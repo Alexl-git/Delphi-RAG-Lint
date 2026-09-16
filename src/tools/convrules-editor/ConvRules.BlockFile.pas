@@ -21,30 +21,49 @@ unit ConvRules.BlockFile;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections;
+  System.SysUtils
+  , System.Classes
+  , System.Generics.Collections
+  ;
 
 type
   /// <summary>One source line plus the exact terminator that followed it.</summary>
-  /// <remarks>Eol is '' for a final line with no terminator, otherwise the bytes
+  /// <remarks>
+  /// Eol is '' for a final line with no terminator, otherwise the bytes
   /// actually found (#13#10, #10 or #13). Text+Eol concatenated over all lines
   /// reproduces the source exactly -- this is why the unit does not use
-  /// TStringList, whose Text property normalises terminators.</remarks>
+  /// TStringList, whose Text property normalises terminators.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.BlockFile.BlockEol (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitOnHeaders (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitRawLines (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitTrailingRun (ConvRules.BlockFile.pas), declaration (ConvRules.BlockFile.pas) (+4 more)</para>
+  /// <para>Used in units: ConvRules.BlockFile, ConvRules.BlockOps, ConvRules.FormTypes, ConvRules.Usage</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRawLine = record
     Text: string;
     Eol : string;
   end;
 
   /// <summary>Which grammar a file is split, merged and composed with.</summary>
-  /// <remarks>Chosen from the file's extension alone -- see GrammarOf. The merge
+  /// <remarks>
+  /// Chosen from the file's extension alone -- see GrammarOf. The merge
   /// and compose paths only implement rgRules, so a cross-grammar operation is
-  /// refused rather than silently corrupting a catalog.</remarks>
+  /// refused rather than silently corrupting a catalog.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.WorkingSet.TWorkingSet.MixedGrammars (ConvRules.WorkingSet.pas), declaration (ConvRules.BlockFile.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleGrammar = (rgRules, rgCastLib);
 
   /// <summary>What a block is.</summary>
-  /// <remarks>Both rbkPreamble and rbkTrailing are HEADERLESS: they carry
+  /// <remarks>
+  /// Both rbkPreamble and rbkTrailing are HEADERLESS: they carry
   /// file-scope content that belongs to no single rule. Preamble is everything
   /// before the first block; trailing is the run of file-scope directives after
-  /// the last one. Neither may be dropped when a subset of blocks is composed.</remarks>
+  /// the last one. Neither may be dropped when a subset of blocks is composed.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.BlockFile.SplitOnHeaders (ConvRules.BlockFile.pas), declaration (ConvRules.BlockFile.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleBlockKind = (
     /// content before the first real block (file header comments)
     rbkPreamble,
@@ -55,21 +74,31 @@ type
     /// .castlib: 'cast <Name> ... end'
     rbkCast,
     /// .castlib: 'enum <Name> ... end'
-    rbkEnum
-  );
+    rbkEnum);
 
   /// <summary>One block of a rule-book or catalog file, carrying its verbatim text.</summary>
-  /// <remarks>RawText includes the header line and every terminator inside the
+  /// <remarks>
+  /// RawText includes the header line and every terminator inside the
   /// block, so blocks concatenate back into the original file. StartLine/EndLine
-  /// are 1-based line numbers in the source, for display only.</remarks>
+  /// are 1-based line numbers in the source, for display only.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.BlockFile.JoinBlocks (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitOnHeaders (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitRulesBlocks (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitTrailingRun (ConvRules.BlockFile.pas), declaration (ConvRules.BlockFile.pas) (+5 more)</para>
+  /// <para>Used in units: ConvRules.BlockFile, ConvRules.BlockOps</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleBlock = record
     Kind     : TRuleBlockKind;
-    Header   : string;    // the header line verbatim (no terminator); '' for a preamble
-    RawText  : string;    // the whole block including its header, verbatim
-    StartLine: Integer;
-    EndLine  : Integer;
+    Header   : string        ; // the header line verbatim (no terminator); '' for a preamble
+    RawText  : string        ; // the whole block including its header, verbatim
+    StartLine: Integer       ;
+    EndLine  : Integer       ;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.BlockOps.Compose (ConvRules.BlockOps.pas), ConvRules.CurationForm.TCurationForm.WriteBlocksTo (ConvRules.CurationForm.pas), declaration (ConvRules.BlockFile.pas), declaration (ConvRules.BlockOps.pas), declaration (ConvRules.CurationForm.pas) (+5 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleBlocks = TArray<TRuleBlock>;
 
 const
@@ -82,15 +111,42 @@ const
   /// places that enforce it.</remarks>
   HEADERLESS_KINDS = [rbkPreamble, rbkTrailing];
 
-/// <summary>PURE: split text into lines, keeping each line's exact terminator.</summary>
-/// <param name="AText">Any text; '' yields an empty array.</param>
-/// <returns>Lines in order; concatenating Text+Eol reproduces AText byte for byte.</returns>
+  /// <summary>PURE: split text into lines, keeping each line's exact terminator.</summary>
+  /// <param name="AText">Any text; '' yields an empty array.</param>
+  /// <returns>Lines in order; concatenating Text+Eol reproduces AText byte for byte.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: ConvRules.BlockFile.BlockEol (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitOnHeaders (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitTrailingRun (ConvRules.BlockFile.pas), ConvRules.BlockOps.BlockOtherLines (ConvRules.BlockOps.pas), ConvRules.BlockOps.ReplaceLineInBlock (ConvRules.BlockOps.pas) (+2 more)</para>
+  /// <para>Calls: CharInSet, Copy</para>
+  /// <para>Returns: List.ToArray</para>
+  /// <para>Pure</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 function SplitRawLines(const AText: string): TArray<TRawLine>;
 
 /// <summary>PURE: the first whitespace-delimited token of a line, '' when blank.</summary>
+/// <param name="ALine"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: Copy(S, 1, p - 1).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockFile.CastLibHeaderTest (ConvRules.BlockFile.pas), ConvRules.BlockFile.IsFileScopeDirective (ConvRules.BlockFile.pas), ConvRules.BlockFile.RulesHeaderTest (ConvRules.BlockFile.pas), ConvRules.BlockFile.SecondToken (ConvRules.BlockFile.pas), ConvRules.BlockOps.BlockOtherLines (ConvRules.BlockOps.pas) (+2 more)</para>
+/// <para>Calls: Copy, TrimLeft</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FirstToken(const ALine: string): string;
 
 /// <summary>PURE: the second whitespace-delimited token of a line, '' when absent.</summary>
+/// <param name="ALine"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: FirstToken(S).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockFile.BlockLabel (ConvRules.BlockFile.pas)</para>
+/// <para>Calls: ConvRules.BlockFile.FirstToken, Copy, TrimLeft</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.BlockFile.FirstToken"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SecondToken(const ALine: string): string;
 
 /// <summary>PURE: split a .rules text into blocks. A block starts at a line whose
@@ -99,35 +155,76 @@ function SecondToken(const ALine: string): string;
 /// and a closing run of FILE-SCOPE directives is one rbkTrailing block.</summary>
 /// <param name="AText">Any .rules text; '' yields no blocks at all.</param>
 /// <returns>Blocks in file order; JoinBlocks reproduces AText byte for byte.</returns>
-/// <remarks>The trailing block exists because file-scope directives after the last
+/// <remarks>
+/// The trailing block exists because file-scope directives after the last
 /// '#convert' would otherwise be mis-attributed to that one rule -- in
 /// convrules\BDE-to-FireDAC.rules that is 43 '#migrate' lines sitting inside the
 /// TBatchMove block, which composing a subset without TBatchMove would silently
 /// drop. It is emitted only when that closing run actually contains a file-scope
-/// directive, so a book merely ending in a comment is split exactly as before.</remarks>
+/// directive, so a book merely ending in a comment is split exactly as before.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockFile.SplitBlocksFor (ConvRules.BlockFile.pas)</para>
+/// <para>Calls: ConvRules.BlockFile.SplitOnHeaders, ConvRules.BlockFile.SplitTrailingRun</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.BlockFile.SplitOnHeaders"/>
+/// <seealso cref="ConvRules.BlockFile.SplitTrailingRun"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitRulesBlocks(const AText: string): TRuleBlocks;
 
 /// <summary>PURE: split a .castlib text into blocks. A block starts at a line whose
 /// first token is 'cast' or 'enum'. Content before the first block becomes an
 /// rbkPreamble block; content between blocks (including the 'end' line and any
 /// trailing blanks) attaches to the PRECEDING block, so nothing is orphaned.</summary>
+/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TRuleBlocks -- Observed: SplitOnHeaders(AText,
+/// CastLibHeaderTest).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockFile.SplitBlocksFor (ConvRules.BlockFile.pas)</para>
+/// <para>Calls: ConvRules.BlockFile.SplitOnHeaders</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.BlockFile.SplitOnHeaders"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitCastLibBlocks(const AText: string): TRuleBlocks;
 
 /// <summary>PURE: the grammar APath's extension selects -- rgCastLib for
 /// '.castlib' (case-insensitively), rgRules for everything else (.rules and reFind
 /// files).</summary>
-/// <remarks>SplitBlocksFor dispatches on exactly this, so two paths with the same
+/// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TRuleGrammar -- Observed: rgCastLib; rgRules.</returns>
+/// <remarks>
+/// SplitBlocksFor dispatches on exactly this, so two paths with the same
 /// GrammarOf are split, merged and composed identically -- which is what makes it
-/// the right test for refusing a cross-grammar merge or compose.</remarks>
+/// the right test for refusing a cross-grammar merge or compose.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockFile.SplitBlocksFor (ConvRules.BlockFile.pas), ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.DoMerge (ConvRules.CurationForm.pas), ConvRules.WorkingSet.TWorkingSet.MixedGrammars (ConvRules.WorkingSet.pas)</para>
+/// <para>Calls: ExtractFileExt, SameText</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GrammarOf(const APath: string): TRuleGrammar;
 
 /// <summary>PURE: a short human name for AGrammar, for a refusal message.</summary>
+/// <param name="AGrammar"><!-- drag-lint:auto type -->TRuleGrammar</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: 'cast catalog'; 'conversion
+/// rules'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.DoMerge (ConvRules.CurationForm.pas)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GrammarName(AGrammar: TRuleGrammar): string;
 
 /// <summary>PURE: True when a file of AGrammar may be a merge or compose TARGET --
 /// i.e. the merger can append a line INTO one of its blocks without corrupting it.
 /// False for rgCastLib.</summary>
-/// <remarks>The reason is NOT grammar detection, it is what a catalog block's
+/// <param name="AGrammar"><!-- drag-lint:auto type -->TRuleGrammar</param>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: AGrammar &lt;&gt; rgCastLib.</returns>
+/// <remarks>
+/// The reason is NOT grammar detection, it is what a catalog block's
 /// RawText contains. SplitCastLibBlocks attaches the closing 'end' line and any
 /// trailing blank lines to the PRECEDING block, so a 'cast Foo ... end' block's
 /// RawText ends with 'end'. ConvRules.BlockOps.AppendLinesToBlock appends at the
@@ -137,158 +234,209 @@ function GrammarName(AGrammar: TRuleGrammar): string;
 /// is invisible to the cross-grammar test: castlib -> castlib is the SAME grammar
 /// on both sides. Making the appender insert before 'end' is a FEATURE with its own
 /// design questions (where among the body lines, what about trailing comments) and
-/// is deliberately out of scope -- this is a guard, not a workaround.</remarks>
+/// is deliberately out of scope -- this is a guard, not a workaround.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.DoMerge (ConvRules.CurationForm.pas)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GrammarAcceptsMerge(AGrammar: TRuleGrammar): Boolean;
 
 /// <summary>PURE: pick the grammar from APath's extension -- '.castlib' uses the
 /// catalog grammar, anything else (.rules and reFind files) uses the DSL grammar.</summary>
+/// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TRuleBlocks -- Observed: SplitCastLibBlocks(AText);
+/// SplitRulesBlocks(AText).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.CurationForm.TCurationForm.DoMerge (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.WriteBlocksTo (ConvRules.CurationForm.pas), ConvRules.WorkingSet.TWorkingSet.AddText (ConvRules.WorkingSet.pas), ConvRules.WorkingSet.TWorkingSet.SyncFromText (ConvRules.WorkingSet.pas)</para>
+/// <para>Calls: ConvRules.BlockFile.GrammarOf, ConvRules.BlockFile.SplitCastLibBlocks, ConvRules.BlockFile.SplitRulesBlocks</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.BlockFile.GrammarOf"/>
+/// <seealso cref="ConvRules.BlockFile.SplitCastLibBlocks"/>
+/// <seealso cref="ConvRules.BlockFile.SplitRulesBlocks"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitBlocksFor(const APath, AText: string): TRuleBlocks;
 
 /// <summary>PURE: what the curation grid shows for a block: the type pair for a
 /// #convert, the bare NAME for a cast/enum, '(file header)' for a preamble.</summary>
+/// <param name="ABlock"><!-- drag-lint:auto type -->const TRuleBlock</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: Trim(Copy(TrimLeft(ABlock.Header),
+/// Length('#convert') + 1, MaxInt)); SecondToken(ABlock.Header); '(file trailer)'; '(file
+/// header)'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.CurationForm.TCurationForm.RefreshBlocks (ConvRules.CurationForm.pas)</para>
+/// <para>Calls: ConvRules.BlockFile.SecondToken, Copy, Trim, TrimLeft</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.BlockFile.SecondToken"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BlockLabel(const ABlock: TRuleBlock): string;
 
 /// <summary>PURE: rejoin blocks in order. JoinBlocks(SplitRulesBlocks(T)) = T.</summary>
+/// <param name="ABlocks"><!-- drag-lint:auto type -->const TRuleBlocks</param>
+/// <returns><!-- drag-lint:auto type -->string</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockOps.Compose (ConvRules.BlockOps.pas), ConvRules.CurationForm.TCurationForm.WriteBlocksTo (ConvRules.CurationForm.pas), ConvRules.WorkingSet.TWorkingSet.SaveFile (ConvRules.WorkingSet.pas)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function JoinBlocks(const ABlocks: TRuleBlocks): string;
 
 /// <summary>PURE: the line terminator this block uses (its first line's), or CRLF
 /// when the block has none (a single unterminated line).</summary>
+/// <param name="ABlock"><!-- drag-lint:auto type -->const TRuleBlock</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: Lines[0].Eol; #13#10.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockOps.AppendLinesToBlock (ConvRules.BlockOps.pas), ConvRules.BlockOps.EnsureTrailingEol (ConvRules.BlockOps.pas)</para>
+/// <para>Calls: ConvRules.BlockFile.SplitRawLines</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.BlockFile.SplitRawLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BlockEol(const ABlock: TRuleBlock): string;
 
 implementation
 
 function SplitRawLines(const AText: string): TArray<TRawLine>;
 var
-  List : TList<TRawLine>;
-  i, St: Integer;
-  L    : TRawLine;
+  List: TList<TRawLine>;
+  i   : Integer        ;
+  St  : Integer        ;
+  L   : TRawLine       ;
 begin
-  List := TList<TRawLine>.Create;
+  List:= TList<TRawLine>.Create;
   try
     i := 1;
-    St := 1;
+    St:= 1;
     while i <= Length(AText) do
     begin
       if CharInSet(AText[i], [#13, #10]) then
       begin
-        L.Text := Copy(AText, St, i - St);
+        L.Text:= Copy(AText, St, i - St);
         if (AText[i] = #13) and (i < Length(AText)) and (AText[i + 1] = #10) then
         begin
-          L.Eol := #13#10;
+          L.Eol:= #13#10;
           Inc(i, 2);
         end
         else
         begin
-          L.Eol := AText[i];
+          L.Eol:= AText[i];
           Inc(i);
         end;
         List.Add(L);
-        St := i;
-      end
+        St:= i;
+      end // if
       else
         Inc(i);
-    end;
+    end; // while
     if St <= Length(AText) then
     begin
-      L.Text := Copy(AText, St, MaxInt);
-      L.Eol  := '';
+      L.Text:= Copy(AText, St, MaxInt);
+      L.Eol:= '';
       List.Add(L);
     end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function FirstToken(const ALine: string): string;
 var
-  S: string;
+  S: string ;
   p: Integer;
 begin
-  S := TrimLeft(ALine);
-  p := 1;
-  while (p <= Length(S)) and (S[p] > ' ') do Inc(p);
-  Result := Copy(S, 1, p - 1);
+  S:= TrimLeft(ALine);
+  p:= 1;
+  while (p <= Length(S)) and (S[p] > ' ') do
+    Inc(p);
+  Result:= Copy(S, 1, p - 1);
 end;
 
 function SecondToken(const ALine: string): string;
 var
   S: string;
 begin
-  S := TrimLeft(ALine);
-  S := TrimLeft(Copy(S, Length(FirstToken(S)) + 1, MaxInt));
-  Result := FirstToken(S);
+  S:= TrimLeft(ALine);
+  S:= TrimLeft(Copy(S, Length(FirstToken(S)) + 1, MaxInt));
+  Result:= FirstToken(S);
 end;
 
-type
-  { Decides whether a line starts a new block, and of what kind. A plain function
+type { Decides whether a line starts a new block, and of what kind. A plain function
     pointer (not "of object") so the two grammars stay unit-level and closure-free. }
   THeaderTest = function(const ALine: string; out AKind: TRuleBlockKind): Boolean;
 
 function RulesHeaderTest(const ALine: string; out AKind: TRuleBlockKind): Boolean;
 begin
-  AKind := rbkConvert;
-  Result := SameText(FirstToken(ALine), '#convert');
+  AKind:= rbkConvert;
+  Result:= SameText(FirstToken(ALine), '#convert');
 end;
 
 function CastLibHeaderTest(const ALine: string; out AKind: TRuleBlockKind): Boolean;
 var
   Tok: string;
 begin
-  Tok := FirstToken(ALine);
-  if SameText(Tok, 'cast') then      begin AKind := rbkCast; Exit(True); end;
-  if SameText(Tok, 'enum') then      begin AKind := rbkEnum; Exit(True); end;
+  Tok:= FirstToken(ALine);
+  if SameText(Tok, 'cast') then begin AKind:= rbkCast; Exit(True); end;
+  if SameText(Tok, 'enum') then begin AKind:= rbkEnum; Exit(True); end;
   AKind := rbkPreamble;
-  Result := False;
+  Result:= False;
 end;
 
 { The one splitting loop. Lines that do not start a block accumulate into the
   current block; before the first header they accumulate into a preamble block. }
 function SplitOnHeaders(const AText: string; ATest: THeaderTest): TRuleBlocks;
 var
-  Lines : TArray<TRawLine>;
+  Lines : TArray<TRawLine> ;
   Blocks: TList<TRuleBlock>;
-  Cur   : TRuleBlock;
-  Have  : Boolean;
-  i     : Integer;
-  Kind  : TRuleBlockKind;
+  Cur   : TRuleBlock       ;
+  Have  : Boolean          ;
+  i     : Integer          ;
+  Kind  : TRuleBlockKind   ;
 begin
-  Lines  := SplitRawLines(AText);
-  Blocks := TList<TRuleBlock>.Create;
+  Lines:= SplitRawLines(AText);
+  Blocks:= TList<TRuleBlock>.Create;
   try
-    Have := False;
-    Cur  := Default(TRuleBlock);
-    for i := 0 to High(Lines) do
+    Have:= False;
+    Cur:= Default(TRuleBlock);
+    for i:= 0 to High(Lines) do
     begin
       if ATest(Lines[i].Text, Kind) then
       begin
-        if Have then Blocks.Add(Cur);
-        Cur := Default(TRuleBlock);
-        Cur.Kind      := Kind;
-        Cur.Header    := Lines[i].Text;
-        Cur.StartLine := i + 1;
-        Have := True;
+        if Have then
+          Blocks.Add(Cur);
+        Cur:= Default(TRuleBlock);
+        Cur.Kind:= Kind;
+        Cur.Header:= Lines[i].Text;
+        Cur.StartLine:= i + 1;
+        Have:= True;
       end
       else if not Have then
       begin
-        Cur := Default(TRuleBlock);
-        Cur.Kind      := rbkPreamble;
-        Cur.Header    := '';
-        Cur.StartLine := i + 1;
-        Have := True;
+        Cur:= Default(TRuleBlock);
+        Cur.Kind  := rbkPreamble;
+        Cur.Header:= '';
+        Cur.StartLine:= i + 1;
+        Have:= True;
       end;
-      Cur.RawText := Cur.RawText + Lines[i].Text + Lines[i].Eol;
-      Cur.EndLine := i + 1;
-    end;
-    if Have then Blocks.Add(Cur);
-    Result := Blocks.ToArray;
+      Cur.RawText:= Cur.RawText + Lines[i].Text + Lines[i].Eol;
+      Cur.EndLine:= i + 1;
+    end; // for
+    if Have then
+      Blocks.Add(Cur);
+    Result:= Blocks.ToArray;
   finally
     Blocks.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-const
-  { Directives that are FILE-scope: they belong to the BOOK, not to any one
+const { Directives that are FILE-scope: they belong to the BOOK, not to any one
     #convert block.
 
     MEASURED against convrules\BDE-to-FireDAC.rules on 2026-09-09: the preamble
@@ -297,8 +445,7 @@ const
     #migrate. #use / #useswap set a unit name like #unuse, so they are file-scope
     too. #default is deliberately ABSENT -- convrules\sample.rules:7 has it inside
     a #convert body, so it is body-scope and must not open a trailing block. }
-  FILE_SCOPE_DIRECTIVES: array[0..5] of string = (
-    '#migrate', '#remove', '#unuse', '#use', '#useswap', '#mapping');
+  FILE_SCOPE_DIRECTIVES: array[0..5] of string = ( '#migrate', '#remove', '#unuse', '#use', '#useswap', '#mapping');
 
 function IsFileScopeDirective(const ALine: string): Boolean;
 var
@@ -307,15 +454,15 @@ begin
   for D in FILE_SCOPE_DIRECTIVES do
     if SameText(FirstToken(ALine), D) then
       Exit(True);
-  Result := False;
+  Result:= False;
 end;
 
 function IsBlankOrComment(const ALine: string): Boolean;
 var
   T: string;
 begin
-  T := TrimLeft(ALine);
-  Result := (T = '') or T.StartsWith('//') or T.StartsWith(';');
+  T:= TrimLeft(ALine);
+  Result:= (T = '') or T.StartsWith('//') or T.StartsWith(';');
 end;
 
 { Splits ABlock's trailing run of file-scope directives off into ATail.
@@ -338,136 +485,138 @@ end;
 function SplitTrailingRun(const ABlock: TRuleBlock; out AHead, ATail: TRuleBlock): Boolean;
 var
   Lines       : TArray<TRawLine>;
-  i, Boundary : Integer;
-  HasDirective: Boolean;
+  i           : Integer         ;
+  Boundary    : Integer         ;
+  HasDirective: Boolean         ;
 
   function Join(AFrom, ATo: Integer): string;
   var
     j: Integer;
   begin
-    Result := '';
-    for j := AFrom to ATo do
-      Result := Result + Lines[j].Text + Lines[j].Eol;
+    Result:= '';
+    for j:= AFrom to ATo do
+      Result:= Result + Lines[j].Text + Lines[j].Eol;
   end;
 
 begin
-  Result       := False;
-  AHead        := Default(TRuleBlock);
-  ATail        := Default(TRuleBlock);
-  Lines        := SplitRawLines(ABlock.RawText);
-  Boundary     := Length(Lines);
-  HasDirective := False;
-  for i := High(Lines) downto 0 do
+  Result:= False;
+  AHead:= Default(TRuleBlock);
+  ATail:= Default(TRuleBlock);
+  Lines:= SplitRawLines(ABlock.RawText);
+  Boundary:= Length(Lines);
+  HasDirective:= False;
+  for i:= High(Lines) downto 0 do
     if IsFileScopeDirective(Lines[i].Text) then
     begin
-      HasDirective := True;
-      Boundary     := i;
+      HasDirective:= True;
+      Boundary    := i;
     end
-    else if IsBlankOrComment(Lines[i].Text) then
-      Boundary := i
-    else
-      Break;
+  else if IsBlankOrComment(Lines[i].Text) then
+    Boundary:= i
+  else
+    Break;
 
   if (not HasDirective) or (Boundary <= 0) or (Boundary > High(Lines)) then
     Exit;
 
-  AHead         := ABlock;
-  AHead.RawText := Join(0, Boundary - 1);
-  AHead.EndLine := ABlock.StartLine + Boundary - 1;
+  AHead:= ABlock;
+  AHead.RawText:= Join(0, Boundary - 1);
+  AHead.EndLine:= ABlock.StartLine + Boundary - 1;
 
-  ATail           := Default(TRuleBlock);
-  ATail.Kind      := rbkTrailing;
-  ATail.Header    := '';
-  ATail.RawText   := Join(Boundary, High(Lines));
-  ATail.StartLine := ABlock.StartLine + Boundary;
-  ATail.EndLine   := ABlock.EndLine;
-  Result          := True;
-end;
+  ATail:= Default(TRuleBlock);
+  ATail.Kind  := rbkTrailing;
+  ATail.Header:= '';
+  ATail.RawText:= Join(Boundary, High(Lines));
+  ATail.StartLine:= ABlock.StartLine + Boundary;
+  ATail.EndLine:= ABlock.EndLine;
+  Result:= True;
+end; // begin
 
 function SplitRulesBlocks(const AText: string): TRuleBlocks;
 var
-  Head, Tail: TRuleBlock;
-  Last      : Integer;
+  Head: TRuleBlock;
+  Tail: TRuleBlock;
+  Last: Integer   ;
 begin
-  Result := SplitOnHeaders(AText, RulesHeaderTest);
+  Result:= SplitOnHeaders(AText, RulesHeaderTest);
   { Only the LAST block can carry a file-scope tail, and only a #convert block
     can: a preamble-only file is file-scope throughout and must stay one block
     (blockfile.preamble.only pins that). }
-  Last := High(Result);
+  Last:= High(Result);
   if (Last < 0) or (Result[Last].Kind <> rbkConvert) then
     Exit;
   if not SplitTrailingRun(Result[Last], Head, Tail) then
     Exit;
-  Result[Last] := Head;
-  Result       := Result + [Tail];
-end;
+  Result[Last]:= Head;
+  Result:= Result + [Tail];
+end; // function
 
 function SplitCastLibBlocks(const AText: string): TRuleBlocks;
 begin
-  Result := SplitOnHeaders(AText, CastLibHeaderTest);
+  Result:= SplitOnHeaders(AText, CastLibHeaderTest);
 end;
 
 function GrammarOf(const APath: string): TRuleGrammar;
 begin
   if SameText(ExtractFileExt(APath), '.castlib') then
-    Result := rgCastLib
+    Result:= rgCastLib
   else
-    Result := rgRules;
+    Result:= rgRules;
 end;
 
 function GrammarName(AGrammar: TRuleGrammar): string;
 begin
   if AGrammar = rgCastLib then
-    Result := 'cast catalog'
+    Result:= 'cast catalog'
   else
-    Result := 'conversion rules';
+    Result:= 'conversion rules';
 end;
 
 function GrammarAcceptsMerge(AGrammar: TRuleGrammar): Boolean;
 begin
-  Result := AGrammar <> rgCastLib;
+  Result:= AGrammar <> rgCastLib;
 end;
 
 function SplitBlocksFor(const APath, AText: string): TRuleBlocks;
 begin
   if GrammarOf(APath) = rgCastLib then
-    Result := SplitCastLibBlocks(AText)
+    Result:= SplitCastLibBlocks(AText)
   else
-    Result := SplitRulesBlocks(AText);
+    Result:= SplitRulesBlocks(AText);
 end;
 
 function BlockLabel(const ABlock: TRuleBlock): string;
 begin
   case ABlock.Kind of
     rbkConvert:
-      Result := Trim(Copy(TrimLeft(ABlock.Header), Length('#convert') + 1, MaxInt));
+      Result:= Trim(Copy(TrimLeft(ABlock.Header), Length('#convert') + 1, MaxInt));
     rbkCast, rbkEnum:
-      Result := SecondToken(ABlock.Header);
+      Result:= SecondToken(ABlock.Header);
     rbkTrailing:
-      Result := '(file trailer)';
-  else
-    Result := '(file header)';
+      Result:= '(file trailer)';
+    else
+      Result:= '(file header)';
   end;
-end;
+end; // function
 
 function JoinBlocks(const ABlocks: TRuleBlocks): string;
 var
   B: TRuleBlock;
 begin
-  Result := '';
+  Result:= '';
   for B in ABlocks do
-    Result := Result + B.RawText;
+    Result:= Result + B.RawText;
 end;
 
 function BlockEol(const ABlock: TRuleBlock): string;
 var
   Lines: TArray<TRawLine>;
 begin
-  Lines := SplitRawLines(ABlock.RawText);
+  Lines:= SplitRawLines(ABlock.RawText);
   if (Length(Lines) > 0) and (Lines[0].Eol <> '') then
-    Result := Lines[0].Eol
+    Result:= Lines[0].Eol
   else
-    Result := #13#10;
+    Result:= #13#10;
 end;
 
 end.

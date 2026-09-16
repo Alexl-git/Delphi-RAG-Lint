@@ -1,0 +1,80 @@
+// TabcToggleBtn -> TcxButton  (ORM3 CLIENT, first authored 2026-09-14)
+//
+// STARTER DRAFT, written from the CORPUS rather than from guesswork. Measured on
+// CLIENT\VARINSP.DFM: 20 TabcToggleBtn instances, every one of them setting
+// Picture.Data / NumGlyphs / Style / GroupIndex / Caption, and 18 of them setting
+// Images and Layout.
+//
+// >>> TWO THINGS HERE DO NOT VALIDATE YET, AND THAT IS AN ENGINE BUG, NOT A TYPO.
+//
+// Every OptionsImage.* path below is real -- `surface --qname
+// cxButtons.TcxButtonImageOptions` lists Glyph, Images, Layout, Margin, NumGlyphs,
+// Spacing -- but `proptree` does not expand OptionsImage, so the editor cannot
+// offer or validate those paths today. See
+// docs\INBOX-forward-decl-shadows-real-class-declaration.md.
+//
+// Until that lands, the lines marked PENDING will be reported as unknown paths.
+// They are written out anyway so the rule is ready the day it clears, and so the
+// engine team has a concrete acceptance case.
+
+// ---------------------------------------------------------------------------
+// Layout needs a MAPPING, not an enum cast: one source value has to set TWO
+// target properties.
+//
+// TabcButtonLayout has 6 members, TButtonLayout has 4. Four map straight across.
+// ablGlyphCenter has no single equivalent -- in the VCL the glyph and caption are
+// centred TOGETHER by setting Margin = -1 (Vcl.Buttons.pas:1285-1304: with
+// Margin = -1 the layout code computes Margin := (ClientSize - TotalSize + 1) div 2
+// over glyph+Spacing+text, i.e. it centres the PAIR instead of pinning the glyph
+// to an edge). TcxButtonImageOptions.Margin is already `default -1`.
+//
+// ablGlyphTiled is DELIBERATELY UNMAPPED and there is no #else: it has no honest
+// target, and an unmapped value is reported rather than guessed. No instance in
+// VARINSP uses it.
+// ---------------------------------------------------------------------------
+#mapping AbcGlyphLayout from Abcbtn.TabcButtonLayout to cxButtons.TcxButton
+#mapping AbcGlyphLayout #when Layout = ablGlyphLeft   -> OptionsImage.Layout = blGlyphLeft
+#mapping AbcGlyphLayout #when Layout = ablGlyphRight  -> OptionsImage.Layout = blGlyphRight
+#mapping AbcGlyphLayout #when Layout = ablGlyphTop    -> OptionsImage.Layout = blGlyphTop
+#mapping AbcGlyphLayout #when Layout = ablGlyphBottom -> OptionsImage.Layout = blGlyphBottom
+#mapping AbcGlyphLayout #when Layout = ablGlyphCenter -> OptionsImage.Layout = blGlyphLeft, OptionsImage.Margin = -1
+
+#convert Abcbtn.TabcToggleBtn -> cxButtons.TcxButton, cxButtons, dxCore
+
+#apply AbcGlyphLayout
+
+// --- the image surface: what the owner asked for ---------------------------
+// PENDING (see header): OptionsImage does not expand in proptree yet.
+// Picture is TPicture, Glyph is TdxSmartGlyph -- bridged by the shipped
+// `cast AssignGraphic` in casts.castlib, whose pas template is
+// '{dst}.Assign({src});'. convert-apply does not yet REALISE that template; see
+// docs\INBOX-2026-09-14-converter-to-engine-realize-class-casts.md.
+#link OptionsImage.Glyph <- Picture : AssignGraphic
+#link OptionsImage.Images <- Images
+#link OptionsImage.NumGlyphs <- NumGlyphs
+
+// --- direct, same-named, no cast needed ------------------------------------
+// These validate today. Auto-Match finds the rest: the two property trees share
+// 105 identical leaf paths (measured), so most of this file should be generated
+// rather than typed.
+#link Caption <- Caption
+#link Down <- Down
+#link GroupIndex <- GroupIndex
+#link AllowAllUp <- AllowAllUp
+#link Enabled <- Enabled
+#link Visible <- Visible
+#link Anchors <- Anchors
+#link Align <- Align
+#link Hint <- Hint
+#link ShowHint <- ShowHint
+
+// NOT carried: TabOrder / TabStop. Drafted here by habit and REJECTED by
+// convert-validate -- TabcToggleBtn is a graphic control with no window handle,
+// so it has neither. TcxButton does, and will get the VCL defaults. If tab order
+// matters on the converted form it has to be set by hand, because there is no
+// source value to carry.
+
+// --- NOT carried, on purpose ------------------------------------------------
+// Style = absThinHighlight is an Orpheus/abc paint style with no TcxButton
+// equivalent; TcxButton's look comes from the active skin. Left for the operator
+// rather than mapped to something that merely compiles.

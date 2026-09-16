@@ -15,117 +15,392 @@ unit ConvRules.MappingForm;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections,
-  Vcl.Forms, Vcl.Controls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ExtCtrls, Vcl.Grids,
-  ConvRules.Model, ConvRules.Engine, ConvRules.Mappings;
+  System.SysUtils
+  , System.Classes
+  , System.Generics.Collections
+  , Vcl.Forms
+  , Vcl.Controls
+  , Vcl.StdCtrls
+  , Vcl.ComCtrls
+  , Vcl.ExtCtrls
+  , Vcl.Grids
+  , ConvRules.Model
+  , ConvRules.Engine
+  , ConvRules.Mappings
+  ;
 
 type
   /// <summary>The modal editor for one named #mapping.</summary>
-  /// <remarks>Prefer the EditMapping class function over constructing this directly --
+  /// <remarks>
+  /// Prefer the EditMapping class function over constructing this directly --
   /// the constructor builds an EMPTY window that knows neither the mapping's name nor
-  /// the block it is validated against.</remarks>
+  /// the block it is validated against.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas)</para>
+  /// <para>Used in units: ConvRules.MainForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMappingForm = class(TForm)
-  private
-    FName       : string;
-    FEngine     : TEngineAdapter;        // borrowed; may be nil (members then fall back)
-    FToTree     : TProptree;             // the applying block's To tree, for validation
-    FBlockToType: string;                // the applying block's To class, for validation
-    FSeed       : TArray<TRuleNode>;     // borrowed entry nodes; read once, never retained
-    FMembers    : TArray<string>;        // source enum members as last resolved
-    { Why the member list cannot be trusted, or '' when it can. Set by LoadMembers (the
+    private
+      FName       : string           ;
+      FEngine     : TEngineAdapter   ; // borrowed; may be nil (members then fall back)
+      FToTree     : TProptree        ; // the applying block's To tree, for validation
+      FBlockToType: string           ; // the applying block's To class, for validation
+      FSeed       : TArray<TRuleNode>; // borrowed entry nodes; read once, never retained
+      FMembers    : TArray<string>   ; // source enum members as last resolved
+      { Why the member list cannot be trusted, or '' when it can. Set by LoadMembers (the
       resolve failed, or the name was ambiguous, or the list is only the values already
       written here) and by DeclChanged (the source enum type was retyped, so whatever
       was resolved belongs to the PREVIOUS type). Revalidate appends it to the status
       line instead of overwriting it: mikBadLiteral and the whole exhaustiveness pass
       are only as good as this list, so an unresolved list must not look like success. }
-    FMemberNote : string;
-    FCases      : TArray<TMappingCase>;  // one per FMemberList row, #else last
-    FSeedSig    : string;                // canonical text at entry (see Signature)
-    FLoading    : Boolean;               // suppress edit handlers while filling controls
+      FMemberNote : string              ;
+      FCases      : TArray<TMappingCase>; // one per FMemberList row, #else last
+      FSeedSig    : string              ; // canonical text at entry (see Signature)
+      FLoading    : Boolean             ; // suppress edit handlers while filling controls
 
-    FEdFromType : TEdit;
-    FEdToTypes  : TEdit;
-    FEdWhenFrom : TEdit;
-    FMemberList : TListBox;
-    FGrid       : TStringGrid;
-    FIssues     : TMemo;
-    FStatus     : TStatusBar;
-    FBtnOk      : TButton;
+      FEdFromType : TEdit      ;
+      FEdToTypes  : TEdit      ;
+      FEdWhenFrom : TEdit      ;
+      FMemberList : TListBox   ;
+      FGrid       : TStringGrid;
+      FIssues     : TMemo      ;
+      FStatus     : TStatusBar ;
+      FBtnOk      : TButton    ;
 
-    procedure BuildUI;
-    { Re-resolve the source enum's members and refold the cases onto them. AFromCurrent
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.Create (ConvRules.MappingForm.pas)</para>
+      /// <para>Calls: TLabel</para>
+      /// <para>Reads: FEdFromType, FEdWhenFrom, FEdToTypes, FIssues, FBtnOk, FStatus, FMemberList, FGrid   Writes: FEdFromType, FEdWhenFrom, FEdToTypes, FIssues, FBtnOk, FStatus, FMemberList, FGrid</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DeclChanged"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DoAddTarget"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure BuildUI;
+      { Re-resolve the source enum's members and refold the cases onto them. AFromCurrent
       False reads the entry nodes (first load); True re-reads the window's own state, so
       a member list that changes under the user keeps every assignment already made. }
-    procedure LoadMembers(AFromCurrent: Boolean);
-    procedure RefreshMemberList;
-    /// <summary>Fills the SELECTED target path across every member row by matching
-    ///   enum member names.</summary>
-    /// <remarks>Operates on the target path of the current grid row and applies it to
-    ///   ALL non-#else member rows, because that is the shape of the job: one target
-    ///   property, one value per source member. A member whose name finds no
-    ///   counterpart is left EMPTY rather than guessed at, and the status line reports
-    ///   how many were filled, how many were left, and how many target members went
-    ///   unused -- the surplus is what the author still has to think about.
-    ///   Never touches the #else row: its value is a fallback, not a translation of any
-    ///   particular member.</remarks>
-    procedure DoSuggestValues(Sender: TObject);
-    procedure RefreshCaseGrid;
-    procedure MemberSelected(Sender: TObject);
-    procedure GridEdited(Sender: TObject; ACol, ARow: Longint; const AText: string);
-    procedure DoAddTarget(Sender: TObject);
-    procedure DoRemoveTarget(Sender: TObject);
-    procedure DoReloadMembers(Sender: TObject);
-    procedure DeclChanged(Sender: TObject);
-    { Index into FCases of the selected member row; -1 when nothing is selected. }
-    function  CurrentCase: Integer;
-    { The To-class list, split from the comma-separated edit box. }
-    function  ToTypeList: TArray<string>;
-    { The window's state as fresh nodes. THE CALLER OWNS THEM. }
-    function  BuildNodes: TArray<TRuleNode>;
-    { The canonical text of BuildNodes -- the one comparison that tells an edit from a
+      /// <summary><!-- drag-lint:auto sum -->Re-resolve the source enum's members and
+      /// refold the cases onto them. AFromCurrent False reads the entry nodes (first load);
+      /// True re-reads the window's own state, so a member list that changes under the user
+      /// keeps every assignment already made.</summary>
+      /// <param name="AFromCurrent"><!-- drag-lint:auto type -->Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.DoReloadMembers (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.EnumMembersOf/4, ConvRules.MappingForm.TMappingForm.RefreshMemberList, ConvRules.Mappings.MappingCasesOf, ConvRules.Mappings.MappingWhenValues, Format, Trim</para>
+      /// <para>Reads: FEdFromType, FEngine, FSeed, FName, FMemberNote   Writes: FMemberNote, FMembers, FCases</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.EnumMembersOf"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshMemberList"/>
+      /// <seealso cref="ConvRules.Mappings.MappingCasesOf"/>
+      /// <seealso cref="ConvRules.Mappings.MappingWhenValues"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure LoadMembers(AFromCurrent: Boolean);
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.DoRemoveTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.LoadMembers (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.MemberSelected (ConvRules.MappingForm.pas)</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.RefreshCaseGrid, IntToStr</para>
+      /// <para>Reads: FMemberList, FCases</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshCaseGrid"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure RefreshMemberList;
+      /// <summary>Fills the SELECTED target path across every member row by matching
+      /// enum member names.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// Operates on the target path of the current grid row and applies it to
+      /// ALL non-#else member rows, because that is the shape of the job: one target
+      /// property, one value per source member. A member whose name finds no
+      /// counterpart is left EMPTY rather than guessed at, and the status line reports
+      /// how many were filled, how many were left, and how many target members went
+      /// unused -- the surplus is what the author still has to think about.
+      /// Never touches the #else row: its value is a fallback, not a translation of any
+      /// particular member.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.DoSuggestValues.PutValue, ConvRules.MappingForm.TMappingForm.RefreshCaseGrid, ConvRules.MappingForm.TMappingForm.Revalidate, ConvRules.Mappings.SuggestEnumPairs, Format, SameText, Trim</para>
+      /// <para>Reads: FStatus, FCases</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DoSuggestValues.PutValue"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshCaseGrid"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
+      /// <seealso cref="ConvRules.Mappings.SuggestEnumPairs"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure DoSuggestValues(Sender: TObject);
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.DoAddTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoSuggestValues (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.RefreshMemberList (ConvRules.MappingForm.pas)</para>
+      /// <para>Reads: FGrid, FCases   Writes: FLoading</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DeclChanged"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure RefreshCaseGrid;
+      /// <summary><!-- drag-lint:auto sum -->Moving to another member is the moment the
+      /// per-member counts are re-read: refreshing them on every keystroke would rebuild
+      /// the list under the cell editor, and leaving them alone would show a stale count
+      /// for the member just edited. RefreshMemberList restores the selection and refills
+      /// the grid for it.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.RefreshMemberList</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshMemberList"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure MemberSelected(Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <param name="ACol"><!-- drag-lint:auto type -->Longint</param>
+      /// <param name="ARow"><!-- drag-lint:auto type -->Longint</param>
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.Revalidate, Trim</para>
+      /// <para>Reads: FLoading, FCases</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure GridEdited(Sender: TObject; ACol, ARow: Longint; const AText: string);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.RefreshCaseGrid, ConvRules.MappingForm.TMappingForm.Revalidate</para>
+      /// <para>Reads: FCases, FGrid</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshCaseGrid"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure DoAddTarget(Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.RefreshMemberList, ConvRules.MappingForm.TMappingForm.Revalidate</para>
+      /// <para>Reads: FGrid, FCases, FStatus</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshMemberList"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure DoRemoveTarget(Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.LoadMembers, ConvRules.MappingForm.TMappingForm.Revalidate</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.LoadMembers"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure DoReloadMembers(Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->But it is not re-VALIDATED against the old
+      /// members either. FMembers still holds the PREVIOUS enum's members, and checking the
+      /// #when values against those produces confidently wrong verdicts -- every value of
+      /// the newly-typed enum reads as a bad literal, and every member of the old one reads
+      /// as uncovered. Dropping the list is the honest answer: ValidateMappings gates both
+      /// mikBadLiteral and the exhaustiveness pass on Length(AEnumMembers) &gt; 0, so an
+      /// empty list turns those two checks OFF until "Load members" resolves the new type.
+      /// No check is better than a wrong one.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.Revalidate</para>
+      /// <para>Reads: FLoading, FEdFromType   Writes: FMembers, FMemberNote</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure DeclChanged(Sender: TObject);
+      { Index into FCases of the selected member row; -1 when nothing is selected. }
+      /// <summary><!-- drag-lint:auto sum -->Index into FCases of the selected member row;
+      /// -1 when nothing is selected.</summary>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FMemberList.ItemIndex; -1.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FMemberList, FCases</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DeclChanged"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DoAddTarget"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function CurrentCase: Integer;
+      { The To-class list, split from the comma-separated edit box. }
+      /// <summary><!-- drag-lint:auto sum -->The To-class list, split from the
+      /// comma-separated edit box.</summary>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: Trim</para>
+      /// <para>Reads: FEdToTypes</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DeclChanged"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function ToTypeList: TArray<string>;
+      { The window's state as fresh nodes. THE CALLER OWNS THEM. }
+      /// <summary><!-- drag-lint:auto sum -->The window's state as fresh nodes. THE CALLER
+      /// OWNS THEM.</summary>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;TRuleNode&gt;</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
+      /// <para>Calls: ConvRules.Mappings.BuildMappingNodes, Trim</para>
+      /// <para>Reads: FName, FEdFromType, FEdWhenFrom, FCases</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.Mappings.BuildMappingNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DeclChanged"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function BuildNodes: TArray<TRuleNode>;
+      { The canonical text of BuildNodes -- the one comparison that tells an edit from a
       look, so an untouched mapping is never rewritten (and never reformatted). }
-    function  Signature: string;
-    { Re-run ValidateMappings over the current state and re-gate OK. }
-    procedure Revalidate;
-  public
-    /// <summary>Creates the (empty) window and builds its controls in code.</summary>
-    /// <param name="AOwner">Owner form; also the modal parent EditMapping centres on.</param>
-    constructor Create(AOwner: TComponent); override;
+      /// <summary><!-- drag-lint:auto sum -->The canonical text of BuildNodes -- the one
+      /// comparison that tells an edit from a look, so an untouched mapping is never
+      /// rewritten (and never reformatted).</summary>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: L.Text.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
+      /// <para>Calls: ConvRules.Model.TRuleNode.Emit</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.Model.TRuleNode.Emit"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function Signature: string;
+      { Re-run ValidateMappings over the current state and re-gate OK. }
+      /// <remarks>
+      /// <!-- drag-lint:auto -->Re-run ValidateMappings over the current state and re-gate OK.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.DeclChanged (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoAddTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoReloadMembers (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoRemoveTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoSuggestValues (ConvRules.MappingForm.pas) (+2 more)</para>
+      /// <para>Calls: ConvRules.Mappings.MappingIssueIsWarning, ConvRules.Mappings.ValidateMappings, Format, Trim</para>
+      /// <para>Reads: FToTree, FMembers, FBlockToType, FIssues, FEdFromType, FBtnOk, FStatus, FMemberNote</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.Mappings.MappingIssueIsWarning"/>
+      /// <seealso cref="ConvRules.Mappings.ValidateMappings"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure Revalidate;
+    public
+      /// <summary>Creates the (empty) window and builds its controls in code.</summary>
+      /// <param name="AOwner">Owner form; also the modal parent EditMapping centres on.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.BuildUI, CreateNew</para>
+      /// <para>constructor</para>
+      /// <para>Pure</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DeclChanged"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DoAddTarget"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      constructor Create(AOwner: TComponent); override;
 
-    /// <summary>Edit one named #mapping modally.</summary>
-    /// <param name="AOwner">Owner for the modal window.</param>
-    /// <param name="AName">The mapping's name. It is not editable in the window -- the
-    ///   caller chose it, and renaming would orphan every #apply that names it.</param>
-    /// <param name="ANodes">IN: the mapping's CURRENT nodes, borrowed and never freed
-    ///   here. OUT (only when the result is True): freshly created replacement nodes for
-    ///   the WHOLE mapping, which THE CALLER NOW OWNS and must free or hand to a
-    ///   TRuleBook. Left untouched when the result is False.</param>
-    /// <param name="AEngine">Adapter used to resolve the source enum's members. May be
-    ///   nil; the member list then falls back to the values existing #when lines name.</param>
-    /// <param name="AToTree">Property tree of the applying block's To class, used to
-    ///   check that every target path exists and is writable. An empty tree skips those
-    ///   checks rather than reporting every target as missing.</param>
-    /// <param name="ABlockToType">Fully-qualified To type of the applying block, checked
-    ///   against the mapping's declared targets. '' skips that check.</param>
-    /// <returns>True when the user pressed OK AND the mapping actually changed. A no-op
-    ///   OK returns False, so an untouched #mapping line is never rewritten and keeps
-    ///   its byte-for-byte round-trip.</returns>
-    /// <remarks>Errors block OK and warnings do not; both classifications come from
-    ///   MappingIssueIsWarning. A missing source enum type also blocks, because without
-    ///   it there is no declaration line and every #apply naming the mapping would be
-    ///   undefined.</remarks>
-    class function EditMapping(AOwner: TComponent; const AName: string;
-      var ANodes: TArray<TRuleNode>; AEngine: TEngineAdapter; const AToTree: TProptree;
-      const ABlockToType: string): Boolean;
+      /// <summary>Edit one named #mapping modally.</summary>
+      /// <param name="AOwner">Owner for the modal window.</param>
+      /// <param name="AName">The mapping's name. It is not editable in the window -- the
+      /// caller chose it, and renaming would orphan every #apply that names it.</param>
+      /// <param name="ANodes">IN: the mapping's CURRENT nodes, borrowed and never freed
+      /// here. OUT (only when the result is True): freshly created replacement nodes for
+      /// the WHOLE mapping, which THE CALLER NOW OWNS and must free or hand to a
+      /// TRuleBook. Left untouched when the result is False.</param>
+      /// <param name="AEngine">Adapter used to resolve the source enum's members. May be
+      /// nil; the member list then falls back to the values existing #when lines name.</param>
+      /// <param name="AToTree">Property tree of the applying block's To class, used to
+      /// check that every target path exists and is writable. An empty tree skips those
+      /// checks rather than reporting every target as missing.</param>
+      /// <param name="ABlockToType">Fully-qualified To type of the applying block, checked
+      /// against the mapping's declared targets. '' skips that check.</param>
+      /// <returns>True when the user pressed OK AND the mapping actually changed. A no-op
+      /// OK returns False, so an untouched #mapping line is never rewritten and keeps
+      /// its byte-for-byte round-trip.</returns>
+      /// <remarks>
+      /// Errors block OK and warnings do not; both classifications come from
+      /// MappingIssueIsWarning. A missing source enum type also blocks, because without
+      /// it there is no declaration line and every #apply naming the mapping would be
+      /// undefined.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.BuildNodes, ConvRules.MappingForm.TMappingForm.Create, ConvRules.MappingForm.TMappingForm.LoadMembers, ConvRules.MappingForm.TMappingForm.Revalidate, ConvRules.MappingForm.TMappingForm.Signature, ConvRules.Mappings.MappingDeclaration, ConvRules.Mappings.MappingWhenFrom</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Mutates: ANodes (var)</para>
+      /// <para>UI thread only -- touches F</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.LoadMembers"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Signature"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      class function EditMapping(AOwner: TComponent; const AName: string; var ANodes: TArray<TRuleNode>; AEngine: TEngineAdapter; const AToTree: TProptree;
+        const ABlockToType: string): Boolean;
   end;
 
 implementation
 
 uses
-  Vcl.Graphics;
+  Vcl.Graphics
+  ;
 
-const
-  { Column layout of the ToPath|Value grid. }
+const { Column layout of the ToPath|Value grid. }
   COL_PATH  = 0;
   COL_VALUE = 1;
 
@@ -148,55 +423,55 @@ end;
 
 procedure TMappingForm.BuildUI;
 var
-  Top   : TPanel;
-  Bottom: TPanel;
+  Top   : TPanel ;
+  Bottom: TPanel ;
   Btn   : TButton;
 begin
-  Caption     := 'Mapping';
-  Width       := 940;
-  Height      := 620;
-  Position    := poOwnerFormCenter;
-  BorderStyle := bsSizeable;
+  Caption    := 'Mapping';
+  Width      := 940;
+  Height     := 620;
+  Position   := poOwnerFormCenter;
+  BorderStyle:= bsSizeable;
 
-  Top := TPanel.Create(Self);
-  Top.Parent := Self; Top.Align := alTop; Top.Height := 68; Top.BevelOuter := bvNone;
+  Top:= TPanel.Create(Self);
+  Top.Parent:= Self; Top.Align:= alTop; Top.Height:= 68; Top.BevelOuter:= bvNone;
 
-  var L: TLabel := TLabel.Create(Self);
-  L.Parent := Top; L.SetBounds(8, 11, 110, 15);
-  L.Caption := 'Source enum type:';
-  FEdFromType := TEdit.Create(Self);
-  FEdFromType.Parent := Top; FEdFromType.SetBounds(124, 8, 300, 23);
-  FEdFromType.Hint := 'The enum the #when values come from, e.g. XYZ.TXYZButtonStyle';
-  FEdFromType.ShowHint := True;
-  FEdFromType.OnChange := DeclChanged;
+  var L: TLabel:= TLabel.Create(Self);
+  L.Parent:= Top; L.SetBounds(8, 11, 110, 15);
+  L.Caption:= 'Source enum type:';
+  FEdFromType:= TEdit.Create(Self);
+  FEdFromType.Parent:= Top; FEdFromType.SetBounds(124, 8, 300, 23);
+  FEdFromType.Hint    := 'The enum the #when values come from, e.g. XYZ.TXYZButtonStyle';
+  FEdFromType.ShowHint:= True;
+  FEdFromType.OnChange:= DeclChanged;
 
-  Btn := TButton.Create(Self);
-  Btn.Parent := Top; Btn.SetBounds(430, 7, 110, 25);
-  Btn.Caption := 'Load members';
-  Btn.Hint := 'Re-resolve the source enum and refresh the member list (keeps every '
+  Btn:= TButton.Create(Self);
+  Btn.Parent:= Top; Btn.SetBounds(430, 7, 110, 25);
+  Btn.Caption:= 'Load members';
+  Btn.Hint:= 'Re-resolve the source enum and refresh the member list (keeps every '
     + 'assignment already made)';
-  Btn.ShowHint := True;
+  Btn.ShowHint:= True;
   Btn.OnClick := DoReloadMembers;
 
-  L := TLabel.Create(Self);
-  L.Parent := Top; L.SetBounds(556, 11, 90, 15);
-  L.Caption := 'From property:';
-  FEdWhenFrom := TEdit.Create(Self);
-  FEdWhenFrom.Parent := Top; FEdWhenFrom.SetBounds(652, 8, 260, 23);
-  FEdWhenFrom.Hint := 'The source property the #when clauses read, e.g. Style. A clause '
+  L:= TLabel.Create(Self);
+  L.Parent:= Top; L.SetBounds(556, 11, 90, 15);
+  L.Caption:= 'From property:';
+  FEdWhenFrom:= TEdit.Create(Self);
+  FEdWhenFrom.Parent:= Top; FEdWhenFrom.SetBounds(652, 8, 260, 23);
+  FEdWhenFrom.Hint:= 'The source property the #when clauses read, e.g. Style. A clause '
     + 'that tests a DIFFERENT property keeps its own and is tagged [property] in the '
     + 'member list.';
-  FEdWhenFrom.ShowHint := True;
-  FEdWhenFrom.OnChange := DeclChanged;
+  FEdWhenFrom.ShowHint:= True;
+  FEdWhenFrom.OnChange:= DeclChanged;
 
-  L := TLabel.Create(Self);
-  L.Parent := Top; L.SetBounds(8, 41, 110, 15);
-  L.Caption := 'Target classes:';
-  FEdToTypes := TEdit.Create(Self);
-  FEdToTypes.Parent := Top; FEdToTypes.SetBounds(124, 38, 788, 23);
-  FEdToTypes.Hint := 'Comma-separated classes this mapping may be applied to';
-  FEdToTypes.ShowHint := True;
-  FEdToTypes.OnChange := DeclChanged;
+  L:= TLabel.Create(Self);
+  L.Parent:= Top; L.SetBounds(8, 41, 110, 15);
+  L.Caption:= 'Target classes:';
+  FEdToTypes:= TEdit.Create(Self);
+  FEdToTypes.Parent:= Top; FEdToTypes.SetBounds(124, 38, 788, 23);
+  FEdToTypes.Hint    := 'Comma-separated classes this mapping may be applied to';
+  FEdToTypes.ShowHint:= True;
+  FEdToTypes.OnChange:= DeclChanged;
 
   // Three alBottom bands, wanted in this order top-down: issue list, button row, status
   // bar hard against the window's bottom edge. Parent ORDER does not decide that -- VCL
@@ -205,82 +480,83 @@ begin
   // overwritten immediately afterwards. (Same trick, and same reason, as the main
   // window's toolbar PARK constant.) Left to chance the status bar lands above the
   // buttons, where it reads as a stray label rather than a status line.
-  FIssues := TMemo.Create(Self);
-  FIssues.Top        := 10000;
-  FIssues.Parent     := Self;
-  FIssues.Align      := alBottom;
-  FIssues.Height     := 96;
-  FIssues.ReadOnly   := True;
-  FIssues.WordWrap   := False;
-  FIssues.ScrollBars := ssBoth;
-  FIssues.Font.Name  := 'Consolas';
-  FIssues.Font.Size  := 9;
+  FIssues:= TMemo.Create(Self);
+  FIssues.Top       := 10000;
+  FIssues.Parent    := Self;
+  FIssues.Align     := alBottom;
+  FIssues.Height    := 96;
+  FIssues.ReadOnly  := True;
+  FIssues.WordWrap  := False;
+  FIssues.ScrollBars:= ssBoth;
+  FIssues.Font.Name:= 'Consolas';
+  FIssues.Font.Size:= 9;
 
-  Bottom := TPanel.Create(Self);
-  Bottom.Top := 20000;
-  Bottom.Parent := Self; Bottom.Align := alBottom; Bottom.Height := 36;
-  Bottom.BevelOuter := bvNone;
+  Bottom:= TPanel.Create(Self);
+  Bottom.Top:= 20000;
+  Bottom.Parent:= Self; Bottom.Align:= alBottom; Bottom.Height:= 36;
+  Bottom.BevelOuter:= bvNone;
 
-  Btn := TButton.Create(Self);
-  Btn.Parent := Bottom; Btn.SetBounds(8, 5, 100, 25);
-  Btn.Caption := '+ Add target'; Btn.OnClick := DoAddTarget;
-  Btn := TButton.Create(Self);
-  Btn.Parent := Bottom; Btn.SetBounds(114, 5, 100, 25);
-  Btn.Caption := 'Remove'; Btn.OnClick := DoRemoveTarget;
+  Btn:= TButton.Create(Self);
+  Btn.Parent:= Bottom; Btn.SetBounds(8, 5, 100, 25);
+  Btn.Caption:= '+ Add target'; Btn.OnClick:= DoAddTarget;
+  Btn:= TButton.Create(Self);
+  Btn.Parent:= Bottom; Btn.SetBounds(114, 5, 100, 25);
+  Btn.Caption:= 'Remove'; Btn.OnClick:= DoRemoveTarget;
 
-  Btn := TButton.Create(Self);
-  Btn.Parent := Bottom;
+  Btn:= TButton.Create(Self);
+  Btn.Parent:= Bottom;
   Btn.SetBounds(220, 5, 130, 25);
   Btn.Caption := 'Suggest values';
-  Btn.Hint := 'Fill this target across every member by matching enum member NAMES';
-  Btn.ShowHint := True;
+  Btn.Hint    := 'Fill this target across every member by matching enum member NAMES';
+  Btn.ShowHint:= True;
   Btn.OnClick := DoSuggestValues;
 
-  FBtnOk := TButton.Create(Self);
-  FBtnOk.Parent := Bottom; FBtnOk.SetBounds(700, 5, 90, 25);
-  FBtnOk.Caption := 'OK'; FBtnOk.ModalResult := mrOk; FBtnOk.Default := True;
-  Btn := TButton.Create(Self);
-  Btn.Parent := Bottom; Btn.SetBounds(798, 5, 90, 25);
-  Btn.Caption := 'Cancel'; Btn.ModalResult := mrCancel; Btn.Cancel := True;
+  FBtnOk:= TButton.Create(Self);
+  FBtnOk.Parent:= Bottom; FBtnOk.SetBounds(700, 5, 90, 25);
+  FBtnOk.Caption:= 'OK'; FBtnOk.ModalResult:= mrOk; FBtnOk.Default:= True;
+  Btn:= TButton.Create(Self);
+  Btn.Parent:= Bottom; Btn.SetBounds(798, 5, 90, 25);
+  Btn.Caption:= 'Cancel'; Btn.ModalResult:= mrCancel; Btn.Cancel:= True;
 
-  FStatus := TStatusBar.Create(Self);
-  FStatus.Top         := 30000;
-  FStatus.Parent      := Self;
-  FStatus.SimplePanel := True;
+  FStatus:= TStatusBar.Create(Self);
+  FStatus.Top        := 30000;
+  FStatus.Parent     := Self;
+  FStatus.SimplePanel:= True;
 
-  FMemberList := TListBox.Create(Self);
-  FMemberList.Parent  := Self;
-  FMemberList.Align   := alLeft;
-  FMemberList.Width   := 240;
-  FMemberList.OnClick := MemberSelected;
+  FMemberList:= TListBox.Create(Self);
+  FMemberList.Parent := Self;
+  FMemberList.Align  := alLeft;
+  FMemberList.Width  := 240;
+  FMemberList.OnClick:= MemberSelected;
 
-  FGrid := TStringGrid.Create(Self);
-  FGrid.Parent    := Self;
-  FGrid.Align     := alClient;
-  FGrid.ColCount  := 2;
-  FGrid.FixedCols := 0;
-  FGrid.FixedRows := 1;
-  FGrid.RowCount  := 2;
-  FGrid.Options   := [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine,
-                      goColSizing, goEditing, goTabs];
-  FGrid.ColWidths[COL_PATH]  := 360;
-  FGrid.ColWidths[COL_VALUE] := 280;
-  FGrid.Cells[COL_PATH,  0]  := 'To path';
-  FGrid.Cells[COL_VALUE, 0]  := 'Value';
-  FGrid.OnSetEditText := GridEdited;
+  FGrid:= TStringGrid.Create(Self);
+  FGrid.Parent   := Self;
+  FGrid.Align    := alClient;
+  FGrid.ColCount := 2;
+  FGrid.FixedCols:= 0;
+  FGrid.FixedRows:= 1;
+  FGrid.RowCount := 2;
+  FGrid.Options:= [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goColSizing, goEditing, goTabs];
+  FGrid.ColWidths[COL_PATH ]:= 360;
+  FGrid.ColWidths[COL_VALUE]:= 280;
+  FGrid.Cells[COL_PATH , 0]:= 'To path';
+  FGrid.Cells[COL_VALUE, 0]:= 'Value';
+  FGrid.OnSetEditText:= GridEdited;
 
   // TLabel is a TGraphicControl, so no style hook reaches it: without Transparent it
   // fills its rectangle with the light clBtnFace its parent's PROPERTY resolves to
   // while the caption is painted styled, which is white-on-white under the dark style.
   // Same sweep, and same reason, as the main window's.
-  for var i := 0 to ComponentCount - 1 do
-    if Components[i] is TLabel then TLabel(Components[i]).Transparent := True;
-end;
+  for var i:= 0 to ComponentCount - 1 do
+    if Components[i] is TLabel then
+      TLabel(Components[i]).Transparent:= True;
+end; // procedure
 
 function TMappingForm.CurrentCase: Integer;
 begin
-  Result := FMemberList.ItemIndex;
-  if (Result < 0) or (Result > High(FCases)) then Result := -1;
+  Result:= FMemberList.ItemIndex;
+  if (Result < 0) or (Result > High(FCases)) then
+    Result:= -1;
 end;
 
 function TMappingForm.ToTypeList: TArray<string>;
@@ -288,53 +564,53 @@ var
   S   : string;
   Part: string;
 begin
-  Result := nil;
+  Result:= nil;
   for S in Trim(FEdToTypes.Text).Split([',']) do
   begin
-    Part := Trim(S);
-    if Part <> '' then Result := Result + [Part];
+    Part:= Trim(S);
+    if Part <> '' then
+      Result:= Result + [Part];
   end;
 end;
 
 function TMappingForm.BuildNodes: TArray<TRuleNode>;
 begin
-  Result := BuildMappingNodes(FName, Trim(FEdFromType.Text), ToTypeList,
-    Trim(FEdWhenFrom.Text), FCases);
+  Result:= BuildMappingNodes(FName, Trim(FEdFromType.Text), ToTypeList, Trim(FEdWhenFrom.Text), FCases);
 end;
 
 function TMappingForm.Signature: string;
 var
   Own: TObjectList<TRuleNode>;
-  N  : TRuleNode;
-  L  : TStringList;
+  N  : TRuleNode             ;
+  L  : TStringList           ;
 begin
-  Own := TObjectList<TRuleNode>.Create(True);
-  L   := TStringList.Create;
+  Own:= TObjectList<TRuleNode>.Create(True);
+  L:= TStringList.Create;
   try
     Own.AddRange(BuildNodes);
     for N in Own do
       L.Add(N.Emit);
-    Result := L.Text;
+    Result:= L.Text;
   finally
     L.Free;
     Own.Free;
   end;
-end;
+end; // function
 
 procedure TMappingForm.LoadMembers(AFromCurrent: Boolean);
 var
-  Members: TArray<string>;
-  Err    : string;
-  Ambig  : Integer;
-  FromTyp: string;
-  Source : TArray<TRuleNode>;
+  Members: TArray<string>        ;
+  Err    : string                ;
+  Ambig  : Integer               ;
+  FromTyp: string                ;
+  Source : TArray<TRuleNode>     ;
   Own    : TObjectList<TRuleNode>;
 begin
-  Members := nil;
-  Err     := '';
-  Ambig   := 0;
-  FMemberNote := '';
-  FromTyp := Trim(FEdFromType.Text);
+  Members:= nil;
+  Err        := '';
+  Ambig      := 0;
+  FMemberNote:= '';
+  FromTyp:= Trim(FEdFromType.Text);
   // Neither the failure reason nor the ambiguity count may be dropped here. Everything
   // downstream -- every mikBadLiteral verdict and the entire exhaustiveness pass -- is
   // computed against this list, so a list that could not be resolved, or that came from
@@ -343,104 +619,109 @@ begin
   if (FEngine <> nil) and (FromTyp <> '') then
     if not FEngine.EnumMembersOf(FromTyp, Members, Err, Ambig) then
     begin
-      Members := nil;
-      FMemberNote := 'Enum members NOT resolved: ' + Err;
+      Members:= nil;
+      FMemberNote:= 'Enum members NOT resolved: ' + Err;
     end
-    else if Ambig > 1 then
-      FMemberNote := Format('%d declarations are named %s; the member list came from '
-        + 'one of them.', [Ambig, FromTyp]);
+  else if Ambig > 1 then
+    FMemberNote:= Format('%d declarations are named %s; the member list came from ' + 'one of them.', [Ambig, FromTyp]);
 
-  Own := TObjectList<TRuleNode>.Create(True);
+  Own:= TObjectList<TRuleNode>.Create(True);
   try
     if AFromCurrent then
     begin
       // Round-tripping the window's own state through nodes is what lets the refold
       // reuse MappingCasesOf instead of a second, divergent merge rule.
       Own.AddRange(BuildNodes);
-      Source := Own.ToArray;
+      Source:= Own.ToArray;
     end
     else
-      Source := FSeed;
+      Source:= FSeed;
 
     // Fallback: method-pointer types are not indexed at all and some enums resolve
     // ambiguously. For those the values the author already wrote are the only members
     // known -- without this the list would be EMPTY for mappings that already work.
     if Length(Members) = 0 then
     begin
-      Members := MappingWhenValues(Source, FName);
+      Members:= MappingWhenValues(Source, FName);
       if (FMemberNote = '') and (FromTyp <> '') then
-        FMemberNote := 'The member list is the values already written here, not '
+        FMemberNote:= 'The member list is the values already written here, not '
           + FromTyp + '''s.';
     end;
 
-    FMembers := Members;
-    FCases   := MappingCasesOf(Source, FName, Members);
+    FMembers:= Members;
+    FCases:= MappingCasesOf(Source, FName, Members);
   finally
     Own.Free;
-  end;
+  end; // try
 
   RefreshMemberList;
-end;
+end; // procedure
 
 procedure TMappingForm.RefreshMemberList;
 var
-  Keep: Integer;
+  Keep: Integer     ;
   Item: TMappingCase;
-  Text: string;
+  Text: string      ;
 begin
-  Keep := FMemberList.ItemIndex;
+  Keep:= FMemberList.ItemIndex;
   FMemberList.Items.BeginUpdate;
   try
     FMemberList.Items.Clear;
     for Item in FCases do
     begin
-      if Item.IsElse then Text := ELSE_ROW else Text := Item.Member;
+      if Item.IsElse then
+        Text:= ELSE_ROW
+      else
+        Text:= Item.Member;
       // A case that reads a DIFFERENT source property than the box above shows up twice
       // under the same member name otherwise, with no way to tell which is which -- so
       // name the property it actually tests. Rare; see TMappingCase.WhenFrom.
       if (not Item.IsElse) and (Item.WhenFrom <> '') then
-        Text := Text + ' [' + Item.WhenFrom + ']';
+        Text:= Text + ' [' + Item.WhenFrom + ']';
       // The count is the only cue that a member is already mapped; without it the user
       // has to click every row to find out.
       if Length(Item.Sets) > 0 then
-        Text := Text + '   (' + IntToStr(Length(Item.Sets)) + ')';
+        Text:= Text + '   (' + IntToStr(Length(Item.Sets)) + ')';
       FMemberList.Items.Add(Text);
-    end;
+    end; // for
   finally
     FMemberList.Items.EndUpdate;
-  end;
-  if (Keep >= 0) and (Keep < FMemberList.Items.Count) then FMemberList.ItemIndex := Keep
-  else if FMemberList.Items.Count > 0 then FMemberList.ItemIndex := 0;
+  end; // try
+  if (Keep >= 0) and (Keep < FMemberList.Items.Count) then
+    FMemberList.ItemIndex:= Keep
+  else if FMemberList.Items.Count > 0 then
+    FMemberList.ItemIndex:= 0;
   RefreshCaseGrid;
-end;
+end; // procedure
 
 procedure TMappingForm.RefreshCaseGrid;
 var
-  c, r: Integer;
+  c: Integer;
+  r: Integer;
 begin
-  FLoading := True;
+  FLoading:= True;
   try
-    c := CurrentCase;
+    c:= CurrentCase;
     if c < 0 then
-      FGrid.RowCount := 2
+      FGrid.RowCount:= 2
     else
       // Always one blank row past the last pair, so typing a new target needs no button.
-      FGrid.RowCount := Length(FCases[c].Sets) + 2;
-    for r := 1 to FGrid.RowCount - 1 do
+      FGrid.RowCount:= Length(FCases[c].Sets) + 2;
+    for r:= 1 to FGrid.RowCount - 1 do
     begin
-      FGrid.Cells[COL_PATH,  r] := '';
-      FGrid.Cells[COL_VALUE, r] := '';
+      FGrid.Cells[COL_PATH , r]:= '';
+      FGrid.Cells[COL_VALUE, r]:= '';
     end;
     if c >= 0 then
-      for r := 0 to High(FCases[c].Sets) do
+      for r:= 0 to High(FCases[c].Sets) do
       begin
-        FGrid.Cells[COL_PATH,  r + 1] := FCases[c].Sets[r].ToPath;
-        FGrid.Cells[COL_VALUE, r + 1] := FCases[c].Sets[r].Value;
+        FGrid.Cells[COL_PATH , r + 1]:= FCases[c].Sets[r].ToPath;
+        FGrid.Cells[COL_VALUE, r + 1]:= FCases[c].Sets[r].Value;
       end;
   finally
-    FLoading := False;
-  end;
-end;
+    FLoading:= False;
+  end; // try
+end; // procedure
 
 { Moving to another member is the moment the per-member counts are re-read: refreshing
   them on every keystroke would rebuild the list under the cell editor, and leaving them
@@ -451,175 +732,192 @@ begin
   RefreshMemberList;
 end;
 
-procedure TMappingForm.GridEdited(Sender: TObject; ACol, ARow: Longint;
-  const AText: string);
+procedure TMappingForm.GridEdited(Sender: TObject; ACol, ARow: Longint; const AText: string);
 var
-  c, i: Integer;
+  c: Integer;
+  i: Integer;
 begin
-  if FLoading then Exit;
-  c := CurrentCase;
-  if (c < 0) or (ARow < 1) then Exit;
-  i := ARow - 1;
+  if FLoading then
+    Exit;
+  c:= CurrentCase;
+  if (c < 0) or (ARow < 1) then
+    Exit;
+  i:= ARow - 1;
   // The grid always shows one row past the data, so typing into it grows the case --
   // "+ Add target" is a convenience, not the only way in.
   if i >= Length(FCases[c].Sets) then
     SetLength(FCases[c].Sets, i + 1);
-  if ACol = COL_PATH then FCases[c].Sets[i].ToPath := Trim(AText)
-  else                    FCases[c].Sets[i].Value  := Trim(AText);
+  if ACol = COL_PATH then
+    FCases[c].Sets[i].ToPath:= Trim(AText)
+  else
+    FCases[c].Sets[i].Value:= Trim(AText);
   Revalidate;
-end;
+end; // procedure
 
 procedure TMappingForm.DoSuggestValues(Sender: TObject);
 var
-  c, r, i, j : Integer;
-  Path, TypeN: string;
-  Err        : string;
-  TgtMembers : TArray<string>;
-  SrcMembers : TArray<string>;
-  Surplus    : TArray<string>;
-  Pairs      : TEnumPairs;
-  Filled, Left: Integer;
+  c         : Integer       ;
+  r         : Integer       ;
+  i         : Integer       ;
+  j         : Integer       ;
+  Path      : string        ;
+  TypeN     : string        ;
+  Err       : string        ;
+  TgtMembers: TArray<string>;
+  SrcMembers: TArray<string>;
+  Surplus   : TArray<string>;
+  Pairs     : TEnumPairs    ;
+  Filled    : Integer       ;
+  Left      : Integer       ;
 
   { Set ATo on case ACase, replacing an existing assignment to the same path
     rather than appending a second one to it. }
   procedure PutValue(ACase: Integer; const APath, AValue: string);
-  var k: Integer;
+  var
+    k: Integer;
   begin
-    for k := 0 to High(FCases[ACase].Sets) do
+    for k:= 0 to High(FCases[ACase].Sets) do
       if SameText(Trim(FCases[ACase].Sets[k].ToPath), APath) then
       begin
-        FCases[ACase].Sets[k].Value := AValue;
+        FCases[ACase].Sets[k].Value:= AValue;
         Exit;
       end;
     SetLength(FCases[ACase].Sets, Length(FCases[ACase].Sets) + 1);
-    FCases[ACase].Sets[High(FCases[ACase].Sets)].ToPath := APath;
-    FCases[ACase].Sets[High(FCases[ACase].Sets)].Value  := AValue;
-  end;
+    FCases[ACase].Sets[High(FCases[ACase].Sets)].ToPath:= APath;
+    FCases[ACase].Sets[High(FCases[ACase].Sets)].Value := AValue;
+  end; // procedure
 
 { Every precondition in one place, returning the message to show, '' when all
     hold. Collapsing six guard clauses into one exit is not cosmetic: the routine
     tripped too-many-exit-points, and a single failure channel is what lets the
     caller below read as the actual work. Sets Path, TypeN and TgtMembers. }
-  // Why the review below: six exits is one per PRECONDITION, which is the
-  // guard-clause shape the rule's own message recommends. Getting under the cap
-  // would mean either merging two unrelated checks behind one message, or six
-  // levels of nesting; both are worse than the finding.
-  // (Do not open this comment with the marker word -- a second one on its own
-  // line reads as a marker naming a rule called "reason" and suppresses nothing.)
-  function Blocked: string;  // dl:ok too-many-exit-points@8756
+// Why the review below: six exits is one per PRECONDITION, which is the
+// guard-clause shape the rule's own message recommends. Getting under the cap
+// would mean either merging two unrelated checks behind one message, or six
+// levels of nesting; both are worse than the finding.
+// (Do not open this comment with the marker word -- a second one on its own
+// line reads as a marker naming a rule called "reason" and suppresses nothing.)
+  function Blocked: string; // dl:ok too-many-exit-points@8756
   var
-    LLeaf: TPropLeaf;
-    LFound: Boolean;
-    LErr  : string;
+    LLeaf : TPropLeaf;
+    LFound: Boolean  ;
+    LErr  : string   ;
   begin
-    Result := '';
-    c := CurrentCase;
-    if c < 0 then Exit('Select a member row first.');
+    Result:= '';
+    c     := CurrentCase;
+    if c < 0 then
+      Exit('Select a member row first.');
 
-    r := FGrid.Row;
+    r:= FGrid.Row;
     if (r < 1) or (r > Length(FCases[c].Sets)) then
       Exit('Select the target row to suggest values for.');
 
-    Path := Trim(FCases[c].Sets[r - 1].ToPath);
-    if Path = '' then Exit('That target row has no path yet.');
+    Path:= Trim(FCases[c].Sets[r - 1].ToPath);
+    if Path = '' then
+      Exit('That target row has no path yet.');
 
     // The path's DECLARED TYPE is what says which enum to match against.
-    LFound := False;
-    TypeN  := '';
+    LFound:= False;
+    TypeN := '';
     for LLeaf in FToTree.Leaves do
       if SameText(LLeaf.Path, Path) then
       begin
-        TypeN  := LLeaf.TypeName;
-        LFound := True;
+        TypeN:= LLeaf.TypeName;
+        LFound:= True;
         Break;
       end;
     if not LFound then
       Exit(Format('%s is not in the To tree, so its type is unknown.', [Path]));
 
-    if not Assigned(FEngine) then Exit('No engine available to read enum members.');
+    if not Assigned(FEngine) then
+      Exit('No engine available to read enum members.');
 
     // Not an enum, or not indexed. Either way there is nothing to match against,
     // and saying WHICH type failed is more use than a bare refusal.
     if (not FEngine.EnumMembersOf(TypeN, TgtMembers, LErr)) or (Length(TgtMembers) = 0) then
       Exit(Format('%s is %s -- no enum members to match. %s', [Path, TypeN, LErr]));
-  end;
+  end; // function
 
 begin
-  Err := Blocked;
+  Err:= Blocked;
   if Err <> '' then
   begin
-    FStatus.SimpleText := Err;
+    FStatus.SimpleText:= Err;
     Exit;
   end;
 
-  SrcMembers := nil;
-  for i := 0 to High(FCases) do
+  SrcMembers:= nil;
+  for i:= 0 to High(FCases) do
     if not FCases[i].IsElse then
-      SrcMembers := SrcMembers + [FCases[i].Member];
+      SrcMembers:= SrcMembers + [FCases[i].Member];
 
-  Pairs := SuggestEnumPairs(SrcMembers, TgtMembers, Surplus);
+  Pairs:= SuggestEnumPairs(SrcMembers, TgtMembers, Surplus);
 
-  Filled := 0;
-  Left   := 0;
-  j      := 0;
-  for i := 0 to High(FCases) do
+  Filled:= 0;
+  Left  := 0;
+  j     := 0;
+  for i:= 0 to High(FCases) do
   begin
-    if FCases[i].IsElse then Continue;      // a fallback is not a member translation
-    if j > High(Pairs) then Break;
+    if FCases[i].IsElse then Continue; // a fallback is not a member translation
+    if j > High(Pairs) then
+      Break;
     if Pairs[j].ToMember <> '' then
     begin
       PutValue(i, Path, Pairs[j].ToMember);
       Inc(Filled);
     end
     else
-      Inc(Left);                            // left EMPTY on purpose -- never guessed
-    Inc(j);
-  end;
+      Inc(Left); // left EMPTY on purpose -- never guessed
+    Inc  (j   );
+  end; // for
 
   RefreshCaseGrid;
   Revalidate;
 
   // Plain if, not IfThen: IfThen evaluates BOTH arms, so it would run the join
   // even with nothing surplus -- and the repo's ifthen-both-branches rule says so.
-  Err := '';
+  Err:= '';
   if Length(Surplus) > 0 then
-    Err := ': ' + string.Join(', ', Surplus);
-  FStatus.SimpleText := Format(
-    '%s (%s): filled %d of %d member(s); %d unmatched; %d target member(s) unused%s',
-    [Path, TypeN, Filled, Length(SrcMembers), Left, Length(Surplus), Err]);
-end;
+    Err:= ': ' + string.Join(', ', Surplus);
+  FStatus.SimpleText:= Format(
+    '%s (%s): filled %d of %d member(s); %d unmatched; %d target member(s) unused%s', [Path, TypeN, Filled, Length(SrcMembers), Left, Length(Surplus), Err]);
+end; // begin
 
 procedure TMappingForm.DoAddTarget(Sender: TObject);
 var
   c: Integer;
 begin
-  c := CurrentCase;
-  if c < 0 then Exit;
+  c:= CurrentCase;
+  if c < 0 then
+    Exit;
   SetLength(FCases[c].Sets, Length(FCases[c].Sets) + 1);
   RefreshCaseGrid;
-  FGrid.Row := Length(FCases[c].Sets);
-  FGrid.Col := COL_PATH;
+  FGrid.Row:= Length(FCases[c].Sets);
+  FGrid.Col:= COL_PATH;
   Revalidate;
 end;
 
 procedure TMappingForm.DoRemoveTarget(Sender: TObject);
 var
-  c, i, j: Integer;
+  c: Integer;
+  i: Integer;
+  j: Integer;
 begin
-  c := CurrentCase;
-  if c < 0 then Exit;
-  i := FGrid.Row - 1;
+  c:= CurrentCase;
+  if c < 0 then
+    Exit;
+  i:= FGrid.Row - 1;
   if (i < 0) or (i > High(FCases[c].Sets)) then
   begin
-    FStatus.SimpleText := 'Pick a target row to remove.';
+    FStatus.SimpleText:= 'Pick a target row to remove.';
     Exit;
   end;
-  for j := i to High(FCases[c].Sets) - 1 do
-    FCases[c].Sets[j] := FCases[c].Sets[j + 1];
+  for j:= i to High(FCases[c].Sets) - 1 do
+    FCases[c].Sets[j]:= FCases[c].Sets[j + 1];
   SetLength(FCases[c].Sets, Length(FCases[c].Sets) - 1);
   RefreshMemberList;
   Revalidate;
-end;
+end; // procedure
 
 procedure TMappingForm.DoReloadMembers(Sender: TObject);
 begin
@@ -640,30 +938,31 @@ end;
   "Load members" resolves the new type. No check is better than a wrong one. }
 procedure TMappingForm.DeclChanged(Sender: TObject);
 begin
-  if FLoading then Exit;
+  if FLoading then
+    Exit;
   if Sender = FEdFromType then
   begin
-    FMembers := nil;
-    FMemberNote := 'Source enum type edited -- press "Load members" to check values '
+    FMembers:= nil;
+    FMemberNote:= 'Source enum type edited -- press "Load members" to check values '
       + 'against it.';
   end;
   Revalidate;
-end;
+end; // procedure
 
 procedure TMappingForm.Revalidate;
 var
   Own   : TObjectList<TRuleNode>;
-  Nodes : TArray<TRuleNode>;
-  Issues: TArray<TMappingIssue>;
-  Issue : TMappingIssue;
-  Errors: Integer;
+  Nodes : TArray<TRuleNode>     ;
+  Issues: TArray<TMappingIssue> ;
+  Issue : TMappingIssue         ;
+  Errors: Integer               ;
 begin
-  Errors := 0;
-  Own := TObjectList<TRuleNode>.Create(True);
+  Errors:= 0;
+  Own:= TObjectList<TRuleNode>.Create(True);
   try
-    Nodes := BuildNodes;
+    Nodes:= BuildNodes;
     Own.AddRange(Nodes);
-    Issues := ValidateMappings(Nodes, FToTree, FMembers, FBlockToType);
+    Issues:= ValidateMappings(Nodes, FToTree, FMembers, FBlockToType);
 
     FIssues.Lines.BeginUpdate;
     try
@@ -682,10 +981,10 @@ begin
         FIssues.Lines.Add('No issues.');
     finally
       FIssues.Lines.EndUpdate;
-    end;
+    end; // try
   finally
     Own.Free;
-  end;
+  end; // try
 
   // A missing source enum type is not an issue KIND -- it means no declaration line is
   // emitted at all, so every #apply naming this mapping would be undefined. It is a
@@ -693,77 +992,75 @@ begin
   // MappingIssueIsWarning.
   if Trim(FEdFromType.Text) = '' then
   begin
-    FBtnOk.Enabled     := False;
-    FStatus.SimpleText := 'A source enum type is required before this mapping can be saved.';
+    FBtnOk .Enabled   := False;
+    FStatus.SimpleText:= 'A source enum type is required before this mapping can be saved.';
     Exit;
   end;
 
-  FBtnOk.Enabled := Errors = 0;
-  if Length(Issues) = 0 then
-    FStatus.SimpleText := 'No issues.'
+  FBtnOk.Enabled:= Errors = 0;
+  if Length(Issues)       = 0 then
+    FStatus.SimpleText:= 'No issues.'
   else
   begin
-    FStatus.SimpleText := Format('%d error(s), %d warning(s).',
-      [Errors, Length(Issues) - Errors]);
+    FStatus.SimpleText:= Format('%d error(s), %d warning(s).', [Errors, Length(Issues) - Errors]);
     // Say why OK is still available only when a warning is actually the reason.
     if (Errors = 0) and (Length(Issues) > 0) then
-      FStatus.SimpleText := FStatus.SimpleText + ' Warnings do not block OK.';
+      FStatus.SimpleText:= FStatus.SimpleText + ' Warnings do not block OK.';
   end;
   // The issue counts above are only meaningful if the member list they were computed
   // against is meaningful. When it is not, that caveat is APPENDED rather than allowed
   // to be overwritten -- "No issues." on an unresolvable enum is the exact reading this
   // has to prevent.
   if FMemberNote <> '' then
-    FStatus.SimpleText := FStatus.SimpleText + '   ' + FMemberNote;
-end;
+    FStatus.SimpleText:= FStatus.SimpleText + '   ' + FMemberNote;
+end; // procedure
 
-class function TMappingForm.EditMapping(AOwner: TComponent; const AName: string;
-  var ANodes: TArray<TRuleNode>; AEngine: TEngineAdapter; const AToTree: TProptree;
+class function TMappingForm.EditMapping(AOwner: TComponent; const AName: string; var ANodes: TArray<TRuleNode>; AEngine: TEngineAdapter; const AToTree: TProptree;
   const ABlockToType: string): Boolean;
 var
   F   : TMappingForm;
-  Decl: TRuleNode;
+  Decl: TRuleNode   ;
 begin
-  Result := False;
-  F := TMappingForm.Create(AOwner);
+  Result:= False;
+  F:= TMappingForm.Create(AOwner);
   try
-    F.FName        := AName;
-    F.FEngine      := AEngine;
-    F.FToTree      := AToTree;
-    F.FBlockToType := ABlockToType;
-    F.FSeed        := ANodes;
-    F.Caption      := 'Mapping -- ' + AName;
+    F.FName       := AName;
+    F.FEngine     := AEngine;
+    F.FToTree     := AToTree;
+    F.FBlockToType:= ABlockToType;
+    F.FSeed       := ANodes;
+    F.Caption:= 'Mapping -- ' + AName;
 
-    F.FLoading := True;
+    F.FLoading:= True;
     try
-      Decl := MappingDeclaration(ANodes, AName);
+      Decl:= MappingDeclaration(ANodes, AName);
       if Decl <> nil then
       begin
-        F.FEdFromType.Text := Decl.MapFromType;
-        F.FEdToTypes.Text  := string.Join(', ', Decl.MapToTypes);
+        F.FEdFromType.Text:= Decl.MapFromType;
+        F.FEdToTypes.Text:= string.Join(', ', Decl.MapToTypes);
       end
       else if ABlockToType <> '' then
         // A brand-new mapping is being authored from inside a block; that block's To
         // class is the only target we can honestly guess, and guessing it wrong is
         // reported by mikToTypeNotDeclared rather than hidden.
-        F.FEdToTypes.Text := ABlockToType;
-      F.FEdWhenFrom.Text := MappingWhenFrom(ANodes, AName);
+        F.FEdToTypes.Text:= ABlockToType;
+      F.FEdWhenFrom.Text:= MappingWhenFrom(ANodes, AName);
     finally
-      F.FLoading := False;
-    end;
+      F.FLoading:= False;
+    end; // try
 
     F.LoadMembers(False);
-    F.FSeedSig := F.Signature;
+    F.FSeedSig:= F.Signature;
     F.Revalidate;
 
     if (F.ShowModal = mrOk) and (F.Signature <> F.FSeedSig) then
     begin
-      ANodes := F.BuildNodes;   // ownership passes to the caller
-      Result := True;
+      ANodes:= F.BuildNodes; // ownership passes to the caller
+      Result:= True;
     end;
   finally
     F.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 end.

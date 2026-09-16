@@ -65,13 +65,23 @@ const
   OPEN_SOURCE_SEP  = #9; { TAB between file and line }
   OPEN_SOURCE_TERM = #10; { LF terminator }
 
-/// <summary>Builds the framed UTF-8 message bytes for (AFile, ALine):
-/// &lt;file&gt;&lt;TAB&gt;&lt;line&gt;&lt;LF&gt;.</summary>
-/// <param name="AFile">Absolute path; must contain neither TAB nor LF.</param>
-/// <param name="ALine">1-based start line, emitted as decimal ASCII.</param>
-/// <returns>The exact bytes SendOpenSource writes to the pipe.</returns>
-/// <remarks>Exposed so a round-trip test (and the plugin author) can assert the
-/// byte layout without a live pipe.</remarks>
+  /// <summary>Builds the framed UTF-8 message bytes for (AFile, ALine):
+  /// &lt;file&gt;&lt;TAB&gt;&lt;line&gt;&lt;LF&gt;.</summary>
+  /// <param name="AFile">Absolute path; must contain neither TAB nor LF.</param>
+  /// <param name="ALine">1-based start line, emitted as decimal ASCII.</param>
+  /// <returns>The exact bytes SendOpenSource writes to the pipe.</returns>
+  /// <remarks>
+  /// Exposed so a round-trip test (and the plugin author) can assert the
+  /// byte layout without a live pipe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: ConvRules.OpenSourceClient.SendOpenSource (ConvRules.OpenSourceClient.pas)</para>
+  /// <para>Calls: IntToStr</para>
+  /// <para>Returns: TEncoding.UTF8.GetBytes(Line)</para>
+  /// <para>Overload 1 of 2</para>
+  /// <para>Pure</para>
+  /// <para>Directives: overload</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 function BuildOpenSourceMessage(const AFile: string; ALine: Integer): TBytes; overload;
 
 /// <summary>Column-aware framing (contract v2):
@@ -80,8 +90,18 @@ function BuildOpenSourceMessage(const AFile: string; ALine: Integer): TBytes; ov
 /// <param name="ALine">1-based start line.</param>
 /// <param name="ACol">1-based caret column; &lt;= 0 is sent as 1.</param>
 /// <returns>The framed v2 message bytes.</returns>
-/// <remarks>The server reads the line positionally and treats the column as
-/// optional, so this stays back-compatible with a v1 (file+line only) reader.</remarks>
+/// <remarks>
+/// The server reads the line positionally and treats the column as
+/// optional, so this stays back-compatible with a v1 (file+line only) reader.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.OpenSourceClient.SendOpenSourceAt (ConvRules.OpenSourceClient.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <para>Returns: TEncoding.UTF8.GetBytes(Line)</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Pure</para>
+/// <para>Directives: overload</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildOpenSourceMessage(const AFile: string; ALine, ACol: Integer): TBytes; overload;
 
 /// <summary>Sends an open-source request to the running plugin.</summary>
@@ -94,7 +114,17 @@ function BuildOpenSourceMessage(const AFile: string; ALine, ACol: Integer): TByt
 /// written. False (within AWaitMs) when no server is listening -- the caller
 /// should then degrade, e.g. show file:line and copy it to the clipboard, so
 /// standalone use still works.</returns>
-/// <remarks>Never raises: all Win32 failures are reported as a False result.</remarks>
+/// <remarks>
+/// Never raises: all Win32 failures are reported as a False result.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoGoToDefinition (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.OpenSourceClient.BuildOpenSourceMessage/2, ConvRules.OpenSourceClient.SendOpenSourceBytes</para>
+/// <para>Returns: False; SendOpenSourceBytes(BuildOpenSourceMessage(AFile, ALine), AWaitMs)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.OpenSourceClient.BuildOpenSourceMessage"/>
+/// <seealso cref="ConvRules.OpenSourceClient.SendOpenSourceBytes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SendOpenSource(const AFile: string; ALine: Integer; AWaitMs: Cardinal = 200): Boolean;
 
 /// <summary>Column-aware send (contract v2).</summary>
@@ -103,8 +133,17 @@ function SendOpenSource(const AFile: string; ALine: Integer; AWaitMs: Cardinal =
 /// <param name="ACol">1-based caret column.</param>
 /// <param name="AWaitMs">Pipe wait budget in milliseconds.</param>
 /// <returns>True only if a server was present AND the whole message was written.</returns>
-/// <remarks>A distinct name (not an overload) so it never collides with the
-/// file+line+waitMs signature above. Never raises.</remarks>
+/// <remarks>
+/// A distinct name (not an overload) so it never collides with the
+/// file+line+waitMs signature above. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: ConvRules.OpenSourceClient.BuildOpenSourceMessage/3, ConvRules.OpenSourceClient.SendOpenSourceBytes</para>
+/// <para>Returns: False; SendOpenSourceBytes( BuildOpenSourceMessage(AFile, ALine, ACol), AWaitMs)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.OpenSourceClient.BuildOpenSourceMessage"/>
+/// <seealso cref="ConvRules.OpenSourceClient.SendOpenSourceBytes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SendOpenSourceAt(const AFile: string; ALine, ACol: Integer; AWaitMs: Cardinal = 200): Boolean;
 
 implementation
@@ -127,7 +166,8 @@ var
   Col : Integer;
 begin
   Col:= ACol;
-  if Col < 1 then Col:= 1;
+  if Col < 1 then
+    Col:= 1;
   Line:= AFile + OPEN_SOURCE_SEP + IntToStr(ALine) + OPEN_SOURCE_SEP + IntToStr(Col) + OPEN_SOURCE_TERM;
   Result:= TEncoding.UTF8.GetBytes(Line);
 end;
@@ -140,14 +180,17 @@ var
   Written: DWORD  ;
 begin
   Result:= False;
-  if Length(AMsg) = 0 then Exit;
+  if Length(AMsg) = 0 then
+    Exit;
 
   { Fast no-server check: if no instance is available within AWaitMs we bail
     so the caller can degrade instead of blocking the UI. }
-  if not WaitNamedPipe(OPEN_SOURCE_PIPE_NAME, AWaitMs) then Exit;
+  if not WaitNamedPipe(OPEN_SOURCE_PIPE_NAME, AWaitMs) then
+    Exit;
 
   H:= CreateFile(OPEN_SOURCE_PIPE_NAME, GENERIC_WRITE, 0, nil, OPEN_EXISTING, 0, 0);
-  if H = INVALID_HANDLE_VALUE then Exit;
+  if H = INVALID_HANDLE_VALUE then
+    Exit;
   try
     Written:= 0;
     if WriteFile(H, AMsg[0], DWORD(Length(AMsg)), Written, nil) and (Written = DWORD(Length(AMsg))) then
@@ -163,14 +206,16 @@ end; // function
 function SendOpenSource(const AFile: string; ALine: Integer; AWaitMs: Cardinal): Boolean;
 begin
   Result:= False;
-  if AFile = '' then Exit;
+  if AFile = '' then
+    Exit;
   Result:= SendOpenSourceBytes(BuildOpenSourceMessage(AFile, ALine), AWaitMs);
 end;
 
 function SendOpenSourceAt(const AFile: string; ALine, ACol: Integer; AWaitMs: Cardinal): Boolean;
 begin
   Result:= False;
-  if AFile = '' then Exit;
+  if AFile = '' then
+    Exit;
   Result:= SendOpenSourceBytes( BuildOpenSourceMessage(AFile, ALine, ACol), AWaitMs);
 end;
 

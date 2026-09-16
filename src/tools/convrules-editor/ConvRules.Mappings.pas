@@ -15,51 +15,67 @@ unit ConvRules.Mappings;
 interface
 
 uses
-  System.SysUtils,
-  System.Generics.Collections,
-  ConvRules.Model,
-  ConvRules.Engine,
-  { The ENGINE's .castlib model, for TEnumPair. Depends on nothing but the RTL, and
+  System.SysUtils
+  , System.Generics.Collections
+  , ConvRules.Model
+  , ConvRules.Engine
+  , { The ENGINE's .castlib model, for TEnumPair. Depends on nothing but the RTL, and
     the editor .dpr already links it -- see TEnumPairs for why the suggestion emits
     the engine's record rather than a parallel one of our own. }
-  DRagLint.Convert.CastLib;
+        DRagLint.Convert.CastLib
+  ;
 
 type
   /// <summary>What is wrong with a #mapping or #apply.</summary>
-  /// <remarks>Kinds are ERRORS -- a rule that will not do what it says -- except for the
-  ///   two WARNINGS below. Ask MappingIssueIsWarning rather than reading this list: it is
-  ///   the classifier, this is only the commentary. A consumer that renders these must not
-  ///   treat a coverage gap, or a literal an imperfect index cannot vouch for, with the
-  ///   same weight as a broken target.
-  ///   <para>mikUndefined: an #apply names a #mapping that was never declared.</para>
-  ///   <para>mikTargetMissing: a set target path is absent from the To class's tree.</para>
-  ///   <para>mikTargetReadOnly: the target exists but cannot be assigned to.</para>
-  ///   <para>mikBadLiteral (WARNING): a #when fires on a value that is not in the member
-  ///   list supplied. Advisory because that list can be wrong -- see
-  ///   MappingIssueIsWarning for why an unindexed or ambiguously-resolved enum makes this
-  ///   a report rather than a veto.</para>
-  ///   <para>mikToTypeNotDeclared: the block converts to a class the mapping never
-  ///   narrowed itself to, so applying it there is out of contract.</para>
-  ///   <para>mikNonExhaustive (WARNING): an enum member has neither a #when nor an
-  ///   #else.</para></remarks>
-  TMappingIssueKind = (mikUndefined, mikTargetMissing, mikTargetReadOnly, mikBadLiteral,
-                       mikToTypeNotDeclared, mikNonExhaustive);
+  /// <remarks>
+  /// Kinds are ERRORS -- a rule that will not do what it says -- except for the
+  /// two WARNINGS below. Ask MappingIssueIsWarning rather than reading this list: it is
+  /// the classifier, this is only the commentary. A consumer that renders these must not
+  /// treat a coverage gap, or a literal an imperfect index cannot vouch for, with the
+  /// same weight as a broken target.
+  /// <para>mikUndefined: an #apply names a #mapping that was never declared.</para>
+  /// <para>mikTargetMissing: a set target path is absent from the To class's tree.</para>
+  /// <para>mikTargetReadOnly: the target exists but cannot be assigned to.</para>
+  /// <para>mikBadLiteral (WARNING): a #when fires on a value that is not in the member
+  /// list supplied. Advisory because that list can be wrong -- see
+  /// MappingIssueIsWarning for why an unindexed or ambiguously-resolved enum makes this
+  /// a report rather than a veto.</para>
+  /// <para>mikToTypeNotDeclared: the block converts to a class the mapping never
+  /// narrowed itself to, so applying it there is out of contract.</para>
+  /// <para>mikNonExhaustive (WARNING): an enum member has neither a #when nor an
+  /// #else.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (ConvRules.Mappings.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TMappingIssueKind = (mikUndefined, mikTargetMissing, mikTargetReadOnly, mikBadLiteral, mikToTypeNotDeclared, mikNonExhaustive);
 
   /// <summary>A list of member correspondences, in source declaration order.</summary>
-  /// <remarks>The element type is the ENGINE's DRagLint.Convert.CastLib.TEnumPair,
-  ///   NOT one of our own. That unit owns the `enum ... end` .castlib grammar this
-  ///   suggestion is destined for, so emitting its record means the editor's output
-  ///   is already the shape the engine parses -- and there is one TEnumPair in the
-  ///   tree rather than two that could drift. The editor .dpr has referenced that
-  ///   unit since the castlib work landed, and it depends on nothing but the RTL.
-  ///   <para>ToMember is '' when nothing matched, which is a real answer and not a
-  ///   failure: a surplus source member is exactly what the author must decide about
-  ///   by hand.</para></remarks>
+  /// <remarks>
+  /// The element type is the ENGINE's DRagLint.Convert.CastLib.TEnumPair,
+  /// NOT one of our own. That unit owns the `enum ... end` .castlib grammar this
+  /// suggestion is destined for, so emitting its record means the editor's output
+  /// is already the shape the engine parses -- and there is one TEnumPair in the
+  /// tree rather than two that could drift. The editor .dpr has referenced that
+  /// unit since the castlib work landed, and it depends on nothing but the RTL.
+  /// <para>ToMember is '' when nothing matched, which is a real answer and not a
+  /// failure: a surplus source member is exactly what the author must decide about
+  /// by hand.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MappingForm.TMappingForm.DoSuggestValues (ConvRules.MappingForm.pas), declaration (ConvRules.Mappings.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumPairs = TArray<TEnumPair>;
 
   /// <summary>One validation finding, addressed to a named mapping.</summary>
-  /// <remarks>Detail is the specific offender -- the path, the literal, the class or the
-  ///   uncovered member -- and is meant to be shown verbatim next to the kind.</remarks>
+  /// <remarks>
+  /// Detail is the specific offender -- the path, the literal, the class or the
+  /// uncovered member -- and is meant to be shown verbatim next to the kind.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MappingForm.TMappingForm.Revalidate (ConvRules.MappingForm.pas), ConvRules.Mappings.ValidateMappings (ConvRules.Mappings.pas), declaration (ConvRules.Mappings.pas)</para>
+  /// <para>Used in units: ConvRules.MappingForm, ConvRules.Mappings</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMappingIssue = record
     Kind   : TMappingIssueKind;
     MapName: string           ;
@@ -67,12 +83,18 @@ type
   end;
 
   /// <summary>One case of a #mapping: the enum member it fires on and the assignments
-  ///   that member selects.</summary>
-  /// <remarks>This is the shape an EDITOR wants -- one row per enum member -- and it is a
-  ///   VIEW over the flat node model, never a replacement for it. The model stays flat:
-  ///   MappingCasesOf folds nodes into cases, BuildMappingNodes unfolds cases back into
-  ///   one node per line, and neither ever nests. A case whose Sets are empty is a member
-  ///   the author has not mapped; it emits no line at all.</remarks>
+  /// that member selects.</summary>
+  /// <remarks>
+  /// This is the shape an EDITOR wants -- one row per enum member -- and it is a
+  /// VIEW over the flat node model, never a replacement for it. The model stays flat:
+  /// MappingCasesOf folds nodes into cases, BuildMappingNodes unfolds cases back into
+  /// one node per line, and neither ever nests. A case whose Sets are empty is a member
+  /// the author has not mapped; it emits no line at all.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MappingForm.TMappingForm.RefreshMemberList (ConvRules.MappingForm.pas), ConvRules.Mappings.BuildMappingNodes (ConvRules.Mappings.pas), ConvRules.Mappings.MappingCasesOf (ConvRules.Mappings.pas), declaration (ConvRules.MappingForm.pas), declaration (ConvRules.Mappings.pas)</para>
+  /// <para>Used in units: ConvRules.MappingForm, ConvRules.Mappings</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMappingCase = record
     /// <summary>The enum member this case fires on; '' on the #else case.</summary>
     Member: string;
@@ -100,52 +122,73 @@ type
     ///   the second condition and silently re-home its assignments onto the first.</remarks>
     WhenFrom: string;
     /// <summary>The assignments this case makes, in author order.</summary>
-    Sets  : TArray<TSetPair>;
-  end;
+    Sets : TArray<TSetPair>;
+  end; // record
 
   /// <summary>A From property that applied #mappings decide conditionally, and how many
-  ///   cases decide it.</summary>
-  /// <remarks>What a grid needs to render such a From leaf as "&lt;conditional: N cases&gt;"
-  ///   rather than as unassigned.</remarks>
+  /// cases decide it.</summary>
+  /// <remarks>
+  /// What a grid needs to render such a From leaf as "&lt;conditional: N cases&gt;"
+  /// rather than as unassigned.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.ActiveConditionals (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.Mappings.pas) (+2 more)</para>
+  /// <para>Used in units: ConvRules.MainForm, ConvRules.Mappings</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConditionalFrom = record
     /// <summary>The From property path the #when clauses read.</summary>
     FromPath: string;
     /// <summary>Case count: one per #when on that path, plus one for the mapping's
     ///   #else when it has one.</summary>
-    Cases   : Integer;
+    Cases : Integer;
   end;
 
-/// <summary>Severity of an issue kind: True = warning, False = error.</summary>
-/// <param name="AKind">The kind to classify.</param>
-/// <returns>True for mikNonExhaustive and mikBadLiteral; False for every other kind.</returns>
-/// <remarks>The one place this rule is written down, so a consumer never re-derives it.
-///   <para>mikNonExhaustive is deliberately NOT an error: a rule book may map only the
-///   enum members that matter and leave the rest to the target's own defaults, which is
-///   authoring intent rather than a defect.</para>
-///   <para>mikBadLiteral is advisory for a different reason -- the CHECK ITSELF may be
-///   wrong. It fires when a #when value is not in the member list this unit was handed,
-///   and that list comes from an index that routinely cannot see the enum: method-pointer
-///   types are not indexed at all, and a name like TColor resolves ambiguously (Spring.
-///   Logging vs Vcl.Graphics), so the members can belong to the wrong type. A literal can
-///   therefore be flagged when it is in fact correct, and blocking a save on it would make
-///   the editor unusable against an imperfect index -- which is the normal case here, not
-///   the exceptional one. It is still REPORTED every time: shown, never silent, never
-///   blocking.</para>
-///   <para>Every other kind describes a rule that will silently fail to do what it says at
-///   apply time, and those the editor can be sure about, so they must block.</para>
-///   <para>Callers gating an OK button should let warnings through and stop on errors.</para></remarks>
+  /// <summary>Severity of an issue kind: True = warning, False = error.</summary>
+  /// <param name="AKind">The kind to classify.</param>
+  /// <returns>True for mikNonExhaustive and mikBadLiteral; False for every other kind.</returns>
+  /// <remarks>
+  /// The one place this rule is written down, so a consumer never re-derives it.
+  /// <para>mikNonExhaustive is deliberately NOT an error: a rule book may map only the
+  /// enum members that matter and leave the rest to the target's own defaults, which is
+  /// authoring intent rather than a defect.</para>
+  /// <para>mikBadLiteral is advisory for a different reason -- the CHECK ITSELF may be
+  /// wrong. It fires when a #when value is not in the member list this unit was handed,
+  /// and that list comes from an index that routinely cannot see the enum: method-pointer
+  /// types are not indexed at all, and a name like TColor resolves ambiguously (Spring.
+  /// Logging vs Vcl.Graphics), so the members can belong to the wrong type. A literal can
+  /// therefore be flagged when it is in fact correct, and blocking a save on it would make
+  /// the editor unusable against an imperfect index -- which is the normal case here, not
+  /// the exceptional one. It is still REPORTED every time: shown, never silent, never
+  /// blocking.</para>
+  /// <para>Every other kind describes a rule that will silently fail to do what it says at
+  /// apply time, and those the editor can be sure about, so they must block.</para>
+  /// <para>Callers gating an OK button should let warnings through and stop on errors.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: ConvRules.MappingForm.TMappingForm.Revalidate (ConvRules.MappingForm.pas)</para>
+  /// <para>Returns: AKind in [mikNonExhaustive, mikBadLiteral]</para>
+  /// <para>Pure</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 function MappingIssueIsWarning(AKind: TMappingIssueKind): Boolean;
 
 /// <summary>PURE: the leading all-lowercase run common to every member.</summary>
 /// <param name="AMembers">Enum member names; [] yields ''.</param>
 /// <returns>e.g. 'bat' for (batAppend, batUpdate, batDelete); '' when the members
 /// share no lowercase lead.</returns>
-/// <remarks>Delphi enum members conventionally carry a lowercase type tag before a
-///   capitalised name -- batAppend, dmAppend, ablGlyphLeft. Trimming the common
-///   prefix back to its all-LOWERCASE run is what stops it eating into the name
-///   itself: (abcOne, abcOnly) share the five characters 'abcOn', and stripping that
-///   would compare 'e' against 'ly'. Stripping only 'abc' compares 'One' against
-///   'Only', which correctly does not match.</remarks>
+/// <remarks>
+/// Delphi enum members conventionally carry a lowercase type tag before a
+/// capitalised name -- batAppend, dmAppend, ablGlyphLeft. Trimming the common
+/// prefix back to its all-LOWERCASE run is what stops it eating into the name
+/// itself: (abcOne, abcOnly) share the five characters 'abcOn', and stripping that
+/// would compare 'e' against 'ly'. Stripping only 'abc' compares 'One' against
+/// 'Only', which correctly does not match.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.Mappings.SuggestEnumPairs (ConvRules.Mappings.pas)</para>
+/// <para>Calls: CharInSet, Copy, UpCase</para>
+/// <para>Returns: ''; Copy(Common, 1, i)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LowercaseTagOf(const AMembers: TArray<string>): string;
 
 /// <summary>PURE: pairs source enum members to target ones by NAME.</summary>
@@ -153,37 +196,58 @@ function LowercaseTagOf(const AMembers: TArray<string>): string;
 /// <param name="ATarget">Candidate target enum members.</param>
 /// <param name="AUnmatchedTarget">Receives target members nothing mapped to.</param>
 /// <returns>One entry per SOURCE member, in order; ToMember is '' where nothing
-///   matched.</returns>
-/// <remarks>Name-first and name-ONLY, deliberately. Two enums being converted are
-///   different types whose members correspond by MEANING; equal ordinals across
-///   unrelated types are a coincidence, not evidence -- and an enum with explicit
-///   values (TFoo = (a = 1, b = 5)) has no positional relationship to anything.
-///   Comparison is on the member name with each side's own lowercase tag removed,
-///   case-insensitively. This is a SUGGESTION for a human to accept or reject; it
-///   never writes a mapping by itself.</remarks>
-function SuggestEnumPairs(const ASource, ATarget: TArray<string>;
-  out AUnmatchedTarget: TArray<string>): TEnumPairs;
+/// matched.</returns>
+/// <remarks>
+/// Name-first and name-ONLY, deliberately. Two enums being converted are
+/// different types whose members correspond by MEANING; equal ordinals across
+/// unrelated types are a coincidence, not evidence -- and an enum with explicit
+/// values (TFoo = (a = 1, b = 5)) has no positional relationship to anything.
+/// Comparison is on the member name with each side's own lowercase tag removed,
+/// case-insensitively. This is a SUGGESTION for a human to accept or reject; it
+/// never writes a mapping by itself.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MappingForm.TMappingForm.DoSuggestValues (ConvRules.MappingForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.LowercaseTagOf, ConvRules.Mappings.SuggestEnumPairs.Bare, Copy, SameText, StartsText</para>
+/// <para>Mutates: AUnmatchedTarget (out)</para>
+/// <seealso cref="ConvRules.Mappings.LowercaseTagOf"/>
+/// <seealso cref="ConvRules.Mappings.SuggestEnumPairs.Bare"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function SuggestEnumPairs(const ASource, ATarget: TArray<string>; out AUnmatchedTarget: TArray<string>): TEnumPairs;
 
 /// <summary>Validate every #mapping and #apply node in one #convert block's context.</summary>
 /// <param name="ANodes">The flat node list to check, in file order. Non-mapping kinds are
-///   ignored. Nodes are read only; ownership stays with the caller.</param>
+/// ignored. Nodes are read only; ownership stays with the caller.</param>
 /// <param name="AToTree">The property tree of the block's To class, used to resolve set
-///   targets. When it has no leaves the target checks are SKIPPED entirely rather than
-///   reporting every target as missing -- an absent tree is unknown, not wrong.</param>
+/// targets. When it has no leaves the target checks are SKIPPED entirely rather than
+/// reporting every target as missing -- an absent tree is unknown, not wrong.</param>
 /// <param name="AEnumMembers">The members of the mapping's source enum. When EMPTY, both
-///   the literal check and the exhaustiveness check are skipped -- the member list is
-///   unknown, so neither question can be answered.</param>
+/// the literal check and the exhaustiveness check are skipped -- the member list is
+/// unknown, so neither question can be answered.</param>
 /// <param name="ABlockToType">Fully-qualified To type of the #convert block the mapping is
-///   used in. When '' the declared-To-type check is skipped (no block context).</param>
+/// used in. When '' the declared-To-type check is skipped (no block context).</param>
 /// <returns>Every issue found, in node order; an empty array when the mappings are sound.
-///   mikNonExhaustive entries are warnings (see TMappingIssueKind); every other kind is an
-///   error.</returns>
-/// <remarks>Never raises. Comparisons of type names, paths, enum members and mapping names
-///   are all case-insensitive, matching the DSL's own case tolerance. The node model is
-///   FLAT -- a #mapping with three clauses is three sibling nodes sharing a MapName -- so
-///   grouping by MapName happens here.</remarks>
-function ValidateMappings(const ANodes: TArray<TRuleNode>; const AToTree: TProptree;
-  const AEnumMembers: TArray<string>; const ABlockToType: string): TArray<TMappingIssue>;
+/// mikNonExhaustive entries are warnings (see TMappingIssueKind); every other kind is an
+/// error.</returns>
+/// <remarks>
+/// Never raises. Comparisons of type names, paths, enum members and mapping names
+/// are all case-insensitive, matching the DSL's own case tolerance. The node model is
+/// FLAT -- a #mapping with three clauses is three sibling nodes sharing a MapName -- so
+/// grouping by MapName happens here.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MappingForm.TMappingForm.Revalidate (ConvRules.MappingForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.HasText, ConvRules.Mappings.IsClause, ConvRules.Mappings.IsDeclaration, ConvRules.Mappings.ValidateMappings.AddIssue, ConvRules.Mappings.ValidateMappings.FindLeaf, Default, SameText</para>
+/// <para>Returns: Issues.ToArray</para>
+/// <para>Complexity: 29 (cyclomatic, outer body), 112 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.HasText"/>
+/// <seealso cref="ConvRules.Mappings.IsClause"/>
+/// <seealso cref="ConvRules.Mappings.IsDeclaration"/>
+/// <seealso cref="ConvRules.Mappings.ValidateMappings.AddIssue"/>
+/// <seealso cref="ConvRules.Mappings.ValidateMappings.FindLeaf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ValidateMappings(const ANodes: TArray<TRuleNode>; const AToTree: TProptree; const AEnumMembers: TArray<string>; const ABlockToType: string): TArray<TMappingIssue>;
 
 { ---- reading a flat node list as named mappings ----------------------------------
 
@@ -194,34 +258,69 @@ function ValidateMappings(const ANodes: TArray<TRuleNode>; const AToTree: TPropt
 /// <summary>Every distinct #mapping name in ANodes, in first-seen order.</summary>
 /// <param name="ANodes">Any node list; non-mapping kinds and nil entries are ignored.</param>
 /// <returns>The names, de-duplicated case-insensitively; [] when there are none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.HasText</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.HasText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MappingNames(const ANodes: TArray<TRuleNode>): TArray<string>;
 
 /// <summary>The declaration line of the mapping called AName.</summary>
 /// <param name="ANodes">The node list to search; ownership stays with the caller.</param>
 /// <param name="AName">The mapping name, matched case-insensitively.</param>
 /// <returns>The node carrying MapFromType/MapToTypes, or nil when the mapping has only
-///   clause lines (or does not exist). The node is BORROWED -- never free it.</returns>
+/// clause lines (or does not exist). The node is BORROWED -- never free it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.IsDeclaration, SameText</para>
+/// <para>Returns: nil</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.IsDeclaration"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MappingDeclaration(const ANodes: TArray<TRuleNode>; const AName: string): TRuleNode;
 
 /// <summary>The source property path AName's #when clauses read.</summary>
 /// <param name="ANodes">The node list to search.</param>
 /// <param name="AName">The mapping name, matched case-insensitively.</param>
 /// <returns>The first non-empty WhenFrom found, or '' when the mapping has no #when
-///   clause yet.</returns>
-/// <remarks>This is the mapping's PRIMARY source property, not its only one: the model
-///   allows a different WhenFrom per clause, and MappingCasesOf keeps any clause that
-///   reads something else as a case of its own rather than normalising it away. Use this
-///   to seed an editor's "source property" field; use MappingCasesOf to find out whether
-///   the mapping is actually uniform.</remarks>
+/// clause yet.</returns>
+/// <remarks>
+/// This is the mapping's PRIMARY source property, not its only one: the model
+/// allows a different WhenFrom per clause, and MappingCasesOf keeps any clause that
+/// reads something else as a case of its own rather than normalising it away. Use this
+/// to seed an editor's "source property" field; use MappingCasesOf to find out whether
+/// the mapping is actually uniform.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas), ConvRules.Mappings.MappingCasesOf (ConvRules.Mappings.pas)</para>
+/// <para>Calls: ConvRules.Mappings.IsClause, SameText</para>
+/// <para>Returns: ''; Node.WhenFrom</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.IsClause"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MappingWhenFrom(const ANodes: TArray<TRuleNode>; const AName: string): string;
 
 /// <summary>The enum values AName's #when clauses fire on, in first-seen order.</summary>
 /// <param name="ANodes">The node list to search.</param>
 /// <param name="AName">The mapping name, matched case-insensitively.</param>
 /// <returns>The distinct WhenValues; [] when there are no #when clauses.</returns>
-/// <remarks>This is the FALLBACK member list for a source type that does not resolve --
-///   method-pointer types are not indexed at all and some enums resolve ambiguously, and
-///   for those the members the author already named are the only ones known.</remarks>
+/// <remarks>
+/// This is the FALLBACK member list for a source type that does not resolve --
+/// method-pointer types are not indexed at all and some enums resolve ambiguously, and
+/// for those the members the author already named are the only ones known.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MappingForm.TMappingForm.LoadMembers (ConvRules.MappingForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.HasText, ConvRules.Mappings.IsClause, SameText</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.HasText"/>
+/// <seealso cref="ConvRules.Mappings.IsClause"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MappingWhenValues(const ANodes: TArray<TRuleNode>; const AName: string): TArray<string>;
 
 /// <summary>Fold AName's flat clause lines into one case per enum member.</summary>
@@ -229,172 +328,233 @@ function MappingWhenValues(const ANodes: TArray<TRuleNode>; const AName: string)
 /// <param name="AName">The mapping name, matched case-insensitively.</param>
 /// <param name="AMembers">The source enum's members, in declaration order. May be [].</param>
 /// <returns>One case per member of AMembers in that order, then a case for every #when
-///   clause NOT already covered (a literal the enum does not contain, or one that tests a
-///   different source property), then ALWAYS the #else case last -- present even when
-///   empty, so an editor has a row to fill in.</returns>
-/// <remarks>Clauses are keyed on the PAIR (WhenFrom, WhenValue), not on the value alone.
-///   Two lines that agree on both are merged into one case with their Sets concatenated
-///   in file order; two lines that name the same value but read DIFFERENT source
-///   properties stay two cases, or the second one's condition would be destroyed and its
-///   assignments silently re-homed onto the first.
-///   <para>The mapping's PRIMARY source property is the first #when's WhenFrom. Cases
-///   that read it leave TMappingCase.WhenFrom blank, so an editor renaming that property
-///   in one place still works; only a divergent case pins its own.</para>
-///   <para>Never raises.</para></remarks>
-function MappingCasesOf(const ANodes: TArray<TRuleNode>; const AName: string;
-  const AMembers: TArray<string>): TArray<TMappingCase>;
+/// clause NOT already covered (a literal the enum does not contain, or one that tests a
+/// different source property), then ALWAYS the #else case last -- present even when
+/// empty, so an editor has a row to fill in.</returns>
+/// <remarks>
+/// Clauses are keyed on the PAIR (WhenFrom, WhenValue), not on the value alone.
+/// Two lines that agree on both are merged into one case with their Sets concatenated
+/// in file order; two lines that name the same value but read DIFFERENT source
+/// properties stay two cases, or the second one's condition would be destroyed and its
+/// assignments silently re-homed onto the first.
+/// <para>The mapping's PRIMARY source property is the first #when's WhenFrom. Cases
+/// that read it leave TMappingCase.WhenFrom blank, so an editor renaming that property
+/// in one place still works; only a divergent case pins its own.</para>
+/// <para>Never raises.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MappingForm.TMappingForm.LoadMembers (ConvRules.MappingForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.HasText, ConvRules.Mappings.IsClause, ConvRules.Mappings.MappingCasesOf.CaseKey, ConvRules.Mappings.MappingCasesOf.SetsFor, ConvRules.Mappings.MappingWhenFrom, SameText</para>
+/// <para>Returns: L.ToArray</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 80 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.HasText"/>
+/// <seealso cref="ConvRules.Mappings.IsClause"/>
+/// <seealso cref="ConvRules.Mappings.MappingCasesOf.CaseKey"/>
+/// <seealso cref="ConvRules.Mappings.MappingCasesOf.SetsFor"/>
+/// <seealso cref="ConvRules.Mappings.MappingWhenFrom"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function MappingCasesOf(const ANodes: TArray<TRuleNode>; const AName: string; const AMembers: TArray<string>): TArray<TMappingCase>;
 
 /// <summary>Unfold a mapping back into flat nodes -- one per physical line.</summary>
 /// <param name="AName">The mapping's name, written on the declaration AND every clause.</param>
 /// <param name="AFromType">The source enum type. '' suppresses the declaration line
-///   ENTIRELY -- MapFromType is what makes a node a declaration, so a node carrying only
-///   target classes would be re-read as a clause and emitted as a malformed #when.</param>
+/// ENTIRELY -- MapFromType is what makes a node a declaration, so a node carrying only
+/// target classes would be re-read as a clause and emitted as a malformed #when.</param>
 /// <param name="AToTypes">The target classes the mapping is narrowed to. Dropped along
-///   with the declaration when AFromType is '', for the reason above.</param>
+/// with the declaration when AFromType is '', for the reason above.</param>
 /// <param name="AWhenFrom">The source property path used by every case that does not pin
-///   its own (see TMappingCase.WhenFrom).</param>
+/// its own (see TMappingCase.WhenFrom).</param>
 /// <param name="ACases">The cases to emit; a case with no Sets emits nothing.</param>
 /// <returns>Freshly created nodes, Dirty and in emit order: the declaration first (when
-///   there is one), then the clauses in ACases order. The CALLER OWNS every node and must
-///   free them or hand them to a TRuleBook.</returns>
-/// <remarks>Dirty is set so Emit() re-serializes from the typed fields; Raw is left empty
-///   because these lines did not come from a file. A caller that wants an untouched
-///   mapping to round-trip byte-for-byte must therefore NOT replace nodes it did not
-///   change -- compare before splicing.</remarks>
-function BuildMappingNodes(const AName, AFromType: string; const AToTypes: TArray<string>;
-  const AWhenFrom: string; const ACases: TArray<TMappingCase>): TArray<TRuleNode>;
+/// there is one), then the clauses in ACases order. The CALLER OWNS every node and must
+/// free them or hand them to a TRuleBook.</returns>
+/// <remarks>
+/// Dirty is set so Emit() re-serializes from the typed fields; Raw is left empty
+/// because these lines did not come from a file. A caller that wants an untouched
+/// mapping to round-trip byte-for-byte must therefore NOT replace nodes it did not
+/// change -- compare before splicing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MappingForm.TMappingForm.BuildNodes (ConvRules.MappingForm.pas)</para>
+/// <para>Returns: L.ToArray</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function BuildMappingNodes(const AName, AFromType: string; const AToTypes: TArray<string>; const AWhenFrom: string; const ACases: TArray<TMappingCase>): TArray<TRuleNode>;
 
 /// <summary>The mapping names #applied by the nodes in ANodes.</summary>
 /// <param name="ANodes">Typically ONE #convert block's nodes.</param>
 /// <returns>The distinct #apply names, in first-seen order; [] when the block applies
-///   nothing.</returns>
+/// nothing.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.HasText</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.HasText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AppliedMappingNames(const ANodes: TArray<TRuleNode>): TArray<string>;
 
 /// <summary>The From paths the applied mappings decide conditionally.</summary>
 /// <param name="ANodes">Every node that could carry a #mapping clause -- normally the
-///   WHOLE book, since a mapping is file-scope and an #apply reaches across blocks.</param>
+/// WHOLE book, since a mapping is file-scope and an #apply reaches across blocks.</param>
 /// <param name="AApplied">The mapping names in force, from AppliedMappingNames.</param>
 /// <returns>One entry per distinct From path, with its case count. A path decided by two
-///   applied mappings appears ONCE, with the counts summed.</returns>
-/// <remarks>A mapping's #else adds one case to each From path that mapping reads, because
-///   it is another branch of the same decision. A mapping with an #else but no #when
-///   contributes nothing: without a #when there is no From path to attach it to.</remarks>
-function ConditionalFromPaths(const ANodes: TArray<TRuleNode>;
-  const AApplied: TArray<string>): TArray<TConditionalFrom>;
+/// applied mappings appears ONCE, with the counts summed.</returns>
+/// <remarks>
+/// A mapping's #else adds one case to each From path that mapping reads, because
+/// it is another branch of the same decision. A mapping with an #else but no #when
+/// contributes nothing: without a #when there is no From path to attach it to.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ActiveConditionals (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.HasText, ConvRules.Mappings.IsClause, SameText</para>
+/// <para>Returns: L.ToArray</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 60 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.HasText"/>
+/// <seealso cref="ConvRules.Mappings.IsClause"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ConditionalFromPaths(const ANodes: TArray<TRuleNode>; const AApplied: TArray<string>): TArray<TConditionalFrom>;
 
 /// <summary>Case count for one From path, looked up in a ConditionalFromPaths result.</summary>
 /// <param name="AConds">The result of ConditionalFromPaths.</param>
 /// <param name="APath">The From path, matched case-insensitively.</param>
 /// <returns>The case count, or 0 when no applied mapping decides that path.</returns>
-/// <remarks>Exists so a caller loops over the property tree ONCE against a prepared list
-///   instead of rescanning every node per leaf.</remarks>
-function ConditionalCasesOf(const AConds: TArray<TConditionalFrom>;
-  const APath: string): Integer;
+/// <remarks>
+/// Exists so a caller loops over the property tree ONCE against a prepared list
+/// instead of rescanning every node per leaf.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid.ToCellFor (ConvRules.MainForm.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: 0</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ConditionalCasesOf(const AConds: TArray<TConditionalFrom>; const APath: string): Integer;
 
 /// <summary>The target paths the applied mappings assign.</summary>
 /// <param name="ANodes">Every node that could carry a #mapping clause (normally the book).</param>
 /// <param name="AApplied">The mapping names in force, from AppliedMappingNames.</param>
 /// <returns>The distinct ToPaths of every clause of every applied mapping, in first-seen
-///   order; [] when nothing is applied.</returns>
-/// <remarks>These targets ARE assigned -- by the mapping rather than by a #link -- so a
-///   pool of "unassigned To leaves" that still offers them is lying about the block.</remarks>
-function MappedTargetPaths(const ANodes: TArray<TRuleNode>;
-  const AApplied: TArray<string>): TArray<string>;
+/// order; [] when nothing is applied.</returns>
+/// <remarks>
+/// These targets ARE assigned -- by the mapping rather than by a #link -- so a
+/// pool of "unassigned To leaves" that still offers them is lying about the block.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshPool (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.Mappings.HasText, ConvRules.Mappings.IsClause</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Mappings.HasText"/>
+/// <seealso cref="ConvRules.Mappings.IsClause"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function MappedTargetPaths(const ANodes: TArray<TRuleNode>; const AApplied: TArray<string>): TArray<string>;
 
 implementation
 
 uses
-  System.StrUtils;
+  System.StrUtils
+  ;
 
 function LowercaseTagOf(const AMembers: TArray<string>): string;
 var
-  Common: string;
-  M     : string;
-  i, N  : Integer;
+  Common: string ;
+  M     : string ;
+  i     : Integer;
+  N     : Integer;
 begin
-  Result := '';
-  if Length(AMembers) = 0 then Exit;
+  Result:= '';
+  if Length(AMembers) = 0 then
+    Exit;
 
   // 1) the raw common prefix, case-insensitively.
-  Common := AMembers[0];
+  Common:= AMembers[0];
   for M in AMembers do
   begin
-    N := 0;
+    N:= 0;
     while (N < Length(Common)) and (N < Length(M))
           and (UpCase(Common[N + 1]) = UpCase(M[N + 1])) do
       Inc(N);
-    Common := Copy(Common, 1, N);
-    if Common = '' then Exit;
+    Common:= Copy(Common, 1, N);
+    if Common = '' then
+      Exit;
   end;
 
   // 2) trim it back to its leading all-LOWERCASE run. Without this step
   //    (abcOne, abcOnly) would yield 'abcOn' and the comparison would be
   //    'e' vs 'ly'; with it the tag is 'abc' and the names differ, correctly.
-  i := 0;
+  i:= 0;
   while (i < Length(Common)) and CharInSet(Common[i + 1], ['a'..'z']) do
     Inc(i);
-  Result := Copy(Common, 1, i);
-end;
+  Result:= Copy(Common, 1, i);
+end; // function
 
-function SuggestEnumPairs(const ASource, ATarget: TArray<string>;
-  out AUnmatchedTarget: TArray<string>): TEnumPairs;
+function SuggestEnumPairs(const ASource, ATarget: TArray<string>; out AUnmatchedTarget: TArray<string>): TEnumPairs;
 var
-  SrcTag, TgtTag: string;
-  Used          : TArray<Boolean>;
-  Leftover      : TList<string>;
-  i, j          : Integer;
-  SrcBare       : string;
+  SrcTag  : string         ;
+  TgtTag  : string         ;
+  Used    : TArray<Boolean>;
+  Leftover: TList<string>  ;
+  i       : Integer        ;
+  j       : Integer        ;
+  SrcBare : string         ;
 
   { The member name with its own enum's lowercase tag removed. }
   function Bare(const AMember, ATag: string): string;
   begin
-    Result := AMember;
+    Result:= AMember;
     if (ATag <> '') and StartsText(ATag, Result) then
-      Result := Copy(Result, Length(ATag) + 1, MaxInt);
+      Result:= Copy(Result, Length(ATag) + 1, MaxInt);
   end;
 
 begin
-  AUnmatchedTarget := nil;
+  AUnmatchedTarget:= nil;
   SetLength(Result, Length(ASource));
-  SetLength(Used, Length(ATarget));
+  SetLength(Used  , Length(ATarget));
 
-  SrcTag := LowercaseTagOf(ASource);
-  TgtTag := LowercaseTagOf(ATarget);
+  SrcTag:= LowercaseTagOf(ASource);
+  TgtTag:= LowercaseTagOf(ATarget);
 
-  for i := 0 to High(ASource) do
+  for i:= 0 to High(ASource) do
   begin
-    Result[i].FromMember := ASource[i];
-    Result[i].ToMember   := '';
-    SrcBare := Bare(ASource[i], SrcTag);
-    if SrcBare = '' then Continue;
+    Result[i].FromMember:= ASource[i];
+    Result[i].ToMember:= '';
+    SrcBare:= Bare(ASource[i], SrcTag);
+    if SrcBare = '' then
+      Continue;
 
-    for j := 0 to High(ATarget) do
+    for j:= 0 to High(ATarget) do
     begin
       // A target is claimed at most ONCE. DEFENSIVE: within a single enum this
       // cannot trigger -- members are unique and share one tag, so their bare
       // names are unique too. It is reachable only when a caller passes a source
       // list containing duplicates, which is why the test for it feeds one.
-      if Used[j] then Continue;
-      if not SameText(SrcBare, Bare(ATarget[j], TgtTag)) then Continue;
-      Result[i].ToMember := ATarget[j];   // verbatim: the book must spell it as declared
-      Used[j] := True;
+      if Used[j] then
+        Continue;
+      if not SameText(SrcBare, Bare(ATarget[j], TgtTag)) then
+        Continue;
+      Result[i].ToMember:= ATarget[j]; // verbatim: the book must spell it as declared
+      Used[j]:= True;
       Break;
-    end;
-  end;
+    end; // for
+  end; // for
 
-  Leftover := TList<string>.Create;
+  Leftover:= TList<string>.Create;
   try
-    for j := 0 to High(ATarget) do
-      if not Used[j] then Leftover.Add(ATarget[j]);
-    AUnmatchedTarget := Leftover.ToArray;
+    for j:= 0 to High(ATarget) do
+      if not Used[j] then
+        Leftover.Add(ATarget[j]);
+    AUnmatchedTarget:= Leftover.ToArray;
   finally
     Leftover.Free;
   end;
-end;
+end; // begin
 
 function MappingIssueIsWarning(AKind: TMappingIssueKind): Boolean;
 begin
-  Result := AKind in [mikNonExhaustive, mikBadLiteral];
+  Result:= AKind in [mikNonExhaustive, mikBadLiteral];
 end;
 
 { Case-insensitive membership, the comparison the DSL uses everywhere. }
@@ -403,28 +563,28 @@ var
   S: string;
 begin
   for S in AArr do
-    if SameText(S, AValue) then Exit(True);
-  Result := False;
+    if SameText(S, AValue) then
+      Exit(True);
+  Result:= False;
 end;
 
 { A declaration line is the one that names the source enum; every other #mapping node with
   the same MapName is a clause (#when or #else). }
 function IsDeclaration(ANode: TRuleNode): Boolean;
 begin
-  Result := (ANode <> nil) and (ANode.Kind = rnkMapping) and (ANode.MapFromType <> '');
+  Result:= (ANode <> nil) and (ANode.Kind = rnkMapping) and (ANode.MapFromType <> '');
 end;
 
 function IsClause(ANode: TRuleNode): Boolean;
 begin
-  Result := (ANode <> nil) and (ANode.Kind = rnkMapping) and (ANode.MapFromType = '');
+  Result:= (ANode <> nil) and (ANode.Kind = rnkMapping) and (ANode.MapFromType = '');
 end;
 
-function ValidateMappings(const ANodes: TArray<TRuleNode>; const AToTree: TProptree;
-  const AEnumMembers: TArray<string>; const ABlockToType: string): TArray<TMappingIssue>;
+function ValidateMappings(const ANodes: TArray<TRuleNode>; const AToTree: TProptree; const AEnumMembers: TArray<string>; const ABlockToType: string): TArray<TMappingIssue>;
 var
   Issues   : TList<TMappingIssue>;
-  DeclNames: TArray<string>      ;  // mappings that have a declaration line
-  GroupName: TArray<string>      ;  // distinct MapNames over ALL #mapping nodes
+  DeclNames: TArray<string>      ; // mappings that have a declaration line
+  GroupName: TArray<string>      ; // distinct MapNames over ALL #mapping nodes
   Node     : TRuleNode           ;
   Pair     : TSetPair            ;
   Leaf     : TPropLeaf           ;
@@ -437,13 +597,13 @@ var
   var
     Issue: TMappingIssue;
   begin
-    Issue.Kind    := AKind   ;
-    Issue.MapName := AMapName;
-    Issue.Detail  := ADetail ;
+    Issue.Kind   := AKind;
+    Issue.MapName:= AMapName;
+    Issue.Detail := ADetail;
     Issues.Add(Issue);
   end;
 
-  { The tree is flat: a dotted path is matched whole, not walked segment by segment. }
+{ The tree is flat: a dotted path is matched whole, not walked segment by segment. }
   function FindLeaf(const APath: string; out ALeaf: TPropLeaf): Boolean;
   var
     L: TPropLeaf;
@@ -451,87 +611,82 @@ var
     for L in AToTree.Leaves do
       if SameText(L.Path, APath) then
       begin
-        ALeaf := L;
+        ALeaf:= L;
         Exit(True);
       end;
-    ALeaf  := Default(TPropLeaf);
-    Result := False;
+    ALeaf:= Default(TPropLeaf);
+    Result:= False;
   end;
 
 begin
-  Issues := TList<TMappingIssue>.Create;
+  Issues:= TList<TMappingIssue>.Create;
   try
     // Pass 1: what is declared, and which groups exist at all.
     for Node in ANodes do
       if (Node <> nil) and (Node.Kind = rnkMapping) and (Node.MapName <> '') then
       begin
         if not HasText(GroupName, Node.MapName) then
-          GroupName := GroupName + [Node.MapName];
+          GroupName:= GroupName + [Node.MapName];
         if IsDeclaration(Node) and not HasText(DeclNames, Node.MapName) then
-          DeclNames := DeclNames + [Node.MapName];
+          DeclNames:= DeclNames + [Node.MapName];
       end;
 
     // Pass 2: per-node checks, in file order.
     for Node in ANodes do
     begin
-      if Node = nil then Continue;
+      if Node = nil then
+        Continue;
 
       if (Node.Kind = rnkApply) and not HasText(DeclNames, Node.ApplyName) then
-        AddIssue(mikUndefined, Node.ApplyName,
-          'no #mapping declares "' + Node.ApplyName + '"');
+        AddIssue(mikUndefined, Node.ApplyName, 'no #mapping declares "' + Node.ApplyName + '"');
 
       // The declaration narrows the mapping to a set of target classes; using it in a
       // block that converts to anything else is out of contract.
       if IsDeclaration(Node) and (ABlockToType <> '') and (Length(Node.MapToTypes) > 0)
          and not HasText(Node.MapToTypes, ABlockToType) then
-        AddIssue(mikToTypeNotDeclared, Node.MapName,
-          ABlockToType + ' is not among the mapping''s declared target classes');
+        AddIssue(mikToTypeNotDeclared, Node.MapName, ABlockToType + ' is not among the mapping''s declared target classes');
 
       if IsClause(Node) then
       begin
         if (not Node.IsElse) and (Node.WhenValue <> '') and (Length(AEnumMembers) > 0)
            and not HasText(AEnumMembers, Node.WhenValue) then
-          AddIssue(mikBadLiteral, Node.MapName,
-            '"' + Node.WhenValue + '" is not a member of ' + Node.WhenFrom + '''s enum');
+          AddIssue(mikBadLiteral, Node.MapName, '"' + Node.WhenValue + '" is not a member of ' + Node.WhenFrom + '''s enum');
 
         if Length(AToTree.Leaves) > 0 then
           for Pair in Node.Sets do
             if not FindLeaf(Pair.ToPath, Leaf) then
-              AddIssue(mikTargetMissing, Node.MapName,
-                Pair.ToPath + ' is not a property of ' + AToTree.RootType)
+              AddIssue(mikTargetMissing, Node.MapName, Pair.ToPath + ' is not a property of ' + AToTree.RootType)
             else if not Leaf.IsWritable then
-              AddIssue(mikTargetReadOnly, Node.MapName,
-                Pair.ToPath + ' is read-only, so assigning it would do nothing');
-      end;
-    end;
+              AddIssue(mikTargetReadOnly, Node.MapName, Pair.ToPath + ' is read-only, so assigning it would do nothing');
+      end; // if
+    end; // for
 
     // Pass 3: exhaustiveness -- a WARNING, per group, and only when the member list is known.
     if Length(AEnumMembers) > 0 then
       for Name in GroupName do
       begin
-        Covered := nil;
-        HasElse := False;
+        Covered:= nil;
+        HasElse:= False;
         for Node in ANodes do
           if IsClause(Node) and SameText(Node.MapName, Name) then
           begin
             if Node.IsElse then
-              HasElse := True
+              HasElse:= True
             else if Node.WhenValue <> '' then
-              Covered := Covered + [Node.WhenValue];
+              Covered:= Covered + [Node.WhenValue];
           end;
 
         if not HasElse then
           for Member in AEnumMembers do
             if not HasText(Covered, Member) then
-              AddIssue(mikNonExhaustive, Name,
-                Member + ' has neither a #when nor an #else');
-      end;
+              AddIssue(mikNonExhaustive, Name, Member + ' has neither a #when nor an #else');
+      end; // for
 
-    Result := Issues.ToArray;
+    Result:= Issues.ToArray;
   finally
     Issues.Free;
-  end;
-end;
+  end; // try
+end; // begin
 
 { ---- fold / unfold ---------------------------------------------------------------- }
 
@@ -539,27 +694,28 @@ function MappingNames(const ANodes: TArray<TRuleNode>): TArray<string>;
 var
   Node: TRuleNode;
 begin
-  Result := nil;
+  Result:= nil;
   for Node in ANodes do
     if (Node <> nil) and (Node.Kind = rnkMapping) and (Node.MapName <> '')
        and not HasText(Result, Node.MapName) then
-      Result := Result + [Node.MapName];
+      Result:= Result + [Node.MapName];
 end;
 
 function MappingDeclaration(const ANodes: TArray<TRuleNode>; const AName: string): TRuleNode;
 var
   Node: TRuleNode;
 begin
-  Result := nil;
+  Result:= nil;
   for Node in ANodes do
-    if IsDeclaration(Node) and SameText(Node.MapName, AName) then Exit(Node);
+    if IsDeclaration(Node) and SameText(Node.MapName, AName) then
+      Exit(Node);
 end;
 
 function MappingWhenFrom(const ANodes: TArray<TRuleNode>; const AName: string): string;
 var
   Node: TRuleNode;
 begin
-  Result := '';
+  Result:= '';
   for Node in ANodes do
     if IsClause(Node) and SameText(Node.MapName, AName) and (not Node.IsElse)
        and (Node.WhenFrom <> '') then
@@ -570,22 +726,21 @@ function MappingWhenValues(const ANodes: TArray<TRuleNode>; const AName: string)
 var
   Node: TRuleNode;
 begin
-  Result := nil;
+  Result:= nil;
   for Node in ANodes do
     if IsClause(Node) and SameText(Node.MapName, AName) and (not Node.IsElse)
        and (Node.WhenValue <> '') and not HasText(Result, Node.WhenValue) then
-      Result := Result + [Node.WhenValue];
+      Result:= Result + [Node.WhenValue];
 end;
 
-function MappingCasesOf(const ANodes: TArray<TRuleNode>; const AName: string;
-  const AMembers: TArray<string>): TArray<TMappingCase>;
+function MappingCasesOf(const ANodes: TArray<TRuleNode>; const AName: string; const AMembers: TArray<string>): TArray<TMappingCase>;
 var
   L      : TList<TMappingCase>;
   Item   : TMappingCase       ;
   Node   : TRuleNode          ;
   Member : string             ;
-  Primary: string             ;   // the source property the mapping mainly reads
-  Placed : TArray<string>     ;   // keys already turned into a case (see CaseKey)
+  Primary: string             ; // the source property the mapping mainly reads
+  Placed : TArray<string>     ; // keys already turned into a case (see CaseKey)
 
   { The identity of a clause: the PAIR it fires on. Keyed on both halves because the same
     value tested on two different source properties is two rules, not one. The separator
@@ -593,35 +748,35 @@ var
     single identifier. }
   function CaseKey(const AFrom, AValue: string): string;
   begin
-    Result := AFrom + '|' + AValue;
+    Result:= AFrom + '|' + AValue;
   end;
 
-  { Every #when clause on exactly this (property, value) pair, concatenated in file order.
+{ Every #when clause on exactly this (property, value) pair, concatenated in file order.
     Two lines that agree on both are one case; the editor could only show one row anyway,
     and merging them loses nothing. }
   function SetsFor(const AFrom, AValue: string): TArray<TSetPair>;
   var
     N: TRuleNode;
   begin
-    Result := nil;
+    Result:= nil;
     for N in ANodes do
       if IsClause(N) and SameText(N.MapName, AName) and (not N.IsElse)
          and SameText(N.WhenFrom, AFrom) and SameText(N.WhenValue, AValue) then
-        Result := Result + N.Sets;
+        Result:= Result + N.Sets;
   end;
 
 begin
-  Primary := MappingWhenFrom(ANodes, AName);
-  L := TList<TMappingCase>.Create;
+  Primary:= MappingWhenFrom(ANodes, AName);
+  L:= TList<TMappingCase>.Create;
   try
     for Member in AMembers do
     begin
-      Item.Member   := Member;
-      Item.IsElse   := False;
-      Item.WhenFrom := '';                       // reads the primary property
-      Item.Sets     := SetsFor(Primary, Member);
+      Item.Member  := Member;
+      Item.IsElse  := False;
+      Item.WhenFrom:= ''; // reads the primary property
+      Item.Sets:= SetsFor(Primary, Member);
       L.Add(Item);
-      Placed := Placed + [CaseKey(Primary, Member)];
+      Placed:= Placed + [CaseKey(Primary, Member)];
     end;
 
     // Two kinds of clause are not covered by the member sweep above and must not vanish:
@@ -632,41 +787,42 @@ begin
          and (Node.WhenValue <> '')
          and not HasText(Placed, CaseKey(Node.WhenFrom, Node.WhenValue)) then
       begin
-        Item.Member := Node.WhenValue;
-        Item.IsElse := False;
+        Item.Member:= Node.WhenValue;
+        Item.IsElse:= False;
         // Blank when it agrees with the mapping's primary property, so it still follows a
         // rename; pinned only when it genuinely reads something else.
-        if SameText(Node.WhenFrom, Primary) then Item.WhenFrom := ''
-        else                                     Item.WhenFrom := Node.WhenFrom;
-        Item.Sets   := SetsFor(Node.WhenFrom, Node.WhenValue);
+        if SameText(Node.WhenFrom, Primary) then
+          Item.WhenFrom:= ''
+        else
+          Item.WhenFrom:= Node.WhenFrom;
+        Item.Sets:= SetsFor(Node.WhenFrom, Node.WhenValue);
         L.Add(Item);
-        Placed := Placed + [CaseKey(Node.WhenFrom, Node.WhenValue)];
-      end;
+        Placed:= Placed + [CaseKey(Node.WhenFrom, Node.WhenValue)];
+      end; // if
 
     // The #else pseudo-member is always last and always present, empty or not.
-    Item.Member   := '';
-    Item.IsElse   := True;
-    Item.WhenFrom := '';
-    Item.Sets     := nil;
+    Item.Member  := '';
+    Item.IsElse  := True;
+    Item.WhenFrom:= '';
+    Item.Sets:= nil;
     for Node in ANodes do
       if IsClause(Node) and SameText(Node.MapName, AName) and Node.IsElse then
-        Item.Sets := Item.Sets + Node.Sets;
+        Item.Sets:= Item.Sets + Node.Sets;
     L.Add(Item);
 
-    Result := L.ToArray;
+    Result:= L.ToArray;
   finally
     L.Free;
-  end;
-end;
+  end; // try
+end; // begin
 
-function BuildMappingNodes(const AName, AFromType: string; const AToTypes: TArray<string>;
-  const AWhenFrom: string; const ACases: TArray<TMappingCase>): TArray<TRuleNode>;
+function BuildMappingNodes(const AName, AFromType: string; const AToTypes: TArray<string>; const AWhenFrom: string; const ACases: TArray<TMappingCase>): TArray<TRuleNode>;
 var
   L   : TList<TRuleNode>;
   Item: TMappingCase    ;
   N   : TRuleNode       ;
 begin
-  L := TList<TRuleNode>.Create;
+  L:= TList<TRuleNode>.Create;
   try
     // The source type is what MAKES a node a declaration -- IsDeclaration tests exactly
     // MapFromType <> '', and Emit branches on the same field. A node with target classes
@@ -678,55 +834,56 @@ begin
     // required-field check is a convenience on top of it, never the thing holding it up.
     if AFromType <> '' then
     begin
-      N := TRuleNode.Create;
-      N.Kind        := rnkMapping;
-      N.Dirty       := True;
-      N.MapName     := AName;
-      N.MapFromType := AFromType;
-      N.MapToTypes  := AToTypes;
+      N:= TRuleNode.Create;
+      N.Kind       := rnkMapping;
+      N.Dirty      := True;
+      N.MapName    := AName;
+      N.MapFromType:= AFromType;
+      N.MapToTypes := AToTypes;
       L.Add(N);
     end;
 
     for Item in ACases do
     begin
-      if Length(Item.Sets) = 0 then Continue;   // an unmapped member has no line
-      N := TRuleNode.Create;
-      N.Kind    := rnkMapping;
-      N.Dirty   := True;
-      N.MapName := AName;
-      N.Sets    := Item.Sets;
+      if Length(Item.Sets) = 0 then Continue; // an unmapped member has no line
+      N:= TRuleNode.Create;
+      N.Kind   := rnkMapping;
+      N.Dirty  := True;
+      N.MapName:= AName;
+      N.Sets:= Item.Sets;
       if Item.IsElse then
-        N.IsElse := True
+        N.IsElse:= True
       else
       begin
         // A case that pinned its own source property keeps it; every other one follows
         // the mapping's, which is what makes renaming that property a one-field edit.
-        if Item.WhenFrom <> '' then N.WhenFrom := Item.WhenFrom
-        else                        N.WhenFrom := AWhenFrom;
-        N.WhenValue := Item.Member;
+        if Item.WhenFrom <> '' then
+          N.WhenFrom:= Item.WhenFrom
+        else
+          N.WhenFrom:= AWhenFrom;
+        N.WhenValue:= Item.Member;
       end;
       L.Add(N);
-    end;
+    end; // for
 
-    Result := L.ToArray;
+    Result:= L.ToArray;
   finally
     L.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function AppliedMappingNames(const ANodes: TArray<TRuleNode>): TArray<string>;
 var
   Node: TRuleNode;
 begin
-  Result := nil;
+  Result:= nil;
   for Node in ANodes do
     if (Node <> nil) and (Node.Kind = rnkApply) and (Node.ApplyName <> '')
        and not HasText(Result, Node.ApplyName) then
-      Result := Result + [Node.ApplyName];
+      Result:= Result + [Node.ApplyName];
 end;
 
-function ConditionalFromPaths(const ANodes: TArray<TRuleNode>;
-  const AApplied: TArray<string>): TArray<TConditionalFrom>;
+function ConditionalFromPaths(const ANodes: TArray<TRuleNode>; const AApplied: TArray<string>): TArray<TConditionalFrom>;
 var
   L      : TList<TConditionalFrom>;
   Name   : string                 ;
@@ -739,76 +896,76 @@ var
   i      : Integer                ;
   Merged : Boolean                ;
 begin
-  L := TList<TConditionalFrom>.Create;
+  L:= TList<TConditionalFrom>.Create;
   try
     for Name in AApplied do
     begin
-      Paths   := nil;
-      HasElse := False;
+      Paths:= nil;
+      HasElse:= False;
       for Node in ANodes do
         if IsClause(Node) and SameText(Node.MapName, Name) then
           if Node.IsElse then
-            HasElse := True
+            HasElse:= True
           else if (Node.WhenFrom <> '') and not HasText(Paths, Node.WhenFrom) then
-            Paths := Paths + [Node.WhenFrom];
+            Paths:= Paths + [Node.WhenFrom];
 
       for Path in Paths do
       begin
-        Count := 0;
+        Count:= 0;
         for Node in ANodes do
           if IsClause(Node) and SameText(Node.MapName, Name) and (not Node.IsElse)
              and SameText(Node.WhenFrom, Path) then
             Inc(Count);
-        if HasElse then Inc(Count);
+        if HasElse then
+          Inc(Count);
 
         // Two applied mappings may decide the same From path; the reader wants one
         // entry carrying the total, not two rows fighting over the same cell.
-        Merged := False;
-        for i := 0 to L.Count - 1 do
+        Merged:= False;
+        for i:= 0 to L.Count - 1 do
           if SameText(L[i].FromPath, Path) then
           begin
-            Item       := L[i];
-            Item.Cases := Item.Cases + Count;
-            L[i]       := Item;
-            Merged     := True;
+            Item:= L[i];
+            Item.Cases:= Item.Cases + Count;
+            L[i]:= Item;
+            Merged:= True;
             Break;
           end;
         if not Merged then
         begin
-          Item.FromPath := Path;
-          Item.Cases    := Count;
+          Item.FromPath:= Path;
+          Item.Cases   := Count;
           L.Add(Item);
         end;
-      end;
-    end;
-    Result := L.ToArray;
+      end; // for
+    end; // for
+    Result:= L.ToArray;
   finally
     L.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function ConditionalCasesOf(const AConds: TArray<TConditionalFrom>;
-  const APath: string): Integer;
+function ConditionalCasesOf(const AConds: TArray<TConditionalFrom>; const APath: string): Integer;
 var
   C: TConditionalFrom;
 begin
   for C in AConds do
-    if SameText(C.FromPath, APath) then Exit(C.Cases);
-  Result := 0;
+    if SameText(C.FromPath, APath) then
+      Exit(C.Cases);
+  Result:= 0;
 end;
 
-function MappedTargetPaths(const ANodes: TArray<TRuleNode>;
-  const AApplied: TArray<string>): TArray<string>;
+function MappedTargetPaths(const ANodes: TArray<TRuleNode>; const AApplied: TArray<string>): TArray<string>;
 var
   Node: TRuleNode;
   Pair: TSetPair ;
 begin
-  Result := nil;
+  Result:= nil;
   for Node in ANodes do
     if IsClause(Node) and HasText(AApplied, Node.MapName) then
       for Pair in Node.Sets do
         if (Pair.ToPath <> '') and not HasText(Result, Pair.ToPath) then
-          Result := Result + [Pair.ToPath];
+          Result:= Result + [Pair.ToPath];
 end;
 
 end.

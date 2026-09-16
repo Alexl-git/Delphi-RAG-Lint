@@ -19,11 +19,16 @@ unit ConvRules.RuleCatalog;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.StrUtils,
-  System.Generics.Collections, System.Generics.Defaults,
-  { TRuleBook, for HeaderIndexFor. ConvRules.Model uses only the RTL, so naming it
+  System.SysUtils
+  , System.Classes
+  , System.IOUtils
+  , System.StrUtils
+  , System.Generics.Collections
+  , System.Generics.Defaults
+  , { TRuleBook, for HeaderIndexFor. ConvRules.Model uses only the RTL, so naming it
     here cannot create a cycle. }
-  ConvRules.Model;
+        ConvRules.Model
+  ;
 
 const
   /// <summary>The index file written into the scanned rules folder.</summary>
@@ -35,11 +40,17 @@ const
 
 type
   /// <summary>One '#convert From -> To' the folder already covers.</summary>
-  /// <remarks>FromType and ToType are stored EXACTLY as the book spells them,
+  /// <remarks>
+  /// FromType and ToType are stored EXACTLY as the book spells them,
   /// which is usually unit-qualified ('Bde.DBTables.TTable'). A DFM always writes
   /// the bare name, so match through FindRuleForType rather than comparing these
   /// directly. LineNo is 1-based, for display and for routing a later save back to
-  /// the originating book.</remarks>
+  /// the originating book.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas), ConvRules.RuleCatalog.CatalogFromText (ConvRules.RuleCatalog.pas), declaration (ConvRules.RuleCatalog.pas) (+6 more)</para>
+  /// <para>Used in units: ConvRules.MainForm, ConvRules.RuleCatalog</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleCatalogEntry = record
     FromType: string;
     ToType  : string;
@@ -49,50 +60,95 @@ type
     /// refused whole rather than read as "these rules are untagged" -- that would
     /// make a tagged rule invisible to the very selection tags exist for.</remarks>
     Tags    : TArray<string>;
-    FilePath: string;
-    LineNo  : Integer;
-  end;
+    FilePath: string        ;
+    LineNo  : Integer       ;
+  end; // record
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.BlockOps.BlocksConvertingTypes (ConvRules.BlockOps.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.MergeCatalogs (ConvRules.RuleCatalog.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.RuleCatalog.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleCatalog = TArray<TRuleCatalogEntry>;
 
   /// <summary>One source type that more than one rule claims to convert.</summary>
-  /// <remarks>Entries are every catalog row covering that type, in scan order --
+  /// <remarks>
+  /// Entries are every catalog row covering that type, in scan order --
   /// which is also the order FindRuleForType silently picks the first of. Holding
   /// them ALL is the point: the fix is to delete or move one, and you cannot do
-  /// that without being told where both are.</remarks>
+  /// that without being told where both are.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor (ConvRules.MainForm.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas)</para>
+  /// <para>Used in units: ConvRules.MainForm, ConvRules.RuleCatalog</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCatalogDuplicate = record
-    FromType: string;
+    FromType: string      ;
     Entries : TRuleCatalog;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (ConvRules.MainForm.pas), declaration (ConvRules.RuleCatalog.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCatalogDuplicates = TArray<TCatalogDuplicate>;
 
   /// <summary>One '#mapping &lt;Name&gt; from &lt;Type&gt; to &lt;Class&gt;' DECLARATION.</summary>
-  /// <remarks>A #mapping spans several physical lines: the declaration is followed by
+  /// <remarks>
+  /// A #mapping spans several physical lines: the declaration is followed by
   /// sibling #when/#else CLAUSE lines that repeat the name. Only the declaration is an
   /// entry here -- a clause is a USE of the name, not a second declaration of it, and
   /// counting clauses would report every multi-clause mapping as duplicated inside a
   /// single correct file. LineNo is 1-based, for display and for routing a later save
-  /// back to the owning book.</remarks>
+  /// back to the owning book.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.RuleCatalog.CheckApplyIntegrity (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.FindDuplicateMappings (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.MappingCatalogFromText (ConvRules.RuleCatalog.pas)</para>
+  /// <para>Used in units: ConvRules.RuleCatalog</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMappingCatalogEntry = record
-    Name    : string;
-    FilePath: string;
+    Name    : string ;
+    FilePath: string ;
     LineNo  : Integer;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.RuleCatalog.CheckApplyIntegrity (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.FindDuplicateMappings (ConvRules.RuleCatalog.pas), declaration (ConvRules.RuleCatalog.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMappingCatalog = TArray<TMappingCatalogEntry>;
 
   /// <summary>One mapping name declared by more than one book.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.RuleCatalog.FindDuplicateMappings (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.TApplyIntegrity.Summary (ConvRules.RuleCatalog.pas)</para>
+  /// <para>Used in units: ConvRules.RuleCatalog</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMappingDuplicate = record
-    Name   : string;
+    Name   : string         ;
     Entries: TMappingCatalog;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (ConvRules.RuleCatalog.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMappingDuplicates = TArray<TMappingDuplicate>;
 
-/// <summary>PURE: the bare type name of a possibly unit-qualified name.</summary>
-/// <param name="AQualified">'Bde.DBTables.TTable' or 'TTable'.</param>
-/// <returns>The text after the last dot; the input unchanged when there is none.</returns>
+  /// <summary>PURE: the bare type name of a possibly unit-qualified name.</summary>
+  /// <param name="AQualified">'Bde.DBTables.TTable' or 'TTable'.</param>
+  /// <returns>The text after the last dot; the input unchanged when there is none.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: ConvRules.BlockOps.BlocksConvertingTypes (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor (ConvRules.MainForm.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.FindRuleForType (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.HeaderIndexFor (ConvRules.RuleCatalog.pas) (+2 more)</para>
+  /// <para>Calls: Copy, LastDelimiter, Trim</para>
+  /// <para>Pure</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 function BareTypeName(const AQualified: string): string;
 
 /// <summary>PURE: every '#convert' in one rule-book text, as catalog entries.</summary>
@@ -100,31 +156,59 @@ function BareTypeName(const AQualified: string): string;
 /// ignored, never an error.</param>
 /// <param name="APath">Recorded verbatim as each entry's FilePath; not read.</param>
 /// <returns>One entry per '#convert', in file order.</returns>
-/// <remarks>ToType is the TARGET TYPE ONLY. A header may carry extra uses-units
+/// <remarks>
+/// ToType is the TARGET TYPE ONLY. A header may carry extra uses-units
 /// after a comma ('-> FireDAC.Comp.Client.TFDTable, FireDAC.Stan.Intf, ...'); those
-/// are units to add, not alternative targets, and must not land in ToType.</remarks>
+/// are units to add, not alternative targets, and must not land in ToType.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockOps.BlocksConvertingTypes (ConvRules.BlockOps.pas), ConvRules.BlockOps.BlocksWithTag (ConvRules.BlockOps.pas), ConvRules.RuleCatalog.ScanRulesFolder (ConvRules.RuleCatalog.pas)</para>
+/// <para>Calls: ConvRules.Model.TRuleBook.ConvertHeaders, ConvRules.Model.TRuleBook.Create, ConvRules.Model.TRuleBook.LoadFromString, Copy, Default, Pos, Trim</para>
+/// <para>Returns: List.ToArray</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
+/// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
+/// <seealso cref="ConvRules.Model.TRuleBook.LoadFromString"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CatalogFromText(const AText, APath: string): TRuleCatalog;
 
 /// <summary>PURE: the catalog entries carrying ATag, in catalog order.</summary>
 /// <param name="ACatalog">The scanned catalog.</param>
 /// <param name="ATag">A tag name; '' matches nothing.</param>
 /// <returns>The matching entries; [] when none carries the tag.</returns>
-/// <remarks>Case-insensitive, as Pascal is. An EMPTY tag selects NOTHING rather
+/// <remarks>
+/// Case-insensitive, as Pascal is. An EMPTY tag selects NOTHING rather
 /// than everything -- a blank filter box must not silently compose the whole
 /// corpus into a job.
 /// <para>This is the third contributor to a job selection, alongside the grid's
 /// checkboxes and by-type; they all fold together through
-/// ConvRules.BlockOps.UnionSelections.</para></remarks>
+/// ConvRules.BlockOps.UnionSelections.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockOps.BlocksWithTag (ConvRules.BlockOps.pas)</para>
+/// <para>Calls: SameText, Trim</para>
+/// <para>Returns: nil; List.ToArray</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SelectByTag(const ACatalog: TRuleCatalog; const ATag: string): TRuleCatalog;
 
 /// <summary>PURE: concatenates catalogs, preserving order.</summary>
+/// <param name="AParts"><!-- drag-lint:auto type -->const TArray&lt;TRuleCatalog&gt;</param>
+/// <returns><!-- drag-lint:auto -->TRuleCatalog -- Observed: List.ToArray.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.RuleCatalog.ScanRulesFolder (ConvRules.RuleCatalog.pas)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
 
 /// <summary>PURE: every source type claimed by more than one rule.</summary>
 /// <param name="ACatalog">The scanned catalog.</param>
 /// <returns>One entry per duplicated type, in first-appearance order; [] when the
 /// corpus holds one rule per type, which is the intended state.</returns>
-/// <remarks>THE RULE THIS ENFORCES (owner, 2026-09-08): a rule lives in
+/// <remarks>
+/// THE RULE THIS ENFORCES (owner, 2026-09-08): a rule lives in
 /// exactly ONE file, because the same conversion in two places is how two versions
 /// of it appear and diverge. Rules may be moved between files freely; they may not
 /// be COPIED.
@@ -134,75 +218,148 @@ function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
 /// would miss.</para>
 /// <para>This is deliberately NOT folded into FindRuleForType. That function
 /// answers "is this type covered", is called once per row while painting, and must
-/// stay cheap; this one answers a corpus-health question and is called on rescan.</para></remarks>
+/// stay cheap; this one answers a corpus-health question and is called on rescan.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.RuleCatalog.BareTypeName, UpperCase</para>
+/// <para>Returns: nil; Found.ToArray</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindDuplicates(const ACatalog: TRuleCatalog): TCatalogDuplicates;
 
 /// <summary>PURE: every '#mapping' DECLARATION in one rule-book text.</summary>
 /// <param name="AText">A .rules book. Unrecognised text is ignored, never an error.</param>
 /// <param name="APath">Recorded verbatim as each entry's FilePath; not read.</param>
 /// <returns>One entry per declaration, in file order. Clause lines yield nothing.</returns>
-/// <remarks>Uses the same TRuleBook the editor loads books with, so the catalog cannot
+/// <remarks>
+/// Uses the same TRuleBook the editor loads books with, so the catalog cannot
 /// disagree with the editor about what a '#mapping' says. The declaration is identified
-/// the way the MODEL marks it -- MapFromType &lt;&gt; '' -- never by re-parsing the line.</remarks>
+/// the way the MODEL marks it -- MapFromType &lt;&gt; '' -- never by re-parsing the line.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.RuleCatalog.CheckApplyIntegrity (ConvRules.RuleCatalog.pas)</para>
+/// <para>Calls: ConvRules.Model.TRuleBook.Create, ConvRules.Model.TRuleBook.LoadFromString, Trim</para>
+/// <para>Returns: List.ToArray</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
+/// <seealso cref="ConvRules.Model.TRuleBook.LoadFromString"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MappingCatalogFromText(const AText, APath: string): TMappingCatalog;
 
 /// <summary>PURE: every mapping NAME declared more than once.</summary>
 /// <param name="ACatalog">The scanned mapping catalog.</param>
 /// <returns>One entry per duplicated name, in first-appearance order, each holding ALL
 /// its sites in scan order; [] when every name is declared once.</returns>
-/// <remarks>The invariant FindDuplicates enforces for types, keyed on the mapping name
+/// <remarks>
+/// The invariant FindDuplicates enforces for types, keyed on the mapping name
 /// instead: a name declared in two books is two versions of one mapping waiting to
 /// diverge. Case-insensitive, as Pascal is.
 /// <para>Still needed after atomization was retired (2026-09-09). Moving a #convert into its
 /// own file separates it from the preamble #mapping its #apply names, and the tempting
-/// repair is to copy the declaration across. This makes that visible.</para></remarks>
+/// repair is to copy the declaration across. This makes that visible.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.RuleCatalog.CheckApplyIntegrity (ConvRules.RuleCatalog.pas)</para>
+/// <para>Calls: Trim, UpperCase</para>
+/// <para>Returns: nil; Found.ToArray</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindDuplicateMappings(const ACatalog: TMappingCatalog): TMappingDuplicates;
 
 type
   /// <summary>What CheckApplyIntegrity found in one composed text.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas), ConvRules.RuleCatalog.CheckApplyIntegrity (ConvRules.RuleCatalog.pas), declaration (ConvRules.RuleCatalog.pas)</para>
+  /// <para>Used in units: ConvRules.CurationForm, ConvRules.RuleCatalog</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApplyIntegrity = record
     /// <summary>'#apply' names with no '#mapping' DECLARATION in the same text,
     /// in first-appearance order, de-duplicated case-insensitively.</summary>
-    Unsatisfied      : TArray<string>;
+    Unsatisfied : TArray<string>;
     /// <summary>Mapping names declared more than once in the text.</summary>
     DuplicateMappings: TMappingDuplicates;
     /// <summary>True when both lists are empty -- the text is safe to hand to
     /// the engine as far as mappings are concerned.</summary>
     /// <returns>True when there is nothing to report.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas)</para>
+    /// <para>Returns: (Length(Unsatisfied) = 0) and (Length(DuplicateMappings) = 0)</para>
+    /// <para>Reads: Unsatisfied, DuplicateMappings</para>
+    /// <para>Pure</para>
+    /// <seealso cref="ConvRules.RuleCatalog.TApplyIntegrity.Summary"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function OK: Boolean;
     /// <summary>One line naming what is wrong, for a status bar.</summary>
     /// <returns>A human-readable summary of both lists; '' when OK.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas)</para>
+    /// <para>Calls: Format</para>
+    /// <para>Returns: string.Join('; ', Parts)</para>
+    /// <para>Reads: Unsatisfied, DuplicateMappings</para>
+    /// <para>Pure</para>
+    /// <seealso cref="ConvRules.RuleCatalog.TApplyIntegrity.OK"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Summary: string;
-  end;
+  end; // record
 
-/// <summary>PURE: every '#apply &lt;Name&gt;' in AText must have a matching
-/// '#mapping &lt;Name&gt; from ... to ...' declaration in AText, and no name may be
-/// declared twice.</summary>
-/// <param name="AText">A rule-book text -- in practice a COMPOSED one.</param>
-/// <returns>The two lists; see TApplyIntegrity.OK.</returns>
-/// <remarks>This runs on the COMPOSED text, not on an authored book, and that is
-/// the whole point. A composed job book is generated, disposable output for
-/// --rules, so a #mapping carried into it from a source preamble is not a second
-/// authored copy and does not breach the one-rule-one-place rule -- but an #apply
-/// whose declaration stayed behind in a book that is not in the working set
-/// produces a book the engine cannot apply, silently.
-/// <para>A #when or #else CLAUSE repeats the name and is NOT a declaration; the
-/// model marks the declaration with MapFromType &lt;&gt; '', the same rule
-/// ConvRules.Mappings.ValidateMappings uses for mikUndefined, so the two cannot
-/// disagree. Names compare case-insensitively, as Pascal does.</para></remarks>
+  /// <summary>PURE: every '#apply &lt;Name&gt;' in AText must have a matching
+  /// '#mapping &lt;Name&gt; from ... to ...' declaration in AText, and no name may be
+  /// declared twice.</summary>
+  /// <param name="AText">A rule-book text -- in practice a COMPOSED one.</param>
+  /// <returns>The two lists; see TApplyIntegrity.OK.</returns>
+  /// <remarks>
+  /// This runs on the COMPOSED text, not on an authored book, and that is
+  /// the whole point. A composed job book is generated, disposable output for
+  /// --rules, so a #mapping carried into it from a source preamble is not a second
+  /// authored copy and does not breach the one-rule-one-place rule -- but an #apply
+  /// whose declaration stayed behind in a book that is not in the working set
+  /// produces a book the engine cannot apply, silently.
+  /// <para>A #when or #else CLAUSE repeats the name and is NOT a declaration; the
+  /// model marks the declaration with MapFromType &lt;&gt; '', the same rule
+  /// ConvRules.Mappings.ValidateMappings uses for mikUndefined, so the two cannot
+  /// disagree. Names compare case-insensitively, as Pascal does.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas)</para>
+  /// <para>Calls: ConvRules.Model.TRuleBook.Create, ConvRules.Model.TRuleBook.LoadFromString, ConvRules.RuleCatalog.FindDuplicateMappings, ConvRules.RuleCatalog.MappingCatalogFromText, Default, SameText, Trim</para>
+  /// <para>Returns: Default(TApplyIntegrity)</para>
+  /// <para>Pure</para>
+  /// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
+  /// <seealso cref="ConvRules.Model.TRuleBook.LoadFromString"/>
+  /// <seealso cref="ConvRules.RuleCatalog.FindDuplicateMappings"/>
+  /// <seealso cref="ConvRules.RuleCatalog.MappingCatalogFromText"/>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
 
 /// <summary>PURE: the node index of the '#convert' header a catalog entry names.</summary>
 /// <param name="ABook">The loaded owning book. nil yields -1.</param>
 /// <param name="AEntry">A catalog entry; its LineNo is a HINT, its FromType decides.</param>
 /// <returns>The 0-based index into ABook.Nodes, or -1 when this book converts no such type.</returns>
-/// <remarks>LineNo is deliberately NOT trusted. The catalog is an index and the book
+/// <remarks>
+/// LineNo is deliberately NOT trusted. The catalog is an index and the book
 /// moves underneath it -- inserting one comment shifts every recorded line -- so the hint
 /// is ACCEPTED ONLY IF the node it names is still an rnkConvert for the same bare type;
 /// otherwise the first header converting that type wins. Trusting the number would select
 /// a neighbouring rule, which looks plausible and is wrong.
 /// <para>An out-of-range LineNo is a stale index, not a fault: it falls back like any
-/// other miss and never raises.</para></remarks>
+/// other miss and never raises.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor.HeaderMatches, SameText</para>
+/// <para>Returns: -1; Hint; i</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
+/// <seealso cref="ConvRules.RuleCatalog.HeaderIndexFor.HeaderMatches"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HeaderIndexFor(ABook: TRuleBook; const AEntry: TRuleCatalogEntry): Integer;
 
 /// <summary>PURE: the file name a NEW single-conversion rule file should carry.</summary>
@@ -210,7 +367,8 @@ function HeaderIndexFor(ABook: TRuleBook; const AEntry: TRuleCatalogEntry): Inte
 /// <param name="ATo">The To type AS WRITTEN ON THE HEADER -- any uses-units after a
 /// comma are stripped here, the same way CatalogFromText derives ToType.</param>
 /// <returns>'&lt;FromBare&gt;-to-&lt;ToBare&gt;.rules', or '' when either side is empty.</returns>
-/// <remarks>SETTLED 2026-09-09 -- owner ruling 1c. The format stays
+/// <remarks>
+/// SETTLED 2026-09-09 -- owner ruling 1c. The format stays
 /// '&lt;FromBare&gt;-to-&lt;ToBare&gt;.rules'; the "atom" vocabulary around it was dropped in
 /// the same ruling, because atomization had been retired earlier that day and this
 /// names an ordinary rule file the user chose to start, not an atom. Spelled once, in
@@ -218,7 +376,16 @@ function HeaderIndexFor(ABook: TRuleBook; const AEntry: TRuleCatalogEntry): Inte
 /// callers.
 /// <para>Characters illegal in a file name are replaced, never passed through: the
 /// result is combined with a folder by the caller, and a name carrying a separator
-/// would write outside it.</para></remarks>
+/// would write outside it.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.RuleFileNameFor.Sanitise, Copy, Format, Pos, Trim</para>
+/// <para>Returns: ''; Format(RULE_FILE_NAME_FMT, [F, T])</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
+/// <seealso cref="ConvRules.RuleCatalog.RuleFileNameFor.Sanitise"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleFileNameFor(const AFrom, ATo: string): string;
 
 /// <summary>A path in AFolder for AName that DOES NOT ALREADY EXIST.</summary>
@@ -226,11 +393,19 @@ function RuleFileNameFor(const AFrom, ATo: string): string;
 /// <param name="AName">Desired file name, typically from RuleFileNameFor.</param>
 /// <returns>AFolder\AName when free, else the first free '...-2', '...-3' variant.
 /// '' when AName is empty.</returns>
-/// <remarks>SAFETY, not convenience. The save path APPENDS to a file that already
+/// <remarks>
+/// SAFETY, not convenience. The save path APPENDS to a file that already
 /// exists, so handing back an occupied path would graft a new rule silently onto an
 /// unrelated rule file -- and the one-rule-one-file invariant would be broken by the very
 /// command meant to uphold it. The suffix goes before the extension so the file stays
-/// a '.rules' and keeps being scanned.</remarks>
+/// a '.rules' and keeps being scanned.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas)</para>
+/// <para>Calls: Format, Trim</para>
+/// <para>Returns: ''; TPath.Combine(AFolder, AName); TPath.Combine(AFolder, Format('%s-%d%s', [Base, n, Ext]))</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UniqueRulePath(const AFolder, AName: string): string;
 
 /// <summary>PURE: the first catalog entry converting ATypeName.</summary>
@@ -238,16 +413,33 @@ function UniqueRulePath(const AFolder, AName: string): string;
 /// <param name="ATypeName">A type name, bare or qualified.</param>
 /// <param name="AEntry">Receives the matching entry; undefined when False.</param>
 /// <returns>True when some book already converts this type.</returns>
-/// <remarks>Matches on the BARE name at both ends, because the .dfm side is always
+/// <remarks>
+/// Matches on the BARE name at both ends, because the .dfm side is always
 /// bare and the book side is usually qualified. Case-insensitive, as Pascal is.
 /// FIRST match wins, so folder order decides which book is reported as the owner
-/// when two cover the same type -- the panel shows which one.</remarks>
-function FindRuleForType(const ACatalog: TRuleCatalog; const ATypeName: string;
-  out AEntry: TRuleCatalogEntry): Boolean;
+/// when two cover the same type -- the panel shows which one.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.RuleCatalog.BareTypeName, Default, SameText</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AEntry (out)</para>
+/// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function FindRuleForType(const ACatalog: TRuleCatalog; const ATypeName: string; out AEntry: TRuleCatalogEntry): Boolean;
 
 /// <summary>PURE: render a catalog as the on-disk index text.</summary>
+/// <param name="ACatalog"><!-- drag-lint:auto type -->const TRuleCatalog</param>
 /// <returns>CATALOG_INDEX_HEADER then one tab-separated
 /// From/To/FilePath/LineNo record per entry, CRLF-terminated.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CatalogToIndexText(const ACatalog: TRuleCatalog): string;
 
 /// <summary>PURE: parse index text produced by CatalogToIndexText.</summary>
@@ -255,9 +447,16 @@ function CatalogToIndexText(const ACatalog: TRuleCatalog): string;
 /// <returns>The entries; empty when the header line does not match
 /// CATALOG_INDEX_HEADER, or for any line that is blank, a comment, or does not
 /// have four fields.</returns>
-/// <remarks>Refusing the whole file on a bad header is deliberate: a partially
+/// <remarks>
+/// Refusing the whole file on a bad header is deliberate: a partially
 /// understood index would silently under-report coverage, which shows up as a type
-/// looking un-ruled and inviting a duplicate rule.</remarks>
+/// looking un-ruled and inviting a duplicate rule.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: Default, StartsStr, StartsText, StrToIntDef, Trim</para>
+/// <para>Returns: nil; List.ToArray</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CatalogFromIndexText(const AText: string): TRuleCatalog;
 
 /// <summary>Scans a folder's '*.rules' books and builds the catalog.</summary>
@@ -266,17 +465,27 @@ function CatalogFromIndexText(const AText: string): TRuleCatalog;
 /// <param name="AErrors">One message per file that could not be read.</param>
 /// <returns>The merged catalog, files in name order so the "first match wins" rule
 /// in FindRuleForType is stable between runs.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
+/// <para>Calls: CompareText, ConvRules.RuleCatalog.CatalogFromText, ConvRules.RuleCatalog.MergeCatalogs, ExtractFileName, Format, Trim</para>
+/// <para>Returns: nil; MergeCatalogs(Parts)</para>
+/// <para>Mutates: AErrors (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="ConvRules.RuleCatalog.CatalogFromText"/>
+/// <seealso cref="ConvRules.RuleCatalog.MergeCatalogs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ScanRulesFolder(const AFolder: string; out AErrors: TArray<string>): TRuleCatalog;
 
 implementation
 
-const
-  { Tab-separated field order of one index record. CatalogToIndexText writes them
+const { Tab-separated field order of one index record. CatalogToIndexText writes them
     in exactly this order, so the two must move together. }
-  IDX_FROM        = 0;
-  IDX_TO          = 1;
-  IDX_PATH        = 2;
-  IDX_LINE        = 3;
+  IDX_FROM = 0;
+  IDX_TO   = 1;
+  IDX_PATH = 2;
+  IDX_LINE = 3;
   { v2 added the tag column. A v1 file has four fields and is refused by the
     HEADER check before it ever reaches this count, which is the point: a
     partially understood index reports tagged rules as untagged. }
@@ -287,74 +496,77 @@ function BareTypeName(const AQualified: string): string;
 var
   DotAt: Integer;
 begin
-  Result := Trim(AQualified);
-  DotAt  := LastDelimiter('.', Result);
+  Result:= Trim(AQualified);
+  DotAt:= LastDelimiter('.', Result);
   if DotAt > 0 then
-    Result := Copy(Result, DotAt + 1, MaxInt);
+    Result:= Copy(Result, DotAt + 1, MaxInt);
 end;
 
 function CatalogFromText(const AText, APath: string): TRuleCatalog;
 var
-  Book : TRuleBook;
-  List : TList<TRuleCatalogEntry>;
-  Idx  : Integer;
-  TagIdx: Integer;
-  Node : TRuleNode;
-  Entry: TRuleCatalogEntry;
-  ToT  : string;
-  CommaAt: Integer;
+  Book   : TRuleBook               ;
+  List   : TList<TRuleCatalogEntry>;
+  Idx    : Integer                 ;
+  TagIdx : Integer                 ;
+  Node   : TRuleNode               ;
+  Entry  : TRuleCatalogEntry       ;
+  ToT    : string                  ;
+  CommaAt: Integer                 ;
 begin
-  List := TList<TRuleCatalogEntry>.Create;
-  Book := TRuleBook.Create;
+  List:= TList<TRuleCatalogEntry>.Create;
+  Book:= TRuleBook.Create;
   try
     Book.LoadFromString(AText);
     // ConvertHeaders yields node indexes in file order, and TRuleBook parses ONE
     // node per physical line, so index+1 is the 1-based line number.
     for Idx in Book.ConvertHeaders do
     begin
-      Node := Book.Nodes[Idx];
+      Node:= Book.Nodes[Idx];
 
-      ToT := Trim(Node.ToType);
+      ToT:= Trim(Node.ToType);
       // Defence in depth: the model already splits trailing uses-units into Units,
       // but a target must never carry them even if that changes.
-      CommaAt := Pos(',', ToT);
-      if CommaAt > 0 then ToT := Trim(Copy(ToT, 1, CommaAt - 1));
+      CommaAt:= Pos(',', ToT);
+      if CommaAt > 0 then
+        ToT:= Trim(Copy(ToT, 1, CommaAt - 1));
 
       { Default() FIRST: this record is reused every iteration, and Tags is the
         only field not overwritten below. Without the reset a tagged rule would
         lend its tags to every untagged rule after it (catalog.tags.no.leak). }
-      Entry          := Default(TRuleCatalogEntry);
-      Entry.FromType := Trim(Node.FromType);
-      Entry.ToType   := ToT;
-      Entry.FilePath := APath;
-      Entry.LineNo   := Idx + 1;
+      Entry:= Default(TRuleCatalogEntry);
+      Entry.FromType:= Trim(Node.FromType);
+      Entry.ToType  := ToT;
+      Entry.FilePath:= APath;
+      Entry.LineNo:= Idx + 1;
       { A #tag labels the ENCLOSING #convert, so scan forward from this header to
         the next one. }
-      for TagIdx := Idx + 1 to Book.Nodes.Count - 1 do
+      for TagIdx:= Idx + 1 to Book.Nodes.Count - 1 do
       begin
-        if Book.Nodes[TagIdx].Kind = rnkConvert then Break;
+        if Book.Nodes[TagIdx].Kind = rnkConvert then
+          Break;
         if (Book.Nodes[TagIdx].Kind = rnkTag)
            and (Trim(Book.Nodes[TagIdx].TagName) <> '') then
-          Entry.Tags := Entry.Tags + [Trim(Book.Nodes[TagIdx].TagName)];
+          Entry.Tags:= Entry.Tags + [Trim(Book.Nodes[TagIdx].TagName)];
       end;
       List.Add(Entry);
-    end;
-    Result := List.ToArray;
+    end; // for
+    Result:= List.ToArray;
   finally
     Book.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function SelectByTag(const ACatalog: TRuleCatalog; const ATag: string): TRuleCatalog;
 var
   List : TList<TRuleCatalogEntry>;
-  Entry: TRuleCatalogEntry;
-  T    : string;
+  Entry: TRuleCatalogEntry       ;
+  T    : string                  ;
 begin
-  Result := nil;
-  if Trim(ATag) = '' then Exit;
-  List := TList<TRuleCatalogEntry>.Create;
+  Result:= nil;
+  if Trim(ATag) = '' then
+    Exit;
+  List:= TList<TRuleCatalogEntry>.Create;
   try
     for Entry in ACatalog do
       for T in Entry.Tags do
@@ -363,64 +575,67 @@ begin
           List.Add(Entry);
           Break;
         end;
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
 var
   List : TList<TRuleCatalogEntry>;
-  Part : TRuleCatalog;
-  Entry: TRuleCatalogEntry;
+  Part : TRuleCatalog            ;
+  Entry: TRuleCatalogEntry       ;
 begin
-  List := TList<TRuleCatalogEntry>.Create;
+  List:= TList<TRuleCatalogEntry>.Create;
   try
-    for Part in AParts do
-      for Entry in Part do
+    for Part  in AParts do
+    for Entry in Part   do
         List.Add(Entry);
-    Result := List.ToArray;
+    Result:= List.ToArray;
   finally
     List.Free;
   end;
-end;
+end; // function
 
 function MappingCatalogFromText(const AText, APath: string): TMappingCatalog;
 var
-  Book : TRuleBook;
+  Book : TRuleBook                  ;
   List : TList<TMappingCatalogEntry>;
-  i    : Integer;
-  Node : TRuleNode;
-  Entry: TMappingCatalogEntry;
+  i    : Integer                    ;
+  Node : TRuleNode                  ;
+  Entry: TMappingCatalogEntry       ;
 begin
-  List := TList<TMappingCatalogEntry>.Create;
-  Book := TRuleBook.Create;
+  List:= TList<TMappingCatalogEntry>.Create;
+  Book:= TRuleBook.Create;
   try
     Book.LoadFromString(AText);
     // TRuleBook parses ONE node per physical line, so i+1 is the 1-based line number.
-    for i := 0 to Book.Nodes.Count - 1 do
+    for i:= 0 to Book.Nodes.Count - 1 do
     begin
-      Node := Book.Nodes[i];
-      if Node.Kind <> rnkMapping then Continue;
+      Node:= Book.Nodes[i];
+      if Node.Kind <> rnkMapping then
+        Continue;
       // MapFromType is the MODEL's own marker for the declaration line. A #when or
       // #else clause carries the same MapName and an empty MapFromType; treating one
       // as a declaration would report BdeBatchMode -- 1 declaration, 5 clauses -- as a
       // six-way duplicate inside a single, entirely correct file.
-      if Trim(Node.MapFromType) = '' then Continue;
-      if Trim(Node.MapName) = '' then Continue;
+      if Trim(Node.MapFromType) = '' then
+        Continue;
+      if Trim(Node.MapName) = '' then
+        Continue;
 
-      Entry.Name     := Trim(Node.MapName);
-      Entry.FilePath := APath;
-      Entry.LineNo   := i + 1;
+      Entry.Name:= Trim(Node.MapName);
+      Entry.FilePath:= APath;
+      Entry.LineNo:= i + 1;
       List.Add(Entry);
-    end;
-    Result := List.ToArray;
+    end; // for
+    Result:= List.ToArray;
   finally
     Book.Free;
     List.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 { Owner ruling 1c lives HERE and nowhere else. }
 const
@@ -428,7 +643,8 @@ const
 
 function RuleFileNameFor(const AFrom, ATo: string): string;
 var
-  F, T: string;
+  F      : string ;
+  T      : string ;
   CommaAt: Integer;
 
   { A file name may not carry a separator or any of the characters Windows reserves.
@@ -438,375 +654,389 @@ var
   var
     Ch: Char;
   begin
-    Result := '';
+    Result:= '';
     for Ch in AText do
-      if TPath.IsValidFileNameChar(Ch) then Result := Result + Ch
-      else Result := Result + '_';
+      if TPath.IsValidFileNameChar(Ch) then
+        Result:= Result + Ch
+      else
+        Result:= Result + '_';
   end;
 
 begin
-  Result := '';
-  T := Trim(ATo);
+  Result:= '';
+  T:= Trim(ATo);
   // A header's target may be followed by uses-units: keep only the type.
-  CommaAt := Pos(',', T);
-  if CommaAt > 0 then T := Trim(Copy(T, 1, CommaAt - 1));
+  CommaAt:= Pos(',', T);
+  if CommaAt > 0 then
+    T:= Trim(Copy(T, 1, CommaAt - 1));
 
-  F := Sanitise(BareTypeName(AFrom));
-  T := Sanitise(BareTypeName(T));
-  if (F = '') or (T = '') then Exit;
+  F:= Sanitise(BareTypeName(AFrom));
+  T:= Sanitise(BareTypeName(T    ));
+  if (F = '') or (T = '') then
+    Exit;
 
-  Result := Format(RULE_FILE_NAME_FMT, [F, T]);
-end;
+  Result:= Format(RULE_FILE_NAME_FMT, [F, T]);
+end; // begin
 
 function UniqueRulePath(const AFolder, AName: string): string;
 var
-  Base, Ext: string;
-  n: Integer;
+  Base: string ;
+  Ext : string ;
+  n   : Integer;
 begin
-  Result := '';
-  if Trim(AName) = '' then Exit;
+  Result:= '';
+  if Trim(AName) = '' then
+    Exit;
 
-  Result := TPath.Combine(AFolder, AName);
-  if not TFile.Exists(Result) then Exit;
+  Result:= TPath.Combine(AFolder, AName);
+  if not TFile.Exists(Result) then
+    Exit;
 
   // Suffix BEFORE the extension: 'X-2.rules', never 'X.rules-2', or the new file
   // would stop matching the '*.rules' folder scan and become invisible to the catalog.
-  Base := TPath.GetFileNameWithoutExtension(AName);
-  Ext  := TPath.GetExtension(AName);
-  n := 2;
+  Base:= TPath.GetFileNameWithoutExtension(AName);
+  Ext := TPath.GetExtension               (AName);
+  n:= 2;
   repeat
-    Result := TPath.Combine(AFolder, Format('%s-%d%s', [Base, n, Ext]));
+    Result:= TPath.Combine(AFolder, Format('%s-%d%s', [Base, n, Ext]));
     Inc(n);
   until not TFile.Exists(Result);
-end;
+end; // function
 
 function TApplyIntegrity.OK: Boolean;
 begin
-  Result := (Length(Unsatisfied) = 0) and (Length(DuplicateMappings) = 0);
+  Result:= (Length(Unsatisfied) = 0) and (Length(DuplicateMappings) = 0);
 end;
 
 function TApplyIntegrity.Summary: string;
 var
-  Parts, Names: TArray<string>;
-  D           : TMappingDuplicate;
+  Parts: TArray<string>   ;
+  Names: TArray<string>   ;
+  D    : TMappingDuplicate;
 begin
-  Parts := nil;
+  Parts:= nil;
   if Length(Unsatisfied) > 0 then
-    Parts := Parts + ['#apply without a #mapping declaration: '
-      + string.Join(', ', Unsatisfied)];
+    Parts:= Parts + ['#apply without a #mapping declaration: ' + string.Join(', ', Unsatisfied)];
   if Length(DuplicateMappings) > 0 then
   begin
-    Names := nil;
+    Names:= nil;
     for D in DuplicateMappings do
-      Names := Names + [Format('%s (%d sites)', [D.Name, Length(D.Entries)])];
-    Parts := Parts + ['#mapping declared more than once: ' + string.Join(', ', Names)];
+      Names:= Names + [Format('%s (%d sites)', [D.Name, Length(D.Entries)])];
+    Parts:= Parts + ['#mapping declared more than once: ' + string.Join(', ', Names)];
   end;
-  Result := string.Join('; ', Parts);
-end;
+  Result:= string.Join('; ', Parts);
+end; // function
 
 function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
 var
-  Book   : TRuleBook;
-  Decl   : TMappingCatalog;
-  Missing: TList<string>;
-  Node   : TRuleNode;
+  Book   : TRuleBook           ;
+  Decl   : TMappingCatalog     ;
+  Missing: TList<string>       ;
+  Node   : TRuleNode           ;
   E      : TMappingCatalogEntry;
-  Name, M: string;
-  Found  : Boolean;
+  Name   : string              ;
+  M      : string              ;
+  Found  : Boolean             ;
 begin
-  Result := Default(TApplyIntegrity);
+  Result:= Default(TApplyIntegrity);
   { Declarations only -- MappingCatalogFromText already discards #when/#else
     clauses, which repeat the name without declaring it. }
-  Decl := MappingCatalogFromText(AText, '');
-  Result.DuplicateMappings := FindDuplicateMappings(Decl);
+  Decl:= MappingCatalogFromText(AText, '');
+  Result.DuplicateMappings:= FindDuplicateMappings(Decl);
 
-  Book    := TRuleBook.Create;
-  Missing := TList<string>.Create;
+  Book:= TRuleBook.Create;
+  Missing:= TList<string>.Create;
   try
     Book.LoadFromString(AText);
     for Node in Book.Nodes do
     begin
-      if Node.Kind <> rnkApply then Continue;
-      Name := Trim(Node.ApplyName);
-      if Name = '' then Continue;
+      if Node.Kind <> rnkApply then
+        Continue;
+      Name:= Trim(Node.ApplyName);
+      if Name = '' then
+        Continue;
 
-      Found := False;
+      Found:= False;
       for E in Decl do
         if SameText(E.Name, Name) then
         begin
-          Found := True;
+          Found:= True;
           Break;
         end;
-      if Found then Continue;
+      if Found then
+        Continue;
 
       { First-appearance order, de-duplicated: one missing name is one defect
         however many blocks apply it. }
-      Found := False;
+      Found:= False;
       for M in Missing do
         if SameText(M, Name) then
         begin
-          Found := True;
+          Found:= True;
           Break;
         end;
       if not Found then
         Missing.Add(Name);
-    end;
-    Result.Unsatisfied := Missing.ToArray;
+    end; // for
+    Result.Unsatisfied:= Missing.ToArray;
   finally
     Missing.Free;
     Book.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function HeaderIndexFor(ABook: TRuleBook; const AEntry: TRuleCatalogEntry): Integer;
 var
-  Hint, i: Integer;
-  Want   : string;
+  Hint: Integer;
+  i   : Integer;
+  Want: string ;
 
   function HeaderMatches(AIndex: Integer): Boolean;
   begin
-    Result := (ABook.Nodes[AIndex].Kind = rnkConvert)
+    Result:= (ABook.Nodes[AIndex].Kind = rnkConvert)
       and SameText(BareTypeName(ABook.Nodes[AIndex].FromType), Want);
   end;
 
 begin
-  Result := -1;
-  if ABook = nil then Exit;
-  Want := BareTypeName(AEntry.FromType);
-  if Want = '' then Exit;
+  Result:= -1;
+  if ABook = nil then
+    Exit;
+  Want:= BareTypeName(AEntry.FromType);
+  if Want = '' then
+    Exit;
 
   // 1. The recorded line, accepted only if it still IS this rule's header.
-  Hint := AEntry.LineNo - 1;
+  Hint:= AEntry.LineNo - 1;
   if (Hint >= 0) and (Hint < ABook.Nodes.Count) and HeaderMatches(Hint) then
     Exit(Hint);
 
   // 2. Otherwise the index is stale: the TYPE is the durable key, so take the first
   //    header converting it. First, not last, to agree with FindRuleForType -- the
   //    panel already reports that site as the owner.
-  for i := 0 to ABook.Nodes.Count - 1 do
+  for i:= 0 to ABook.Nodes.Count - 1 do
     if HeaderMatches(i) then
       Exit(i);
-end;
+end; // begin
 
 function FindDuplicateMappings(const ACatalog: TMappingCatalog): TMappingDuplicates;
 var
   Groups: TDictionary<string, TMappingCatalog>;
-  Order : TList<string>;                  // keys in FIRST-APPEARANCE order
-  Found : TList<TMappingDuplicate>;
-  Entry : TMappingCatalogEntry;
-  Bucket: TMappingCatalog;
-  Dup   : TMappingDuplicate;
-  Key   : string;
+  Order : TList<string>                       ; // keys in FIRST-APPEARANCE order
+  Found : TList<TMappingDuplicate>            ;
+  Entry : TMappingCatalogEntry                ;
+  Bucket: TMappingCatalog                     ;
+  Dup   : TMappingDuplicate                   ;
+  Key   : string                              ;
 begin
-  Result := nil;
-  Groups := TDictionary<string, TMappingCatalog>.Create;
-  Order  := TList<string>.Create;
-  Found  := TList<TMappingDuplicate>.Create;
+  Result:= nil;
+  Groups:= TDictionary<string, TMappingCatalog>.Create;
+  Order:= TList<string>.Create;
+  Found:= TList<TMappingDuplicate>.Create;
   try
     for Entry in ACatalog do
     begin
       // A mapping name is an identifier and never qualified, so unlike the type
       // catalog there is nothing to strip here -- only case to fold.
-      Key := UpperCase(Trim(Entry.Name));
-      if Key = '' then Continue;
+      Key:= UpperCase(Trim(Entry.Name));
+      if Key = '' then
+        Continue;
 
       if not Groups.TryGetValue(Key, Bucket) then
       begin
-        Bucket := nil;
+        Bucket:= nil;
         Order.Add(Key);
       end;
       Groups.AddOrSetValue(Key, Bucket + [Entry]);
-    end;
+    end; // for
 
     // Walk Order, not Groups: a dictionary has no order, and a report that
     // reshuffles between runs is one nobody can diff.
     for Key in Order do
       if Groups.TryGetValue(Key, Bucket) and (Length(Bucket) > 1) then
       begin
-        Dup.Name    := Bucket[0].Name;      // as the first site spells it
-        Dup.Entries := Bucket;
+        Dup.Name:= Bucket[0].Name; // as the first site spells it
+        Dup.Entries:= Bucket;
         Found.Add(Dup);
       end;
 
-    Result := Found.ToArray;
+    Result:= Found.ToArray;
   finally
     Found.Free;
     Order.Free;
     Groups.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function FindDuplicates(const ACatalog: TRuleCatalog): TCatalogDuplicates;
 var
   Groups: TDictionary<string, TRuleCatalog>;
-  Order : TList<string>;                  // keys in FIRST-APPEARANCE order
-  Found : TList<TCatalogDuplicate>;
-  Entry : TRuleCatalogEntry;
-  Bucket: TRuleCatalog;
-  Dup   : TCatalogDuplicate;
-  Key   : string;
+  Order : TList<string>                    ; // keys in FIRST-APPEARANCE order
+  Found : TList<TCatalogDuplicate>         ;
+  Entry : TRuleCatalogEntry                ;
+  Bucket: TRuleCatalog                     ;
+  Dup   : TCatalogDuplicate                ;
+  Key   : string                           ;
 begin
-  Result := nil;
-  Groups := TDictionary<string, TRuleCatalog>.Create;
-  Order  := TList<string>.Create;
-  Found  := TList<TCatalogDuplicate>.Create;
+  Result:= nil;
+  Groups:= TDictionary<string, TRuleCatalog>.Create;
+  Order:= TList<string>.Create;
+  Found:= TList<TCatalogDuplicate>.Create;
   try
     for Entry in ACatalog do
     begin
       // Bare + upper: a qualified 'Bde.DBTables.TQuery' and a bare 'TQuery' are
       // the SAME rule declared twice, and that is the case a naive comparison of
       // the written names would miss entirely.
-      Key := UpperCase(BareTypeName(Entry.FromType));
-      if Key = '' then Continue;
+      Key:= UpperCase(BareTypeName(Entry.FromType));
+      if Key = '' then
+        Continue;
 
       if not Groups.TryGetValue(Key, Bucket) then
       begin
-        Bucket := nil;
+        Bucket:= nil;
         Order.Add(Key);
       end;
       Groups.AddOrSetValue(Key, Bucket + [Entry]);
-    end;
+    end; // for
 
     // Walk Order, not Groups: a dictionary has no order, and a report that
     // reshuffles between runs is one nobody can diff.
     for Key in Order do
       if Groups.TryGetValue(Key, Bucket) and (Length(Bucket) > 1) then
       begin
-        Dup.FromType := Bucket[0].FromType;   // as the first site spells it
-        Dup.Entries  := Bucket;
+        Dup.FromType:= Bucket[0].FromType; // as the first site spells it
+        Dup.Entries:= Bucket;
         Found.Add(Dup);
       end;
 
-    Result := Found.ToArray;
+    Result:= Found.ToArray;
   finally
     Found.Free;
     Order.Free;
     Groups.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function FindRuleForType(const ACatalog: TRuleCatalog; const ATypeName: string;
-  out AEntry: TRuleCatalogEntry): Boolean;
+function FindRuleForType(const ACatalog: TRuleCatalog; const ATypeName: string; out AEntry: TRuleCatalogEntry): Boolean;
 var
   Entry: TRuleCatalogEntry;
-  Want : string;
+  Want : string           ;
 begin
-  AEntry := Default(TRuleCatalogEntry);
-  Result := False;
-  Want   := BareTypeName(ATypeName);
-  if Want = '' then Exit;
+  AEntry:= Default(TRuleCatalogEntry);
+  Result:= False;
+  Want:= BareTypeName(ATypeName);
+  if Want = '' then
+    Exit;
 
   for Entry in ACatalog do
     if SameText(BareTypeName(Entry.FromType), Want) then
     begin
-      AEntry := Entry;
+      AEntry:= Entry;
       Exit(True);
     end;
-end;
+end; // function
 
 function CatalogToIndexText(const ACatalog: TRuleCatalog): string;
 var
-  SB   : TStringBuilder;
+  SB   : TStringBuilder   ;
   Entry: TRuleCatalogEntry;
 begin
-  SB := TStringBuilder.Create;
+  SB:= TStringBuilder.Create;
   try
     SB.Append(CATALOG_INDEX_HEADER).Append(#13#10);
     for Entry in ACatalog do
-      SB.Append(Entry.FromType).Append(#9)
-        .Append(Entry.ToType).Append(#9)
-        .Append(Entry.FilePath).Append(#9)
-        .Append(IntToStr(Entry.LineNo)).Append(#9)
+      SB.Append(Entry.FromType).Append(#9).Append(Entry.ToType).Append(#9).Append(Entry.FilePath).Append(#9).Append(IntToStr(Entry.LineNo)).Append(#9)
         .Append(string.Join(',', Entry.Tags)).Append(#13#10);
-    Result := SB.ToString;
+    Result:= SB.ToString;
   finally
     SB.Free;
   end;
-end;
+end; // function
 
 function CatalogFromIndexText(const AText: string): TRuleCatalog;
 var
-  Lines: TStringList;
+  Lines: TStringList             ;
   List : TList<TRuleCatalogEntry>;
-  i    : Integer;
-  Parts: TArray<string>;
-  Entry: TRuleCatalogEntry;
-  Ln   : string;
+  i    : Integer                 ;
+  Parts: TArray<string>          ;
+  Entry: TRuleCatalogEntry       ;
+  Ln   : string                  ;
 begin
-  Result := nil;
-  if Trim(AText) = '' then Exit;
+  Result:= nil;
+  if Trim(AText) = '' then
+    Exit;
 
-  Lines := TStringList.Create;
-  List  := TList<TRuleCatalogEntry>.Create;
+  Lines:= TStringList.Create;
+  List:= TList<TRuleCatalogEntry>.Create;
   try
-    Lines.Text := AText;
+    Lines.Text:= AText;
     // A wrong or missing header refuses the WHOLE file -- see the doc comment.
     if (Lines.Count = 0) or (not StartsText(CATALOG_INDEX_HEADER, Trim(Lines[0]))) then
       Exit;
 
-    for i := 1 to Lines.Count - 1 do
+    for i:= 1 to Lines.Count - 1 do
     begin
-      Ln := Lines[i];
-      if Trim(Ln) = '' then Continue;
-      if StartsStr('#', Trim(Ln)) then Continue;
+      Ln:= Lines[i];
+      if Trim(Ln) = '' then
+        Continue;
+      if StartsStr('#', Trim(Ln)) then
+        Continue;
 
-      Parts := Ln.Split([#9]);
-      if Length(Parts) < IDX_FIELD_COUNT then Continue;
+      Parts:= Ln.Split([#9]);
+      if Length(Parts) < IDX_FIELD_COUNT then
+        Continue;
 
       { Reset first -- one record is reused per line, and Tags would otherwise
         carry over from the previous row. }
-      Entry          := Default(TRuleCatalogEntry);
-      Entry.FromType := Trim(Parts[IDX_FROM]);
-      Entry.ToType   := Trim(Parts[IDX_TO]);
-      Entry.FilePath := Trim(Parts[IDX_PATH]);
-      Entry.LineNo   := StrToIntDef(Trim(Parts[IDX_LINE]), 0);
+      Entry:= Default(TRuleCatalogEntry);
+      Entry.FromType:= Trim(Parts[IDX_FROM]);
+      Entry.ToType  := Trim(Parts[IDX_TO  ]);
+      Entry.FilePath:= Trim(Parts[IDX_PATH]);
+      Entry.LineNo:= StrToIntDef(Trim(Parts[IDX_LINE]), 0);
       if Trim(Parts[IDX_TAGS]) <> '' then
-        Entry.Tags := Trim(Parts[IDX_TAGS]).Split([',']);
+        Entry.Tags:= Trim(Parts[IDX_TAGS]).Split([',']);
       List.Add(Entry);
-    end;
-    Result := List.ToArray;
+    end; // for
+    Result:= List.ToArray;
   finally
     List.Free;
     Lines.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 function ScanRulesFolder(const AFolder: string; out AErrors: TArray<string>): TRuleCatalog;
 var
-  Files : TArray<string>;
-  Errs  : TList<string>;
+  Files : TArray<string>      ;
+  Errs  : TList<string>       ;
   Parts : TArray<TRuleCatalog>;
-  F     : string;
+  F     : string              ;
 begin
-  AErrors := nil;
-  Result  := nil;
-  if (Trim(AFolder) = '') or (not TDirectory.Exists(AFolder)) then Exit;
+  AErrors:= nil;
+  Result := nil;
+  if (Trim(AFolder) = '') or (not TDirectory.Exists(AFolder)) then
+    Exit;
 
-  Errs := TList<string>.Create;
+  Errs:= TList<string>.Create;
   try
-    Files := TDirectory.GetFiles(AFolder, '*.rules');
+    Files:= TDirectory.GetFiles(AFolder, '*.rules');
     // Name order, so FindRuleForType's "first match wins" is stable between runs
     // rather than depending on whatever order the file system hands back.
-    TArray.Sort<string>(Files, TComparer<string>.Construct(
-      function(const L, R: string): Integer
-      begin
-        Result := CompareText(L, R);
-      end));
+    TArray.Sort<string>(Files, TComparer<string>.Construct( function(const L, R: string): Integer begin Result:= CompareText(L, R); end));
 
-    Parts := nil;
+    Parts:= nil;
     for F in Files do
-      try
-        Parts := Parts + [CatalogFromText(TFile.ReadAllText(F), F)];
-      except
-        on E: Exception do
-          Errs.Add(Format('%s: %s', [ExtractFileName(F), E.Message]));
-      end;
+    try
+      Parts:= Parts + [CatalogFromText(TFile.ReadAllText(F), F)];
+    except
+      on E: Exception do
+        Errs.Add(Format('%s: %s', [ExtractFileName(F), E.Message]));
+    end;
 
-    Result  := MergeCatalogs(Parts);
-    AErrors := Errs.ToArray;
+    Result:= MergeCatalogs(Parts);
+    AErrors:= Errs.ToArray;
   finally
     Errs.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 end.

@@ -23,6 +23,12 @@ type
   /// <summary>Normalized unit sets for a rule book. Adds/Removes are deduped
   /// (case-insensitive); Conflicts lists units that appeared in both (ADD won,
   /// so they are in Adds, NOT Removes).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.DoCheckUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshUnitList (ConvRules.MainForm.pas), declaration (ConvRules.Units.pas)</para>
+  /// <para>Used in units: ConvRules.MainForm, ConvRules.Units</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnitSets = record
     Adds     : TArray<string>;
     Removes  : TArray<string>;
@@ -30,32 +36,69 @@ type
   end;
 
   /// <summary>One From/To type pair fed to auto-derive (a #convert header).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.Units.DeriveUnits (ConvRules.Units.pas), declaration (ConvRules.Units.pas)</para>
+  /// <para>Used in units: ConvRules.MainForm, ConvRules.Units</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConvPair = record
     FromType: string;
     ToType  : string;
   end;
 
   /// <summary>Resolve a type name to its declaring unit ('' when unresolved).</summary>
+  /// <param name="ATypeName"><!-- drag-lint:auto type -->const string</param>
+  /// <returns><!-- drag-lint:auto type -->string</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (ConvRules.Units.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnitResolver = reference to function(const ATypeName: string): string;
 
-/// <summary>Normalized ADD/REMOVE unit sets for a whole rule book (see the unit
-/// header for the rule). Pure; case-insensitive dedup; ADD wins on conflict.</summary>
+  /// <summary>Normalized ADD/REMOVE unit sets for a whole rule book (see the unit
+  /// header for the rule). Pure; case-insensitive dedup; ADD wins on conflict.</summary>
+  /// <param name="ABook"><!-- drag-lint:auto type -->TRuleBook</param>
+  /// <returns><!-- drag-lint:auto type -->TUnitSets</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoCheckUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshUnitList (ConvRules.MainForm.pas)</para>
+  /// <para>Calls: ConvRules.Units.AddUniq, ConvRules.Units.ToArr, Trim</para>
+  /// <para>Pure</para>
+  /// <seealso cref="ConvRules.Units.AddUniq"/>
+  /// <seealso cref="ConvRules.Units.ToArr"/>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 function NormalizeUnitSets(ABook: TRuleBook): TUnitSets;
 
 /// <summary>Auto-derive: Adds = each ToType's resolved unit; Removes = each
 /// FromType's resolved unit. An empty resolver result (unresolved type) is
 /// skipped. Each list deduped case-insensitively. Conflicts is left empty --
 /// the caller runs NormalizeUnitSets once the derived nodes are in the book.</summary>
-function DeriveUnits(const APairs: TArray<TConvPair>;
-  const AResolve: TUnitResolver): TUnitSets;
+/// <param name="APairs"><!-- drag-lint:auto type -->const TArray&lt;TConvPair&gt;</param>
+/// <param name="AResolve"><!-- drag-lint:auto type -->const TUnitResolver</param>
+/// <returns><!-- drag-lint:auto type -->TUnitSets</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas)</para>
+/// <para>Calls: AResolve, ConvRules.Units.AddUniq, ConvRules.Units.ToArr</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Units.AddUniq"/>
+/// <seealso cref="ConvRules.Units.ToArr"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DeriveUnits(const APairs: TArray<TConvPair>; const AResolve: TUnitResolver): TUnitSets;
 
 implementation
 
 { Add AUnit to AList unless blank or already present (case-insensitive). }
 procedure AddUniq(AList: TStringList; const AUnit: string);
 begin
-  if Trim(AUnit) = '' then Exit;
-  if AList.IndexOf(AUnit) < 0 then AList.Add(AUnit);
+  if Trim(AUnit) = '' then
+    Exit;
+  if AList.IndexOf(AUnit) < 0 then
+    AList.Add(AUnit);
 end;
 
 function ToArr(AList: TStringList): TArray<string>;
@@ -63,35 +106,40 @@ var
   i: Integer;
 begin
   SetLength(Result, AList.Count);
-  for i := 0 to AList.Count - 1 do Result[i] := AList[i];
+  for i:= 0 to AList.Count - 1 do
+    Result[i]:= AList[i];
 end;
 
 function NormalizeUnitSets(ABook: TRuleBook): TUnitSets;
 var
-  Adds, Removes, Conflicts: TStringList;
-  N    : TRuleNode;
-  U    : string   ;
-  Parts: TArray<string>;
-  P    : string   ;
+  Adds     : TStringList   ;
+  Removes  : TStringList   ;
+  Conflicts: TStringList   ;
+  N        : TRuleNode     ;
+  U        : string        ;
+  Parts    : TArray<string>;
+  P        : string        ;
 begin
-  Adds := TStringList.Create; Removes := TStringList.Create; Conflicts := TStringList.Create;
+  Adds:= TStringList.Create; Removes:= TStringList.Create; Conflicts:= TStringList.Create;
   try
-    Adds.CaseSensitive := False; Removes.CaseSensitive := False; Conflicts.CaseSensitive := False;
+    Adds.CaseSensitive:= False; Removes.CaseSensitive:= False; Conflicts.CaseSensitive:= False;
     for N in ABook.Nodes do
-      case N.Kind of
-        rnkUse:   AddUniq(Adds, N.UseUnit);
-        rnkUnuse: AddUniq(Removes, N.UnuseUnit);
-        rnkUseSwap:
-          begin
-            AddUniq(Removes, N.SwapOld);
-            for U in N.SwapNew do AddUniq(Adds, U);
-          end;
-        rnkConvert:
-          begin
-            Parts := N.Units.Split([',']);
-            for P in Parts do AddUniq(Adds, Trim(P));
-          end;
+    case N.Kind of
+      rnkUse    : AddUniq(Adds, N.UseUnit)     ;
+      rnkUnuse  : AddUniq(Removes, N.UnuseUnit);
+      rnkUseSwap:
+      begin
+        AddUniq(Removes, N.SwapOld);
+        for U in N.SwapNew do
+          AddUniq(Adds, U);
       end;
+      rnkConvert:
+      begin
+        Parts:= N.Units.Split([',']);
+        for P in Parts do
+          AddUniq(Adds, Trim(P));
+      end;
+    end; // case
     // ADD wins: any unit present in both -> Conflicts, removed from Removes.
     for U in ToArr(Adds) do
       if Removes.IndexOf(U) >= 0 then
@@ -99,34 +147,34 @@ begin
         AddUniq(Conflicts, U);
         Removes.Delete(Removes.IndexOf(U));
       end;
-    Result.Adds      := ToArr(Adds);
-    Result.Removes   := ToArr(Removes);
-    Result.Conflicts := ToArr(Conflicts);
+    Result.Adds     := ToArr(Adds     );
+    Result.Removes  := ToArr(Removes  );
+    Result.Conflicts:= ToArr(Conflicts);
   finally
     Adds.Free; Removes.Free; Conflicts.Free;
-  end;
-end;
+  end; // try
+end; // function
 
-function DeriveUnits(const APairs: TArray<TConvPair>;
-  const AResolve: TUnitResolver): TUnitSets;
+function DeriveUnits(const APairs: TArray<TConvPair>; const AResolve: TUnitResolver): TUnitSets;
 var
-  Adds, Removes: TStringList;
-  Pair: TConvPair;
+  Adds   : TStringList;
+  Removes: TStringList;
+  Pair   : TConvPair  ;
 begin
-  Adds := TStringList.Create; Removes := TStringList.Create;
+  Adds:= TStringList.Create; Removes:= TStringList.Create;
   try
-    Adds.CaseSensitive := False; Removes.CaseSensitive := False;
+    Adds.CaseSensitive:= False; Removes.CaseSensitive:= False;
     for Pair in APairs do
     begin
-      AddUniq(Adds, AResolve(Pair.ToType));
+      AddUniq(Adds   , AResolve(Pair.ToType  ));
       AddUniq(Removes, AResolve(Pair.FromType));
     end;
-    Result.Adds      := ToArr(Adds);
-    Result.Removes   := ToArr(Removes);
-    Result.Conflicts := nil;
+    Result.Adds   := ToArr(Adds   );
+    Result.Removes:= ToArr(Removes);
+    Result.Conflicts:= nil;
   finally
     Adds.Free; Removes.Free;
-  end;
-end;
+  end; // try
+end; // function
 
 end.

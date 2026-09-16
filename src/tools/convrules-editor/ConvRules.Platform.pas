@@ -8,12 +8,14 @@ unit ConvRules.Platform;
 interface
 
 uses
-  System.SysUtils;
+  System.SysUtils
+  ;
 
 type
   /// <summary>Which platform library a picker side resolves component types
   /// against. cpBoth lists both libraries, Win32 first (see LibDbsFor).</summary>
-  /// <remarks>cpBoth is offered but is NOT the default for either side. It was
+  /// <remarks>
+  /// cpBoth is offered but is NOT the default for either side. It was
   /// intended as a FROM safety net for components indexed under only one
   /// platform; measured 2026-07-29 against the libraries on disk that net was
   /// empty (Win64 alone gave the same 6180 TComponent descendants as the union,
@@ -21,7 +23,11 @@ type
   /// fragment of the ~1.9 GB corpus. Because a consumer such as `proptree`
   /// resolves a qname from the FIRST --db that answers, listing a fragment ahead
   /// of a healthy index can shadow it. Use cpBoth deliberately, not by
-  /// default.</remarks>
+  /// default.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.Platform.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConvPlatform = (cpWin32, cpWin64, cpBoth);
 
 const
@@ -37,53 +43,87 @@ const
   DEFAULT_FROM_PLATFORM = cpWin64;
   DEFAULT_TO_PLATFORM   = cpWin64;
 
-/// <summary>Parse a platform token (case-insensitive: 'win32' | 'win64' |
-/// 'both'). Returns ADefault for '' or any unrecognized token.</summary>
+  /// <summary>Parse a platform token (case-insensitive: 'win32' | 'win64' |
+  /// 'both'). Returns ADefault for '' or any unrecognized token.</summary>
+  /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="ADefault"><!-- drag-lint:auto type -->TConvPlatform</param>
+  /// <returns><!-- drag-lint:auto -->TConvPlatform -- Observed: cpWin32; cpWin64; cpBoth;
+  /// ADefault.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: ArgPlatform (ConvRulesEditor.dpr)</para>
+  /// <para>Calls: LowerCase, Trim</para>
+  /// <para>Pure</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 function ParsePlatform(const AText: string; ADefault: TConvPlatform): TConvPlatform;
 
 /// <summary>The canonical lowercase token for a platform
 /// ('win32' | 'win64' | 'both').</summary>
+/// <param name="APlatform"><!-- drag-lint:auto type -->TConvPlatform</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: 'win32'; 'win64'; 'both'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlatformToStr(APlatform: TConvPlatform): string;
 
 /// <summary>The library-index DB paths a platform selects, each under ALibDir.
 /// cpWin32 -> [ALibDir\library-Win32.sqlite]; cpWin64 -> [...library-Win64...];
 /// cpBoth -> [Win32, Win64] in that order. Pure: does not check existence.</summary>
+/// <param name="APlatform"><!-- drag-lint:auto type -->TConvPlatform</param>
+/// <param name="ALibDir"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
+/// [TPath.Combine(ALibDir, 'library-Win32.sqlite')]; [TPath.Combine(ALibDir,
+/// 'library-Win64.sqlite')].</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.FromDbSet (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ToDbSet (ConvRules.MainForm.pas)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LibDbsFor(APlatform: TConvPlatform; const ALibDir: string): TArray<string>;
 
 implementation
 
 uses
-  System.IOUtils;
+  System.IOUtils
+  ;
 
 function ParsePlatform(const AText: string; ADefault: TConvPlatform): TConvPlatform;
 var
   T: string;
 begin
-  T := LowerCase(Trim(AText));
-  if T = 'win32' then Result := cpWin32
-  else if T = 'win64' then Result := cpWin64
-  else if T = 'both' then Result := cpBoth
-  else Result := ADefault;
-end;
+  T:= LowerCase(Trim(AText));
+  if T = 'win32' then
+    Result:= cpWin32
+  else if T = 'win64' then
+    Result:= cpWin64
+  else if T = 'both' then
+    Result:= cpBoth
+  else
+    Result:= ADefault;
+end; // function
 
 function PlatformToStr(APlatform: TConvPlatform): string;
 begin
   case APlatform of
-    cpWin32: Result := 'win32';
-    cpWin64: Result := 'win64';
-  else
-    Result := 'both';
+    cpWin32: Result:= 'win32';
+    cpWin64: Result:= 'win64';
+    else
+      Result:= 'both';
   end;
 end;
 
 function LibDbsFor(APlatform: TConvPlatform; const ALibDir: string): TArray<string>;
 begin
   case APlatform of
-    cpWin32: Result := [TPath.Combine(ALibDir, 'library-Win32.sqlite')];
-    cpWin64: Result := [TPath.Combine(ALibDir, 'library-Win64.sqlite')];
-  else
-    Result := [TPath.Combine(ALibDir, 'library-Win32.sqlite'),
-               TPath.Combine(ALibDir, 'library-Win64.sqlite')];
+    cpWin32: Result:= [TPath.Combine(ALibDir, 'library-Win32.sqlite')];
+    cpWin64: Result:= [TPath.Combine(ALibDir, 'library-Win64.sqlite')];
+    else
+      Result:= [TPath.Combine(ALibDir, 'library-Win32.sqlite'), TPath.Combine(ALibDir, 'library-Win64.sqlite')];
   end;
 end;
 
