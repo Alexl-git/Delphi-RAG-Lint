@@ -5,6 +5,47 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed: `outline --file X` said no database resolved for a file `resolve-dbs --in X` found three for
+
+Reported independently **twice** by the converter team (their own
+`ConvRules.Usage.pas`, and ORM3's `COMMON\OBJECTS\iFOLDERS.PAS`):
+
+```
+resolve-dbs --in ...\iFOLDERS.PAS  -> Micronite2027, MicroniteMW1Service, TestMicroniteObjects
+outline --file ...\iFOLDERS.PAS    -> "no project database resolves here"
+```
+
+Two statements about the same file at the same moment, and the second is the
+false one -- the worse kind of false, because it names a **remedy** ("pass
+`--db`") for a condition that does not hold, sending the reader after a missing
+index instead of a resolution bug.
+
+`DoOutline` resolved only through `AArgs.DbPath`, which is driven by
+`--platform` / the cwd / the manifest default and knows nothing about the file
+being read. `resolve-dbs --in` additionally runs a **membership probe**, asking
+each candidate index whether it actually contains the file -- and that is what
+finds a unit living outside its own `.dproj`'s folder, which is most of ORM3's
+`COMMON\` and most of this repo (whose `.dproj` sits in `src\cli` and pulls in a
+dozen sibling folders).
+
+**Fixed as shared code, not a second copy.** Both verbs now call
+`ResolveReadDbsForFileWith`; the manifest *load* stays with each caller (because
+`resolve-dbs` honours `--config` and must exit 2 on a bad one) and only the
+ordering is shared. `outline` then walks the resolved list and uses the first
+index that actually holds the file -- the same walk `hover` uses -- because
+"ordered first" is not "contains it", and answering from an index that does not
+hold the file prints an empty outline indistinguishable from a file with no
+symbols.
+
+A file in **no** index is still refused (exit 2), never answered with an empty
+outline.
+
+Guarded by `tests\autotest\run_outline_resolves_from_file.ps1`, which asserts
+the **agreement** between the two verbs rather than the implementation, so it
+still fails if the logic is ever re-forked. Every invocation runs from a
+**neutral working directory** -- run from inside the repo, cwd resolution alone
+can find the index and the guard would pass against the unfixed build.
+
 ### Fixed: fourteen more read verbs silently MIGRATED the `--db` they were told to read
 
 **This completes the breaking change v1.12.0-alpha announced for four verbs.**

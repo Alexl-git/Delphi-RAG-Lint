@@ -979,6 +979,10 @@ end;
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+{ Declared here because ResolveReadDbsForFileWith (used by `outline`, well above
+  the implementation) needs it, and the implementation sits beside the manifest
+  helpers near DoResolveDbsList. }
+function DetectPlatformFromDproj(const AManifest: TIndexManifest; const ACwd: string): string; forward;
 { Forward: DoLint needs the project's scoped closure for unit-not-in-dpr's third
   direction, and BuildProjectFileScope is defined some 3,000 lines below it. }
 function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>; forward;
@@ -8685,6 +8689,118 @@ end; // function
 // JSON shape: [{"kind","name","qname","line","signature","modifiers"}, ...]
 // Exit 2 on usage error / db missing, 0 otherwise (empty list is not an error
 // -- a file with no indexed symbols legitimately returns []).
+{ THE READER-SIDE DB RESOLUTION, KEYED ON THE FILE BEING READ.
+
+  `outline --file X` resolved only through AArgs.DbPath, which is driven by
+  --platform / the cwd / the manifest default and knows nothing about X. So a
+  file covered by three indexes could be told none existed. Measured
+  2026-09-16, and reported INDEPENDENTLY TWICE by the converter team (their
+  own ConvRules.Usage.pas, and ORM3's COMMON\OBJECTS\iFOLDERS.PAS):
+
+    resolve-dbs --in ...\iFOLDERS.PAS  -> Micronite2027, MicroniteMW1Service,
+                                          TestMicroniteObjects
+    outline --file ...\iFOLDERS.PAS    -> "no project database resolves here"
+
+  Two statements about the same file at the same moment, and the second is the
+  false one. It is the worse kind of false: it names a REMEDY ("pass --db") for
+  a condition that does not hold, so the reader goes looking for a missing
+  index instead of a resolution bug.
+
+  This mirrors `resolve-dbs --in` (DoResolveDbsList): the same manifest load,
+  the same ResolveReadDbs, the same OrderDbsByMembership with DbContainsFile.
+  Kept as a small helper rather than by calling that routine, because
+  DoResolveDbsList also PRINTS and carries display-only branches. If the two
+  ever disagree, `resolve-dbs` is the authority and THIS is the copy to fix --
+  a consumer disagreeing with the verb whose whole job is to answer "which
+  database covers this file" is a defect by definition. }
+  { Pure: manifest in, ordered DB list out. `resolve-dbs --in` loads its own
+    manifest (it honours --config and must exit 2 on a bad one), so the LOAD
+    stays with each caller and only the RESOLUTION is shared. Two copies of
+    this ordering is precisely how outline and resolve-dbs came to disagree. }
+function ResolveReadDbsForFileWith(const AManifest: TIndexManifest; const AArgs: TArgs): TArray<string>;
+var
+  Paths: TArray<string>;
+begin
+  Paths:= ResolveReadDbs(AManifest, AArgs.ProjectPath, AArgs.InFile);
+
+  var ActiveDb: string:= '';
+  var ActClaimants: TArray<string>:= nil;
+  if AArgs.ProjectPath <> '' then
+    if ResolveProjectDb(AManifest, AArgs.ProjectPath, ActiveDb, ActClaimants) <> pdmUnique then ActiveDb:= '';
+  Paths:= OrderDbsByMembership(Paths, ActiveDb, AArgs.InFile, DbContainsFile);
+
+  { MEMBERSHIP FIRST, FOLDERS ONLY AS A FALLBACK. ResolveReadDbs answers from
+    the manifest -- the active project's DB plus the section whose ROOTS contain
+    the file's folder -- which is EMPTY for any member unit living outside its
+    .dproj's own folder. That is most of ORM3 (COMMON\OBJECTS\iFOLDERS.PAS) and
+    most of this repo. So the probe below asks the indexes themselves.
+
+    HOLDERS LEAD, THEY DO NOT REPLACE. run_project_db_resolve.ps1 contracts that
+    this resolution is a PERMUTATION of the candidates, never a shorter list, so
+    browsing library and third-party source keeps working when membership is
+    unknown. Returning holders alone would trade one silent miss for another. }
+  var MemberDbs: TArray<string>:= nil;
+  var ProbePlatform: string:= AArgs.CheckPlatform;
+  if ProbePlatform = '' then ProbePlatform:= DetectPlatformFromDproj(AManifest, GetCurrentDir);
+  if ProbePlatform = '' then ProbePlatform:= AManifest.Settings.DefaultPlatform;
+  try
+    var MemResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      for var Cand: string in TDbSelect.Resolve(AManifest, ProbePlatform, MemResolver, True) do
+        if DbContainsFile(Cand, AArgs.InFile) then
+        begin
+          SetLength(MemberDbs, Length(MemberDbs) + 1);
+          MemberDbs[High(MemberDbs)]:= Cand;
+        end;
+    finally
+      MemResolver.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      { A probe failure must not turn a working folder answer into no answer. }
+      MemberDbs:= nil;
+      Writeln(ErrOutput, System.SysUtils.Format('NOTE: membership probe failed (%s: %s); falling back to folder resolution.',
+                                [E.ClassName, E.Message]));
+    end;
+  end;
+  if Length(MemberDbs) > 0 then
+  begin
+    var Merged: TArray<string>:= OrderDbsByMembership(MemberDbs, ActiveDb, AArgs.InFile, DbContainsFile);
+    for var Prev: string in Paths do
+    begin
+      var Already: Boolean:= False;
+      for var Have: string in Merged do
+        if SameText(Have, Prev) then begin Already:= True; Break; end;
+      if not Already then
+      begin
+        SetLength(Merged, Length(Merged) + 1);
+        Merged[High(Merged)]:= Prev;
+      end;
+    end;
+    Paths:= Merged;
+  end;
+  Result:= Paths;
+end; // function
+
+function ResolveReadDbsForFile(const AArgs: TArgs): TArray<string>;
+var
+  Manifest: TIndexManifest;
+begin
+  Result:= nil;
+  { An explicit --db is an instruction, not a hint: honour it untouched. }
+  if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPaths);
+  if AArgs.InFile = '' then Exit;
+  try
+    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+  except
+    { No manifest is not an error here -- the caller falls back to its old
+      single-path behaviour and reports that in its own words. }
+    on E: Exception do Exit;
+  end;
+  Result:= ResolveReadDbsForFileWith(Manifest, AArgs);
+end; // function
+
 function DoOutline(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore   ;
@@ -8694,13 +8810,50 @@ var
   JObj : TJSONObject    ;
 begin
   if AArgs.InFile = '' then begin Writeln('Usage: drag-lint outline --file <path.pas> ' + '[--db <path>] [--format text|json]'); Exit(2); end;
-  if NoDbResolved(AArgs.DbPath, 'outline') then Exit(2);
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
-  var RoOk: Boolean;
-  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
-  Syms:= Store.FindSymbolsByFile(AArgs.InFile);
+  { Resolve from the FILE, not from the cwd. See ResolveReadDbsForFile's header
+    for the defect this closes. The old single-path behaviour survives as the
+    fallback, so a run with an explicit --db, or with no manifest at all, is
+    unchanged. }
+  var Dbs: TArray<string>:= ResolveReadDbsForFile(AArgs);
+  if Length(Dbs) = 0 then
+  begin
+    if NoDbResolved(AArgs.DbPath, 'outline') then Exit(2);
+    if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+    Dbs:= [AArgs.DbPath];
+  end;
+
+  { FIRST DB THAT ACTUALLY HOLDS THE FILE WINS -- the same walk hover uses.
+    OrderDbsByMembership has already put the containing indexes in front, but
+    "ordered first" is not "contains it": a file in no index at all still
+    yields a list, and answering from the first entry would print an empty
+    outline that looks exactly like a file with no symbols. }
+  var RoOk : Boolean;
+  var UsedDb: string:= '';
+  Store:= nil;
+  SetLength(Syms, 0);
+  for var Db in Dbs do
+  begin
+    if not TFile.Exists(Db) then Continue;
+    Store:= OpenReadOnlyStore(Db, RoOk);
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'outline', Db) then Exit(2);
+      Store:= nil;
+      Continue;
+    end;
+    Syms:= Store.FindSymbolsByFile(AArgs.InFile);
+    if Length(Syms) > 0 then begin UsedDb:= Db; Break; end;
+    Store:= nil;
+  end;
+
+  if Store = nil then
+  begin
+    Writeln('ERROR: outline: no index that resolves here contains ', AArgs.InFile);
+    Writeln('       Tried ', Length(Dbs), ' database(s). Index the file, or pass --db <file.sqlite>.');
+    Exit(2);
+  end;
+  if UsedDb = '' then UsedDb:= Dbs[0];
 
   if SameText(AArgs.Format, 'json') then
   begin
@@ -24568,89 +24721,13 @@ begin
       end;
     end; // try
 
-    Paths:= ResolveReadDbs(Manifest, AArgs.ProjectPath, AArgs.InFile);
-
-    { Then reorder by what the indexes ACTUALLY CONTAIN. The manifest can only say
-      which sections plausibly cover a file; once two projects share a directory
-      that is not enough to choose, and a consumer reading only the first entry
-      gets an index that does not hold the file at all. The active project's DB
-      stays as the tiebreak, which is what ORM3's COMMON\ units need. }
-    var ActiveDb: string:= '';
-    var ActClaimants: TArray<string>:= nil;
-    if AArgs.ProjectPath <> '' then
-      if ResolveProjectDb(Manifest, AArgs.ProjectPath, ActiveDb, ActClaimants) <> pdmUnique then ActiveDb:= '';
-    Paths:= OrderDbsByMembership(Paths, ActiveDb, AArgs.InFile, DbContainsFile);
-
-    { v1.7 B2: MEMBERSHIP FIRST, folders only as a fallback.
-
-      ResolveReadDbs answers from the manifest: the active project's DB, plus
-      the section whose ROOTS contain the file's folder. That is empty for any
-      member unit living outside its .dproj's own folder -- which is most of
-      this repo, whose project file sits in src\cli and pulls in src\lsp,
-      src\core, src\resolver and a dozen more. So `resolve-dbs --in
-      src\lsp\DRagLint.LSP.Server.pas` printed NOTHING while the very DB it
-      should have named answered `query --name HandleHover` about that file.
-
-      Silent, and worse than an error: CLAUDE.md tells every session to resolve
-      DB paths with this command rather than guess them, so an empty answer
-      reads as "no index covers this file" and sends the reader to Grep -- the
-      exact fallback the index exists to remove.
-
-      The reverse mapping is therefore taken from the files table, which is the
-      authority on membership, by probing every DB the platform resolves to.
-      Two DBs legitimately holding the same file (ORM3's shared COMMON\ units)
-      both get listed, because both genuinely contain it.
-
-      HOLDERS LEAD, THEY DO NOT REPLACE. The obvious form of this fix returns
-      the holders alone, and the INBOX note proposed exactly that -- but
-      run_project_db_resolve.ps1 already contracts that this resolution is a
-      PERMUTATION of the candidates, never a shorter list, precisely so that
-      browsing library and third-party source keeps working when membership is
-      unknown. Dropping candidates would trade one silent miss for another. So
-      the holders are moved to the FRONT and the manifest's own candidates
-      follow. A caller reading Result[0] now gets an index that can answer; a
-      caller reading the whole list loses nothing it used to be offered. }
-    var MemberDbs: TArray<string>:= nil;
-    var ProbePlatform: string:= AArgs.CheckPlatform;
-    if ProbePlatform = '' then ProbePlatform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
-    if ProbePlatform = '' then ProbePlatform:= Manifest.Settings.DefaultPlatform;
-    try
-      var MemResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
-      try
-        for var Cand: string in TDbSelect.Resolve(Manifest, ProbePlatform, MemResolver, True) do
-          if DbContainsFile(Cand, AArgs.InFile) then
-          begin
-            SetLength(MemberDbs, Length(MemberDbs) + 1);
-            MemberDbs[High(MemberDbs)]:= Cand;
-          end;
-      finally
-        MemResolver.Free;
-      end;
-    except
-      on E: Exception do
-      begin
-        { A probe failure must not turn a working folder answer into no answer. }
-        MemberDbs:= nil;
-        Writeln(ErrOutput, Format('NOTE: membership probe failed (%s: %s); falling back to folder resolution.',
-                                  [E.ClassName, E.Message]));
-      end;
-    end;
-    if Length(MemberDbs) > 0 then
-    begin
-      var Merged: TArray<string>:= OrderDbsByMembership(MemberDbs, ActiveDb, AArgs.InFile, DbContainsFile);
-      for var Prev: string in Paths do
-      begin
-        var Already: Boolean:= False;
-        for var Have: string in Merged do
-          if SameText(Have, Prev) then begin Already:= True; Break; end;
-        if not Already then
-        begin
-          SetLength(Merged, Length(Merged) + 1);
-          Merged[High(Merged)]:= Prev;
-        end;
-      end;
-      Paths:= Merged;
-    end;
+    { ONE resolution, shared with `outline --file` and anything else that
+      resolves from the file being read. The manifest load stays HERE because
+      this verb honours --config and must exit 2 on a bad one; only the
+      ordering is shared. Two copies of that ordering is exactly how
+      `outline --file X` came to report "no project database resolves here"
+      for a file this verb listed three databases for. }
+    Paths:= ResolveReadDbsForFileWith(Manifest, AArgs);
 
     if AArgs.AsJson then
     begin
