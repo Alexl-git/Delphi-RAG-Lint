@@ -8,6 +8,9 @@ echo RC_EXITCODE=%errorlevel%
 REM Gate on it: a broken .rc plus a stale .res would otherwise report BUILD_EXITCODE=0
 REM while silently embedding the previous resource.
 if %errorlevel% neq 0 exit /b %errorlevel%
-dcc64 -B ConvRulesEditor.dpr
+REM DCUs go to .\dcu, not beside the source. dcc64 does NOT create the output
+REM directory -- a missing one is a hard error (F1027), so make it first.
+if not exist "dcu" mkdir "dcu"
+dcc64 -B -NUdcu ConvRulesEditor.dpr
 echo BUILD_EXITCODE=%errorlevel%
 if %errorlevel%==0 copy /Y ConvRulesEditor.exe "%~dp0..\third_party\dll-win64\ConvRulesEditor.exe" >NUL
