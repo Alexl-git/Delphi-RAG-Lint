@@ -125,12 +125,15 @@ type
     aikDefaultRuleSuperseded,{ #default skipped -- a rule already carried that path }
     aikDefaultResolved,      { F prop absent-because-default; its value was carried }
     aikEnumCastUnmapped,     { an enum cast had no map for this value and no else }
-    aikUnlinkedSourceProperty); { ONE line per (source type, property) that no
+    aikUnlinkedSourceProperty,{ ONE line per (source type, property) that no
                                #link carries and no #ignore acknowledges, with the
                                site count as a FRACTION of that type's converted
                                instances. The per-instance 'dropped' lines above
                                are the sites; this is the rule-book gap they
                                share. Row 6 step 3, 2026-09-16. }
+    aikSubLeafCarried);      { a sub-leaf carried IMPLICITLY under an identity
+                               #link (Font <- Font, both TFont) -- nobody typed
+                               it, and the report says so (info). }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -524,7 +527,7 @@ const
     'cast-not-applied', 'cast-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
-    'unlinked-source-property');
+    'unlinked-source-property', 'sub-leaf-carried');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1354,6 +1357,20 @@ var
     FoldOne(AReport.Mismatched, aikBinaryTypeMismatch,   '%s: mismatched %s');
     FoldOne(AReport.OwnedParts, aikOwnedPartUnconverted, '%s: owned-part %s');
     FoldOne(AReport.Created,    aikDfmPathCreated,       '%s: created %s');
+    { Carried is folded inline for the same reason Dropped is: the LEAF PATH and
+      the rule line land as structured data (It.Path / It.RuleLine), so a
+      consumer can list "the leaves nobody typed" without parsing prose. }
+    for var CR: TReemitCarried in AReport.Carried do
+    begin
+      var CIt: TApplyItem:= InstItem(aikSubLeafCarried, afReemitNotes,
+        Format('%s: carried %s -> %s (implicit under #link at line %d; both sides %s)',
+               [Inst.InstanceName, CR.FromPath, CR.ToPath, CR.RuleLine, CR.TypeName]));
+      CIt.FilePath:= ADfmPath;
+      CIt.Line    := ABlockLine;
+      CIt.Path    := CR.FromPath;
+      CIt.RuleLine:= CR.RuleLine;
+      Emit(CIt);
+    end;
     { Stubs and Relocated used to live in Notes and were emitted with this same
       '%s: %s' shape -- keeping it means every existing text assertion still
       matches; only the KIND is newly distinguishable. }

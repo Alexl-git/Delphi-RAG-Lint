@@ -184,6 +184,16 @@ type
     RuleLine: Integer; { the #link line }
   end;
 
+  /// <summary>One sub-leaf carried implicitly under a type-identity #link. See
+  /// TReemitReport.Carried for why it is structured rather than prose: the
+  /// converter team wants to dispatch on 'nobody typed this leaf'.</summary>
+  TReemitCarried = record
+    FromPath: string;  { the source leaf, dotted, as the .dfm spelled it (Font.Name) }
+    ToPath  : string;  { where it landed on T (ToPrefix + '.' + remainder) }
+    RuleLine: Integer; { 1-based line of the parent #link that carried it }
+    TypeName: string;  { the shared property type, bare (TFont) }
+  end;
+
   /// <summary>A structured report of what the re-emit did and what needs human
   /// attention. WARN-level: Dropped, Mismatched, OwnedParts. Silent: Ignored (an
   /// acknowledged #ignore).</summary>
@@ -228,6 +238,18 @@ type
     OwnedParts : TArray<string>;
     Stubs      : TArray<string>;
     Relocated  : TArray<string>;
+    /// <summary>Informational: a sub-leaf carried IMPLICITLY under a #link between
+    /// two class-typed properties of IDENTICAL type (#link Font &lt;- Font, both
+    /// TFont), so the author did not have to spell every Charset/Color/Height/
+    /// Name/Style line. One entry per carried leaf, naming the source leaf, the
+    /// target leaf, the #link that carried it and its line, and the shared type.
+    /// A leaf the author linked or ignored EXPLICITLY never appears here -- an
+    /// explicit rule always wins over the carry. Kept apart from Created so a
+    /// consumer can tell 'nobody typed this leaf' from 'this path was
+    /// materialised', which is what the converter team asked for (2026-09-16):
+    /// if implicit carry is ever wrong they want the report to say which leaves
+    /// nobody typed.</summary>
+    Carried    : TArray<TReemitCarried>;
     /// <summary>Informational: an applied mapping whose source path is not in
     /// this block AND has no usable default to resolve it to, so there was
     /// genuinely nothing to map.</summary>
@@ -720,6 +742,17 @@ begin
     if SameText(N.Path, AName) then Exit(N.TypeName);
 end;
 
+// True when the property at AName is CLASS-TYPED on ATree (Font: TFont). Such a
+// property is a container: the .dfm never streams it as a leaf, only its
+// sub-leaves, so 'absent from the block' says nothing about it.
+function LeafIsClassTyped(const ATree: TPropTree; const AName: string): Boolean;
+var N: TPropNode;
+begin
+  Result:= False;
+  for N in ATree.Nodes do
+    if SameText(N.Path, AName) then Exit(N.IsClassTyped);
+end;
+
 // The value a property sits at when the .dfm does NOT stream it, or False when
 // there is no such value.
 //
@@ -795,6 +828,89 @@ var
     for Q in ARules.Rules do
       if (Q.Kind = rkLink) and SameText(Q.FromPath, AFromPath) then
       begin AToPath:= Q.ToPath; Exit(True); end;
+  end;
+
+  { TYPE-IDENTITY CARRY (converter team's rule, 2026-09-16, taken verbatim):
+
+      A #link dst <- src between class-typed properties carries the source's
+      sub-leaves automatically WHEN the two property types are identical. When
+      the types differ, it carries nothing implicitly and every dotted leaf must
+      be named.
+
+    Why that line and not "always carry": identity is the only case where the
+    sub-surfaces are GUARANTEED to correspond. Font: TFont -> Font: TFont is the
+    same class on both sides, so carrying Charset/Color/Height/Name/Style cannot
+    be wrong. Non-identity is TdxSmartGlyph <- TPicture, where an auto-carried
+    leaf would invent a target path that may not exist -- and a .dfm path that
+    does not exist is how a form stops loading (c5534245, the same morning).
+    keep-bytes-if-compatible already refuses to guess across a type boundary
+    and asks the castlib's accepts list instead; this is that rule one level up.
+
+    Their clause "or the destination type is an ancestor of the source type"
+    is NOT implemented: this unit is pure and has no class graph, and the
+    flattened property trees carry no ancestry. An ancestor-typed target still
+    needs explicit leaves, exactly as today. Recorded in the run log as an
+    assumption so it can be revisited when a caller can supply ancestry.
+
+    Types are compared by BARE TAIL because BuildPropTree may spell one side
+    qualified (Vcl.Graphics.TFont) and the other not; a cast-bearing #link is
+    excluded because a cast is the author saying the types are NOT the same.
+    Gated on TreesDescribeThisBlock: an owned-part recursion is handed the
+    PARENT's trees, and an identity read off the wrong class is not identity. }
+  function IdentityLinkFor(const AFromPrefix: string; out AToPrefix, AType: string;
+    out ARuleLine: Integer): Boolean;
+  var
+    Q    : TConversionRule;
+    FType: string;
+    TType: string;
+  begin
+    Result   := False;
+    AToPrefix:= '';
+    AType    := '';
+    ARuleLine:= 0;
+    if not TreesDescribeThisBlock then Exit;
+    for Q in ARules.Rules do
+    begin
+      if (Q.Kind <> rkLink) or (Q.Cast <> '') or not SameText(Q.FromPath, AFromPrefix) then Continue;
+      if Trim(Q.ToPath) = '???' then Exit(False);
+      FType:= LeafTypeOf(AFromTree, Q.FromPath);
+      TType:= LeafTypeOf(AToTree, Q.ToPath);
+      if (FType = '') or (TType = '') then Exit(False);
+      if not SameText(BareTypeTail(FType), BareTypeTail(TType)) then Exit(False);
+      AToPrefix:= Q.ToPath;
+      AType    := BareTypeTail(FType);
+      ARuleLine:= Q.LineNo;
+      Exit(True);
+    end;
+  end;
+
+  // The identity #link whose FromPath is the LONGEST proper prefix of ALeafPath
+  // ('Font' for 'Font.Name'), with the remainder split off. Longest wins for the
+  // same reason as ClassCastUnderPath: a book linking both Style and Style.Font
+  // resolves the more specific rule.
+  function CarryLinkFor(const ALeafPath: string; out AToPrefix, ARemainder, AType: string;
+    out ARuleLine: Integer): Boolean;
+  var
+    DotAt: Integer;
+    Prefix: string;
+  begin
+    Result    := False;
+    AToPrefix := '';
+    ARemainder:= '';
+    AType     := '';
+    ARuleLine := 0;
+    DotAt:= Length(ALeafPath);
+    while DotAt > 1 do
+    begin
+      Dec(DotAt);
+      if ALeafPath[DotAt] <> '.' then Continue;
+      Prefix:= Copy(ALeafPath, 1, DotAt - 1);
+      if IdentityLinkFor(Prefix, AToPrefix, AType, ARuleLine) then
+      begin
+        ARemainder:= Copy(ALeafPath, DotAt + 1, MaxInt);
+        Exit(True);
+      end;
+    end;
   end;
 
   // The ': CastName' suffix on the #link that FindLinkFor would pick, or ''.
@@ -1046,7 +1162,19 @@ var
     Node:= FRoot;
     for i:= 0 to High(Segs) do
     begin
+      { A class-typed sub-property streams as a DOTTED leaf name (Font.Size = 9)
+        in a real .dfm, not as a nested object -- so the child that answers
+        'Font.Size' may be ONE node named 'Font.Size' rather than 'Font' then
+        'Size'. Try the remaining path as one name first; until 2026-09-16 only
+        the segment walk ran, and every explicitly linked sub-leaf of a VCL form
+        was reported absent from the block it was plainly in. }
       Found:= False;
+      for j:= 0 to Node.Children.Count - 1 do
+        if SameText(Node.Children[j].Name, string.Join('.', Segs, i, Length(Segs) - i)) then
+        begin
+          AValue:= Node.Children[j].ValueText;
+          Exit(True);
+        end;
       for j:= 0 to Node.Children.Count - 1 do
         if SameText(Node.Children[j].Name, Segs[i]) then
         begin
@@ -1309,6 +1437,29 @@ var
       PlaceAtPath(TRoot, ToPath, CastVal, ALeaf.Kind, Created);
       Exit;
     end;
+    { TYPE-IDENTITY CARRY -- see IdentityLinkFor. Sits AFTER the explicit-link
+      block above, which is what makes "an explicit leaf link always wins over
+      a carried one" true by position rather than by a precedence table: a leaf
+      with its own #link, #ignore or #remove has already left this routine.
+      Under identity the leaf's own type is the same on both sides, so a binary
+      payload (Picture.Data under TPicture <- TPicture) is carried verbatim
+      without the keep-bytes format sniff -- same streaming class, same bytes. }
+    var CarryTo  : string;
+    var CarryRem : string;
+    var CarryType: string;
+    var CarryLine: Integer;
+    if CarryLinkFor(AFromPath, CarryTo, CarryRem, CarryType, CarryLine) then
+    begin
+      PlaceAtPath(TRoot, CarryTo + '.' + CarryRem, ALeaf.ValueText, ALeaf.Kind, Created);
+      var CarriedRec: TReemitCarried;
+      CarriedRec.FromPath:= AFromPath;
+      CarriedRec.ToPath  := CarryTo + '.' + CarryRem;
+      CarriedRec.RuleLine:= CarryLine;
+      CarriedRec.TypeName:= CarryType;
+      Result.Report.Carried:= Result.Report.Carried + [CarriedRec];
+      Exit;
+    end;
+
     (* KEEP-BYTES-IF-COMPATIBLE, before the leaf is given up as dropped.
 
        A class-valued property streams its payload on a nested leaf that carries
@@ -1380,6 +1531,9 @@ var
   var
     PartResult: TReemitResult;
     Clone     : TDfmNode;
+    NestTo    : string;  { IdentityLinkFor outputs; only the Boolean is used here }
+    NestType  : string;
+    NestLine  : Integer;
   begin
     if HasConvertFor(ARules, ASub.ClassName_) then
     begin
@@ -1396,11 +1550,15 @@ var
           // fold the part's report notes up
           Result.Report.Created := Result.Report.Created + PartResult.Report.Created;
           Result.Report.Dropped := Result.Report.Dropped + PartResult.Report.Dropped;
+          Result.Report.Carried := Result.Report.Carried + PartResult.Report.Carried;
         end;
       end;
     end
-    else if HasDeepRuleUnder(ASub.Name) then
+    else if HasDeepRuleUnder(ASub.Name) or IdentityLinkFor(ASub.Name, NestTo, NestType, NestLine) then
     begin
+      // (or TYPE-IDENTITY CARRY: #link Font <- Font with both sides the same
+      // class carries every leaf of this sub-object through RemapLeaf, where an
+      // explicit per-leaf rule still wins -- see IdentityLinkFor.)
       // MOVED-DEPTH: this F sub-object has no #convert of its own, but one or
       // more of its children are individually redirected by a dotted #link
       // (e.g. 'Style.Active.Font.Size <- Font.Size'). The sub-object itself is
@@ -1565,6 +1723,11 @@ begin
         was removed; absent, it was resurrected. }
       if IsRemoved(R.FromPath) then Continue;
       if IsConsumed(R.FromPath) then Continue;  // a #mapping already spoke for it
+      { A class-typed #link (Font <- Font) names a CONTAINER. It is never streamed
+        as a leaf, has no default clause, and its sub-leaves were carried (or
+        dropped, and said so) in step 4 -- so it is neither resolvable nor
+        unknown here, and listing it under 'defaults may diverge' was noise. }
+      if LeafIsClassTyped(AFromTree, R.FromPath) then Continue;
       if FindLeafValue(R.FromPath, ResolvedVal) then Continue; // present -> step 4 handled it
       { The TARGET must be a real property of T. A rule set carries every
         #convert in the book and #link has no per-rule scoping, so a rule

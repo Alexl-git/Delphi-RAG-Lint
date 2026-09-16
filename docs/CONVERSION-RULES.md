@@ -311,7 +311,7 @@ Real reFind sample lines (from the BDE2FD sample):
 | Directive | Meaning |
 |---|---|
 | `#convert <From> -> <To> [, <unit> ...]` | declares the type-pair this block converts (groups the links; optional target uses-add) |
-| `#link <ToPath> <- <FromPath>` | deep property assignment. **Note the `<-` arrow** -- reversed vs `#migrate`'s `->`. Read it "target gets source." |
+| `#link <ToPath> <- <FromPath>` | deep property assignment. **Note the `<-` arrow** -- reversed vs `#migrate`'s `->`. Read it "target gets source." **Type-identity carry (2026-09-16):** when both sides are CLASS-TYPED and of the SAME class (`#link Font <- Font`, both `TFont`), every sub-leaf the `.dfm` streams under the source (`Font.Charset`, `Font.Name`, ...) is carried to the same leaf under the target automatically -- the five hand-written `Font.*` lines become one. When the types DIFFER (`OptionsImage.Glyph <- Picture`, `TdxSmartGlyph <- TPicture`) nothing is carried implicitly and every dotted leaf must be named, because an invented target path is how a form stops loading. An explicit per-leaf `#link` / `#ignore` / `#remove` always wins over the carry; a carried leaf is reported (`sub-leaf-carried` in `convert-apply --format json`, `report.carried[]` in `convert-reemit`) so the leaves nobody typed are visible. Not implemented: the "target type is an ancestor of the source type" case -- the engine has no class graph, so that still needs explicit leaves. |
 | `#default <ToPath> = <value>` | set a target property to a default when no source maps to it |
 | `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. |
 | `#note <text>` | a human comment carried in the rule (the scaffolder emits `candidates:` and `DROPPED` notes) |
@@ -395,7 +395,7 @@ it parses the block into an in-memory tree, remaps each leaf to its T path
 (including **moved-depth** -- `Font.Size` -> `Style.Active.Font.Size`, creating the
 intermediate T sub-objects -- and **events**), and re-serializes a well-formed T
 block plus a structured report (dropped / ignored / mismatched / created /
-ownedParts / notes). It is **pure** (no file I/O, no CLI, no IDE) and is exercised
+carried / ownedParts / notes). It is **pure** (no file I/O, no CLI, no IDE) and is exercised
 headlessly through a **hidden** `convert-reemit` test verb. This is more than
 GExperts does: GExperts converts the DFM only, one level deep, and cannot map
 events or moved-depth properties. `convert-apply` drives this engine for real,

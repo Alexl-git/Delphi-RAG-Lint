@@ -21994,6 +21994,17 @@ begin
     JReport.AddPair('ownedParts', ArrJson(Res.Report.OwnedParts));
     JReport.AddPair('stubs',      ArrJson(Res.Report.Stubs));
     JReport.AddPair('relocated',  ArrJson(Res.Report.Relocated));
+    var JCarried: TJSONArray:= TJSONArray.Create;
+    for var CR in Res.Report.Carried do
+    begin
+      var JCR: TJSONObject:= TJSONObject.Create;
+      JCR.AddPair('fromPath', CR.FromPath);
+      JCR.AddPair('toPath'  , CR.ToPath);
+      JCR.AddPair('ruleLine', TJSONNumber.Create(CR.RuleLine));
+      JCR.AddPair('type'    , CR.TypeName);
+      JCarried.AddElement(JCR);
+    end;
+    JReport.AddPair('carried', JCarried);
     JReport.AddPair('mappingNotes', ArrJson(Res.Report.MappingNotes));
     var JNotApplied: TJSONArray:= TJSONArray.Create;
     for var NA in Res.Report.NotApplied do
