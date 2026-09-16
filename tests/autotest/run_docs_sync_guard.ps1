@@ -1102,7 +1102,20 @@ Write-Host '-- check 9: flags' -ForegroundColor Cyan
 $FlagRx  = '--[A-Za-z][A-Za-z0-9-]*'
 # Prose must END on an alphanumeric: README wraps '--scan-libraries-' across a
 # line break, and a trailing hyphen is a fragment, never a flag.
-$ProseRx = '--[A-Za-z][A-Za-z0-9-]*[A-Za-z0-9]'
+#
+# CORRECTED 2026-09-16, found by F5 on its first run. The old form
+# '--[A-Za-z][A-Za-z0-9-]*[A-Za-z0-9]' required at least TWO characters after
+# the dashes, so a SINGLE-LETTER flag was invisible to the prose scan. `--n`
+# (bench-context) is named in BOTH docs -- README.md:661 and AI-USAGE.md:625 --
+# and F5 still reported it missing from both, because the matcher could not
+# spell it. Documenting it would not have helped; the doc already did.
+#
+# The single-letter case is now an optional tail, and the trailing hyphen is
+# excluded by a lookahead instead of by a mandatory final character, which keeps
+# the original protection: a wrapped '--scan-libraries-' still does not match as
+# a flag, and prose's ' -- ' em-dash still cannot match because a letter must
+# follow the dashes immediately.
+$ProseRx = '--[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?![A-Za-z0-9-])'
 
 function Get-FlagSet([string]$Text, [string]$Rx) {
   $s = New-Object System.Collections.Generic.HashSet[string]
@@ -1279,6 +1292,38 @@ $hoStale = @($FlagHelpOnlyOnPurpose.Keys | Where-Object { -not $promoted.Contain
 Check 'F4x every $FlagHelpOnlyOnPurpose entry is still promoted' ($hoStale.Count -eq 0) `
   ("no longer promoted, delete the entry: " + ($hoStale -join ' '))
 
+# --- F5: TOTAL flag coverage, not just the promoted subset ------------------
+# F4 polices a curated subset (the COMMON QUESTIONS / Output-CI blocks plus any
+# flag on 5+ verb lines, 20..60 of them). F5 is the whole banner.
+#
+# WHY THIS IS ON NOW, AFTER BEING PARKED SINCE 2026-09-05. The note
+# INBOX-docs-guard-checks-help-only parked it as "an owner decision with a
+# price, not because it is hard": measured then, README lacked 16 flags and
+# AI-USAGE lacked 39, so turning it on cost 55 doc lines up front plus a
+# maintenance cost on every new flag forever.
+#
+# Re-measured 2026-09-16: 163 flags in --help, **0 missing from either doc**.
+# The sessions 93-97 docs work closed the debt as a side effect, so the up-front
+# price is now nil and only the maintenance cost remains -- which is precisely
+# the discipline THE DOCS-IN-SYNC RULE in CLAUDE.md already demands, and which
+# F1-F4 already impose on verbs and on the promoted subset. Owner ruled to turn
+# it on 2026-09-16.
+#
+# A CAUTION ABOUT THAT MEASUREMENT, because it was wrong the first time. The
+# first pass matched flags with `--[a-z][a-z0-9-]*` and reported ONE missing
+# flag, `--client`. There is no such flag: the regex truncated
+# `--clientProcessId` at the capital P and then failed to find the stump in the
+# docs. $FlagRx below admits camelCase for exactly this reason. A flag regex
+# that cannot spell every flag reports doc gaps that do not exist -- and would
+# hide real ones behind a name it mangles the same way.
+foreach ($name in $proseSets.Keys) {
+  $allMissing = @($helpSet | Where-Object {
+                    -not $proseSets[$name].Contains($_) -and -not $FlagHelpOnlyOnPurpose.Contains($_)
+                  }) | Sort-Object
+  Check "F5 $name names EVERY flag in --help ($($helpSet.Count) flag(s))" ($allMissing.Count -eq 0) `
+    ("$($allMissing.Count) flag(s) in the banner that this doc never names: " + ($allMissing -join ' '))
+}
+
 # --- POSITIVE CONTROLS ------------------------------------------------------
 # Every assertion above is of the form "this set difference is empty", and an
 # empty set is exactly what a BROKEN scan produces. These four plant a token
@@ -1298,6 +1343,20 @@ $ctlHelpSet = Get-FlagSet ($helpText + " [$tok]") $FlagRx
 Check 'CONTROL F2 a planted --help flag is seen as a phantom' `
   ($ctlHelpSet.Contains($tok) -and -not $accepted.Contains($tok)) `
   'the --help scan cannot see a new token, so F2 can never fail'
+
+# CONTROL F5: F5 asserts a set difference is EMPTY, and an empty difference is
+# also what a broken --help scan produces. Plant a flag into the banner copy and
+# require F5's comparison to report it as missing from a doc that cannot contain
+# it. Without this, F5 passes forever if $helpSet ever comes back empty.
+if ($proseSets.ContainsKey('README.md')) {
+  $ctlHelpF5 = Get-FlagSet ($helpText + " [$tok]") $FlagRx
+  $ctlF5Missing = @($ctlHelpF5 | Where-Object {
+                      -not $proseSets['README.md'].Contains($_) -and -not $FlagHelpOnlyOnPurpose.Contains($_)
+                    })
+  Check 'CONTROL F5 a planted --help flag is seen as undocumented' `
+    ($ctlF5Missing -contains $tok) `
+    'F5 cannot detect a banner flag absent from the prose, so it can never fail'
+}
 
 if ($proseSets.ContainsKey('README.md')) {
   $ctlProse = Get-FlagSet ((Get-Content -LiteralPath $proseDocs['README.md'] -Raw) + " ``$tok``") $ProseRx
