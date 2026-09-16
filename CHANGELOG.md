@@ -3,6 +3,66 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased (after v1.13.0-alpha)
+
+### convert-apply: unlinked source properties are warned by default, as "N of M instances", keyed by (source type, property)
+
+A source property some converted instance carries that no `#link` carries and
+no `#ignore` acknowledges is now warned ONCE per (source type, property):
+
+```
+TabcToggleBtn.Style: no #link carries it -- dropped on 20 of 20 converted instance(s); add a #link, or #ignore Style to accept the drop
+```
+
+Read the fraction, not the count: `2 of 20` is the two controls somebody
+deliberately styled (`ParentFont = False`) and is the STRONGER signal; `20 of
+20` is a structural non-mapping. Keyed by source type so two `#convert` blocks
+both dropping `Style` are two rows, not one. `--format json` carries
+`unlinked_source_properties` (rows), `unlinked_source_property_sites` (sum of
+sites -- both keep their step-1 meaning) and an additive `unlinked[]`
+(`from_type`, `path`, `sites`, `instances`); the warnings are `items[]` of kind
+`unlinked-source-property`. `--no-warn-unlinked` drops the warnings and keeps
+the count. Default-on because the number earned it: 2 distinct / 22 sites on a
+real 36-link book.
+
+### convert: `#link` between class-typed properties carries sub-leaves on TYPE IDENTITY
+
+`#link Font <- Font` with `TFont` on both sides now carries every sub-leaf the
+`.dfm` streams (`Font.Charset`, `Font.Name`, ...) automatically -- the five
+hand-written `Font.*` lines become one. When the types DIFFER
+(`OptionsImage.Glyph <- Picture`, `TdxSmartGlyph <- TPicture`) nothing is
+carried implicitly and every dotted leaf must still be named, because an
+invented target path is how a form stops loading. An explicit per-leaf `#link`
+/ `#ignore` / `#remove` always wins over the carry; a carried leaf is reported
+(`sub-leaf-carried` with `path` and `rule_line` in apply/1; `report.carried[]`
+in `convert-reemit`) so the leaves nobody typed are visible. Not implemented:
+the "target type is an ancestor of the source type" case. Two step-4b defects
+fixed alongside: VCL-shaped dotted leaves (`Font.Size = 9` as one child) were
+reported "absent from the F DFM", and class-typed containers were listed under
+"defaults may diverge".
+
+### duplicate-global-decl: LIBRARY tier
+
+A project global whose NAME is also an interface-level global of a library
+unit that the declaring file USES (interface or implementation `uses`;
+`SysUtils` matches `System.SysUtils`) is reported -- masking an RTL name is
+almost always a naming error. 2+ project units AND the library is the stronger
+three-declaration message. Severity `warning`, NO autofix (only you know which
+declaration is meant). Measured before the severity was final: 44 findings on
+ORM3 CLIENT (every one a genuine RTL/WinAPI re-declaration), rule cost 1.6 s
+against the 3.7 GB Win32 library.
+
+### lint: two false positives fixed
+
+* `hardcoded-ip-address` no longer reads a dotted-quad VERSION const
+  (`YADF_MIN_VERSION = '1.0.6.6'`) as an IPv4 address. New rule predicate
+  `(#in? @cap "nodeType" ["nameRegex"])` / `#not-in?` -- "some ancestor of the
+  captured node has that type and its `name:` matches" -- documented in
+  `rules\README.md`.
+* `review-marker-unused` no longer fires on a `dl:ok` that IS suppressing a
+  store-backed (project-scope) finding: the marker join keyed the finding's
+  ABSOLUTE path against the scanned file's path as typed, so a relative `lint
+  src\X.pas` never matched. Both sides are now normalised.
 ## v1.13.0-alpha -- 2026-09-16
 
 ### Fixed: `outline --file X` said no database resolved for a file `resolve-dbs --in X` found three for
