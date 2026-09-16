@@ -68,6 +68,40 @@
 #link Hint <- Hint
 #link ShowHint <- ShowHint
 
+// --- GEOMETRY, EVENT AND FONT: added 2026-09-16 after a measured DROP ---------
+// These were missing from this book, and an unlinked property is NOT carried.
+// Measured on ORM3\CLIENT\VARINSP with the 13-link version of this file:
+// `convert-apply` reported "20 instance(s) converted, 60 edit(s) planned" -- a
+// clean-looking success -- while its re-emit notes said, for every one of the
+// twenty buttons:
+//     dropped Left / dropped Top / dropped Width / dropped Height / dropped OnClick
+// Twenty buttons would have landed stacked at (0,0) with no size and no click
+// handler, and the report gives the operator no reason to look. That is worse
+// than a conversion that refuses to run.
+// Types checked on BOTH sides before linking (proptree, library-Win64):
+//   Left/Top/Width/Height  Integer      -> Integer
+//   OnClick                TNotifyEvent -> TNotifyEvent
+//   ParentFont             Boolean      -> Boolean
+//   Font                   TFont        -> TFont      (identity, no cast)
+#link Left <- Left
+#link Top <- Top
+#link Width <- Width
+#link Height <- Height
+#link OnClick <- OnClick
+#link Font <- Font
+#link ParentFont <- ParentFont
+// The parent `Font` link carries ParentFont but NOT the sub-leaves: two of the
+// twenty buttons set an explicit face and still reported `dropped Font.Charset /
+// Font.Color / Font.Height / Font.Name / Font.Style` with only `#link Font <- Font`
+// present. A dotted leaf has to be named. Those two are the buttons with
+// ParentFont = False, so dropping these would silently restyle exactly the
+// controls that were deliberately given their own font.
+#link Font.Charset <- Font.Charset
+#link Font.Color <- Font.Color
+#link Font.Height <- Font.Height
+#link Font.Name <- Font.Name
+#link Font.Style <- Font.Style
+
 // NOT carried: TabOrder / TabStop. Drafted here by habit and REJECTED by
 // convert-validate -- TabcToggleBtn is a graphic control with no window handle,
 // so it has neither. TcxButton does, and will get the VCL defaults. If tab order
