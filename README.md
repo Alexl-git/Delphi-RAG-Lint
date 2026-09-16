@@ -17,6 +17,16 @@ Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 
 **? Driving it from an AI agent? See [docs/AI-USAGE.md](docs/AI-USAGE.md)** ? copy-paste instructions so your AI uses drag-lint over CLI or MCP (and reads ~10-60x fewer tokens than opening whole units).
 
+> **What it does today, and what is coming -- the feature list.**
+> A single readable document covering every capability by area (indexing, search,
+> analysis, linting, diagnostics, documentation, refactoring, AI integration, IDE
+> integration, reporting and the Component Converter), plus **what changed in this
+> release** and an **upcoming roadmap** of everything currently planned.
+> [`docs/drag-lint-features-2026-09-16.html`](docs/drag-lint-features-2026-09-16.html)
+> ([rendered](https://htmlpreview.github.io/?https://github.com/Alexl-git/Delphi-RAG-Lint/blob/main/docs/drag-lint-features-2026-09-16.html))
+> -- and Word, [`docs/drag-lint-features-2026-09-16.docx`](docs/drag-lint-features-2026-09-16.docx).
+> Every count in it is read from the shipping build, not from the previous edition.
+
 Built on [`tree-sitter-delphi13`](https://github.com/Alexl-git/tree-sitter-delphi13)
 (sibling project) and a vendored Pascal binding for libtree-sitter.
 
