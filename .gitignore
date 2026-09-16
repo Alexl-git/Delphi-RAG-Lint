@@ -174,11 +174,19 @@ dist/
 third_party/engine-pinned/
 # YADF formatter backups. drag-lint format shells out to YADF, which writes a
 # numbered .BCKn beside each file it rewrites -- so a whole-folder format leaves
-# one per source file. Same category as the *.pas.bak rule above: a local
-# artifact of running a tool, never a thing to commit.
-*.BCK
-*.BCK[0-9]
-*.BCK[0-9][0-9]
+# one per source file. convert-apply writes the same shape. Same category as the
+# *.pas.bak rule above: a local artifact of running a tool, never a thing to
+# commit. They matter only when the tool has a bug and the rewritten file no
+# longer compiles, and that is a local recovery, not repo state.
+#
+# WIDENED 2026-09-16 to a catch-all after the numbered forms let two through:
+# docs\examples\devexpress-printer-crash-repro\DMStyles.pas.BCK{1,2} reached main
+# and survived there because .gitignore has no effect on an already-tracked path
+# -- the rule was right and the files predated it. Both suffix case and any
+# suffix tail are covered now, so .BCK, .BCK1, .BCK99 and .bck.old all match
+# whatever core.ignorecase is set to on the machine.
+*.BCK*
+*.bck*
 
 # YADF backups of .rules books. Same category as *.pas.bak and *.BCK[n] above: a
 # local artifact of running the formatter, never a thing to commit. Two of these
