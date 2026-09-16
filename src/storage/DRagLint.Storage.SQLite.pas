@@ -9835,7 +9835,7 @@ end; // function
 
 // The shared reader behind FindDuplicateGlobalDecls and FindGlobalDeclSites:
 // runs ASQL, which must project nm/kd/fid/ln/cl/sg, into site rows.
-function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;
+function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;  // dl:ok duplicate-code@f247 -- the unit's house reader shape (TFDQuery open / row loop / close), shared with FindUsesGlobalCensus and every other typed reader here; a generic reader would need a TFunc<TFDQuery, T> per record type, which is more code than the duplication it removes
 var
   Q   : TFDQuery                   ;
   List: TList<TDuplicateDeclSite>  ;

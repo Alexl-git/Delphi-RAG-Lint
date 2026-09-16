@@ -1352,7 +1352,7 @@ var
       NProject : Integer;
       LibUnit  : string;
       SitePath : string;
-      Sites_   : string;
+      SiteList : TArray<string>;
       Shown    : Integer;
       F        : TLintFinding;
     begin
@@ -1380,18 +1380,17 @@ var
       end;
       if Length(Masking) = 0 then Exit;
 
-      Sites_:= '';
-      Shown := 0;
+      SiteList:= nil;
+      Shown   := 0;
       for C:= 0 to High(Masking) do
       begin
         if Shown >= CMaxDupSitesShown then Break;
-        if Sites_ <> '' then Sites_:= Sites_ + ', ';
-        Sites_:= Sites_ + Format('%s:%d uses %s',
-          [AStore.GetFilePath(Masking[C].FileId), Masking[C].StartLine, MaskUnits[C]]);
+        SiteList:= SiteList + [Format('%s:%d uses %s',
+          [AStore.GetFilePath(Masking[C].FileId), Masking[C].StartLine, MaskUnits[C]])];
         Inc(Shown);
       end;
       if Length(Masking) > Shown then
-        Sites_:= Sites_ + Format(', and %d more', [Length(Masking) - Shown]);
+        SiteList:= SiteList + [Format('and %d more', [Length(Masking) - Shown])];
 
       F:= Default(TLintFinding);
       F.RuleId   := 'duplicate-global-decl';
@@ -1409,7 +1408,7 @@ var
           'clause in reverse order, so which one compiles depends on uses order in every file that ' +
           'sees two of them. Almost certainly a naming error, not deliberate masking; decide which ' +
           'declaration is meant and rename or delete the others with a refactoring tool',
-          [Masking[0].Name, NProject, MaskUnits[0], Sites_, Masking[0].Name])
+          [Masking[0].Name, NProject, MaskUnits[0], string.Join(', ', SiteList), Masking[0].Name])
       else
         F.Message:= Format(
           '%s is declared at interface level as %s in a unit that USES library unit %s, which also ' +
@@ -1417,7 +1416,7 @@ var
           'now means a different thing here than in every other unit. Almost always a naming error ' +
           'rather than deliberate masking; rename the project declaration (a refactoring tool, not an ' +
           'autofix: only you know which one is meant) or qualify every use',
-          [Masking[0].Name, Masking[0].Kind, MaskUnits[0], Sites_, Masking[0].Name]);
+          [Masking[0].Name, Masking[0].Kind, MaskUnits[0], string.Join(', ', SiteList), Masking[0].Name]);
       AFindings.Add(F);
     end;
 

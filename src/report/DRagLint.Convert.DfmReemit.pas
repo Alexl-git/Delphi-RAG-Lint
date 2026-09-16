@@ -861,8 +861,8 @@ var
     out ARuleLine: Integer): Boolean;
   var
     Q    : TConversionRule;
-    FType: string;
-    TType: string;
+    SrcT : string;
+    DstT : string;
   begin
     Result   := False;
     AToPrefix:= '';
@@ -873,12 +873,12 @@ var
     begin
       if (Q.Kind <> rkLink) or (Q.Cast <> '') or not SameText(Q.FromPath, AFromPrefix) then Continue;
       if Trim(Q.ToPath) = '???' then Exit(False);
-      FType:= LeafTypeOf(AFromTree, Q.FromPath);
-      TType:= LeafTypeOf(AToTree, Q.ToPath);
-      if (FType = '') or (TType = '') then Exit(False);
-      if not SameText(BareTypeTail(FType), BareTypeTail(TType)) then Exit(False);
+      SrcT:= LeafTypeOf(AFromTree, Q.FromPath);
+      DstT:= LeafTypeOf(AToTree, Q.ToPath);
+      if (SrcT = '') or (DstT = '') then Exit(False);
+      if not SameText(BareTypeTail(SrcT), BareTypeTail(DstT)) then Exit(False);
       AToPrefix:= Q.ToPath;
-      AType    := BareTypeTail(FType);
+      AType    := BareTypeTail(SrcT);
       ARuleLine:= Q.LineNo;
       Exit(True);
     end;
