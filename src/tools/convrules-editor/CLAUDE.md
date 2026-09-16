@@ -76,11 +76,32 @@ through a breaking change buys nothing.
   start anything that consumes `convert-apply` findings until it ships -- that
   array is the ~2,156-item informational flood. The editor calls no
   `convert-apply` today, so nothing current is affected.
-* **The `--db` strictness sweep is in flight** in the shared tree. It costs us
-  nothing by construction: our DB set is three hardcoded paths that all exist,
-  and `DbArgsFor` (`ConvRules.Engine.pas:544`) filters empty entries so an unset
-  `GEditorProjectDb` never reaches a command line. The only exposure is a typo in
-  `--project-db`, which already fails today on the strict `query --name`.
+* **The `--db` strictness sweep has LANDED, and the "costs us nothing" reading of
+  it was WRONG (corrected 2026-09-15).** The claim recorded here was that our DB
+  set is three hardcoded paths that all exist, so strictness could not touch us.
+  That measured EXISTENCE. The strictness is about **SCHEMA**: a read verb now
+  refuses an index at an older schema, and on 2026-09-15 the ORM3
+  `Micronite2027.sqlite` sat at v21 against an engine wanting v22.
+
+  It cost 12 test failures (`picker.*`, `platform.rescope.*`, `proptree.bareclass.*`)
+  and would have blocked a GUI session at the first class pick. **A stale DB is a
+  file that exists perfectly.**
+
+  Two properties worth knowing before you debug this shape again:
+
+  * **One stale `--db` fails the WHOLE query.** The error is `exit 2` with
+    "Nothing was answered", even though the other DBs in the list are healthy and
+    could answer. So a single stale index takes down every editor query, and the
+    message names the stale DB -- read it, do not assume the engine broke.
+  * **The migration is nearly free when the sources have not changed.** The fix
+    was `index --project Micronite2027.dproj --db <db>`: **2.0 s, 624 files, all
+    624 "up-to-date"** -- a schema migration, NOT a re-parse. Do not budget hours
+    for this or route around it; just run it.
+
+  `DbArgsFor` (`ConvRules.Engine.pas:544`) filtering empty entries is still true
+  and still irrelevant to this. Note also that `--project-db ''` does NOT disable
+  the project DB: `ConvRulesEditor.dpr:205-206` re-defaults an empty value to the
+  hardcoded `ProjectDb`.
 * **The stdout -> stderr move for engine errors is a non-event here.**
   `RunCapture` sets `SI.hStdError := WritePipe` (`ConvRules.Engine.pas:580`) --
   both streams already land in one pipe, and we gate on the exit code.
