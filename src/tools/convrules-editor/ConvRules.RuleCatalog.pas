@@ -451,13 +451,28 @@ function CatalogToIndexText(const ACatalog: TRuleCatalog): string;
 /// Refusing the whole file on a bad header is deliberate: a partially
 /// understood index would silently under-report coverage, which shows up as a type
 /// looking un-ruled and inviting a duplicate rule.
+/// <para>NO PRODUCTION CALLER, AND THAT IS A DECISION -- not an oversight, and not
+/// dead code to be tidied away. The catalog index is written by
+/// CatalogToIndexText and deliberately never read back at runtime: the editor
+/// always rebuilds the catalog from the '*.rules' books themselves, because an
+/// index read at start-up could be STALE against books edited outside the editor,
+/// and a stale catalog under-reports coverage exactly the way a bad header would.
+/// The trade was put to this side as three options in
+/// docs\INBOX-convrules-catalog-index-is-write-only.md and option 2 -- keep it
+/// write-only on purpose -- was ruled on 2026-09-15; the note is retired in
+/// docs\INBOX-Done\. The reader is KEPT rather than deleted because it is the
+/// round-trip half of the format's contract: ConvRulesModelTests pins
+/// write-then-read (catalog.index.v2.roundtrip), a v1 index being refused, and a
+/// bad header, an unreadable-back format being the thing that would rot silently.
+/// Wire it in and the staleness argument in that note is what must be answered
+/// first.</para>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Calls: Default, StartsStr, StartsText, StrToIntDef, Trim</para>
 /// <para>Returns: nil; List.ToArray</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function CatalogFromIndexText(const AText: string): TRuleCatalog;
+function CatalogFromIndexText(const AText: string): TRuleCatalog;  // dl:ok unused-public-symbol@f230
 
 /// <summary>Scans a folder's '*.rules' books and builds the catalog.</summary>
 /// <param name="AFolder">Folder to scan, not recursive. A missing folder yields an
