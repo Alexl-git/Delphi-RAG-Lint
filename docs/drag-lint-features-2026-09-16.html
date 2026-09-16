@@ -319,12 +319,81 @@ test that passes.</p>
 all of them green.</p>
 </div>
 
+<h2>Appendix A -- Upcoming roadmap (everything currently planned)</h2>
+<p class="sub">Every open item on the board at 16 September 2026, not just the
+highlights in chapter 13. Effort is a working estimate. <b class="f">Order changes as
+priorities do; nothing here is a commitment or a delivery date.</b></p>
+
+<h3>A.1 Committed next -- the converter contract</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th class="n">Effort</th></tr>
+<tr><td><b class="f">Realize class casts</b> in the converter</td>
+    <td><b class="f">The only item blocking another team.</b> Today a conversion that must transform a <em>value</em> drops image data while reporting success. Also widens the conversion to honour every accepted source type (<code>TPicture</code>, <code>TBitmap</code>, <code>TGraphic</code>, <code>TPngImage</code>, <code>TIcon</code>), not just the one the current rule book exercises.</td>
+    <td class="n">3-5 d</td></tr>
+</table>
+
+<h3>A.2 Engine analysis -- makes existing answers more complete</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th class="n">Effort</th></tr>
+<tr><td>Generic base-class resolution</td>
+    <td>A generic base such as <code>TMicObjectBase&lt;I&gt;</code> currently reads as unresolved, so <em>every</em> object's ancestry in that estate is incomplete. Prerequisite for inherited fields, and on its own it improves ancestors, descendants, the property tree and type resolution.</td>
+    <td class="n">1-2 d</td></tr>
+<tr><td>Inherited fields in analysis</td>
+    <td>Analysis stops at a class's own fields and misses everything inherited from a shared base, understating what a method touches. Decision taken; waits on the item above.</td>
+    <td class="n">2-3 d</td></tr>
+<tr><td>Exceptions a routine <em>handles</em></td>
+    <td>The tool documents what a routine raises but not what it catches, so a reader cannot tell which failures are already dealt with.</td>
+    <td class="n">2-3 d</td></tr>
+<tr><td>Nested-routine variables</td>
+    <td>Variables declared inside nested routines are not recorded, weakening several checks and producing false "unused" style findings. Needs a full re-read of every index (about five hours, unattended).</td>
+    <td class="n">2-3 d + re-index</td></tr>
+<tr><td><b class="f">Property references</b></td>
+    <td><b class="f">The largest item on the board.</b> The index records which routines call each other but not which read or write a property. Closing it improves dead-code detection, purity analysis and impact reporting at once, and several smaller items are really waiting on it.</td>
+    <td class="n">weeks</td></tr>
+<tr><td>Numbers as searchable facts</td>
+    <td>A port number or similar constant cannot be found by value today, only by name. Batched with the two extractor items above, since they share one re-index.</td>
+    <td class="n">small, batched</td></tr>
+</table>
+
+<h3>A.3 Reach -- new kinds of question</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th class="n">Effort</th></tr>
+<tr><td>Calls across process boundaries</td>
+    <td>Trace a request from the client through to the server routine that serves it. Proven end to end already; the remaining work is query-side only, with no re-index.</td>
+    <td class="n">1-2 d</td></tr>
+<tr><td><b class="f">Visual code map</b></td>
+    <td>A standalone viewer already exists and already talks to the IDE. The work is professional layout and export. Re-estimated from months to weeks once it was established the layout engine should be delegated rather than written. Likely to run on its own track so it does not hold up the engine.</td>
+    <td class="n">2-3 wk</td></tr>
+<tr><td>More project wiki topics</td>
+    <td>Roughly ten further topics available from existing Micronite documentation, on the same pattern as the 21 already seeded.</td>
+    <td class="n">1-2 h</td></tr>
+</table>
+
+<h3>A.4 Quality of the tool's own output</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th class="n">Effort</th></tr>
+<tr><td>Two lint false positives</td>
+    <td>A version constant such as <code>'1.0.6.6'</code> is reported as a hardcoded IP address; and a legitimately suppressed project-wide finding is then reported as an unnecessary suppression, so the two messages contradict each other. Small, but exactly the kind of noise that teaches people to skim the linter.</td>
+    <td class="n">hours</td></tr>
+<tr><td>Retire the stale side branch</td>
+    <td>Housekeeping: an old worktree and branch are still registered after the work moved. Awaiting a go-ahead rather than effort.</td>
+    <td class="n">owner decision</td></tr>
+</table>
+
+<div class="warn">
+<p><b class="f">Not on the roadmap, deliberately.</b> The release ships with eight commits
+not yet published to the shared repository -- that is a decision for the owner,
+not a work item. And the converter's image-drop limitation is listed once, as
+A.1; it is a defect being fixed first, not a feature being added.</p>
+</div>
+
 <p class="foot">
 Counts in this document are derived from the shipping build, not from the
 previous edition of this document: rule totals come from <code>drag-lint rules
 --json</code>, the command surface from <code>drag-lint --help</code> (<b class="f">82
 documented commands</b>), and the MCP tool count from the server's own tool list --
-all taken on 16 September 2026 against drag-lint 1.13.0-alpha.<br><br>
+all taken on 16 September 2026 against drag-lint 1.13.0-alpha. The roadmap in
+Appendix A is the project's real open-item list on that date, not a selection.<br><br>
 The eight rule groups above are a presentation grouping over the engine's own 16
 categories, chosen so each group is a comparable size and describes one kind of
 problem; every one of the 181 rules appears in exactly one group, and the
