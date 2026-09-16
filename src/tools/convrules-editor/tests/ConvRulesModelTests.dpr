@@ -2908,10 +2908,93 @@ begin
   Check('usage.compute.unused', not Has(U.Names, 'Hint'), 'Hint is used nowhere');
   Check('usage.compute.nomissing', Length(U.Missing) = 0, 'every used name has a From-tree leaf here');
 
+  // THE VARINSP DEFECT, end to end at the level the grid calls. Before the receiver
+  // filter this returned 'Popup' in Names -- the green mark the user could not explain,
+  // because F7Actions is a TdxBarPopupMenu and no TabcToggleBtn on the form sets Popup.
+  // ComputeUsage must derive the receivers ('btnEWAcAQL') from the .dfm it was handed.
+  U:= ComputeUsage([REAL_DFM], ['  F7Actions.Popup(400,300);'#13#10], 'TabcToggleBtn', ['Caption', 'Popup']);
+  Check('usage.compute.rcv.foreign', not Has(U.Names, 'Popup'), 'another class''s .Popup is not a use of ours');
+  Check('usage.compute.rcv.loose', Has(U.Loose, 'Popup'), 'and it is reported as loose, not silently dropped');
+  Check('usage.compute.rcv.control', Has(ComputeUsage([REAL_DFM], ['  btnEWAcAQL.Popup(400,300);'#13#10], 'TabcToggleBtn', ['Caption', 'Popup']).Names, 'Popup'),
+    'POSITIVE CONTROL: the SAME call on one of OUR instances IS a use');
+  Check('usage.compute.rcv.dfmwins', not Has(ComputeUsage([REAL_DFM], ['  Other.Caption := ''x'';'#13#10], 'TabcToggleBtn', ['Caption']).Loose, 'Caption'),
+    'a name the .dfm confirmed is never also reported as loose');
+
   // criterion 11: a used name with no From-tree leaf is reported
   U:= ComputeUsage([REAL_DFM], [], 'TabcToggleBtn', ['Caption']);
   Check('usage.compute.missing', Has(U.Missing, 'GroupIndex'), 'GroupIndex is assigned in the DFM but absent from the From tree');
   Check('usage.compute.missing.notused', not Has(U.Missing, 'Caption'), 'a name WITH a leaf is not Missing');
+end; // begin
+
+{ The receiver-blindness defect, MEASURED on ORM3\CLIENT\VARINSP (2026-09-15): the grid
+  marked 'Popup' used on TabcToggleBtn although no TabcToggleBtn on that form sets it. The
+  two hits were 'F7Actions.Popup(400,300)' -- a TdxBarPopupMenu at VARINSP.PAS:16903, a
+  different class entirely -- and a COMMENTED-OUT line at :11103.
+
+  EVERY negative case below is paired with a POSITIVE CONTROL over the same fixture. A
+  case that asserts only "the false hit is gone" also passes when the scan finds nothing
+  at all -- including when it is switched off entirely -- so on its own it would be
+  incapable of failing for the reason it names. The control proves the fixture can still
+  produce the hit, which makes the negative a statement about the RULE. }
+procedure TestScanPasReceiverAndComments;
+var
+  Loose: TArray<string>;
+  U    : TArray<string>;
+begin
+  // --- comments are not code ---
+  U:= ScanPasText('  // btnA.Popup := 1;'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.linecomment', not Contains(U, 'Popup'), 'a // line comment is not a use');
+  U:= ScanPasText('  btnA.Popup := 1;'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.linecomment.control', Contains(U, 'Popup'), 'POSITIVE CONTROL: the same line uncommented IS a use');
+
+  U:= ScanPasText('  { btnA.Popup := 1; }'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.bracecomment', not Contains(U, 'Popup'), 'a brace comment is not a use');
+  U:= ScanPasText('  (* btnA.Popup := 1; *)'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.parencomment', not Contains(U, 'Popup'), 'a (* *) comment is not a use');
+
+  // --- a string literal is not code either ---
+  U:= ScanPasText('  S := ''btnA.Popup'';'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.stringlit', not Contains(U, 'Popup'), 'a name inside a string literal is not a use');
+  U:= ScanPasText('  S := btnA.Popup;'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.stringlit.control', Contains(U, 'Popup'), 'POSITIVE CONTROL: the same line unquoted IS a use');
+
+  // --- the receiver decides, and the rejected name is REPORTED, not discarded ---
+  U:= ScanPasText('  F7Actions.Popup(400,300);'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.wrongreceiver', not Contains(U, 'Popup'), 'another class''s .Popup is not a use of ours');
+  Check('usage.pas.rcv.wrongreceiver.loose', Contains(Loose, 'Popup'), 'and it is reported as loose rather than silently dropped');
+  U:= ScanPasText('  F7Actions.Popup(400,300);'#13#10, ['Popup'], ['F7Actions'], Loose);
+  Check('usage.pas.rcv.wrongreceiver.control', Contains(U, 'Popup'), 'POSITIVE CONTROL: the SAME text hits when that receiver is ours');
+
+  // --- receiver forms that must still be credited ---
+  U:= ScanPasText('  Self.btnA.Popup := 1;'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.chain', Contains(U, 'Popup'), 'the last link of a chain is the receiver');
+  U:= ScanPasText('  TabcToggleBtn(Sender).Popup := 1;'#13#10, ['Popup'], ['btnA', 'TabcToggleBtn'], Loose);
+  Check('usage.pas.rcv.cast', Contains(U, 'Popup'), 'a cast to the From class is a known receiver');
+
+  // --- no receivers known: the filter is OFF, and says so by leaving Loose empty ---
+  U:= ScanPasText('  F7Actions.Popup(400,300);'#13#10, ['Popup'], [], Loose);
+  Check('usage.pas.rcv.nofilter', Contains(U, 'Popup'), 'with no known instance names every hit is confirmed');
+  Check('usage.pas.rcv.nofilter.noloose', Length(Loose) = 0, 'and nothing is held back as loose');
+
+  // --- unchanged by design: a with-block assignment has no dot to find ---
+  U:= ScanPasText('  with btnA do Popup := 1;'#13#10, ['Popup'], ['btnA'], Loose);
+  Check('usage.pas.rcv.withblock', not Contains(U, 'Popup'), 'a with-block still has no dot, unchanged and by design');
+end; // begin
+
+{ The instance names a .dfm declares for one class -- the receivers the .pas scan trusts. }
+procedure TestScanDfmInstanceNames;
+const
+  SRC = 'object Form1: TForm1'#13#10 + '  object btnA: TabcToggleBtn'#13#10 + '    Caption = ''A'''#13#10 + '  end'#13#10 + '  object pnl: TPanel'#13#10 +
+  '    object btnB: TabcToggleBtn'#13#10 + '      Caption = ''B'''#13#10 + '    end'#13#10 + '  end'#13#10 + 'end'#13#10;
+var
+  N: TArray<string>;
+begin
+  N:= ScanDfmInstanceNames(SRC, 'TabcToggleBtn');
+  Check('usage.dfm.inst.count', Length(N) = 2, IntToStr(Length(N)));
+  Check('usage.dfm.inst.top'   , Contains(N, 'btnA'), 'a top-level instance is found'         );
+  Check('usage.dfm.inst.nested', Contains(N, 'btnB'), 'a nested instance is found too'        );
+  Check('usage.dfm.inst.other' , not Contains(N, 'pnl'), 'an instance of another class is not');
+  Check('usage.dfm.inst.none', Length(ScanDfmInstanceNames(SRC, 'TNotPresent')) = 0, 'a class with no block yields nothing');
 end; // begin
 
 { Harvesting the units a form actually uses is what turns the Unit Rules tab from a blank
@@ -5258,6 +5341,8 @@ begin
     TestScanPasAndMatch;
     TestScanPasEndOfTextSafety;
     TestComputeUsage;
+    TestScanPasReceiverAndComments;
+    TestScanDfmInstanceNames;
     TestScanUsesClauses;
     TestScanUsesClausesLimits;
     TestPlatform;

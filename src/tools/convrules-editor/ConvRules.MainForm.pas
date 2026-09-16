@@ -919,7 +919,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AssignLink"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure ShowUsageReport(const AMissing: TArray<string>);
+      procedure ShowUsageReport(const AMissing, ALoose: TArray<string>);
       /// <summary>FGrid.OnDrawCell: paints a row green when its From path is used per
       /// the active examination (FUsedProps), else the normal fixed/selected/window
       /// colours. Every colour is resolved through StyleServices, so the grid follows
@@ -4122,6 +4122,10 @@ begin
   FExamineInfo:= Format(
     'Examined %d file(s): %d of %d From properties used; ' + '%d unit(s) offered on the Unit Rules tab.',
     [U.DfmCount + U.PasCount, Length(U.Names), Length(Paths), Length(FUnitCandidates)]);
+  // Held back by the receiver filter -- say so in the status bar, not only in the modal
+  // report, so the count is visible after the dialog has been dismissed.
+  if Length(U.Loose) > 0 then
+    FExamineInfo:= FExamineInfo + Format(' %d name(s) held back (unknown receiver).', [Length(U.Loose)]);
   if Length(Bad) > 0 then
     FExamineInfo:= FExamineInfo + ' Unreadable: ' + string.Join(', ', Bad);
   SetStatus(FExamineInfo);
@@ -4129,8 +4133,8 @@ begin
   RefreshUnitList; // draws the harvested units as candidate rows
   UpdateToolbarEnabled; // "Clear marks" is gated on there BEING an examination
 
-  if Length(U.Missing) > 0 then
-    ShowUsageReport(U.Missing);
+  if (Length(U.Missing) > 0) or (Length(U.Loose) > 0) then
+    ShowUsageReport(U.Missing, U.Loose);
 end; // procedure
 
 { Drop the current examination -- the session-state fields only (green marks AND the
@@ -4147,10 +4151,20 @@ begin
   SetStatus('Examination cleared.');
 end;
 
-{ Small read-only report window: used names the examined files reference that match
-  no leaf of the active From tree -- expected to be rare, and worth surfacing since
-  it usually means the indexer's proptree is missing something real. }
-procedure TConvRulesForm.ShowUsageReport(const AMissing: TArray<string>);
+{ Small read-only report window, two sections, either of which may be empty.
+
+  MISSING: used names the examined files reference that match no leaf of the active From
+  tree -- expected to be rare, and worth surfacing since it usually means the indexer's
+  proptree is missing something real.
+
+  LOOSE: names seen in a .pas as '.Name' on a receiver that is NOT one of this form's
+  instances of the From class. They are NOT marked used, and this report is the only place
+  they appear -- which is the point. The receiver filter exists to stop another class's
+  '.Popup' painting a row green, but a filter that silently discarded what it rejected
+  would trade visible false positives for INVISIBLE false negatives, and a property this
+  conversion really does touch through a local alias or a loop variable would simply stop
+  being mentioned. Listing them keeps that judgement with the user. }
+procedure TConvRulesForm.ShowUsageReport(const AMissing, ALoose: TArray<string>);
 var
   F   : TForm  ;
   Memo: TMemo  ;
@@ -4159,7 +4173,7 @@ var
 begin
   F:= TForm.CreateNew(Self);
   try
-    F.Caption    := 'Examine -- used names with no grid row';
+    F.Caption    := 'Examine -- names not accounted for';
     F.Width      := 520;
     F.Height     := 420;
     F.Position   := poOwnerFormCenter;
@@ -4177,10 +4191,26 @@ begin
     Memo.WordWrap  := False;
     Memo.Font.Name:= 'Consolas';
     Memo.Font.Size:= 9;
-    Memo.Lines.Add(Format('%d name(s) used in the examined files have no row in this grid:', [Length(AMissing)]));
-    Memo.Lines.Add('');
-    for N in AMissing do
-      Memo.Lines.Add(N);
+    if Length(AMissing) > 0 then
+    begin
+      Memo.Lines.Add(Format('%d name(s) used in the examined files have no row in this grid:', [Length(AMissing)]));
+      Memo.Lines.Add('');
+      for N in AMissing do
+        Memo.Lines.Add('  ' + N);
+    end;
+
+    if Length(ALoose) > 0 then
+    begin
+      if Length(AMissing) > 0 then
+        Memo.Lines.Add('');
+      Memo.Lines.Add(Format('%d name(s) appear in the .pas on a receiver that is NOT one of', [Length(ALoose)]));
+      Memo.Lines.Add('this form''s instances of the From class. They are NOT marked used.');
+      Memo.Lines.Add('Usually another component''s property of the same name -- but check,');
+      Memo.Lines.Add('since a local alias or a loop variable also lands here:');
+      Memo.Lines.Add('');
+      for N in ALoose do
+        Memo.Lines.Add('  ' + N);
+    end;
 
     F.ShowModal;
   finally

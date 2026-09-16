@@ -26,6 +26,12 @@ type
   /// Names are normalised and de-duplicated case-insensitively. Missing holds
   /// used names that match no leaf of the From property tree -- expected to be empty,
   /// and evidence of an indexer gap when it is not.
+  /// Loose holds names seen in a .pas as '.Name' on a receiver that is NOT a known
+  /// instance of the From class -- reported, never marked used. It exists so the
+  /// receiver filter cannot silently DISCARD a real use: a property touched through a
+  /// local alias or a loop variable lands here rather than vanishing. Empty whenever
+  /// no receiver names are known, because the filter is then off and every hit is in
+  /// Names (see ScanPasText's receiver-aware overload).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: ConvRules.MainForm.TConvRulesForm.LoadFormFiles (ConvRules.MainForm.pas), ConvRules.Usage.ComputeUsage (ConvRules.Usage.pas), declaration (ConvRules.Usage.pas)</para>
   /// <para>Used in units: ConvRules.MainForm, ConvRules.Usage</para>
@@ -33,6 +39,7 @@ type
   /// </remarks>
   TUsageSet = record
     Names   : TArray<string>;
+    Loose   : TArray<string>;
     Missing : TArray<string>;
     DfmCount: Integer       ;
     PasCount: Integer       ;
@@ -56,7 +63,32 @@ type
   /// <seealso cref="ConvRules.BlockFile.FirstToken"/>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-function ParseBlockHeader(const ALine: string; out AClass: string): Boolean;
+function ParseBlockHeader(const ALine: string; out AClass: string): Boolean; overload;
+
+/// <summary>PURE: as ParseBlockHeader above, and additionally yields the INSTANCE name
+/// the block declares ('object btnA: TabcToggleBtn' -> AClass 'TabcToggleBtn',
+/// AInstance 'btnA').</summary>
+/// <param name="ALine">One .dfm line.</param>
+/// <param name="AClass">Receives the bare class name; '' when the line is not a header.</param>
+/// <param name="AInstance">Receives the instance name, or '' for an anonymous block
+/// ('object : TFoo', and the collection-item form where the name is an index). Never
+/// carries the '[0]' suffix, which belongs to the class half of the line.</param>
+/// <returns>True when ALine is a block header declaring a class.</returns>
+/// <remarks>This is the ONE object-header parser; the two-argument overload above
+/// delegates to it. Splitting them would let two parsers disagree about what a form
+/// contains, which is the reason ParseBlockHeader was exported in the first place.</remarks>
+function ParseBlockHeader(const ALine: string; out AClass, AInstance: string): Boolean; overload;
+
+/// <summary>PURE: the INSTANCE names declared as AFromClass in a .dfm text --
+/// ['btnEWAcAQL', 'btnEWAcQL', ...] for a form holding those TabcToggleBtn controls.</summary>
+/// <param name="AText">The whole .dfm as text. A binary .dfm yields nothing.</param>
+/// <param name="AFromClass">Bare class name, matched case-insensitively.</param>
+/// <returns>Distinct instance names, in first-seen order.</returns>
+/// <remarks>These are the receivers a .pas scan may trust: 'btnEWAcAQL.Popup' is a use
+/// of TabcToggleBtn.Popup, while 'F7Actions.Popup' is a use of something else entirely.
+/// Nested blocks are included -- a control is an instance of its class wherever on the
+/// form it sits.</remarks>
+function ScanDfmInstanceNames(const AText, AFromClass: string): TArray<string>;
 
 /// <summary>PURE: the property names assigned to instances of AFromClass in a .dfm text.</summary>
 /// <param name="AText">The whole .dfm as text. A binary .dfm simply yields nothing.</param>
@@ -108,10 +140,14 @@ function CandidatesFor(const AFromPaths: TArray<string>): TArray<string>;
 /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: Hits.ToArray.</returns>
 /// <remarks>
 /// DELIBERATELY LOOSE (the user's ruling): it does not check which object the
-/// member belongs to, and does not exclude comments or string literals. The cost is
-/// over-reporting -- another component's '.Caption' marks Caption used; the gain is that
-/// typed locals and any dotted access are caught. A 'with X do Caption := ...' has no
-/// dot and is therefore NOT seen.
+/// member belongs to. The cost is over-reporting -- another component's '.Caption' marks
+/// Caption used; the gain is that typed locals and any dotted access are caught. A
+/// 'with X do Caption := ...' has no dot and is therefore NOT seen.
+/// Comments and string literals ARE excluded, which the ruling's wording also covered
+/// until 2026-09-15: a commented-out line is not a use under any reading, and one was
+/// measured contributing a green mark on VARINSP. Receiver-blindness -- the part of the
+/// ruling that was a real trade-off -- survives here unchanged. Prefer the receiver-aware
+/// overload below when the instance names are known; ComputeUsage now does.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.Usage.ComputeUsage (ConvRules.Usage.pas)</para>
 /// <para>Calls: ConvRules.Usage.HarvestDotTokens, ConvRules.Usage.TNameSet.Add, ConvRules.Usage.TNameSet.Contains, ConvRules.Usage.TNameSet.Create, ConvRules.Usage.TNameSet.ToArray</para>
@@ -123,7 +159,33 @@ function CandidatesFor(const AFromPaths: TArray<string>): TArray<string>;
 /// <seealso cref="ConvRules.Usage.TNameSet.ToArray"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ScanPasText(const AText: string; const ACandidates: TArray<string>): TArray<string>;
+function ScanPasText(const AText: string; const ACandidates: TArray<string>): TArray<string>; overload;
+
+/// <summary>PURE: as ScanPasText above, but a hit counts only when the RECEIVER of the
+/// '.Name' is a known instance of the From class. Names rejected for their receiver are
+/// returned in ALooseNames rather than discarded.</summary>
+/// <param name="AText">The .pas text.</param>
+/// <param name="ACandidates">Names worth looking for (see CandidatesFor).</param>
+/// <param name="AReceivers">Instance names of the From class (see ScanDfmInstanceNames),
+/// plus the From class name itself so a cast 'TabcToggleBtn(Sender).Popup' is credited.
+/// EMPTY TURNS THE FILTER OFF: with no idea what the instances are called, every hit is
+/// confirmed and the result is exactly the loose overload's. That is the honest
+/// degradation -- examining .pas files with no .dfm cannot do better.</param>
+/// <param name="ALooseNames">Receives candidates seen on an UNKNOWN receiver. Always
+/// empty when AReceivers is empty.</param>
+/// <returns>Candidates confirmed on a known receiver.</returns>
+/// <remarks>
+/// WHY THIS IS NOT THE OLD LOOSE RULE. Measured on ORM3\CLIENT\VARINSP: 'Popup' was
+/// marked used on TabcToggleBtn although no TabcToggleBtn in that form sets it. The two
+/// hits were 'F7Actions.Popup(400,300)' -- a TdxBarPopupMenu, a different class entirely
+/// -- and a COMMENTED-OUT line. Both are now rejected: the first for its receiver, the
+/// second because comments and string literals are skipped.
+/// Recognised receiver forms are the identifier immediately before the dot ('btnA.X'),
+/// the last link of a chain ('Self.btnA.X'), and the callee of a completed call or cast
+/// ('TabcToggleBtn(Sender).X'). A 'with btnA do X' still has no dot and is still not
+/// seen, unchanged and by design.
+/// </remarks>
+function ScanPasText(const AText: string; const ACandidates, AReceivers: TArray<string>; out ALooseNames: TArray<string>): TArray<string>; overload;
 
 /// <summary>PURE: every unit named in a .pas text's uses clauses -- BOTH the interface
 /// and the implementation one, because a unit used only in the implementation still has
@@ -236,18 +298,30 @@ end; // function
   'inherited' and 'inline' block keywords real DFMs use for inherited forms and frames. }
 function ParseBlockHeader(const ALine: string; out AClass: string): Boolean;
 var
+  Ignored: string;
+begin
+  Result:= ParseBlockHeader(ALine, AClass, Ignored);
+end; // function
+
+function ParseBlockHeader(const ALine: string; out AClass, AInstance: string): Boolean;
+var
   S  : string ;
   Tok: string ;
   p  : Integer;
 begin
-  Result:= False;
-  AClass:= '';
+  Result   := False;
+  AClass   := '';
+  AInstance:= '';
   S  := Trim      (ALine);
   Tok:= FirstToken(S    );
   if not (SameText(Tok, 'object') or SameText(Tok, 'inherited') or SameText(Tok, 'inline')) then
     Exit;
   p:= Pos(':', S);
   if p = 0 then Exit; // 'inherited Frame1' with no type
+  // Between the keyword and the ':' is the instance name. It is absent on an
+  // anonymous block ('object : TFoo'), which Trim then yields as ''.
+  if p > Length(Tok) then
+    AInstance:= Trim(Copy(S, Length(Tok) + 1, p - Length(Tok) - 1));
   AClass:= Trim(Copy(S, p + 1, MaxInt));
   // a trailing '[0]' index appears on inherited collection items
   p:= Pos('[', AClass);
@@ -635,6 +709,26 @@ begin
   end; // try
 end; // begin
 
+function ScanDfmInstanceNames(const AText, AFromClass: string): TArray<string>;
+var
+  Lines  : TArray<TRawLine>;
+  NameSet: TNameSet        ;
+  i      : Integer         ;
+  Cur    : string          ;
+  Inst   : string          ;
+begin
+  Lines  := SplitRawLines(AText);
+  NameSet:= TNameSet.Create;
+  try
+    for i:= 0 to High(Lines) do
+      if ParseBlockHeader(Lines[i].Text, Cur, Inst) and SameText(Cur, AFromClass) and (Inst <> '') then
+        NameSet.Add(Inst);
+    Result:= NameSet.ToArray;
+  finally
+    NameSet.Free;
+  end; // try
+end; // function
+
 function CandidatesFor(const AFromPaths: TArray<string>): TArray<string>;
 var
   NameSet: TNameSet;
@@ -665,8 +759,14 @@ end; // function
   several-hundred-KB unit, per file) with one O(textlength) harvest plus an O(candidates)
   membership filter. It is exactly equivalent for the loose-match rule: a candidate is
   used iff it appears as a '.Identifier' token followed by a non-identifier character,
-  which is precisely what this yields. Comments and string literals are still NOT
-  excluded -- same loose semantics ScanPasText has always documented. }
+  which is precisely what this yields.
+
+  Comments and string literals ARE excluded (2026-09-15). They were not until the VARINSP
+  measurement found 'Popup' marked used partly on the strength of a COMMENTED-OUT line.
+  Nothing is lost: under no reading of "which properties does this conversion use" is a
+  commented-out line or the inside of a string a use. Receiver-blindness -- the OTHER half
+  of that defect, and the deliberate part -- is unchanged here and is addressed by
+  ScanPasText's receiver-aware overload instead. }
 function HarvestDotTokens(const AText: string): TNameSet;
 var
   i: Integer;
@@ -676,6 +776,8 @@ begin
   i:= 1;
   while i <= Length(AText) do
   begin
+    if SkipNonCode(AText, i) then
+      Continue;
     if AText[i] = '.' then
     begin
       j:= i + 1;
@@ -709,6 +811,147 @@ begin
   end;
 end; // function
 
+{ One left-to-right pass that, unlike HarvestDotTokens, is aware of two things the loose
+  scan was blind to: NON-CODE (comments and string literals, skipped via the same
+  SkipNonCode the uses-clause scanner uses) and the RECEIVER of each '.Name'.
+
+  The receiver is tracked with two variables rather than a parser. PrevIdent is the last
+  identifier token seen, which covers 'btnA.Popup' and -- because a matched member becomes
+  the new PrevIdent -- the last link of a chain, 'Self.btnA.Popup'. A parenthesis stack
+  carries the callee across a completed call or cast, so 'TabcToggleBtn(Sender).Popup'
+  credits 'TabcToggleBtn'. Any other punctuation breaks the chain and leaves the receiver
+  unknown; whitespace does not.
+
+  A candidate seen on an unknown receiver goes to ALooseNames, never to the result -- but
+  only if it was not ALSO seen on a known one, so a property touched both ways reads as
+  used rather than as doubtful. }
+function ScanPasText(const AText: string; const ACandidates, AReceivers: TArray<string>; out ALooseNames: TArray<string>): TArray<string>;
+var
+  Cand      : TNameSet      ;
+  Recv      : TNameSet      ;
+  Hits      : TNameSet      ;
+  Loose     : TNameSet      ;
+  Depth     : TStack<string>;
+  i         : Integer       ;
+  j         : Integer       ;
+  N         : Integer       ;
+  PrevIdent : string        ; // last identifier token seen; '' when the chain is broken
+  LastCallee: string        ; // callee of the most recently CLOSED '( ... )'
+  AfterClose: Boolean       ; // the last significant token was that ')'
+  Member    : string        ;
+  Receiver  : string        ;
+  S         : string        ;
+  FilterOn  : Boolean       ; // False when no receiver names are known: filter OFF
+begin
+  ALooseNames:= nil;
+  Cand := TNameSet.Create;
+  Recv := TNameSet.Create;
+  Hits := TNameSet.Create;
+  Loose:= TNameSet.Create;
+  Depth:= TStack<string>.Create;
+  try
+    for S in ACandidates do
+      if S <> '' then
+        Cand.Add(S);
+    FilterOn:= False;
+    for S in AReceivers do
+      if S <> '' then
+      begin
+        Recv.Add(S);
+        FilterOn:= True;
+      end;
+
+    N         := Length(AText);
+    i         := 1;
+    PrevIdent := '';
+    LastCallee:= '';
+    AfterClose:= False;
+    while i <= N do
+    begin
+      // A comment or a string literal is not code, and nothing inside one can name a
+      // receiver either -- so the chain breaks across it.
+      if SkipNonCode(AText, i) then
+      begin
+        PrevIdent := '';
+        AfterClose:= False;
+        Continue;
+      end;
+
+      if AText[i] = '.' then
+      begin
+        j:= i + 1;
+        while (j <= N) and IsIdentCh(AText[j]) do
+          Inc(j);
+        if j > i + 1 then
+        begin
+          Member:= Copy(AText, i + 1, j - i - 1);
+          if AfterClose then
+            Receiver:= LastCallee
+          else
+            Receiver:= PrevIdent;
+          if Cand.Contains(Member) then
+            if (not FilterOn) or Recv.Contains(Receiver) then
+              Hits.Add(Member)
+            else
+              Loose.Add(Member);
+          // the member becomes the receiver of any further link in the chain
+          PrevIdent := Member;
+          AfterClose:= False;
+          i         := j;
+        end
+        else
+          Inc(i); // a '.' with no identifier after it (end of text, or '1.' )
+        Continue;
+      end;
+
+      if IsIdentStartCh(AText[i]) then
+      begin
+        j:= i;
+        while (j <= N) and IsIdentCh(AText[j]) do
+          Inc(j);
+        PrevIdent := Copy(AText, i, j - i);
+        AfterClose:= False;
+        i         := j;
+        Continue;
+      end;
+
+      if AText[i] = '(' then
+      begin
+        Depth.Push(PrevIdent); // remember what was being called or cast
+        PrevIdent := '';
+        AfterClose:= False;
+      end
+      else if AText[i] = ')' then
+      begin
+        if Depth.Count > 0 then
+          LastCallee:= Depth.Pop
+        else
+          LastCallee:= '';
+        PrevIdent := '';
+        AfterClose:= True;
+      end
+      else if not CharInSet(AText[i], [' ', #9, #13, #10]) then
+      begin
+        PrevIdent := ''; // any other punctuation breaks the receiver chain
+        AfterClose:= False;
+      end;
+      Inc(i);
+    end; // while
+
+    Result:= Hits.ToArray;
+    // A name confirmed somewhere is not doubtful anywhere.
+    for S in Loose.ToArray do
+      if not Hits.Contains(S) then
+        ALooseNames:= ALooseNames + [S];
+  finally
+    Depth.Free;
+    Loose.Free;
+    Hits .Free;
+    Recv .Free;
+    Cand .Free;
+  end; // try
+end; // function
+
 function MergeUsage(const AParts: TArray<TArray<string>>): TArray<string>;
 var
   NameSet: TNameSet      ;
@@ -733,28 +976,50 @@ end;
 
 function ComputeUsage(const ADfmTexts, APasTexts: TArray<string>; const AFromClass: string; const AFromPaths: TArray<string>): TUsageSet;
 var
-  Parts: TList<TArray<string>>;
-  Cand : TArray<string>       ;
-  T    : string               ;
-  N    : string               ;
-  Miss : TList<string>        ;
+  Parts    : TList<TArray<string>>;
+  LooseAll : TList<TArray<string>>;
+  Cand     : TArray<string>       ;
+  Receivers: TArray<string>       ;
+  LooseOne : TArray<string>       ;
+  T        : string               ;
+  N        : string               ;
+  Miss     : TList<string>        ;
 begin
   Result:= Default      (TUsageSet );
   Cand  := CandidatesFor(AFromPaths);
   Parts:= TList<TArray<string>>.Create;
+  LooseAll:= TList<TArray<string>>.Create;
   Miss:= TList<string>.Create;
   try
+    // The .dfm half is class-scoped and trustworthy; it also TELLS US the instance names
+    // the .pas half needs in order to be. The From class name joins them so a cast
+    // 'TabcToggleBtn(Sender).X' is credited as well.
+    Receivers:= nil;
     for T in ADfmTexts do
     begin
       Parts.Add(ScanDfmText(T, AFromClass));
+      Receivers:= Receivers + ScanDfmInstanceNames(T, AFromClass);
       Inc(Result.DfmCount);
     end;
+    // With no .dfm there are no known instances, and ScanPasText then runs unfiltered --
+    // the old loose behaviour, which is the best an examination of .pas files alone can
+    // honestly do. Adding the class name in that case would NOT help: it would leave the
+    // filter on with a single receiver and reject everything else.
+    if Length(Receivers) > 0 then
+      Receivers:= Receivers + [AFromClass];
     for T in APasTexts do
     begin
-      Parts.Add(ScanPasText(T, Cand));
+      Parts.Add(ScanPasText(T, Cand, Receivers, LooseOne));
+      LooseAll.Add(LooseOne);
       Inc(Result.PasCount);
     end;
     Result.Names:= MergeUsage(Parts.ToArray);
+    // Loose is what the receiver filter HELD BACK, so a name the .dfm half confirmed
+    // independently must not appear there -- it is used, and by the trustworthy half.
+    Result.Loose:= nil;
+    for N in MergeUsage(LooseAll.ToArray) do
+      if not HasName(Result.Names, N) then
+        Result.Loose:= Result.Loose + [N];
 
     // A used name is Missing when no From-tree leaf matches it by either rule.
     for N in Result.Names do
@@ -772,6 +1037,7 @@ begin
     Result.Missing:= Miss.ToArray;
   finally
     Miss.Free;
+    LooseAll.Free;
     Parts.Free;
   end; // try
 end; // function
