@@ -9014,7 +9014,14 @@ begin
       Store:= nil;
     end; // for
 
-    if SameText(AArgs.Format, 'json') then Writeln(JRoot.Format(2))
+    { `--json` is a GLOBAL flag (parsed at the top of ParseArgs into AArgs.AsJson),
+      so testing only AArgs.Format made `usages --json` print the human summary and
+      exit 0. The converter team reported it 2026-09-16: an accepted-but-ignored
+      flag reads as a deliberate answer, and they concluded from it that "usages
+      has no JSON detail, only counts" -- which is false, and cost them a round
+      trip. A CLI must not answer a question it was not asked. The idiom used by
+      the majority of verbs is `AsJson or Format='json'`; this is that. }
+    if AArgs.AsJson or SameText(AArgs.Format, 'json') then Writeln(JRoot.Format(2))
     else
     begin
       Writeln(Format('usages of "%s" (width=%s)', [AArgs.Name, Width]));
