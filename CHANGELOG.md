@@ -5,6 +5,50 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed: `convert-apply` blamed the `.dfm` when the real cause was "not indexed"
+
+On a unit covered by no supplied `--db`, `convert-apply` printed, once per
+instance:
+
+```
+btnTop: could not locate .dfm object block for "btnTop: TabcToggleBtn"
+        in ...\VARINSP.dfm -- instance skipped        ... x20
+```
+
+That sentence is **false about the file**. The converter team verified the
+`.dfm` was text (not binary) and that all twenty blocks were present at lines
+4880, 14705, 17564, ... before concluding anything -- then spent a day
+disproving three plausible readings the message invited (binary `.dfm`, nesting
+depth, qualified-vs-bare `#convert` type) before finding the real condition:
+`convert-apply` resolves `.dfm` blocks **through the index**, and the unit was in
+no supplied index. Indexing it converted all twenty.
+
+The lookup fails for two different reasons and the old text asserted the second
+unconditionally. `Length(DfmFileSyms) = 0` discriminates them exactly -- which
+works because `FindConvertInstances` reads the `.dfm` TEXT, so an unindexed unit
+still produces instances to warn about at all.
+
+**No behaviour change.** Requiring an index may be load-bearing and nobody asked
+for it to be relaxed; instance counts and the skip/convert accounting are
+identical. Only the sentence differs:
+
+```
+btnTop: MyForm.pas is not covered by any supplied --db; convert-apply resolves
+        .dfm blocks through the index. Index it, or pass a --db that covers it
+        -- instance skipped
+```
+
+The genuine case **keeps the original wording**, plus a clause naming the two
+causes that remain once the index is ruled out (the object is absent, or the
+index is stale). Replacing both branches would have traded one false claim for
+another and made the real not-in-the-`.dfm` case undiagnosable.
+
+Guarded by `tests\autotest\run_convert_apply_index_precondition.ps1`: the
+converter team's own repro shape (a depth-1 and a depth-2 instance, since depth
+was one of the disproved hypotheses), two positive controls, and a
+**discrimination control** proving an indexed unit with an unknown object still
+gets the original message.
+
 ### Added: hovering an INTERFACE now names what implements it
 
 Hovering `var ABC: ImcSTATIONS;` answers `TmcSTATIONS`. Before this, hover on an

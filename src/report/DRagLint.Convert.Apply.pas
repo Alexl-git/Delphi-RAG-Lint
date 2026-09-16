@@ -1703,9 +1703,50 @@ begin
       var DfmSym: TSymbol:= FindDfmInstanceSymbol(DfmFileSyms, Inst.InstanceName, Inst.FromType);
       if DfmSym.Id = 0 then
       begin
-        It:= InstItem(aikInstanceSkipped, afWarnings,
-          Format('%s: could not locate .dfm object block for "%s: %s" in %s -- instance skipped',
-            [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]));
+        { TWO CAUSES, ONE SYMPTOM -- and the old message named the wrong one.
+
+          The lookup is against DfmFileSyms, which comes from the INDEX
+          (:1647-1650). So it fails either because this .dfm is in no supplied
+          --db AT ALL, or because it is indexed and this particular object is
+          not in it. The old text asserted the second unconditionally:
+
+            btnTop: could not locate .dfm object block for "btnTop: TabcToggleBtn"
+                    in ...\VARINSP.dfm -- instance skipped        ... x20
+
+          On a unit covered by no --db that sentence is FALSE ABOUT THE FILE.
+          The converter team verified the .dfm was text, not binary, and that
+          all twenty blocks were present at lines 4880, 14705, 17564, ... then
+          spent a day disproving three plausible readings the message invited
+          (binary .dfm, nesting depth, qualified-vs-bare #convert type) before
+          finding the real condition. A merely unhelpful message costs a minute;
+          a confidently wrong one costs a day.
+
+          Length(DfmFileSyms) = 0 discriminates them exactly, because
+          FindConvertInstances reads the .dfm TEXT (:1621) -- which is why an
+          unindexed unit still produces instances to warn about at all.
+
+          THE BEHAVIOUR IS UNCHANGED, deliberately. Requiring an index may be
+          load-bearing and nobody asked for it to be relaxed; the instance
+          counts and the skip/convert accounting are identical. Only the
+          sentence differs.
+
+          The else-branch keeps the ORIGINAL wording -- pinned by
+          run_convert_apply_index_precondition.ps1's discrimination control --
+          because replacing both branches with the new text would trade one
+          false claim for another and make the genuine not-in-the-.dfm case
+          undiagnosable. It gains a clause naming the two remaining causes,
+          since "indexed but absent" and "indexed but STALE" are both live and
+          the reader cannot tell them apart from the old sentence either. }
+        var SkipMsg: string;
+        if Length(DfmFileSyms) = 0 then
+          SkipMsg:= Format('%s: %s is not covered by any supplied --db; convert-apply resolves .dfm blocks through the index. ' +
+                           'Index it, or pass a --db that covers it -- instance skipped',
+            [Inst.InstanceName, ExtractFileName(AUnitPas)])
+        else
+          SkipMsg:= Format('%s: could not locate .dfm object block for "%s: %s" in %s ' +
+                           '(the .dfm IS indexed, so the object is absent from it or the index is stale) -- instance skipped',
+            [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]);
+        It:= InstItem(aikInstanceSkipped, afWarnings, SkipMsg);
         It.FilePath:= ADfmPath;
         Emit(It);
         Continue;
