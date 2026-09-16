@@ -5,6 +5,43 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed: fourteen more read verbs silently MIGRATED the `--db` they were told to read
+
+**This completes the breaking change v1.12.0-alpha announced for four verbs.**
+Those four (`usages`, `typeat`, `deps-report`, `uses-report`) stopped migrating a
+caller-supplied index; fourteen more were doing exactly the same thing and were
+listed as `unaudited` in the guard that found them:
+
+`hover`, `wiring`, `impact`, `slice`, `bench-context`, `generate-docs`,
+`find-deadcode`, `check-unit --resolve-uses`, `cycles`, `uses-audit`,
+`uses-fix`, `uses-fix` (sweep form), `generate-test`, `check-ast`.
+
+Each opened the path read-write and called `.Migrate` before reading, so pointing
+a *read* verb at an old index silently upgraded it on disk -- a write nobody
+asked for, from a command that only claims to answer questions. All fourteen now
+use `OpenReadOnlyStore` + `StaleDbRefusesRun`: a stale explicit `--db` exits 2,
+says so on stderr, answers nothing, and **leaves the database at its original
+schema**.
+
+`run_migrate_site_guard.ps1` goes from `sites: 33  listed: 30  writes: 16
+unaudited: 14` to `sites: 19  listed: 16  writes: 16  **unaudited: 0**`.
+
+**The `uses-fix` pair is the one worth noting.** Both routines edit *source
+files*, which reads like a write -- but the exemption list is only ever about
+writes to the **index**, so both are read verbs and both were fixed. And
+`uses-fix` reaches two different routines: with a `<unit>` target it is
+`DoUsesFix`, with none it is `DoUsesFixSweep`, so it appears **twice** in the
+test matrix or the sweep form would have gone untested.
+
+Fifteen rows added to `run_explicit_db_strict.ps1`'s stale matrix (T5/T5b/T5c/
+T5d). Every row is **argument-complete and was verified against a current
+database first**: a verb that exits 2 *before* opening any database passes all
+four checks without testing anything, which is the trap the existing
+`uses-report` row already documents. `uses-fix <unit>` needs `--project` for
+exactly that reason, so the fixture now writes a stub `.dproj` -- it only has to
+exist, since the store is opened before the project is used. A named coverage
+assertion fails with *which* row was dropped rather than an off-by-one.
+
 ### Fixed: `format` -- the verb that rewrites your source had no safety net, and `--dry-run` was a lie
 
 `drag-lint format` overwrites a `.pas` in place. It was also the only verb with

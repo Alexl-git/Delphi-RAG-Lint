@@ -74,22 +74,11 @@ $exempt = [ordered]@{
   'DoSelfTestRecreate'    = 'writes: self-test over its own fixture db'
   'DoTestStoreFreshness'  = 'writes: self-test over its own fixture db'
   'DoDocFactsSelfTest'    = 'writes: self-test over its own fixture db'
-  # -- unaudited: read-shaped, migrates a caller-supplied path; same defect as --
-  # -- the three fixed verbs. Fix one, delete its line.                        --
-  'DoHover'               = 'unaudited: read-shaped, Create+Migrate on each --db'
-  'DoWiring'              = 'unaudited: read-shaped, Create+Migrate on the first existing --db'
-  'DoImpact'              = 'unaudited: read-shaped, Create+Migrate on --db'
-  'DoSlice'               = 'unaudited: read-shaped, Create+Migrate on --db'
-  'DoBenchContext'        = 'unaudited: read-shaped (benchmark), Create+Migrate on --db'
-  'DoGenerateDocs'        = 'unaudited: read-shaped, Create+Migrate on --db'
-  'DoFindDeadCode'        = 'unaudited: read-shaped, Create+Migrate on --db'
-  'DoCheckUnit'           = 'unaudited: read-shaped (--resolve-uses), Create+Migrate on --db'
-  'DoCycles'              = 'unaudited: read-shaped, Create+Migrate on --db'
-  'DoUsesAudit'           = 'unaudited: read-shaped, Create+Migrate on --db'
-  'DoUsesFixSweep'        = 'unaudited: reads the db to edit SOURCE; Create+Migrate on --db'
-  'DoUsesFix'             = 'unaudited: reads the db to edit SOURCE; Create+Migrate on --db'
-  'DoGenerateTest'        = 'unaudited: read-shaped, Create+Migrate on --db'
-  'DoCheckAst'            = 'unaudited: read-shaped, Create+Migrate on --db'
+  # -- NO unaudited ENTRIES REMAIN. All 14 read-shaped verbs that migrated a   --
+  # -- caller-supplied --db became OpenReadOnlyStore + StaleDbRefusesRun on     --
+  # -- 2026-09-16, completing the change v1.12.0-alpha began for four of them.  --
+  # -- A NEW entry here must be a writes: line naming what it writes TO -- the  --
+  # -- INDEX, not source files. uses-fix edits .pas and is still a READ verb.   --
 }
 
 # The three verbs INBOX-read-verbs-migrate-the-db measured, plus DoUsesReport

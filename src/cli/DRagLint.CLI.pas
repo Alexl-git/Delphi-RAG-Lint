@@ -8335,8 +8335,13 @@ begin
   for Db in Dbs do
   begin
     if not TFile.Exists(Db) then Continue;
-    Store:= TSQLiteSymbolStore.Create(Db);
-    Store.Migrate;
+    var RoOk: Boolean;
+    Store:= OpenReadOnlyStore(Db, RoOk);
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'hover', Db) then Exit(2);
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
     Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
     if Length(Syms) > 0 then begin UsedDb:= Db; Break; end;
     Store:= nil; { release before trying the next db }
@@ -8426,8 +8431,9 @@ begin
   for D in Dbs do
     if TFile.Exists(D) then begin DbToUse:= D; Break; end;
   if DbToUse = '' then begin Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs), ' resolved path(s)). Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(DbToUse);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(DbToUse, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'wiring', DbToUse) then Exit(2);
 
   if AArgs.WiringCoverage then
   begin
@@ -8523,8 +8529,9 @@ begin
   // Use the bare name (last segment) as the target for the CTE ref lookup,
   // since refs store the bare identifier name, not the qualified name.
   TargetName:= LastSegment(AArgs.QName, '.');
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'impact', AArgs.DbPath) then Exit(2);
   Levels:= Store.FindTransitiveCallers(TargetName, Depth);
   if SameText(AArgs.Format, 'json') then
   begin
@@ -8892,8 +8899,9 @@ begin
   if NoDbResolved(AArgs.DbPath, 'slice') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'slice', AArgs.DbPath) then Exit(2);
   Slice:= Store.GetSymbolSlice(AArgs.QName);
 
   if Length(Slice) = 0 then begin Writeln(System.SysUtils.Format( 'No slice returned for qname: %s', [AArgs.QName])); Exit(1); end;
@@ -12020,8 +12028,9 @@ begin
   N:= AArgs.BenchN;
   if N <= 0 then N:= 20;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'bench-context', AArgs.DbPath) then Exit(2);
 
   // Fetch documented symbols (clamped to N).
   Syms:= Store.ListDocumentedSymbols(N);
@@ -14672,8 +14681,9 @@ var
 begin
   if AArgs.QName = '' then begin Writeln('Usage: drag-lint generate-docs --qname X [--format xmldoc|pasdoc] [--db PATH]'); Exit (2 ); end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'generate-docs', AArgs.DbPath) then Exit(2);
   if SameText(AArgs.Format, 'pasdoc') then Fmt:= dsfPasDoc
   else Fmt:= dsfXmlDoc;
   Stub:= TDocStubGenerator.Generate(Store, AArgs.QName, Fmt);
@@ -15874,8 +15884,9 @@ var
   Symbols: TArray<TSymbol>;
 begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'find-deadcode', AArgs.DbPath) then Exit(2);
   Symbols:= TDeadCodeFinder.Find(Store, AArgs.Kind, AArgs.IncludePrivate);
   if Length(Symbols) > 0 then Writeln(TDeadCodeFinder.RenderText(Symbols, Store));
   Writeln(Format('Found %d dead-code candidate(s)', [Length(Symbols)]));
@@ -18801,7 +18812,12 @@ begin
   { open the index only if --resolve-uses asked AND the db exists }
   if NoDbResolved(AArgs.DbPath, 'check-unit') then Exit(2);
   HasStore:= AArgs.ResolveUsesFlag and TFile.Exists(AArgs.DbPath);
-  if HasStore then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; end;
+  if HasStore then
+  begin
+    var RoOk: Boolean;
+    Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+    if (not RoOk) and StaleDbRefusesRun(AArgs, 'check-unit', AArgs.DbPath) then Exit(2);
+  end;
 
   ErrCount:= 0; WarnCount:= 0;
   Sb:= TStringBuilder.Create;
@@ -18960,8 +18976,9 @@ var
 begin
   if NoDbResolved(AArgs.DbPath, 'cycles') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'cycles', AArgs.DbPath) then Exit(2);
 
   Adj:= TDictionary<string, TList<string>>.Create;
   IntfEdges:= TEdgeSet.Create;
@@ -19431,8 +19448,9 @@ begin
   if AArgs.Target = '' then begin Writeln('Usage: drag-lint uses-audit <unit.pas> --db <sqlite> [--format json|text]'); Exit (2 ); end;
   if NoDbResolved(AArgs.DbPath, 'uses-audit') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-audit', AArgs.DbPath) then Exit(2);
 
   RefIntf     := TDictionary<string, Boolean>.Create;
   RefImpl     := TDictionary<string, Boolean>.Create;
@@ -19783,8 +19801,9 @@ begin
   if NoDbResolved(AArgs.DbPath, 'uses-fix-sweep') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   RootFilter:= LowerCase(StringReplace(AArgs.InFile, '/', '\', [rfReplaceAll]));
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-fix-sweep', AArgs.DbPath) then Exit(2);
 
   IndexedUnits:= TDictionary<string, Int64>.Create;
   NameCache:= TDictionary<string, TArray<string>>.Create;
@@ -20277,8 +20296,9 @@ begin
   Proj:= AArgs.ProjectPath;
   Plat:= AArgs.CheckPlatform;
   WantJson:= SameText(AArgs.Format, 'json');
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-fix', AArgs.DbPath) then Exit(2);
 
   RefIntf     := TDictionary<string, Boolean>.Create;
   RefImpl     := TDictionary<string, Boolean>.Create;
@@ -20437,8 +20457,9 @@ var
 begin
   if AArgs.QName = '' then begin Writeln('Usage: drag-lint generate-test --qname X [--framework dunitx|dunit] [--db PATH]'); Exit (2 ); end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'generate-test', AArgs.DbPath) then Exit(2);
   if SameText(AArgs.TestFramework, 'dunit') then Framework:= tfDUnit
   else Framework:= tfDUnitX;
   Stub:= TTestStubGenerator.Generate(Store, AArgs.QName, Framework);
@@ -20460,7 +20481,12 @@ begin
   if AArgs.Target = '' then begin Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--format text|json]'); Exit (2 ); end;
   if not TFile.Exists(AArgs.Target) then begin Writeln('ERROR: file not found: ', AArgs.Target); Exit(2); end;
   if NoDbResolved(AArgs.DbPath, 'check-ast') then Exit(2);
-  if TFile.Exists(AArgs.DbPath) then begin Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate; end
+  if TFile.Exists(AArgs.DbPath) then
+  begin
+    var RoOk: Boolean;
+    Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+    if (not RoOk) and StaleDbRefusesRun(AArgs, 'check-ast', AArgs.DbPath) then Exit(2);
+  end
   else Store:= nil;
   Findings:= TAstChecker.Check(Store, AArgs.Target);
   { v11 (M1): type-aware rules with exact resolution when a store is present

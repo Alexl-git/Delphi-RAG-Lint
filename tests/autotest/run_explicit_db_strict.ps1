@@ -425,6 +425,14 @@ Check 'V the stale fixture CONTAINS the source files (membership probe must say 
 if ($havePython) {
   # Stale db FIRST. Args are the same shape as the matrix above, plus the four
   # convert verbs, which need a unit/rules/block of their own.
+  #
+  # `uses-fix <unit>` requires --project or it exits 2 with a usage line before
+  # opening any database. The file only has to EXIST -- DoUsesFix opens the
+  # store before it uses the project -- so a one-line stub is enough and keeps
+  # the row honest without dragging a buildable project into this fixture.
+  $dummyDproj = Join-Path $WorkDir 'stub.dproj'
+  Write-Ascii $dummyDproj '<Project></Project>'
+
   $staleMatrix = @(
     @{ N='proptree';         A=@('proptree','--qname','uAlpha.TAlphaBase','--depth','1') }
     @{ N='reverse-calltree'; A=@('reverse-calltree','--qname','uAlpha.TAlphaBase.Touch') }
@@ -457,6 +465,40 @@ if ($havePython) {
     # note missed it; --output is REQUIRED or the verb exits 2 before it opens
     # any database, which would fake a pass on this row.
     @{ N='uses-report';      A=@('uses-report','--output',(Join-Path $WorkDir 'uses.csv')) }
+    # ---- the 14 read-shaped verbs audited 2026-09-16 (BACKLOG-94 row 1) ------
+    # Each one opened a CALLER-SUPPLIED --db read-write and called .Migrate
+    # before reading, so a v12 fixture came back silently migrated to the
+    # current schema -- the same defect v1.12.0-alpha fixed for four verbs, on
+    # fourteen more. run_migrate_site_guard.ps1 went `unaudited: 14` -> 0.
+    #
+    # EVERY ROW BELOW IS ARGUMENT-COMPLETE, and that is the whole discipline
+    # here: a verb that exits 2 BEFORE it opens any database passes all four of
+    # T5/T5b/T5c/T5d without testing anything. Each was run against a CURRENT
+    # database first and confirmed to answer; the P5 positive control below
+    # loops this same matrix and asserts exactly that, so a row that stops
+    # reaching a store later turns P5 red rather than going quietly green.
+    #
+    # `uses-fix` appears TWICE ON PURPOSE -- with a <unit> target it is
+    # DoUsesFix, with no target it is DoUsesFixSweep. One verb, two routines,
+    # and the sweep form was the one that would otherwise go untested.
+    # --project is REQUIRED for the targeted form (it exits 2 with a usage line
+    # otherwise, which would fake a pass); the .dproj need not be buildable,
+    # only present, because the store is opened before the project is used.
+    @{ N='hover';            A=@('hover','--qname','uAlpha.TAlphaBase.Touch') }
+    @{ N='wiring';           A=@('wiring','--qname','uAlpha.TAlphaBase') }
+    @{ N='wiring --coverage';A=@('wiring','--coverage') }
+    @{ N='impact';           A=@('impact','--qname','uAlpha.TAlphaBase.Touch') }
+    @{ N='slice';            A=@('slice','--qname','uAlpha.TAlphaBase') }
+    @{ N='bench-context';    A=@('bench-context','--n','1') }
+    @{ N='generate-docs';    A=@('generate-docs','--qname','uAlpha.TAlphaBase.Touch') }
+    @{ N='find-deadcode';    A=@('find-deadcode') }
+    @{ N='check-unit';       A=@('check-unit',$fileA,'--resolve-uses') }
+    @{ N='cycles';           A=@('cycles') }
+    @{ N='uses-audit';       A=@('uses-audit',$fileA) }
+    @{ N='uses-fix sweep';   A=@('uses-fix') }
+    @{ N='uses-fix';         A=@('uses-fix',$fileA,'--project',$dummyDproj) }
+    @{ N='generate-test';    A=@('generate-test','--qname','uAlpha.TAlphaBase.Touch') }
+    @{ N='check-ast';        A=@('check-ast',$fileA) }
   )
   Check 'V the stale matrix covers all four convert-* verbs' `
         (@($staleMatrix | Where-Object { $_.N -like 'convert-*' }).Count -eq 4) `
@@ -464,6 +506,17 @@ if ($havePython) {
   Check 'V the stale matrix covers the four migrate-on-read verbs (usages, typeat, deps-report, uses-report)' `
         (@($staleMatrix | Where-Object { $_.N -in @('usages','typeat','deps-report','uses-report') }).Count -eq 4) `
         'a verb dropped from this matrix can go back to migrating a database it was told to read, silently'
+
+  # The 2026-09-16 audit's own coverage check. Named individually rather than
+  # counted, so a row deleted later fails with the NAME of what stopped being
+  # tested instead of an off-by-one.
+  $auditedRows = @('hover','wiring','wiring --coverage','impact','slice','bench-context',
+                   'generate-docs','find-deadcode','check-unit','cycles','uses-audit',
+                   'uses-fix sweep','uses-fix','generate-test','check-ast')
+  $missingAudited = @($auditedRows | Where-Object { $_ -notin @($staleMatrix.N) })
+  Check 'V the stale matrix covers all 15 rows of the 2026-09-16 read-verb audit' `
+        ($missingAudited.Count -eq 0) `
+        ("dropped from the matrix, so these can silently migrate a --db again: " + ($missingAudited -join ', '))
 
   function Run-Stale([string[]]$VerbArgs) {
     Reset-StaleDb
