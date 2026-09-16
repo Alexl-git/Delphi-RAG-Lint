@@ -237,6 +237,25 @@ than one that blamed the form file.</p>
 <li><b class="f">Light and dark themes</b>, with the preference remembered per user.</li>
 </ul>
 
+<h3>Added to the editor since the previous edition</h3>
+<ul>
+<li><b class="f">Work on a unit that is not a project member</b> -- the From Unit box accepts a loose <code>.pas</code> or <code>.dfm</code> browsed from disk, so a form that no project file lists can still be converted. This is the common case in a long-lived codebase, and it previously stopped the job.</li>
+<li><b class="f">Conversion catalog</b> -- a "Can convert to:" list beneath the target pool, so the author sees which target types a source component actually has rules for instead of discovering it by trying.</li>
+<li><b class="f">Double-click to assign</b> in the target pool -- the mapping action that was previously only reachable through a button.</li>
+<li><b class="f">Pinned engine with a drift check</b> -- the editor is tested against a pinned copy of the engine, and a check compares it by <b class="f">content hash</b> rather than version string. Two builds of the same version can differ, and a GUI test rebuilt underneath you produces failures that belong to neither side.</li>
+</ul>
+
+<div class="warn">
+<p><b class="f">One editor limitation worth knowing.</b> The green "already used"
+marks on source properties are trustworthy for the form file but <em>not</em> for
+the code: the code-side scan matches any <code>.Property</code> text without
+knowing the receiver's type or skipping comments, so a property can be marked
+used on the strength of a different component's call, or of a commented-out
+line. The fix is designed -- match against the known instance names of the
+source class, which the form file already supplies -- and is listed in the
+roadmap.</p>
+</div>
+
 <h2>12. What is new since the previous edition</h2>
 <p class="sub">Changes between 1.10.1-alpha (9 September) and 1.13.0-alpha (16 September).</p>
 
@@ -268,6 +287,14 @@ commands.</p>
 <ul>
 <li>The converter reported that a form file was missing a component block when the real cause was that the unit had not been indexed. The message cost the conversion team a day of eliminating plausible wrong answers. It now names the real condition.</li>
 <li>The outline command reported that no database covered a file, for files another command listed three databases for. Both now resolve the same way, through shared code rather than two copies.</li>
+</ul>
+
+<h3>Component Converter and its editor</h3>
+<ul>
+<li>The editor can now work on <b class="f">a unit no project file lists</b>, which is the ordinary case in a long-lived codebase and previously stopped the job outright.</li>
+<li>A <b class="f">conversion catalog</b> shows which target types a source component actually has rules for.</li>
+<li>The editor is tested against a <b class="f">pinned engine, compared by content hash</b> rather than version string -- two builds of one version can differ, and a GUI test rebuilt underneath you produces failures belonging to neither side.</li>
+<li>A conversion whose unit is in no supplied index is now <b class="f">refused with a message that says so</b>, instead of one that blamed the form file.</li>
 </ul>
 
 <h3>Documentation the tool enforces about itself</h3>
@@ -369,7 +396,24 @@ priorities do; nothing here is a commitment or a delivery date.</b></p>
     <td class="n">1-2 h</td></tr>
 </table>
 
-<h3>A.4 Quality of the tool's own output</h3>
+<h3>A.4 Component Converter and its editor</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th class="n">Effort</th></tr>
+<tr><td>End-to-end conversion run in the UI</td>
+    <td>The <code>TabcToggleBtn</code> to <code>TcxButton</code> rule book validates and the blocker that stopped it is fixed, but the conversion has not yet been driven through the editor from end to end on a real form. Nothing blocks it.</td>
+    <td class="n">hours</td></tr>
+<tr><td>Trustworthy "already used" marks</td>
+    <td>The editor's code-side scan matches any <code>.Property</code> text regardless of the receiver's type, and does not skip comments, so a property can be marked used on another component's call or a commented-out line. The author is then told a property is handled when it is not. Fix designed: match the source class's known instance names, which the form file already supplies.</td>
+    <td class="n">1-2 d</td></tr>
+<tr><td>Exercise the curation UI</td>
+    <td>The named-value-mapping curation surface has been built but never driven in anger, so it carries whatever defects an unclicked UI carries. Long-standing owed item.</td>
+    <td class="n">hours</td></tr>
+<tr><td>Unlinked properties are silently not carried</td>
+    <td>A property with no <code>#link</code> is simply dropped, and the run still reports success. Found by measurement, not by the tool: a rule book missing geometry and event links would have landed twenty buttons stacked at (0,0) with no size and no click handler, reported as <code>20 instance(s) converted</code>. The rule book has been completed; the general question -- whether the engine should warn about an unlinked source property rather than leave it to the author -- is open.</td>
+    <td class="n">open question</td></tr>
+</table>
+
+<h3>A.5 Quality of the tool's own output</h3>
 <table>
 <tr><th>Item</th><th>Why it matters</th><th class="n">Effort</th></tr>
 <tr><td>Two lint false positives</td>
