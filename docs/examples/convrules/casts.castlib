@@ -2,11 +2,24 @@
 # Each 'cast <Name> ... end' block defines a class-to-class cast the DSL names as the
 # '#link To <- From : <Name>' suffix. The editor uses name/accepts/yields.
 #
-# The realization hints (dfm/compat/pas/todo) are EDITOR-SIDE ONLY as of 2026-09-04.
-# This header used to say the engine's convert-apply consumes them. It does not, and
-# never has -- nothing under srceport\ or src\cli\ reads a .castlib. Spec item G6.3
-# asked for the comment to be corrected or the consumer built; the comment is now
-# correct and building the consumer remains open work.
+# The realization hints (dfm/compat/pas/todo) ARE CONSUMED by the engine as of
+# 2026-09-16 (row 6): convert-apply renders `pas` at a .pas access site, and
+# `dfm keep-bytes-if-compatible` carries a streamed payload to the target path
+# when its format is in `compat`, emitting `todo` when it is not.
+#
+# THE HISTORY HERE IS DELIBERATE, and please keep it. Between 2026-09-04 and
+# 2026-09-16 this paragraph read "EDITOR-SIDE ONLY ... nothing under srceport\ or
+# src\cli\ reads a .castlib", and it said so because it was CORRECTING an earlier
+# header that had claimed a consumer which did not exist. Spec item G6.3 asked
+# for that comment to be corrected or the consumer built; the comment was
+# corrected first, and the consumer has now been built. A bare "consumed by
+# convert-apply" would erase the fact that this file once described a consumer
+# that was not there -- which is the exact failure the note was guarding against.
+#
+# The payload format is sniffed from the BYTES, not inferred from the property
+# name: a .dfm blob is a streamed TPicture (a length-prefixed class name, a size,
+# then the image), so the wrapper class is read first and the image magic is the
+# fallback.
 #
 # Since 2026-09-04 the engine DOES split the ': <Name>' suffix off the #link FromPath
 # (it used to swallow it and then report the valid line as a missing path), and

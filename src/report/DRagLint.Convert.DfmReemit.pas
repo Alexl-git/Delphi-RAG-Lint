@@ -796,21 +796,14 @@ var
       if (Q.Kind <> rkLink) or (Q.Cast = '') or (Q.FromPath = '') then Continue;
       if Length(Q.FromPath) <= Best then Continue;
       if not SameText(Copy(ALeafPath, 1, Length(Q.FromPath) + 1), Q.FromPath + '.') then Continue;
-      { The by-name class-cast lookup CastLib does not expose -- ClassCastFor
-        takes two TYPE names and answers the editor's question, the inverse of
-        this one, and FindEnumCast is the enum twin. Local for now because
-        Convert.CastLib.pas is the converter team's file with uncommitted work
-        in it; raised with them to hoist beside FindEnumCast once that lands. }
-      for CD in ACastLib.Casts do
-        if SameText(CD.Name, Q.Cast) then
-        begin
-          ADef      := CD;
-          AToPrefix := Q.ToPath;
-          ARemainder:= Copy(ALeafPath, Length(Q.FromPath) + 2, MaxInt);
-          Best      := Length(Q.FromPath);
-          Result    := True;
-          Break;
-        end;
+      if FindClassCast(ACastLib, Q.Cast, CD) then
+      begin
+        ADef      := CD;
+        AToPrefix := Q.ToPath;
+        ARemainder:= Copy(ALeafPath, Length(Q.FromPath) + 2, MaxInt);
+        Best      := Length(Q.FromPath);
+        Result    := True;
+      end;
     end;
   end;
 

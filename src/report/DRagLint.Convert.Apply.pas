@@ -1554,24 +1554,16 @@ var
           Before this, 2 and 3 produced the identical sentence and sent the
           operator hunting the wrong file.
 
-          THE LOOKUP IS BY NAME, AND IT IS LOCAL ON PURPOSE. CastLib's
-          ClassCastFor(ADefs, AFrom, ATo) takes two TYPE names and returns a
-          cast NAME -- the editor's "is there a cast for these types" question,
-          the inverse of this one. There is no by-name class-cast lookup
-          (FindEnumCast is the enum twin), and Convert.CastLib.pas is the
-          converter team's file with uncommitted work in it, so the helper lives
-          here rather than colliding with their working copy. Raised with them
-          in docs\INBOX-2026-09-16b-...; hoist it beside FindEnumCast once their
-          changes land. }
+          THE LOOKUP IS BY NAME, and it is FindClassCast -- not ClassCastFor,
+          which takes two TYPE names and returns a cast NAME (the editor's
+          question, the inverse of this one). FindClassCast lives beside its
+          enum twin in Convert.CastLib.pas for the reason that unit exists: one
+          parser, two consumers, no drift. It briefly lived here as a local
+          helper only because that file had uncommitted converter-team work in
+          it; they committed it as 30fdf633 expressly so this could move, and
+          asked that it not stay local. }
         var CastDef  : TCastDef;
-        var CastFound: Boolean:= False;
-        for var CD: TCastDef in ACastLib.Casts do
-          if SameText(CD.Name, LinkRule.Cast) then
-          begin
-            CastDef  := CD;
-            CastFound:= True;
-            Break;
-          end;
+        var CastFound: Boolean:= FindClassCast(ACastLib, LinkRule.Cast, CastDef);
 
         if not CastFound then
         begin

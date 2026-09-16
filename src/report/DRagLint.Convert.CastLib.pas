@@ -201,6 +201,27 @@ function ParseCastLib(const APath: string): TCastLib;
 /// </remarks>
 function ClassCastFor(const ADefs: TArray<TCastDef>; const AFrom, ATo: string): string;
 
+/// <summary>Find the CLASS cast named AName (case-insensitive).</summary>
+/// <param name="ALib">The parsed cast library.</param>
+/// <param name="AName">The name off a <c>#link To &lt;- From : Name</c> suffix.</param>
+/// <param name="ADef">Filled with the matching definition when found.</param>
+/// <returns>True and fills ADef when found; False and a zeroed ADef otherwise.</returns>
+/// <remarks>
+/// <para>THE INVERSE OF <see cref="ClassCastFor"/>, and the pair is easy to
+/// confuse. ClassCastFor takes two TYPE names and returns a cast NAME -- the
+/// EDITOR's question, "given TPicture and TdxSmartGlyph, is there a cast and
+/// what is it called?", asked while authoring a rule. This takes the NAME the
+/// rule already carries and returns the whole definition, so a CONSUMER can
+/// read PasTemplate / Dfm / Compat / Todo. A caller that reaches for
+/// ClassCastFor here gets a signature mismatch rather than a wrong answer,
+/// which is the one mercy in the confusion.</para>
+/// <para>Deliberately mirrors <see cref="FindEnumCast"/> -- same shape, same
+/// case-insensitive match, same zeroed-out on miss -- so the class and enum
+/// lookups cannot drift apart. It lives here rather than in a consumer for the
+/// reason this unit exists: one parser, two consumers, no drift.</para>
+/// </remarks>
+function FindClassCast(const ALib: TCastLib; const AName: string; out ADef: TCastDef): Boolean;
+
 /// <summary>Find the enum cast named AName (case-insensitive).</summary>
 /// <param name="ALib"><!-- drag-lint:auto type -->const TCastLib</param>
 /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
@@ -434,6 +455,21 @@ begin
   Result:= '';
   for d in ADefs do if Has(d.Accepts, AFrom) and Has(d.Yields, ATo) then Exit(d.Name);
 end;
+
+function FindClassCast(const ALib: TCastLib; const AName: string; out ADef: TCastDef): Boolean;
+var
+  c: TCastDef;
+begin
+  ADef:= Default(TCastDef);
+  if AName = '' then
+    Exit(False);
+  for c in ALib.Casts do if SameText(c.Name, AName) then
+  begin
+    ADef:= c;
+    Exit(True);
+  end;
+  Result:= False;
+end; // function
 
 function FindEnumCast(const ALib: TCastLib; const AName: string; out ADef: TEnumDef): Boolean;
 var
