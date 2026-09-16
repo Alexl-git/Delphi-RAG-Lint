@@ -443,10 +443,16 @@ begin
   Result:= '';
 end; // function
 
-{ True if the ORM3 project DB answers a units query -- i.e. it exists AND is at the
-  engine's current schema. The v17 exe REFUSES a pre-v17 DB ("index schema v16 < v17
-  ... migrate") and returns 0 rows, so ORM3-dependent live tests SKIP (environment not
-  ready -- ORM3 awaits a v17 re-index) rather than FAIL, matching the absent-DB policy. }
+{ True if the ORM3 project DB answers a units query -- i.e. it exists AND is at or above
+  the exe's own SCHEMA_VERSION. The gate is `>=`, so a NEWER DB is fine; only an OLDER one
+  is refused ("index schema vN < vM ... migrate", 0 rows), in which case ORM3-dependent
+  live tests SKIP (environment not ready) rather than FAIL, matching the absent-DB policy.
+
+  SAY THE SCHEMA GENERICALLY, NEVER A HARDCODED VERSION. These messages said "pre-v17"
+  from the v17 era until 2026-09-15, by which point the engine wanted v22 and ORM3 sat at
+  v21. The skip then reported a version pair that had not been current for months, and a
+  session debugging it lost time to a message that named the wrong schema with complete
+  confidence. The engine prints the real pair; this text must not compete with it. }
 function Orm3Queryable(const AExe: string): Boolean;
 var
   Adapter: TEngineAdapter;
@@ -525,7 +531,7 @@ begin
   // --- From-Unit picker: what FCbUnit would hold ---
   // Editor: ListProjectUnits over the adapter's DBs (project DB carries units).
   if (not TFile.Exists(ProjectDb)) or (not Orm3Queryable(Exe)) then
-    Skip('picker.unit.datasource', 'ORM3 project db absent or pre-v17 (needs re-index)')
+    Skip('picker.unit.datasource', 'ORM3 project db absent or below the exe schema (re-index)')
   else
   begin
     Adapter:= TEngineAdapter.Create(Exe, [ProjectDb]);
@@ -562,7 +568,7 @@ begin
      or (not TFile.Exists('C:\Projects\DB\ORM3\CLIENT\VARINSP.DFM'))
      or (not Orm3Queryable(Exe)) then
   begin
-    Skip('fill.from-unit.varinsp', 'exe / ORM3 db / VARINSP.DFM absent, or ORM3 pre-v17');
+    Skip('fill.from-unit.varinsp', 'exe / ORM3 db / VARINSP.DFM absent, or ORM3 below the exe schema');
     Exit;
   end;
   // The editor passes the FROM db set (both libs + project) as the control set
@@ -645,7 +651,7 @@ begin
     OK:= Adapter.GetProptree('TcxButton', Tree, Err, Note, 'published');
     if not OK or (Length(Tree.Leaves) = 0) then
     begin
-      Skip('proptree2.live', 'TcxButton not resolved at published surface (pre-v17 exe?): ' + Err);
+      Skip('proptree2.live', 'TcxButton not resolved at published surface (pre-proptree/2 exe?): ' + Err);
       Exit;
     end;
     // Bounded -- a pathological (refs-expanding) tree would be many thousands of leaves.
