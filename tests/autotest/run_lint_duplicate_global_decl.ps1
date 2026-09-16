@@ -65,6 +65,7 @@ type
     const CMember = 3;
   end;
   TDupArr = array [1 .. 10] of Integer;
+  TSpaceArr = array [1 .. 10] of Integer;
   TDupRec = record
     X: Integer;
   end;
@@ -99,6 +100,7 @@ type
     const CMember = 4;
   end;
   TDupArr = array [1 .. 20] of Integer;
+  TSpaceArr = array [1..10] of Integer;
   TDupRec = record
     X: Integer;
   end;
@@ -216,6 +218,24 @@ Write-Host 'CONTROLS -- each one is a way the rule can be wrong' -ForegroundColo
 Check 'NORMALIZATION: integer vs Integer is reported, NOT escalated' `
   (((DupFor 'CNorm').Count -eq 1) -and (-not (((DupFor 'CNorm') -join ' ') -match 'DIFFER'))) `
   'RED means the value compare is raw-string -- the tbltdistrcount lesson'
+
+# SPACING is the same lesson one step further, and it shipped broken. Measured on
+# ORM3 CLIENT 2026-09-16: 3 of 5 escalations were `array [1 .. 43, 1 .. 17]`
+# against `array [1..43, 1..17]` -- character-identical but for how a formatter
+# spaced a range operator. Collapsing whitespace RUNS (the pre-fix NormSig) is not
+# enough, because ' .. ' and '..' both survive collapsing and stay different.
+#
+# TSpaceArr differs ONLY in that spacing. TDupArr, asserted elsewhere in this
+# file, is 1..10 against 1..20 -- a REAL difference with identical spacing. The
+# pair is what makes this a measurement: a NormSig that normalised too hard would
+# silence TDupArr, and one that normalises too little shouts about TSpaceArr.
+Check 'SPACING: [1 .. 10] vs [1..10] is reported, NOT escalated' `
+  (((DupFor 'TSpaceArr').Count -eq 1) -and (-not (((DupFor 'TSpaceArr') -join ' ') -match 'DIFFER'))) `
+  'RED means spacing around a range operator reads as a semantic difference'
+
+Check 'SPACING CONTROL: a REAL size difference still escalates' `
+  (((DupFor 'TDupArr') -join ' ') -match 'DIFFER') `
+  'if this goes RED with the one above GREEN, NormSig now normalises away real differences'
 Check 'SINGLE DECL: a name declared once is never reported' `
   ((DupFor 'COnlyHere').Count -eq 0) ''
 Check 'SECTION: interface in one unit, implementation in the other -> SILENT' `

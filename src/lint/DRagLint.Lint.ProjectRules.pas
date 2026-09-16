@@ -1143,8 +1143,9 @@ begin
   end;
 end; // function
 
-/// <summary>Flags a const or var NAME declared at interface unit level in two
-/// or more units -- which declaration compiles depends on uses order.</summary>
+/// <summary>Flags a NAME declared at interface unit level in two or more units
+/// -- const, var, type, record, class, interface, enum or routine -- so which
+/// declaration compiles depends on uses order.</summary>
 /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
 /// <returns>'duplicate-global-decl' findings, one per NAME (not per site),
 /// anchored at the first declaring site in (path, line) order; empty if none.</returns>
@@ -1192,25 +1193,52 @@ const
 var
   Findings: TList<TLintFinding>;
 
-  { Lowercased with every whitespace run collapsed to one space. See the
-    tbltdistrcount note above -- this is the difference between an escalation
-    the reader believes and one they learn to ignore. }
+  { Lowercased, with whitespace significant ONLY between two word characters.
+    See the tbltdistrcount note above -- this is the difference between an
+    escalation the reader believes and one they learn to ignore.
+
+    WIDENED 2026-09-16 from "collapse every whitespace run to one space", which
+    was not enough. Measured on ORM3 CLIENT, 3 of the 5 escalations were pure
+    spacing around punctuation and nothing else:
+
+        array [1 .. 43, 1 .. 17] of double   vs   array [1..43, 1..17] of double
+
+    Collapsing runs leaves ` .. ` and `..` different, so all three shouted THE
+    DECLARATIONS DIFFER about declarations that are character-identical once you
+    ignore how somebody's formatter spaced a range operator. That is exactly the
+    "teaches the reader to distrust the escalation" failure the original note
+    warned about, arriving through a door it left open: only ONE of those five
+    (TARecTDistr, array[1..500] vs array[1..100]) was a real difference.
+
+    A space is kept only when it separates two word characters, so `packed
+    record` and `of TrecTDistr` are untouched while `[1 .. 500]` and `[1..500]`
+    converge. NORMALIZATION IS FOR COMPARISON ONLY -- the message prints the RAW
+    signatures, so the reader still sees the declarations as they are written. }
   function NormSig(const AText: string): string;
+  const
+    CWord = ['a'..'z', 'A'..'Z', '0'..'9', '_'];
   var
     I   : Integer;
     Gap : Boolean;
+    Ch  : Char   ;
   begin
     Result:= '';
     Gap   := False;
     for I:= 1 to Length(AText) do
-      if CharInSet(AText[I], [' ', #9, #13, #10]) then
+    begin
+      Ch:= AText[I];
+      if CharInSet(Ch, [' ', #9, #13, #10]) then
         Gap:= True
       else
       begin
-        if Gap and (Result <> '') then Result:= Result + ' ';
+        if Gap and (Result <> '')
+           and CharInSet(Result[Length(Result)], CWord)
+           and CharInSet(Ch, CWord) then
+          Result:= Result + ' ';
         Gap   := False;
-        Result:= Result + AText[I];
+        Result:= Result + Ch;
       end;
+    end;
     Result:= LowerCase(Result);
   end;
 
@@ -1300,15 +1328,25 @@ begin
         if F.StartCol <= 0 then F.StartCol:= 1;
         F.EndLine  := Rows[I].StartLine;
         F.EndCol   := F.StartCol + Length(Rows[I].Name);
+        { SAME SEVERITY BOTH WAYS, DIFFERENT WORDS -- owner's ruling 2026-09-16:
+          "Doesn't matter if they differ or same ... it means it is a bug and I
+          converted something into 2 different locations". Both arms describe one
+          fault, a name ported into two units; the difference is only how much
+          damage it has already done, which is a message concern. Escalating the
+          SEVERITY on `Differ` would also make the rule's severity depend on
+          NormSig being perfect, and NormSig has now been wrong once. }
         if Differ then
           F.Message:= Format(
-            '%s is declared at interface level in %d units as %s (%s) -- THE DECLARATIONS ' +
-            'DIFFER (%s), so which one compiles depends on uses order',
+            '%s is declared at interface level in %d units as %s (%s) -- and THE DECLARATIONS ' +
+            'DIFFER (%s), so you are compiling one of two different things and which one ' +
+            'depends on uses order. Almost always the same name ported twice and then edited ' +
+            'apart; decide which is correct and delete the other rather than renaming it',
             [Rows[I].Name, NFiles, Kinds, Sites, Sigs])
         else
           F.Message:= Format(
-            '%s is declared at interface level in %d units as %s (%s) -- the declarations ' +
-            'are identical; delete one and re-point the uses',
+            '%s is declared at interface level in %d units as %s (%s) -- the declarations are ' +
+            'identical, so this is almost always the same thing ported twice; delete one and ' +
+            're-point the uses. They are interchangeable only UNTIL someone edits one of them',
             [Rows[I].Name, NFiles, Kinds, Sites]);
         Findings.Add(F);
       end;
