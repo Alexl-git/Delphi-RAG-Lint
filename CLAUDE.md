@@ -97,6 +97,39 @@ BEFORE the parse, so it legitimately exceeds `files=` when a parse fails, and
 Procedure, triage rules and the per-project run list:
 `docs\PLAN-project-completeness-sweep.md`.
 
+### `files > walked` means REBUILD. It is the only thing that clears those rows.
+
+**Owner ruling, 2026-09-16: a periodic full reindex is the standing remedy for
+index drift. There is no eviction verb and there will not be one.**
+
+Incremental indexing is already correct for the two cases people assume it is
+not, and it is worth knowing which case is which before reaching for a rebuild:
+
+* **A refactored or gutted unit is NOT stale.** `OpenFileTx` is full re-emit --
+  it DELETEs that file's symbols, refs, di_bindings, string_literals, unit_uses
+  and docs by `file_id` *before* the parser emits anything. Re-indexing one unit
+  wipes it clean and rebuilds it; nothing is merged. Move half a unit elsewhere
+  and nothing of the old half survives.
+* **A unit dropped from the `.dproj` IS evicted**, provided it lives under a
+  scope root (the closure's directories plus the project dir) -- the normal case.
+  Eviction runs on every `index --project`.
+
+What incremental CANNOT clear is a row whose directory the closure never
+mentions -- another project's unit that a hand-run `index <dir> --db
+<projectDb>` swept in. Eviction is bounded to the scope roots on purpose, so
+those rows are immortal: `index --project` never visits them, eviction never
+considers them, and the freshness sweep keeps counting them.
+
+**The tell is `files > walked` on the section summary line.** When you see it:
+
+```
+drag-lint index --project <X.dproj> --db <db> --rebuild
+```
+
+Do not read the difference as a defect in the indexer; read it as a DB that was
+widened once and needs rebuilding. And do not add a `--db` that belongs to a
+different project, which is how the shape is created in the first place.
+
 ## Two version constants, and why they are separate
 
 * `DRAGLINT_VERSION` -- the product version. Bump freely for a release.
