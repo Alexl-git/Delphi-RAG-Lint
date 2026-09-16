@@ -5,6 +5,62 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed: a `context` bundle from a BARE name silently omitted the target's body
+
+`context --task "modify DoHover"` returned 870 bytes with **no `## Impl slice`**,
+while `context --task "modify DRagLint.CLI.DoHover"` returned 5,035 bytes with
+one. The bare form was not a miss -- it RESOLVED, and its own header said so
+(`# Context bundle: modify DRagLint.CLI.DoHover`). It then dropped the one thing
+a `modify X` task asks for: X's own body.
+
+The bare-name fallback added earlier set `Result.QName` to the resolved
+qualified name, so the HEADER became honest. Three consumers kept reading the
+raw, still-bare `AQName` -- the class-surface parent, the impl slice and the
+caller lookup -- and asked the store about a name it cannot match. The header
+was fixed; the body was not. All three now use the resolved name.
+
+This is the verb the token-saving path runs on, so the failure mattered more
+than its size: an agent handed the short bundle edits a routine it never saw,
+and nothing about the result looks wrong. Bare and qualified forms are now
+byte-identical (5,035 bytes both).
+
+An AMBIGUOUS bare name still resolves to nothing, deliberately -- picking one of
+several same-named symbols would be a confidently wrong bundle, which is worse
+than an empty one. Guarded, with that case pinned, by
+`tests\autotest\run_context_bare_name_body.ps1`.
+
+### Changed: the usage log records WHICH tool was replaced, and what the index cost
+
+`stats\draglint-usage.log` gains two optional fields --
+`ISO8601 what units_avoided tokens_avoided **tool tokens_used**` -- where `tool`
+is `grep` or `read`. `stats\daily-report.ps1` now prints a per-tool breakdown
+with a **net** figure (avoided minus spent).
+
+The split exists because the two are not the same claim: for a GREP avoided the
+saving is a genuine estimate, while for a READ avoided it is **measured** -- the
+file's own size is a fact. The report labels each row's basis so a reader can
+weigh it. Reporting `tokens_used` keeps the section honest; a saving that never
+subtracts its own cost is marketing.
+
+Pre-existing 4-field rows still count exactly as before -- the parser treats the
+new fields as optional. Nothing was migrated.
+
+### Docs: `AI-INDEX-FIRST.md` no longer tells agents to widen `--db` across projects
+
+The published AI rule block still carried *"a cross-project question needs
+several `--db` flags"* -- advice the owner **superseded on 2026-08-13**, and the
+exact mechanism that wrote `dxXMLWriter`, `FireDAC.Comp.QBE`,
+`Spring.Data.ExpressionParser` and `System.JSON` into YADF's shared source. It
+now states the authoritative set (project DB + platform library, nothing else),
+that authority is per QUESTION rather than per database, and that a genuinely
+cross-project question is answered by SEPARATE runs correlated on an explicit
+key -- never by widening one query's `--db` list.
+
+The same file, `docs\AI-USAGE.md` and the global AI instructions also gain the
+unbounded-`Read` rule: orient with `outline`/`context`, act with a targeted
+`Read`, and never read a `.pas` over ~2,000 lines without first knowing which
+lines you want.
+
 ### BREAKING (behaviour): a late-resolved type-alias ancestor now answers to BOTH names
 
 **What changes for a caller.** `query ancestors --name T --of A` returns **True**

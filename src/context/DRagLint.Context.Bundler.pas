@@ -193,6 +193,7 @@ class function TContextBundler.Build(
 var
   Syms       : TArray<TSymbol>   ;
   Sym        : TSymbol           ;
+  EffQName   : string            ;  { the RESOLVED qname -- see its assignment }
   ParentQName: string            ;
   CallerName : string            ;
   RawCallers : TArray<TReference>;
@@ -318,6 +319,26 @@ begin
   Sym          := Syms[0];
   Result.Resolved:= True;
 
+  { THE NAME TO USE FROM HERE DOWN IS THE RESOLVED ONE, NEVER THE TYPED ONE.
+
+    The bare-name fallback above (:293-303) resolved `DoHover` to
+    `DRagLint.CLI.DoHover` and set Result.QName so the HEADER named the symbol
+    the reader actually got. Three consumers below kept reading the raw AQName,
+    which is still the bare word -- so the class surface, the impl slice and the
+    caller lookup were all asked about a name the store cannot match. Measured
+    2026-09-15: `context --task "modify DoHover"` returned 870 bytes with no
+    `## Impl slice` while the qualified form returned 5,035 bytes with one, and
+    the bare bundle's own header said `DRagLint.CLI.DoHover`.
+
+    That is the worst shape a bundle can take: it resolves, it says which symbol
+    it resolved to, and it silently omits the body the task named -- so an agent
+    edits a routine it never saw and nothing looks wrong. The header was made
+    honest; the body was not. One name, used everywhere, is the fix.
+
+    Guarded by tests\autotest\run_context_bare_name_body.ps1. }
+  EffQName:= Sym.QualifiedName;
+  if EffQName = '' then EffQName:= AQName;  { defensive: never regress to empty }
+
   if AIncludeDocs then MatchWikiTopics;
 
   // Doc
@@ -340,9 +361,9 @@ begin
       ParentQName:= Sym.QualifiedName
     else
     begin
-      ParentQName:= AQName;
+      ParentQName:= EffQName;
       if LastDelimiter('.', ParentQName) > 0 then ParentQName:= Copy(ParentQName, 1, LastDelimiter('.', ParentQName) - 1);
-      if ParentQName = AQName then ParentQName:= '';  { no owner to describe }
+      if ParentQName = EffQName then ParentQName:= '';  { no owner to describe }
     end;
     if ParentQName <> '' then
     begin
@@ -358,10 +379,10 @@ begin
   // the bundle was ~the whole source file (bench-context ~1x, no savings).  The
   // class SURFACE (signatures, cheap) already supplies the surrounding shape;
   // the body the caller actually needs is the target's own.  (v0.41)
-  if AIncludeImpl then Result.ImplSlice:= AStore.GetSymbolSlice(AQName);
+  if AIncludeImpl then Result.ImplSlice:= AStore.GetSymbolSlice(EffQName);
 
   // Callers (truncated to AMaxCallers; resolve FilePath from store)
-  CallerName:= AQName;
+  CallerName:= EffQName;
   if LastDelimiter('.', CallerName) > 0 then CallerName:= Copy(CallerName, LastDelimiter('.', CallerName) + 1, MaxInt);
   RawCallers:= AStore.FindCallersByNameWithContext(CallerName, ACallerContext);
   if Length(RawCallers) > AMaxCallers then SetLength(RawCallers, AMaxCallers);

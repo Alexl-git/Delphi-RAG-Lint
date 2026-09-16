@@ -1,13 +1,18 @@
-# AI rule: query the drag-lint index BEFORE Grep
+# AI rule: query the drag-lint index BEFORE Grep, and before an unbounded Read
 
 Drop this block into a project's `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`. It
 forces the agent to use the symbol-exact index instead of text search for Delphi
 symbol questions. The index is AST-accurate (no string-literal / comment /
 `*- Copy.PAS` noise) and sub-second on millions of symbols.
 
+**Two fallbacks, not one.** Grep is the cheap mistake; reading a whole `.pas` is
+the expensive one. Measured 2026-09-15 on `DRagLint.CLI.pas` (25,198 lines):
+**~338,500 tokens to Read it whole, ~1,259 for a `context` bundle, ~1,009 for a
+targeted `Read` of the 76 lines that mattered.** The rule below is about both.
+
 ---
 
-## Delphi symbol lookup — drag-lint index FIRST, Grep second (HARD RULE)
+## Delphi symbol lookup — drag-lint index FIRST, Grep/Read second (HARD RULE)
 
 For ANY Delphi/Pascal symbol question — "find X", "where is Y defined", "who
 calls/uses Z", "what implements I", "where is this const/enum/type/property" —
@@ -24,9 +29,21 @@ text-level matches, non-Delphi files, or code no index covers.
   every configured DB; `... resolve-dbs --project <file.dproj>` or
   `... resolve-dbs --in <file.pas>` resolves the one covering a given target.
   Omitting `--db` entirely lets the manifest resolver pick the full set.
-- **A cross-project question needs several `--db` flags.** With per-project DBs,
-  `find-callers` against one DB reports only that project's callers -- a
-  confident single-DB answer can be wrong across projects.
+- **Pass the PROJECT DB and the platform LIBRARY DB, and nothing else.** Never
+  hand a verb another project's DB. (This reverses advice this file carried
+  until 2026-09-15 -- "a cross-project question needs several `--db` flags" --
+  which the owner superseded on 2026-08-13. That advice surfaced a cross-project
+  caller through an unverified NAME match, and that is the exact mechanism that
+  wrote `dxXMLWriter`, `FireDAC.Comp.QBE`, `Spring.Data.ExpressionParser` and
+  `System.JSON` into YADF's shared source.)
+- **Authority is per QUESTION, not per database.** The library DB is the right
+  answer for "which unit declares `X`" (`find-unit`, type resolution) and the
+  WRONG answer for "who calls `X`" -- a name match against the RTL is not a
+  caller. "Authoritative" never means "may contribute to any fact".
+- **A genuinely cross-project question is answered by SEPARATE runs, then
+  correlated** -- one invocation per project DB, each authoritative for its own
+  project, joined on an explicit key you can show (a shared pipe name, port or
+  command constant). Never by widening one query's `--db` list.
 
 ### Pick the right command
 | Question | Command |
@@ -75,16 +92,43 @@ not yet shipped.
 ### Why
 - **Understand/modify a symbol → context bundle, not whole files.** `drag-lint
   context --task "modify <QualifiedName>"` returns doc + class surface
-  (signatures) + the target's body + capped callers — measured ~60× leaner than
-  reading the `.pas` files.
+  (signatures) + the target's body + capped callers — measured **269× leaner**
+  than reading `DRagLint.CLI.pas` (~1,259 tokens vs ~338,500).
 - Definitions in **include files** (`.inc`) and library consts/enums are indexed
   too — Grep across compiled/DCU-only trees would miss them; the index won't.
 
+### ORIENT with the index, ACT with a targeted Read
+
+Do not read this as "never Read". A **targeted** `Read` (`offset`/`limit`) costs
+~1,009 tokens here — *less* than the bundle — and returns the exact bytes an
+edit needs. The 300× saving comes from not reading the file **whole**, not from
+preferring one tool over the other.
+
+| step | tool | why |
+|---|---|---|
+| **Orient** | `outline --file X`, or `context --task "<verb> <Qualified.Name>"` | answers "what is in here / what must I know about this symbol and who touches it" — which no Read answers at any price |
+| **Act** | `Read` with `offset`/`limit` around the lines those gave you | exact bytes; most harnesses also require the file to have been Read before an edit |
+
+**The bright line: never Read a `.pas`/`.dfm` over ~2,000 lines without first
+knowing which lines you want.** `outline --file` costs almost nothing and hands
+you the offsets.
+
+**Check the bundle contains what you asked for.** A `modify X` bundle with no
+`## Impl slice`, an empty class surface on a type, or zero callers on a symbol
+you know is called, is a DEFECT to report — not a small answer. Measured
+2026-09-15: a bare-name bundle resolved correctly, said so in its header, and
+silently omitted the body; an agent trusting it would have edited a routine it
+never saw. (Fixed same-day; guard:
+`tests\autotest\run_context_bare_name_body.ps1`.) Bare names resolve when
+UNAMBIGUOUS; an ambiguous one returns nothing on purpose — qualify and re-ask.
+
 ### Discipline
 1. Before reaching for Grep on a Delphi symbol, run the matching command above.
-2. Only fall back to Grep if the index returns nothing AND the symbol should
-   exist (then it may be in code no DB covers — say so, and re-index if needed).
-3. To work ON a symbol, prefer `context`/`surface`/`slice` over reading files.
+2. Before reading a Delphi file whole, run `outline --file` or `context --task`.
+3. Only fall back if the index returns nothing AND the symbol should exist (then
+   it may be in code no DB covers — say so, and re-index if needed).
+4. Say in the same message WHY each Grep or whole-file Read was necessary. A
+   silent fallback is how the index stops improving.
 
 ---
 

@@ -163,6 +163,20 @@ published while `modifiers` says `public` for both.
 >   its callers. Add `--full-surface` ONLY when working on a form's
 >   components/DFM/layout (otherwise the auto-generated component fields are
 >   stripped to save tokens).
+>   Pass a QUALIFIED name when you have one. A bare name resolves only when it is
+>   UNAMBIGUOUS; an ambiguous one deliberately returns nothing rather than
+>   guessing, and the header always names the symbol it chose - check it.
+>   **Verify the bundle carries the section you needed.** A `modify X` bundle with
+>   no `## Impl slice`, an empty class surface on a type, or zero callers on a
+>   symbol you know is called, is a defect worth reporting - not a small answer.
+> - **ORIENT with the index, ACT with a targeted read.** The big cost is reading a
+>   Delphi unit WHOLE, not reading at all: measured on `DRagLint.CLI.pas` (25,198
+>   lines), **~338,500 tokens to read it whole, ~1,259 for the context bundle,
+>   ~1,009 to read just the 76 lines that mattered**. So a targeted read is
+>   *cheaper than the bundle* and gives exact bytes for an edit. Use
+>   `drag-lint outline --file <F.pas>` to get every type/method and its line
+>   without opening the file, then read only that range. **Never read a `.pas`
+>   over ~2,000 lines without first knowing which lines you want.**
 > - **Class shape / member signatures:** `drag-lint surface --qname <Unit.TClass> --db <DB>`
 > - **One symbol's source body:** `drag-lint slice --qname <Unit.TClass.Method> --db <DB>`
 > - **Blast radius before a refactor:** `drag-lint impact --qname <...> --db <DB>`
