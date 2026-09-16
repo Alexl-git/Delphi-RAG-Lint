@@ -823,22 +823,86 @@ var
   // could-not-carry than a silent re-encode."
   function SniffPayloadFormat(const AValueText: string): string;
   var
-    Hex: string;
-    C  : Char;
+    Hex : string;
+    C   : Char;
+    B   : TBytes;
+    I, N: Integer;
+    Cls : string;
+
+    function MagicAt(AOfs: Integer): string;
+      function StartsWith(const AHexSig: string): Boolean;
+      var K: Integer;
+      begin
+        Result:= False;
+        if (AOfs * 2) + Length(AHexSig) > Length(Hex) then Exit;
+        for K:= 1 to Length(AHexSig) do
+          if Hex[(AOfs * 2) + K] <> AHexSig[K] then Exit;
+        Result:= True;
+      end;
+    begin
+      Result:= '';
+      if StartsWith('89504E47') then Exit('png');
+      if StartsWith('424D'    ) then Exit('bmp');
+      if StartsWith('FFD8FF'  ) then Exit('jpg');
+      if StartsWith('47494638') then Exit('gif');
+      if StartsWith('00000100') then Exit('ico');
+    end;
+
   begin
     Result:= '';
     Hex   := '';
     for C in AValueText do
     begin
       if CharInSet(C, ['0'..'9', 'A'..'F', 'a'..'f']) then Hex:= Hex + UpCase(C);
-      if Length(Hex) >= 16 then Break;
+      if Length(Hex) >= 128 then Break;
     end;
     if Length(Hex) < 4 then Exit;
-    if Hex.StartsWith('89504E47') then Exit('png');
-    if Hex.StartsWith('424D'    ) then Exit('bmp');
-    if Hex.StartsWith('FFD8FF'  ) then Exit('jpg');
-    if Hex.StartsWith('47494638') then Exit('gif');
-    if Hex.StartsWith('00000100') then Exit('ico');
+
+    { A raw image, sniffed at offset 0. }
+    Result:= MagicAt(0);
+    if Result <> '' then Exit;
+
+    (* A DELPHI FILER PREAMBLE, WHICH IS WHAT A REAL .dfm ACTUALLY HOLDS.
+       Measured on ORM3 CLIENT\VARINSP.dfm:
+
+         07 "TBitmap" 76 08 00 00 42 4D ...
+         ^^ ^^^^^^^^^ ^^^^^^^^^^^ ^^^^^
+         |  class     stream size  BM -- the real payload starts HERE
+
+       A `Picture.Data` blob is a STREAMED TPicture, not a bare image: one
+       length byte, that many class-name bytes, a four-byte size, then the
+       image. Sniffing at offset 0 sees the length byte and reports
+       "unrecognised", which is how twenty BMPs -- a format that IS in the
+       compat list -- were refused as incompatible.
+
+       THE CLASS NAME IS THE BETTER ANSWER, and is taken first: it is what the
+       writer declared, where magic bytes are an inference about the same thing.
+       It is also the vocabulary the castlib's `accepts` list speaks, so a cast
+       accepting TBitmap / TPngImage / TIcon is matched on its own terms. The
+       magic-byte sniff after the preamble remains as the fallback for a class
+       this does not know. *)
+    SetLength(B, Length(Hex) div 2);
+    for I:= 0 to High(B) do B[I]:= Byte(StrToIntDef('$' + Copy(Hex, (I * 2) + 1, 2), 0));
+    if Length(B) < 2 then Exit;
+    N:= B[0];
+    if (N < 1) or (N > 63) or (Length(B) < 1 + N) then Exit;
+    Cls:= '';
+    for I:= 1 to N do
+    begin
+      if (B[I] < 32) or (B[I] > 126) then Exit; { not a class name -- give up }
+      Cls:= Cls + Chr(B[I]);
+    end;
+
+    if SameText(Cls, 'TBitmap'   ) then Exit('bmp');
+    if SameText(Cls, 'TPngImage' ) then Exit('png');
+    if SameText(Cls, 'TPNGObject') then Exit('png');
+    if SameText(Cls, 'TJPEGImage') then Exit('jpg');
+    if SameText(Cls, 'TIcon'     ) then Exit('ico');
+    if SameText(Cls, 'TMetafile' ) then Exit('wmf');
+
+    { Unknown wrapper class: fall back to the magic bytes after the preamble
+      (1 length byte + N class bytes + 4 size bytes). }
+    Result:= MagicAt(1 + N + 4);
   end;
 
   // Is AItem one of the comma-separated entries of AList, case-insensitively?
