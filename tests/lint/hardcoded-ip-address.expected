@@ -1,3 +1,9 @@
-# IPv4 literal (11) fires; plain text (12) must not
-hardcoded-ip-address 11
-!hardcoded-ip-address 12
+# IPv4 literal (18) fires; plain text (19) must not
+hardcoded-ip-address 18
+!hardcoded-ip-address 19
+# 2026-09-16: a VERSION-named const holding a dotted quad is NOT an address (7, 8);
+# a const that is not version-named still is (10) -- the positive control for the
+# #not-in? predicate, without which the rule stays silent on every const or fires on all
+hardcoded-ip-address 10
+!hardcoded-ip-address 7
+!hardcoded-ip-address 8

@@ -162,7 +162,7 @@ const
   /// (2026-06-14). Below it, YADF silently rewrites
   /// `var A, B: Integer;` into something that no longer compiles the same way,
   /// which is the whole reason this gate exists.</remarks>
-  YADF_MIN_VERSION = '1.0.6.6'; // dl:ok hardcoded-ip-address@130c -- a dotted-quad VERSION, not an IPv4 address. The rule cannot tell them apart; see docs\INBOX-lint-version-string-reads-as-ip.md
+  YADF_MIN_VERSION = '1.0.6.6';
 
   { The TFormatResult.ExitCode vocabulary, named rather than spelled as bare
     negative literals at each assignment. `magic-literal` flagged five of them

@@ -631,8 +631,72 @@ begin
     if Caps[i].index = ACaptureIndex then Exit(NodeText(Caps[i].node, ASource));
 end;
 
+// The NODE behind a capture index, or a null node when the match has none.
+function ResolveCaptureNode(const AMatch: TTSQueryMatch; ACaptureIndex: UInt32): TTSNode;
+var
+  Caps: TTSQueryCaptureArray;
+  i   : Integer             ;
+begin
+  Result:= Default(TTSNode);
+  Caps:= AMatch.CapturesArray;
+  for i:= 0 to Length(Caps) - 1 do
+    if Caps[i].index = ACaptureIndex then Exit(Caps[i].node);
+end;
+
+{ (#in? @cap "nodeType" ["nameRegex"]) / (#not-in? ...) -- 2026-09-16.
+
+  True (for #in?) when SOME ancestor of the captured node has NodeType
+  "nodeType" and, if a third argument is given, that ancestor's `name:` field
+  matches the regex. #not-in? is the negation. Without the regex the predicate
+  is purely structural ("is this literal inside a declConst at all").
+
+  WHY A NEW PREDICATE. tree-sitter's own predicates see only the captured text,
+  so a rule cannot say "unless the enclosing declaration is named like a
+  version". hardcoded-ip-address needed exactly that: `YADF_MIN_VERSION =
+  '1.0.6.6'` is the shape of an IPv4 literal AND of every dotted version
+  constant a codebase has, and a rule wrong in a whole CATEGORY teaches people
+  to skim it. Writing one pattern per syntactic context the literal can sit in
+  (const, assignment, argument, ...) would need node names this repo has been
+  wrong about five times; walking Parent from the capture needs none of them.
+
+  The walk is bounded by the tree's depth and runs only for matches that
+  already passed the cheaper predicates before it in the same pattern, so put
+  it LAST in a rule. Unknown field / no `name:` on the ancestor counts as "no
+  match" for the regex form, never as an error. }
+function AncestorNamedLike(const ANode: TTSNode; const ASource: TBytes; const ANodeType, ANameRx: string): Boolean;
+var
+  Cur : TTSNode;
+  Nm  : TTSNode;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  Cur:= ANode.Parent;
+  while not Cur.IsNull do
+  begin
+    if Cur.NodeType = ANodeType then
+    begin
+      if ANameRx = '' then Exit(True);
+      Nm:= Cur.ChildByField('name');
+      if not Nm.IsNull then
+        try
+          if TRegEx.IsMatch(NodeText(Nm, ASource), ANameRx) then Exit(True);
+        except
+          { a bad regex in a rule file must not take the scan down }
+        end;
+    end;
+    Cur:= Cur.Parent;
+  end;
+end;
+
 // Evaluate one predicate. Returns True if it passes.
 function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>): Boolean;
+const
+  { #in? / #not-in? argument positions: (#in? @cap "nodeType" ["nameRegex"]) }
+  CapArg    = 1;
+  TypeArg   = 2;
+  NameRxArg = 3;
+  MinArgs   = 3; { op + @cap + "nodeType" }
+  MaxArgs   = 4; { ... + "nameRegex" }
 var
   i        : Integer;
   Op       : string ;
@@ -695,6 +759,21 @@ begin
         Break;
       end;
     if Op = 'not-any-of?' then Result:= not Result;
+    Exit;
+  end;
+
+  if (Op = 'in?') or (Op = 'not-in?') then
+  begin
+    { (#in? @cap "nodeType") or (#in? @cap "nodeType" "nameRegex") -- see
+      AncestorNamedLike. Malformed arguments pass, like every other predicate
+      here: a directive we cannot read must not silently suppress matches. }
+    if (Length(AArgs) < MinArgs) or (Length(AArgs) > MaxArgs) then Exit(True);
+    if (not AArgs[CapArg].IsCapture) or AArgs[TypeArg].IsCapture then Exit(True);
+    if (Length(AArgs) = MaxArgs) and AArgs[NameRxArg].IsCapture then Exit(True);
+    Pattern:= '';
+    if Length(AArgs) = MaxArgs then Pattern:= AArgs[NameRxArg].StringValue;
+    Result:= AncestorNamedLike(ResolveCaptureNode(AMatch, AArgs[CapArg].CaptureIndex), ASource, AArgs[TypeArg].StringValue, Pattern);
+    if Op = 'not-in?' then Result:= not Result;
     Exit;
   end;
 

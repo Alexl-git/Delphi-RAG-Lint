@@ -92,6 +92,7 @@ The runner evaluates these standard tree-sitter predicates:
 | `#eq? @c1 @c2` / `#not-eq?` | Two captures have identical text |
 | `#match? @cap "re"` / `#not-match?` | Capture text matches the regex (TRegEx) |
 | `#any-of? @cap "a" "b" ...` / `#not-any-of?` | Capture text equals any of the listed |
+| `#in? @cap "nodeType" ["nameRegex"]` / `#not-in?` | **drag-lint's own (2026-09-16):** some ANCESTOR of the captured node has that node type and, when the regex is given, its `name:` field matches it. Walks parents, so it needs no knowledge of which syntactic context the capture sits in. Put it last -- it runs only for matches that passed the cheaper predicates. Born for `hardcoded-ip-address`: `(#not-in? @warn "declConst" "(?i)version")` keeps a dotted-quad VERSION const from reading as an IPv4 address |
 
 Unknown predicates pass through (don't suppress) so future tree-sitter
 extensions don't silently filter matches.

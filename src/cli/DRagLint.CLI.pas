@@ -9159,9 +9159,35 @@ var
   M         : TReviewMarker                      ;
   Want      : string                             ;
 
+  { The join key between a finding and the marker that suppressed it.
+
+    THE PATH IS NORMALISED, and until 2026-09-16 it was not -- LowerCase was the
+    only treatment. The two sides of the join are keyed from DIFFERENT
+    variables: the POPULATE side from the finding's F.FilePath, which a
+    project-scope rule (high-response, unused-public-symbol, the uses-edge and
+    duplicate-global rules) fills ABSOLUTE from the store, and the CHECK side
+    from the scanned file's path, which is whatever the caller typed --
+    `lint src\refactor\X.pas` is RELATIVE. Two spellings of one file could not
+    join, so every legitimately suppressed project-scope finding also earned a
+    permanent `review-marker-unused` hint telling the operator to delete the
+    marker that was doing its job: the two rules gave contradictory
+    instructions and exactly one could be obeyed. Measured both ways in
+    docs\INBOX-lint-two-rule-false-positives-on-new-code.md; confirmed at the
+    code level in session 98; pinned by run_marker_unused_project_scope.ps1,
+    whose fixture carries a project-scope AND a file-scope marker in ONE file
+    so that a fix normalising only one side cannot pass.
+
+    ExpandFileName absolutises against the process cwd, which is by definition
+    the base a relative argument was written against; an already-absolute path
+    is returned unchanged. '' is guarded because it would otherwise expand to
+    the cwd and turn "no path" into a real one. }
   function MarkerKey(const AFile: string; ALine: Integer; const ARule: string): string;
+  var
+    P: string;
   begin
-    Result:= LowerCase(AFile) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule);
+    P:= StringReplace(AFile, '/', '\', [rfReplaceAll]);
+    if P <> '' then P:= ExpandFileName(P);
+    Result:= LowerCase(P) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule);
   end;
 
   { One hint per marker, never one per finding that happened to share the line. }
