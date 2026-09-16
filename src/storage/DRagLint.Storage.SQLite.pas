@@ -1788,6 +1788,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
+      /// <summary>Every interface-level global declaring site (see ISymbolStore).</summary>
+      function FindGlobalDeclSites: TArray<TDuplicateDeclSite>;
+      /// <summary>Shared reader for the two decl-site queries above; ASQL must project nm/kd/fid/ln/cl/sg.</summary>
+      function ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;
       /// <summary><!-- drag-lint:auto sum -->Measured through the ENGINE after the
       /// re-shape. Full refs scan, hence the OptedIn gate on the caller.</summary>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TUsesCensusEdge&gt; -- Observed: nil;
@@ -9745,7 +9749,6 @@ begin
   end; // try
 end; // function
 
-function TSQLiteSymbolStore.FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
 const
   { KINDS: everything `uses` can put into scope under one name, not just data.
     It was ('const','var') until 2026-08-31, which answered a third of the
@@ -9782,7 +9785,11 @@ const
     the pre-flight count grouped by NAME and reported "procedure: 1", which read
     as harmless. The message renders SITES, and that one name carried 134 of
     them. Count what the output will contain, not what the GROUP BY returns. }
-  CGate =
+  { Shared by FindDuplicateGlobalDecls and FindGlobalDeclSites (2026-09-16), so
+    the two tiers of duplicate-global-decl cannot disagree about what a global
+    IS. Unit-level on purpose: it was local to the first until the second needed
+    it, and a copy would have drifted the way every copied predicate does. }
+  CGlobalDeclGate =
     '  s.kind IN (''const'', ''var'', ''type'', ''record'', ''class'',' +
     '             ''interface'', ''enum'', ''procedure'', ''function'')' +
     '  AND s.section = ''interface'' AND s.name IS NOT NULL' +
@@ -9790,6 +9797,10 @@ const
     '  AND LOWER(SUBSTR(f.path, -4)) <> ''.dfm''' +
     '  AND LOWER(s.name) <> ''register''' +
     '  AND LOWER(f.path) NOT LIKE ''%- copy%'' ';
+
+function TSQLiteSymbolStore.FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
+const
+  CGate = CGlobalDeclGate;
   SQL =
     'WITH dup AS (' +
     '  SELECT LOWER(s.name) AS n' +
@@ -9805,6 +9816,26 @@ const
     '  WHERE ' + CGate +
     '    AND LOWER(s.name) IN (SELECT n FROM dup) ' +
     'ORDER BY LOWER(s.name), LOWER(f.path), s.start_line';
+begin
+  Result:= ReadDeclSiteRows(SQL);
+end; // function
+
+function TSQLiteSymbolStore.FindGlobalDeclSites: TArray<TDuplicateDeclSite>;
+const
+  SQL =
+    'SELECT s.name AS nm, s.kind AS kd, s.file_id AS fid, s.start_line AS ln,' +
+    '       s.start_col AS cl, s.signature AS sg' +
+    '  FROM symbols s JOIN files f ON f.id = s.file_id' +
+    '  LEFT JOIN symbols p ON p.id = s.parent_id' +
+    '  WHERE ' + CGlobalDeclGate +
+    'ORDER BY LOWER(s.name), LOWER(f.path), s.start_line';
+begin
+  Result:= ReadDeclSiteRows(SQL);
+end; // function
+
+// The shared reader behind FindDuplicateGlobalDecls and FindGlobalDeclSites:
+// runs ASQL, which must project nm/kd/fid/ln/cl/sg, into site rows.
+function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;
 var
   Q   : TFDQuery                   ;
   List: TList<TDuplicateDeclSite>  ;
@@ -9815,7 +9846,7 @@ begin
   Q   := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text  := SQL;
+    Q.SQL.Text  := ASQL;
     try
       Q.Open;
     except

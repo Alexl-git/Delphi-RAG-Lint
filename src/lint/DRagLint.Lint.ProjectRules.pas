@@ -1178,12 +1178,30 @@ end; // function
 /// KNOWN CAVEAT: the finding is anchored at ONE site, so if that file is
 /// excluded by exclude_paths or ownership while its twin is owned, the finding
 /// vanishes with it. Accepted for v1 -- per-site findings would report the same
-/// name twice. Duplicates against the LIBRARY index (re-declaring an RTL name)
-/// are a deliberate non-goal here; TProjectLintRules.Run already receives the
-/// library store, so a future tier can join against it.
-/// Never raises. See ISymbolStore.FindDuplicateGlobalDecls.
+/// name twice.
+///
+/// LIBRARY TIER (owner-designed 2026-09-16, docs\INBOX-2026-09-16-duplicate-global-decl-library-tier.md).
+/// A project global whose NAME is also an interface-level global of a library
+/// unit that the declaring file USES is reported -- one finding per name, same
+/// 'warning' severity, NO autofix. In the owner's words: `do an indexed
+/// Library search for AGlob; if it returns a list of units and one of those is
+/// used in the linted unit, you have a masking declaration`. The `used in the
+/// linted unit` clause IS the design: without it the rule asks whether the name
+/// exists anywhere in the RTL, which floods; with it, it fires only where the
+/// ambiguity can actually arise, which is also the only place it bites the
+/// compiler. Severity is warning and not info because, per the owner, a project
+/// re-declaring a library name is `probably not masking, but a naming error`,
+/// and the 3-declaration case (2+ in the project AND 1+ in the library) is a
+/// distinct, stronger signal that falls out free once the join exists. No
+/// autofix, deliberately: the tool does not know which declaration is meant to
+/// survive -- that is the whole content of the finding -- and a numeric suffix
+/// can preserve the bug while making it look deliberate.
+/// Never raises. See ISymbolStore.FindDuplicateGlobalDecls / FindGlobalDeclSites.
 /// </remarks>
-function CollectDuplicateGlobalDecls(const AStore: ISymbolStore): TArray<TLintFinding>;
+/// <param name="AStore">The project index.</param>
+/// <param name="ALibStore">The platform library index, or nil -- with nil the
+/// library tier is skipped and the rule behaves exactly as before.</param>
+function CollectDuplicateGlobalDecls(const AStore: ISymbolStore; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
 const
   { How many declaration sites the message enumerates before it says "and N
     more". Six fits a report line and still shows enough to act on; the real
@@ -1240,6 +1258,188 @@ var
       end;
     end;
     Result:= LowerCase(Result);
+  end;
+
+  { The library tier proper. Appends to AFindings; never raises.
+
+    Which library units count as "used": every entry of the declaring file's
+    uses clauses, interface AND implementation -- an unqualified name in the
+    implementation resolves through both. A `uses SysUtils` matches library
+    unit System.SysUtils by unit-scope suffix, and vice versa.
+
+    Split into three routines (lookup / masking sites / one name) so no
+    routine nests deeper than the house limit -- the first cut did the whole
+    join in one loop and nesting-depth flagged it at 6. }
+  procedure CollectLibraryMasking(const AFindings: TList<TLintFinding>);
+  const
+    CGlobalKinds = [skConstDecl, skVarDecl, skTypeAlias, skRecord, skClass,
+                    skInterface, skEnum, skProcedure, skFunction];
+  var
+    Sites   : TArray<TDuplicateDeclSite>;
+    UsesMemo: TDictionary<Int64, TArray<string>>;
+    LibShown: TDictionary<string, string>; { lowercased -> as the library spells it }
+    A, B    : Integer;
+
+    function UsesOf(AFileId: Int64): TArray<string>;
+    var
+      U: TUnitUse;
+    begin
+      if UsesMemo.TryGetValue(AFileId, Result) then Exit;
+      Result:= nil;
+      for U in AStore.GetUnitUsesForFile(AFileId) do
+        Result:= Result + [LowerCase(Trim(U.UnitName))];
+      UsesMemo.Add(AFileId, Result);
+    end;
+
+    // Does a uses entry name this library unit? Exact, or by unit-scope suffix
+    // either way round (`SysUtils` <-> `System.SysUtils`).
+    function UsesNames(const AUse, ALibUnit: string): Boolean;
+    begin
+      Result:= (AUse = ALibUnit)
+        or ((Length(ALibUnit) > Length(AUse)) and (Copy(ALibUnit, Length(ALibUnit) - Length(AUse), MaxInt) = '.' + AUse))
+        or ((Length(AUse) > Length(ALibUnit)) and (Copy(AUse, Length(AUse) - Length(ALibUnit), MaxInt) = '.' + ALibUnit));
+    end;
+
+    // The first library unit in ALibUnitsLower that the file uses, or ''.
+    function FirstUsedLibUnit(AFileId: Int64; const ALibUnitsLower: TArray<string>): string;
+    var
+      U, L: string;
+    begin
+      Result:= '';
+      for U in UsesOf(AFileId) do
+        for L in ALibUnitsLower do
+          if UsesNames(U, L) then Exit(L);
+    end;
+
+    // Library side: the DISTINCT library units (lowercased) declaring AName at
+    // interface level, unit-scoped. Filtered in Pascal because
+    // FindSymbolsByExactName is the indexed primitive and a bespoke SQL
+    // predicate would not be, on a 3.7 GB library.
+    function LibUnitsDeclaring(const AName: string): TArray<string>;
+    var
+      Sy, Par: TSymbol;
+      LibUnit: string;
+    begin
+      Result:= nil;
+      for Sy in ALibStore.FindSymbolsByExactName(AName) do
+      begin
+        if not (Sy.Kind in CGlobalKinds) then Continue;
+        if not SameText(Sy.Section, 'interface') then Continue;
+        LibUnit:= '';
+        if Sy.ParentId <> 0 then
+        begin
+          Par:= ALibStore.GetSymbolById(Sy.ParentId);
+          if not (Par.Kind in [skUnit, skProgram]) then Continue;
+          LibUnit:= Par.Name;
+        end;
+        if LibUnit = '' then
+          LibUnit:= TPath.GetFileNameWithoutExtension(ALibStore.GetFilePath(Sy.FileId));
+        if LibUnit = '' then Continue;
+        LibShown.AddOrSetValue(LowerCase(LibUnit), LibUnit);
+        if IndexStr(LowerCase(LibUnit), Result) < 0 then
+          Result:= Result + [LowerCase(LibUnit)];
+      end;
+    end;
+
+    // One NAME: Sites[AFrom..ATo-1] are its project declaring sites. Emits at
+    // most one finding, anchored at the first masking site.
+    procedure ReportName(AFrom, ATo: Integer; const ALibUnits: TArray<string>);
+    var
+      C        : Integer;
+      Masking  : TArray<TDuplicateDeclSite>;
+      MaskUnits: TArray<string>;
+      ProjPaths: TDictionary<string, Boolean>;
+      NProject : Integer;
+      LibUnit  : string;
+      SitePath : string;
+      Sites_   : string;
+      Shown    : Integer;
+      F        : TLintFinding;
+    begin
+      Masking  := nil;
+      MaskUnits:= nil;
+      ProjPaths:= TDictionary<string, Boolean>.Create;
+      try
+        { Project side: every declaring site whose file USES one of the library
+          units is a masking site. NProject counts distinct project files
+          declaring the name at all -- 2+ is the stronger 3-declaration case
+          the ruling singles out. }
+        for C:= AFrom to ATo - 1 do
+        begin
+          SitePath:= AStore.GetFilePath(Sites[C].FileId);
+          if SitePath = '' then Continue;
+          ProjPaths.AddOrSetValue(LowerCase(SitePath), True);
+          LibUnit:= FirstUsedLibUnit(Sites[C].FileId, ALibUnits);
+          if LibUnit = '' then Continue;
+          Masking  := Masking + [Sites[C]];
+          MaskUnits:= MaskUnits + [LibShown[LibUnit]];
+        end;
+        NProject:= ProjPaths.Count;
+      finally
+        ProjPaths.Free;
+      end;
+      if Length(Masking) = 0 then Exit;
+
+      Sites_:= '';
+      Shown := 0;
+      for C:= 0 to High(Masking) do
+      begin
+        if Shown >= CMaxDupSitesShown then Break;
+        if Sites_ <> '' then Sites_:= Sites_ + ', ';
+        Sites_:= Sites_ + Format('%s:%d uses %s',
+          [AStore.GetFilePath(Masking[C].FileId), Masking[C].StartLine, MaskUnits[C]]);
+        Inc(Shown);
+      end;
+      if Length(Masking) > Shown then
+        Sites_:= Sites_ + Format(', and %d more', [Length(Masking) - Shown]);
+
+      F:= Default(TLintFinding);
+      F.RuleId   := 'duplicate-global-decl';
+      F.Severity := 'warning';
+      F.FilePath := AStore.GetFilePath(Masking[0].FileId);
+      F.StartLine:= Masking[0].StartLine;
+      F.StartCol := Masking[0].StartCol;
+      if F.StartCol <= 0 then F.StartCol:= 1;
+      F.EndLine  := Masking[0].StartLine;
+      F.EndCol   := F.StartCol + Length(Masking[0].Name);
+      if NProject >= 2 then
+        F.Message:= Format(
+          '%s is declared at interface level in %d project units AND in library unit %s (%s) -- ' +
+          'three or more declarations of one name; an unqualified %s resolves through the uses ' +
+          'clause in reverse order, so which one compiles depends on uses order in every file that ' +
+          'sees two of them. Almost certainly a naming error, not deliberate masking; decide which ' +
+          'declaration is meant and rename or delete the others with a refactoring tool',
+          [Masking[0].Name, NProject, MaskUnits[0], Sites_, Masking[0].Name])
+      else
+        F.Message:= Format(
+          '%s is declared at interface level as %s in a unit that USES library unit %s, which also ' +
+          'declares it (%s) -- the project declaration masks the library one, and an unqualified %s ' +
+          'now means a different thing here than in every other unit. Almost always a naming error ' +
+          'rather than deliberate masking; rename the project declaration (a refactoring tool, not an ' +
+          'autofix: only you know which one is meant) or qualify every use',
+          [Masking[0].Name, Masking[0].Kind, MaskUnits[0], Sites_, Masking[0].Name]);
+      AFindings.Add(F);
+    end;
+
+  begin
+    Sites:= AStore.FindGlobalDeclSites;
+    if Length(Sites) = 0 then Exit;
+    UsesMemo:= TDictionary<Int64, TArray<string>>.Create;
+    LibShown:= TDictionary<string, string>.Create;
+    try
+      A:= 0;
+      while A < Length(Sites) do
+      begin
+        B:= A;
+        while (B < Length(Sites)) and SameText(Sites[B].Name, Sites[A].Name) do Inc(B);
+        var LibUnits: TArray<string>:= LibUnitsDeclaring(Sites[A].Name);
+        if Length(LibUnits) > 0 then ReportName(A, B, LibUnits);
+        A:= B;
+      end;
+    finally
+      LibShown.Free;
+      UsesMemo.Free;
+    end;
   end;
 
 var
@@ -1353,6 +1553,20 @@ begin
 
       I:= J;
     end;
+
+    { ---- LIBRARY TIER (2026-09-16) -------------------------------------------
+      A project global that re-declares a library global, in a unit that USES
+      the library unit. See the doc-comment for the design and the ruling.
+
+      Cost shape: one FindGlobalDeclSites on the PROJECT store (thousands of
+      rows on ORM3, symbols-only), then ONE indexed FindSymbolsByExactName on
+      the library per DISTINCT project name. The library hits are filtered to
+      interface-level unit-scoped declarations in Pascal, and the uses clause of
+      each declaring project file is read once and memoised per file.
+      Measured on this repo (DragLint-Cli, 198 files): see the commit. }
+    if ALibStore <> nil then
+      CollectLibraryMasking(Findings);
+
     Result:= Findings.ToArray;
   finally
     Seen    .Free;
@@ -2944,7 +3158,7 @@ begin
       no refs join, so running it and discarding it is not the defect the
       sibling's gate exists to prevent. }
     if WantRule('duplicate-global-decl') then
-      for var Df in CollectDuplicateGlobalDecls(AStore) do Findings.Add(Df);
+      for var Df in CollectDuplicateGlobalDecls(AStore, ALibraryStore) do Findings.Add(Df);
     Inc(TDupD, Tick - T0); T0:= Tick;
 
     { uses-global-census: whole-refs-graph pass, OFF by default and gated on

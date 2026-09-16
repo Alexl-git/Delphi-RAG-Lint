@@ -968,6 +968,21 @@ type
     /// </remarks>
     function FindDuplicateGlobalDecls: TArray<TDuplicateDeclSite>;
 
+    /// <summary>EVERY interface-section, unit-level declaring site in this
+    /// store -- the same population FindDuplicateGlobalDecls draws from, without
+    /// the "in two or more units" requirement.</summary>
+    /// <returns>Site rows ordered by (lower(name), lower(path), start_line) so
+    /// the caller can group by name in one pass; empty when the store has none
+    /// or is too old to answer. Never raises.</returns>
+    /// <remarks>
+    /// Backs the LIBRARY tier of 'duplicate-global-decl' (2026-09-16): the
+    /// project's globals are enumerated here and each name is then looked up in
+    /// the library store by FindSymbolsByExactName, which is indexed. Called on
+    /// the PROJECT store only; a library-sized store would return millions of
+    /// rows, and nothing needs that.
+    /// </remarks>
+    function FindGlobalDeclSites: TArray<TDuplicateDeclSite>;
+
     /// <summary>For every resolved uses edge, how many DISTINCT unambiguous
     /// interface-section unit-level vars and consts of the target the reader
     /// actually references -- the coupling census.</summary>
