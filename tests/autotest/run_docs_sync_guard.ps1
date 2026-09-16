@@ -1319,6 +1319,110 @@ if ($proseSets.ContainsKey('docs\AI-USAGE.md') -and $promoted.Contains('--fix'))
     '--fix is no longer promoted, so this control proves nothing -- pick another promoted flag'
 }
 
+# ---------------------------------------------------------------------------
+# CHECK 10 -- every accepted SUBcommand is in --help
+# ---------------------------------------------------------------------------
+# WHY THIS EXISTS, AND WHY CHECK 1 COULD NEVER HAVE CAUGHT IT.
+#
+# Check 1 enumerates TOP-LEVEL verbs: `Args.Command = 'x'` in Run against
+# `^  drag-lint <verb>` in the banner. `query` is in both, so check 1 passes --
+# and passed, for months, while `query descendants` appeared ZERO times in
+# --help despite shipping and being used by the converter team's editor.
+#
+# That is this guard's OWN founding failure ("four shipping verbs missing from
+# --help") repeating one level down, inside the guard written to prevent it.
+# The structural lesson is the point: an axis a guard does not enumerate is an
+# axis that drifts silently, and adding the missing banner line WITHOUT adding
+# this check would leave the next subcommand just as free to go missing.
+#
+# The verb -> subcommand map is derived FROM SOURCE by
+# tests\autotest\lib\CliFlagVerbMap.ps1 (Get-CliVerbSubcommandMap), the same
+# lexer + dispatch-closure machinery check 9 uses for flags. See that function's
+# header for the binding rule and for the two shapes it deliberately excludes.
+Write-Host ''
+Write-Host '-- check 10: subcommands' -ForegroundColor Cyan
+
+. (Join-Path $Repo 'tests\autotest\lib\CliFlagVerbMap.ps1')
+$subMap = Get-CliVerbSubcommandMap -CliPath $cliPas
+
+# Non-emptiness first: every assertion below is "this set difference is empty",
+# and a broken derivation produces exactly that for free.
+$subTotal = @($subMap.VerbSubs.Keys | ForEach-Object { $subMap.VerbSubs[$_] }).Count
+Check 'check 10: subcommand map derived' ($subTotal -gt 20) `
+  "($($subMap.VerbSubs.Keys.Count) verb(s) take subcommands; $subTotal literal(s))"
+Check 'check 10: every subcommand literal bound to a verb' ($subMap.Unbound.Count -eq 0) `
+  $(if ($subMap.Unbound.Count -gt 0) { "unbound: $($subMap.Unbound -join ' ')" } else { '' })
+
+# "Documented" = a reader of --help can find the pair. Deliberately looser than
+# check 1's `^  drag-lint <verb>` anchor: a subcommand named only in the COMMON
+# QUESTIONS block IS discoverable, and failing it would be a false RED.
+function Test-SubDocumented([string]$Verb, [string]$Sub) {
+  return $script:helpText -match ("(?m)\bdrag-lint\s+" + [regex]::Escape($Verb) + "\s+" + [regex]::Escape($Sub) + "\b")
+}
+
+# --- 10a: accepted but undocumented ----------------------------------------
+# A subcommand of a verb that is itself $UndocumentedOnPurpose inherits that
+# exemption -- selftest's fifteen are the test harness's internals, and
+# demanding --help document them would be demanding the opposite of check 1's
+# stated line between "the product's surface" and "its test harness". No second
+# exemption list: the verb's own entry is the ruling.
+$subMissing = New-Object System.Collections.Generic.List[string]
+$subSkipped = New-Object System.Collections.Generic.List[string]
+$subChecked = 0
+foreach ($verb in $subMap.VerbSubs.Keys) {
+  if ($UndocumentedOnPurpose.Contains($verb)) {
+    $subSkipped.Add("$verb ($($subMap.VerbSubs[$verb].Count))")
+    continue
+  }
+  foreach ($sub in $subMap.VerbSubs[$verb]) {
+    $subChecked++
+    if (-not (Test-SubDocumented $verb $sub)) { $subMissing.Add("$verb $sub") }
+  }
+}
+Check 'every subcommand the CLI accepts is named in --help' ($subMissing.Count -eq 0) `
+  $(if ($subMissing.Count -gt 0) { "undocumented: $($subMissing -join ', ')" } else { "($subChecked checked)" })
+if ($subMissing.Count -gt 0) {
+  Write-Host '        ^ the CLI accepts a SUBcommand that --help never names. Check 1 cannot' -ForegroundColor Yellow
+  Write-Host '          see this: it enumerates top-level verbs only, and the parent verb IS' -ForegroundColor Yellow
+  Write-Host '          documented, so check 1 passes while the subcommand stays invisible.' -ForegroundColor Yellow
+  Write-Host '          Add it to PrintHelp in src\cli\DRagLint.CLI.pas, then REBUILD -- this' -ForegroundColor Yellow
+  Write-Host '          check reads the EXE''s help, not the source.' -ForegroundColor Yellow
+}
+
+# --- 10b: the exemption is a verb-level ruling, and must still hold ----------
+foreach ($s in $subSkipped) {
+  Write-Host ("  [NOTE] subcommands NOT required in --help: {0} -- parent verb is `$UndocumentedOnPurpose" -f $s) -ForegroundColor DarkGray
+}
+
+# --- 10c: POSITIVE CONTROLS -------------------------------------------------
+# Without these, 10a passes against a derivation that returns nothing and
+# against a matcher that calls everything documented.
+$subGuid = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+Check 'CONTROL S1 a synthetic subcommand is seen as UNDOCUMENTED' `
+  (-not (Test-SubDocumented 'query' ("zz-planted-$subGuid"))) `
+  'the matcher calls everything documented, so 10a can never fail'
+
+# The other direction, and the one that matters most: this check must not be a
+# guard that always fails. A subcommand that IS in the banner has to pass.
+$ctlDocumented = @('query find-callers', 'export enums', 'workspace status')
+$ctlBad = @($ctlDocumented | Where-Object {
+              $parts = $_ -split ' '
+              -not (Test-SubDocumented $parts[0] $parts[1])
+            })
+Check 'CONTROL S2 a documented subcommand classifies as DOCUMENTED' ($ctlBad.Count -eq 0) `
+  $(if ($ctlBad.Count -gt 0) { "matcher failed on: $($ctlBad -join ', ')" } else { "($($ctlDocumented.Count) checked)" })
+
+# And the derivation must really be reading the dispatch chain: the verb we know
+# takes subcommands must carry the ones we know it dispatches.
+$ctlQuery = @('find-callers', 'ancestors', 'typecat')
+$ctlQMiss = @($ctlQuery | Where-Object { $subMap.VerbSubs['query'] -notcontains $_ })
+Check 'CONTROL S3 the derivation binds known subcommands to query' ($ctlQMiss.Count -eq 0) `
+  $(if ($ctlQMiss.Count -gt 0) { "derivation missed: $($ctlQMiss -join ' ')" } else { "(query: $($subMap.VerbSubs['query'].Count) subcommand(s))" })
+
+foreach ($verb in $subMap.VerbSubs.Keys) {
+  Write-Host ("      [NOTE] {0}: {1}" -f $verb, ($subMap.VerbSubs[$verb] -join ' ')) -ForegroundColor DarkGray
+}
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'DOCS SYNC GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DOCS SYNC GUARD: PASS' -ForegroundColor Green

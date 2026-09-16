@@ -731,6 +731,7 @@ begin
   Writeln('                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.');
   Writeln('                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry.');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
+  Writeln('  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every type descending from <ancestor>, across all scanned DBs. exit 1 = no such ancestor)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
   Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
   Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]');

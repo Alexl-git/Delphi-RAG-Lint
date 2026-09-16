@@ -648,3 +648,141 @@ function Get-CliVerbFlagMap {
     Unevaluated = $res.Unevaluated
   }
 }
+
+function Get-CliVerbSubcommandMap {
+<#
+  .SYNOPSIS
+    verb -> the SUBcommands that verb actually accepts, derived from source.
+  .DESCRIPTION
+    THE AXIS run_docs_sync_guard.ps1 CHECK 1 CANNOT SEE. Check 1 enumerates
+    TOP-LEVEL verbs only: it matches `Args.Command = 'x'` in Run and
+    `^  drag-lint <verb>` in the banner. `query` is in both, so check 1 passes
+    while `query descendants` -- a shipping subcommand -- appears ZERO times in
+    --help. That is the founding DOCS-IN-SYNC failure ("four shipping verbs
+    missing from --help") repeating one level down, inside the guard written to
+    prevent it.
+
+    THE BINDING RULE, and why it is not a flat harvest. A subcommand literal
+    belongs to the verb whose dispatch closure reaches the routine the literal
+    sits in -- the same verb -> arm -> entry-routine -> transitive-callee walk
+    Get-CliVerbFlagMap uses for flags. A flat `SubCommand = 'x'` harvest over
+    the whole unit cannot tell `query`'s eight from `selftest`'s fifteen, and
+    would demand that --help document the self-test dispatcher's internals.
+
+    TWO SHAPES ARE DELIBERATELY EXCLUDED, both measured on the live source:
+
+      * `Result.SubCommand` -- the PARSER side. ParseArgs WRITES the field
+        (:1161 `Result.SubCommand:= A`) and one guard reads it back
+        (:1483, the `workspace add` positional-target rule). Those are how the
+        value is produced, not which verb accepts it; counting them would put
+        'add' in the pre-dispatch GLOBAL set, belonging to every verb.
+      * anything inside a comment -- :1253 is prose that literally reads
+        "Its guards tested Result.SubCommand". The caller passes the LEXED
+        projection, so comments are already blanked; this note records WHY that
+        matters here rather than leaving the next reader to rediscover it.
+
+    A verb with no subcommand literal in its closure is absent from the result
+    (not present-with-an-empty-list), so a consumer can distinguish "takes no
+    subcommands" from "takes some" without a second lookup.
+  .PARAMETER CliPath
+    src\cli\DRagLint.CLI.pas
+  .OUTPUTS
+    .VerbSubs   ordered verb -> sorted subcommand list (verbs with none omitted)
+    .All        every subcommand literal found, whatever verb it bound to
+    .Unbound    literals in no verb's closure -- named, never silently dropped
+#>
+  param([Parameter(Mandatory)][string]$CliPath)
+
+  $raw = [IO.File]::ReadAllText($CliPath)
+  $lex = ConvertTo-PascalProjections -Text $raw
+  $res = Resolve-PascalConditionals -NoComments $lex.NoComments -Code $lex.Code
+
+  # Reader side only: AArgs.SubCommand / Args.SubCommand, never Result.SubCommand.
+  # Two patterns for the same reason Get-CliRoutineMap uses two: the lookbehind
+  # that keeps `Args.` from matching inside `AArgs.` also keeps it from matching
+  # `AArgs.` at all.
+  $subRx = [regex]"(?:\bAArgs|(?<![A-Za-z0-9_.])Args)\.SubCommand\s*(?:=|<>)\s*'([a-z0-9][a-z0-9-]*)'"
+
+  # --- routine -> the subcommand literals in its own span --------------------
+  $headers  = @([regex]::Matches($res.Code, '(?m)^(?:procedure|function)\s+([A-Za-z_][A-Za-z0-9_]*)'))
+  $perRoutine = @{}
+  $all = New-Object System.Collections.Generic.HashSet[string]
+  for ($h = 0; $h -lt $headers.Count; $h++) {
+    $name = $headers[$h].Groups[1].Value
+    $from = $headers[$h].Index
+    $to   = if ($h + 1 -lt $headers.Count) { $headers[$h + 1].Index } else { $res.Code.Length }
+    $span = $res.Code.Substring($from, $to - $from)
+    if ($span -notmatch '(?m)^begin\b') { continue }   # forward decl: no body
+    # Span DETECTION on Code (strings blanked, so a `begin` inside a literal
+    # cannot open a phantom body); literal HARVEST on NoComments, where the
+    # subcommand strings still exist. The projections are offset-preserving,
+    # so the identical slice reads both.
+    foreach ($m in $subRx.Matches($res.NoComments.Substring($from, $to - $from))) {
+      if (-not $perRoutine.ContainsKey($name)) { $perRoutine[$name] = New-Object System.Collections.Generic.HashSet[string] }
+      [void]$perRoutine[$name].Add($m.Groups[1].Value)
+      [void]$all.Add($m.Groups[1].Value)
+    }
+  }
+
+  # --- verb -> dispatch arm -> entry routines --------------------------------
+  $run = Get-RoutineSpanRange -Code $res.Code -Name 'Run'
+  if (-not $run) { throw 'the Run dispatcher implementation was not found in the lexed source' }
+  $runBeg = $run.Index
+  $runEnd = $run.Index + $run.Length
+
+  $armHits = @([regex]::Matches($res.NoComments, "Args\.Command\s*=\s*'([a-z0-9-]+)'") |
+                Where-Object { $_.Index -ge $runBeg -and $_.Index -lt $runEnd })
+  $dispatch = [ordered]@{}
+  for ($a = 0; $a -lt $armHits.Count; $a++) {
+    $verb = $armHits[$a].Groups[1].Value
+    $from = $armHits[$a].Index
+    $to   = if ($a + 1 -lt $armHits.Count) { $armHits[$a + 1].Index } else { $runEnd }
+    $span = $res.Code.Substring($from, $to - $from)
+    if (-not $dispatch.Contains($verb)) { $dispatch[$verb] = New-Object System.Collections.Generic.HashSet[string] }
+    foreach ($c in (Get-ArgsCallees -Span $span -Self 'Run')) { [void]$dispatch[$verb].Add($c) }
+    # A one-line arm may compare SubCommand inline rather than in a Do<Verb>.
+    foreach ($m in $subRx.Matches($res.NoComments.Substring($from, $to - $from))) {
+      if (-not $perRoutine.ContainsKey("Run:$verb")) { $perRoutine["Run:$verb"] = New-Object System.Collections.Generic.HashSet[string] }
+      [void]$perRoutine["Run:$verb"].Add($m.Groups[1].Value)
+      [void]$all.Add($m.Groups[1].Value)
+    }
+  }
+
+  $routines = Get-CliRoutineMap -Code $res.Code
+
+  # --- transitive closure, collecting subcommands instead of fields ----------
+  function Get-SubClosure([string]$Start, $Routines, $PerRoutine) {
+    $seen = New-Object System.Collections.Generic.HashSet[string]
+    $todo = New-Object System.Collections.Generic.Stack[string]
+    $todo.Push($Start)
+    $subs = New-Object System.Collections.Generic.HashSet[string]
+    while ($todo.Count -gt 0) {
+      $r = $todo.Pop()
+      if (-not $seen.Add($r)) { continue }
+      if ($PerRoutine.ContainsKey($r)) { foreach ($s in $PerRoutine[$r]) { [void]$subs.Add($s) } }
+      if (-not $Routines.Contains($r)) { continue }
+      foreach ($c in $Routines[$r].Calls) { if (-not $seen.Contains($c)) { $todo.Push($c) } }
+    }
+    return $subs
+  }
+
+  $verbSubs = [ordered]@{}
+  $bound    = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($verb in @($dispatch.Keys | Sort-Object)) {
+    $subs = New-Object System.Collections.Generic.HashSet[string]
+    if ($perRoutine.ContainsKey("Run:$verb")) { foreach ($s in $perRoutine["Run:$verb"]) { [void]$subs.Add($s) } }
+    foreach ($entry in $dispatch[$verb]) {
+      foreach ($s in (Get-SubClosure -Start $entry -Routines $routines -PerRoutine $perRoutine)) { [void]$subs.Add($s) }
+    }
+    if ($subs.Count -gt 0) {
+      $verbSubs[$verb] = @($subs | Sort-Object)
+      foreach ($s in $subs) { [void]$bound.Add($s) }
+    }
+  }
+
+  return [pscustomobject]@{
+    VerbSubs = $verbSubs
+    All      = @($all | Sort-Object)
+    Unbound  = @($all | Where-Object { -not $bound.Contains($_) } | Sort-Object)
+  }
+}

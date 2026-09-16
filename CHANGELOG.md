@@ -5,6 +5,37 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed: `query descendants` shipped without ever appearing in `--help`
+
+`query descendants --of <ancestor>` -- the reverse of `query ancestors`, and the
+query behind the conversion editor's control-class pickers -- appeared **zero
+times** in the 341-line help banner. Its own sibling `ancestors` was documented.
+It is now in `--help`, `README.md` and `docs\AI-USAGE.md`.
+
+**The banner line is the smaller half of this change.** `run_docs_sync_guard.ps1`
+existed precisely to stop this, and could not see it: check 1 enumerates
+TOP-LEVEL verbs only (`Args.Command = 'x'` against `^  drag-lint <verb>`), and
+`query` is in both, so the guard PASSED while a shipping subcommand stayed
+invisible. That is this repo's founding DOCS-IN-SYNC failure -- "four shipping
+verbs missing from `--help`" -- repeating one level down, inside the guard
+written to prevent it.
+
+New **check 10** closes the axis. The verb -> subcommand map is derived FROM
+SOURCE by `Get-CliVerbSubcommandMap` in `tests\autotest\lib\CliFlagVerbMap.ps1`,
+reusing the lexer and dispatch-closure machinery check 9 already uses for flags:
+a subcommand binds to the verb whose dispatch closure reaches the routine that
+compares it. A flat literal harvest would have been wrong -- it cannot tell
+`query`'s eight from `selftest`'s fifteen. Measured: 28 literals, all bound,
+across `query` (8), `selftest` (15), `workspace` (3), `export` (2). Subcommands
+of a verb that is itself `$UndocumentedOnPurpose` inherit that exemption, so
+`selftest`'s internals are reported as skipped rather than demanded.
+
+Three positive controls ship with it, because every assertion is of the form
+"this set difference is empty" and a broken derivation produces that for free:
+a synthetic subcommand must classify as UNDOCUMENTED, a documented one must
+classify as DOCUMENTED (otherwise the check is a guard that always fails), and
+the derivation must bind known subcommands to `query`.
+
 ### Fixed: a `context` bundle from a BARE name silently omitted the target's body
 
 `context --task "modify DoHover"` returned 870 bytes with **no `## Impl slice`**,
