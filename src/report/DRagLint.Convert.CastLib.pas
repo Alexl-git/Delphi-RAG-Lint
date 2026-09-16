@@ -5,10 +5,10 @@ unit DRagLint.Convert.CastLib;
   A .castlib defines two named block kinds the scalar TCastFn enum cannot
   express:
 
-    cast <Name> ... end   -- a CLASS cast (TPicture -> TdxSmartGlyph): which From
+    cast <Name> ... end -- a CLASS cast (TPicture -> TdxSmartGlyph): which From
                              types it accepts, which To type it yields, plus
                              realization hints.
-    enum <Name> ... end   -- an ENUM cast (TabcButtonLayout -> TButtonLayout):
+    enum <Name> ... end -- an ENUM cast (TabcButtonLayout -> TButtonLayout):
                              member-by-member value translation.
 
   Both are named by the DSL's '#link To <- From : <Name>' suffix.
@@ -31,7 +31,10 @@ unit DRagLint.Convert.CastLib;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections;
+  System.SysUtils
+  , System.Classes
+  , System.Generics.Collections
+  ;
 
 type
   /// <summary>One named class cast from the .castlib.</summary>
@@ -46,13 +49,13 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCastDef = record
-    Name       : string;
+    Name       : string        ;
     Accepts    : TArray<string>;
     Yields     : TArray<string>;
-    Dfm        : string;
-    Compat     : string;
-    PasTemplate: string;
-    Todo       : string;
+    Dfm        : string        ;
+    Compat     : string        ;
+    PasTemplate: string        ;
+    Todo       : string        ;
   end;
 
   /// <summary>One member pair of an enum cast: the source member name and the
@@ -101,12 +104,12 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumDef = record
-    Name    : string;
-    FromType: string;
-    ToType  : string;
+    Name    : string           ;
+    FromType: string           ;
+    ToType  : string           ;
     Pairs   : TArray<TEnumPair>;
-    Fallback: string;
-    Todo    : string;
+    Fallback: string           ;
+    Todo    : string           ;
   end;
 
   /// <summary>Everything one .castlib file declares.</summary>
@@ -121,19 +124,19 @@ type
     Enums: TArray<TEnumDef>;
   end;
 
-/// <summary>PURE: parse .castlib text into cast definitions. Tolerant -- skips blank
-/// lines, '#' comments, and unknown keys; a malformed block (missing name or 'end')
-/// is dropped without aborting the rest of the file.</summary>
-/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->TArray&lt;TCastDef&gt; -- Observed:
-/// ParseCastLibText(AText).Casts.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.Convert.CastLib.ParseCastLibText</para>
-/// <para>Pure</para>
-/// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
+  /// <summary>PURE: parse .castlib text into cast definitions. Tolerant -- skips blank
+  /// lines, '#' comments, and unknown keys; a malformed block (missing name or 'end')
+  /// is dropped without aborting the rest of the file.</summary>
+  /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+  /// <returns><!-- drag-lint:auto -->TArray&lt;TCastDef&gt; -- Observed:
+  /// ParseCastLibText(AText).Casts.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Calls: DRagLint.Convert.CastLib.ParseCastLibText</para>
+  /// <para>Pure</para>
+  /// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 function LoadCastLibText(const AText: string): TArray<TCastDef>;
 
 /// <summary>PURE: parse .castlib text into BOTH block kinds.</summary>
@@ -211,8 +214,7 @@ function ClassCastFor(const ADefs: TArray<TCastDef>; const AFrom, ATo: string): 
 /// <para>Mutates: ADef (out)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function FindEnumCast(const ALib: TCastLib; const AName: string;
-  out ADef: TEnumDef): Boolean;
+function FindEnumCast(const ALib: TCastLib; const AName: string; out ADef: TEnumDef): Boolean;
 
 /// <summary>Translate one source enum member through an enum cast.</summary>
 /// <param name="ADef">The cast to apply.</param>
@@ -230,27 +232,26 @@ function FindEnumCast(const ALib: TCastLib; const AName: string;
 /// <para>Mutates: AResult (out)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function EnumCastValue(const ADef: TEnumDef; const AValue: string;
-  out AResult: string): Boolean;
+function EnumCastValue(const ADef: TEnumDef; const AValue: string; out AResult: string): Boolean;
 
 implementation
 
 uses
-  System.IOUtils;
+  System.IOUtils
+  ;
 
 { Split 'a, b ,c' -> ['a','b','c'], trimmed, empties dropped. }
 function SplitList(const AValue: string): TArray<string>;
 var
   parts: TArray<string>;
-  p    : string;
-  list : TList<string>;
+  p    : string        ;
+  list : TList<string> ;
 begin
-  list := TList<string>.Create;
+  list:= TList<string>.Create;
   try
-    parts := AValue.Split([',']);
-    for p in parts do
-      if Trim(p) <> '' then list.Add(Trim(p));
-    Result := list.ToArray;
+    parts:= AValue.Split([',']);
+    for p in parts do if Trim(p) <> '' then list.Add(Trim(p));
+    Result:= list.ToArray;
   finally
     list.Free;
   end;
@@ -259,198 +260,216 @@ end;
 { Strip one layer of surrounding single quotes from a value ('x' -> x). }
 function Unquote(const AValue: string): string;
 begin
-  Result := Trim(AValue);
+  Result:= Trim(AValue);
   if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then
-    Result := Copy(Result, 2, Length(Result) - 2);
+    Result:= Copy(Result, 2, Length(Result) - 2);
 end;
 
 { Case-insensitive membership over a bare-name array. }
 function Has(const AArr: TArray<string>; const AName: string): Boolean;
-var s: string;
+var
+  s: string;
 begin
-  for s in AArr do
-    if SameText(s, AName) then Exit(True);
-  Result := False;
+  for s in AArr do if SameText(s, AName) then Exit(True);
+  Result:= False;
 end;
 
 { Split 'a -> b' into its two sides. False when the arrow or either side is
   missing -- a half-written pair is dropped rather than stored as a rule that
   maps something to nothing. }
 function SplitArrow(const AValue: string; out ALeft, ARight: string): Boolean;
-var p: Integer;
+var
+  p: Integer;
 begin
   ALeft := '';
-  ARight := '';
-  p := Pos('->', AValue);
-  if p <= 0 then Exit(False);
-  ALeft  := Trim(Copy(AValue, 1, p - 1));
-  ARight := Trim(Copy(AValue, p + 2, MaxInt));
-  Result := (ALeft <> '') and (ARight <> '');
+  ARight:= '';
+  p:= Pos('->', AValue);
+  if p <= 0 then
+    Exit(False);
+  ALeft:= Trim(Copy(AValue, 1, p - 1));
+  ARight:= Trim(Copy(AValue, p + 2, MaxInt));
+  Result:= (ALeft <> '') and (ARight <> '');
 end;
 
 function ParseCastLibText(const AText: string): TCastLib;
 var
-  SL   : TStringList;
-  i, sp: Integer;
-  Line, Key, Val, L, R: string;
-  cur  : TCastDef;
-  curE : TEnumDef;
-  pair : TEnumPair;
-  inCast, inEnum: Boolean;
-  casts: TList<TCastDef>;
-  enums: TList<TEnumDef>;
+  SL    : TStringList    ;
+  i     : Integer        ;
+  sp    : Integer        ;
+  Line  : string         ;
+  Key   : string         ;
+  Val   : string         ;
+  L     : string         ;
+  R     : string         ;
+  cur   : TCastDef       ;
+  curE  : TEnumDef       ;
+  pair  : TEnumPair      ;
+  inCast: Boolean        ;
+  inEnum: Boolean        ;
+  Casts : TList<TCastDef>;
+  Enums : TList<TEnumDef>;
 begin
-  Result := Default(TCastLib);
-  casts := TList<TCastDef>.Create;
-  enums := TList<TEnumDef>.Create;
-  SL := TStringList.Create;
+  Result:= Default(TCastLib);
+  Casts:= TList<TCastDef>.Create;
+  Enums:= TList<TEnumDef>.Create;
+  SL:= TStringList.Create;
   try
-    SL.Text := AText;
-    inCast := False;
-    inEnum := False;
-    cur  := Default(TCastDef);
-    curE := Default(TEnumDef);
-    for i := 0 to SL.Count - 1 do
+    SL.Text:= AText;
+    inCast:= False;
+    inEnum:= False;
+    cur := Default(TCastDef);
+    curE:= Default(TEnumDef);
+    for i:= 0 to SL.Count - 1 do
     begin
-      Line := Trim(SL[i]);
-      if (Line = '') or Line.StartsWith('#') then Continue;   // blank / comment
-      sp := Pos(' ', Line);
+      Line:= Trim(SL[i]);
+      if (Line = '') or Line.StartsWith('#') then Continue; // blank / comment
+      sp:= Pos(' ', Line);
       if sp > 0 then
       begin
-        Key := LowerCase(Copy(Line, 1, sp - 1));
-        Val := Trim(Copy(Line, sp + 1, MaxInt));
+        Key:= LowerCase(Copy(Line, 1, sp - 1));
+        Val:= Trim(Copy(Line, sp + 1, MaxInt));
       end
       else
       begin
-        Key := LowerCase(Line);
-        Val := '';
+        Key:= LowerCase(Line);
+        Val:= '';
       end;
 
       if Key = 'cast' then
       begin
         // a new block; a prior unclosed block (no 'end') is discarded
-        inCast := True;
-        inEnum := False;
-        cur := Default(TCastDef);
-        cur.Name := Val;
+        inCast:= True;
+        inEnum:= False;
+        cur:= Default(TCastDef);
+        cur.Name:= Val;
       end
       else if Key = 'enum' then
       begin
-        inEnum := True;
-        inCast := False;
-        curE := Default(TEnumDef);
-        curE.Name := Val;
+        inEnum:= True;
+        inCast:= False;
+        curE:= Default(TEnumDef);
+        curE.Name:= Val;
       end
       else if Key = 'end' then
       begin
-        if inCast and (cur.Name <> '') then casts.Add(cur);
-        if inEnum and (curE.Name <> '') then enums.Add(curE);
-        inCast := False;
-        inEnum := False;
-        cur  := Default(TCastDef);
-        curE := Default(TEnumDef);
+        if inCast and (cur .Name <> '') then
+          Casts.Add(cur );
+        if inEnum and (curE.Name <> '') then
+          Enums.Add(curE);
+        inCast:= False;
+        inEnum:= False;
+        cur := Default(TCastDef);
+        curE:= Default(TEnumDef);
       end
       else if inCast then
       begin
-        if      Key = 'accepts' then cur.Accepts := SplitList(Val)
-        else if Key = 'yields'  then cur.Yields := SplitList(Val)
-        else if Key = 'dfm'     then cur.Dfm := Val
-        else if Key = 'compat'  then cur.Compat := Val
-        else if Key = 'pas'     then cur.PasTemplate := Unquote(Val)
-        else if Key = 'todo'    then cur.Todo := Unquote(Val);
+        if Key = 'accepts' then
+          cur.Accepts:= SplitList(Val)
+        else if Key = 'yields' then
+          cur.Yields:= SplitList(Val)
+        else if Key = 'dfm' then
+          cur.Dfm:= Val
+        else if Key = 'compat' then
+          cur.Compat:= Val
+        else if Key = 'pas' then
+          cur.PasTemplate:= Unquote(Val)
+        else if Key = 'todo' then
+          cur.Todo:= Unquote(Val);
         // unknown keys tolerated (skipped)
-      end
+      end // if
       else if inEnum then
       begin
-        if      Key = 'from' then curE.FromType := Val
-        else if Key = 'to'   then curE.ToType := Val
-        else if Key = 'else' then curE.Fallback := Val
-        else if Key = 'todo' then curE.Todo := Unquote(Val)
-        else if Key = 'map'  then
+        if Key = 'from' then
+          curE.FromType:= Val
+        else if Key = 'to' then
+          curE.ToType:= Val
+        else if Key = 'else' then
+          curE.Fallback:= Val
+        else if Key = 'todo' then
+          curE.Todo:= Unquote(Val)
+        else if Key = 'map' then
         begin
           if SplitArrow(Val, L, R) then
           begin
-            pair := Default(TEnumPair);
-            pair.FromMember := L;
-            pair.ToMember   := R;
-            curE.Pairs := curE.Pairs + [pair];
+            pair:= Default(TEnumPair);
+            pair.FromMember:= L;
+            pair.ToMember  := R;
+            curE.Pairs:= curE.Pairs + [pair];
           end;
         end;
         // unknown keys tolerated (skipped)
-      end;
-    end;
-    Result.Casts := casts.ToArray;
-    Result.Enums := enums.ToArray;
+      end; // if
+    end; // for
+    Result.Casts:= Casts.ToArray;
+    Result.Enums:= Enums.ToArray;
   finally
     SL.Free;
-    casts.Free;
-    enums.Free;
-  end;
-end;
+    Casts.Free;
+    Enums.Free;
+  end; // try
+end; // function
 
 function LoadCastLibText(const AText: string): TArray<TCastDef>;
 begin
-  Result := ParseCastLibText(AText).Casts;
+  Result:= ParseCastLibText(AText).Casts;
 end;
 
 function ParseCastLib(const APath: string): TCastLib;
 begin
-  Result := Default(TCastLib);
-  if (APath = '') or not TFile.Exists(APath) then Exit;
-  Result := ParseCastLibText(TFile.ReadAllText(APath));
+  Result:= Default(TCastLib);
+  if (APath = '') or not TFile.Exists(APath) then
+    Exit;
+  Result:= ParseCastLibText(TFile.ReadAllText(APath));
 end;
 
 function LoadCastLib(const APath: string): TArray<TCastDef>;
 begin
-  Result := ParseCastLib(APath).Casts;
+  Result:= ParseCastLib(APath).Casts;
 end;
 
 function ClassCastFor(const ADefs: TArray<TCastDef>; const AFrom, ATo: string): string;
 var
   d: TCastDef;
 begin
-  Result := '';
-  for d in ADefs do
-    if Has(d.Accepts, AFrom) and Has(d.Yields, ATo) then Exit(d.Name);
+  Result:= '';
+  for d in ADefs do if Has(d.Accepts, AFrom) and Has(d.Yields, ATo) then Exit(d.Name);
 end;
 
-function FindEnumCast(const ALib: TCastLib; const AName: string;
-  out ADef: TEnumDef): Boolean;
-var e: TEnumDef;
+function FindEnumCast(const ALib: TCastLib; const AName: string; out ADef: TEnumDef): Boolean;
+var
+  e: TEnumDef;
 begin
-  ADef := Default(TEnumDef);
-  if AName = '' then Exit(False);
-  for e in ALib.Enums do
-    if SameText(e.Name, AName) then
-    begin
-      ADef := e;
-      Exit(True);
-    end;
-  Result := False;
-end;
+  ADef:= Default(TEnumDef);
+  if AName = '' then
+    Exit(False);
+  for e in ALib.Enums do if SameText(e.Name, AName) then
+  begin
+    ADef:= e;
+    Exit(True);
+  end;
+  Result:= False;
+end; // function
 
-function EnumCastValue(const ADef: TEnumDef; const AValue: string;
-  out AResult: string): Boolean;
+function EnumCastValue(const ADef: TEnumDef; const AValue: string; out AResult: string): Boolean;
 var
   p : TEnumPair;
-  V : string;
+  V : string   ;
 begin
-  AResult := '';
-  V := Trim(AValue);
-  for p in ADef.Pairs do
-    if SameText(p.FromMember, V) then
-    begin
-      AResult := p.ToMember;
-      Exit(True);
-    end;
+  AResult:= '';
+  V:= Trim(AValue);
+  for p in ADef.Pairs do if SameText(p.FromMember, V) then
+  begin
+    AResult:= p.ToMember;
+    Exit(True);
+  end;
   { No pair matched. An `else` is the author saying "anything else becomes
     this"; without one there is nothing honest to emit. }
   if ADef.Fallback <> '' then
   begin
-    AResult := ADef.Fallback;
+    AResult:= ADef.Fallback;
     Exit(True);
   end;
-  Result := False;
-end;
+  Result:= False;
+end; // function
 
 end.
