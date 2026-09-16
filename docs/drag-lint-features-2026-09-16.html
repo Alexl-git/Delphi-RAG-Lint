@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>drag-lint + Component Converter -- Feature List</title>
+<style>
+  body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 11pt;
+         line-height: 1.45; color: #1a1a1a; max-width: 52em; margin: 2em auto; padding: 0 1em; }
+  h1 { font-size: 20pt; margin: 0 0 .15em 0; }
+  h2 { font-size: 15pt; margin: 1.6em 0 .4em 0; padding-bottom: .15em;
+       border-bottom: 2px solid #b8b8b8; }
+  h3 { font-size: 12pt; margin: 1.1em 0 .3em 0; color: #222; }
+  .sub { color: #555; font-size: 10pt; margin: 0 0 1.4em 0; }
+  .lede { background: #f4f6f8; border-left: 4px solid #7a8a99; padding: .7em 1em; margin: 1.2em 0; }
+  .note { background: #fbf7ec; border-left: 4px solid #c9a227; padding: .7em 1em; margin: 1.2em 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8em 0 1.2em 0; font-size: 10.5pt; }
+  th, td { border: 1px solid #c8ccd0; padding: .38em .55em; text-align: left; vertical-align: top; }
+  th { background: #eef1f4; }
+  ul { margin: .3em 0 .9em 0; }
+  li { margin: .22em 0; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 10pt; background: #f2f4f6; padding: .05em .3em; }
+  .big { font-size: 13pt; font-weight: bold; }
+  .cap { color: #555; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+
+<h1>drag-lint + Component Converter</h1>
+<p class="sub">Feature list &middot; release <strong>1.13.0-alpha</strong> &middot; 16 September 2026<br>
+Supersedes the 9 September 2026 edition. Every number below was read from the
+engine on the day of writing, not carried over from the previous document.</p>
+
+<div class="lede">
+<p><strong>What this is.</strong> drag-lint reads a Delphi codebase the way the
+compiler does -- it parses the real syntax rather than searching for text -- and
+stores what it learns in a database beside the project. Everything else in this
+document is a question that database can answer in under a second, on a codebase
+too large to hold in your head.</p>
+<p>It is a command-line engine, an IDE plugin for RAD Studio, and a language
+server. The same answers reach all three.</p>
+</div>
+
+<h2>At a glance</h2>
+
+<table>
+<tr><th>&nbsp;</th><th>Today</th></tr>
+<tr><td>Commands</td><td><strong>82</strong> documented</td></tr>
+<tr><td>Lint rules</td><td><strong>181</strong> across <strong>16</strong> categories</td></tr>
+<tr><td>On by default</td><td><strong>156</strong> (25 deliberately off -- they flood on legacy code)</td></tr>
+<tr><td>Fix themselves</td><td><strong>23</strong> rules carry an automatic fix</td></tr>
+<tr><td>Scale</td><td>~1.5 million symbols indexed across the projects here</td></tr>
+</table>
+
+<h2>1. Indexing and the code database</h2>
+<p>One database per project, kept beside the project file. Rebuilds are
+incremental: only what changed is re-read.</p>
+<ul>
+<li>Indexes Pascal source, form files (<code>.dfm</code>) and SQL together, so a question can cross from code to a form to a table.</li>
+<li>Knows a project's real membership -- the units it actually compiles, not whatever happens to sit in the folder.</li>
+<li>Reports when it is out of date rather than answering from stale data.</li>
+<li>Reconciles a project file against the units it really uses, and can repair it.</li>
+</ul>
+
+<h2>2. Search and navigation</h2>
+<p>Exact answers, not text matches. No hits from comments, string literals or
+stray backup copies.</p>
+<ul>
+<li>Where is a symbol declared; what is its signature.</li>
+<li>Who calls it -- and who calls <em>them</em>, to any depth.</li>
+<li>Which unit declares a type, so it can be added to a <code>uses</code> clause.</li>
+<li>Full-text search across messages, form captions and SQL exception text.</li>
+<li><strong>What implements this interface</strong> -- new in this release; see chapter 12.</li>
+</ul>
+
+<h2>3. Dependency and architecture analysis</h2>
+<ul>
+<li>Circular unit dependencies, with a followable plan for breaking them.</li>
+<li>Blast radius: everything a change to one symbol could reach.</li>
+<li>Third-party dependency rollups.</li>
+<li>Dependency-injection wiring and form event wiring, including registrations that never resolve.</li>
+<li>A type's deep property tree, following into class-typed properties.</li>
+</ul>
+
+<h2>4. Linting and auto-fix</h2>
+<p>181 rules in 16 categories. 23 fix themselves.</p>
+<ul>
+<li>Bug patterns, resource-leak shapes, exception-handling mistakes, naming, dead code, documentation gaps.</li>
+<li>A reviewed finding can be marked as accepted, with the reason recorded in the code -- so the next report is quiet about it and the reasoning survives.</li>
+<li>Rules can run for one file or a whole project; some questions only exist at project scope.</li>
+</ul>
+<div class="note">
+<p><strong>The standard this is held to.</strong> A finding count in the
+thousands is treated as a defect in the rule, not a fact about the code. The
+point is that when a message appears, it means something.</p>
+</div>
+
+<h2>5. Compiler-less diagnostics and compile checking</h2>
+<ul>
+<li>Catches missing-unit and undeclared-identifier problems without a full build.</li>
+<li>Can check an unsaved editor buffer.</li>
+<li>Imports a real build log and lines its errors up with the code.</li>
+</ul>
+
+<h2>6. Documentation</h2>
+<ul>
+<li>Generates documentation comments for a symbol, a unit or a whole project, in Delphi's own format.</li>
+<li>Records facts it can prove -- who calls this, what it raises, what it reads and writes, how complex it is, which tests cover it.</li>
+<li>Hand-written prose is preserved; only the generated part is refreshed.</li>
+<li>Flags documentation that has drifted away from the code it describes.</li>
+</ul>
+
+<h2>7. Refactoring and code actions</h2>
+<ul>
+<li>Rename a symbol across the project.</li>
+<li>Safe-delete, with a check for what would break.</li>
+<li>Extract a method; turn a public field into a property.</li>
+<li>Clean up <code>uses</code> clauses -- verified by actually compiling, not guessed.</li>
+<li>Format through YADF, now with real safety rails (chapter 12).</li>
+</ul>
+
+<h2>8. AI and tooling integration</h2>
+<div class="lede">
+<p><strong>Why this matters commercially.</strong> An AI assistant reading a
+large Delphi unit spends enormous effort doing it. Asking drag-lint the same
+question instead was measured at <strong>269&times; cheaper</strong> on a real
+file -- roughly 1,300 units of work against 338,500. Across a working day that
+is the difference between an assistant that is affordable and one that is not.</p>
+</div>
+<ul>
+<li>A context bundle: exactly the code needed to answer one question, and nothing else.</li>
+<li>Machine-readable output from every command.</li>
+<li>A guarded read-only SQL interface over the database.</li>
+<li>Exports to Obsidian and to graph formats.</li>
+</ul>
+
+<h2>9. Editor and IDE integration</h2>
+<ul>
+<li>RAD Studio plugin: structure view, findings panel, go-to-definition, find usages, hover, completion, a call-graph viewer.</li>
+<li>A language server, so other editors get the same answers.</li>
+<li>Quick fixes offered at the cursor.</li>
+</ul>
+
+<h2>10. Reporting, maintenance and integrity</h2>
+<ul>
+<li>Reports on uses clauses, dependencies and TODOs.</li>
+<li>Detects drift between the index and the code.</li>
+<li>Recovers work from editor buffers after a crash.</li>
+<li>A project wiki authored in the code itself -- 21 topics were seeded for Micronite from its own units.</li>
+</ul>
+
+<h2>11. Component Converter</h2>
+<p>Converts legacy visual components to modern equivalents -- the Orpheus to
+DevExpress migration this was built for.</p>
+<ul>
+<li>A rule book describes the conversion; a validator checks it before anything runs.</li>
+<li>Converts the code declaration, the form file, the property values and the <code>uses</code> clause together, or refuses the instance entirely -- never half of it.</li>
+<li>Always previewable before it writes.</li>
+<li>A visual rule-authoring editor.</li>
+</ul>
+<div class="note">
+<p><strong>Known limitation in this release.</strong> When a conversion needs to
+convert a <em>value</em> as well as a property -- an image being handed to a
+different image type, for instance -- the image data is currently dropped while
+the run reports success. Fixing this is the <strong>first</strong> piece of work
+after this release (chapter 13). Until then, treat image-carrying conversions as
+manual.</p>
+</div>
+
+<h2>12. What is new in 1.13.0-alpha</h2>
+
+<h3>Hovering an interface now tells you what implements it</h3>
+<p>Point at <code>ImcSTATIONS</code> and the answer is <code>TmcSTATIONS</code>.
+Implementing classes and derived interfaces are listed separately, because one
+is something you can create and the other is not. The same fact is written into
+the generated documentation, so it can be read without any tool.</p>
+
+<h3>Formatting is no longer able to damage a file</h3>
+<p>The format command rewrites source in place. It now: refuses a formatter
+version old enough to be known-bad; re-reads the file afterwards and checks that
+the formatter changed only the <em>layout</em>, not what the unit declares --
+restoring the original if it did; and offers a preview that writes nothing.</p>
+<p class="cap">Previously the preview option was accepted and then ignored, so a
+file could be rewritten by the very command intended to avoid touching it.</p>
+
+<h3>Read-only commands are genuinely read-only</h3>
+<p>Fourteen further commands that only answer questions were quietly upgrading
+the database they were pointed at. They now refuse a stale database and leave it
+untouched. This completes a change begun in the previous release.</p>
+
+<h3>Two messages that were confidently wrong</h3>
+<ul>
+<li>The converter reported that a form file was missing a component block when the real cause was that the unit had not been indexed. The message cost the conversion team a day. It now names the real condition.</li>
+<li>The outline command reported that no database covered a file, for files another command listed three databases for. Both now resolve the same way.</li>
+</ul>
+
+<h2>13. What is planned</h2>
+<div class="note">
+<p><strong>This is a pipeline, not a commitment.</strong> Items are listed in
+the order currently intended, with rough effort. Order and scope change as
+priorities do.</p>
+</div>
+
+<table>
+<tr><th>Next</th><th>What it is</th><th>Rough effort</th></tr>
+<tr><td><strong>Image and value conversion</strong></td>
+    <td>Finish the converter so a conversion that must transform a <em>value</em> -- an image handed to a different image type -- carries it across instead of dropping it. Blocks live conversion work today.</td>
+    <td>3-5 days</td></tr>
+<tr><td>Inherited fields in analysis</td>
+    <td>Object analysis currently stops at a class's own fields and misses everything inherited from a shared base. Decided; needs one piece of groundwork first (recognising a generic base class), which by itself improves several other answers.</td>
+    <td>2-3 days + groundwork</td></tr>
+<tr><td>Exception handling</td>
+    <td>Document which exceptions a routine <em>handles</em>, not only which it raises.</td>
+    <td>2-3 days</td></tr>
+<tr><td>Nested routine analysis</td>
+    <td>Variables declared inside nested routines are not currently recorded, which weakens several checks. Requires a full re-read of every index (about five hours, unattended).</td>
+    <td>2-3 days + re-index</td></tr>
+<tr><td>Property references</td>
+    <td>The index records which routines call each other, but not which read or write a property. Closing this improves dead-code detection, purity analysis and impact reports at once. The largest item on the list.</td>
+    <td>weeks</td></tr>
+</table>
+
+<h3>Further out</h3>
+<ul>
+<li><strong>A visual code map.</strong> A standalone viewer already exists and already talks to the IDE; the work is to give it professional layout and export. Re-estimated from months to <strong>about two to three weeks</strong> once it was established that the layout engine should be delegated rather than written. Likely to run on its own track so it does not hold up the engine.</li>
+<li><strong>Following a call across process boundaries</strong> -- tracing a request from a client through to the server routine that serves it. Proven to work end to end; roughly one to two days to finish.</li>
+<li><strong>Numbers as searchable facts</strong> -- port numbers and similar constants are not currently findable by value.</li>
+<li><strong>More wiki topics</strong> from the existing Micronite documentation -- one to two hours.</li>
+</ul>
+
+<h2>How quality is held</h2>
+<div class="lede">
+<p>Every change in this release shipped with a test written <em>before</em> the
+fix, which was required to fail first. Each also ships what the team calls a
+positive control -- a second test proving the first one is capable of failing at
+all. This exists because a test that silently stops checking anything is
+indistinguishable from a test that passes.</p>
+<p>The full test battery is <strong>543 runs</strong>, and the release was cut
+only with all of them green.</p>
+</div>
+
+<p class="cap">drag-lint 1.13.0-alpha &middot; 16 September 2026 &middot; internal document</p>
+
+</body>
+</html>

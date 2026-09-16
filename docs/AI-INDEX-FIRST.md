@@ -50,6 +50,7 @@ text-level matches, non-Delphi files, or code no index covers.
 |---|---|
 | Where is `X` defined? | `drag-lint query --name X --db <db>` |
 | All symbols in one file | `drag-lint outline --file F.pas --format json --db <db>` |
+| **What implements this interface?** | `drag-lint hover --qname Unit.IFoo --format md --db <db>` -- reports `Implemented by:` (classes) and `Extended by:` (derived interfaces) separately. `query descendants --of IFoo` answers the CLASS half only, by design |
 | A type's members/API | `drag-lint surface --qname Unit.TType --db <db>` |
 | Who **calls** `X` | `drag-lint query find-callers --name X --db <db>` |
 | Who calls `X`, and who calls **them** (upward tree) | `drag-lint reverse-calltree --qname X [--direction callers\|callees] [--depth N] --db <db>` |

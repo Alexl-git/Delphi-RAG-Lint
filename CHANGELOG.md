@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.13.0-alpha -- 2026-09-16
 
 ### Fixed: `outline --file X` said no database resolved for a file `resolve-dbs --in X` found three for
 
