@@ -248,7 +248,23 @@ $b2 = "object C1: TFromC`r`n  object Font: TFont2`r`n    Size = 12`r`n  end`r`ne
 $r2 = "#convert TFromC -> TToC`r`n#link Style.Active.Font.Size <- Font.Size`r`n"
 $o2 = Reemit $b2 $r2 'ReemitFix.TFromC' 'ReemitFix.TToC'
 Check 'moved-depth exit 0' ($script:LastExit -eq 0) "out=$o2"
-Check 'moved-depth nests Style/Active/Font' ($o2 -match 'object Style' -and $o2 -match 'object Active' -and $o2 -match 'object Font') "out=$o2"
+# CORRECTED 2026-09-16: this asserted `object Style` / `object Active` /
+# `object Font` -- a nested block per segment with no class name, which is not
+# loadable DFM. ConvertHeader reads a lone symbol after `object` as the CLASS
+# name (empty object name), so the file converts to binary cleanly and the form
+# then fails with `EClassNotFound: Class Style not found` (measured with a
+# compiled Delphi 13 probe). A sub-property path is written DOTTED.
+#
+# Asserted against the PARSED `dfm` field, not the raw output: the raw output is
+# JSON, where every newline is the two characters \r\n, so an anchored multiline
+# regex over it can never match and would pass whatever the emitter did.
+$d2 = (ConvertFrom-Json $o2).dfm
+Check 'moved-depth writes the DOTTED path Style.Active.Font.Size' `
+      ($d2 -match 'Style\.Active\.Font\.Size\s*=\s*12') "dfm=$d2"
+Check 'moved-depth emits NO classless object header' `
+      (-not ($d2 -match '(?m)^[ \t]*object[ \t]+[A-Za-z_]\w*[ \t]*\r?$')) "dfm=$d2"
+Check 'moved-depth DISCRIMINATION the root header is still CLASSED' `
+      ($d2 -match 'object C1: TToC') "dfm=$d2"
 Check 'moved-depth Size = 12 present' ($o2 -match 'Size\s*=\s*12') "out=$o2"
 Check 'moved-depth Created lists Style.Active.Font' ($o2 -match 'Style\.Active\.Font') "out=$o2"
 
@@ -505,8 +521,14 @@ Check 'dotted control exit 0' ($script:LastExit -eq 0) "out=$o21"
 $j21 = $o21 | ConvertFrom-Json
 Check 'dotted control: the #default fires (Size = 99)' `
   ($j21.dfm -match 'Size\s*=\s*99') "dfm=$($j21.dfm)"
-Check 'dotted control: the intermediates were created' `
-  ($j21.dfm -match 'object Style' -and $j21.dfm -match 'object Active') "dfm=$($j21.dfm)"
+# CORRECTED 2026-09-16 -- see case 2. The intermediates are a PATH, not blocks;
+# `object Style` with no class fails at form load, so the created chain must
+# appear as the dotted leaf name. The report's `created` list is asserted
+# separately below, which is where "the intermediates were created" really lives.
+Check 'dotted control: the intermediates appear as a DOTTED path' `
+  ($j21.dfm -match 'Style\.Active\.Font\.Size\s*=\s*99') "dfm=$($j21.dfm)"
+Check 'dotted control: no classless object header was emitted' `
+  (-not ($j21.dfm -match '(?m)^[ \t]*object[ \t]+[A-Za-z_]\w*[ \t]*\r?$')) "dfm=$($j21.dfm)"
 Check 'dotted control: nothing reported superseded' `
   (@($j21.report.defaultsSuperseded | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o21"
 

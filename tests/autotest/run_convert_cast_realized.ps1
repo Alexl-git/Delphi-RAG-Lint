@@ -375,6 +375,101 @@ Check 'T9c the todo does not leak an unsubstituted placeholder' `
       (-not ($notes2 -match '\{src\}|\{dst\}')) `
       ("a raw placeholder reached the operator:`n" + $notes2)
 
+# ============================================================================
+# PHASE W -- THE WRITE PATH. Everything above measures the PLAN; --apply is what
+# reaches the user's disk, and until this phase was written no cast had EVER
+# written a file. The plan being right does not make the bytes right.
+#
+# WHAT THIS PHASE CAUGHT, so nobody relaxes it later. The re-emitter synthesized
+# the target sub-property chain as NESTED CLASSLESS OBJECT BLOCKS:
+#
+#     object btnPng: TDstBtn
+#       object OptionsImage          <- no class
+#         object Glyph               <- no class
+#           Data = {89504E47...}
+#
+# and its own comment claimed "the DFM streamer accepts `object Name` with no
+# class for owned TPersistent sub-properties". It does not. System.Classes
+# ConvertHeader takes the single symbol as the CLASS NAME with an EMPTY object
+# name, so the text converts to binary WITHOUT ERROR and then dies at form load.
+# Verified on this machine with a compiled Delphi 13 probe, not by reading:
+#
+#     A (classless nested) -> LOAD FAILED -> EClassNotFound: Class OptionsImage not found
+#     B (dotted property)  -> LOADED OK.   OptionsImage.Glyph.Value = 7
+#
+# So the image bytes were being preserved into a .dfm that will not open -- the
+# row 6 fix carried the payload into a form the user cannot load. A sub-property
+# path MUST be emitted dotted, which is what Delphi's own writer emits and what
+# ConvertProperty explicitly parses (it loops on '.' building A.B.C).
+# ============================================================================
+
+$appW = Join-Path $WorkDir 'appw'
+New-Item -ItemType Directory $appW -Force | Out-Null
+foreach ($f in 'MyForm.pas','MyForm.dfm','TwoPic.pas','TwoPic.dfm') {
+  Copy-Item (Join-Path $app $f) (Join-Path $appW $f) -Force
+}
+$srcDfmText = [IO.File]::ReadAllText((Join-Path $appW 'TwoPic.dfm'))
+$dbW = Join-Path $WorkDir 'dbW.sqlite'
+& $Exe index $appW --db $dbW 2>&1 | Out-Null
+
+Push-Location $appW
+try {
+  $wRaw = (& $Exe convert-apply --unit 'TwoPic.pas' --rules $rulesGood --castlib $castlib `
+             --db $dbW --db $dbA --db $dbB --apply 2>&1) -join "`n"
+  $wExit = $LASTEXITCODE
+} finally { Pop-Location }
+
+$wDfm = Join-Path $appW 'TwoPic.dfm'
+$written = if (Test-Path $wDfm) { [IO.File]::ReadAllText($wDfm) } else { '' }
+
+# ---- W0 POSITIVE CONTROL: the write actually happened -----------------------
+# Without this every shape assertion below could pass on a file --apply never
+# touched, which is the same trap as asserting on a fixture that never converts.
+Check 'W0 POSITIVE CONTROL --apply exits 0 and converts both instances' `
+      (($wExit -eq 0) -and ($wRaw -match '2 instance\(s\) converted') -and ($written -match 'TDstBtn')) `
+      ("exit=$wExit`n$wRaw")
+
+# ---- W1 the payload reached the file, on a DOTTED path ----------------------
+$payload = if ($srcDfmText -match "Picture\.Data = \{([0-9A-Fa-f]+)\}") { $Matches[1] } else { '' }
+Check 'W1 the carried payload is written on a DOTTED sub-property path' `
+      (($payload -ne '') -and ($written -match ("OptionsImage\.Glyph\.Data = \{" + $payload + "\}"))) `
+      ("expected `OptionsImage.Glyph.Data = {$payload}` in the written .dfm:`n$written")
+
+# ---- W2 THE DEFECT: no classless `object` header may be written -------------
+# `object Foo` with no `: TClass` converts to binary silently and fails only when
+# the form is opened, so nothing before this assertion could have caught it.
+$classless = [regex]::Matches($written, '(?m)^[ \t]*object[ \t]+[A-Za-z_]\w*[ \t]*\r?$')
+Check 'W2 no CLASSLESS object header is emitted (EClassNotFound at form load)' `
+      ($classless.Count -eq 0) `
+      ("these lines parse as a CLASS with an empty name and kill the form at load: " +
+       (($classless | ForEach-Object { $_.Value.Trim() }) -join ' | ') + "`n$written")
+
+Check 'W2b DISCRIMINATION the real component headers are still CLASSED' `
+      (($written -match '(?m)^\s*object btnPng: TDstBtn\s*$') -and `
+       ($written -match '(?m)^\s*object btnOdd: TDstBtn\s*$')) `
+      ("W2 could pass by emitting no object headers at all:`n$written")
+
+# ---- W3 the incompatible payload is still NOT written anywhere --------------
+Check 'W3 the incompatible payload is absent from the written file' `
+      (-not ($written -match 'DEADBEEF')) `
+      ("an unrecognised payload was carried to disk anyway:`n$written")
+
+# ---- W4 the destructive op is recoverable ----------------------------------
+$bck = Join-Path $appW 'TwoPic.dfm.BCK1'
+Check 'W4 a backup holds the ORIGINAL bytes, byte for byte' `
+      ((Test-Path $bck) -and ([IO.File]::ReadAllText($bck) -eq $srcDfmText)) `
+      'the pre-apply bytes are not recoverable'
+
+# ---- W5 the written source obeys the encoding rule --------------------------
+$wb = [IO.File]::ReadAllBytes($wDfm)
+$bareLf = 0
+for ($i = 0; $i -lt $wb.Length; $i++) {
+  if ($wb[$i] -eq 10 -and ($i -eq 0 -or $wb[$i-1] -ne 13)) { $bareLf++ }
+}
+Check 'W5 the written .dfm is strict 7-bit ASCII with CRLF' `
+      ((($wb | Where-Object { $_ -gt 127 }).Count -eq 0) -and ($bareLf -eq 0)) `
+      "nonAscii=$((($wb | Where-Object { $_ -gt 127 }).Count)) bareLf=$bareLf"
+
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0

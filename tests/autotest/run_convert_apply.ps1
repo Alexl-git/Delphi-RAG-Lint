@@ -548,15 +548,27 @@ Check 'shows re-emitted .dfm header TNewEdit' ($applyRaw -match 'object Edit1: T
 Check 'shows re-emitted Text = ''Hi''' ($applyRaw -match "Text\s*=\s*'Hi'") "raw=$applyRaw"
 
 # Surface #3 (moved-depth): '#link Style.Active.Font.Size <- Font.Size' must
-# re-nest the F-side 'object Font: TFont2 / Size = 12' sub-object 3 levels
-# deep under a newly-created Style/Active/Font chain in the re-emitted T
-# block (this is a .dfm-only surface -- BuildApplyPlan's own doc comment
-# marks surface #4's .pas access rewrite as single-segment-paths-only, so a
-# dotted #link path like this one is correctly OUT of surface #4's scope and
-# must show up here, on the .dfm side, instead).
-Check 'shows moved-depth nesting object Style' ($applyRaw -match 'object Style') "raw=$applyRaw"
-Check 'shows moved-depth nesting object Active' ($applyRaw -match 'object Active') "raw=$applyRaw"
-Check 'shows moved-depth nesting object Font' ($applyRaw -match 'object Font') "raw=$applyRaw"
+# carry the F-side 'object Font: TFont2 / Size = 12' sub-object 3 levels deep
+# under a newly-created Style/Active/Font chain in the re-emitted T block (this
+# is a .dfm-only surface -- BuildApplyPlan's own doc comment marks surface #4's
+# .pas access rewrite as single-segment-paths-only, so a dotted #link path like
+# this one is correctly OUT of surface #4's scope and must show up here, on the
+# .dfm side, instead).
+#
+# CORRECTED 2026-09-16 -- these four asserted `object Style` / `object Active` /
+# `object Font`, i.e. a nested block per path segment with NO class name. That
+# is not loadable DFM and the guard was pinning the defect: System.Classes'
+# ConvertHeader takes a lone symbol after `object` as the CLASS NAME with an
+# empty object name, so the text converts to binary WITHOUT ERROR and the form
+# then dies with `EClassNotFound: Class Style not found`. Measured with a
+# compiled Delphi 13 probe. A sub-property path is written DOTTED -- which is
+# what Delphi's own writer emits and what ConvertProperty parses.
+Check 'shows moved-depth path Style.Active.Font.Size (DOTTED, loadable)' `
+      ($applyRaw -match 'Style\.Active\.Font\.Size\s*=\s*12') "raw=$applyRaw"
+Check 'shows NO classless object header (EClassNotFound at form load)' `
+      (-not ($applyRaw -match '(?m)^[ \t]*object[ \t]+[A-Za-z_]\w*[ \t]*\r?$')) "raw=$applyRaw"
+Check 'DISCRIMINATION the real component header is still CLASSED' `
+      ($applyRaw -match 'object Edit1: TNewEdit') "raw=$applyRaw"
 Check 'shows moved-depth Size = 12 preserved' ($applyRaw -match 'Size\s*=\s*12') "raw=$applyRaw"
 
 # Surface #3 (event): '#link OnClick2 <- OnClick' re-emits the event binding
@@ -715,13 +727,21 @@ Check 'MyForm.pas converted: Other.Caption UNCHANGED (not a converted instance)'
 Check 'MyForm.pas converted: no stray Other.Text (Other must not be rewritten)' (-not ($p2PasText -match [regex]::Escape('Other.Text'))) "text=$p2PasText"
 Check 'MyForm.dfm converted: Text = ''Hi''' ($p2DfmText -match "Text\s*=\s*'Hi'") "text=$p2DfmText"
 
-# Surface #3 (moved-depth) on disk: Font.Size is re-nested 3 levels deep under
+# Surface #3 (moved-depth) ON DISK: Font.Size lands 3 levels deep under
 # Style/Active/Font in the WRITTEN .dfm, and the .pas is untouched by it
 # (moved-depth is .dfm-only, surface #4's access rewrite is single-segment
 # paths only -- see BuildApplyPlan's own doc comment).
-Check 'MyForm.dfm converted: moved-depth object Style' ($p2DfmText -match 'object Style') "text=$p2DfmText"
-Check 'MyForm.dfm converted: moved-depth object Active' ($p2DfmText -match 'object Active') "text=$p2DfmText"
-Check 'MyForm.dfm converted: moved-depth object Font' ($p2DfmText -match 'object Font') "text=$p2DfmText"
+#
+# This is the assertion that matters most of the four, because it is about bytes
+# the user keeps. See the correction note at the phase-1 copies above: a
+# classless `object Style` block streams as a missing CLASS and the form fails
+# to open. Dotted is the only loadable form.
+Check 'MyForm.dfm converted: moved-depth path is DOTTED and loadable' `
+      ($p2DfmText -match 'Style\.Active\.Font\.Size\s*=\s*12') "text=$p2DfmText"
+Check 'MyForm.dfm converted: NO classless object header was written' `
+      (-not ($p2DfmText -match '(?m)^[ \t]*object[ \t]+[A-Za-z_]\w*[ \t]*\r?$')) "text=$p2DfmText"
+Check 'MyForm.dfm converted: DISCRIMINATION real component header still CLASSED' `
+      ($p2DfmText -match 'object Edit1: TNewEdit') "text=$p2DfmText"
 Check 'MyForm.dfm converted: moved-depth Size = 12 preserved' ($p2DfmText -match 'Size\s*=\s*12') "text=$p2DfmText"
 
 # Surface #3 (event) on disk: OnClick -> OnClick2, value (the handler method

@@ -495,10 +495,53 @@ begin
   Result:= StringOfChar(' ', ALevel * 2);
 end;
 
+function EmitBlock(const ANode: TDfmNode; AIndent: Integer): string; forward;
+
+// Emit the leaves of a CLASSLESS sub-object as DOTTED property names, which is
+// the only form a sub-property path may take in a .dfm.
+//
+// `object Name` with no `: TClass` is NOT a sub-property block. System.Classes'
+// ConvertHeader reads the lone symbol as the CLASS NAME and leaves the object
+// name EMPTY, so the text converts to binary with no error at all and then dies
+// when the form is loaded:
+//
+//   object OptionsImage  ->  EClassNotFound: Class OptionsImage not found
+//   OptionsImage.Glyph.Data = {...}  ->  loads, value carried
+//
+// (Both measured with a compiled Delphi 13 probe; the failure is invisible to
+// every text-level check because the binary conversion SUCCEEDS.) Delphi's own
+// writer emits sub-property paths dotted, and ConvertProperty parses them by
+// looping on '.' to build `A.B.C`.
+procedure EmitDotted(const ANode: TDfmNode; const APrefix: string;
+  AIndent: Integer; ASB: TStringBuilder);
+var
+  Child: TDfmNode;
+begin
+  for Child in ANode.Children do
+  begin
+    case Child.Kind of
+      dnkSubObject:
+        if Child.ClassName_ <> '' then
+          // A classed node is a real nested component, which cannot live under a
+          // property path. Emit it as its own block rather than lose it.
+          ASB.Append(EmitBlock(Child, AIndent))
+        else
+          EmitDotted(Child, APrefix + '.' + Child.Name, AIndent, ASB);
+      dnkScalar, dnkEvent, dnkBinary, dnkCollection:
+        ASB.Append(Ind(AIndent))
+           .Append(APrefix).Append('.').Append(Child.Name)
+           .Append(' = ').Append(Child.ValueText)
+           .Append(#13#10);
+    end;
+  end;
+end;
+
 // Re-serialize a TDfmNode sub-object tree to well-formed DFM text. Scalars/events
-// emit `Name = Value`; nested objects emit `object Name: TClass ... end`;
-// collections/binary values emit their verbatim ValueText (which already carries
-// the `< ... >` / `{ ... }` structure). Indentation normalized to 2 spaces.
+// emit `Name = Value`; a nested object WITH a class emits `object Name: TClass
+// ... end`; a synthesized CLASSLESS sub-object is a property path and flattens to
+// dotted leaf names (see EmitDotted -- emitting it as a block loads as a missing
+// class); collections/binary values emit their verbatim ValueText (which already
+// carries the `< ... >` / `{ ... }` structure). Indentation normalized to 2 spaces.
 function EmitBlock(const ANode: TDfmNode; AIndent: Integer): string;
 var
   SB   : TStringBuilder;
@@ -517,7 +560,10 @@ begin
     begin
       case Child.Kind of
         dnkSubObject:
-          SB.Append(EmitBlock(Child, AIndent + 1));
+          if Child.ClassName_ <> '' then
+            SB.Append(EmitBlock(Child, AIndent + 1))
+          else
+            EmitDotted(Child, Child.Name, AIndent + 1, SB);
         dnkScalar, dnkEvent, dnkBinary, dnkCollection:
           SB.Append(Ind(AIndent + 1))
             .Append(Child.Name).Append(' = ').Append(Child.ValueText)
@@ -562,9 +608,10 @@ begin
       Child.Name:= Segs[i];
       Child.Kind:= dnkSubObject;
       // A synthesized intermediate has no DFM class of its own (it is a sub-property
-      // object like Font/Style); emit as `object Name` with no class, which the
-      // DFM streamer accepts for owned TPersistent sub-properties. If a class is
-      // required by the T shape, 2a-ii/iii supply it; 2a-i notes the creation.
+      // object like Font/Style). It is a PATH, not a block: EmitBlock flattens a
+      // classless sub-object to dotted leaf names, because `object Name` with no
+      // class streams as a missing CLASS and fails at form load. 2a-i notes the
+      // creation; the note is about the path being materialized, not a block.
       Cur.Children.Add(Child);
       ACreated:= ACreated + [Prefix];
       Cur:= Child;
