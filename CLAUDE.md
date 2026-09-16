@@ -121,6 +121,49 @@ the index then looks complete and answers confidently with fewer results.
 Write/Edit tools emit LF -- normalise after editing or `run_encoding_guard.ps1`
 will fail.
 
+## Backing out working-tree changes: STASH, never `checkout --`, and CLEAN UP
+
+**This tree usually holds another team's uncommitted work** (~28 dirty entries
+under `src\tools\convrules-editor\` and `src\report\DRagLint.Convert.CastLib.pas`
+at the time of writing). Their changes are not committed, not pushed, and some
+are not even tracked -- so a destructive working-tree command here can erase work
+that has no copy anywhere.
+
+### The rule
+
+* **Never `git checkout -- <paths>`** to back out an experiment. It is
+  irreversible, and a path list that is one glob too wide destroys someone
+  else's day with no recovery and no prompt.
+* **Never a bare `git stash`.** With no pathspec it stashes EVERYTHING, the
+  other team's files included, and hands you a single blob to untangle.
+* **Do this instead** -- always with an explicit pathspec and an identifying
+  message:
+
+  ```
+  git stash push -m "agent:<task> -- <why>" -- <path> <path> ...
+  ```
+
+  Flags go BEFORE the `--`. `git stash push -- <path> --quiet` parses `--quiet`
+  as a pathspec and silently does the wrong thing.
+
+### The cleanup is part of the task, not an afterthought
+
+A stash you created is a loose end, and an orphaned one is indistinguishable
+from someone else's. **Before you report, resolve every stash you made:**
+
+* keeping the work -> `git stash pop` (then commit it, or leave it dirty and say so);
+* discarding it deliberately -> `git stash drop <ref>`, and say in your report
+  that you dropped it and why;
+* genuinely unable to resolve it -> **name the exact `stash@{n}` ref and its
+  message in your report** so the next person can find it. Never just leave it.
+
+End by running `git stash list` and confirming what you created is gone -- or
+accounted for by name. "I think I cleaned up" is not a verification.
+
+The scratchpad-copy-then-revert pattern is no longer needed: a stash IS the
+backup, and unlike a copy in `C:\TEMP` it survives in the repo and is visible to
+anyone who looks.
+
 ## Building
 
 Use the `delphi-build` skill. For the CLI specifically,
