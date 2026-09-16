@@ -22580,6 +22580,44 @@ begin
     end;
     JRoot.AddPair('resolved_defaults', JResolved);
 
+    { unlinked_source_properties -- STEP 1 OF THREE, and deliberately just a
+      number. The converter team's request, 2026-09-16: "count it before
+      designing it ... one integer, no prose, no behaviour change. If that
+      number is 2 on a real book it is a warning; if it is 200 it is a report,
+      and you will know which without either of us guessing." Steps 2 and 3 (a
+      --warn-unlinked opt-in, then default-on only if this number earns it) are
+      NOT built.
+
+      DISTINCT PROPERTIES, NOT INSTANCES. On ORM3 VARINSP the per-instance count
+      is 22 and the distinct count is 2 (Style, DisabledShadow) -- and 2 is the
+      number an author can act on, because it is the RULE BOOK that is short,
+      not the form. The per-instance total is emitted beside it so the scale
+      stays visible. Asked of them in INBOX-2026-09-16c; this is our stated
+      lean, taken so the count exists to be argued with, and it is one line to
+      invert if they prefer the other.
+
+      The denominator that matters is properties PRESENT IN THE SOURCE .dfm --
+      which is exactly what the reemit Dropped list holds -- never the source
+      type's surface. TabcToggleBtn has 3,905 proptree leaves and sets about
+      nine per button; counting the surface would be the flood they warned of. }
+    var UnlinkedSet: TStringList:= TStringList.Create;
+    try
+      UnlinkedSet.Sorted:= True;
+      UnlinkedSet.Duplicates:= dupIgnore;
+      UnlinkedSet.CaseSensitive:= False;
+      var UnlinkedTotal: Integer:= 0;
+      for Item in ACtx.Report.Items do
+        if (Item.Kind = aikUnmappedProperty) and (Trim(Item.Path) <> '') then
+        begin
+          UnlinkedSet.Add(Item.Path);
+          Inc(UnlinkedTotal);
+        end;
+      JRoot.AddPair('unlinked_source_properties', TJSONNumber.Create(UnlinkedSet.Count));
+      JRoot.AddPair('unlinked_source_property_sites', TJSONNumber.Create(UnlinkedTotal));
+    finally
+      UnlinkedSet.Free;
+    end;
+
     Writeln(JRoot.ToJSON);
   finally
     JRoot.Free;

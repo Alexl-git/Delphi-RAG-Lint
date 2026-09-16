@@ -1284,7 +1284,21 @@ var
       end;
     end;
   begin
-    FoldOne(AReport.Dropped,    aikUnmappedProperty,     '%s: dropped %s');
+    { Dropped is folded inline rather than through FoldOne so the PROPERTY PATH
+      lands in It.Path as structured data. The count of distinct unlinked source
+      properties is emitted in --format json, and deriving it by parsing
+      '<instance>: dropped <prop>' back out of prose would be a measurement of
+      the message rather than of the fact. FoldOne stays as it is because its
+      other callers pass whole sentences, which are not paths. }
+    for var DN: string in AReport.Dropped do
+    begin
+      var DIt: TApplyItem:= InstItem(aikUnmappedProperty, afReemitNotes,
+                                     Format('%s: dropped %s', [Inst.InstanceName, DN]));
+      DIt.FilePath:= ADfmPath;
+      DIt.Line    := ABlockLine;
+      DIt.Path    := DN;
+      Emit(DIt);
+    end;
     FoldOne(AReport.Mismatched, aikBinaryTypeMismatch,   '%s: mismatched %s');
     FoldOne(AReport.OwnedParts, aikOwnedPartUnconverted, '%s: owned-part %s');
     FoldOne(AReport.Created,    aikDfmPathCreated,       '%s: created %s');
