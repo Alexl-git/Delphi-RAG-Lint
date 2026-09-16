@@ -5,6 +5,53 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Added: hovering an INTERFACE now names what implements it
+
+Hovering `var ABC: ImcSTATIONS;` answers `TmcSTATIONS`. Before this, hover on an
+interface carried Used-by and Used-in-units and nothing about its implementors,
+while `query descendants --of ImcSTATIONS` answered instantly -- the data was
+indexed, and no surface carried it. Hover on the CLASS did not carry the forward
+edge either: `Implements:` is a Phase-1.x doc-only fact.
+
+Two lines, never merged, because a class that implements a contract and an
+interface that extends it are different claims:
+
+```
+# pFIBInterfaces.IFIBObject
+- Implemented by: TFIBCustomDataSet, TFIBDatabase, TFIBDataSet, TFIBQuery, TFIBTransaction, TFriendDatabase (+14 more)
+- Extended by: IFIBConnect, IFIBDataSet, IFIBQuery, IFIBSQLObject, IFIBTransaction
+```
+
+**The autodoc carries the identical fact, by construction rather than by a second
+implementation.** `document`'s managed block and `hover` both format through
+`TDocRegions.FormatPhase2FactLines` -- the v(ADP2 T9) consistency lock -- so the
+fact was added to `TDocFacts`, not to a renderer. Both lines are appended after
+the last existing emitter, so already-documented blocks stay byte-identical but
+for the new trailing lines.
+
+**A shipping primitive could not answer half of it, and that is now on record.**
+`FindDescendantNames` filters `s.kind IN ('class','type')` at BOTH hops of its
+CTE, so an interface can be neither emitted nor **crossed** -- and crossing is the
+half that is easy to miss. Measured on library-Win64: `query descendants --of
+IFIBObject` printed `(none)` while `type_ancestors` held IFIBConnect,
+IFIBSQLObject and IFIBTransaction. That filter is correct for its caller (it
+backs the conversion editor's class pickers, which must never be offered an
+interface), so its behaviour is untouched; the new fact uses a kind-aware
+`FindDescendantNamesOfKind` whose walk admits interfaces and which filters only
+what it emits. Logged as `wrong` in `stats\draglint-gaps.log`.
+
+`query descendants`' `--help`, README and AI-USAGE entries now say **class**
+rather than "type", and state the interface exclusion, instead of promising
+something the verb does not do.
+
+Guarded by `tests\autotest\run_hover_interface_implementors.ps1`, which ships an
+**absence control** (an interface with no implementor must not have one
+fabricated), a **cap control** (more implementors than `OVERRIDDENBY_CAP` must
+report the truncation, not silently shorten), a **kind-separation control**
+(a derived interface must not appear on the Implemented-by line), and a
+**fixture control** (`query descendants` must see the fixture at all, so a red
+run cannot be blamed on the feature when the fixture is what broke).
+
 ### Fixed: `query descendants` shipped without ever appearing in `--help`
 
 `query descendants --of <ancestor>` -- the reverse of `query ancestors`, and the

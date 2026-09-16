@@ -293,7 +293,7 @@ pure-diagnostic verbs are broken out in 2b.
 | `query type-usage --in <f.pas>` | **"does this file reference any of these type names?"** asked of a LIST in one pass (`--names A,B,C` or `--names-file <f>`; `--json`). Counts declarations, `X.Create` construction sites (seen through `receiver_text`) and inheritance. A name appearing only in a COMMENT or a STRING LITERAL is correctly NOT a reference -- that is the whole reason to use this over grep. **Name-keyed**: `refs.symbol_id` is NULL for `type_use` rows -- since 2026-08-31 it is populated, but only for `call` and `member-access` refs and only where the resolver was CERTAIN -- so a project type sharing an RTL name is still indistinguishable here, and the output says so |
 | `query unit-usage --in <f.pas> --unit <U>` | **"is this `uses` entry dead?"** Lists unit U's EXPORT SURFACE -- the interface-section children of its unit symbol -- and reports which of them this file references. `0 of N export(s) referenced` = nothing from U is used. **Pass BOTH databases** for an RTL/VCL/third-party unit: the unit is resolved in whichever store has it, the file's refs come from the store that has the file, and a PROJECT index deliberately excludes library-path units. Members (methods, fields, properties) are NOT part of the surface -- they are not addressable by bare name, and folding them in makes a loop counter named `I` inside a unit look like a reference to it |
 | `query ancestors --name T` | transitive class/interface hierarchy (`--of <ancestor>`) |
-| `query descendants --of T` | the REVERSE of `ancestors` -- every type descending from `T` (implementing classes AND derived interfaces), across all scanned DBs. Exit 1 means no such ancestor, not an error |
+| `query descendants --of T` | the REVERSE of `ancestors` -- every **class** descending from `T`, across all scanned DBs. Derived **interfaces are excluded by design** (it backs the conversion editor's class pickers), so `--of <an interface>` lists implementing classes and never sub-interfaces. Exit 1 means no such ancestor, not an error |
 | `query typecat --name T` | resolve a type's category (float/string/class/interface/...) |
 | `query hints` | stored lint hints (`--name <code>`, `--rule <severity>`) |
 | `resolve-uses --name X` | which unit to add to `uses` (won't suggest implementation-only symbols) |
@@ -303,7 +303,7 @@ pure-diagnostic verbs are broken out in 2b.
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
 | `slice --qname U.T.M` | one symbol's source body |
 | `typeat F:L:C` | resolve the identifier at a cursor position |
-| `hover --qname U.T.M` | hover card (`--format plain\|md\|json`) |
+| `hover --qname U.T.M` | hover card (`--format plain\|md\|json`). On an **interface** it also answers "what satisfies this contract": `Implemented by:` (classes) and `Extended by:` (derived interfaces), capped with a `(+N more)` suffix. Absent entirely when nothing implements it -- never `(none)` |
 | `helpers-of T` | record/class helper edges targeting type T |
 | `top` | most-depended-on symbols (`--by fanin`, `--limit N`) |
 

@@ -519,7 +519,26 @@ type
     /// RenderFactsBlock renders (Called from / Calls / Used in units /
     /// Raises / Deprecated / the ADP1 T3 cheap group / Since / SeeAlso) is
     /// Phase 1.x or opt-in doc-only content, deliberately out of scope for
-    /// this helper and for hover.</summary>
+    /// this helper and for hover.
+    /// <para>PLUS two later additions, each APPENDED after the last emitter so
+    /// that already-documented blocks stay byte-identical but for a new
+    /// trailing line: &lt;c&gt;Directives&lt;/c&gt; (v22), and -- 2026-09-16 --
+    /// &lt;c&gt;Implemented by&lt;/c&gt; / &lt;c&gt;Extended by&lt;/c&gt;. "SIX" above is
+    /// therefore the ORIGINAL count, not the current one; the invariant that
+    /// still holds is that this is the ONE formatter both surfaces call.</para>
+    /// <para>Implemented by / Extended by are the INTERFACE's reverse edge and
+    /// are populated only for an interface symbol. They are NOT the mirror of
+    /// the &lt;c&gt;Implements&lt;/c&gt; line above: that one is Phase 1.x, doc-only,
+    /// per-member, and hover never shows it. These are here precisely so hover
+    /// DOES -- answering "what satisfies this contract" for a reader hovering
+    /// &lt;c&gt;var X: IFoo&lt;/c&gt;. The two are separate lines because a class that
+    /// implements and an interface that extends are different claims; each is
+    /// omitted when empty, with no "(none)" form, since an empty index would
+    /// otherwise render as a measured absence. Both are capped at
+    /// OVERRIDDENBY_CAP with a ' (+N more)' suffix from the *Total fields.
+    /// Sourced from ISymbolStore.FindDescendantNamesOfKind -- NOT
+    /// FindDescendantNames, which cannot traverse an interface chain. Pinned by
+    /// tests\autotest\run_hover_interface_implementors.ps1.</para></summary>
     /// <param name="AFacts"><!-- drag-lint:auto type -->const TDocFacts</param>
     /// <param name="AComplexityMin">Same threshold/semantics as
     /// RenderFactsBlock's own AComplexityMin param (see its comment): the
@@ -1965,6 +1984,25 @@ class function TDocRegions.FormatPhase2FactLines(const AFacts: TDocFacts; ACompl
   AHasOtherContent: Boolean = True): TArray<string>;
 var
   Lines: TStringList;
+  // Local twins of RenderFactsBlock's MoreSuffix/JoinEsc. They are nested
+  // functions THERE, so they are not reachable here; duplicated rather than
+  // hoisted because hoisting would change RenderFactsBlock's own shape in a
+  // change whose subject is a new fact. Same format string, deliberately: two
+  // '(+N more)' spellings in one block would read as two different measurements.
+  function MoreSuffixP2(AShown, ATotal: Integer): string;
+  begin
+    if ATotal > AShown then Result:= Format(' (+%d more)', [ATotal - AShown]) else Result:= '';
+  end;
+  function JoinEscP2(const A: TArray<string>): string;
+  var i: Integer;
+  begin
+    Result:= '';
+    for i:= 0 to High(A) do
+    begin
+      if i > 0 then Result:= Result + ', ';
+      Result:= Result + EscXml(A[i]);
+    end;
+  end;
 begin
   Lines:= TStringList.Create;
   try
@@ -2172,6 +2210,35 @@ begin
       gated behind the same content test by virtue of being appended here. }
     if AFacts.Directives <> '' then
       Lines.Add('Directives: ' + EscXml(StringReplace(AFacts.Directives, ' ', '; ', [rfReplaceAll])));
+    { Implemented by / Extended by -- the interface's own reverse edge, the
+      answer to "what satisfies this contract?".
+
+      POSITION: appended after the last existing emitter, for the reason the
+      Directives note above states in full -- this ONE function feeds BOTH the
+      managed doc block and hover, so a line inserted mid-block would rewrite
+      every already-documented block in the corpus. These two are last.
+
+      WHY THEY ARE HERE AND NOT IN RenderFactsBlock. `Implements` -- the FORWARD
+      edge -- is rendered by RenderFactsBlock and is deliberately doc-only, so
+      hover has never shown it. The owner's request was specifically that
+      HOVERING an interface answer the question, and this helper is the only
+      formatter hover calls. Putting the fact here therefore makes the doc block
+      and hover agree BY CONSTRUCTION (the v(ADP2 T9) consistency lock) instead
+      of by a second implementation that can drift.
+
+      THIS FUNCTION'S SUMMARY SAYS "THE SIX PHASE-2 FACTS" AND IS NOW WRONG;
+      it is corrected in the same change rather than left to be discovered.
+
+      TWO LINES, NEVER MERGED: a class implementing IFoo and an interface
+      extending IFoo are different claims. Each is omitted when empty -- there
+      is no 'Implemented by: (none)', because that would assert a measured
+      absence over whatever corpus happened to be indexed. }
+    if Length(AFacts.ImplementedBy) > 0 then
+      Lines.Add('Implemented by: ' + JoinEscP2(AFacts.ImplementedBy)
+                + MoreSuffixP2(Length(AFacts.ImplementedBy), AFacts.ImplementedByTotal));
+    if Length(AFacts.ExtendedBy) > 0 then
+      Lines.Add('Extended by: ' + JoinEscP2(AFacts.ExtendedBy)
+                + MoreSuffixP2(Length(AFacts.ExtendedBy), AFacts.ExtendedByTotal));
     Result:= Lines.ToStringArray;
   finally
     Lines.Free;

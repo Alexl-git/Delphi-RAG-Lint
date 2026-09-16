@@ -1218,6 +1218,34 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindDescendantNames(const AAncestorName: string): TArray<string>;
+    /// <summary>Transitive descendants of AAncestorName, restricted to symbols
+    /// of AKind ('class' or 'interface'), sorted and case-insensitively
+    /// distinct.</summary>
+    /// <param name="AAncestorName">Bare type name. Matched COLLATE NOCASE.</param>
+    /// <param name="AKind">The symbols.kind to EMIT -- 'class' or 'interface'.
+    /// It does not restrict the WALK.</param>
+    /// <returns>Sorted distinct names; empty when nothing of that kind
+    /// descends from AAncestorName.</returns>
+    /// <remarks>
+    /// <para>NOT a generalisation of <see cref="FindDescendantNames"/>, and the
+    /// difference is load-bearing. FindDescendantNames admits only 'class' and
+    /// 'type' rows INTO THE WALK, so a chain that passes THROUGH an interface
+    /// is cut: IFIBDataSet -> IFIBSQLObject -> IFIBObject yields nothing for
+    /// IFIBObject. That is correct for its caller -- it backs the conversion
+    /// editor's class pickers, which must never be offered an interface -- so
+    /// its behaviour is deliberately left alone rather than widened.</para>
+    /// <para>This routine admits 'class', 'type' AND 'interface' rows into the
+    /// walk and filters only what it EMITS, which is what lets an interface
+    /// hierarchy answer at all. Measured 2026-09-16: on library-Win64,
+    /// `query descendants --of IFIBObject` returns nothing while the index
+    /// holds IFIBConnect, IFIBSQLObject and IFIBTransaction.</para>
+    /// <para>Aliases: a weak alias (`TA = TB;`) carries its own heritage row and
+    /// is crossed; it is emitted only when AKind is 'type'. A strong alias
+    /// (`= type TB`) carries no heritage row and is neither crossed nor
+    /// emitted -- the same rule FindDescendantNames documents.</para>
+    /// <para>Not thread-safe; call from the owning thread only.</para>
+    /// </remarks>
+    function FindDescendantNamesOfKind(const AAncestorName, AKind: string): TArray<string>;
     /// <summary>True when AClassName's transitive closure reaches AInterfaceName
     /// via an interface-kind edge (i.e. AClassName implements that interface).</summary>
     /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>

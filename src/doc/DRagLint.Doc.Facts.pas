@@ -217,6 +217,29 @@ type
     // descendant redeclares the method.
     OverriddenBy     : TArray<string>   ;
     OverriddenByTotal: Integer          ;
+    // Implemented by / Extended by: the REVERSE of Implements, and populated
+    // ONLY when ASym is itself an INTERFACE. ImplementedBy holds the CLASSES
+    // that implement it; ExtendedBy holds the INTERFACES that extend it. Both
+    // come from FindDescendantNamesOfKind (NOT FindDescendantNames, which bars
+    // interfaces from the walk for the class-picker contract and so cannot see
+    // an interface hierarchy at all), capped at OVERRIDDENBY_CAP with the
+    // *Total fields carrying the true distinct count for the '(+N more)'
+    // suffix -- the same shape as OverriddenBy/OverriddenByTotal above.
+    //
+    // THE TWO ARE SEPARATE FIELDS, NOT ONE LIST, and that is a decision. A
+    // descendant of an interface is either a class you can instantiate or an
+    // interface you cannot; merging them would report ISuperWorker as an
+    // implementation. Pinned by
+    // tests\autotest\run_hover_interface_implementors.ps1 (T3/T3b).
+    //
+    // ABSENCE IS THE DEFAULT: both stay empty for a non-interface symbol, and
+    // for an interface nothing implements. An empty list renders no line at
+    // all -- never "Implemented by: (none)", which would read as a measured
+    // claim about a corpus the index may simply not cover.
+    ImplementedBy     : TArray<string>  ;
+    ImplementedByTotal: Integer         ;
+    ExtendedBy        : TArray<string>  ;
+    ExtendedByTotal   : Integer         ;
     // Implements: the QUALIFIED NAME of a same-named member on a resolved
     // INTERFACE ancestor (NAME-BASED ONLY -- no signature-match helper exists in
     // the index, so this is a heuristic, not a verified interface-method proof;
@@ -3431,6 +3454,42 @@ begin
   // which is a property of the ref's neighbourhood rather than of the symbol
   // being documented. Three coincident literals would be worth collapsing; two
   // sites answering two different questions is the same trap in miniature.
+  // Implemented by / Extended by: the REVERSE of Implements, asked of the
+  // INTERFACE rather than of a member. Implements (gathered above, per method)
+  // answers "which interface declares this member"; this answers "what satisfies
+  // this contract", which is the question a reader hovering `var X: IFoo` is
+  // actually asking and which no surface carried before 2026-09-16.
+  //
+  // FindDescendantNamesOfKind, NOT FindDescendantNames: the latter bars
+  // interfaces from the WALK (its class-picker contract), so it cannot traverse
+  // IDerived -> IBase and returns nothing for an interface hierarchy. See that
+  // routine's own header for the measurement.
+  //
+  // TWO QUERIES, TWO FIELDS -- a class that implements the contract and an
+  // interface that extends it are different claims, and one merged list would
+  // present ISuperWorker as instantiable.
+  //
+  // Cost: two indexed CTE lookups, and ONLY for interface symbols -- the fact
+  // gather for every class, record and routine is untouched.
+  if ASym.Kind = skInterface then
+  begin
+    var IfaceName: string:= LastSeg(ASym.QualifiedName);
+
+    var ImplNames: TArray<string>:= AStore.FindDescendantNamesOfKind(IfaceName, 'class');
+    Result.ImplementedByTotal:= Length(ImplNames);
+    var ShownIB: Integer:= Length(ImplNames);
+    if ShownIB > OVERRIDDENBY_CAP then ShownIB:= OVERRIDDENBY_CAP;
+    SetLength(Result.ImplementedBy, ShownIB);
+    for var K:= 0 to ShownIB - 1 do Result.ImplementedBy[K]:= ImplNames[K];
+
+    var ExtNames: TArray<string>:= AStore.FindDescendantNamesOfKind(IfaceName, 'interface');
+    Result.ExtendedByTotal:= Length(ExtNames);
+    var ShownEB: Integer:= Length(ExtNames);
+    if ShownEB > OVERRIDDENBY_CAP then ShownEB:= OVERRIDDENBY_CAP;
+    SetLength(Result.ExtendedBy, ShownEB);
+    for var K:= 0 to ShownEB - 1 do Result.ExtendedBy[K]:= ExtNames[K];
+  end;
+
   if ASym.Kind in [skClass, skInterface, skRecord] then
   begin
     var URefs: TArray<TReference>:= AStore.FindCallersByName(LastSeg(ASym.QualifiedName));

@@ -1993,6 +1993,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindDescendantNames(const AAncestorName: string): TArray<string>;
+      function FindDescendantNamesOfKind(const AAncestorName, AKind: string): TArray<string>;
       /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AInterfaceName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
@@ -11660,6 +11661,63 @@ begin
       ') ' +
       'SELECT DISTINCT name FROM desc_names WHERE kind = ''class'' ORDER BY name';
     Q.ParamByName('anc').AsString:= AAncestorName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      if Trim(Q.Fields[0].AsString) <> '' then List.Add(Q.Fields[0].AsString);
+      Q.Next;
+    end;
+    Q.Close;
+    Result:= List.ToStringArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindDescendantNamesOfKind(const AAncestorName, AKind: string): TArray<string>;
+{ THE WALK ADMITS INTERFACES; FindDescendantNames DOES NOT, ON PURPOSE.
+
+  The sibling above joins `s.kind IN ('class','type')` at BOTH hops, so an
+  interface can neither be emitted nor CROSSED. Crossing is the half that is
+  easy to miss: IFIBDataSet extends IFIBSQLObject extends IFIBObject, and with
+  interfaces barred from the walk, IFIBObject has no reachable descendant at
+  all. Measured on library-Win64, 2026-09-16: `query descendants --of
+  IFIBObject` printed `(none)` while type_ancestors held three derived
+  interfaces. That is a true statement about the class-picker contract and a
+  false-looking one about the type system, which is why this routine exists
+  INSTEAD of a widened flag on the old one -- the pickers keep their contract
+  untouched.
+
+  AKind filters only the final SELECT. Passing 'class' here is therefore NOT
+  identical to FindDescendantNames: this walk may reach a class through an
+  interface hop, which is the correct answer to "what implements IFoo" and the
+  wrong answer for a picker that wants a clean class tree. The two routines are
+  not interchangeable in either direction. }
+var
+  Q   : TFDQuery   ;
+  List: TStringList;
+begin
+  List:= TStringList.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    List.Sorted:= True; List.Duplicates:= dupIgnore; List.CaseSensitive:= False;
+    Q.Connection:= FConn;
+    Q.SQL.Text  :=
+      'WITH RECURSIVE desc_names(name, kind) AS ( ' +
+      '  SELECT DISTINCT s.name, s.kind ' +
+      '    FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id ' +
+      '   WHERE ta.ancestor_name = :anc COLLATE NOCASE ' +
+      '     AND s.kind IN (''class'', ''type'', ''interface'') ' +
+      '  UNION ' +
+      '  SELECT DISTINCT s.name, s.kind ' +
+      '    FROM type_ancestors ta ' +
+      '    JOIN symbols s    ON s.id = ta.symbol_id AND s.kind IN (''class'', ''type'', ''interface'') ' +
+      '    JOIN desc_names d ON ta.ancestor_name = d.name COLLATE NOCASE ' +
+      ') ' +
+      'SELECT DISTINCT name FROM desc_names WHERE kind = :knd ORDER BY name';
+    Q.ParamByName('anc').AsString:= AAncestorName;
+    Q.ParamByName('knd').AsString:= AKind;
     Q.Open;
     while not Q.Eof do
     begin
