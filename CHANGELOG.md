@@ -5,6 +5,57 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed: `format` -- the verb that rewrites your source had no safety net, and `--dry-run` was a lie
+
+`drag-lint format` overwrites a `.pas` in place. It was also the only verb with
+**zero test coverage anywhere under `tests\`** -- a `Select-String` for
+`TYadfFormatter|drag-lint format|yadf-path` over every runner returned nothing.
+Four things were true at once:
+
+* **`--dry-run` rewrote the file.** The flag parsed (it is global) and `DoFormat`
+  ignored it, so a user who typed it *specifically* to avoid touching the file
+  had the file rewritten anyway. `--diff` did not exist at all.
+* **No verification.** A formatter that corrupted the file printed `Formatted:`,
+  exited 0, and left the corruption on disk.
+* **No version gate.** A YADF old enough to split inline `var` declarations ran
+  happily.
+* **Two hardcoded Win32 fallbacks** (`...\YADF\Win32\{Release,Debug}\...`) that
+  could never resolve, since every YADF build on this box is **Win64** -- each
+  carrying a `dl:ok hardcoded-absolute-path` review reading *"an
+  existence-checked dev-box fallback, never the only source"*, which justified
+  exactly the mechanism that made the original defect silent.
+
+Now:
+
+| | |
+|---|---|
+| `--dry-run` | resolves, version-checks, prints the binary it **would** run, writes nothing |
+| `--diff` | formats a **copy** in a scratch dir and prints a diff; the original is never opened for writing |
+| version gate | refuses YADF older than **1.0.6.6**, naming the found version, the floor and the path (**exit 4**, nothing written) |
+| verification | re-parses after formatting and compares the **declared symbol set**; on divergence the file is **restored** (**exit 5**) |
+| resolution | `--yadf-path` or `HKCU\Software\YADF\ExePath`. **No hardcoded fallback** -- both constants and their `dl:ok` markers are deleted |
+
+Exit codes are now distinct (3 = no YADF, 4 = too old, 5 = corrupted and
+restored) because "it did not format" is not actionable on a verb that rewrites
+source.
+
+**The gate reads the exe's VERSION RESOURCE, not `--version`.** Measured:
+`YADF.exe --version` exits 2 with `unknown option --version`. The probe the plan
+called for is not buildable; the resource needs no cooperation from YADF and
+costs no subprocess. An **absent** version resource (a wrapper script) proceeds
+with a warning rather than being refused -- refusing the unverifiable would
+break `--yadf-path` for no gain, since the post-format verification protects the
+file regardless.
+
+Guarded by `tests\autotest\run_format_verb_guard.ps1` (21 assertions). The
+version-floor pair uses the two **real** YADF builds on the box -- Release
+1.0.17.0 (accepted) and Debug 1.0.3.0 (refused) -- rather than a stub, because a
+`.bat` has no version resource and could never exercise a resource-based gate;
+using both proves the refusal keys on the **version**, not on the binary's
+identity. Those two assertions SKIP loudly where YADF is not installed. Note the
+Debug build is *older in version* but *newer on disk*: mtime does not order
+versions.
+
 ### Fixed: `convert-apply` blamed the `.dfm` when the real cause was "not indexed"
 
 On a unit covered by no supplied `--db`, `convert-apply` printed, once per

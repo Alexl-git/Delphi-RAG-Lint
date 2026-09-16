@@ -703,7 +703,7 @@ CI flags (apply to `lint` / `lint-all` / `check-ast`): `--format sarif` (SARIF
 | [`create-enum-helper`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/create-enum-helper) `--qname <TEnum>` | Generate a Byte-family record helper for an enum | `--methods <csv>`, `--tostring rtti\|case` |
 | `uses-audit <unit.pas> --db <db>` | Propose interface->implementation moves + unused units | `--format text\|json` |
 | `uses-fix <unit.pas> --project <dproj> --db <db>` | Compiler-verified `uses` cleanup | `--apply`, `--remove-unused`, `--format json\|text`, `--only <unit,...>` |
-| `format <file>` | Format a `.pas` file with the YADF formatter | `--yadf-path` |
+| `format <file>` | Format a `.pas` file with the YADF formatter. **Rewrites the file in place.** Refuses a YADF older than 1.0.6.6 (exit 4, nothing written) and restores the file if formatting changed what the unit *declares* (exit 5) | `--yadf-path`, `--dry-run`, `--diff` |
 
 **Formatting is safe for your suppressions.** drag-lint drives **YADF** for the
 current unit or the whole active project straight from the IDE menu, and neither

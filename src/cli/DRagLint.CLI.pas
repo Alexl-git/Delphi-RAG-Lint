@@ -272,6 +272,7 @@ type
     ScanLibrariesAll: Boolean       ; // --scan-libraries-all: every platform subkey
     AsJson          : Boolean       ;
     DryRun          : Boolean       ;
+    ShowDiff        : Boolean       ; // v(row 2): `format --diff` -- format a COPY, print the diff, write nothing
     Watch           : Boolean       ;
     Interval        : Integer       ;
     Open            : Boolean       ;
@@ -874,7 +875,7 @@ begin
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
-  Writeln('  drag-lint format <file> [--yadf-path PATH]');
+  Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
@@ -1299,6 +1300,7 @@ begin
     // INBOX 2.4: no fuzzy suggestions -- zero rows means "no such symbol".
     else if A = '--exact' then Result.ExactOnly:= True
     else if A = '--dry-run' then Result.DryRun:= True
+    else if A = '--diff' then Result.ShowDiff:= True
     else if A = '--quiet'   then Result.Quiet := True
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
     else if A = '--document-third-party' then Result.DocumentThirdParty:= True
@@ -23225,18 +23227,64 @@ end; // function
 // v0.27: drag-lint format <file> [--yadf-path PATH]
 // Runs YADF formatter on the given file (YADF rewrites in place).
 // Exit 2 on usage error, 1 on formatter failure, 0 on success.
+{ `drag-lint format <file> [--yadf-path PATH] [--dry-run | --diff]`
+
+  THE EXIT CODES ARE DISTINCT ON PURPOSE. This verb REWRITES THE USER'S SOURCE,
+  so "it did not format" is not an actionable answer -- a script (or a person)
+  has to be able to tell "no formatter" from "the formatter is too old" from
+  "the formatter corrupted the file and I put it back":
+
+    0  formatted (or dry-run/diff completed)
+    2  usage: no target, or the target does not exist
+    3  no usable YADF resolved            (TFormatResult -3)
+    4  resolved YADF is BELOW the floor   (TFormatResult -4) -- nothing written
+    5  post-format verification FAILED    (TFormatResult -5) -- file RESTORED
+    1  any other formatter failure
+
+  `--dry-run` USED TO BE A SILENT LIE. The flag parsed (it is global) and this
+  routine ignored it, so a user who typed it specifically to avoid touching the
+  file had the file rewritten anyway. Measured 2026-09-16 and pinned by
+  tests\autotest\run_format_verb_guard.ps1 (A3b). }
 function DoFormat(const AArgs: TArgs): Integer;
 var
   Res   : TFormatResult;
   Target: string       ;
+  Mode  : TFormatMode  ;
 begin
   Target:= AArgs.Target;
   if Target = '' then Target:= AArgs.QName; // fallback: reuse qname slot
-  if Target = '' then begin Writeln('Usage: drag-lint format <file> [--yadf-path PATH]'); Exit (2 ); end;
+  if Target = '' then begin Writeln('Usage: drag-lint format <file> [--yadf-path PATH] [--dry-run|--diff]'); Exit (2 ); end;
   if not FileExists(Target) then begin Writeln(Format('File not found: %s', [Target])); Exit(2); end;
-  Res:= TYadfFormatter.Format(Target, AArgs.YadfPath);
-  if not Res.Success then begin Writeln(Format('YADF format failed (exit %d):'#13#10'%s', [Res.ExitCode, Res.StdoutText])); Exit(1); end;
-  Writeln(Format('Formatted: %s', [Target]));
+
+  if AArgs.ShowDiff then Mode:= fmDiff
+  else if AArgs.DryRun then Mode:= fmDryRun
+  else Mode:= fmApply;
+
+  Res:= TYadfFormatter.Format(Target, AArgs.YadfPath, Mode);
+
+  if not Res.Success then
+  begin
+    Writeln(Format('YADF format failed (exit %d):'#13#10'%s', [Res.ExitCode, Res.StdoutText]));
+    case Res.ExitCode of
+      -3: Exit(3);
+      -4: Exit(4);
+      -5: Exit(5);
+    else
+      Exit(1);
+    end;
+  end;
+
+  case Mode of
+    fmDryRun: Writeln(Res.StdoutText);
+    fmDiff  : Writeln(Res.DiffText  );
+  else
+    begin
+      if Trim(Res.StdoutText) <> '' then Writeln(Res.StdoutText);
+      Writeln(Format('Formatted: %s  (via %s%s)',
+        [Target, Res.ResolvedPath,
+         (if Res.YadfVersion <> '' then ' ' + Res.YadfVersion else '')]));
+    end;
+  end;
   Result:= 0;
 end; // function
 
