@@ -179,3 +179,9 @@ third_party/engine-pinned/
 *.BCK
 *.BCK[0-9]
 *.BCK[0-9][0-9]
+
+# YADF backups of .rules books. Same category as *.pas.bak and *.BCK[n] above: a
+# local artifact of running the formatter, never a thing to commit. Two of these
+# (docs/examples/convrules/sample.rules.bak{,.2}) reached main before this rule.
+*.rules.bak
+*.rules.bak.[0-9]

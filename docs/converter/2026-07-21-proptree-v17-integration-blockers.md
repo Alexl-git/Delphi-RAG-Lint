@@ -5,6 +5,21 @@
 (`is_writable`/`visibility`/`member_kind`). The field contract works great; two
 blockers + one corpus note surfaced when running it against the live v17 exe + DBs.
 
+> **STATUS UPDATE 2026-07-23 (all indexes reindexed to schema v18):**
+> - **BLOCKER 1 -- STILL OPEN.** `--refs-as-leaves` was NOT added in v18. Verified by diffing
+>   the `proptree` usage lines of the staged Jul-21 exe and main's fresh v18 exe: identical,
+>   both `schema proptree/2`, neither accepts the flag. The `f65fb9c` cherry-pick is still the
+>   ask; the v18 rebuild does not address it, and the 30 s watchdog remains the only guard.
+> - **BLOCKER 2 -- FULLY RESOLVED.** Every project DB (ORM3, SQL, Loader, TableTools, DragLint,
+>   DragLintGraph, OCRPDF) is at schema 18, and `symbols.prop_access` is populated across all of
+>   them -- `is_writable` now carries real data instead of defaulting TRUE. The ORM3-dependent
+>   tests guarded by `Orm3Queryable` should now RUN instead of skipping.
+> - **Corpus note (unified libraries) -- unretested.** Both platform libraries are being rebuilt
+>   for v18; re-check whether Win32/Win64 counts still come out equal once they land.
+> - **No converter code change was needed for v18**: the schema gate is `>=` and the editor
+>   holds no `symbols.id`. See `docs/converter/STATUS.md` (2026-07-23) and
+>   `docs/INBOX-index-schema-v18-reindex-for-converter.md`.
+
 ## What works (no action needed)
 - proptree/2 fields parse and drive the editor: read-only leaves hidden, public
   leaves tagged "PAS-only", DFM/PAS surface via `--min-visibility`. Verified on
