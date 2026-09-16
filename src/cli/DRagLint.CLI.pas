@@ -568,6 +568,7 @@ type
     // only diagnostics). --from/--to reuse CallFrom/RenameTo (the From/To types).
     RulesFile     : string ; // --rules <file>  (conversion-rules DSL)
     CastLibFile   : string ; // --castlib <file>  (class + enum cast library)
+    NoWarnUnlinked: Boolean; // --no-warn-unlinked  (convert-apply: keep the unlinked count, drop the warnings)
     PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
     // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
     // is the --from-block path (one F DFM `object` block, verbatim text).
@@ -888,7 +889,7 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix)');
+  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -1416,6 +1417,7 @@ begin
       Result.CastLibFile:= ParamStr(i);
     end
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
+    else if A = '--no-warn-unlinked' then Result.NoWarnUnlinked:= True // convert-apply: silence the per-(type,property) unlinked warnings; the json count stays
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
     else if (A = '--task') and (i < ParamCount) then
     begin
@@ -22587,43 +22589,43 @@ begin
     end;
     JRoot.AddPair('resolved_defaults', JResolved);
 
-    { unlinked_source_properties -- STEP 1 OF THREE, and deliberately just a
-      number. The converter team's request, 2026-09-16: "count it before
-      designing it ... one integer, no prose, no behaviour change. If that
-      number is 2 on a real book it is a warning; if it is 200 it is a report,
-      and you will know which without either of us guessing." Steps 2 and 3 (a
-      --warn-unlinked opt-in, then default-on only if this number earns it) are
-      NOT built.
+    { unlinked_source_properties / unlinked_source_property_sites / unlinked[]
+      -- row 6 steps 1-3, complete (2026-09-16). Step 1 shipped the two
+      integers alone, keyed by property NAME, so a number existed before a
+      design did; measured 2 distinct / 22 sites on ORM3 VARINSP, and the
+      converter team's own test was "2 is a warning, 200 is a report".
 
-      DISTINCT PROPERTIES, NOT INSTANCES. On ORM3 VARINSP the per-instance count
-      is 22 and the distinct count is 2 (Style, DisabledShadow) -- and 2 is the
-      number an author can act on, because it is the RULE BOOK that is short,
-      not the form. The per-instance total is emitted beside it so the scale
-      stays visible. Asked of them in INBOX-2026-09-16c; this is our stated
-      lean, taken so the count exists to be argued with, and it is one line to
-      invert if they prefer the other.
+      Now derived from Report.Unlinked, which is keyed by (SOURCE TYPE,
+      property) -- their refinement (a): with one #convert block the two keys
+      agree, with two blocks two source types both dropping 'Style' must be two
+      rows. The counts keep their step-1 names and meaning (rows, and the sum of
+      their sites), so a consumer written against step 1 still parses; the
+      array is additive and carries the per-row fraction their refinement (b)
+      asked for, '2 of 20 instances', as sites/instances.
+
+      The matching warnings are in warnings[]/items[] as kind
+      'unlinked-source-property' unless --no-warn-unlinked; this block is
+      emitted either way, so silencing the warning never loses the count.
 
       The denominator that matters is properties PRESENT IN THE SOURCE .dfm --
       which is exactly what the reemit Dropped list holds -- never the source
       type's surface. TabcToggleBtn has 3,905 proptree leaves and sets about
       nine per button; counting the surface would be the flood they warned of. }
-    var UnlinkedSet: TStringList:= TStringList.Create;
-    try
-      UnlinkedSet.Sorted:= True;
-      UnlinkedSet.Duplicates:= dupIgnore;
-      UnlinkedSet.CaseSensitive:= False;
-      var UnlinkedTotal: Integer:= 0;
-      for Item in ACtx.Report.Items do
-        if (Item.Kind = aikUnmappedProperty) and (Trim(Item.Path) <> '') then
-        begin
-          UnlinkedSet.Add(Item.Path);
-          Inc(UnlinkedTotal);
-        end;
-      JRoot.AddPair('unlinked_source_properties', TJSONNumber.Create(UnlinkedSet.Count));
-      JRoot.AddPair('unlinked_source_property_sites', TJSONNumber.Create(UnlinkedTotal));
-    finally
-      UnlinkedSet.Free;
+    var UnlinkedTotal: Integer:= 0;
+    var JUnlinked: TJSONArray:= TJSONArray.Create;
+    for var U: TApplyUnlinked in ACtx.Report.Unlinked do
+    begin
+      Inc(UnlinkedTotal, U.Sites);
+      var JU: TJSONObject:= TJSONObject.Create;
+      JU.AddPair('from_type', U.FromType);
+      JU.AddPair('path'     , U.Path);
+      JU.AddPair('sites'    , TJSONNumber.Create(U.Sites));
+      JU.AddPair('instances', TJSONNumber.Create(U.Instances));
+      JUnlinked.AddElement(JU);
     end;
+    JRoot.AddPair('unlinked_source_properties', TJSONNumber.Create(Length(ACtx.Report.Unlinked)));
+    JRoot.AddPair('unlinked_source_property_sites', TJSONNumber.Create(UnlinkedTotal));
+    JRoot.AddPair('unlinked', JUnlinked);
 
     Writeln(JRoot.ToJSON);
   finally
@@ -22632,7 +22634,7 @@ begin
 end; // procedure
 
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
-/// [--only Name1,Name2,...] [--apply] [--no-backup] [--format json] -- Track 3 sub-project B: locates the
+/// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
 /// (#1 declaration retype, #2 uses-add, #3 .dfm re-emit, #4 property/event access-site
 /// rewrite via ref-gap G's member-access index, #5 runtime-creator retype + TODO markers).
@@ -22650,7 +22652,8 @@ end; // procedure
 /// OnlySections (same comma-split TArray&lt;string&gt; already used by `index --all`).</summary>
 /// <param name="AArgs">GhostUnit=--unit (the .pas file to convert); RulesFile=--rules;
 /// OnlySections=--only (comma-split instance-name allow-list); Apply=--apply; NoBackup=
-/// --no-backup; DbPath/DbPaths=index(es).</param>
+/// --no-backup; NoWarnUnlinked=--no-warn-unlinked (silences the per-(source type, property)
+/// unlinked warnings; the json count and unlinked[] stay); DbPath/DbPaths=index(es).</param>
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
 /// hard error (missing .dfm when rules need it, invalid rules, BuildApplyPlan Ok=False, or
 /// --apply refused by the freshness guard); 2 on bad args (missing --unit/--rules, file not
@@ -22783,7 +22786,7 @@ begin
 
   if (AArgs.GhostUnit = '') or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json]');
     Exit(2);
   end;
   UnitPas:= AArgs.GhostUnit;
@@ -22908,7 +22911,7 @@ begin
   end;
 
   PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections,
-    ParseCastLib(AArgs.CastLibFile));
+    ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked);
   if not PlanRes.Ok then
   begin
     if UseJson then

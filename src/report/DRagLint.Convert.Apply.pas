@@ -124,7 +124,13 @@ type
     aikMappingNotApplied,    { #apply'd #mapping matched no value }
     aikDefaultRuleSuperseded,{ #default skipped -- a rule already carried that path }
     aikDefaultResolved,      { F prop absent-because-default; its value was carried }
-    aikEnumCastUnmapped);    { an enum cast had no map for this value and no else }
+    aikEnumCastUnmapped,     { an enum cast had no map for this value and no else }
+    aikUnlinkedSourceProperty); { ONE line per (source type, property) that no
+                               #link carries and no #ignore acknowledges, with the
+                               site count as a FRACTION of that type's converted
+                               instances. The per-instance 'dropped' lines above
+                               are the sites; this is the rule-book gap they
+                               share. Row 6 step 3, 2026-09-16. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -204,6 +210,33 @@ type
     Line    : Integer; { 1-based line of the instance's .dfm object header, or 0 }
   end;
 
+  /// <summary>One rule-book gap: a source property that at least one converted
+  /// instance of FromType carried in its .dfm block and that no #link carries
+  /// and no #ignore acknowledges. Keyed by (FromType, Path), NOT by Path alone:
+  /// two source types both dropping 'Style' are two gaps, and collapsing them
+  /// would hide one the moment a book grows a second #convert block.</summary>
+  /// <remarks>
+  /// <para>Sites is how many converted instances of FromType carried the
+  /// property; Instances is how many instances of FromType were converted at
+  /// all. The pair is the whole point (converter team, 2026-09-16): a MINORITY
+  /// site count is the STRONGER signal. 20 of 20 dropping Style is a deliberate
+  /// non-mapping; 2 of 20 dropping Font.* is the two buttons somebody styled
+  /// with ParentFont=False, and dropping those silently restyles exactly the
+  /// controls someone cared about. A bare 'x2' invites a skim; '2 of 20' does
+  /// not.</para>
+  /// <para>The denominator is instances that CONVERTED (cleared the re-emit
+  /// checkpoint), not instances found -- a skipped instance produced no
+  /// Dropped list, so counting it would understate every fraction.</para>
+  /// <para>Sorted by FromType then Path, case-insensitively, so the order is
+  /// stable across runs and does not depend on .dfm instance order.</para>
+  /// </remarks>
+  TApplyUnlinked = record
+    FromType : string;  { the #convert source type, as the rule spells it }
+    Path     : string;  { the dotted source property path, as the .dfm spells it }
+    Sites    : Integer; { converted instances of FromType that carried it }
+    Instances: Integer; { converted instances of FromType, the denominator }
+  end;
+
   /// <summary>Human-readable summary of one convert-apply run, grouped by
   /// surface: Converted lists one line per instance actually rewritten;
   /// AccessSites and CreatorSites list the .pas property/event-access and
@@ -227,6 +260,12 @@ type
   /// that separation is the whole point of the record (see
   /// TApplyResolvedDefault), and a consumer summing the six arrays to predict
   /// Length(Items) must NOT add this one in.
+  /// INVARIANT 3: Unlinked is likewise disjoint from Items and the six arrays;
+  /// it is derived from the aikUnmappedProperty items AFTER the instance loop
+  /// and is ALWAYS populated. The matching aikUnlinkedSourceProperty warnings
+  /// (one per Unlinked entry, in Warnings AND Items, so invariant 1 holds) are
+  /// emitted only when BuildApplyPlan's AWarnUnlinked is True -- so a caller
+  /// that silences the warning still gets the count.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
@@ -242,6 +281,9 @@ type
     Items       : TArray<TApplyItem>;
     { Disjoint from Items and from the six arrays above -- see invariant 2. }
     ResolvedDefaults: TArray<TApplyResolvedDefault>;
+    { Disjoint likewise -- see invariant 3. One entry per (source type, property)
+      no #link carries; always populated, whether or not it was also warned. }
+    Unlinked        : TArray<TApplyUnlinked>;
   end;
 
   /// <summary>The outcome of BuildApplyPlan: the full set of text edits to
@@ -347,6 +389,14 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <param name="AOnly">Optional allow-list of instance names to restrict the
 /// plan to; empty means convert every instance that matches a rule.</param>
 /// <param name="ACastLib"><!-- drag-lint:auto type -->const TCastLib</param>
+/// <param name="AWarnUnlinked">True (the CLI default) emits one
+/// aikUnlinkedSourceProperty warning per Report.Unlinked entry -- a source
+/// property some converted instance carried that no #link carries and no
+/// #ignore acknowledges -- printed as '&lt;N&gt; of &lt;M&gt; instance(s)'. False
+/// (`--no-warn-unlinked`) still fills Report.Unlinked but emits no warning.
+/// Default-on because the number earned it: measured 2 distinct gaps over 22
+/// sites on a real 36-link book, and the converter team's own test was "2 is
+/// a warning, 200 is a report".</param>
 /// <returns>A TApplyResult. Task 2 implements surface #1 (.pas declaration
 /// retype) and surface #2 (.pas uses-add): each located instance contributes a
 /// tekReplaceInLine edit swapping its FromType token for ToType, plus (once
@@ -386,7 +436,7 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// </remarks>
 function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>;
-  const ACastLib: TCastLib): TApplyResult;
+  const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
 /// returns the instances that should be converted: those whose class matches
@@ -455,6 +505,7 @@ implementation
 
 uses
   System.StrUtils,
+  System.Generics.Defaults,
   System.IOUtils,
   System.Classes,
   System.Hash,
@@ -472,7 +523,8 @@ const
     'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
     'cast-not-applied', 'cast-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
-    'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped');
+    'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
+    'unlinked-source-property');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1140,7 +1192,7 @@ end;
 
 function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>;
-  const ACastLib: TCastLib): TApplyResult;
+  const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
 var
   DfmText     : string;
   DfmLines    : TArray<string>;
@@ -1722,6 +1774,102 @@ var
     end;
   end;
 
+  // Row 6 steps 2/3 (2026-09-16). Folds the per-instance aikUnmappedProperty
+  // items into ONE row per (source type, property) -- Result.Report.Unlinked,
+  // always -- and, when AWarnUnlinked, warns once per row with the site count
+  // as a FRACTION of that type's converted instances. Runs AFTER the instance
+  // loop, so both the numerator (sites) and the denominator (instances that
+  // cleared the re-emit checkpoint) are final.
+  //
+  // The key is (FromType, Path), not Path: with one #convert block the two are
+  // identical, which is exactly when it is cheap to get right; with two, two
+  // source types both dropping 'Style' would collapse into one row and one of
+  // the two rule-book gaps would vanish.
+  function SummarizeUnlinked: TArray<TApplyUnlinked>;
+  var
+    Rows   : TList<TApplyUnlinked>;
+    Keys   : TStringList;               { UpperCase('FromType|Path') -> row index, via Objects }
+    PerType: TDictionary<string, Integer>; { UpperCase(FromType) -> converted instances }
+    Inst2  : TConvertInstance;
+    Item   : TApplyItem;
+    U      : TApplyUnlinked;
+    K      : string;
+    N, Idx : Integer;
+  begin
+    Rows   := TList<TApplyUnlinked>.Create;
+    Keys   := TStringList.Create;
+    PerType:= TDictionary<string, Integer>.Create;
+    try
+      Keys.Sorted:= True;
+      Keys.Duplicates:= dupError;
+      Keys.CaseSensitive:= False;
+
+      { Denominators: instances of each source type that actually converted.
+        A skipped instance produced no Dropped list, so counting it would
+        understate every fraction. }
+      for Inst2 in Instances do
+        if ConvertedInstNames.Contains(Inst2.InstanceName) then
+        begin
+          K:= UpperCase(Inst2.FromType);
+          if not PerType.TryGetValue(K, N) then N:= 0;
+          PerType.AddOrSetValue(K, N + 1);
+        end;
+
+      { Numerators: one Dropped item per (instance, property). }
+      for Item in Items do
+      begin
+        if (Item.Kind <> aikUnmappedProperty) or (Trim(Item.Path) = '') then Continue;
+        K:= UpperCase(Item.FromType + '|' + Item.Path);
+        if Keys.Find(K, Idx) then
+        begin
+          Idx:= Integer(Keys.Objects[Idx]);
+          U:= Rows[Idx];
+          Inc(U.Sites);
+          Rows[Idx]:= U;
+        end
+        else
+        begin
+          U:= Default(TApplyUnlinked);
+          U.FromType:= Item.FromType;
+          U.Path    := Item.Path;
+          U.Sites   := 1;
+          if not PerType.TryGetValue(UpperCase(Item.FromType), U.Instances) then U.Instances:= 0;
+          Rows.Add(U);
+          Keys.AddObject(K, TObject(Rows.Count - 1));
+        end;
+      end;
+
+      { Stable order: by source type, then property, case-insensitively -- not
+        by .dfm instance order, which is what emission order would give. }
+      Rows.Sort(TComparer<TApplyUnlinked>.Construct(
+        function(const L, R: TApplyUnlinked): Integer
+        begin
+          Result:= CompareText(L.FromType, R.FromType);
+          if Result = 0 then Result:= CompareText(L.Path, R.Path);
+        end));
+      Result:= Rows.ToArray;
+
+      if not AWarnUnlinked then Exit;
+      for U in Rows do
+      begin
+        { '2 of 20', never 'x2': a MINORITY site count is the STRONGER signal
+          (the two ParentFont=False buttons somebody deliberately styled), and
+          a bare multiplier reads as "rare" and invites a skim. }
+        It:= PlainItem(aikUnlinkedSourceProperty, afWarnings,
+          Format('%s.%s: no #link carries it -- dropped on %d of %d converted instance(s); add a #link, or #ignore %s to accept the drop',
+                 [U.FromType, U.Path, U.Sites, U.Instances, U.Path]));
+        It.FromType:= U.FromType;
+        It.Path    := U.Path;
+        It.FilePath:= ADfmPath;
+        Emit(It);
+      end;
+    finally
+      PerType.Free;
+      Keys.Free;
+      Rows.Free;
+    end;
+  end;
+
 begin
   Result:= Default(TApplyResult);
   Result.Ok:= False;
@@ -1932,6 +2080,7 @@ begin
 
     PlanAccessSites;
     PlanUsesAdditions;
+    Result.Report.Unlinked:= SummarizeUnlinked;
 
     Result.Edits          := Edits.ToArray;
     Result.Report.Converted:= Converted.ToArray;
