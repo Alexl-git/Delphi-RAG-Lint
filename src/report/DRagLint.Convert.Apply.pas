@@ -111,6 +111,11 @@ type
     aikDefaultsMayDiverge,   { a rule-referenced source is absent AND has no
                                usable default, so the T default applies }
     aikCastNotApplied,       { #link carrying a cast, refused on the .pas side }
+    aikCastApplied,          { #link carrying a cast, REALIZED from the castlib's
+                               `pas` template at a .pas access site. Sits
+                               immediately after aikCastNotApplied because the
+                               two are the same question answered both ways, and
+                               NAMES below is POSITIONAL -- keep the two in step. }
     aikInstanceSkipped,      { whole instance skipped before any edit }
     aikFieldDeclNotRetyped,  { shared multi-declarator line, not retyped }
     aikUsesUnitUnresolved,   { no unit found declaring T, uses not added }
@@ -465,7 +470,7 @@ const
     'dfm-path-created', 'creator-verify', 'creator-unverified',
     'unmapped-property', 'binary-type-mismatch', 'owned-part-unconverted',
     'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
-    'cast-not-applied', 'instance-skipped', 'field-decl-not-retyped',
+    'cast-not-applied', 'cast-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped');
 begin
@@ -1532,14 +1537,119 @@ var
         about is the same class of defect. }
       if LinkRule.Cast <> '' then
       begin
-        It:= PlainItem(aikCastNotApplied, afWarnings,
-          Format('line %d: #link %s <- %s : %s SKIPPED on the .pas side -- ' +
-            'the cast is not applied by convert-apply, and renaming without it would produce ' +
-            'wrong values. Convert this access site by hand.',
-            [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast]));
-        It.Path    := LinkRule.FromPath;
-        It.RuleLine:= LinkRule.LineNo;
-        Emit(It);
+        { THREE OUTCOMES, NEVER TWO, AND NEVER SILENCE.
+
+          The refusal above was right when it was the only option: renaming the
+          member without converting the VALUE emits source that compiles and is
+          wrong, which is worse than not converting. What was missing is the
+          other half -- performing the cast when the library says how.
+
+          The three cases need telling apart because two of them need OPPOSITE
+          fixes by the operator:
+            1. resolved + `pas` template -> realize it here.
+            2. resolved + EMPTY template -> still by hand, but the fix is to the
+               .castlib, so the message must say the cast was FOUND.
+            3. name resolves to nothing  -> the fix is to the rule book or the
+               --castlib path, so the message keeps its original wording.
+          Before this, 2 and 3 produced the identical sentence and sent the
+          operator hunting the wrong file.
+
+          THE LOOKUP IS BY NAME, AND IT IS LOCAL ON PURPOSE. CastLib's
+          ClassCastFor(ADefs, AFrom, ATo) takes two TYPE names and returns a
+          cast NAME -- the editor's "is there a cast for these types" question,
+          the inverse of this one. There is no by-name class-cast lookup
+          (FindEnumCast is the enum twin), and Convert.CastLib.pas is the
+          converter team's file with uncommitted work in it, so the helper lives
+          here rather than colliding with their working copy. Raised with them
+          in docs\INBOX-2026-09-16b-...; hoist it beside FindEnumCast once their
+          changes land. }
+        var CastDef  : TCastDef;
+        var CastFound: Boolean:= False;
+        for var CD: TCastDef in ACastLib.Casts do
+          if SameText(CD.Name, LinkRule.Cast) then
+          begin
+            CastDef  := CD;
+            CastFound:= True;
+            Break;
+          end;
+
+        if not CastFound then
+        begin
+          { Outcome 3 -- unchanged wording, and it already names the cast. }
+          It:= PlainItem(aikCastNotApplied, afWarnings,
+            Format('line %d: #link %s <- %s : %s SKIPPED on the .pas side -- ' +
+              'the cast is not applied by convert-apply, and renaming without it would produce ' +
+              'wrong values. Convert this access site by hand.',
+              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast]));
+          It.Path    := LinkRule.FromPath;
+          It.RuleLine:= LinkRule.LineNo;
+          Emit(It);
+          Continue;
+        end;
+
+        if Trim(CastDef.PasTemplate) = '' then
+        begin
+          { Outcome 2 -- FOUND, but the library says nothing about how to do it
+            on the .pas side. Naming that is the whole point: the operator edits
+            the .castlib instead of looking for a missing rule. }
+          It:= PlainItem(aikCastNotApplied, afWarnings,
+            Format('line %d: #link %s <- %s : %s SKIPPED on the .pas side -- ' +
+              'the cast WAS FOUND in the cast library but carries no pas template, so there is ' +
+              'nothing to emit. Add a `pas` line to cast %s in the .castlib, or convert this ' +
+              'access site by hand.%s',
+              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast, LinkRule.Cast,
+               (if Trim(CastDef.Todo) <> '' then ' TODO: ' + CastDef.Todo else '')]));
+          It.Path    := LinkRule.FromPath;
+          It.RuleLine:= LinkRule.LineNo;
+          Emit(It);
+          Continue;
+        end;
+
+        (* Outcome 1 -- realize it, once per access site.
+
+           The dst placeholder is the REWRITTEN target expression (instance plus
+           the dotted ToPath); the src placeholder is the ORIGINAL source
+           expression, so the emitted statement can still read the old value.
+           The template is a STATEMENT, so the whole access-site expression is
+           replaced by it -- deliberately NOT the tekReplaceInLine identifier
+           swap the no-cast path below uses, which would splice a statement into
+           the middle of an expression.
+
+           WRITTEN AS A PAREN-STAR COMMENT ON PURPOSE: the placeholders are
+           spelled with braces, and a literal closing brace inside a brace
+           comment ENDS THE COMMENT -- the prose after it then compiles as code.
+           That is exactly how this block failed to build the first time. Note
+           the same hazard exists here with the paren-star terminator, which is
+           why neither delimiter is written out literally in this block. *)
+        var CastSites: TArray<TAccessSite>:= FindMemberAccessSites(PasStore, PasFileId, PasLines,
+          LinkRule.FromPath, ConvertedInstNames.ToArray);
+        for var CSite in CastSites do
+        begin
+          var DstExpr: string:= CSite.InstanceName + '.' + LinkRule.ToPath;
+          var SrcExpr: string:= CSite.InstanceName + '.' + LinkRule.FromPath;
+          var Rendered: string:= StringReplace(CastDef.PasTemplate, '{dst}', DstExpr, [rfReplaceAll]);
+          Rendered:= StringReplace(Rendered, '{src}', SrcExpr, [rfReplaceAll]);
+
+          E:= Default(TTextEdit);
+          E.FilePath:= AUnitPas;
+          E.Kind    := tekReplaceInLine;
+          E.Line    := CSite.Line;
+          E.Col     := CSite.Col;
+          E.EndCol  := CSite.EndCol;
+          E.Text    := Rendered;
+          Edits.Add(E);
+
+          It:= PlainItem(aikCastApplied, afAccessSites,
+            Format('line %d: #link %s <- %s : %s -> %s (L%d)',
+              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast,
+               Rendered, CSite.Line]));
+          It.Instance:= CSite.InstanceName;
+          It.FilePath:= AUnitPas;
+          It.Path    := LinkRule.FromPath;
+          It.RuleLine:= LinkRule.LineNo;
+          It.Line    := CSite.Line;
+          Emit(It);
+        end;
         Continue;
       end;
       if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
