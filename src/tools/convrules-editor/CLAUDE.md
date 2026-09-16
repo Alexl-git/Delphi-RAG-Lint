@@ -72,10 +72,31 @@ through a breaking change buys nothing.
 
 ## Standing state with the engine stream (as of 2026-09-14)
 
-* **`resolved_defaults` was never built** (zero occurrences in `src\`). Do not
-  start anything that consumes `convert-apply` findings until it ships -- that
-  array is the ~2,156-item informational flood. The editor calls no
-  `convert-apply` today, so nothing current is affected.
+* **`resolved_defaults` HAS SHIPPED (corrected 2026-09-16).** This entry said it
+  "was never built (zero occurrences in `src\`)" and told the next session not to
+  start anything consuming `convert-apply` findings until it landed. It landed as
+  `7f5ce20`: a real run on VARINSP prints `ResolvedDefaults: 8 property value(s)
+  carried from their declared defaults (--format json lists each)`. The advice was
+  correct when written and became a brake on work that was already unblocked.
+
+* **`convert-apply` needs the unit to be INDEXED, and says something else when it
+  is not (2026-09-16).** It reports `could not locate .dfm object block for "<x>:
+  <Type>"` -- an assertion about the .dfm's content that is FALSE. Measured: a
+  261-byte fixture with the block at depth 1 fails; index that folder and the
+  identical run converts. VARINSP produced 20 of these and converted 0 of 20;
+  indexed into its own DB it converts **20 of 20, 60 edits**. Do not go looking in
+  the .dfm -- check the `--db` set first. Filed as
+  `docs\INBOX-2026-09-16-converter-to-engine-dfm-block-needs-indexed-unit.md`.
+
+* **The class cast is still not realized, and the .dfm half DROPS the image.**
+  `#link OptionsImage.Glyph <- Picture : AssignGraphic` is skipped on the `.pas`
+  side, and the re-emit reports `dropped Picture.Data` -- so twenty buttons lose
+  their glyphs silently. `--castlib` executes **enum blocks only** (its own help
+  says so); `TCastDef.PasTemplate` is parsed at
+  `src\report\DRagLint.Convert.CastLib.pas:375` and read nowhere in `src\`. This
+  is engine item 6, `realize-class-casts`, 3-5 d, planned in
+  `PLAN-SESSION-95-OPEN-NOTES.md`. It is the ONLY remaining gap in the
+  conversion; everything else lands.
 * **The `--db` strictness sweep has LANDED, and the "costs us nothing" reading of
   it was WRONG (corrected 2026-09-15).** The claim recorded here was that our DB
   set is three hardcoded paths that all exist, so strictness could not touch us.
