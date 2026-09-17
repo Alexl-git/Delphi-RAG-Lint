@@ -3072,6 +3072,46 @@ begin
   Check('uses.ifdef.arm.still.harvested', Names('{$IFDEF NEVER}'#13#10'uses Ghost;'#13#10'{$ENDIF}'#13#10) = 'Ghost', Names('{$IFDEF NEVER}'#13#10'uses Ghost;'#13#10'{$ENDIF}'));
 end; // begin
 
+{ The Unit Rules tab marks each used unit with the clause it was written in, so the
+  scan has to carry a section. ScanUsesClauses is now a FLATTEN over the sectioned
+  scan -- one scanner, two consumers -- so the last check here is a positive control
+  on that refactor: it fails if the delegation changed order or contents. }
+procedure TestScanUsesClausesSections;
+
+  function Sections(const ASrc: string): string;
+  var
+    R  : TUsedUnitRef ;
+    Acc: TArray<string>;
+  begin
+    Acc:= nil;
+    for R in ScanUsesClausesSectioned(ASrc) do
+      Acc:= Acc + [R.UnitName + '=' + R.Section];
+    Result:= string.Join(',', Acc);
+  end;
+
+const
+  SRC = 'unit U;'#13#10 + 'interface'#13#10 + 'uses Alpha, Beta;'#13#10 + 'implementation'#13#10 + 'uses Gamma;'#13#10 + 'end.'#13#10;
+  BOTH = 'uses Foo;'#13#10 + 'implementation'#13#10 + 'uses FOO, Bar;'#13#10;
+  QUAL = 'uses Alpha;'#13#10 + 'X := A.Implementation;'#13#10 + 'uses Beta;'#13#10;
+  CMNT = 'uses Alpha;'#13#10 + '{ implementation }'#13#10 + 'uses Beta;'#13#10;
+begin
+  Check('uses.section.both.clauses', Sections(SRC) = 'Alpha=interface,Beta=interface,Gamma=implementation', Sections(SRC));
+
+  { First occurrence wins, so a unit in BOTH clauses keeps 'interface'. Written to
+    DISCRIMINATE: a scan that appended unconditionally would emit a SECOND row,
+    'Foo=implementation', and the tab would show the same unit twice. }
+  Check('uses.section.first.wins', Sections(BOTH) = 'Foo=interface,Bar=implementation', Sections(BOTH));
+
+  { The latch is keyword-only. Both of these would flip the section on a scanner that
+    matched the token without the '.'-guard / without SkipNonCode, and every unit
+    after them would be mislabelled 'implementation'. }
+  Check('uses.section.qualified.implementation.ignored', Sections(QUAL) = 'Alpha=interface,Beta=interface', Sections(QUAL));
+  Check('uses.section.commented.implementation.ignored', Sections(CMNT) = 'Alpha=interface,Beta=interface', Sections(CMNT));
+
+  // POSITIVE CONTROL on the refactor: the flat scan must answer exactly as before.
+  Check('uses.flat.delegation.unchanged', string.Join(',', ScanUsesClauses(SRC)) = 'Alpha,Beta,Gamma', string.Join(',', ScanUsesClauses(SRC)));
+end; // begin
+
 { Review fix (Important 1 + 2): a terminator character sitting inside a QUOTED literal
   inside a <...> or (...) container must not be mistaken for the container's real
   terminator. For <...> this used to pop the block stack early on a mid-list item's own
@@ -5351,6 +5391,7 @@ begin
     TestScanDfmInstanceNames;
     TestScanUsesClauses;
     TestScanUsesClausesLimits;
+    TestScanUsesClausesSections;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;

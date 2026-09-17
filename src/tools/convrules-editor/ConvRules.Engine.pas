@@ -338,24 +338,6 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgs: string; overload;
-      /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
-      /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
-      /// <param name="AUnit"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; FileP.</returns>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListControlTypesInUnit (ConvRules.Engine.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Copy, Format, Pos, SameText</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 39 lines (full implementation)</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
-      function ResolveUnitFile(const AUnit: string): string;
       /// <summary>Qualify a bare class name to its unit-qualified form (TcxButton ->
       /// cxButtons.TcxButton) via `query --name`, which is what `proptree --qname`
       /// requires. Discards the tie count; see the overload below.</summary>
@@ -446,6 +428,24 @@ type
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer): string; overload;
     public
+      /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
+      /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
+      /// <param name="AUnit"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; FileP.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListControlTypesInUnit (ConvRules.Engine.pas)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Copy, Format, Pos, SameText</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 39 lines (full implementation)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function ResolveUnitFile(const AUnit: string): string;
       /// <summary><!-- drag-lint:auto sum -->TEngineAdapter</summary>
       /// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ADbList"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>

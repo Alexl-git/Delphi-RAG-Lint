@@ -45,6 +45,17 @@ type
     PasCount: Integer       ;
   end;
 
+  /// <summary>One entry of a unit's own `uses` clauses, with the clause it was
+  /// written in.</summary>
+  /// <remarks>A unit named in BOTH clauses appears ONCE, carrying the clause it
+  /// appeared in FIRST -- the same first-wins rule the flat scan has always used,
+  /// and the same answer the engine's `uses-report.first_section` gives. Do not
+  /// read Section as "the only clause this unit appears in".</remarks>
+  TUsedUnitRef = record
+    UnitName: string;
+    Section : string; // 'interface' | 'implementation'
+  end;
+
   /// <summary>PURE: parses a DFM block header line into the class it declares.</summary>
   /// <param name="ALine">One .dfm line, e.g. 'object btnA: TabcToggleBtn'. Accepts the
   /// 'object', 'inherited' and 'inline' keywords real DFMs use for forms and frames.</param>
@@ -219,6 +230,37 @@ function ScanPasText(const AText: string; const ACandidates, AReceivers: TArray<
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ScanUsesClauses(const APasText: string): TArray<string>;
+
+/// <summary>PURE: as ScanUsesClauses, but each unit carries the clause it was
+/// written in -- 'interface' before the `implementation` keyword, 'implementation'
+/// after it.</summary>
+/// <param name="APasText">Whole .pas text. Comment and string runs are skipped by
+/// the same SkipNonCode the flat scan uses, so a `uses` inside a comment is not a
+/// clause and 'Foo in ''Foo.pas''' still reduces to 'Foo'.</param>
+/// <returns>Source order, de-duplicated case-insensitively, FIRST occurrence
+/// winning -- so a unit in both clauses is reported once, as 'interface'.</returns>
+/// <remarks>This is the scanner; <see cref="ScanUsesClauses"/> is a flatten over
+/// it. Deliberately NOT the engine's `uses-report`: that verb reads the INDEX, and
+/// a unit the index does not cover (a browsed file, or a form like VARINSP that no
+/// .dproj lists) comes back as zero rows with exit 0 -- an empty list that reads
+/// as "uses nothing". Reading the text answers for any file the editor can open.
+/// A `uses` inside an inactive {$IFDEF} branch IS reported: this is a text scan,
+/// not a preprocessor.</remarks>
+function ScanUsesClausesSectioned(const APasText: string): TArray<TUsedUnitRef>;
+
+/// <summary>PURE: every class/interface/record/object declared at the top level of a
+/// .pas file.</summary>
+/// <param name="APasText">The whole .pas text.</param>
+/// <returns>Type names exactly as written, de-duplicated case-insensitively, in
+/// first-seen order. Only top-level declarations are harvested; nested types are
+/// not descended.</returns>
+/// <remarks>
+/// Scans for the pattern: identifier followed by '=' followed by one of
+/// (class, interface, record, object). Comments and strings are skipped, so a
+/// 'class' inside a comment or string is not harvested. A generic class
+/// 'TFoo&lt;T&gt; = class' contributes 'TFoo', not 'TFoo&lt;T&gt;'.
+/// </remarks>
+function ScanClassesDeclared(const APasText: string): TArray<string>;
 
 /// <summary>PURE: union of several scans, de-duplicated case-insensitively.</summary>
 /// <param name="AParts"><!-- drag-lint:auto type -->const TArray&lt;TArray&lt;string&gt;&gt;</param>
@@ -613,14 +655,16 @@ begin
   Result:= False;
 end; // function
 
-function ScanUsesClauses(const APasText: string): TArray<string>;
+function ScanUsesClausesSectioned(const APasText: string): TArray<TUsedUnitRef>;
 var
-  NameSet: TNameSet;
-  i      : Integer ;
-  j      : Integer ;
-  N      : Integer ;
-  Tok    : string  ;
-  PrevSig: Char    ; // last significant code character; guards 'X.Uses'
+  NameSet: TNameSet           ;
+  Refs   : TArray<TUsedUnitRef>;
+  i      : Integer            ;
+  j      : Integer            ;
+  N      : Integer            ;
+  Tok    : string             ;
+  PrevSig: Char               ; // last significant code character; guards 'X.Uses'
+  InImpl : Boolean            ; // past the `implementation` keyword
 
   { Reads the comma-separated clause starting at AIdx up to the terminating ';' (or end
     of text) and adds each entry's leading dotted identifier. Comment and string runs
@@ -645,8 +689,21 @@ var
         while (Nm <> '') and (Nm[Length(Nm)] = '.') do
           SetLength(Nm, Length(Nm) - 1);
       end;
-      if Nm <> '' then
+      { First occurrence wins, so a unit named in BOTH clauses keeps the clause it
+        appeared in first. Contains-then-Add rather than Add alone: TNameSet.Add is
+        silent on a duplicate, which would otherwise append a second Refs row
+        carrying the LATER section. }
+      if (Nm <> '') and not NameSet.Contains(Nm) then
+      begin
         NameSet.Add(Nm);
+        var R: TUsedUnitRef;
+        R.UnitName:= Nm;
+        if InImpl then
+          R.Section:= 'implementation'
+        else
+          R.Section:= 'interface';
+        Refs:= Refs + [R];
+      end;
       Entry:= '';
     end; // procedure
 
@@ -679,8 +736,10 @@ var
 begin
   NameSet:= TNameSet.Create;
   try
-    N:= Length(APasText);
+    Refs   := nil;
+    N      := Length(APasText);
     PrevSig:= #0;
+    InImpl := False;
     i      := 1;
     while i <= N do
     begin
@@ -692,6 +751,11 @@ begin
           Inc(j);
         Tok:= Copy(APasText, i, j - i);
         i:= j;
+        { The section switch. Guarded by PrevSig for the same reason `uses` is: an
+          `X.Implementation` member access is not the keyword. A unit has exactly one
+          `implementation`, so this latches and never flips back. }
+        if SameText(Tok, 'implementation') and (PrevSig <> '.') then
+          InImpl:= True;
         // Whole-token match, so 'MyUses'/'UsesFoo' never qualify; PrevSig rules out a
         // qualified member access like 'X.Uses'.
         if SameText(Tok, 'uses') and (PrevSig <> '.') then
@@ -703,11 +767,100 @@ begin
         PrevSig:= APasText[i];
       Inc(i);
     end; // while
-    Result:= NameSet.ToArray;
+    Result:= Refs;
   finally
     NameSet.Free;
   end; // try
 end; // begin
+
+function ScanUsesClauses(const APasText: string): TArray<string>;
+var
+  R: TUsedUnitRef;
+begin
+  { A flatten over the sectioned scan -- one scanner, two consumers. TNameSet is
+    insertion-ordered with first-wins dedup, so this reproduces the order and the
+    contents this function returned before the section was tracked. }
+  Result:= nil;
+  for R in ScanUsesClausesSectioned(APasText) do
+    Result:= Result + [R.UnitName];
+end; // function
+
+function ScanClassesDeclared(const APasText: string): TArray<string>;
+var
+  NameSet: TNameSet;
+  i      : Integer ;
+  j      : Integer ;
+  N      : Integer ;
+  Tok    : string  ;
+  PrevSig: Char    ; // last significant code character; guards X.ClassName
+  Ident  : string  ;
+begin
+  NameSet:= TNameSet.Create;
+  try
+    N      := Length(APasText);
+    PrevSig:= #0;
+    i      := 1;
+    while i <= N do
+    begin
+      if SkipNonCode(APasText, i) then
+      begin
+        PrevSig:= #0; // a non-code run resets the significant char
+        Continue;
+      end;
+      if IsIdentStartCh(APasText[i]) then
+      begin
+        j:= i;
+        while (j <= N) and IsIdentCh(APasText[j]) do
+          Inc(j);
+        Tok:= Copy(APasText, i, j - i);
+        i:= j;
+
+        { Bare token 'class', 'interface', 'record', 'object' (not 'Foo.class').
+          After an identifier (PrevSig='x') followed by '=', a type keyword means
+          the identifier is a type declaration. }
+        if (PrevSig = '=') and (SameText(Tok, 'class') or SameText(Tok, 'interface')
+          or SameText(Tok, 'record') or SameText(Tok, 'object')) then
+        begin
+          { Backtrack: find the identifier before the '='. }
+          j:= i - 1;
+          while (j >= 1) and (APasText[j] <= ' ') do
+            Dec(j);
+          if (j >= 1) and (APasText[j] = '=') then
+          begin
+            Dec(j);
+            while (j >= 1) and (APasText[j] <= ' ') do
+              Dec(j);
+            if (j >= 1) and IsIdentCh(APasText[j]) then
+            begin
+              { j now points at the last char of the identifier. Backtrack to start. }
+              var k: Integer:= j;
+              while (k >= 1) and IsIdentCh(APasText[k]) do
+                Dec(k);
+              Ident:= Copy(APasText, k + 1, j - k);
+              { Strip generic parameters: 'TFoo<T>' -> 'TFoo' }
+              j:= Pos('<', Ident);
+              if j > 0 then
+                SetLength(Ident, j - 1);
+              if (Ident <> '') and IsIdentStartCh(Ident[1]) then
+                NameSet.Add(Ident);
+            end;
+          end;
+          PrevSig:= 'x'; // after processing a keyword
+          Continue;
+        end;
+
+        PrevSig:= 'x'; // an identifier: significant, and definitely not a '.'
+        Continue;
+      end;
+      if APasText[i] > ' ' then
+        PrevSig:= APasText[i];
+      Inc(i);
+    end; // while
+    Result:= NameSet.ToArray;
+  finally
+    NameSet.Free;
+  end;
+end; // function
 
 function ScanDfmInstanceNames(const AText, AFromClass: string): TArray<string>;
 var

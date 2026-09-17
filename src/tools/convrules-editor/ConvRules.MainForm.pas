@@ -42,6 +42,7 @@ uses
   , ConvRules.MappingForm
   , ConvRules.FormTypes
   , ConvRules.RuleCatalog
+  , ConvRules.Usage // TUsedUnitRef: a field's type, so this has to be INTERFACE-visible
   ;
 
 const
@@ -136,6 +137,11 @@ type
       // can never dirty the rule book. Filtered against the current rules at DISPLAY
       // time, so authoring a rule for one makes its candidate row go away by itself.
       FUnitCandidates: TArray<string>;
+      // The SAME harvest, carrying the clause each unit was written in, so the Unit
+      // Rules tab can mark interface vs implementation. Kept alongside the flat array
+      // rather than replacing it: FUnitCandidates is what the derive/check paths
+      // filter on, and both are written from one scan so they cannot drift.
+      FUsedUnitRefs: TArray<TUsedUnitRef>;
       // --- form-types panel (leftmost): what is ON the examined form(s) ---
       // FFormTypeRows is the decorated model the list paints; ScanDfmTypes fills
       // TypeName/Count and RefreshFormTypes applies Visual/Excluded/Ruled on top.
@@ -147,6 +153,7 @@ type
       FChkStdCtrls  : TCheckBox    ; // also exclude Vcl./FMX. declared types
       FLblFormTypes : TLabel       ; // "N types, M shown"
       FFilterError  : string       ; // first malformed regex, surfaced in the label
+      FSelectedFormType: string    ; // type selected in FFormTypeList (filter FRules to this type)
       FCatalog      : TRuleCatalog ; // every #convert the rules folder already has
       // Types claimed by MORE THAN ONE rule. A rule lives in exactly one
       // file; two claims mean two versions waiting to diverge, so the panel must
@@ -1242,6 +1249,17 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
+      /// <summary>Fill the Unit Rules tab's candidate rows from the `uses` clauses of
+      /// APasTexts, each marked with the clause it was written in.</summary>
+      /// <param name="APasTexts">One entry per .pas file. Scanned PER TEXT and merged:
+      /// the interface/implementation latch is per-unit, so scanning a concatenation
+      /// would mislabel every clause after the first file's `implementation`.</param>
+      /// <remarks>Writes FUsedUnitRefs and FUnitCandidates from ONE scan so the two
+      /// cannot disagree, and calls RefreshUnitList. Purely additive -- it never
+      /// touches FBook, so both callers stay read-only with respect to the rule book.
+      /// First occurrence wins across texts, as it does within one.</remarks>
+      procedure HarvestUsedUnits(const APasTexts: TArray<string>);
+      procedure HarvestUnitClasses(const AUnitText: string);
       procedure RefreshUnitList;
       /// <summary><!-- drag-lint:auto sum -->---- Unit Rules tab ----</summary>
       /// <param name="ANode"><!-- drag-lint:auto type -->TRuleNode</param>
@@ -1839,8 +1857,7 @@ uses
   , ConvRules.Units
   , ConvRules.WorkingSet
   , ConvRules.CurationForm
-  , ConvRules.Usage
-  ;
+  ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
     ConvRulesEditorStyles.rc -- not the file names. Verified with
@@ -2381,15 +2398,36 @@ begin
   FLblFormTypes.Parent:= FormTypesPanel; FLblFormTypes.SetBounds(6, 158, 288, 15);
   FLblFormTypes.Caption:= '';
 
+  { Form types list: reduced height to make room for the rules list below it. }
   FFormTypeList:= TListBox.Create(Self);
   FFormTypeList.Parent:= FormTypesPanel;
-  FFormTypeList.SetBounds(6, 176, 288, 466);
-  FFormTypeList.Anchors:= [akLeft, akTop, akRight, akBottom];
+  FFormTypeList.SetBounds(6, 176, 288, 170);
+  FFormTypeList.Anchors:= [akLeft, akTop, akRight];
   FFormTypeList.Style     := lbOwnerDrawFixed;
   FFormTypeList.ItemHeight:= 18;
   FFormTypeList.OnDrawItem:= FormTypeDrawItem;
   FFormTypeList.OnClick   := FormTypeClick;
   FFormTypeList.OnDblClick:= FormTypeDblClick;
+
+  { Rules list: relocated from TabRules into FormTypesPanel below the form types list.
+    This consolidates the two redundant left lists into one form-types-driven view. }
+  var LblRulesForType: TLabel:= TLabel.Create(Self);
+  LblRulesForType.Parent:= FormTypesPanel; LblRulesForType.SetBounds(6, 354, 288, 15);
+  LblRulesForType.Caption:= 'Rules for selected type:';
+
+  FRulesFilter:= TEdit.Create(Self);
+  FRulesFilter.Parent:= FormTypesPanel; FRulesFilter.SetBounds(6, 372, 288, 23);
+  FRulesFilter.TextHint:= 'filter by To type...';
+  FRulesFilter.OnChange:= RulesFilterChange;
+
+  FRules:= TListView.Create(Self);
+  FRules.Parent   := FormTypesPanel; FRules.SetBounds(6, 398, 288, 244);
+  FRules.Anchors  := [akLeft, akTop, akRight, akBottom];
+  FRules.ViewStyle:= vsReport; FRules.ReadOnly     := True;
+  FRules.RowSelect:= True    ; FRules.HideSelection:= False;
+  FRules.Columns.Add.Caption:= 'To'  ; FRules.Columns[0].Width:= 140;
+  FRules.Columns.Add.Caption:= '%'   ; FRules.Columns[1].Width:= 40;
+  FRules.OnSelectItem:= RulesSelectItem;
 
   SplitForms:= TSplitter.Create(Self);
   SplitForms.Parent:= Self; SplitForms.Align:= alLeft; SplitForms.Width:= 4;
@@ -2402,20 +2440,12 @@ begin
   FTabs:= TPageControl.Create(Self);
   FTabs.Parent:= LeftPanel; FTabs.Align:= alClient;
 
+  { FRules tab superseded 2026-09-16: FRules and FRulesFilter were moved into
+    FormTypesPanel below FFormTypeList, consolidating the two redundant left lists.
+    This tab now serves as a placeholder and is hidden. }
   TabRules:= TTabSheet.Create(FTabs); TabRules.PageControl:= FTabs;
-  TabRules.Caption:= 'Rules Library';
-  FRulesFilter:= TEdit.Create(Self);
-  FRulesFilter.Parent:= TabRules; FRulesFilter.Align:= alTop;
-  FRulesFilter.TextHint:= 'filter rules (From/To contains)...';
-  FRulesFilter.OnChange:= RulesFilterChange;
-  FRules:= TListView.Create(Self);
-  FRules.Parent   := TabRules; FRules.Align        := alClient;
-  FRules.ViewStyle:= vsReport; FRules.ReadOnly     := True;
-  FRules.RowSelect:= True    ; FRules.HideSelection:= False;
-  FRules.Columns.Add.Caption:= 'From'; FRules.Columns[0].Width:= 150;
-  FRules.Columns.Add.Caption:= 'To'  ; FRules.Columns[1].Width:= 150;
-  FRules.Columns.Add.Caption:= '%'   ; FRules.Columns[2].Width:= 50;
-  FRules.OnSelectItem:= RulesSelectItem;
+  TabRules.Caption:= 'Rules Library (retired)';
+  TabRules.Visible:= False;
 
   TabRaw:= TTabSheet.Create(FTabs); TabRaw.PageControl:= FTabs;
   TabRaw.Caption:= 'Raw DSL (all directives)';
@@ -2839,6 +2869,44 @@ begin
   end; // try
 end; // procedure
 
+{ Scan a unit file's text for top-level class/interface/record declarations and
+  populate FFormTypeList with them. De-duplicates case-insensitively, applies
+  filters, and marks ruled vs. unruled classes. Called from DoLoadUnit to fill
+  the left panel when a unit is selected. }
+procedure TConvRulesForm.HarvestUnitClasses(const AUnitText: string);
+var
+  Classes: TArray<string>;
+  i      : Integer       ;
+begin
+  Classes:= ScanClassesDeclared(AUnitText);
+  if Length(Classes) = 0 then
+    Exit;
+
+  { Build FFormTypeRows with Ruled status from the catalog, then refresh the list. }
+  SetLength(FFormTypeRows, Length(Classes));
+  var RowIdx: Integer:= 0;
+  for i:= 0 to High(Classes) do
+  begin
+    var Entry: TRuleCatalogEntry;
+    var IsRuled: Boolean:= FindRuleForType(FCatalog, Classes[i], Entry);
+
+    FFormTypeRows[RowIdx].TypeName := Classes[i];
+    FFormTypeRows[RowIdx].Count    := 1;
+    FFormTypeRows[RowIdx].Visual   := tvkUnknown;
+    FFormTypeRows[RowIdx].Excluded := False;
+    FFormTypeRows[RowIdx].Reenabled:= False;
+    FFormTypeRows[RowIdx].Ruled    := IsRuled;
+    if IsRuled then
+      FFormTypeRows[RowIdx].RuledBy:= ExtractFileName(Entry.FilePath)
+    else
+      FFormTypeRows[RowIdx].RuledBy:= '';
+
+    Inc(RowIdx);
+  end;
+
+  RefreshFormTypes;
+end; // procedure
+
 { "Fill From-classes": read the chosen unit's .dfm components and add one FROM-ONLY
   conversion row per distinct component CLASS to the rules library (To unassigned).
   These are CLASSES, not properties, so they go in the rules list -- NOT the grid's
@@ -2856,6 +2924,8 @@ var
   H       : Integer       ;
   added   : Integer       ;
   firstNew: Integer       ;
+  PasPath : string        ;
+  UsesNote: string        ;
 begin
   UnitName:= Trim(FCbUnit.Text);
   if UnitName = '' then
@@ -2863,6 +2933,43 @@ begin
     SetError('Pick a unit first -- a project unit from the drop-down, or Browse... ' + 'for one outside the project.');
     Exit;
   end;
+
+  { The Unit Rules tab is about the UNIT, not about a selected conversion, so fill it
+    on unit selection as well as on Examine.
+
+    Read from the FILE, never from the index. A browsed unit is in no index by
+    definition, and so is any form its .dproj does not list -- which on this corpus
+    includes VARINSP, the form this work targets. The engine's `uses-report` answers
+    such a unit with zero rows and exit 0: an empty list that reads as "uses nothing"
+    rather than as "not indexed". Measured 2026-09-16.
+
+    A failure is NOTED, not swallowed and not fatal: the unit list is a convenience and
+    must not stop Fill From-classes, but a silently empty tab is the thing this whole
+    feature exists to avoid. }
+  UsesNote:= '';
+  PasPath := UnitName;
+  if not TPath.IsPathRooted(PasPath) then
+    PasPath:= FEngine.ResolveUnitFile(UnitName);
+  if SameText(ExtractFileExt(PasPath), '.dfm') then
+    PasPath:= ChangeFileExt(PasPath, '.pas');
+  if (PasPath <> '') and TFile.Exists(PasPath) then
+  begin
+    var Txt: string:= '';
+    try
+      Txt:= TFile.ReadAllText(PasPath);
+    except
+      on E: Exception do
+        UsesNote:= Format(' Unit list unavailable: %s could not be read (%s).', [ExtractFileName(PasPath), E.Message]);
+    end;
+    if Txt <> '' then
+    begin
+      HarvestUsedUnits([Txt]);
+      HarvestUnitClasses(Txt);
+    end;
+  end
+  else
+    UsesNote:= Format(' Unit list unavailable: no .pas resolved for %s.', [UnitName]);
+
   Screen.Cursor:= crHourGlass;
   try
     Application.ProcessMessages;
@@ -2876,7 +2983,9 @@ begin
     end;
     if Length(Types) = 0 then
     begin
-      SetError(Format('No form components found in %s. It may be a non-form unit ' + '(no .dfm), or not indexed. Use the From/To pickers instead.', [UnitName]));
+      { Not a dead end any more: a non-form unit still has uses clauses, and they are
+        already on the Unit Rules tab by the time this fires. }
+      SetError(Format('No form components found in %s. It may be a non-form unit ' + '(no .dfm), or not indexed. Use the From/To pickers instead. ' + 'Its used units are listed on the Unit Rules tab.%s', [UnitName, UsesNote]));
       Exit;
     end;
 
@@ -2926,9 +3035,9 @@ begin
         end;
 
     if added = 0 then
-      SetStatus(Format('All %d component class(es) from %s are already in the rules ' + 'library.', [Length(Types), UnitName]))
+      SetStatus(Format('All %d component class(es) from %s are already in the rules ' + 'library. %d used unit(s) on the Unit Rules tab.%s', [Length(Types), UnitName, Length(FUnitCandidates), UsesNote]))
     else
-      SetStatus(Format('Added %d From-only conversion(s) from %s. Pick a To class for ' + 'each you want to convert -- its properties auto-match.', [added, UnitName]));
+      SetStatus(Format('Added %d From-only conversion(s) from %s. Pick a To class for ' + 'each you want to convert -- its properties auto-match. ' + '%d used unit(s) on the Unit Rules tab.%s', [added, UnitName, Length(FUnitCandidates), UsesNote]));
   finally
     Screen.Cursor:= crDefault;
   end; // try
@@ -2956,6 +3065,7 @@ begin
     Exit;
   end;
   FFilePath:= APath;
+  FSelectedFormType:= ''; // clear the type filter when loading a new file
   FBook.LoadFromString(TFile.ReadAllText(APath));
   FLblFile.Caption:= APath;
   RefreshRulesList;
@@ -3006,29 +3116,10 @@ begin
 end; // procedure
 
 procedure TConvRulesForm.RefreshRulesList;
-var
-  Heads: TArray<Integer>;
-  H    : Integer        ;
-  Item : TListItem      ;
-  Node : TRuleNode      ;
-  flt  : string         ;
 begin
+  { Retired 2026-09-16: FRules tab is no longer populated. The rules library
+    functionality was replaced by loading classes directly from the selected unit. }
   FRules.Items.Clear;
-  flt:= '';
-  if FRulesFilter <> nil then
-    flt:= LowerCase(Trim(FRulesFilter.Text));
-  Heads:= FBook.ConvertHeaders;
-  for H in Heads do
-  begin
-    Node:= FBook.Nodes[H];
-    if (flt <> '') and (Pos(flt, LowerCase(Node.FromType + ' ' + Node.ToType)) = 0) then
-      Continue;
-    Item:= FRules.Items.Add;
-    Item.Caption:= Node.FromType;
-    Item.SubItems.Add(Node.ToType);
-    Item.SubItems.Add(IntToStr(BlockPercent(H)) + '%');
-    Item.Data:= Pointer(H); // store header index
-  end;
 end; // procedure
 
 function TConvRulesForm.BlockPercent(AHdrIdx: Integer): Integer;
@@ -3748,13 +3839,33 @@ end; // procedure
 
 procedure TConvRulesForm.FormTypeClick(Sender: TObject);
 var
-  i: Integer;
+  i   : Integer;
+  Hdr : Integer;
+  Entry: TRuleCatalogEntry;
 begin
   i:= FFormTypeList.ItemIndex;
   if (i < 0) or (i > High(FFormTypeRows)) then
     Exit;
 
   FCbFrom.Text:= FFormTypeRows[i].TypeName;
+
+  { Set the selected type filter and refresh the rules list to show only rules for this type. }
+  FSelectedFormType:= FFormTypeRows[i].TypeName;
+  RefreshRulesList;
+
+  // If the type is ruled, load its rule into the grid immediately
+  if FFormTypeRows[i].Ruled and FindRuleForType(FCatalog, FFormTypeRows[i].TypeName, Entry) then
+  begin
+    Hdr:= HeaderIndexFor(FBook, Entry);
+    if Hdr >= 0 then
+    begin
+      LoadGridForBlock(Hdr);
+      SetStatus(Format('Loaded rule for %s from %s.', [FFormTypeRows[i].TypeName, ExtractFileName(Entry.FilePath)]));
+      Exit;
+    end;
+  end;
+
+  // Not ruled, or rule lookup failed: set From and wait for user to pick a To class
   if FFormTypeRows[i].Ruled then
     SetStatus(Format('From set to %s -- already converted by %s. Pick a To class, ' + 'then New conversion.', [FFormTypeRows[i].TypeName, FFormTypeRows[i].RuledBy]))
   else
@@ -4081,6 +4192,23 @@ begin
     HarvestFormTypes(Dfms);
   end; // if
 
+  { The same .pas texts answer "which units does this form pull in" -- harvest them
+    into the Unit Rules tab as CANDIDATES, each marked with the clause it was written
+    in.
+
+    Harvested HERE, ABOVE the no-active-rule exit below, because the Unit Rules tab is
+    about the UNIT and not about the selected conversion. It used to sit after that
+    exit, so examining a form without a rule selected left the tab empty and gave no
+    reason why.
+
+    Scanned PER FILE and merged, never over the concatenated text: the section latch
+    is per-unit, so one file's `implementation` would otherwise mislabel the next
+    file's interface clause. First occurrence wins across files, as it does within
+    one. Deliberately additive -- nothing here touches FBook, so Examine stays the
+    read-only action it says it is, and RefreshUnitList does the "already ruled"
+    filtering. }
+  HarvestUsedUnits(Pass);
+
   if FActiveHdr < 0 then
   begin
     FExamineInfo:= Format(
@@ -4110,14 +4238,7 @@ begin
 
   FUsedProps:= U.Names;
 
-  // The same .pas texts also answer "which units does this form pull in" -- harvest
-  // them into the Unit Rules tab as CANDIDATES. Deliberately additive: it never
-  // creates, edits or deletes a rule, so Examine stays the read-only action it says
-  // it is. RefreshUnitList does the "already has a rule" filtering.
-  UnitParts:= nil;
-  for T in Pass do
-    UnitParts:= UnitParts + [ScanUsesClauses(T)];
-  FUnitCandidates:= MergeUsage(UnitParts);
+  // (the unit harvest now runs ABOVE the no-active-rule exit -- see the note there)
 
   FExamineInfo:= Format(
     'Examined %d file(s): %d of %d From properties used; ' + '%d unit(s) offered on the Unit Rules tab.',
@@ -4144,9 +4265,13 @@ begin
   FUsedProps     := nil;
   FUsedFiles     := nil;
   FUnitCandidates:= nil;
+  FUsedUnitRefs  := nil; // cleared WITH the candidates: a section for a unit that is
+                         // no longer listed is state nothing can reach or refresh.
   FExamineInfo:= '';
+  FSelectedFormType:= ''; // clear the type filter on the rules list
   FGrid.Invalidate;
   RefreshUnitList; // takes the candidate rows back off the Unit Rules tab
+  RefreshRulesList; // refresh to show all rules again (no type filter)
   UpdateToolbarEnabled; // nothing left to clear -> "Clear marks" goes back down
   SetStatus('Examination cleared.');
 end;
@@ -5140,6 +5265,35 @@ end;
   candidate). Candidates are re-filtered on every refresh rather than pruned once, so
   authoring a #use/#unuse/#useswap for one silently retires its candidate row, and one
   source unit can fan out to several replacements through the existing #useswap. }
+procedure TConvRulesForm.HarvestUsedUnits(const APasTexts: TArray<string>);
+var
+  UnitParts: TArray<TArray<string>>;
+  T        : string                ;
+begin
+  FUsedUnitRefs:= nil;
+  UnitParts    := nil;
+  for T in APasTexts do
+  begin
+    UnitParts:= UnitParts + [ScanUsesClauses(T)];
+    for var R: TUsedUnitRef in ScanUsesClausesSectioned(T) do
+    begin
+      { First occurrence wins ACROSS texts too, matching the within-text rule, so a
+        unit pulled in by two of the examined files is offered once. }
+      var Dup: Boolean:= False;
+      for var X: TUsedUnitRef in FUsedUnitRefs do
+        if SameText(X.UnitName, R.UnitName) then
+        begin
+          Dup:= True;
+          Break;
+        end;
+      if not Dup then
+        FUsedUnitRefs:= FUsedUnitRefs + [R];
+    end;
+  end;
+  FUnitCandidates:= MergeUsage(UnitParts);
+  RefreshUnitList;
+end; // procedure
+
 procedure TConvRulesForm.RefreshUnitList;
 var
   N   : TRuleNode;
@@ -5157,6 +5311,19 @@ var
     for C in S.Conflicts do
       if SameText(C, AUnit) then
         Exit(True);
+  end;
+
+{ Which `uses` clause the scan found AUnit in. Falls back to the old wording rather
+    than to '' or to 'interface': a blank cell would read as "no section", and
+    defaulting to a real clause would assert something the scan never established. }
+  function SectionOf(const AUnit: string): string;
+  var
+    R: TUsedUnitRef;
+  begin
+    for R in FUsedUnitRefs do
+      if SameText(R.UnitName, AUnit) then
+        Exit(R.Section);
+    Result:= 'from Examine';
   end;
 
 { Does a unit directive already speak about AUnit? SwapOld, not SwapNew: a #useswap's
@@ -5216,9 +5383,9 @@ begin
       begin
         Item:= FUnitList.Items.Add;
         Item.Caption:= '(candidate)';
-        Item.SubItems.Add(Cand          );
-        Item.SubItems.Add(''            );
-        Item.SubItems.Add('from Examine');
+        Item.SubItems.Add(Cand            );
+        Item.SubItems.Add(''              );
+        Item.SubItems.Add(SectionOf(Cand) );
         Item.Data:= nil; // NOT a rule -- see DoDeleteUnit
       end;
   finally
