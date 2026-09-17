@@ -667,4 +667,16 @@
 #   src\index holds non-extracting utilities as well as the extractor. A hit
 #   here is therefore a question, not automatically a bump -- but the broad
 #   surface is deliberate, because it forces the question to be ASKED.
-1.16.0-alpha|2aa34e37ae77635fe6bceaf3280fd4674ea6aa761633a88fbb4ef3dd5e34a9db
+# 2026-09-16: hash updated WITHOUT a version bump, per the rule above.
+#   src\index\DRagLint.Index.CallResolver.pas changed: member-access refs that
+#   name a PROPERTY or FIELD now resolve (LookupMemberOnType / MemberAccessMode
+#   / ResolveAccessor), writing refs.symbol_id, member_accesses and a
+#   call_edges row for a method accessor. That is the RESOLVE pass -- derived
+#   rows read off stored parses -- and it is governed by
+#   DRAGLINT_RESOLVER_VERSION, which moved 1.2.0-alpha -> 1.3.0-alpha in the
+#   same commit and re-derived every index (index --all --resolve-only). No
+#   byte of source parses differently; no symbol or ref row changes; bumping
+#   the EXTRACTOR version would buy a ~5-hour re-parse to alter not one stored
+#   parse. Same shape as the Freshness.pas and ManifestWrite.pas entries above:
+#   a src\index file that is not the extractor.
+1.16.0-alpha|cf9cedf86c60488c11634fa4dfa649137448f7b57bb4d59c04ce2ab7f4eeae50
