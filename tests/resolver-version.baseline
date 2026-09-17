@@ -118,4 +118,25 @@
 #
 #   Superseded: 1.2.0-alpha|6f0b03699c2cb23f83c8b5831a0013c92cacbea98da8759f033fd528acad2f2f
 
-1.4.0-alpha|2cda913770535660645b65f9daceb3483b729158dbdf64d2836be374149f536c
+# 2026-09-17: hash re-pinned WITHIN 1.4.0-alpha (final-review wave, ruling R19:
+#   no version constant moves in this wave). No index has yet been resolved
+#   under 1.4.0, so the pin moves within the same version instead of bumping
+#   -- there is no 1.4.0 edge anywhere for a bump to invalidate. What moved:
+#   GenericArity now counts PARAMETERS, not constraint commas
+#   (<T: class, constructor> = 1; <S: IUnknown; I: IUnknown> = 2), which is
+#   the number FilterCandidatesByArity compares, so every edge onto a
+#   constrained generic resolves differently (final review #1); the manifest
+#   gained the three Core.Model helpers that decide which edge is written
+#   (GenericArity, SplitGenericName, StripGenericSegments -- the last moved
+#   here from the parser) and GetTransitiveAncestors (late resolution), and
+#   EXCLUDEs PreferArity (query-side reader); src\index CallResolver.
+#   FindChildOfKind declines on same-named locals of differing Signature.
+#   The guard itself changed too: spans are cut from the implementation
+#   section only (Core.Model declares free functions at column 1 in its
+#   interface, which would otherwise hash the next routine's doc comment),
+#   the drift vocabulary gained arity|generic, and the drift walk covers
+#   Core.Model. Remedy when an index exists: index --all --resolve-only.
+#
+#   Superseded: 1.4.0-alpha|2cda913770535660645b65f9daceb3483b729158dbdf64d2836be374149f536c
+
+1.4.0-alpha|a35513046797f2f0cf416752672496d55bec00368bb9e08238e0279eb4004389

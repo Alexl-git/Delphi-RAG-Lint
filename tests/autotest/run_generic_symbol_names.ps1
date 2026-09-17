@@ -61,8 +61,15 @@ uses gnA;
 type
   TList<T> = class
     FItems: TArray<T>;
+    procedure Add(const A: T);
   end;
   TObjectList<T: class> = class(TList<T>)
+  end;
+  TRepo<T: class, constructor> = class
+    FCount: Integer;
+  end;
+  TImport<S: IUnknown; I: IUnknown> = class
+    FImp: Integer;
   end;
   TPair<K, V> = record
     Key: K;
@@ -82,6 +89,10 @@ type
   end;
 
 implementation
+
+procedure TList<T>.Add(const A: T);
+begin
+end;
 
 function TBinder.BindAs<T>(const AName: string): T;
 begin
@@ -115,6 +126,12 @@ type
   end;
   TFromPair = class
     FP: TPair<string, Integer>;
+  end;
+  TRepoOfPlain = class(TRepo<TPlain>)
+  end;
+  TImportOfTwo = class(TImport<IUnknown, IUnknown>)
+  end;
+  TWrongArity = class(TImport<IUnknown>)
   end;
 
 implementation
@@ -204,6 +221,39 @@ try {
   Check 'G8 text table shows TPair<K, V>' ($txt -match 'TPair<K, V>')
   $anc = (& $exePath query ancestors --name TWithArgs --db $db 2>$null) -join "`n"
   Check 'G8 ancestors climbs TWithArgs -> TObjectList<T: class> -> TList<T>' (($anc -match 'TObjectList<T: class>') -and ($anc -match 'TList<T>')) "out=$anc"
+
+  # --- G4 arity counts PARAMETERS, not constraint commas (final review #1) ----
+  # 'T: class, constructor' is ONE parameter; 'S: IUnknown; I: IUnknown' is TWO.
+  # Before the fix the first counted 2 and TRepo<TPlain> (1 arg) could never
+  # resolve; the second counted 1 and TImport<IUnknown, IUnknown> (2 args) never.
+  $repo = Get-Rows 'TRepo'
+  Check 'A1 gnB.TRepo generic_params = "T: class, constructor" (as written)' (($repo.Count -eq 1) -and ($repo[0].generic_params -eq 'T: class, constructor')) "gp=$($repo[0].generic_params)"
+  $imp = Get-Rows 'TImport'
+  Check 'A1 gnB.TImport generic_params = "S: IUnknown; I: IUnknown" (as written)' (($imp.Count -eq 1) -and ($imp[0].generic_params -eq 'S: IUnknown; I: IUnknown')) "gp=$($imp[0].generic_params)"
+  $rA = Sql "SELECT ta.ancestor_symbol_id AS id, a.qualified_name AS t FROM type_ancestors ta JOIN symbols s ON s.id=ta.symbol_id LEFT JOIN symbols a ON a.id=ta.ancestor_symbol_id WHERE s.qualified_name='gnC.TRepoOfPlain'"
+  Check 'A2 gnC.TRepoOfPlain (TRepo<TPlain>, 1 arg) -> gnB.TRepo (arity 1, constraint comma ignored)' (($rA.Count -eq 1) -and ($null -ne $rA[0].id) -and ($rA[0].t -eq 'gnB.TRepo')) "resolved_to=$($rA[0].t)"
+  $rB = Sql "SELECT ta.ancestor_symbol_id AS id, a.qualified_name AS t FROM type_ancestors ta JOIN symbols s ON s.id=ta.symbol_id LEFT JOIN symbols a ON a.id=ta.ancestor_symbol_id WHERE s.qualified_name='gnC.TImportOfTwo'"
+  Check 'A3 gnC.TImportOfTwo (TImport<IUnknown, IUnknown>, 2 args) -> gnB.TImport (arity 2, ; separates groups)' (($rB.Count -eq 1) -and ($null -ne $rB[0].id) -and ($rB[0].t -eq 'gnB.TImport')) "resolved_to=$($rB[0].t)"
+  # POSITIVE CONTROL for the arity decline: 1 arg against arity 2 stays unresolved.
+  $rC = Sql "SELECT ta.ancestor_symbol_id AS id FROM type_ancestors ta JOIN symbols s ON s.id=ta.symbol_id WHERE s.qualified_name='gnC.TWrongArity'"
+  Check 'A4 control: gnC.TWrongArity (TImport<IUnknown>, 1 arg vs arity 2) stays UNRESOLVED' (($rC.Count -eq 1) -and ($null -eq $rC[0].id)) "id=$($rC[0].id)"
+
+  # --- G7 per-segment strip: 'Unit.TClass<T>.Method' finds the METHOD (#3) ----
+  $q3 = (& $exePath query --name 'gnB.TBinder.BindAs<T>' --db $db --json --exact 2>$null) -join "`n"
+  $rows3 = @(); try { $rows3 = @($q3 | ConvertFrom-Json) } catch { }
+  Check 'Q1 query --name "gnB.TBinder.BindAs<T>" returns the METHOD row (gnB.TBinder.BindAs), not the class' (($rows3.Count -eq 1) -and ($rows3[0].qualified_name -eq 'gnB.TBinder.BindAs') -and ($rows3[0].kind -notmatch '(?i)class')) "rows=$($rows3.Count) qn=$($rows3[0].qualified_name) kind=$($rows3[0].kind)"
+  # The discriminating input: the <...> sits on a MIDDLE segment. The old
+  # first-'<'/last-'>' split dropped '.Add' and returned the CLASS.
+  $q3m = (& $exePath query --name 'gnB.TList<T>.Add' --db $db --json --exact 2>$null) -join "`n"
+  $rows3m = @(); try { $rows3m = @($q3m | ConvertFrom-Json) } catch { }
+  Check 'Q1 query --name "gnB.TList<T>.Add" returns the METHOD gnB.TList.Add (per-segment strip), not the class' (($rows3m.Count -eq 1) -and ($rows3m[0].qualified_name -eq 'gnB.TList.Add') -and ($rows3m[0].kind -notmatch '(?i)class')) "rows=$($rows3m.Count) qn=$($rows3m[0].qualified_name) kind=$($rows3m[0].kind)"
+  $q3c = (& $exePath query --name 'gnB.TList<T>' --db $db --json --exact 2>$null) -join "`n"
+  $rows3c = @(); try { $rows3c = @($q3c | ConvertFrom-Json) } catch { }
+  Check 'Q2 query --name "gnB.TList<T>" still returns the class gnB.TList' (($rows3c.Count -eq 1) -and ($rows3c[0].qualified_name -eq 'gnB.TList') -and ($rows3c[0].kind -match '(?i)class')) "rows=$($rows3c.Count) qn=$($rows3c[0].qualified_name) kind=$($rows3c[0].kind)"
+
+  # --- impl range of a GENERIC class's method body is stamped (#5c) -----------
+  $impl = Sql "SELECT impl_start_line FROM symbols WHERE qualified_name='gnB.TList.Add'"
+  Check 'I1 gnB.TList.Add (procedure TList<T>.Add impl) has a non-null impl_start_line' (($impl.Count -eq 1) -and ($null -ne $impl[0].impl_start_line) -and ([int]$impl[0].impl_start_line -gt 0)) "impl_start_line=$($impl[0].impl_start_line)"
 
   # --- POSITIVE CONTROL: the guard can fail -----------------------------------
   $ctl = Sql "SELECT COUNT(*) AS n FROM symbols WHERE name='TPair'"

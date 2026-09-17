@@ -59,16 +59,24 @@ if ($null -eq $m) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 $version = $m.Matches[0].Groups[1].Value
 
 # --- span extraction ---------------------------------------------------------
-# A top-level routine header starts in COLUMN 1. Interface declarations and
-# nested routines are indented in this codebase, which is what separates the
-# implementation body (the thing that can change behaviour) from its forward
-# declaration. Verified against DRagLint.Storage.SQLite.pas before relying on it.
-$HdrRx = [regex]'^(?i)(function|procedure|constructor|destructor)\s+([A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)'
+# A top-level routine header starts in COLUMN 1, and only headers AFTER the
+# `implementation` line count. Nested routines are indented in this codebase,
+# and in Storage.SQLite every interface declaration is too (class members) --
+# but src\core\DRagLint.Core.Model.pas declares its free functions at column 1
+# in the INTERFACE section as well, and a span cut there runs from the
+# declaration to the next header, i.e. over the NEXT routine's doc comment.
+# Hashing that would fail this guard on an autodoc regeneration, which is the
+# over-billing this split exists to end. The implementation body is the thing
+# that can change behaviour, so that is the only section spans are cut from.
+$HdrRx  = [regex]'^(?i)(function|procedure|constructor|destructor)\s+([A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)'
+$ImplRx = [regex]'^(?i)implementation\s*$'
 
 function Get-TopLevelRoutines([string]$Path) {
   $lines = [System.IO.File]::ReadAllLines($Path)
   $out = New-Object System.Collections.Generic.List[object]
+  $inImpl = $false
   for ($i = 0; $i -lt $lines.Count; $i++) {
+    if (-not $inImpl) { if ($ImplRx.IsMatch($lines[$i])) { $inImpl = $true }; continue }
     $mm = $HdrRx.Match($lines[$i])
     if ($mm.Success) { $out.Add([pscustomobject]@{ Line = $i; Name = $mm.Groups[3].Value }) }
   }
@@ -126,14 +134,19 @@ $hash = ([System.BitConverter]::ToString(
 $current = "$version|$hash"
 
 # --- DRIFT CONTROL: a resolve-ish routine that nobody classified -------------
-$Vocab = [regex]'(?i)resolve|candidate|ancestry|inherit|calledge|call_edge|helper'
+# `arity|generic` joined the vocabulary with the v23 generic-name work: a
+# generic-arity miscount emptied every constrained candidate set (final review
+# #1), and nothing spelled Resolve* had changed. It flags PreferArity (a
+# query-side reader, EXCLUDEd with its reason) and the three Core.Model helpers
+# (in the manifest), so the walk now covers Core.Model as well.
+$Vocab = [regex]'(?i)resolve|candidate|ancestry|inherit|calledge|call_edge|helper|arity|generic'
 # Separators are normalised on BOTH sides. The manifest is written with forward
 # slashes (it is read by humans and by git); the walk below builds Windows
 # paths. Comparing them raw made every manifest entry read as unclassified --
 # the check fired on 17 routines it had itself been given.
 function NormPath([string]$P) { return ($P -replace '\\', '/').ToLower() }
 $unclassified = @()
-foreach ($f in @('src/storage/DRagLint.Storage.SQLite.pas')) {
+foreach ($f in @('src/storage/DRagLint.Storage.SQLite.pas', 'src/core/DRagLint.Core.Model.pas')) {
   foreach ($r in (Get-TopLevelRoutines (Join-Path $Repo $f))) {
     if (-not $Vocab.IsMatch($r.Name)) { continue }
     $key = $r.Name.ToLower()

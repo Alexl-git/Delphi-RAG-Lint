@@ -210,10 +210,17 @@ type
     function FileIsStale(AFileId: Int64): Boolean;
     /// <summary>Find a direct child of AParentId whose Name matches AName (case-
     /// insensitively) and whose Kind is in AKinds. Default(TSymbol) (Id=0) when
-    /// none.</summary>
+    /// none. With ADeclineOnConflict, two or more matching children whose
+    /// Signatures DIFFER also yield Default(TSymbol): two sibling
+    /// 'for var Item in A' / 'for var Item in B' loops share one qualified
+    /// name, and typing the receiver from whichever row came first would be a
+    /// guess. Same-signature duplicates still match (they type the same).</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AKinds"><!-- drag-lint:auto type -->const TSymbolKindSet</param>
+    /// <param name="ADeclineOnConflict">True: decline on same-named children
+    /// of differing Signature instead of returning the first (v23 local/param
+    /// receiver typing). False (default): first match, the pre-v23 contract.</param>
     /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: Default(TSymbol).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -227,7 +234,8 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Destroy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet): TSymbol;
+    function FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet;
+      ADeclineOnConflict: Boolean = False): TSymbol;
     /// <summary>Choose one target from a set of same-named candidates, narrowing
     /// by argument count when the set is an overload set. Sets AConfidence
     /// ('certain' | 'ambiguous') and returns the chosen symbol id, or 0 when
@@ -1303,7 +1311,8 @@ begin
   Result:= FileIsStale(AFileId);
 end;
 
-function TCallResolver.FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet): TSymbol;
+function TCallResolver.FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet;
+  ADeclineOnConflict: Boolean): TSymbol;
 var
   Kids: TList<TSymbol>;
   S   : TSymbol       ;
@@ -1312,7 +1321,12 @@ begin
   Kids  := ChildrenOf(AParentId);
   if Kids = nil then Exit;
   for S in Kids do
-    if (S.Kind in AKinds) and SameText(S.Name, AName) then Exit(S);
+    if (S.Kind in AKinds) and SameText(S.Name, AName) then
+    begin
+      if not ADeclineOnConflict then Exit(S);
+      if Result.Id = 0 then Result:= S
+      else if Result.Signature <> S.Signature then Exit(Default(TSymbol));
+    end;
 end;
 
 function TCallResolver.PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
@@ -1642,9 +1656,16 @@ begin
   //     Kind 5: PARAM 'AFoo.M' -> param's declared type.
   // Both are children of the enclosing ROUTINE. Try them first (an inner name
   // shadows a field), then fall back to the class fields/properties.
-  Member:= FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam]);
+  // v23: sibling for-var loops can declare the SAME local name twice under one
+  // qualified name; when their declared types differ the receiver is not typed
+  // from either (decline -> the honest untyped floor), not from the first. The
+  // local still SHADOWS any same-named field or type, so a declined local ends
+  // the search here rather than falling through to the rungs below.
+  Member:= FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam], True);
   if Member.Id > 0 then
     Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
+  if FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam]).Id > 0 then
+    Exit; // a local/param of that name exists but its type is ambiguous -> 0
 
   // --- Kind 2: FIELD 'FBar.M' / Kind 3: PROPERTY 'Prop.M' -> member's type.
   //     Members are children of the enclosing class.

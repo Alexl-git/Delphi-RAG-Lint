@@ -11,9 +11,14 @@ breaking changes** until v1.0.
   `ancestor_type_args` and resolve by arity before the scope rules:
   `TObjectList<T: class>` now climbs to `System.Generics.Collections.TList<T>`
   (was `System.Classes.TList`); ORM3's 134 `TMicObjectBase<I>` descendants
-  resolve their base. `query --name` accepts `TList<T>`.
+  resolve their base. `query --name` accepts `TList<T>`, and a dotted name is
+  stripped per segment, so `Unit.TList<T>.Add` finds the METHOD (was the class).
+  Arity counts PARAMETERS, not commas: `<T: class, constructor>` is 1 and
+  `<S: IUnknown; I: IUnknown>` is 2, so edges onto constrained generics resolve.
 - Nested-routine locals and inline `var` / `for var` declarations are
-  `local_var` symbols parented to the innermost routine.
+  `local_var` symbols parented to the innermost routine. Two sibling
+  `for var Item: T in` loops of DIFFERENT element types leave `Item.M` calls
+  unresolved (decline) rather than typing both from the first loop.
 - `symbol_facts.reads_fields` / `writes_fields` include INHERITED fields
   (own first, nearest ancestor next) via the new `facts-inherited` index stage.
 

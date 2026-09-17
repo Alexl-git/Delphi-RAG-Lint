@@ -1753,58 +1753,12 @@ begin
   end;
 end; // procedure
 
-// v23: the last '.'-separated segment of a routine header name, counting only
-// dots at angle-bracket depth 0, so 'TFoo<T>.Bar<U>' -> 'Bar<U>' and
-// 'TFoo<Some.Unit.TBase>.Bar' -> 'Bar'.
-function LastTopLevelSegment(const AName: string): string;
-var
-  I, Depth, Start: Integer;
-begin
-  Depth:= 0;
-  Start:= 1;
-  for I:= 1 to Length(AName) do
-    case AName[I] of
-      '<': Inc(Depth);
-      '>': Dec(Depth);
-      '.': if Depth <= 0 then Start:= I + 1;
-    end;
-  Result:= Copy(AName, Start, MaxInt);
-end;
-
-// v23: every '.'-separated segment (dots at angle-bracket depth 0 only) with its
-// own '<...>' list removed, so an impl header 'TFoo<T>.Bar<U>' -> 'TFoo.Bar'.
-// SetRoutineImplRange / FindRoutineSymbolIndex compare the DOTTED name against
-// QualifiedName (exact or suffix) and its last segment against Name; both are
-// bare since the declarations emit bare names, so the header must be too.
-function StripGenericSegments(const AName: string): string;
-var
-  I, Depth, Start: Integer;
-
-  procedure FlushSegment(AEnd: Integer);
-  var
-    Bare, Params: string;
-  begin
-    SplitGenericName(Copy(AName, Start, AEnd - Start), Bare, Params);
-    if Start > 1 then Result:= Result + '.';
-    Result:= Result + Bare;
-  end;
-
-begin
-  Result:= '';
-  Depth:= 0;
-  Start:= 1;
-  for I:= 1 to Length(AName) do
-    case AName[I] of
-      '<': Inc(Depth);
-      '>': Dec(Depth);
-      '.': if Depth <= 0 then
-           begin
-             FlushSegment(I);
-             Start:= I + 1;
-           end;
-    end;
-  FlushSegment(Length(AName) + 1);
-end;
+// v23: LastTopLevelSegment and StripGenericSegments (the header-name helpers
+// WalkDeclProc and the impl-range stamp use) live in DRagLint.Core.Model since
+// the query side needs the same per-segment strip -- SetRoutineImplRange /
+// FindRoutineSymbolIndex compare the DOTTED name against QualifiedName (exact
+// or suffix) and its last segment against Name; both are bare since the
+// declarations emit bare names, so the header must be too.
 
 { v(PHASE C): returns the index of the routine symbol it emitted, or -1 when it
   emitted nothing (no name node / empty name). Callers that only want the side

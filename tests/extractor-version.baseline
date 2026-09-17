@@ -701,4 +701,17 @@
 #   constant was moved by item 1 (d9c70859); the baseline is re-pinned ONCE
 #   here, at the end of the batch, per ruling R2. Superseded line:
 #   1.16.0-alpha|baf135941eb2f788bdbeabefc01c83f699910093468b3877970401f84d368e3c
-1.17.0-alpha|bf0e9d92d499259c05ffe202a6f56c58f9ae3cce194d083088c6bb4045e03409
+# 2026-09-17: hash re-pinned WITHIN 1.17.0-alpha (final-review wave, ruling
+#   R19: no version constant moves in this wave). No index has yet been built
+#   under 1.17.0, so the pin moves within the same version instead of bumping
+#   -- there is no 1.17.0 parse anywhere for a bump to invalidate. What moved
+#   in the surface: src\parser lost its file-local LastTopLevelSegment /
+#   StripGenericSegments (now public in DRagLint.Core.Model, same bodies, so
+#   the header names WalkDeclProc emits are unchanged); src\index
+#   CallResolver.FindChildOfKind gained ADeclineOnConflict (two same-named
+#   locals of differing Signature type nothing rather than the first one) and
+#   TypeReceiver stops at a declined local instead of falling through to the
+#   field/type rungs. Both are DERIVED-edge changes (call_edges), not parses;
+#   the overnight rebuild that this pin precedes covers them. Superseded line:
+#   1.17.0-alpha|bf0e9d92d499259c05ffe202a6f56c58f9ae3cce194d083088c6bb4045e03409
+1.17.0-alpha|05731a9e1414bf02d55148d754d9a510d56c64ac0dfc2745a2fd0aae7f4c0898

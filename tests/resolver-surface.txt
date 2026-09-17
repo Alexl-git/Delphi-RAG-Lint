@@ -54,6 +54,21 @@ src/storage/DRagLint.Storage.SQLite.pas::SplitHeritageList
 # v23 arity filter in front of rule 0, called by ResolveAncestry's edge loop and
 # by ResolveTypeNameToClass.PickCandidate -- it decides WHICH candidate is written.
 src/storage/DRagLint.Storage.SQLite.pas::FilterCandidatesByArity
+# The Core.Model helpers that arity filter and the ancestor-name strip rest on.
+# None writes a row, but each decides WHICH edge is written: GenericArity is the
+# number FilterCandidatesByArity compares (a miscount emptied every constrained
+# candidate set, final review #1); SplitGenericName is how an edge's bare name
+# and type-argument list are taken apart; StripGenericSegments is the
+# per-segment strip a dotted generic name passes through before it is compared
+# against a stored qualified_name.
+src/core/DRagLint.Core.Model.pas::GenericArity
+src/core/DRagLint.Core.Model.pas::SplitGenericName
+src/core/DRagLint.Core.Model.pas::StripGenericSegments
+# Late resolution: the transitive climb LookupMemberOnType / ResolveAccessor
+# and the facts-inherited post-pass walk to find the member an edge binds to.
+# A change to how it climbs (hop bound, resolved-only, ordering) changes which
+# call_edges row is written.
+src/storage/DRagLint.Storage.SQLite.pas::GetTransitiveAncestors
 
 # Scope selection. These decide WHICH refs the calls pass rewrites, so a change
 # here changes what ends up stored even though neither writes anything itself.
@@ -102,6 +117,12 @@ EXCLUDE calledgesneedrebuild
 # A path lookup that merely happens to be spelled Resolve*. This is the exact
 # false positive a name regex produces, kept here as the worked example.
 EXCLUDE resolvefileidtolerant
+
+# Query-side reader for `query --name 'TList<T>'`: prefers rows of the arity the
+# INPUT carried (FindSymbolsByExactName / FindSymbolsByQualifiedName). It
+# consumes symbols.generic_params and writes nothing; flagged by the
+# `arity|generic` vocabulary added with the Core.Model entries above.
+EXCLUDE preferarity
 
 # Resolves a type at a CURSOR for the LSP. Despite living under src\resolver it
 # takes no part in the index resolve pass and writes nothing.

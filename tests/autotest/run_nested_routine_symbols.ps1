@@ -121,6 +121,54 @@ end;
 end.
 '@
 
+# duploc: two sibling `for var Item: T in` loops in ONE routine give two
+# local_var rows under ONE qualified name with DIFFERENT signatures. The call
+# resolver must not type the receiver from whichever row came first -- the
+# second loop's Item.Ping would then bind to TAlpha.Ping, confidently wrong.
+# OneLoop is the control: a single typed loop still resolves.
+Write-Ascii (Join-Path $scratch 'duploc.pas') @'
+unit duploc;
+
+interface
+
+type
+  TAlpha = class
+    procedure Ping;
+  end;
+  TBeta = class
+    procedure Ping;
+  end;
+  THost = class
+    FAs: TArray<TAlpha>;
+    FBs: TArray<TBeta>;
+    procedure TwoLoops;
+    procedure OneLoop;
+  end;
+
+implementation
+
+procedure TAlpha.Ping;
+begin
+end;
+
+procedure TBeta.Ping;
+begin
+end;
+
+procedure THost.TwoLoops;
+begin
+  for var Item: TAlpha in FAs do Item.Ping;
+  for var Item: TBeta in FBs do Item.Ping;
+end;
+
+procedure THost.OneLoop;
+begin
+  for var Item: TAlpha in FAs do Item.Ping;
+end;
+
+end.
+'@
+
 $db = Join-Path $scratch 'nestsyms.sqlite'
 
 Push-Location C:\TEMP
@@ -210,6 +258,17 @@ try {
 
   # --- 9. N5: whitespace before the semicolon extracts ------------------------
   Check 'N5 ResolvedYadf (space before ;) is a local of OuterOne' ($ol -contains 'ResolvedYadf')
+
+  # --- 11. D1: duplicate local QNs with DIFFERENT signatures DECLINE ----------
+  # (final review #2). Both rows exist, so a resolver picking the first would
+  # type line 32's receiver as TAlpha; the decline leaves BOTH TwoLoops calls
+  # without an edge, while the single-loop control keeps its certain edge.
+  $dl = Sql "SELECT signature FROM symbols WHERE kind='local_var' AND qualified_name='duploc.THost.TwoLoops.Item' ORDER BY start_line"
+  Check 'D1 TwoLoops has TWO local_var Item rows with distinct signatures (TAlpha, TBeta)' (($dl.Count -eq 2) -and ($dl[0].signature -eq 'TAlpha') -and ($dl[1].signature -eq 'TBeta')) "sigs=$(@($dl | ForEach-Object signature) -join ',')"
+  $de = Sql "SELECT COUNT(e.ref_id) AS n FROM refs r JOIN symbols s ON s.id=r.enclosing_symbol_id LEFT JOIN call_edges e ON e.ref_id=r.id WHERE r.kind='call' AND r.name_text='Ping' AND s.qualified_name='duploc.THost.TwoLoops'"
+  Check 'D1 neither TwoLoops Item.Ping call is resolved (ambiguous local -> decline, not first-match)' (($de.Count -eq 1) -and ($de[0].n -eq 0)) "edges=$($de[0].n)"
+  $dc = Sql "SELECT t.qualified_name AS target FROM refs r JOIN symbols s ON s.id=r.enclosing_symbol_id JOIN call_edges e ON e.ref_id=r.id JOIN symbols t ON t.id=e.target_symbol_id WHERE r.kind='call' AND r.name_text='Ping' AND s.qualified_name='duploc.THost.OneLoop'"
+  Check 'D1 control: OneLoop Item.Ping still resolves to duploc.TAlpha.Ping (the rung is alive)' (($dc.Count -eq 1) -and ($dc[0].target -eq 'duploc.TAlpha.Ping')) "target=$($dc[0].target)"
 
   # --- 10. POSITIVE CONTROL: the count is exact, so a dropped local goes red ---
   $cnt = Sql "SELECT COUNT(*) AS n FROM symbols l JOIN symbols r ON l.parent_id=r.id WHERE l.kind='local_var' AND r.qualified_name='nestsyms.OuterOne.NestedHelper'"

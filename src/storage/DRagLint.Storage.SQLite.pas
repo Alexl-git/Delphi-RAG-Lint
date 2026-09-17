@@ -7081,12 +7081,18 @@ function TSQLiteSymbolStore.FindSymbolsByQualifiedName( const AQName: string): T
 var
   List: TList<TSymbol>;
 begin
-  { v23 (spec G7): same input strip as FindSymbolsByExactName -- 'gnB.TList<T>'
-    splits on the FIRST '<' into bare 'gnB.TList' + params 'T'; see PreferArity.
-    A qualified name whose CLASS segment is generic ('gnB.TList<T>.Add') is not
-    handled here; no caller writes that form. }
-  var BareName, InParams: string;
-  var HadList: Boolean:= SplitGenericName(AQName, BareName, InParams);
+  { v23 (spec G7): strip EVERY segment's <...> list, dots kept, so
+    'gnB.TList<T>' looks up 'gnB.TList' and 'gnB.TList<T>.Add' looks up
+    'gnB.TList.Add' (the METHOD, not the class). The arity preference applies to
+    the LAST segment's list only -- the class's parameters are not the
+    method's; see PreferArity.
+    dl:ok duplicate-code below: the exact-then-NOCASE retry loop is the SAME
+    shape as FindSymbolsByExactName's over a different prepared-query pair
+    (FQFindByQName/CI vs FQFindByName/CI) -- pre-existing at 908377f7, and
+    folding both into one helper is a refactor outside the v23 wave. }
+  var LastBare, InParams: string;
+  var BareName: string:= StripGenericSegments(AQName);
+  var HadList: Boolean:= SplitGenericName(LastTopLevelSegment(AQName), LastBare, InParams);  // dl:ok duplicate-code@31e2
   List:= TList<TSymbol>.Create;
   try
     if FQFindByQName.Active then FQFindByQName.Close;

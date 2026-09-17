@@ -1715,10 +1715,32 @@ function IntrinsicSignature(const AName: string): string;
 /// AParams='') otherwise.</returns>
 function SplitGenericName(const AText: string; out ABare, AParams: string): Boolean;
 
-/// <summary>Number of top-level comma-separated entries in a parameter or
-/// argument list ('K, V' = 2, 'TList&lt;A, B&gt;' = 1, '' = 0). Commas nested
-/// inside &lt;...&gt; do not count.</summary>
+/// <summary>Number of type PARAMETERS a parameter list declares, or of type
+/// ARGUMENTS an argument list carries. Rule: split the text on top-level ';'
+/// into constrained groups; in each group count the top-level commas BEFORE
+/// the group's first top-level ':' (the whole group when it has no ':') plus
+/// one; sum the groups. Constraint commas are therefore NOT parameters:
+/// 'T: class, constructor' = 1 and 'S: IUnknown; I: IUnknown' = 2. Plain lists
+/// count as before: 'K, V' = 2, 'T' = 1, '' = 0, 'TList&lt;A, B&gt;' = 1. An
+/// argument list never carries ':' or ';', so it is top-level commas + 1
+/// ('string, TList&lt;T&gt;' = 2). Commas nested inside &lt;...&gt; do not
+/// count. Constraints have no parenthesised form, so only '&lt;'/'&gt;' track
+/// depth.</summary>
 function GenericArity(const AParamsOrArgs: string): Integer;
+
+/// <summary>The last '.'-separated segment of a dotted name, counting only
+/// dots at angle-bracket depth 0, so 'TFoo&lt;T&gt;.Bar&lt;U&gt;' -&gt; 'Bar&lt;U&gt;'
+/// and 'TFoo&lt;Some.Unit.TBase&gt;.Bar' -&gt; 'Bar'. The segment keeps its own
+/// '&lt;...&gt;' list; SplitGenericName takes it apart.</summary>
+function LastTopLevelSegment(const AName: string): string;
+
+/// <summary>Every '.'-separated segment (dots at angle-bracket depth 0 only)
+/// with its own '&lt;...&gt;' list removed, dots kept, so an impl header
+/// 'TFoo&lt;T&gt;.Bar&lt;U&gt;' -&gt; 'TFoo.Bar' and a query input
+/// 'Unit.TList&lt;T&gt;.Add' -&gt; 'Unit.TList.Add'. Symbols are stored under
+/// BARE names since schema v23, so any dotted name compared against
+/// qualified_name must pass through this first.</summary>
+function StripGenericSegments(const AName: string): string;
 
 /// <summary>True when AName is a Delphi compiler intrinsic -- a built-in the
 /// compiler recognizes by name and compiles inline, which is therefore never a
@@ -1904,17 +1926,80 @@ end;
 
 function GenericArity(const AParamsOrArgs: string): Integer;
 var
-  I, Depth: Integer;
+  I, Depth, GroupStart, GroupCount: Integer;
+  InConstraint: Boolean;
+
+  { A group contributes its name count only when it has text at all, so a
+    stray trailing ';' does not invent a parameter. }
+  procedure CloseGroup(AEnd: Integer);
+  begin
+    if Trim(Copy(AParamsOrArgs, GroupStart, AEnd - GroupStart)) <> '' then
+      Inc(Result, GroupCount);
+    GroupStart  := AEnd + 1;
+    GroupCount  := 1;
+    InConstraint:= False;
+  end;
+
 begin
-  if Trim(AParamsOrArgs) = '' then Exit(0);
-  Result:= 1;
-  Depth := 0;
+  Result      := 0;
+  Depth       := 0;
+  GroupStart  := 1;
+  GroupCount  := 1;
+  InConstraint:= False;
   for I:= 1 to Length(AParamsOrArgs) do
     case AParamsOrArgs[I] of
       '<': Inc(Depth);
       '>': Dec(Depth);
-      ',': if Depth <= 0 then Inc(Result);
+      ':': if Depth <= 0 then InConstraint:= True;
+      ',': if (Depth <= 0) and not InConstraint then Inc(GroupCount);
+      ';': if Depth <= 0 then CloseGroup(I);
     end;
+  CloseGroup(Length(AParamsOrArgs) + 1);
+end;
+
+function LastTopLevelSegment(const AName: string): string;
+var
+  I, Depth, Start: Integer;
+begin
+  Depth:= 0;
+  Start:= 1;
+  for I:= 1 to Length(AName) do
+    case AName[I] of
+      '<': Inc(Depth);
+      '>': Dec(Depth);
+      '.': if Depth <= 0 then Start:= I + 1;
+    end;
+  Result:= Copy(AName, Start, MaxInt);
+end;
+
+function StripGenericSegments(const AName: string): string;
+var
+  I, Depth, Start: Integer;
+
+  procedure FlushSegment(AEnd: Integer);
+  var
+    Bare, Params: string;
+  begin
+    SplitGenericName(Copy(AName, Start, AEnd - Start), Bare, Params);
+    if Start > 1 then Result:= Result + '.';
+    Result:= Result + Bare;
+  end;
+
+begin
+  Result:= '';
+  Depth:= 0;
+  Start:= 1;
+  for I:= 1 to Length(AName) do
+    case AName[I] of
+      '<': Inc(Depth);
+      '>': Dec(Depth);
+      '.': if Depth <= 0 then
+           begin
+             FlushSegment(I);
+             Start:= I + 1;
+           end;
+    end;
+  FlushSegment(Length(AName) + 1);
 end;
 
 function IntrinsicSignature(const AName: string): string;

@@ -57,6 +57,16 @@ type
     FItem: T;
   end;
 
+  TGrand = class
+  protected
+    FG: Integer;
+  end;
+
+  TMid = class(TGrand)
+  protected
+    FM: Integer;
+  end;
+
 implementation
 
 end.
@@ -87,7 +97,18 @@ type
     procedure Touch;
   end;
 
+  TLeaf = class(TMid)
+  public
+    procedure WriteBoth;
+  end;
+
 implementation
+
+procedure TLeaf.WriteBoth;
+begin
+  FG := 1;
+  FM := 2;
+end;
 
 procedure TChild.WriteInherited;
 begin
@@ -178,13 +199,30 @@ try {
   $gt = Facts 'ifChild.TGenChild.Touch'
   Check 'F2 GENERIC base: Touch writes_fields = "FItem, FModified"' (($null -ne $gt) -and ($gt.writes_fields -eq 'FItem, FModified')) "writes=$($gt.writes_fields)"
 
-  # F7: a no-op incremental run prints no facts-inherited work
+  # F3 THREE-level chain: the body writes FG (grand) BEFORE FM (mid), but the
+  # post-pass appends by ancestor distance -- nearest first -- so TMid's FM
+  # precedes TGrand's FG regardless of body order.
+  $wb = Facts 'ifChild.TLeaf.WriteBoth'
+  Check 'F3 three-level chain: WriteBoth writes_fields = "FM, FG" (nearest ancestor first, not body order)' (($null -ne $wb) -and ($wb.writes_fields -eq 'FM, FG')) "writes=$($wb.writes_fields)"
+
+  # F7: a no-op incremental run STILL runs the facts-inherited stage (it is a
+  # post-pass over the whole DB, not per changed file) and changes nothing.
+  # (Sql returns `,$out`; assign before piping so the rows ENUMERATE -- piped
+  # directly, the whole array arrives as one item and the count reads 1.)
+  $allFactsSql = "SELECT s.qualified_name AS q, f.reads_fields AS r, f.writes_fields AS w FROM symbol_facts f JOIN symbols s ON s.id=f.symbol_id ORDER BY s.qualified_name"
+  $rowsBefore = Sql $allFactsSql
+  $factsBefore = @($rowsBefore | ForEach-Object { "$($_.q)|$($_.r)|$($_.w)" })
   $out2 = & $exePath index $scratch --db $db 2>&1
+  Check 'F7 no-op incremental run exits 0' ($LASTEXITCODE -eq 0)
+  Check 'F7 no-op incremental run still reports stage: facts-inherited' (($out2 -join "`n") -match 'stage: facts-inherited') "stages seen: $(@($out2 | Select-String 'stage:') -join ' | ')"
+  $rowsAfter = Sql $allFactsSql
+  $factsAfter = @($rowsAfter | ForEach-Object { "$($_.q)|$($_.r)|$($_.w)" })
+  Check 'F7 no-op incremental run keeps EVERY facts row byte-identical (idempotent, 7 rows)' (($factsBefore.Count -eq 7) -and (($factsBefore -join "`n") -eq ($factsAfter -join "`n"))) "before=$($factsBefore.Count) after=$($factsAfter.Count)"
   Check 'F7 no-op incremental run keeps the facts (idempotent)' (((Facts 'ifChild.TChild.WriteInherited').writes_fields) -eq 'FOwn, FBaseField')
 
   # POSITIVE CONTROL
   $n = Sql "SELECT COUNT(*) AS n FROM symbol_facts"
-  Check 'control: symbol_facts has 6 rows (one per routine)' (($n.Count -eq 1) -and ($n[0].n -eq 6)) "n=$($n[0].n)"
+  Check 'control: symbol_facts has 7 rows (one per routine)' (($n.Count -eq 1) -and ($n[0].n -eq 7)) "n=$($n[0].n)"
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
