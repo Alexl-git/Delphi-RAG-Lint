@@ -18,7 +18,14 @@ const
     and both are present in the CREATE below for new ones -- the prop_access
     pattern. Riding the same bump: dfm-prop rows for EVERY value kind, not only
     string-valued properties. }
-  SCHEMA_VERSION = 22;
+  { 22 -> 23 (2026-09-17, extractor batch): additive symbols.generic_params
+    (the generic parameter list, name is now BARE) and
+    type_ancestors.ancestor_type_args (the edge's instantiation arguments).
+    Both ALTERed onto pre-v23 tables by Migrate(); type_ancestors is rebuilt
+    by ResolveAncestry on every index run so its column fills on the next run.
+    A pre-v23 symbols row reads generic_params NULL -> '' and its name still
+    carries '<...>' until re-parsed -- which the extractor bump forces. }
+  SCHEMA_VERSION = 23;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
@@ -84,7 +91,10 @@ const
       which is the ambiguity this resolves. NULL on a pre-v22 row, read back as
       1 (claiming the keyword was written invents nothing; the other default
       would invent published members across every old index). }
-    '  vis_explicit    INTEGER' + ')',
+    '  vis_explicit    INTEGER,' +
+    { v23: generic parameter list as written, brackets stripped; NULL for a
+      non-generic symbol. Never a match key -- name is bare. }
+    '  generic_params  TEXT' + ')',
 
     'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)', 'CREATE INDEX IF NOT EXISTS idx_symbols_qname ON symbols(qualified_name)',
     'CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id)', 'CREATE INDEX IF NOT EXISTS idx_symbols_parent ON symbols(parent_id)',

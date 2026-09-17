@@ -66,7 +66,12 @@ const
     have them, and DFM text search still finds only quoted values. Nothing reads
     WRONG -- it reads SHORT, which is the failure mode this stamp exists to make
     visible rather than silent. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.16.0-alpha';
+  { 1.16.0 -> 1.17.0 (2026-09-17, extractor batch): generic type/method NAMES
+    drop the parameter list into symbols.generic_params; nested-routine locals
+    and inline vars are emitted as local_var; symbol_facts reads/writes_fields
+    gain inherited fields via the facts-inherited post-pass. Re-parses every
+    index. Spec: docs\superpowers\specs\2026-09-17-extractor-batch-*.md }
+  DRAGLINT_EXTRACTOR_VERSION = '1.17.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -247,6 +252,11 @@ type
     // claiming "the keyword was written" invents nothing, whereas defaulting to
     // False would invent published members across every old index.
     VisExplicit  : Boolean    ;
+    /// <summary>v23: the generic parameter list AS WRITTEN, without the angle
+    /// brackets and including constraints ('T', 'K, V', 'I: IMicObject',
+    /// 'T: class'). '' for a non-generic symbol. Name is always the BARE
+    /// identifier; see DisplayName for the assembled form.</summary>
+    GenericParams: string     ;
     StartLine    : Integer    ;
     StartCol     : Integer    ;
     EndLine      : Integer    ;
@@ -257,6 +267,9 @@ type
     // methods). StartLine/EndLine stay the DECLARATION range.
     ImplStartLine: Integer;
     ImplEndLine  : Integer;
+    /// <summary>The human-visible name: Name, or Name&lt;GenericParams&gt; for a
+    /// generic. Renderers print this; nothing matches on it.</summary>
+    function DisplayName: string;
   end; // record
 
   /// <summary>v(ADP2 T1): index-time ANALYSIS facts about one symbol -- as
@@ -335,6 +348,10 @@ type
     /// <c>SameText(A.Name, X)</c>. Pinned by
     /// tests\autotest\run_ancestors_alias_target_name.ps1.</remarks>
     ResolvedName: string;
+    /// <summary>v23: the instantiation's argument list as written on the edge
+    /// ('T', 'TFoo', 'string, TBar'); '' when the ancestor was named without
+    /// arguments. Arity = GenericArity(TypeArgs) when non-empty.</summary>
+    TypeArgs: string;
     /// <summary>True when AName names this ancestor -- either as WRITTEN in the
     /// heritage list (<c>Name</c>) or as the class a type alias resolved to
     /// (<c>ResolvedName</c>). The by-name ancestry test; use it instead of
@@ -1668,6 +1685,19 @@ function CanBeCallTarget(AKind: TSymbolKind): Boolean;
 /// </remarks>
 function IntrinsicSignature(const AName: string): string;
 
+/// <summary>Splits 'TBox&lt;T: class&gt;' into ABare='TBox', AParams='T: class'.
+/// Splits on the FIRST '&lt;' and the LAST '&gt;', so nested arguments
+/// ('TDictionary&lt;string, TList&lt;T&gt;&gt;') stay intact. Whitespace is trimmed
+/// on both parts.</summary>
+/// <returns>True when AText carried a parameter list; False (ABare=Trim(AText),
+/// AParams='') otherwise.</returns>
+function SplitGenericName(const AText: string; out ABare, AParams: string): Boolean;
+
+/// <summary>Number of top-level comma-separated entries in a parameter or
+/// argument list ('K, V' = 2, 'TList&lt;A, B&gt;' = 1, '' = 0). Commas nested
+/// inside &lt;...&gt; do not count.</summary>
+function GenericArity(const AParamsOrArgs: string): Integer;
+
 /// <summary>True when AName is a Delphi compiler intrinsic -- a built-in the
 /// compiler recognizes by name and compiles inline, which is therefore never a
 /// symbol in any index.</summary>
@@ -1816,6 +1846,14 @@ uses
   System.SysUtils
   ;
 
+{ TSymbol }
+
+function TSymbol.DisplayName: string;
+begin
+  if GenericParams <> '' then Result:= Name + '<' + GenericParams + '>'
+  else Result:= Name;
+end;
+
 { TTypeAncestor }
 
 function TTypeAncestor.MatchesName(const AName: string): Boolean;
@@ -1823,6 +1861,38 @@ begin
   if AName = '' then Exit(False);
   Result:= SameText(Name, AName) or
            ((ResolvedName <> '') and SameText(ResolvedName, AName));
+end;
+
+function SplitGenericName(const AText: string; out ABare, AParams: string): Boolean;
+var
+  P, Q: Integer;
+begin
+  ABare  := Trim(AText);
+  AParams:= '';
+  Result := False;
+  P:= Pos('<', ABare);
+  if P <= 0 then Exit;
+  Q:= Length(ABare);
+  while (Q > P) and (ABare[Q] <> '>') do Dec(Q);
+  if Q <= P then Exit; // '<' without a closing '>' -- leave the text alone
+  AParams:= Trim(Copy(ABare, P + 1, Q - P - 1));
+  ABare  := Trim(Copy(ABare, 1, P - 1));
+  Result := True;
+end;
+
+function GenericArity(const AParamsOrArgs: string): Integer;
+var
+  I, Depth: Integer;
+begin
+  if Trim(AParamsOrArgs) = '' then Exit(0);
+  Result:= 1;
+  Depth := 0;
+  for I:= 1 to Length(AParamsOrArgs) do
+    case AParamsOrArgs[I] of
+      '<': Inc(Depth);
+      '>': Dec(Depth);
+      ',': if Depth <= 0 then Inc(Result);
+    end;
 end;
 
 function IntrinsicSignature(const AName: string): string;

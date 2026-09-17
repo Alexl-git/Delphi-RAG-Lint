@@ -3687,9 +3687,13 @@ begin
           '  ancestor_name      TEXT NOT NULL,' +
           '  ancestor_kind      TEXT,' +
           '  ancestor_symbol_id INTEGER,' +
-          '  ancestor_file_id   INTEGER)');
+          '  ancestor_file_id   INTEGER,' +
+          '  ancestor_type_args TEXT)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_symbol ON type_ancestors(symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_name   ON type_ancestors(ancestor_name)');
+  { v23 (extractor batch): see Schema.pas 22 -> 23. }
+  TryExec('ALTER TABLE symbols ADD COLUMN generic_params TEXT');
+  TryExec('ALTER TABLE type_ancestors ADD COLUMN ancestor_type_args TEXT');
   { v15: first-class helper-target edges. Similar to type_ancestors, one row
     per helper declaration (record/class helper for T) linked to its target type.
     Populated by the indexer during the resolve pass (like type_ancestors);
@@ -4072,7 +4076,7 @@ begin
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, is_helper, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp)');
+    '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit, generic_params) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp, :gp)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id) ' +
@@ -4726,6 +4730,12 @@ begin
   FQInsertSymbol.ParamByName('dirs' ).DataType := ftString;
   FQInsertSymbol.ParamByName('dirs' ).AsString := ASymbol.Directives;
   FQInsertSymbol.ParamByName('vexp' ).AsInteger:= Ord(ASymbol.VisExplicit);
+  { v23: generic_params follows the prop_access NULL-when-empty idiom -- NULL
+    means "not generic", and no consumer needs to tell that from "pre-v23 row"
+    because the extractor bump re-parses every row anyway. }
+  FQInsertSymbol.ParamByName('gp'   ).DataType := ftString;
+  if ASymbol.GenericParams <> '' then FQInsertSymbol.ParamByName('gp').AsString:= ASymbol.GenericParams
+  else FQInsertSymbol.ParamByName('gp').Clear;
   FQInsertSymbol.ExecSQL;
   Result:= FConn.GetLastAutoGenValue('');
   // Populate trigram index alongside each symbol insert so fuzzy queries
@@ -7003,6 +7013,9 @@ begin
     Result.Directives:= AQ.FieldByName('directives').AsString;
   if AQ.FindField('vis_explicit') <> nil then
     Result.VisExplicit:= AQ.FieldByName('vis_explicit').IsNull or (AQ.FieldByName('vis_explicit').AsInteger <> 0);
+  Result.GenericParams:= '';
+  if AQ.FindField('generic_params') <> nil then { v23: tolerate pre-v23 databases }
+    Result.GenericParams:= AQ.FieldByName('generic_params').AsString;
   Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
   Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
   Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;
@@ -10839,10 +10852,11 @@ begin
     { 3. rebuild edges from scratch (simple + correct; whole-DB). }
     QIns.Connection:= FConn;
     QIns.SQL.Text  := 'INSERT INTO type_ancestors(symbol_id, ordinal, ancestor_name, ' +
-                      '  ancestor_kind, ancestor_symbol_id, ancestor_file_id) ' +
-                      'VALUES (:sid, :ord, :an, :ak, :asid, :afid)';
+                      '  ancestor_kind, ancestor_symbol_id, ancestor_file_id, ancestor_type_args) ' +
+                      'VALUES (:sid, :ord, :an, :ak, :asid, :afid, :targs)';
     QIns.Params.ParamByName('asid').DataType:= ftLargeint;
     QIns.Params.ParamByName('afid').DataType:= ftLargeint;
+    QIns.Params.ParamByName('targs').DataType:= ftString;
     { MEMBER C: 'type' joins the SOURCE set so a plain type alias's heritage --
       which the parser now fills with the bare target name -- becomes an
       ordinal-0 type_ancestors row, and CallResolver's existing climb resolves a
@@ -10873,6 +10887,7 @@ begin
         begin
           var AncName:= NormalizeAncestorName(Tokens[Ord]);
           if AncName = '' then Continue;
+          var AncArgs: string := ''; { v23: filled by the arity resolver }
           var RSymId : Int64  := 0;
           var RFileId: Int64  := 0;
           var RKind  : string := '?';
@@ -10906,6 +10921,8 @@ begin
           QIns.ParamByName('sid').AsLargeInt:= SymId;
           QIns.ParamByName('ord').AsInteger := Ord;
           QIns.ParamByName('an' ).AsString  := AncName;
+          if AncArgs <> '' then QIns.ParamByName('targs').AsString:= AncArgs
+          else QIns.ParamByName('targs').Clear;
           QIns.ParamByName('ak' ).AsString  := RKind;
           if RSymId > 0 then
           begin
@@ -11648,7 +11665,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT ordinal, ancestor_name, ancestor_kind, ancestor_symbol_id, ' +
-                   '  ancestor_file_id FROM type_ancestors WHERE symbol_id = :sid ORDER BY ordinal';
+                   '  ancestor_file_id, ancestor_type_args FROM type_ancestors WHERE symbol_id = :sid ORDER BY ordinal';
     Queue.Enqueue(ASymbolId);
     Expanded.AddOrSetValue(ASymbolId, True);
     Hops:= 0;
@@ -11666,6 +11683,8 @@ begin
         A.Ordinal := Q.FieldByName('ordinal'      ).AsInteger;
         A.Name    := Q.FieldByName('ancestor_name').AsString;
         A.Kind    := Q.FieldByName('ancestor_kind').AsString;
+        A.TypeArgs:= '';
+        if Q.FindField('ancestor_type_args') <> nil then A.TypeArgs:= Q.FieldByName('ancestor_type_args').AsString;
         { EXPLICIT, not incidental. An inline `var` inside a loop body is still a
           ROUTINE-scoped local for managed-field initialization, so a
           ResolvedName set on an earlier row would leak onto every later row
