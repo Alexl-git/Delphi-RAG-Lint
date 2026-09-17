@@ -85,6 +85,11 @@ type
     /// Ids are per-DATABASE, so it is only meaningful against the store the row
     /// came from.</remarks>
     EnclosingSymbolId: Int64;
+    /// <summary>'read' | 'write' when the target is a PROPERTY or FIELD and
+    /// this row is an access bound by the resolver (2026-09-16); '' for a
+    /// routine call. Rendered as a trailing key/bracket only when set, so
+    /// routine rows are byte-identical to what they were.</summary>
+    Mode       : string ;
   end;
 
   /// <remarks>
@@ -214,6 +219,7 @@ begin
       Row.FullPath    := RC.FullPath      ;  { ...and the openable one beside it }
       Row.CallSiteLine:= RC.CallSiteLine  ;
       Row.Confidence  := RC.Confidence    ;
+      Row.Mode        := RC.Mode          ;
       Row.TargetQName := T.QualifiedName  ;
       { The line is the caller SYMBOL's own start line (routine-granular, not
         the exact call-site line) -- unchanged from the CLI, whose JSON omits

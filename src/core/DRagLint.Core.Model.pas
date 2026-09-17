@@ -95,7 +95,11 @@ const
   /// single candidate, so an index holding one source tree twice resolves the
   /// ancestor edges it used to decline. Changes DERIVED edges only, never a
   /// parse: remedy is `index --all --resolve-only`, NOT a re-parse.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.2.0-alpha';
+  /// <para>1.2.0-alpha -&gt; 1.3.0-alpha (2026-09-16): member-access refs that name a
+  /// PROPERTY or FIELD now bind (refs.symbol_id), record their mode and accessor
+  /// (member_accesses), and a METHOD accessor earns a call_edges row. DERIVED
+  /// rows only, no parse change: remedy is `index --all --resolve-only`.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.3.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
@@ -429,6 +433,18 @@ type
     // Defaults False so Default(TCallEdge) keeps the old meaning (known).
     // See TCallResolver.LinesOf and INBOX-whole-db-resolve-degrades-a-stale-index.
     ReceiverUnknown     : Boolean;
+    { 2026-09-16 (property-refs-resolve): a member-access ref that named a
+      PROPERTY or FIELD rather than a routine. TargetSymbolId is then the
+      MEMBER's id and these three describe the access: MemberMode is 'read' or
+      'write' (E3: := after the name, past any indexer, is a write);
+      AccessorSymbolId is the getter/setter the mode resolves to -- a METHOD
+      (AccessorKind 'method'), which earns a call_edges row, or the backing
+      FIELD (AccessorKind 'field'), which earns a member_accesses row only --
+      or 0 when the declaration names none this resolver could find. '' /
+      0 on every routine edge, so Default(TCallEdge) keeps its old meaning. }
+    MemberMode          : string;
+    AccessorSymbolId    : Int64 ;
+    AccessorKind        : string;
   end;
 
   /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see
@@ -485,6 +501,11 @@ type
   TResolvedCaller = record
     EnclosingSymbolId: Int64 ;
     EnclosingQName   : string;
+    /// <summary>'read' | 'write' when this row is a PROPERTY or FIELD access
+    /// (2026-09-16, member_accesses); '' for a routine call. Rendered as a
+    /// trailing mode key / bracket so routine rows are byte-identical to
+    /// what they were.</summary>
+    Mode             : string;
     Location         : string; // filename only (unchanged; existing consumers rely on this)
     /// <summary>The same file, fully qualified.</summary>
     /// <remarks>Location is deliberately filename-only and must stay that way --

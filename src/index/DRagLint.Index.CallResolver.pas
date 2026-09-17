@@ -293,6 +293,22 @@ type
     /// </remarks>
     function LookupMethodOnType(ATypeSymbolId: Int64; const AMethodName: string;
       AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
+    /// <summary>2026-09-16 (property-refs-resolve): the PROPERTY or FIELD named
+    /// AMemberName on ATypeSymbolId or the nearest ancestor declaring it.
+    /// Default(TSymbol) (Id = 0) when none.</summary>
+    /// <remarks>Own members first, then the transitive ancestor chain in order,
+    /// so a re-published `property X;` on a descendant wins over the ancestor's
+    /// declaration -- the nearest declaration is the one the source names. No
+    /// arity to pick by, so no ambiguity: the first hit is the answer.</remarks>
+    function LookupMemberOnType(ATypeSymbolId: Int64; const AMemberName: string): TSymbol;
+    /// <summary>E3: 'write' when the source after the member name (past any
+    /// `[...]` indexer) is `:=`, else 'read'. '' when the line is unavailable.</summary>
+    function MemberAccessMode(const ARef: TReference): string;
+    /// <summary>The accessor a property's AMode resolves to: the identifier
+    /// after `read` / `write` on the declaring lines, looked up as a METHOD or
+    /// FIELD on the declaring class or its ancestors. Id = 0 when the clause is
+    /// absent, names a path (`FRec.X`), or resolves to nothing.</summary>
+    function ResolveAccessor(const AProp: TSymbol; const AMode: string): TSymbol;
     /// <summary>Delphi's INNERMOST-FIRST lexical scope walk for a BARE call.
     /// Starts at the call site's own enclosing routine, looks for a nested
     /// routine named AName among its direct children, and climbs one lexical
@@ -572,6 +588,7 @@ type
 implementation
 
 uses
+  System.Math,     // Min -- ResolveAccessor's declaring-line range
   System.StrUtils; // B1: StartsText / SplitString, used by SignatureArityRange
 
 const
@@ -1611,6 +1628,133 @@ begin
   // can name) -> Result stays 0 (leave unresolved).
 end;
 
+function TCallResolver.LookupMemberOnType(ATypeSymbolId: Int64; const AMemberName: string): TSymbol;
+const
+  MEMBER_KINDS: TSymbolKindSet = [skProperty, skField];
+var
+  A: TTypeAncestor;
+begin
+  Result:= Default(TSymbol);
+  if ATypeSymbolId <= 0 then Exit;
+  Result:= FindChildOfKind(ATypeSymbolId, AMemberName, MEMBER_KINDS);
+  if Result.Id > 0 then Exit;
+  for A in FStore.GetTransitiveAncestors(ATypeSymbolId) do
+  begin
+    if not A.Resolved or (A.SymbolId <= 0) then Continue;
+    Result:= FindChildOfKind(A.SymbolId, AMemberName, MEMBER_KINDS);
+    if Result.Id > 0 then Exit;
+  end;
+end;
+
+function TCallResolver.MemberAccessMode(const ARef: TReference): string;
+var
+  Lines: TStringList;
+  Line : string;
+  P    : Integer;
+  Depth: Integer;
+begin
+  Result:= '';
+  Lines:= LinesOf(ARef.FileId);
+  if (Lines = nil) or (ARef.EndLine < 1) or (ARef.EndLine > Lines.Count) then Exit;
+  Line:= Lines[ARef.EndLine - 1];
+  { Start just past the name. Whether EndCol is inclusive or exclusive in a
+    given index, skipping the remaining identifier characters lands on the
+    first character AFTER the member, which is the only position that matters. }
+  P:= ARef.StartCol + Length(ARef.NameText);
+  if (ARef.EndLine <> ARef.StartLine) or (P < 1) then P:= Max(ARef.EndCol, 1);
+  while (P <= Length(Line)) and IsIdentPart(Line[P]) do Inc(P);
+  Result:= 'read';
+  while P <= Length(Line) do
+  begin
+    case Line[P] of
+      ' ', #9: Inc(P);
+      '[':
+        begin
+          { skip one balanced indexer -- `Items[0] := x` writes Items }
+          Depth:= 0;
+          repeat
+            if Line[P] = '[' then Inc(Depth)
+            else if Line[P] = ']' then Dec(Depth);
+            Inc(P);
+          until (Depth = 0) or (P > Length(Line));
+        end;
+      ':':
+        begin
+          if (P < Length(Line)) and (Line[P + 1] = '=') then Result:= 'write';
+          Exit;
+        end;
+    else
+      Exit;
+    end;
+  end;
+end;
+
+// The identifier after the standalone keyword AKey (`read` / `write`) on a
+// property's declaring text, or '' when absent or a dotted path (`FRec.X` is a
+// record field access, not an accessor this resolver can name). The keyword
+// must stand alone: `read` inside `FReadOnly` is a name.
+function AccessorIdentAfter(const ADecl, AKey: string): string;
+var
+  I, J: Integer;
+begin
+  Result:= '';
+  I:= 1;
+  while I <= Length(ADecl) do
+  begin
+    if not (IsIdentStart(ADecl[I]) and ((I = 1) or not IsIdentPart(ADecl[I - 1]))) then
+    begin
+      Inc(I);
+      Continue;
+    end;
+    J:= I;
+    while (J <= Length(ADecl)) and IsIdentPart(ADecl[J]) do Inc(J);
+    if SameText(Copy(ADecl, I, J - I), AKey) then
+    begin
+      while (J <= Length(ADecl)) and (ADecl[J] = ' ') do Inc(J);
+      I:= J;
+      while (J <= Length(ADecl)) and IsIdentPart(ADecl[J]) do Inc(J);
+      Result:= Copy(ADecl, I, J - I);
+      if (J <= Length(ADecl)) and (ADecl[J] = '.') then Result:= '';
+      Exit;
+    end;
+    I:= J;
+  end;
+end;
+
+function TCallResolver.ResolveAccessor(const AProp: TSymbol; const AMode: string): TSymbol;
+const
+  ACCESSOR_KINDS: TSymbolKindSet = [skMethod, skProcedure, skFunction, skField];
+var
+  Lines: TStringList;
+  Decl : string;
+  I    : Integer;
+  Ident: string;
+  A    : TTypeAncestor;
+begin
+  Result:= Default(TSymbol);
+  { Guards, consolidated: a member with no parent, an unknown mode, or a stale
+    file (S1 -- the accessor names live on the declaring line(s), which the
+    index does not store, so they are read from the cached source exactly as
+    the receiver text is, and a stale line is a guess, not a fact). }
+  if (AProp.Id <= 0) or (AProp.ParentId <= 0) or ((AMode <> 'read') and (AMode <> 'write'))
+     or FileIsStale(AProp.FileId) then Exit;
+  Lines:= LinesOf(AProp.FileId);
+  if (Lines = nil) or (AProp.StartLine < 1) or (AProp.StartLine > Lines.Count) then Exit;
+  Decl:= ' ' + Lines[AProp.StartLine - 1];
+  for I:= AProp.StartLine + 1 to Min(AProp.EndLine, Lines.Count) do
+    Decl:= Decl + ' ' + Lines[I - 1];
+  Ident:= AccessorIdentAfter(Decl, AMode);
+  if Ident = '' then Exit;
+  Result:= FindChildOfKind(AProp.ParentId, Ident, ACCESSOR_KINDS);
+  if Result.Id = 0 then
+    for A in FStore.GetTransitiveAncestors(AProp.ParentId) do
+    begin
+      if not A.Resolved or (A.SymbolId <= 0) then Continue;
+      Result:= FindChildOfKind(A.SymbolId, Ident, ACCESSOR_KINDS);
+      if Result.Id > 0 then Break;
+    end;
+end;
+
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
 var
   Lines   : TStringList;
@@ -1692,6 +1836,37 @@ begin
       Result.TargetSymbolId:= Target;
       Result.Confidence    := Conf;
       Exit;
+    end;
+    { 3b. PROPERTY / FIELD (2026-09-16, property-refs-resolve). A member-access
+      ref that names no routine on the typed receiver may name a property or
+      field, and until now that was the end of it: the ref stayed unbound and a
+      public property with 207 dependents reported "0 place(s)" when removed.
+      Only for member-access refs -- a 'call' ref naming a property would be a
+      parse oddity, not a call -- and only with a typed receiver: a bare name
+      inside the class is a 'read'/'write' ref, out of scope here. The owner's
+      ruling: a READ is also a call to the getter, a WRITE to the setter; a
+      field-backed accessor is a use of that field. The mode and accessor ride
+      on the edge; ResolveCallTargets decides what each earns. }
+    if SameText(ACallRef.Kind, 'member-access') then
+    begin
+      var Member: TSymbol:= LookupMemberOnType(TypeId, ACallRef.NameText);
+      if Member.Id > 0 then
+      begin
+        Result.TargetSymbolId:= Member.Id;
+        Result.Confidence    := 'certain';
+        Result.MemberMode    := MemberAccessMode(ACallRef);
+        if Result.MemberMode = '' then Result.MemberMode:= 'read';
+        if Member.Kind = skProperty then
+        begin
+          var Acc: TSymbol:= ResolveAccessor(Member, Result.MemberMode);
+          if Acc.Id > 0 then
+          begin
+            Result.AccessorSymbolId:= Acc.Id;
+            Result.AccessorKind    := (if Acc.Kind = skField then 'field' else 'method');
+          end;
+        end;
+        Exit;
+      end;
     end;
   end;
 

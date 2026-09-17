@@ -400,33 +400,26 @@ begin
     else goes down the name-join path (B3 step 2) or is not reportable at all
     -- which the report states rather than implies.
 
-    PROPERTY AND FIELD STAY OUT, and 2026-09-14 established WHY with a
-    measurement rather than by assumption -- see
-    docs\INBOX-property-refs-never-resolve.md.
+    PROPERTY AND FIELD JOINED 2026-09-16, and ONLY because the resolver now
+    binds them. 2026-09-14 established with a measurement that widening this
+    gate alone was WORSE than leaving it: a property counted as "handled",
+    dropped out of `not_reportable`, and the caller got silence with nothing
+    to explain it -- the one failure this verb exists to prevent. The blocker
+    was upstream: a member-access ref naming a property reached the resolve
+    pass and was discarded because only routines could own an edge, so
+    FindReferencesTo(id) returned nothing for a property however wide this
+    gate was (find-callers Disconnect --resolved -> 4, Connected -> 0).
 
-    The owner removed two PUBLIC PROPERTIES from a class with 207 dependents and
-    got "0 place(s) in 0 unit(s)" twice. Widening this predicate was tried first
-    and is NOT the fix: it was built, staged and measured, and a property still
-    reported nothing. The blocker is upstream, in the resolver --
-
-        CallSiteRefKindSql = `ref.kind = 'call'`
-
-    so a property READ, which the extractor records as `member-access`, never
-    enters the resolve pass and never gets refs.symbol_id. FindReferencesTo(id)
-    consequently returns nothing for a property however wide this gate is.
-    Measured on the real index, the asymmetry is exact:
-
-        find-callers Disconnect --resolved -> 4 callers, all [certain]
-        find-callers Connected  --resolved -> 0
-
-    Widening this predicate alone would therefore be WORSE than leaving it: a
-    property would be counted as "handled", drop out of `not_reportable`, and
-    the caller would get silence with nothing to explain it -- which is the one
-    failure this verb exists to prevent. Fix the resolver first; this gate is
-    then a one-line follow-up, and `field` rides with it. }
+    The resolver fix (docs\superpowers\specs\2026-09-16-property-refs-resolve.md)
+    writes refs.symbol_id for property and field accesses, so the two kinds now
+    belong here on the same terms as the routines: their references are found
+    by id. run_property_refs_resolve.ps1 pins the removal of a property
+    producing stale-interface-reference findings AND `property` leaving
+    not_reportable -- the positive control this comment's predecessor lacked. }
   Result:= SameText(pKind, 'procedure') or SameText(pKind, 'function')
         or SameText(pKind, 'method')    or SameText(pKind, 'constructor')
-        or SameText(pKind, 'destructor');
+        or SameText(pKind, 'destructor')
+        or SameText(pKind, 'property')  or SameText(pKind, 'field');
 end;
 
 function SymbolKeyOf(const pQName, pSignature: string): string;

@@ -101,6 +101,8 @@ type
       FQInsertRef            : TFDQuery     ;
       FQInsertCallEdge       : TFDQuery     ;
       FQSetRefSymbol         : TFDQuery     ;
+      FQInsertMemberAccess   : TFDQuery     ; { 2026-09-16: member_accesses writer }
+      FHasMemberAccesses     : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasMemberAccesses }
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -533,6 +535,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Fts5TableExists: Boolean;
+      /// <summary>True when this DB carries the member_accesses table (2026-09-16).
+      /// Probed once per store; a not-yet-migrated read-only DB answers False and
+      /// every reader then behaves as it did before the table existed.</summary>
+      function HasMemberAccesses: Boolean;
       // v(merge main -> autodoc-phase3): the AStrict PARAMETER IS GONE, and with
       // it the Ex form. Task 4d had introduced it to pick the ambiguity policy
       // when several candidates are in the reference file's uses-scope -- False
@@ -2980,6 +2986,7 @@ constructor TSQLiteSymbolStore.Create(const ADbPath: string; AReadOnly: Boolean 
 begin
   inherited Create;
   FReadOnly      := AReadOnly;
+  FHasMemberAccesses:= -1; { probed lazily -- see HasMemberAccesses }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -3017,6 +3024,29 @@ begin
       SearchText (query --text) run; it never issues DDL. }
     if FReadOnly then FFts5Available := Fts5TableExists;
   end;
+end;
+
+function TSQLiteSymbolStore.HasMemberAccesses: Boolean;
+var
+  Q: TFDQuery;
+begin
+  if FHasMemberAccesses < 0 then
+  begin
+    FHasMemberAccesses:= 0;
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      { sqlite_master exists on every SQLite database, so this SELECT cannot
+        fail on an open connection -- no try/except, and no swallowed error. }
+      Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = ''member_accesses'' LIMIT 1';
+      Q.Open;
+      if not Q.IsEmpty then FHasMemberAccesses:= 1;
+      Q.Close;
+    finally
+      Q.Free;
+    end;
+  end;
+  Result:= FHasMemberAccesses = 1;
 end;
 
 function TSQLiteSymbolStore.Fts5TableExists: Boolean;
@@ -3094,6 +3124,7 @@ begin
   FQInsertRef.Free;
   FQInsertCallEdge.Free;
   FQSetRefSymbol  .Free;
+  FQInsertMemberAccess.Free;
   FQDeleteFileSymbols.Free;
   FQDeleteFileRefs.Free;
   FQUpsertDiBinding.Free;
@@ -3543,6 +3574,22 @@ begin
           '  helper_kind      TEXT NOT NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_helper ON type_helpers(helper_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_target ON type_helpers(target_name)');
+  { 2026-09-16 (property-refs-resolve): one row per member-access ref that
+    names a PROPERTY or FIELD -- the member, the access MODE, and the accessor
+    the mode resolves to (a method, which ALSO earns a call_edges row, or the
+    backing field, which does not: call_edges stays routine-only). Written by
+    ResolveCallTargets beside refs.symbol_id; cleared with the edges. ADDITIVE
+    and probed for by every reader (HasMemberAccesses), so NO SCHEMA_VERSION
+    bump: a not-yet-migrated DB answers as it did before, never crashes. }
+  TryExec('CREATE TABLE IF NOT EXISTS member_accesses (' +
+          '  ref_id                  INTEGER PRIMARY KEY REFERENCES refs(id) ON DELETE CASCADE,' +
+          '  member_symbol_id        INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  mode                    TEXT NOT NULL,' +
+          '  accessor_symbol_id      INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+          '  accessor_kind           TEXT,' +
+          '  receiver_type_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_member_accesses_member   ON member_accesses(member_symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_member_accesses_accessor ON member_accesses(accessor_symbol_id)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -3909,6 +3956,9 @@ begin
     See UpsertCallEdge for why only CERTAIN edges earn one. }
   FQSetRefSymbol:= NewQuery(
     'UPDATE refs SET symbol_id = :sid WHERE id = :rid');
+  FQInsertMemberAccess:= NewQuery(
+    'INSERT OR REPLACE INTO member_accesses(ref_id, member_symbol_id, mode, accessor_symbol_id, accessor_kind, receiver_type_symbol_id) ' +
+    'VALUES (:rid, :mid, :mode, :aid, :akind, :rtid)');
   FQDeleteFileSymbols:= NewQuery('DELETE FROM symbols WHERE file_id = :fid');
   FQDeleteFileRefs   := NewQuery('DELETE FROM refs WHERE file_id = :fid'   );
   FQUpsertDiBinding:= NewQuery(
@@ -4634,6 +4684,8 @@ begin
     edges wrote" are the same set, and the cheaper statement cannot drift out
     of step with the delete above. }
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL');
+  { and the member accesses the same pass wrote -- same lifetime as the edges }
+  if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');
 end;
 
 { The kinds a call receiver's type can resolve TO, spelled as the stored kind
@@ -5228,18 +5280,39 @@ var
   Q   : TFDQuery              ;
   List: TList<TResolvedCaller>;
   R   : TResolvedCaller       ;
+  MemberArm: string           ; { the member_accesses UNION arm, '' on a DB without the table }
 begin
   List:= TList<TResolvedCaller>.Create;
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
+    if HasMemberAccesses then
+      MemberArm:=
+        'UNION ALL ' +
+        'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ''certain'' AS confidence, ma.mode ' +
+        'FROM member_accesses ma ' +
+        'JOIN refs r ON r.id = ma.ref_id ' +
+        'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
+        'JOIN files f ON f.id = r.file_id ' +
+        'WHERE ma.member_symbol_id = :x OR (ma.accessor_kind = ''field'' AND ma.accessor_symbol_id = :x) '
+    else
+      MemberArm:= '';
     Q.SQL.Text:=
-      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ce.confidence ' +
+      { Wrapped in a subquery: a compound SELECT may only ORDER BY a result
+        column, and the confidence CASE below is an expression. }
+      'SELECT * FROM (' +
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ce.confidence, '''' AS mode ' +
       'FROM call_edges ce ' +
       'JOIN refs r ON r.id = ce.ref_id ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
       'WHERE ce.target_symbol_id = :x ' +
+      { 2026-09-16: PROPERTY / FIELD accesses. The member itself, and a FIELD
+        that backs one of its accessors, are 'called' by every bound access --
+        with the mode carried so the CLI can print read/write. A METHOD accessor
+        is already a call_edges row above; not repeated. Empty string in the
+        first arm keeps the routine rows byte-identical. }
+      MemberArm +
       // D5 fast-follow (T7): confidence is TEXT ('certain' | 'ambiguous'), and a
       // plain 'ORDER BY ce.confidence DESC' only puts 'certain' first because
       // 'c' > 'a' lexically -- an accident of English spelling, not an intended
@@ -5248,7 +5321,7 @@ begin
       // value is ever introduced, it must be slotted into this CASE on purpose --
       // it will otherwise fall into the ELSE bucket (sorted last, alongside
       // 'ambiguous') rather than silently reordering the existing two.
-      'ORDER BY CASE ce.confidence WHEN ''certain'' THEN 0 ELSE 1 END, s.qualified_name';
+      ') ORDER BY CASE confidence WHEN ''certain'' THEN 0 ELSE 1 END, encl_qname';
     Q.ParamByName('x').AsLargeInt:= ATargetSymbolId;
     Q.Open;
     while not Q.Eof do
@@ -5263,6 +5336,8 @@ begin
       if Q.FieldByName('start_line').IsNull then R.CallSiteLine := 0
       else R.CallSiteLine := Q.FieldByName('start_line').AsInteger;
       R.Confidence:= Q.FieldByName('confidence').AsString;
+      var ModeF: TField:= Q.FindField('mode');
+      if (ModeF <> nil) and not ModeF.IsNull then R.Mode:= ModeF.AsString else R.Mode:= '';
       List.Add(R);
       Q.Next;
     end; // while
@@ -7046,7 +7121,18 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT * FROM refs WHERE symbol_id = :sid ORDER BY file_id, start_line';
+    { 2026-09-16: a FIELD that backs a property accessor is USED by every access
+      the resolver bound to that property (member_accesses.accessor_kind =
+      'field'), so those refs are that field's references too -- the owner's
+      ruling. A METHOD accessor is not listed here: its accesses are call_edges
+      rows, and FindResolvedCallers reports them. }
+    if HasMemberAccesses then
+      Q.SQL.Text:= 'SELECT * FROM refs WHERE symbol_id = :sid ' +
+                   'UNION SELECT refs.* FROM refs JOIN member_accesses ma ON ma.ref_id = refs.id ' +
+                   '  WHERE ma.accessor_symbol_id = :sid AND ma.accessor_kind = ''field'' ' +
+                   'ORDER BY file_id, start_line'
+    else
+      Q.SQL.Text:= 'SELECT * FROM refs WHERE symbol_id = :sid ORDER BY file_id, start_line';
     Q.ParamByName('sid').AsLargeInt:= ASymbolId;
     Q.Open;
     while not Q.Eof do
@@ -7241,7 +7327,11 @@ begin
   Q   := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT DISTINCT symbol_id FROM refs WHERE symbol_id IS NOT NULL AND symbol_id > 0';
+    if HasMemberAccesses then
+      Q.SQL.Text:= 'SELECT DISTINCT symbol_id FROM refs WHERE symbol_id IS NOT NULL AND symbol_id > 0 ' +
+                   'UNION SELECT DISTINCT accessor_symbol_id FROM member_accesses WHERE accessor_symbol_id IS NOT NULL'
+    else
+      Q.SQL.Text:= 'SELECT DISTINCT symbol_id FROM refs WHERE symbol_id IS NOT NULL AND symbol_id > 0';
     Q.Open;
     while not Q.Eof do
     begin
@@ -11159,12 +11249,21 @@ begin
         measured damage. When nothing is stale this is the original fast path,
         bulk ClearCallEdges included. }
       if Scoped then
+      begin
         FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
                       '(SELECT refs.id FROM refs WHERE (' + ScopeWhere + ')' +
-                      IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', '') + ')')
+                      IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', '') + ')');
+        FConn.ExecSQL('DELETE FROM member_accesses WHERE ref_id IN ' +
+                      '(SELECT refs.id FROM refs WHERE (' + ScopeWhere + ')' +
+                      IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', '') + ')');
+      end
       else if StaleWhere <> '' then
+      begin
         FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
-                      '(SELECT refs.id FROM refs WHERE ' + StaleWhere + ')')
+                      '(SELECT refs.id FROM refs WHERE ' + StaleWhere + ')');
+        FConn.ExecSQL('DELETE FROM member_accesses WHERE ref_id IN ' +
+                      '(SELECT refs.id FROM refs WHERE ' + StaleWhere + ')');
+      end
       else
         ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
       SkippedStaleRcv:= 0;
@@ -11218,7 +11317,47 @@ begin
         else
           Inc(SkippedStaleRcv);
         if Profiled then Inc(AccRcv, TStopwatch.GetTimeStamp - TMark);
-        if Edge.TargetSymbolId > 0 then
+        { 2026-09-16 (property-refs-resolve): a member-access ref that named a
+          PROPERTY or FIELD. Per the owner's ruling it binds to the MEMBER
+          (refs.symbol_id), records its mode and accessor (member_accesses), and
+          when the accessor is a METHOD it is also a call to that method -- a
+          call_edges row whose target is a routine, so CanBeCallTarget's
+          invariant holds. A FIELD accessor earns no edge: the member_accesses
+          row IS the use, and the readers UNION it in. Written through the
+          prepared statements directly rather than UpsertCallEdge, because that
+          helper would point refs.symbol_id at the accessor and the identifier
+          the source wrote is the property. }
+        if (Edge.TargetSymbolId > 0) and (Edge.MemberMode <> '') then
+        begin
+          FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
+          FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+          FQSetRefSymbol.ExecSQL;
+          FQInsertMemberAccess.ParamByName('rid' ).AsLargeInt:= Ref.Id;
+          FQInsertMemberAccess.ParamByName('mid' ).AsLargeInt:= Edge.TargetSymbolId;
+          FQInsertMemberAccess.ParamByName('mode').AsString  := Edge.MemberMode;
+          FQInsertMemberAccess.ParamByName('aid' ).DataType:= ftLargeint;
+          if Edge.AccessorSymbolId > 0 then FQInsertMemberAccess.ParamByName('aid').AsLargeInt:= Edge.AccessorSymbolId
+          else FQInsertMemberAccess.ParamByName('aid').Clear;
+          FQInsertMemberAccess.ParamByName('akind').DataType:= ftString;
+          if Edge.AccessorKind <> '' then FQInsertMemberAccess.ParamByName('akind').AsString:= Edge.AccessorKind
+          else FQInsertMemberAccess.ParamByName('akind').Clear;
+          FQInsertMemberAccess.ParamByName('rtid').DataType:= ftLargeint;
+          if Edge.ReceiverTypeSymbolId > 0 then FQInsertMemberAccess.ParamByName('rtid').AsLargeInt:= Edge.ReceiverTypeSymbolId
+          else FQInsertMemberAccess.ParamByName('rtid').Clear;
+          FQInsertMemberAccess.ExecSQL;
+          if (Edge.AccessorSymbolId > 0) and SameText(Edge.AccessorKind, 'method') then
+          begin
+            FQInsertCallEdge.ParamByName('rid' ).AsLargeInt:= Ref.Id;
+            FQInsertCallEdge.ParamByName('tid' ).AsLargeInt:= Edge.AccessorSymbolId;
+            FQInsertCallEdge.ParamByName('conf').AsString  := 'certain';
+            FQInsertCallEdge.ParamByName('rtid').DataType:= ftLargeint;
+            if Edge.ReceiverTypeSymbolId > 0 then FQInsertCallEdge.ParamByName('rtid').AsLargeInt:= Edge.ReceiverTypeSymbolId
+            else FQInsertCallEdge.ParamByName('rtid').Clear;
+            FQInsertCallEdge.ExecSQL;
+          end;
+          Inc(Written);
+        end
+        else if Edge.TargetSymbolId > 0 then
         begin
           KeepEdge:= True;
           if not SameText(Ref.Kind, REF_KIND_CALL) then

@@ -6874,6 +6874,9 @@ begin
               JObj.AddPair('confidence'  , Row.Confidence );
               JObj.AddPair('target_qname', Row.TargetQName);
               if Row.HasLine then JObj.AddPair('line', TJSONNumber.Create(Row.Line));
+              { 2026-09-16: a PROPERTY/FIELD access carries its mode; routine rows
+                keep the pinned key order exactly (no key when empty). }
+              if Row.Mode <> '' then JObj.AddPair('mode', Row.Mode);
               JOut.AddElement(JObj);
             end
             else if Row.Confidence = 'callback' then
@@ -6888,7 +6891,9 @@ begin
                 one qualified name and each gets its own header, exactly as the
                 inline version printed it. }
               if Row.FirstOfTarget then Writeln(Format('  %s:', [Row.TargetQName]));
-              Writeln(Format('    %s  (%s)  [%s]', [Row.CallerQName, Row.FilePath, Row.Confidence]));
+              var Tag: string:= Row.Confidence;
+              if Row.Mode <> '' then Tag:= Tag + ', ' + Row.Mode;
+              Writeln(Format('    %s  (%s)  [%s]', [Row.CallerQName, Row.FilePath, Tag]));
             end;
             Inc(TotalCallers);
           end; // for Row

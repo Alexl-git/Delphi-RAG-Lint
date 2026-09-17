@@ -5,6 +5,25 @@ breaking changes** until v1.0.
 
 ## Unreleased (after v1.13.0-alpha)
 
+### Property and field references RESOLVE (resolver 1.3.0-alpha; re-resolve every index)
+
+A `member-access` ref naming a PROPERTY or FIELD (`FConnection.Connected`)
+reached the resolve pass since v20b and was discarded there, because only a
+routine could own a `call_edges` row -- so `find-callers --resolved` answered 0
+for a property that a method on the same receiver answered 4 for, and
+`lint-tree` reported "0 place(s)" when a public property with 207 dependents
+was removed. Per the owner's ruling: the ref now binds to the member
+(`refs.symbol_id`); a READ is also a resolved call to the read accessor and a
+WRITE to the write accessor (a `call_edges` row when the accessor is a method
+-- `call_edges` stays routine-only); a FIELD-backed accessor lists the access
+as a use of that field. New `member_accesses` table (additive, no schema bump;
+readers probe for it). `find-callers --resolved` on a property or field prints
+`[certain, read]` / `[certain, write]` (JSON `mode`); `lint-tree` reports a
+removed property's stale references and `property`/`field` leave
+`not_reportable`. **Every index resolved before 1.3.0-alpha answers 0 for
+properties until `index --all --resolve-only` (or its next `index`).** A bare
+property access inside its own class (`if Flag then`) is a `read` ref, not
+`member-access`, and is not bound by this change.
 ### convert-apply: unlinked source properties are warned by default, as "N of M instances", keyed by (source type, property)
 
 A source property some converted instance carries that no `#link` carries and
