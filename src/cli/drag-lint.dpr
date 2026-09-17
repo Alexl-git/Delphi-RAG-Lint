@@ -172,6 +172,8 @@ uses
   DRagLint.Convert.DfmReemit in '..\report\DRagLint.Convert.DfmReemit.pas',
   DRagLint.Convert.PropTree in '..\report\DRagLint.Convert.PropTree.pas',
   DRagLint.Convert.Rules in '..\report\DRagLint.Convert.Rules.pas',
+  DRagLint.Convert.GlyphStrip in '..\report\DRagLint.Convert.GlyphStrip.pas',
+  DRagLint.Convert.GlyphVacuum in '..\report\DRagLint.Convert.GlyphVacuum.pas',
   DRagLint.Lint.SharedUnit in '..\lint\DRagLint.Lint.SharedUnit.pas',
   DRagLint.Lint.ReviewMarker in '..\lint\DRagLint.Lint.ReviewMarker.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';

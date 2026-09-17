@@ -211,6 +211,7 @@ uses
   , DRagLint.Convert   .PropTree
   , DRagLint.Convert   .Rules
   , DRagLint.Convert   .CastLib
+  , DRagLint.Convert   .GlyphVacuum
   , DRagLint.Convert   .DfmReemit
   , DRagLint.Convert   .Apply
   , DRagLint.Convert   .Backup
@@ -584,6 +585,9 @@ type
     // field, not three. A second field for a flag that already exists is how two
     // switches with the same name end up meaning different things.
     AddProjectName: string ; // shared-unit: --add-project <ProjectName>
+    // glyph-vacuum: --append merges this run into an existing --out (rows keyed
+    // on dfm_path+object_path+property, images keyed on sha) instead of replacing it.
+    AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
 procedure PrintHelp;
@@ -891,7 +895,9 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count)');
+  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
+    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count)');
+  Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --out DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --out; --append merges into an existing --out; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -1413,6 +1419,7 @@ begin
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
+    else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --out
     else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)
     begin
       Inc(i);
@@ -1475,7 +1482,7 @@ begin
     else if (A = '--root') and (i < ParamCount) then
     begin
       Inc(i);
-      if (Result.Command = 'selftest') or (Result.Command = 'library-drift') then
+      if (Result.Command = 'selftest') or (Result.Command = 'library-drift') or (Result.Command = 'glyph-vacuum') then
       begin
         SetLength(Result.Roots, Length(Result.Roots) + 1);
         Result.Roots[High(Result.Roots)]:= ParamStr(i);
@@ -23058,6 +23065,57 @@ begin
   Result:= 0;
 end; // function
 
+// drag-lint glyph-vacuum --root DIR [--root DIR ...] --out DIR [--append] [--db PATH ...]
+// Walk every .dfm/.fmx under the roots, extract and decode every streamed graphic,
+// pair it with its count property, write instances.tsv / classes.tsv / skipped.tsv /
+// gallery.html / images\ into --out. --db only QUALIFIES (class_unit, declared count
+// default, runtime_refs); without one those columns are empty, never guessed.
+// Exit 0 on a completed walk (0 graphics is an answer); 2 on bad args or a missing root.
+function DoGlyphVacuum(const AArgs: TArgs): Integer;
+var
+  Opts   : TGlyphVacuumOptions;
+  Summary: TGlyphVacuumSummary;
+  Err    : string;
+  Dbs    : TArray<string>;
+  LDb    : string;
+  RoOk   : Boolean;
+  Store  : ISymbolStore;
+begin
+  if (Length(AArgs.Roots) = 0) or (AArgs.Output = '') then
+  begin
+    Writeln('Usage: drag-lint glyph-vacuum --root DIR [--root DIR ...] --out DIR [--append] [--db PATH ...]');
+    Exit(2);
+  end;
+  if not ExplicitDbsExist(AArgs, 'glyph-vacuum') then Exit(2);
+  Opts:= Default(TGlyphVacuumOptions);
+  Opts.Roots := AArgs.Roots;
+  Opts.OutDir:= AArgs.Output;
+  Opts.Append:= AArgs.AppendOut;
+  { EXPLICIT --db ONLY. Every other consumer auto-selects from the manifest; this
+    verb must not, because its qualification columns are documented as EMPTY
+    without a --db, and a column filled from a DB nobody named is a guess. }
+  Dbs:= AArgs.DbPaths;
+  for LDb in Dbs do
+  begin
+    if not TFile.Exists(LDb) then Continue;
+    Store:= OpenReadOnlyStore(LDb, RoOk);
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, 'glyph-vacuum', LDb) then Exit(2);
+      Continue;
+    end;
+    Opts.Stores:= Opts.Stores + [Store];
+  end;
+  if not RunGlyphVacuum(Opts, Summary, Err) then
+  begin
+    Writeln('ERROR: glyph-vacuum: ' + Err);
+    Exit(2);
+  end;
+  Writeln(Format('glyph-vacuum: dfm=%d graphics=%d distinct=%d skipped=%d -> %s',
+    [Summary.DfmFiles, Summary.Graphics, Summary.DistinctPayloads, Summary.Skipped, AArgs.Output]));
+  Result:= 0;
+end;
+
 /// <summary>drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N]
 /// [--format text|json|dot|mermaid] [--json] --db PATH ... -- the N-deep call tree rooted
 /// at X, with call sites (unit:line) and cycle markers. --direction callers (default,
@@ -27101,6 +27159,7 @@ begin
     else if Args.Command = 'convert-scaffold'  then Result:= DoConvertScaffold (Args)
     else if Args.Command = 'convert-reemit'    then Result:= DoConvertReemit   (Args)
     else if Args.Command = 'convert-apply'     then Result:= DoConvertApply    (Args)
+    else if Args.Command = 'glyph-vacuum'      then Result:= DoGlyphVacuum     (Args)
     else if Args.Command = 'butterfly'         then Result:= DoButterfly       (Args)
     else if Args.Command = 'purge-locals'      then Result:= DoPurgeLocals     (Args)
     else if Args.Command = 'diff'              then Result:= DoDiff            (Args)
