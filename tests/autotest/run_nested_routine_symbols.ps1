@@ -69,21 +69,35 @@ procedure TwinGuest;
 implementation
 
 function OuterOne(const A: string): Integer;
+var
+  OuterLocal: Integer;
+  ResolvedYadf: string ;
 
   function NestedHelper(const S: string): Integer;
+  var
+    NestedLocal: Integer;
+    NestedOther: Boolean;
   begin
-    Result := Length(S);
+    var InlineOne: Integer := Length(S);
+    for var LoopVar := 0 to 1 do NestedLocal := LoopVar;
+    NestedOther := InlineOne > 0;
+    Result := NestedLocal;
   end;
 
 begin
-  Result := NestedHelper(A);
+  OuterLocal := 1;
+  ResolvedYadf := A;
+  Result := NestedHelper(A) + OuterLocal;
 end;
 
 procedure TwinHost;
 
   function SharedName(const HostArg: string): Boolean;
+  var
+    HostOnly: Integer;
   begin
-    Result := HostArg <> '';
+    HostOnly := Length(HostArg);
+    Result := HostOnly > 0;
   end;
 
 begin
@@ -93,8 +107,11 @@ end;
 procedure TwinGuest;
 
   function SharedName(const GuestArg: Integer): Boolean;
+  var
+    GuestOnly: Integer;
   begin
-    Result := GuestArg > 0;
+    GuestOnly := GuestArg;
+    Result := GuestOnly > 0;
   end;
 
 begin
@@ -148,6 +165,55 @@ try {
   $dc = -1; try { $dc = ([int](($docJson | ConvertFrom-Json).declCount)) } catch { }
   Check 'document --unit public surface is still exactly the 3 interface decls' ($dc -eq 3) `
     "declCount=$dc -- a nested routine leaking into the public surface raises this"
+
+  # `sql --json` returns {columns:[{name,type}], rows:[[...]]} -- rows are
+  # POSITIONAL arrays, so each row is mapped onto columns[].name here to give
+  # the assertions below named fields ($_.name, $_.qualified_name, $_.n).
+  # The `,@()` / `,$out` form keeps a 0/1-element result an array.
+  function Sql([string]$q) {
+    $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+    if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
+    try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+    $cols = @($o.columns | ForEach-Object { $_.name })
+    $out = @()
+    foreach ($r in @($o.rows)) {
+      $h = [ordered]@{}
+      for ($i = 0; $i -lt $cols.Count; $i++) { $h[$cols[$i]] = @($r)[$i] }
+      $out += [pscustomobject]$h
+    }
+    return ,$out
+  }
+  function LocalsOf([string]$qname) {
+    return @(Sql "SELECT l.name FROM symbols l JOIN symbols r ON l.parent_id=r.id WHERE l.kind='local_var' AND r.qualified_name='$qname' ORDER BY l.name" | ForEach-Object { $_.name })
+  }
+
+  # --- 5. N1: a nested routine's classic var block is extracted ---------------
+  $nl = LocalsOf 'nestsyms.OuterOne.NestedHelper'
+  Check 'N1 NestedHelper has local_var NestedLocal, NestedOther' (($nl -contains 'NestedLocal') -and ($nl -contains 'NestedOther')) "locals=$($nl -join ',')"
+
+  # --- 6. N2: inline var and for-var inside the nested routine ----------------
+  Check 'N2 NestedHelper has inline local InlineOne' ($nl -contains 'InlineOne') "locals=$($nl -join ',')"
+  Check 'N2 NestedHelper has for-var local LoopVar' ($nl -contains 'LoopVar') "locals=$($nl -join ',')"
+  $qn = Sql "SELECT qualified_name FROM symbols WHERE kind='local_var' AND name='InlineOne'"
+  Check 'N1/N2 qualified_name is Unit.Outer.Nested.X' (($qn.Count -eq 1) -and ($qn[0].qualified_name -eq 'nestsyms.OuterOne.NestedHelper.InlineOne')) "qn=$($qn[0].qualified_name)"
+
+  # --- 7. N3: NO LEAK into the enclosing routine ------------------------------
+  $ol = LocalsOf 'nestsyms.OuterOne'
+  Check 'N3 OuterOne keeps exactly its own two locals' ((($ol -join ',') -eq 'OuterLocal,ResolvedYadf')) "locals=$($ol -join ',')"
+  Check 'N3 OuterOne did NOT gain NestedLocal/InlineOne/LoopVar' (-not (($ol -contains 'NestedLocal') -or ($ol -contains 'InlineOne') -or ($ol -contains 'LoopVar')))
+
+  # --- 8. N4: twins keep their OWN locals -------------------------------------
+  $hl = LocalsOf 'nestsyms.TwinHost.SharedName'
+  $gl = LocalsOf 'nestsyms.TwinGuest.SharedName'
+  Check 'N4 TwinHost.SharedName has HostOnly only' (($hl -join ',') -eq 'HostOnly') "locals=$($hl -join ',')"
+  Check 'N4 TwinGuest.SharedName has GuestOnly only' (($gl -join ',') -eq 'GuestOnly') "locals=$($gl -join ',')"
+
+  # --- 9. N5: whitespace before the semicolon extracts ------------------------
+  Check 'N5 ResolvedYadf (space before ;) is a local of OuterOne' ($ol -contains 'ResolvedYadf')
+
+  # --- 10. POSITIVE CONTROL: the count is exact, so a dropped local goes red ---
+  $cnt = Sql "SELECT COUNT(*) AS n FROM symbols l JOIN symbols r ON l.parent_id=r.id WHERE l.kind='local_var' AND r.qualified_name='nestsyms.OuterOne.NestedHelper'"
+  Check 'control: NestedHelper has exactly 4 locals (delete one from the fixture -> red)' ($cnt[0].n -eq 4) "n=$($cnt[0].n)"
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

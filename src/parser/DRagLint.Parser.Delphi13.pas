@@ -1978,62 +1978,121 @@ begin
   end;
 end; // function
 
-{ v14 (D5, Task 3): emit each entry of a routine's local `var` section(s) as an
-  skLocalVar symbol parented to the routine (ARoutineIdx), Signature = declared
-  type text, so the call resolver (Task 5) can type a receiver that is a local.
-  Scans ONLY THIS defProc's DIRECT `declVars` children -- never recurses -- so a
-  nested procedure's own `declVars` (which lives inside the nested defProc child,
-  not here) cannot leak into the outer routine. Grouped `X, Y: T` emits one symbol
-  per name identifier, all sharing the one `type` child (parallel to params). }
+const
+  // v23 (spec N2): node types that DECLARE a routine-scoped local inside the
+  // body block. Confirmed against the real tree on 2026-09-17 (Task 0 dump):
+  //   varAssignDef -- `var X: T := v;` as a statement is an `assignment` whose
+  //                   lhs: field is (varAssignDef (kVar) (identifier) type: ...);
+  //                   the untyped `var X := v;` is the same minus type:. The
+  //                   `for var I := ...` start and the `foreach` iterator: are the
+  //                   SAME node (the foreach one with no assignment wrapper), so
+  //                   one recursive walk reaches all three -- no per-loop path.
+  //   varDef       -- `var X: T;` inline with NO initializer, directly under
+  //                   the block: (varDef (kVar) (identifier) type: ...).
+  // In both, the name is a NAMED `identifier` child with NO field name (there is
+  // no name: field), and type: when present is a `type` node exactly like the
+  // classic declVar's -- so EmitDeclVar's identifier loop and TypeTextOf read
+  // them unchanged. A `declVar` inside a `declVars` section is the classic form
+  // and is handled by the same visitor.
+  InlineDeclNodeTypes: array[0..1] of string = ('varAssignDef', 'varDef');
+  // Bounds WalkBodyForInlineDecls. Real routine bodies nest statements a dozen
+  // deep at most; this only stops a pathological or malformed tree.
+  MaxInlineDeclWalkDepth = 64;
+
+{ v14 (D5, Task 3) / v23: emit a routine's locals as skLocalVar symbols parented
+  to the routine (ARoutineIdx), Signature = declared type text, so the call
+  resolver (Task 5) can type a receiver that is a local. Two sources:
+    - the classic `var` section(s): THIS defProc's DIRECT `declVars` children;
+    - inline declarations inside the body block (`var X: T := ...;`, `for var I`,
+      `for var X in`) -- spec N2 -- found by WalkBodyForInlineDecls.
+  Neither descends into a nested defProc: the nested routine's own `declVars`
+  are its DIRECT children (not this node's), and the body walk stops at any
+  defProc it meets, so a nested routine's locals cannot leak into the outer
+  routine (spec N3). Grouped `X, Y: T` emits one symbol per name identifier, all
+  sharing the one `type` child (parallel to params). }
 procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkState; ARoutineIdx: Integer; const ARoutineQualifiedName: string);
+
+  procedure EmitDeclVar(const ADeclVar: TTSNode);
+  var
+    TypeText: string ;
+    VarName : string ;
+    VarQN   : string ;
+    Child   : TTSNode;
+    k       : Integer;
+  begin
+    // One shared type for every name in this declVar (grouped locals).
+    TypeText:= TypeTextOf(ADeclVar, AState.Source);
+    // Ref-gap E: emit a type_use for a local var's declared type
+    // (Local: Widget) so a type rename reaches it. EmitTypeUseReference
+    // takes the typeref node inside the declaration's 'type' field.
+    var LTypeField:= ADeclVar.ChildByField('type');
+    if not LTypeField.IsNull then
+    begin
+      var LTyperef:= FindNamedChildOfType(LTypeField, 'typeref');
+      if not LTyperef.IsNull then EmitTypeUseReference(LTyperef, AState);
+    end;
+    // One skLocalVar per direct 'identifier' child (the var names). The type
+    // lives under a 'type' child, so only the name identifiers match.
+    for k:= 0 to ADeclVar.NamedChildCount - 1 do
+    begin
+      Child:= ADeclVar.NamedChild(k);
+      if Child.NodeType <> 'identifier' then Continue;
+      VarName:= NodeText(Child, AState.Source);
+      if VarName = '' then Continue;
+      if ARoutineQualifiedName <> '' then VarQN:= ARoutineQualifiedName + '.' + VarName
+      else VarQN:= VarName;
+      // Range = the var-name identifier; parent = the routine; Signature =
+      // the declared type text.
+      AState.Emit(skLocalVar, VarName, VarQN, ARoutineIdx, Child, TypeText);
+    end;
+  end;
+
+  function IsInlineDecl(const ANodeType: string): Boolean;
+  var
+    s: string;
+  begin
+    for s in InlineDeclNodeTypes do
+      if ANodeType = s then Exit(True);
+    Result:= False;
+  end;
+
+  // v23 (spec N2/N3): descend the body for inline declarations. STOP at a
+  // nested defProc -- it emits its own locals when the walk reaches it, and
+  // descending here would parent its inline vars to the OUTER routine (the
+  // leak N3 pins). Depth-capped like every other recursive walk in this unit.
+  procedure WalkBodyForInlineDecls(const ANode: TTSNode; ADepth: Integer);
+  var
+    i: Integer;
+  begin
+    if ANode.IsNull or (ADepth > MaxInlineDeclWalkDepth) then Exit;
+    if ANode.NodeType = 'defProc' then Exit;
+    if IsInlineDecl(ANode.NodeType) or (ANode.NodeType = 'declVar') then
+    begin
+      EmitDeclVar(ANode);
+      Exit;
+    end;
+    for i:= 0 to ANode.NamedChildCount - 1 do
+      WalkBodyForInlineDecls(ANode.NamedChild(i), ADepth + 1);
+  end;
+
 var
-  Section : TTSNode;
-  DeclVar : TTSNode;
-  Child   : TTSNode;
-  TypeText: string ;
-  VarName : string ;
-  VarQN   : string ;
-  i, j, k : Integer;
+  Section: TTSNode;
+  i, j   : Integer;
 begin
   if ARoutineIdx < 0 then Exit;
   // Direct children of the defProc: declProc (header), zero+ declVars sections,
-  // nested defProc(s), and the block. Process only the declVars sections here.
+  // nested defProc(s), and the block. The declVars sections are the classic
+  // `var` block; the block is walked for inline declarations.
   for i:= 0 to ADefProcNode.NamedChildCount - 1 do
   begin
     Section:= ADefProcNode.NamedChild(i);
     if Section.NodeType <> 'declVars' then Continue;
     // Each declVars holds a `kVar` token plus one+ declVar entries.
     for j:= 0 to Section.NamedChildCount - 1 do
-    begin
-      DeclVar:= Section.NamedChild(j);
-      if DeclVar.NodeType <> 'declVar' then Continue;
-      // One shared type for every name in this declVar (grouped locals).
-      TypeText:= TypeTextOf(DeclVar, AState.Source);
-      // Ref-gap E: emit a type_use for a local var's declared type
-      // (Local: Widget) so a type rename reaches it. EmitTypeUseReference
-      // takes the typeref node inside the declVar's 'type' field.
-      var LTypeField:= DeclVar.ChildByField('type');
-      if not LTypeField.IsNull then
-      begin
-        var LTyperef:= FindNamedChildOfType(LTypeField, 'typeref');
-        if not LTyperef.IsNull then EmitTypeUseReference(LTyperef, AState);
-      end;
-      // Emit one skLocalVar per direct 'identifier' child (the var names). The
-      // type lives under a 'type' child, so only the name identifiers match.
-      for k:= 0 to DeclVar.NamedChildCount - 1 do
-      begin
-        Child:= DeclVar.NamedChild(k);
-        if Child.NodeType <> 'identifier' then Continue;
-        VarName:= NodeText(Child, AState.Source);
-        if VarName = '' then Continue;
-        if ARoutineQualifiedName <> '' then VarQN:= ARoutineQualifiedName + '.' + VarName
-        else VarQN:= VarName;
-        // Range = the var-name identifier; parent = the routine; Signature =
-        // the declared type text.
-        AState.Emit(skLocalVar, VarName, VarQN, ARoutineIdx, Child, TypeText);
-      end;
-    end;
+      if Section.NamedChild(j).NodeType = 'declVar' then EmitDeclVar(Section.NamedChild(j));
   end;
+  var Body:= ADefProcNode.ChildByField('body');
+  if not Body.IsNull then WalkBodyForInlineDecls(Body, 0);
 end; // procedure
 
 // v8: walk a Spring4D fluent method-access chain (descend the lhs/entity spine of
@@ -2434,22 +2493,18 @@ begin
             produced the decl's stored Signature) so overloads disambiguate
             by signature, not just name -- see SetRoutineImplRange. }
           if HdrName <> '' then SetRoutineImplRange(AState, HdrName, Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1, ProcSignatureOf(HdrNode, AState.Source));
-          { v14 (D5, Task 3): emit this routine's local `var` entries as skLocalVar
-            symbols, parented to its (already-emitted) routine symbol. Only at
-            RoutineDepth = 0 -- a nested proc is never walked here, so its locals
-            do not leak. Uses the routine symbol's own unit-qualified name so the
-            local's QualifiedName is 'Unit.TClass.Method.VarName'.
-            DEFERRED (D5 fast-follow, T3): EmitRoutineLocals only scans this
-            defProc's DIRECT `declVars` children (the classic `var` section
-            before `begin`). A Delphi 10.3+ INLINE var -- `var X: T := ...;`
-            declared mid-statement inside the `block` -- lives under a different
-            node shape further down the body and is NOT visited here, so it is
-            never emitted as an skLocalVar today. This is a known gap, not a
-            bug: the call resolver (Task 5) still degrades gracefully (an
-            inline-var receiver just stays untypable/'ambiguous' rather than
-            resolving), so nothing silently gives a wrong answer. Picking up
-            inline vars is future work if/when they show up as a real gap in
-            receiver-typing coverage. }
+          { v14 (D5, Task 3) / v23: emit this routine's locals as skLocalVar
+            symbols, parented to its (already-emitted) routine symbol, with the
+            routine symbol's own unit-qualified name so the local's
+            QualifiedName is 'Unit.TClass.Method.VarName'. The classic `var`
+            block AND inline declarations (`var X: T := ...;`, `for var I`)
+            are both emitted -- see EmitRoutineLocals. The nested arm below
+            makes the SAME call for a nested routine (spec N1); the walk stops
+            at a nested defProc so nothing leaks upward (spec N3). The earlier
+            comment here claimed "a nested proc is never walked here, so its
+            locals do not leak" -- that was written before Phase C made nested
+            routines symbols in their own right, and it became the bug's own
+            documentation: 738 nested routines, 0 with a local. }
           if HdrName <> '' then
           begin
             var RoutineIdx:= FindRoutineSymbolIndex(AState, HdrName, Integer(ANode.StartPoint.row) + 1);
@@ -2512,6 +2567,7 @@ begin
               NSym.ImplStartLine:= Integer(ANode.StartPoint.row) + 1;
               NSym.ImplEndLine  := Integer(ANode.EndPoint.row) + 1;
               AState.Symbols[SelfIdx]:= NSym;
+              EmitRoutineLocals(ANode, AState, SelfIdx, SelfQName);   // v23 (spec N1/N2)
             end;
           end;
         end;
