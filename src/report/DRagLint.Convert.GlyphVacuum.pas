@@ -188,12 +188,20 @@ type
 const
   CountPropNames: array[0..3] of string = ('NumGlyphs', 'GlyphCount', 'NumStates', 'ImageCount');
 
+// AName may be a bare scalar name ('NumGlyphs') or a dotted one streamed flat
+// by a DevExpress-style .dfm ('OptionsImage.NumGlyphs' -- no nested object
+// block, the dot lives in the scalar's own Name). Match on the LAST segment so
+// both forms qualify; the caller keeps AName's full text as count_prop.
 function IsCountPropName(const AName: string): Boolean;
-var S: string;
+var
+  S, Tail: string;
+  P: Integer;
 begin
   Result:= False;
+  P:= LastDelimiter('.', AName);
+  if P > 0 then Tail:= Copy(AName, P + 1, MaxInt) else Tail:= AName;
   for S in CountPropNames do
-    if SameText(S, AName) then Exit(True);
+    if SameText(S, Tail) then Exit(True);
 end;
 
 // The first scalar sibling on the same object whose name is a known count

@@ -195,6 +195,30 @@ Write-Host "--- raw positive-control row ---"; Get-Content (Join-Path $WorkDir '
 Check 'T2 positive control: no count property -> count_value, count_effective, agree EMPTY; inferred_n still 4' ($r3.count_prop -eq '' -and $r3.count_value -eq '' -and $r3.count_effective -eq '' -and $r3.agree -eq '' -and $r3.inferred_n -eq '4') "$($r3.count_prop)/$($r3.count_value)/$($r3.count_effective)/$($r3.agree)/$($r3.inferred_n)"
 Check 'T2 positive control: kind strip from inferred_n alone' ($r3.kind -eq 'strip') $r3.kind
 
+# ---- dotted count property (T2 dotted): TcxButton-style OptionsImage.NumGlyphs --
+# A DevExpress .dfm streams a nested property as a flat dotted scalar name, not a
+# nested object block. FindCountProp must match CountPropNames on the LAST
+# dot-segment of the scalar's name, and keep the FULL dotted name as count_prop.
+$src4   = Join-Path $WorkDir 'src4'; New-Item -ItemType Directory $src4 -Force | Out-Null
+$stripCx = New-StripBmp 64 32 2
+$payCx   = New-PicturePayload 'TBitmap' $stripCx
+Write-Ascii (Join-Path $src4 'FrmD.dfm') @"
+object FrmD: TFrmD
+  object Btn4: TcxButton
+    OptionsImage.NumGlyphs = 2
+    OptionsImage.Glyph.Data = $(ConvertTo-DfmHex $payCx)
+  end
+end
+"@
+$out4 = Join-Path $WorkDir 'out4'
+$o9 = & $Exe glyph-vacuum --root $src4 --out $out4 2>&1 | Out-String
+Write-Host "--- raw stdout (dotted count run) ---"; Write-Host $o9
+$r4 = @(Import-Csv (Join-Path $out4 'instances.tsv') -Delimiter "`t")
+Write-Host "--- raw instances.tsv (dotted count run) ---"; Get-Content (Join-Path $out4 'instances.tsv') | ForEach-Object { Write-Host $_ }
+Check 'T2 dotted count_prop keeps full dotted name OptionsImage.NumGlyphs' ($r4[0].count_prop -eq 'OptionsImage.NumGlyphs') $r4[0].count_prop
+Check 'T2 dotted count_value 2' ($r4[0].count_value -eq '2') $r4[0].count_value
+Check 'T2 dotted count_effective 2, inferred_n 2, agree Y' ($r4[0].count_effective -eq '2' -and $r4[0].inferred_n -eq '2' -and $r4[0].agree -eq 'Y') "$($r4[0].count_effective)/$($r4[0].inferred_n)/$($r4[0].agree)"
+
 # ---- fixture 4: an index that DECLARES the class, for the qualification columns --
 $lib = Join-Path $WorkDir 'lib'; New-Item -ItemType Directory $lib -Force | Out-Null
 Write-Ascii (Join-Path $lib 'Abcbtn.pas') @'
