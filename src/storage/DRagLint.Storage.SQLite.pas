@@ -7030,15 +7030,13 @@ begin
   end;
 end; // function
 
+function PreferArity(const ARows: TArray<TSymbol>; const AParams: string): TArray<TSymbol>; forward;
+
 function TSQLiteSymbolStore.FindSymbolsByExactName( const AName: string): TArray<TSymbol>;
 var
   List: TList<TSymbol>;
 begin
-  { v23 (spec G7): a caller may still write the name the way the source does
-    ('TList<T>', 'Unit.TBox<K, V>'). Match on the bare name; when the input
-    carried a list, prefer rows of the same arity and fall back to all rows
-    when none matches (so a wrong-arity query still finds SOMETHING rather
-    than nothing -- the caller sees generic_params and can tell). }
+  { v23 (spec G7): match on the BARE name; see PreferArity for the rest. }
   var BareName, InParams: string;
   var HadList: Boolean:= SplitGenericName(AName, BareName, InParams);
   List:= TList<TSymbol>.Create;
@@ -7067,15 +7065,7 @@ begin
       end;
     end;
     Result:= List.ToArray;
-    if HadList and (Length(Result) > 1) then
-    begin
-      var Want:= GenericArity(InParams);
-      var Same: TArray<TSymbol>;
-      SetLength(Same, 0);
-      for var S in Result do
-        if GenericArity(S.GenericParams) = Want then Same:= Same + [S];
-      if Length(Same) > 0 then Result:= Same;
-    end;
+    if HadList and (Length(Result) > 1) then Result:= PreferArity(Result, InParams);
   finally
     { Close in the FINALLY, not after the loop: ReadSymbolFromQuery can raise,
       and a still-open dataset holds its cursor for the life of the store (these
@@ -7092,9 +7082,9 @@ var
   List: TList<TSymbol>;
 begin
   { v23 (spec G7): same input strip as FindSymbolsByExactName -- 'gnB.TList<T>'
-    splits on the FIRST '<' into bare 'gnB.TList' + params 'T'. A qualified
-    name whose CLASS segment is generic ('gnB.TList<T>.Add') is not handled
-    here; no caller writes that form. }
+    splits on the FIRST '<' into bare 'gnB.TList' + params 'T'; see PreferArity.
+    A qualified name whose CLASS segment is generic ('gnB.TList<T>.Add') is not
+    handled here; no caller writes that form. }
   var BareName, InParams: string;
   var HadList: Boolean:= SplitGenericName(AQName, BareName, InParams);
   List:= TList<TSymbol>.Create;
@@ -7122,15 +7112,7 @@ begin
       end;
     end;
     Result:= List.ToArray;
-    if HadList and (Length(Result) > 1) then
-    begin
-      var Want:= GenericArity(InParams);
-      var Same: TArray<TSymbol>;
-      SetLength(Same, 0);
-      for var S in Result do
-        if GenericArity(S.GenericParams) = Want then Same:= Same + [S];
-      if Length(Same) > 0 then Result:= Same;
-    end;
+    if HadList and (Length(Result) > 1) then Result:= PreferArity(Result, InParams);
   finally
     if FQFindByQName  .Active then FQFindByQName  .Close;
     if FQFindByQNameCI.Active then FQFindByQNameCI.Close;
@@ -8045,6 +8027,20 @@ begin
   SetLength(Result, 0);
   for S in ACands do
     if GenericArity(S.GenericParams) = AArity then Result:= Result + [S];
+end;
+
+// v23 (spec G7): the QUERY-side counterpart of FilterCandidatesByArity. A caller
+// may still write a name the way the source does ('TList<T>', 'Unit.TBox<K, V>');
+// the by-name lookups match on the bare name and then PREFER rows of the arity
+// the input carried. Unlike the ancestor filter this is a preference, not a
+// decline: when no row has that arity every row comes back, so a wrong-arity
+// query still finds SOMETHING rather than nothing -- the caller sees
+// generic_params and can tell. Shared by FindSymbolsByExactName and
+// FindSymbolsByQualifiedName (declared `forward` above them).
+function PreferArity(const ARows: TArray<TSymbol>; const AParams: string): TArray<TSymbol>;
+begin
+  Result:= FilterCandidatesByArity(ARows, GenericArity(AParams));
+  if Length(Result) = 0 then Result:= ARows;
 end;
 
 /// <summary>

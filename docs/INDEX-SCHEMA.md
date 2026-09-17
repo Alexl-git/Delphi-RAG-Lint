@@ -358,7 +358,7 @@ resolve pass from `symbols.heritage`.
 |---|---|---|
 | `symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE CASCADE) | The class/interface symbol declaring this ancestor |
 | `ordinal` | INTEGER | Position in the heritage list (0-based) |
-| `ancestor_name` | TEXT | Ancestor name as written in the heritage clause, WITHOUT any type-argument list (v23: `TObjectList` for `class(TObjectList<TFoo>)`; the list moves to `ancestor_type_args`) |
+| `ancestor_name` | TEXT | Bare ancestor name from the heritage clause, always without a type-argument list (`TObjectList` for `class(TObjectList<TFoo>)`, in every schema version); v23 ADDS the arguments beside it in `ancestor_type_args` |
 | `ancestor_type_args` | TEXT | v23. The type arguments written on this heritage entry (`TFoo`, `T`, `string, TBar`); NULL when the ancestor was named without arguments. Resolution prefers a candidate whose `generic_params` arity equals this list's arity; an argument-less edge keeps the pre-v23 behaviour. |
 | `ancestor_kind` | TEXT | Same value domain as `symbols.kind`, restricted to `class`/`interface` in practice |
 | `ancestor_symbol_id` | INTEGER | Resolved ancestor's `symbols.id`; NULL when unresolved (external/RTL/by-name-only) |
