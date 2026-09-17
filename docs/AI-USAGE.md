@@ -367,8 +367,12 @@ pure-diagnostic verbs are broken out in 2b.
 > `<!-- drag-lint:auto BEGIN -->` / `<!-- drag-lint:auto END -->`. Ownership is
 > decided by that marker and by nothing else:
 >
-> - **A tag WITHOUT the marker is yours. drag-lint never touches it** -- not its
->   text, not its whitespace, whatever it says.
+> - **A tag WITHOUT the marker is yours. drag-lint never touches its BYTES** -- not
+>   its text, not its whitespace, whatever it says. It MAY move the tag to the
+>   engine's fixed slot order (summary, deprecated, params, returns, exceptions,
+>   example, seealso, since, remarks): a hand-written `<returns>` placed above the
+>   `<param>`s comes back byte-identical but below them. Owner ruling 2026-09-16:
+>   position is not part of the guarantee, bytes are.
 > - **A tag WITH the marker is the engine's, and its contents are regenerated on
 >   every run.** If you edit the text INSIDE a marked tag, your edit WILL be
 >   overwritten the next time `document --apply` runs over that file. This is
