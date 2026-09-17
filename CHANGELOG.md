@@ -3,7 +3,25 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.15.0-alpha -- 2026-09-17
+
+### Added
+- `glyph-vacuum --root <dir> --out <dir> [--db <db>] [--append]` (converter):
+  walks every `.dfm` / `.fmx` under the root, decodes every streamed graphic
+  (a binary `.dfm` is converted in memory), and writes `instances.tsv`, the
+  decoded images, a per-class `classes.tsv` (count property, inferred strip N,
+  agreement, kind, format and distinct-payload distributions, `runtime_refs`
+  counted through resolved property refs when `--db` is given) and a
+  `gallery.html` with one card per distinct payload per class, slot separators
+  overlaid at width div N. Unparseable files are listed in `skipped.tsv`, never
+  dropped; `--append` merges a rescan by (dfm_path, object_path, property), so
+  a second run is idempotent. The input to `docs\GLYPH-CLASSES.md` and the
+  `G[I/N]` grammar.
+- ConvRulesEditor: the Unit Rules tab lists each used unit with the section it
+  is declared in (interface / implementation) and fills the moment a unit is
+  picked -- Browse, combo select or Fill, form or not. The declared-class list
+  on the same tab was empty for every input (`ScanClassesDeclared` started its
+  backtrack past the keyword and never met the `=`).
 
 ### Changed -- extractor 1.17.0-alpha / schema v23 (re-parses every index)
 - Generic types and methods are indexed under their BARE name; the parameter
@@ -21,8 +39,17 @@ breaking changes** until v1.0.
   unresolved (decline) rather than typing both from the first loop.
 - `symbol_facts.reads_fields` / `writes_fields` include INHERITED fields
   (own first, nearest ancestor next) via the new `facts-inherited` index stage.
+- `query ancestors --json` rows carry `type_args` ('' on a plain edge). The
+  LSP's ephemeral store for a file no index owns now runs the `facts-inherited`
+  stage too, so hover on such a file shows a same-unit inherited field in
+  `Writes:`.
 
 ### Fixed
+- `context --task "modify Class.Member"` resolves when exactly one symbol's
+  qualified name ends with that dotted suffix (segment-aligned; an ambiguous
+  `Class.Member` still declines). A RECORD's class surface lists every field:
+  the lean DFM-component filter now runs only when the owner is a class, so
+  `modify TTypeAncestor` no longer prints one field of eight.
 - A property whose accessor is OVERLOADED (`read GetItem` beside two `GetItem`
   declarations) binds the overload whose parameter count is the property's index
   count (+1 for a setter); when the count leaves several, the access records no
