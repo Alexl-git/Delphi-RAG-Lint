@@ -271,21 +271,35 @@ begin
   AState.Facts.Add(LowerCase(ABareClass), Result);
 end;
 
-// Resolved .pas references to <class>.<prop> (reads and writes; a
+// Resolved .pas references to <declaring-class>.<prop> (reads and writes; a
 // `Picture.Assign(..)` is a read of Picture followed by a call). Over-counts
-// assignments, which is the safe direction for a sizing number.
-function CountRuntimeRefs(const AStores: TArray<ISymbolStore>; const AQName, AProp: string): Integer;
+// assignments, which is the safe direction for a sizing number. An inherited
+// property is not redeclared on AQName, so its symbol lives under the class
+// that DOES declare it -- ATree's own node for AProp names that class via
+// DeclaredIn; fall back to AQName when the tree has no node for AProp (a
+// property the tree does not know).
+function CountRuntimeRefs(const AStores: TArray<ISymbolStore>; const AQName, AProp: string;
+  const ATree: TPropTree): Integer;
 var
-  S   : ISymbolStore;
-  Syms: TArray<TSymbol>;
-  Sym : TSymbol;
-  Refs: TArray<TReference>;
-  Ref : TReference;
+  S    : ISymbolStore;
+  Syms : TArray<TSymbol>;
+  Sym  : TSymbol;
+  Refs : TArray<TReference>;
+  Ref  : TReference;
+  N    : TPropNode;
+  Owner: string;
 begin
   Result:= 0;
+  Owner:= AQName;
+  for N in ATree.Nodes do
+    if SameText(N.Path, AProp) then
+    begin
+      Owner:= N.DeclaredIn;
+      Break;
+    end;
   for S in AStores do
   begin
-    Syms:= S.FindSymbolsByQualifiedName(AQName + '.' + AProp);
+    Syms:= S.FindSymbolsByQualifiedName(Owner + '.' + AProp);
     for Sym in Syms do
     begin
       Refs:= S.FindReferencesTo(Sym.Id);
@@ -367,7 +381,7 @@ begin
     RefKey:= LowerCase(Facts.QName) + '.' + LowerCase(Prop);
     if not AState.RefsCounted.ContainsKey(RefKey) then
     begin
-      Facts.RuntimeRefs:= Facts.RuntimeRefs + CountRuntimeRefs(AState.Stores, Facts.QName, Prop);
+      Facts.RuntimeRefs:= Facts.RuntimeRefs + CountRuntimeRefs(AState.Stores, Facts.QName, Prop, Facts.Tree);
       AState.RefsCounted.Add(RefKey, True);
       AState.Facts.AddOrSetValue(LowerCase(AObject.ClassName_), Facts);
     end;

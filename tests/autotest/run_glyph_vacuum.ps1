@@ -281,14 +281,14 @@ if (Test-Path $cls) {
   Check 'T4 disagreements 1'                 ($tb.disagreements -eq '1') $tb.disagreements
   Check 'T4 formats bmp:2'                   ($tb.formats -eq 'bmp:2') $tb.formats
   Check 'T4 distinct_payloads 2'             ($tb.distinct_payloads -eq '2') $tb.distinct_payloads
-  # runtime_refs: whether the deployed resolver binds B.Picture.Assign / B.Picture :=
-  # in UsesBtn.pas back to Abcbtn.TabcToggleBtn.Picture. Measured with
-  # `find-callers --name Picture --resolved --db $libDb` below; pinned to whatever
-  # that run demonstrably produces, per the brief's instruction not to weaken this
-  # to "non-empty".
+  # runtime_refs: B.Picture.Assign / B.Picture := in UsesBtn.pas bind to the
+  # DECLARING class Abcbtn.TabcCustomPicSpeedBtn.Picture (Picture is inherited,
+  # not redeclared, on TabcToggleBtn) -- confirmed by the raw find-callers
+  # output below. CountRuntimeRefs follows the property's DeclaredIn from the
+  # class's own prop tree, so TabcToggleBtn's count is the ancestor's 2, not 0.
   $fc = & $Exe query find-callers --name Picture --resolved --db $libDb 2>&1 | Out-String
   Write-Host "--- raw find-callers --name Picture --resolved --db `$libDb ---"; Write-Host $fc
-  Check 'T4 runtime_refs 0 (TabcToggleBtn inherits Picture; find-callers --name Picture --resolved found 0 callers under Abcbtn.TabcToggleBtn.Picture -- see raw output above)' ($tb.runtime_refs -eq '0') $tb.runtime_refs
+  Check 'T4 runtime_refs 2 (UsesBtn.pas touches Picture twice)' ($tb.runtime_refs -eq '2') $tb.runtime_refs
   $sp = $c | Where-Object { $_.component_class -eq 'TSpeedButton' }
   Check 'T4 unresolved class -> runtime_refs empty' ($sp.runtime_refs -eq '') $sp.runtime_refs
 }
