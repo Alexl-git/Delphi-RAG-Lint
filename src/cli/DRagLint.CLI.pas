@@ -809,7 +809,7 @@ begin
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
-  Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]');
+  Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)');
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
@@ -12653,12 +12653,20 @@ var
   end; // try
 end; // procedure
 
+  { The ONE definition of "is this file a source unit of the report": first
+    --db only unless --all-sources, then the --name substring on the stem.
+    Both the pre-count and the emit loop go through it, so they cannot drift. }
+  function IsSourceCandidate(const AMeta: TFileMeta): Boolean;
+  begin
+    Result:= (AArgs.AllSources or (AMeta.StoreIndex = 0)) and ((RootPattern = '') or (Pos(RootPattern, AMeta.Stem) > 0));
+  end;
+
 var
   GlobalIdx   : Integer  ;
   SourceMeta  : TFileMeta;
   RowCount    : Integer  ;
   SourceCount : Integer  ;
-  RootPatLower: string   ;
+  Candidates  : Integer  ;
 begin
   if not ExplicitDbsExist(AArgs, 'uses-report') then Exit(2);
   Result:= 0;
@@ -12680,19 +12688,31 @@ begin
 
     LoadFilesAndEdges;
 
+    { Converter gap 2026-09-16 (stats\draglint-gaps.log, class `wrong`): a
+      --name that matches NO source unit used to answer "0 source units, 0 rows
+      written" with exit 0 -- a complete-looking report computed against a
+      corpus that does not contain the subject, while `outline` on the same
+      file and DB refused with exit 2. Count BEFORE the CSV is opened, so a
+      refusal creates nothing and leaves an existing --output untouched. }
+    Candidates:= 0;
+    for GlobalIdx:= 0 to AllFiles.Count - 1 do
+      if IsSourceCandidate(AllFiles[GlobalIdx]) then Inc(Candidates);
+    if (RootPattern <> '') and (Candidates = 0) then
+    begin
+      Writeln(ErrOutput, 'ERROR: uses-report: no index passed contains a source unit named ', AArgs.Name);
+      Writeln(ErrOutput, '       Tried ', Length(Stores), ' database(s). Index the unit, pass --all-sources, or pass --db <file.sqlite>.');
+      Exit(2);
+    end;
+
     CsvOut:= TStreamWriter.Create(AArgs.Output, False, TEncoding.UTF8);
     EmitCsvHeader;
 
     RowCount    := 0;
     SourceCount := 0;
-    RootPatLower:= RootPattern;
     for GlobalIdx:= 0 to AllFiles.Count - 1 do
     begin
       SourceMeta:= AllFiles[GlobalIdx];
-      { Default: emit only files from the first DB (the "project"). With
-        --all-sources, include all. }
-      if (not AArgs.AllSources) and (SourceMeta.StoreIndex <> 0) then Continue;
-      if (RootPatLower <> '') and (Pos(RootPatLower, SourceMeta.Stem) = 0) then Continue;
+      if not IsSourceCandidate(SourceMeta) then Continue;
       WalkBfs(GlobalIdx, RowCount);
       Inc(SourceCount);
     end;

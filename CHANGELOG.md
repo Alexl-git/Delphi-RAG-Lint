@@ -25,6 +25,14 @@ breaking changes** until v1.0.
 ### Fixed
 - `GetSymbolFacts` / `GetSymbolDoc` initialise a managed `Result` with
   `Default()`, not `FillChar` (leak when a caller reused the variable).
+- `uses-report --name <pattern>` matching NO source unit now exits 2 with
+  `ERROR: uses-report: no index passed contains a source unit named <pattern>`
+  on stderr and writes no output file (an existing `--output` is left
+  untouched). It used to print `0 source units, 0 rows written` and exit 0 --
+  a complete-looking report against a corpus that did not contain the subject,
+  while `outline` on the same file and DB refused. Converter gap 2026-09-16
+  (`stats\draglint-gaps.log`, class `wrong`). Guard:
+  `tests\autotest\run_uses_report_name_no_match.ps1`.
 
 ## v1.14.0-alpha -- 2026-09-17
 
