@@ -62,9 +62,9 @@ type
     FChildren: TObjectList<TDfmNode>;
   public
     Name      : string;
-    Kind      : TDfmNodeKind;
-    ValueText : string;
-    ClassName_: string;
+    Kind      : TDfmNodeKind;  // dl:ok public-field@a23c -- internal parse-tree node, same rationale as Keyword below
+    ValueText : string;  // dl:ok public-field@2fe3 -- internal parse-tree node, same rationale as Keyword below
+    ClassName_: string;  // dl:ok public-field@dede -- internal parse-tree node, same rationale as Keyword below
     Keyword   : string; { 'object' | 'inherited' | 'inline' -- the object line's first token; '' for a property }  // dl:ok public-field@0660
     /// <summary><!-- drag-lint:auto sum -->TDfmNode</summary>
     /// <remarks>

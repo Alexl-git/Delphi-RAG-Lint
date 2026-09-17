@@ -412,7 +412,11 @@ typos that reFind's blind PCRE cannot; and `convert-apply` rewrites the real
 `.pas` + `.dfm` files (dry-run by default, `--apply` to write for real, with
 automatic `.BCK<n>` backups + a `recovery.txt` unless `--no-backup`). The usual
 workflow: `convert-scaffold` -> `convert-validate` -> `convert-apply` (dry-run,
-review the plan) -> `convert-apply --apply`. Full DSL reference, the 5
+review the plan) -> `convert-apply --apply`. Before a glyph rule, `glyph-vacuum`
+measures every streamed graphic in the legacy tree (class, property, strip
+geometry, count property) and writes a reviewable gallery -- the input to
+`docs\GLYPH-CLASSES.md` and the `G[I/N]` grammar (`--append` merges a rescan
+into an existing run). Full DSL reference, the 5
 conversion surfaces, and the safety scheme: **[docs/CONVERSION-RULES.md](docs/CONVERSION-RULES.md)**.
 
 **`ConvRulesEditor.exe` -- the visual rule-book editor.** Shipped in the

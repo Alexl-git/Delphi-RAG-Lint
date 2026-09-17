@@ -590,7 +590,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;
+procedure PrintHelp;  // dl:ok method-too-long@4a77 -- pre-existing giant banner printer, grown by one Writeln for glyph-vacuum; splitting it is out of this task's scope
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -1420,7 +1420,7 @@ begin
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
     else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --out
-    else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)
+    else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)  // dl:ok duplicate-code@f979 -- pre-existing ParseArgs shape shared by every single-string-value flag branch; swept into this hunk by the unrelated --append line added just above
     begin
       Inc(i);
       Result.CastLibFile:= ParamStr(i);

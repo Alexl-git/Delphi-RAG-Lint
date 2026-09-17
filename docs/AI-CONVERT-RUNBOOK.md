@@ -110,7 +110,16 @@ step is diagnostic -- it does not write anything.
 
 ---
 
-## 2. Scaffold a rules file (`convert-scaffold`)
+## 2. Any graphic property in the source class? Run the vacuum first.
+
+`drag-lint glyph-vacuum --root <legacy folder> --out <scratch>\vacuum --db <library> --db <project db>`,
+open `gallery.html`, and write or update the class's section in `docs\GLYPH-CLASSES.md`
+(how N is read, what each slot means, corpus counts, date) BEFORE the `#link`.
+A G-link on a class with no section is a validate error by design.
+
+---
+
+## 3. Scaffold a rules file (`convert-scaffold`)
 
 Auto-draft a **valid, pre-filled** conversion-rules file from both trees. The
 scaffolder matches target paths to source paths by leaf-name + compatible type
@@ -148,7 +157,7 @@ the ones that matter.
 
 ---
 
-## 3. Validate the rules (`convert-validate`)
+## 4. Validate the rules (`convert-validate`)
 
 After you edit the draft, prove every path still exists in the real trees (this
 catches typos reFind cannot):
@@ -166,7 +175,7 @@ bad args, or an explicit `--db` that does not exist. Every `--db` you pass must 
 
 ---
 
-## 4. Dry-run the apply (`convert-apply`, no `--apply`)
+## 5. Dry-run the apply (`convert-apply`, no `--apply`)
 
 This is the crux. **Without `--apply`, `convert-apply` writes nothing** -- it
 previews the full 5-surface rewrite so you can read it before committing.
@@ -229,7 +238,7 @@ that may no longer exist.
 
 ---
 
-## 5. Apply for real (`--apply`)
+## 6. Apply for real (`--apply`)
 
 Once the dry-run looks right and the guard is clean:
 
@@ -251,7 +260,7 @@ version control and you'll rely on that instead.
 
 ---
 
-## 6. Verify by compiling (the real proof)
+## 7. Verify by compiling (the real proof)
 
 The gold standard: **the converted unit must compile.** If it compiles, the
 conversion is at least as correct as a mechanical converter can be.
@@ -284,19 +293,24 @@ drag-lint query --name <FromType> --db <db>
 drag-lint query --name <ToType>   --db <db>
 drag-lint index  "<folder declaring the missing type>" --db <libdb>   # only if needed
 
-# 1-3. plan
+# 1. plan (source tree)
 drag-lint proptree         --qname <Unit.FromType> --db <libdb>
+
+# 2. any graphic property on the source class? measure before you rule
+drag-lint glyph-vacuum      --root <legacy folder> --out <scratch>\vacuum --db <libdb> --db <appdb>
+
+# 3-4. plan (scaffold + validate)
 drag-lint convert-scaffold  --from <Unit.FromType> --to <Unit.ToType> --out c.rules --db <libdb>
 # ... edit c.rules: fill every ??? that matters ...
 drag-lint convert-validate  --rules c.rules --from <Unit.FromType> --to <Unit.ToType> --db <libdb>   # must exit 0
 
-# 4. dry-run (writes nothing) -- READ the output
+# 5. dry-run (writes nothing) -- READ the output
 drag-lint convert-apply     --unit <Form.pas> --rules c.rules --db <appdb> --db <libdb>
 
-# 5. apply (writes .BCK<n> + recovery.txt + marker)
+# 6. apply (writes .BCK<n> + recovery.txt + marker)
 drag-lint convert-apply     --unit <Form.pas> --rules c.rules --db <appdb> --db <libdb> --apply
 
-# 6. verify -> compile the host project (delphi-build skill); reindex the changed unit
+# 7. verify -> compile the host project (delphi-build skill); reindex the changed unit
 ```
 
 ## What convert-apply does NOT do (leave to a human)

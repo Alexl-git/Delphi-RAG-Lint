@@ -66,11 +66,13 @@ C:\Users\Public\Documents\Embarcadero\Studio\37.0\Samples\Object Pascal\Database
 (`readme.txt` plus the `BDE2FDMigration`, `ADO2FDMigration`, `DBX2FDMigration`,
 `IBX2FDMigration`, ... sample subfolders.)
 
-## The three verbs
+## The verbs
 
-All three are **read-only, CLI-only, headless.** They resolve their index DBs
-from the manifest (or from repeated `--db PATH`), and with multiple `--db` the
-FIRST db that resolves the qname (symbol ids are per-DB) wins.
+All four are **read-only, CLI-only, headless.** `proptree`, `convert-scaffold`
+and `convert-validate` resolve their index DBs from the manifest (or from
+repeated `--db PATH`), and with multiple `--db` the FIRST db that resolves the
+qname (symbol ids are per-DB) wins. `glyph-vacuum` walks `--root` folders
+directly (not the index) and treats `--db` as optional per-class enrichment.
 
 ### 1. `proptree` -- deep property enumerator
 
@@ -277,6 +279,31 @@ line 4: link ToPath not found in --to tree: Sub.Nonexistent
 
 Exit codes: **0** valid / parse-ok; **1** errors found (parse or validation); **2**
 bad args (no `--rules`) or unreadable rules file.
+
+### 4. `glyph-vacuum` -- measure before you rule
+
+```
+drag-lint glyph-vacuum --root <D> [--root <D> ...] --out <D> [--append] [--db <X> ...]
+```
+
+Before writing a `#link`/`G[I/N]` glyph rule, measure every streamed graphic
+under the legacy roots. Five outputs land under `--out`: `instances.tsv`,
+`classes.tsv`, `skipped.tsv`, an `images\` folder of extracted payloads, and a
+reviewable `gallery.html`. `--append` merges a rescan into an existing run by
+`(dfm_path, object_path, property)` identity, so re-running the vacuum is
+idempotent. A binary `.dfm` is converted in memory with `ObjectBinaryToText`
+(not `ObjectResourceToText`) before parsing, so binary and text `.dfm` are
+measured alike.
+
+`instances.tsv` is one row per component+graphic property -- wrapper, format,
+size, bpp, the streamed count property + value, its declared default, the
+inferred N and whether they agree, and a payload sha. When the `.dfm` streams
+no count property (its value equalled the class's own default, so Delphi
+omitted it) and `--db` resolves the class, the count property and its default
+are instead read off the CLASS's own property tree, so `count_default` can
+still be reported. `classes.tsv` rolls instances up per class: N-distributions,
+disagreements between instances of the same class, and `runtime_refs` (code
+that touches the property outside the `.dfm`).
 
 ## The rule language
 

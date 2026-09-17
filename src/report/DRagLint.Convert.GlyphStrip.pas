@@ -37,6 +37,8 @@ type
 function DecodeDfmHex(const AValueText: string): TBytes;
 
 /// <summary>Image format from the magic bytes at <paramref name="AOffset"/>.</summary>
+/// <param name="ABytes">The payload bytes to sniff.</param>
+/// <param name="AOffset">Byte offset within <paramref name="ABytes"/> to read the magic number from.</param>
 /// <returns>'bmp' | 'ico' | 'wmf' | 'emf' | 'png' | 'jpg' | 'gif' | '' (unrecognised).</returns>
 function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;
 
