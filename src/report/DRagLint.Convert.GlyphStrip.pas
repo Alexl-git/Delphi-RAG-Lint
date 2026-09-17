@@ -15,8 +15,12 @@ type
   /// <remarks>A .dfm `Picture.Data` blob is a streamed TPicture: one length
   /// byte, that many class-name bytes, a little-endian Int32 image size, then
   /// the image. A bare image (no preamble) is recognised by its magic bytes at
-  /// offset 0 and reported with an empty Wrapper. Width/Height/BitCount/
-  /// PaletteEntries are filled for BMP only; every other format leaves them 0.</remarks>
+  /// offset 0 -- or, when it starts with '&lt;?xml'/'&lt;svg' (an optional UTF-8
+  /// BOM and whitespace skipped), as SVG text -- and reported with an empty
+  /// Wrapper. A TBitmap-typed property streams as [Int32 LE length][image bytes]
+  /// with no class name at all; that length-prefixed shape is also reported with
+  /// an empty Wrapper. Width/Height/BitCount/PaletteEntries are filled for BMP
+  /// only; every other format, including SVG, leaves them 0.</remarks>
   TStreamedGraphic = record
     Ok            : Boolean;
     Wrapper       : string;
@@ -39,7 +43,7 @@ function DecodeDfmHex(const AValueText: string): TBytes;
 /// <summary>Image format from the magic bytes at <paramref name="AOffset"/>.</summary>
 /// <param name="ABytes">The payload bytes to sniff.</param>
 /// <param name="AOffset">Byte offset within <paramref name="ABytes"/> to read the magic number from.</param>
-/// <returns>'bmp' | 'ico' | 'wmf' | 'emf' | 'png' | 'jpg' | 'gif' | '' (unrecognised).</returns>
+/// <returns>'bmp' | 'ico' | 'wmf' | 'emf' | 'png' | 'jpg' | 'gif' | 'svg' | '' (unrecognised).</returns>
 function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;
 
 /// <summary>Decode a streamed graphic payload: wrapper preamble first (the
@@ -87,7 +91,18 @@ const
   GifMagic: array[0..3] of Byte = ($47, $49, $46, $38);
   IcoMagic: array[0..3] of Byte = ($00, $00, $01, $00);
   WmfMagic: array[0..3] of Byte = ($D7, $CD, $C6, $9A); { placeable WMF }
-  EmfMagic: array[0..3] of Byte = ($01, $00, $00, $00); { ENHMETAHEADER.iType }
+  // ENHMETAHEADER.iType alone (01 00 00 00) is a 10-byte non-image value too;
+  // the real signature is the 4 bytes ' EMF' at a fixed offset into the header.
+  EmfSigOffset  = 40;
+  EmfSignature: array[0..3] of Byte = ($20, $45, $4D, $46); { ' EMF' }
+  // a UTF-8 BOM and leading whitespace are skipped before the SVG text probe
+  Utf8Bom: array[0..2] of Byte = ($EF, $BB, $BF);
+  XmlDeclPrefix = '<?xml';
+  SvgTagPrefix  = '<svg';
+  // TBitmap-typed properties (e.g. TBitBtn.Glyph.Data) stream with no class
+  // name at all: a 4-byte LE length, then the image -- so a payload needs room
+  // for the length field plus the widest magic signature checked at its start.
+  MinLengthPrefixedPayload = PreambleSizeBytes + Int32ByteLen;
 
 function DecodeDfmHex(const AValueText: string): TBytes;
 var
@@ -113,11 +128,42 @@ begin
   Result:= True;
 end;
 
+// The ENHMETAHEADER signature lives 40 bytes into the header, not at offset 0
+// -- iType alone (01 00 00 00) is a common short non-image value.
+function IsEmfSignature(const ABytes: TBytes; AOffset: Integer): Boolean;
+begin
+  Result:= StartsWith(ABytes, AOffset + EmfSigOffset, EmfSignature);
+end;
+
+// SVG glyphs (TdxSmartGlyph) stream as raw XML text, no binary preamble at
+// all: skip an optional UTF-8 BOM, then ASCII whitespace, then compare the
+// next few bytes case-insensitively to '<?xml' or '<svg'.
+function LooksLikeSvg(const ABytes: TBytes; AOffset: Integer): Boolean;
+var
+  P    : Integer;
+  Probe: string;
+begin
+  Result:= False;
+  P:= AOffset;
+  if StartsWith(ABytes, P, Utf8Bom) then Inc(P, Length(Utf8Bom));
+  while (P < Length(ABytes)) and CharInSet(Chr(ABytes[P]), [' ', #9, #13, #10]) do Inc(P);
+  if P + Length(XmlDeclPrefix) <= Length(ABytes) then
+  begin
+    Probe:= TEncoding.ASCII.GetString(ABytes, P, Length(XmlDeclPrefix));
+    if SameText(Probe, XmlDeclPrefix) then Exit(True);
+  end;
+  if P + Length(SvgTagPrefix) <= Length(ABytes) then
+  begin
+    Probe:= TEncoding.ASCII.GetString(ABytes, P, Length(SvgTagPrefix));
+    if SameText(Probe, SvgTagPrefix) then Exit(True);
+  end;
+end;
+
 // Flat magic-byte dispatch table -- each Exit is one signature, independent
 // of the others; folding these into a loop over an array of (sig, format)
 // pairs would need a dynamic-array typed constant per entry for zero
 // behavioural gain on a routine this small.
-function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;  // dl:ok too-many-exit-points@fc29
+function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;  // dl:ok too-many-exit-points@0ee8
 begin
   Result:= '';
   if StartsWith(ABytes, AOffset, PngMagic) then Exit('png');
@@ -126,7 +172,8 @@ begin
   if StartsWith(ABytes, AOffset, GifMagic) then Exit('gif');
   if StartsWith(ABytes, AOffset, IcoMagic) then Exit('ico');
   if StartsWith(ABytes, AOffset, WmfMagic) then Exit('wmf');
-  if StartsWith(ABytes, AOffset, EmfMagic) then Exit('emf');
+  if IsEmfSignature(ABytes, AOffset) then Exit('emf');
+  if LooksLikeSvg(ABytes, AOffset) then Exit('svg');
 end;
 
 function ReadInt32LE(const ABytes: TBytes; AOffset: Integer): Integer;
@@ -181,14 +228,15 @@ end;
 
 function ParseStreamedGraphic(const APayload: TBytes): TStreamedGraphic;
 var
-  N  : Integer;
-  I  : Integer;
-  Cls: string;
+  N       : Integer;
+  I       : Integer;
+  Cls     : string;
+  InnerFmt: string;
 begin
   Result:= Default(TStreamedGraphic);
   if Length(APayload) = 0 then Exit;
 
-  { A bare image, sniffed at offset 0. }
+  { A bare image, sniffed at offset 0 (magic bytes, or SVG text). }
   Result.Format:= SniffImageFormat(APayload, 0);
   if Result.Format <> '' then
   begin
@@ -198,26 +246,44 @@ begin
   end
   else
   begin
-    { The Delphi filer preamble: [len] class-name [Int32 size] image. }
-    N:= APayload[0];
-    if (N < 1) or (N > MaxClassNameLen) or (Length(APayload) < 1 + N + PreambleSizeBytes) then Exit;
-    for I:= 1 to N do
-      if (APayload[I] < MinPrintableAscii) or (APayload[I] > MaxPrintableAscii) then Exit; { not a class name }
-    Cls:= TEncoding.ASCII.GetString(APayload, 1, N);
-    Result.Wrapper    := Cls;
-    Result.ImageOffset:= 1 + N + PreambleSizeBytes;
-    Result.ImageLength:= Length(APayload) - Result.ImageOffset;
-    Result.Format     := SniffImageFormat(APayload, Result.ImageOffset);
-    if Result.Format = '' then
+    { TBitmap-typed properties stream with no class name: [Int32 LE length][image].
+      Checked before the class-name preamble below -- a size byte in 1..63 there
+      could otherwise be misread as a class-name length. }
+    InnerFmt:= '';
+    if Length(APayload) >= MinLengthPrefixedPayload then
+      if ReadInt32LE(APayload, 0) = Length(APayload) - PreambleSizeBytes then
+        InnerFmt:= SniffImageFormat(APayload, PreambleSizeBytes);
+    if InnerFmt <> '' then
     begin
-      { The writer's declaration decides when the magic does not. }
-      if SameText(Cls, 'TBitmap')    then Result.Format:= 'bmp'
-      else if SameText(Cls, 'TIcon') then Result.Format:= 'ico'
-      else if SameText(Cls, 'TMetafile') then Result.Format:= 'wmf'
-      else if SameText(Cls, 'TPngImage') or SameText(Cls, 'TPNGObject') then Result.Format:= 'png'
-      else if SameText(Cls, 'TJPEGImage') then Result.Format:= 'jpg';
+      Result.Wrapper    := '';
+      Result.ImageOffset:= PreambleSizeBytes;
+      Result.ImageLength:= Length(APayload) - PreambleSizeBytes;
+      Result.Format     := InnerFmt;
+      Result.Ok         := True;
+    end
+    else
+    begin
+      { The Delphi filer preamble: [len] class-name [Int32 size] image. }
+      N:= APayload[0];
+      if (N < 1) or (N > MaxClassNameLen) or (Length(APayload) < 1 + N + PreambleSizeBytes) then Exit;
+      for I:= 1 to N do
+        if (APayload[I] < MinPrintableAscii) or (APayload[I] > MaxPrintableAscii) then Exit; { not a class name }
+      Cls:= TEncoding.ASCII.GetString(APayload, 1, N);
+      Result.Wrapper    := Cls;
+      Result.ImageOffset:= 1 + N + PreambleSizeBytes;
+      Result.ImageLength:= Length(APayload) - Result.ImageOffset;
+      Result.Format     := SniffImageFormat(APayload, Result.ImageOffset);
+      if Result.Format = '' then
+      begin
+        { The writer's declaration decides when the magic does not. }
+        if SameText(Cls, 'TBitmap')    then Result.Format:= 'bmp'
+        else if SameText(Cls, 'TIcon') then Result.Format:= 'ico'
+        else if SameText(Cls, 'TMetafile') then Result.Format:= 'wmf'
+        else if SameText(Cls, 'TPngImage') or SameText(Cls, 'TPNGObject') then Result.Format:= 'png'
+        else if SameText(Cls, 'TJPEGImage') then Result.Format:= 'jpg';
+      end;
+      Result.Ok:= True;
     end;
-    Result.Ok:= True;
   end;
 
   if Result.Format = 'bmp' then ReadDibHeader(APayload, Result.ImageOffset, Result);

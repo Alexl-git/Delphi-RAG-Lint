@@ -115,12 +115,48 @@ inherited FrmB: TFrmB
 end
 "@
 
+# ---- fixture 3 (Task 10): length-prefixed bare bitmap, raw SVG, a non-image
+# blob that must NOT sniff as EMF from the bare iType alone, and a genuine EMF
+# positive control (the real ' EMF' signature 40 bytes into the header) ---------
+$stripBB = New-StripBmp 64 32 2
+$payBB   = New-Object byte[] (4 + $stripBB.Length)
+[BitConverter]::GetBytes([int32]$stripBB.Length).CopyTo($payBB, 0)
+$stripBB.CopyTo($payBB, 4)
+
+$svgText = '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16"/></svg>'
+$paySvg  = [Text.Encoding]::ASCII.GetBytes($svgText)
+
+$fake1 = [byte[]](0x01,0x00,0x00,0x00,0x01,0x02,0x03,0x04,0x05,0x06)
+
+$emfCtl = New-Object byte[] 100
+$emfCtl[0] = 0x01; $emfCtl[1] = 0x00; $emfCtl[2] = 0x00; $emfCtl[3] = 0x00
+$emfCtl[40] = 0x20; $emfCtl[41] = 0x45; $emfCtl[42] = 0x4D; $emfCtl[43] = 0x46
+
+Write-Ascii (Join-Path $src 'FrmD.dfm') @"
+object FrmD: TFrmD
+  Caption = 'D'
+  object BitBtn1: TBitBtn
+    NumGlyphs = 2
+    Glyph.Data = $(ConvertTo-DfmHex $payBB)
+  end
+  object Svg1: TcxButton
+    OptionsImage.Glyph.Data = $(ConvertTo-DfmHex $paySvg)
+  end
+  object Fake1: TPanel
+    Blob.Data = $(ConvertTo-DfmHex $fake1)
+  end
+  object EmfCtl: TPanel
+    Blob.Data = $(ConvertTo-DfmHex $emfCtl)
+  end
+end
+"@
+
 # ---- run ------------------------------------------------------------------------
 $o = & $Exe glyph-vacuum --root $src --out $out 2>&1 | Out-String
 $code = $LASTEXITCODE
 Write-Host "--- raw stdout ---"; Write-Host $o
 Check 'T1 exit 0 on a completed walk' ($code -eq 0) "exit=$code"
-Check 'T1 summary line names the counts' ($o -match 'glyph-vacuum: dfm=2 graphics=5 distinct=4 skipped=0') $o
+Check 'T1 summary line names the counts' ($o -match 'glyph-vacuum: dfm=3 graphics=9 distinct=8 skipped=0') $o
 
 $inst = Join-Path $out 'instances.tsv'
 Check 'T1 instances.tsv written' (Test-Path $inst)
@@ -158,7 +194,11 @@ if (Test-Path $inst) {
   $il  = $rows | Where-Object { $_.object_path -eq 'ImageList1' }
   $cx  = $rows | Where-Object { $_.object_path -eq 'cxImageList1' }
   $a1  = $rows | Where-Object { $_.object_path -eq 'Panel1.Btn1' }
-  Check 'T2 five rows' ($rows.Count -eq 5) "rows=$($rows.Count)"
+  $bb  = $rows | Where-Object { $_.object_path -eq 'BitBtn1' }
+  $sv  = $rows | Where-Object { $_.object_path -eq 'Svg1' }
+  $fk  = $rows | Where-Object { $_.object_path -eq 'Fake1' }
+  $ec  = $rows | Where-Object { $_.object_path -eq 'EmfCtl' }
+  Check 'T2 nine rows' ($rows.Count -eq 9) "rows=$($rows.Count)"
   Check 'T2 Btn1 count_prop NumGlyphs'     ($a1.count_prop -eq 'NumGlyphs') $a1.count_prop
   Check 'T2 Btn1 count_value 4'           ($a1.count_value -eq '4') $a1.count_value
   Check 'T2 Btn1 count_effective 4 (no db: from the value)' ($a1.count_effective -eq '4') $a1.count_effective
@@ -178,6 +218,36 @@ if (Test-Path $inst) {
   Check 'T2 cxImageList item row property ImageInfo[0].Image.Data' ($cx.property -eq 'ImageInfo[0].Image.Data') $cx.property
   Check 'T2 cxImageList item kind container, format bmp' ($cx.kind -eq 'container' -and $cx.format -eq 'bmp') "$($cx.kind)/$($cx.format)"
   Check 'T2 cxImageList item shares Btn1 sha' ($cx.payload_sha -eq $a1.payload_sha)
+
+  # ---- Task 10: length-prefixed bare bitmap (TBitBtn.Glyph.Data, no class name) --
+  Check 'T8 BitBtn1 wrapper empty (no class-name preamble)' ($bb.wrapper -eq '') $bb.wrapper
+  Check 'T8 BitBtn1 format bmp'            ($bb.format -eq 'bmp') $bb.format
+  Check 'T8 BitBtn1 width 64 height 32'    ($bb.width -eq '64' -and $bb.height -eq '32') "$($bb.width)x$($bb.height)"
+  Check 'T8 BitBtn1 count_value 2, inferred_n 2, agree Y, kind strip' ($bb.count_value -eq '2' -and $bb.inferred_n -eq '2' -and $bb.agree -eq 'Y' -and $bb.kind -eq 'strip') "$($bb.count_value)/$($bb.inferred_n)/$($bb.agree)/$($bb.kind)"
+  Check 'T8 BitBtn1 image_file .bmp'       ($bb.image_file -like 'images\*.bmp') $bb.image_file
+  $bbImg = Join-Path $out $bb.image_file
+  if (Test-Path $bbImg) {
+    $bbBytes = [IO.File]::ReadAllBytes($bbImg)
+    Check 'T8 BitBtn1 image file is the bare BMP (BM first), length = image length' ($bbBytes.Length -eq $stripBB.Length -and $bbBytes[0] -eq 0x42 -and $bbBytes[1] -eq 0x4D) "len=$($bbBytes.Length) vs $($stripBB.Length)"
+  }
+
+  # ---- Task 10: raw SVG text, no preamble (TdxSmartGlyph-style) ------------------
+  Check 'T8 Svg1 format svg, wrapper empty' ($sv.format -eq 'svg' -and $sv.wrapper -eq '') "$($sv.format)/$($sv.wrapper)"
+  Check 'T8 Svg1 width/height 0 (not inferred for SVG)' ($sv.width -eq '0' -and $sv.height -eq '0') "$($sv.width)x$($sv.height)"
+  Check 'T8 Svg1 kind single'              ($sv.kind -eq 'single') $sv.kind
+  Check 'T8 Svg1 image_file .svg'          ($sv.image_file -like 'images\*.svg') $sv.image_file
+  $svImg = Join-Path $out $sv.image_file
+  if (Test-Path $svImg) {
+    $svTxt = [IO.File]::ReadAllText($svImg, [Text.Encoding]::ASCII)
+    Check 'T8 Svg1 image file text starts with <?xml' ($svTxt.StartsWith('<?xml')) $svTxt.Substring(0, [Math]::Min(20, $svTxt.Length))
+  }
+
+  # ---- Task 10: a short non-image blob must NOT sniff as EMF from iType alone ----
+  Check 'T8 Fake1 format empty (NOT emf)'  ($fk.format -eq '') $fk.format
+  Check 'T8 Fake1 image_file .bin'         ($fk.image_file -like 'images\*.bin') $fk.image_file
+
+  # ---- Task 10: EMF positive control -- the real ENHMETAHEADER ' EMF' signature --
+  Check 'T8 EmfCtl format emf'             ($ec.format -eq 'emf') $ec.format
 }
 
 # ---- positive control: count column stays empty with no count property ----------
@@ -295,7 +365,9 @@ if (Test-Path $cls) {
   Write-Host "--- raw classes.tsv ---"; Get-Content $cls | ForEach-Object { Write-Host $_ }
   $c = Import-Csv $cls -Delimiter "`t"
   $tb = $c | Where-Object { $_.component_class -eq 'TabcToggleBtn' }
-  Check 'T4 four classes (TabcToggleBtn, TSpeedButton, TImageList, TcxImageList)' ($c.Count -eq 4) "n=$($c.Count)"
+  # 4 original (TabcToggleBtn, TSpeedButton, TImageList, TcxImageList) + 3 from
+  # Task 10's FrmD fixtures (TBitBtn, TcxButton, TPanel -- Fake1+EmfCtl share TPanel)
+  Check 'T4 seven classes' ($c.Count -eq 7) "n=$($c.Count)"
   Check 'T4 TabcToggleBtn instances 2'      ($tb.instances -eq '2') $tb.instances
   Check 'T4 graphic_props Picture.Data'      ($tb.graphic_props -eq 'Picture.Data') $tb.graphic_props
   Check 'T4 count_props NumGlyphs'           ($tb.count_props -eq 'NumGlyphs') $tb.count_props
@@ -325,7 +397,7 @@ if (Test-Path $gal) {
   $imgs = [regex]::Matches($g, 'src="(images/[0-9a-f]{64}\.[a-z]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
   $files = Get-ChildItem (Join-Path $outDb 'images') | ForEach-Object { 'images/' + $_.Name } | Sort-Object -Unique
   Check 'T5 gallery references every image file and nothing else' (($imgs -join ',') -eq ($files -join ',')) "refs=$($imgs -join ',') files=$($files -join ',')"
-  Check 'T5 one h2 per class' (([regex]::Matches($g, '<h2>')).Count -eq 4)
+  Check 'T5 one h2 per class' (([regex]::Matches($g, '<h2>')).Count -eq 7)
   Check 'T5 Btn1 strip has 3 separators at 32/64/96 px' ($g -match 'left:32px' -and $g -match 'left:64px' -and $g -match 'left:96px')
   Check 'T5 caption carries N/inferred/agree' ($g -match 'N=4 inferred=4 agree=Y')
   Check 'T5 no script tag' (-not ($g -match '<script'))
@@ -337,12 +409,12 @@ $outA = Join-Path $WorkDir 'out-append'
 $n1 = (Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count
 & $Exe glyph-vacuum --root $src --out $outA --append | Out-Null
 $n2 = (Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count
-Check 'T6 append of the same root is idempotent' ($n1 -eq 5 -and $n2 -eq 5) "n1=$n1 n2=$n2"
+Check 'T6 append of the same root is idempotent' ($n1 -eq 9 -and $n2 -eq 9) "n1=$n1 n2=$n2"
 & $Exe glyph-vacuum --root $src3 --out $outA --append | Out-Null
 $rowsA = Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t"
-Check 'T6 append of a second root adds its rows' ($rowsA.Count -eq 6) "n=$($rowsA.Count)"
+Check 'T6 append of a second root adds its rows' ($rowsA.Count -eq 10) "n=$($rowsA.Count)"
 Check 'T6 merged classes.tsv counts both roots' (((Import-Csv (Join-Path $outA 'classes.tsv') -Delimiter "`t") | Where-Object { $_.component_class -eq 'TabcToggleBtn' }).instances -eq '3')
-Check 'T6 images dir holds one file per distinct sha (4)' ((Get-ChildItem (Join-Path $outA 'images')).Count -eq 4)
+Check 'T6 images dir holds one file per distinct sha (8)' ((Get-ChildItem (Join-Path $outA 'images')).Count -eq 8)
 & $Exe glyph-vacuum --root $src3 --out $outA | Out-Null
 Check 'T6 without --append the file is REPLACED' ((@(Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t")).Count -eq 1)
 
