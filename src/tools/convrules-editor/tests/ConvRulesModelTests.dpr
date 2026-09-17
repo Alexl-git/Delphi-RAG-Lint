@@ -3112,6 +3112,37 @@ begin
   Check('uses.flat.delegation.unchanged', string.Join(',', ScanUsesClauses(SRC)) = 'Alpha,Beta,Gamma', string.Join(',', ScanUsesClauses(SRC)));
 end; // begin
 
+{ ScanClassesDeclared shipped in 6cfaa158 with NO test and returned [] for EVERY
+  input: the backtrack to the '=' started at the last letter of the keyword just
+  read, never at the character before it. Measured 2026-09-17 on the real file
+  (VARINSP.PAS, 'TVarInspDlg = class(TForm)') and on 'type TDlg = class(TForm) end;'
+  alike -- both 0. The first case here is that minimal shape; the VARINSP case
+  keeps the file's own tabs, and the enum + const declared BEFORE the class, so a
+  scanner that is thrown by an earlier '=' is caught. }
+procedure TestScanClassesDeclared;
+
+  function Names(const ASrc: string): string;
+  begin
+    Result:= string.Join(',', ScanClassesDeclared(ASrc));
+  end;
+
+const
+  MINIMAL = 'type'#13#10 + '  TDlg = class(TForm)'#13#10 + '  end;'#13#10;
+  VARINSP = 'unit VARINSP;'#13#10 + 'interface'#13#10 + 'type'#13#10 + #9'TMachineState = (msON, msOFF, msNone);'#13#10 + 'const'#13#10
+    + #9'MAXREADINGS = 8000;'#13#10 + 'type'#13#10 + #9'TRectangleAround = record'#13#10 + #9#9'Box: Integer;'#13#10 + #9'end;'#13#10 + 'type'#13#10
+    + #9'TsgDXFImageAccess = class(TsgCADImage);'#13#10 + 'type'#13#10 + #9'TVarInspDlg = class(TForm)'#13#10 + #9#9'Timer1: TTimer;'#13#10 + #9'end;'#13#10
+    + 'implementation'#13#10 + 'end.'#13#10;
+  KINDS   = 'type'#13#10 + '  IFoo = interface'#13#10 + '  end;'#13#10 + '  TRec = record'#13#10 + '  end;'#13#10 + '  TGen<T> = class'#13#10 + '  end;'#13#10;
+  GUARDED = 'type'#13#10 + '  TA = class'#13#10 + '  end;'#13#10 + 'var X: TObject;'#13#10 + 'begin X := Y.class; end;'#13#10;
+begin
+  Check('classes.minimal', Names(MINIMAL) = 'TDlg', Names(MINIMAL));
+  Check('classes.varinsp.shape', Names(VARINSP) = 'TRectangleAround,TsgDXFImageAccess,TVarInspDlg', Names(VARINSP));
+  Check('classes.kinds.and.generic.stripped', Names(KINDS) = 'IFoo,TRec,TGen', Names(KINDS));
+  Check('classes.qualified.class.ignored', Names(GUARDED) = 'TA', Names(GUARDED));
+  // POSITIVE CONTROL: an enum is not a class, and text with no type keyword yields [].
+  Check('classes.none', Names('type TMode = (a, b);'#13#10) = '', Names('type TMode = (a, b);'#13#10));
+end; // begin
+
 { Review fix (Important 1 + 2): a terminator character sitting inside a QUOTED literal
   inside a <...> or (...) container must not be mistaken for the container's real
   terminator. For <...> this used to pop the block stack early on a mid-list item's own
@@ -5392,6 +5423,7 @@ begin
     TestScanUsesClauses;
     TestScanUsesClausesLimits;
     TestScanUsesClausesSections;
+    TestScanClassesDeclared;
     TestPlatform;
     TestUnitDirectives;
     TestUnitSets;

@@ -1260,6 +1260,20 @@ type
       /// First occurrence wins across texts, as it does within one.</remarks>
       procedure HarvestUsedUnits(const APasTexts: TArray<string>);
       procedure HarvestUnitClasses(const AUnitText: string);
+      /// <summary>Fill the Unit Rules tab and the left class list from the TEXT of
+      /// AUnitName's .pas -- the file, never the index, so a browsed or orphan unit
+      /// (VARINSP) answers. This is the "unit selected" half of Fill From-classes:
+      /// every path that PICKS a unit (Browse..., the From Unit drop-down, the button)
+      /// goes through here, so picking is what fills the tab.</summary>
+      /// <param name="AUnitName">A bare project unit name (resolved through the
+      /// engine) or a full path to a .pas/.dfm (its .pas sibling is read).</param>
+      /// <returns>'' on success; otherwise a status-line suffix saying WHY the tab is
+      /// empty (' Unit list unavailable: ...'). Never raises: the list is a
+      /// convenience and must not stop the caller.</returns>
+      function HarvestUnitFile(const AUnitName: string): string;
+      /// <summary>From Unit drop-down pick: harvest the chosen unit into the Unit Rules
+      /// tab at once, without waiting for Fill From-classes.</summary>
+      procedure CbUnitSelected(Sender: TObject);
       procedure RefreshUnitList;
       /// <summary><!-- drag-lint:auto sum -->---- Unit Rules tab ----</summary>
       /// <param name="ANode"><!-- drag-lint:auto type -->TRuleNode</param>
@@ -2270,6 +2284,11 @@ begin
   FCbUnit.Hint:= 'Pick a project unit -- or Browse... for one outside the project -- '
     + 'to add a From-only conversion per component class on its form (optional)';
   FCbUnit.ShowHint:= True; FCbUnit.OnDropDown:= CbLoadUnits;
+  // Picking a unit fills the Unit Rules tab (and the class list) right away; the
+  // button is only needed for the engine's component scan. Measured 2026-09-17:
+  // with only OnDropDown wired, Browse... + a pick left the tab empty and the
+  // operator read that as "6cfaa158 does not work".
+  FCbUnit.OnSelect:= CbUnitSelected;
   // Its "Fill From-classes" trigger is the toolbar button of that name.
 
   // A unit worth converting is often NOT a project member yet -- that is the
@@ -2871,8 +2890,8 @@ end; // procedure
 
 { Scan a unit file's text for top-level class/interface/record declarations and
   populate FFormTypeList with them. De-duplicates case-insensitively, applies
-  filters, and marks ruled vs. unruled classes. Called from DoLoadUnit to fill
-  the left panel when a unit is selected. }
+  filters, and marks ruled vs. unruled classes. Called from HarvestUnitFile to fill
+  the left panel whenever a unit is picked. }
 procedure TConvRulesForm.HarvestUnitClasses(const AUnitText: string);
 var
   Classes: TArray<string>;
@@ -2915,6 +2934,56 @@ end; // procedure
   scratch: SaveComplete drops it, so nothing is written until the user picks a To.
   Existing From classes are skipped (no duplicates). Best-effort: a non-form unit
   (no .dfm) adds nothing. }
+{ Read from the FILE, never from the index. A browsed unit is in no index by
+  definition, and so is any form its .dproj does not list -- which on this corpus
+  includes VARINSP, the form this work targets. The engine's `uses-report` answers
+  such a unit with zero rows and exit 0: an empty list that reads as "uses nothing"
+  rather than as "not indexed". Measured 2026-09-16.
+
+  A failure is NOTED in the result, not swallowed and not fatal: the unit list is a
+  convenience and must not stop the caller, but a silently empty tab is the thing
+  this whole feature exists to avoid. }
+function TConvRulesForm.HarvestUnitFile(const AUnitName: string): string;
+var
+  PasPath: string;
+  Txt    : string;
+begin
+  Result := '';
+  PasPath:= AUnitName;
+  if not TPath.IsPathRooted(PasPath) then
+    PasPath:= FEngine.ResolveUnitFile(AUnitName);
+  if SameText(ExtractFileExt(PasPath), '.dfm') then
+    PasPath:= ChangeFileExt(PasPath, '.pas');
+  if (PasPath = '') or not TFile.Exists(PasPath) then
+    Exit(Format(' Unit list unavailable: no .pas resolved for %s.', [AUnitName]));
+
+  Txt:= '';
+  try
+    Txt:= TFile.ReadAllText(PasPath);
+  except
+    on E: Exception do
+      Result:= Format(' Unit list unavailable: %s could not be read (%s).', [ExtractFileName(PasPath), E.Message]);
+  end;
+  if Txt <> '' then
+  begin
+    HarvestUsedUnits([Txt]);
+    HarvestUnitClasses(Txt);
+  end;
+end; // function
+
+procedure TConvRulesForm.CbUnitSelected(Sender: TObject);
+var
+  UnitName: string;
+  UsesNote: string;
+begin
+  UnitName:= Trim(FCbUnit.Text);
+  if UnitName = '' then
+    Exit;
+  UsesNote:= HarvestUnitFile(UnitName);
+  SetStatus(Format('From Unit: %s -- %d used unit(s) on the Unit Rules tab; ' + '"Fill From-classes" adds its form components.%s',
+    [ExtractFileName(UnitName), Length(FUnitCandidates), UsesNote]));
+end; // procedure
+
 procedure TConvRulesForm.DoLoadUnit(Sender: TObject);
 var
   UnitName: string        ;
@@ -2924,7 +2993,6 @@ var
   H       : Integer       ;
   added   : Integer       ;
   firstNew: Integer       ;
-  PasPath : string        ;
   UsesNote: string        ;
 begin
   UnitName:= Trim(FCbUnit.Text);
@@ -2934,41 +3002,11 @@ begin
     Exit;
   end;
 
-  { The Unit Rules tab is about the UNIT, not about a selected conversion, so fill it
-    on unit selection as well as on Examine.
-
-    Read from the FILE, never from the index. A browsed unit is in no index by
-    definition, and so is any form its .dproj does not list -- which on this corpus
-    includes VARINSP, the form this work targets. The engine's `uses-report` answers
-    such a unit with zero rows and exit 0: an empty list that reads as "uses nothing"
-    rather than as "not indexed". Measured 2026-09-16.
-
-    A failure is NOTED, not swallowed and not fatal: the unit list is a convenience and
-    must not stop Fill From-classes, but a silently empty tab is the thing this whole
-    feature exists to avoid. }
-  UsesNote:= '';
-  PasPath := UnitName;
-  if not TPath.IsPathRooted(PasPath) then
-    PasPath:= FEngine.ResolveUnitFile(UnitName);
-  if SameText(ExtractFileExt(PasPath), '.dfm') then
-    PasPath:= ChangeFileExt(PasPath, '.pas');
-  if (PasPath <> '') and TFile.Exists(PasPath) then
-  begin
-    var Txt: string:= '';
-    try
-      Txt:= TFile.ReadAllText(PasPath);
-    except
-      on E: Exception do
-        UsesNote:= Format(' Unit list unavailable: %s could not be read (%s).', [ExtractFileName(PasPath), E.Message]);
-    end;
-    if Txt <> '' then
-    begin
-      HarvestUsedUnits([Txt]);
-      HarvestUnitClasses(Txt);
-    end;
-  end
-  else
-    UsesNote:= Format(' Unit list unavailable: no .pas resolved for %s.', [UnitName]);
+  // The unit's own text (uses clauses -> Unit Rules tab, declared classes -> left
+  // list) is harvested by HarvestUnitFile, which every unit-picking path shares.
+  // Re-run here rather than trusted from the pick: the box is a free-text combo, so
+  // what it holds now may not be what was last picked.
+  UsesNote:= HarvestUnitFile(UnitName);
 
   Screen.Cursor:= crHourGlass;
   try
@@ -4133,7 +4171,11 @@ begin
   if Idx < 0 then
     Idx:= FCbUnit.Items.Add(Pick);
   FCbUnit.ItemIndex:= Idx;
-  SetStatus(Format('From Unit: %s (outside the project) -- use "Fill From-classes".', [ExtractFileName(Pick)]));
+  // Setting ItemIndex in code does not fire OnSelect (VCL only raises it for a user
+  // pick), so the harvest is called by hand: browsing IS picking a unit.
+  var UsesNote: string:= HarvestUnitFile(Pick);
+  SetStatus(Format('From Unit: %s (outside the project) -- %d used unit(s) on the Unit Rules tab; ' + '"Fill From-classes" adds its form components.%s',
+    [ExtractFileName(Pick), Length(FUnitCandidates), UsesNote]));
 end; // procedure
 
 procedure TConvRulesForm.DoOpenForm(Sender: TObject);

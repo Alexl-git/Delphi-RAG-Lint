@@ -785,6 +785,50 @@ begin
     Result:= Result + [R.UnitName];
 end; // function
 
+{ The identifier of a type declaration whose keyword starts just after AIdx:
+  walks back over blanks to the '=', over blanks again, over a balanced generic
+  parameter list ('TFoo<T: class> = class' -> the name is 'TFoo', as the DocInsight
+  on ScanClassesDeclared promises), and then over the identifier itself. '' when
+  the shape before the keyword is not 'Ident [<...>] ='. }
+function DeclaredNameBefore(const AText: string; AIdx: Integer): string;
+var
+  j    : Integer;
+  k    : Integer;
+  Depth: Integer;
+begin
+  Result:= '';
+  j:= AIdx;
+  while (j >= 1) and (AText[j] <= ' ') do
+    Dec(j);
+  if (j < 1) or (AText[j] <> '=') then
+    Exit;
+  Dec(j);
+  while (j >= 1) and (AText[j] <= ' ') do
+    Dec(j);
+  if (j >= 1) and (AText[j] = '>') then
+  begin
+    Depth:= 0;
+    repeat
+      if AText[j] = '>' then
+        Inc(Depth)
+      else if AText[j] = '<' then
+        Dec(Depth);
+      Dec(j);
+    until (j < 1) or (Depth = 0);
+    while (j >= 1) and (AText[j] <= ' ') do
+      Dec(j);
+  end;
+  if (j < 1) or not IsIdentCh(AText[j]) then
+    Exit;
+  { j is the identifier's last char; walk back to its first. }
+  k:= j;
+  while (k >= 1) and IsIdentCh(AText[k]) do
+    Dec(k);
+  Result:= Copy(AText, k + 1, j - k);
+  if (Result <> '') and not IsIdentStartCh(Result[1]) then
+    Result:= '';
+end; // function
+
 function ScanClassesDeclared(const APasText: string): TArray<string>;
 var
   NameSet: TNameSet;
@@ -794,6 +838,7 @@ var
   Tok    : string  ;
   PrevSig: Char    ; // last significant code character; guards X.ClassName
   Ident  : string  ;
+  TokStart: Integer; // first char of the identifier just read
 begin
   NameSet:= TNameSet.Create;
   try
@@ -809,6 +854,7 @@ begin
       end;
       if IsIdentStartCh(APasText[i]) then
       begin
+        TokStart:= i;
         j:= i;
         while (j <= N) and IsIdentCh(APasText[j]) do
           Inc(j);
@@ -821,30 +867,13 @@ begin
         if (PrevSig = '=') and (SameText(Tok, 'class') or SameText(Tok, 'interface')
           or SameText(Tok, 'record') or SameText(Tok, 'object')) then
         begin
-          { Backtrack: find the identifier before the '='. }
-          j:= i - 1;
-          while (j >= 1) and (APasText[j] <= ' ') do
-            Dec(j);
-          if (j >= 1) and (APasText[j] = '=') then
-          begin
-            Dec(j);
-            while (j >= 1) and (APasText[j] <= ' ') do
-              Dec(j);
-            if (j >= 1) and IsIdentCh(APasText[j]) then
-            begin
-              { j now points at the last char of the identifier. Backtrack to start. }
-              var k: Integer:= j;
-              while (k >= 1) and IsIdentCh(APasText[k]) do
-                Dec(k);
-              Ident:= Copy(APasText, k + 1, j - k);
-              { Strip generic parameters: 'TFoo<T>' -> 'TFoo' }
-              j:= Pos('<', Ident);
-              if j > 0 then
-                SetLength(Ident, j - 1);
-              if (Ident <> '') and IsIdentStartCh(Ident[1]) then
-                NameSet.Add(Ident);
-            end;
-          end;
+          { From TokStart, not from i: i already sits past the keyword, and
+            starting there put the backtrack on its last letter -- which is never
+            '=' -- so nothing was ever recorded (shipped that way in 6cfaa158;
+            pinned by classes.* in the model tests). }
+          Ident:= DeclaredNameBefore(APasText, TokStart - 1);
+          if Ident <> '' then
+            NameSet.Add(Ident);
           PrevSig:= 'x'; // after processing a keyword
           Continue;
         end;
