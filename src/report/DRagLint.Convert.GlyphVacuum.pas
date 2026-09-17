@@ -168,18 +168,145 @@ type
     Summary: TGlyphVacuumSummary;
   end;
 
+const
+  CountPropNames: array[0..3] of string = ('NumGlyphs', 'GlyphCount', 'NumStates', 'ImageCount');
+
+function IsCountPropName(const AName: string): Boolean;
+var S: string;
+begin
+  Result:= False;
+  for S in CountPropNames do
+    if SameText(S, AName) then Exit(True);
+end;
+
+// The first scalar sibling on the same object whose name is a known count
+// property. Empty when there is none -- the caller must not invent a value.
+procedure FindCountProp(const AObject: TDfmNode; out AName, AValue: string);
+var C: TDfmNode;
+begin
+  AName := '';
+  AValue:= '';
+  for C in AObject.Children do
+    if (C.Kind = dnkScalar) and IsCountPropName(C.Name) then
+    begin
+      AName := C.Name;
+      AValue:= Trim(C.ValueText);
+      Exit;
+    end;
+end;
+
+// count_effective/inferred_n/agree/kind, derived from what's already on the
+// row. count_default (the --db half) is Task 3's; here it is always ''.
+procedure FillDerived(var R: TGlyphRow; const AObjectClass: string; AInCollection: Boolean);
+var
+  Eff, Inf: Integer;
+begin
+  if R.CountValue <> '' then R.CountEffective:= R.CountValue
+  else R.CountEffective:= R.CountDefault;
+  if (R.Height > 0) and (R.Width mod R.Height = 0) then R.InferredN:= IntToStr(R.Width div R.Height)
+  else R.InferredN:= '';
+  Eff:= StrToIntDef(R.CountEffective, 0);
+  Inf:= StrToIntDef(R.InferredN, 0);
+  if (R.CountEffective <> '') and (R.InferredN <> '') then
+  begin
+    if Eff = Inf then R.Agree:= 'Y' else R.Agree:= 'N';
+  end
+  else
+    R.Agree:= '';
+  if AInCollection or (SameText(R.Prop, 'Bitmap') and ContainsText(AObjectClass, 'ImageList')) then
+    R.Kind:= 'container'
+  else if (Eff > 1) or (Inf > 1) then
+    R.Kind:= 'strip'
+  else
+    R.Kind:= 'single';
+end;
+
+// Builds and files one row for one decoded payload -- the binary-leaf path and
+// the collection-item path (HarvestCollection) both funnel through here so the
+// derived columns are computed exactly once, the same way, everywhere.
+procedure AddRow(const AObject: TDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, AProp: string;  // dl:ok too-many-parameters@1d66
+  const APayload: TBytes; AInCollection: Boolean; var AState: TVacuumState);
+var
+  G: TStreamedGraphic;
+  R: TGlyphRow;
+begin
+  G:= ParseStreamedGraphic(APayload);
+  R:= Default(TGlyphRow);
+  R.DfmPath       := ADfmPath;
+  R.PasUnit       := APasUnit;
+  R.Surface       := ASurface;
+  R.FormClass     := AFormClass;
+  R.ObjectPath    := AObjectPath;
+  R.ComponentName := AObject.Name;
+  R.ComponentClass:= AObject.ClassName_;
+  if SameText(AObject.Keyword, 'inherited') or SameText(AObject.Keyword, 'inline') then R.Inherited_:= 'Y';
+  R.Prop          := AProp;
+  R.Wrapper       := G.Wrapper;
+  R.Format        := G.Format;
+  R.Bytes         := Length(APayload);
+  R.Width         := G.Width;
+  R.Height        := G.Height;
+  R.Bpp           := G.BitCount;
+  R.PaletteEntries:= G.PaletteEntries;
+  FindCountProp(AObject, R.CountProp, R.CountValue);
+  FillDerived(R, AObject.ClassName_, AInCollection);
+  R.PayloadSha    := Sha256Hex(APayload);
+  R.ImageFile     := 'images\' + R.PayloadSha + ImageExt(G.Format);
+  SaveImage(AState.OutDir, APayload, G, R.ImageFile);
+  AState.Shas.AddOrSetValue(R.PayloadSha, True);
+  AState.Rows.Add(R);
+  Inc(AState.Summary.Graphics);
+end;
+
+// A collection value is verbatim `< item ... end item ... end>` text; the
+// re-emit parser does not descend into it. Every `<Name> = {hex}` inside becomes
+// one row named <CollectionProp>[i].<Name>, i counting `item` keywords from 0.
+procedure HarvestCollection(const AObject: TDfmNode; const ACollProp: TDfmNode;  // dl:ok too-many-parameters@b1c3
+  const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath: string; var AState: TVacuumState);
+var
+  Text   : string;
+  P, Q   : Integer;
+  ItemIx : Integer;
+  Name   : string;
+  Line   : string;
+  Payload: TBytes;
+begin
+  Text  := ACollProp.ValueText;
+  ItemIx:= -1;
+  P     := 1;
+  while P <= Length(Text) do
+  begin
+    Q:= P;
+    while (Q <= Length(Text)) and (Text[Q] <> #10) do Inc(Q);
+    Line:= Trim(Copy(Text, P, Q - P));
+    if SameText(Line, 'item') then Inc(ItemIx)
+    else if EndsText('= {', Line) or (Pos(' = {', Line) > 0) then
+    begin
+      Name:= Trim(Copy(Line, 1, Pos('=', Line) - 1));
+      // the hex runs from after the opening brace to the closing brace
+      P:= Q;
+      Q:= PosEx('}', Text, P);
+      if Q = 0 then Break;
+      Payload:= DecodeDfmHex(Copy(Text, P, Q - P));
+      if Length(Payload) > 0 then
+        AddRow(AObject, ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath,
+          Format('%s[%d].%s', [ACollProp.Name, ItemIx, Name]), Payload, True, AState);
+    end;
+    P:= Q + 1;
+  end;
+end;
+
 // Walks ANode's own children: recurses into nested dnkSubObject children
-// (their own name joins AObjectPath, dotted) and harvests every dnkBinary
-// (streamed graphic) child in place. AObjectPath is ANode's OWN dotted path
-// ('' for the form itself, which never appears in an emitted object_path).
+// (their own name joins AObjectPath, dotted), harvests every dnkBinary
+// (streamed graphic) child in place, and expands every dnkCollection child's
+// items. AObjectPath is ANode's OWN dotted path ('' for the form itself, which
+// never appears in an emitted object_path).
 procedure HarvestObject(const ANode: TDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath: string;
   var AState: TVacuumState);
 var
   Child    : TDfmNode;
   ChildPath: string;
   Payload  : TBytes;
-  G        : TStreamedGraphic;
-  R        : TGlyphRow;
 begin
   for Child in ANode.Children do
   begin
@@ -189,33 +316,15 @@ begin
       HarvestObject(Child, ADfmPath, APasUnit, ASurface, AFormClass, ChildPath, AState);
       Continue;
     end;
+    if Child.Kind = dnkCollection then
+    begin
+      HarvestCollection(ANode, Child, ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, AState);
+      Continue;
+    end;
     if Child.Kind <> dnkBinary then Continue;
     Payload:= DecodeDfmHex(Child.ValueText);
     if Length(Payload) = 0 then Continue;
-    G:= ParseStreamedGraphic(Payload);
-    R:= Default(TGlyphRow);
-    R.DfmPath       := ADfmPath;
-    R.PasUnit       := APasUnit;
-    R.Surface       := ASurface;
-    R.FormClass     := AFormClass;
-    R.ObjectPath    := AObjectPath;
-    R.ComponentName := ANode.Name;
-    R.ComponentClass:= ANode.ClassName_;
-    R.Prop          := Child.Name;
-    R.Kind          := 'single';
-    R.Wrapper       := G.Wrapper;
-    R.Format        := G.Format;
-    R.Bytes         := Length(Payload);
-    R.Width         := G.Width;
-    R.Height        := G.Height;
-    R.Bpp           := G.BitCount;
-    R.PaletteEntries:= G.PaletteEntries;
-    R.PayloadSha    := Sha256Hex(Payload);
-    R.ImageFile     := 'images\' + R.PayloadSha + ImageExt(G.Format);
-    SaveImage(AState.OutDir, Payload, G, R.ImageFile);
-    AState.Shas.AddOrSetValue(R.PayloadSha, True);
-    AState.Rows.Add(R);
-    Inc(AState.Summary.Graphics);
+    AddRow(ANode, ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, Child.Name, Payload, False, AState);
   end;
 end;
 

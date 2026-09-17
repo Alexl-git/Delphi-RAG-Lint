@@ -86,12 +86,41 @@ object FrmA: TFrmA
 end
 "@
 
+# ---- fixture 2: count disagreement, inherited object, container, icon ----------
+$strip2 = New-StripBmp 64 32 2                      # really 2 glyphs
+$pay2   = New-PicturePayload 'TBitmap' $strip2
+$ico    = [byte[]](0x00,0x00,0x01,0x00,0x01,0x00,0x10,0x10,0x00,0x00,0x01,0x00,0x20,0x00,0x68,0x04,0x00,0x00,0x16,0x00,0x00,0x00) + (New-Object byte[] 1128)
+$payIco = New-PicturePayload 'TIcon' $ico
+$blob   = New-Object byte[] 40; for($i=0;$i -lt 40;$i++){ $blob[$i]=[byte]($i*3) }   # not a picture: an image-list blob
+Write-Ascii (Join-Path $src 'FrmB.dfm') @"
+inherited FrmB: TFrmB
+  Caption = 'B'
+  inherited Btn2: TabcToggleBtn
+    NumGlyphs = 3
+    Picture.Data = $(ConvertTo-DfmHex $pay2)
+  end
+  object BtnIco: TSpeedButton
+    Glyph.Data = $(ConvertTo-DfmHex $payIco)
+  end
+  object ImageList1: TImageList
+    Bitmap = $(ConvertTo-DfmHex $blob)
+  end
+  object cxImageList1: TcxImageList
+    FormatVersion = 1
+    ImageInfo = <
+      item
+        Image.Data = $(ConvertTo-DfmHex $pay4)
+      end>
+  end
+end
+"@
+
 # ---- run ------------------------------------------------------------------------
 $o = & $Exe glyph-vacuum --root $src --out $out 2>&1 | Out-String
 $code = $LASTEXITCODE
 Write-Host "--- raw stdout ---"; Write-Host $o
 Check 'T1 exit 0 on a completed walk' ($code -eq 0) "exit=$code"
-Check 'T1 summary line names the counts' ($o -match 'glyph-vacuum: dfm=1 graphics=1 distinct=1 skipped=0') $o
+Check 'T1 summary line names the counts' ($o -match 'glyph-vacuum: dfm=2 graphics=5 distinct=4 skipped=0') $o
 
 $inst = Join-Path $out 'instances.tsv'
 Check 'T1 instances.tsv written' (Test-Path $inst)
@@ -99,8 +128,7 @@ if (Test-Path $inst) {
   $raw = Get-Content $inst
   Write-Host "--- raw instances.tsv ---"; $raw | ForEach-Object { Write-Host $_ }
   $rows = @(Import-Csv $inst -Delimiter "`t")
-  Check 'T1 one row' ($rows.Count -eq 1) "rows=$($rows.Count)"
-  $r = $rows[0]
+  $r = $rows | Where-Object { $_.object_path -eq 'Panel1.Btn1' }
   Check 'T1 dfm_path is the fixture' ($r.dfm_path -eq (Join-Path $src 'FrmA.dfm')) $r.dfm_path
   Check 'T1 pas_unit is the sibling'  ($r.pas_unit -eq 'FrmA.pas') $r.pas_unit
   Check 'T1 surface=dfm'              ($r.surface -eq 'dfm')
@@ -125,7 +153,47 @@ if (Test-Path $inst) {
     $ib = [IO.File]::ReadAllBytes($img)
     Check 'T1 image file is the BARE image (BM first), not the wrapped payload' ($ib.Length -eq $strip4.Length -and $ib[0] -eq 0x42 -and $ib[1] -eq 0x4D) "len=$($ib.Length)"
   }
+  $b2  = $rows | Where-Object { $_.object_path -eq 'Btn2' }
+  $ico = $rows | Where-Object { $_.object_path -eq 'BtnIco' }
+  $il  = $rows | Where-Object { $_.object_path -eq 'ImageList1' }
+  $cx  = $rows | Where-Object { $_.object_path -eq 'cxImageList1' }
+  $a1  = $rows | Where-Object { $_.object_path -eq 'Panel1.Btn1' }
+  Check 'T2 five rows' ($rows.Count -eq 5) "rows=$($rows.Count)"
+  Check 'T2 Btn1 count_prop NumGlyphs'     ($a1.count_prop -eq 'NumGlyphs') $a1.count_prop
+  Check 'T2 Btn1 count_value 4'           ($a1.count_value -eq '4') $a1.count_value
+  Check 'T2 Btn1 count_effective 4 (no db: from the value)' ($a1.count_effective -eq '4') $a1.count_effective
+  Check 'T2 Btn1 inferred_n 4 (128/32)'   ($a1.inferred_n -eq '4') $a1.inferred_n
+  Check 'T2 Btn1 agree Y'                 ($a1.agree -eq 'Y') $a1.agree
+  Check 'T2 Btn1 kind strip'              ($a1.kind -eq 'strip') $a1.kind
+  Check 'T2 Btn1 inherited empty'         ($a1.inherited -eq '') $a1.inherited
+  Check 'T2 Btn2 inherited Y'             ($b2.inherited -eq 'Y') $b2.inherited
+  Check 'T2 Btn2 form_class TFrmB'        ($b2.form_class -eq 'TFrmB') $b2.form_class
+  Check 'T2 Btn2 count_value 3 vs inferred 2 -> agree N' ($b2.count_value -eq '3' -and $b2.inferred_n -eq '2' -and $b2.agree -eq 'N') "$($b2.count_value)/$($b2.inferred_n)/$($b2.agree)"
+  Check 'T2 icon wrapper TIcon format ico' ($ico.wrapper -eq 'TIcon' -and $ico.format -eq 'ico') "$($ico.wrapper)/$($ico.format)"
+  Check 'T2 icon has no count -> count_prop, agree, inferred_n empty' ($ico.count_prop -eq '' -and $ico.agree -eq '' -and $ico.inferred_n -eq '') "$($ico.count_prop)/$($ico.agree)/$($ico.inferred_n)"
+  Check 'T2 icon kind single'             ($ico.kind -eq 'single') $ico.kind
+  Check 'T2 icon width/height 0 (not a BMP)' ($ico.width -eq '0' -and $ico.height -eq '0') "$($ico.width)x$($ico.height)"
+  Check 'T2 TImageList.Bitmap kind container, wrapper empty' ($il.kind -eq 'container' -and $il.wrapper -eq '') "$($il.kind)/$($il.wrapper)"
+  Check 'T2 TImageList image_file uses .bin' ($il.image_file -like 'images\*.bin') $il.image_file
+  Check 'T2 cxImageList item row property ImageInfo[0].Image.Data' ($cx.property -eq 'ImageInfo[0].Image.Data') $cx.property
+  Check 'T2 cxImageList item kind container, format bmp' ($cx.kind -eq 'container' -and $cx.format -eq 'bmp') "$($cx.kind)/$($cx.format)"
+  Check 'T2 cxImageList item shares Btn1 sha' ($cx.payload_sha -eq $a1.payload_sha)
 }
+
+# ---- positive control: count column stays empty with no count property ----------
+$src3 = Join-Path $WorkDir 'src3'; New-Item -ItemType Directory $src3 -Force | Out-Null
+Write-Ascii (Join-Path $src3 'FrmC.dfm') @"
+object FrmC: TFrmC
+  object Btn3: TabcToggleBtn
+    Picture.Data = $(ConvertTo-DfmHex $pay4)
+  end
+end
+"@
+$o5 = & $Exe glyph-vacuum --root $src3 --out (Join-Path $WorkDir 'out3') 2>&1 | Out-String
+$r3 = (Import-Csv (Join-Path $WorkDir 'out3\instances.tsv') -Delimiter "`t")[0]
+Write-Host "--- raw positive-control row ---"; Get-Content (Join-Path $WorkDir 'out3\instances.tsv') | ForEach-Object { Write-Host $_ }
+Check 'T2 positive control: no count property -> count_value, count_effective, agree EMPTY; inferred_n still 4' ($r3.count_prop -eq '' -and $r3.count_value -eq '' -and $r3.count_effective -eq '' -and $r3.agree -eq '' -and $r3.inferred_n -eq '4') "$($r3.count_prop)/$($r3.count_value)/$($r3.count_effective)/$($r3.agree)/$($r3.inferred_n)"
+Check 'T2 positive control: kind strip from inferred_n alone' ($r3.kind -eq 'strip') $r3.kind
 
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null

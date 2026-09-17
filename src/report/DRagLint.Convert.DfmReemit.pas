@@ -65,6 +65,7 @@ type
     Kind      : TDfmNodeKind;
     ValueText : string;
     ClassName_: string;
+    Keyword   : string; { 'object' | 'inherited' | 'inline' -- the object line's first token; '' for a property }  // dl:ok public-field@0660
     /// <summary><!-- drag-lint:auto sum -->TDfmNode</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -420,6 +421,18 @@ begin
     AKind:= dnkScalar;
 end;
 
+// The object line's leading keyword. tree-sitter-dfm does not expose it as a
+// field, so it is the first token of the node's own text.
+function ObjectKeyword(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  T: string;
+  P: Integer;
+begin
+  T:= NodeText(ANode, ASource);
+  P:= Pos(' ', T);
+  if P > 0 then Result:= LowerCase(Copy(T, 1, P - 1)) else Result:= '';
+end;
+
 // Walks the named children of a tree-sitter object/source node, appending a
 // TDfmNode (owned by AParent) per nested `object` (recursed) or `property`.
 procedure WalkNodeInto(const ATsNode: TTSNode; const ASource: TBytes;
@@ -442,6 +455,7 @@ begin
     begin
       Sub:= TDfmNode.Create;
       Sub.Kind:= dnkSubObject;
+      Sub.Keyword:= ObjectKeyword(Child, ASource);
       NameNode := Child.ChildByField('name');
       ClassNode:= Child.ChildByField('class');
       if not NameNode.IsNull then Sub.Name:= NodeText(NameNode, ASource);
@@ -507,6 +521,7 @@ begin
     if not Found then Exit;
     ARoot:= TDfmNode.Create;
     ARoot.Kind:= dnkSubObject;
+    ARoot.Keyword:= ObjectKeyword(ObjNode, Src);
     NameNode := ObjNode.ChildByField('name');
     ClassNode:= ObjNode.ChildByField('class');
     if not NameNode.IsNull then ARoot.Name:= NodeText(NameNode, Src);
