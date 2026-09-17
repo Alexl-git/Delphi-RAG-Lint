@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased (after v1.13.0-alpha)
+## v1.14.0-alpha -- 2026-09-17
 
 ### `Catches:` -- the exceptions a routine HANDLES (INBOX-report-exceptions-raised-and-handled, gap 3)
 
