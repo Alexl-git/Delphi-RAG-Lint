@@ -7751,7 +7751,7 @@ begin
   FQGetSymbolFacts.ParamByName('sid').AsLargeInt:= ASymbolId;
   FQGetSymbolFacts.Open;
   try
-    if FQGetSymbolFacts.IsEmpty then Exit; // Present stays False (FillChar zeroed it)
+    if FQGetSymbolFacts.IsEmpty then Exit; // Present stays False (Default() above zeroed it)
     Result.ReadsFields := FQGetSymbolFacts.FieldByName('reads_fields' ).AsString;
     Result.WritesFields:= FQGetSymbolFacts.FieldByName('writes_fields').AsString;
     Result.ReturnsOwner:= FQGetSymbolFacts.FieldByName('returns_owner').AsString;

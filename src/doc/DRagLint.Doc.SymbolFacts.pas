@@ -562,8 +562,12 @@ begin
   Result:= (T = 'inc') or (T = 'dec');
 end;
 
-// Case-insensitive membership over a small list (the per-routine unresolved
-// set stays in the tens; a dictionary would cost more than it saves).
+// Case-insensitive membership by linear scan. The per-routine unresolved list
+// holds EVERY distinct bare identifier the walk could not classify (locals,
+// params, globals, unit-scoped names ...), so on a long routine it runs to the
+// hundreds and this is O(n) per probe. Kept as a list on purpose: the held
+// names must keep BODY ORDER for the facts-inherited post-pass (spec F3 -- the
+// merge walks them in held order), which a dictionary would not preserve.
 function ContainsTextCI(AList: TList<string>; const AText: string): Boolean;
 var s: string;
 begin
@@ -742,7 +746,8 @@ end;
 // FStore.UpsertSymbol call -- the facts loop, which calls Analyze, used to
 // re-read the SAME untranslated ParseRes.Symbols[I] afterwards). This
 // function used to work around that by re-resolving the routine's ALREADY-
-// INSERTED row via AStore.FindFileIdByPath(AFilePath) + AStore.
+// INSERTED row via AStore.FindFileIdByPath(<the source path, then a parameter
+// of this routine; dropped in the v23 sweep once nothing read it>) + AStore.
 // FindEnclosingRoutineByImpl(FileId, ASym.ImplStartLine) -- three SQL
 // round-trips per routine, always-on, corpus-wide. The indexer's facts loop
 // now resolves identity BEFORE calling Analyze instead (Id := the
@@ -765,8 +770,8 @@ end;
 // list (F4). AOwnReads/AOwnWrites are the UNCAPPED own lists behind the two
 // capped CSVs. A free routine (ASym.ParentId <= 0) yields '' for both CSVs
 // and empty arrays -- the renderer then omits the whole Reads/Writes line.
-procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;
-  const ASym: TSymbol; const AFilePath: string; const AStore: ISymbolStore;  // dl:ok unused-parameter@0544 -- pre-existing since the ADP2 T4 fix wave (see the body comment: kept so the call shape did not change); the line only moved in v23
+procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-parameters@036e -- pre-existing (12 before the v23 sweep dropped AFilePath, 11 now): the two own + two held out-arrays are the F1 contract with ApplyInheritedFieldFacts; grouping them into a record is a separate refactor
+  const ASym: TSymbol; const AStore: ISymbolStore;
   out AReadsCsv, AWritesCsv: string;
   out AOwnReads, AOwnWrites, AHeldReads, AHeldWrites: TArray<string>);
 var
@@ -789,8 +794,6 @@ begin
   // indexer's facts loop) before Analyze is called -- see this function's
   // header comment above -- so ASym.ParentId is read directly here, no
   // FindFileIdByPath/FindEnclosingRoutineByImpl re-resolution needed.
-  // AFilePath is now unused by this function; left in the signature
-  // unchanged (mechanical plumbing fix, not a signature change).
   if ASym.ParentId <= 0 then Exit; // free routine (no owning class) -- nothing to classify
 
   Fields     := TDictionary<string, string>.Create;
@@ -2789,7 +2792,7 @@ begin
         // AST scan. See AnalyzeReadsWrites' header comment (above, this
         // unit's implementation section) for the field-set + classification
         // rules.
-        AnalyzeReadsWrites(Proc, Body, PF.Src, ASym, AFilePath, AStore, Result.ReadsFields, Result.WritesFields,
+        AnalyzeReadsWrites(Proc, Body, PF.Src, ASym, AStore, Result.ReadsFields, Result.WritesFields,
           Result.OwnReads, Result.OwnWrites, Result.HeldReads, Result.HeldWrites);
         // v(ADP3 T11): var/out parameter writes -- same matched Proc/Body, no
         // 2nd AST scan. Complements the line above: that one resolves against

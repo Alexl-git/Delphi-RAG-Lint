@@ -1812,18 +1812,33 @@ begin
         end;
         Move(SavedOut, TTextRec(Output), SizeOf(TTextRec));
       end;
+
+      { The link passes an ordinary scan runs, MINUS ResolveCallTargets. Hover
+        needs declarations, uses and ancestry; call edges it does not, and
+        ResolveCallTargets is the one pass that would reach across into the
+        library index -- unbounded work on the hover path. One file, so these
+        four are microseconds.
+
+        The fourth, ApplyInheritedFieldFacts (v23, spec F2), is why Idx is
+        still alive here: it consumes the held-identifier list the parse left
+        on THIS indexer instance, so it must run on the same Idx, AFTER
+        ResolveAncestry (it reads the ancestry that pass just wrote) and
+        BEFORE Idx.Free. Without it a hover on a method of a file no store
+        owns showed 'Writes: FOwn' and dropped a field the method assigns
+        on its base class -- the one fact an ephemeral store CAN know, when
+        the base is declared in the same unit. A base in another unit is out
+        of reach here by construction (one-file store, F6: absence, never a
+        guess). It writes nothing to stdout itself (the CLI's Stage wrapper
+        prints the 'facts-inherited' line, not the method), so it runs
+        outside the redirect; NC2 in run_lsp_hover_unindexed_file.ps1 reads
+        the raw stdout of this very reply and would catch a print. }
+      S.ResolveUnitUseTargets;
+      S.ResolveAncestry;
+      S.ResolveHelpers;
+      Idx.ApplyInheritedFieldFacts;
     finally
       Idx.Free;
     end;
-
-    { The link passes an ordinary scan runs, MINUS ResolveCallTargets. Hover
-      needs declarations, uses and ancestry; call edges it does not, and
-      ResolveCallTargets is the one pass that would reach across into the
-      library index -- unbounded work on the hover path. One file, so these
-      three are microseconds. }
-    S.ResolveUnitUseTargets;
-    S.ResolveAncestry;
-    S.ResolveHelpers;
 
     { EXISTENCE IS NOT SUFFICIENCY. A store that opened cleanly and holds
       nothing answers 'not mine' for everything and would push the real answer

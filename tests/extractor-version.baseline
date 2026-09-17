@@ -714,4 +714,11 @@
 #   field/type rungs. Both are DERIVED-edge changes (call_edges), not parses;
 #   the overnight rebuild that this pin precedes covers them. Superseded line:
 #   1.17.0-alpha|bf0e9d92d499259c05ffe202a6f56c58f9ae3cce194d083088c6bb4045e03409
-1.17.0-alpha|05731a9e1414bf02d55148d754d9a510d56c64ac0dfc2745a2fd0aae7f4c0898
+# 2026-09-17: hash re-pinned WITHIN 1.17.0-alpha (post-batch sweep, track B):
+#   comment-only edits in src\parser\DRagLint.Parser.Delphi13.pas -- the
+#   NESTED ROUTINES block no longer claims a nested routine emits no symbol
+#   (false since Phase C), and WalkBodyForInlineDecls says why a lambda's
+#   locals parent to the enclosing named routine. Same version, no index
+#   parsed differently. Superseded line:
+#   1.17.0-alpha|05731a9e1414bf02d55148d754d9a510d56c64ac0dfc2745a2fd0aae7f4c0898
+1.17.0-alpha|d64cb0f9464ef372ae5a39fd28665a9eda62922adcb5e61f32db02f2f562c66e

@@ -221,6 +221,11 @@ try {
   Check 'G8 text table shows TPair<K, V>' ($txt -match 'TPair<K, V>')
   $anc = (& $exePath query ancestors --name TWithArgs --db $db 2>$null) -join "`n"
   Check 'G8 ancestors climbs TWithArgs -> TObjectList<T: class> -> TList<T>' (($anc -match 'TObjectList<T: class>') -and ($anc -match 'TList<T>')) "out=$anc"
+  # B2 (v23 sweep): the JSON row carries the edge's type args as WRITTEN. The
+  # first hop of TWithArgs is `TObjectList<TPlain>`, so type_args = 'TPlain'.
+  $ancJ = (& $exePath query ancestors --name TWithArgs --db $db --json 2>$null) -join "`n"
+  $ancRows = @(); try { $ancRows = @(($ancJ | ConvertFrom-Json).ancestors) } catch { }
+  Check 'B2 ancestors --json first hop carries type_args = TPlain' (($ancRows.Count -ge 1) -and ($ancRows[0].type_args -eq 'TPlain')) "row0=$($ancRows[0] | ConvertTo-Json -Compress)"
 
   # --- G4 arity counts PARAMETERS, not constraint commas (final review #1) ----
   # 'T: class, constructor' is ONE parameter; 'S: IUnknown; I: IUnknown' is TWO.

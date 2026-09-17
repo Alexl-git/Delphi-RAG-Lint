@@ -411,5 +411,79 @@ $cPcL = @(); if ($null -ne $cPc) { $cPcL = @(@($cPc.items) | ForEach-Object { [s
 Check 'PC: completion in an INDEXED file is unaffected' `
   ($cPcL -contains 'ProjectOwnMethod') "got $($cPcL.Count) item(s): $($cPcL -join ', ')"
 
+# ===========================================================================
+# INHERITED FIELD FACTS in the ephemeral store -- v23 batch sweep (B1).
+#
+# The facts-inherited post-pass (TIndexer.ApplyInheritedFieldFacts, spec F2)
+# consumes a held list that lives on the TIndexer INSTANCE that parsed the
+# file and must run AFTER ResolveAncestry. BuildEphemeralStore freed the
+# indexer before the resolve passes, so the pass never ran on this path and a
+# hover in a loose file showed 'Writes: FOwn' for a method that also assigns
+# a field declared on its base class IN THE SAME UNIT.
+#
+# RED against the build before the change, measured on this fixture:
+#   hover on TLooseChild.WriteInherited -> 'Writes: FOwn' (FBaseField absent)
+# with every check above already green.
+#
+# Own fixture in its OWN folder: CASE 3 asserts that `loose` holds exactly one
+# file, and the existing probes locate their lines by content in LooseUnit.pas
+# -- both stay byte-identical by not touching that file. The method carries a
+# doc comment on purpose: ComputeHover threads the Reads/Writes fact lines
+# only into the Doc.HasContent branch, so an undocumented method would render
+# the bare signature list and this probe would measure nothing.
+# ===========================================================================
+
+Write-Host ''
+Write-Host 'INHERITED FIELD in the UNINDEXED file (facts-inherited post-pass)' -ForegroundColor Cyan
+New-Item -ItemType Directory "$WorkDir\loose2" | Out-Null
+$inhText = @'
+unit LooseInherit;
+
+interface
+
+type
+  TLooseBase = class
+  protected
+    FBaseField: Integer;
+  end;
+
+  TLooseChild = class(TLooseBase)
+  private
+    FOwn: Integer;
+  public
+    /// <summary>Assigns the own field and the inherited one.</summary>
+    procedure WriteInherited;
+  end;
+
+implementation
+
+procedure TLooseChild.WriteInherited;
+begin
+  FOwn := 1;
+  FBaseField := 2;
+end;
+
+end.
+'@
+$inhFile = Join-Path $WorkDir 'loose2\LooseInherit.pas'
+WriteAnsi $inhFile $inhText
+$inhLines = $inhText -split "`r?`n"
+$inhLine  = [Array]::FindIndex($inhLines, [Predicate[string]]{ param($x) $x -like '*procedure TLooseChild.WriteInherited;*' })
+$inhCol   = $inhLines[$inhLine].IndexOf('.WriteInherited') + 3
+Check 'located the inherited-write probe position' ($inhLine -ge 0) "decl=$inhLine"
+
+$inh = Invoke-Hover $inhFile $inhLine $inhCol
+Check 'hover names the loose method itself' ($inh -match 'LooseInherit\.TLooseChild\.WriteInherited') "got: [$inh]"
+Check 'PC: Writes names the OWN field FOwn' ($inh -match 'Writes:[^\r\n]*\bFOwn\b') "got: [$inh]"
+Check 'Writes names the SAME-UNIT inherited field FBaseField (facts-inherited ran on the ephemeral store)' `
+  ($inh -match 'Writes:[^\r\n]*\bFBaseField\b') "got: [$inh]"
+Check 'order: own field first, inherited after (spec F3)' ($inh -match 'Writes: FOwn, FBaseField') "got: [$inh]"
+Check 'NC2: no indexer/post-pass line on the protocol channel (facts-inherited path)' `
+  (($script:LastRaw -notmatch '->\s+\d+\s+symbols') -and ($script:LastRaw -notmatch 'facts-inherited')) `
+  'the fourth pass runs outside the stdout redirect; it must stay silent'
+$strays2 = @(Get-ChildItem "$WorkDir\loose2" -File | Where-Object { $_.Name -ne 'LooseInherit.pas' })
+Check 'no ephemeral database dropped beside the second loose source' `
+  ($strays2.Count -eq 0) "found: $($strays2.Name -join ',')"
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

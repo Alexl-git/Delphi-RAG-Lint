@@ -2014,6 +2014,10 @@ procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkStat
   // nested defProc -- it emits its own locals when the walk reaches it, and
   // descending here would parent its inline vars to the OUTER routine (the
   // leak N3 pins). Depth-capped like every other recursive walk in this unit.
+  // An anonymous method is a `lambda` node, NOT a defProc, so the walk does
+  // descend into it and its inline/classic locals are parented to the
+  // enclosing NAMED routine -- within spec N2 (a lambda has no symbol of its
+  // own to parent them to), not a leak.
   procedure WalkBodyForInlineDecls(const ANode: TTSNode; ADepth: Integer);
   var
     i: Integer;
@@ -2547,10 +2551,13 @@ begin
       local functions -- an idiomatic Delphi pattern, and commonest in exactly
       the large routines people most want a call graph for.
 
-      Walked at RoutineDepth > 0, so the nested routine still does not emit a
-      SYMBOL of its own (its decl is not a unit-level API, and EmitRoutineLocals
-      keeps its locals from leaking into the parent) -- only its references are
-      collected, which is what the reference-derived rules were missing. }
+      Walked at RoutineDepth > 0. Originally that depth only collected the
+      nested routine's REFERENCES (what the reference-derived rules were
+      missing); since Phase C a nested routine IS a symbol of its own,
+      qualified by its enclosing routine (Unit.Outer.Nested -- see the Walk
+      call below), and its locals are emitted by EmitRoutineLocals from the
+      nested arm, parented to the nested symbol so they never leak into the
+      enclosing routine. }
     for i:= 0 to ANode.NamedChildCount - 1 do
       if ANode.NamedChild(i).NodeType = 'defProc' then
       begin

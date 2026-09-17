@@ -7016,6 +7016,11 @@ begin
             { ADDITIVE: '' on every ordinary edge; the TARGET class name when
               this row is a late-resolved TYPE ALIAS. `--of` matches both. }
             AO.AddPair('resolved_name', A.ResolvedName);
+            { ADDITIVE (v23 sweep): the instantiation's arguments as WRITTEN on
+              the edge (TObjectList<TPlain> -> 'TPlain'); '' on a plain edge.
+              The text branch below already folds this into an unresolved
+              row's display; JSON consumers had no way to see it. }
+            AO.AddPair('type_args', A.TypeArgs);
             Arr.AddElement(AO);
           end;
           JO.AddPair('ancestors', Arr);
