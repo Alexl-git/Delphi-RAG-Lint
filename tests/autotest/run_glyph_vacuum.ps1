@@ -195,6 +195,75 @@ Write-Host "--- raw positive-control row ---"; Get-Content (Join-Path $WorkDir '
 Check 'T2 positive control: no count property -> count_value, count_effective, agree EMPTY; inferred_n still 4' ($r3.count_prop -eq '' -and $r3.count_value -eq '' -and $r3.count_effective -eq '' -and $r3.agree -eq '' -and $r3.inferred_n -eq '4') "$($r3.count_prop)/$($r3.count_value)/$($r3.count_effective)/$($r3.agree)/$($r3.inferred_n)"
 Check 'T2 positive control: kind strip from inferred_n alone' ($r3.kind -eq 'strip') $r3.kind
 
+# ---- fixture 4: an index that DECLARES the class, for the qualification columns --
+$lib = Join-Path $WorkDir 'lib'; New-Item -ItemType Directory $lib -Force | Out-Null
+Write-Ascii (Join-Path $lib 'Abcbtn.pas') @'
+unit Abcbtn;
+
+interface
+
+uses
+  Classes, Graphics;
+
+type
+  TabcNumGlyphs = 1..5;
+
+  TabcCustomPicSpeedBtn = class(TGraphicControl)
+  private
+    FPicture: TPicture;
+    FNumGlyphs: TabcNumGlyphs;
+  published
+    property Picture: TPicture read FPicture write FPicture;
+    property NumGlyphs: TabcNumGlyphs read FNumGlyphs write FNumGlyphs default 1;
+  end;
+
+  TabcToggleBtn = class(TabcCustomPicSpeedBtn)
+  end;
+
+implementation
+
+end.
+'@
+Write-Ascii (Join-Path $lib 'UsesBtn.pas') @'
+unit UsesBtn;
+
+interface
+
+uses
+  Abcbtn;
+
+procedure Touch(B: TabcToggleBtn);
+
+implementation
+
+procedure Touch(B: TabcToggleBtn);
+begin
+  B.Picture.Assign(nil);
+  B.Picture := nil;
+end;
+
+end.
+'@
+$libDb = Join-Path $WorkDir 'lib.sqlite'
+& $Exe index $lib --db $libDb | Out-Null
+
+$outDb = Join-Path $WorkDir 'out-db'
+$o6 = & $Exe glyph-vacuum --root $src --out $outDb --db $libDb 2>&1 | Out-String
+Write-Host "--- raw stdout (db run) ---"; Write-Host $o6
+Check 'T3 db run exit 0' ($LASTEXITCODE -eq 0) $o6
+$rowsDb = Import-Csv (Join-Path $outDb 'instances.tsv') -Delimiter "`t"
+Write-Host "--- raw instances.tsv (db run) ---"; Get-Content (Join-Path $outDb 'instances.tsv') | ForEach-Object { Write-Host $_ }
+$a1d = $rowsDb | Where-Object { $_.object_path -eq 'Panel1.Btn1' }
+$icd = $rowsDb | Where-Object { $_.object_path -eq 'BtnIco' }
+Check 'T3 class_unit Abcbtn for TabcToggleBtn' ($a1d.class_unit -eq 'Abcbtn') $a1d.class_unit
+Check 'T3 count_default 1 (declared on the ancestor)' ($a1d.count_default -eq '1') $a1d.count_default
+Check 'T3 count_effective stays 4 when the value is present' ($a1d.count_effective -eq '4') $a1d.count_effective
+Check 'T3 TSpeedButton not in this index -> class_unit empty, count_default empty' ($icd.class_unit -eq '' -and $icd.count_default -eq '') "$($icd.class_unit)/$($icd.count_default)"
+# the default half of count_effective: same class, no value streamed
+$o7 = & $Exe glyph-vacuum --root $src3 --out (Join-Path $WorkDir 'out3-db') --db $libDb 2>&1 | Out-String
+$r3d = (Import-Csv (Join-Path $WorkDir 'out3-db\instances.tsv') -Delimiter "`t")[0]
+Check 'T3 no value + declared default 1 -> count_effective 1, inferred 4, agree N, kind strip' ($r3d.count_value -eq '' -and $r3d.count_default -eq '1' -and $r3d.count_effective -eq '1' -and $r3d.agree -eq 'N' -and $r3d.kind -eq 'strip') "$($r3d.count_value)/$($r3d.count_default)/$($r3d.count_effective)/$($r3d.agree)/$($r3d.kind)"
+
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null
 $o2 = & $Exe glyph-vacuum --root $empty --out (Join-Path $WorkDir 'out-empty') 2>&1 | Out-String

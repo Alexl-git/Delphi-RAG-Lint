@@ -361,6 +361,17 @@ function ReemitComponent(const AFromBlock: string; const ARules: TConversionRule
   const AFromTree, AToTree: TPropTree;
   const ACastLib: TCastLib): TReemitResult;
 
+/// <summary>The declared `default` value of the leaf named <paramref name="AName"/>
+/// in a property tree.</summary>
+/// <param name="ATree">A BuildPropTree result.</param>
+/// <param name="AName">The dotted leaf path, compared case-insensitively.</param>
+/// <param name="AValue">Receives the default's text; '' when the result is False.</param>
+/// <returns>False when the declaration has no usable default (`nodefault`, a bare
+/// `default;`, or no clause) -- such a property is always streamed, so its absence
+/// is genuinely unknown and the caller must not invent a value.</returns>
+function LeafDefaultOf(const ATree: TPropTree; const AName: string;
+  out AValue: string): Boolean;
+
 implementation
 
 uses
@@ -776,19 +787,6 @@ begin
     if SameText(N.Path, AName) then Exit(N.IsClassTyped);
 end;
 
-// The value a property sits at when the .dfm does NOT stream it, or False when
-// there is no such value.
-//
-// A .dfm is SPARSE: Delphi omits a published property whose value equals the
-// `default` declared on it. So an absent property is an UNREAD value, not a
-// missing one, and this is where the reader gets it -- DfmReemit is pure and
-// cannot read a declaration line, so BuildPropTree resolved it at query time
-// (TPropNode.HasDefault/DefaultValue).
-//
-// False means the declaration has NO usable default -- `nodefault`, a bare
-// `default;` (the default-ARRAY-PROPERTY directive, which carries no value), or
-// no clause at all. Such a property is ALWAYS streamed, so its absence is
-// genuinely unknown and the caller must not invent a value for it.
 function LeafDefaultOf(const ATree: TPropTree; const AName: string;
   out AValue: string): Boolean;
 var N: TPropNode;

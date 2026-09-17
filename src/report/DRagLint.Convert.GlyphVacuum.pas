@@ -85,8 +85,10 @@ uses
   System.IOUtils,
   System.Hash,
   System.StrUtils,
+  DRagLint.Core.Model,
   DRagLint.Convert.DfmReemit,
-  DRagLint.Convert.GlyphStrip;
+  DRagLint.Convert.GlyphStrip,
+  DRagLint.Convert.PropTree;
 
 const
   InstancesHeader =
@@ -160,12 +162,24 @@ begin
 end;
 
 type
+  // Per-class qualification, resolved through the stores at most once per run.
+  TClassFacts = record
+    Resolved   : Boolean;   // a store declared the class
+    QName      : string;    // Unit.TClass
+    UnitName   : string;
+    Tree       : TPropTree;
+    RuntimeRefs: Integer;   // -1 = no store
+  end;
+
   TVacuumState = record
-    Rows   : TList<TGlyphRow>;
-    Shas   : TDictionary<string, Boolean>;
-    OutDir : string;
-    ImgDir : string;
-    Summary: TGlyphVacuumSummary;
+    Rows       : TList<TGlyphRow>;
+    Shas       : TDictionary<string, Boolean>;
+    OutDir     : string;
+    ImgDir     : string;
+    Summary    : TGlyphVacuumSummary;
+    Stores     : TArray<ISymbolStore>;
+    Facts      : TDictionary<string, TClassFacts>;
+    RefsCounted: TDictionary<string, Boolean>;
   end;
 
 const
@@ -221,14 +235,93 @@ begin
     R.Kind:= 'single';
 end;
 
+// Resolve a bare .dfm class name once per run through the stores, in order:
+// the first store declaring a class of that name wins. No store, or no such
+// class, leaves the qualification columns EMPTY -- never guessed from the name.
+function FactsFor(const ABareClass: string; const AStores: TArray<ISymbolStore>;
+  var AState: TVacuumState): TClassFacts;
+var
+  S   : ISymbolStore;
+  Syms: TArray<TSymbol>;
+  Sym : TSymbol;
+  Opts: TPropTreeOptions;
+  P   : Integer;
+begin
+  if AState.Facts.TryGetValue(LowerCase(ABareClass), Result) then Exit;
+  Result:= Default(TClassFacts);
+  Result.RuntimeRefs:= -1;
+  for S in AStores do
+  begin
+    Syms:= S.FindSymbolsByExactName(ABareClass);
+    for Sym in Syms do
+      if Sym.Kind = skClass then
+      begin
+        Result.Resolved:= True;
+        Result.QName   := Sym.QualifiedName;
+        P:= LastDelimiter('.', Sym.QualifiedName);
+        Result.UnitName:= Copy(Sym.QualifiedName, 1, P - 1);
+        Opts:= Default(TPropTreeOptions);
+        Result.Tree:= BuildPropTree(S, Sym.QualifiedName, Opts);
+        Result.RuntimeRefs:= 0;
+        Break;
+      end;
+    if Result.Resolved then Break;
+  end;
+  AState.Facts.Add(LowerCase(ABareClass), Result);
+end;
+
+// Resolved .pas references to <class>.<prop> (reads and writes; a
+// `Picture.Assign(..)` is a read of Picture followed by a call). Over-counts
+// assignments, which is the safe direction for a sizing number.
+function CountRuntimeRefs(const AStores: TArray<ISymbolStore>; const AQName, AProp: string): Integer;
+var
+  S   : ISymbolStore;
+  Syms: TArray<TSymbol>;
+  Sym : TSymbol;
+  Refs: TArray<TReference>;
+  Ref : TReference;
+begin
+  Result:= 0;
+  for S in AStores do
+  begin
+    Syms:= S.FindSymbolsByQualifiedName(AQName + '.' + AProp);
+    for Sym in Syms do
+    begin
+      Refs:= S.FindReferencesTo(Sym.Id);
+      for Ref in Refs do
+        if EndsText('.pas', S.GetFilePath(Ref.FileId)) then Inc(Result);
+    end;
+  end;
+end;
+
+// The graphic property a leaf path names: the first segment before a '.' or a
+// collection index '[' -- 'Picture.Data' -> 'Picture', 'ImageInfo[0].Image.Data'
+// -> 'ImageInfo' (the collection property, not the item's own nested leaf).
+function GraphicPropName(const AProp: string): string;
+var PDot, PBrack, P: Integer;
+begin
+  PDot  := Pos('.', AProp);
+  PBrack:= Pos('[', AProp);
+  if PDot = 0 then P:= PBrack
+  else if PBrack = 0 then P:= PDot
+  else if PDot < PBrack then P:= PDot
+  else P:= PBrack;
+  if P = 0 then Result:= AProp else Result:= Copy(AProp, 1, P - 1);
+end;
+
 // Builds and files one row for one decoded payload -- the binary-leaf path and
 // the collection-item path (HarvestCollection) both funnel through here so the
 // derived columns are computed exactly once, the same way, everywhere.
 procedure AddRow(const AObject: TDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, AProp: string;  // dl:ok too-many-parameters@1d66
   const APayload: TBytes; AInCollection: Boolean; var AState: TVacuumState);
 var
-  G: TStreamedGraphic;
-  R: TGlyphRow;
+  G     : TStreamedGraphic;
+  R     : TGlyphRow;
+  Facts : TClassFacts;
+  Def   : string;
+  Name  : string;
+  Prop  : string;
+  RefKey: string;
 begin
   G:= ParseStreamedGraphic(APayload);
   R:= Default(TGlyphRow);
@@ -249,6 +342,35 @@ begin
   R.Bpp           := G.BitCount;
   R.PaletteEntries:= G.PaletteEntries;
   FindCountProp(AObject, R.CountProp, R.CountValue);
+  Facts:= FactsFor(AObject.ClassName_, AState.Stores, AState);
+  if Facts.Resolved then
+  begin
+    R.ClassUnit:= Facts.UnitName;
+    if R.CountProp <> '' then
+    begin
+      // the object streamed a known count property explicitly: look up ITS default.
+      if LeafDefaultOf(Facts.Tree, R.CountProp, Def) then R.CountDefault:= Def;
+    end
+    else
+      // no count property streamed (its value equals the class's own default,
+      // so the .dfm omits it) -- the class may still declare one; the first
+      // known name with a usable default stands in for it.
+      for Name in CountPropNames do
+        if LeafDefaultOf(Facts.Tree, Name, Def) then
+        begin
+          R.CountProp   := Name;
+          R.CountDefault:= Def;
+          Break;
+        end;
+    Prop  := GraphicPropName(AProp);
+    RefKey:= LowerCase(Facts.QName) + '.' + LowerCase(Prop);
+    if not AState.RefsCounted.ContainsKey(RefKey) then
+    begin
+      Facts.RuntimeRefs:= Facts.RuntimeRefs + CountRuntimeRefs(AState.Stores, Facts.QName, Prop);
+      AState.RefsCounted.Add(RefKey, True);
+      AState.Facts.AddOrSetValue(LowerCase(AObject.ClassName_), Facts);
+    end;
+  end;
   FillDerived(R, AObject.ClassName_, AInCollection);
   R.PayloadSha    := Sha256Hex(APayload);
   R.ImageFile     := 'images\' + R.PayloadSha + ImageExt(G.Format);
@@ -377,6 +499,7 @@ begin
   State:= Default(TVacuumState);
   State.OutDir:= AOpts.OutDir;
   State.ImgDir:= TPath.Combine(AOpts.OutDir, 'images');
+  State.Stores:= AOpts.Stores;
   try
     TDirectory.CreateDirectory(State.ImgDir);
   except
@@ -386,8 +509,10 @@ begin
       Exit;
     end;
   end;
-  State.Rows:= TList<TGlyphRow>.Create;
-  State.Shas:= TDictionary<string, Boolean>.Create;
+  State.Rows       := TList<TGlyphRow>.Create;
+  State.Shas       := TDictionary<string, Boolean>.Create;
+  State.Facts      := TDictionary<string, TClassFacts>.Create;
+  State.RefsCounted:= TDictionary<string, Boolean>.Create;
   SB:= TStringBuilder.Create;
   try
     for Root in AOpts.Roots do
@@ -403,6 +528,8 @@ begin
     Result  := True;
   finally
     SB.Free;
+    State.RefsCounted.Free;
+    State.Facts.Free;
     State.Shas.Free;
     State.Rows.Free;
   end;
