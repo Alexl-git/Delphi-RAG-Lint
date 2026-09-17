@@ -138,5 +138,21 @@
 #   Core.Model. Remedy when an index exists: index --all --resolve-only.
 #
 #   Superseded: 1.4.0-alpha|2cda913770535660645b65f9daceb3483b729158dbdf64d2836be374149f536c
+#
+# 2026-09-17: hash re-pinned WITHIN 1.4.0-alpha (batch residue; ruling R19
+#   still holds -- no index has been resolved under 1.4.0 yet, the overnight
+#   rebuild is the first). Commit "fix(resolve): ResolveAccessor narrows
+#   overloaded accessors by arity or declines; FindSymbolsByExactName strips
+#   generics per dotted segment (batch residue)". What moved: src\index
+#   CallResolver.ResolveAccessor no longer first-matches an OVERLOADED
+#   accessor set -- PickAccessor keeps the candidates whose arity range
+#   contains the property's index count (+1 for a setter, read off the
+#   declaring line by PropertyIndexArity) and answers only a unique survivor;
+#   same-count overloads decline (accessor 0, no call edge) and a declined set
+#   on the declaring class stops the ancestor walk. FindSymbolsByExactName is
+#   a READER and is not in the manifest. Remedy when an index exists:
+#   index --all --resolve-only.
+#
+#   Superseded: 1.4.0-alpha|a35513046797f2f0cf416752672496d55bec00368bb9e08238e0279eb4004389
 
-1.4.0-alpha|a35513046797f2f0cf416752672496d55bec00368bb9e08238e0279eb4004389
+1.4.0-alpha|c1d56f481b2b1107635f79319f399f9c5b822474a0b9752b1bd5a0c838d304fa

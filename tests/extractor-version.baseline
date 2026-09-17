@@ -721,4 +721,15 @@
 #   locals parent to the enclosing named routine. Same version, no index
 #   parsed differently. Superseded line:
 #   1.17.0-alpha|05731a9e1414bf02d55148d754d9a510d56c64ac0dfc2745a2fd0aae7f4c0898
-1.17.0-alpha|d64cb0f9464ef372ae5a39fd28665a9eda62922adcb5e61f32db02f2f562c66e
+# 2026-09-17: hash re-pinned WITHIN 1.17.0-alpha (batch residue, ruling R19
+#   still holds: no index has been rebuilt under 1.17.0; the overnight rebuild
+#   covers it). Commit "fix(resolve): ResolveAccessor narrows overloaded
+#   accessors by arity or declines; FindSymbolsByExactName strips generics
+#   per dotted segment (batch residue)". What moved in the surface: src\index
+#   CallResolver.ResolveAccessor picks through PickAccessor (an overloaded
+#   accessor set is narrowed by the property's index arity or declined) with
+#   PropertyIndexArity / PosAfterKeyword reading the declaring line. A
+#   DERIVED-edge change (member_accesses / call_edges), not a parse.
+#   Superseded line:
+#   1.17.0-alpha|d64cb0f9464ef372ae5a39fd28665a9eda62922adcb5e61f32db02f2f562c66e
+1.17.0-alpha|f5d9e5086c95712800ee7f7271297a479fe5d233cd5e67ab9cf7d2ea020e3104

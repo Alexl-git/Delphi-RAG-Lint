@@ -431,6 +431,12 @@ type
     /// more than one row matches, prefers rows of the same arity, falling back
     /// to every row when none has that arity. Pinned by
     /// tests\autotest\run_generic_symbol_names.ps1.
+    /// A DOTTED AName ('TList&lt;T&gt;.Add', 'gnA.TList') is split per
+    /// segment: the name match and the arity preference are the LAST
+    /// segment's, and the rows are kept to those whose qualified name equals
+    /// the stripped path or ends with it at a '.' boundary -- so the first
+    /// answers the METHOD gnB.TList.Add and the second exactly gnA.TList,
+    /// never gnB.TList. The first is pinned by the same guard.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) (+47 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>

@@ -7035,10 +7035,37 @@ function PreferArity(const ARows: TArray<TSymbol>; const AParams: string): TArra
 function TSQLiteSymbolStore.FindSymbolsByExactName( const AName: string): TArray<TSymbol>;
 var
   List: TList<TSymbol>;
+
+  { A DOTTED input names a path, and `name` is one segment: keep the rows
+    whose qualified name IS the stripped path or ENDS with it at a segment
+    boundary, so 'TList<T>.Add' reaches gnB.TList.Add and 'TFoo.Load' is never
+    satisfied by 'TBar.Load' (the ResolveExemptionEntry idiom). Case follows
+    the lookup that produced the rows -- see CaseSensitiveLookups. }
+  function KeepQualifiedSuffix(const ARows: TArray<TSymbol>; const APath: string): TArray<TSymbol>;
+  var
+    Hit: Boolean;
+  begin
+    Result:= nil;
+    for var S: TSymbol in ARows do
+    begin
+      if CaseSensitiveLookups then Hit:= (S.QualifiedName = APath) or EndsStr('.' + APath, S.QualifiedName)
+      else Hit:= SameText(S.QualifiedName, APath) or EndsText('.' + APath, S.QualifiedName);
+      if Hit then Result:= Result + [S];
+    end;
+  end;
+
 begin
-  { v23 (spec G7): match on the BARE name; see PreferArity for the rest. }
+  { v23 (spec G7): match on the BARE name; see PreferArity for the rest.
+    Batch residue R2: a dotted input is split PER SEGMENT like
+    FindSymbolsByQualifiedName -- the `name` match and the arity preference
+    are the LAST segment's ('TList<T>.Add' -> 'Add', no list), where the old
+    whole-input split took the first '<' and the last '>' and answered the
+    CLASS `TList` for that input. The remaining segments narrow the rows by
+    qualified-name suffix (KeepQualifiedSuffix). A bare input is untouched:
+    LastTopLevelSegment returns it whole. }
   var BareName, InParams: string;
-  var HadList: Boolean:= SplitGenericName(AName, BareName, InParams);
+  var Path   : string := StripGenericSegments(AName);
+  var HadList: Boolean:= SplitGenericName(LastTopLevelSegment(AName), BareName, InParams);
   List:= TList<TSymbol>.Create;
   try
     if FQFindByName.Active then FQFindByName.Close;
@@ -7065,6 +7092,7 @@ begin
       end;
     end;
     Result:= List.ToArray;
+    if Pos('.', Path) > 0 then Result:= KeepQualifiedSuffix(Result, Path);
     if HadList and (Length(Result) > 1) then Result:= PreferArity(Result, InParams);
   finally
     { Close in the FINALLY, not after the loop: ReadSymbolFromQuery can raise,

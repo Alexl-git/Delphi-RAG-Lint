@@ -346,15 +346,36 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function MemberAccessMode(const ARef: TReference): string;
+    /// <summary>The one child of AParentId named AName (of a kind in AKinds)
+    /// that a property accessor clause can mean. One candidate, or several
+    /// with one signature, is that candidate (first-match, as before). An
+    /// OVERLOAD SET -- several with different signatures -- is narrowed to
+    /// the candidates whose arity range contains AArity; a unique survivor is
+    /// the answer, anything else DECLINES (Id = 0) rather than guess.</summary>
+    /// <param name="AParentId">The class whose direct children are searched.</param>
+    /// <param name="AName">The accessor identifier after `read` / `write`.</param>
+    /// <param name="AArity">The argument count the accessor must accept: the
+    /// property's index-parameter count, plus one for a setter. Negative when
+    /// the property's declaration could not be read, in which case an overload
+    /// set always declines.</param>
+    /// <param name="AKinds">Kinds admitted as an accessor (methods, fields).</param>
+    /// <param name="AFound">True when at least one child carried the name --
+    /// even if the answer declined -- so a caller stops at this class instead
+    /// of walking to an ancestor that the same-named members shadow.</param>
+    /// <returns>The chosen accessor, or Default(TSymbol) when none or declined.</returns>
+    function PickAccessor(AParentId: Int64; const AName: string; AArity: Integer;
+      const AKinds: TSymbolKindSet; out AFound: Boolean): TSymbol;
     /// <summary>The accessor a property's AMode resolves to: the identifier
     /// after `read` / `write` on the declaring lines, looked up as a METHOD or
     /// FIELD on the declaring class or its ancestors. Id = 0 when the clause is
-    /// absent, names a path (`FRec.X`), or resolves to nothing.</summary>
+    /// absent, names a path (`FRec.X`), resolves to nothing, or names an
+    /// OVERLOAD SET that the property's own arity cannot narrow to one
+    /// (see PickAccessor) -- no edge over a wrong one.</summary>
     /// <param name="AProp"><!-- drag-lint:auto type -->const TSymbol</param>
     /// <param name="AMode"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: Default(TSymbol);
-    /// FindChildOfKind(AProp.ParentId, Ident, ACCESSOR_KINDS);
-    /// FindChildOfKind(A.SymbolId, Ident, ACCESSOR_KINDS).</returns>
+    /// PickAccessor(AProp.ParentId, Ident, WantArity, ACCESSOR_KINDS, Found);
+    /// PickAccessor(A.SymbolId, Ident, WantArity, ACCESSOR_KINDS, Found).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
@@ -1764,15 +1785,15 @@ begin
   end;
 end;
 
-// The identifier after the standalone keyword AKey (`read` / `write`) on a
-// property's declaring text, or '' when absent or a dotted path (`FRec.X` is a
-// record field access, not an accessor this resolver can name). The keyword
-// must stand alone: `read` inside `FReadOnly` is a name.
-function AccessorIdentAfter(const ADecl, AKey: string): string;
+// The position just past the first STANDALONE occurrence of the keyword AKey
+// in ADecl, or 0 when absent. Standalone means not part of a longer
+// identifier: `read` inside `FReadOnly` is a name, not the keyword. Shared by
+// AccessorIdentAfter (`read` / `write`) and PropertyIndexArity (`property`).
+function PosAfterKeyword(const ADecl, AKey: string): Integer;
 var
   I, J: Integer;
 begin
-  Result:= '';
+  Result:= 0;
   I:= 1;
   while I <= Length(ADecl) do
   begin
@@ -1783,28 +1804,125 @@ begin
     end;
     J:= I;
     while (J <= Length(ADecl)) and IsIdentPart(ADecl[J]) do Inc(J);
-    if SameText(Copy(ADecl, I, J - I), AKey) then
-    begin
-      while (J <= Length(ADecl)) and (ADecl[J] = ' ') do Inc(J);
-      I:= J;
-      while (J <= Length(ADecl)) and IsIdentPart(ADecl[J]) do Inc(J);
-      Result:= Copy(ADecl, I, J - I);
-      if (J <= Length(ADecl)) and (ADecl[J] = '.') then Result:= '';
-      Exit;
-    end;
+    if SameText(Copy(ADecl, I, J - I), AKey) then Exit(J);
     I:= J;
   end;
+end;
+
+// The identifier after the standalone keyword AKey (`read` / `write`) on a
+// property's declaring text, or '' when absent or a dotted path (`FRec.X` is a
+// record field access, not an accessor this resolver can name).
+function AccessorIdentAfter(const ADecl, AKey: string): string;
+var
+  I, J: Integer;
+begin
+  Result:= '';
+  J:= PosAfterKeyword(ADecl, AKey);
+  if J = 0 then Exit;
+  while (J <= Length(ADecl)) and (ADecl[J] = ' ') do Inc(J);
+  I:= J;
+  while (J <= Length(ADecl)) and IsIdentPart(ADecl[J]) do Inc(J);
+  Result:= Copy(ADecl, I, J - I);
+  if (J <= Length(ADecl)) and (ADecl[J] = '.') then Result:= '';
+end;
+
+// The number of INDEX parameters the property APropName declares on its
+// declaring text: `property Items[I, J: Integer; const Key: string]` is 3,
+// `property Flag: Boolean` is 0. The index list is not in the symbol row (its
+// signature holds only the type), so it is read off ADecl like the accessor
+// names are. -1 when the declaration cannot be read (`property` + name not
+// found, an unbalanced bracket) -- an unknown, not a zero.
+function PropertyIndexArity(const ADecl, APropName: string): Integer;
+var
+  I, J, Depth: Integer;
+  Lo, Hi     : Integer;
+begin
+  Result:= -1;
+  J:= PosAfterKeyword(ADecl, 'property');
+  if J = 0 then Exit;
+  while (J <= Length(ADecl)) and (ADecl[J] = ' ') do Inc(J);
+  I:= J;
+  while (J <= Length(ADecl)) and IsIdentPart(ADecl[J]) do Inc(J);
+  if not SameText(Copy(ADecl, I, J - I), APropName) then Exit;
+  while (J <= Length(ADecl)) and (ADecl[J] = ' ') do Inc(J);
+  if (J > Length(ADecl)) or (ADecl[J] <> '[') then Exit(0);
+  { Balanced extract of `[...]`, then count it the way a parameter list is
+    counted -- SignatureArityRange already splits groups at top-level ';' and
+    names at ','; an index parameter has no default, so Lo = Hi. }
+  Depth:= 0;
+  I    := J;
+  while J <= Length(ADecl) do
+  begin
+    case ADecl[J] of
+      '[': Inc(Depth);
+      ']': Dec(Depth);
+    end;
+    if Depth = 0 then Break;
+    Inc(J);
+  end;
+  if Depth <> 0 then Exit;
+  if SignatureArityRange('(' + Copy(ADecl, I + 1, J - I - 1) + ')', Lo, Hi) then Exit(Hi);
+end;
+
+function TCallResolver.PickAccessor(AParentId: Int64; const AName: string; AArity: Integer;
+  const AKinds: TSymbolKindSet; out AFound: Boolean): TSymbol;
+var
+  Kids   : TList<TSymbol>;
+  S      : TSymbol       ;
+  Lo, Hi : Integer       ;
+  FitN   : Integer       ;
+  Overld : Boolean       ;
+begin
+  Result:= Default(TSymbol);
+  AFound:= False;
+  Kids  := ChildrenOf(AParentId);
+  if Kids = nil then Exit;
+  { Pass 1: the first-match answer, and whether the name is an OVERLOAD SET
+    (a second candidate with a DIFFERENT signature -- same-signature twins are
+    the first-match case, exactly as FindChildOfKind treats them). }
+  Overld:= False;
+  for S in Kids do
+    if (S.Kind in AKinds) and SameText(S.Name, AName) then
+    begin
+      if not AFound then
+      begin
+        Result:= S;
+        AFound:= True;
+      end
+      else if S.Signature <> Result.Signature then Overld:= True;
+    end;
+  if not Overld then Exit;
+  { Pass 2 (batch residue R1): `read GetItem` beside two GetItem declarations
+    used to bind the FIRST one -- a coin toss recorded as certain. The
+    property's own shape narrows it: a getter takes exactly the index
+    parameters and a setter those plus the value, so an overload whose arity
+    range does not contain that count cannot be the accessor. A unique
+    survivor answers; several (same count, types only) or none DECLINE, on
+    the unit's FP policy -- no edge over a wrong one. }
+  FitN  := 0;
+  Result:= Default(TSymbol);
+  if AArity < 0 then Exit;
+  for S in Kids do
+    if (S.Kind in AKinds) and SameText(S.Name, AName)
+       and SignatureArityRange(S.Signature, Lo, Hi) and (AArity >= Lo) and (AArity <= Hi) then
+    begin
+      Inc(FitN);
+      Result:= S;
+    end;
+  if FitN <> 1 then Result:= Default(TSymbol);
 end;
 
 function TCallResolver.ResolveAccessor(const AProp: TSymbol; const AMode: string): TSymbol;
 const
   ACCESSOR_KINDS: TSymbolKindSet = [skMethod, skProcedure, skFunction, skField];
 var
-  Lines: TStringList;
-  Decl : string;
-  I    : Integer;
-  Ident: string;
-  A    : TTypeAncestor;
+  Lines    : TStringList;
+  Decl     : string;
+  I        : Integer;
+  Ident    : string;
+  A        : TTypeAncestor;
+  WantArity: Integer;
+  Found    : Boolean;
 begin
   Result:= Default(TSymbol);
   { Guards, consolidated: a member with no parent, an unknown mode, or a stale
@@ -1820,13 +1938,21 @@ begin
     Decl:= Decl + ' ' + Lines[I - 1];
   Ident:= AccessorIdentAfter(Decl, AMode);
   if Ident = '' then Exit;
-  Result:= FindChildOfKind(AProp.ParentId, Ident, ACCESSOR_KINDS);
-  if Result.Id = 0 then
+  { The count an overloaded accessor must accept (PickAccessor): a getter takes
+    the index parameters, a setter takes them plus the value. -1 propagates an
+    unreadable declaration so an overload set declines instead of guessing. }
+  WantArity:= PropertyIndexArity(Decl, AProp.Name);
+  if (WantArity >= 0) and (AMode = 'write') then Inc(WantArity);
+  { A same-named member on the declaring class SHADOWS every ancestor's, so a
+    declined overload set there ends the search -- Found says the name was
+    seen even when the answer is 0. }
+  Result:= PickAccessor(AProp.ParentId, Ident, WantArity, ACCESSOR_KINDS, Found);
+  if not Found then
     for A in FStore.GetTransitiveAncestors(AProp.ParentId) do
     begin
       if not A.Resolved or (A.SymbolId <= 0) then Continue;
-      Result:= FindChildOfKind(A.SymbolId, Ident, ACCESSOR_KINDS);
-      if Result.Id > 0 then Break;
+      Result:= PickAccessor(A.SymbolId, Ident, WantArity, ACCESSOR_KINDS, Found);
+      if Found then Break;
     end;
 end;
 

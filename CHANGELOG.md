@@ -23,6 +23,13 @@ breaking changes** until v1.0.
   (own first, nearest ancestor next) via the new `facts-inherited` index stage.
 
 ### Fixed
+- A property whose accessor is OVERLOADED (`read GetItem` beside two `GetItem`
+  declarations) binds the overload whose parameter count is the property's index
+  count (+1 for a setter); when the count leaves several, the access records no
+  accessor and no call edge instead of the first-declared one (resolver 1.4.0, re-pinned).
+- `FindSymbolsByExactName` (`query --name`) splits a dotted input per segment:
+  `TList<T>.Add` finds the METHOD `gnB.TList.Add`, not the class, and a dotted
+  path keeps only rows whose qualified name ends with it.
 - `dataset-open-without-close` ignores a member named `Open` that is indexed, passed as
   an argument or assigned -- only a bare `X.Open;` / `X.Open();` statement is a
   dataset open. A record field `Open: TArray<...>` read as `AState.Open[i]` fired

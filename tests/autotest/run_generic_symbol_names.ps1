@@ -252,6 +252,13 @@ try {
   $q3m = (& $exePath query --name 'gnB.TList<T>.Add' --db $db --json --exact 2>$null) -join "`n"
   $rows3m = @(); try { $rows3m = @($q3m | ConvertFrom-Json) } catch { }
   Check 'Q1 query --name "gnB.TList<T>.Add" returns the METHOD gnB.TList.Add (per-segment strip), not the class' (($rows3m.Count -eq 1) -and ($rows3m[0].qualified_name -eq 'gnB.TList.Add') -and ($rows3m[0].kind -notmatch '(?i)class')) "rows=$($rows3m.Count) qn=$($rows3m[0].qualified_name) kind=$($rows3m[0].kind)"
+  # R2 (batch residue): the BY-NAME lookup used to single-split the whole
+  # input -- 'TList<T>.Add' became bare 'TList' + params 'T' and answered the
+  # CLASS. It now strips per dotted segment and matches the LAST segment's
+  # bare name ('Add'), kept to rows whose qualified name ends with the path.
+  $q3n = (& $exePath query --name 'TList<T>.Add' --db $db --json --exact 2>$null) -join "`n"
+  $rows3n = @(); try { $rows3n = @($q3n | ConvertFrom-Json) } catch { }
+  Check 'R2 query --name "TList<T>.Add" (no unit) returns the METHOD gnB.TList.Add via the by-name path, not the class' (($rows3n.Count -eq 1) -and ($rows3n[0].qualified_name -eq 'gnB.TList.Add') -and ($rows3n[0].kind -notmatch '(?i)class')) "rows=$($rows3n.Count) qn=$($rows3n[0].qualified_name) kind=$($rows3n[0].kind)"
   $q3c = (& $exePath query --name 'gnB.TList<T>' --db $db --json --exact 2>$null) -join "`n"
   $rows3c = @(); try { $rows3c = @($q3c | ConvertFrom-Json) } catch { }
   Check 'Q2 query --name "gnB.TList<T>" still returns the class gnB.TList' (($rows3c.Count -eq 1) -and ($rows3c[0].qualified_name -eq 'gnB.TList') -and ($rows3c[0].kind -match '(?i)class')) "rows=$($rows3c.Count) qn=$($rows3c[0].qualified_name) kind=$($rows3c[0].kind)"

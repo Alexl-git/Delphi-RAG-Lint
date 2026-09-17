@@ -68,6 +68,23 @@ type
     property Items[I: Integer]: Integer read GetItem write SetItem;
   end;
 
+  { R1 (batch residue): an OVERLOADED accessor set. The wrong overload is
+    declared FIRST on purpose -- first-match binds it. GetItem's overloads
+    differ in COUNT (2 vs 1): the 1-index property narrows to the Integer one.
+    GetPair's overloads have the SAME count and differ only in type: nothing
+    narrows them, so the read must record NO accessor rather than a guess. }
+  TOverloaded = class
+  private
+    FByIdx: array[0..3] of Integer;
+    function GetItem(const Key: string; ADefault: Integer): Integer; overload;
+    function GetItem(I: Integer): Integer; overload;
+    function GetPair(const Key: string): Integer; overload;
+    function GetPair(A: Integer): Integer; overload;
+  public
+    property Items[I: Integer]: Integer read GetItem;
+    property Pairs[A: Integer]: Integer read GetPair;
+  end;
+
 implementation
 
 function TProvider.GetFlag: Boolean;
@@ -95,6 +112,26 @@ begin
   FCount := 0;
 end;
 
+function TOverloaded.GetItem(const Key: string; ADefault: Integer): Integer;
+begin
+  Result := Length(Key) + ADefault;
+end;
+
+function TOverloaded.GetItem(I: Integer): Integer;
+begin
+  Result := FByIdx[I];
+end;
+
+function TOverloaded.GetPair(const Key: string): Integer;
+begin
+  Result := Length(Key);
+end;
+
+function TOverloaded.GetPair(A: Integer): Integer;
+begin
+  Result := FByIdx[A];
+end;
+
 end.
 '@
 
@@ -110,15 +147,25 @@ type
   TConsumer = class
   private
     FProv: TProvider;
+    FOver: TOverloaded;
   public
     procedure ReadIt;
     procedure WriteIt;
     procedure CountIt;
     procedure IndexIt;
     procedure ReadCnt;
+    procedure OverIt;
   end;
 
 implementation
+
+procedure TConsumer.OverIt;
+var
+  N: Integer;
+begin
+  N := FOver.Items[1];
+  N := N + FOver.Pairs[1];
+end;
 
 procedure TConsumer.ReadIt;
 begin
@@ -196,6 +243,36 @@ $ff = Of (Resolved 'FFlag') 'uProv.TProvider.FFlag'
 Check 'FFlag: used by WriteIt (the Flag WRITE), as a write' ($ff.Count -eq 1 -and $ff[0].caller_qname -match 'WriteIt$' -and $ff[0].mode -eq 'write') ($ff | ConvertTo-Json -Compress)
 $fc = Of (Resolved 'FCount') 'uProv.TProvider.FCount'
 Check 'FCount: used by CountIt and ReadCnt (the Count READs), as reads' ($fc.Count -eq 2 -and (@($fc | Where-Object { $_.mode -eq 'read' }).Count -eq 2)) ($fc | ConvertTo-Json -Compress)
+
+Write-Host ''
+Write-Host '== R1: an OVERLOADED accessor narrows by arity or declines ==' -ForegroundColor Cyan
+# `sql --json` returns columns[] + POSITIONAL rows[][]; map each row onto its
+# column names. A failed query (empty stdout) is an EMPTY array.
+function Sql([string]$q) {
+  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+  if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
+  try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+  $cols = @($o.columns | ForEach-Object { $_.name })
+  $out = @()
+  foreach ($r in @($o.rows)) {
+    $h = [ordered]@{}
+    for ($i = 0; $i -lt $cols.Count; $i++) { $h[$cols[$i]] = @($r)[$i] }
+    $out += [pscustomobject]$h
+  }
+  return ,$out
+}
+$acc = Sql "SELECT m.name AS member, ma.mode, a.name AS accessor, a.signature FROM member_accesses ma JOIN symbols m ON m.id = ma.member_symbol_id LEFT JOIN symbols a ON a.id = ma.accessor_symbol_id WHERE m.qualified_name IN ('uProv.TOverloaded.Items', 'uProv.TOverloaded.Pairs') ORDER BY m.name"
+Check 'R1 both TOverloaded reads recorded as member accesses' ($acc.Count -eq 2 -and (@($acc | Where-Object { $_.mode -eq 'read' }).Count -eq 2)) ($acc | ConvertTo-Json -Compress)
+$accItems = @($acc | Where-Object { $_.member -eq 'Items' })
+Check 'R1 Items[I: Integer] read GetItem binds the 1-param overload (narrowed by arity), not the first-declared 2-param one' ($accItems.Count -eq 1 -and $accItems[0].accessor -eq 'GetItem' -and $accItems[0].signature -eq '(I: Integer): Integer') ($accItems | ConvertTo-Json -Compress)
+$gio = @(Of (Resolved 'GetItem') 'uProv.TOverloaded.GetItem')
+Check 'R1 TOverloaded.GetItem: exactly one resolved caller (OverIt), certain' ($gio.Count -eq 1 -and $gio[0].caller_qname -match 'OverIt$' -and $gio[0].confidence -eq 'certain') ($gio | ConvertTo-Json -Compress)
+$gioSig = Sql "SELECT s.signature FROM call_edges ce JOIN symbols s ON s.id = ce.target_symbol_id WHERE s.qualified_name = 'uProv.TOverloaded.GetItem'"
+Check 'R1 the GetItem call edge targets the (I: Integer) overload' ($gioSig.Count -eq 1 -and $gioSig[0].signature -eq '(I: Integer): Integer') ($gioSig | ConvertTo-Json -Compress)
+$accPairs = @($acc | Where-Object { $_.member -eq 'Pairs' })
+Check 'R1 control: Pairs[A: Integer] read GetPair (two 1-param overloads, types only) records NO accessor' ($accPairs.Count -eq 1 -and [string]::IsNullOrEmpty($accPairs[0].accessor)) ($accPairs | ConvertTo-Json -Compress)
+$gpo = @(Of (Resolved 'GetPair') 'uProv.TOverloaded.GetPair')
+Check 'R1 control: TOverloaded.GetPair has NO resolved caller (declined, no wrong edge)' ($gpo.Count -eq 0) ($gpo | ConvertTo-Json -Compress)
 
 Write-Host ''
 Write-Host '== E5: lint-tree sees a removed PROPERTY ==' -ForegroundColor Cyan
