@@ -286,7 +286,7 @@ pure-diagnostic verbs are broken out in 2b.
 **Query / search (find symbols, callers, text)**
 | Verb | What it does |
 |------|--------------|
-| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss, `--exact` suppresses the fallback so 0 rows means "no such symbol", `--case-sensitive` opts out of the NOCASE retry. Exit 0 = hits / 1 = zero hits / 2 = bad usage (no selector, or an explicit `--db` that is missing or at an old schema) / 3 = fatal (unrecognised argument). **A same-named VCL/FMX tie is ordered by the framework the run's own project uses** -- see below. **Generics (schema v23):** a generic is indexed under its BARE name; rows carry `generic_params` (`'T: class'`, `''` for a non-generic) and `--name` accepts `TList<T>` -- it matches the bare name and prefers rows of that arity. The text table shows `TList<T>`; `name`/`qualified_name` stay bare |
+| `query --name X` / `query --qname U.T.M` | locate a symbol (kind, signature, section, `usable_from_other_units`); auto-fuzzy on a miss, `--exact` suppresses the fallback so 0 rows means "no such symbol", `--case-sensitive` opts out of the NOCASE retry. Exit 0 = hits / 1 = zero hits / 2 = bad usage (no selector, or an explicit `--db` that is missing or at an old schema) / 3 = fatal (unrecognised argument). **A same-named VCL/FMX tie is ordered by the framework the run's own project uses** -- see below. **Generics (schema v23 / extractor 1.17.0):** a generic is indexed under its BARE name; rows carry `generic_params` as the source spells it (`T`, `K, V`, `T: class`, `I: IMicObject`; `''` for a non-generic) and `--name` accepts a generic written as in source (`TList<T>`) -- it matches the bare name and prefers a row of the same arity, so `TList<X>` finds the same row. The text table shows `TList<T>`; `name`/`qualified_name` are bare |
 | `query --text "<phrase>"` | full-text search over `.pas`/`.dfm`/`.sql` constants AND COMMENT PROSE: messages, DFM captions, SQL exception text, and `//` / `{ }` / `(* *)` / `///` comment text (`--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--kind literal\|const\|resourcestring\|format\|comment\|doc\|dfm-prop\|sql-exception`, `--limit N`) |
 | `query find-callers --name X` | callers of a symbol (`--context N`; `--resolved` for precise call-edge callers). `--resolved` also reports routines **reached as a callback** -- handed somewhere by bare name, `@X`, or an event assignment -- marked `[callback]` rather than `[certain]`/`[ambiguous]`, because that is a reach, not a call. Without it a live predicate passed to e.g. `TDirectory.GetFiles` read as dead. **A PROPERTY or FIELD name works too (2026-09-16):** each bound access is a row tagged `[certain, read]` / `[certain, write]` (JSON `mode`); a property READ is also a resolved call to its getter and a WRITE to its setter, and a field that backs an accessor lists those accesses as its own uses. Indexes resolved before resolver 1.3.0-alpha answer 0 for properties until re-resolved (`index --all --resolve-only`) |
 | `query find` | doc-driven find (`--doc-tag`, `--doc-contains`, `--no-docs`, `--kind`, `--public`); `--decl-contains Z` matches the DECLARING SOURCE LINE (clauses the index does not model) and needs `--kind`, `--name` or `--unit` |
@@ -299,7 +299,7 @@ pure-diagnostic verbs are broken out in 2b.
 | `resolve-uses --name X` | which unit to add to `uses` (won't suggest implementation-only symbols) |
 | `find-unit --name X --in F` | add the declaring unit to F's `uses` clause |
 | `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`) |
-| `outline --file F.pas` | all symbols declared in one file |
+| `outline --file F.pas` | all symbols declared in one file. Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`) |
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
 | `slice --qname U.T.M` | one symbol's source body |
 | `typeat F:L:C` | resolve the identifier at a cursor position |
@@ -492,13 +492,18 @@ pure-diagnostic verbs are broken out in 2b.
 > - `Complexity: N (cyclomatic), M lines` -- cyclomatic complexity + body
 >   LOC, shown only when `N >= docs.complexity_min` (default `10`; see
 >   above).
-> - `Reads: a, b   Writes: c` -- own-class instance fields the routine
->   reads vs. writes (an `:=` LHS or an `Inc`/`Dec` first argument = write;
->   everything else = read). **Limitations:** a field passed to an ordinary
->   call's `var`/`out` parameter is not resolved as a write -- it is
->   counted as a read (absence over a wrong write); only the owning
->   class's OWN fields are considered, never inherited ones. Each side
->   capped at 8, with `(+N more)`.
+> - `Reads: a, b   Writes: c` -- instance fields the routine reads vs.
+>   writes (an `:=` LHS or an `Inc`/`Dec` first argument = write;
+>   everything else = read). Own-class fields are listed first, then
+>   INHERITED fields nearest-ancestor-first (v23 / extractor 1.17.0, the
+>   `facts-inherited` index stage), resolved within the SAME database -- a
+>   base class that lives in the platform library is out of reach from a
+>   project index, so its fields do not appear. **Limitations:** a field
+>   passed to an ordinary call's `var`/`out` parameter is not resolved as
+>   a write -- it is counted as a read (absence over a wrong write); an
+>   ancestor gaining a field does not re-derive the facts of descendants in
+>   unchanged files on an incremental run (the periodic rebuild does). Each
+>   side capped at 8, with `(+N more)`.
 > - `Owns returned: new (caller owns)` / `borrowed` / `self` -- conservative
 >   escape analysis on `Result`, emitted ONLY when every return site in the
 >   routine unanimously agrees: `T.Create` on a bare/qualified TYPE
@@ -572,7 +577,7 @@ pure-diagnostic verbs are broken out in 2b.
 **Index / DB management**
 | Verb | What it does |
 |------|--------------|
-| `index <path>` | build/refresh an index; a `.dpr`/`.dproj` target = project (compile-closure) scan, a folder = library scan. `--recompile` (default) / `--rebuild`; also `--project`, `--watch`, `--deep`. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform |
+| `index <path>` | build/refresh an index; a `.dpr`/`.dproj` target = project (compile-closure) scan, a folder = library scan. `--recompile` (default) / `--rebuild`; also `--project`, `--watch`, `--deep`. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform. After the walk every run resolves in this order: `uses-targets`, `ancestry`, **`facts-inherited`** (v23 -- inherited fields into `symbol_facts.reads_fields`/`writes_fields`; runs only when the run parsed files, so a no-change run does nothing here), `helpers`, `calls` (skipped when no file changed and the edges already hold) |
 | any `index` run | mode and sweep: `--force-reparse` (alias `--no-skip`) re-parses every walked file even when path+mtime+sha are unchanged -- once per DB after an engine upgrade that extracts something new; `--no-prune` is the one "delete nothing" switch (a dry look: both sweeps are computed and reported, nothing deleted), `--prune` forces the sweep for a single-FILE walk. Walk scoping: `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` skips any file larger than N KB, `--no-use-ignore` opts out of the `.drag-lint-ignore` file honoured by default, `--no-sql-ms` indexes EVERY `.sql` file rather than only the `MS*.sql` migration scripts, `--shallow` (default) vs `--deep` (also records usage refs) |
 | any verb that opens a DB | `--size-guard-mb N` / `--force32` (`index`, `query`, `lsp`, `serve`): the 32-bit build refuses a database larger than the guard because it would run out of address space mid-answer; the first moves the threshold, the second overrides the refusal. Neither is normally needed on Win64 |
 | `index <path> --resolve-only` | re-derive call edges / ancestry / helper targets from the STORED parses, skipping the walk. Use when `schema_meta.resolver_fingerprint` shows the edges predate the current resolver -- minutes, against the hours a re-parse costs, because no parse became wrong |

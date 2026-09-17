@@ -3,6 +3,24 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Changed -- extractor 1.17.0-alpha / schema v23 (re-parses every index)
+- Generic types and methods are indexed under their BARE name; the parameter
+  list is in `symbols.generic_params`. Ancestor edges carry
+  `ancestor_type_args` and resolve by arity before the scope rules:
+  `TObjectList<T: class>` now climbs to `System.Generics.Collections.TList<T>`
+  (was `System.Classes.TList`); ORM3's 134 `TMicObjectBase<I>` descendants
+  resolve their base. `query --name` accepts `TList<T>`.
+- Nested-routine locals and inline `var` / `for var` declarations are
+  `local_var` symbols parented to the innermost routine.
+- `symbol_facts.reads_fields` / `writes_fields` include INHERITED fields
+  (own first, nearest ancestor next) via the new `facts-inherited` index stage.
+
+### Fixed
+- `GetSymbolFacts` / `GetSymbolDoc` initialise a managed `Result` with
+  `Default()`, not `FillChar` (leak when a caller reused the variable).
+
 ## v1.14.0-alpha -- 2026-09-17
 
 ### `Catches:` -- the exceptions a routine HANDLES (INBOX-report-exceptions-raised-and-handled, gap 3)
