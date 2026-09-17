@@ -600,6 +600,10 @@ begin
         A.InfDist   := TDictionary<string, Integer>.Create;
         A.Formats   := TDictionary<string, Integer>.Create;
         A.Shas      := TDictionary<string, Integer>.Create;
+        // Register immediately: if anything below raises, the outer `finally`
+        // walks Aggs to free these six dictionaries -- they must already be
+        // reachable from it, not stranded in a local that never got written back.
+        Aggs.Add(K, A);
       end;
       Inc(A.Instances);
       Bump(A.Props, R.Prop);
