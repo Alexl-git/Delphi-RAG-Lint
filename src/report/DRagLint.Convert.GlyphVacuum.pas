@@ -85,6 +85,7 @@ uses
   System.IOUtils,
   System.Hash,
   System.StrUtils,
+  System.Generics.Defaults,
   DRagLint.Core.Model,
   DRagLint.Convert.DfmReemit,
   DRagLint.Convert.GlyphStrip,
@@ -478,6 +479,157 @@ begin
   end;
 end;
 
+type
+  // Per-class accumulator for classes.tsv, keyed on LowerCase(component_class).
+  // Five owned dictionaries: a record read out of a TDictionary is a COPY, so
+  // every mutation is written back with Aggs[Key]:= A.
+  TClassAgg = record
+    ClassName_ : string;
+    ClassUnit  : string;
+    Instances  : Integer;
+    Props      : TDictionary<string, Integer>;
+    CountProps : TDictionary<string, Integer>;
+    CountDef   : string;
+    NDist      : TDictionary<string, Integer>;
+    InfDist    : TDictionary<string, Integer>;
+    Disagree   : Integer;
+    Formats    : TDictionary<string, Integer>;
+    Shas       : TDictionary<string, Integer>;
+    RuntimeRefs: Integer;
+  end;
+
+// value:count pairs, sorted by value descending (numeric keys first, then
+// name ascending), the empty value last as '?:count'.
+function DistText(const AD: TDictionary<string, Integer>): string;
+var
+  Keys : TArray<string>;
+  K    : string;
+  Parts: TArray<string>;
+begin
+  Keys:= AD.Keys.ToArray;
+  TArray.Sort<string>(Keys, TComparer<string>.Construct(
+    function(const L, R: string): Integer
+    begin
+      if (L = '') and (R = '') then Exit(0);
+      if L = '' then Exit(1);
+      if R = '' then Exit(-1);
+      Result:= StrToIntDef(R, -1) - StrToIntDef(L, -1);
+      if Result = 0 then Result:= CompareText(L, R);
+    end));
+  Parts:= nil;
+  for K in Keys do
+    if K = '' then Parts:= Parts + ['?:' + IntToStr(AD[K])]
+    else Parts:= Parts + [K + ':' + IntToStr(AD[K])];
+  Result:= String.Join(';', Parts);
+end;
+
+// The dictionary's keys alone, sorted with CompareText and joined -- for the
+// columns that list distinct names (graphic_props/count_props), not counts.
+function KeysText(const AD: TDictionary<string, Integer>): string;
+var
+  Keys: TArray<string>;
+begin
+  Keys:= AD.Keys.ToArray;
+  TArray.Sort<string>(Keys, TComparer<string>.Construct(
+    function(const L, R: string): Integer
+    begin
+      Result:= CompareText(L, R);
+    end));
+  Result:= String.Join(';', Keys);
+end;
+
+procedure Bump(const AD: TDictionary<string, Integer>; const AKey: string);
+var V: Integer;
+begin
+  if AD.TryGetValue(AKey, V) then AD[AKey]:= V + 1 else AD.Add(AKey, 1);
+end;
+
+function ClassRowLine(const A: TClassAgg): string;
+var Runtime: string;
+begin
+  if A.RuntimeRefs = -1 then Runtime:= '' else Runtime:= IntToStr(A.RuntimeRefs);
+  Result:= String.Join(#9, [
+    Cell(A.ClassName_), Cell(A.ClassUnit), IntToStr(A.Instances), Cell(KeysText(A.Props)),
+    Cell(KeysText(A.CountProps)), Cell(A.CountDef), DistText(A.NDist), DistText(A.InfDist),
+    IntToStr(A.Disagree), DistText(A.Formats), IntToStr(A.Shas.Count), Runtime]);
+end;
+
+// One row per distinct component_class (case-insensitive), sorted by class
+// name. Stores may be empty: class_unit/count_default/runtime_refs then stay
+// empty, matching instances.tsv's own qualification columns.
+procedure WriteClassesTsv(const AOutDir: string; const ARows: TList<TGlyphRow>; var AState: TVacuumState);
+const
+  Header = 'component_class' + #9 + 'class_unit' + #9 + 'instances' + #9 + 'graphic_props' + #9 +
+           'count_props' + #9 + 'count_default' + #9 + 'n_distribution' + #9 + 'inferred_distribution' + #9 +
+           'disagreements' + #9 + 'formats' + #9 + 'distinct_payloads' + #9 + 'runtime_refs';
+var
+  Aggs : TDictionary<string, TClassAgg>;
+  Keys : TArray<string>;
+  K    : string;
+  A    : TClassAgg;
+  R    : TGlyphRow;
+  SB   : TStringBuilder;
+begin
+  Aggs:= TDictionary<string, TClassAgg>.Create;
+  try
+    for R in ARows do
+    begin
+      K:= LowerCase(R.ComponentClass);
+      if not Aggs.TryGetValue(K, A) then
+      begin
+        A:= Default(TClassAgg);
+        A.ClassName_:= R.ComponentClass;
+        A.ClassUnit := R.ClassUnit;
+        A.Props     := TDictionary<string, Integer>.Create;
+        A.CountProps:= TDictionary<string, Integer>.Create;
+        A.NDist     := TDictionary<string, Integer>.Create;
+        A.InfDist   := TDictionary<string, Integer>.Create;
+        A.Formats   := TDictionary<string, Integer>.Create;
+        A.Shas      := TDictionary<string, Integer>.Create;
+      end;
+      Inc(A.Instances);
+      Bump(A.Props, R.Prop);
+      if R.CountProp <> '' then Bump(A.CountProps, R.CountProp);
+      if R.CountDefault <> '' then A.CountDef:= R.CountDefault;
+      Bump(A.NDist, R.CountEffective);
+      Bump(A.InfDist, R.InferredN);
+      if R.Agree = 'N' then Inc(A.Disagree);
+      Bump(A.Formats, R.Format);
+      A.Shas.AddOrSetValue(R.PayloadSha, 1);
+      A.RuntimeRefs:= FactsFor(R.ComponentClass, AState.Stores, AState).RuntimeRefs;
+      Aggs.AddOrSetValue(K, A);
+    end;
+
+    Keys:= Aggs.Keys.ToArray;
+    TArray.Sort<string>(Keys, TComparer<string>.Construct(
+      function(const AL, ARr: string): Integer
+      begin
+        Result:= CompareText(Aggs[AL].ClassName_, Aggs[ARr].ClassName_);
+      end));
+
+    SB:= TStringBuilder.Create;
+    try
+      SB.Append(Header).Append(#13#10);
+      for K in Keys do SB.Append(ClassRowLine(Aggs[K])).Append(#13#10);
+      WriteUtf8NoBom(TPath.Combine(AOutDir, 'classes.tsv'), SB.ToString);
+    finally
+      SB.Free;
+    end;
+  finally
+    for K in Aggs.Keys do
+    begin
+      A:= Aggs[K];
+      A.Props.Free;
+      A.CountProps.Free;
+      A.NDist.Free;
+      A.InfDist.Free;
+      A.Formats.Free;
+      A.Shas.Free;
+    end;
+    Aggs.Free;
+  end;
+end;
+
 function RunGlyphVacuum(const AOpts: TGlyphVacuumOptions;
   out ASummary: TGlyphVacuumSummary; out AError: string): Boolean;
 var
@@ -523,6 +675,7 @@ begin
     SB.Append(InstancesHeader).Append(#13#10);
     for R in State.Rows do SB.Append(RowLine(R)).Append(#13#10);
     WriteUtf8NoBom(TPath.Combine(AOpts.OutDir, 'instances.tsv'), SB.ToString);
+    WriteClassesTsv(AOpts.OutDir, State.Rows, State);
     State.Summary.DistinctPayloads:= State.Shas.Count;
     ASummary:= State.Summary;
     Result  := True;

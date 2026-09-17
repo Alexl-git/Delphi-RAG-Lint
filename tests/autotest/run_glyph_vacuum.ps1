@@ -264,6 +264,35 @@ $o7 = & $Exe glyph-vacuum --root $src3 --out (Join-Path $WorkDir 'out3-db') --db
 $r3d = (Import-Csv (Join-Path $WorkDir 'out3-db\instances.tsv') -Delimiter "`t")[0]
 Check 'T3 no value + declared default 1 -> count_effective 1, inferred 4, agree N, kind strip' ($r3d.count_value -eq '' -and $r3d.count_default -eq '1' -and $r3d.count_effective -eq '1' -and $r3d.agree -eq 'N' -and $r3d.kind -eq 'strip') "$($r3d.count_value)/$($r3d.count_default)/$($r3d.count_effective)/$($r3d.agree)/$($r3d.kind)"
 
+# ---- fixture 4 (continued): classes.tsv, the per-class summary ------------------
+$cls = Join-Path $outDb 'classes.tsv'
+Check 'T4 classes.tsv written' (Test-Path $cls)
+if (Test-Path $cls) {
+  Write-Host "--- raw classes.tsv ---"; Get-Content $cls | ForEach-Object { Write-Host $_ }
+  $c = Import-Csv $cls -Delimiter "`t"
+  $tb = $c | Where-Object { $_.component_class -eq 'TabcToggleBtn' }
+  Check 'T4 four classes (TabcToggleBtn, TSpeedButton, TImageList, TcxImageList)' ($c.Count -eq 4) "n=$($c.Count)"
+  Check 'T4 TabcToggleBtn instances 2'      ($tb.instances -eq '2') $tb.instances
+  Check 'T4 graphic_props Picture.Data'      ($tb.graphic_props -eq 'Picture.Data') $tb.graphic_props
+  Check 'T4 count_props NumGlyphs'           ($tb.count_props -eq 'NumGlyphs') $tb.count_props
+  Check 'T4 count_default 1'                 ($tb.count_default -eq '1') $tb.count_default
+  Check 'T4 n_distribution 4:1;3:1'          ($tb.n_distribution -eq '4:1;3:1') $tb.n_distribution
+  Check 'T4 inferred_distribution 4:1;2:1'   ($tb.inferred_distribution -eq '4:1;2:1') $tb.inferred_distribution
+  Check 'T4 disagreements 1'                 ($tb.disagreements -eq '1') $tb.disagreements
+  Check 'T4 formats bmp:2'                   ($tb.formats -eq 'bmp:2') $tb.formats
+  Check 'T4 distinct_payloads 2'             ($tb.distinct_payloads -eq '2') $tb.distinct_payloads
+  # runtime_refs: whether the deployed resolver binds B.Picture.Assign / B.Picture :=
+  # in UsesBtn.pas back to Abcbtn.TabcToggleBtn.Picture. Measured with
+  # `find-callers --name Picture --resolved --db $libDb` below; pinned to whatever
+  # that run demonstrably produces, per the brief's instruction not to weaken this
+  # to "non-empty".
+  $fc = & $Exe query find-callers --name Picture --resolved --db $libDb 2>&1 | Out-String
+  Write-Host "--- raw find-callers --name Picture --resolved --db `$libDb ---"; Write-Host $fc
+  Check 'T4 runtime_refs 0 (TabcToggleBtn inherits Picture; find-callers --name Picture --resolved found 0 callers under Abcbtn.TabcToggleBtn.Picture -- see raw output above)' ($tb.runtime_refs -eq '0') $tb.runtime_refs
+  $sp = $c | Where-Object { $_.component_class -eq 'TSpeedButton' }
+  Check 'T4 unresolved class -> runtime_refs empty' ($sp.runtime_refs -eq '') $sp.runtime_refs
+}
+
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null
 $o2 = & $Exe glyph-vacuum --root $empty --out (Join-Path $WorkDir 'out-empty') 2>&1 | Out-String
