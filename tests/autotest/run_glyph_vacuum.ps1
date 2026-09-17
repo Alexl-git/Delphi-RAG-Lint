@@ -293,6 +293,20 @@ if (Test-Path $cls) {
   Check 'T4 unresolved class -> runtime_refs empty' ($sp.runtime_refs -eq '') $sp.runtime_refs
 }
 
+# ---- fixture 4 (continued): gallery.html, the visual-review page -----------------
+$gal = Join-Path $outDb 'gallery.html'
+Check 'T5 gallery.html written' (Test-Path $gal)
+if (Test-Path $gal) {
+  $g = Get-Content $gal -Raw
+  $imgs = [regex]::Matches($g, 'src="(images/[0-9a-f]{64}\.[a-z]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+  $files = Get-ChildItem (Join-Path $outDb 'images') | ForEach-Object { 'images/' + $_.Name } | Sort-Object -Unique
+  Check 'T5 gallery references every image file and nothing else' (($imgs -join ',') -eq ($files -join ',')) "refs=$($imgs -join ',') files=$($files -join ',')"
+  Check 'T5 one h2 per class' (([regex]::Matches($g, '<h2>')).Count -eq 4)
+  Check 'T5 Btn1 strip has 3 separators at 32/64/96 px' ($g -match 'left:32px' -and $g -match 'left:64px' -and $g -match 'left:96px')
+  Check 'T5 caption carries N/inferred/agree' ($g -match 'N=4 inferred=4 agree=Y')
+  Check 'T5 no script tag' (-not ($g -match '<script'))
+}
+
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null
 $o2 = & $Exe glyph-vacuum --root $empty --out (Join-Path $WorkDir 'out-empty') 2>&1 | Out-String

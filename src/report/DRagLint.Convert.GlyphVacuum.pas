@@ -648,6 +648,126 @@ begin
   end;
 end;
 
+const
+  GalleryHead =
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>glyph-vacuum gallery</title>' +
+    '<style>body{font-family:Segoe UI,Arial,sans-serif;margin:16px}h2{border-bottom:1px solid #999}' +
+    '.card{display:inline-block;vertical-align:top;margin:8px;padding:8px;border:1px solid #ccc}' +
+    '.box{position:relative;display:inline-block;background:#eee}.box img{display:block;image-rendering:pixelated}' +
+    '.sep{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed #e00}' +
+    '.cap{font-size:12px;margin-top:4px}.paths{font-size:11px;color:#555}</style></head><body>';
+  GalleryTail = '</body></html>';
+  GalleryMaxPaths = 3;
+
+// & first, then < and >, so an already-escaped '&amp;' never becomes '&amp;amp;'.
+function Esc(const S: string): string;
+begin
+  Result:= StringReplace(S, '&', '&amp;', [rfReplaceAll]);
+  Result:= StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
+  Result:= StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
+end;
+
+type
+  // One card per distinct payload_sha within a class: Rep is the first row
+  // seen for that sha (its geometry/caption fields), Count is every row
+  // sharing the sha, Paths the first GalleryMaxPaths object_paths.
+  TGalleryCard = record
+    Rep  : TGlyphRow;
+    Count: Integer;
+    Paths: TArray<string>;
+  end;
+
+  // Per-class card set, keyed on payload_sha. A record read out of a
+  // TDictionary is a COPY (Task 4's lesson): every card mutation is written
+  // back with Cards.AddOrSetValue; the Cards dictionary itself is a class
+  // reference, so no write-back is needed for it once the class row exists.
+  TGalleryClass = record
+    ClassName_: string;
+    Cards     : TDictionary<string, TGalleryCard>;
+  end;
+
+// One <h2> per component_class (CompareText order), one .card per distinct
+// payload_sha within that class -- see the unit banner's Spec for the layout.
+procedure WriteGalleryHtml(const AOutDir: string; const ARows: TList<TGlyphRow>);
+var
+  Classes: TDictionary<string, TGalleryClass>;
+  Keys   : TArray<string>;
+  Shas   : TArray<string>;
+  K, Sha : string;
+  GC     : TGalleryClass;
+  Card   : TGalleryCard;
+  R      : TGlyphRow;
+  SB     : TStringBuilder;
+  N, I   : Integer;
+begin
+  Classes:= TDictionary<string, TGalleryClass>.Create;
+  try
+    for R in ARows do
+    begin
+      K:= LowerCase(R.ComponentClass);
+      if not Classes.TryGetValue(K, GC) then
+      begin
+        GC:= Default(TGalleryClass);
+        GC.ClassName_:= R.ComponentClass;
+        GC.Cards     := TDictionary<string, TGalleryCard>.Create;
+        Classes.Add(K, GC);
+      end;
+      if not GC.Cards.TryGetValue(R.PayloadSha, Card) then
+      begin
+        Card:= Default(TGalleryCard);
+        Card.Rep:= R;
+      end;
+      Inc(Card.Count);
+      if Length(Card.Paths) < GalleryMaxPaths then Card.Paths:= Card.Paths + [R.ObjectPath];
+      GC.Cards.AddOrSetValue(R.PayloadSha, Card);
+    end;
+
+    Keys:= Classes.Keys.ToArray;
+    TArray.Sort<string>(Keys, TComparer<string>.Construct(
+      function(const AL, ARr: string): Integer
+      begin
+        Result:= CompareText(Classes[AL].ClassName_, Classes[ARr].ClassName_);
+      end));
+
+    SB:= TStringBuilder.Create;
+    try
+      SB.Append(GalleryHead);
+      for K in Keys do
+      begin
+        GC:= Classes[K];
+        SB.AppendFormat('<h2>%s</h2>', [Esc(GC.ClassName_)]);
+        Shas:= GC.Cards.Keys.ToArray;
+        for Sha in Shas do
+        begin
+          Card:= GC.Cards[Sha];
+          R   := Card.Rep;
+          if R.Width > 0 then
+            SB.AppendFormat('<div class="card"><div class="box" style="width:%dpx;height:%dpx">',
+              [R.Width, R.Height])
+          else
+            SB.Append('<div class="card"><div class="box" style="width:auto;height:auto">');
+          SB.AppendFormat('<img src="%s" alt="">', [StringReplace(R.ImageFile, '\', '/', [rfReplaceAll])]);
+          N:= StrToIntDef(R.CountEffective, 0);
+          if (N > 1) and (R.Width > 0) and (R.Width mod N = 0) then
+            for I:= 1 to N - 1 do
+              SB.AppendFormat('<div class="sep" style="left:%dpx"></div>', [I * (R.Width div N)]);
+          SB.Append('</div>');
+          SB.AppendFormat('<div class="cap">%s | N=%s inferred=%s agree=%s | %dx%dx%d %s | shared by %d instance(s)</div>',
+            [Esc(R.Prop), R.CountEffective, R.InferredN, R.Agree, R.Width, R.Height, R.Bpp, R.Format, Card.Count]);
+          SB.AppendFormat('<div class="paths">%s</div></div>', [Esc(String.Join(', ', Card.Paths))]);
+        end;
+      end;
+      SB.Append(GalleryTail);
+      WriteUtf8NoBom(TPath.Combine(AOutDir, 'gallery.html'), SB.ToString);
+    finally
+      SB.Free;
+    end;
+  finally
+    for K in Classes.Keys do Classes[K].Cards.Free;
+    Classes.Free;
+  end;
+end;
+
 function RunGlyphVacuum(const AOpts: TGlyphVacuumOptions;
   out ASummary: TGlyphVacuumSummary; out AError: string): Boolean;
 var
@@ -694,6 +814,7 @@ begin
     for R in State.Rows do SB.Append(RowLine(R)).Append(#13#10);
     WriteUtf8NoBom(TPath.Combine(AOpts.OutDir, 'instances.tsv'), SB.ToString);
     WriteClassesTsv(AOpts.OutDir, State.Rows, State);
+    WriteGalleryHtml(AOpts.OutDir, State.Rows);
     State.Summary.DistinctPayloads:= State.Shas.Count;
     ASummary:= State.Summary;
     Result  := True;
