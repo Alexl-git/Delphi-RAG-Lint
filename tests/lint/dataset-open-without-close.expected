@@ -15,3 +15,14 @@ dataset-open-without-close 11
 !dataset-open-without-close 51
 !dataset-open-without-close 63
 dataset-open-without-close 78
+#
+# 101, 102, 104 (GoodOpenIsAField) are the 2026-09-17 FALSE POSITIVE: a record
+# FIELD named Open, indexed with [ or passed to Length(). The walk used to match
+# every exprDot spelt X.Open anywhere in the tree -- eight findings on
+# drag-lint's own DRagLint.Doc.Facts.pas for one field. Only an X.Open that is
+# the WHOLE statement (parent node statement, optionally with ()) is a
+# dataset open; an operand of a subscript, an argument list or an assignment is
+# not. 11 and 78 remain the positive controls that a bare Q.Open; still fires.
+!dataset-open-without-close 101
+!dataset-open-without-close 102
+!dataset-open-without-close 104

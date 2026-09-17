@@ -80,4 +80,28 @@ begin
   Q.Free;
 end;
 
+{ A FIELD named Open is not a dataset open. INBOX 2026-09-17 section 2: a
+  record with Open: TArray<...> read as AState.Open[High(AState.Open)]
+  fired EIGHT times on drag-lint's own source -- the walk matched every
+  exprDot whose rhs spelt Open, wherever it sat. Only a bare X.Open; /
+  X.Open(); STATEMENT is a dataset open; an X.Open that is indexed, passed
+  as an argument, or assigned is an operand and must be ignored. }
+type
+  TOpenHandler = record
+    SawStmt: Boolean;
+  end;
+  THandlersScanState = record
+    Open: TArray<TOpenHandler>;
+  end;
+
+procedure GoodOpenIsAField(var AState: THandlersScanState);
+var
+  N: Integer;
+begin
+  AState.Open[High(AState.Open)].SawStmt:= True;
+  N:= Length(AState.Open);
+  if N > 0 then
+    AState.Open[0].SawStmt:= False;
+end;
+
 end.

@@ -7603,6 +7603,21 @@ var
     if A0.NodeType = 'identifier' then begin AVar:= LowerCase(NodeStr(A0)); Result:= True; end;
   end;
 
+  { A dataset open is a bare `X.Open;` / `X.Open();` STATEMENT -- the parser
+    wraps one in a `statement` node in every position (block, then/else arm,
+    loop body, case arm, try/finally/except body). An `X.Open` whose parent is
+    anything else is an OPERAND: `AState.Open[i]` (exprSubscript),
+    `Length(AState.Open)` (exprArgs), `if Q.Open then` (condition), a
+    `:=` rhs. A record with a dynamic-array field named Open fired eight times
+    on drag-lint's own source this way (INBOX 2026-09-17, section 2). }
+  function IsWholeStatement(const N: TTSNode): Boolean;
+  var
+    P: TTSNode;
+  begin
+    P:= N.Parent;
+    Result:= (not P.IsNull) and (P.NodeType = 'statement');
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
   var
     I   : Integer;
@@ -7615,7 +7630,7 @@ var
     if DotMethod(N, V, M) then
     begin
       if SameText(M, 'Open') then
-      begin if not Opened.ContainsKey(V) then Opened.Add(V, N.StartPoint); end
+      begin if IsWholeStatement(N) and not Opened.ContainsKey(V) then Opened.Add(V, N.StartPoint); end
       else if SameText(M, 'Close') and AInFinally then ClosedInFinally.AddOrSetValue(V, True);
     end
     else if IsActiveAssign(N, True, V) then

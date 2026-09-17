@@ -23,6 +23,10 @@ breaking changes** until v1.0.
   (own first, nearest ancestor next) via the new `facts-inherited` index stage.
 
 ### Fixed
+- `dataset-open-without-close` ignores a member named `Open` that is indexed, passed as
+  an argument or assigned -- only a bare `X.Open;` / `X.Open();` statement is a
+  dataset open. A record field `Open: TArray<...>` read as `AState.Open[i]` fired
+  eight times on drag-lint's own source (INBOX 2026-09-17, section 2).
 - `GetSymbolFacts` / `GetSymbolDoc` initialise a managed `Result` with
   `Default()`, not `FillChar` (leak when a caller reused the variable).
 - `uses-report --name <pattern>` matching NO source unit now exits 2 with
