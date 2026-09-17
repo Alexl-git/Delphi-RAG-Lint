@@ -55,6 +55,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
 /// <para>Calls: DateTimeToUnix, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt, DRagLint.Core.Interfaces.ISymbolStore.GetFileMTime</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt"/>

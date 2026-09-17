@@ -46,7 +46,7 @@ type
   /// <summary>Flow-sensitive checks over a single file's routines.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -88,6 +88,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
@@ -103,6 +104,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
@@ -113,10 +115,34 @@ type
     class function PhaseName(APhase: Integer): string; static;
     /// <summary>How many phases there are.</summary>
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: FLOW_PHASES.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function PhaseCount: Integer; static;
     /// <summary>Routines analysed since process start -- the denominator for a
     /// per-routine cost.</summary>
     /// <returns><!-- drag-lint:auto -->Int64 -- Observed: GFlowRoutines.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Pure</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
+    /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RoutinesAnalysed: Int64; static;
     /// <summary>Seconds spent inside flow ORACLE AOracle (Step 0 of
     /// docs\PLAN-flowchecker-transfer.md). Nested time is excluded, so the
@@ -128,6 +154,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
@@ -143,6 +170,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>
@@ -159,6 +187,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
@@ -174,6 +203,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCount"/>
@@ -188,6 +218,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleCalls"/>
     /// <seealso cref="DRagLint.Diagnostics.FlowChecks.TFlowChecker.OracleMisses"/>

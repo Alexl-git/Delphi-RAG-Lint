@@ -114,10 +114,11 @@ type
       procedure HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
+      /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, ExtractFileExt, Integer, LowerCase, Move, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, ExtractFileExt, Integer (+6 more)</para>
       /// <para>Complexity: 14 (cyclomatic, outer body), 121 lines (full implementation)</para>
       /// <para>Reads: FLanguage, FExcUnit, FQueryRules</para>
       /// <para>Touches: file system</para>
@@ -151,6 +152,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FQueryRules</para>
       /// <para>Pure</para>
+      /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
@@ -215,6 +217,7 @@ type
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Lint.Linter.TLinter.CheckFileImpl, Format, FWalkFilter, Writeln</para>
       /// <para>Reads: FWalkFilter</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
@@ -273,6 +276,7 @@ type
       /// <summary>Parses AFilePath and harvests its raise sites and exception
       /// candidates, running NO rules.</summary>
       /// <param name="AFilePath">A .pas or .dpr on disk.</param>
+      /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <para>This is what `exceptions-sync` walks a project with. LintFile
       /// would give the same harvest, but it also executes 114 tree-sitter
@@ -288,8 +292,9 @@ type
       /// because one unrelated unit is malformed would be the wrong trade.</para>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.TLinter.HarvestExceptions, ExtractFileExt, Integer, Move, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.TLinter.HarvestExceptions, ExtractFileExt, Integer, Move, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
       /// <para>Reads: FExcUnit, FLanguage</para>
+      /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>

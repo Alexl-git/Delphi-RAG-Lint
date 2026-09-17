@@ -31,8 +31,8 @@ type
   /// level deep) All $(BDS) and similar macros are expanded.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+19 more)</para>
-  /// <para>Used in units: Config.IndexesFrame, Config.SettingsFrame, DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan, DragLint.Plugin.OptionsFrames</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas) (+17 more)</para>
+  /// <para>Used in units: Config.IndexesFrame, Config.SettingsFrame, DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan, DRagLint.Lint.ProjectChecks, DragLint.Plugin.OptionsFrames</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectResolver = class
@@ -94,6 +94,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths (DRagLint.Project.Resolver.pas)</para>
       /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros, SameText</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ExpandMacros"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
@@ -108,7 +109,7 @@ type
       /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/3 (DRagLint.Project.Resolver.pas)</para>
       /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.ExpandMacros</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
@@ -141,16 +142,38 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths (DRagLint.Project.Resolver.pas)</para>
-      /// <para>Calls: DRagLint.Project.Resolver.ReadRegPathInto, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, HKEY</para>
-      /// <para>Writes: FCurrentPlatform</para>
-      /// <seealso cref="DRagLint.Project.Resolver.ReadRegPathInto"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/3</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Pure</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>); overload;
+    /// <summary><!-- drag-lint:auto sum -->Indexing callers must keep BOTH -- a
+    /// browsing-only root is still code the user can open and therefore code the index
+    /// should know. So Resolve is unchanged and only the COMPILE path opts out.</summary>
+    /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
+    /// <param name="APlatforms"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <param name="ASearchPathOnly"><!-- drag-lint:auto type -->Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2 (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveCompilePaths (DRagLint.Project.Resolver.pas)</para>
+    /// <para>Calls: DRagLint.Project.Resolver.ReadRegPathInto, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, HKEY</para>
+    /// <para>Overload 2 of 2</para>
+    /// <para>Writes: FCurrentPlatform</para>
+    /// <para>Directives: overload</para>
+    /// <seealso cref="DRagLint.Project.Resolver.ReadRegPathInto"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>; ASearchPathOnly: Boolean); overload;
       /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
@@ -192,7 +215,7 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->.dproj not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveProjectOnly (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.Resolve (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveCompilePaths (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveProjectOnly (DRagLint.Project.Resolver.pas)</para>
       /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadDProj, DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadDProj"/>
@@ -206,7 +229,7 @@ type
     public
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+12 more)</para>
       /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty</para>
       /// <para>constructor</para>
       /// <para>Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded</para>
@@ -222,6 +245,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FEnvVars</para>
       /// <para>Pure</para>
+      /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -243,8 +267,7 @@ type
       /// indexes the entire RTL/VCL and every installed component's source. Use
       /// <see cref="ResolveProjectOnly"/> to index a project.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?</para>
-      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2</para>
       /// <para>Returns: List.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
@@ -257,10 +280,26 @@ type
       function Resolve(const ADprojPath: string): TArray<string>;
     /// <summary>The folders dcc should COMPILE against: the project's own plus
     /// the TARGET platform's registry Search Path, in registry order.</summary>
-    /// <remarks>Deliberately NOT Resolve: that one adds the Browsing Path and
+    /// <param name="ADprojPath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="APlatform"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
+    /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders: .dproj not found: %s</exception>
+    /// <remarks>
+    /// Deliberately NOT Resolve: that one adds the Browsing Path and
     /// both platforms, which is right for indexing and wrong for compiling --
     /// it put a Source dir 102 positions ahead of its DCU dir and made dcc
-    /// rebuild Spring4D from source on every invocation.</remarks>
+    /// rebuild Spring4D from source on every invocation.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/3</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveCompilePaths(const ADprojPath, APlatform: string): TArray<string>;
       /// <summary>The INDEXING scope for ADprojPath: the project's own folders
       /// only -- its .dproj search paths, the directories named by the .dpr's
@@ -304,8 +343,8 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+5 more)</para>
-      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+3 more)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
@@ -340,7 +379,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas) ?</para>
-      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2</para>
       /// <para>Returns: List.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>

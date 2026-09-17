@@ -78,6 +78,7 @@ type
       /// <para>Complexity: 12 (cyclomatic, outer body), 55 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Destroy"/>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
@@ -101,6 +102,16 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         constructor Create;
+        /// <remarks>
+        /// <!-- drag-lint:auto BEGIN -->
+        /// <para>Directives: override</para>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored"/>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.ParseIgnoreFile"/>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir"/>
+        /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir"/>
+        /// <!-- drag-lint:auto END -->
+        /// </remarks>
         destructor Destroy; override;
 
         /// <summary>Load .gitignore + .hgignore (if present) from ADir and push

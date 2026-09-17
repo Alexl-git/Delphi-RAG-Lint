@@ -49,11 +49,17 @@ uses
 type
   /// <summary>Raised for a failure inside the format pipeline itself (the
   /// target file is missing, a pipe or process could not be created).</summary>
-  /// <remarks>A named class rather than a bare <c>Exception</c> so a caller can
+  /// <remarks>
+  /// A named class rather than a bare <c>Exception</c> so a caller can
   /// handle a formatter problem without also swallowing every unrelated
   /// error -- `raise-bare-exception` is a warning in this repo, and on a verb
   /// that rewrites source it is the difference between "formatting failed" and
-  /// "something, somewhere, failed".</remarks>
+  /// "something, somewhere, failed".
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas), DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture (DRagLint.Format.Yadf.pas)</para>
+  /// <para>Used in units: DRagLint.Format.Yadf</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EYadfFormatError = class(Exception);
 
   /// <summary>What `format` should DO once it has resolved and vetted a
@@ -66,6 +72,9 @@ type
   /// <para>Both non-apply modes are kept even though fmDiff subsumes fmDryRun
   /// for a human reader: fmDryRun is the one a script can branch on without
   /// parsing a diff.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Format.Yadf.pas), DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFormatMode = (fmApply, fmDryRun, fmDiff);
 
@@ -80,6 +89,10 @@ type
   /// are known, including on a refusal -- an operator debugging a refusal needs
   /// to see WHICH binary was rejected, which was exactly what the old
   /// single-line failure could not tell them.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Format.Yadf.pas), DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Format.Yadf</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFormatResult = record
     ExitCode    : Integer;
@@ -92,8 +105,14 @@ type
 
   /// <summary>Resolves, vets and runs YADF over a single Delphi source file.
   /// </summary>
-  /// <remarks>Every entry point is a class function; the type holds no state.
-  /// Not thread-safe with respect to the file it is rewriting.</remarks>
+  /// <remarks>
+  /// Every entry point is a class function; the type holds no state.
+  /// Not thread-safe with respect to the file it is rewriting.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TYadfFormatter = class  // dl:ok high-response@30e2 -- RFC 70 is dominated by SpawnAndCapture's WinAPI call list (CreatePipe/CreateProcessW/ReadFile/WaitForSingleObject); one cohesive operation that splitting would only obscure
     public
       /// <summary>Resolve a YADF, refuse it if too old, then apply / dry-run /
@@ -106,6 +125,7 @@ type
       /// <returns>The outcome; see TFormatResult.ExitCode for the reason
       /// codes.</returns>
       /// <exception cref="Exception">AFile does not exist.</exception>
+      /// <exception cref="EYadfFormatError"><!-- drag-lint:auto exc -->File not found: %s; via DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture: CreatePipe failed; via DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture: CreateProcessW failed: %d</exception>
       /// <remarks>
       /// <para>In fmApply the file is backed up, formatted, then RE-PARSED and
       /// compared against the pre-format parse by symbol fingerprint. On
@@ -113,6 +133,18 @@ type
       /// allowed to change every byte of layout; it is not allowed to change
       /// what the unit DECLARES.</para>
       /// <para>Touches the file system and the registry.</para>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ? (+143 more)</para>
+      /// <para>Calls: DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr, DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence, DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion, DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff, DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture, DRagLint.Format.Yadf.TYadfFormatter.SymbolFingerprint</para>
+      /// <para>Complexity: 18 (cyclomatic, outer body), 207 lines (full implementation)</para>
+      /// <para>Catches: Exception (empty); Exception (swallowed)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture"/>
+      /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Format(const AFile: string; const AYadfPath: string = '';
                             AMode: TFormatMode = fmApply): TFormatResult;
@@ -120,39 +152,145 @@ type
       /// <summary>The YADF path from HKCU\Software\YADF\ExePath, or ''.</summary>
       /// <returns>An existing file path, or '' when the value is unset, empty
       /// or names a file that is not there.</returns>
-      /// <remarks>REGISTRY ONLY, deliberately. The two hardcoded Win32
+      /// <remarks>
+      /// REGISTRY ONLY, deliberately. The two hardcoded Win32
       /// fallbacks this used to carry are deleted -- see the unit header for
-      /// why repointing them was rejected.</remarks>
+      /// why repointing them was rejected.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: Trim</para>
+      /// <para>Returns: ''; RegPath</para>
+      /// <para>Touches: file system, registry</para>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function FindYadfPath: string;
 
       /// <summary>FileVersion from AExePath's version resource.</summary>
       /// <param name="AExePath">Any file; need not be an exe.</param>
       /// <returns>'a.b.c.d', or '' when the file carries no version resource
       /// (a .bat wrapper, for instance).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+      /// <para>Calls: GetFileVersionInfoSizeW, GetFileVersionInfoW, HiWord, LoWord, Pointer, PWideChar, VerQueryValueW</para>
+      /// <para>Returns: ''</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ReadFileVersion(const AExePath: string): string;
 
       /// <summary>Compares two dotted version strings numerically.</summary>
+      /// <param name="A"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="B"><!-- drag-lint:auto type -->const string</param>
       /// <returns>&lt;0, 0 or &gt;0. Missing components read as 0, so '1.0'
       /// and '1.0.0.0' compare equal.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+      /// <para>Calls: Trim, TryStrToInt</para>
+      /// <para>Returns: 0</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CompareVersionStr(const A, B: string): Integer;
     private
       /// <summary>Kind+qualified-name fingerprint of everything ASource
       /// declares, sorted.</summary>
-      /// <remarks>The qualified name carries the parent chain, so this one
+      /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AOk"><!-- drag-lint:auto type -->out Boolean</param>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
+      /// <remarks>
+      /// The qualified name carries the parent chain, so this one
       /// string per symbol covers names, kinds AND nesting. Returns nil when
       /// the source does not parse at all, which the caller must distinguish
-      /// from "parsed to nothing".</remarks>
+      /// from "parsed to nothing".
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.IParser.Parse, DRagLint.Parser.Delphi13.TDelphi13Parser.Create, IntToStr</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>Mutates: AOk (out)</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.IParser.Parse"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Create"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function SymbolFingerprint(const ASource: TBytes; const AFilePath: string;
                                        out AOk: Boolean): TArray<string>;
       /// <summary>First divergence between two fingerprints, as display text,
       /// or '' when they match.</summary>
+      /// <param name="ABefore"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <param name="AAfter"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function FirstDivergence(const ABefore, AAfter: TArray<string>): string;
       /// <summary>A unified-ish diff of two texts.</summary>
-      /// <remarks>NOT a minimal-edit diff: it trims the common prefix and
+      /// <param name="ABefore"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AAfter"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALabel"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Sb.ToString.</returns>
+      /// <remarks>
+      /// NOT a minimal-edit diff: it trims the common prefix and
       /// suffix and prints the differing span between them. That is enough to
       /// see what a formatter did, and avoids carrying an LCS implementation
-      /// for a display-only feature.</remarks>
+      /// for a display-only feature.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 37 lines (full implementation)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function SimpleDiff(const ABefore, AAfter, ALabel: string): string;
+      /// <param name="ACmd"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ATimeoutMs"><!-- drag-lint:auto type -->DWORD</param>
+      /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FMT_SPAWN_ERROR;
+      /// FMT_TIMEOUT; Integer(ExitCode).</returns>
+      /// <exception cref="EYadfFormatError"><!-- drag-lint:auto exc -->CreatePipe failed; CreateProcessW failed: %d</exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+      /// <para>Calls: AnsiString, CloseHandle, Copy, CreatePipe, CreateProcessW, FillChar, GetExitCodeProcess, GetStdHandle, Integer, PAnsiChar (+6 more)</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 68 lines (full implementation)</para>
+      /// <para>Mutates: AOutput (out)</para>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+      /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function SpawnAndCapture(const ACmd: string; ATimeoutMs: DWORD; out AOutput: string): Integer;
   end;
 

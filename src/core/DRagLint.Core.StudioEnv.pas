@@ -71,7 +71,7 @@ type
   /// cache is kept -- a cached root would go stale across an install without
   /// any way to notice.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)</para>
+  /// <para>Used by: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.LSP.Proxy.ResolveDelphiLspPath (DRagLint.LSP.Proxy.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Proxy, DRagLint.Project.Resolver</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -93,7 +93,9 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Calls: Trim</para>
     /// <para>Returns: ''; Trim(Reg.ReadString(REG_VALUE))</para>
+    /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: registry</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
@@ -120,6 +122,7 @@ type
     /// <para>Returns: True; False</para>
     /// <para>Mutates: ADiagnostic (out), ARoot (out)</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
@@ -142,6 +145,7 @@ type
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
     /// <para>Returns: ''</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
@@ -161,9 +165,10 @@ type
     /// composed with TPath.Combine by the caller, never stored as its own
     /// literal.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas)</para>
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
@@ -180,9 +185,10 @@ type
     /// Composed, never stored. Its existence is NOT checked here --
     /// callers pass it to cmd.exe, whose own failure names the file.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)</para>
     /// <para>Returns: TPath.Combine(Root, 'bin\rsvars.bat')</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
@@ -212,6 +218,7 @@ type
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect, GetEnvironmentVariable, PChar, SetEnvironmentVariable</para>
     /// <para>Returns: True</para>
     /// <para>Mutates: AFailure (out)</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>

@@ -77,8 +77,10 @@ type
       /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas)</para>
       /// <para>Calls: Copy, DateTimeToUnix, Default, DRagLint.Sql.FbSnapshot.ClearPriorSnapshot, DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks, DRagLint.Sql.FbSnapshot.TableExists, DRagLint.Sql.FbSnapshot.TFbSnapshot.Run.ConnectFb, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, Pos, Trim, UpCase, UpperCase, Writeln</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 299 lines (full implementation)</para>
+      /// <para>Catches: Exception (re-raise); Exception (swallowed)</para>
       /// <para>SQL: writes FB_COLUMNS, FB_DATASETS, FB_ENUM_VALUES, FB_FIELD_INFO, FB_RELATIONS</para>
       /// <para>Transaction: starts, commits, rolls back</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Sql.FbSnapshot.ClearPriorSnapshot"/>
       /// <seealso cref="DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks"/>
       /// <seealso cref="DRagLint.Sql.FbSnapshot.TableExists"/>

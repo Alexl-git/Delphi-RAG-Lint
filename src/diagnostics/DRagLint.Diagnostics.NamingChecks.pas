@@ -41,6 +41,12 @@ type
   /// <summary>Config-driven naming-convention checks (pure AST, no DB required for
   /// prefix rules). The store is optional and is used only for the exception-class
   /// sub-check of type-name-prefix.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNamingChecker = class
   public
     /// <summary>Runs the configured naming rules against a single .pas file and

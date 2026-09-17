@@ -60,7 +60,9 @@ type
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Interfaces.ISymbolStore.GuiFrameworkInUse, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Resolver.TypeAt.FindGenericBaseAnywhere, DRagLint.Resolver.TypeAt.FindTypeAnywhere (+10 more)</para>
       /// <para>Overload 1 of 2</para>
       /// <para>Complexity: 41 (cyclomatic, outer body), 248 lines (full implementation)</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl"/>
@@ -80,6 +82,7 @@ type
       /// <para>Calls: DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
       /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.CollectMembers"/>
       /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.ExtractTokenAt"/>

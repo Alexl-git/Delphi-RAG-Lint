@@ -183,6 +183,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FQuery</para>
       /// <para>Pure</para>
+      /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
@@ -269,6 +270,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)</para>
       /// <para>Calls: ChangeFileExt, DRagLint.Lint.QueryRules.TQueryRule.Create, Format, Writeln</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
       /// <!-- drag-lint:auto END -->

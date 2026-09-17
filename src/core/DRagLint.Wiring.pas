@@ -23,6 +23,7 @@ uses
 /// <para>Called from: DRagLint.CLI.DoWiring (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
 /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites, DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm, DRagLint.Core.Interfaces.ISymbolStore.FindImplementationsOf, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
 /// <para>Returns: TJSONObject.Create</para>
+/// <para>Catches: Exception (re-raise)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm"/>

@@ -83,6 +83,7 @@ type
       /// <para>Calls: LowerCase, Pos</para>
       /// <para>Returns: (ARaw &lt;&gt; '') and (Pos(WIKI_MARK, LowerCase(ARaw)) &gt; 0)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
@@ -110,6 +111,7 @@ type
       /// <para>Calls: DRagLint.Doc.Wiki.TWikiParser.Walk</para>
       /// <para>Returns: Walk(ARaw, AOwnerQName, AOwnerKind, AFilePath, ADocStartLine, nil)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.Walk"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
@@ -143,6 +145,7 @@ type
       /// <para>Calls: DRagLint.Doc.Wiki.TWikiParser.Walk, Trim</para>
       /// <para>Returns: Trim(Rest.Text)</para>
       /// <para>Mutates: ANames (out)</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.Walk"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
@@ -170,6 +173,7 @@ type
       /// <para>Returns: 0; S</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 25 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
@@ -196,6 +200,7 @@ type
       /// <para>Calls: CompareText</para>
       /// <para>Returns: Length(ANameA) - Length(ANameB); CompareText(ANameA, ANameB)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
@@ -219,6 +224,7 @@ type
       /// <para>Returns: True</para>
       /// <para>Complexity: 10 (cyclomatic, outer body), 24 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
@@ -235,6 +241,7 @@ type
       /// <para>Called from: DRagLint.Doc.Wiki.TWikiParser.Walk (DRagLint.Doc.Wiki.pas)</para>
       /// <para>Calls: Trim</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
@@ -254,6 +261,7 @@ type
       /// <para>Calls: CharInSet, PosEx</para>
       /// <para>Returns: False</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.CompareRanked"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
@@ -282,6 +290,7 @@ type
       /// <para>Calls: CharInSet, Copy, Default, DRagLint.Doc.Wiki.TWikiParser.HasMarker, DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly, DRagLint.Doc.Wiki.TWikiParser.SplitList, DRagLint.Doc.Wiki.TWikiParser.Walk.Flush, DRagLint.Doc.Wiki.TWikiParser.Walk.Keep, DRagLint.Doc.Wiki.TWikiParser.Walk.StartTopic, DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned, LowerCase, Pos, StartsStr, StartsText, Trim</para>
       /// <para>Complexity: 16 (cyclomatic, outer body), 133 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.HasMarker"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.IsMarkupOnly"/>
       /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.SplitList"/>

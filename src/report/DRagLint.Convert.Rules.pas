@@ -201,7 +201,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
 /// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.Rules.ParseConversionRules.AddError, DRagLint.Convert.Rules.ParseConversionRules.AddRule, DRagLint.Convert.Rules.ParseConversionRules.Directive, DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective, DRagLint.Convert.Rules.SplitCastSuffix, DRagLint.Convert.Rules.SplitHeadAndUnits, DRagLint.Convert.Rules.SplitLines (+10 more)</para>
-/// <para>Complexity: 27 (cyclomatic, outer body), 426 lines (full implementation)</para>
+/// <para>Complexity: 30 (cyclomatic, outer body), 454 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.AddError"/>
 /// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.AddRule"/>

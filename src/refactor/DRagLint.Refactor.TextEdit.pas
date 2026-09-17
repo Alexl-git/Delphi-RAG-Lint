@@ -40,7 +40,7 @@ type
   /// AnchorIsValid for what it verifies and why a substring test alone is not
   /// enough. Set BOTH fields to arm it; ExpectLine = 0 is unguarded.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits.BuildUsesEdit (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ScopeWalkEditsToClosure (DRagLint.CLI.pas) (+40 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits.BuildUsesEdit (DRagLint.CLI.pas), DRagLint.CLI.ScopeWalkEditsToClosure (DRagLint.CLI.pas) (+41 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Diagnostics.AstChecks, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Doc.Strip, DRagLint.Lint.DocRules, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.NamingFix, DRagLint.Refactor.TextEdit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -58,7 +58,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas), DRagLint.CLI.ReportStrip (DRagLint.CLI.pas) (+8 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas), DRagLint.CLI.ReportStrip (DRagLint.CLI.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -86,6 +86,7 @@ type
     /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3</para>
     /// <para>Overload 1 of 2</para>
     /// <para>Pure</para>
+    /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
     /// <!-- drag-lint:auto END -->
@@ -105,13 +106,14 @@ type
     /// rejected is not rewritten, backed up, or counted.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/2 (DRagLint.Refactor.TextEdit.pas)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/2 (DRagLint.Refactor.TextEdit.pas)</para>
     /// <para>Calls: Copy, DRagLint.Refactor.TextEdit.AnchorIsValid, DRagLint.Refactor.TextEdit.EditTopLine, DRagLint.Refactor.TextEdit.ReplaceEditIsValid</para>
     /// <para>Returns: Touched</para>
     /// <para>Overload 2 of 2</para>
     /// <para>Complexity: 33 (cyclomatic, outer body), 162 lines (full implementation)</para>
     /// <para>Mutates: ASkippedEdits (out)</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.AnchorIsValid"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.EditTopLine"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.ReplaceEditIsValid"/>
@@ -160,6 +162,7 @@ type
     /// <para>Calls: DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/6</para>
     /// <para>Overload 1 of 2</para>
     /// <para>Pure</para>
+    /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -187,6 +190,7 @@ type
     /// <para>Complexity: 29 (cyclomatic, outer body), 140 lines (full implementation)</para>
     /// <para>Mutates: AResolvedUnit (out), AAlreadyUsed (out)</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>

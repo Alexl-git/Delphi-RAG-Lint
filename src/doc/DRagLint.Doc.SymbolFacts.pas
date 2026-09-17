@@ -443,6 +443,7 @@ type
       /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, DRagLint.Doc.SymbolFacts.ProcsForFile, Integer, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.StartPoint</para>
       /// <para>Returns: Default(TSymbolFacts)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent"/>

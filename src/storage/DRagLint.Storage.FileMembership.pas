@@ -50,11 +50,13 @@ interface
 /// run_project_db_resolve.ps1 (6d).
 /// Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Storage.FileMembership.NormalizeForLookup</para>
+/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.HeaderSaysWal, DRagLint.Storage.FileMembership.NormalizeForLookup</para>
 /// <para>Returns: False; not Q.Eof</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>SQL: reads FILES</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
 /// <seealso cref="DRagLint.Storage.FileMembership.NormalizeForLookup"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -68,7 +70,8 @@ function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
 /// <returns>True only when the header says WAL. A missing, unreadable or
 /// too-short file (0 bytes -- created and never written) reads as False, i.e.
 /// a rollback journal, on which journal_mode=Delete is a no-op.</returns>
-/// <remarks>WHY A CONNECTION HAS TO BE TOLD THE MODE AT ALL. FireDAC executes
+/// <remarks>
+/// WHY A CONNECTION HAS TO BE TOLD THE MODE AT ALL. FireDAC executes
 /// `PRAGMA journal_mode = &lt;the JournalMode param, else Delete&gt;` on EVERY
 /// connect (FireDAC.Phys.SQLite.pas, SetPragma) -- there is no "leave it alone"
 /// value. So a READER leaves the header untouched only by asking for what is
@@ -78,7 +81,14 @@ function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
 /// or fails BUSY under a live LSP reader. Neither is a read.
 /// Exported (2026-09-15) so TSQLiteSymbolStore.Connect's read-only path and the
 /// LSP server use THIS reading of the header rather than a second copy of it.
-/// Thread-safe: no shared state.</remarks>
+/// Thread-safe: no shared state.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.FileMembership.DbContainsFile (DRagLint.Storage.FileMembership.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Returns: False; (F.Read(Hdr, SizeOf(Hdr)) = SizeOf(Hdr))</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HeaderSaysWal(const APath: string): Boolean;
 
 implementation

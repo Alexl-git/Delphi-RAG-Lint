@@ -35,7 +35,7 @@ type
   /// Not thread-safe; the lint pipeline is single-threaded per process.
   /// Call Clear between files in a batch to bound memory.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared (DRagLint.Diagnostics.AstChecks.pas) (+48 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas) (+50 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.FlowChecks, DRagLint.Diagnostics.NamingChecks, DRagLint.Doc.SymbolFacts, DRagLint.Lint.ClassMetrics, DRagLint.Lint.Linter, DRagLint.Lint.ProjectRules, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -66,8 +66,7 @@ type
     /// <summary>Applies the configured preprocessing to AUtf8, or returns it unchanged.</summary>
     /// <param name="AUtf8"><!-- drag-lint:auto type -->const TBytes</param>
     /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->TBytes -- Observed: AUtf8; Preprocess(AUtf8,
-    /// PpOpts).</returns>
+    /// <returns><!-- drag-lint:auto type -->TBytes</returns>
     /// <remarks>
     /// ONE transform and ONE fail-open path, shared by this cache and by
     /// TLinter -- which deliberately builds its own parser and would otherwise
@@ -75,10 +74,12 @@ type
     /// entry points would drift into disagreeing about which branches are live,
     /// which is the defect this whole change exists to close.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestFile (DRagLint.Lint.Linter.pas)</para>
-    /// <para>Calls: DRagLint.Preprocess.Preprocess/2</para>
+    /// <para>Called from: DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestFile (DRagLint.Lint.Linter.pas)</para>
+    /// <para>Calls: DRagLint.Preprocess.Preprocess/2, DRagLint.Preprocess.Types.NormalizeLoneCR</para>
+    /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Preprocess.Preprocess"/>
+    /// <seealso cref="DRagLint.Preprocess.Types.NormalizeLoneCR"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.SetPreprocess"/>
@@ -90,16 +91,17 @@ type
     /// <param name="AFile">Path to the source file; resolved to a normalized full path used as the cache key.</param>
     /// <returns>A TParsedFile whose Tree is nil when AFile is missing or unreadable. The cache owns Tree;
     /// callers must NOT free it (call Clear to release all trees).</returns>
+    /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection (DRagLint.Diagnostics.AstChecks.pas) (+48 more)</para>
-    /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, Integer, LowerCase, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse</para>
+    /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, Integer, LowerCase, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
     /// <seealso cref="TreeSitter.TTSParser.Create"/>
     /// <seealso cref="TreeSitter.TTSParser.Parse"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
+    /// <seealso cref="TreeSitter.TTSParser.SetLanguage"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Get(const AFile: string): TParsedFile;

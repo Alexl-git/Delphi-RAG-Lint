@@ -90,6 +90,7 @@ type
       /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
       /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Preprocess.Preprocess/2, Format, Writeln</para>
       /// <para>Reads: FPreprocessEnabled, FProfile, FPreprocessFellBack   Writes: FPreprocessFellBack</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Preprocess.Preprocess"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
@@ -350,6 +351,7 @@ type
       /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas) (+1 more)</para>
       /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.ExtractIncludes, DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.FindIncFile, DRagLint.Index.Closure.TClosureResolver.FindUnitFile, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile, LowerCase</para>
       /// <para>Complexity: 24 (cyclomatic, outer body), 236 lines (full implementation)</para>
+      /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>

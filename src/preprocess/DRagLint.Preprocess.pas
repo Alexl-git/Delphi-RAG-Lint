@@ -91,6 +91,7 @@ uses
 /// <para>Overload 1 of 2</para>
 /// <para>Recursive</para>
 /// <para>Pure</para>
+/// <para>Directives: overload</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes; overload;
@@ -114,6 +115,7 @@ function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes
 /// <para>Calls: DRagLint.Preprocess.PreprocessInto, DRagLint.Preprocess.Tolerance.ApplyTolerances, LowerCase</para>
 /// <para>Overload 2 of 2</para>
 /// <para>Pure</para>
+/// <para>Directives: overload</para>
 /// <seealso cref="DRagLint.Preprocess.PreprocessInto"/>
 /// <seealso cref="DRagLint.Preprocess.Tolerance.ApplyTolerances"/>
 /// <!-- drag-lint:auto END -->

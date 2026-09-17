@@ -54,7 +54,13 @@ type
   TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
 
   /// <summary>Index-wide lint rules (oversized classes; unused exported routines).</summary>
-  /// <remarks>Stateless; reads the supplied open store. Never raises.</remarks>
+  /// <remarks>
+  /// Stateless; reads the supplied open store. Never raises.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectLintRules = class
   public
     /// <summary>Runs the project rules over AStore and returns all findings.</summary>
@@ -74,9 +80,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ASiblingStore, ChangeFileExt, CollectFrom, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower (+34 more)</para>
+    /// <para>Calls: ASiblingStore, ChangeFileExt, CollectFrom, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower (+36 more)</para>
     /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Found; nil; Findings.ToArray</para>
-    /// <para>Complexity: 59 (cyclomatic, outer body), 754 lines (full implementation)</para>
+    /// <para>Complexity: 63 (cyclomatic, outer body), 768 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
@@ -103,6 +109,7 @@ type
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering.LayerOf, Format, LowerCase, SameText, TJSONArray, TJSONObject, TJSONString, Writeln</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Complexity: 29 (cyclomatic, outer body), 139 lines (full implementation)</para>
+    /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
@@ -117,10 +124,16 @@ type
 type
   /// <summary>One circular-uses cycle: the finding a tool consumes, plus the
   /// human narrative explaining what to extract to break it.</summary>
-  /// <remarks>Detail lines are pre-indented and ready to print, one per coupling
+  /// <remarks>
+  /// Detail lines are pre-indented and ready to print, one per coupling
   /// edge, and are EMPTY when the cycle's symbols could not be attributed. They
   /// belong in a report section, never in Finding.Message -- a finding line is a
-  /// single parsed record and a newline in it corrupts every consumer.</remarks>
+  /// single parsed record and a newline in it corrupts every consumer.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect (DRagLint.Lint.ProjectRules.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ProjectRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleCoupling = record
     Finding: TLintFinding ;
     Detail : TArray<string>;
@@ -130,8 +143,22 @@ type
 /// detail that says WHICH declarations couple the units.</summary>
 /// <param name="AStore">An open, migrated symbol store; nil yields no cycles.</param>
 /// <returns>One entry per strongly-connected component of 2+ units.</returns>
-/// <remarks>Runs ONE Tarjan pass over the unit graph and is the single
-/// implementation; the finding-only view is a projection of this. Never raises.</remarks>
+/// <remarks>
+/// Runs ONE Tarjan pass over the unit graph and is the single
+/// implementation; the finding-only view is a projection of this. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Copy, CouplingLines, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect, Format, IntToStr (+6 more)</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 339 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+/// <seealso cref="DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectCircularUsesDetailed(const AStore: ISymbolStore): TArray<TCycleCoupling>;
 
 implementation

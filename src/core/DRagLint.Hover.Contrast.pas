@@ -35,7 +35,7 @@ function ContrastRatio(AForeground, ABackground: TColor): Double;
 /// <remarks>
 /// Hue is preserved where possible so "keyword blue" stays blue.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoContrastSelfTest (DRagLint.CLI.pas), DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDrawItem.Run (DragLint.Plugin.CompletionForm.pas) ?, DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit (DragLint.Plugin.HoverForm.pas) ?, DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/7 (DragLint.Plugin.HoverForm.pas) ?, DragLint.Plugin.Theme.ThemedStatusColor (DragLint.Plugin.Theme.pas) ?</para>
+/// <para>Called from: DRagLint.CLI.DoContrastSelfTest (DRagLint.CLI.pas)</para>
 /// <para>Calls: ColorToRGB, DRagLint.Hover.Contrast.ContrastRatio, DRagLint.Hover.Contrast.RelLuminance, EnsureRange, GetBValue, GetGValue, GetRValue, RGB, TColor</para>
 /// <para>Returns: AForeground; clWhite</para>
 /// <para>Pure</para>

@@ -75,6 +75,7 @@ function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const 
 /// <para>Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen</para>
 /// <para>Overload 1 of 2</para>
 /// <para>Pure</para>
+/// <para>Directives: overload</para>
 /// <seealso cref="DRagLint.Core.Model.DocFormatToStr"/>
 /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
@@ -211,6 +212,7 @@ function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUni
 /// <para>Returns: SB.ToString</para>
 /// <para>Overload 2 of 2</para>
 /// <para>Pure</para>
+/// <para>Directives: overload</para>
 /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <!-- drag-lint:auto END -->

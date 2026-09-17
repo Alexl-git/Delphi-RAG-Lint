@@ -61,6 +61,7 @@ uses
 /// <para>Called from: DRagLint.CLI.DoDumpPpEval (DRagLint.CLI.pas), DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
 /// <para>Calls: DRagLint.Preprocess.Expr.TPPExprParser.Eval, DRagLint.Preprocess.Expr.TPPExprParser.Init, DRagLint.Preprocess.Expr.Truthy</para>
 /// <para>Returns: Truthy(V); False</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Eval"/>
 /// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Init"/>

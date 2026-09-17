@@ -52,6 +52,10 @@ type
   /// Plain (non-inline, non-generic) routines must NOT be supplied here: their
   /// bodies are invisible across a unit boundary, and including one would make
   /// every ordinary implementation edit fan out.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.SurfaceAdapters.pas), declaration (DRagLint.Analysis.SurfaceFingerprint.pas), DRagLint.Analysis.SurfaceAdapters.CollectInlineBodies (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceFingerprint.CollectBodyLines (DRagLint.Analysis.SurfaceFingerprint.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TInlineBody = record
     /// <summary>Fully qualified routine name, e.g. `uB.TWidget.DoThing`.</summary>
@@ -83,7 +87,18 @@ type
 /// A newline-joined string. Deterministic for a given surface regardless of the
 /// order the arrays arrive in, and free of line numbers.
 /// </returns>
-/// <remarks>Pure; allocates nothing the caller owns. Not thread-affine.</remarks>
+/// <remarks>
+/// Pure; allocates nothing the caller owns. Not thread-affine.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.SurfaceFingerprint.SurfaceFingerprint (DRagLint.Analysis.SurfaceFingerprint.pas)</para>
+/// <para>Calls: DRagLint.Analysis.SurfaceFingerprint.CollectBodyLines, DRagLint.Analysis.SurfaceFingerprint.CollectSymbolLines, DRagLint.Analysis.SurfaceFingerprint.InterfaceUsesLine</para>
+/// <para>Returns: string.Join(sLineBreak, Lines)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Analysis.SurfaceFingerprint.CollectBodyLines"/>
+/// <seealso cref="DRagLint.Analysis.SurfaceFingerprint.CollectSymbolLines"/>
+/// <seealso cref="DRagLint.Analysis.SurfaceFingerprint.InterfaceUsesLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SurfaceCanonical(const pSymbols: TArray<TSymbol>;
                           const pUses: TArray<TUnitUse>;
                           const pInlineBodies: TArray<TInlineBody>): string;
@@ -102,6 +117,12 @@ function SurfaceCanonical(const pSymbols: TArray<TSymbol>;
 /// as `''`/True on a pre-v22 row, so a stale baseline would report every
 /// routine as changed -- which is why the baseline file carries both stamps and
 /// a mismatch is refused rather than diffed.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.FingerprintOfParse (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas)</para>
+/// <para>Calls: DRagLint.Analysis.SurfaceFingerprint.SurfaceCanonical, LowerCase</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Analysis.SurfaceFingerprint.SurfaceCanonical"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function SurfaceFingerprint(const pSymbols: TArray<TSymbol>;
                             const pUses: TArray<TUnitUse>;

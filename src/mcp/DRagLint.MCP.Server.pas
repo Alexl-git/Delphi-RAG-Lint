@@ -23,6 +23,15 @@ uses
 type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
   // Holds one open ISymbolStore for the lifetime of the session.
+  /// <summary><!-- drag-lint:auto sum -->Newline-delimited JSON-RPC 2.0 server speaking
+  /// MCP-2024-11-05 over stdio. Holds one open ISymbolStore for the lifetime of the
+  /// session.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMCPServer = class
     strict private
       FStore  : ISymbolStore  ;
@@ -353,6 +362,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FLinter   Writes: FStore</para>
+      /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatFindings"/>

@@ -91,7 +91,8 @@ const
 /// open a control channel?</summary>
 /// <param name="ACommand">The CLI verb the engine was started with.</param>
 /// <returns>True for <c>lsp</c> only.</returns>
-/// <remarks>PROVISIONAL ANSWER to the plan's open owner question (Q1, session
+/// <remarks>
+/// PROVISIONAL ANSWER to the plan's open owner question (Q1, session
 /// 93): honoured by every running engine, or only by one in <c>lsp</c> mode?
 /// Taken as <c>lsp</c> only, in the owner's absence, for two reasons: an
 /// engine in the middle of an index is the one process a stray message must
@@ -101,32 +102,77 @@ const
 /// something shipped is a breaking change. To widen: add the verb here AND
 /// start the channel in that verb's dispatch branch the way the <c>lsp</c>
 /// branch in DRagLint.CLI does (Create after the stores are open, Run,
-/// StandDownComplete after they are closed). Nothing else consults the mode.</remarks>
+/// StandDownComplete after they are closed). Nothing else consults the mode.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: SameText(ACommand, 'lsp')</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ControlChannelEnabledFor(const ACommand: string): Boolean;
 
 /// <summary>The current user's SID as a string (<c>S-1-5-21-...</c>).</summary>
 /// <returns>The SID string, or '' when the token cannot be read.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: CloseHandle, ConvertSidToStringSidW, GetTokenInformation, HLOCAL, LocalFree, OpenProcessToken, PTokenUser</para>
+/// <para>Returns: ''; SidStr</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CurrentUserSidString: string;
 
 /// <summary>The logon session id of the current process.</summary>
 /// <returns>The session id (0 when it cannot be read).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: ProcessIdToSessionId</para>
+/// <para>Returns: S</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CurrentSessionId: Cardinal;
 
 /// <summary>Full pipe name an engine with pid <paramref name="APid"/> of THIS
 /// user and session would listen on.</summary>
 /// <param name="APid">Process id of the engine.</param>
 /// <returns><c>\\.\pipe\drag-lint-ctl-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.ControlPipeLeafFor</para>
+/// <para>Returns: PIPE_PREFIX_FULL + ControlPipeLeafFor(APid)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.ControlPipeLeafFor"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ControlPipeNameFor(APid: Cardinal): string;
 
 /// <summary>Pid encoded in a control pipe name, or 0 when the name is not one.</summary>
 /// <param name="APipeLeaf">The name without the <c>\\.\pipe\</c> prefix.</param>
 /// <returns>The pid, or 0.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Calls: StrToIntDef</para>
+/// <para>Returns: 0; StrToIntDef(APipeLeaf.Substring(P + 2), 0)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PidFromControlPipeLeaf(const APipeLeaf: string): Cardinal;
 
 /// <summary>Every control pipe currently in the pipe namespace that belongs
 /// to THIS user and session.</summary>
 /// <returns>Full pipe names. A pipe disappears with its process, so this is
 /// also the live instance list -- no registry file to go stale.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Core.ControlChannel.PidFromControlPipeLeaf, FindFirstFileW, FindNextFileW, IntToStr</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.PidFromControlPipeLeaf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ListControlPipesForThisUser: TArray<string>;
 
 /// <summary>Sends ONE message to a control pipe and reads its one-line reply.</summary>
@@ -136,12 +182,28 @@ function ListControlPipesForThisUser: TArray<string>;
 /// <param name="AReply">The reply with its terminator stripped; '' on failure.</param>
 /// <param name="AError">Why it failed; '' on success.</param>
 /// <returns>True when a reply was read.</returns>
-/// <remarks>The read blocks until the engine replies; for <c>shutdown</c>
-/// that is bounded by the wait-ms the message itself carries.</remarks>
+/// <remarks>
+/// The read blocks until the engine replies; for <c>shutdown</c>
+/// that is bounded by the wait-ms the message itself carries.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas)</para>
+/// <para>Calls: Cardinal, CloseHandle, CreateFileW, DRagLint.Core.ControlChannel.ReadLineFromPipe, IntToStr, PChar, SysErrorMessage, WaitNamedPipeW, WriteFile</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AReply (out), AError (out)</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.ReadLineFromPipe"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ControlRequest(const APipeName, AMessage: string; AConnectTimeoutMs: Integer; out AReply, AError: string): Boolean;
 
 /// <summary>Where honoured and refused requests are appended.</summary>
 /// <returns><c>%LOCALAPPDATA%\drag-lint\control-channel-audit.log</c>.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: GetEnvironmentVariable</para>
+/// <para>Returns: TPath.Combine(TPath.Combine(Base, AUDIT_DIR_NAME), AUDIT_FILE_NAME)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ControlAuditLogPath: string;
 
 type
@@ -157,6 +219,10 @@ type
   /// closed -- the `exiting` reply is withheld until then. Then Free.</para>
   /// <para>Thread-safety: the host hooks are interlocked; the listener owns
   /// the pipe handles exclusively.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.ControlChannel.pas), declaration (DRagLint.LSP.Server.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.TControlListener.Create (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.TControlListener.ServeStandDown (DRagLint.Core.ControlChannel.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.ControlChannel, DRagLint.LSP.Server</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TControlChannel = class
     private
@@ -181,7 +247,33 @@ type
         FWork       : string        ;
         FDone       : TEvent        ; { StandDownComplete }
         FReplied    : TEvent        ; { the listener wrote its final reply }
+      /// <param name="AError"><!-- drag-lint:auto type -->out string</param>
+      /// <returns><!-- drag-lint:auto type -->THandle</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.ControlChannel.TControlChannel.Start (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.TControlListener.Execute (DRagLint.Core.ControlChannel.pas)</para>
+      /// <para>Calls: CreateNamedPipeW, PChar, SysErrorMessage</para>
+      /// <para>Mutates: AError (out)</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.EndWork"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function CreatePipeInstance(out AError: string): THandle;
+      /// <returns><!-- drag-lint:auto -->string -- Observed: FWork.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.ControlChannel.TControlListener.ServeStandDown (DRagLint.Core.ControlChannel.pas)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.EndWork"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function CurrentWork: string;
     public
       /// <summary>Prepares a channel describing the stores <paramref name="ADbs"/>.
@@ -190,13 +282,51 @@ type
       /// <param name="AVersion">DRAGLINT_VERSION.</param>
       /// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
       /// <exception cref="EInvalidOperation">Not called on the main thread.</exception>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Core.ControlChannel.ControlPipeNameFor</para>
+      /// <para>constructor</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.ControlPipeNameFor"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const ADbs: TArray<string>; const AVersion, AExtractor: string);
       /// <summary>Stops the listener (bounded wait) and releases the pipe.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: CloseHandle, CreateFileW, FreeAndNil, HLOCAL, InterlockedCompareExchange, LocalFree, PChar, WaitForSingleObject, WaitNamedPipeW</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 41 lines (full implementation)</para>
+      /// <para>Pure</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.EndWork"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>Builds the DACL, creates the first pipe instance and starts
       /// the listener. Synchronous, so the pipe exists before this returns.</summary>
       /// <param name="AError">Why it could not listen; '' on success.</param>
       /// <returns>True when listening.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DRagLint.Core.ControlChannel.ConvertStringSecurityDescriptorToSecurityDescriptorW, DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance, DRagLint.Core.ControlChannel.TControlListener.Create, DuplicateHandle, PChar, SysErrorMessage</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Mutates: AError (out)</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.ConvertStringSecurityDescriptorToSecurityDescriptorW"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlListener.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Start(out AError: string): Boolean;
       /// <summary>Full name of the pipe this engine listens on.</summary>
       property PipeName: string read FPipeName;
@@ -205,17 +335,88 @@ type
       /// <summary>Host hook: True exactly once, when a stand-down request is
       /// pending; taking it commits the host to exiting.</summary>
       /// <returns>True when the host must leave its loop.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.StandDownTaken (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: InterlockedCompareExchange</para>
+      /// <para>Returns: InterlockedCompareExchange(FState, ST_TAKEN, ST_REQUESTED) = ST_REQUESTED</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function StandDownRequested: Boolean;
       /// <summary>Host hook: the host is about to block in its stdin read.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ReadMessageGuarded (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: InterlockedExchange</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure EnterRead;
       /// <summary>Host hook: the stdin read returned.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ReadMessageGuarded (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: InterlockedExchange</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure LeaveRead;
       /// <summary>Host hook: a request is being handled (named in a `busy` reply).</summary>
       /// <param name="AWhat">The method name.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.ControlChannel.TControlChannel.EndWork (DRagLint.Core.ControlChannel.pas), DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.EndWork"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure BeginWork(const AWhat: string);
       /// <summary>Host hook: the request is done.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.ControlChannel.TControlChannel.BeginWork</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure EndWork;
       /// <summary>Host hook: every store is closed; the `exiting` reply may go.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: InterlockedCompareExchange</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure StandDownComplete;
   end;
 

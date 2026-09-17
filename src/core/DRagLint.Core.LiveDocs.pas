@@ -59,6 +59,7 @@ type
       /// <para>Called from: DRagLint.Core.LiveDocs.TLiveDocuments.HasText (DRagLint.Core.LiveDocs.pas), DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes (DRagLint.Core.LiveDocs.pas), DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines (DRagLint.Core.LiveDocs.pas), DRagLint.Core.LiveDocs.TLiveDocuments.Remove (DRagLint.Core.LiveDocs.pas), DRagLint.Core.LiveDocs.TLiveDocuments.SetText (DRagLint.Core.LiveDocs.pas)</para>
       /// <para>Calls: LowerCase, StringReplace, Trim</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
@@ -79,6 +80,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key, Trim</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
@@ -95,6 +97,7 @@ type
       /// <para>Called from: DRagLint.Core.LiveDocs.TLiveDocuments.Remove (DRagLint.Core.LiveDocs.pas) ?, DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
@@ -105,6 +108,16 @@ type
       class procedure Remove(const APath: string); static;
 
       /// <summary>Forgets every document. Used on shutdown.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.HasText"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class procedure Clear; static;
 
       /// <summary>True when the client has sent text for this path.</summary>
@@ -116,6 +129,7 @@ type
       /// <para>Called from: DRagLint.Core.LiveDocs.TLiveDocuments.Readable (DRagLint.Core.LiveDocs.pas)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
@@ -127,6 +141,16 @@ type
 
       /// <summary>Number of documents currently overlaid. For diagnostics.</summary>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: FTexts.Count.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Create"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.HasText"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Count: Integer; static;
 
       /// <summary>The document's content as lines -- overlay when open, else the file on
@@ -138,6 +162,7 @@ type
       /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas) (+2 more)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
@@ -159,6 +184,7 @@ type
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Mutates: AFromOverlay (out)</para>
       /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
@@ -179,6 +205,7 @@ type
       /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas) (+3 more)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.HasText</para>
       /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.HasText"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>

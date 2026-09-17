@@ -79,6 +79,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Reads: Items, Succ, Pred</para>
     /// <para>Pure</para>
+    /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddItem"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.AddSucc"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Create"/>
@@ -148,6 +149,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Reads: ForVars, Blocks</para>
     /// <para>Pure</para>
+    /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>

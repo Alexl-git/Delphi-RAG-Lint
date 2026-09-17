@@ -158,7 +158,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FNative, FPrevNOpers</para>
+      /// <para>Catches: Exception (empty)</para>
       /// <para>Pure</para>
+      /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Create"/>
       /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.ElapsedMs"/>
       /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Explain"/>

@@ -109,7 +109,8 @@ function TPPOptionsDefault: TPPOptions;
 /// <param name="ASource">UTF-8 source bytes. NOT modified.</param>
 /// <returns>The input unchanged when it holds no lone CR (the 99.5% case),
 /// otherwise a normalised COPY of it.</returns>
-/// <remarks>Pure, and byte-for-byte LENGTH PRESERVING, so every stored offset
+/// <remarks>
+/// Pure, and byte-for-byte LENGTH PRESERVING, so every stored offset
 /// stays valid. Idempotent, so applying it at more than one stage is harmless.
 /// <para>Lives HERE, in the extractor hash surface, and not beside either of its
 /// callers: the indexer half must be inside that surface so a change to it trips
@@ -117,7 +118,15 @@ function TPPOptionsDefault: TPPOptions;
 /// RTL) so both callers can reach it without a cycle. It is deliberately NOT in
 /// DRagLint.Parser.Delphi13, because DRagLint.Diagnostics.ParseCache avoids
 /// importing that unit on purpose -- see the duplicate-global note beside its
-/// own tree_sitter_delphi13 declaration.</para></remarks>
+/// own tree_sitter_delphi13 declaration.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Parse (DRagLint.Parser.Delphi13.pas)</para>
+/// <para>Calls: Copy</para>
+/// <para>Returns: Copy(ASource, 0, Length(ASource))</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NormalizeLoneCR(const ASource: TBytes): TBytes;
 
 implementation

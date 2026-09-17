@@ -242,6 +242,7 @@ type
       /// <para>Complexity: 16 (cyclomatic, outer body), 73 lines (full implementation)</para>
       /// <para>Reads: FIgnoreStack, FWalkFilter, FCountOnly   Writes: FProgressTotal</para>
       /// <para>Recursive</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ParserFor"/>
@@ -262,6 +263,7 @@ type
       /// <para>Overload 1 of 2</para>
       /// <para>constructor</para>
       /// <para>Reads: FParsers   Writes: FStore, FDocConfig, FParsers, FExcludeRoots, FVisited, FVisitedKeys, FIgnoreStack, FPreprocessEnabled (+2 more)</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Interfaces.TWalkFilter.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
@@ -279,6 +281,7 @@ type
       /// <para>Overload 2 of 2</para>
       /// <para>constructor</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
@@ -290,6 +293,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FParsers, FExcludeRoots, FVisited, FVisitedKeys, FIgnoreStack   Writes: FStore</para>
+      /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
@@ -321,6 +325,7 @@ type
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.IndexFile</para>
       /// <para>Complexity: 29 (cyclomatic, outer body), 377 lines (full implementation)</para>
       /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FForceReparse, FPreprocessEnabled, FProfile (+1 more)   Writes: FSkippedUpToDate, FParsedFiles</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Core.Indexer.BuildEnclosingLineMap"/>

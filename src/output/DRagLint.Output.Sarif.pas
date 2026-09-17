@@ -8,6 +8,12 @@ uses
 type
   /// <summary>Serializes drag-lint findings to SARIF 2.1.0 JSON for CI / GitHub
   /// code-scanning ingestion. Pure: no I/O, no global state.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSarifWriter = class
   strict private
     /// <summary>Maps a drag-lint severity to a SARIF level. error->error,
@@ -19,6 +25,7 @@ type
     /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.BuildResult (DRagLint.Output.Sarif.pas)</para>
     /// <para>Calls: SameText</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
     /// <!-- drag-lint:auto END -->
@@ -34,6 +41,7 @@ type
     /// <para>Calls: DRagLint.Output.Sarif.TSarifWriter.SarifLevel, Max</para>
     /// <para>Owns returned: new (caller owns)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
     /// <!-- drag-lint:auto END -->
@@ -51,6 +59,7 @@ type
     /// <para>Calls: DRagLint.Output.Sarif.TSarifWriter.BuildResult</para>
     /// <para>Returns: Root.Format(2)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
     /// <!-- drag-lint:auto END -->

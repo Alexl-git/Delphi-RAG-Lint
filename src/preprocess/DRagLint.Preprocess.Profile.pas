@@ -65,6 +65,7 @@ function PlatformBuiltins(const APlatform: string): TArray<string>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Preprocess.Profile.AddDccDefines, DRagLint.Preprocess.Profile.CfgAliasFor, DRagLint.Preprocess.Profile.DccDefineInGroup, DRagLint.Preprocess.Profile.PlatformBuiltins</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Preprocess.Profile.AddDccDefines"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.CfgAliasFor"/>

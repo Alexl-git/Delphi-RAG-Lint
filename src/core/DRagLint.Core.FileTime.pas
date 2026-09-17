@@ -46,8 +46,17 @@ interface
 /// <param name="AMTimeUnix">Set to the epoch on success; 0 otherwise.</param>
 /// <returns>False when the path does not exist, is a directory, or cannot be
 /// read at all. Never raises.</returns>
-/// <remarks>Truncates sub-second precision downwards, which is what
-/// `SecondsBetween` does on the writer's side and what the stored stamps show.</remarks>
+/// <remarks>
+/// Truncates sub-second precision downwards, which is what
+/// `SecondsBetween` does on the writer's side and what the stored stamps show.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Index.Freshness.ProbeIndexFreshness (DRagLint.Index.Freshness.pas)</para>
+/// <para>Calls: DRagLint.Core.FileTime.FileTimeToUnix, FindFirstFile, GetFileAttributesEx, PChar</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AMTimeUnix (out)</para>
+/// <seealso cref="DRagLint.Core.FileTime.FileTimeToUnix"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryGetFileMTimeUnix(const APath: string; out AMTimeUnix: Int64): Boolean;
 
 implementation

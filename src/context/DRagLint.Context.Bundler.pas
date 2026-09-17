@@ -45,7 +45,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: Copy, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+7 more)</para>
-      /// <para>Complexity: 27 (cyclomatic, outer body), 223 lines (full implementation)</para>
+      /// <para>Complexity: 28 (cyclomatic, outer body), 244 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Context.Bundler.StripDfmFields"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics"/>

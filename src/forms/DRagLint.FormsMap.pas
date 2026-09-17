@@ -90,6 +90,7 @@ function CalledFrom(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, 
 /// <para>Overload 1 of 2</para>
 /// <para>Recursive</para>
 /// <para>Pure</para>
+/// <para>Directives: overload</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): string; overload;
@@ -110,6 +111,7 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 /// <para>Returns: GenerateFormsCsvCore(Primary, Extras, AProjectFile, ARootForm, ADbPaths[0])</para>
 /// <para>Overload 2 of 2</para>
 /// <para>Pure</para>
+/// <para>Directives: overload</para>
 /// <seealso cref="DRagLint.FormsMap.GenerateFormsCsvCore"/>
 /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
 /// <!-- drag-lint:auto END -->

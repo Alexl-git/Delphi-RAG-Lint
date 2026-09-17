@@ -44,8 +44,8 @@ type
   /// PasTemplate/Todo are engine realization hints; the editor stores them verbatim
   /// and does not interpret them.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
-  /// <para>Used in units: ConvRules.CastLib, ConvRules.MainForm, ConvRulesModelTests, DRagLint.Convert.CastLib</para>
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindClassCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas) (+2 more)</para>
+  /// <para>Used in units: ConvRules.CastLib, ConvRules.MainForm, ConvRulesModelTests, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCastDef = record
@@ -124,19 +124,19 @@ type
     Enums: TArray<TEnumDef>;
   end;
 
-  /// <summary>PURE: parse .castlib text into cast definitions. Tolerant -- skips blank
-  /// lines, '#' comments, and unknown keys; a malformed block (missing name or 'end')
-  /// is dropped without aborting the rest of the file.</summary>
-  /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
-  /// <returns><!-- drag-lint:auto -->TArray&lt;TCastDef&gt; -- Observed:
-  /// ParseCastLibText(AText).Casts.</returns>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Calls: DRagLint.Convert.CastLib.ParseCastLibText</para>
-  /// <para>Pure</para>
-  /// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>PURE: parse .castlib text into cast definitions. Tolerant -- skips blank
+/// lines, '#' comments, and unknown keys; a malformed block (missing name or 'end')
+/// is dropped without aborting the rest of the file.</summary>
+/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TArray&lt;TCastDef&gt; -- Observed:
+/// ParseCastLibText(AText).Casts.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Convert.CastLib.ParseCastLibText</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadCastLibText(const AText: string): TArray<TCastDef>;
 
 /// <summary>PURE: parse .castlib text into BOTH block kinds.</summary>
@@ -148,7 +148,7 @@ function LoadCastLibText(const AText: string): TArray<TCastDef>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Convert.CastLib.LoadCastLibText (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLib (DRagLint.Convert.CastLib.pas)</para>
 /// <para>Calls: Copy, Default, DRagLint.Convert.CastLib.SplitArrow, DRagLint.Convert.CastLib.SplitList, DRagLint.Convert.CastLib.Unquote, LowerCase, Pos, Trim</para>
-/// <para>Complexity: 26 (cyclomatic, outer body), 98 lines (full implementation)</para>
+/// <para>Complexity: 26 (cyclomatic, outer body), 116 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.CastLib.SplitArrow"/>
 /// <seealso cref="DRagLint.Convert.CastLib.SplitList"/>
@@ -219,6 +219,12 @@ function ClassCastFor(const ADefs: TArray<TCastDef>; const AFrom, ATo: string): 
 /// case-insensitive match, same zeroed-out on miss -- so the class and enum
 /// lookups cannot drift apart. It lives here rather than in a consumer for the
 /// reason this unit exists: one parser, two consumers, no drift.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: Default, SameText</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: ADef (out)</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function FindClassCast(const ALib: TCastLib; const AName: string; out ADef: TCastDef): Boolean;
 
@@ -231,7 +237,7 @@ function FindClassCast(const ALib: TCastLib; const AName: string; out ADef: TCas
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: Default, SameText</para>
-/// <para>Returns: True; False</para>
+/// <para>Returns: False; True</para>
 /// <para>Mutates: ADef (out)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

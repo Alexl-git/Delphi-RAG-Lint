@@ -26,7 +26,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocFor (DRagLint.Doc.Document.pas)</para>
       /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.MergeAdjacentSameKind, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Peek, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.StartLineComment</para>
-      /// <para>Complexity: 31 (cyclomatic, outer body), 175 lines (full implementation)</para>
+      /// <para>Complexity: 34 (cyclomatic, outer body), 198 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit"/>
@@ -54,6 +54,7 @@ type
       /// <para>Calls: Copy, DRagLint.Parser.DocComments.EnsureParserRegexes, DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned, DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace, FillChar, Pos, StartsText, Trim</para>
       /// <para>Complexity: 22 (cyclomatic, outer body), 180 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.EnsureParserRegexes"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
@@ -70,6 +71,7 @@ type
       /// <para>Calls: Copy, DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace, DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc.FlushTag, FillChar, LowerCase, Pos, Trim, TrimLeft</para>
       /// <para>Complexity: 16 (cyclomatic, outer body), 177 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc.FlushTag"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
@@ -86,6 +88,7 @@ type
       /// <para>Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace, DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix, FillChar</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
@@ -102,6 +105,7 @@ type
       /// <para>Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline, DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix, FillChar, StartsText, TrimLeft</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
@@ -119,6 +123,7 @@ type
       /// <para>Called from: DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: Copy, TrimLeft</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
@@ -134,6 +139,7 @@ type
       /// <para>Called from: DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc (DRagLint.Parser.DocComments.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: Trim</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
@@ -162,6 +168,7 @@ type
       /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.StandaloneBodyOf (DRagLint.Doc.Regions.pas), DRagLint.Doc.Wiki.TWikiParser.Walk (DRagLint.Doc.Wiki.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
@@ -181,6 +188,7 @@ type
       /// <para>Calls: DRagLint.Parser.DocComments.EnsureParserRegexes, DRagLint.Parser.DocComments.HasAnyRecognizedTag, DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose, DRagLint.Parser.DocComments.TDocCommentParser.ParseOneline, DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc, DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc, FillChar</para>
       /// <para>Complexity: 16 (cyclomatic, outer body), 97 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.EnsureParserRegexes"/>
       /// <seealso cref="DRagLint.Parser.DocComments.HasAnyRecognizedTag"/>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>

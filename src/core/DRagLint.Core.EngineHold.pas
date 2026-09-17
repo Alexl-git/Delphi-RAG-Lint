@@ -91,6 +91,7 @@ function EngineHoldFilePath: string;
 /// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
 /// <para>Calls: IntToStr</para>
 /// <para>Returns: True; False</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: AError (out)</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
@@ -105,6 +106,7 @@ function HoldEngine(ASeconds: Integer; out AError: string): Boolean;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
 /// <para>Returns: True; False</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: AError (out)</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
@@ -119,9 +121,10 @@ function ReleaseEngineHold(out AError: string): Boolean;
 /// Cheap enough to call from a 1 s UI timer: one stat and one short
 /// read. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.StatusBar.TDragLintStatusBar.PollEngineHold (DragLint.Plugin.StatusBar.pas) ?</para>
+/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
 /// <para>Calls: Integer, Trim, TryStrToInt64</para>
 /// <para>Returns: False; True</para>
+/// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Mutates: ASecondsLeft (out)</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->

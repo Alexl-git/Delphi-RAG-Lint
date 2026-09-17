@@ -52,6 +52,7 @@ type
     /// <para>Called from: DRagLint.Core.DeclText.TDeclTextReader.TextOf (DRagLint.Core.DeclText.pas)</para>
     /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
     /// <para>Reads: FLines, FStore</para>
+    /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Create"/>
@@ -78,6 +79,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Reads: FLines</para>
     /// <para>Pure</para>
+    /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Create"/>
     /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.LinesOf"/>
     /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.TextOf"/>

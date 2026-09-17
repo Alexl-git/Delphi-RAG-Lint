@@ -20,7 +20,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+  /// <para>Used by: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.SymbolFacts, DRagLint.LSP.Completion, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -721,7 +721,7 @@ type
       /// Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, NodeStr, SameText, WalkBody</para>
+      /// <para>Calls: Copy, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, MonitorArgKey, NodeStr, SameText, StringReplace, WalkBody</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs"/>
@@ -778,6 +778,7 @@ type
       /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/2</para>
       /// <para>Overload 1 of 2</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -798,6 +799,7 @@ type
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -818,6 +820,7 @@ type
       /// <para>Returns: CheckCyclomaticComplexity(AFile, 15)</para>
       /// <para>Overload 1 of 2</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -838,6 +841,7 @@ type
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
@@ -884,6 +888,7 @@ type
       /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2</para>
       /// <para>Overload 1 of 2</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
@@ -902,6 +907,7 @@ type
       /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Score</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>

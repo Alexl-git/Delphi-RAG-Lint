@@ -65,6 +65,7 @@ type
     /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
     /// <para>Calls: DRagLint.Doc.GitSince.ParsePorcelainAuthorDate, DRagLint.Doc.GitSince.SpawnGit, Format, Trim</para>
     /// <para>Returns: ''; ParsePorcelainAuthorDate(Output)</para>
+    /// <para>Catches: Exception (swallowed)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.GitSince.ParsePorcelainAuthorDate"/>
     /// <seealso cref="DRagLint.Doc.GitSince.SpawnGit"/>

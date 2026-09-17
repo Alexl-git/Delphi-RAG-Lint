@@ -127,6 +127,7 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// <para>Calls: CharInSet, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.LocalNameCollides, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveSymbolAt, DRagLint.Refactor.NamingFix.StyleFromConfigText, DRagLint.Refactor.NamingFix.SynthesizeCasedName (+9 more)</para>
 /// <para>Returns: nil; Edits.ToArray</para>
 /// <para>Complexity: 35 (cyclomatic, outer body), 239 lines (full implementation)</para>
+/// <para>Catches: Exception (empty)</para>
 /// <para>Mutates: AFixCount (out), ASkippedCount (out)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits"/>

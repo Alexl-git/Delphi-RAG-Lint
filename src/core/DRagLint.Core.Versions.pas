@@ -30,14 +30,24 @@ const
 /// <param name="AVersionB">The version to compare against, same form.</param>
 /// <returns>Negative when AVersionA is older than AVersionB, 0 when they name the
 /// same release, positive when AVersionA is newer.</returns>
-/// <remarks>The pre-release suffix is decided only when every numeric limb is
+/// <remarks>
+/// The pre-release suffix is decided only when every numeric limb is
 /// equal, and then per SemVer: a version WITHOUT a suffix is newer than the same
 /// numbers WITH one ('1.16.0' &gt; '1.16.0-alpha'); two suffixes compare ordinally.
 /// Exists for the never-downgrade gate on the extractor stamp
 /// (PLAN-multi-client-index-safety, ruling 1): the pair that would let an old
 /// engine through a lexical comparison -- a stamp of 1.10.0 against an engine at
 /// 1.9.0 -- is the pair tests\autotest\run_index_never_downgrades.ps1 plants.
-/// Pure; no allocation beyond the split.</remarks>
+/// Pure; no allocation beyond the split.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RefuseIfEngineOlderThanDb (DRagLint.CLI.pas)</para>
+/// <para>Calls: CompareStr, Copy, DRagLint.Core.Versions.CompareDottedVersions.LimbAt, DRagLint.Core.Versions.CompareDottedVersions.Split, Pos, StrToIntDef, Trim</para>
+/// <para>Returns: CompareStr(SA, SB)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Versions.CompareDottedVersions.LimbAt"/>
+/// <seealso cref="DRagLint.Core.Versions.CompareDottedVersions.Split"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompareDottedVersions(const AVersionA, AVersionB: string): Integer;
 
 implementation

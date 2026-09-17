@@ -54,6 +54,10 @@ type
   /// <remarks>
   /// A record rather than TArgs so the engine is testable without the CLI, and
   /// so this unit does not depend on DRagLint.CLI.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLintTreeOptions = record
     /// <summary>Path of the unit whose interface may have changed. Required.</summary>
@@ -81,17 +85,32 @@ type
   /// <summary>Opens the index for a given path; injected so tests need no DB.</summary>
   /// <param name="pDbPath">Path of the SQLite index.</param>
   /// <returns>An open read-only store, or nil when it cannot be opened.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TStoreOpener = reference to function(const pDbPath: string): ISymbolStore;
 
   /// <summary>Builds a parser for a source extension; injected for the same reason.</summary>
   /// <param name="pExtension">File extension including the dot, e.g. `.pas`.</param>
   /// <returns>A parser, or nil when the extension has none.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TParserFactory = reference to function(const pExtension: string): IParser;
 
   /// <summary>Preprocesses UTF-8 source the way the indexer did.</summary>
   /// <param name="pUtf8">UTF-8 source bytes.</param>
   /// <param name="pFile">Path, used to resolve the define profile.</param>
   /// <returns>Preprocessed bytes; byte length and line structure are preserved.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPreprocessor = reference to function(const pUtf8: TBytes;
                                         const pFile: string): TBytes;
 
@@ -102,8 +121,13 @@ type
   /// <param name="pPlatform">win32 | win64.</param>
   /// <param name="pShadowDir">Directory holding the staged buffer(s).</param>
   /// <returns>Compiler findings; errors and warnings alike, filtered by the caller.</returns>
-  /// <remarks>Injected rather than called directly so this unit stays free of
-  /// the CLI, and so a test can drive tier 3 without a compiler.</remarks>
+  /// <remarks>
+  /// Injected rather than called directly so this unit stays free of
+  /// the CLI, and so a test can drive tier 3 without a compiler.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnitCompiler = reference to function(const pUnitPath, pProjectPath,
     pPlatform, pShadowDir: string): TArray<TCompilerFinding>;
 
@@ -116,10 +140,25 @@ type
 /// the report says so, because a unit with `{$IFDEF}` in its interface would
 /// otherwise be permanently reported as changed.
 /// </param>
+/// <param name="pCompile"><!-- drag-lint:auto type -->const TUnitCompiler</param>
 /// <param name="AOutput">Receives the rendered report (JSON or text).</param>
 /// <returns>0 when the verb ran, 2 when it could not.</returns>
 /// <remarks>
 /// Exit code is deliberately NOT a finding count -- see the unit header.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintTree (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Analysis.LintTree.BuildFindings, DRagLint.Analysis.LintTree.CollectUnchecked, DRagLint.Analysis.LintTree.CompileDependents, DRagLint.Analysis.LintTree.ComputeDelta, DRagLint.Analysis.LintTree.ReadBaselineFile, DRagLint.Analysis.LintTree.ReadSourceLines, DRagLint.Analysis.LintTree.Render, DRagLint.Analysis.LintTree.ValidateAndResolve (+14 more)</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 202 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AOutput (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Analysis.LintTree.BuildFindings"/>
+/// <seealso cref="DRagLint.Analysis.LintTree.CollectUnchecked"/>
+/// <seealso cref="DRagLint.Analysis.LintTree.CompileDependents"/>
+/// <seealso cref="DRagLint.Analysis.LintTree.ComputeDelta"/>
+/// <seealso cref="DRagLint.Analysis.LintTree.ReadBaselineFile"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function RunLintTree(const pOptions   : TLintTreeOptions;
                      const pOpenStore : TStoreOpener;

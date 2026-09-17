@@ -103,6 +103,7 @@ type
 /// <para>Called from: DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Index.Manifest.ResolveProjectDb, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.ManifestWrite.AppendSectionToText, DRagLint.Index.ManifestWrite.BuildSectionJson, DRagLint.Index.ManifestWrite.FindManifestCopies</para>
 /// <para>Returns: Default(TRegisterResult)</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
 /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>

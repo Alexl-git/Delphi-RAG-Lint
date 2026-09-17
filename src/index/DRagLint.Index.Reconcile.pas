@@ -88,6 +88,10 @@ type
   /// edit is attempted, so a run can leave a .bak on disk and change nothing;
   /// a caller offering revert must look at Backups, and a caller reporting
   /// 'N units added' must look at Edited.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReconcileApplyResult = record
     /// <summary>True iff at least one project file was actually rewritten.
@@ -271,7 +275,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Index.Reconcile.EditDpr, DRagLint.Index.Reconcile.EditDproj, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase</para>
+      /// <para>Calls: Default, DRagLint.Index.Reconcile.EditDpr, DRagLint.Index.Reconcile.EditDproj, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase, SameText</para>
+      /// <para>Returns: Default(TReconcileApplyResult)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 103 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Reconcile.EditDpr"/>
       /// <seealso cref="DRagLint.Index.Reconcile.EditDproj"/>

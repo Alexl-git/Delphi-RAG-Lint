@@ -229,6 +229,7 @@ type
     /// <para>Returns: Default(TEnumHelperResolve)</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
@@ -266,6 +267,7 @@ type
     /// <para>Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue))</para>
     /// <para>Complexity: 20 (cyclomatic, outer body), 164 lines (full implementation)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase"/>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build"/>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Resolve"/>
@@ -307,6 +309,7 @@ type
     /// <para>Returns: Default(TEnumHelperResult)</para>
     /// <para>Complexity: 23 (cyclomatic, outer body), 193 lines (full implementation)</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
     /// <seealso cref="DRagLint.Refactor.EnumHelper.FindImplementationLine"/>

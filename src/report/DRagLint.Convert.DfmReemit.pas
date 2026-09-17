@@ -53,7 +53,7 @@ type
   /// verbatim in ValueText, not modelled as child nodes. Only a dnkSubObject has
   /// children: its properties + nested objects.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas) (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitDotted (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -79,6 +79,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Reads: FChildren</para>
     /// <para>Pure</para>
+    /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -187,6 +188,12 @@ type
   /// <summary>One sub-leaf carried implicitly under a type-identity #link. See
   /// TReemitReport.Carried for why it is structured rather than prose: the
   /// converter team wants to dispatch on 'nobody typed this leaf'.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReemitCarried = record
     FromPath: string;  { the source leaf, dotted, as the .dfm spelled it (Font.Name) }
     ToPath  : string;  { where it landed on T (ToPrefix + '.' + remainder) }
@@ -294,6 +301,7 @@ type
 /// OWNS and must Free it. Set to nil on failure.</param>
 /// <returns>True when the block parsed into a single root object; False on a
 /// binary DFM, an empty block, or a parse with no top-level object.</returns>
+/// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
 /// <remarks>
 /// Pure: no file I/O. Uses the same tree-sitter-dfm grammar the indexer
 /// uses (node types object/property/identifier_value/qualified_identifier/
@@ -302,7 +310,7 @@ type
 /// respect to the tree-sitter runtime if called concurrently.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
-/// <para>Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, Trim</para>
+/// <para>Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, Trim</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 53 lines (full implementation)</para>
 /// <para>Mutates: ARoot (out)</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.NodeText"/>
@@ -337,15 +345,15 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// Components child is left ALONE. Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
-/// <para>Calls: ApplyInScope, ApplySets, CloneNode, Copy, Default, DRagLint.Convert.DfmReemit.BareTypeTail, DRagLint.Convert.DfmReemit.EmitBlock, DRagLint.Convert.DfmReemit.FindAtPath, DRagLint.Convert.DfmReemit.LeafDefaultOf, DRagLint.Convert.DfmReemit.LeafTypeOf (+24 more)</para>
+/// <para>Calls: ApplyInScope, ApplySets, Byte, CarryLinkFor, CharInSet, ClassCastUnderPath, CloneNode, CompatHas, Copy, Default (+38 more)</para>
 /// <para>Returns: Default(TReemitResult)</para>
-/// <para>Complexity: 27 (cyclomatic, outer body), 720 lines (full implementation)</para>
+/// <para>Complexity: 28 (cyclomatic, outer body), 1042 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.BareTypeTail"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.EmitBlock"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.FindAtPath"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.LeafDefaultOf"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.LeafTypeOf"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.LeafIsClassTyped"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;

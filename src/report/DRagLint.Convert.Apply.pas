@@ -232,6 +232,10 @@ type
   /// Dropped list, so counting it would understate every fraction.</para>
   /// <para>Sorted by FromType then Path, case-insensitively, so the order is
   /// stable across runs and does not depend on .dfm instance order.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan.SummarizeUnlinked (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyUnlinked = record
     FromType : string;  { the #convert source type, as the rule spells it }
@@ -426,9 +430,9 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
-/// <para>Calls: BuildPropTree, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions, DRagLint.Convert.Apply.BuildApplyPlan.StoreForFile (+19 more)</para>
+/// <para>Calls: BuildPropTree, CompareText, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (+27 more)</para>
 /// <para>Returns: Default(TApplyResult)</para>
-/// <para>Complexity: 14 (cyclomatic, outer body), 669 lines (full implementation)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 932 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>

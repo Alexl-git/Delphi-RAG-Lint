@@ -31,6 +31,10 @@ type
   /// <remarks>
   /// Stateless; project-wide -- invoke from the lint-all store path only
   /// (not lint-project or the per-file LSP). Reads the store read-only; never raises.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TClassMetrics = class
   public

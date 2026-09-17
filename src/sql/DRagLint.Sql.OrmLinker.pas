@@ -64,8 +64,10 @@ type
       /// <para>Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas)</para>
       /// <para>Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, StripPrefix, UpperCase</para>
       /// <para>Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)</para>
+      /// <para>Catches: Exception (re-raise)</para>
       /// <para>SQL: writes ORM_LINKS</para>
       /// <para>Transaction: starts, commits, rolls back</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink"/>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>

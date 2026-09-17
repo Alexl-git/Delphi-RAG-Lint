@@ -100,6 +100,12 @@ uses
 type
   /// <summary>Dead-code checks that operate on a single .pas file using the
   /// tree-sitter AST only; no symbol-store or DB is required.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDeadCodeChecker = class
   public
     /// <summary>Runs the dead-code rules against a single .pas file and
@@ -184,9 +190,9 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses, CollectPrivateFields (+65 more)</para>
+    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses (+66 more)</para>
     /// <para>Returns: nil; Deduped.ToArray</para>
-    /// <para>Complexity: 18 (cyclomatic, outer body), 2410 lines (full implementation)</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 2480 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>

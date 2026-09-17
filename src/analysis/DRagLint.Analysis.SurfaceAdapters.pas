@@ -48,6 +48,10 @@ type
   /// Two surfaces are only comparable when their profiles match on extractor
   /// version and schema. Platform and preprocess are carried so the buffer can
   /// be parsed the way the index was, not merely checked.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), declaration (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.LintTree.ReadBaselineFile (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.ParseIndexerFingerprint (DRagLint.Analysis.SurfaceAdapters.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.SurfaceAdapters</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TIndexerProfile = record
     /// <summary>Extractor version, the `v=` field, e.g. `1.15.0-alpha`.</summary>
@@ -71,9 +75,28 @@ type
     /// branches are parsed, which is a real interface difference that the
     /// fingerprint should report rather than refuse.
     /// </returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: SameText</para>
+    /// <para>Returns: (ExtractorVersion &lt;&gt; '')</para>
+    /// <para>Reads: ExtractorVersion, SchemaVersion</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Analysis.SurfaceAdapters.TIndexerProfile.Describe"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Matches(const pOther: TIndexerProfile): Boolean;
     /// <summary>Human-readable form for a refusal message.</summary>
     /// <returns>e.g. `v=1.15.0-alpha schema=22`.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas)</para>
+    /// <para>Calls: Format</para>
+    /// <para>Returns: Format('v=%s schema=%d', [VersionText, SchemaVersion])</para>
+    /// <para>Reads: ExtractorVersion, SchemaVersion</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Analysis.SurfaceAdapters.TIndexerProfile.Matches"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Describe: string;
   end;
 
@@ -86,6 +109,14 @@ type
 /// which is the safe direction: an unknown provenance is not comparable.
 /// </param>
 /// <returns>The parsed profile, with <c>Raw</c> set to the input.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.SurfaceAdapters.IndexProfileOf (DRagLint.Analysis.SurfaceAdapters.pas)</para>
+/// <para>Calls: Copy, Default, LowerCase, Pos, StrToIntDef, Trim</para>
+/// <para>Returns: Default(TIndexerProfile)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseIndexerFingerprint(const pRaw: string): TIndexerProfile;
 
 /// <summary>Reads the profile of the index behind <paramref name="pStore"/>.</summary>
@@ -95,6 +126,16 @@ function ParseIndexerFingerprint(const pRaw: string): TIndexerProfile;
 /// zeroed profile rather than raising, so the caller reports a refusal with a
 /// reason instead of a stack trace.
 /// </returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas)</para>
+/// <para>Calls: Default, DRagLint.Analysis.SurfaceAdapters.ParseIndexerFingerprint, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue</para>
+/// <para>Returns: Default(TIndexerProfile); ParseIndexerFingerprint(pStore.GetMetaValue(META_INDEXER_FINGERPRINT))</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Analysis.SurfaceAdapters.ParseIndexerFingerprint"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IndexProfileOf(const pStore: ISymbolStore): TIndexerProfile;
 
 /// <summary>
@@ -115,6 +156,14 @@ function IndexProfileOf(const pStore: ISymbolStore): TIndexerProfile;
 /// qualified name -- and it is deliberately inclusive: a routine wrongly
 /// included costs a spurious fan-out that the user sees and can dismiss, while
 /// one wrongly excluded is a silent all-clear.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.FingerprintOfParse (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas)</para>
+/// <para>Calls: Default, DRagLint.Analysis.SurfaceAdapters.IsExpansionVisible, DRagLint.Analysis.SurfaceAdapters.SpanText, SameText</para>
+/// <para>Returns: Acc.ToArray</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Analysis.SurfaceAdapters.IsExpansionVisible"/>
+/// <seealso cref="DRagLint.Analysis.SurfaceAdapters.SpanText"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function CollectInlineBodies(const pSymbols: TArray<TSymbol>;
                              const pSourceLines: TArray<string>):
@@ -128,6 +177,12 @@ function CollectInlineBodies(const pSymbols: TArray<TSymbol>;
 /// The caller owns the parse, and must have preprocessed the buffer with the
 /// profile the index was built with -- otherwise a unit with `{$IFDEF}` in its
 /// interface is permanently `changed:true`.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Analysis.SurfaceAdapters.CollectInlineBodies, DRagLint.Analysis.SurfaceFingerprint.SurfaceFingerprint</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Analysis.SurfaceAdapters.CollectInlineBodies"/>
+/// <seealso cref="DRagLint.Analysis.SurfaceFingerprint.SurfaceFingerprint"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function FingerprintOfParse(const pParse: TParseResult;
                             const pSourceLines: TArray<string>): string;
@@ -142,6 +197,18 @@ function FingerprintOfParse(const pParse: TParseResult;
 /// </param>
 /// <param name="AFingerprint">Receives the fingerprint on success.</param>
 /// <returns>False when the file is not in this index; AFingerprint is then ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Analysis.SurfaceAdapters.CollectInlineBodies, DRagLint.Analysis.SurfaceFingerprint.SurfaceFingerprint, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AFingerprint (out)</para>
+/// <seealso cref="DRagLint.Analysis.SurfaceAdapters.CollectInlineBodies"/>
+/// <seealso cref="DRagLint.Analysis.SurfaceFingerprint.SurfaceFingerprint"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryFingerprintOfIndex(const pStore: ISymbolStore;
                                const pPath: string;
                                const pSourceLines: TArray<string>;

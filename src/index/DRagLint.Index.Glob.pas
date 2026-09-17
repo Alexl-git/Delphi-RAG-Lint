@@ -38,6 +38,7 @@ type
       /// <para>Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize</para>
       /// <para>Returns: GlobMatch(Normalize(AName), Normalize(APattern))</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Glob.GlobMatch"/>
       /// <seealso cref="DRagLint.Index.Glob.Normalize"/>
       /// <seealso cref="DRagLint.Index.Glob.TGlob.MatchesAny"/>
@@ -55,6 +56,7 @@ type
       /// <para>Calls: DRagLint.Index.Glob.GlobMatch, DRagLint.Index.Glob.Normalize</para>
       /// <para>Returns: False</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Glob.GlobMatch"/>
       /// <seealso cref="DRagLint.Index.Glob.Normalize"/>
       /// <seealso cref="DRagLint.Index.Glob.TGlob.Matches"/>

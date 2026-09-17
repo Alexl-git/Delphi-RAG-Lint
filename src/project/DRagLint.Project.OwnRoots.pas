@@ -61,7 +61,9 @@ type
     /// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestOwnRoots (DRagLint.CLI.pas), DRagLint.Doc.Batch.FilterToOwnRoots (DRagLint.Doc.Batch.pas)</para>
     /// <para>Calls: Default, DRagLint.Project.OwnRoots.NormalizeDir, ExcludeTrailingPathDelimiter, ExpandFileName, Format, TJSONObject, Trim</para>
     /// <para>Returns: Default(TOwnRoots)</para>
+    /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Project.OwnRoots.NormalizeDir"/>
     /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.IsOurs"/>
     /// <!-- drag-lint:auto END -->

@@ -11,6 +11,12 @@ type
   /// normalized path + a hash of the finding's (trimmed) source-line CONTENT, so
   /// inserting or removing unrelated lines does not invalidate a baselined
   /// finding. Used to report only NEW findings on a legacy codebase.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBaseline = class
   strict private
     /// <summary>Lowercased, backslash-normalized file path.</summary>
@@ -22,6 +28,7 @@ type
     /// <para>Called from: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf (DRagLint.Lint.Baseline.pas)</para>
     /// <para>Calls: LowerCase, StringReplace</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
@@ -41,6 +48,7 @@ type
     /// <para>Called from: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf (DRagLint.Lint.Baseline.pas)</para>
     /// <para>Calls: Trim</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
@@ -59,6 +67,7 @@ type
     /// <para>Called from: DRagLint.Lint.Baseline.TBaseline.Filter (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Fingerprint (DRagLint.Lint.Baseline.pas), DRagLint.Lint.Baseline.TBaseline.Write (DRagLint.Lint.Baseline.pas)</para>
     /// <para>Calls: DRagLint.Lint.Baseline.TBaseline.NormPath, DRagLint.Lint.Baseline.TBaseline.SourceLineText, IntToStr, LowerCase</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.SourceLineText"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
@@ -76,6 +85,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
@@ -93,6 +103,7 @@ type
     /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas) ?, DRagLint.CLI.DoHover (DRagLint.CLI.pas) ?, DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas) ?, DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas) (+4 more)</para>
     /// <para>Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Filter"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
@@ -112,6 +123,7 @@ type
     /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
     /// <para>Calls: DRagLint.Lint.Baseline.TBaseline.FingerprintsOf</para>
     /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.FingerprintsOf"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.Fingerprint"/>
     /// <seealso cref="DRagLint.Lint.Baseline.TBaseline.NormPath"/>
