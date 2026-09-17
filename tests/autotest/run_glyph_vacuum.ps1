@@ -132,6 +132,26 @@ $emfCtl = New-Object byte[] 100
 $emfCtl[0] = 0x01; $emfCtl[1] = 0x00; $emfCtl[2] = 0x00; $emfCtl[3] = 0x00
 $emfCtl[40] = 0x20; $emfCtl[41] = 0x45; $emfCtl[42] = 0x4D; $emfCtl[43] = 0x46
 
+# Fix round 1 finding 1: a BARE bitmap at payload offset 0 -- no length prefix,
+# no class name -- so ParseStreamedGraphic's FIRST branch (bare magic at 0)
+# must fire and fall through to the tail ReadDibHeader call. This is the exact
+# branch an earlier draft of this fix broke with a premature Exit (caught in
+# review, fixed before commit 2343c0bc) -- no fixture exercised it until now.
+$stripBare1 = New-StripBmp 96 32 3
+$payBare1   = $stripBare1
+
+# Fix round 1 finding 2: the first Int32 LE equals Length-4 (an 8-byte length
+# field claiming an 8-byte image), so the length-prefixed branch's OWN size
+# check passes -- but SniffImageFormat at offset 4 finds no magic (all zero
+# bytes), so InnerFmt stays '' and the payload must fall through to the
+# class-name preamble test, which must ALSO reject it (byte 0 = 8 is read as
+# N = 8, but 1+N+4 = 13 > Length = 12, so the preamble's own length check
+# rejects it -- not the printable-ASCII check, since N and the Int32 share the
+# same low byte by construction whenever the high 3 bytes are 0, the preamble
+# length check always fires first for this shape). Either way the payload must
+# never be reported as an image: format/wrapper stay empty.
+$collPay = [byte[]](0x08,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+
 Write-Ascii (Join-Path $src 'FrmD.dfm') @"
 object FrmD: TFrmD
   Caption = 'D'
@@ -148,6 +168,12 @@ object FrmD: TFrmD
   object EmfCtl: TPanel
     Blob.Data = $(ConvertTo-DfmHex $emfCtl)
   end
+  object Bare1: TImage
+    Picture.Data = $(ConvertTo-DfmHex $payBare1)
+  end
+  object Coll1: TPanel
+    Blob.Data = $(ConvertTo-DfmHex $collPay)
+  end
 end
 "@
 
@@ -156,7 +182,7 @@ $o = & $Exe glyph-vacuum --root $src --out $out 2>&1 | Out-String
 $code = $LASTEXITCODE
 Write-Host "--- raw stdout ---"; Write-Host $o
 Check 'T1 exit 0 on a completed walk' ($code -eq 0) "exit=$code"
-Check 'T1 summary line names the counts' ($o -match 'glyph-vacuum: dfm=3 graphics=9 distinct=8 skipped=0') $o
+Check 'T1 summary line names the counts' ($o -match 'glyph-vacuum: dfm=3 graphics=11 distinct=10 skipped=0') $o
 
 $inst = Join-Path $out 'instances.tsv'
 Check 'T1 instances.tsv written' (Test-Path $inst)
@@ -198,7 +224,9 @@ if (Test-Path $inst) {
   $sv  = $rows | Where-Object { $_.object_path -eq 'Svg1' }
   $fk  = $rows | Where-Object { $_.object_path -eq 'Fake1' }
   $ec  = $rows | Where-Object { $_.object_path -eq 'EmfCtl' }
-  Check 'T2 nine rows' ($rows.Count -eq 9) "rows=$($rows.Count)"
+  $ba  = $rows | Where-Object { $_.object_path -eq 'Bare1' }
+  $cl  = $rows | Where-Object { $_.object_path -eq 'Coll1' }
+  Check 'T2 eleven rows' ($rows.Count -eq 11) "rows=$($rows.Count)"
   Check 'T2 Btn1 count_prop NumGlyphs'     ($a1.count_prop -eq 'NumGlyphs') $a1.count_prop
   Check 'T2 Btn1 count_value 4'           ($a1.count_value -eq '4') $a1.count_value
   Check 'T2 Btn1 count_effective 4 (no db: from the value)' ($a1.count_effective -eq '4') $a1.count_effective
@@ -248,6 +276,24 @@ if (Test-Path $inst) {
 
   # ---- Task 10: EMF positive control -- the real ENHMETAHEADER ' EMF' signature --
   Check 'T8 EmfCtl format emf'             ($ec.format -eq 'emf') $ec.format
+
+  # ---- Fix round 1, finding 1: bare BMP at offset 0 reaching ReadDibHeader -------
+  Check 'T9 Bare1 wrapper empty (bare, no preamble)' ($ba.wrapper -eq '') $ba.wrapper
+  Check 'T9 Bare1 format bmp'               ($ba.format -eq 'bmp') $ba.format
+  Check 'T9 Bare1 width 96 height 32'       ($ba.width -eq '96' -and $ba.height -eq '32') "$($ba.width)x$($ba.height)"
+  Check 'T9 Bare1 bpp 24'                   ($ba.bpp -eq '24') $ba.bpp
+  Check 'T9 Bare1 inferred_n 3 (96/32)'     ($ba.inferred_n -eq '3') $ba.inferred_n
+  $baImg = Join-Path $out $ba.image_file
+  if (Test-Path $baImg) {
+    $baBytes = [IO.File]::ReadAllBytes($baImg)
+    Check 'T9 Bare1 image file is the exact bare BMP, same length as the source strip' ($baBytes.Length -eq $stripBare1.Length -and $baBytes[0] -eq 0x42 -and $baBytes[1] -eq 0x4D) "len=$($baBytes.Length) vs $($stripBare1.Length)"
+  }
+
+  # ---- Fix round 1, finding 2: Int32-equals-Length-4 collision with no magic at
+  # offset 4 must fall through to (and be rejected by) the class-name preamble ---
+  Check 'T9 Coll1 format empty (falls through, not length-prefixed)' ($cl.format -eq '') $cl.format
+  Check 'T9 Coll1 wrapper empty (preamble also rejects it)' ($cl.wrapper -eq '') $cl.wrapper
+  Check 'T9 Coll1 image_file .bin'          ($cl.image_file -like 'images\*.bin') $cl.image_file
 }
 
 # ---- positive control: count column stays empty with no count property ----------
@@ -367,7 +413,8 @@ if (Test-Path $cls) {
   $tb = $c | Where-Object { $_.component_class -eq 'TabcToggleBtn' }
   # 4 original (TabcToggleBtn, TSpeedButton, TImageList, TcxImageList) + 3 from
   # Task 10's FrmD fixtures (TBitBtn, TcxButton, TPanel -- Fake1+EmfCtl share TPanel)
-  Check 'T4 seven classes' ($c.Count -eq 7) "n=$($c.Count)"
+  # + 1 from fix round 1 (TImage -- Bare1; Coll1 is TPanel, already counted)
+  Check 'T4 eight classes' ($c.Count -eq 8) "n=$($c.Count)"
   Check 'T4 TabcToggleBtn instances 2'      ($tb.instances -eq '2') $tb.instances
   Check 'T4 graphic_props Picture.Data'      ($tb.graphic_props -eq 'Picture.Data') $tb.graphic_props
   Check 'T4 count_props NumGlyphs'           ($tb.count_props -eq 'NumGlyphs') $tb.count_props
@@ -397,7 +444,7 @@ if (Test-Path $gal) {
   $imgs = [regex]::Matches($g, 'src="(images/[0-9a-f]{64}\.[a-z]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
   $files = Get-ChildItem (Join-Path $outDb 'images') | ForEach-Object { 'images/' + $_.Name } | Sort-Object -Unique
   Check 'T5 gallery references every image file and nothing else' (($imgs -join ',') -eq ($files -join ',')) "refs=$($imgs -join ',') files=$($files -join ',')"
-  Check 'T5 one h2 per class' (([regex]::Matches($g, '<h2>')).Count -eq 7)
+  Check 'T5 one h2 per class' (([regex]::Matches($g, '<h2>')).Count -eq 8)
   Check 'T5 Btn1 strip has 3 separators at 32/64/96 px' ($g -match 'left:32px' -and $g -match 'left:64px' -and $g -match 'left:96px')
   Check 'T5 caption carries N/inferred/agree' ($g -match 'N=4 inferred=4 agree=Y')
   Check 'T5 no script tag' (-not ($g -match '<script'))
@@ -409,12 +456,12 @@ $outA = Join-Path $WorkDir 'out-append'
 $n1 = (Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count
 & $Exe glyph-vacuum --root $src --out $outA --append | Out-Null
 $n2 = (Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count
-Check 'T6 append of the same root is idempotent' ($n1 -eq 9 -and $n2 -eq 9) "n1=$n1 n2=$n2"
+Check 'T6 append of the same root is idempotent' ($n1 -eq 11 -and $n2 -eq 11) "n1=$n1 n2=$n2"
 & $Exe glyph-vacuum --root $src3 --out $outA --append | Out-Null
 $rowsA = Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t"
-Check 'T6 append of a second root adds its rows' ($rowsA.Count -eq 10) "n=$($rowsA.Count)"
+Check 'T6 append of a second root adds its rows' ($rowsA.Count -eq 12) "n=$($rowsA.Count)"
 Check 'T6 merged classes.tsv counts both roots' (((Import-Csv (Join-Path $outA 'classes.tsv') -Delimiter "`t") | Where-Object { $_.component_class -eq 'TabcToggleBtn' }).instances -eq '3')
-Check 'T6 images dir holds one file per distinct sha (8)' ((Get-ChildItem (Join-Path $outA 'images')).Count -eq 8)
+Check 'T6 images dir holds one file per distinct sha (10)' ((Get-ChildItem (Join-Path $outA 'images')).Count -eq 10)
 & $Exe glyph-vacuum --root $src3 --out $outA | Out-Null
 Check 'T6 without --append the file is REPLACED' ((@(Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t")).Count -eq 1)
 
