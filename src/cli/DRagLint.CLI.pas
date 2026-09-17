@@ -590,7 +590,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@4a77 -- pre-existing giant banner printer, grown by one Writeln for glyph-vacuum; splitting it is out of this task's scope
+procedure PrintHelp;  // dl:ok method-too-long@4a77 -- one Writeln per verb, so length IS the verb count; run_docs_sync_guard.ps1 harvests the banner as ONE surface, and splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
