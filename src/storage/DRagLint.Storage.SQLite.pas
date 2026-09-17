@@ -7673,7 +7673,7 @@ end; // begin
 
 function TSQLiteSymbolStore.GetSymbolDoc(ASymbolId: Int64): TParsedDoc;
 begin
-  FillChar(Result, SizeOf(Result), 0);
+  Result:= Default(TParsedDoc);
   if FQGetSymbolDoc.Active then FQGetSymbolDoc.Close;
   FQGetSymbolDoc.ParamByName('sid').AsLargeInt:= ASymbolId;
   FQGetSymbolDoc.Open;
@@ -7739,7 +7739,7 @@ end; // procedure
 
 function TSQLiteSymbolStore.GetSymbolFacts(ASymbolId: Int64): TSymbolFacts;
 begin
-  FillChar(Result, SizeOf(Result), 0);
+  Result:= Default(TSymbolFacts);
   Result.SymbolId:= ASymbolId;
   if FQGetSymbolFacts.Active then FQGetSymbolFacts.Close;
   FQGetSymbolFacts.ParamByName('sid').AsLargeInt:= ASymbolId;
