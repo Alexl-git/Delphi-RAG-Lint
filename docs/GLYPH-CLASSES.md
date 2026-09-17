@@ -147,7 +147,11 @@ spec for the two systemic decode gaps the first run exposed (SVG glyphs, and a
   OptionsImage.NumGlyphs`, `n_distribution 2:3;?:33` (3 instances declare
   `OptionsImage.NumGlyphs = 2`; 33 don't stream it at all -- and `count_default`
   is empty because `TcxButton` isn't in either index, so there is no
-  declared-default fallback), `inferred_distribution 2:3;1:1;?:32`,
+  declared-default fallback; the gap here is `TcxButton` being OUT OF SCOPE,
+  not the fallback itself -- the final-review wave fixed the fallback so a
+  default-valued DOTTED count (e.g. `Options.NumGlyphs`) IS resolvable through
+  the tree once its class is indexed, see `FactsFor`/`AddRow`'s count-tree
+  walk in `src\report\DRagLint.Convert.GlyphVacuum.pas`), `inferred_distribution 2:3;1:1;?:32`,
   `disagreements 0`, `distinct_payloads 15`; `class_unit`/`runtime_refs` both
   empty (class not indexed).
 - **Corpus (re-measured after Task 10, commit `2343c0bc`):** `formats

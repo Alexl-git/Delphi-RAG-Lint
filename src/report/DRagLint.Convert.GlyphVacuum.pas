@@ -170,7 +170,10 @@ type
     QName      : string;    // Unit.TClass
     UnitName   : string;
     Tree       : TPropTree;
-    RuntimeRefs: Integer;   // -1 = no store
+    // runtime_refs is derived in WriteClassesTsv from the merged WRITE SET
+    // (see RefsCounted), not cached here -- a class only reached via --append
+    // merge is never AddRow'd this run, so a per-class cache written only from
+    // AddRow would report a false 0 for it.
   end;
 
   TVacuumState = record
@@ -187,6 +190,10 @@ type
 
 const
   CountPropNames: array[0..3] of string = ('NumGlyphs', 'GlyphCount', 'NumStates', 'ImageCount');
+  // Matches DRagLint.Convert.Apply.pas's own PropTreeOptions.Depth for the
+  // same tree -- deep enough to recurse into a DevExpress-style Options:
+  // TFooOptions sub-object and find a dotted default like 'Options.NumGlyphs'.
+  PropTreeDepthForCountFallback = 6;
 
 // AName may be a bare scalar name ('NumGlyphs') or a dotted one streamed flat
 // by a DevExpress-style .dfm ('OptionsImage.NumGlyphs' -- no nested object
@@ -260,7 +267,6 @@ var
 begin
   if AState.Facts.TryGetValue(LowerCase(ABareClass), Result) then Exit;
   Result:= Default(TClassFacts);
-  Result.RuntimeRefs:= -1;
   for S in AStores do
   begin
     Syms:= S.FindSymbolsByExactName(ABareClass);
@@ -272,8 +278,13 @@ begin
         P:= LastDelimiter('.', Sym.QualifiedName);
         Result.UnitName:= Copy(Sym.QualifiedName, 1, P - 1);
         Opts:= Default(TPropTreeOptions);
+        // Recurse into class-typed properties (e.g. a DevExpress-style
+        // Options: TFooOptions holding NumGlyphs) so the count-tree fallback
+        // in AddRow can find a dotted default like 'Options.NumGlyphs'; 6
+        // matches the depth DRagLint.Convert.Apply.pas already uses for the
+        // same tree.
+        Opts.Depth:= PropTreeDepthForCountFallback;
         Result.Tree:= BuildPropTree(S, Sym.QualifiedName, Opts);
-        Result.RuntimeRefs:= 0;
         Break;
       end;
     if Result.Resolved then Break;
@@ -340,13 +351,11 @@ end;
 procedure AddRow(const AObject: TDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, AProp: string;  // dl:ok too-many-parameters@1d66
   const APayload: TBytes; AInCollection: Boolean; var AState: TVacuumState);
 var
-  G     : TStreamedGraphic;
-  R     : TGlyphRow;
-  Facts : TClassFacts;
-  Def   : string;
-  Name  : string;
-  Prop  : string;
-  RefKey: string;
+  G    : TStreamedGraphic;
+  R    : TGlyphRow;
+  Facts: TClassFacts;
+  Def  : string;
+  N    : TPropNode;
 begin
   G:= ParseStreamedGraphic(APayload);
   R:= Default(TGlyphRow);
@@ -378,23 +387,19 @@ begin
     end
     else
       // no count property streamed (its value equals the class's own default,
-      // so the .dfm omits it) -- the class may still declare one; the first
-      // known name with a usable default stands in for it.
-      for Name in CountPropNames do
-        if LeafDefaultOf(Facts.Tree, Name, Def) then
+      // so the .dfm omits it) -- the class may still declare one, possibly
+      // through a nested (dotted) path such as 'Options.NumGlyphs' -- the
+      // first tree node whose LAST segment is a known count name and that
+      // itself carries a default stands in for it. IsCountPropName already
+      // matches on the last dotted segment, so this composes with a
+      // dotted path exactly the way FindCountProp's own scan does.
+      for N in Facts.Tree.Nodes do
+        if IsCountPropName(N.Path) and N.HasDefault then
         begin
-          R.CountProp   := Name;
-          R.CountDefault:= Def;
+          R.CountProp   := N.Path;
+          R.CountDefault:= N.DefaultValue;
           Break;
         end;
-    Prop  := GraphicPropName(AProp);
-    RefKey:= LowerCase(Facts.QName) + '.' + LowerCase(Prop);
-    if not AState.RefsCounted.ContainsKey(RefKey) then
-    begin
-      Facts.RuntimeRefs:= Facts.RuntimeRefs + CountRuntimeRefs(AState.Stores, Facts.QName, Prop, Facts.Tree);
-      AState.RefsCounted.Add(RefKey, True);
-      AState.Facts.AddOrSetValue(LowerCase(AObject.ClassName_), Facts);
-    end;
   end;
   FillDerived(R, AObject.ClassName_, AInCollection);
   R.PayloadSha    := Sha256Hex(APayload);
@@ -427,7 +432,7 @@ begin
     while (Q <= Length(Text)) and (Text[Q] <> #10) do Inc(Q);
     Line:= Trim(Copy(Text, P, Q - P));
     if SameText(Line, 'item') then Inc(ItemIx)
-    else if EndsText('= {', Line) or (Pos(' = {', Line) > 0) then
+    else if EndsText('= {', Line) then
     begin
       Name:= Trim(Copy(Line, 1, Pos('=', Line) - 1));
       // the hex runs from after the opening brace to the closing brace
@@ -657,12 +662,15 @@ const
            'count_props' + #9 + 'count_default' + #9 + 'n_distribution' + #9 + 'inferred_distribution' + #9 +
            'disagreements' + #9 + 'formats' + #9 + 'distinct_payloads' + #9 + 'runtime_refs';
 var
-  Aggs : TDictionary<string, TClassAgg>;
-  Keys : TArray<string>;
-  K    : string;
-  A    : TClassAgg;
-  R    : TGlyphRow;
-  SB   : TStringBuilder;
+  Aggs  : TDictionary<string, TClassAgg>;
+  Keys  : TArray<string>;
+  K     : string;
+  A     : TClassAgg;
+  R     : TGlyphRow;
+  SB    : TStringBuilder;
+  Facts : TClassFacts;
+  GProp : string;
+  RefKey: string;
 begin
   Aggs:= TDictionary<string, TClassAgg>.Create;
   try
@@ -694,7 +702,26 @@ begin
       if R.Agree = 'N' then Inc(A.Disagree);
       Bump(A.Formats, R.Format);
       A.Shas.AddOrSetValue(R.PayloadSha, 1);
-      A.RuntimeRefs:= FactsFor(R.ComponentClass, AState.Stores, AState).RuntimeRefs;
+      // Derived from the MERGED write set, not from AddRow: a row reached only
+      // through --append's merge (or a graphic property this run never
+      // walked) still has its class resolved and its refs counted here, so
+      // the column never reports a false 0 for a class this process itself
+      // never saw. RefsCounted keys on (class, graphic property) so a class
+      // with two graphic props sums both, and repeat rows for the same pair
+      // are counted once.
+      Facts:= FactsFor(R.ComponentClass, AState.Stores, AState);
+      if Facts.Resolved then
+      begin
+        GProp := GraphicPropName(R.Prop);
+        RefKey:= LowerCase(Facts.QName) + '.' + LowerCase(GProp);
+        if not AState.RefsCounted.ContainsKey(RefKey) then
+        begin
+          A.RuntimeRefs:= A.RuntimeRefs + CountRuntimeRefs(AState.Stores, Facts.QName, GProp, Facts.Tree);
+          AState.RefsCounted.Add(RefKey, True);
+        end;
+      end
+      else
+        A.RuntimeRefs:= -1;
       Aggs.AddOrSetValue(K, A);
     end;
 
@@ -817,6 +844,14 @@ begin
         GC:= Classes[K];
         SB.AppendFormat('<h2>%s</h2>', [Esc(GC.ClassName_)]);
         Shas:= GC.Cards.Keys.ToArray;
+        // Ordinal sort so gallery.html is byte-identical run to run -- the
+        // spec calls a re-scan idempotent, and a TDictionary's own enumeration
+        // order is not.
+        TArray.Sort<string>(Shas, TComparer<string>.Construct(
+          function(const L, R: string): Integer
+          begin
+            Result:= CompareStr(L, R);
+          end));
         for Sha in Shas do
         begin
           Card:= GC.Cards[Sha];

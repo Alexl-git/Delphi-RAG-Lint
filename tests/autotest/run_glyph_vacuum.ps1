@@ -109,6 +109,7 @@ inherited FrmB: TFrmB
     FormatVersion = 1
     ImageInfo = <
       item
+        Caption = 'x = {y}'
         Image.Data = $(ConvertTo-DfmHex $pay4)
       end>
   end
@@ -360,6 +361,22 @@ type
   TabcToggleBtn = class(TabcCustomPicSpeedBtn)
   end;
 
+  TDottedOpts = class(TPersistent)
+  private
+    FNumGlyphs: Integer;
+  published
+    property NumGlyphs: Integer read FNumGlyphs write FNumGlyphs default 3;
+  end;
+
+  TDottedBtn = class(TGraphicControl)
+  private
+    FPicture: TPicture;
+    FOptions: TDottedOpts;
+  published
+    property Picture: TPicture read FPicture write FPicture;
+    property Options: TDottedOpts read FOptions write FOptions;
+  end;
+
 implementation
 
 end.
@@ -495,6 +512,74 @@ $sk = @(Import-Csv (Join-Path $outBin 'skipped.tsv') -Delimiter "`t")
 Check 'T7 unparseable file listed in skipped.tsv with a reason' ($sk.Count -eq 1 -and $sk[0].dfm_path -like '*Broken.dfm' -and $sk[0].reason -ne '') ($sk | Out-String)
 Check 'T7 summary counts skipped=1 dfm=2' ($o8 -match 'dfm=2 graphics=1 distinct=1 skipped=1') $o8
 Check 'T7 skipped.tsv exists even when empty (db run)' (Test-Path (Join-Path $outDb 'skipped.tsv'))
+
+# ---- final-review finding 3: a string VALUE containing ' = {' must not start a
+# phantom blob inside a collection item (Caption precedes the real Image.Data) ----
+$capRows = @($rows | Where-Object { $_.object_path -eq 'cxImageList1' })
+Check 'T13 finding3: exactly one row from the cxImageList1 collection' ($capRows.Count -eq 1) "count=$($capRows.Count)"
+if ($capRows.Count -ge 1) {
+  Check 'T13 finding3: the row is ImageInfo[0].Image.Data' ($capRows[0].property -eq 'ImageInfo[0].Image.Data') $capRows[0].property
+}
+Check 'T13 finding3: no row property mentions Caption (no phantom blob)' (-not (@($rows | Where-Object { $_.property -like '*Caption*' }).Count)) 'unexpected Caption row found'
+
+# ---- final-review finding 1: --append + --db must not report a FALSE ZERO for
+# runtime_refs -- a class present ONLY via a previous run's merged instances.tsv
+# (not walked THIS run) must still be counted from the MERGED write set, not just
+# rows AddRow saw this process. Three steps: (1) $src establishes 2 TabcToggleBtn
+# instances; (2) append $src3 adds a 3rd (this step still WALKS TabcToggleBtn, so
+# the old per-AddRow counting would still get it right here -- not yet a repro);
+# (3) append $src4 (TcxButton only, ZERO TabcToggleBtn rows walked this process)
+# is the step that must still report TabcToggleBtn's runtime_refs from the MERGED
+# rows carried over, not from this run's own walk. -------------------------------
+$outAppendDb = Join-Path $WorkDir 'out-append-db'
+& $Exe glyph-vacuum --root $src --out $outAppendDb --db $libDb | Out-Null
+& $Exe glyph-vacuum --root $src3 --out $outAppendDb --append --db $libDb | Out-Null
+& $Exe glyph-vacuum --root $src4 --out $outAppendDb --append --db $libDb | Out-Null
+$clsAppendDb = Import-Csv (Join-Path $outAppendDb 'classes.tsv') -Delimiter "`t"
+Write-Host "--- raw classes.tsv (append+db) ---"; Get-Content (Join-Path $outAppendDb 'classes.tsv') | ForEach-Object { Write-Host $_ }
+$tbAppendDb = $clsAppendDb | Where-Object { $_.component_class -eq 'TabcToggleBtn' }
+Check 'T14 finding1: append+db runtime_refs stays 2 when the LAST append walks none of this class' ($tbAppendDb.runtime_refs -eq '2') $tbAppendDb.runtime_refs
+Check 'T14 finding1: append+db instances 3 across the merge' ($tbAppendDb.instances -eq '3') $tbAppendDb.instances
+
+# ---- final-review finding 2: class-tree count fallback composes with a DOTTED
+# path -- TDottedBtn.Options.NumGlyphs has a default but is never streamed -------
+$srcDot = Join-Path $WorkDir 'srcdot'; New-Item -ItemType Directory $srcDot -Force | Out-Null
+$stripDot = New-StripBmp 96 32 3
+$payDot   = New-PicturePayload 'TBitmap' $stripDot
+Write-Ascii (Join-Path $srcDot 'FrmDot.dfm') @"
+object FrmDot: TFrmDot
+  Caption = 'Dot'
+  object Dot1: TDottedBtn
+    Picture.Data = $(ConvertTo-DfmHex $payDot)
+  end
+end
+"@
+$outDot = Join-Path $WorkDir 'out-dot'
+$oDot = & $Exe glyph-vacuum --root $srcDot --out $outDot --db $libDb 2>&1 | Out-String
+Write-Host "--- raw stdout (dotted tree-fallback run) ---"; Write-Host $oDot
+$instDot = Join-Path $outDot 'instances.tsv'
+if (Test-Path $instDot) {
+  Write-Host "--- raw instances.tsv (dotted tree-fallback run) ---"; Get-Content $instDot | ForEach-Object { Write-Host $_ }
+  $rDot = (Import-Csv $instDot -Delimiter "`t")[0]
+  $dottedOk = ($rDot.count_prop -eq 'Options.NumGlyphs' -and $rDot.count_value -eq '' -and $rDot.count_default -eq '3' -and
+               $rDot.count_effective -eq '3' -and $rDot.inferred_n -eq '3' -and $rDot.agree -eq 'Y')
+  if (-not $dottedOk) {
+    $pt = & $Exe proptree --qname Abcbtn.TDottedBtn --db $libDb 2>&1 | Out-String
+    Write-Host "--- raw proptree --qname Abcbtn.TDottedBtn --db `$libDb (NEEDS_CONTEXT) ---"; Write-Host $pt
+  }
+  Check 'T15 finding2: dotted tree fallback count_prop/default/effective/inferred/agree' $dottedOk "$($rDot.count_prop)/$($rDot.count_value)/$($rDot.count_default)/$($rDot.count_effective)/$($rDot.inferred_n)/$($rDot.agree)"
+} else {
+  Check 'T15 finding2: dotted tree fallback run wrote instances.tsv' $false 'instances.tsv missing'
+}
+
+# ---- final-review finding 4: gallery.html card order must be deterministic -----
+$outG1 = Join-Path $WorkDir 'out-gallery-1'
+$outG2 = Join-Path $WorkDir 'out-gallery-2'
+& $Exe glyph-vacuum --root $src --out $outG1 --db $libDb | Out-Null
+& $Exe glyph-vacuum --root $src --out $outG2 --db $libDb | Out-Null
+$hg1 = (Get-FileHash (Join-Path $outG1 'gallery.html')).Hash
+$hg2 = (Get-FileHash (Join-Path $outG2 'gallery.html')).Hash
+Check 'T16 finding4: gallery.html is byte-identical across repeated runs' ($hg1 -eq $hg2) "h1=$hg1 h2=$hg2"
 
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null
