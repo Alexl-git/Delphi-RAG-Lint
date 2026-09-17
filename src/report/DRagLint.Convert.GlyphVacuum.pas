@@ -85,6 +85,7 @@ uses
   System.IOUtils,
   System.Hash,
   System.StrUtils,
+  System.Math,
   System.Generics.Defaults,
   DRagLint.Core.Model,
   DRagLint.Convert.DfmReemit,
@@ -181,6 +182,7 @@ type
     Stores     : TArray<ISymbolStore>;
     Facts      : TDictionary<string, TClassFacts>;
     RefsCounted: TDictionary<string, Boolean>;
+    Skipped    : TList<TPair<string, string>>; // (dfm_path, reason); see skipped.tsv
   end;
 
 const
@@ -465,31 +467,101 @@ begin
   end;
 end;
 
+const
+  FilerSignature = 'TPF0';
+  SignatureScan  = 64;
+
+// A binary .dfm starts with the filer signature (sometimes after a small
+// resource header). Convert it in memory; the file is never written.
+//
+// Uses ObjectBinaryToText, NOT ObjectResourceToText, despite the latter's name
+// looking like the fit: System.Classes.pas (RAD Studio 37.0) shows
+// ObjectResourceToText calling Input.ReadResHeader FIRST -- it expects a
+// compiled .RES-style header BEFORE the signature -- and only then forwards to
+// ObjectBinaryToText. ObjectBinaryToText itself calls Reader.ReadSignature,
+// which reads and validates the 4-byte 'TPF0' marker from the stream's CURRENT
+// position -- that is the one that matches "positioned at the signature".
+// Calling ObjectResourceToText directly on a TPF0-positioned stream makes
+// ReadResHeader treat 'TPF0' as a resource header and raise EInvalidImage
+// ('Invalid stream format'); confirmed against the hand-built fixture.
+function BinaryDfmToText(const ABytes: TBytes; out AText: string): Boolean;
+var
+  Sig  : Integer;
+  I    : Integer;
+  InS  : TBytesStream;
+  OutS : TStringStream;
+begin
+  Result:= False;
+  AText := '';
+  Sig   := -1;
+  for I:= 0 to Min(SignatureScan, Length(ABytes) - Length(FilerSignature)) do
+    if (ABytes[I] = Ord('T')) and (ABytes[I + 1] = Ord('P')) and (ABytes[I + 2] = Ord('F')) and
+       (ABytes[I + Length(FilerSignature) - 1] = Ord('0')) then
+    begin
+      Sig:= I;
+      Break;
+    end;
+  if Sig < 0 then Exit;
+  InS := TBytesStream.Create(ABytes);
+  OutS:= TStringStream.Create('', TEncoding.UTF8);
+  try
+    InS.Position:= Sig;
+    ObjectBinaryToText(InS, OutS);
+    AText := OutS.DataString;
+    Result:= True;
+  finally
+    OutS.Free;
+    InS.Free;
+  end;
+end;
+
+// Records one file the walk could not turn into rows -- never dropped
+// silently. AReason is the parse/read failure text verbatim; Summary.Skipped
+// and skipped.tsv are the only places a caller learns this file was seen.
+procedure Skip(const APath, AReason: string; var AState: TVacuumState);
+begin
+  AState.Skipped.Add(TPair<string, string>.Create(APath, AReason));
+  Inc(AState.Summary.Skipped);
+end;
+
 procedure HarvestFile(const APath: string; var AState: TVacuumState);
 var
+  Bytes  : TBytes;
   Text   : string;
   Root   : TDfmNode;
   PasUnit: string;
   Surface: string;
 begin
   Inc(AState.Summary.DfmFiles);
-  Text:= TFile.ReadAllText(APath);
-  if SameText(TPath.GetExtension(APath), '.fmx') then Surface:= 'fmx' else Surface:= 'dfm';
-  PasUnit:= TPath.ChangeExtension(TPath.GetFileName(APath), '.pas');
-  if not TFile.Exists(TPath.Combine(TPath.GetDirectoryName(APath), PasUnit)) then PasUnit:= '';
-  Root:= nil;
-  if not ParseDfmBlock(Text, Root) then
-  begin
-    Inc(AState.Summary.Skipped);
-    Exit;
-  end;
   try
-    { The form itself never appears in an object_path: it is already carried
-      as FormClass/dfm_path, so the walk starts at ITS children with an empty
-      path prefix -- see HarvestObject's own remark. }
-    HarvestObject(Root, APath, PasUnit, Surface, Root.ClassName_, '', AState);
-  finally
-    Root.Free;
+    Bytes:= TFile.ReadAllBytes(APath);
+    // FilerSignature (TPF0) means the file is a compiled binary .dfm --
+    // convert it in memory; otherwise it is already a text .dfm (ANSI).
+    if not BinaryDfmToText(Bytes, Text) then
+      Text:= TEncoding.Default.GetString(Bytes);
+    if SameText(TPath.GetExtension(APath), '.fmx') then Surface:= 'fmx' else Surface:= 'dfm';
+    PasUnit:= TPath.ChangeExtension(TPath.GetFileName(APath), '.pas');
+    if not TFile.Exists(TPath.Combine(TPath.GetDirectoryName(APath), PasUnit)) then PasUnit:= '';
+    Root:= nil;
+    if not ParseDfmBlock(Text, Root) then
+    begin
+      Skip(APath, 'not a parseable text .dfm', AState);
+      Exit;
+    end;
+    try
+      { The form itself never appears in an object_path: it is already carried
+        as FormClass/dfm_path, so the walk starts at ITS children with an empty
+        path prefix -- see HarvestObject's own remark. }
+      HarvestObject(Root, APath, PasUnit, Surface, Root.ClassName_, '', AState);
+    finally
+      Root.Free;
+    end;
+  except
+    // A locked or unreadable .dfm (or a conversion/parse that raised rather
+    // than returning False) must not abort the whole walk -- list it and
+    // continue with the next file (Task 1 review finding, deferred here).
+    on E: Exception do
+      Skip(APath, E.Message, AState);
   end;
 end;
 
@@ -768,6 +840,27 @@ begin
   end;
 end;
 
+// dfm_path <TAB> reason, one line per file HarvestFile could not turn into
+// rows. Always written -- header only when nothing was skipped -- so its
+// absence is never mistaken for "everything parsed".
+procedure WriteSkippedTsv(const AOutDir: string; const ASkipped: TList<TPair<string, string>>);
+const
+  Header = 'dfm_path' + #9 + 'reason';
+var
+  SB: TStringBuilder;
+  P : TPair<string, string>;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    SB.Append(Header).Append(#13#10);
+    for P in ASkipped do
+      SB.Append(Cell(P.Key)).Append(#9).Append(Cell(P.Value)).Append(#13#10);
+    WriteUtf8NoBom(TPath.Combine(AOutDir, 'skipped.tsv'), SB.ToString);
+  finally
+    SB.Free;
+  end;
+end;
+
 // (dfm_path, object_path, property), case-insensitive: the merge key for
 // --append. Two rows with the same key are the same instance across runs.
 function RowKey(const R: TGlyphRow): string;
@@ -883,6 +976,7 @@ begin
   State.Shas       := TDictionary<string, Boolean>.Create;
   State.Facts      := TDictionary<string, TClassFacts>.Create;
   State.RefsCounted:= TDictionary<string, Boolean>.Create;
+  State.Skipped    := TList<TPair<string, string>>.Create;
   SB:= TStringBuilder.Create;
   try
     for Root in AOpts.Roots do
@@ -914,6 +1008,7 @@ begin
       WriteUtf8NoBom(TPath.Combine(AOpts.OutDir, 'instances.tsv'), SB.ToString);
       WriteClassesTsv(AOpts.OutDir, WriteRows, State);
       WriteGalleryHtml(AOpts.OutDir, WriteRows);
+      WriteSkippedTsv(AOpts.OutDir, State.Skipped);
     finally
       WriteRows.Free;
     end;
@@ -922,6 +1017,7 @@ begin
     Result  := True;
   finally
     SB.Free;
+    State.Skipped.Free;
     State.RefsCounted.Free;
     State.Facts.Free;
     State.Shas.Free;

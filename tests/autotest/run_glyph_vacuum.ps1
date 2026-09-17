@@ -320,7 +320,38 @@ Check 'T6 append of a second root adds its rows' ($rowsA.Count -eq 6) "n=$($rows
 Check 'T6 merged classes.tsv counts both roots' (((Import-Csv (Join-Path $outA 'classes.tsv') -Delimiter "`t") | Where-Object { $_.component_class -eq 'TabcToggleBtn' }).instances -eq '3')
 Check 'T6 images dir holds one file per distinct sha (4)' ((Get-ChildItem (Join-Path $outA 'images')).Count -eq 4)
 & $Exe glyph-vacuum --root $src3 --out $outA | Out-Null
-Check 'T6 without --append the file is REPLACED' ((Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count -eq 1)
+Check 'T6 without --append the file is REPLACED' ((@(Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t")).Count -eq 1)
+
+# ---- fixture 5: a BINARY .dfm (TPF0) written by hand in the TWriter format --------
+function New-BinaryDfm(){
+  $ms = New-Object IO.MemoryStream
+  $w  = New-Object IO.BinaryWriter($ms)
+  function S([string]$s){ $b=[Text.Encoding]::ASCII.GetBytes($s); $w.Write([byte]$b.Length); $w.Write($b) }
+  $w.Write([Text.Encoding]::ASCII.GetBytes('TPF0'))
+  S 'TFrmBin'; S 'FrmBin'                     # root: class, name
+  $w.Write([byte]0)                           # end of root properties
+    S 'TabcToggleBtn'; S 'BtnBin'             # child object
+    S 'NumGlyphs'; $w.Write([byte]2); $w.Write([byte]4)          # vaInt8 = 2, value 4
+    S 'Picture.Data'; $w.Write([byte]10); $w.Write([int32]$pay4.Length); $w.Write($pay4)   # vaBinary = 10
+    $w.Write([byte]0)                         # end of child properties
+    $w.Write([byte]0)                         # end of child children
+  $w.Write([byte]0)                           # end of root children
+  $w.Flush(); return ,$ms.ToArray()
+}
+$srcBin = Join-Path $WorkDir 'srcbin'; New-Item -ItemType Directory $srcBin -Force | Out-Null
+[IO.File]::WriteAllBytes((Join-Path $srcBin 'FrmBin.dfm'), (New-BinaryDfm))
+[IO.File]::WriteAllText((Join-Path $srcBin 'Broken.dfm'), "this is not a dfm at all: no object block", [Text.Encoding]::ASCII)   # ParseDfmBlock returns False: no top-level object
+$outBin = Join-Path $WorkDir 'out-bin'
+$o8 = & $Exe glyph-vacuum --root $srcBin --out $outBin 2>&1 | Out-String
+Write-Host "--- raw stdout (binary run) ---"; Write-Host $o8
+Write-Host "--- raw skipped.tsv ---"; Get-Content (Join-Path $outBin 'skipped.tsv') | ForEach-Object { Write-Host $_ }
+$rb = @(Import-Csv (Join-Path $outBin 'instances.tsv') -Delimiter "`t")
+Check 'T7 binary .dfm decoded: one row, object_path BtnBin, count 4, 128x32' ($rb.Count -eq 1 -and $rb[0].object_path -eq 'BtnBin' -and $rb[0].count_value -eq '4' -and $rb[0].width -eq '128') ($rb | Out-String)
+Check 'T7 binary row keeps the ORIGINAL dfm_path' ($rb[0].dfm_path -eq (Join-Path $srcBin 'FrmBin.dfm')) $rb[0].dfm_path
+$sk = @(Import-Csv (Join-Path $outBin 'skipped.tsv') -Delimiter "`t")
+Check 'T7 unparseable file listed in skipped.tsv with a reason' ($sk.Count -eq 1 -and $sk[0].dfm_path -like '*Broken.dfm' -and $sk[0].reason -ne '') ($sk | Out-String)
+Check 'T7 summary counts skipped=1 dfm=2' ($o8 -match 'dfm=2 graphics=1 distinct=1 skipped=1') $o8
+Check 'T7 skipped.tsv exists even when empty (db run)' (Test-Path (Join-Path $outDb 'skipped.tsv'))
 
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null
