@@ -80,6 +80,10 @@ spec for the two systemic decode gaps the first run exposed (SVG glyphs, and a
   `formats bmp:20`, `distinct_payloads 3`, `runtime_refs 16`, `count_default 1`
   (confirms the range-mismatch note's expectation exactly: `4:20`, default `1`,
   `bmp:...`).
+- **Corpus (M2022, 2026-09-17, glyph-vacuum):** identical shape on a second
+  codebase -- `TabcToggleBtn`, 20 instances, `n_distribution 4:20`,
+  `inferred_distribution 4:20`, `disagreements 0`, `formats bmp:20`,
+  `distinct_payloads 3`, `runtime_refs 16`. See the M2022 corpus block below.
 - **Open:** does any corpus hold `NumGlyphs = 5`? ORM3: **0** (every one of the
   20 instances streams `NumGlyphs = 4`). The 5-slot case is a property of the
   control, not of this corpus, per the spec's own framing.
@@ -98,6 +102,11 @@ spec for the two systemic decode gaps the first run exposed (SVG glyphs, and a
   evenly divisible by 2, so `inferred_n`/`agree` stay empty -- a real
   disagreement between the strip's own pixel height and `NumGlyphs`, not a
   decode failure).
+- **Corpus (M2022, 2026-09-17, glyph-vacuum):** 16 instances (not 3 -- this is
+  a different codebase with its own `.dfm` set), `count_props NumGlyphs`,
+  `n_distribution 2:10;?:6` (6 instances don't stream `NumGlyphs` at all),
+  `inferred_distribution 2:9;1:6;?:1`, `disagreements 0`, `formats bmp:16`,
+  `distinct_payloads 7`. See the M2022 corpus block below for the full table.
 - **Fixed (Task 10, commit `2343c0bc`):** all 3 payloads previously failed to
   decode: `wrapper`, `format`, `width`, `height`, `bpp` all came back empty
   despite plausible byte counts (2002, 2002, 502). Read the raw hex for
@@ -148,6 +157,14 @@ spec for the two systemic decode gaps the first run exposed (SVG glyphs, and a
   glyph is not a raster strip; geometry is not inferred from vector text), so
   `agree`/`inferred_n` are unaffected -- still 3 `Y` rows, all from the `bmp`
   side.
+- **Corpus (M2022, 2026-09-17, glyph-vacuum):** 79 instances (vs 36 in ORM3),
+  `count_props OptionsImage.NumGlyphs`, `n_distribution 4:8;2:14;?:57`,
+  `inferred_distribution 4:8;2:14;1:3;?:54`, `disagreements 0`, `formats
+  bmp:27;svg:52`, `distinct_payloads 34`. Confirms the dotted-count fix
+  (`2df9601f`) generalises to a second codebase: `count_prop` resolves for
+  every instance that streams `OptionsImage.NumGlyphs`, including the new
+  `4:8` group this corpus adds that ORM3 didn't have. See the M2022 corpus
+  block below.
 
 ---
 
@@ -171,6 +188,25 @@ spec for the two systemic decode gaps the first run exposed (SVG glyphs, and a
   in either index this session (`TcxGridDBColumn` not found in `Micronite2027.sqlite`
   or the abc5 scratch library). Do not write a G-rule for this class until that
   is resolved.
+- **Corpus (M2022, 2026-09-17, glyph-vacuum):** the same open question, on a
+  much larger sample -- 28 instances (not 2), `n_distribution ?:28`,
+  `inferred_distribution 6:26;2:1;1:1` (26 of 28 confirm the 6-cell strip; one
+  `Properties.Buttons[0/1].Glyph.Data` pair on `MEStats.dfm`'s
+  `cxGrid1DBTableView1DBColumn1` decodes as 2 separate 32x16/16x16 single-button
+  glyphs, `kind = container`, not the same shape as the `Properties.Glyph.Data`
+  strip), `formats bmp:28`, `distinct_payloads 4`, `runtime_refs` empty
+  (`TcxGridDBColumn` not found in `m2022-components.sqlite` or the abc5 scratch
+  library either -- `proptree --qname TcxGridDBColumn --db <both>` returns
+  `class not found` on both DBs passed this session, so there is still no
+  source to read a count property from). **Same open question, still open:**
+  no DevExpress source is in scope on this box to confirm whether the target
+  reads a fixed `6` or a property. Notably, 3 of the 6-cell payloads across
+  this run's `TcxGridDBColumn`, `TdxDBGridCheckColumn`, `TRzCheckList` and
+  `TRzRadioGroup` rows share the IDENTICAL `payload_sha`
+  (`20de6362cd769f0d2bc7de0d3989e2f39f4f3bddfbbc543770b733d6d41704a9`) despite
+  belonging to four unrelated component classes across three different vendors
+  -- consistent with (but not proof of) a shared "6-state checkbox" default
+  bitmap resource. See the M2022 corpus block below for the sibling classes.
 
 ## D. Container / list sources (not glyphs themselves)
 
@@ -294,3 +330,185 @@ every class with agree = N" -- the corpus contains zero declared/inferred
 disagreements. (Before the dotted-count fix, `TcxButton` would have shown as
 all-`?`/no-agree rather than a real disagreement, since its count property was
 never being read at all -- not the same thing as a genuine `N`.)
+
+---
+
+## M2022 corpus (2026-09-17)
+
+The owner named `C:\Projects\M2022` as the legacy tree the conversion will
+extract from (Task 11). No manifest section covers M2022 on this box, so a
+scratch library index of `Component\` was built first:
+
+```
+& $exe index C:\Projects\M2022\Component --db C:\TEMP\claude\vacuum-m2022\m2022-components.sqlite
+```
+-- `Files: 5, Symbols: 118, Refs: 305, 0.28s` (the folder holds only 3 `.pas` +
+2 `.dpk`; the bulk of M2022's component classes are DevExpress/Raize
+third-party controls, not project-owned sources, so this index resolves almost
+nothing -- see `class_unit`/`runtime_refs` below).
+
+```
+& $exe glyph-vacuum --root C:\Projects\M2022 --out C:\TEMP\claude\vacuum-m2022 --db C:\TEMP\claude\vacuum-m2022\m2022-components.sqlite --db C:\TEMP\claude\vacuum-orm3\abc5-lib.sqlite
+```
+-- `glyph-vacuum: dfm=223 graphics=2721 distinct=673 skipped=0 ->
+C:\TEMP\claude\vacuum-m2022`. `skipped.tsv` has a header row and zero data
+rows (nothing skipped). Exit 0. 208 distinct component classes in
+`classes.tsv`. Across all 2721 rows: `format` resolves (non-blank) for 1969
+(72%); `agree = Y` for 75 rows; `agree = N` for **zero** rows -- same "no
+declared/inferred disagreement anywhere" result as ORM3.
+
+**No `CountPropNames` gap found this run.** Step 3 of the task brief calls for
+adding a new count-property name only when a class shows strip geometry with
+an empty `count_prop` AND its `proptree` shows an integer property that
+plainly means glyph count. Every M2022 class below with strip geometry and no
+`count_prop` (`TcxGridDBColumn`, `TdxDBGridCheckColumn`, `TRzCheckList`,
+`TRzDBRadioGroup`, `TRzRadioGroup`, `TRzTrackBar`) returns `class not found`
+from `proptree --qname <Class> --db C:\TEMP\claude\vacuum-m2022\m2022-components.sqlite --db C:\TEMP\claude\vacuum-orm3\abc5-lib.sqlite`
+against BOTH DBs passed this session -- none of DevExpress's `cxGrid`/`dxDBGrid`
+or Raize's `Rz*` sources are in scope on this box, so there is no property to
+read a name from. This is a scope gap, not a decode gap: nothing here indicates
+`CountPropNames` (`NumGlyphs`, `GlyphCount`, `NumStates`, `ImageCount`) is
+missing an entry -- it is that the classes needing one are not indexed. No
+`.pas`/guard change made this session.
+
+### Per-class table (every class with a strip or a declared count property)
+
+| class | count_prop | n_distribution | inferred_distribution | formats | instances | runtime_refs |
+|---|---|---|---|---|---|---|
+| `TabcToggleBtn` | `NumGlyphs` | `4:20` | `4:20` | `bmp:20` | 20 | 16 |
+| `TBitBtn` | `NumGlyphs` | `2:10;?:6` | `2:9;1:6;?:1` | `bmp:16` | 16 | (empty) |
+| `TcxButton` | `OptionsImage.NumGlyphs` | `4:8;2:14;?:57` | `4:8;2:14;1:3;?:54` | `bmp:27;svg:52` | 79 | (empty) |
+| `TRzBitBtn` | `NumGlyphs` | `4:20;?:1` | `4:20;1:1` | `bmp:21` | 21 | (empty) |
+| `TRzToolbarButton` | `NumGlyphs` | `2:4` | `2:4` | `bmp:4` | 4 | (empty) |
+| `TcxGridDBColumn` | (none) | `?:28` | `6:26;2:1;1:1` | `bmp:28` | 28 | (empty) |
+| `TdxDBGridCheckColumn` | (none) | `?:2` | `6:2` | `bmp:2` | 2 | (empty) |
+| `TRzCheckList` | (none) | `?:1` | `6:1` | `bmp:1` | 1 | (empty) |
+| `TRzDBRadioGroup` | (none) | `?:1` | `6:1` | `bmp:1` | 1 | (empty) |
+| `TRzRadioGroup` | (none) | `?:4` | `6:4` | `bmp:4` | 4 | (empty) |
+| `TRzTrackBar` | (none) | `?:3` | `6:3` | `bmp:3` | 3 | (empty) |
+
+`disagreements = 0` for every row above (no `class_unit`/`runtime_refs` value
+resolves for any class in this table except `TabcToggleBtn`, which is only
+found because `abc5-lib.sqlite` was passed as the second `--db`). The first
+five rows are already covered above (sections A.1-A.3); the remaining six are
+new to this doc and get their own sections below.
+
+### M2022.1 TRzBitBtn (Raize Components, `RzBtnEdt`/`RzButton`-family)
+
+- **Image property:** `Glyph: TBitmap` (streams as `Glyph.Data`, same
+  length-prefixed bare-bitmap shape as `TBitBtn` -- see section A.2 -- since
+  `Glyph` is `TBitmap`-typed).
+- **N:** `count_props NumGlyphs`, a bare (non-dotted) name already in
+  `CountPropNames`; resolves for every instance that streams it.
+- **Slots:** **open.** Raize's `RzButton.pas`/`RzBtnEdt.pas` source is not in
+  either index passed this session (`proptree --qname TRzBitBtn --db <both>`
+  -> `class not found`), so the per-slot meaning cannot be read from source.
+  The declared/inferred agreement (`4:20`, `agree = Y` on all 20 -- see
+  `C:\Projects\M2022\MEStats.dfm:btnCPR` etc., 52x13 decoding to 4 x 13x13
+  cells) is consistent with the same normal/disabled/down/stay-down convention
+  as VCL `TBitBtn`/`TNumGlyphs = 1..4`, but that is an inference from the
+  numbers, not a confirmed read of Raize's source -- do not write a G-rule
+  slot mapping from this note alone.
+- **Corpus (M2022, 2026-09-17):** 21 instances, `count_props NumGlyphs`,
+  `n_distribution 4:20;?:1`, `inferred_distribution 4:20;1:1`, `disagreements
+  0`, `formats bmp:21`, `distinct_payloads 2`. 20 instances are on
+  `C:\Projects\M2022\MEStats.dfm` (all share one 2762-byte, 52x13 payload); the
+  1 outlier (`C:\Projects\M2022\ProcParameters4.dfm:btnSaveOperationSets`)
+  doesn't stream `NumGlyphs` at all and decodes to a single 16x16 glyph
+  (`kind = single`).
+
+### M2022.2 TRzToolbarButton (Raize Components)
+
+- **Image property:** `Glyph: TBitmap` (streams as `Glyph.Data`, length-prefixed
+  bare bitmap).
+- **N:** `count_props NumGlyphs`, bare name, already in `CountPropNames`.
+- **Slots:** **open** (Raize source not indexed this session -- same gap as
+  M2022.1). 36x18 decoding to 2 x 18x18 cells for all 4 instances, declared
+  `NumGlyphs = 2`, `agree = Y` on all 4 -- consistent with a simple
+  up/down(pressed) pair, unconfirmed by source.
+- **Corpus (M2022, 2026-09-17):** 4 instances, all on
+  `C:\Projects\M2022\ControlPlanningPresets.dfm` (`btnNewSet`, `btnDeleteSet`,
+  `btnPreviousSet`, `btnNextSet`), `count_props NumGlyphs`, `n_distribution
+  2:4`, `inferred_distribution 2:4`, `disagreements 0`, `formats bmp:4`,
+  `distinct_payloads 4` (each button has its own distinct glyph).
+
+### M2022.3 TdxDBGridCheckColumn (DevExpress `cxDBGrid` predecessor / dxDBGrid)
+
+- **Image property:** `Glyph: TBitmap` (streams as `Glyph.Data`).
+- **N:** none declared. `inferred_distribution 6:2` (96x16 -> 6 x 16x16
+  cells) on both instances.
+- **Slots:** **open** -- no count property in the `.dfm` and
+  `proptree --qname TdxDBGridCheckColumn --db <both DBs>` returns `class not
+  found` (DevExpress `dxDBGrid` source not in scope on this box). Same
+  checkbox-strip convention question as `TcxGridDBColumn` (section C).
+- **Corpus (M2022, 2026-09-17):** 2 instances, both from
+  `C:\Projects\M2022\Backups\MAIN_X1.dfm` (`dxDBGrid1QFlagOFF`,
+  `dxDBGrid1TFlagOff`), identical 4666-byte payload
+  (`sha 20de6362cd769f0d2bc7de0d3989e2f39f4f3bddfbbc543770b733d6d41704a9`),
+  `formats bmp:2`, `distinct_payloads 1`. This exact payload SHA is shared with
+  one `TcxGridDBColumn` instance pair (`MAIN_X1.dfm`), one `TRzRadioGroup`
+  instance, and the `TRzCheckList` instance below -- see the shared-payload
+  note in section C.
+
+### M2022.4 TRzCheckList (Raize Components)
+
+- **Image property:** `CustomGlyphs: TBitmap` (streams as `CustomGlyphs.Data`).
+- **N:** none declared. `inferred_distribution 6:1` (96x16 -> 6 x 16x16 cells).
+- **Slots:** **open** (`class not found` in both DBs this session).
+- **Corpus (M2022, 2026-09-17):** 1 instance,
+  `C:\Projects\M2022\FirstSampleReport.dfm:RzCheckList1`, 4666-byte payload,
+  `sha 20de6362cd769f0d2bc7de0d3989e2f39f4f3bddfbbc543770b733d6d41704a9` --
+  the SAME sha as `TdxDBGridCheckColumn` above and one `TRzRadioGroup` instance
+  below, despite `TRzCheckList` and `TdxDBGridCheckColumn`/`TRzRadioGroup`
+  being unrelated classes from two different vendors. `formats bmp:1`.
+
+### M2022.5 TRzDBRadioGroup (Raize Components)
+
+- **Image property:** `CustomGlyphs: TBitmap` (streams as `CustomGlyphs.Data`).
+- **N:** none declared. `inferred_distribution 6:1`.
+- **Slots:** **open** (`class not found` in both DBs this session).
+- **Corpus (M2022, 2026-09-17):** 1 instance,
+  `C:\Projects\M2022\ControlPlan.dfm:EdtbyPpk`, a DISTINCT 4666-byte payload
+  (`sha 2557e578450137ed82314e371c5ecaecebcda3f3650e8b24dcb02e54c2a29fd2`) --
+  same size and 96x16/6-cell geometry as the shared-sha family above, but not
+  byte-identical to it. `formats bmp:1`.
+
+### M2022.6 TRzRadioGroup (Raize Components)
+
+- **Image property:** `CustomGlyphs: TBitmap` (streams as `CustomGlyphs.Data`).
+- **N:** none declared. `inferred_distribution 6:4` on all 4 instances.
+- **Slots:** **open** (`class not found` in both DBs this session).
+- **Corpus (M2022, 2026-09-17):** 4 instances, all on
+  `C:\Projects\M2022\ControlPlan.dfm` (`RzRadioGroup1`, `RzRadioGroup2`,
+  `RzRadioGroup3`) and
+  `C:\Projects\M2022\SmallBatch100Final.dfm:rbtControlMode`, all 4 share the
+  same 4666-byte payload as `TdxDBGridCheckColumn`/`TRzCheckList`
+  (`sha 20de6362cd769f0d2bc7de0d3989e2f39f4f3bddfbbc543770b733d6d41704a9`).
+  `formats bmp:4`, `distinct_payloads 1`.
+
+### M2022.7 TRzTrackBar (Raize Components)
+
+- **Image property:** `CustomThumb: TBitmap` (streams as `CustomThumb.Data` --
+  a slider thumb bitmap, not a button glyph, but harvested by the same
+  `dnkBinary` sweep and worth recording since it shows the identical 6-cell
+  strip shape).
+- **N:** none declared. `inferred_distribution 6:3` on all 3 instances.
+- **Slots:** **open** (`class not found` in both DBs this session). Unlike the
+  four classes above, this payload is NOT byte-identical to the shared-sha
+  family -- distinct `sha
+  1137396f34c1766a9a144363cec11d6c6a875573446280c686defeeae1ac9846`, same size
+  (4666 bytes) and geometry (96x16) by coincidence or by shared authoring
+  convention, not because it is literally the same resource.
+- **Corpus (M2022, 2026-09-17):** 3 instances, all on
+  `C:\Projects\M2022\BonusMC.dfm` (`sldTP`, `sldTPB`, `sldTPB2`),
+  `distinct_payloads 1`, `formats bmp:3`.
+
+**Summary of the open questions this run adds:** six classes
+(`TcxGridDBColumn`, `TdxDBGridCheckColumn`, `TRzCheckList`, `TRzDBRadioGroup`,
+`TRzRadioGroup`, `TRzTrackBar`) show a 6-cell 16x16 strip with no declared
+count property, and none of their declaring units are in scope on this box
+(neither DevExpress's nor Raize's source ships in either `--db` passed this
+session). Four of the six share one byte-identical payload across three
+vendors' classes, which is evidence of a shared default resource, not evidence
+of what the runtime reads as its count. Do not write a `G[...]` rule against
+any of these six until a DevExpress/Raize source index resolves the question.
