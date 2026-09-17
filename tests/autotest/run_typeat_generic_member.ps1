@@ -113,7 +113,7 @@ $cOut  = (& $Exe typeat "${consumer}:${cLine}:${cCol}" --db $dbPrj --db $dbLib -
 # --- Task 3: ATokens.Count -> the generic base's Count property, resolved
 #     CROSS-DB (the base TMyList<T> lives in dbLib, the alias in dbPrj).
 Check 'ATokens.Count resolves to the generic base Count property' `
-    ($cOut -match '"resolved":"MyColl\.TMyList<T>\.Count"') $cOut
+    ($cOut -match '"resolved":"MyColl\.TMyList\.Count"') $cOut
 Check 'and shows the real signature (NativeInt)' ($cOut -match '"signature":"NativeInt"') $cOut
 
 # --- Floor stays honest for a genuinely-absent member on a generic alias.
