@@ -166,6 +166,10 @@ published while `modifiers` says `public` for both.
 >   Pass a QUALIFIED name when you have one. A bare name resolves only when it is
 >   UNAMBIGUOUS; an ambiguous one deliberately returns nothing rather than
 >   guessing, and the header always names the symbol it chose - check it.
+>   A CLASS-qualified name (`modify TIndexer.ApplyInheritedFieldFacts`, or
+>   `TList<T>.Add`) resolves the same way (2026-09-17): when exactly one symbol's
+>   qualified name ends with that dotted suffix, segment-aligned; the same
+>   `Class.Member` declared in two units still returns nothing.
 >   **Verify the bundle carries the section you needed.** A `modify X` bundle with
 >   no `## Impl slice`, an empty class surface on a type, or zero callers on a
 >   symbol you know is called, is a defect worth reporting - not a small answer.

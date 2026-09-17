@@ -44,14 +44,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+7 more)</para>
-      /// <para>Complexity: 28 (cyclomatic, outer body), 244 lines (full implementation)</para>
+      /// <para>Calls: Copy, DRagLint.Context.Bundler.OwnerIsClassKind, DRagLint.Context.Bundler.ResolveUniqueName, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface (+7 more)</para>
+      /// <para>Complexity: 28 (cyclomatic, outer body), 279 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Context.Bundler.OwnerIsClassKind"/>
+      /// <seealso cref="DRagLint.Context.Bundler.ResolveUniqueName"/>
       /// <seealso cref="DRagLint.Context.Bundler.StripDfmFields"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext"/>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(
@@ -187,6 +187,64 @@ begin
   end; // try
 end; // function
 
+// The ONE symbol a name that is not a whole qualified name identifies; empty
+// when none or several do (ambiguity declines on purpose -- a confidently-wrong
+// bundle is worse than an empty one).
+//   * no dot     -> the bare-name rule: exactly one symbol with that exact name.
+//   * with a dot -> the suffix rule: exactly one symbol whose qualified_name
+//                   ends with `.<AQName>`. Segment-aligned (the character before
+//                   the suffix must be a '.', so `orker.UniqueMethod` never
+//                   matches `uA.TWorker.UniqueMethod`), case-insensitive, with
+//                   every segment's `<...>` list stripped first because symbols
+//                   are stored under BARE names since schema v23. Candidates
+//                   come from the LAST segment's exact-name lookup -- the same
+//                   index the bare rule queries.
+// See the call site in Build for the why.
+function ResolveUniqueName( const AStore: ISymbolStore; const AQName: string): TArray<TSymbol>;
+var
+  Suffix: string         ;
+  Tail  : string         ;
+  ByName: TArray<TSymbol>;
+  Hit   : Integer        ;
+  Hits  : Integer        ;
+  I     : Integer        ;
+begin
+  SetLength(Result, 0);
+  if Pos('.', AQName) = 0 then
+  begin
+    ByName:= AStore.FindSymbolsByExactName(AQName);
+    if Length(ByName) = 1 then Result:= ByName;
+    Exit;
+  end;
+  Suffix:= StripGenericSegments(AQName);
+  Tail  := Copy(Suffix, LastDelimiter('.', Suffix) + 1, MaxInt);
+  ByName:= AStore.FindSymbolsByExactName(Tail);
+  Hit   := -1;
+  Hits  := 0;
+  for I:= 0 to High(ByName) do
+    if EndsText('.' + Suffix, ByName[I].QualifiedName) then
+    begin
+      Inc(Hits);
+      Hit:= I;
+    end;
+  if Hits = 1 then Result:= [ByName[Hit]];
+end; // function
+
+// True when the store knows AOwnerQName as a CLASS -- the only kind whose
+// surface may carry a DFM component dump, and therefore the only kind the lean
+// filter (StripDfmFields) may run on. An owner the store cannot find has no
+// surface either, so True there changes nothing and keeps the pre-2026-09-17
+// behaviour for a class; an empty name has no owner at all.
+function OwnerIsClassKind( const AStore: ISymbolStore; const AOwnerQName: string): Boolean;
+var
+  Owners: TArray<TSymbol>;
+begin
+  Result:= True;
+  if AOwnerQName = '' then Exit;
+  Owners:= AStore.FindSymbolsByQualifiedName(AOwnerQName);
+  if Length(Owners) > 0 then Result:= Owners[0].Kind = skClass;
+end; // function
+
 class function TContextBundler.Build(
   const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
   AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
@@ -195,6 +253,7 @@ var
   Sym        : TSymbol           ;
   EffQName   : string            ;  { the RESOLVED qname -- see its assignment }
   ParentQName: string            ;
+  OwnerIsClass: Boolean          ;  { the lean DFM-field filter runs only for a CLASS owner }
   CallerName : string            ;
   RawCallers : TArray<TReference>;
   Total      : Integer           ;
@@ -290,17 +349,35 @@ begin
     failure than the empty one, because nothing about it looks wrong. Ambiguous
     bare names still return empty, and the caller reports "not found", which
     remains the honest answer for a name that does not identify one symbol.
-    See docs\INBOX-context-bundle-empty-for-bare-name.md. }
-  if (Length(Syms) = 0) and (Pos('.', AQName) = 0) then
+    See docs\INBOX-context-bundle-empty-for-bare-name.md.
+
+    CLASS-QUALIFIED SUFFIX (2026-09-17). Between the bare name (no dot) and the full qname
+    there was nothing: `modify TIndexer.ApplyInheritedFieldFacts` -- the form a
+    reader naturally types after seeing a class surface -- answered "No symbol
+    matched" while BOTH the bare member and the unit-qualified name resolved
+    (INBOX 2026-09-17, section 1). The middle spelling resolved less readily
+    than either neighbour.
+
+    A dotted name that is not a whole qname resolves when EXACTLY ONE symbol's
+    qualified_name ends with `.<the typed text>` -- segment-aligned (the char
+    before the suffix must be a '.', so `orker.UniqueMethod` never matches
+    `uA.TWorker.UniqueMethod`), case-insensitive, and with every segment's
+    `<...>` list stripped first because symbols are stored under BARE names
+    since schema v23. The candidates come from the LAST segment's exact-name
+    lookup, which is the same index the bare-name rule uses.
+
+    The bare-name policy is kept, not relaxed: two units each declaring
+    `TTwin.Shared` is ambiguous and still returns nothing, because a
+    confidently-wrong bundle is worse than an empty one.
+
+    Guarded by tests\autotest\run_context_class_qualified_name.ps1; the bare
+    rule by run_context_bare_name_body.ps1. Both live in ResolveUniqueName. }
+  if Length(Syms) = 0 then
   begin
-    var ByName: TArray<TSymbol>:= AStore.FindSymbolsByExactName(AQName);
-    if Length(ByName) = 1 then
-    begin
-      Syms:= ByName;
-      { Report the resolved QUALIFIED name, not the bare one the caller typed --
-        the bundle header is the reader's evidence of WHICH symbol they got. }
-      Result.QName:= ByName[0].QualifiedName;
-    end;
+    Syms:= ResolveUniqueName(AStore, AQName);
+    { Report the resolved QUALIFIED name, not the text the caller typed --
+      the bundle header is the reader's evidence of WHICH symbol they got. }
+    if Length(Syms) = 1 then Result.QName:= Syms[0].QualifiedName;
   end;
 
   { THE ALIAS IS ALSO A FALLBACK, not only an enrichment. When the qname
@@ -358,19 +435,35 @@ begin
   if AIncludeSurface then
   begin
     if Sym.Kind in [skClass, skInterface, skRecord] then
-      ParentQName:= Sym.QualifiedName
+    begin
+      ParentQName := Sym.QualifiedName;
+      OwnerIsClass:= Sym.Kind = skClass;
+    end
     else
     begin
       ParentQName:= EffQName;
       if LastDelimiter('.', ParentQName) > 0 then ParentQName:= Copy(ParentQName, 1, LastDelimiter('.', ParentQName) - 1);
       if ParentQName = EffQName then ParentQName:= '';  { no owner to describe }
+      OwnerIsClass:= OwnerIsClassKind(AStore, ParentQName);  { decides whether the lean filter may run -- see below }
     end;
     if ParentQName <> '' then
     begin
       Result.ClassSurface:= AStore.GetClassSurface(ParentQName, False, False);
-      // Strip the auto-generated DFM component fields unless the caller asked
-      // for the full surface (e.g. when working on the form's components/DFM).
-      if AExcludeDfmFields then Result.ClassSurface:= StripDfmFields(Result.ClassSurface);
+      { Strip the auto-generated DFM component fields unless the caller asked
+        for the full surface (e.g. when working on the form's components/DFM).
+
+        ONLY WHEN THE OWNER IS A CLASS. StripDfmFields treats the default
+        (pre-specifier) section as published and drops every `Ident: TType;`
+        line in it -- the shape of a form's component dump. A RECORD has no
+        visibility specifiers, so ALL of its fields sit in that section and
+        every one of them looked like a component field: measured 2026-09-17,
+        `modify TTypeAncestor` printed ONE of eight fields (Ordinal, whose
+        trailing `// comment` stops the line ending in ';') and the `///` doc
+        comments of the other seven with the declarations they documented
+        MISSING. Nothing in a record or an interface is DFM-streamed, so the
+        filter has nothing to remove there. Guarded by
+        tests\autotest\run_context_record_surface.ps1. }
+      if AExcludeDfmFields and OwnerIsClass then Result.ClassSurface:= StripDfmFields(Result.ClassSurface);
     end;
   end;
 
