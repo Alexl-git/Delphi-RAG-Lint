@@ -690,4 +690,15 @@
 #   row changes. Same shape as the ManifestWrite.pas entry above. The same
 #   change also ran `document --project` to a fixed point, which rewrote
 #   managed DOC COMMENTS in src\index and src\parser units -- comments only.
-1.16.0-alpha|baf135941eb2f788bdbeabefc01c83f699910093468b3877970401f84d368e3c
+# 2026-09-17: bumped 1.16.0-alpha -> 1.17.0-alpha (extractor batch, spec items
+#   1-3). Generic types/methods index under their BARE name with generic_params
+#   / ancestor_type_args columns (schema v23, spec G1-G9); nested-routine locals
+#   and inline vars are local_var symbols (spec N1-N5); and src\core\
+#   DRagLint.Core.Indexer.pas gained the facts-inherited post-pass (spec F1-F8):
+#   IndexFile now HOLDS each analysed routine's unclassified identifiers and
+#   TIndexer.ApplyInheritedFieldFacts appends matching ancestor fields to
+#   symbol_facts.reads_fields/writes_fields after the ancestry stage. The
+#   constant was moved by item 1 (d9c70859); the baseline is re-pinned ONCE
+#   here, at the end of the batch, per ruling R2. Superseded line:
+#   1.16.0-alpha|baf135941eb2f788bdbeabefc01c83f699910093468b3877970401f84d368e3c
+1.17.0-alpha|bf0e9d92d499259c05ffe202a6f56c58f9ae3cce194d083088c6bb4045e03409

@@ -22,6 +22,18 @@ uses
   ;
 
 type
+  /// <summary>v23: one analysed routine's candidates for the facts-inherited
+  /// post-pass. Strings are interned per run (see TIndexer.Intern) so a
+  /// 500k-routine library holds each identifier once.</summary>
+  THeldFieldFacts = record
+    SymbolId  : Int64;
+    ClassId   : Int64;
+    OwnReads  : TArray<string>;
+    OwnWrites : TArray<string>;
+    HeldReads : TArray<string>;
+    HeldWrites: TArray<string>;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
@@ -32,6 +44,11 @@ type
     strict private
       FStore          : ISymbolStore                       ;
       FParsers        : TList<IParser>                     ;
+      { v23 (spec F1/F2): the routines this run analysed that held unclassified
+        identifiers, consumed and cleared by ApplyInheritedFieldFacts. FIntern
+        is the per-run string pool behind Intern. }
+      FHeld           : TList<THeldFieldFacts>             ;
+      FIntern         : TDictionary<string, string>        ;
       FSkippedUpToDate: Integer                            ;
       { Files this indexer got PAST the up-to-date skip for, i.e. every file it
         may have written rows for. Backs IIndexer.ParsedFiles -- see there. }
@@ -252,6 +269,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure WalkAndIndex(const ADir: string; ARecursive: Boolean);
+      /// <summary>v23: returns A with every element replaced by the run's
+      /// pooled instance of the same string (FIntern), so the held records
+      /// share one copy per distinct identifier.</summary>
+      /// <param name="A">The identifiers to intern; may be empty.</param>
+      /// <returns>An array of the same length whose strings are pooled.</returns>
+      function Intern(const A: TArray<string>): TArray<string>;
     public
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AParsers"><!-- drag-lint:auto type -->const TArray&lt;IParser&gt;</param>
@@ -452,12 +475,27 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+      /// <summary>v23 (spec F2): the facts-inherited post-pass. For every routine
+      /// this run analysed that HELD unclassified identifiers, resolves the
+      /// owning class's transitive ancestors (GetTransitiveAncestors -- which
+      /// late-resolves, so it sees what the ancestry stage just wrote), collects
+      /// their field children nearest-first, and appends every held name that
+      /// matches a field to reads_fields / writes_fields after the own-class
+      /// names (F3). Must run AFTER ResolveAncestry. Clears the held list.</summary>
+      /// <returns>Number of symbol_facts rows rewritten. 0 on a run that parsed
+      /// nothing (F7), and then it prints nothing.</returns>
+      /// <remarks>Implements IIndexer.ApplyInheritedFieldFacts. Reach is the
+      /// SAME database: a base class in the platform library is out of reach
+      /// from a project index (F6). An ancestor gaining a field does not
+      /// re-facts descendants in unchanged files on an incremental run -- the
+      /// periodic rebuild covers that.</remarks>
+      function ApplyInheritedFieldFacts: Integer;
   end;
 
 implementation
 
 uses
-  DRagLint.Doc.SymbolFacts        { v(ADP2 T2): TSymbolFactsAnalyzer -- index-time symbol_facts pass }
+  DRagLint.Doc.SymbolFacts        // dl:unit DRagLint.Doc.SymbolFacts accepted -- v(ADP2 T2): TSymbolFactsAnalyzer, the index-time symbol_facts pass; v23: FIELD_RW_CAP + JoinCappedDisplay travel with it so the facts-inherited post-pass re-joins by the SAME cap rule the parse-time string used
   , DRagLint.Diagnostics.ParseCache { v(ADP2 T3): TAstParseCache.Clear -- bound the per-file tree cache }
   ;
 
@@ -472,6 +510,8 @@ begin
   FExcludeRoots:= TList<string>.Create;
   FVisited     := TList<string>.Create;
   FVisitedKeys := TDictionary<string, Boolean>.Create;
+  FHeld        := TList<THeldFieldFacts>.Create;
+  FIntern      := TDictionary<string, string>.Create;
   FIgnoreStack:= nil;
   { PP-Task-9: safe default -- preprocessing OFF until a caller opts in via
     SetPreprocess. A bare TIndexer (tests, embedders) keeps the pre-Task-9 raw
@@ -495,9 +535,154 @@ begin
   FExcludeRoots.Free;
   FVisited.Free;
   FVisitedKeys.Free;
+  FIntern.Free;
+  FHeld.Free;
   FIgnoreStack.Free;
   FStore:= nil;
   inherited;
+end;
+
+function TIndexer.Intern(const A: TArray<string>): TArray<string>;
+var
+  I: Integer;
+  S: string;
+begin
+  SetLength(Result, Length(A));
+  for I:= 0 to High(A) do
+  begin
+    if not FIntern.TryGetValue(A[I], S) then
+    begin
+      S:= A[I];
+      FIntern.Add(S, S);
+    end;
+    Result[I]:= S;
+  end;
+end;
+
+type
+  { v23 (spec F2/F3), private to ApplyInheritedFieldFacts. One ancestor field:
+    its declared spelling and the RANK of the ancestor that declares it (0 =
+    nearest, in GetTransitiveAncestors' BFS order). }
+  TAncField = record
+    Display: string;
+    Rank   : Integer;
+  end;
+
+  { lower-cased field name -> TAncField for one owning class's whole ancestor
+    chain; RankCount is kept beside it so Merge can walk rank 0..RankCount-1
+    without re-deriving it from the dictionary. }
+  TFieldMap = class
+    Fields   : TDictionary<string, TAncField>;
+    RankCount: Integer;
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+constructor TFieldMap.Create;
+begin
+  inherited Create;
+  Fields   := TDictionary<string, TAncField>.Create;
+  RankCount:= 0;
+end;
+
+destructor TFieldMap.Destroy;
+begin
+  Fields.Free;
+  inherited Destroy;
+end;
+
+function TIndexer.ApplyInheritedFieldFacts: Integer;
+var
+  AncFields: TObjectDictionary<Int64, TFieldMap>;
+
+  function FieldsOfAncestors(AClassId: Int64): TFieldMap;
+  var
+    A   : TTypeAncestor;
+    Kid : TSymbol;
+    F   : TAncField;
+    Rank: Integer;
+  begin
+    if AncFields.TryGetValue(AClassId, Result) then Exit;
+    Result:= TFieldMap.Create;
+    AncFields.Add(AClassId, Result);
+    Rank:= 0;
+    // GetTransitiveAncestors is a BFS: direct ancestors first, then theirs --
+    // which is exactly the nearest-first order F3 asks for. An unresolved
+    // edge contributes nothing (F6: absence, never a guess). A name already
+    // seen at a nearer rank keeps that rank (nearest ancestor wins).
+    for A in FStore.GetTransitiveAncestors(AClassId) do
+    begin
+      if not (A.Resolved and (A.SymbolId > 0)) then Continue;
+      for Kid in FStore.FindAllChildSymbols(A.SymbolId) do
+        if (Kid.Kind = skField) and not Result.Fields.ContainsKey(LowerCase(Kid.Name)) then
+        begin
+          F.Display:= Kid.Name;
+          F.Rank   := Rank;
+          Result.Fields.Add(LowerCase(Kid.Name), F);
+        end;
+      Inc(Rank);
+    end;
+    Result.RankCount:= Rank;
+  end;
+
+  // ORDER RULE (spec F3, ruling R12): own names first (already deduped, body
+  // order), then the inherited names NEAREST ANCESTOR FIRST, and within one
+  // ancestor in the EXISTING sort order of reads/writes_fields -- which is
+  // BODY order, i.e. the order the names were held in, NOT the ancestor's
+  // declaration order. So for rank 0..RankCount-1: walk AHeld in held order
+  // and append every name that is a field of THAT rank. A held name can never
+  // be an own field (F4: it was classified before it was held), and each
+  // name lands in exactly one rank, so a plain IndexOf guard is enough.
+  // Capped and suffixed by the SAME rule the parse-time string used.
+  function Merge(const AOwn, AHeld: TArray<string>; AMap: TFieldMap): string;
+  var
+    L   : TList<string>;
+    S   : string;
+    F   : TAncField;
+    Rank: Integer;
+  begin
+    L:= TList<string>.Create;
+    try
+      for S in AOwn do L.Add(S);
+      for Rank:= 0 to AMap.RankCount - 1 do
+        for S in AHeld do
+          if AMap.Fields.TryGetValue(LowerCase(S), F) and (F.Rank = Rank) then
+            if L.IndexOf(F.Display) < 0 then L.Add(F.Display);
+      Result:= JoinCappedDisplay(L, FIELD_RW_CAP);
+    finally
+      L.Free;
+    end;
+  end;
+
+var
+  H     : THeldFieldFacts;
+  Map   : TFieldMap;
+  Facts : TSymbolFacts;
+  NewR, NewW: string;
+begin
+  Result:= 0;
+  if FHeld.Count = 0 then Exit; // F7: nothing parsed, nothing to do, print nothing
+  AncFields:= TObjectDictionary<Int64, TFieldMap>.Create([doOwnsValues]);
+  try
+    for H in FHeld do
+    begin
+      Map:= FieldsOfAncestors(H.ClassId);
+      if Map.Fields.Count = 0 then Continue;
+      NewR:= Merge(H.OwnReads , H.HeldReads , Map);
+      NewW:= Merge(H.OwnWrites, H.HeldWrites, Map);
+      Facts:= FStore.GetSymbolFacts(H.SymbolId);
+      if not Facts.Present then Continue;
+      if (NewR = Facts.ReadsFields) and (NewW = Facts.WritesFields) then Continue;
+      Facts.ReadsFields := NewR;
+      Facts.WritesFields:= NewW;
+      FStore.PutSymbolFacts(Facts);
+      Inc(Result);
+    end;
+  finally
+    AncFields.Free;
+    FHeld.Clear;
+    FIntern.Clear;
+  end;
 end;
 
 function TIndexer.SkippedUpToDate: Integer;
@@ -1119,6 +1304,20 @@ begin
           Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore);
           Facts.SymbolId:= NewSymId;
           FStore.PutSymbolFacts(Facts);
+          // v23 (spec F1): hold the candidates for the facts-inherited pass.
+          // Only a routine with an owning class AND something unclassified is
+          // worth a record -- everything else can gain nothing from ancestors.
+          if (Sym.ParentId > 0) and ((Length(Facts.HeldReads) > 0) or (Length(Facts.HeldWrites) > 0)) then
+          begin
+            var H: THeldFieldFacts;
+            H.SymbolId  := NewSymId;
+            H.ClassId   := Sym.ParentId;
+            H.OwnReads  := Intern(Facts.OwnReads);
+            H.OwnWrites := Intern(Facts.OwnWrites);
+            H.HeldReads := Intern(Facts.HeldReads);
+            H.HeldWrites:= Intern(Facts.HeldWrites);
+            FHeld.Add(H);
+          end;
         end;
         Inc(GProfFacts, ProfNow - TProf);
         TProf:= ProfNow;

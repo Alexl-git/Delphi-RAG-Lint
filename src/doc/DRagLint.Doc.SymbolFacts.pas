@@ -244,9 +244,32 @@ unit DRagLint.Doc.SymbolFacts;
 interface
 
 uses
-  DRagLint.Core.Model
+  System.Generics.Collections       { ADP2 T4: TDictionary/TList for the field-name set + ordered read/write lists; v23: TList<string> in JoinCappedDisplay's signature }
+  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
+
+const
+  /// <summary>ADP2 T4: display cap for the Reads:/Writes: fields fact -- 8 names
+  /// shown, then a ' (+N more)' suffix (the Phase 1 cap convention
+  /// DRagLint.Doc.Regions' MoreSuffix already uses for Calls/CalledFrom/etc.).
+  /// Unlike those fields, ReadsFields/WritesFields have no companion *Total
+  /// column (see TSymbolFacts, DRagLint.Core.Model), so the cap decision is
+  /// made ONCE at analysis time and the resulting string is stored -- and later
+  /// rendered -- verbatim. v23: public so TIndexer.ApplyInheritedFieldFacts
+  /// re-joins with the SAME cap.</summary>
+  FIELD_RW_CAP = 8;
+
+/// <summary>Joins up to ACap entries of AItems with ', ', appending the Phase 1
+/// ' (+N more)' suffix when AItems holds more than ACap. This IS the final,
+/// display-ready string stored verbatim in symbol_facts.reads_fields /
+/// writes_fields (and the other capped display columns).</summary>
+/// <param name="AItems">The names in display order; nil is treated as empty.</param>
+/// <param name="ACap">Maximum names shown before the suffix.</param>
+/// <returns>The joined string; '' for an empty or nil AItems.</returns>
+/// <remarks>Pure string joining, no escaping. v23: promoted to the interface so
+/// TIndexer.ApplyInheritedFieldFacts re-joins with the same rule.</remarks>
+function JoinCappedDisplay(AItems: TList<string>; ACap: Integer): string;
 
 /// <summary>Joins AItems into the CSV text form stored in one of
 /// symbol_facts' TEXT columns (ReadsFields, WritesFields, SqlReads,
@@ -461,7 +484,6 @@ uses
   , System.StrUtils
   , System.IOUtils                    { ADP2 T6: TFile.Exists/ReadAllBytes -- the paired .dfm sibling read }
   , System.Classes                    { ADP2 T5: TStringList for the sorted/deduped test-name set }
-  , System.Generics.Collections       { ADP2 T4: TDictionary/TList for the field-name set + ordered read/write lists }
   , TreeSitter                        { ADP2 T3: TTSNode for the AST-derived Cyclomatic fact }
   , DRagLint.Diagnostics.ParseCache    { ADP2 T3: TAstParseCache -- memoized per-file tree, owned by the cache }
   , DRagLint.Analysis.Cfg              { ADP2 T3: CfgFindProcs -- collect every defProc in the file's tree }
@@ -509,14 +531,9 @@ begin
   Result:= SplitString(ACsv, ',');
 end;
 
-// ADP2 T4: display cap for the Reads:/Writes: fields fact -- 8 names shown,
-// then a ' (+N more)' suffix (the Phase 1 cap convention DRagLint.Doc.Regions'
-// MoreSuffix already uses for Calls/CalledFrom/etc.). Unlike those fields,
-// ReadsFields/WritesFields have no companion *Total column (see TSymbolFacts,
-// DRagLint.Core.Model), so the cap decision is made ONCE here, at analysis
-// time, and the resulting string is stored -- and later rendered -- verbatim.
-const
-  FIELD_RW_CAP = 8;
+// ADP2 T4: FIELD_RW_CAP (the Reads:/Writes: display cap) is declared in the
+// interface section -- v23 promoted it beside JoinCappedDisplay so the
+// facts-inherited post-pass re-joins with the same rule.
 
 // Byte-slice text of N out of ASrc (UTF-8), mirroring the private NodeStr
 // helper every AST-walking unit (DRagLint.Analysis.Cfg, .Flow.Lattices,
@@ -543,6 +560,16 @@ begin
   if AEnt.IsNull or (AEnt.NodeType <> 'identifier') then Exit;
   T:= LowerCase(Trim(FieldNodeStr(AEnt, ASrc)));
   Result:= (T = 'inc') or (T = 'dec');
+end;
+
+// Case-insensitive membership over a small list (the per-routine unresolved
+// set stays in the tens; a dictionary would cost more than it saves).
+function ContainsTextCI(AList: TList<string>; const AText: string): Boolean;
+var s: string;
+begin
+  for s in AList do
+    if SameText(s, AText) then Exit(True);
+  Result:= False;
 end;
 
 // Single-pass classification walk over one routine body (or any subtree of
@@ -597,29 +624,43 @@ end;
 // own style always brace multi-branch bodies, so it is not expected to bite
 // real code, but it is a real, pre-existing parser gap -- out of scope for
 // this fact to fix -- worth a grammar-side ticket).
-procedure WalkFieldRW(const N: TTSNode; const ASrc: TBytes; AFields: TDictionary<string, string>;
-  AVars: TRoutineVarTable; AReads, AWrites: TList<string>);
 
-  function ResolveField(const AIdent: TTSNode; out ADisplay: string): Boolean;
-  var Key: string;
+// too-many-parameters, reviewed v23: 8 = the 6 pre-existing plus the two held
+// lists, which parallel AReads/AWrites one-to-one; folding the four lists into
+// a record would hide WHICH list each of the 8 recursive call sites feeds.
+procedure WalkFieldRW(const N: TTSNode; const ASrc: TBytes; AFields: TDictionary<string, string>;  // dl:ok too-many-parameters@a341 -- see the note above
+  AVars: TRoutineVarTable; AReads, AWrites: TList<string>; AUnresReads, AUnresWrites: TList<string>);
+
+  // Returns True when AIdent is an OWN field (ADisplay = its declared
+  // spelling). When it is a bare identifier that is neither shadowed by a
+  // local/param/Result nor an own field, it is appended to AUnres (deduped,
+  // as written) for the facts-inherited post-pass -- spec F1. AUnres may be
+  // nil, in which case the identifier is simply dropped as before.
+  function ResolveField(const AIdent: TTSNode; out ADisplay: string; AUnres: TList<string>): Boolean;
+  var
+    Key, Raw: string;
   begin
-    Result:= False;
+    Result  := False;
+    ADisplay:= '';
     if AIdent.IsNull or (AIdent.NodeType <> 'identifier') then Exit;
-    Key:= LowerCase(Trim(FieldNodeStr(AIdent, ASrc)));
+    Raw:= Trim(FieldNodeStr(AIdent, ASrc));
+    Key:= LowerCase(Raw);
     if (AVars <> nil) and (AVars.IndexOf(Key) >= 0) then Exit; // shadowed by a local/param/Result
     Result:= AFields.TryGetValue(Key, ADisplay);
+    if (not Result) and (AUnres <> nil) and (Raw <> '') then
+      if not ContainsTextCI(AUnres, Raw) then AUnres.Add(Raw);
   end;
 
   procedure MarkRead(const AIdent: TTSNode);
   var Disp: string;
   begin
-    if ResolveField(AIdent, Disp) and (AReads.IndexOf(Disp) < 0) then AReads.Add(Disp);
+    if ResolveField(AIdent, Disp, AUnresReads) and (AReads.IndexOf(Disp) < 0) then AReads.Add(Disp);
   end;
 
   procedure MarkWrite(const AIdent: TTSNode);
   var Disp: string;
   begin
-    if ResolveField(AIdent, Disp) and (AWrites.IndexOf(Disp) < 0) then AWrites.Add(Disp);
+    if ResolveField(AIdent, Disp, AUnresWrites) and (AWrites.IndexOf(Disp) < 0) then AWrites.Add(Disp);
   end;
 
 var
@@ -636,8 +677,8 @@ begin
     if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
       MarkWrite(Lhs)
     else
-      WalkFieldRW(Lhs, ASrc, AFields, AVars, AReads, AWrites);
-    WalkFieldRW(Rhs, ASrc, AFields, AVars, AReads, AWrites);
+      WalkFieldRW(Lhs, ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
+    WalkFieldRW(Rhs, ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
     Exit;
   end;
 
@@ -645,7 +686,7 @@ begin
 
   if N.NodeType = 'exprDot' then
   begin
-    WalkFieldRW(N.ChildByField('lhs'), ASrc, AFields, AVars, AReads, AWrites);
+    WalkFieldRW(N.ChildByField('lhs'), ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
     Exit; // rhs = member name, never itself a field reference
   end;
 
@@ -656,26 +697,23 @@ begin
     if IsIncOrDecEntity(Ent, ASrc) and (not ArgsN.IsNull) and (ArgsN.NamedChildCount > 0) then
     begin
       if ArgsN.NamedChild(0).NodeType = 'identifier' then MarkWrite(ArgsN.NamedChild(0))
-      else WalkFieldRW(ArgsN.NamedChild(0), ASrc, AFields, AVars, AReads, AWrites);
+      else WalkFieldRW(ArgsN.NamedChild(0), ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
       for I:= 1 to ArgsN.NamedChildCount - 1 do
-        WalkFieldRW(ArgsN.NamedChild(I), ASrc, AFields, AVars, AReads, AWrites);
+        WalkFieldRW(ArgsN.NamedChild(I), ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
     end
     else if not ArgsN.IsNull then
       for I:= 0 to ArgsN.NamedChildCount - 1 do
-        WalkFieldRW(ArgsN.NamedChild(I), ASrc, AFields, AVars, AReads, AWrites);
-    WalkFieldRW(Ent, ASrc, AFields, AVars, AReads, AWrites); // a field holding a callback (FOnChange()) reads FOnChange
+        WalkFieldRW(ArgsN.NamedChild(I), ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
+    WalkFieldRW(Ent, ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites); // a field holding a callback (FOnChange()) reads FOnChange
     Exit;
   end;
 
   for I:= 0 to N.NamedChildCount - 1 do
-    WalkFieldRW(N.NamedChild(I), ASrc, AFields, AVars, AReads, AWrites);
+    WalkFieldRW(N.NamedChild(I), ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
 end;
 
-// Joins up to ACap entries of AItems with ', ', appending the Phase 1
-// ' (+N more)' suffix when AItems holds more than ACap. '' for an empty
-// AItems. This IS the final, display-ready string stored verbatim in
-// symbol_facts.reads_fields/writes_fields (see FIELD_RW_CAP's comment for
-// why the cap can't be deferred to render time for these two columns).
+// Contract in the interface section; see FIELD_RW_CAP's comment for why the
+// cap can't be deferred to render time for reads_fields/writes_fields.
 function JoinCappedDisplay(AItems: TList<string>; ACap: Integer): string;
 var Shown, I: Integer;
 begin
@@ -718,26 +756,34 @@ end;
 //
 // Fields considered are the resolved owning class's DIRECT children
 // (AStore.FindAllChildSymbols) filtered to Kind = skField: OWN-CLASS fields
-// only. Inherited-field resolution (walking ancestor classes for a field
-// declared higher up) is explicitly OUT OF SCOPE for T4 (the brief marks it
-// OPTIONAL/bounded; own-class fields are the high-signal core) -- an
-// identifier that does not resolve to a DIRECT field of the owning class is
-// simply never reported (absence over noise), even if it happens to be an
-// inherited field. A free routine (ASym.ParentId <= 0) or an owning class
-// with no field children both yield '' for both -- the renderer then omits
-// the whole Reads/Writes line.
+// only. Inherited fields are resolved by TIndexer.ApplyInheritedFieldFacts
+// AFTER the ancestry stage (spec F2); this function only HOLDS the
+// unclassified names for it (F1): AHeldReads/AHeldWrites carry every bare
+// identifier that is neither a local/param/Result nor an own field, as
+// written, deduped case-insensitively, in body order. Own fields always win
+// a name collision because a name classified here never reaches the held
+// list (F4). AOwnReads/AOwnWrites are the UNCAPPED own lists behind the two
+// capped CSVs. A free routine (ASym.ParentId <= 0) yields '' for both CSVs
+// and empty arrays -- the renderer then omits the whole Reads/Writes line.
 procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;
-  const ASym: TSymbol; const AFilePath: string; const AStore: ISymbolStore; out AReadsCsv, AWritesCsv: string);
+  const ASym: TSymbol; const AFilePath: string; const AStore: ISymbolStore;  // dl:ok unused-parameter@0544 -- pre-existing since the ADP2 T4 fix wave (see the body comment: kept so the call shape did not change); the line only moved in v23
+  out AReadsCsv, AWritesCsv: string;
+  out AOwnReads, AOwnWrites, AHeldReads, AHeldWrites: TArray<string>);
 var
-  Fields       : TDictionary<string, string>;
-  Kids         : TArray<TSymbol>;
-  Kid          : TSymbol;
-  LKey         : string;
-  Vars         : TRoutineVarTable;
-  Reads, Writes: TList<string>;
+  Fields                 : TDictionary<string, string>;
+  Kids                   : TArray<TSymbol>;
+  Kid                    : TSymbol;
+  LKey                   : string;
+  Vars                   : TRoutineVarTable;
+  Reads, Writes          : TList<string>;
+  UnresReads, UnresWrites: TList<string>;
 begin
   AReadsCsv := '';
   AWritesCsv:= '';
+  SetLength(AOwnReads , 0);
+  SetLength(AOwnWrites, 0);
+  SetLength(AHeldReads, 0);
+  SetLength(AHeldWrites, 0);
   if ABody.IsNull then Exit;
   // ADP2 T4 fix wave: ASym's identity is resolved by the caller (the
   // indexer's facts loop) before Analyze is called -- see this function's
@@ -747,10 +793,12 @@ begin
   // unchanged (mechanical plumbing fix, not a signature change).
   if ASym.ParentId <= 0 then Exit; // free routine (no owning class) -- nothing to classify
 
-  Fields:= TDictionary<string, string>.Create;
-  Reads := TList<string>.Create;
-  Writes:= TList<string>.Create;
-  Vars  := nil;
+  Fields     := TDictionary<string, string>.Create;
+  Reads      := TList<string>.Create;
+  Writes     := TList<string>.Create;
+  UnresReads := TList<string>.Create;
+  UnresWrites:= TList<string>.Create;
+  Vars       := nil;
   try
     Kids:= ChildSymbolsCached(AStore, ASym.ParentId); { was a per-routine store round-trip }
     for Kid in Kids do
@@ -759,15 +807,21 @@ begin
         LKey:= LowerCase(Kid.Name);
         if not Fields.ContainsKey(LKey) then Fields.Add(LKey, Kid.Name);
       end;
-    if Fields.Count = 0 then Exit; // no owning-class fields -> nothing to classify
-
+    // v23: no early exit on Fields.Count = 0 -- the owning class may have no
+    // own fields and still inherit some; the held lists carry the candidates.
     Vars:= TRoutineVarTable.Build(AProc, ASrc); // params/locals/Result shadow same-named fields
-    WalkFieldRW(ABody, ASrc, Fields, Vars, Reads, Writes);
+    WalkFieldRW(ABody, ASrc, Fields, Vars, Reads, Writes, UnresReads, UnresWrites);
 
-    AReadsCsv := JoinCappedDisplay(Reads, FIELD_RW_CAP);
-    AWritesCsv:= JoinCappedDisplay(Writes, FIELD_RW_CAP);
+    AReadsCsv  := JoinCappedDisplay(Reads, FIELD_RW_CAP);
+    AWritesCsv := JoinCappedDisplay(Writes, FIELD_RW_CAP);
+    AOwnReads  := Reads.ToArray;
+    AOwnWrites := Writes.ToArray;
+    AHeldReads := UnresReads.ToArray;
+    AHeldWrites:= UnresWrites.ToArray;
   finally
     Vars.Free;
+    UnresWrites.Free;
+    UnresReads.Free;
     Writes.Free;
     Reads.Free;
     Fields.Free;
@@ -2735,7 +2789,8 @@ begin
         // AST scan. See AnalyzeReadsWrites' header comment (above, this
         // unit's implementation section) for the field-set + classification
         // rules.
-        AnalyzeReadsWrites(Proc, Body, PF.Src, ASym, AFilePath, AStore, Result.ReadsFields, Result.WritesFields);
+        AnalyzeReadsWrites(Proc, Body, PF.Src, ASym, AFilePath, AStore, Result.ReadsFields, Result.WritesFields,
+          Result.OwnReads, Result.OwnWrites, Result.HeldReads, Result.HeldWrites);
         // v(ADP3 T11): var/out parameter writes -- same matched Proc/Body, no
         // 2nd AST scan. Complements the line above: that one resolves against
         // the owning class's FIELDS, this one against the routine's own

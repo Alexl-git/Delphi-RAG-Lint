@@ -318,6 +318,23 @@ type
     /// <summary>False when no symbol_facts row exists for SymbolId -- the
     /// renderer's cue to omit every derived doc-comment line entirely.</summary>
     Present     : Boolean;
+    /// <summary>v23 (spec F1), TRANSIENT -- never stored; PutSymbolFacts does
+    /// not read it. The UNCAPPED own-class fields READ (display spelling, body
+    /// order). Empty for a free routine.</summary>
+    OwnReads  : TArray<string>;
+    /// <summary>v23 (spec F1), TRANSIENT -- never stored. The UNCAPPED
+    /// own-class fields WRITTEN (display spelling, body order). Empty for a
+    /// free routine.</summary>
+    OwnWrites : TArray<string>;
+    /// <summary>v23 (spec F1), TRANSIENT -- never stored. The UNCLASSIFIED bare
+    /// identifiers READ (not a local, param, Result or own field), as written,
+    /// that the facts-inherited post-pass matches against ancestor fields.</summary>
+    HeldReads : TArray<string>;
+    /// <summary>v23 (spec F1), TRANSIENT -- never stored. The UNCLASSIFIED bare
+    /// identifiers WRITTEN (not a local, param, Result or own field), as
+    /// written, that the facts-inherited post-pass matches against ancestor
+    /// fields.</summary>
+    HeldWrites: TArray<string>;
   end; // record
 
   /// <summary>v11 (M1): one resolved ancestor edge of a class/interface --

@@ -2576,6 +2576,20 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+    /// <summary>v23 (spec F2): the facts-inherited post-pass. For every routine
+    /// this run analysed that HELD unclassified identifiers, resolves the
+    /// owning class's transitive ancestors (GetTransitiveAncestors -- which
+    /// late-resolves, so it sees what the ancestry stage just wrote), collects
+    /// their field children nearest-first, and appends every held name that
+    /// matches a field to reads_fields / writes_fields after the own-class
+    /// names (F3). Must run AFTER ResolveAncestry. Clears the held list.</summary>
+    /// <returns>Number of symbol_facts rows rewritten. 0 on a run that parsed
+    /// nothing (F7), and then it prints nothing.</returns>
+    /// <remarks>Reach is the SAME database: a base class in the platform
+    /// library is out of reach from a project index (F6). An ancestor gaining
+    /// a field does not re-facts descendants in unchanged files on an
+    /// incremental run -- the periodic rebuild covers that.</remarks>
+    function ApplyInheritedFieldFacts: Integer;
   end;
 
   ILinter = interface

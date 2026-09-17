@@ -3393,6 +3393,10 @@ begin
       together on that same index). }
     Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
     Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
+    { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
+      stage above just wrote. Runs on the indexer that parsed this run, so a
+      run that parsed nothing does nothing (F7). }
+    Stage('  ', 'facts-inherited', procedure begin Indexer.ApplyInheritedFieldFacts; end);
     Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
     { CallEdgesNeedRebuild: see the DoIndex site for the full argument. Short
       version -- "no file changed" only implies "every edge still holds" if the
@@ -5136,6 +5140,10 @@ begin
       forces the full-corpus call pass; both are one flag away. }
     Stage('', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
     Stage('', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
+    { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
+      stage above just wrote. Runs on the indexer that parsed this run, so a
+      run that parsed nothing does nothing (F7). }
+    Stage('', 'facts-inherited', procedure begin Indexer.ApplyInheritedFieldFacts; end);
     Stage('', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
     { A MISSING EDGE SET ALSO FORCES THE PASS. Every other term here asks "did
       anything change?", and the skip message's premise -- no file changed, so
