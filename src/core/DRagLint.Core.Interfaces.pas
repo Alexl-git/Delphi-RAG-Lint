@@ -426,6 +426,11 @@ type
     /// a class with no ancestors, never as some other class). Two REAL
     /// declarations of one name in two units keep qualified_name order.
     /// Pinned by tests\autotest\run_forward_decl_shadow.ps1.
+    /// v23 (spec G7): AName may carry a generic parameter list as written in
+    /// source ('TList&lt;T&gt;'); the lookup matches the BARE name and, when
+    /// more than one row matches, prefers rows of the same arity, falling back
+    /// to every row when none has that arity. Pinned by
+    /// tests\autotest\run_generic_symbol_names.ps1.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) (+47 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -454,6 +459,9 @@ type
     /// duplicate full definitions in two different files is the RIGHT one -- only
     /// which one comes first. Callers needing the right one must disambiguate by
     /// scope themselves.
+    /// v23 (spec G7): AQName may carry a generic parameter list ('Unit.TBox&lt;K, V&gt;');
+    /// the lookup matches the bare qualified name and prefers rows of the same
+    /// arity, exactly as FindSymbolsByExactName does.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoSurface (DRagLint.CLI.pas) (+13 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1561,10 +1569,19 @@ type
     /// file never resolved. Forward-declaration stubs are dropped when a real body
     /// exists. Returns a class/interface/record symbol (Id&gt;0) or Default (Id=0)
     /// when it cannot be resolved unambiguously (no worse than an unresolved edge).
-    /// Cross-unit safe; the alias chain is cycle-guarded and hop-capped.</summary>
+    /// Cross-unit safe; the alias chain is cycle-guarded and hop-capped.
+    /// v23: when <paramref name="AArity"/> &gt;= 0 the candidate set is FILTERED to
+    /// symbols declaring exactly that many generic parameters BEFORE any scope
+    /// rule (including the lone-candidate short-circuit) runs; a filter that
+    /// empties the set is a DECLINE (Id=0), never a fall-through to the
+    /// unfiltered set, so 'TList&lt;T&gt;' cannot bind to an arity-0 TList.</summary>
     /// <param name="ATypeName">Bare type name to resolve (e.g. 'TCustomButton').</param>
     /// <param name="AScopeFileId">File whose uses-clause disambiguates same-named
     /// candidates; 0 disables scope preference (single-global fallback only).</param>
+    /// <param name="AArity">Number of type arguments the reference was written
+    /// with ('TObjectList&lt;TFoo&gt;' = 1), or -1 (the default) when the reference
+    /// carried none -- then no arity filter runs and every pre-v23 outcome on an
+    /// argument-less reference is preserved.</param>
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -1576,7 +1593,7 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
+    function ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64; AArity: Integer = -1): TSymbol;
     /// <summary>Memoize a resolved property type by writing ': '+ATypeName as the
     /// signature of property symbol ASymbolId (which previously carried an
     /// empty/typeless signature -- a bare inherited redeclaration such as

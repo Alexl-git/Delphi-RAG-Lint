@@ -1,8 +1,8 @@
 # drag-lint indexing & database architecture
 
-**Applies to:** drag-lint **1.10.1-alpha** · index **schema_version 22** ·
-extractor **1.14.0-alpha** · tree-sitter grammars delphi13 **14** / dfm **14**.
-Header re-verified 2026-09-09 against `SCHEMA_VERSION` and
+**Applies to:** drag-lint **1.14.0-alpha** · index **schema_version 23** ·
+extractor **1.17.0-alpha** · tree-sitter grammars delphi13 **14** / dfm **14**.
+Header re-verified 2026-09-17 against `SCHEMA_VERSION` and
 `DRAGLINT_EXTRACTOR_VERSION` in source, and the version stamps THROUGHOUT this
 document were corrected the same day: the body and the diagram below both used
 to say `schema_version 17` while this banner said 21, and the sample database

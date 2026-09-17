@@ -5334,6 +5334,10 @@ begin
           being absent means the engine predates v22. }
         JObj.AddPair('directives'    , Sym.Directives   );
         JObj.AddPair('vis_explicit'  , TJSONBool.Create(Sym.VisExplicit));
+        { v23 (spec G1/G8): the generic parameter list as written ('T: class',
+          'K, V'); '' for a non-generic symbol. `name` stays BARE -- the
+          display form is name<generic_params>, see TSymbol.DisplayName. }
+        JObj.AddPair('generic_params', Sym.GenericParams);
         { v22: is_virtual was never in this JSON. It is added here because a
           guard asserting the v12 bit is UNCHANGED by the directives work had no
           way to observe it -- and an assertion whose subject is absent from the
@@ -5371,7 +5375,7 @@ begin
     Writeln(StringOfChar('-', 75));
     for Sym in ASymbols do
     begin
-      Line:= Format('%-12s %-30s %s', [Sym.Kind.ToText, Sym.Name, Sym.QualifiedName]);
+      Line:= Format('%-12s %-30s %s', [Sym.Kind.ToText, Sym.DisplayName, Sym.QualifiedName]);
       if Sym.Signature <> '' then { gap #1/#2: show sig, distinguish overloads }
       begin
         { v0.42: Signature now carries the full param list (+ return type).
@@ -6957,8 +6961,15 @@ begin
       end;
       var StartId : Int64:= 0   ;
       var StartKind: string:= '';
+      var StartShown: string:= AArgs.Name; { v23 (G8): the root's own header, name<params> }
       for S in Store.FindSymbolsByExactName(AArgs.Name) do
-        if S.Kind in [skClass, skInterface, skRecord] then begin StartId:= S.Id; StartKind:= S.Kind.ToText; Break; end;
+        if S.Kind in [skClass, skInterface, skRecord] then
+        begin
+          StartId   := S.Id;
+          StartKind := S.Kind.ToText;
+          StartShown:= S.DisplayName;
+          Break;
+        end;
       if StartId <= 0 then Continue; { try the next DB }
 
       if AArgs.OfName <> '' then
@@ -7005,13 +7016,25 @@ begin
       end // if
       else
       begin
-        Writeln(AArgs.Name, ' ancestors:');
+        Writeln(StartShown, ' ancestors:');
         for var A in Ancs do
+        begin
+          { v23 (spec G8): a row shows the ancestor as DECLARED -- name<params>
+            (TList<T>, TObjectList<T: class>) -- when the edge resolved to a
+            symbol; an unresolved edge can only show what was WRITTEN, so it
+            carries the instantiation's arguments instead (TObjectList<TPlain>).
+            The JSON branch above is untouched: `name` is a match key there. }
+          var Shown : string := A.Name;
+          var Target: TSymbol:= Default(TSymbol);
+          if A.Resolved and (A.ResolvedName = '') then Target:= Store.GetSymbolById(A.SymbolId);
+          if Target.Id > 0 then Shown:= Target.DisplayName
+          else if A.TypeArgs <> '' then Shown:= Shown + '<' + A.TypeArgs + '>';
           { A late-resolved TYPE ALIAS is one ancestor under two names; render
             both, or the reader cannot tell why `--of <target>` is True. }
-          if A.Resolved then Writeln(Format('  %s [%s]%s', [A.Name, A.Kind,
+          if A.Resolved then Writeln(Format('  %s [%s]%s', [Shown, A.Kind,
             if A.ResolvedName <> '' then ' -> ' + A.ResolvedName else '']))
-        else Writeln(Format('  %s [%s] (unresolved)', [A.Name, A.Kind]));
+          else Writeln(Format('  %s [%s] (unresolved)', [Shown, A.Kind]));
+        end;
         if Length(Ancs) = 0 then Writeln('  (none)');
       end;
       Exit(0);

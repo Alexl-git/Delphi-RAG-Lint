@@ -501,6 +501,17 @@ begin
   Result:= StringReplace(Result, '\\'   , '\'       , [rfReplaceAll]);
 end;
 
+// v23 (spec G8): the hover HEADER is the one place the qualified name is shown
+// to a human rather than matched, so a generic reads as written in source --
+// 'Unit.TList<T>' -- while symbols.qualified_name stays bare. Byte-identical
+// to the old header for a non-generic symbol. The JSON renderer keeps the bare
+// qname: that field is a match key for the plugin.
+function HoverHeaderName(const ASym: TSymbol): string;
+begin
+  Result:= ASym.QualifiedName;
+  if ASym.GenericParams <> '' then Result:= Result + '<' + ASym.GenericParams + '>';
+end;
+
 function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 var
   SB: TStringBuilder;
@@ -509,7 +520,7 @@ var
 begin
   SB:= TStringBuilder.Create;
   try
-    SB.AppendLine(ASym.QualifiedName);
+    SB.AppendLine(HoverHeaderName(ASym));
     if ADoc.Deprecated then SB.AppendLine('[DEPRECATED]');
     if ADoc.SinceText <> '' then SB.AppendLine('Since: '   + ADoc.SinceText);
     // v(ADP3 T1): strip the ownership marker before a human sees it -- see
@@ -584,7 +595,7 @@ var
 begin
   SB:= TStringBuilder.Create;
   try
-    SB.AppendLine('# ' + ASym.QualifiedName);
+    SB.AppendLine('# ' + HoverHeaderName(ASym));
     if ADoc.Deprecated then SB.AppendLine('> **DEPRECATED**');
     if ADoc.SinceText <> '' then SB.AppendLine('> _Since: ' + ADoc.SinceText + '_');
     // v(ADP3 T1): strip the ownership marker before a human sees it -- see

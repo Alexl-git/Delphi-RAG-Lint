@@ -165,7 +165,7 @@ type
     function Emit(
       AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature: string = ''; const AModifiers: string = '';
       const AHeritage: string = ''; AIsVirtual: Boolean = False; AIsHelper: Boolean = False; const APropAccess: string = '';
-      const ADirectives: string = ''; AVisExplicit: Boolean = True
+      const ADirectives: string = ''; AVisExplicit: Boolean = True; const AGenericParams: string = ''
     ): Integer;
     procedure EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode);
     procedure EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
@@ -230,7 +230,7 @@ end;
 
 function TWalkState.Emit(AKind: TSymbolKind; const AName, AQualifiedName: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode; const ASignature,
   AModifiers, AHeritage: string; AIsVirtual: Boolean; AIsHelper: Boolean; const APropAccess: string;
-  const ADirectives: string; AVisExplicit: Boolean): Integer;
+  const ADirectives: string; AVisExplicit: Boolean; const AGenericParams: string): Integer;
 var
   Sym: TSymbol;
 begin
@@ -247,6 +247,7 @@ begin
   Sym.IsHelper     := AIsHelper;  { v15: record/class helper declaration flag }
   Sym.Directives   := ADirectives;  { v22: every routine directive, canonical, declaration order; '' = none }
   Sym.VisExplicit  := AVisExplicit; { v22: False only for a member in an UNLABELLED class section }
+  Sym.GenericParams:= AGenericParams; { v23: 'T: class' / 'K, V' as written, brackets stripped; '' = not generic }
   if AParentSymbolIdx >= 0 then Sym.ParentId:= AParentSymbolIdx
   else Sym.ParentId:= -1;
   if not ARangeNode.IsNull then
@@ -955,13 +956,16 @@ begin
   if ClassNode.IsNull then Exit;
   NameNode:= ADeclTypeNode.ChildByField('name');
   if NameNode.IsNull then Exit;
-  TypeName:= NodeText(NameNode, AState.Source);
+  { v23: a generic header's name node is the WHOLE 'TBase<T: class>'; emit the
+    BARE name and carry the parameter list separately (GenericParams). }
+  var GenParams: string;
+  SplitGenericName(NodeText(NameNode, AState.Source), TypeName, GenParams);
   if TypeName = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
   if ClassNodeIsRecord(ClassNode) then Kind:= skRecord
   else Kind:= skClass;
-  TypeIdx:= AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(ClassNode, AState.Source));
+  TypeIdx:= AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(ClassNode, AState.Source), False, False, '', '', True, GenParams);
   { Members before any visibility keyword default to 'public'; declSection
     handlers update it as they are walked.  Save/restore so a nested type does
     not leak its sections to the enclosing one. }
@@ -997,11 +1001,12 @@ begin
   if TypeNode.IsNull or (TypeNode.NodeType <> 'declIntf') then Exit;
   NameNode:= ADeclTypeNode.ChildByField('name');
   if NameNode.IsNull then Exit;
-  TypeName:= NodeText(NameNode, AState.Source);
+  var GenParams: string;
+  SplitGenericName(NodeText(NameNode, AState.Source), TypeName, GenParams);
   if TypeName = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(TypeNode, AState.Source));
+  Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(TypeNode, AState.Source), False, False, '', '', True, GenParams);
   { All interface members are public. }
   OldVis:= AState.CurrentVisibility;
   var OldVisExp: Boolean:= AState.CurrentVisExplicit;
@@ -1226,14 +1231,15 @@ begin
   if RefNode.IsNull then Exit;
   NameNode:= ADeclTypeNode.ChildByField('name');
   if NameNode.IsNull then Exit;
-  TypeName:= NodeText(NameNode, AState.Source);
+  var GenParams: string;
+  SplitGenericName(NodeText(NameNode, AState.Source), TypeName, GenParams);
   if TypeName = '' then Exit;
   { A parameter list can wrap across lines; collapse runs of whitespace so the
     stored signature is one readable line, as TypeTextOf already does for fields. }
   Target:= CollapseWhitespace(NodeText(RefNode, AState.Source));
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
   Result:= True;
 end; // function
 
@@ -1363,13 +1369,14 @@ begin
   if TypeWrapNode.IsNull then Exit;
   NameNode:= ADeclTypeNode.ChildByField('name');
   if NameNode.IsNull then Exit;
-  TypeName:= NodeText(NameNode, AState.Source);
+  var GenParams: string;
+  SplitGenericName(NodeText(NameNode, AState.Source), TypeName, GenParams);
   if TypeName = '' then Exit;
   Target:= CollapseWhitespace(NodeText(TypeWrapNode, AState.Source));
   if Target = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target);
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
   Result:= True;
 end; // function
 
@@ -1746,6 +1753,59 @@ begin
   end;
 end; // procedure
 
+// v23: the last '.'-separated segment of a routine header name, counting only
+// dots at angle-bracket depth 0, so 'TFoo<T>.Bar<U>' -> 'Bar<U>' and
+// 'TFoo<Some.Unit.TBase>.Bar' -> 'Bar'.
+function LastTopLevelSegment(const AName: string): string;
+var
+  I, Depth, Start: Integer;
+begin
+  Depth:= 0;
+  Start:= 1;
+  for I:= 1 to Length(AName) do
+    case AName[I] of
+      '<': Inc(Depth);
+      '>': Dec(Depth);
+      '.': if Depth <= 0 then Start:= I + 1;
+    end;
+  Result:= Copy(AName, Start, MaxInt);
+end;
+
+// v23: every '.'-separated segment (dots at angle-bracket depth 0 only) with its
+// own '<...>' list removed, so an impl header 'TFoo<T>.Bar<U>' -> 'TFoo.Bar'.
+// SetRoutineImplRange / FindRoutineSymbolIndex compare the DOTTED name against
+// QualifiedName (exact or suffix) and its last segment against Name; both are
+// bare since the declarations emit bare names, so the header must be too.
+function StripGenericSegments(const AName: string): string;
+var
+  I, Depth, Start: Integer;
+
+  procedure FlushSegment(AEnd: Integer);
+  var
+    Bare, Params: string;
+  begin
+    SplitGenericName(Copy(AName, Start, AEnd - Start), Bare, Params);
+    if Start > 1 then Result:= Result + '.';
+    Result:= Result + Bare;
+  end;
+
+begin
+  Result:= '';
+  Depth:= 0;
+  Start:= 1;
+  for I:= 1 to Length(AName) do
+    case AName[I] of
+      '<': Inc(Depth);
+      '>': Dec(Depth);
+      '.': if Depth <= 0 then
+           begin
+             FlushSegment(I);
+             Start:= I + 1;
+           end;
+    end;
+  FlushSegment(Length(AName) + 1);
+end;
+
 { v(PHASE C): returns the index of the routine symbol it emitted, or -1 when it
   emitted nothing (no name node / empty name). Callers that only want the side
   effect may still invoke it as a statement -- the three pre-existing call sites
@@ -1764,11 +1824,14 @@ begin
   Result:= -1;   { emitted nothing, unless we reach the Emit below }
   NameNode:= ANode.ChildByField('name');
   if NameNode.IsNull then Exit;
-  MethName:= NodeText(NameNode, AState.Source);
+  var RawName: string:= NodeText(NameNode, AState.Source);
+  // A free implementation header is 'TFoo.DoBar' or 'TFoo<T>.DoBar<U>'. Take the
+  // LAST dotted segment at depth 0 first, THEN split that segment's own list
+  // (v23: a generic method is emitted under its BARE name + GenericParams).
+  var Seg: string:= LastTopLevelSegment(RawName);
+  var GenParams: string;
+  SplitGenericName(Seg, MethName, GenParams);
   if MethName = '' then Exit;
-  // Strip qualified prefix if present (e.g. 'TFoo.DoBar' -> 'DoBar') - happens in
-  // free implementations. For interface/class declarations the name is bare.
-  if Pos('.', MethName) > 0 then MethName:= Copy(MethName, LastDelimiter('.', MethName) + 1, MaxInt);
   { v1.7: A CLASS MEMBER'S KIND WAS ALWAYS skMethod. The kConstructor /
     kDestructor token was inspected only for FREE routines, so every
     constructor and destructor declared inside a class -- which is to say
@@ -1810,7 +1873,7 @@ begin
     `AAsMethod and ...` gate here would have silently excluded every one of
     them. AAsMethod still gates is_virtual, whose v12 meaning is unchanged. }
   RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode),
-                           False, '', ProcDirectivesOf(ANode), (not AAsMethod) or AState.CurrentVisExplicit);
+                           False, '', ProcDirectivesOf(ANode), (not AAsMethod) or AState.CurrentVisExplicit, GenParams);
   Result:= RoutineIdx;
   // v14 (D5, Task 2): emit each formal parameter as an skParam symbol parented
   // to this routine (RoutineIdx). Nested procs never reach WalkDeclProc (their
@@ -2335,7 +2398,11 @@ begin
         var HdrNameNode:= HdrNode.ChildByField('name');
         if not HdrNameNode.IsNull then
         begin
-          var HdrName:= NodeText(HdrNameNode, AState.Source);
+          // v23: 'TFoo<T>.Bar<U>' -> 'TFoo.Bar'. The declarations are emitted
+          // under BARE names, and SetRoutineImplRange / FindRoutineSymbolIndex
+          // below match this DOTTED text against QualifiedName, so the dots stay
+          // and only each segment's own <...> list is dropped.
+          var HdrName:= StripGenericSegments(NodeText(HdrNameNode, AState.Source));
           // Ref-gap E: emit type_use refs for the type sites on a METHOD-impl
           // header (constructor/procedure/function Widget.Use(pParam: Widget): Widget).
           // A method impl header (name is a genericDot, i.e. Class.Method) is

@@ -6,10 +6,15 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **22** (`SCHEMA_VERSION` in
-`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-09-09 against the
-constant AND against a live index rebuilt the same day -- previously this line
-had only ever been checked against the constant). Recent additive changes:
+Current schema version at time of writing: **23** (`SCHEMA_VERSION` in
+`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-09-17 against the
+constant AND against the guard fixture index `run_generic_symbol_names.ps1`
+builds -- previously this line had only ever been checked against the
+constant). Recent additive changes:
+**v23 added `symbols.generic_params` and `type_ancestors.ancestor_type_args`**
+-- a generic type or method is now indexed under its BARE name with the
+parameter list in its own column, and an ancestor edge carries the
+instantiation's arguments (see 2.2 and 2.6);
 **v21 added `refs.external_target`** -- the qualified name of a call target that
 lives outside this DB, so a cross-database call stops looking like an unresolved
 one (see 2.3); **v20 added `refs.receiver_text`** -- the call-site receiver
@@ -39,8 +44,17 @@ Schema history, one line per step:
   `symbols.vis_explicit` (was a visibility keyword actually written for this
   member's section). Riding the same extractor bump: the DFM extractor now emits
   a `dfm-prop` row for EVERY value kind, not only string-valued properties, so
-  colours, sets, numbers and booleans became text-searchable. **This is the
-  current version.**
+  colours, sets, numbers and booleans became text-searchable.
+- `22 -> 23`: additive columns `symbols.generic_params` (the generic parameter
+  list as written, `T: class` / `K, V`; NULL for a non-generic symbol) and
+  `type_ancestors.ancestor_type_args` (the type arguments written on a heritage
+  entry, `TFoo` in `class(TObjectList<TFoo>)`; NULL when named without
+  arguments). **Behaviour change riding the extractor bump: `symbols.name` and
+  `qualified_name` of a generic are now BARE** (`TList`, not `TList<T>`), and
+  ancestor resolution filters candidates by arity before any scope rule -- a
+  pre-v23 row still carries the list in its name until the next re-parse. A
+  consumer that matched `name LIKE '%<%'` finds nothing on a v23 index; read
+  `generic_params` instead. **This is the current version.**
 
 All facts in this document were cross-checked against the DDL in
 `src/storage/DRagLint.Storage.SQLite.pas` and
@@ -195,6 +209,7 @@ markers, and -- since v14 -- typed local variables and parameters.
 | `modifiers` | TEXT | The member's VISIBILITY word -- `private` / `strict private` / `protected` / `public` / `published` -- plus a mirrored ` message` for a message handler. NOT directives: it never held `virtual`/`override` markers, despite what this row claimed until v22. Four consumers equality-match it as the visibility word, which is why v22 put directives in their own column rather than here. |
 | `directives` | TEXT | v22. Every routine directive, canonical lowercase, in declaration order, space-joined (`virtual overload stdcall`); `external` included. `'` when the routine declares none, and `'` for non-routine symbols. NULL only on a row written by a pre-v22 index. |
 | `vis_explicit` | INTEGER | v22. 1 when a visibility keyword was written for this member's section, 0 for the unlabelled leading section of a class or record -- which under `$M+` is PUBLISHED while `modifiers` says `public` for both. NULL on a pre-v22 row, read back as 1. |
+| `generic_params` | TEXT | v23. The generic parameter list exactly as written between `<` and `>` -- `T`, `K, V`, `T: class`, `I: IMicObject` -- for a generic class/interface/record/procedural type or a generic method. NULL (read back as `''`) for a non-generic symbol. `name` and `qualified_name` are BARE for a generic; the display form is `name<generic_params>`. Arity = the number of top-level comma-separated entries. |
 | `section` | TEXT | `''` \| `'interface'` \| `'implementation'` (usable-from-other-units test; NOT the same value set as `unit_uses.section`) |
 | `heritage` | TEXT (v11+) | Raw ancestor list text for class/interface symbols, e.g. `'TBar, IBaz'`; NULL for non-class/interface or no ancestors. Resolved into `type_ancestors` |
 | `is_virtual` | INTEGER (v12+) | 1 when the method is virtually dispatched (`virtual`/`dynamic`/`override`), else 0/NULL |
@@ -343,7 +358,8 @@ resolve pass from `symbols.heritage`.
 |---|---|---|
 | `symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE CASCADE) | The class/interface symbol declaring this ancestor |
 | `ordinal` | INTEGER | Position in the heritage list (0-based) |
-| `ancestor_name` | TEXT | Verbatim ancestor name as written in the heritage clause |
+| `ancestor_name` | TEXT | Ancestor name as written in the heritage clause, WITHOUT any type-argument list (v23: `TObjectList` for `class(TObjectList<TFoo>)`; the list moves to `ancestor_type_args`) |
+| `ancestor_type_args` | TEXT | v23. The type arguments written on this heritage entry (`TFoo`, `T`, `string, TBar`); NULL when the ancestor was named without arguments. Resolution prefers a candidate whose `generic_params` arity equals this list's arity; an argument-less edge keeps the pre-v23 behaviour. |
 | `ancestor_kind` | TEXT | Same value domain as `symbols.kind`, restricted to `class`/`interface` in practice |
 | `ancestor_symbol_id` | INTEGER | Resolved ancestor's `symbols.id`; NULL when unresolved (external/RTL/by-name-only) |
 | `ancestor_file_id` | INTEGER | File of the resolved ancestor, when resolved |

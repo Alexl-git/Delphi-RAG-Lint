@@ -2473,6 +2473,9 @@ type
       /// for the contract.</summary>
       /// <param name="ATypeName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AScopeFileId"><!-- drag-lint:auto type -->Int64</param>
+      /// <param name="AArity">v23: the number of type arguments the edge was
+      /// written with, or -1 when the edge carried none. See the interface
+      /// DocInsight for the filter/decline contract.</param>
       /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: Default(TSymbol).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2487,7 +2490,7 @@ type
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
+      function ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64; AArity: Integer = -1): TSymbol;
       /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
       /// <param name="ATypeName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; Q.RowsAffected &gt;
@@ -7031,10 +7034,17 @@ function TSQLiteSymbolStore.FindSymbolsByExactName( const AName: string): TArray
 var
   List: TList<TSymbol>;
 begin
+  { v23 (spec G7): a caller may still write the name the way the source does
+    ('TList<T>', 'Unit.TBox<K, V>'). Match on the bare name; when the input
+    carried a list, prefer rows of the same arity and fall back to all rows
+    when none matches (so a wrong-arity query still finds SOMETHING rather
+    than nothing -- the caller sees generic_params and can tell). }
+  var BareName, InParams: string;
+  var HadList: Boolean:= SplitGenericName(AName, BareName, InParams);
   List:= TList<TSymbol>.Create;
   try
     if FQFindByName.Active then FQFindByName.Close;
-    FQFindByName.ParamByName('name').AsString:= AName;
+    FQFindByName.ParamByName('name').AsString:= BareName;
     FQFindByName.Open;
     while not FQFindByName.Eof do
     begin
@@ -7048,7 +7058,7 @@ begin
     begin
       WarnIfNocaseIndexMissing;
       if FQFindByNameCI.Active then FQFindByNameCI.Close;
-      FQFindByNameCI.ParamByName('name').AsString:= AName;
+      FQFindByNameCI.ParamByName('name').AsString:= BareName;
       FQFindByNameCI.Open;
       while not FQFindByNameCI.Eof do
       begin
@@ -7057,6 +7067,15 @@ begin
       end;
     end;
     Result:= List.ToArray;
+    if HadList and (Length(Result) > 1) then
+    begin
+      var Want:= GenericArity(InParams);
+      var Same: TArray<TSymbol>;
+      SetLength(Same, 0);
+      for var S in Result do
+        if GenericArity(S.GenericParams) = Want then Same:= Same + [S];
+      if Length(Same) > 0 then Result:= Same;
+    end;
   finally
     { Close in the FINALLY, not after the loop: ReadSymbolFromQuery can raise,
       and a still-open dataset holds its cursor for the life of the store (these
@@ -7072,10 +7091,16 @@ function TSQLiteSymbolStore.FindSymbolsByQualifiedName( const AQName: string): T
 var
   List: TList<TSymbol>;
 begin
+  { v23 (spec G7): same input strip as FindSymbolsByExactName -- 'gnB.TList<T>'
+    splits on the FIRST '<' into bare 'gnB.TList' + params 'T'. A qualified
+    name whose CLASS segment is generic ('gnB.TList<T>.Add') is not handled
+    here; no caller writes that form. }
+  var BareName, InParams: string;
+  var HadList: Boolean:= SplitGenericName(AQName, BareName, InParams);
   List:= TList<TSymbol>.Create;
   try
     if FQFindByQName.Active then FQFindByQName.Close;
-    FQFindByQName.ParamByName('qname').AsString:= AQName;
+    FQFindByQName.ParamByName('qname').AsString:= BareName;
     FQFindByQName.Open;
     while not FQFindByQName.Eof do
     begin
@@ -7088,7 +7113,7 @@ begin
     begin
       WarnIfNocaseIndexMissing;
       if FQFindByQNameCI.Active then FQFindByQNameCI.Close;
-      FQFindByQNameCI.ParamByName('qname').AsString:= AQName;
+      FQFindByQNameCI.ParamByName('qname').AsString:= BareName;
       FQFindByQNameCI.Open;
       while not FQFindByQNameCI.Eof do
       begin
@@ -7097,6 +7122,15 @@ begin
       end;
     end;
     Result:= List.ToArray;
+    if HadList and (Length(Result) > 1) then
+    begin
+      var Want:= GenericArity(InParams);
+      var Same: TArray<TSymbol>;
+      SetLength(Same, 0);
+      for var S in Result do
+        if GenericArity(S.GenericParams) = Want then Same:= Same + [S];
+      if Length(Same) > 0 then Result:= Same;
+    end;
   finally
     if FQFindByQName  .Active then FQFindByQName  .Close;
     if FQFindByQNameCI.Active then FQFindByQNameCI.Close;
@@ -7997,6 +8031,22 @@ end;
 // climb's REFUSE-side cross-namespace guard share ONE definition of the notion
 // rather than each carrying its own copy. Semantics are unchanged.
 
+// v23 (spec G4/G5): when the edge names its ancestor WITH type arguments,
+// only candidates of the same arity can be what the author meant -- the
+// compiler resolves `TObjectList<TFoo>` to the generic even when the
+// non-generic System.Contnrs.TObjectList is also in scope. Runs BEFORE rule 0.
+// AArity < 0 means the edge carried no arguments: return ACands untouched, so
+// every v22 outcome on an argument-less edge is preserved (G5).
+function FilterCandidatesByArity(const ACands: TArray<TSymbol>; AArity: Integer): TArray<TSymbol>;
+var
+  S: TSymbol;
+begin
+  if AArity < 0 then Exit(ACands);
+  SetLength(Result, 0);
+  for S in ACands do
+    if GenericArity(S.GenericParams) = AArity then Result:= Result + [S];
+end;
+
 /// <summary>
 ///  Shared ancestor/type-candidate disambiguation rule: given several
 ///  same-named class/interface/record/type-alias candidates, picks the one
@@ -8574,7 +8624,7 @@ begin
   end;
 end;
 
-function TSQLiteSymbolStore.ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64): TSymbol;
+function TSQLiteSymbolStore.ResolveTypeNameToClass(const ATypeName: string; AScopeFileId: Int64; AArity: Integer): TSymbol;
 var
   UsesNames       : TDictionary<string, Boolean>; // lowercased unit names in scope (own + used)
   SeenAlias       : TDictionary<string, Boolean>; // alias-chain cycle guard (lowercased names)
@@ -8662,6 +8712,7 @@ var
         if not IsStub(S) then Kept:= Kept + [S];
       Types:= Kept;
     end;
+    Types:= FilterCandidatesByArity(Types, AArity);   // v23 (G4): arity before every rule
     if Length(Types) = 0 then Exit;
     if Length(Types) = 1 then Exit(Types[0]);        // single global definition
     // ambiguous (2+ same-named candidates) -- apply the shared scope rule.
@@ -10604,17 +10655,26 @@ end; // procedure
 // v11 (M1): normalize one raw heritage ancestor token to a name comparable to
 // symbols.name: trim, drop a generic argument list (TList<TFoo> -> TList) and
 // take the dotted tail (System.Classes.TComponent -> TComponent).
-function NormalizeAncestorName(const ARaw: string): string;
+// v23: also hands back the instantiation ARGUMENTS as written between the
+// outermost '<' and '>' ('TList<T>' -> 'TList' + 'T'; 'Unit.TBase<A, B>' ->
+// 'TBase' + 'A, B'; 'TFoo' -> 'TFoo' + ''). The one-arg overload below keeps
+// every existing caller unchanged.
+function NormalizeAncestorName(const ARaw: string; out AArgs: string): string; overload;
 var
   S: string ;
   P: Integer;
 begin
-  S:= Trim(ARaw);
-  P:= Pos('<', S);
-  if P > 0 then S:= Trim(Copy(S, 1, P - 1));
+  SplitGenericName(ARaw, S, AArgs);
   P:= LastDelimiter('.', S);
   if P > 0 then S:= Copy(S, P + 1, MaxInt);
   Result:= Trim(S);
+end;
+
+function NormalizeAncestorName(const ARaw: string): string; overload;
+var
+  Dummy: string;
+begin
+  Result:= NormalizeAncestorName(ARaw, Dummy);
 end;
 
 // v11 (M1): split a heritage list on top-level commas only, so a generic
@@ -10779,20 +10839,33 @@ begin
       declines, and a decline is written as ancestor_kind '?', i.e. exactly the
       behaviour that existed before. It cannot invent a wrong binding, only fail
       to make one. }
-    Q.SQL.Text:= 'SELECT id, file_id, kind, name, qualified_name, heritage, start_line, end_line ' +
+    Q.SQL.Text:= 'SELECT id, file_id, kind, name, qualified_name, heritage, start_line, end_line, generic_params ' +
                  'FROM symbols WHERE kind IN (''class'',''interface'',''record'')';
     Q.Open;
+    { The TField references are resolved ONCE: this SELECT walks every class,
+      interface and record in the index, and FieldByName is a by-name scan of
+      the field list on every call. }
+    var FldId   : TField:= Q.FieldByName('id'            );
+    var FldFile : TField:= Q.FieldByName('file_id'       );
+    var FldKind : TField:= Q.FieldByName('kind'          );
+    var FldName : TField:= Q.FieldByName('name'          );
+    var FldQName: TField:= Q.FieldByName('qualified_name');
+    var FldHer  : TField:= Q.FieldByName('heritage'      );
+    var FldGP   : TField:= Q.FieldByName('generic_params');
+    var FldSL   : TField:= Q.FieldByName('start_line'    );
+    var FldEL   : TField:= Q.FieldByName('end_line'      );
     while not Q.Eof do
     begin
       Sym:= Default(TSymbol);
-      Sym.Id           := Q.FieldByName('id'            ).AsLargeInt;
-      Sym.FileId       := Q.FieldByName('file_id'       ).AsLargeInt;
-      Sym.Kind         := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
-      Sym.Name         := Q.FieldByName('name'          ).AsString;
-      Sym.QualifiedName:= Q.FieldByName('qualified_name').AsString;
-      Sym.Heritage     := Q.FieldByName('heritage'      ).AsString;
-      Sym.StartLine    := Q.FieldByName('start_line'    ).AsInteger;
-      Sym.EndLine      := Q.FieldByName('end_line'      ).AsInteger;
+      Sym.Id           := FldId   .AsLargeInt;
+      Sym.FileId       := FldFile .AsLargeInt;
+      Sym.Kind         := TSymbolKind.FromText(FldKind.AsString);
+      Sym.Name         := FldName .AsString;
+      Sym.QualifiedName:= FldQName.AsString;
+      Sym.Heritage     := FldHer  .AsString;
+      Sym.GenericParams:= FldGP   .AsString;
+      Sym.StartLine    := FldSL   .AsInteger;
+      Sym.EndLine      := FldEL   .AsInteger;
       Lc:= LowerCase(Sym.Name);
       if not NameToCands.ContainsKey(Lc) then NameToCands.Add(Lc, TList<TSymbol>.Create);
       NameToCands[Lc].Add(Sym);
@@ -10885,22 +10958,30 @@ begin
         var Tokens := SplitHeritageList(Q.FieldByName('heritage').AsString);
         for var Ord:= 0 to High(Tokens) do
         begin
-          var AncName:= NormalizeAncestorName(Tokens[Ord]);
+          var AncArgs: string;
+          var AncName:= NormalizeAncestorName(Tokens[Ord], AncArgs);
           if AncName = '' then Continue;
-          var AncArgs: string := ''; { v23: filled by the arity resolver }
+          var AncArity: Integer:= -1;
+          if AncArgs <> '' then AncArity:= GenericArity(AncArgs);
           var RSymId : Int64  := 0;
           var RFileId: Int64  := 0;
           var RKind  : string := '?';
           var Cands  : TList<TSymbol>;
           if NameToCands.TryGetValue(LowerCase(AncName), Cands) then
           begin
-            { A single global definition needs no disambiguation -- the same
+            { v23: arity first (G4), then the unchanged v22 path (G5/G9). A
+              filter that empties the set is a DECLINE, not a fall-through to
+              the unfiltered set -- an edge written `TList<T>` must never bind
+              to the arity-0 TList just because no arity-1 one is in scope.
+              A single surviving candidate needs no disambiguation -- the same
               short-circuit PickCandidate makes at query time, and the reason
               the stub filter in step 1b matters so much. Otherwise hand the
               field to the ONE shared scope rule. It declines (Id = 0) when no
               rule narrows the field to one, and a decline is written out as
               ancestor_kind='?' exactly as before: when unsure, don't claim. }
-            if Cands.Count = 1 then Chosen:= Cands[0]
+            var Narrowed:= FilterCandidatesByArity(Cands.ToArray, AncArity);
+            if Length(Narrowed) = 1 then Chosen:= Narrowed[0]
+            else if Length(Narrowed) = 0 then Chosen:= Default(TSymbol)
             else
             begin
               ScopeUnit:= '' ;
@@ -10909,7 +10990,7 @@ begin
               FileUses.TryGetValue(SymFile, ScopeUses);
               { '' anchor: see this procedure's header -- type_ancestors is
                 mid-rebuild here, so no anchor can honestly be derived. }
-              Chosen:= PickAncestorCandidateByScope(Cands.ToArray, SymFile, ScopeUnit, ScopeUses, '');
+              Chosen:= PickAncestorCandidateByScope(Narrowed, SymFile, ScopeUnit, ScopeUses, '');
             end;
             if Chosen.Id > 0 then
             begin
@@ -11741,11 +11822,16 @@ begin
               ScopeFile:= GetSymbolById(Cur).FileId;
               CurFileId.AddOrSetValue(Cur, ScopeFile);
             end;
-            var CacheKey: string:= IntToStr(ScopeFile) + '|' + Key;
+            { v23: the edge's arity is part of the memo key -- a TList edge
+              written with arguments and one written without resolve to
+              different candidate sets and must not share an answer. }
+            var EdgeArity: Integer:= -1;
+            if A.TypeArgs <> '' then EdgeArity:= GenericArity(A.TypeArgs);
+            var CacheKey: string:= IntToStr(ScopeFile) + '|' + Key + '|' + IntToStr(EdgeArity);
             var Late    : TSymbol;
             if not FLateAncCache.TryGetValue(CacheKey, Late) then
             begin
-              Late:= ResolveTypeNameToClass(A.Name, ScopeFile);
+              Late:= ResolveTypeNameToClass(A.Name, ScopeFile, EdgeArity);
               { CRITERION 5, and this path needs its OWN check. PickCandidate
                 short-circuits on a LONE candidate before any scope rule runs, so
                 a name with exactly one -- possibly wrong-framework -- definition
