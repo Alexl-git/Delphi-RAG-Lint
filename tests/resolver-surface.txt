@@ -51,6 +51,9 @@ src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeCategoryDepth
 src/storage/DRagLint.Storage.SQLite.pas::NormalizeAncestorName
 src/storage/DRagLint.Storage.SQLite.pas::PickAncestorCandidateByScope
 src/storage/DRagLint.Storage.SQLite.pas::SplitHeritageList
+# v23 arity filter in front of rule 0, called by ResolveAncestry's edge loop and
+# by ResolveTypeNameToClass.PickCandidate -- it decides WHICH candidate is written.
+src/storage/DRagLint.Storage.SQLite.pas::FilterCandidatesByArity
 
 # Scope selection. These decide WHICH refs the calls pass rewrites, so a change
 # here changes what ends up stored even though neither writes anything itself.

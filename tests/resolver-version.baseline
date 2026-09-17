@@ -101,4 +101,21 @@
 #
 #   Superseded: 1.1.0-alpha|3be00d360f91f38761edeb97760b40607a28bce7f24044608cfa9d361399c21e
 
-1.2.0-alpha|6f0b03699c2cb23f83c8b5831a0013c92cacbea98da8759f033fd528acad2f2f
+# 2026-09-17: 1.2.0-alpha -> 1.4.0-alpha (extractor batch, Task 12). Ancestor
+#   edges now resolve by ARITY before scope rule 0: FilterCandidatesByArity
+#   (new; added to the manifest) narrows the candidate set in ResolveAncestry's
+#   edge loop and in ResolveTypeNameToClass.PickCandidate, and
+#   NormalizeAncestorName hands back the type arguments. All of that decides
+#   WHICH type_ancestors row is written, so it is DERIVED rows only, no parse
+#   change: remedy is index --all --resolve-only.
+#
+#   ABSORBS AN UNPINNED BUMP. 1.2.0 -> 1.3.0 (bc2e39dc, 2026-09-16: member-access
+#   refs bind properties/fields and accessor calls earn call_edges rows) moved
+#   the constant but never re-pinned this baseline, so the active line below was
+#   still 1.2.0 while the source declared 1.3.0. The guard reported "changed AND
+#   bumped" on every run since -- green, but no longer pinning anything. This
+#   entry pins 1.4.0 against the current surface and closes that gap.
+#
+#   Superseded: 1.2.0-alpha|6f0b03699c2cb23f83c8b5831a0013c92cacbea98da8759f033fd528acad2f2f
+
+1.4.0-alpha|2cda913770535660645b65f9daceb3483b729158dbdf64d2836be374149f536c

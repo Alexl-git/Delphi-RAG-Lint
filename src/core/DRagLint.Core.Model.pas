@@ -104,7 +104,12 @@ const
   /// PROPERTY or FIELD now bind (refs.symbol_id), record their mode and accessor
   /// (member_accesses), and a METHOD accessor earns a call_edges row. DERIVED
   /// rows only, no parse change: remedy is `index --all --resolve-only`.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.3.0-alpha';
+  /// <para>1.3.0-alpha -&gt; 1.4.0-alpha (2026-09-17, extractor batch): ancestor
+  /// edges resolve by ARITY before scope rule 0 (FilterCandidatesByArity;
+  /// ResolveAncestry, ResolveTypeNameToClass, GetTransitiveAncestors);
+  /// NormalizeAncestorName hands back the type arguments. Note: 1.2.0 -&gt; 1.3.0
+  /// (bc2e39dc) was never pinned in the baseline; this pin absorbs it.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.4.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
