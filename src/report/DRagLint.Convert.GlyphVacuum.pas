@@ -768,14 +768,94 @@ begin
   end;
 end;
 
+// (dfm_path, object_path, property), case-insensitive: the merge key for
+// --append. Two rows with the same key are the same instance across runs.
+function RowKey(const R: TGlyphRow): string;
+begin
+  Result:= LowerCase(R.DfmPath) + '|' + LowerCase(R.ObjectPath) + '|' + LowerCase(R.Prop);
+end;
+
+// Read an existing instances.tsv by COLUMN NAME so a file written by an older
+// build (fewer columns) still loads; unknown columns are ignored, missing ones
+// read as ''.
+procedure LoadExistingRows(const APath: string; const AInto: TDictionary<string, TGlyphRow>);
+var
+  Lines: TArray<string>;
+  Hdr  : TArray<string>;
+  Cols : TDictionary<string, Integer>;
+  I, K : Integer;
+  F    : TArray<string>;
+  R    : TGlyphRow;
+  function Col(const AName: string): string;
+  var Ix: Integer;
+  begin
+    if Cols.TryGetValue(AName, Ix) and (Ix < Length(F)) then Result:= F[Ix] else Result:= '';
+  end;
+begin
+  if not TFile.Exists(APath) then Exit;
+  Lines:= TFile.ReadAllLines(APath, TEncoding.UTF8);
+  if Length(Lines) = 0 then Exit;
+  Hdr := Lines[0].Split([#9]);
+  Cols:= TDictionary<string, Integer>.Create;
+  try
+    for K:= 0 to High(Hdr) do Cols.AddOrSetValue(Hdr[K], K);
+    for I:= 1 to High(Lines) do
+    begin
+      if Trim(Lines[I]) = '' then Continue;
+      F:= Lines[I].Split([#9]);
+      R:= Default(TGlyphRow);
+      R.DfmPath:= Col('dfm_path');
+      R.PasUnit:= Col('pas_unit');
+      R.Surface:= Col('surface');
+      R.FormClass:= Col('form_class');
+      R.ObjectPath:= Col('object_path');
+      R.ComponentName:= Col('component_name');
+      R.ComponentClass:= Col('component_class');
+      R.ClassUnit:= Col('class_unit');
+      R.Inherited_:= Col('inherited');
+      R.Prop:= Col('property');
+      R.Kind:= Col('kind');
+      R.Wrapper:= Col('wrapper');
+      R.Format:= Col('format');
+      R.Bytes:= StrToIntDef(Col('bytes'), 0);
+      R.Width:= StrToIntDef(Col('width'), 0);
+      R.Height:= StrToIntDef(Col('height'), 0);
+      R.Bpp:= StrToIntDef(Col('bpp'), 0);
+      R.PaletteEntries:= StrToIntDef(Col('palette_entries'), 0);
+      R.CountProp:= Col('count_prop');
+      R.CountValue:= Col('count_value');
+      R.CountDefault:= Col('count_default');
+      R.CountEffective:= Col('count_effective');
+      R.InferredN:= Col('inferred_n');
+      R.Agree:= Col('agree');
+      R.PayloadSha:= Col('payload_sha');
+      R.ImageFile:= Col('image_file');
+      AInto.AddOrSetValue(RowKey(R), R);
+    end;
+  finally
+    Cols.Free;
+  end;
+end;
+
+// Total order for the WRITE set (merged or not) so a --append run's
+// instances.tsv/classes.tsv/gallery.html do not depend on walk order.
+function CompareRowsForWrite(const L, R: TGlyphRow): Integer;
+begin
+  Result:= CompareText(L.DfmPath, R.DfmPath);
+  if Result = 0 then Result:= CompareText(L.ObjectPath, R.ObjectPath);
+  if Result = 0 then Result:= CompareText(L.Prop, R.Prop);
+end;
+
 function RunGlyphVacuum(const AOpts: TGlyphVacuumOptions;
   out ASummary: TGlyphVacuumSummary; out AError: string): Boolean;
 var
-  State: TVacuumState;
-  Root : string;
-  F    : string;
-  SB   : TStringBuilder;
-  R    : TGlyphRow;
+  State    : TVacuumState;
+  Root     : string;
+  F        : string;
+  SB       : TStringBuilder;
+  R        : TGlyphRow;
+  Merged   : TDictionary<string, TGlyphRow>;
+  WriteRows: TList<TGlyphRow>;
 begin
   Result  := False;
   AError  := '';
@@ -810,11 +890,33 @@ begin
       for F in TDirectory.GetFiles(Root, '*.dfm', TSearchOption.soAllDirectories) do HarvestFile(F, State);
       for F in TDirectory.GetFiles(Root, '*.fmx', TSearchOption.soAllDirectories) do HarvestFile(F, State);
     end;
-    SB.Append(InstancesHeader).Append(#13#10);
-    for R in State.Rows do SB.Append(RowLine(R)).Append(#13#10);
-    WriteUtf8NoBom(TPath.Combine(AOpts.OutDir, 'instances.tsv'), SB.ToString);
-    WriteClassesTsv(AOpts.OutDir, State.Rows, State);
-    WriteGalleryHtml(AOpts.OutDir, State.Rows);
+    if AOpts.Append then
+    begin
+      Merged:= TDictionary<string, TGlyphRow>.Create;
+      try
+        LoadExistingRows(TPath.Combine(AOpts.OutDir, 'instances.tsv'), Merged);
+        for R in State.Rows do Merged.AddOrSetValue(RowKey(R), R);
+        WriteRows:= TList<TGlyphRow>.Create(Merged.Values);
+      finally
+        Merged.Free;
+      end;
+      WriteRows.Sort(TComparer<TGlyphRow>.Construct(
+        function(const L, Rr: TGlyphRow): Integer
+        begin
+          Result:= CompareRowsForWrite(L, Rr);
+        end));
+    end
+    else
+      WriteRows:= TList<TGlyphRow>.Create(State.Rows);
+    try
+      SB.Append(InstancesHeader).Append(#13#10);
+      for R in WriteRows do SB.Append(RowLine(R)).Append(#13#10);
+      WriteUtf8NoBom(TPath.Combine(AOpts.OutDir, 'instances.tsv'), SB.ToString);
+      WriteClassesTsv(AOpts.OutDir, WriteRows, State);
+      WriteGalleryHtml(AOpts.OutDir, WriteRows);
+    finally
+      WriteRows.Free;
+    end;
     State.Summary.DistinctPayloads:= State.Shas.Count;
     ASummary:= State.Summary;
     Result  := True;

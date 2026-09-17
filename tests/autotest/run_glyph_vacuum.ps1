@@ -307,6 +307,21 @@ if (Test-Path $gal) {
   Check 'T5 no script tag' (-not ($g -match '<script'))
 }
 
+# ---- append: same roots twice = same rows; a second root adds, never duplicates --
+$outA = Join-Path $WorkDir 'out-append'
+& $Exe glyph-vacuum --root $src --out $outA | Out-Null
+$n1 = (Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count
+& $Exe glyph-vacuum --root $src --out $outA --append | Out-Null
+$n2 = (Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count
+Check 'T6 append of the same root is idempotent' ($n1 -eq 5 -and $n2 -eq 5) "n1=$n1 n2=$n2"
+& $Exe glyph-vacuum --root $src3 --out $outA --append | Out-Null
+$rowsA = Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t"
+Check 'T6 append of a second root adds its rows' ($rowsA.Count -eq 6) "n=$($rowsA.Count)"
+Check 'T6 merged classes.tsv counts both roots' (((Import-Csv (Join-Path $outA 'classes.tsv') -Delimiter "`t") | Where-Object { $_.component_class -eq 'TabcToggleBtn' }).instances -eq '3')
+Check 'T6 images dir holds one file per distinct sha (4)' ((Get-ChildItem (Join-Path $outA 'images')).Count -eq 4)
+& $Exe glyph-vacuum --root $src3 --out $outA | Out-Null
+Check 'T6 without --append the file is REPLACED' ((Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count -eq 1)
+
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null
 $o2 = & $Exe glyph-vacuum --root $empty --out (Join-Path $WorkDir 'out-empty') 2>&1 | Out-String
