@@ -14,6 +14,22 @@ distinct=208 skipped=0`, 72 distinct component classes in classes.tsv. The
 few instances below cite a `BACKUP\*.dfm` source -- noted per class where it
 matters.
 
+**Re-measured 2026-09-17 after Task 10** (same command, no `--append` --
+replaces the first run's output; `dfm=108 graphics=1016 distinct=208 skipped=0`
+and 72 classes are unchanged, since decoding does not change what gets
+harvested, only whether `format`/`width`/`height` fill in): `ParseStreamedGraphic`
+now also decodes raw SVG text (`TdxSmartGlyph`) and the length-prefixed bare
+bitmap form (`[Int32 LE length][image]`, no class name -- `TBitmap`-typed
+properties such as `TBitBtn.Glyph.Data`), and the EMF sniff requires the real
+`" EMF"` signature instead of the bare `01 00 00 00` iType alone. Rows with a
+non-empty `format` went from **161 of 1016 (before Task 10)** to **947 of 1016**;
+the remaining 69 blank-`format` rows are the genuine non-image blobs in section H
+plus the still-open container/collection cases noted in sections D and E.
+`agree = Y` went from 23 to **25** rows (2 more `TBitBtn` instances now have a
+decoded width/height to compare against their `NumGlyphs`); `agree = N` is still
+zero. See the per-class updates below and the **Gallery review** section at the
+bottom.
+
 **Read this before trusting a row below:** the vacuum harvests every binary
 (`dnkBinary`) property in a `.dfm`, not just ones named Glyph/Picture/Icon/Image.
 Several classes in the corpus have NO image property at all; their binary blob
@@ -21,9 +37,9 @@ is something else entirely that happens to stream as a hex block. Those are
 called out explicitly in section H so nobody writes a glyph rule against them.
 
 Also see the **Vacuum findings (2026-09-17)** block at the top of the grammar
-spec for the two systemic decode gaps this run exposed (SVG glyphs, and a
-4-byte-length-prefixed bare bitmap form) -- they affect nearly every class below
-that shows a blank `format`/`wrapper`.
+spec for the two systemic decode gaps the first run exposed (SVG glyphs, and a
+4-byte-length-prefixed bare bitmap form) -- both are FIXED as of Task 10 (commit
+`2343c0bc`); the notes below record what changed in the corpus, not an open gap.
 
 ---
 
@@ -70,26 +86,36 @@ that shows a blank `format`/`wrapper`.
 
 ### A.2 TBitBtn (VCL, `Vcl.Buttons`)
 
-- **Image property:** `Glyph: TBitmap` (streams as `Glyph.Data`, no wrapper --
-  see the decode-gap note below).
+- **Image property:** `Glyph: TBitmap` (streams as `Glyph.Data`, wrapper empty
+  -- a `TBitmap`-typed property carries no class name, only its own 4-byte
+  length prefix; see the fixed decode gap below).
 - **N:** `NumGlyphs: TNumGlyphs = 1..4` (VCL standard: normal/disabled/down/stay-down).
-- **Corpus:** 3 instances (all from `C:\Projects\DB\ORM3\BACKUP\EWrkSLCT.dfm`,
-  a backup copy under the walked root, not `CLIENT\`), `count_value = 2` on
-  all 3, `count_props NumGlyphs`, `formats ?:3` (unrecognised), `distinct_payloads 3`.
-- **Open -- decode gap (real, not a guess):** all 3 payloads fail to decode:
-  `wrapper`, `format`, `width`, `height`, `bpp` all come back empty despite
-  plausible byte counts (2002, 2002, 502). Read the raw hex for `btn_Cancel`
-  in `BACKUP\EWrkSLCT.dfm`: it starts `CE070000 424D CE070000 ...` -- a
-  little-endian **Int32 byte count (`0x000007CE` = 1998)**, immediately
-  followed by a real `BM...` bitmap whose own internal `bfSize` happens to
-  equal the same 1998. This is a THIRD streaming form, distinct from both
-  forms `DRagLint.Convert.GlyphStrip.ParseStreamedGraphic` currently knows
-  (wrapped-with-classname for `TPicture`, and bare-with-magic-at-offset-0):
-  a `TBitmap`-typed property (no class name needed, the static type already
-  says `TBitmap`) streams `[Int32 size][raw bitmap bytes]`, so the `BM` magic
-  sits at **offset 4**, not offset 0. The decoder's magic-byte fallback only
-  checks offset 0, so it never finds it. See "Vacuum findings" (grammar spec)
-  for the write-up; not fixed in this session (out of scope for Task 9).
+- **Corpus (re-measured after Task 10):** 3 instances (all from
+  `C:\Projects\DB\ORM3\BACKUP\EWrkSLCT.dfm`, a backup copy under the walked
+  root, not `CLIENT\`), `count_value = 2` on all 3, `count_props NumGlyphs`,
+  `formats bmp:3`, `distinct_payloads 3`. `btn_Cancel`/`btn_Ok` decode to
+  36x18 (`inferred_n 2`, `agree Y`); `Panel3.BitBtn2` decodes to 36x19 (not
+  evenly divisible by 2, so `inferred_n`/`agree` stay empty -- a real
+  disagreement between the strip's own pixel height and `NumGlyphs`, not a
+  decode failure).
+- **Fixed (Task 10, commit `2343c0bc`):** all 3 payloads previously failed to
+  decode: `wrapper`, `format`, `width`, `height`, `bpp` all came back empty
+  despite plausible byte counts (2002, 2002, 502). Read the raw hex for
+  `btn_Cancel` in `BACKUP\EWrkSLCT.dfm`: it starts `CE070000 424D CE070000
+  ...` -- a little-endian **Int32 byte count (`0x000007CE` = 1998)**,
+  immediately followed by a real `BM...` bitmap whose own internal `bfSize`
+  happens to equal the same 1998. This is a THIRD streaming form, distinct
+  from both forms `DRagLint.Convert.GlyphStrip.ParseStreamedGraphic` knew
+  before Task 10 (wrapped-with-classname for `TPicture`, and
+  bare-with-magic-at-offset-0): a `TBitmap`-typed property (no class name
+  needed, the static type already says `TBitmap`) streams `[Int32
+  size][raw bitmap bytes]`, so the `BM` magic sits at **offset 4**, not
+  offset 0. `ParseStreamedGraphic` now checks this shape -- `Length(payload)
+  >= 8`, the leading Int32 equal to `Length - 4`, and a recognised magic at
+  offset 4 -- before the class-name-preamble branch, and reports it with an
+  empty `Wrapper` just like the bare-at-offset-0 case. The same shape also
+  explains `TOvcNumberEdit.ButtonGlyph.Data` and `TRzMenuButton.Glyph.Data`
+  in section E below, both `TBitmap`-typed and now decoding as `bmp` too.
 
 ### A.3 cxButtons.TcxButton (target side, for reference)
 
@@ -108,14 +134,20 @@ that shows a blank `format`/`wrapper`.
   now match on the LAST dot-segment of the scalar's name and keep the FULL
   dotted name as `count_prop` (`src\report\DRagLint.Convert.GlyphVacuum.pas`,
   `IsCountPropName`). Commit `2df9601f`.
-- **Corpus (post-fix):** 36 instances, `count_props OptionsImage.NumGlyphs`,
-  `n_distribution 2:3;?:33` (3 instances declare `OptionsImage.NumGlyphs = 2`;
-  33 don't stream it at all -- and `count_default` is empty because `TcxButton`
-  isn't in either index, so there is no declared-default fallback),
-  `inferred_distribution 2:3;1:1;?:32`, `disagreements 0`, `formats bmp:5;?:31`,
-  `distinct_payloads 15`. Most of the 31 unresolved-format instances are SVG
-  glyphs (see grammar-spec findings) -- `class_unit`/`runtime_refs` both empty
-  (class not indexed).
+- **Corpus (post dotted-count fix, `2df9601f`):** 36 instances, `count_props
+  OptionsImage.NumGlyphs`, `n_distribution 2:3;?:33` (3 instances declare
+  `OptionsImage.NumGlyphs = 2`; 33 don't stream it at all -- and `count_default`
+  is empty because `TcxButton` isn't in either index, so there is no
+  declared-default fallback), `inferred_distribution 2:3;1:1;?:32`,
+  `disagreements 0`, `distinct_payloads 15`; `class_unit`/`runtime_refs` both
+  empty (class not indexed).
+- **Corpus (re-measured after Task 10, commit `2343c0bc`):** `formats
+  bmp:5;svg:31` -- the 31 instances that used to report an unresolved format
+  are now confirmed and decoded as SVG (`TdxSmartGlyph` streams raw XML text,
+  no preamble). `width`/`height` stay 0 for the SVG rows by design (an SVG
+  glyph is not a raster strip; geometry is not inferred from vector text), so
+  `agree`/`inferred_n` are unaffected -- still 3 `Y` rows, all from the `bmp`
+  side.
 
 ---
 
@@ -124,9 +156,9 @@ that shows a blank `format`/`wrapper`.
 - **TcxButtonEdit** (8 instances) and **TcxDBButtonEdit** (4 instances): each
   streams up to 4 independent single glyphs, `Properties.Buttons[0..3].Glyph.Data`
   -- these are 4 SEPARATE single-glyph properties on one component, not one
-  strip with a count. No `NumGlyphs`-style property applies. `formats` all `?`
-  (unresolved -- SVG, per the grammar-spec findings). No G-rule needs an N here;
-  each `Buttons[i].Glyph` is its own `single`.
+  strip with a count. No `NumGlyphs`-style property applies. `formats svg:8` /
+  `svg:4` (confirmed SVG and decoded as of Task 10; previously unresolved). No
+  G-rule needs an N here; each `Buttons[i].Glyph` is its own `single`.
 
 ## C. Inferred strip, no declared count property (open question)
 
@@ -151,33 +183,47 @@ that shows a blank `format`/`wrapper`.
   grammar-spec finding (b): `runtime_refs` could not be checked this session
   (none of the three resolve against either `--db` passed), so whether they
   actually appear as glyph sources in `.pas` is still open.
+- **Re-measured after Task 10:** `TcxImageList` now `formats svg:24;?:6` --
+  most of its `ImageInfo[i].Image.Data` items are individual SVG glyphs and
+  decode; 6 items (likely the container's own `Bitmap`, a multi-image strip in
+  a format this decoder does not parse as one image) stay unresolved. `TImageList`
+  (`?:8`) and `TcxImageCollectionItem` (`?:4`) are UNCHANGED by Task 10's fix --
+  neither is SVG nor the length-prefixed bare-bitmap shape, so what their
+  binary actually is remains an open question, not a decode-gap this task
+  covers.
 
 ## E. Single-glyph DevExpress bar/ribbon/misc controls, no count property
 
 `TcxHintStyleController` (1, `HintStyle.Icon.Data`, ico:1), `TcxImage` (6,
-`Picture.Data`, all unresolved format), `TcxMRUEdit` (2,
-`Properties.ButtonGlyph.Data`, unresolved), `TdxBar` (4, `Glyph.Data`,
-unresolved), `TdxBarButton` (337, `Glyph.Data`/`LargeGlyph.Data`, `formats
-bmp:47;jpg:4;png:2;?:284` -- by far the largest single class in the corpus),
-`TdxBarDBNavButton` (328, `Glyph.Data`, `bmp:10;?:318`), `TdxBarEdit` (1,
-unresolved), `TdxBarImageCombo` (5, `bmp:4;?:1`), `TdxBarLargeButton` (77,
-`Glyph.Data`/`HotGlyph.Data`/`LargeGlyph.Data`, `bmp:2;?:75`),
+`Picture.Data`, still unresolved format -- see the open note below), `TcxMRUEdit`
+(2, `Properties.ButtonGlyph.Data`, `svg:2`), `TdxBar` (4, `Glyph.Data`,
+`svg:4`), `TdxBarButton` (337, `Glyph.Data`/`LargeGlyph.Data`, `formats
+bmp:47;jpg:4;png:2;svg:284` -- by far the largest single class in the corpus),
+`TdxBarDBNavButton` (328, `Glyph.Data`, `bmp:10;svg:318`), `TdxBarEdit` (1,
+`svg:1`), `TdxBarImageCombo` (5, `bmp:4;svg:1`), `TdxBarLargeButton` (77,
+`Glyph.Data`/`HotGlyph.Data`/`LargeGlyph.Data`, `bmp:2;svg:75`),
 `TdxBarLookupCombo` (3, `bmp:3`), `TdxBarManager` (2, `HelpButtonGlyph.Data`,
-`bmp:2`), `TdxBarSubItem` (4, `Glyph.Data`/`LargeGlyph.Data`, unresolved),
-`TdxLayoutImageItem` (2, `Image.Data`, unresolved), `TdxPDFViewer` (3, three
-`OptionsNavigationPane.*.Glyph.Data` properties, unresolved), `TdxRibbon` (12,
-`ApplicationButton.Glyph.Data`/`BackgroundImage.Data`, unresolved),
-`TdxScreenTip` (4, `Description.Glyph.Data`, unresolved), `TOvcNumberEdit` (3,
-`ButtonGlyph.Data`, unresolved), `TRzMenuButton` (2, `Glyph.Data`, unresolved).
+`bmp:2`), `TdxBarSubItem` (4, `Glyph.Data`/`LargeGlyph.Data`, `svg:4`),
+`TdxLayoutImageItem` (2, `Image.Data`, `svg:2`), `TdxPDFViewer` (3, three
+`OptionsNavigationPane.*.Glyph.Data` properties, `svg:3`), `TdxRibbon` (12,
+`ApplicationButton.Glyph.Data`/`BackgroundImage.Data`, `svg:12`),
+`TdxScreenTip` (4, `Description.Glyph.Data`, `svg:4`), `TOvcNumberEdit` (3,
+`ButtonGlyph.Data`, `bmp:3`), `TRzMenuButton` (2, `Glyph.Data`, `bmp:2`).
 
 None of these declare a count property; every instance is `kind = single` or
 `kind = strip` purely from inferred geometry (width/height), never from a
-declared N. **Every "unresolved format" above is very likely the SVG-glyph gap**
-(see grammar-spec findings) -- confirmed by hand-decoding two representative
-payloads (`TcxButton.OptionsImage.Glyph.Data` in `CMMGetDataMultiplyer.dfm` and
-`TdxBarButton.Glyph.Data` in `Blueprint4 - Copy.dfm`): both begin
-`3C3F786D6C2076657273696F6E...` = `<?xml version=...`, i.e. a `TdxSmartGlyph`
-SVG document, not a raster image at all.
+declared N. **The "unresolved format" gap for most of the list above was the
+SVG-glyph gap**, FIXED in Task 10 (commit `2343c0bc`) -- confirmed by
+hand-decoding two representative payloads (`TcxButton.OptionsImage.Glyph.Data`
+in `CMMGetDataMultiplyer.dfm` and `TdxBarButton.Glyph.Data` in `Blueprint4 -
+Copy.dfm`): both begin `3C3F786D6C2076657273696F6E...` = `<?xml version=...`,
+i.e. a `TdxSmartGlyph` SVG document, not a raster image at all, and both now
+report `format svg`. `TOvcNumberEdit`/`TRzMenuButton` were the OTHER gap
+(the length-prefixed bare `TBitmap`, see section A.2) and now report `format
+bmp`. **Still open:** `TcxImage.Picture.Data` (6 instances) remains
+unresolved after both fixes -- it is neither SVG text nor the length-prefixed
+bare-bitmap shape, so its actual wire format is still unknown; do not assume
+it is SVG without checking the raw bytes.
 
 ## F. Form icons -- single ICO, no count property (39 classes, one section)
 
@@ -214,11 +260,14 @@ recognisable and have `width=height=0`, confirmed by reading the raw bytes:
 - **TOvcDbSimpleField, TOvcSimpleField, TOvcTCSimpleField** (Orpheus numeric
   fields; 2, 18, 16 instances respectively): `RangeHigh`/`RangeLow` are 10-byte
   `Extended`/`Currency` bounds streamed as a binary block, not images. One pair
-  of `TOvcSimpleField.RangeLow` instances sniffs as `format = emf` -- this is a
-  **false-positive magic-byte collision**: the payload is only 10 bytes and an
-  EMF signature needs ~40 bytes plus the `" EMF"` marker, so `SniffImageFormat`'s
-  EMF check is under-specified (matches on too little of the header). See
-  grammar-spec findings, item (c).
+  of `TOvcSimpleField.RangeLow` instances used to sniff as `format = emf` --
+  this was a **false-positive magic-byte collision**: the payload is only 10
+  bytes and a real EMF signature needs ~40 bytes plus the `" EMF"` marker, so
+  the old `SniffImageFormat` EMF check (bare `01 00 00 00` at offset 0) was
+  under-specified. **Fixed in Task 10** (commit `2343c0bc`): the EMF check now
+  requires the actual ENHMETAHEADER `" EMF"` signature 40 bytes into the
+  header, and the re-measured corpus shows all three classes reporting
+  `formats ?:N` -- no `emf` false positive anywhere in the run.
 - **TQuery** (3 instances): `Data` is the query's own binary blob (parameter
   set or similar), 1374-1962 bytes, not an image.
 - **TcxTreeList** (4 instances): `Data` is the tree's saved layout/state blob,
@@ -230,14 +279,18 @@ recognisable and have `width=height=0`, confirmed by reading the raw bytes:
 
 ## Gallery review (step 2, no browser opened per instructions)
 
-`agree` is `Y` for exactly 23 of 1016 rows and `N` for **zero** rows in this
-corpus (993 rows have no `agree` value at all -- either no count property or no
-inferred N to compare against). The 23 `Y` rows are the 20 `TabcToggleBtn`
-instances (declared 4, inferred 4) plus 3 of the 36 `TcxButton` instances
-(declared 2, inferred 2). **There is no class in this run with `agree = N`**,
-so there is nothing to report for "what the separators show for every class
-with agree = N" -- the corpus currently contains zero declared/inferred
-disagreements once the dotted-count fix is applied. (Before the fix, `TcxButton`
-would have shown as all-`?`/no-agree rather than a real disagreement, since its
-count property was never being read at all -- not the same thing as a genuine
-`N`.)
+**Re-measured after Task 10:** `agree` is `Y` for **25** of 1016 rows (was 23
+before Task 10's decode fixes) and `N` for **zero** rows in this corpus (991
+rows have no `agree` value at all -- either no count property or no inferred N
+to compare against). The 25 `Y` rows are the 20 `TabcToggleBtn` instances
+(declared 4, inferred 4), 3 of the 36 `TcxButton` instances (declared 2,
+inferred 2), and 2 of the 3 `TBitBtn` instances (declared 2, inferred 2 --
+newly comparable now that the length-prefixed bare bitmap decodes; the third
+`TBitBtn` instance, `Panel3.BitBtn2`, decodes to 36x19, not evenly divisible by
+its `NumGlyphs = 2`, so it stays without an `inferred_n`/`agree` value rather
+than manufacturing a wrong one). **There is still no class in this run with
+`agree = N`**, so there is nothing to report for "what the separators show for
+every class with agree = N" -- the corpus contains zero declared/inferred
+disagreements. (Before the dotted-count fix, `TcxButton` would have shown as
+all-`?`/no-agree rather than a real disagreement, since its count property was
+never being read at all -- not the same thing as a genuine `N`.)
