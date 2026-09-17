@@ -679,4 +679,15 @@
 #   the EXTRACTOR version would buy a ~5-hour re-parse to alter not one stored
 #   parse. Same shape as the Freshness.pas and ManifestWrite.pas entries above:
 #   a src\index file that is not the extractor.
-1.16.0-alpha|cf9cedf86c60488c11634fa4dfa649137448f7b57bb4d59c04ce2ab7f4eeae50
+# 2026-09-17: hash updated WITHOUT a version bump, per the rule above.
+#   src\index\DRagLint.Index.Manifest.pas changed: TDocSettings gained the
+#   'Catches:' doc-fact knob (docs.dialog_routines / docs.max_handles --
+#   INBOX-report-exceptions-raised-and-handled gap 3), parsed, merged,
+#   validated, saved and read back by LoadDocHandlesOptions. That is
+#   MANIFEST CONFIG consumed at DOC time; the miner itself lives in
+#   src\doc\DRagLint.Doc.Facts.pas, outside this surface, and reads source
+#   lines, not the index. No byte of source parses differently and no stored
+#   row changes. Same shape as the ManifestWrite.pas entry above. The same
+#   change also ran `document --project` to a fixed point, which rewrote
+#   managed DOC COMMENTS in src\index and src\parser units -- comments only.
+1.16.0-alpha|baf135941eb2f788bdbeabefc01c83f699910093468b3877970401f84d368e3c

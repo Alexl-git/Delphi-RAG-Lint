@@ -21,6 +21,7 @@ uses
   , System.IOUtils
   , System.JSON
   , System.Generics.Collections
+  , DRagLint.Core.Model      // dl:unit DRagLint.Core.Model accepted -- TDocHandlesOptions (the docs.dialog_routines / max_handles knob) and drag_home_dir travel with the manifest that names them
   ;
 
 type
@@ -63,6 +64,7 @@ type
     /// <para>Called from: DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
     /// <para>Calls: Default</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Defaults: TIndexSettings; static;
@@ -104,13 +106,22 @@ type
     /// analyzed routine, so changing this threshold takes effect on the very
     /// next `document` run with no reindex required.</summary>
     ComplexityMin: Integer;
-    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20, MaxCallers=5, AccessorTrivialMaxLines=2, ComplexityMin=10).</summary>
+    /// <summary>The 'Catches:' fact knob (docs.dialog_routines / docs.max_handles):
+    /// which routines count as showing a dialog in an exception handler, and the
+    /// cap on rendered entries. An absent dialog_routines key means the built-in
+    /// VCL four (TDocHandlesOptions.Defaults); an explicit [] means NONE, which is
+    /// the feature's off switch. Applied at doc time like ComplexityMin -- no
+    /// reindex is needed for a change to take effect.</summary>
+    Handles: TDocHandlesOptions;
+    /// <summary>Record with all fields at documented defaults (MaxReturnCases=20, MaxCallers=5, AccessorTrivialMaxLines=2, ComplexityMin=10, Handles=TDocHandlesOptions.Defaults).</summary>
     /// <returns><!-- drag-lint:auto -->TDocSettings -- Observed: Default(TDocSettings).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
-    /// <para>Calls: Default</para>
+    /// <para>Calls: Default, DRagLint.Core.Model.TDocHandlesOptions.Defaults</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Model.TDocHandlesOptions.Defaults"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Defaults: TDocSettings; static;
@@ -128,17 +139,19 @@ type
   /// <param name="skMaxCallers"><!-- drag-lint:auto --></param>
   /// <param name="skAccessorTrivialMaxLines"><!-- drag-lint:auto --></param>
   /// <param name="skComplexityMin"><!-- drag-lint:auto --></param>
+  /// <param name="skDialogRoutines">docs.dialog_routines was present (an explicit [] counts as present -- it is the off switch).</param>
+  /// <param name="skMaxHandles">docs.max_handles was present.</param>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Index.Manifest.pas), DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases, skMaxCallers, skAccessorTrivialMaxLines, skComplexityMin );
+  TSettingsKeySet = set of ( skCurrentProjectsIndexing, skDefaultPlatform, skSizeGuardMB, skEnginePath, skMaxJobs, skMaxParseFileKB, skMaxReturnCases, skMaxCallers, skAccessorTrivialMaxLines, skComplexityMin, skDialogRoutines, skMaxHandles );
 
   /// <summary>Describes one named index section within the manifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.LoadSectionToControls (Config.IndexesFrame.pas), DRagLint.CLI.DetectPlatformFromDproj (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas) (+11 more)</para>
+  /// <para>Used by: DRagLint.CLI.DetectPlatformFromDproj (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) (+8 more)</para>
   /// <para>Used in units: Config.IndexesFrame, DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.Manifest, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -171,7 +184,7 @@ type
   /// <summary>Complete parsed and merged manifest for a drag-lint installation.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas) (+33 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas) (+31 more)</para>
   /// <para>Used in units: Config.MainForm, DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Manifest, DRagLint.Index.ManifestWrite, DRagLint.Index.Plan, DragLint.Plugin.DbResolver</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -208,7 +221,7 @@ type
   /// <summary>Load, parse, validate and save drag-lint index manifests.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas) (+23 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas) (+22 more)</para>
   /// <para>Used in units: Config.MainForm, DRagLint.CLI, DRagLint.Index.Manifest, DRagLint.Index.ManifestWrite, DragLint.Plugin.DbResolver</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -224,11 +237,13 @@ type
       /// else to AEngineDir.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+14 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+16 more)</para>
       /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, SameText, Writeln</para>
       /// <para>Returns: Default(TIndexManifest); GlobalManifest; LocalManifest</para>
-      /// <para>Complexity: 24 (cyclomatic, outer body), 129 lines (full implementation)</para>
+      /// <para>Complexity: 26 (cyclomatic, outer body), 131 lines (full implementation)</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TDocSettings.Defaults"/>
       /// <seealso cref="DRagLint.Index.Manifest.TIndexSettings.Defaults"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.MergeSections"/>
@@ -244,10 +259,11 @@ type
       /// <returns>Populated TIndexManifest.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+7 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+6 more)</para>
       /// <para>Calls: DRagLint.Index.Manifest.TManifestIO.ParseTextEx</para>
       /// <para>Returns: ParseTextEx(AJson, ARootDir, Keys)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
@@ -266,10 +282,11 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas)</para>
-      /// <para>Calls: Default, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, Include, TJSONArray, TJSONObject</para>
+      /// <para>Calls: Default, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, Include, TJSONArray, TJSONObject, Trim</para>
       /// <para>Returns: Default(TIndexManifest)</para>
-      /// <para>Complexity: 25 (cyclomatic, outer body), 131 lines (full implementation)</para>
+      /// <para>Complexity: 29 (cyclomatic, outer body), 153 lines (full implementation)</para>
       /// <para>Mutates: ASettingsKeys (out)</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.JsonStrArr"/>
       /// <seealso cref="DRagLint.Index.Manifest.ParseProjectsIndexing"/>
       /// <seealso cref="DRagLint.Index.Manifest.ParseSection"/>
@@ -289,9 +306,10 @@ type
       /// <para>Called from: DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas)</para>
       /// <para>Calls: DRagLint.Index.Manifest.ProjectsIndexingToStr</para>
       /// <para>Returns: TJSONObject.Create</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 100 lines (full implementation)</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 106 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.ProjectsIndexingToStr"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
@@ -313,9 +331,10 @@ type
       /// <param name="APath">Destination file path.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: Config.MainForm.TMainForm.btnSaveClick (Config.MainForm.pas) ?, Config.MainForm.TMainForm.FormShow (Config.MainForm.pas) ?, DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), DragLint.Plugin.Editor.InsertCompletionAtCursor (DragLint.Plugin.Editor.pas) ?</para>
+      /// <para>Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Core.JsonFile.WriteJsonFileAtomic, DRagLint.Index.Manifest.TManifestIO.ToJson</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.JsonFile.WriteJsonFileAtomic"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
@@ -331,11 +350,12 @@ type
       /// <returns>Empty string if valid; first error message otherwise.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: Config.MainForm.TMainForm.btnSaveClick (Config.MainForm.pas) ?, Config.MainForm.TMainForm.FormShow (Config.MainForm.pas) ?, DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Index.Manifest.TIndexManifest.FindSection, Format</para>
       /// <para>Returns: ''; Format('Section %d has an empty name', [I]); Format('Duplicate section name: "%s"', [Sec.Name]); Format('Section "%s" has no include paths and source is not registry-libraries', [Sec.Name]); Format('Section "%s" dedupAgainst references unknown section "%s"', [Sec.Name, DA])</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 63 lines (full implementation)</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 64 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TIndexManifest.FindSection"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
@@ -396,7 +416,7 @@ type
 /// data loss once the caller passes --rebuild, which clears the whole DB.
 /// Pure: no file system access, no globals. Safe to call from any thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas), DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.NormalizeProjectPath, ExtractFileExt, SameText</para>
 /// <para>Returns: pdmNone; pdmUnique</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 43 lines (full implementation)</para>
@@ -420,7 +440,7 @@ function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: s
 /// Handles relative paths, empty paths (defaults), and environment variable expansion.
 /// Used by DB selection logic to match resolved DBs back to manifest sections.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.ManifestProjectFileForDb (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Index.Manifest.SectionProjectFile, ExpandFileName, ExtractFilePath</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Manifest.SectionProjectFile"/>
@@ -438,7 +458,7 @@ function ExpandSectionDb(const AManifest: TIndexManifest; const ASection: TIndex
 /// project indexes that project's compile closure, so a second project target
 /// would be a second section -- which is how the manifest already models it.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.LintAnchorDir (DRagLint.CLI.pas), DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.ManifestProjectFileForDb (DRagLint.CLI.pas), DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas)</para>
 /// <para>Calls: ExpandFileName, ExtractFileExt, LowerCase</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
@@ -460,7 +480,7 @@ function SectionProjectFile(const AManifest: TIndexManifest; const ASection: TIn
 /// folder: see ResolveProjectDb and ResolveReadDbs.
 /// Pure: no file system access. Safe to call from any thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas), DragLint.Plugin.DbResolver.ManifestDbForFile (DragLint.Plugin.DbResolver.pas) ?</para>
+/// <para>Called from: DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas)</para>
 /// <para>Calls: DRagLint.Index.Manifest.ExpandSectionDb, ExpandFileName, ExtractFileExt, ExtractFilePath, IncludeTrailingPathDelimiter, LowerCase, Pos, SameText</para>
 /// <para>Returns: ''; ExpandSectionDb(AManifest, Sec)</para>
 /// <para>Complexity: 13 (cyclomatic, outer body), 39 lines (full implementation)</para>
@@ -499,7 +519,7 @@ function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: strin
 /// right at a fraction of the cost.
 /// Pure: no file system access. Safe to call from any thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DragLint.Plugin.DbResolver.ManifestReadDbs (DragLint.Plugin.DbResolver.pas) ?</para>
+/// <para>Called from: DRagLint.CLI.ResolveCompileCheckDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Index.Manifest.ResolveFolderDb, DRagLint.Index.Manifest.ResolveProjectDb, SameText</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveFolderDb"/>
@@ -553,7 +573,7 @@ type
 /// keeps library-source browsing working.
 /// Pure apart from AContains. Cost is one probe per candidate (small list).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
 /// <para>Calls: AContains, SameText</para>
 /// <para>Returns: ACandidates; Holders + Others</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 49 lines (full implementation)</para>
@@ -585,17 +605,38 @@ function OrderDbsByMembership(const ACandidates: TArray<string>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Calls: DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, ParamStr</para>
 /// <para>Returns: 10; DocManifest.Docs.ComplexityMin</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function LoadDocComplexityMin: Integer;
 
+/// <summary>Reads the 'Catches:' fact knob (docs.dialog_routines and
+/// docs.max_handles) for every renderer of the managed facts block --
+/// `document`, doc-drift, `hover` and the LSP -- through the same manifest
+/// discovery LoadDocComplexityMin uses, and for the same reason it lives here
+/// rather than in DRagLint.CLI: the LSP server must load the IDENTICAL set
+/// `document` writes with, or hover and the file disagree.</summary>
+/// <returns>The configured options. Best-effort: any load failure falls back
+/// to TDocHandlesOptions.Defaults (the VCL four, cap 8), so a doc verb never
+/// errors out over a manifest problem.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Core.Model.TDocHandlesOptions.Defaults, DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, ParamStr</para>
+/// <para>Returns: TDocHandlesOptions.Defaults; DocManifest.Docs.Handles</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Core.Model.TDocHandlesOptions.Defaults"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function LoadDocHandlesOptions: TDocHandlesOptions;
+
 implementation
 
 uses
   DRagLint.Core.JsonFile   { WriteJsonFileAtomic -- pretty, no BOM, atomic }
-  , DRagLint.Core.Model
   ;
 
 { ---------------------------------------------------------------------- }
@@ -724,6 +765,7 @@ begin
   Result.MaxCallers              := 5;
   Result.AccessorTrivialMaxLines := 2;  // ADP1 T2: ON by default (see field comment).
   Result.ComplexityMin           := 10; // ADP2 T3: see field comment.
+  Result.Handles                 := TDocHandlesOptions.Defaults; // gap 3: see field comment.
 end;
 
 { ---------------------------------------------------------------------- }
@@ -855,6 +897,28 @@ begin
       begin
         Result.Docs.ComplexityMin:= NCx.AsInt;
         Include(ASettingsKeys, skComplexityMin);
+      end;
+
+      // gap 3 (Catches:): docs.dialog_routines -- an ARRAY of routine names.
+      // Present REPLACES the built-in set, and an explicit [] is the off
+      // switch, so the key is recorded as present even when it is empty --
+      // the merge must carry "none" over the global default, not drop it.
+      // A non-string element is skipped rather than failing the whole load.
+      var JDlg: TJSONArray:= JDocs.GetValue('dialog_routines') as TJSONArray;
+      if JDlg <> nil then
+      begin
+        Result.Docs.Handles.DialogRoutines:= nil;
+        for var JName in JDlg do
+          if (JName is TJSONString) and (Trim(JName.Value) <> '') then
+            Result.Docs.Handles.DialogRoutines:= Result.Docs.Handles.DialogRoutines + [Trim(JName.Value)];
+        Include(ASettingsKeys, skDialogRoutines);
+      end;
+
+      var NH: TJSONNumber:= JDocs.GetValue('max_handles') as TJSONNumber;
+      if NH <> nil then
+      begin
+        Result.Docs.Handles.MaxHandles:= NH.AsInt;
+        Include(ASettingsKeys, skMaxHandles);
       end;
     end;
 
@@ -1008,6 +1072,8 @@ begin
     if skMaxCallers              in LocalKeys then Result.Docs.MaxCallers                := LocalManifest.Docs.MaxCallers;
     if skAccessorTrivialMaxLines in LocalKeys then Result.Docs.AccessorTrivialMaxLines   := LocalManifest.Docs.AccessorTrivialMaxLines;
     if skComplexityMin           in LocalKeys then Result.Docs.ComplexityMin             := LocalManifest.Docs.ComplexityMin;
+    if skDialogRoutines          in LocalKeys then Result.Docs.Handles.DialogRoutines    := LocalManifest.Docs.Handles.DialogRoutines;
+    if skMaxHandles              in LocalKeys then Result.Docs.Handles.MaxHandles        := LocalManifest.Docs.Handles.MaxHandles;
     Result.RootDir:= LocalManifest.RootDir;
     MergeSections(Result, LocalManifest);
   end // if
@@ -1045,6 +1111,7 @@ begin
   if AManifest.Docs.MaxCallers < 0 then Exit('docs.max_callers must be >= 0');
   if AManifest.Docs.AccessorTrivialMaxLines < 0 then Exit('docs.accessor_trivial_max_lines must be >= 0');
   if AManifest.Docs.ComplexityMin < 0 then Exit('docs.complexity_min must be >= 0');
+  if AManifest.Docs.Handles.MaxHandles < 0 then Exit('docs.max_handles must be >= 0');
   Names:= TStringList.Create;
   Names.CaseSensitive:= False;
   try
@@ -1133,6 +1200,12 @@ begin
   JDocs.AddPair('max_callers', TJSONNumber.Create(AManifest.Docs.MaxCallers));
   JDocs.AddPair('accessor_trivial_max_lines', TJSONNumber.Create(AManifest.Docs.AccessorTrivialMaxLines));
   JDocs.AddPair('complexity_min', TJSONNumber.Create(AManifest.Docs.ComplexityMin));
+  { gap 3: written back verbatim, INCLUDING an empty list -- an explicit []
+    is the off switch and a round-trip must not turn it back into the default. }
+  var JDlg:= TJSONArray.Create;
+  for var Name in AManifest.Docs.Handles.DialogRoutines do JDlg.Add(Name);
+  JDocs.AddPair('dialog_routines', JDlg);
+  JDocs.AddPair('max_handles', TJSONNumber.Create(AManifest.Docs.Handles.MaxHandles));
 
   { indexes }
   JIndexes:= TJSONObject.Create;
@@ -1484,6 +1557,19 @@ begin
     Result:= DocManifest.Docs.ComplexityMin;
   except
     Result:= 10;
+  end;
+end;
+
+function LoadDocHandlesOptions: TDocHandlesOptions;
+var
+  DocManifest: TIndexManifest;
+begin
+  Result:= TDocHandlesOptions.Defaults;
+  try
+    DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    Result:= DocManifest.Docs.Handles;
+  except
+    on Exception do Result:= TDocHandlesOptions.Defaults; { best-effort, as every loader above }
   end;
 end;
 

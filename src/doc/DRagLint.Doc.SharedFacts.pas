@@ -289,6 +289,7 @@ type
     /// <para>Calls: CompareText</para>
     /// <para>Returns: CompareText(X, Y)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts"/>
@@ -311,6 +312,7 @@ type
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
     /// <para>Returns: DRagLint.Doc.SharedFacts.StoredBlockBody(AText)</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
@@ -377,9 +379,10 @@ const
     -- this array is how a fact's text is bounded in the FLATTENED stored form,
     so an unregistered label makes the PRECEDING fact's slice swallow it, and the
     residual compare then reports drift on a block that is perfectly correct. }
-  ALL_LABELS: array[0..20] of string = (
+  { gap 3: 'Catches:' joins the list, for the reason 'Directives:' did. }
+  ALL_LABELS: array[0..21] of string = (
     'Called from:', 'Used by:', 'Calls:', 'Returns:', 'Used in units:',
-    'Complexity:', 'Owns returned:', 'Handles:', 'SQL:', 'Covered by:',
+    'Complexity:', 'Owns returned:', 'Handles:', 'Catches:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',
     'Reads:', 'Writes:', 'Recursive', 'UI thread only', 'Pure',
     'Directives:');

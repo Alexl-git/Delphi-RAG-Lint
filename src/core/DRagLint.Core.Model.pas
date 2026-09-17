@@ -109,7 +109,7 @@ const
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Model.pas), declaration (DRagLint.Doc.Facts.pas), declaration (DragLint.Plugin.StructureForm.pas), DRagLint.CLI.DoSchema.ColumnSemantics (DRagLint.CLI.pas), DRagLint.Core.Model.TSymbolKindHelper.FromText (DRagLint.Core.Model.pas) (+20 more)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas), declaration (DRagLint.Doc.Facts.pas), declaration (DRagLint.Index.CallResolver.pas), DRagLint.CLI.DoSchema.ColumnSemantics (DRagLint.CLI.pas), DRagLint.Core.Model.TSymbolKindHelper.FromText (DRagLint.Core.Model.pas) (+19 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSymbolKind = (  // dl:ok duplicate-global-decl@b16d -- DragLint.Plugin.StructureCache deliberately re-declares this; it is a design-time BPL that shells out to the CLI and uses only System.* units, so depending on Core.Model would link the whole engine into the IDE package
@@ -139,6 +139,7 @@ type
     /// <para>Called from: DRagLint.Storage.SQLite.ReadSymbolFromQuery (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTypeCandidates (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetUnitLevelRoutines (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveHelpers (DRagLint.Storage.SQLite.pas)</para>
     /// <para>Calls: SameText</para>
     /// <para>Pure</para>
+    /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.ToText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -182,8 +183,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoQueryFind (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DropRefsThatCannotBeCallers (DRagLint.CLI.pas), DRagLint.CLI.PrintSymbols (DRagLint.CLI.pas), DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas) (+204 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.PropTree, DRagLint.Core.DeclText, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.FlowChecks (+29 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ComputeDelta (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.InterfaceSymbolsOf (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.WriteBaselineFile (DRagLint.Analysis.LintTree.pas) (+220 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint, DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.PropTree, DRagLint.Core.DeclText, DRagLint.Core.Indexer, DRagLint.Core.Interfaces (+32 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSymbol = record
@@ -313,7 +314,7 @@ type
   /// when the ancestor was linked to a defining symbol (SymbolId/FileId set).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding.SurfaceOf.Harvest (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.IsTestRoutine (DRagLint.Doc.SymbolFacts.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas) (+10 more)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding.SurfaceOf.Harvest (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.IsTestRoutine (DRagLint.Doc.SymbolFacts.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas) (+12 more)</para>
   /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Diagnostics.AstChecks, DRagLint.Doc.Facts, DRagLint.Doc.SymbolFacts, DRagLint.Index.CallResolver, DRagLint.Lint.ProjectRules, DRagLint.LSP.Completion, DRagLint.Resolver.TypeAt, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -341,7 +342,15 @@ type
     /// <param name="AName">Candidate ancestor name; compared case-insensitively.
     /// An empty AName never matches.</param>
     /// <returns>True when AName equals Name or ResolvedName.</returns>
-    /// <remarks>Pure; no side effects.</remarks>
+    /// <remarks>
+    /// Pure; no side effects.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.BuildPropTree.IsComponentType (DRagLint.Convert.PropTree.pas) ?, DRagLint.Doc.SymbolFacts.IsTestRoutine (DRagLint.Doc.SymbolFacts.pas), DRagLint.Lint.ProjectRules.CollectUsesGlobalCensus.IsDataModuleClass (DRagLint.Lint.ProjectRules.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ImplementsInterface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsDescendantOf (DRagLint.Storage.SQLite.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Name, ResolvedName</para>
+    /// <para>Pure</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function MatchesName(const AName: string): Boolean;
   end;
 
@@ -365,8 +374,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas), DRagLint.CLI.DropRefsThatCannotBeCallers (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas), DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) (+51 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Core.Interfaces, DRagLint.Doc.Facts, DRagLint.Index.CallResolver, DRagLint.Lint.ClassMetrics, DRagLint.Lint.ProjectRules, DRagLint.LSP.Server, DRagLint.MCP.Server (+8 more)</para>
+  /// <para>Used by: DRagLint.Analysis.LintTree.CollectNameJoinFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectRoutineFindings (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.DropRefsThatCannotBeCallers (DRagLint.CLI.pas), DRagLint.CLI.PrintReferences (DRagLint.CLI.pas), DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) (+55 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Core.Interfaces, DRagLint.Doc.Facts, DRagLint.Index.CallResolver, DRagLint.Lint.ClassMetrics, DRagLint.Lint.ProjectRules, DRagLint.LSP.Server (+9 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReference = record
@@ -477,6 +486,10 @@ type
   /// the depth-carrying form ARTIFICIALLY CAPPED at 200 already returns 4,124
   /// rows -- 53x -- and is non-terminating without the cap. IsDirect carries
   /// the only distinction the fan-out actually needs.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectNameJoinFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDependentFile = record
     /// <summary>files.id of the dependent.</summary>
@@ -581,8 +594,8 @@ type
   /// string (escapes/`#nn`/continuations resolved); never empty.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Parser.DFM.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.WalkProperty (DRagLint.Parser.DFM.pas) (+7 more)</para>
-  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, DRagLint.Parser.Sql, DRagLint.Storage.SQLite</para>
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Parser.DFM.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Lint.ProjectRules.CollectDfmPropertyNotDeclared (DRagLint.Lint.ProjectRules.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Lint.ProjectRules, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, DRagLint.Parser.Sql, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TStringLiteral = record
@@ -642,7 +655,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.EmitHint (DRagLint.CLI.pas), DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.ScopeWalkFindingsToClosure (DRagLint.CLI.pas) (+141 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.EmitHint (DRagLint.CLI.pas), DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.ScopeWalkFindingsToClosure (DRagLint.CLI.pas) (+143 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.FlowChecks, DRagLint.Diagnostics.NamingChecks, DRagLint.Lint.Baseline, DRagLint.Lint.ClassMetrics, DRagLint.Lint.DocRules (+9 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -754,8 +767,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.CLI.SuggestUnitForSymbol (DRagLint.CLI.pas) (+19 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Lint.ProjectChecks, DRagLint.Lint.ProjectRules, DRagLint.Parser.Delphi13, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.TextEdit, DRagLint.Storage.SQLite</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), declaration (DRagLint.Analysis.SurfaceFingerprint.pas), DRagLint.Analysis.LintTree.InterfaceUsesOf (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceFingerprint.InterfaceUsesLine (DRagLint.Analysis.SurfaceFingerprint.pas) (+24 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint, DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Lint.ProjectChecks, DRagLint.Lint.ProjectRules, DRagLint.Parser.Delphi13, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.TextEdit, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUnitUse = record
@@ -880,7 +893,7 @@ type
   /// collapsed: raw comparison calls ORM3's tbltdistrcount a difference on 'integer' versus
   /// 'Integer', and a case difference is not a semantic one.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls (DRagLint.Lint.ProjectRules.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindDuplicateGlobalDecls (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Storage.SQLite.pas), DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls (DRagLint.Lint.ProjectRules.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindDuplicateGlobalDecls (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindGlobalDeclSites (DRagLint.Storage.SQLite.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Lint.ProjectRules, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -1028,6 +1041,51 @@ type
     AllowBlankLineGap   : Integer;
   end;
 
+  /// <summary>How the 'Catches:' doc fact (the exceptions a routine HANDLES,
+  /// INBOX-report-exceptions-raised-and-handled gap 3) is rendered: which
+  /// routines count as "showing a dialog", and how many entries the line
+  /// may carry. Parsed from the manifest's docs block (docs.dialog_routines,
+  /// docs.max_handles) and threaded to every renderer -- document, doc-drift,
+  /// hover, LSP -- so the writer and the checker cannot disagree.</summary>
+  /// <remarks>
+  /// DialogRoutines is matched on the LAST dotted segment, case-insensitively,
+  /// so a configured 'Application.MessageBox' and a bare 'MessageBox' both hit
+  /// a call written either way. That looseness is deliberate: the fact carries
+  /// the routine that matched as its witness, so a false hit is visible.
+  /// An EMPTY list is the feature's off switch (no 'dialog:' disposition is
+  /// ever emitted) -- the escape hatch for a project whose error dialog is a
+  /// method on a singleton. A zeroed record is therefore "dialogs off, cap at
+  /// the default", not "invalid"; construct with Defaults for the built-in set.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Model.pas), declaration (DRagLint.Doc.Batch.pas), declaration (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Core.Model, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Doc.Facts, DRagLint.Index.Manifest</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocHandlesOptions = record
+    /// <summary>Routine names whose call in a handler body makes the
+    /// disposition 'dialog: name'. Empty = never.</summary>
+    DialogRoutines: TArray<string>;
+    /// <summary>Cap on rendered entries; overflow is a visible '(+N more)'.
+    /// 0 or negative = the default (8).</summary>
+    MaxHandles    : Integer;
+    /// <summary>The built-in dialog set (ShowMessage, MessageDlg,
+    /// Application.MessageBox, Application.HandleException) and a cap of 8.</summary>
+    /// <returns>A fully populated record.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults (DRagLint.Doc.Facts.pas), DRagLint.Index.Manifest.LoadDocHandlesOptions (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TDocSettings.Defaults (DRagLint.Index.Manifest.pas)</para>
+    /// <para>Pure</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function Defaults: TDocHandlesOptions; static;
+  end;
+
+const
+  /// <summary>Default cap on 'Catches:' entries; see TDocHandlesOptions.MaxHandles.</summary>
+  DOC_HANDLES_DEFAULT_CAP = 8;
+
+type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.Core.Model.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas) (+5 more)</para>
@@ -1173,8 +1231,8 @@ type
   /// or msbuild output).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.NormalizeFindings (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+13 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Completion, DRagLint.MCP.Server, DRagLint.Storage.SQLite</para>
+  /// <para>Used by: DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.CLI.NormalizeFindings (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+15 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Completion, DRagLint.MCP.Server, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCompilerFinding = record
@@ -2013,6 +2071,16 @@ end;
 function CanBeCallTarget(AKind: TSymbolKind): Boolean;
 begin
   Result:= AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
+end;
+
+class function TDocHandlesOptions.Defaults: TDocHandlesOptions;
+begin
+  { The four VCL shapes a Delphi handler shows an error with. A project whose
+    dialog is its own routine lists it in docs.dialog_routines instead; this
+    set is what an ABSENT key means, and an explicit [] means none. }
+  Result.DialogRoutines:= ['ShowMessage', 'MessageDlg', 'Application.MessageBox',
+                           'Application.HandleException'];
+  Result.MaxHandles    := DOC_HANDLES_DEFAULT_CAP;
 end;
 
 end.

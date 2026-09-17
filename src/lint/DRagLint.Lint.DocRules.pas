@@ -47,7 +47,13 @@ uses
 
 type
   /// <summary>Doc-comment-aware lint rules (missing-doc + doc-drift).</summary>
-  /// <remarks>Stateless; reads the supplied open store. Never raises.</remarks>
+  /// <remarks>
+  /// Stateless; reads the supplied open store. Never raises.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocLintRules = class
   public
     /// <summary>Flags every public/published declaration in AStore that has
@@ -102,6 +108,7 @@ type
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Lint.DocRules.DocumentedPublicDecls, Flush, Format, GetEnvironmentVariable, Writeln</para>
     /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Catches: Exception (empty)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
@@ -160,9 +167,10 @@ type
     /// Never raises; per-symbol failures are swallowed.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildFor/9, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, Format, GetEnvironmentVariable, LowerCase, Writeln</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildFor/10, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, Format, GetEnvironmentVariable, LowerCase, Writeln</para>
     /// <para>Returns: nil; Edits.ToArray</para>
     /// <para>Complexity: 13 (cyclomatic, outer body), 127 lines (full implementation)</para>
+    /// <para>Catches: Exception (swallowed)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
@@ -231,7 +239,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Document.TDocumenter.BuildFor/9, LowerCase, SameText</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Document.TDocumenter.BuildFor/10, LowerCase, SameText</para>
+    /// <para>Catches: Exception (empty)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
@@ -639,7 +648,7 @@ begin
         { The caps must match what the CHECKER just compared against, or the
           repairer regenerates a block the checker will call stale again -- the
           same divergence, one step further along. See TDocDrift.Analyze. }
-        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName, AOpts.IncludeSeeAlso,
+        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName, AOpts.Handles, AOpts.IncludeSeeAlso,
                                       {AIncludeSince=}False, {ABaseDir=}'',
                                       AOpts.ExtraStores, AOpts.MaxReturnCases, AOpts.MaxCallers);
         if Length(DocRes.Edits) = 0 then ReportTrace('DROP BuildFor-0-edits', ResSym.QualifiedName)
@@ -725,7 +734,7 @@ begin
           checker's default True, NOT something this change introduced, and
           flipping it would alter every created block -- left alone deliberately
           and recorded on the declaration. }
-        DocRes:= TDocumenter.BuildFor(AStore, QName, {AIncludeSeeAlso=}False,
+        DocRes:= TDocumenter.BuildFor(AStore, QName, AOpts.Handles, {AIncludeSeeAlso=}False,
                                       {AIncludeSince=}False, {ABaseDir=}'',
                                       AOpts.ExtraStores, AOpts.MaxReturnCases, AOpts.MaxCallers);
         for E in DocRes.Edits do Edits.Add(E);

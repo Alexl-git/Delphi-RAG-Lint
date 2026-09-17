@@ -86,6 +86,26 @@ type
   // but unsaved. didChange is now accepted (full sync) and stored in
   // TLiveDocuments; SYMBOL RESOLUTION still comes from the index, so the
   // original reasoning is intact -- only the text under the caret is live.
+  /// <summary><!-- drag-lint:auto sum -->Language Server Protocol over stdio with
+  /// Content-Length framing. Implements the subset that's actually useful when backed by
+  /// a static symbol index: initialize, shutdown, workspace/symbol,
+  /// textDocument/definition, textDocument/references.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto -->v0.6 did NOT implement textDocument/didChange - files are indexed via
+  /// `drag-lint index` ahead of time, and a re-index is sub-second per file.
+  ///
+  /// v(live-buffer) REVISITED, and the distinction the original note missed: that argument is about
+  /// the INDEX, but didChange is about the CURSOR. A client's position describes its BUFFER, and
+  /// the buffer diverges from disk on the first keystroke. Without an overlay every position lookup
+  /// read disk, so a symbol the user could see on screen resolved to '' and hover returned null --
+  /// reported 2026-08-18 for `AExceptionInfo.Assign`, typed but unsaved. didChange is now accepted
+  /// (full sync) and stored in TLiveDocuments; SYMBOL RESOLUTION still comes from the index, so the
+  /// original reasoning is intact -- only the text under the caret is live.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLSPServer = class
     strict private
       FStore       : ISymbolStore        ; { v0.40.3: FStores[0]; kept for legacy single-store callers }
@@ -133,7 +153,34 @@ type
       FInitialized : Boolean             ;
       FShuttingDown: Boolean             ;
       FControl     : TControlChannel     ; { nil = no channel (every mode but lsp); not owned }
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FControl &lt;&gt; nil) and
+      /// FControl.StandDownRequested.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DRagLint.Core.ControlChannel.TControlChannel.StandDownRequested</para>
+      /// <para>Reads: FControl</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.StandDownRequested"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function StandDownTaken: Boolean;
+      /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: ReadMessage.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DRagLint.Core.ControlChannel.TControlChannel.EnterRead, DRagLint.Core.ControlChannel.TControlChannel.LeaveRead</para>
+      /// <para>Reads: FControl</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.EnterRead"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.LeaveRead"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ReadMessageGuarded: TJSONObject;
       /// <summary>Does any CONFIGURED store hold a files row for this path?</summary>
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
@@ -161,6 +208,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.Destroy (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas)</para>
       /// <para>Reads: FEphemDbPath   Writes: FEphemStore, FEphemFile, FEphemStamp, FEphemDbPath</para>
+      /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
@@ -183,6 +231,7 @@ type
       /// <para>Calls: AssignFile, CloseFile, DRagLint.Core.Indexer.TIndexer.Create/2, DRagLint.LSP.Server.TLSPServer.DropEphemeralStore, DRagLint.Parser.Delphi13.TDelphi13Parser.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Flush, Format, Move, Rewrite, TTextRec, Writeln</para>
       /// <para>Returns: False; True</para>
       /// <para>Reads: FEphemSeq, FEphemDbPath   Writes: FEphemSeq, FEphemDbPath, FEphemStore, FEphemFile, FEphemStamp</para>
+      /// <para>Catches: Exception (empty); Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DropEphemeralStore"/>
@@ -204,6 +253,7 @@ type
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.AnyStoreOwns, DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore, ExtractFileExt, LowerCase, SameText</para>
       /// <para>Complexity: 12 (cyclomatic, outer body), 33 lines (full implementation)</para>
       /// <para>Reads: FStores, FEphemStore, FEphemFile, FEphemStamp</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
@@ -255,7 +305,7 @@ type
       /// <param name="AObj"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) (+8 more)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas) (+9 more)</para>
       /// <para>Calls: AnsiString, GetStdHandle, IntToStr, Move, WriteFile</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
@@ -304,7 +354,7 @@ type
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas) (+4 more)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas) (+5 more)</para>
       /// <para>Calls: Copy, StringReplace</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
@@ -467,6 +517,7 @@ type
       /// <para>Calls: Copy, Default, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Hover.Renderer.BuildHoverModel, DRagLint.LSP.Server.TLSPServer.ComputeHover, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.Query.Callers.NameCallersForName, DRagLint.Query.Callers.ResolvedCallersForName, DRagLint.Query.HoverModel.AssembleHover, ExtractFileName, LowerCase, Pos, Trim, Writeln</para>
       /// <para>Complexity: 28 (cyclomatic, outer body), 241 lines (full implementation)</para>
       /// <para>Reads: FStores, FStorePaths</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
@@ -560,7 +611,21 @@ type
       /// reviewed-markers for drag-lint findings.</summary>
       /// <param name="AId">Request id from the client.</param>
       /// <param name="AParams">textDocument/codeAction request parameters (textDocument, range, context).</param>
-      /// <remarks>Responds with a JSON array of CodeAction objects or null.</remarks>
+      /// <remarks>
+      /// Responds with a JSON array of CodeAction objects or null.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, StrToIntDef</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 77 lines (full implementation)</para>
+      /// <para>Reads: FStore</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
       /// <remarks>
@@ -618,6 +683,7 @@ type
       /// <para>Overload 1 of 2</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileToUri"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
@@ -635,6 +701,7 @@ type
       /// <para>Overload 1 of 2</para>
       /// <para>Reads: FStore</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromRef"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
@@ -660,6 +727,7 @@ type
       /// <para>Reads: FStore</para>
       /// <para>Recursive</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
@@ -678,6 +746,7 @@ type
       /// <para>Overload 2 of 2</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileToUri"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
@@ -696,10 +765,11 @@ type
       /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
       /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto type -->string</returns>
+      /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Server.ContainsPosition, DRagLint.LSP.Server.FindSmallestNamedAt, DRagLint.LSP.Server.NodeTextLocal, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, Trim</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Server.ContainsPosition, DRagLint.LSP.Server.FindSmallestNamedAt, DRagLint.LSP.Server.NodeTextLocal, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, Trim</para>
       /// <para>Complexity: 18 (cyclomatic, outer body), 68 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
@@ -734,6 +804,7 @@ type
       /// <para>constructor</para>
       /// <para>Recursive</para>
       /// <para>Pure</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
@@ -748,22 +819,25 @@ type
       /// The first surviving store becomes FStore for legacy code paths.</summary>
       /// <param name="ADbPaths">Index paths in priority order -- the project DB
       /// first, the platform library behind it. Empty entries are ignored.</param>
-      /// <remarks>A READER. Never calls Migrate on a --db: the owner's ruling of
+      /// <remarks>
+      /// A READER. Never calls Migrate on a --db: the owner's ruling of
       /// 2026-09-14 is that only the IDE writes an index, and a reader that
       /// migrated would upgrade the database underneath its owner. The one
       /// writable store this server owns is the ephemeral single-unit index in
       /// %TEMP% (BuildEphemeralStore), which is never a project DB.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, GetStdHandle, Writeln</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format, GetStdHandle, Writeln</para>
       /// <para>Overload 2 of 2</para>
       /// <para>constructor</para>
       /// <para>Reads: FStores, FStorePaths   Writes: FStdIn, FLinter, FStore</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ADbPaths: TArray<string>); overload;
@@ -771,6 +845,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.DropEphemeralStore</para>
       /// <para>Reads: FLinter, FStdIn   Writes: FStore</para>
+      /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DropEphemeralStore"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
@@ -781,15 +856,15 @@ type
       destructor Destroy; override;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts, DRagLint.LSP.Server.TLSPServer.HandleCompletion, DRagLint.LSP.Server.TLSPServer.HandleDefinition, DRagLint.LSP.Server.TLSPServer.HandleDidChange, DRagLint.LSP.Server.TLSPServer.HandleDidClose, DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave, DRagLint.LSP.Server.TLSPServer.HandleHover, DRagLint.LSP.Server.TLSPServer.HandleHoverBundle, DRagLint.LSP.Server.TLSPServer.HandleInitialize, DRagLint.LSP.Server.TLSPServer.HandleReferences (+6 more)</para>
-      /// <para>Complexity: 24 (cyclomatic, outer body), 47 lines (full implementation)</para>
-      /// <para>Reads: FShuttingDown</para>
+      /// <para>Calls: DRagLint.Core.ControlChannel.TControlChannel.BeginWork, DRagLint.Core.ControlChannel.TControlChannel.EndWork, DRagLint.LSP.Server.TLSPServer.HandleCallerCounts, DRagLint.LSP.Server.TLSPServer.HandleCodeAction, DRagLint.LSP.Server.TLSPServer.HandleCompletion, DRagLint.LSP.Server.TLSPServer.HandleDefinition, DRagLint.LSP.Server.TLSPServer.HandleDidChange, DRagLint.LSP.Server.TLSPServer.HandleDidClose, DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave, DRagLint.LSP.Server.TLSPServer.HandleHover (+9 more)</para>
+      /// <para>Complexity: 28 (cyclomatic, outer body), 57 lines (full implementation)</para>
+      /// <para>Reads: FShuttingDown, FControl</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.EndWork"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleCallerCounts"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleCodeAction"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleCompletion"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleDefinition"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleDidChange"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleDidClose"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure Run;
@@ -2023,7 +2098,7 @@ begin
     // docs.complexity_min threshold `document` uses. AIncludeSeeAlso/
     // AIncludeSince stay False (no --seealso/--since opt-in here),
     // mirroring a default `document` run.
-    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel);
+    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines);
   end

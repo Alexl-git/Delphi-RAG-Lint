@@ -423,10 +423,18 @@ pure-diagnostic verbs are broken out in 2b.
 > threshold at/above which the Phase 2 `Complexity:` fact line renders (see
 > "Phase 2 analysis facts" below) -- applied at RENDER time, not when the
 > fact was computed, so changing it takes effect on the very next
-> `document`/`hover` call with **no reindex needed**. All four numeric keys
+> `document`/`hover` call with **no reindex needed**. `docs.dialog_routines`
+> (default the VCL four: `ShowMessage`, `MessageDlg`, `Application.MessageBox`,
+> `Application.HandleException`) names the routines whose call inside an
+> exception handler makes the `Catches:` disposition `dialog: <name>`;
+> matched on the LAST dotted segment, case-insensitively; an explicit `[]` is
+> the off switch (no `dialog:` ever). `docs.max_handles` (default `8`)
+> caps the `Catches:` entries with a visible `(+N more)`. Both are read
+> by `document`, `doc-drift`, `hover` and the LSP alike, so the writer and
+> the checker cannot disagree. All five numeric keys
 > must be `>= 0`. Only **Max return cases** has a GUI field (Linter options
 > page, see `docs/INSTALL.md`); `max_callers`, `accessor_trivial_max_lines`,
-> and `complexity_min` are manifest-only for now.
+> `complexity_min`, `dialog_routines` and `max_handles` are manifest-only for now.
 >
 > **When the mined `<returns>` says nothing.** The enumeration is a display
 > aid, not an authority, and it prefers silence to naming a value the routine
@@ -506,6 +514,17 @@ pure-diagnostic verbs are broken out in 2b.
 >   double-free).
 > - `Handles: Button1.OnClick` -- the `.dfm` event a published method is
 >   wired to, from the unit's own paired `.dfm` sibling.
+> - `Catches: EConvertError (dialog: ShowMessage); Exception (re-raise)` --
+>   the exceptions the body HANDLES, one entry per (class, disposition),
+>   mined from SOURCE at doc time (not a `symbol_facts` column -- no reindex
+>   ever needed). An `else` arm and a bare `except .. end` both count as
+>   `Exception`. Dispositions, first match wins: `re-raise` (a bare
+>   `raise;` or `raise` of the handler's own variable), `raises X` (the
+>   handler raises a different class), `dialog: <name>` (a call on
+>   `docs.dialog_routines`, the witness spelled as the source spells it),
+>   `empty`, else `swallowed`. Sorted by class name, deduped, capped at
+>   `docs.max_handles` with `(+N more)`. A `try..finally` contributes
+>   nothing; a handler in a comment or string literal is never reported.
 > - `SQL: reads A, B; writes C` -- table names mined from SQL-shaped string
 >   literals in the body (`FROM`/`JOIN` = reads; `INSERT INTO`/`UPDATE`/
 >   `DELETE FROM` = writes). Best-effort and deliberately not a SQL

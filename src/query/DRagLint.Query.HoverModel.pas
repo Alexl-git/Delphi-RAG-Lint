@@ -277,7 +277,7 @@ begin
     documentation does not. }
   if AWithFacts then
   begin
-    var Facts: TDocFacts:= TDocFactsBuilder.Build(AStore, ASym);
+    var Facts: TDocFacts:= TDocFactsBuilder.Build(AStore, ASym, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
     Result.FactLines:= TDocRegions.FormatPhase2FactLines(Facts, LoadDocComplexityMin);
   end;
 end; // function

@@ -70,11 +70,13 @@ const
 
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 2; DoIndexAll(Args);
 /// DoIndex(Args); DoQuery (Args); DoRules (Args); DoLint (Args).</returns>
+/// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
 /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+89 more)</para>
-/// <para>Complexity: 104 (cyclomatic, outer body), 251 lines (full implementation)</para>
+/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+95 more)</para>
+/// <para>Complexity: 110 (cyclomatic, outer body), 286 lines (full implementation)</para>
+/// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
@@ -2131,7 +2133,7 @@ begin
   var Prim: string:= APrimaryDb;
   if Prim = '' then Prim:= AArgs.DbPath;
   Result:= TDocFactsRenderOptions.Make(AArgs.DocSeeAlso, OpenExtraStoresExcept(AArgs, Prim),
-                                       LoadDocMaxReturnCases, LoadDocMaxCallers);
+                                       LoadDocMaxReturnCases, LoadDocMaxCallers, LoadDocHandlesOptions);
   { WHICH STORES THE CHECKER IS USING IS OTHERWISE INVISIBLE, and getting it
     wrong produces a doc-drift finding no command can clear -- the symptom looks
     like a stale index, not like a store-selection bug. One line under the
@@ -15079,6 +15081,7 @@ begin
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
   Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
+  Opts.Handles:= LoadDocHandlesOptions; // gap 3: manifest docs.dialog_routines / docs.max_handles for the 'Catches:' line.
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
 
@@ -15276,6 +15279,7 @@ begin
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
   Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
+  Opts.Handles:= LoadDocHandlesOptions; // gap 3: manifest docs.dialog_routines / docs.max_handles for the 'Catches:' line.
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; // restore the pre-fix whole-closure behaviour, including vendored source.
 
@@ -15330,6 +15334,7 @@ begin
   Opts.MaxCallers:= LoadDocMaxCallers; // ADP1 T1: manifest docs.max_callers cap (default 5 on any load failure).
   Opts.AccessorTrivialMaxLines:= LoadDocAccessorMaxLines; // ADP1 T2: manifest docs.accessor_trivial_max_lines threshold (default 2, filter ON, on any load failure).
   Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
+  Opts.Handles:= LoadDocHandlesOptions; // gap 3: manifest docs.dialog_routines / docs.max_handles for the 'Catches:' line.
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   Res:= TDocBatch.DocumentAll(Store, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
@@ -15603,9 +15608,9 @@ begin
 
   if AArgs.DocStrip then Exit(DoDocumentStripQName(AArgs, Store)); // v(ADP3 T2)
 
-  Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
+  Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
     AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
-    LoadDocComplexityMin); // ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap; ADP2 T3: manifest docs.complexity_min threshold.
+    LoadDocComplexityMin); // gap 3: manifest docs.dialog_routines / max_handles for 'Catches:'. ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap; ADP2 T3: manifest docs.complexity_min threshold.
 
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
@@ -15624,7 +15629,7 @@ begin
       if not ReindexAfterStaleAnchor(AArgs, Res.FilePath) then Exit(1);
       Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
       if not Ok then Exit(2);
-      Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, AArgs.DocSeeAlso,
+      Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
         AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases,
         LoadDocMaxCallers, LoadDocComplexityMin);
       Skipped:= 0;

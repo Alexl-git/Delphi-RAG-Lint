@@ -128,6 +128,38 @@ type
     Message : string;
   end;
 
+  /// <summary>One exception handler in a routine body -- an `on` clause, an
+  /// `else` arm, or a bare `except` block -- and what its body does, as mined
+  /// by TDocFactsBuilder.MineHandlers. The disposition is NOT decided here:
+  /// RenderCatches decides it against the configured dialog list, so the
+  /// same mined facts render identically for every consumer.</summary>
+  /// <remarks>
+  /// Calls holds the dotted call chains of the handler body as the source
+  /// spells them (`Application.MessageBox`), deduped case-insensitively in
+  /// source order; that spelling is what the 'dialog:' witness prints.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CloseTopHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.OpenHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.RecordCall (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.RecordRaise (DRagLint.Doc.Facts.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocHandlerFact = record
+    /// <summary>The class the handler catches; 'Exception' for an `else` arm
+    /// or a bare `except` block, the last segment of a dotted type otherwise.</summary>
+    ExcClass  : string;
+    /// <summary>True when the body has no statement at all.</summary>
+    IsEmpty   : Boolean;
+    /// <summary>True on a bare `raise;` or a `raise` of the handler's own variable.</summary>
+    Reraises  : Boolean;
+    /// <summary>The class of a `raise X.Create(..)` / `raise X(..)` in the body
+    /// (a translation); '' when none, or when the class could not be named.</summary>
+    RaisesCls : string;
+    /// <summary>True when the body raised something that could not be named
+    /// (`raise SomeVar;` with no binding): a raise happened, the class is unknown.</summary>
+    RaisesUnnamed: Boolean;
+    /// <summary>Dotted call chains in the body, source spelling, deduped.</summary>
+    Calls     : TArray<string>;
+  end;
+
   /// <summary>Index-grounded facts about one symbol, for the managed
   /// DocInsight remarks block. All lists are capped for display; the *Total
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
@@ -395,6 +427,18 @@ type
     // index predates Phase 2 Task 6 (no symbol_facts row / older column) --
     // absence over a guessed fact.
     DfmEvent         : string           ;
+    // INBOX-report-exceptions-raised-and-handled gap 3: the exceptions this
+    // routine HANDLES, one entry per (class, disposition), e.g.
+    // 'EConvertError (dialog: ShowMessage); Exception (re-raise)'. Mined
+    // from SOURCE at doc time by MineHandlers on the raise miners' own scan
+    // state (NOT an index-time symbol_facts column, so no re-parse and no
+    // silently-stale rows -- see Doc.SymbolFacts for why that route bites),
+    // and rendered by RenderCatches under the caller's TDocHandlesOptions.
+    // DISPLAY-READY like DfmEvent: sorted, deduped, capped with a visible
+    // '(+N more)'. '' when the body has no try..except at all -- and, as for
+    // every mined fact here, '' also when the body could not be read, which
+    // is "never looked", not "handles nothing".
+    Catches          : string           ;
     // v(ADP2 T7): SQL tables touched -- which tables a routine that builds
     // SQL (string literals) reads (FROM/JOIN) vs. writes (INSERT INTO/
     // UPDATE/'UPDATE OR INSERT INTO'/DELETE FROM), read back verbatim from
@@ -553,13 +597,21 @@ type
     /// therefore the safe default in the literal sense: it is the behaviour
     /// every existing caller already had.</remarks>
     IncludeCalleeRaises: Boolean;
-    /// <summary>The documented defaults: seealso on, no extra stores, 20 and 5.</summary>
+    /// <summary>The 'Catches:' knob the block is graded under. Threaded here
+    /// for the same reason the caps are: the checker must grade with the
+    /// dialog list `document` wrote with, or a configured project reports a
+    /// drift no command can clear.</summary>
+    Handles: TDocHandlesOptions;
+    /// <summary>The documented defaults: seealso on, no extra stores, 20 and 5,
+    /// the built-in dialog set.</summary>
     /// <returns><!-- drag-lint:auto type -->TDocFactsRenderOptions</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Calls: DRagLint.Core.Model.TDocHandlesOptions.Defaults</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Model.TDocHandlesOptions.Defaults"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Make"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Normalized"/>
     /// <!-- drag-lint:auto END -->
@@ -570,6 +622,7 @@ type
     /// <param name="AExtraStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
     /// <param name="AMaxReturnCases"><!-- drag-lint:auto type -->Integer</param>
     /// <param name="AMaxCallers"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="AHandles">The 'Catches:' knob; see the Handles field.</param>
     /// <returns><!-- drag-lint:auto type -->TDocFactsRenderOptions</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -581,7 +634,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Make(AIncludeSeeAlso: Boolean; const AExtraStores: TArray<ISymbolStore>;
-                        AMaxReturnCases, AMaxCallers: Integer): TDocFactsRenderOptions; static;
+                        AMaxReturnCases, AMaxCallers: Integer;
+                        const AHandles: TDocHandlesOptions): TDocFactsRenderOptions; static;
     /// <summary>Self with non-positive caps replaced by the documented defaults,
     /// so a zero-initialised record cannot silently mean "render nothing".</summary>
     /// <returns><!-- drag-lint:auto -->TDocFactsRenderOptions -- Observed: Self.</returns>
@@ -618,6 +672,12 @@ type
     /// comment for how it is derived.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="ASym">The symbol to document.</param>
+    /// <param name="AHandles">The 'Catches:' knob (docs.dialog_routines /
+    /// docs.max_handles), resolved by the CALLER from the manifest. REQUIRED and
+    /// placed before the defaulted parameters on purpose: a renderer that could
+    /// omit it would silently render with a different dialog list than
+    /// `document` wrote with, and that is exactly the writer/checker divergence
+    /// the shared walk in MineCalleeRaises exists to prevent.</param>
     /// <param name="AIncludeSeeAlso">Opt-in: compute the &lt;seealso&gt; related set. Default False.</param>
     /// <param name="AIncludeSince">Opt-in: derive the git &lt;since&gt; date. Default False.</param>
     /// <param name="ABaseDir">Repo root for the git &lt;since&gt; lookup; '' -&gt; the file's own directory. Default ''.</param>
@@ -638,21 +698,91 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol (+36 more)</para>
-    /// <para>Complexity: 73 (cyclomatic, outer body), 1041 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+39 more)</para>
+    /// <para>Complexity: 78 (cyclomatic, outer body), 1082 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
+      const AHandles: TDocHandlesOptions;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
       AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5;
       AIncludeCalleeRaises: Boolean = False): TDocFacts;
+
+    /// <summary>Mines every exception HANDLER in ASym's own body -- each `on`
+    /// clause, each `else` arm (as Exception) and each bare `except` block with
+    /// no `on` at all (also as Exception, the implicit catch-all) -- with what
+    /// its body does: whether it re-raises, what it raises instead, and which
+    /// routines it calls. INBOX-report-exceptions-raised-and-handled gap 3.</summary>
+    /// <param name="AStore">Open symbol store, used only to resolve ASym's file path. Must not be nil.</param>
+    /// <param name="ASym">The routine whose implementation body is scanned.</param>
+    /// <returns>One entry per handler in source order, NOT deduped and NOT
+    /// sorted -- RenderCatches does both. Empty when ASym has no body, or when
+    /// its source cannot be read: "never looked", never "handles nothing".</returns>
+    /// <remarks>
+    /// A TEXT scan on the same TBodyScanState the raise miners use, so the
+    /// three cannot disagree about what is a comment, a string literal or a
+    /// wrapped `on E:` binding. It is NOT lifted from
+    /// TAstChecker.CheckSwallowedExcept, which was read first: that one runs
+    /// over the tree-sitter AST of a whole FILE at lint time and yields
+    /// findings, not per-routine facts, and the doc pipeline has no tree at
+    /// doc time -- only the memoised source lines. Two detectors, stated.
+    /// WHAT IT WILL NOT CLAIM: a handler inside a nested routine (a different
+    /// symbol); a handler whose `try` opens inside a comment; anything at all
+    /// about a try..finally. A nested try..except INSIDE a handler contributes
+    /// its own handlers at the same level; its statements are attributed to
+    /// the INNERMOST open handler only, and the rendering does not nest.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CloseTopHandler, DRagLint.Doc.Facts.CollectHandlers, DRagLint.Doc.Facts.MakeRaiseNameKindResolver, DRagLint.Doc.Facts.SourceLines, Min</para>
+    /// <para>Returns: nil; Acc.ToArray</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Doc.Facts.CloseTopHandler"/>
+    /// <seealso cref="DRagLint.Doc.Facts.CollectHandlers"/>
+    /// <seealso cref="DRagLint.Doc.Facts.MakeRaiseNameKindResolver"/>
+    /// <seealso cref="DRagLint.Doc.Facts.SourceLines"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function MineHandlers(const AStore: ISymbolStore; const ASym: TSymbol): TArray<TDocHandlerFact>;
+
+    /// <summary>Renders MineHandlers' output as the 'Catches:' display string:
+    /// one entry per (class, disposition), ordered by class name then
+    /// disposition (case-insensitive), capped at AOpts.MaxHandles with a visible
+    /// '(+N more)'. '' when there is nothing to say.</summary>
+    /// <param name="AHandlers">The mined handlers, any order.</param>
+    /// <param name="AOpts">The dialog list and the cap; see TDocHandlesOptions.</param>
+    /// <returns>e.g. 'EConvertError (dialog: ShowMessage); Exception (re-raise)'.</returns>
+    /// <remarks>
+    /// One disposition per handler, first match wins, in this order:
+    /// 're-raise' (a bare `raise;` or `raise` of the handler's own variable);
+    /// 'raises X' (the handler raises a DIFFERENT class -- a translation, which
+    /// the plan's four dispositions did not cover and which "swallowed" would
+    /// misdescribe); 'dialog: name' (a call whose last dotted segment is on
+    /// AOpts.DialogRoutines, the witness spelled as the source spells it);
+    /// 'empty' (no statement); else 'swallowed'.
+    /// SORTED AND DEDUPED, not incidentally: the line lands in the doc-drift
+    /// population, and an order that could change between runs would make
+    /// `document --apply` rewrite the same file forever.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Calls: CompareText, DRagLint.Doc.Facts.TDocFactsBuilder.RenderCatches.DispositionOf, Format, LastDottedSegment, SameText</para>
+    /// <para>Pure</para>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.RenderCatches.DispositionOf"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineHandlers"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineRaises"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function RenderCatches(const AHandlers: TArray<TDocHandlerFact>;
+      const AOpts: TDocHandlesOptions): string;
 
     /// <summary>Mines the exception class names raised directly in ASym's own
     /// body, deduped and case-insensitive. This is the same miner Build uses to
@@ -672,14 +802,14 @@ type
     /// See ResolveRaiseClass in the implementation for the four shapes.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseClass, DRagLint.Doc.Facts.SourceLines, Min</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseClass, DRagLint.Doc.Facts.MakeRaiseNameKindResolver, DRagLint.Doc.Facts.SourceLines, Min</para>
     /// <para>Returns: nil; RaiseSet.ToStringArray</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Facts.CollectRaiseClass"/>
+    /// <seealso cref="DRagLint.Doc.Facts.MakeRaiseNameKindResolver"/>
     /// <seealso cref="DRagLint.Doc.Facts.SourceLines"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
-    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineRaises(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
@@ -698,14 +828,14 @@ type
     /// without touching them.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest (DRagLint.Doc.Facts.pas) ?</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseDetail, DRagLint.Doc.Facts.SourceLines, Min</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseDetail, DRagLint.Doc.Facts.MakeRaiseNameKindResolver, DRagLint.Doc.Facts.SourceLines, Min</para>
     /// <para>Returns: nil; Acc.ToArray</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Facts.CollectRaiseDetail"/>
+    /// <seealso cref="DRagLint.Doc.Facts.MakeRaiseNameKindResolver"/>
     /// <seealso cref="DRagLint.Doc.Facts.SourceLines"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
-    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineRaisesDetailed(const AStore: ISymbolStore; const ASym: TSymbol): TArray<TRaiseDetail>;
@@ -750,7 +880,7 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
-    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineRaises"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineHandlers"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineCalleeRaises(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -2079,6 +2209,424 @@ begin
   end;
 end;
 
+{ THE HANDLER HALF OF THE EXCEPTION SCAN (INBOX-report-exceptions-raised-and-
+  handled, gap 3). A third pass over the same body lines, on the same
+  TBodyScanState as the two raise miners, so the three agree about comments
+  and string literals by construction.
+
+  WHAT IT TRACKS, and no more: a stack of block frames (what the next `end`
+  closes -- begin/case/asm/record or a try in one of its three phases), the
+  handlers currently open inside except frames, and a resumable reader for
+  the `on [Var:] Type do` clause, which wraps across lines in real code
+  exactly as the raise binder found it does.
+
+  WHERE THE HARD PART IS: `else`. Inside an except block it opens the
+  catch-all arm, but inside a handler's single-statement body it may belong
+  to an `if` (`on E: EFoo do if a then b else c;`). The disambiguation is a
+  count of `if`s seen at the handler's own depth: an `else` while that count
+  is positive is the if's; otherwise it is the except's. A `case` pushes a
+  frame, so its `else` never reaches this test.
+
+  A BARE `except ... end` WITH NO `on` IS A HANDLER: the implicit catch-all,
+  reported as Exception. It is opened at `except` and deleted again the
+  moment an `on` arrives before any statement -- the two shapes are
+  exclusive in the grammar, and this is how the scanner tells them apart
+  without lookahead.
+
+  KEYWORDS ARE NOT KEYWORDS AFTER A DOT OR AN AMPERSAND. `X.Object`,
+  `&End`: a member or an escaped identifier is never a frame. }
+const
+  BF_BLOCK   = 0; { begin / case / asm / record: a plain `end` }
+  BF_TRY     = 1; { try, before its except or finally }
+  BF_EXCEPT  = 2; { the except half: handlers live here }
+  BF_FINALLY = 3;
+
+  OC_NONE  = 0; { the on-clause reader's stages }
+  OC_FIRST = 1; { after `on`: a variable, or the type itself }
+  OC_TYPE  = 2; { after `Var:` -- the type }
+  OC_DO    = 3; { after the type -- `do` }
+
+  { The tokens after which a bare identifier chain followed by `;` is a
+    procedure statement (`Abort;`) rather than an operand. }
+  STMT_START: array[0..9] of string = (
+    ';', 'do', 'then', 'else', 'begin', 'except', 'try', 'finally', 'repeat', ':');
+
+type
+  TOpenHandler = record
+    Idx     : Integer; { into the accumulator }
+    Depth   : Integer; { Length(Frames) when the body began -- inside the except frame }
+    VarName : string ; { `on E:` -- '' for a type-only, else- or implicit handler }
+    OpenIfs : Integer; { `if`s at Depth whose `else` is still owed }
+    Implicit: Boolean; { the bare-except catch-all; closes only with its `end` }
+    SawStmt : Boolean; { any statement token yet -- IsEmpty is its negation }
+  end;
+
+  THandlersScanState = record
+    Scan    : TBodyScanState;
+    Frames  : TArray<Integer>;
+    Handlers: TArray<TOpenHandler>; { open handlers, innermost last }
+    OcStage : Integer;
+    OcVar   : string ;
+    OcType  : string ;
+    OcBudget: Integer;
+    PrevTok : string ; { previous significant token, lowercased -- statement-position test }
+  end;
+
+function LastDottedSegment(const AName: string): string;
+begin
+  var P: Integer:= LastDelimiter('.', AName);
+  if P > 0 then Result:= Copy(AName, P + 1, MaxInt) else Result:= AName;
+end;
+
+function IsStatementStart(const ATok: string): Boolean;
+begin
+  for var S in STMT_START do
+    if ATok = S then Exit(True);
+  Result:= False;
+end;
+
+{ Innermost open handler, or -1. }
+function TopHandler(const AState: THandlersScanState): Integer;
+begin
+  Result:= High(AState.Handlers);
+end;
+
+{ True when an open handler's body is at the current frame depth -- the only
+  place `;`, `else`, `on` and `if` mean anything to this scanner. }
+function HandlerAtDepth(const AState: THandlersScanState): Boolean;
+begin
+  Result:= (Length(AState.Handlers) > 0)
+       and (AState.Handlers[High(AState.Handlers)].Depth = Length(AState.Frames));
+end;
+
+function TopFrame(const AState: THandlersScanState): Integer;
+begin
+  if Length(AState.Frames) = 0 then Result:= -1
+  else Result:= AState.Frames[High(AState.Frames)];
+end;
+
+procedure MarkStatement(var AState: THandlersScanState);
+begin
+  if Length(AState.Handlers) > 0 then
+    AState.Handlers[High(AState.Handlers)].SawStmt:= True;
+end;
+
+procedure OpenHandler(AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState;
+  const AExcClass, AVarName: string; AImplicit: Boolean);
+begin
+  var H: TDocHandlerFact:= Default(TDocHandlerFact);
+  H.ExcClass:= AExcClass;
+  AAcc.Add(H);
+  var O: TOpenHandler:= Default(TOpenHandler);
+  O.Idx     := AAcc.Count - 1;
+  O.Depth   := Length(AState.Frames);
+  O.VarName := AVarName;
+  O.Implicit:= AImplicit;
+  AState.Handlers:= AState.Handlers + [O];
+end;
+
+{ Records the body's emptiness and forgets the handler. The fact itself was
+  added when the handler opened; only IsEmpty is decided at close. }
+procedure CloseTopHandler(AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState);
+begin
+  var O: TOpenHandler:= AState.Handlers[High(AState.Handlers)];
+  var H: TDocHandlerFact:= AAcc[O.Idx];
+  H.IsEmpty:= not O.SawStmt;
+  AAcc[O.Idx]:= H;
+  SetLength(AState.Handlers, Length(AState.Handlers) - 1);
+end;
+
+procedure PopFrame(AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState);
+begin
+  if Length(AState.Frames) = 0 then Exit;
+  SetLength(AState.Frames, Length(AState.Frames) - 1);
+  { Anything open deeper than the stack now reaches was inside the block that
+    just closed -- the except block's own `end` is how its last handler ends. }
+  while (Length(AState.Handlers) > 0)
+    and (AState.Handlers[High(AState.Handlers)].Depth > Length(AState.Frames)) do
+    CloseTopHandler(AAcc, AState);
+end;
+
+{ Consumes as much of `[Var:] Type do` as this line carries from AIdx. Leaves
+  OcStage non-zero when the line ran out; every non-continuation shape
+  disarms, for the reason AdvanceHandlerBinding states: an armed reader that
+  cannot complete binds nonsense pages later. On `do` it opens the handler.
+  The same three-stage skeleton as AdvanceHandlerBinding on purpose -- it is
+  reading the same clause -- but it must also keep the TYPE of a type-only
+  handler, which the binder has no reason to.
+  REVIEWED 2026-09-17, dl:ok duplicate-code. The stage loop mirrors
+  AdvanceHandlerBinding by design; folding the two would hand the raise
+  miners a handler list they do not want and this reader a binder that
+  drops type-only handlers. Two readers of one clause, stated. }
+procedure AdvanceOnClause(const ALine: string; var AIdx: Integer;
+  AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState);
+var
+  N: Integer;
+  C: TArray<string>;
+begin
+  N:= Length(ALine);
+  while AState.OcStage <> OC_NONE do
+  begin
+    while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
+    if AIdx > N then Exit; { the line ran out -- stay armed }
+    if (AState.OcStage <> OC_DO) and (not IsIdentStart(ALine[AIdx])) then
+    begin
+      AState.OcStage:= OC_NONE;
+      Continue;
+    end;
+    case AState.OcStage of
+      OC_FIRST:
+        begin
+          C:= ReadIdentChain(ALine, AIdx);
+          while (AIdx <= N) and (ALine[AIdx] = ' ') do Inc(AIdx);
+          if (AIdx <= N) and (ALine[AIdx] = ':') and (Length(C) = 1) then
+          begin
+            AState.OcVar  := C[0];
+            AState.OcStage:= OC_TYPE;
+            Inc(AIdx);
+          end
+          else
+          begin
+            AState.OcType := C[High(C)];
+            AState.OcStage:= OC_DO;
+          end;
+        end;
+      OC_TYPE:
+        begin
+          C:= ReadIdentChain(ALine, AIdx);
+          AState.OcType := C[High(C)];
+          AState.OcStage:= OC_DO;
+          { The binding the raise miners keep, kept here too, so a `raise E`
+            through an OUTER handler's variable still resolves to its type. }
+          AState.Scan.HandlerVars := AState.Scan.HandlerVars  + [AState.OcVar];
+          AState.Scan.HandlerTypes:= AState.Scan.HandlerTypes + [AState.OcType];
+        end;
+    else { OC_DO }
+      begin
+        AState.OcStage:= OC_NONE;
+        if not IsIdentStart(ALine[AIdx]) then Continue;
+        C:= ReadIdentChain(ALine, AIdx);
+        if (Length(C) = 1) and SameText(C[0], 'do') then
+        begin
+          OpenHandler(AAcc, AState, AState.OcType, AState.OcVar, {AImplicit=}False);
+          AState.PrevTok:= 'do';
+        end;
+      end;
+    end; // case
+  end; // while
+end;
+
+{ `on` inside an except frame: whatever handler was open at this depth is
+  over, and the reader is armed for the clause that follows AIdx. }
+procedure BeginOnClause(const ALine: string; var AIdx: Integer;
+  AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState);
+begin
+  if HandlerAtDepth(AState) then
+  begin
+    var Top: TOpenHandler:= AState.Handlers[High(AState.Handlers)];
+    if Top.Implicit and (not Top.SawStmt) then
+    begin
+      { `except on ...`: the catch-all opened at `except` was never one. }
+      AAcc.Delete(Top.Idx);
+      SetLength(AState.Handlers, Length(AState.Handlers) - 1);
+    end
+    else CloseTopHandler(AAcc, AState);
+  end;
+  AState.OcStage := OC_FIRST;
+  AState.OcVar   := '';
+  AState.OcType  := '';
+  AState.OcBudget:= HANDLER_WRAP_BUDGET_LINES;
+  AdvanceOnClause(ALine, AIdx, AAcc, AState);
+end;
+
+{ `else` inside an except frame: the if's, if one is owed; otherwise the
+  catch-all arm, which ends whatever handler was open. }
+procedure HandleExceptElse(AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState);
+begin
+  if HandlerAtDepth(AState) and (AState.Handlers[TopHandler(AState)].OpenIfs > 0) then
+  begin
+    Dec(AState.Handlers[TopHandler(AState)].OpenIfs);
+    Exit;
+  end;
+  if HandlerAtDepth(AState) then CloseTopHandler(AAcc, AState);
+  OpenHandler(AAcc, AState, 'Exception', '', {AImplicit=}False);
+end;
+
+{ The structural keywords: frames and handler boundaries. Returns True when
+  AWord (already lowercased, already known not to be escaped) was one. }
+function HandleStructureWord(const ALine, AWord: string; var AIdx: Integer;
+  AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState): Boolean;
+begin
+  Result:= True;
+  if AWord = 'try' then
+    AState.Frames:= AState.Frames + [BF_TRY]
+  else if (AWord = 'begin') or (AWord = 'case') or (AWord = 'asm') or (AWord = 'record') then
+    AState.Frames:= AState.Frames + [BF_BLOCK]
+  else if AWord = 'end' then
+    PopFrame(AAcc, AState)
+  else if AWord = 'except' then
+  begin
+    if TopFrame(AState) = BF_TRY then
+    begin
+      AState.Frames[High(AState.Frames)]:= BF_EXCEPT;
+      OpenHandler(AAcc, AState, 'Exception', '', {AImplicit=}True);
+    end;
+  end
+  else if AWord = 'finally' then
+  begin
+    if TopFrame(AState) = BF_TRY then AState.Frames[High(AState.Frames)]:= BF_FINALLY;
+  end
+  else if (AWord = 'on') and (TopFrame(AState) = BF_EXCEPT) then
+    BeginOnClause(ALine, AIdx, AAcc, AState)
+  else if (AWord = 'else') and (TopFrame(AState) = BF_EXCEPT) then
+    HandleExceptElse(AAcc, AState)
+  else
+    Result:= False;
+end;
+
+{ `raise` inside a handler body. AIdx is just past the word; it is moved past
+  the operand when there is one. }
+procedure RecordRaise(const ALine: string; var AIdx: Integer;
+  AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState);
+var
+  N, K: Integer;
+begin
+  N:= Length(ALine);
+  var Top: TOpenHandler:= AState.Handlers[TopHandler(AState)];
+  var H: TDocHandlerFact:= AAcc[Top.Idx];
+  K:= AIdx;
+  while (K <= N) and (ALine[K] = ' ') do Inc(K);
+  if (K > N) or (not IsIdentStart(ALine[K])) then
+    H.Reraises:= True { `raise;` -- and `raise` at the end of a line, as CollectRaiseDetail reads it }
+  else
+  begin
+    var E: Integer:= K;
+    var Segs: TArray<string>:= ReadIdentChain(ALine, E);
+    if (Length(Segs) = 1) and (Top.VarName <> '') and SameText(Segs[0], Top.VarName) then
+      H.Reraises:= True
+    else
+    begin
+      var Cls: string:= ResolveRaiseClass(ALine, K, AState.Scan);
+      if Cls = '' then H.RaisesUnnamed:= True
+      else if H.RaisesCls = '' then H.RaisesCls:= Cls;
+    end;
+    AIdx:= E;
+  end;
+  AAcc[Top.Idx]:= H;
+end;
+
+{ An identifier chain inside a handler body, read from AStart. It is a CALL
+  when a `(` follows, or when it stands in statement position and a `;` (or
+  the line end) follows -- `Abort;`. AIdx is moved past the chain. }
+procedure RecordCall(const ALine: string; AStart: Integer; var AIdx: Integer;
+  AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState);
+var
+  N, K: Integer;
+begin
+  N:= Length(ALine);
+  var E: Integer:= AStart;
+  var Chain: TArray<string>:= ReadIdentChain(ALine, E);
+  K:= E;
+  while (K <= N) and (ALine[K] = ' ') do Inc(K);
+  var IsCall: Boolean:= (K <= N) and (ALine[K] = '(');
+  if not IsCall then
+    IsCall:= ((K > N) or (ALine[K] = ';')) and IsStatementStart(AState.PrevTok);
+  AIdx:= E;
+  if not IsCall then Exit;
+  var Idx: Integer:= AState.Handlers[TopHandler(AState)].Idx;
+  var H: TDocHandlerFact:= AAcc[Idx];
+  var Name: string:= string.Join('.', Chain);
+  for var Known in H.Calls do
+    if SameText(Known, Name) then Exit;
+  H.Calls:= H.Calls + [Name];
+  AAcc[Idx]:= H;
+end;
+
+{ One keyword or identifier, of a handler body or of the surrounding code.
+  AIdx is just past the word; AStart is where it began (to see the char
+  before it). Moves AIdx past whatever else it consumed -- a raise operand, a
+  dotted chain, an on-clause. Owns AState.PrevTok. }
+procedure HandleBodyWord(const ALine: string; const AWord: string; AStart: Integer;
+  var AIdx: Integer; AAcc: TList<TDocHandlerFact>; var AState: THandlersScanState);
+begin
+  var W: string:= LowerCase(AWord);
+  AState.PrevTok:= W;
+  { A member name or an escaped identifier is never a keyword, and its chain
+    was already read from its head. }
+  if (AStart > 1) and CharInSet(ALine[AStart - 1], ['.', '&']) then Exit;
+  { A nested try or case IS a statement of the handler it sits in; a plain
+    begin..end is not -- `on E: EFoo do begin end` is the empty shape. }
+  if (W = 'try') or (W = 'case') or (W = 'asm') then MarkStatement(AState);
+  if HandleStructureWord(ALine, W, AIdx, AAcc, AState) then Exit;
+  { From here on the word is a statement token of whichever handler is open. }
+  if Length(AState.Handlers) = 0 then Exit;
+  MarkStatement(AState);
+  if (W = 'if') and HandlerAtDepth(AState) then
+    Inc(AState.Handlers[TopHandler(AState)].OpenIfs)
+  else if W = 'raise' then
+    RecordRaise(ALine, AIdx, AAcc, AState)
+  else if not IsCallSkipWord(W) then
+    RecordCall(ALine, AStart, AIdx, AAcc, AState);
+end;
+
+procedure CollectHandlers(const ALine: string; AAcc: TList<TDocHandlerFact>;
+  var AState: THandlersScanState);
+var
+  I, N, J  : Integer;
+  Ident    : string ;
+  LineEnded: Boolean;
+begin
+  I:= 1;
+  N:= Length(ALine);
+  { An on-clause left half-read on the previous line finishes here, aged by
+    the same budget rule as the raise binder, and the scan CONTINUES from
+    where the reader stopped -- restarting at column 1 would re-read the
+    clause's own words as the new handler's first statement. }
+  if AState.OcStage <> OC_NONE then
+  begin
+    Dec(AState.OcBudget);
+    if AState.OcBudget < 0 then AState.OcStage:= OC_NONE
+    else AdvanceOnClause(ALine, I, AAcc, AState);
+  end;
+  while I <= N do
+  begin
+    if AdvanceCommentState(ALine, I, AState.Scan, LineEnded) then Continue;
+    if LineEnded then Break;
+    if ALine[I] = '''' then
+    begin
+      ReadPascalLiteral(ALine, I);
+      MarkStatement(AState);
+      AState.PrevTok:= '''';
+      Continue;
+    end;
+    if IsIdentStart(ALine[I]) then
+    begin
+      J:= I;
+      while (J <= N) and IsIdentPart(ALine[J]) do Inc(J);
+      Ident:= Copy(ALine, I, J - I);
+      HandleBodyWord(ALine, Ident, I, J, AAcc, AState); { owns PrevTok; may move J }
+      I:= J;
+      Continue;
+    end;
+    if ALine[I] = ';' then
+    begin
+      if HandlerAtDepth(AState) and (not AState.Handlers[TopHandler(AState)].Implicit) then
+        CloseTopHandler(AAcc, AState);
+      AState.PrevTok:= ';';
+      Inc(I);
+      Continue;
+    end;
+    { Any other character is a statement token of the open handler: `:=`,
+      `(`, a digit. Whitespace is not. }
+    if ALine[I] > ' ' then
+    begin
+      MarkStatement(AState);
+      if ALine[I] = ':' then AState.PrevTok:= ':' else AState.PrevTok:= '';
+    end;
+    Inc(I);
+  end;
+end;
+
 { PERF -- one whole-file read per file instead of five per DECLARATION.
 
   Build reads the source with TFile.ReadAllLines in four separate places (the
@@ -2720,6 +3268,75 @@ begin
   end;
 end;
 
+{ REVIEWED 2026-09-17 (marker on the header line). The bodyless carve-out, the
+  memoised read and the line loop are MineRaisesDetailed's on purpose: the
+  plan for this fact requires the three miners to walk the same lines under
+  the same comment state, and a generic walker over three state types would
+  cost more than the twelve lines it saves. }
+class function TDocFactsBuilder.MineHandlers(const AStore: ISymbolStore;  // dl:ok duplicate-code@e2dd
+  const ASym: TSymbol): TArray<TDocHandlerFact>;
+begin
+  Result:= nil;
+  { Same bodyless carve-out as the raise miners, for the same reason: empty
+    means "never looked", not "provably handles nothing". }
+  if (ASym.ImplStartLine <= 0) or (ASym.ImplEndLine < ASym.ImplStartLine) then Exit;
+  var Acc: TList<TDocHandlerFact>:= TList<TDocHandlerFact>.Create;
+  try
+    var Src: TArray<string>:= SourceLines(AStore.GetFilePath(ASym.FileId)); { memoised; nil on any read error }
+    var State: THandlersScanState:= Default(THandlersScanState);
+    State.Scan.NameKind:= MakeRaiseNameKindResolver(AStore); { as the raise miners -- `raise X(..)` must resolve alike }
+    for var Ln:= ASym.ImplStartLine to Min(ASym.ImplEndLine, Length(Src)) do
+      CollectHandlers(Src[Ln - 1], Acc, State);
+    { A handler still open at the last line is a body the scanner lost track
+      of -- close it as the file did, so its emptiness is decided, not zeroed. }
+    while Length(State.Handlers) > 0 do CloseTopHandler(Acc, State);
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+class function TDocFactsBuilder.RenderCatches(const AHandlers: TArray<TDocHandlerFact>;
+  const AOpts: TDocHandlesOptions): string;
+
+  function DispositionOf(const AH: TDocHandlerFact): string;
+  begin
+    if AH.Reraises then Exit('re-raise');
+    if AH.RaisesCls <> '' then Exit('raises ' + AH.RaisesCls);
+    if AH.RaisesUnnamed then Exit('raises');
+    for var C in AH.Calls do
+      for var D in AOpts.DialogRoutines do
+        if SameText(LastDottedSegment(C), LastDottedSegment(D)) then Exit('dialog: ' + C);
+    if AH.IsEmpty then Exit('empty');
+    Result:= 'swallowed';
+  end;
+
+var
+  Entries: TArray<string>;
+  Cap    : Integer;
+begin
+  Result:= '';
+  if Length(AHandlers) = 0 then Exit;
+  Entries:= nil;
+  for var H in AHandlers do
+    if H.ExcClass <> '' then
+      Entries:= Entries + [H.ExcClass + ' (' + DispositionOf(H) + ')'];
+  { Ordinal, case-insensitive, and NOT the locale collation: the text lands in
+    files that other machines compare. }
+  TArray.Sort<string>(Entries, TComparer<string>.Construct(
+    function(const L, R: string): Integer begin Result:= CompareText(L, R); end));
+  var Kept: TArray<string>:= nil;
+  for var E in Entries do
+    if (Length(Kept) = 0) or (CompareText(Kept[High(Kept)], E) <> 0) then
+      Kept:= Kept + [E];
+  Cap:= AOpts.MaxHandles;
+  if Cap <= 0 then Cap:= DOC_HANDLES_DEFAULT_CAP;
+  var Total: Integer:= Length(Kept);
+  if Total > Cap then SetLength(Kept, Cap);
+  Result:= string.Join('; ', Kept);
+  if Total > Cap then Result:= Result + Format(' (+%d more)', [Total - Cap]);
+end;
+
 { This walk implements EXACTLY ONE hop, and the constant is checked at COMPILE
   time rather than trusted. A runtime check would only fire for whoever ran the
   build; this refuses to produce a binary in which the writer and the checker
@@ -2815,16 +3432,19 @@ begin
   { OFF: the writer is the only caller that wants the callee walk, and it opts
     in explicitly. Defaults must stay the behaviour every existing caller had. }
   Result.IncludeCalleeRaises := False;
+  Result.Handles := TDocHandlesOptions.Defaults;
 end;
 
 class function TDocFactsRenderOptions.Make(AIncludeSeeAlso: Boolean;
   const AExtraStores: TArray<ISymbolStore>;
-  AMaxReturnCases, AMaxCallers: Integer): TDocFactsRenderOptions;
+  AMaxReturnCases, AMaxCallers: Integer;
+  const AHandles: TDocHandlesOptions): TDocFactsRenderOptions;
 begin
   Result.IncludeSeeAlso := AIncludeSeeAlso;
   Result.ExtraStores    := AExtraStores;
   Result.MaxReturnCases := AMaxReturnCases;
   Result.MaxCallers     := AMaxCallers;
+  Result.Handles        := AHandles;
   { Not a parameter: adding one would change a published signature every call
     site already uses, to express something only `document` ever sets. It sets
     the field directly. }
@@ -2842,9 +3462,13 @@ begin
   Result:= Self;
   if Result.MaxReturnCases <= 0 then Result.MaxReturnCases := 20;
   if Result.MaxCallers     <= 0 then Result.MaxCallers     := 5;
+  { The cap only. An empty DialogRoutines is a legitimate explicit value (the
+    off switch) and cannot be told from a zeroed one, so it is left alone. }
+  if Result.Handles.MaxHandles <= 0 then Result.Handles.MaxHandles := DOC_HANDLES_DEFAULT_CAP;
 end;
 
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
+  const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
   AIncludeCalleeRaises: Boolean): TDocFacts;
@@ -3547,6 +4171,10 @@ begin
     keeping the message. Two scans rather than one because the two consumers
     want different shapes -- see MineRaisesDetailed's remarks. }
   Result.RaisesDetailed:= MineRaisesDetailed(AStore, ASym);
+  { Gap 3 of the same note: what the body HANDLES. Third scan of the same
+    lines on the same comment state; rendered here, not in Regions, so the
+    string every consumer sees was made under the SAME AHandles. }
+  Result.Catches:= RenderCatches(MineHandlers(AStore, ASym), AHandles);
 
   { TRANSITIVE RAISES, WRITER ONLY (INBOX-exception-cref-transitive-raise, gap 2).
 

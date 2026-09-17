@@ -153,6 +153,7 @@ type
     /// <para>Overload 1 of 2</para>
     /// <para>Complexity: 57 (cyclomatic, outer body), 547 lines (full implementation)</para>
     /// <para>Pure</para>
+    /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
@@ -177,6 +178,7 @@ type
     /// <para>Calls: DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults</para>
     /// <para>Overload 2 of 2</para>
     /// <para>Pure</para>
+    /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks"/>
@@ -638,7 +640,7 @@ begin
     // AIncludeSince/ABaseDir stay off: <since> is a documenter opt-in that the
     // checker never compares, and ABaseDir is only read when it is on.
     var Opts: TDocFactsRenderOptions:= AOpts.Normalized;
-    Facts:= TDocFactsBuilder.Build(AStore, ASym, Opts.IncludeSeeAlso, {AIncludeSince=}False,
+    Facts:= TDocFactsBuilder.Build(AStore, ASym, Opts.Handles, Opts.IncludeSeeAlso, {AIncludeSince=}False,
                                    {ABaseDir=}'', Opts.ExtraStores,
                                    Opts.MaxReturnCases, Opts.MaxCallers);
     Inc(GFactsBuildTicks, TStopwatch.GetTimeStamp - TFacts0);

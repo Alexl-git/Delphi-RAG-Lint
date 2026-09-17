@@ -5,6 +5,30 @@ breaking changes** until v1.0.
 
 ## Unreleased (after v1.13.0-alpha)
 
+### `Catches:` -- the exceptions a routine HANDLES (INBOX-report-exceptions-raised-and-handled, gap 3)
+
+The managed facts block gains one line per routine with a `try..except`:
+`Catches: EConvertError (dialog: ShowMessage); Exception (re-raise)` -- one
+entry per (class, disposition), sorted by class name, deduped, capped at
+`docs.max_handles` (default 8) with a visible `(+N more)`. An `else` arm
+and a bare `except .. end` both count as `Exception`. Dispositions, first
+match wins: `re-raise` (a bare `raise;` or `raise` of the handler's own
+variable), `raises X` (the handler raises a DIFFERENT class -- the plan's four
+did not cover the translation shape, and `swallowed` would misdescribe it),
+`dialog: <name>` (a call on `docs.dialog_routines`, the witness spelled as
+the source spells it), `empty`, else `swallowed`. Mined from SOURCE at doc
+time on the raise miners' own comment/literal scan state (`TDocFactsBuilder.
+MineHandlers` / `RenderCatches`), NOT an index-time `symbol_facts` column
+-- no extractor bump, no reindex, and a handler in a comment or string literal
+is never reported. The label is `Catches:`, not a second `Handles:`:
+`Doc.SharedFacts` bounds a fact's slice in the flattened stored block by
+label, so two lines under one label would collide there. New manifest keys
+`docs.dialog_routines` (default the VCL four; `[]` is the off switch) and
+`docs.max_handles`, read by `document`, `doc-drift`, `hover` and the
+LSP through one `TDocHandlesOptions` threaded like the caps, so the writer
+and the checker cannot disagree. `document --project` was run to a fixed
+point on this repo in the same change (76 `Catches:` lines). Guard:
+`tests\autodoc\run_doc_exception_handles.ps1` (27 assertions, RED-first).
 ### Property and field references RESOLVE (resolver 1.3.0-alpha; re-resolve every index)
 
 A `member-access` ref naming a PROPERTY or FIELD (`FConnection.Connected`)

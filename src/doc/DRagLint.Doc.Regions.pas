@@ -508,7 +508,8 @@ type
     /// T3/T4/T5/T6/T7/T8)) as bare, omit-when-empty display lines, in the
     /// SAME fixed order RenderFactsBlock emits them in the managed doc
     /// block: Complexity / Reads-Writes fields / Owns returned / Handles /
-    /// SQL tables touched / Covered by. Each returned line is UNPREFIXED (no
+    /// Catches (the exceptions handled -- gap 3, doc-time, see
+    /// TDocFacts.Catches) / SQL tables touched / Covered by. Each returned line is UNPREFIXED (no
     /// '/// ', no leading indentation) -- RenderFactsBlock prepends its own
     /// APrefix per line when it calls this helper; a hover renderer appends
     /// the lines as-is. This is the v(ADP2 T9) DOC/HOVER CONSISTENCY LOCK:
@@ -558,15 +559,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, Format, StartsStr, StringReplace</para>
+    /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2, Format, StartsStr, StringReplace</para>
     /// <para>Returns: Lines.ToStringArray</para>
-    /// <para>Complexity: 41 (cyclomatic, outer body), 215 lines (full implementation)</para>
+    /// <para>Complexity: 44 (cyclomatic, outer body), 274 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
@@ -829,7 +830,7 @@ type
 /// dependency cycle this unit's interface would otherwise close
 /// (Regions -&gt; Facts -&gt; Harvest -&gt; Regions) never forms.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Regions.EscXmlAttr (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.ObservedSuffix (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineException (DRagLint.Doc.Regions.pas) (+6 more)</para>
+/// <para>Called from: DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Regions.EscXmlAttr (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.ObservedSuffix (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2 (DRagLint.Doc.Regions.pas) (+7 more)</para>
 /// <para>Calls: StringReplace</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
@@ -2082,6 +2083,17 @@ begin
     // string (index-time), so no cap/threshold logic is needed here.
     if AFacts.DfmEvent <> '' then
       Lines.Add('Handles: ' + EscXml(AFacts.DfmEvent));
+    // INBOX-report-exceptions-raised-and-handled gap 3: the exceptions the
+    // body HANDLES -- ONE line, 'Catches: EConvertError (dialog: ShowMessage);
+    // Exception (re-raise)', omitted entirely when AFacts.Catches = ''.
+    // Display-ready (sorted, deduped, capped by TDocFactsBuilder.RenderCatches
+    // under the caller's TDocHandlesOptions), so a passthrough like DfmEvent.
+    // A DIFFERENT label from the DFM line above on purpose: Doc.SharedFacts
+    // bounds a fact's slice in the flattened stored block BY LABEL, so a
+    // second 'Handles:' would collide with the first there. Placed directly
+    // after it because both answer "what does this routine respond to".
+    if AFacts.Catches <> '' then
+      Lines.Add('Catches: ' + EscXml(AFacts.Catches));
     // v(ADP2 T7): SQL tables touched -- ONE line, 'SQL: reads A, B; writes
     // C', either side omitted when empty, the WHOLE line omitted when both
     // sides are empty. Semicolon-SPACE separates the two sides here (NOT the

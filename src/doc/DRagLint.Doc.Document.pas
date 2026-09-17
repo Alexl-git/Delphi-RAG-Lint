@@ -47,7 +47,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Document.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Document.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -61,8 +61,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-  /// <para>Used in units: DRagLint.Doc.Batch, DRagLint.Lint.DocRules</para>
+  /// <para>Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocumenter = class
@@ -78,6 +78,7 @@ type
     /// caller applies them.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AQName">Fully qualified symbol name, e.g. Unit.TType.Method.</param>
+    /// <param name="AHandles">The 'Catches:' knob (docs.dialog_routines / docs.max_handles), forwarded to TDocFactsBuilder.Build as-is. Required, and before the defaulted parameters, so no caller can silently render under a different dialog list than the checker grades with.</param>
     /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto type -->Boolean</param>
     /// <param name="AIncludeSince"><!-- drag-lint:auto type -->Boolean = False</param>
     /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string = ''</param>
@@ -115,6 +116,7 @@ type
     /// <para>Returns: Default(TDocumentResult)</para>
     /// <para>Overload 1 of 2</para>
     /// <para>Pure</para>
+    /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
@@ -122,20 +124,25 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
+      const AHandles: TDocHandlesOptions;
       AIncludeSeeAlso: Boolean; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
       AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5; AComplexityMin: Integer = 10): TDocumentResult; overload;
     /// <summary>Back-compat overload: BuildFor with no doc-source opt-ins
-    /// (AIncludeSeeAlso = False, AIncludeSince = False).</summary>
+    /// (AIncludeSeeAlso = False, AIncludeSince = False) and the BUILT-IN
+    /// 'Catches:' options -- no production caller uses it; a manifest-driven
+    /// verb must call the full overload.</summary>
     /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
     /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->TDocumentResult -- Observed: BuildFor(AStore,
-    /// AQName, False).</returns>
+    /// AQName, TDocHandlesOptions.Defaults, False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DRagLint.Doc.Document.TDocumenter.BuildFor/9</para>
+    /// <para>Calls: DRagLint.Core.Model.TDocHandlesOptions.Defaults, DRagLint.Doc.Document.TDocumenter.BuildFor/10</para>
     /// <para>Overload 2 of 2</para>
     /// <para>Pure</para>
+    /// <para>Directives: overload</para>
+    /// <seealso cref="DRagLint.Core.Model.TDocHandlesOptions.Defaults"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
@@ -154,6 +161,7 @@ type
     /// and documenting the others never -- see adp1-bugA-brief.md.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="ASym">The already-resolved symbol to document (its own file/line).</param>
+    /// <param name="AHandles">The 'Catches:' knob; same meaning as on BuildFor's full overload.</param>
     /// <param name="AIncludeSeeAlso"><!-- drag-lint:auto type -->Boolean = False</param>
     /// <param name="AIncludeSince"><!-- drag-lint:auto type -->Boolean = False</param>
     /// <param name="ABaseDir"><!-- drag-lint:auto type -->const string = ''</param>
@@ -170,10 +178,10 @@ type
     /// on BuildFor's full overload (see its remarks). Result.QName is
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/9 (DRagLint.Doc.Document.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas)</para>
     /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+17 more)</para>
     /// <para>Returns: Default(TDocumentResult)</para>
-    /// <para>Complexity: 27 (cyclomatic, outer body), 482 lines (full implementation)</para>
+    /// <para>Complexity: 27 (cyclomatic, outer body), 483 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -183,6 +191,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+      const AHandles: TDocHandlesOptions;
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
       AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5; AComplexityMin: Integer = 10): TDocumentResult;
@@ -802,8 +811,8 @@ end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult;
 begin
-  // Back-compat: no doc-source opt-ins.
-  Result:= BuildFor(AStore, AQName, False);
+  // Back-compat: no doc-source opt-ins, built-in 'Catches:' options.
+  Result:= BuildFor(AStore, AQName, TDocHandlesOptions.Defaults, False);
 end;
 
 class function TDocumenter.ExistingDocFor(const AStore: ISymbolStore; const AQName: string;
@@ -862,6 +871,7 @@ begin
 end;
 
 class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
+  const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
   AComplexityMin: Integer): TDocumentResult;
@@ -875,11 +885,12 @@ begin
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
   if Length(Syms) = 0 then Exit;
 
-  Result:= BuildForSymbol(AStore, Syms[0], AIncludeSeeAlso, AIncludeSince, ABaseDir,
+  Result:= BuildForSymbol(AStore, Syms[0], AHandles, AIncludeSeeAlso, AIncludeSince, ABaseDir,
     AExtraStores, AMaxReturnCases, AMaxCallers, AComplexityMin);
 end;
 
 class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+  const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
   AComplexityMin: Integer): TDocumentResult;
@@ -949,7 +960,7 @@ begin
     since session 47. Hover and doc-drift pass False and keep the behaviour they
     already had -- see TDocFacts.CalleeRaises for why that is not merely
     caution. }
-  Facts := TDocFactsBuilder.Build(AStore, ASym, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers,
+  Facts := TDocFactsBuilder.Build(AStore, ASym, AHandles, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers,
                                   {AIncludeCalleeRaises=}True);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'

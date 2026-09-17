@@ -94,6 +94,13 @@ type
     /// should still set the real configured value for the intended default
     /// (10, not "show everything").</summary>
     ComplexityMin: Integer;
+    /// <summary>The 'Catches:' knob (docs.dialog_routines / docs.max_handles),
+    /// forwarded to BuildForSymbol as-is. Same discipline as ComplexityMin:
+    /// every caller sets it from the manifest (LoadDocHandlesOptions); a
+    /// zeroed record means "no dialog detection", which is a legitimate
+    /// configured state, so nothing here can tell a forgotten set from an
+    /// explicit off switch -- set it.</summary>
+    Handles: TDocHandlesOptions;
     /// <summary>True documents the project's WHOLE compile closure, including
     /// vendored third-party source. False (the default, and what
     /// Default(TDocBatchOptions) gives) restricts DocumentProject to the roots
@@ -416,7 +423,7 @@ begin
       // -- documents each row's OWN declaration. BuildFor(Sym.QualifiedName)
       // would re-resolve every call to Syms[0], stacking duplicate blocks
       // above the first overload and never documenting the others (Bug A).
-      Res := TDocumenter.BuildForSymbol(AStore, Sym, AOptions.IncludeSeeAlso,
+      Res := TDocumenter.BuildForSymbol(AStore, Sym, AOptions.Handles, AOptions.IncludeSeeAlso,
         AOptions.IncludeSince, AOptions.BaseDir, AOptions.ExtraStores, AOptions.MaxReturnCases,
         AOptions.MaxCallers, AOptions.ComplexityMin);
       if Length(Res.Edits) = 0 then Continue; // daUnchanged / daNotFound: nothing to do
