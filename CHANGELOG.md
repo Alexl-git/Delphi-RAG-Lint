@@ -3,6 +3,11 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Fixed
+- `FindSymbolsByExactName` tries the VERBATIM dotted name first: unit names are stored with their dots (`A.Lib`, `Vcl.Controls`), and the per-segment split from fdb05c9d (`TList<T>.Add` -> `Add` + qualified-name suffix) ran first and found nothing, so `query unit-usage --unit A.Lib` degraded to `exports_known:false` and `unused-unit-in-uses` reported zero for every dotted unit. The split now runs only when the verbatim lookup misses; pinned by `run_generic_symbol_names.ps1` (D1, through `unit-usage`, which has no qualified-name fallback of its own).
+
 ## v1.15.0-alpha -- 2026-09-17
 
 ### Added

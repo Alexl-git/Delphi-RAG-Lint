@@ -139,6 +139,48 @@ implementation
 end.
 '@
 
+# unit gn.Dotted: a DOTTED unit name. The unit row is stored with its dot in
+# symbols.name ('gn.Dotted', like Vcl.Controls); the by-name lookup must try
+# that verbatim FIRST and only then fall back to the per-segment split that
+# serves 'TList<T>.Add'. Regression fdb05c9d: the split ran first, looked for
+# name 'Dotted', found nothing, and unit-usage / unused-unit-in-uses went dark.
+Write-Ascii (Join-Path $scratch 'gn.Dotted.pas') @'
+unit gn.Dotted;
+
+interface
+
+type
+  TDotted = class
+    FValue: Integer;
+  end;
+
+implementation
+
+end.
+'@
+
+# unit gnD imports gn.Dotted: the importer that `query unit-usage --unit
+# gn.Dotted` must list. That verb resolves the unit's export surface through
+# FindSymbolsByExactName with NO qualified-name fallback (unlike `query
+# --name`, which retries FindSymbolsByQualifiedName on a miss and so cannot
+# see this regression).
+Write-Ascii (Join-Path $scratch 'gnD.pas') @'
+unit gnD;
+
+interface
+
+uses gn.Dotted;
+
+type
+  TUsesDotted = class
+    FD: TDotted;
+  end;
+
+implementation
+
+end.
+'@
+
 $db = Join-Path $scratch 'gn.sqlite'
 
 Push-Location C:\TEMP
@@ -266,6 +308,23 @@ try {
   # --- impl range of a GENERIC class's method body is stamped (#5c) -----------
   $impl = Sql "SELECT impl_start_line FROM symbols WHERE qualified_name='gnB.TList.Add'"
   Check 'I1 gnB.TList.Add (procedure TList<T>.Add impl) has a non-null impl_start_line' (($impl.Count -eq 1) -and ($null -ne $impl[0].impl_start_line) -and ([int]$impl[0].impl_start_line -gt 0)) "impl_start_line=$($impl[0].impl_start_line)"
+
+  # --- D1: a DOTTED UNIT NAME is a verbatim `name`, not a path to split -------
+  # 'gn.Dotted' is the unit row's symbols.name (stored WITH the dot). The
+  # per-segment fallback that serves 'TList<T>.Add' must run only when the
+  # verbatim lookup finds nothing; fdb05c9d ran it first and answered zero.
+  # The probe is `unit-usage`, NOT `query --name`: the latter retries by
+  # qualified name on a miss (CLI, INBOX 2.4) and passed on the broken build.
+  $qd = (& $exePath query unit-usage --unit 'gn.Dotted' --db $db --json 2>$null) -join "`n"
+  $qdExit = $LASTEXITCODE
+  $rowsD = @(); try { $rowsD = @($qd | ConvertFrom-Json) } catch { }
+  # exports_known is the tell: the importer list comes from unit_uses, but the
+  # export surface comes from FindSymbolsByExactName('gn.Dotted') -- broken,
+  # it degrades to exports_known:false with no referenced verdict.
+  Check 'D1 query unit-usage --unit "gn.Dotted" resolves the UNIT by its verbatim dotted name: gnD.pas listed with exports_known:true and referenced:true' (($qdExit -eq 0) -and ($rowsD.Count -eq 1) -and ($rowsD[0].file -match '(?i)\\gnD\.pas$') -and ($rowsD[0].exports_known -eq $true) -and ($rowsD[0].referenced -eq $true)) "exit=$qdExit rows=$($rowsD.Count) file=$($rowsD[0].file) exports_known=$($rowsD[0].exports_known) referenced=$($rowsD[0].referenced)"
+  $qdc = (& $exePath query --name 'gn.Dotted.TDotted' --db $db --json --exact 2>$null) -join "`n"
+  $rowsDC = @(); try { $rowsDC = @($qdc | ConvertFrom-Json) } catch { }
+  Check 'D1 query --name "gn.Dotted.TDotted" returns the CLASS gn.Dotted.TDotted (per-segment fallback still reaches it)' (($rowsDC.Count -eq 1) -and ($rowsDC[0].qualified_name -eq 'gn.Dotted.TDotted') -and ($rowsDC[0].kind -match '(?i)class')) "rows=$($rowsDC.Count) qn=$($rowsDC[0].qualified_name) kind=$($rowsDC[0].kind)"
 
   # --- POSITIVE CONTROL: the guard can fail -----------------------------------
   $ctl = Sql "SELECT COUNT(*) AS n FROM symbols WHERE name='TPair'"

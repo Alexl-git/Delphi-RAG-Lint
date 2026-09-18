@@ -431,12 +431,16 @@ type
     /// more than one row matches, prefers rows of the same arity, falling back
     /// to every row when none has that arity. Pinned by
     /// tests\autotest\run_generic_symbol_names.ps1.
-    /// A DOTTED AName ('TList&lt;T&gt;.Add', 'gnA.TList') is split per
-    /// segment: the name match and the arity preference are the LAST
-    /// segment's, and the rows are kept to those whose qualified name equals
-    /// the stripped path or ends with it at a '.' boundary -- so the first
-    /// answers the METHOD gnB.TList.Add and the second exactly gnA.TList,
-    /// never gnB.TList. The first is pinned by the same guard.
+    /// A DOTTED AName is tried VERBATIM first (generics stripped per segment,
+    /// dots kept): a unit's name carries its dots ('A.Lib', 'Vcl.Controls'),
+    /// so 'A.Lib' answers the unit row. Only when that finds nothing is it
+    /// split per segment: the name match and the arity preference are the
+    /// LAST segment's, and the rows are kept to those whose qualified name
+    /// equals the stripped path or ends with it at a '.' boundary -- so
+    /// 'TList&lt;T&gt;.Add' answers the METHOD gnB.TList.Add and 'gnA.TList'
+    /// exactly gnA.TList, never gnB.TList. Both orders are pinned by the same
+    /// guard (the unit case through `query unit-usage`, which has no
+    /// qualified-name fallback of its own).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) (+47 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>

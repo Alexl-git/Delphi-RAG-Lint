@@ -7054,53 +7054,74 @@ var
     end;
   end;
 
+  { The exact-then-NOCASE-retry pair over FQFindByName/CI, so the two passes
+    below share one body. Appends to List; the caller reads List.ToArray.
+    Closes both prepared queries in its own finally: ReadSymbolFromQuery can
+    raise, and the second pass reopens the same long-lived datasets. }
+  procedure CollectByName(const ABare: string);
+  begin
+    try
+      if FQFindByName.Active then FQFindByName.Close;
+      FQFindByName.ParamByName('name').AsString:= ABare;
+      FQFindByName.Open;
+      while not FQFindByName.Eof do
+      begin
+        List.Add(ReadSymbolFromQuery(FQFindByName));
+        FQFindByName.Next;
+      end;
+      FQFindByName.Close;
+      { Nothing matched byte-exactly. Retry case-insensitively before reporting
+        absence -- see CaseSensitiveLookups. }
+      if (List.Count = 0) and not CaseSensitiveLookups then
+      begin
+        WarnIfNocaseIndexMissing;
+        if FQFindByNameCI.Active then FQFindByNameCI.Close;
+        FQFindByNameCI.ParamByName('name').AsString:= ABare;
+        FQFindByNameCI.Open;
+        while not FQFindByNameCI.Eof do
+        begin
+          List.Add(ReadSymbolFromQuery(FQFindByNameCI));
+          FQFindByNameCI.Next;
+        end;
+      end;
+    finally
+      if FQFindByName  .Active then FQFindByName  .Close;
+      if FQFindByNameCI.Active then FQFindByNameCI.Close;
+    end;
+  end;
+
 begin
   { v23 (spec G7): match on the BARE name; see PreferArity for the rest.
-    Batch residue R2: a dotted input is split PER SEGMENT like
-    FindSymbolsByQualifiedName -- the `name` match and the arity preference
-    are the LAST segment's ('TList<T>.Add' -> 'Add', no list), where the old
-    whole-input split took the first '<' and the last '>' and answered the
-    CLASS `TList` for that input. The remaining segments narrow the rows by
-    qualified-name suffix (KeepQualifiedSuffix). A bare input is untouched:
-    LastTopLevelSegment returns it whole. }
+    A DOTTED input is tried in two passes, in this order:
+      1. VERBATIM (generics stripped per segment, dots kept): a unit's
+         symbols.name carries its dots -- 'A.Lib', 'Vcl.Controls' -- so
+         'A.Lib' must match `name = 'A.Lib'` before anything splits it.
+         Regression fdb05c9d ran pass 2 alone, looked for name 'Lib', and
+         unit-usage / unused-unit-in-uses answered zero for every dotted unit.
+      2. Only when pass 1 finds nothing, batch residue R2: split PER SEGMENT
+         like FindSymbolsByQualifiedName -- the `name` match and the arity
+         preference are the LAST segment's ('TList<T>.Add' -> 'Add', no
+         list), where the old whole-input split took the first '<' and the
+         last '>' and answered the CLASS `TList`. The remaining segments
+         narrow the rows by qualified-name suffix (KeepQualifiedSuffix).
+    A bare input is one pass: LastTopLevelSegment returns it whole, so the
+    verbatim name IS the bare name and pass 2 would repeat pass 1. }
   var BareName, InParams: string;
   var Path   : string := StripGenericSegments(AName);
   var HadList: Boolean:= SplitGenericName(LastTopLevelSegment(AName), BareName, InParams);
+  var Dotted : Boolean:= Pos('.', Path) > 0;
   List:= TList<TSymbol>.Create;
   try
-    if FQFindByName.Active then FQFindByName.Close;
-    FQFindByName.ParamByName('name').AsString:= BareName;
-    FQFindByName.Open;
-    while not FQFindByName.Eof do
+    if Dotted then CollectByName(Path)
+    else CollectByName(BareName);
+    if Dotted and (List.Count = 0) then
     begin
-      List.Add(ReadSymbolFromQuery(FQFindByName));
-      FQFindByName.Next;
-    end;
-    FQFindByName.Close;
-    { Nothing matched byte-exactly. Retry case-insensitively before reporting
-      absence -- see CaseSensitiveLookups. }
-    if (List.Count = 0) and not CaseSensitiveLookups then
-    begin
-      WarnIfNocaseIndexMissing;
-      if FQFindByNameCI.Active then FQFindByNameCI.Close;
-      FQFindByNameCI.ParamByName('name').AsString:= BareName;
-      FQFindByNameCI.Open;
-      while not FQFindByNameCI.Eof do
-      begin
-        List.Add(ReadSymbolFromQuery(FQFindByNameCI));
-        FQFindByNameCI.Next;
-      end;
-    end;
-    Result:= List.ToArray;
-    if Pos('.', Path) > 0 then Result:= KeepQualifiedSuffix(Result, Path);
+      CollectByName(BareName);
+      Result:= KeepQualifiedSuffix(List.ToArray, Path);
+    end
+    else Result:= List.ToArray;
     if HadList and (Length(Result) > 1) then Result:= PreferArity(Result, InParams);
   finally
-    { Close in the FINALLY, not after the loop: ReadSymbolFromQuery can raise,
-      and a still-open dataset holds its cursor for the life of the store (these
-      are long-lived PREPARED queries, not locals). The pre-existing
-      close-after-the-loop left that open on any exception path. }
-    if FQFindByName  .Active then FQFindByName  .Close;
-    if FQFindByNameCI.Active then FQFindByNameCI.Close;
     List.Free;
   end;
 end; // function
