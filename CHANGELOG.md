@@ -3,10 +3,30 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.15.1-alpha -- 2026-09-17
+
+PATCH: fixes a regression shipped in 1.15.0 (dotted unit names invisible to
+`unit-usage` / `unused-unit-in-uses`). Extractor 1.17.0 / schema v23 /
+resolver 1.4.0 are UNCHANGED; an index built by 1.15.0 needs no re-parse.
 
 ### Fixed
 - `FindSymbolsByExactName` tries the VERBATIM dotted name first: unit names are stored with their dots (`A.Lib`, `Vcl.Controls`), and the per-segment split from fdb05c9d (`TList<T>.Add` -> `Add` + qualified-name suffix) ran first and found nothing, so `query unit-usage --unit A.Lib` degraded to `exports_known:false` and `unused-unit-in-uses` reported zero for every dotted unit. The split now runs only when the verbatim lookup misses; pinned by `run_generic_symbol_names.ps1` (D1, through `unit-usage`, which has no qualified-name fallback of its own).
+- glyph-vacuum (converter): `FindCountProp` matches dotted count props by
+  their last segment (2df9601f); length-prefixed bare bitmaps
+  (`TBitBtn.Glyph.Data`) and raw SVG (`TdxSmartGlyph`) decode, and EMF
+  requires the ` EMF` signature -- 852+3 of 1016 ORM3 rows were undecoded
+  (2343c0bc); `runtime_refs` derived from the merged write set, the
+  class-tree count fallback matches dotted names, the collection scan fires
+  only at an end-of-line `= {`, gallery cards sorted by sha (6a2803f4).
+
+### Changed
+- `docs\GLYPH-CLASSES.md` seeded from the first glyph-vacuum run on ORM3,
+  re-measured after the SVG / length-prefix decoders, and the M2022 corpus
+  added (d298ae1d, 64a5d5db, 7df84bc1).
+- glyph-vacuum fixtures for bare-BMP-at-offset-0 geometry and the
+  Int32-equals-length collision fall-through (fd810e91).
+- autodoc: the CLI project's doc-comments regenerated after extractor 1.17.0
+  (inherited fields, nested locals in facts) -- comment-only (1307e778).
 
 ## v1.15.0-alpha -- 2026-09-17
 
