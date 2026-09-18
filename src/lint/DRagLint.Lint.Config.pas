@@ -58,7 +58,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TNamingConfig</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ?, DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas) (+45 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas) ?, DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas) ?, DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas) (+47 more)</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <!-- drag-lint:auto END -->
@@ -105,7 +105,7 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.ErrorSignatures (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveEndpointIds (DRagLint.CLI.pas) ?, DRagLint.Lint.Config.TLintConfig.IsAutoFix (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.ShouldKeep (DRagLint.Lint.Config.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesAudit.UnitsDefining (DRagLint.CLI.pas) ?, DRagLint.CLI.ErrorSignatures (DRagLint.CLI.pas) ?, DRagLint.Lint.Config.TLintConfig.IsAutoFix (DRagLint.Lint.Config.pas), DRagLint.Lint.Config.TLintConfig.ShouldKeep (DRagLint.Lint.Config.pas) (+5 more)</para>
     /// <para>Calls: SameText, Trim</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
@@ -222,7 +222,7 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Config.TLintConfig.IsEnabled (DRagLint.Lint.Config.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Config.TLintConfig.IsEnabled (DRagLint.Lint.Config.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
     /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Contains</para>
     /// <para>Reads: FDisabled, FEnabled</para>
     /// <para>Pure</para>
@@ -280,7 +280,7 @@ type
     /// suppression, because vendored code is not this codebase's quality
     /// signal for ANY rule.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?</para>
+    /// <para>Called from: DRagLint.CLI.DocExcludePredicate (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Calls: LowerCase, MatchesMask, StringReplace</para>
     /// <para>Returns: False; True</para>
     /// <para>Reads: FExcludePaths</para>
@@ -299,7 +299,7 @@ type
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: ADefault.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.Lint.ClassMetrics.TClassMetrics.Run (DRagLint.Lint.ClassMetrics.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ClassMetrics.TClassMetrics.Run (DRagLint.Lint.ClassMetrics.pas)</para>
     /// <para>Calls: SameText</para>
     /// <para>Reads: FThreshNames, FThreshValues</para>
     /// <para>Pure</para>

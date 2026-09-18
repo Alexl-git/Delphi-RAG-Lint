@@ -51,7 +51,7 @@ type
   /// have empty `Items`. `EntryDefs` names vars defined unconditionally on
   /// entry to this block (used for the `foreach` iterator).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas) (+8 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Cfg.TCfg.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfg.NewBlock (DRagLint.Analysis.Cfg.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Flow.Lattices, DRagLint.Analysis.Liveness, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -119,8 +119,8 @@ type
   /// the routine contains `goto`/labels/`asm` and analyses must bail (return no
   /// findings) -- the graph would otherwise need unsound edges.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.Cfg.TBuilderState.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver&lt;TValue&gt;.Solve (DRagLint.Analysis.DataFlow.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Liveness, DRagLint.Refactor.ExtractMethod</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.Cfg.TBuilderState.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Liveness, DRagLint.Diagnostics.FlowChecks, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCfg = class
@@ -178,7 +178,7 @@ type
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: Blocks.Count.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver&lt;TValue&gt;.Solve (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Refactor.ExtractMethod.LiveOutOfRun (DRagLint.Refactor.ExtractMethod.pas)</para>
+    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Refactor.ExtractMethod.LiveOutOfRun (DRagLint.Refactor.ExtractMethod.pas)</para>
     /// <para>Reads: Blocks</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>

@@ -31,7 +31,7 @@ type
   /// surrounding angle brackets already stripped, or '' when the link has no
   /// type argument (e.g. '.AsSingleton').
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.SpringDI.FindLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.FirstDiRegistrationVerb (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.HasLink (DRagLint.Parser.SpringDI.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.Delphi13.TryEmitSpringDI.AddLink (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.SpringDI.FindLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.HasLink (DRagLint.Parser.SpringDI.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.Parser.Delphi13, DRagLint.Parser.SpringDI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

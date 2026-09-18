@@ -18,8 +18,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.FormatRenameEditsAsJson (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.Rename</para>
+  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.FormatRenameEditsAsJson (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRenameEdit = record

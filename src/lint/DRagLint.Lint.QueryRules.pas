@@ -199,6 +199,7 @@ type
       /// FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
       /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, Integer, SameText, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.Query.TTSQueryCursor.Create, TreeSitter.Query.TTSQueryCursor.Execute, TreeSitter.Query.TTSQueryCursor.NextMatch, TreeSitter.Query.TTSQueryMatchHelper.CapturesArray, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
       /// <para>Complexity: 13 (cyclomatic, outer body), 85 lines (full implementation)</para>
       /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FRuleId</para>

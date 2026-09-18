@@ -73,8 +73,8 @@ type
   /// so identical names would make TSetPair ambiguous by uses-clause order.
   /// A change to one must be mirrored in the other.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseSetList (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateConversionRules (DRagLint.Convert.Rules.pas)</para>
-  /// <para>Used in units: DRagLint.Convert.Rules</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Rules.pas), DRagLint.CLI.DoConvertValidate.SetsSummary (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ApplySets (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseSetList (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateConversionRules (DRagLint.Convert.Rules.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMappingSetPair = record
@@ -105,7 +105,7 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.HasConvertFor (DRagLint.Convert.DfmReemit.pas) (+7 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.HasConvertFor (DRagLint.Convert.DfmReemit.pas) (+18 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -147,7 +147,7 @@ type
   /// ASCII-only description (e.g. 'unknown directive: #frobnicate' or
   /// 'link ToPath not found in --to tree: Bogus.Path').
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Rules.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Rules.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -324,7 +324,7 @@ type
       /// and/or .dproj-derived DCC_Define). Used only when AEnabled.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?, DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas)</para>
       /// <para>Writes: FPreprocessEnabled, FProfile, FPreprocessFellBack</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
@@ -348,7 +348,7 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->Project file not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas) (+1 more)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+1 more)</para>
       /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.ExtractIncludes, DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.FindIncFile, DRagLint.Index.Closure.TClosureResolver.FindUnitFile, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile, LowerCase</para>
       /// <para>Complexity: 24 (cyclomatic, outer body), 236 lines (full implementation)</para>
       /// <para>Catches: Exception (empty)</para>

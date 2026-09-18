@@ -25,36 +25,107 @@ type
   /// TValue is the lattice element (e.g. a variable bitset). `Join`
   /// must be commutative/associative and monotone; `Transfer` monotone. The
   /// solver terminates because the lattice has finite height.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.DataFlow, DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks</para>
+  /// <para>Implemented by: TDefiniteAssignment, TEscape, TFreedState, TLiveness</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   IDataFlowAnalysis<TValue> = interface
     /// <summary>Forward (Entry-&gt;Exit) or backward (Exit-&gt;Entry).</summary>
     /// <returns><!-- drag-lint:auto type -->TFlowDir</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas)</para>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Equals"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Join"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Direction: TFlowDir;
     /// <summary>The lattice bottom (initial IN/OUT of interior blocks).</summary>
     /// <returns><!-- drag-lint:auto type -->TValue</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas)</para>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Direction"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Equals"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Join"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Bottom: TValue;
     /// <summary>Value at the boundary block (Entry for forward, Exit for
     /// backward) -- e.g. params assigned-on-entry, or vars live-at-exit.</summary>
     /// <returns><!-- drag-lint:auto type -->TValue</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas)</para>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Direction"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Equals"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Join"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Boundary: TValue;
     /// <summary>Meet of two predecessor/successor contributions.</summary>
     /// <param name="A"><!-- drag-lint:auto type -->const TValue</param>
     /// <param name="B"><!-- drag-lint:auto type -->const TValue</param>
     /// <returns><!-- drag-lint:auto type -->TValue</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas)</para>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Direction"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Equals"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Join(const A, B: TValue): TValue;
     /// <summary>Effect of one block on the in-value.</summary>
     /// <param name="ABlock"><!-- drag-lint:auto type -->const TCfgBlock</param>
     /// <param name="AIn"><!-- drag-lint:auto type -->const TValue</param>
     /// <returns><!-- drag-lint:auto type -->TValue</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas)</para>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Direction"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Equals"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Join"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Transfer(const ABlock: TCfgBlock; const AIn: TValue): TValue;
     /// <summary>Lattice equality (fixpoint test).</summary>
     /// <param name="A"><!-- drag-lint:auto type -->const TValue</param>
     /// <param name="B"><!-- drag-lint:auto type -->const TValue</param>
     /// <returns><!-- drag-lint:auto type -->Boolean</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas)</para>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Direction"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Join"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Equals(const A, B: TValue): Boolean;
   end;
 
   /// <summary>Worklist fixpoint solver over a CFG.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.Liveness, DRagLint.Diagnostics.FlowChecks</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDataFlowSolver<TValue> = class
   public
     /// <summary>Solve AAnalysis over ACfg. Returns False (and leaves AIn/AOut
@@ -67,11 +138,14 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DRagLint.Analysis.Cfg.TCfg.BlockCount, DRagLint.Analysis.DataFlow.DataFlowRecordSolve</para>
+    /// <para>Calls: DRagLint.Analysis.Cfg.TCfg.BlockCount, DRagLint.Analysis.DataFlow.DataFlowRecordSolve, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Direction, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Equals, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Join, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer</para>
     /// <para>Complexity: 17 (cyclomatic, outer body), 84 lines (full implementation)</para>
     /// <para>Mutates: AIn (out), AOut (out)</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.BlockCount"/>
     /// <seealso cref="DRagLint.Analysis.DataFlow.DataFlowRecordSolve"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary"/>
+    /// <seealso cref="DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Direction"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Solve(const ACfg: TCfg; const AAnalysis: IDataFlowAnalysis<TValue>;
@@ -179,7 +253,7 @@ function DataFlowLatticeStats: TArray<TDataFlowLatticeStat>;
 /// stay private to the implementation and this is their one door.
 /// Not thread-safe, and deliberately so -- see the counter block's remarks.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver&lt;TValue&gt;.Solve (DRagLint.Analysis.DataFlow.pas)</para>
+/// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas)</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

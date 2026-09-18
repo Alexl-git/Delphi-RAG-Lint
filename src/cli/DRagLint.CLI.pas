@@ -74,8 +74,8 @@ const
 /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+95 more)</para>
-/// <para>Complexity: 110 (cyclomatic, outer body), 286 lines (full implementation)</para>
+/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+96 more)</para>
+/// <para>Complexity: 111 (cyclomatic, outer body), 287 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>

@@ -118,7 +118,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, ExtractFileExt, Integer (+6 more)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, DRagLint.Lint.QueryRules.TQueryRule.Run, ExtractFileExt (+7 more)</para>
       /// <para>Complexity: 14 (cyclomatic, outer body), 121 lines (full implementation)</para>
       /// <para>Reads: FLanguage, FExcUnit, FQueryRules</para>
       /// <para>Touches: file system</para>

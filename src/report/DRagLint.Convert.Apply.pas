@@ -67,7 +67,7 @@ type
   /// (To), per the matching #convert rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.SummarizeUnlinked (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -161,7 +161,7 @@ type
   /// only be anchored to the instance's object-block header line. RuleLine is
   /// the 1-based line in the rules file that produced the item, or 0.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlainItem (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport.FoldOne (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlainItem (DRagLint.Convert.Apply.pas) (+6 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

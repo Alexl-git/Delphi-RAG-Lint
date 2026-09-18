@@ -23,8 +23,8 @@ type
   /// file, and the shortest import chain from any project source.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
-  /// <para>Used in units: DRagLint.Report.Deps</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.CLI.DoDepsReport.RenderCsv (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsExternal = record
@@ -55,8 +55,8 @@ type
   /// <summary>One project-unit -&gt; external-unit uses edge.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas)</para>
-  /// <para>Used in units: DRagLint.Report.Deps</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.CLI.DoDepsReport.RenderCsv (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsEdge = record
@@ -77,8 +77,8 @@ type
   /// and how many distinct project units depend on at least one of them.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.Deps.pas)</para>
-  /// <para>Used in units: DRagLint.Report.Deps</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsGroupCount = record

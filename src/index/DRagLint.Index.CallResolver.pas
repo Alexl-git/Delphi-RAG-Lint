@@ -30,7 +30,7 @@ type
   /// filter by "any method-shaped kind" / "any type-defining kind" in one test.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.PickAccessor (DRagLint.Index.CallResolver.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSymbolKindSet = set of TSymbolKind;
@@ -155,7 +155,7 @@ type
     /// TList&lt;TSymbol&gt;.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods (DRagLint.Index.CallResolver.pas) ?</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupInLexicalScopes (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType.AddHelperMethods (DRagLint.Index.CallResolver.pas) ?, DRagLint.Index.CallResolver.TCallResolver.PickAccessor (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols</para>
     /// <para>Reads: FChildCache, FStore</para>
     /// <para>Pure</para>
@@ -221,10 +221,10 @@ type
     /// <param name="ADeclineOnConflict">True: decline on same-named children
     /// of differing Signature instead of returning the first (v23 local/param
     /// receiver typing). False (default): first match, the pre-v23 contract.</param>
-    /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: Default(TSymbol).</returns>
+    /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: Default(TSymbol); S.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LookupMemberOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveAccessor (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeReceiver (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LookupMemberOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeReceiver (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: Default, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, SameText</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
@@ -363,6 +363,20 @@ type
     /// even if the answer declined -- so a caller stops at this class instead
     /// of walking to an ancestor that the same-named members shadow.</param>
     /// <returns>The chosen accessor, or Default(TSymbol) when none or declined.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveAccessor (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Calls: Default, DRagLint.Index.CallResolver.SignatureArityRange, DRagLint.Index.CallResolver.TCallResolver.ChildrenOf, SameText</para>
+    /// <para>Returns: Default(TSymbol); S</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 46 lines (full implementation)</para>
+    /// <para>Mutates: AFound (out)</para>
+    /// <seealso cref="DRagLint.Index.CallResolver.SignatureArityRange"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ChildrenOf"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.BuildMaps"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PickAccessor(AParentId: Int64; const AName: string; AArity: Integer;
       const AKinds: TSymbolKindSet; out AFound: Boolean): TSymbol;
     /// <summary>The accessor a property's AMode resolves to: the identifier
@@ -379,14 +393,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Index.CallResolver.AccessorIdentAfter, DRagLint.Index.CallResolver.TCallResolver.FileIsStale, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind, DRagLint.Index.CallResolver.TCallResolver.LinesOf, Min</para>
-    /// <para>Complexity: 15 (cyclomatic, outer body), 32 lines (full implementation)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Index.CallResolver.AccessorIdentAfter, DRagLint.Index.CallResolver.PropertyIndexArity, DRagLint.Index.CallResolver.TCallResolver.FileIsStale, DRagLint.Index.CallResolver.TCallResolver.LinesOf, DRagLint.Index.CallResolver.TCallResolver.PickAccessor, Min</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 42 lines (full implementation)</para>
     /// <para>Reads: FStore</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
     /// <seealso cref="DRagLint.Index.CallResolver.AccessorIdentAfter"/>
+    /// <seealso cref="DRagLint.Index.CallResolver.PropertyIndexArity"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStale"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind"/>
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LinesOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -484,7 +498,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveOne (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Index.CallResolver.IsIdentPart, DRagLint.Index.CallResolver.IsIdentStart, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind, DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol, DRagLint.Index.CallResolver.TryParseCastTarget, Pos, SameText</para>
-    /// <para>Complexity: 19 (cyclomatic, outer body), 110 lines (full implementation)</para>
+    /// <para>Complexity: 20 (cyclomatic, outer body), 117 lines (full implementation)</para>
     /// <para>Reads: FStore</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
@@ -659,7 +673,7 @@ type
   /// which case the caller must not filter on it.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Index.CallResolver.TCallResolver.PickFromMatches (DRagLint.Index.CallResolver.pas)</para>
+  /// <para>Called from: DRagLint.Doc.Facts.OverloadArityTag (DRagLint.Doc.Facts.pas), DRagLint.Index.CallResolver.PropertyIndexArity (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.PickAccessor (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.PickFromMatches (DRagLint.Index.CallResolver.pas)</para>
   /// <para>Calls: Copy, Pos, SplitString, StartsText, Trim</para>
   /// <para>Returns: False; True</para>
   /// <para>Complexity: 25 (cyclomatic, outer body), 103 lines (full implementation)</para>

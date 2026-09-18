@@ -224,7 +224,7 @@ type
     /// not resolve to exactly one skEnum symbol.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
+    /// <para>Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfTypeSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.EnumHelper.DetectExplicitOrdinal, DRagLint.Refactor.EnumHelper.ReadDeclSpan</para>
     /// <para>Returns: Default(TEnumHelperResolve)</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>

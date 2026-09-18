@@ -99,8 +99,8 @@ type
   /// Fallback is '' when the block declares no `else`, and an unmatched value
   /// is then reported rather than guessed at.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindEnumCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
-  /// <para>Used in units: DRagLint.Convert.CastLib</para>
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindEnumCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEnumDef = record

@@ -12,7 +12,8 @@ uses
 type
   /// <summary>What a streamed graphic payload turned out to be, decoded from
   /// its bytes -- never inferred from the property name.</summary>
-  /// <remarks>A .dfm `Picture.Data` blob is a streamed TPicture: one length
+  /// <remarks>
+  /// A .dfm `Picture.Data` blob is a streamed TPicture: one length
   /// byte, that many class-name bytes, a little-endian Int32 image size, then
   /// the image. A bare image (no preamble) is recognised by its magic bytes at
   /// offset 0 -- or, when it starts with '&lt;?xml'/'&lt;svg' (an optional UTF-8
@@ -20,7 +21,12 @@ type
   /// Wrapper. A TBitmap-typed property streams as [Int32 LE length][image bytes]
   /// with no class name at all; that length-prefixed shape is also reported with
   /// an empty Wrapper. Width/Height/BitCount/PaletteEntries are filled for BMP
-  /// only; every other format, including SVG, leaves them 0.</remarks>
+  /// only; every other format, including SVG, leaves them 0.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.GlyphStrip, DRagLint.Convert.GlyphVacuum</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TStreamedGraphic = record
     Ok            : Boolean;
     Wrapper       : string;
@@ -38,12 +44,30 @@ type
 /// nibble is dropped.</summary>
 /// <param name="AValueText">The verbatim value text as TDfmNode.ValueText holds it.</param>
 /// <returns>The decoded bytes; empty for an empty or non-hex value.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.GlyphVacuum.HarvestCollection (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.HarvestObject (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Calls: Byte, CharInSet, Copy, StrToIntDef, UpCase</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DecodeDfmHex(const AValueText: string): TBytes;
 
 /// <summary>Image format from the magic bytes at <paramref name="AOffset"/>.</summary>
 /// <param name="ABytes">The payload bytes to sniff.</param>
 /// <param name="AOffset">Byte offset within <paramref name="ABytes"/> to read the magic number from.</param>
 /// <returns>'bmp' | 'ico' | 'wmf' | 'emf' | 'png' | 'jpg' | 'gif' | 'svg' | '' (unrecognised).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Calls: DRagLint.Convert.GlyphStrip.IsEmfSignature, DRagLint.Convert.GlyphStrip.LooksLikeSvg, DRagLint.Convert.GlyphStrip.StartsWith</para>
+/// <para>Returns: ''</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.IsEmfSignature"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.LooksLikeSvg"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.StartsWith"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;
 
 /// <summary>Decode a streamed graphic payload: wrapper preamble first (the
@@ -52,6 +76,18 @@ function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;
 /// <param name="APayload">The whole property value, decoded from hex.</param>
 /// <returns>Ok=False when neither a preamble nor a magic is recognised; every
 /// numeric field 0 and Format '' in that case.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.GlyphStrip.ReadDibHeader, DRagLint.Convert.GlyphStrip.ReadInt32LE, DRagLint.Convert.GlyphStrip.SniffImageFormat, SameText</para>
+/// <para>Returns: Default(TStreamedGraphic)</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 61 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.ReadDibHeader"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.ReadInt32LE"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.SniffImageFormat"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseStreamedGraphic(const APayload: TBytes): TStreamedGraphic;
 
 implementation

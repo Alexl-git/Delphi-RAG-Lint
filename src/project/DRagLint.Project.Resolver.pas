@@ -360,7 +360,7 @@ type
       /// <returns>Array of platform names (e.g. Win32, Win64, Android64).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
       /// <para>Returns: EnumLibraryPlatforms; ['Win32', 'Win64']</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
@@ -378,7 +378,7 @@ type
       /// <returns>Deduplicated array of existing absolute folder paths.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas) ?</para>
+      /// <para>Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas)</para>
       /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2</para>
       /// <para>Returns: List.ToArray</para>
       /// <para>Pure</para>

@@ -54,8 +54,8 @@ type
   /// only where the source states it. Nothing in this record is ever
   /// invented.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas)</para>
-  /// <para>Used in units: DRagLint.Doc.Facts</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ParamNoteFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ParamTypeFor (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocParamNote = record
@@ -92,7 +92,7 @@ type
   /// exists": callers must render the class alone in that case, exactly as
   /// they did before messages were mined at all.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail.OpenPendingRaiseAt (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CollectRaiseDetail.SetPendingMessage (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineRaisesDetailed (DRagLint.Doc.Facts.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

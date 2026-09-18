@@ -25,6 +25,12 @@ type
   /// <summary>v23: one analysed routine's candidates for the facts-inherited
   /// post-pass. Strings are interned per run (see TIndexer.Intern) so a
   /// 500k-routine library holds each identifier once.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THeldFieldFacts = record
     SymbolId  : Int64;
     ClassId   : Int64;
@@ -110,10 +116,10 @@ type
       /// <para>Calls: Format, Writeln</para>
       /// <para>Reads: FPreprocessFellBack   Writes: FPreprocessFellBack</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
@@ -127,9 +133,9 @@ type
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.IParser.FileExtensions"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParserFor(const AExtension: string): IParser;
@@ -144,9 +150,9 @@ type
       /// <para>Reads: FProgressTotal, FProgressWatch, FProgressDone   Writes: FProgressDone</para>
       /// <seealso cref="DRagLint.Core.Indexer.HumanDuration"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
@@ -159,10 +165,10 @@ type
       /// <para>Reads: FExcludeRoots</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsUnderExcludeRoot  (const APath: string): Boolean;
@@ -177,8 +183,8 @@ type
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot"/>
       /// <seealso cref="DRagLint.Index.Glob.TGlob.MatchesAny"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ShouldPruneDir      (const ADir : string): Boolean;
@@ -197,10 +203,10 @@ type
       /// <para>Reads: FWalkFilter</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SqlFileAllowedFilter(const APath: string): Boolean;
@@ -220,10 +226,10 @@ type
       /// <para>Returns: 0; DbId</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveEnclosingSymbolId(const ASymbols: TArray<TSymbol>;
@@ -243,10 +249,10 @@ type
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
@@ -274,6 +280,18 @@ type
       /// share one copy per distinct identifier.</summary>
       /// <param name="A">The identifiers to intern; may be empty.</param>
       /// <returns>An array of the same length whose strings are pooled.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Reads: FIntern</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Intern(const A: TArray<string>): TArray<string>;
     public
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
@@ -285,13 +303,13 @@ type
       /// <para>Calls: DRagLint.Core.Interfaces.TWalkFilter.Create</para>
       /// <para>Overload 1 of 2</para>
       /// <para>constructor</para>
-      /// <para>Reads: FParsers   Writes: FStore, FDocConfig, FParsers, FExcludeRoots, FVisited, FVisitedKeys, FIgnoreStack, FPreprocessEnabled (+2 more)</para>
+      /// <para>Reads: FParsers   Writes: FStore, FDocConfig, FParsers, FExcludeRoots, FVisited, FVisitedKeys, FHeld, FIntern (+4 more)</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Interfaces.TWalkFilter.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig); overload;
@@ -307,21 +325,21 @@ type
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>); overload;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Reads: FParsers, FExcludeRoots, FVisited, FVisitedKeys, FIgnoreStack   Writes: FStore</para>
+      /// <para>Reads: FParsers, FExcludeRoots, FVisited, FVisitedKeys, FIntern, FHeld, FIgnoreStack   Writes: FStore</para>
       /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
@@ -334,9 +352,9 @@ type
       /// <para>Reads: FProgressTotal   Writes: FProgressTotal, FProgressDone, FCountOnly, FProgressWatch</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.WalkAndIndex"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFolder(const APath: string; ARecursive: Boolean = True);
@@ -344,17 +362,17 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DateTimeToUnix, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ReportProgress, DRagLint.Core.Indexer.TIndexer.ResolveEnclosingSymbolId, DRagLint.Core.Indexer.TIndexer.SliceBodyLines, DRagLint.Core.Interfaces.IParser.LanguageName (+31 more)</para>
+      /// <para>Calls: DateTimeToUnix, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.TIndexer.Intern, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ReportProgress, DRagLint.Core.Indexer.TIndexer.ResolveEnclosingSymbolId, DRagLint.Core.Indexer.TIndexer.SliceBodyLines (+32 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.IndexFile</para>
-      /// <para>Complexity: 29 (cyclomatic, outer body), 377 lines (full implementation)</para>
-      /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FForceReparse, FPreprocessEnabled, FProfile (+1 more)   Writes: FSkippedUpToDate, FParsedFiles</para>
+      /// <para>Complexity: 32 (cyclomatic, outer body), 391 lines (full implementation)</para>
+      /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FForceReparse, FPreprocessEnabled, FProfile (+2 more)   Writes: FSkippedUpToDate, FParsedFiles</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Core.Indexer.BuildEnclosingLineMap"/>
       /// <seealso cref="DRagLint.Core.Indexer.FindDocRegionAbove"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Intern"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ParserFor"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFile(const AFilePath: string);
@@ -365,10 +383,10 @@ type
       /// <para>Reads: FSkippedUpToDate</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SkippedUpToDate: Integer;
@@ -381,10 +399,10 @@ type
       /// <para>Reads: FParsedFiles</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParsedFiles: Integer;
@@ -396,10 +414,10 @@ type
       /// <para>Reads: FVisited</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function VisitedFiles: TArray<string>;
@@ -410,11 +428,11 @@ type
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot</para>
       /// <para>Reads: FExcludeRoots</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddExcludeRoot(const APath: string);
@@ -424,10 +442,10 @@ type
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.SetForceReparse</para>
       /// <para>Writes: FForceReparse</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetForceReparse(AValue: Boolean);
@@ -439,10 +457,10 @@ type
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.SetResumeFingerprint</para>
       /// <para>Writes: FResumeFingerprint</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetResumeFingerprint(const AFingerprint: string);
@@ -454,9 +472,9 @@ type
       /// <para>Reads: FIgnoreStack, FWalkFilter   Writes: FWalkFilter, FIgnoreStack</para>
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetWalkFilter(const AFilter: TWalkFilter);
@@ -464,14 +482,14 @@ type
       /// <param name="AProfile"><!-- drag-lint:auto type -->const TDefineProfile</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.SetPreprocess</para>
       /// <para>Writes: FPreprocessEnabled, FProfile, FPreprocessFellBack</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
@@ -484,11 +502,25 @@ type
       /// names (F3). Must run AFTER ResolveAncestry. Clears the held list.</summary>
       /// <returns>Number of symbol_facts rows rewritten. 0 on a run that parsed
       /// nothing (F7), and then it prints nothing.</returns>
-      /// <remarks>Implements IIndexer.ApplyInheritedFieldFacts. Reach is the
+      /// <remarks>
+      /// Implements IIndexer.ApplyInheritedFieldFacts. Reach is the
       /// SAME database: a base class in the platform library is out of reach
       /// from a project index (F6). An ancestor gaining a field does not
       /// re-facts descendants in unchanged files on an incremental run -- the
-      /// periodic rebuild covers that.</remarks>
+      /// periodic rebuild covers that.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts.FieldsOfAncestors, DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts.Merge, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.PutSymbolFacts, JoinCappedDisplay, LowerCase</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.ApplyInheritedFieldFacts</para>
+      /// <para>Reads: FHeld, FStore, FIntern</para>
+      /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts.FieldsOfAncestors"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts.Merge"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolFacts"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.PutSymbolFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ApplyInheritedFieldFacts: Integer;
   end;
 

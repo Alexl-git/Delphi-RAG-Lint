@@ -732,4 +732,10 @@
 #   DERIVED-edge change (member_accesses / call_edges), not a parse.
 #   Superseded line:
 #   1.17.0-alpha|d64cb0f9464ef372ae5a39fd28665a9eda62922adcb5e61f32db02f2f562c66e
-1.17.0-alpha|f5d9e5086c95712800ee7f7271297a479fe5d233cd5e67ab9cf7d2ea020e3104
+# 2026-09-17 19:05: hash re-pinned WITHIN 1.17.0-alpha for a COMMENT-ONLY autodoc
+#   regeneration (document --project src\cli\drag-lint.dproj --apply after the
+#   v23 rebuild; 43 files, 0 non-comment lines changed -- verified with
+#   git diff -U0 filtered to lines that are not '///'). Same precedent as the
+#   v1.14.0-alpha release. Nothing parses differently. Superseded line:
+#   1.17.0-alpha|f5d9e5086c95712800ee7f7271297a479fe5d233cd5e67ab9cf7d2ea020e3104
+1.17.0-alpha|08af464e8ba0c86fc7e67e0fa0163b4008b3cd7ef539c120d0a1e245b015b06b

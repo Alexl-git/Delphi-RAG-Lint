@@ -14,8 +14,8 @@ type
   /// empty at the depth cap or when a node is a cycle re-encounter.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildForwardCallTree.Expand (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree.Expand (DRagLint.Report.RCallTree.pas)</para>
-  /// <para>Used in units: DRagLint.Report.RCallTree</para>
+  /// <para>Used by: DRagLint.CLI.DoButterfly.BuildNodeJson (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly.RenderNodeText (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree.BuildNodeJson (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree.RenderNodeChart (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree.RenderNodeText (DRagLint.CLI.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallNode = record

@@ -40,7 +40,7 @@ type
   /// AnchorIsValid for what it verifies and why a substring test alone is not
   /// enough. Set BOTH fields to arm it; ExpectLine = 0 is unguarded.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits.BuildUsesEdit (DRagLint.CLI.pas), DRagLint.CLI.ScopeWalkEditsToClosure (DRagLint.CLI.pas) (+41 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits.BuildUsesEdit (DRagLint.CLI.pas), DRagLint.CLI.ScopeWalkEditsToClosure (DRagLint.CLI.pas) (+42 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Diagnostics.AstChecks, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Doc.Strip, DRagLint.Lint.DocRules, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.NamingFix, DRagLint.Refactor.TextEdit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

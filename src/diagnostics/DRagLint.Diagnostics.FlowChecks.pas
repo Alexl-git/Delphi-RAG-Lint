@@ -66,7 +66,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ApplyEntryDefs, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectGuardTokens, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructedTypeText, ConstructorTransfersOwnership (+45 more)</para>
+    /// <para>Calls: ApplyEntryDefs, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectGuardTokens, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructedTypeText, ConstructorTransfersOwnership (+46 more)</para>
     /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); pmUnknown</para>
     /// <para>Complexity: 42 (cyclomatic, outer body), 1077 lines (full implementation)</para>
     /// <para>Touches: file system</para>

@@ -20,11 +20,12 @@ uses
 /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
+/// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 73 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.StripTopics"/>
+/// <seealso cref="DRagLint.Hover.Renderer.HoverHeaderName"/>
 /// <seealso cref="DRagLint.Hover.Renderer.UnescapeJsonText"/>
 /// <seealso cref="DRagLint.Hover.Renderer.WikiIndicatorLines"/>
 /// <!-- drag-lint:auto END -->
@@ -55,14 +56,14 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
+/// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
 /// <para>Complexity: 17 (cyclomatic, outer body), 136 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.StripTopics"/>
 /// <seealso cref="DRagLint.Hover.Renderer.HasAnyParamDescription"/>
+/// <seealso cref="DRagLint.Hover.Renderer.HoverHeaderName"/>
 /// <seealso cref="DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown"/>
-/// <seealso cref="DRagLint.Hover.Renderer.UnescapeJsonText"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const AReturnRhs: TArray<string> = nil; const AFactLines: TArray<string> = nil): string;
@@ -105,7 +106,7 @@ function RenderSignatureParamsMarkdown(const ASignature: string): string;
   /// const/var/out modifier (if any), the parameter name, and its type text.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), DRagLint.Diagnostics.FlowChecks.ModeOf (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)</para>
   /// <para>Used in units: DRagLint.Diagnostics.FlowChecks, DRagLint.Hover.Renderer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

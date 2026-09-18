@@ -134,7 +134,7 @@ type
       /// what the unit DECLARES.</para>
       /// <para>Touches the file system and the registry.</para>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ? (+143 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.OpenReadOnlyStore (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ? (+144 more)</para>
       /// <para>Calls: DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr, DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence, DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion, DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff, DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture, DRagLint.Format.Yadf.TYadfFormatter.SymbolFingerprint</para>
       /// <para>Complexity: 18 (cyclomatic, outer body), 207 lines (full implementation)</para>
       /// <para>Catches: Exception (empty); Exception (swallowed)</para>

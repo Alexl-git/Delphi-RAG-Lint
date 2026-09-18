@@ -228,16 +228,16 @@ type
       /// server is a worse one.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.StoresForFile (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: AssignFile, CloseFile, DRagLint.Core.Indexer.TIndexer.Create/2, DRagLint.LSP.Server.TLSPServer.DropEphemeralStore, DRagLint.Parser.Delphi13.TDelphi13Parser.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Flush, Format, Move, Rewrite, TTextRec, Writeln</para>
+      /// <para>Calls: AssignFile, CloseFile, DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts, DRagLint.Core.Indexer.TIndexer.Create/2, DRagLint.Core.Indexer.TIndexer.IndexFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Core.Interfaces.ISymbolStore.ResolveAncestry, DRagLint.Core.Interfaces.ISymbolStore.ResolveHelpers, DRagLint.Core.Interfaces.ISymbolStore.ResolveUnitUseTargets (+9 more)</para>
       /// <para>Returns: False; True</para>
       /// <para>Reads: FEphemSeq, FEphemDbPath   Writes: FEphemSeq, FEphemDbPath, FEphemStore, FEphemFile, FEphemStamp</para>
       /// <para>Catches: Exception (empty); Exception (swallowed)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DropEphemeralStore"/>
-      /// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Create"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  BuildEphemeralStore(const APath: string; AStamp: TDateTime): Boolean;
@@ -490,16 +490,16 @@ type
       /// resolution rule changed.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: Copy, Default, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Hover.Returns.MineReturnExpressions, DRagLint.LSP.Server.DeclLineFor (+10 more)</para>
+      /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.TDocFactsBuilder.Build (+13 more)</para>
       /// <para>Returns: False; True</para>
       /// <para>Complexity: 54 (cyclomatic, outer body), 327 lines (full implementation)</para>
       /// <para>Reads: FStores</para>
       /// <para>Mutates: AOut (out)</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
-      /// <seealso cref="DRagLint.Core.Model.IntrinsicSignature"/>
-      /// <seealso cref="DRagLint.Core.Model.IsCompilerIntrinsic"/>
-      /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  ComputeHover         (const AParams: TJSONObject; out AOut: THoverComputation): Boolean;

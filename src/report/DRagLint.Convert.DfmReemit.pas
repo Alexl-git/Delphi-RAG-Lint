@@ -53,8 +53,8 @@ type
   /// verbatim in ValueText, not modelled as child nodes. Only a dnkSubObject has
   /// children: its properties + nested objects.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitDotted (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitDotted (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmNode = class
@@ -105,7 +105,7 @@ type
   /// resolved default -- a value the operator asked to be mapped and which was
   /// not, even though it never appeared in the .dfm text.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.EvaluateMapping (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -283,7 +283,7 @@ type
   /// block, or no #convert header in the rules. Error carries the reason when Ok
   /// is False.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -310,15 +310,15 @@ type
 /// indexer's TDFMParser is lossy -- symbols/refs only). Not thread-safe with
 /// respect to the tree-sitter runtime if called concurrently.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
-/// <para>Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, Trim</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 53 lines (full implementation)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.HarvestFile (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Calls: DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.ObjectKeyword, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, Trim</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 54 lines (full implementation)</para>
 /// <para>Mutates: ARoot (out)</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.NodeText"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ObjectKeyword"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.WalkNodeInto"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
-/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
@@ -369,6 +369,14 @@ function ReemitComponent(const AFromBlock: string; const ARules: TConversionRule
 /// <returns>False when the declaration has no usable default (`nodefault`, a bare
 /// `default;`, or no clause) -- such a property is always streamed, so its absence
 /// is genuinely unknown and the caller must not invent a value.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ResolveLeafValue (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AValue (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LeafDefaultOf(const ATree: TPropTree; const AName: string;
   out AValue: string): Boolean;
 

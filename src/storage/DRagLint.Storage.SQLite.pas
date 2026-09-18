@@ -499,7 +499,7 @@ type
       /// implementation.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByQualifiedName (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName.CollectByName (DRagLint.Storage.SQLite.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByQualifiedName (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: Writeln</para>
       /// <para>Reads: FNocaseWarned, FConn   Writes: FNocaseWarned</para>
       /// <para>Catches: Exception (empty)</para>
@@ -622,7 +622,7 @@ type
       /// <exception cref="EIndexNewerThanEngine"><!-- drag-lint:auto exc -->refusing to write: this database is at schema v%d, NEWER than this engine's v%d (drag-lint %s).</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropTriggerVerbose, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.PrintTriggerCount, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.TryExec, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, IntToStr, LowerCase, Pos, Writeln</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.Migrate</para>
       /// <para>Reads: FConn, FFts5Available   Writes: FFts5Available</para>
@@ -1418,36 +1418,36 @@ type
       procedure RollbackFileTx(const AToken: TFileTxToken);
 
       /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: List.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.ResolveUnitExportSurface (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolByExactNameAnywhere (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeCategoryDepth (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeSymbolId (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds (DRagLint.Storage.SQLite.pas) (+5 more)</para>
-      /// <para>Calls: DRagLint.Storage.SQLite.ReadSymbolFromQuery, DRagLint.Storage.SQLite.TSQLiteSymbolStore.WarnIfNocaseIndexMissing</para>
+      /// <para>Called from: DRagLint.CLI.DoUsesAudit.UnitsDefining (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolByExactNameAnywhere (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeCategoryDepth (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeSymbolId (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds (DRagLint.Storage.SQLite.pas) (+3 more)</para>
+      /// <para>Calls: DRagLint.Core.Model.LastTopLevelSegment, DRagLint.Core.Model.SplitGenericName, DRagLint.Core.Model.StripGenericSegments, DRagLint.Storage.SQLite.PreferArity, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName.CollectByName, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName.KeepQualifiedSuffix, EndsStr, EndsText, Pos, ReadSymbolFromQuery, SameText</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName</para>
-      /// <para>Reads: FQFindByName, FQFindByNameCI</para>
       /// <para>Pure</para>
-      /// <seealso cref="DRagLint.Storage.SQLite.ReadSymbolFromQuery"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.WarnIfNocaseIndexMissing"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths"/>
+      /// <seealso cref="DRagLint.Core.Model.LastTopLevelSegment"/>
+      /// <seealso cref="DRagLint.Core.Model.SplitGenericName"/>
+      /// <seealso cref="DRagLint.Core.Model.StripGenericSegments"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.PreferArity"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName.CollectByName"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindSymbolsByExactName    (const AName : string): TArray<TSymbol>;
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: List.ToArray.</returns>
+      /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetClassSurface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolSlice (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: DRagLint.Storage.SQLite.ReadSymbolFromQuery, DRagLint.Storage.SQLite.TSQLiteSymbolStore.WarnIfNocaseIndexMissing</para>
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetClassSurface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolSlice (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Calls: DRagLint.Core.Model.LastTopLevelSegment, DRagLint.Core.Model.SplitGenericName, DRagLint.Core.Model.StripGenericSegments, DRagLint.Storage.SQLite.PreferArity, DRagLint.Storage.SQLite.ReadSymbolFromQuery, DRagLint.Storage.SQLite.TSQLiteSymbolStore.WarnIfNocaseIndexMissing</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>
       /// <para>Reads: FQFindByQName, FQFindByQNameCI</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Model.LastTopLevelSegment"/>
+      /// <seealso cref="DRagLint.Core.Model.SplitGenericName"/>
+      /// <seealso cref="DRagLint.Core.Model.StripGenericSegments"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.PreferArity"/>
       /// <seealso cref="DRagLint.Storage.SQLite.ReadSymbolFromQuery"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.WarnIfNocaseIndexMissing"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindSymbolsByQualifiedName(const AQName: string): TArray<TSymbol>;
@@ -1574,7 +1574,7 @@ type
       /// Q.FieldByName('path').AsString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit.UnitsDefining (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByNameWithContext (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetClassSurface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolSlice (DRagLint.Storage.SQLite.pas) (+6 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoUsesAudit.UnitsDefining (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFixSweep.UnitsDefining (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByNameWithContext (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetClassSurface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolSlice (DRagLint.Storage.SQLite.pas) (+5 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
       /// <para>Reads: FConn</para>
       /// <para>SQL: reads FILES</para>
@@ -1696,10 +1696,10 @@ type
       /// </remarks>
       procedure UpsertSymbolDoc(const AToken: TFileTxToken; ASymbolId: Int64; const ADoc: TParsedDoc);
       /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
-      /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
+      /// <returns><!-- drag-lint:auto -->TParsedDoc -- Observed: Default(TParsedDoc).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: FillChar, IndexStr</para>
+      /// <para>Calls: Default, IndexStr</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc</para>
       /// <para>Reads: FQGetSymbolDoc</para>
       /// <para>Pure</para>
@@ -1714,12 +1714,12 @@ type
 
       // v(ADP2 T1): symbol_facts (index-time analysis facts) -- see ISymbolStore.
       /// <param name="ASymbolId"><!-- drag-lint:auto type -->Int64</param>
-      /// <returns><!-- drag-lint:auto type -->TSymbolFacts</returns>
+      /// <returns><!-- drag-lint:auto -->TSymbolFacts -- Observed: Default(TSymbolFacts).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto -->v(ADP2 T1): symbol_facts (index-time analysis facts) -- see
       /// ISymbolStore.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: FillChar</para>
+      /// <para>Calls: Default</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolFacts</para>
       /// <para>Reads: FQGetSymbolFacts</para>
       /// <para>Pure</para>
@@ -1961,18 +1961,18 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto -->v11 (M1): type &amp; hierarchy resolution (see ISymbolStore).
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Core.Interfaces.TFlowOracleCache.Clear, DRagLint.Core.Model.TSymbolKindHelper.FromText, DRagLint.Storage.SQLite.NormalizeAncestorName, DRagLint.Storage.SQLite.PickAncestorCandidateByScope, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.SplitHeritageList, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry.NoteScopeName, Format, LowerCase</para>
+      /// <para>Calls: Default, DRagLint.Core.Interfaces.TFlowOracleCache.Clear, DRagLint.Core.Model.GenericArity, DRagLint.Core.Model.TSymbolKindHelper.FromText, DRagLint.Storage.SQLite.FilterCandidatesByArity, DRagLint.Storage.SQLite.NormalizeAncestorName, DRagLint.Storage.SQLite.PickAncestorCandidateByScope, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.SplitHeritageList, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry.NoteScopeName, Format, LowerCase</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveAncestry</para>
-      /// <para>Complexity: 23 (cyclomatic, outer body), 282 lines (full implementation)</para>
+      /// <para>Complexity: 26 (cyclomatic, outer body), 307 lines (full implementation)</para>
       /// <para>Reads: FAnchorCache, FFlowOracles, FConn</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <para>SQL: reads SYMBOLS, UNIT_USES; writes TYPE_ANCESTORS</para>
       /// <para>Transaction: starts, commits, rolls back</para>
       /// <seealso cref="DRagLint.Core.Interfaces.TFlowOracleCache.Clear"/>
+      /// <seealso cref="DRagLint.Core.Model.GenericArity"/>
       /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.FromText"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.FilterCandidatesByArity"/>
       /// <seealso cref="DRagLint.Storage.SQLite.NormalizeAncestorName"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.PickAncestorCandidateByScope"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.ResolveLog"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveAncestry;
@@ -2042,16 +2042,16 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetVirtualMethodsIncludingAncestors (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ImplementsInterface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsDescendantOf (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.UnresolvedAncestorNames (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: Default, DRagLint.Core.Model.CrossesGuiFramework, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolById, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass, IntToStr, LowerCase, SameText, Trim</para>
+      /// <para>Calls: Default, DRagLint.Core.Model.CrossesGuiFramework, DRagLint.Core.Model.GenericArity, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolById, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass, IntToStr, LowerCase, SameText, Trim</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors</para>
-      /// <para>Complexity: 19 (cyclomatic, outer body), 162 lines (full implementation)</para>
+      /// <para>Complexity: 21 (cyclomatic, outer body), 169 lines (full implementation)</para>
       /// <para>Reads: FConn, FLateAncCache</para>
       /// <para>SQL: reads TYPE_ANCESTORS</para>
       /// <seealso cref="DRagLint.Core.Model.CrossesGuiFramework"/>
+      /// <seealso cref="DRagLint.Core.Model.GenericArity"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolById"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
@@ -2258,7 +2258,7 @@ type
       /// <returns><!-- drag-lint:auto -->TFDConnection -- Observed: FConn.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.CaptionForHandler (DRagLint.FormsMap.pas), DRagLint.FormsMap.FindComponent (DRagLint.FormsMap.pas) (+9 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.CLI.DoUsesReport.LoadFilesAndEdges (DRagLint.CLI.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.CaptionForHandler (DRagLint.FormsMap.pas) (+10 more)</para>
       /// <para>Reads: FConn</para>
       /// <para>Owns returned: borrowed</para>
       /// <para>Pure</para>
@@ -2419,7 +2419,7 @@ type
       /// FQFindFileId.Fields[0].AsLargeInt.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.AnyStoreOwns (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveFileIdTolerant (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.AnyStoreOwns (DRagLint.LSP.Server.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveFileIdTolerant (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: StringReplace</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath</para>
       /// <para>Reads: FQFindFileId</para>
@@ -2480,7 +2480,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTransitiveAncestors (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: Default, DRagLint.Storage.SQLite.ParseFirstTypeToken, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass.LoadScopeNames, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass.PickCandidate, FindSymbolsByExactName, FrameworkAnchorForFile, IsStub, LowerCase, PickAncestorCandidateByScope, Trim, UnitFrameworkPrefix</para>
+      /// <para>Calls: Default, DRagLint.Storage.SQLite.ParseFirstTypeToken, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass.LoadScopeNames, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeNameToClass.PickCandidate, FilterCandidatesByArity, FindSymbolsByExactName, FrameworkAnchorForFile, IsStub, LowerCase, PickAncestorCandidateByScope, Trim, UnitFrameworkPrefix</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveTypeNameToClass</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Storage.SQLite.ParseFirstTypeToken"/>
@@ -2552,7 +2552,7 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.ResolveUnitExportSurface (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindEventHandlersForForm (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindEventHandlersForForm (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.ReadSymbolFromQuery</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols</para>
       /// <para>Reads: FQFindAllChildren</para>

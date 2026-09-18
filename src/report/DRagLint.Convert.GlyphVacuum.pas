@@ -15,10 +15,16 @@ uses
 
 type
   /// <summary>Inputs of one vacuum run.</summary>
-  /// <remarks>Stores may be empty: the qualification columns (class_unit,
+  /// <remarks>
+  /// Stores may be empty: the qualification columns (class_unit,
   /// count_default, count_effective's default half, runtime_refs) then stay
   /// empty rather than guessed. Append merges into an existing OutDir keyed on
-  /// (dfm_path, object_path, property); a re-scan is idempotent.</remarks>
+  /// (dfm_path, object_path, property); a re-scan is idempotent.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas), DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.GlyphVacuum</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGlyphVacuumOptions = record
     Roots : TArray<string>;
     OutDir: string;
@@ -27,6 +33,12 @@ type
   end;
 
   /// <summary>The counts the CLI prints as its one summary line.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas), DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas), DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.GlyphVacuum</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGlyphVacuumSummary = record
     DfmFiles        : Integer;
     Graphics        : Integer;
@@ -35,10 +47,16 @@ type
   end;
 
   /// <summary>One row of instances.tsv: one (component, graphic property).</summary>
-  /// <remarks>Column order in the file is the field order here; a new column
+  /// <remarks>
+  /// Column order in the file is the field order here; a new column
   /// is appended at the end so an older instances.tsv still parses under
   /// --append. Every value is written verbatim with tabs/newlines replaced by
-  /// spaces.</remarks>
+  /// spaces.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.LoadExistingRows (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.WriteClassesTsv (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.WriteGalleryHtml (DRagLint.Convert.GlyphVacuum.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Convert.GlyphVacuum</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGlyphRow = record
     DfmPath        : string;
     PasUnit        : string;
@@ -76,6 +94,21 @@ type
 /// creatable).</param>
 /// <returns>True when the walk completed; a tree with no graphics is True with
 /// Graphics = 0.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.GlyphVacuum.CompareRowsForWrite, DRagLint.Convert.GlyphVacuum.HarvestFile, DRagLint.Convert.GlyphVacuum.LoadExistingRows, DRagLint.Convert.GlyphVacuum.RowKey, DRagLint.Convert.GlyphVacuum.RowLine, DRagLint.Convert.GlyphVacuum.WriteClassesTsv, DRagLint.Convert.GlyphVacuum.WriteGalleryHtml, DRagLint.Convert.GlyphVacuum.WriteSkippedTsv, DRagLint.Convert.GlyphVacuum.WriteUtf8NoBom</para>
+/// <para>Returns: False; True</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AError (out), ASummary (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Convert.GlyphVacuum.CompareRowsForWrite"/>
+/// <seealso cref="DRagLint.Convert.GlyphVacuum.HarvestFile"/>
+/// <seealso cref="DRagLint.Convert.GlyphVacuum.LoadExistingRows"/>
+/// <seealso cref="DRagLint.Convert.GlyphVacuum.RowKey"/>
+/// <seealso cref="DRagLint.Convert.GlyphVacuum.RowLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunGlyphVacuum(const AOpts: TGlyphVacuumOptions;
   out ASummary: TGlyphVacuumSummary; out AError: string): Boolean;
 

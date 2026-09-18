@@ -267,8 +267,15 @@ const
 /// <param name="AItems">The names in display order; nil is treated as empty.</param>
 /// <param name="ACap">Maximum names shown before the suffix.</param>
 /// <returns>The joined string; '' for an empty or nil AItems.</returns>
-/// <remarks>Pure string joining, no escaping. v23: promoted to the interface so
-/// TIndexer.ApplyInheritedFieldFacts re-joins with the same rule.</remarks>
+/// <remarks>
+/// Pure string joining, no escaping. v23: promoted to the interface so
+/// TIndexer.ApplyInheritedFieldFacts re-joins with the same rule.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts.Merge (DRagLint.Core.Indexer.pas), DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeSqlTables (DRagLint.Doc.SymbolFacts.pas), DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity (DRagLint.Doc.SymbolFacts.pas) (+1 more)</para>
+/// <para>Calls: Format</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function JoinCappedDisplay(AItems: TList<string>; ACap: Integer): string;
 
 /// <summary>Joins AItems into the CSV text form stored in one of

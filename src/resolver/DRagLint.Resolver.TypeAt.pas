@@ -56,8 +56,8 @@ type
       /// ResolvedStoreIndex names the store the resolved symbol came from.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas) (+2 more)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Interfaces.ISymbolStore.GuiFrameworkInUse, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Resolver.TypeAt.FindGenericBaseAnywhere, DRagLint.Resolver.TypeAt.FindTypeAnywhere (+10 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoTypeAt (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas) (+1 more)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol, DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Interfaces.ISymbolStore.GuiFrameworkInUse, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Resolver.TypeAt.FindGenericBaseAnywhere (+11 more)</para>
       /// <para>Overload 1 of 2</para>
       /// <para>Complexity: 41 (cyclomatic, outer body), 248 lines (full implementation)</para>
       /// <para>Catches: Exception (swallowed)</para>
@@ -67,7 +67,7 @@ type
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindContainingSymbol"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindEnclosingRoutineByImpl"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Resolve(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer)         : TTypeAtResult; overload;

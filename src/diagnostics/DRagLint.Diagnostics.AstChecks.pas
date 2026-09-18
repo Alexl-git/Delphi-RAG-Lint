@@ -700,7 +700,7 @@ type
       /// Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsActiveAssign, IsDestroyingCall, LowerCase, NodeStr, SameText, WalkBody</para>
+      /// <para>Calls: Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsActiveAssign, IsDestroyingCall, IsWholeStatement, LowerCase, NodeStr, SameText, WalkBody</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs"/>
