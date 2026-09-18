@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 60 24" preserveAspectRatio="none" width="60px" height="24px" xmlns="http://www.w3.org/2000/svg">
+	<defs>
+		<style type="text/css" xml:space="preserve">.Blue{fill:#1177D7;}&#10;&#9;.Yellow{fill:#FFB115;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}</style>
+	</defs>
+	<rect class="White" x="1" y="1" width="58" height="22" rx="4" ry="4" style="stroke: rgb(28, 110, 243); stroke-width: 1px;"/>
+</svg>

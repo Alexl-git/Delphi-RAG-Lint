@@ -1,0 +1,22 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 697, 339, 689, 130,,,,
+SurfFin.db,TW,20, 10, 181, 135,,,,,
+    4, - Number of Columns,,,,,,
+ID,TW,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Reason,TW,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+Severity,TW,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+SystID,TW,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	TW."ID" , TW."Reason" , TW."Severity" , 
+	TW."SystID"
+FROM	"SurfFin.db" TW
+ORDER BY
+	TW."Reason",,,,,,,

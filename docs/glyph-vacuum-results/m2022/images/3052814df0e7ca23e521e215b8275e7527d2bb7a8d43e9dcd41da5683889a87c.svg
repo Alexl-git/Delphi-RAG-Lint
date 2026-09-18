@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" width="32px" height="32px" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Blue{fill:#1177D7;}&#10;&#9;.Yellow{fill:#FFB115;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}</style>
+	<g id="g-1" transform="matrix(1.239426, 0, 0, 1.333333, -3.901306, -5.333332)" style="">
+		<g id="List">
+			<rect x="12" y="14" width="8" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.239426, 0, 0, 1.333333, -3.901306, -5.333332)" style="">
+		<g id="List">
+			<rect x="12" y="10" width="8" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.239426, 0, 0, 1.333333, -3.901306, -5.333332)" style="">
+		<g id="List">
+			<rect x="12" y="18" width="8" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.239426, 0, 0, 1.333333, -3.901306, -5.333332)" style="">
+		<g id="List">
+			<path d="M25, 4L7, 4C6.5, 4 6, 4.5 6, 5L6, 27C6, 27.5 6.5, 28 7, 28L25, 28C25.5, 28 26, 27.5 26, 27L26, 5C26, 4.5 25.5, 4 25, 4zM24, 26L8, 26L8, 6L24, 6L24, 26z" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<path class="Red" d="M 22.395 17.952 C 18.671 17.952 15.624 21.113 15.624 24.976 C 15.624 28.839 18.671 32 22.395 32 C 26.118 32 29.165 28.839 29.165 24.976 C 29.165 21.113 26.118 17.952 22.395 17.952 Z M 25.78 26.983 L 24.33 28.488 L 22.395 26.481 L 20.461 28.488 L 19.01 26.983 L 20.944 24.976 L 19.01 22.969 L 20.461 21.464 L 22.395 23.471 L 24.33 21.464 L 25.78 22.969 L 23.846 24.976 L 25.78 26.983 Z" style=""/>
+</svg>

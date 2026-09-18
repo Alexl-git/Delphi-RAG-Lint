@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g id="ChangeView" transform="matrix(1.301379, 0, 0, 1.216284, -4.824908, -3.558498)" style="">
+		<path class="Blue" d="M24.5,7.5C22.3,5.3,19.3,4,16,4C10.1,4,5.1,8.3,4.2,14h4.1c0.9-3.4,4-6,7.7-6c2.2,0,4.2,0.9,5.6,2.4L18,14 h5.7h4.1H28V4L24.5,7.5z M16,24c-2.2,0-4.2-0.9-5.6-2.4L14,18H8.2h-4H4v10l3.5-3.5C9.7,26.7,12.7,28,16,28c5.9,0,10.8-4.3,11.8-10 h-4.1C22.8,21.4,19.7,24,16,24z"/>
+	</g>
+</svg>

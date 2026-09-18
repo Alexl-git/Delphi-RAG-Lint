@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xml:space="preserve">&#13;&#10;<style type="text/css" xml:space="preserve">.Green{fill:#039C23;}&#13;&#10;&#9;.Black{fill:#727272;}&#13;&#10;&#9;.Red{fill:#D11C1C;}&#13;&#10;&#9;.Yellow{fill:#FFB115;}&#13;&#10;&#9;.Blue{fill:#1177D7;}&#13;&#10;&#9;.White{fill:#FFFFFF;}&#13;&#10;&#9;.st0{opacity:0.5;}&#13;&#10;&#9;.st1{opacity:0.75;}</style>
+<g id="GridResetColumnWidths">
+		<path class="Black" d="M24,32v-4H8v4l-5-5l5-5v4h16v-4l5,5L24,32z M2,22H0v10h2V22z M32,22h-2v10h2V22z"/>
+		<path class="Blue" d="M32,3v16c0,0.5-0.5,1-1,1H1c-0.5,0-1-0.5-1-1V3c0-0.5,0.5-1,1-1h30C31.5,2,32,2.5,32,3z"/>
+	</g>
+</svg>

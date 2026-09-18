@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xml:space="preserve">&#13;&#10;&#9;	<style type="text/css" xml:space="preserve">.Blue{fill:#1177D7;}&#13;&#10;&#9;&#9;.Green{fill:#039C23;}&#13;&#10;&#9;&#9;.Yellow{fill:#FFB115;}&#13;&#10;&#9;&#9;.Black{fill:#727272;}&#13;&#10;&#9;&#9;.White{fill:#FFFFFF;}&#13;&#10;&#9;&#9;.Red{fill:#D11C1C;}</style>
+	<rect x="5" y="2" width="22" height="26" class="Black"/>
+	<rect x="6" y="3" width="20" height="24" class="White"/>
+	<rect x="8" y="5" width="16" height="6" class="Blue"/>
+	<g transform="translate(4, 10)">
+		<polygon class="Black" transform="scale(0.5, 0.5)" points="14.1,21.2 8.5,26.8 8.5,3.1 26.7,19.5 19,19.5 24.3,28.8 19.2,31.3 "/>
+	</g>
+</svg>

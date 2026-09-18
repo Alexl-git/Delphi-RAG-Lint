@@ -1,0 +1,22 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 683, 1049, 675, 713,,,,
+Osublot.DB,Os,20, 10, 191, 559,,,,,
+    3, - Number of Columns,,,,,,
+OperID,Os,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+:ID,    6,,,,,,
+QuickLoged,Os,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+False,    6,,,,,,
+osCount,,                   1,    1, ,,,
+count( Os.ID ),,,,,,,
+     , - Number of Criteria,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	( count( Os.ID ) )  as osCount
+FROM	"Osublot.DB" Os
+WHERE	( ( Os."OperID" = :ID ) AND
+		( Os."QuickLoged" = False ) ),,,,,,,

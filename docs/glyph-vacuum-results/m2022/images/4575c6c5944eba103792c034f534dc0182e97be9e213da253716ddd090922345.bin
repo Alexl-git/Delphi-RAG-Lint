@@ -1,0 +1,22 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 793, 707, 785, 321,,,,
+StopReas.db,Sr,20, 10, 181, 135,,,,,
+    4, - Number of Columns,,,,,,
+ID,Sr,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Reason,Sr,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+Severity,Sr,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+SystID,Sr,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	Sr."ID" , Sr."Reason" , Sr."Severity" , 
+	Sr."SystID"
+FROM	"StopReas.db" Sr
+ORDER BY
+	Sr."Reason",,,,,,,

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g id="g-1" transform="matrix(1.163808, 0, 0, 1.276559, -2.85779, -4.565458)" style="">
+		<g id="Database">
+			<path d="M16, 24C10.5, 24 6, 22.2 6, 20L6, 24C6, 26.2 10.5, 28 16, 28C21.5, 28 26, 26.2 26, 24L26, 20C26, 22.2 21.5, 24 16, 24z" fill="#FFB115" class="Yellow"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.163808, 0, 0, 1.276559, -2.85779, -4.565458)" style="">
+		<g id="Database">
+			<path d="M16, 18C10.5, 18 6, 16.2 6, 14L6, 18C6, 20.2 10.5, 22 16, 22C21.5, 22 26, 20.2 26, 18L26, 14C26, 16.2 21.5, 18 16, 18z" fill="#FFB115" class="Yellow"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.163808, 0, 0, 1.276559, -2.85779, -4.565458)" style="">
+		<g id="Database">
+			<path d="M16, 4C10.5, 4 6, 5.8 6, 8L6, 12C6, 14.2 10.5, 16 16, 16C21.5, 16 26, 14.2 26, 12L26, 8C26, 5.8 21.5, 4 16, 4z" fill="#FFB115" class="Yellow"/>
+		</g>
+	</g>
+	<g transform="matrix(0.588726, 0, 0, 0.56457, 13.698962, 15.847713)" style=""/>
+	<rect x="14.036" y="28.463" width="11.143" height="2.932" style="fill: rgb(255, 177, 21); stroke: rgb(0, 0, 0);" rx="0.085" ry="0.085"/>
+	<rect x="10.974" y="8.359" width="10.645" height="1.642" style="fill: rgb(255, 177, 21); stroke: rgb(0, 0, 0);" transform="matrix(0.571587, -0.820541, 0, 1.749514, 19.113228, 22.580442)" rx="0.229" ry="0.229"/>
+	<rect x="11.334" y="46.744" width="10.994" height="9.184" style="fill: rgb(255, 177, 21); stroke: rgb(0, 0, 0); transform-origin: 16.832px 51.337px;" transform="matrix(0.999997, 0.002451, -0.688922, 0.998314, 5.881345, -27.545767)" rx="0.156" ry="0.156"/>
+	<circle style="fill: rgb(255, 255, 255); stroke: rgb(0, 0, 0);" cx="51.727" cy="18.749" r="2.313" transform="matrix(0.588726, 0, 0, 0.56457, -7.544427, 13.098009)"/>
+	<path style="transform-origin: 32.369px 8.404px;" d="M 28.735 23.24 L 31.118 19.599 C 31.072 19.523 30.929 19.274 30.929 19.274 C 30.835 19.326 26.605 19.246 26.572 19.338 C 26.572 19.338 28.642 23.291 28.735 23.24 Z"/>
+	<path style="transform-origin: 22.251px 26.015px;" d="M 16.758 24.276 L 14.349 27.901 C 14.395 27.978 14.536 28.228 14.536 28.228 C 14.63 28.177 18.861 28.283 18.893 28.191 C 18.893 28.191 16.852 24.225 16.758 24.276 Z"/>
+	<g id="g-2" transform="matrix(-0.298917, 0, 0, -0.252911, 32.755573, 34.052635)" style="">
+		<g id="WarningCircled1"/>
+	</g>
+</svg>

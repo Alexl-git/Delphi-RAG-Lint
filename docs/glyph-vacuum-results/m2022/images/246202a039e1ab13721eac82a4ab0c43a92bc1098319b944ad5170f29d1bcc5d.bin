@@ -1,0 +1,34 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    2, - Number of Tables,-1, -1, 1016, 699, 1008, 309,,,,
+ToolAssg.DB,Tg,5, 17, 166, 189,,,,,
+msclist.DB,ms,188, 20, 349, 145,,,,,
+    5, - Number of Columns,,,,,,
+FldrID,Tg,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+:FldrID,    6,,,,,,
+OperID,ms,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+:OperID,    6,,,,,,
+PosID,Tg,                 129,     , ,1,,
+     , - Number of Criteria,,,,,,
+ToolGroup,Tg,                 129,     , ,2,,
+     , - Number of Criteria,,,,,,
+UnitsPerPart,Tg,                   3,     , ,,,
+     , - Number of Criteria,,,,,,
+    1, - Number of Joins,,,,,,
+FtrID,Tg,ID,ms,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	Tg."PosID" , Tg."ToolGroup" , 
+	sum( Tg."UnitsPerPart" )
+FROM	"ToolAssg.DB" Tg , "msclist.DB" ms
+WHERE	( Tg.FtrID = ms.ID )
+		AND
+	(
+	( ( Tg."FldrID" = :FldrID ) AND
+		( ms."OperID" = :OperID ) )
+	)
+GROUP BY
+	Tg."PosID" , Tg."ToolGroup",,,,,,,

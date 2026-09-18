@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g id="g-1" transform="matrix(1.110018, 0, 0, 1.109408, -3.935707, -3.854568)" style="">
+		<g id="List">
+			<rect x="12" y="14" width="8" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.110018, 0, 0, 1.109408, -3.935707, -3.854568)" style="">
+		<g id="List">
+			<rect x="12" y="10" width="8" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.110018, 0, 0, 1.109408, -3.935707, -3.854568)" style="">
+		<g id="List">
+			<rect x="12" y="18" width="8" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.110018, 0, 0, 1.109408, -3.935707, -3.854568)" style="">
+		<g id="List">
+			<path d="M25, 4L7, 4C6.5, 4 6, 4.5 6, 5L6, 27C6, 27.5 6.5, 28 7, 28L25, 28C25.5, 28 26, 27.5 26, 27L26, 5C26, 4.5 25.5, 4 25, 4zM24, 26L8, 26L8, 6L24, 6L24, 26z" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g id="Red_to_Black" transform="matrix(1.32194, 0, 0, 1.227078, 10.972509, 10.724879)" style="">
+		<g class="st0" style="opacity: 1;">
+			<circle cx="8" cy="8" r="7" fill="#FFFFFF" class="White"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.110018, 0, 0, 1.109408, 13.824583, 13.895959)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g id="Sale_x5F_Item_1_">
+				<g class="st0" style="opacity: 1;">
+					<polygon points="6,0 2,4 18.6,4 22.6,0   " fill="#FFB115" class="Yellow"/>
+				</g>
+			</g>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.110018, 0, 0, 1.109408, 13.824583, 13.895959)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g id="Sale_x5F_Item_1_">
+				<g class="st1" style="opacity: 1;">
+					<polygon points="18,15.5 18,6 2,6 2,22 11.5,22   " fill="#FFB115" class="Yellow"/>
+				</g>
+			</g>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.110018, 0, 0, 1.109408, 13.824583, 13.895959)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g id="Sale_x5F_Item_1_">
+				<path d="M20.6, 12.9C21.2, 12.3 21.9, 12 22.7, 12L24, 12L24, 1.4L20, 5.4L20, 13.4L20.6, 12.9z" fill="#FFB115" class="Yellow"/>
+			</g>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1.110018, 0, 0, 1.109408, 13.824583, 13.895959)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g id="Sale_x5F_Item_1_">
+				<path d="M29, 14L22.7, 14C22.4, 14 22.2, 14.1 22, 14.3L12.3, 24C11.9, 24.4 11.9, 25 12.3, 25.4L18.6, 31.7C19, 32.1 19.6, 32.1 20, 31.7L29.7, 22C29.9, 21.8 30, 21.6 30, 21.3L30, 15C30, 14.4 29.6, 14 29, 14zM26, 20C24.9, 20 24, 19.1 24, 18C24, 16.9 24.9, 16 26, 16C27.1, 16 28, 16.9 28, 18C28, 19.1 27.1, 20 26, 20z" fill="#D11C1C" class="Red"/>
+			</g>
+		</g>
+	</g>
+</svg>

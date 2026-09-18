@@ -1,0 +1,38 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 0, 3196, 2350,,,,,
+1,1, - Distinct & Quote,,,,,
+    3, - Number of Tables,-1, -1, 920, 1088, 912, 809,,,,
+ToolGR12.DB,TG,421, 8, 582, 139,,,,,
+Folders.DB,Fo,20, 10, 181, 746,,,,,
+ToolFldr.DB,TF,220, 10, 381, 543,,,,,
+    6, - Number of Columns,,,,,,
+WrkOrdrNmbr,Fo,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+:WrkOrdrNmbr,    6,,,,,,
+FldrID,TF,                    ,     , ,,,
+     , - Number of Criteria,,,,,,
+Tag1,TG,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+Tag2,TG,                  65,     , ,,2,
+     , - Number of Criteria,,,,,,
+Tag3,TG,                  65,     , ,,3,
+     , - Number of Criteria,,,,,,
+ID,TG,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+    2, - Number of Joins,,,,,,
+Fldr_SystID,Fo,FldrID,TF,          ,          ,,
+ToolID,TF,ID,TG,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	 DISTINCT TG."Tag1" , TG."Tag2" , TG."Tag3" , TG."ID"
+FROM	"ToolGR12.DB" TG , "Folders.DB" Fo , 
+	"ToolFldr.DB" TF
+WHERE	( Fo."Fldr_SystID" = TF."FldrID" )
+		AND
+	( TF."ToolID" = TG."ID" )
+		AND
+	(
+	( Fo."WrkOrdrNmbr" = :WrkOrdrNmbr )
+	)
+ORDER BY
+	TG."Tag1" , TG."Tag2" , TG."Tag3",,,,,,,

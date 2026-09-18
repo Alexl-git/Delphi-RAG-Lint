@@ -1,0 +1,21 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3200, 2356,,,,,
+1,1, - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 651, 678, 643, 294,,,,
+ToolAdj.DB,TA,20, 10, 161, 242,,,,,
+    2, - Number of Columns,,,,,,
+FldrID,TA,                 193,     , ,1,1,
+     , - Number of Criteria,,,,,,
+ToolID,TA,                 129,     , ,2,,
+    1, - Number of Criteria,,,,,,
+:ID,    6,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	 DISTINCT TA."FldrID" , TA."ToolID"
+FROM	"ToolAdj.DB" TA
+WHERE	( TA."ToolID" = :ID )
+GROUP BY
+	TA."FldrID" , TA."ToolID"
+ORDER BY
+	TA."FldrID",,,,,,,

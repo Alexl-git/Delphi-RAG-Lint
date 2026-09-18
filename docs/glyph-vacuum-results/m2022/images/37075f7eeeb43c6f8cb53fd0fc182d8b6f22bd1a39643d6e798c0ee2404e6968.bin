@@ -1,0 +1,21 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 691, 637, 683, 272,,,,
+customer.DB,cu,20, 10, 181, 244,,,,,
+    2, - Number of Columns,,,,,,
+Code,cu,                 129,     , ,1,,
+    1, - Number of Criteria,,,,,,
+:newCode,    6,,,,,,
+Cnt,,                   1,    1, ,,,
+count( cu.Code ),,,,,,,
+     , - Number of Criteria,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	cu."Code" , 
+	( count( cu.Code ) )  as Cnt
+FROM	"customer.DB" cu
+WHERE	( cu."Code" = :newCode )
+GROUP BY
+	cu."Code",,,,,,,

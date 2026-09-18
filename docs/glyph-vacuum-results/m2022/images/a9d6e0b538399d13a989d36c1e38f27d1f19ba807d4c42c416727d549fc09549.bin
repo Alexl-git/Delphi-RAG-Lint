@@ -1,0 +1,23 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2344,,,,,
+1,1, - Distinct & Quote,,,,,
+    2, - Number of Tables,-1, -1, 556, 616, 548, 274,,,,
+FolHeat.DB,Fo,20, 10, 193, 135,,,,,
+Heats.DB,He,213, 20, 407, 266,,,,,
+    3, - Number of Columns,,,,,,
+Heat,Fo,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+Vendor,He,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+ReceiveDate,He,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+    1, - Number of Joins,,,,,,
+Heat,Fo,ID,He,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	 DISTINCT Fo."Heat" , He."Vendor" , 
+	He."ReceiveDate"
+FROM	"FolHeat.DB" Fo , "Heats.DB" He
+WHERE	( Fo."Heat" = He."ID" )
+ORDER BY
+	Fo."Heat",,,,,,,

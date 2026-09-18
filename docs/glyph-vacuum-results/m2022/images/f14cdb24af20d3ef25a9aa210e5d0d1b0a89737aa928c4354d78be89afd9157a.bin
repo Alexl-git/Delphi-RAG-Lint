@@ -1,0 +1,21 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+1,1, - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 918, 787, 910, 397,,,,
+ToolGR12.db,TG,20, 10, 181, 135,,,,,
+    3, - Number of Columns,,,,,,
+Tag1,TG,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+:Tag1,    6,,,,,,
+Tag2,TG,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+ID,TG,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	 DISTINCT TG."Tag2" , TG."ID"
+FROM	"ToolGR12.db" TG
+WHERE	( TG."Tag1" = :Tag1 )
+ORDER BY
+	TG."Tag2",,,,,,,

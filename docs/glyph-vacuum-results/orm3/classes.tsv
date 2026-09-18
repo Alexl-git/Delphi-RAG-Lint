@@ -1,0 +1,73 @@
+component_class	class_unit	instances	graphic_props	count_props	count_default	n_distribution	inferred_distribution	disagreements	formats	distinct_payloads	runtime_refs
+TabcToggleBtn	Abcbtn	20	Picture.Data	NumGlyphs	1	4:20	4:20	0	bmp:20	3	16
+TBitBtn		3	Glyph.Data	NumGlyphs		2:3	2:2;?:1	0	bmp:3	3	
+TcxButton		36	OptionsImage.Glyph.Data	OptionsImage.NumGlyphs		2:3;?:33	2:3;1:1;?:32	0	bmp:5;svg:31	15	
+TcxButtonEdit		8	Properties.Buttons[0].Glyph.Data;Properties.Buttons[1].Glyph.Data;Properties.Buttons[2].Glyph.Data;Properties.Buttons[3].Glyph.Data			?:8	?:8	0	svg:8	4	
+TcxDBButtonEdit		4	Properties.Buttons[0].Glyph.Data;Properties.Buttons[1].Glyph.Data;Properties.Buttons[2].Glyph.Data;Properties.Buttons[3].Glyph.Data			?:4	?:4	0	svg:4	4	
+TcxGridDBColumn		2	Properties.Glyph.Data			?:2	6:2	0	bmp:2	1	
+TcxHintStyleController		1	HintStyle.Icon.Data			?:1	?:1	0	ico:1	1	
+TcxImage		6	Picture.Data			?:6	?:6	0	?:6	2	
+TcxImageCollectionItem		4	Picture.Data			?:4	?:4	0	?:4	3	
+TcxImageList		30	Bitmap;ImageInfo[0].Image.Data;ImageInfo[1].Image.Data;ImageInfo[2].Image.Data;ImageInfo[3].Image.Data;ImageInfo[4].Image.Data;ImageInfo[5].Image.Data			?:30	?:30	0	svg:24;?:6	14	
+TcxMRUEdit		2	Properties.ButtonGlyph.Data			?:2	?:2	0	svg:2	1	
+TcxTreeList		4	Data			?:4	?:4	0	?:4	2	
+TDefectListDlg	Dfctlist	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TdlgSetupDefaults	uSetupDefaultsFrm	5	Icon.Data			?:5	?:5	0	ico:5	1	0
+TdxBar		4	Glyph.Data			?:4	?:4	0	svg:4	2	
+TdxBarButton		337	Glyph.Data;LargeGlyph.Data			?:337	1:47;?:290	0	bmp:47;jpg:4;png:2;svg:284	92	
+TdxBarDBNavButton		328	Glyph.Data			?:328	1:10;?:318	0	bmp:10;svg:318	22	
+TdxBarEdit		1	Glyph.Data			?:1	?:1	0	svg:1	1	
+TdxBarImageCombo		5	Glyph.Data			?:5	1:4;?:1	0	bmp:4;svg:1	2	
+TdxBarLargeButton		77	Glyph.Data;HotGlyph.Data;LargeGlyph.Data			?:77	1:2;?:75	0	bmp:2;svg:75	17	
+TdxBarLookupCombo		3	Glyph.Data			?:3	1:3	0	bmp:3	1	
+TdxBarManager		2	HelpButtonGlyph.Data			?:2	1:2	0	bmp:2	1	
+TdxBarSubItem		4	Glyph.Data;LargeGlyph.Data			?:4	?:4	0	svg:4	1	
+TdxComponentPrinter		2	PreviewOptions.PreviewBoundsRect			?:2	?:2	0	?:2	1	
+TdxLayoutImageItem		2	Image.Data			?:2	?:2	0	svg:2	1	
+TdxPDFViewer		3	OptionsNavigationPane.Attachments.Glyph.Data;OptionsNavigationPane.Bookmarks.Glyph.Data;OptionsNavigationPane.Thumbnails.Glyph.Data			?:3	?:3	0	svg:3	3	
+TdxRibbon		12	ApplicationButton.Glyph.Data;BackgroundImage.Data			?:12	?:12	0	svg:12	2	
+TdxScreenTip		4	Description.Glyph.Data			?:4	?:4	0	svg:4	2	
+TfrmBlueprint4	Blueprint4	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmCADFNotes	CADFNotes	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmCMMGetDataMultiplier	CMMGetDataMultiplyer	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmCompGroupSetup2	CompGroup2	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmCompRulesImport		1	Icon.Data			?:1	?:1	0	ico:1	1	
+TfrmConfirmorCancel	ConfirmCancel	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmControlPlan2	ControlPlan2	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmDataChannels	uDataChannels	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmDefaultForm3	DefaultForm3	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmDefaultTolerance	DefaultTolerance	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmDefineSerialNumbers	DefineSerialNumbers	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmDrawingPages	DrawingPages	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmEditMRU	EditMRU	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmEnterPassword	uEnterPassword	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmEwrkSlct	EWrkSLCT	3	Icon.Data			?:3	?:3	0	ico:3	2	0
+TfrmGageport2	Gagefrm2	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmGridLayout	GridLayout	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmImportCADFile		1	Icon.Data			?:1	?:1	0	ico:1	1	
+TfrmImportPDFFile		1	Icon.Data			?:1	?:1	0	ico:1	1	
+TfrmJobList	uJobList	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmMAIN	Unit1	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmMENotes	MENotes	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmMEPDOESampling	MEPDOESampling	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmMETemplateSetup	METemplateSetup	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmSelectData		1	Icon.Data			?:1	?:1	0	ico:1	1	
+TfrmSmallBatch100FinalPlanSetup	SmallBatch100Final	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmSPCTplEdit	SPCTplEdit	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmTakeJob		1	Icon.Data			?:1	?:1	0	ico:1	1	
+TfrmTrpsSlct	TrpsSlct	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmUIConnect	UIConnect	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmVarNames	varnames	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TfrmWaitingToComplete	WaitingToComplete	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TfrmZ19OSelect	Z19OSelect	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TGageBoxTestDlg	Gagetest	1	Icon.Data			?:1	?:1	0	ico:1	1	0
+TImageList		8	Bitmap			?:8	?:8	0	?:8	8	
+TOvcDbSimpleField		2	RangeHigh;RangeLow			?:2	?:2	0	?:2	2	
+TOvcNumberEdit		3	ButtonGlyph.Data			?:3	1:3	0	bmp:3	1	
+TOvcSimpleField		18	RangeHigh;RangeLow			?:18	?:18	0	?:18	6	
+TOvcTCSimpleField		16	RangeHigh;RangeLow			?:16	?:16	0	?:16	4	
+TQuery		3	Data			?:3	?:3	0	?:3	3	
+TRzMenuButton		2	Glyph.Data			?:2	1:2	0	bmp:2	2	
+TVarInspDlg		1	Icon.Data			?:1	?:1	0	ico:1	1	
+TZ14slctFrm	Z14slct	2	Icon.Data			?:2	?:2	0	ico:2	1	0
+TZ19slctFrm	z19Slct	2	Icon.Data			?:2	?:2	0	ico:2	1	0

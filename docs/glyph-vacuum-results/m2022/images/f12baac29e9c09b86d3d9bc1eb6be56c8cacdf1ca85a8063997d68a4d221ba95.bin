@@ -1,0 +1,41 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 0, 3200, 2356,,,,,
+1,1, - Distinct & Quote,,,,,
+    2, - Number of Tables,-1, -1, 874, 770, 866, 388,,,,
+ToolGR12.DB,T2,264, 6, 405, 181,,,,,
+ToolAssg.DB,ToolAssg,20, 10, 161, 235,,,,,
+    7, - Number of Columns,,,,,,
+OperID,ToolAssg,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:ID,    6,,,,,,
+FldrID,ToolAssg,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:FldrID,    6,,,,,,
+Tag1,T2,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Tag2,T2,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Tag3,T2,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+'GROUP',    6,,,,,,
+Application,ToolAssg,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+4,    6,,,,,,
+ID,T2,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+    1, - Number of Joins,,,,,,
+ToolID,ToolAssg,ID,T2,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	 DISTINCT ToolAssg."OperID" , ToolAssg."FldrID" , 
+	T2."Tag1" , T2."Tag2" , T2."Tag3" , 
+	ToolAssg."Application" , T2."ID"
+FROM	"ToolGR12.DB" T2 , "ToolAssg.DB" ToolAssg
+WHERE	( ToolAssg."ToolID" = T2."ID" )
+		AND
+	(
+	( ( ToolAssg."OperID" = :ID ) AND
+		( ToolAssg."FldrID" = :FldrID ) AND
+		( T2."Tag3" = 'GROUP' ) AND
+		( ToolAssg."Application" = 4 ) )
+	),,,,,,,

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xml:space="preserve">&#13;&#10;&#9;	<style type="text/css" xml:space="preserve">.Blue{fill:#1177D7}&#13;&#10;&#9;&#9;.Yellow{fill:#FFB115;}&#13;&#10;&#9;&#9;.Black{fill:#727272;}&#13;&#10;&#9;&#9;.Green{fill:#039C23;}&#13;&#10;&#9;&#9;.Red{fill:#D11C1C;}&#13;&#10;&#9;&#9;.White{fill:#FFFFFF}&#13;&#10;&#9;&#9;.st1{opacity:0.5;}</style>
+	<rect x="2" y="10" class="Black" width="28" height="20"/>
+	<g class="st1">
+		<rect x="3" y="11" class="White" width="26" height="18"/>
+	</g>
+	<rect x="2" y="4" class="Blue" width="10" height="9"/>
+	<rect x="12" y="6" class="Blue" width="9" height="7"/>
+	<rect x="21" y="6" class="Blue" width="9" height="7"/>
+	<g class="st1">
+		<rect x="3" y="5" class="White" width="8" height="7"/>
+		<rect x="12" y="7" class="White" width="8" height="5"/>
+		<rect x="21" y="7" class="White" width="8" height="5"/>
+	</g>
+</svg>

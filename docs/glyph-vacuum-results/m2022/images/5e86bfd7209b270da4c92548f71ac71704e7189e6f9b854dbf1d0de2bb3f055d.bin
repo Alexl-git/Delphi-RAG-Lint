@@ -1,0 +1,30 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    2, - Number of Tables,-1, -1, 981, 939, 973, 443,,,,
+Osublot.DB,Os,20, 10, 181, 395,,,,,
+Insprslt.DB,Ir,201, 10, 362, 375,,,,,
+    4, - Number of Columns,,,,,,
+ID,Os,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+OperID,Os,                  65,     , ,,1,
+    1, - Number of Criteria,,,,,,
+:ID,    6,,,,,,
+Size,Os,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+OpenTime,Os,                  65,     , ,,2,
+     , - Number of Criteria,,,,,,
+    1, - Number of Joins,,,,,,
+OSublotID,Ir,ID,Os,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	Os."ID" , Os."OperID" , Os."Size" , 
+	Os."OpenTime"
+FROM	"Osublot.DB" Os , "Insprslt.DB" Ir
+WHERE	( Ir.OSublotID = Os.ID )
+		AND
+	(
+	( Os."OperID" = :ID )
+	)
+ORDER BY
+	Os."OperID" , Os."OpenTime",,,,,,,

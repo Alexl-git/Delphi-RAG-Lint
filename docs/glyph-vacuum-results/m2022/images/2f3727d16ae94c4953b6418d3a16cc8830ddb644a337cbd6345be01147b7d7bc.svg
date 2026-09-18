@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#000000;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g/>
+	<rect x="0.572" y="22.345" width="18.927" height="5.194" style="fill: rgb(255, 177, 21); stroke: rgb(0, 0, 0);" rx="0.085" ry="0.085"/>
+	<rect x="19.181" y="14.389" width="18.605" height="2.827" style="fill: rgb(255, 177, 21); stroke: rgb(0, 0, 0);" transform="matrix(0.555477, -0.831532, 0, 1.800255, 9.196597, 11.925401)" rx="0.229" ry="0.229"/>
+	<rect x="19.253" y="82.796" width="18.674" height="16.267" style="fill: rgb(255, 177, 21); transform-box: fill-box; transform-origin: 50% 50%; stroke: rgb(0, 0, 0);" transform="matrix(0.999997, 0.002556, -0.660657, 0.998315, -13.278888, -76.860966)" rx="0.156" ry="0.156"/>
+	<circle style="fill: rgb(255, 255, 255); stroke: rgb(0, 0, 0);" cx="15.643" cy="13.879" r="2.313"/>
+	<path style="transform-origin: 21.12px 4.499px;" d="M 30.772 4.963 L 27.208 -1.765 C 27.051 -1.765 26.548 -1.775 26.548 -1.775 C 26.548 -1.591 22.837 4.565 22.95 4.694 C 22.95 4.694 30.772 5.146 30.772 4.963 Z" transform="matrix(0.499456, 0.866339, -0.866339, 0.499456, -0.000001, 0.000002)"/>
+	<path style="transform-origin: 9.556px 23.551px;" d="M 19.208 24.015 L 15.644 17.287 C 15.487 17.287 14.984 17.277 14.984 17.277 C 14.984 17.461 11.273 23.617 11.386 23.746 C 11.386 23.746 19.208 24.198 19.208 24.015 Z" transform="matrix(-0.493656, -0.869657, 0.869657, -0.493656, -0.000001, 0)"/>
+	<g id="g-1" transform="matrix(-0.507736, 0, 0, -0.447971, 32.369289, 32.245625)" style="">
+		<g id="WarningCircled1"/>
+	</g>
+	<g transform="matrix(0.507736, 0, 0, 0.447971, 17.13723, 18.564075)" style="">
+		<circle style="fill: rgb(3, 156, 35); stroke: rgb(3, 156, 35);" cx="14.31" cy="14.386" r="15.781" transform="matrix(0.94, 0, 0, 0.973061, 0.414156, 0.039715)"/>
+		<g transform="matrix(1, 0, 0, 1, 0.154589, -0.038647)">
+			<rect x="11.951" y="5.497" width="4.406" height="18.435" style="fill: rgb(255, 255, 255); stroke: rgb(255, 255, 255);"/>
+			<rect x="18.019" y="0.493" width="4.406" height="18.435" style="fill: rgb(255, 255, 255); stroke: rgb(255, 255, 255); transform-box: fill-box; transform-origin: 50% 50%;" transform="matrix(-0.003617, -0.999993, 0.999993, -0.003617, -6.183588, 4.830925)"/>
+		</g>
+	</g>
+</svg>

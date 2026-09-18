@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" id="Layer_4">
+	<defs>
+		<style>.Blue{fill:#1177d7;}.cls-1{opacity:0.25;}.Black{fill:#727272;}</style>
+	</defs>
+	<path d="M4,8A4,4,0,0,1,8,4h2V2H8A6,6,0,0,0,2,8v2H4Z" class="Blue"/>
+	<path d="M8,28a4,4,0,0,1-4-4V22H2v2a6,6,0,0,0,6,6h2V28Z" class="Blue"/>
+	<path d="M24,4a4,4,0,0,1,4,4v2h2V8a6,6,0,0,0-6-6H22V4Z" class="Blue"/>
+	<path d="M28,24a4,4,0,0,1-4,4H22v2h2a6,6,0,0,0,6-6V22H28Z" class="Blue"/>
+	<g class="cls-1">
+		<rect x="10" y="28" width="12" height="2" rx="0" ry="0" class="Black"/>
+		<rect x="10" y="2" width="12" height="2" rx="0" ry="0" class="Black"/>
+		<rect x="2" y="10" width="2" height="12" rx="0" ry="0" class="Black"/>
+		<rect x="28" y="10" width="2" height="12" rx="0" ry="0" class="Black"/>
+	</g>
+</svg>

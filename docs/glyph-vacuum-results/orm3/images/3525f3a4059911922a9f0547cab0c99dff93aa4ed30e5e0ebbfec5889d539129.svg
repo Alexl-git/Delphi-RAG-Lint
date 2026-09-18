@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xml:space="preserve">&#13;&#10;<style type="text/css" xml:space="preserve">.Blue{fill:#1177D7;}&#13;&#10;&#9;.Yellow{fill:#FFB115;}&#13;&#10;&#9;.Black{fill:#727272;}&#13;&#10;&#9;.Green{fill:#039C23;}&#13;&#10;&#9;.Red{fill:#D11C1C;}&#13;&#10;&#9;.st0{opacity:0.75;}&#13;&#10;&#9;.st1{opacity:0.5;}</style>
+<g id="Edit">
+		<path class="Blue" d="M27.6,8.2l-3.8-3.8c-0.5-0.5-1.4-0.5-1.9,0l-2.5,2.5l5.8,5.8l2.5-2.5C28.1,9.6,28.1,8.8,27.6,8.2z"/>
+		<polygon class="Blue" points="4,28 9.8,28 4,22.2 &#9;"/>
+		<rect x="5.8" y="13.4" transform="matrix(0.707 -0.7072 0.7072 0.707 -8.0721 15.4048)" class="Blue" width="17.6" height="8.2"/>
+	</g>
+</svg>

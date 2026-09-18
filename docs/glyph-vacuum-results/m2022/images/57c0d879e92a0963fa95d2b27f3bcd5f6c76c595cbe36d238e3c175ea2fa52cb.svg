@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g/>
+	<g id="g-1" transform="matrix(2.206504, 0, 0, 2.240395, -1.577161, -1.939044)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<path d="M4, 2L4, 30L28, 30L28, 8L28, 2L4, 2z" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(2.206504, 0, 0, 2.240395, -1.577161, -1.939044)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<rect x="6" y="4" width="20" height="24" rx="0" ry="0" fill="#FFFFFF" class="White"/>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(2.206504, 0, 0, 2.240395, -1.577161, -1.939044)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g class="st0" style="opacity: 1;">
+				<rect x="8" y="6" width="16" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+			</g>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(2.206504, 0, 0, 2.240395, -1.577161, -1.939044)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g class="st0" style="opacity: 1;">
+				<rect x="8" y="18" width="12" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+			</g>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(2.206504, 0, 0, 2.240395, -1.577161, -1.939044)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g class="st0" style="opacity: 1;">
+				<rect x="8" y="10" width="16" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+			</g>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(2.206504, 0, 0, 2.240395, -1.577161, -1.939044)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g class="st0" style="opacity: 1;">
+				<rect x="8" y="14" width="16" height="2" rx="0" ry="0" fill="#727272" class="Black"/>
+			</g>
+		</g>
+	</g>
+	<g transform="matrix(0.919548, 0, 0, 0.69179, 3.606747, 12.35239)" style=""/>
+	<rect x="4.132" y="27.811" width="17.405" height="3.593" style="fill: rgb(255, 177, 21); stroke: rgb(0, 0, 0);" rx="0.085" ry="0.085"/>
+	<rect x="14.755" y="11.898" width="14.313" height="2.338" style="fill: rgb(255, 177, 21); stroke: rgb(0, 0, 0);" transform="matrix(0.66397, -0.747759, 0, 1.506092, 12.06345, 20.602265)" rx="0.229" ry="0.229"/>
+	<rect x="17.704" y="57.278" width="17.171" height="11.254" style="fill: rgb(255, 177, 21); stroke: rgb(0, 0, 0); transform-origin: 26.29px 62.904px;" transform="matrix(0.999998, 0.001923, -0.878163, 0.998313, -8.60388, -40.81948)" rx="0.156" ry="0.156"/>
+	<circle style="fill: rgb(255, 255, 255); stroke: rgb(0, 0, 0);" cx="49.532" cy="22.979" r="2.313" transform="matrix(0.919548, 0, 0, 0.69179, -27.556138, 6.057219)"/>
+	<path style="transform-origin: 12.719px 0.043px;" d="M 27.09 21.41 L 30.814 16.949 C 30.742 16.855 30.518 16.55 30.518 16.55 C 30.373 16.614 23.764 16.516 23.712 16.628 C 23.712 16.628 26.945 21.473 27.09 21.41 Z"/>
+	<path style="transform-origin: -8.511px 23.813px;" d="M 8.384 22.68 L 4.62 27.12 C 4.692 27.215 4.913 27.521 4.913 27.521 C 5.059 27.459 11.667 27.588 11.718 27.478 C 11.718 27.478 8.529 22.617 8.384 22.68 Z"/>
+	<g id="g-2" transform="matrix(-0.466886, 0, 0, -0.309902, 33.371827, 34.659611)" style="">
+		<g id="WarningCircled1"/>
+	</g>
+</svg>

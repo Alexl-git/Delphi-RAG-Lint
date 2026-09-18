@@ -1,0 +1,46 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3200, 2356,,,,,
+ , , - Distinct & Quote,,,,,
+    5, - Number of Tables,-1, -1, 1368, 969, 1360, 698,,,,
+Ginsp.DB,GI,181, 14, 322, 139,,,,,
+Iinsp.db,II,361, 17, 502, 142,,,,,
+msclist.DB,ms,721, 18, 862, 606,,,,,
+InspName.DB,IA,13, 22, 154, 147,,,,,
+PLANLIST.DB,PL,547, 84, 688, 635,,,,,
+    5, - Number of Columns,,,,,,
+ID,ms,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:ID,    6,,,,,,
+Order,IA,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+Name,IA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+PName,PL,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+PDescription,PL,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+    4, - Number of Joins,,,,,,
+GID,II,ID,GI,          ,          ,,
+PlanID,II,ID,PL,          ,          ,,
+ID,ms,CharID,II,          ,          ,,
+InspType,GI,ID,IA,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	ms."ID" , IA."Order" , IA."Name" , 
+	PL."PName" , PL."PDescription"
+FROM	"Ginsp.DB" GI , "Iinsp.db" II , 
+	"msclist.DB" ms , "InspName.DB" IA , 
+	"PLANLIST.DB" PL
+WHERE	( II.GID = GI.ID )
+		AND
+	( II.PlanID = PL.ID )
+		AND
+	( ms.ID = II.CharID )
+		AND
+	( GI.InspType = IA.ID )
+		AND
+	(
+	( ms."ID" = :ID )
+	)
+ORDER BY
+	IA."Order",,,,,,,

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g id="g-1" transform="matrix(1.225831, 0, 0, 1.142923, -4.860858, -3.954823)" style="">
+		<g id="FolderClose">
+			<g>
+				<path d="M27, 10L14, 10L14, 7C14, 6.5 13.5, 6 13, 6L5, 6C4.5, 6 4, 6.5 4, 7L4, 25C4, 25.5 4.5, 26 5, 26L27, 26C27.5, 26 28, 25.5 28, 25L28, 11C28, 10.5 27.5, 10 27, 10z" fill="#FFB115" class="Yellow"/>
+			</g>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1, 0, 0, 1, 12.042739, 12.902441)" style="enable-background:new 0 0 16 16">
+		<g id="AddCircled">
+			<g>
+				<circle cx="12.824" cy="10.559" r="7" fill="#039C23" class="Green" style="" transform="matrix(1.259861, 0, 0, 1.190918, -5.151481, -3.352332)"/>
+			</g>
+		</g>
+	</g>
+	<g id="g-1" transform="matrix(1, 0, 0, 1, 12.042739, 12.902441)" style="enable-background:new 0 0 16 16">
+		<g id="AddCircled">
+			<polygon points="17.304 8.032 12.265 8.032 12.265 3.268 9.745 3.268 9.745 8.032 4.706 8.032 4.706 10.413 9.745 10.413 9.745 15.177 12.265 15.177 12.265 10.413 17.304 10.413" fill="#FFFFFF" class="White" style=""/>
+		</g>
+	</g>
+</svg>

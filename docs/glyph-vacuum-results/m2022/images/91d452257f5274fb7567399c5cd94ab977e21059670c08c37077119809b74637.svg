@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" width="32px" height="32px" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Blue{fill:#1177D7;}&#10;&#9;.Yellow{fill:#FFB115;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}</style>
+	<g id="Layer_1" transform="matrix(1.144713, 0, 0, 1.12495, 0, 0.001123)" style="">
+		<g transform="matrix(0.8736, 0, 0, 0.8736, 0, 0)">
+			<g transform="translate(0, 0.0008)">
+				<g transform="matrix(1.1428, 0, 0, 1.1428, 0, 0)">
+					<g transform="translate(0, -0.0017)">
+						<g transform="matrix(1.1667, 0, 0, 1.1667, 0, 0)">
+							<g id="Layer_1" transform="translate(-4, -6)" style="enable-background:new 0 0 32 32">
+								<g id="FolderClose">
+									<g>
+										<path d="M27, 10L14, 10L14, 7C14, 6.5 13.5, 6 13, 6L5, 6C4.5, 6 4, 6.5 4, 7L4, 25C4, 25.5 4.5, 26 5, 26L27, 26C27.5, 26 28, 25.5 28, 25L28, 11C28, 10.5 27.5, 10 27, 10z" fill="#FFB115" class="Yellow"/>
+									</g>
+								</g>
+							</g>
+						</g>
+					</g>
+				</g>
+			</g>
+		</g>
+	</g>
+	<g transform="matrix(0.434934, 0, 0, 0.399226, -0.249652, 13.879381)" style="">
+		<ellipse cx="16" cy="15.472" rx="15.426" ry="15.405" class="Red"/>
+		<rect x="13.887" y="3.41" width="4.226" height="17.641" class="White"/>
+		<ellipse cx="16" cy="25.543" rx="2.215" ry="2.031" class="White"/>
+	</g>
+	<g id="g-1" transform="matrix(0.698869, 0, 0, 0.671018, 12.431662, 2.569191)" style="">
+		<g id="Forbid">
+			<path d="M16, 4C9.4, 4 4, 9.4 4, 16C4, 22.6 9.4, 28 16, 28C22.6, 28 28, 22.6 28, 16C28, 9.4 22.6, 4 16, 4zM16, 8C17.5, 8 18.9, 8.4 20.1, 9.1L9.1, 20.1C8.4, 18.9 8, 17.5 8, 16C8, 11.6 11.6, 8 16, 8zM16, 24C14.5, 24 13.2, 23.6 12, 22.9L22.9, 12C23.6, 13.2 24, 14.5 24, 16C24, 20.4 20.4, 24 16, 24z" fill="#D11C1C" class="Red"/>
+		</g>
+	</g>
+</svg>

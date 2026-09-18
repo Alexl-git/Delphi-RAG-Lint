@@ -1,0 +1,62 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 0, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    6, - Number of Tables,-1, -1, 1359, 770, 1351, 380,,,,
+PLANLIST.DB,PL,592, 1, 757, 296,,,,,
+msclist.DB,ms,403, 3, 568, 285,,,,,
+Ginsp.DB,Gi,209, 4, 374, 145,,,,,
+Insprslt.DB,ir,774, 8, 939, 307,,,,,
+Osublot.DB,Os,957, 8, 1122, 309,,,,,
+Iinsp.db,Ii,20, 10, 185, 135,,,,,
+    8, - Number of Columns,,,,,,
+CharID,Ii,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:ChrID,    6,,,,,,
+OperID,Os,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:OprID,    6,,,,,,
+PlanID,Ii,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+ProcDyn,PL,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+PType,PL,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+InspType,Gi,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:inType,    6,,,,,,
+ID,ir,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+OSublotID,ir,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:RsltOSublotID,    6,,,,,,
+    5, - Number of Joins,,,,,,
+GID,Ii,ID,Gi,          ,          ,,
+PlanID,Ii,ID,PL,          ,          ,,
+CharID,Ii,ID,ms,          ,          ,,
+ID,Ii,InspID,ir,          ,          ,,
+OSublotID,ir,ID,Os,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	Ii."CharID" , Os."OperID" , Ii."PlanID" , 
+	PL."ProcDyn" , PL."PType" , Gi."InspType" , 
+	ir."ID" , ir."OSublotID"
+FROM	"PLANLIST.DB" PL , "msclist.DB" ms , 
+	"Ginsp.DB" Gi , "Insprslt.DB" ir , 
+	"Osublot.DB" Os , "Iinsp.db" Ii
+WHERE	( Ii.GID = Gi.ID )
+		AND
+	( Ii.PlanID = PL.ID )
+		AND
+	( Ii.CharID = ms.ID )
+		AND
+	( Ii.ID = ir.InspID )
+		AND
+	( ir.OSublotID = Os.ID )
+		AND
+	(
+	( ( Ii."CharID" = :ChrID ) AND
+		( Os."OperID" = :OprID ) AND
+		( Gi."InspType" = :inType ) AND
+		( ir,,,,,,,
+."OSublotID" = :RsltOSublotID ) )
+	),,,,,,,

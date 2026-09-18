@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1575 1598" width="1575" height="1598">
+	<title>logo_header_01-svg</title>
+	<style xml:space="preserve">tspan { white-space:pre }&#10;&#9;&#9;.shp0 { fill: #0a0905 } &#10;&#9;&#9;.shp1 { fill: #ea0437 } </style>
+	<g id="Layer">
+		<path id="Layer" class="shp0" d="M1249.76 0.5L760.41 752.75L1266.38 1573.56L1576.79 1573.56L1079.63 728.19L1553.36 0.4L1249.76 0.5Z"/>
+		<path id="Layer" class="shp1" d="M1050.49 0.5L303.4 0C263.53 0.07 224.05 7.99 187.23 23.31C150.41 38.63 116.97 61.06 88.8 89.31C60.63 117.56 38.29 151.09 23.06 187.98C7.82 224.86 -0.01 264.39 0 304.31L0 1603.73L1050.49 0.5Z"/>
+	</g>
+</svg>

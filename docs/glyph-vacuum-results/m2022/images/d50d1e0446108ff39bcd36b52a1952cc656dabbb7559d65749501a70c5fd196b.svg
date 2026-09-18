@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xml:space="preserve">&#13;&#10;&#9;&#9;&#9;&#9;&#9;&#9;&#9;&#9;	<style type="text/css" xml:space="preserve">.White{fill:#FFFFFF;}&#13;&#10;&#9;.Blue{fill:#1177D7;}</style>
+	<g id="Mail">
+		<rect y="4" class="Blue" width="32" height="24"/>
+		<rect x="2" y="6" class="White" width="28" height="20"/>
+		<polygon class="Blue" points="30,8 16,18 2,8 2,10 10.4,16 2,22 2,24 11.8,17 16,20 20.2,17 30,24 30,22 21.6,16 30,10 &#9;"/>
+	</g>
+</svg>

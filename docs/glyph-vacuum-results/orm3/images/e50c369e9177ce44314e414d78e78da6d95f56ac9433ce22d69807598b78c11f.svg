@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g/>
+	<path style="stroke: rgb(17, 119, 215); fill: rgb(255, 255, 255); stroke-width: 3px;" d="M 7.076 17.706 C 4.261 17.667 1.749 18.826 1.591 23.209 C 1.463 26.777 3.578 28.702 7.038 28.682"/>
+	<rect x="6.617" y="24.72" width="18.927" height="6.718" style="fill: rgb(114, 114, 114); stroke: rgb(114, 114, 114);"/>
+	<path style="stroke: rgb(17, 119, 215); fill: rgb(255, 255, 255); stroke-width: 3px; transform-box: fill-box; transform-origin: 50% 50%;" d="M 30.532 6.418 C 27.717 6.379 25.205 7.538 25.047 11.921 C 24.919 15.489 27.034 17.414 30.494 17.394" transform="matrix(-0.999986, 0.005266, -0.005266, -0.999986, 0.000003, 0)"/>
+	<rect x="6.575" y="14.118" width="18.927" height="6.718" style="fill: rgb(114, 114, 114); stroke: rgb(114, 114, 114);"/>
+	<rect x="6.54" y="2.917" width="18.927" height="6.718" style="fill: rgb(114, 114, 114); stroke: rgb(114, 114, 114);"/>
+	<path class="Blue" d="M 29.356 24.777 L 22.31 31.091 L 18.787 27.934 L 25.833 21.621 L 29.356 24.777 Z M 30.236 23.989 L 31.735 22.647 C 32.086 22.331 32.086 21.857 31.735 21.621 L 29.356 19.489 C 29.002 19.174 28.474 19.174 28.211 19.489 L 26.714 20.83 L 30.236 23.989 Z M 17.906 28.724 L 17.906 31.881 L 21.428 31.881 L 17.906 28.724 Z" style="fill: rgb(17, 119, 215);"/>
+</svg>

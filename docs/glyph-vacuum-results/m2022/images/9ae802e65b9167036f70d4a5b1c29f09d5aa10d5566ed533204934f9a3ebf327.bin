@@ -1,0 +1,13 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 741, 660, 733, 284,,,,
+Osublot.DB,Os,20, 10, 181, 239,,,,,
+    1, - Number of Columns,,,,,,
+ID,Os,                  17,     , ,,,
+     , - Number of Criteria,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	max( Os."ID" )
+FROM	"Osublot.DB" Os,,,,,,,

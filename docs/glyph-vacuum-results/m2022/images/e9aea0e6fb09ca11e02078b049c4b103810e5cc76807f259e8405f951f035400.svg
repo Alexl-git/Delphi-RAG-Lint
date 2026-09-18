@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" enable-background="new 0 0 32 32" xml:space="preserve">&#13;&#10;<g id="Layer_1_1_">
+		<polygon opacity="0.6" points="24,6 20,6 20,0 4,0 4,22 12,22 12,30 30,30 30,12 &#9;"/>
+		<g>
+			<polygon fill="#FFFFFF" points="17.9,2 5.9,2 5.9,20 11.8,20 11.8,6 17.9,6 &#9;&#9;"/>
+			<polygon fill="#FFFFFF" points="21.7,8 14,8 14,28 28,28 28,14 21.7,14 &#9;&#9;"/>
+			<polygon fill="#FFFFFF" points="24,8 24,12 28,12 &#9;&#9;"/>
+		</g>
+		<g opacity="0.3">
+			<rect x="16" y="14.3" width="4" height="2"/>
+			<rect x="16" y="18" width="10" height="1.9"/>
+			<rect x="16" y="22" width="10" height="2"/>
+		</g>
+	</g>
+<g id="Layer_2"/>
+</svg>

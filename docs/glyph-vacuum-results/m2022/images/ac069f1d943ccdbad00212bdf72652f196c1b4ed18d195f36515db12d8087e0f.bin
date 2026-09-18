@@ -1,0 +1,15 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+1,1, - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 463, 1107, 455, 535,,,,
+Folders.DB,Fo,20, 10, 181, 135,,,,,
+    1, - Number of Columns,,,,,,
+WrkOrdrNmbr,Fo,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	 DISTINCT Fo."WrkOrdrNmbr"
+FROM	"Folders.DB" Fo
+ORDER BY
+	Fo."WrkOrdrNmbr",,,,,,,

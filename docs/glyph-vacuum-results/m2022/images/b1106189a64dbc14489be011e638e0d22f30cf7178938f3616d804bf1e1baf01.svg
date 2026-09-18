@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g/>
+	<g transform="matrix(2.264861, 0, 0, 2.267494, -2.129736, -2.176517)" style="">
+		<rect x="1" y="1" width="14" height="14" rx="1" ry="0" fill="#727272" class="Black"/>
+	</g>
+	<g transform="matrix(2.264861, 0, 0, 2.267494, -2.129736, -2.176517)" style="">
+		<circle cx="8" cy="8" r="4" fill="#1177D7" class="Blue" stroke="White" stroke-width="2px"/>
+	</g>
+</svg>

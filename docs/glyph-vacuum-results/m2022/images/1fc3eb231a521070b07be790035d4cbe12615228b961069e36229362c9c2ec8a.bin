@@ -1,0 +1,39 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 0, 3200, 2356,,,,,
+1,1, - Distinct & Quote,,,,,
+    2, - Number of Tables,-1, -1, 1540, 933, 1532, 639,,,,
+ToolAssg.DB,TA,503, 10, 644, 263,,,,,
+ToolGR12.db,T12,30, 11, 191, 144,,,,,
+    8, - Number of Columns,,,,,,
+FldrID,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:FID,    6,,,,,,
+OperID,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:ID,    6,,,,,,
+Tag2,T12,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Tag1,T12,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Tag3,T12,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+ToolID,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+PosID,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Application,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+    1, - Number of Joins,,,,,,
+ToolID,TA,ID,T12,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	 DISTINCT TA."FldrID" , TA."OperID" , T12."Tag2" , 
+	T12."Tag1" , T12."Tag3" , TA."ToolID" , 
+	TA."PosID" , TA."Application"
+FROM	"ToolAssg.DB" TA , "ToolGR12.db" T12
+WHERE	( TA."ToolID" = T12."ID" )
+		AND
+	(
+	( ( TA."FldrID" = :FID ) AND
+		( TA."OperID" = :ID ) )
+	),,,,,,,

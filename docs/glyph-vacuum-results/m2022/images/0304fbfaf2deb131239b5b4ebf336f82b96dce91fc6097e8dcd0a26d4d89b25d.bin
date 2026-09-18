@@ -1,0 +1,34 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3200, 2366,,,,,
+ , , - Distinct & Quote,,,,,
+    2, - Number of Tables,-1, -1, 754, 988, 746, 654,,,,
+Folders.DB,Fo,20, 20, 126, 611,,,,,
+JobStn.DB,Jo,205, 20, 370, 145,,,,,
+    5, - Number of Columns,,,,,,
+RTState,Fo,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+1,    6,,,,,,
+NextEvent,Fo,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+PartNmbr,Fo,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+WrkOrdrNmbr,Fo,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Station,Jo,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+'1',    6,,,,,,
+    1, - Number of Joins,,,,,,
+Fldr_SystID,Fo,FldrID,Jo,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	Fo."NextEvent" , Fo."PartNmbr" , 
+	Fo."WrkOrdrNmbr" , Jo."Station"
+FROM	"Folders.DB" Fo , "JobStn.DB" Jo
+WHERE	( Fo.Fldr_SystID = Jo.FldrID )
+		AND
+	(
+	( ( Fo."RTState" = 1 ) AND
+		( Jo."Station" = '1' ) )
+	)
+ORDER BY
+	Fo."NextEvent",,,,,,,

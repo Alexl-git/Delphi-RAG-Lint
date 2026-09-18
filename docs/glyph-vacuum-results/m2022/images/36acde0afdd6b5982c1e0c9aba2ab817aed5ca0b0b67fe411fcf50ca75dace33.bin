@@ -1,0 +1,54 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 0, 3196, 2350,,,,,
+ ,1, - Distinct & Quote,,,,,
+    3, - Number of Tables,-1, -1, 1460, 1008, 1452, 696,,,,
+ToolAdj.DB,TA,13, 11, 174, 644,,,,,
+ToolAssg.DB,TS,220, 11, 381, 300,,,,,
+EndProc.DB,EP,216, 323, 377, 470,,,,,
+    8, - Number of Columns,,,,,,
+FldrID,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:FldrID,    6,,,,,,
+OperID,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:OperID,    6,,,,,,
+ONN,TA,                  65,     , ,,1,1
+     , - Number of Criteria,,,,,,
+OFF,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+ToolChange,EP,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Control,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+FtrID,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+FtrID,TS,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:FtrID,    6,,,,,,
+    4, - Number of Joins,,,,,,
+FldrID,TA,FldrID,TS,          ,          ,,
+ToolID,TA,ToolID,TS,          ,          ,,
+Position,TA,PosID,TS,          ,          ,,
+Reason,TA,ID,EP,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	TA."FldrID" , TA."OperID" , TA."ONN" , 
+	TA."OFF" , EP."ToolChange" , TA."Control" , 
+	TA."FtrID" , TS."FtrID"
+FROM	"ToolAdj.DB" TA , "ToolAssg.DB" TS , 
+	"EndProc.DB" EP
+WHERE	( TA."FldrID" = TS."FldrID" )
+		AND
+	( TA."ToolID" = TS."ToolID" )
+		AND
+	( TA."Position" = TS."PosID" )
+		AND
+	( TA."Reason" = EP."ID" )
+		AND
+	(
+	( ( TA."FldrID" = :FldrID ) AND
+		( TA."OperID" = :OperID ) AND
+		( TS."FtrID" = :FtrID ) )
+	)
+ORDER BY
+	TA."ONN" desc,,,,,,,

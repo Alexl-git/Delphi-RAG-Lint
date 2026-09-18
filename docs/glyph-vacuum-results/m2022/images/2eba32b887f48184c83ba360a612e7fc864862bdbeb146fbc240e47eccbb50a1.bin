@@ -1,0 +1,22 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 667, 739, 659, 323,,,,
+Insprslt.DB,Ir,20, 10, 181, 289,,,,,
+    3, - Number of Columns,,,,,,
+OSublotID,Ir,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+:ID,    6,,,,,,
+HasData,Ir,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+True,    6,,,,,,
+Cnt,,                   1,    1, ,,,
+count( Ir.ID ),,,,,,,
+     , - Number of Criteria,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	( count( Ir.ID ) )  as Cnt
+FROM	"Insprslt.DB" Ir
+WHERE	( ( Ir."OSublotID" = :ID ) AND
+		( Ir."HasData" = True ) ),,,,,,,

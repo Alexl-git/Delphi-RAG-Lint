@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xml:space="preserve">&#13;&#10;	<style type="text/css" xml:space="preserve">.Blue{fill:#1177D7;}&#13;&#10;&#9;.Yellow{fill:#FFB115;}&#13;&#10;&#9;.Red{fill:#D11C1C;}&#13;&#10;&#9;.Green{fill:#039C23;}&#13;&#10;&#9;.Black{fill:#727272;}&#13;&#10;&#9;.White{fill:#FFFFFF;}&#13;&#10;&#9;.st0{opacity:0.5;}&#13;&#10;&#9;.st1{opacity:0.75;}&#13;&#10;&#9;.st2{display:none;}&#13;&#10;&#9;.st3{display:inline;fill:#FFB115;}&#13;&#10;&#9;.st4{display:inline;}&#13;&#10;&#9;.st5{display:inline;opacity:0.75;}&#13;&#10;&#9;.st6{display:inline;opacity:0.5;}&#13;&#10;&#9;.st7{display:inline;fill:#039C23;}&#13;&#10;&#9;.st8{display:inline;fill:#D11C1C;}&#13;&#10;&#9;.st9{display:inline;fill:#1177D7;}&#13;&#10;&#9;.st10{display:inline;fill:#FFFFFF;}</style>
+	<g id="State">
+		<path class="Blue" d="M16,2C8.3,2,2,8.3,2,16s6.3,14,14,14s14-6.3,14-14S23.7,2,16,2z M19,22l-0.9-3h-4.2L13,22h-3l4.6-13h3L22,22  &#9;&#9;H19z M16,12l1.5,5h-3.1C14.4,17,16,12.4,16,12z"/>
+	</g>
+</svg>

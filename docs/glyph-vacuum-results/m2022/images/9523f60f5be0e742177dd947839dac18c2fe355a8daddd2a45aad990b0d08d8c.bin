@@ -1,0 +1,70 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 0, 3196, 2350,,,,,
+ ,1, - Distinct & Quote,,,,,
+    3, - Number of Tables,-1, -1, 1532, 1132, 1524, 839,,,,
+EndProc.DB,EP,20, 12, 181, 158,,,,,
+ToolAdj.DB,TA,216, 14, 377, 738,,,,,
+Operat.DB,Op,431, 17, 592, 661,,,,,
+   14, - Number of Columns,,,,,,
+FldrID,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:FldrID,    6,,,,,,
+OperID,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:OperID,    6,,,,,,
+Position,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:Position,    6,,,,,,
+ToolID,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+:ToolID,    6,,,,,,
+Tool,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+ONN,TA,                  65,     , ,,1,
+    1, - Number of Criteria,,,,,,
+<:ONN,    6,,,,,,
+ToolChange,EP,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+OFF,TA,                   1,     , ,,,
+    1, - Number of Criteria,,,,,,
+<:OFF,    6,,,,,,
+OProcessSet,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+TProcessSet,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Reason,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Reason,EP,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+MachineGr,Op,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+ID,TA,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+    2, - Number of Joins,,,,,,
+Reason,TA,ID,EP,          ,          ,,
+OperID,TA,ID,Op,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	TA."FldrID" , TA."OperID" , TA."Position" , 
+	TA."ToolID" , TA."Tool" , TA."ONN" , 
+	EP."ToolChange" , TA."OFF" , 
+	TA."OProcessSet" , TA."TProcessSet" , 
+	TA."Reason" , EP."Reason" , 
+	Op."MachineGr" , TA."ID"
+FROM	"EndProc.DB" EP , "ToolAdj.DB" TA , 
+	"Operat.DB" Op
+WHERE	( TA."Reason" = EP."ID" )
+		AND
+	( TA."OperID" = Op."ID" )
+		AND
+	(
+	( ( TA."FldrID" = :FldrID ) AND
+		( TA."OperID" = :OperID ) AND
+		( TA."Position" = :Position ) AND
+		( TA."ToolID" = :ToolID ) AND
+		( TA."ONN,,,,,,,
+" <:ONN ) AND
+		( TA."OFF" <:OFF ) )
+	)
+ORDER BY
+	TA."ONN",,,,,,,

@@ -1,0 +1,17 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3196, 2350,,,,,
+ , , - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 607, 577, 599, 242,,,,
+JobStn.DB,Jo,20, 10, 181, 135,,,,,
+    2, - Number of Columns,,,,,,
+Station,Jo,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+FldrID,Jo,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+=:FLDR_SYSTID,    6,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	Jo."Station"
+FROM	"JobStn.DB" Jo
+WHERE	( Jo."FldrID" =:FLDR_SYSTID ),,,,,,,

@@ -1,0 +1,25 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 0, 3196, 2348,,,,,
+ , , - Distinct & Quote,,,,,
+    2, - Number of Tables,-1, -1, 1004, 773, 996, 381,,,,
+FolHeat.DB,Fh,20, 10, 185, 135,,,,,
+Folders.DB,Fo,205, 10, 370, 293,,,,,
+    2, - Number of Columns,,,,,,
+Heat,Fh,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+:ID,    6,,,,,,
+WrkOrdrNmbr,Fo,                  65,     , ,,1,
+     , - Number of Criteria,,,,,,
+    1, - Number of Joins,,,,,,
+FolderID,Fh,Fldr_SystID,Fo,          ,          ,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	Fo."WrkOrdrNmbr"
+FROM	"FolHeat.DB" Fh , "Folders.DB" Fo
+WHERE	( Fh.FolderID = Fo.Fldr_SystID )
+		AND
+	(
+	( Fh."Heat" = :ID )
+	)
+ORDER BY
+	Fo."WrkOrdrNmbr",,,,,,,

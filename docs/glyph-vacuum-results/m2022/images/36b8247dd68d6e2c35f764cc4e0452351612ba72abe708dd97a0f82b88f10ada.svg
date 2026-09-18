@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" width="32px" height="32px" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Blue{fill:#1177D7;}&#10;&#9;&#10;&#9;.Yellow{fill:#FFB115;}&#10;&#9;&#10;&#9;.Black{fill:#727272;}&#10;&#9;&#10;&#9;.Green{fill:#039C23;}&#10;&#9;&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;&#10;&#9;.st0{opacity:0.75;}&#10;&#9;&#10;&#9;.st1{opacity:0.5;}</style>
+	<g id="g-1" transform="matrix(1.142857, 0, 0, 1.088338, -2.285714, -1.10531)" style="">
+		<g id="TV">
+			<path d="M28, 4L4, 4C2.9, 4 2, 4.9 2, 6L2, 22C2, 23.1 2.9, 24 4, 24L10, 24L10, 28L22, 28L22, 24L28, 24C29.1, 24 30, 23.1 30, 22L30, 6C30, 4.9 29.1, 4 28, 4zM28, 22L4, 22L4, 6L28, 6L28, 22z" fill="#727272" class="Black"/>
+		</g>
+	</g>
+	<g transform="matrix(1.169711, 0, 0, 1.153177, 7.373272, 6.825066)" style="">
+		<g id="g-2" transform="matrix(1, 0, 0, 1, 0, -2)" style="enable-background:new 0 0 16 16">
+			<g id="FolderOpen_2_">
+				<g class="st0" style="opacity: 1;">
+					<path d="M4.6, 6.4C4.8, 6.2 5.1, 6 5.5, 6L12, 6L12, 5C12, 4.4 11.5, 4 11, 4L6, 4L6, 3C6, 2.4 5.5, 2 5, 2L1, 2C0.5, 2 0, 2.4 0, 3L0, 13C0, 13.1 0, 13.2 0.1, 13.3L4.6, 6.4z" fill="#FFB115" class="Yellow"/>
+				</g>
+			</g>
+		</g>
+		<g id="g-2" transform="matrix(1, 0, 0, 1, 0, -2)" style="enable-background:new 0 0 16 16">
+			<g id="FolderOpen_2_">
+				<path d="M2, 14L6, 8L15, 8C15.8, 8 16.3, 8.9 15.8, 9.6L13.1, 13.6C13, 13.8 12.7, 14 12.3, 14L2, 14z" fill="#FFB115" class="Yellow"/>
+			</g>
+		</g>
+	</g>
+	<g id="g-3" transform="matrix(-0.775463, 0, 0, -0.809073, 18.151438, 30.892948)" style="">
+		<g transform="matrix(-1, 0, 0, 1, 16, 0)">
+			<g id="Undo">
+				<path d="M6, 4L6, 0L0, 6L6, 12L6, 8C10.8, 8 14.9, 11.4 15.8, 16C15.9, 15.4 16, 14.7 16, 14C16, 8.5 11.5, 4 6, 4z" fill="#D11C1C" class="Red"/>
+			</g>
+		</g>
+	</g>
+</svg>

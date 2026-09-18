@@ -1,0 +1,19 @@
+Ver 2.0,QBE - Integra Visual Database Builder,0, 10, 3134, 2346,,,,,
+ , , - Distinct & Quote,,,,,
+    1, - Number of Tables,-1, -1, 648, 647, 640, 283,,,,
+logedon.db,lo,20, 10, 189, 154,,,,,
+    3, - Number of Columns,,,,,,
+CompName,lo,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+UserName,lo,                   1,     , ,,,
+     , - Number of Criteria,,,,,,
+Active,lo,                    ,     , ,,,
+    1, - Number of Criteria,,,,,,
+True,    6,,,,,,
+     , - Number of Joins,,,,,,
+
+"SELECT Statement"
+,,,,,,,
+SELECT	lo."CompName" , lo."UserName"
+FROM	"logedon.db" lo
+WHERE	( lo."Active" = True ),,,,,,,

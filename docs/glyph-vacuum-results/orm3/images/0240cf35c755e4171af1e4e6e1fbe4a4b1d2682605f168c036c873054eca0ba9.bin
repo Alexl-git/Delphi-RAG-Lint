@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 32 32" style="enable-background:new 0 0 32 32;" xmlns="http://www.w3.org/2000/svg">
+	<style type="text/css" xml:space="preserve">.Yellow{fill:#FFB115;}&#10;&#9;.Red{fill:#D11C1C;}&#10;&#9;.Black{fill:#727272;}&#10;&#9;.Blue{fill:#1177D7;}&#10;&#9;.White{fill:#FFFFFF;}&#10;&#9;.Green{fill:#039C23;}&#10;&#9;.st0{opacity:0.75;}&#10;&#9;.st1{opacity:0.5;}&#10;&#9;.st2{opacity:0.25;}&#10;&#9;.st3{fill:#FFB115;}</style>
+	<g id="Open2" transform="matrix(2.060853, 0, 0, 2.248062, -1.562646, 0.170329)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<g class="st0" style="opacity: 1;">
+				<path d="M19.2, 10L12, 10L12, 7C12, 6.4 11.6, 6 11, 6L3, 6C2.4, 6 2, 6.5 2, 7L2, 25C2, 25.2 2, 25.3 2.1, 25.4C2.1, 25.4 2.2, 25.3 2.2, 25.2L7.7, 15.2C8, 14.5 8.7, 14 9.5, 14L23.2, 14L19.2, 10z" fill="#FFB115" class="Yellow"/>
+			</g>
+		</g>
+	</g>
+	<g id="Open2" transform="matrix(2.060853, 0, 0, 2.248062, -1.562646, 0.170329)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<path d="M29.3, 16L9.6, 16L4, 26L23.8, 26C24.3, 26 24.9, 25.8 25.1, 25.4L30, 16.5C30.1, 16.2 29.8, 16 29.3, 16z" fill="#FFB115" class="Yellow"/>
+		</g>
+	</g>
+	<g id="Open2" transform="matrix(2.060853, 0, 0, 2.248062, -1.562646, 0.170329)" style="">
+		<g transform="matrix(0.5, 0, 0, 0.5, 0, 0)">
+			<path d="M28, 8C28, 4.7 25.3, 2 22, 2C18.7, 2 16, 4.7 16, 8C16, 5.8 17.8, 4 20, 4C22.2, 4 24, 5.8 24, 8L20, 8L26, 14L32, 8L28, 8z" fill="#039C23" class="Green"/>
+		</g>
+	</g>
+</svg>

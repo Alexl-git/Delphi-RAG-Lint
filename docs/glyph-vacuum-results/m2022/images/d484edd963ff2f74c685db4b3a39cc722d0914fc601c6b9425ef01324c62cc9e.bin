@@ -1,0 +1,14 @@
+l version="1.0" encoding="utf-8"?>
+<svg viewBox="0 0 31 31" xmlns="http://www.w3.org/2000/svg" xmlns:bx="https://boxy-svg.com">
+  <style type="text/css">
+	.Black{fill:#727272;}	
+	.Blue{fill:#1177D7;}
+	.Yellow{fill:#FFB115;}
+	.Green{fill:#039C23;}
+	.Red{fill:#D11C1C;}
+	.st0{opacity:0.75;}
+	.st1{opacity:0.5;}
+</style>
+  <path d="M 12.69931 13.31103 H 13.69931 L 12.69931 9.31103 L 22.69931 13.81103 L 12.69931 18.31103 L 13.69931 14.31103 H 12.69931 V 13.31103 Z" style="stroke: Blue; fill: Blue;" transform="matrix(0.9999123, 0.01324387, -0.01324387, 0.9999123, 7.08954239, 1.32957411)" bx:shape="arrow 12.69931 9.31103 10 9 1 10 1 1@8a5c117e"/>
+  <path d="M 4.31862 10.85241 H 5.31862 L 4.31862 6.85241 L 14.31862 11.35241 L 4.31862 15.85241 L 5.31862 11.85241 H 4.31862 V 10.85241 Z" style="stroke: Blue; fill: Blue;" transform="matrix(-0.9993968, -0.03472808, 0.03472808, -0.9993968, 15.38107872, 26.93787956)" bx:shape="arrow 4.31862 6.85241 10 9 1 10 1 1@b67acbf0"/>
+</svg>
