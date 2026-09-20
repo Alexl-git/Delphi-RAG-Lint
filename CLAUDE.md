@@ -197,6 +197,52 @@ The scratchpad-copy-then-revert pattern is no longer needed: a stash IS the
 backup, and unlike a copy in `C:\TEMP` it survives in the repo and is visible to
 anyone who looks.
 
+## Two controllers on one tree, and the gate that cannot see backwards (2026-09-20)
+
+Two process rules, each written after a real loss on 2026-09-20. Both apply to
+any subagent-driven plan run in this repo.
+
+### Before resuming an SDD ledger found on disk, check who else is running it
+
+A bare "resume" found `.superpowers\sdd\<plan>\progress.md` mid-loop and picked
+the plan up. Another session was already executing it. For ~40 minutes two
+controllers dispatched implementers into ONE working tree; each worker read the
+other's edits as corruption, one ran `git stash push` on the other's files
+twice, and a review verdict was lost. Nothing was destroyed only because the
+stash held a superset and both controllers stopped when they found each other.
+
+**The rule:** before dispatching anything against a ledger you did not create in
+this session, run `ListAgents` and look for a live session whose name or
+`--check` output names this repo or this branch. If one exists, message it and
+wait for its answer before touching the tree. A ledger on disk is a claim that
+work is in progress, not a claim that nobody is doing it. Record in the ledger
+which session owns the branch from that moment on.
+
+### A per-task lint gate cannot see an annotation go stale in a LATER task
+
+Task 2 of a 13-task plan added `dl:ok unused-public-symbol` on a routine nothing
+called yet. Task 3 called it. The annotation was stale from then on and survived
+TEN more tasks, every one of which reported "0 findings on my lines" truthfully
+-- the marker was not on their lines. The whole-branch review's lint sweep is
+what caught it. Separately, 13 real findings on branch-authored lines surfaced
+only at the end, because per-task "touched lines" filters miss lines ADJACENT
+to a hunk and lines swept into a later task's rebuilt block.
+
+**The rule:** the final whole-branch review dispatch MUST include a
+stale-annotation sweep and a branch-wide lint over the FULL diff
+(`<merge-base>..HEAD`), not the union of per-task hunks:
+
+```
+drag-lint lint-all --db <db> --enable multiple-statements-per-line,magic-literal,commented-out-code
+drag-lint lint <every changed unit> --db <db> --enable ...   (review-marker-stale included)
+```
+
+and every `dl:ok` the branch ADDS is re-checked against the final tree: does it
+still suppress a LIVE finding, and does its reason still hold. A marker whose
+finding no longer fires is removed in the fix wave, not carried. The owner's
+standard is that a linter message means something; a stale annotation is the
+first thing that teaches a reader to skim.
+
 ## Building
 
 Use the `delphi-build` skill. For the CLI specifically,
