@@ -2013,9 +2013,22 @@ begin
   // -- not always [0].
   var Chosen: Integer:= 0;
   var FoundDeclImpl: Boolean:= False;
-  if Length(Symbols) > 1 then
+  var CurLine1: Integer:= Line + 1;
+  { C2.5: the cursor is on a FORWARD DECLARATION (`TFoo = class;`). The store
+    already folded that row into the real declaration and stamped ForwardLine,
+    so no candidate's own StartLine matches the cursor -- match ForwardLine
+    instead, and remember to say so in the popup (OnForwardStub). Checked for
+    ANY candidate count: a folded pair is ONE row, which the `> 1` guard below
+    would skip. }
+  var OnForwardStub: Boolean:= False;
+  for var si:= 0 to High(Symbols) do
+    if (Symbols[si].ForwardLine = CurLine1)
+      and SameText(HitStore.GetFilePath(Symbols[si].FileId), Path) then
+    begin
+      Chosen:= si; FoundDeclImpl:= True; OnForwardStub:= True; Break;
+    end;
+  if (not FoundDeclImpl) and (Length(Symbols) > 1) then
   begin
-    var CurLine1: Integer:= Line + 1;
     for var si:= 0 to High(Symbols) do
       if SameText(HitStore.GetFilePath(Symbols[si].FileId), Path)
         and ((Symbols[si].StartLine = CurLine1)
@@ -2234,6 +2247,11 @@ begin
     end; // try
   end; // else Doc.HasContent
   end; // else HaveOwnerFloor
+  { C2.5: the popup was built for the REAL declaration; say that the cursor is
+    on its forward stub and where the real one is. Rendered as the first line so
+    the plugin's one-line header shows it. }
+  if OnForwardStub then
+    MdValue:= Format('_forward declaration -> line %d_'#10#10, [Sel.StartLine]) + MdValue;
   AOut.MdValue:= MdValue;
   { On the owner-type floor the markdown deliberately names the OWNER TYPE,
     because the member was not found on it or any base. Report that same type

@@ -213,6 +213,70 @@ try {
 }
 finally { Pop-Location }
 
+# ============================================================= CASE B =====
+function Frame($obj) {
+  $j = $obj | ConvertTo-Json -Compress -Depth 10
+  $n = [System.Text.Encoding]::UTF8.GetByteCount($j)
+  return "Content-Length: $n`r`n`r`n$j"
+}
+# Drives `lsp --stdio` exactly as run_hover_member_guard.ps1 does; returns the
+# hover markdown, '' for a null result, '<no-reply>' when id 2 never answered.
+function Get-HoverValue([string]$Db, [string]$File, [int]$Line0, [int]$Char0) {
+  $uri = 'file:///' + ($File -replace '\\', '/')
+  $msgs  = Frame @{ jsonrpc = '2.0'; id = 1; method = 'initialize'; params = @{ processId = $null; rootUri = $null; capabilities = @{} } }
+  $msgs += Frame @{ jsonrpc = '2.0'; method = 'initialized'; params = @{} }
+  $msgs += Frame @{ jsonrpc = '2.0'; id = 2; method = 'textDocument/hover';
+                    params = @{ textDocument = @{ uri = $uri }; position = @{ line = $Line0; character = $Char0 } } }
+  $msgs += Frame @{ jsonrpc = '2.0'; id = 3; method = 'shutdown'; params = @{} }
+  $inF = Join-Path $WorkDir 'lsp_in.txt'; $outF = Join-Path $WorkDir 'lsp_out.txt'; $errF = Join-Path $WorkDir 'lsp_err.txt'
+  [System.IO.File]::WriteAllText($inF, $msgs, (New-Object System.Text.ASCIIEncoding))
+  Start-Process $Exe -ArgumentList @('lsp', '--db', $Db) -WorkingDirectory $WorkDir `
+    -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -Wait | Out-Null
+  $raw = [System.IO.File]::ReadAllText($outF)
+  foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
+    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    if ($o.id -eq 2) { if ($null -eq $o.result) { return '' }; return [string]$o.result.contents.value }
+  }
+  return '<no-reply>'
+}
+
+Push-Location $WorkDir
+try {
+  Write-Host ''
+  Write-Host 'CASE B: hover renders the REAL declaration' -ForegroundColor Cyan
+  $hj = (& $Exe hover --qname fwstub.TFoo --db $db --format json 2>$null | Out-String)
+  $ho = $null; try { $ho = $hj.Trim() | ConvertFrom-Json } catch {}
+  Check 'S4: hover --qname fwstub.TFoo answered JSON' ($null -ne $ho) "got: [$($hj.Substring(0, [Math]::Min(120, $hj.Length)))]"
+  if ($ho) {
+    Check 'S4: def_line is the REAL declaration, not the stub' ($ho.def_line -eq $realLine) "def_line=$($ho.def_line) real=$realLine stub=$stubLine"
+    Check 'S4: kind class' ($ho.kind -eq 'class')
+  }
+  $hji = (& $Exe hover --qname fwstub.IFoo --db $db --format json 2>$null | Out-String)
+  $hoi = $null; try { $hoi = $hji.Trim() | ConvertFrom-Json } catch {}
+  Check 'S7: hover --qname fwstub.IFoo def_line is the real interface' (($null -ne $hoi) -and ($hoi.def_line -eq $iRealLine)) "def_line=$($hoi.def_line)"
+
+  $fixFile = Join-Path $srcDir 'fwstub.pas'
+  # positional: cursor INSIDE 'TFoo' on the stub's line (0-based for LSP)
+  $stubCol0 = $lines[$stubLine - 1].IndexOf('TFoo') + 1
+  $hStub = Get-HoverValue $db $fixFile ($stubLine - 1) $stubCol0
+  Check 'S4: positional hover on the stub line answers' (($hStub -ne '') -and ($hStub -ne '<no-reply>')) "got: [$hStub]"
+  Check "S4: lead line 'forward declaration -> line $realLine'" ($hStub -match "^_?forward declaration -> line $realLine") "got: [$hStub]"
+  Check 'S4: it describes the real TFoo (its line appears)' ($hStub -match "line $realLine") "got: [$hStub]"
+  # cursor on the REAL declaration: no lead line
+  $realCol0 = $lines[$realLine - 1].IndexOf('TFoo') + 1
+  $hReal = Get-HoverValue $db $fixFile ($realLine - 1) $realCol0
+  Check 'S4 control: hover on the real declaration has NO forward lead line' (($hReal -ne '') -and ($hReal -notmatch 'forward declaration')) "got: [$hReal]"
+  # cursor on the consumer's field type, declared BEFORE the real TFoo: resolves to the real one
+  $consCol0 = $lines[$consumerLine - 1].IndexOf('TFoo') + 1
+  $hCons = Get-HoverValue $db $fixFile ($consumerLine - 1) $consCol0
+  Check 'S4: a use of TFoo before its real declaration hovers the real one' (($hCons -match "line $realLine") -and ($hCons -notmatch "line $stubLine\b")) "got: [$hCons]"
+  # POSITIVE CONTROL for the probe: the lone stub hovers as itself
+  $onlyCol0 = $lines[$onlyStubLine - 1].IndexOf('TOnlyStub') + 2
+  $hOnly = Get-HoverValue $db $fixFile ($onlyStubLine - 1) $onlyCol0
+  Check 'S2 control: lone TOnlyStub hovers as a class on its own line, no lead line' (($hOnly -match 'TOnlyStub') -and ($hOnly -notmatch 'forward declaration')) "got: [$hOnly]"
+}
+finally { Pop-Location }
+
 # ---- CASE B / C / D are appended by Tasks 3-5 ABOVE this footer ----
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
