@@ -260,6 +260,18 @@ function FindDuplicates(const ACatalog: TRuleCatalog): TCatalogDuplicates;
 /// </remarks>
 function SameBookDups(const ADups: TCatalogDuplicates): TCatalogDuplicates;
 
+/// <summary>PURE: are these two paths the SAME file?</summary>
+/// <param name="APathA">A file path.</param>
+/// <param name="APathB">A file path.</param>
+/// <returns>True when the two paths name the same file once separator style and
+/// case are normalised.</returns>
+/// <remarks>Windows paths are case-insensitive and '/' and '\' name the same
+/// separator, so a plain '=' would call the SAME file two different books.
+/// Exported (was RuleCatalog.pas-private) so ChooseTargetForNewRule can decide
+/// whether an existing rule lives in the book a new one is about to join --
+/// the same same-book test SameBookDups uses internally.</remarks>
+function SameFileNormalised(const APathA, APathB: string): Boolean;
+
 /// <summary>PURE: every '#mapping' DECLARATION in one rule-book text.</summary>
 /// <param name="AText">A .rules book. Unrecognised text is ignored, never an error.</param>
 /// <param name="APath">Recorded verbatim as each entry's FilePath; not read.</param>
@@ -984,8 +996,6 @@ begin
   end; // try
 end; // function
 
-{ Windows paths are case-insensitive and '/' and '\' name the same separator, so
-  a plain '=' would call the SAME file two different books. }
 function SameFileNormalised(const APathA, APathB: string): Boolean;
 begin
   Result:= SameText(StringReplace(APathA, '/', '\', [rfReplaceAll]), StringReplace(APathB, '/', '\', [rfReplaceAll]));

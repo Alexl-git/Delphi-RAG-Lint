@@ -4482,6 +4482,31 @@ begin
 
   L3:= ParseSkipList('filter DevExpress = ^Tdx'#13#10 + 'filter devexpress = ^Tcx');
   Check('skiplist.filter.name.caseinsensitive.merge', (Length(L3.Filters) = 1) and (Length(L3.Filters[0].Patterns) = 2) and SameText(L3.Filters[0].Name, 'DevExpress'), 'two filter lines whose names differ only by case accumulate into one filter');
+
+  // Finding 2 (2026-09-20 whole-branch review): a mark ticked before any rules
+  // folder is known must survive the first LoadSkipList of that folder's skip
+  // file -- MergePendingMarks is the pure merge LoadSkipList wires in instead
+  // of the bare FSkipList:= ParseSkipList(...) reset that discarded them.
+  var Pending: TSkipList:= Default(TSkipList);
+  Pending.Classes:= ['TOvcTable'];             // ticked with no folder open yet
+  Pending.Foreign:= ['ignored pending foreign line']; // must NOT leak into the merge
+  var PendingFilter: TNamedFilter;
+  PendingFilter.Name    := 'Extra';
+  PendingFilter.Patterns:= ['^Tfoo'];
+  var PendingDup: TNamedFilter;
+  PendingDup.Name    := 'DevExpress'; // same name as a filter already on disk
+  PendingDup.Patterns:= ['^Tzzz'];    // must NOT duplicate or replace the file's entry
+  Pending.Filters:= [PendingFilter, PendingDup];
+
+  var Merged: TSkipList:= MergePendingMarks(L, Pending);
+  Check('skiplist.merge.pending.class.survives', IsSkipped(Merged, 'TOvcTable'), 'a mark made before the folder was known must not be discarded by the first load');
+  Check('skiplist.merge.file.class.kept', IsSkipped(Merged, 'TLabel') and IsSkipped(Merged, 'TPanel'), 'marks already on disk must still be there after the merge');
+  Check('skiplist.merge.classes.union', Length(Merged.Classes) = 3, Format('expected 3 (2 file + 1 pending), got %d', [Length(Merged.Classes)]));
+  Check('skiplist.merge.filter.new.added', Length(Merged.Filters) = 3, Format('2 file filters + 1 new pending filter, got %d', [Length(Merged.Filters)]));
+  Check('skiplist.merge.filter.dup.not.duplicated', SameText(Merged.Filters[0].Name, 'DevExpress') and (Length(Merged.Filters[0].Patterns) = 2) and not ContainsText(string.Join('|', Merged.Filters[0].Patterns), '^Tzzz'), 'a same-named pending filter must not replace or duplicate the file''s own entry');
+  Check('skiplist.merge.foreign.file.only', Length(Merged.Foreign) = Length(L.Foreign), 'Foreign comes only from AFromFile; APending never contributes its own');
+  Check('skiplist.merge.foreign.pending.excluded', not ContainsText(string.Join('|', Merged.Foreign), 'ignored pending foreign line'), 'a pending Foreign line must not leak into the merged result');
+  Check('skiplist.merge.empty.pending.noop', Length(MergePendingMarks(L, Default(TSkipList)).Classes) = Length(L.Classes), 'nothing pending -> the file''s own list is unchanged');
 end; // procedure
 
 procedure TestFormTypesFilter;
@@ -5086,7 +5111,12 @@ begin
     if TDirectory.Exists(Dir) then
     begin
       var Errs: TArray<string>                                                     ;
-      var RealDups: TCatalogDuplicates:= FindDuplicates(ScanRulesFolder(Dir, Errs));
+      // Owner ruling 2026-09-20 (finding 4): several rules per class ACROSS books
+      // is normal and legal -- only a SAME-book collision is a defect the real
+      // corpus must stay clean of. Asserting bare FindDuplicates here would fail
+      // the first time the owner legitimately adds a second campaign's rule for
+      // a class already ruled in another book.
+      var RealDups: TCatalogDuplicates:= SameBookDups(FindDuplicates(ScanRulesFolder(Dir, Errs)));
       var Msg: string:= ''                                                         ;
       if Length(RealDups) > 0 then
         Msg:= RealDups[0].FromType + ' in ' + ExtractFileName(RealDups[0].Entries[0].FilePath) + ' and ' + ExtractFileName(RealDups[0].Entries[1].FilePath);

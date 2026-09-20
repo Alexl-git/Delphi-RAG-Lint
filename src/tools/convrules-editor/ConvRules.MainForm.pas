@@ -168,6 +168,12 @@ type
         would be unreachable. Enabled only while a row is selected. }
       FBtnAddRule   : TButton       ;
       FFormTypeRows : TFormTypeRows;
+      // The .pas path HarvestUnitClasses last merged into FFormTypeRows, or ''
+      // before any unit pick. Picking the SAME unit again (Browse a second time,
+      // re-selecting the combo entry) MERGES, same as today; picking a DIFFERENT
+      // unit resets FFormTypeRows first, so the list never silently accumulates
+      // two units' classes into one "form" (finding 3, 2026-09-20 review).
+      FHarvestedUnitPath: string    ;
       // List index -> FFormTypeRows index. The list shows only the rows the search
       // box leaves visible, so the two are NOT the same number. Every handler must
       // go through SelectedRowIndex; indexing FFormTypeRows with ItemIndex directly
@@ -644,7 +650,7 @@ type
       /// <summary>Re-applies Visual/Ruled decoration and repaints the list.</summary>
       /// <remarks>
       /// Cheap and idempotent -- called on every filter keystroke. The
-      /// TypeIsExcluded filter pass moves to the Apply button in Task 9; until then
+      /// TypeIsExcluded filter pass lives on the Apply button (ApplyNamedFilterClick);
       /// this only tallies RowState.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ClassSearchChange (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeCheckClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas) (+4 more)</para>
@@ -684,7 +690,7 @@ type
       /// </remarks>
       function SelectedRowIndex: Integer;
       /// <summary>The class-search text, or '' when the search box does not exist
-      /// yet (Task 8 wires FRulesFilter to this list).</summary>
+      /// yet.</summary>
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Trim(FRulesFilter.Text).</returns>
       /// <remarks>
       /// FRulesFilter is the class search box: a partial, case-insensitive match
@@ -2839,7 +2845,8 @@ begin
   FRulesFilter.OnChange:= ClassSearchChange;
 
   FLblFormTypes:= TLabel.Create(Self);
-  FLblFormTypes.Parent:= FormTypesPanel; FLblFormTypes.SetBounds(6, 202, 288, 15);  // dl:ok multiple-statements-per-line@7d33, magic-literal@7d33, large-magic-number@7d33 -- Task 8, shifted +23 by Task 9; same unnamed-coordinate idiom as its siblings
+  FLblFormTypes.Parent:= FormTypesPanel;
+  FLblFormTypes.SetBounds(6, 202, 288, 15);  // dl:ok magic-literal@62bf, large-magic-number@62bf -- Task 8, shifted +23 by Task 9; same unnamed-coordinate idiom as its siblings
   FLblFormTypes.Caption:= '';
 
   { Form types list: reduced height to make room for the rules list below it.
@@ -3343,17 +3350,42 @@ var
   Err      : string        ;
   Guard    : IInterface    ;  // dl:ok write-only-local@b3f5 -- RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read, same idiom as LGuard elsewhere in this unit
   OutlineOK: Boolean       ;
+  DfmPath  : string        ;
 begin
   Result:= '';
   Guard := HourGlass;
   SetStatus(Format('Reading the classes of %s ...', [ExtractFileName(APasPath)]));
   Application.ProcessMessages;
 
+  // A pick of a DIFFERENT unit starts a fresh list rather than merging into
+  // whatever a previous pick (or Open form/Examine) left behind -- otherwise
+  // the row count and the rows themselves silently mix two forms into one
+  // (finding 3, 2026-09-20 review). Re-picking the SAME unit still merges, as
+  // before -- the sibling .dfm is only (re-)scanned on the reset branch, since
+  // a re-pick's scan would just reproduce what is already in FFormTypeRows.
+  if not SameText(ExtractFileName(APasPath), ExtractFileName(FHarvestedUnitPath)) then
+  begin
+    FFormTypeRows:= nil;
+    DfmPath:= ChangeFileExt(APasPath, '.dfm');
+    if TFile.Exists(DfmPath) then
+      try
+        FFormTypeRows:= ScanDfmTypes(TFile.ReadAllText(DfmPath));
+      except
+        on E: Exception do
+          Result:= Format(' (.dfm unreadable: %s)', [E.Message]);
+      end;
+  end;
+  FHarvestedUnitPath:= APasPath;
+
   OutlineOK:= FEngine.OutlineClasses(APasPath, Classes, Indexed, Err);
   if not OutlineOK then
     Classes:= ScanClassesDeclared(AUnitText);
-  Result:= DescribeOutlineOutcome(OutlineOK, Indexed, ExtractFileName(APasPath), Err);
+  Result:= Result + DescribeOutlineOutcome(OutlineOK, Indexed, ExtractFileName(APasPath), Err);
 
+  // R1.1's union ("origin, dfm first") is now delivered by the pick itself --
+  // .dfm rows (if any, from the reset branch above) lead, MergeClassRows folds
+  // the .pas outline in on top, same as the pre-existing merge-into-current
+  // behaviour for a same-unit re-pick.
   FFormTypeRows:= MergeClassRows(FFormTypeRows, Classes);
   ApplySkipMarks;
   RefreshFormTypes;
@@ -3361,17 +3393,30 @@ end; // function
 
 procedure TConvRulesForm.LoadSkipList;
 var
-  P: string;
+  P      : string  ;
+  Pending: TSkipList;
 begin
+  // Marks may already exist in memory -- ticked (via SetSkipped / SaveSkipList)
+  // before any rules folder was known, e.g. "Open form"/Browse with no book
+  // open yet. A bare reset here would discard them the moment the folder
+  // became known; MergePendingMarks keeps both sides instead (finding 2,
+  // 2026-09-20 whole-branch review).
+  Pending:= FSkipList;
   FSkipList:= Default(TSkipList);
   P        := SkipFilePath(FRulesFolder);
   if (P = '') or not TFile.Exists(P) then
+  begin
+    FSkipList:= Pending; // no file yet: the pending marks ARE the current list
     Exit;
+  end;
   try
-    FSkipList:= ParseSkipList(TFile.ReadAllText(P));
+    FSkipList:= MergePendingMarks(ParseSkipList(TFile.ReadAllText(P)), Pending);
   except
     on E: Exception do
+    begin
       SetError(Format('Could not read %s (%s) -- marks are not loaded this session.', [ExtractFileName(P), E.Message]));
+      FSkipList:= Pending; // read failed: keep whatever was already in memory
+    end;
   end;
 end; // procedure
 
@@ -4241,6 +4286,10 @@ begin
   for Txt in ADfmTexts do
     Parts:= Parts + [ScanDfmTypes(Txt)];
   FFormTypeRows:= MergeFormTypes(Parts);
+  // These rows no longer belong to any single unit pick -- the next
+  // HarvestUnitClasses call must treat itself as "a different unit" (reset,
+  // not merge) even if it happens to re-pick the unit examined here.
+  FHarvestedUnitPath:= '';
 
   // A manual re-enable is the user's decision about a TYPE, not about a scan, so it
   // survives re-Examining the same form. Without this, re-running Examine would
@@ -4421,6 +4470,11 @@ begin
 
   if Sender <> nil then
   begin
+    // LoadSkipList just (re)loaded FSkipList from the folder's file -- a hand
+    // edit made while the editor is open would otherwise sit unapplied until
+    // the next harvest, and then get overwritten by the next toggle's
+    // SaveSkipList (Minor 7, 2026-09-20 whole-branch review).
+    ApplySkipMarks;
     RefreshFormTypes;
 
     // A same-book collision is louder than an unreadable file: an unreadable file
@@ -4583,16 +4637,20 @@ begin
     if Integer(FRules.Items[k].Data) = Hdr then begin Sel:= k; Break; end;
   if Sel >= 0 then
   begin
-    FRules.ItemIndex:= Sel;
-    { A TListView does not fire OnSelectItem when Selected:= True lands on a
-      row that is ALREADY selected (measured behaviour of this control) -- so
-      re-opening the same class's already-highlighted rule would silently skip
-      LoadGridForBlock. Call it directly in that case rather than relying on
-      the event to fire it; otherwise let Selected:= True do it as before. }
+    { Read Selected BEFORE touching ItemIndex/Selected -- TCustomListView.SetItemIndex
+      itself sets Items[Value].Selected:= True, which fires LVN_ITEMCHANGED ->
+      RulesSelectItem -> LoadGridForBlock. Assigning ItemIndex unconditionally and
+      THEN testing Selected (the prior shape) always read True, because the
+      assignment had already made it so -- so the not-yet-selected path loaded
+      twice: once from the event, once from this test. Branch on the PRE-assignment
+      state instead, so exactly one of the two mechanisms ever loads:
+        - already selected  -> ItemIndex is unchanged, no event fires, so load directly.
+        - not yet selected  -> assigning ItemIndex selects it, the event fires
+                                RulesSelectItem, which loads. }
     if FRules.Items[Sel].Selected then
       LoadGridForBlock(Hdr)
     else
-      FRules.Items[Sel].Selected:= True; // fires RulesSelectItem -> LoadGridForBlock
+      FRules.ItemIndex:= Sel; // fires RulesSelectItem -> LoadGridForBlock, once
     FRules.Items[Sel].Focused := True;
     FRules.SetFocus;
   end
@@ -5585,17 +5643,39 @@ begin
     a tool that simply says no gets worked around in ways nobody can see. The DEFAULT
     is the safe act and the cost of the other one is stated. }
   if (not ACompletingStub) and FindRuleForType(FCatalog, AFrom, RuledEntry) then
-  case MessageDlg(
-      Format('%s is already converted by %s (line %d).' + sLineBreak + sLineBreak + 'Yes = open THAT rule and edit it.' + sLineBreak + 'No  = write a SECOND rule anyway; the catalog will report a duplicate.', [AFrom, ExtractFileName(RuledEntry.FilePath), RuledEntry.LineNo]),
-      mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
-    mrCancel: Exit;
-    mrYes   :
-    begin
-      FCbFrom.Text:= AFrom;
-      OpenOwningRule(AFrom); // one implementation, shared with the double-click
-      Exit;
-    end;
-  end; // case
+  begin
+    // Owner ruling 2026-09-20 (Task 11, SameBookDups): several rules per class are
+    // NORMAL across books -- only two rules for one class in the SAME book cannot
+    // both apply. This prompt is where every R3.5 "add another To" action lands,
+    // so its wording and default must match that ruling rather than treating a
+    // routine cross-book pair as a defect.
+    var SameBook: Boolean:= (FFilePath <> '') and SameFileNormalised(RuledEntry.FilePath, FFilePath);
+    var Choice: Integer;
+    if SameBook then
+      Choice:= MessageDlg(
+          Format('%s already has a rule in %s (line %d) -- the SAME book you have open. '
+            + 'One book cannot convert one class two ways.' + sLineBreak + sLineBreak
+            + 'Yes = open that rule and edit it.' + sLineBreak
+            + 'No  = write a second rule anyway; move or delete one before this catalog is clean.',
+            [AFrom, ExtractFileName(RuledEntry.FilePath), RuledEntry.LineNo]),
+          mtConfirmation, [mbYes, mbNo, mbCancel], 0, mbYes)
+    else
+      Choice:= MessageDlg(
+          Format('%s already has a rule in %s (line %d), in a different book.' + sLineBreak + sLineBreak
+            + 'Yes = open that rule.' + sLineBreak
+            + 'No  = add another rule for %s here -- several rules per class across books are normal.',
+            [AFrom, ExtractFileName(RuledEntry.FilePath), RuledEntry.LineNo, AFrom]),
+          mtConfirmation, [mbYes, mbNo, mbCancel], 0, mbNo);
+    case Choice of
+      mrCancel: Exit;
+      mrYes   :
+      begin
+        FCbFrom.Text:= AFrom;
+        OpenOwningRule(AFrom); // one implementation, shared with the double-click
+        Exit;
+      end;
+    end; // case
+  end; // if
 
   { A rule may live in an existing book or in a file of its own; selective
     Compose picks the rules a job needs out of multi-rule books, so neither is

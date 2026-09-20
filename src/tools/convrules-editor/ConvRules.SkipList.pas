@@ -90,6 +90,25 @@ function SetSkipped(const AList: TSkipList; const AClassName: string; AOn: Boole
 /// name, which would land in the process's current directory.</returns>
 function SkipFilePath(const ARulesFolder: string): string;
 
+/// <summary>PURE: merge marks accumulated in memory before a rules folder was
+/// known with the list freshly parsed from that folder's skip file, so that
+/// loading the file never discards a pending mark.</summary>
+/// <param name="AFromFile">ParseSkipList's result for the file just read --
+/// the sole source for Foreign lines, which exist nowhere else.</param>
+/// <param name="APending">The in-memory list as it stood before the file was
+/// read, e.g. ticks made (via SetSkipped / SkipListFromRows) while no rules
+/// folder was open yet.</param>
+/// <returns>Classes: the union of both sides' names, case-insensitive -- a
+/// class marked on either side stays marked. Filters: AFromFile's filters plus
+/// any APending filter whose name AFromFile does not already have (a name
+/// present on both sides keeps the file's entry). Foreign: AFromFile's foreign
+/// lines only -- APending never carries its own.</returns>
+/// <remarks>A skip mark is a presence flag, not a value, so there is no real
+/// conflict to arbitrate for Classes: a name on either side simply survives.
+/// LoadSkipList is the one caller -- it merges instead of resetting so that
+/// marks ticked before FRulesFolder became known are not thrown away.</remarks>
+function MergePendingMarks(const AFromFile, APending: TSkipList): TSkipList;
+
 implementation
 
 uses
@@ -282,6 +301,22 @@ begin
   if Trim(ARulesFolder) = '' then
     Exit('');
   Result:= TPath.Combine(ARulesFolder, SKIP_FILE_NAME);
+end; // function
+
+function MergePendingMarks(const AFromFile, APending: TSkipList): TSkipList;
+var
+  C: string      ;
+  F: TNamedFilter;
+begin
+  Result:= AFromFile;
+  for C in APending.Classes do
+    if not IsSkipped(Result, C) then
+      Result.Classes:= Result.Classes + [C];
+  for F in APending.Filters do
+    if IndexOfFilter(Result, F.Name) < 0 then
+      Result.Filters:= Result.Filters + [F];
+  // Foreign is deliberately left as AFromFile's alone -- APending never carries
+  // any of its own (see the doc-comment).
 end; // function
 
 end.
