@@ -4507,6 +4507,32 @@ begin
   Check('skiplist.merge.foreign.file.only', Length(Merged.Foreign) = Length(L.Foreign), 'Foreign comes only from AFromFile; APending never contributes its own');
   Check('skiplist.merge.foreign.pending.excluded', not ContainsText(string.Join('|', Merged.Foreign), 'ignored pending foreign line'), 'a pending Foreign line must not leak into the merged result');
   Check('skiplist.merge.empty.pending.noop', Length(MergePendingMarks(L, Default(TSkipList)).Classes) = Length(L.Classes), 'nothing pending -> the file''s own list is unchanged');
+
+  // A3 (2026-09-20 whole-branch review, Minor 10): ApplyNamedFilterClick used to
+  // APPEND a new TNamedFilter on every Apply, so pressing it twice on the same
+  // name wrote the pattern line twice; SetNamedFilter replaces by name instead.
+  // It also drops blank memo lines, which used to survive into Patterns and get
+  // emitted as a foreign "filter Name = " line preserved forever.
+  var Base: TSkipList:= Default(TSkipList);
+  var FilterOne: TNamedFilter;
+  FilterOne.Name    := 'DevExpress';
+  FilterOne.Patterns:= ['^Tdx', ''];  // trailing blank memo line
+  var Once: TSkipList:= SetNamedFilter(Base, FilterOne);
+  Check('namedfilter.set.once.count', Length(Once.Filters) = 1, Format('%d', [Length(Once.Filters)]));
+  Check('namedfilter.set.blank.dropped', Length(Once.Filters[0].Patterns) = 1, 'the blank memo line must not become a Patterns entry');
+
+  var FilterTwo: TNamedFilter;
+  FilterTwo.Name    := 'DevExpress'; // same name, applied again
+  FilterTwo.Patterns:= ['^Tdx', '^Tcx'];
+  var Twice: TSkipList:= SetNamedFilter(Once, FilterTwo);
+  Check('namedfilter.set.replace.not.duplicate', Length(Twice.Filters) = 1, 'apply twice on the same name -> one record, not two');
+  Check('namedfilter.set.replace.content', Length(Twice.Filters[0].Patterns) = 2, 'the second Apply''s patterns replace the first''s');
+
+  var FilterOther: TNamedFilter;
+  FilterOther.Name    := 'Raize';
+  FilterOther.Patterns:= ['^TRz'];
+  var TwoNames: TSkipList:= SetNamedFilter(Twice, FilterOther);
+  Check('namedfilter.set.new.name.appends', Length(TwoNames.Filters) = 2, 'a different name is appended, not merged');
 end; // procedure
 
 procedure TestFormTypesFilter;
@@ -5425,13 +5451,15 @@ end; // procedure
   already covers is answered directly and never indexed. }
 procedure TestOutlineClassesLive;
 var
-  Exe    : string        ;
-  Eng    : TEngineAdapter;
-  Covered: TEngineAdapter;
-  Classes: TArray<string>;
-  Indexed: Boolean       ;
-  Err    : string        ;
-  Orphan : string        ;
+  Exe      : string        ;
+  Eng      : TEngineAdapter;
+  Covered  : TEngineAdapter;
+  Classes  : TArray<string>;
+  Indexed  : Boolean       ;
+  Err      : string        ;
+  Orphan   : string        ;
+  ScratchDb: string        ;
+  CopyDb   : string        ;
 begin
   Exe:= ResolveExe;
   if Exe = '' then
@@ -5449,8 +5477,12 @@ begin
     '  end;'#13#10 +
     'implementation'#13#10 +
     'end.'#13#10);
-  if TFile.Exists(ScratchDbPath(Orphan)) then
-    TFile.Delete(ScratchDbPath(Orphan)); // start cold, or the first assertion lies
+  ScratchDb:= ScratchDbPath(Orphan);
+  CopyDb   := ScratchDb + '.covered-copy.sqlite';
+  if TFile.Exists(ScratchDb) then
+    TFile.Delete(ScratchDb); // start cold, or the first assertion lies
+  if TFile.Exists(CopyDb) then
+    TFile.Delete(CopyDb);
 
   Eng:= TEngineAdapter.Create(Exe, []);
   try
@@ -5462,8 +5494,18 @@ begin
     // This is the assertion that proves the 27 s cold cost is paid once.
     Check('outline.live.orphan.warm', Eng.OutlineClasses(Orphan, Classes, Indexed, Err) and not Indexed, 'the second call must reuse the scratch DB');
 
-    // R1.3: a unit a CONFIGURED db covers is answered directly and never indexed.
-    Covered:= TEngineAdapter.Create(Exe, [ScratchDbPath(Orphan)]);
+    // R1.3 / A10 (2026-09-20 whole-branch review, Minor 12): this used to configure
+    // Covered with the SAME scratch DB the warm call just proved above it can answer
+    // from -- so a broken "resolve-dbs --in / outline against the configured DB"
+    // path could never fail outline.live.covered.notindexed; it would just fall
+    // through to the still-present warm scratch DB and read as covered either way.
+    // Copying the scratch DB to a SECOND path and deleting the original removes that
+    // fallback: if the configured-DB path were broken, OutlineClasses would have
+    // nothing to fall through to at ScratchDb and would have to re-index (Indexed =
+    // True) or fail (Result = False), either of which this assertion would catch.
+    TFile.Copy(ScratchDb, CopyDb);
+    TFile.Delete(ScratchDb);
+    Covered:= TEngineAdapter.Create(Exe, [CopyDb]);
     try
       Check('outline.live.covered.ok', Covered.OutlineClasses(Orphan, Classes, Indexed, Err), Err);
       Check('outline.live.covered.notindexed', not Indexed, 'a covered unit must never pay the index cost');
@@ -5474,6 +5516,13 @@ begin
     Eng.Free;
     if TFile.Exists(Orphan) then
       TFile.Delete(Orphan);
+    // A9 (2026-09-20 whole-branch review, Minor 17): the probe .pas is deleted
+    // above, but its scratch DB(s) under %LOCALAPPDATA% otherwise survive this
+    // test run forever.
+    if TFile.Exists(ScratchDb) then
+      TFile.Delete(ScratchDb);
+    if TFile.Exists(CopyDb) then
+      TFile.Delete(CopyDb);
   end; // try
 end; // procedure
 
