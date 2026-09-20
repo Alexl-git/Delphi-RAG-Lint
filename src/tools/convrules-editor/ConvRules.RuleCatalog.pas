@@ -208,10 +208,16 @@ function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
 /// <returns>One entry per duplicated type, in first-appearance order; [] when the
 /// corpus holds one rule per type, which is the intended state.</returns>
 /// <remarks>
-/// THE RULE THIS ENFORCES (owner, 2026-09-08): a rule lives in
+/// THE RULE THIS ENFORCED (owner, 2026-09-08): a rule lives in
 /// exactly ONE file, because the same conversion in two places is how two versions
 /// of it appear and diverge. Rules may be moved between files freely; they may not
 /// be COPIED.
+/// <para>AMENDED (owner, 2026-09-20): several rules for one From type is normal
+/// ACROSS books -- different campaigns may convert the same class differently, and
+/// the chooser lets a user pick which applies. Every finding this returns still
+/// deserves a mention (double-click the class to choose), but only the subset
+/// SameBookDups narrows it to -- two sites in the SAME file -- has no defined way
+/// for convert-apply to pick and stays a hard warning.</para>
 /// <para>Comparison is on the BARE type name, case-insensitively, matching
 /// FindRuleForType -- so 'Bde.DBTables.TQuery' in one book and a bare 'TQuery' in
 /// another ARE a duplicate, which is exactly the case a qualified-name comparison
@@ -228,6 +234,24 @@ function MergeCatalogs(const AParts: TArray<TRuleCatalog>): TRuleCatalog;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function FindDuplicates(const ACatalog: TRuleCatalog): TCatalogDuplicates;
+
+/// <summary>PURE: the duplicates whose entries share a file -- the only case a
+/// single rule book cannot resolve at apply time.</summary>
+/// <param name="ADups">A FindDuplicates result.</param>
+/// <returns>The subset of ADups where two or more Entries share a FilePath, each
+/// carried through UNCHANGED (every site, not just the colliding pair); [] when
+/// every duplicate's sites are all in different files.</returns>
+/// <remarks>
+/// Owner ruling 2026-09-20: one From class claimed by rules in several DIFFERENT
+/// books is legal -- different conversion campaigns, resolved by the chooser at
+/// apply time. It stops being resolvable only when two sites name the SAME file,
+/// which is what this narrows FindDuplicates down to.
+/// <para>File paths are compared case-insensitively with '/' and '\' treated as
+/// the same separator, because Windows paths are and a mismatch here would
+/// silently under-warn on a real same-book collision written with a different
+/// slash style or case.</para>
+/// </remarks>
+function SameBookDups(const ADups: TCatalogDuplicates): TCatalogDuplicates;
 
 /// <summary>PURE: every '#mapping' DECLARATION in one rule-book text.</summary>
 /// <param name="AText">A .rules book. Unrecognised text is ignored, never an error.</param>
@@ -940,6 +964,40 @@ begin
     Found.Free;
     Order.Free;
     Groups.Free;
+  end; // try
+end; // function
+
+{ Windows paths are case-insensitive and '/' and '\' name the same separator, so
+  a plain '=' would call the SAME file two different books. }
+function SameFileNormalised(const APathA, APathB: string): Boolean;
+begin
+  Result:= SameText(StringReplace(APathA, '/', '\', [rfReplaceAll]), StringReplace(APathB, '/', '\', [rfReplaceAll]));
+end;
+
+function SameBookDups(const ADups: TCatalogDuplicates): TCatalogDuplicates;
+var
+  List     : TList<TCatalogDuplicate>;
+  Dup      : TCatalogDuplicate       ;
+  Collision: Boolean                 ;
+  i        : Integer                 ;
+  j        : Integer                 ;
+begin
+  Result:= nil;
+  List:= TList<TCatalogDuplicate>.Create;
+  try
+    for Dup in ADups do
+    begin
+      Collision:= False;
+      for i:= 0 to High(Dup.Entries) do
+        for j:= i + 1 to High(Dup.Entries) do
+          if SameFileNormalised(Dup.Entries[i].FilePath, Dup.Entries[j].FilePath) then
+            Collision:= True;
+      if Collision then
+        List.Add(Dup);
+    end; // for
+    Result:= List.ToArray;
+  finally
+    List.Free;
   end; // try
 end; // function
 

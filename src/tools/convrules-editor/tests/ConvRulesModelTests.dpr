@@ -5097,6 +5097,35 @@ begin
   end; // begin
 end; // procedure
 
+{ Under the owner's ruling (2026-09-20), two rules for one From type in DIFFERENT
+  books is normal -- convert-apply just needs a choice made, which the chooser
+  gives it. Only when both sites are the SAME file does apply have no defined way
+  to pick, so SameBookDups narrows FindDuplicates' full list down to that case. }
+procedure TestSameBookDups;
+var
+  D: TCatalogDuplicates;
+begin
+  SetLength(D, 1);
+  D[0].FromType:= 'TabcToggleBtn';
+  SetLength(D[0].Entries, 2);
+  D[0].Entries[0].FilePath:= 'A.rules';
+  D[0].Entries[1].FilePath:= 'B.rules';
+  Check('samebook.across.books.ok', Length(SameBookDups(D)) = 0, 'two books converting one class differently is legal');
+
+  D[0].Entries[1].FilePath:= 'A.rules';
+  Check('samebook.same.book.warns', Length(SameBookDups(D)) = 1, 'one book cannot convert one class two ways');
+
+  // Windows paths are case-insensitive and can differ in separator style; a naive
+  // '=' comparison would miss both and under-warn.
+  D[0].Entries[0].FilePath:= 'C:\rules\A.rules';
+  D[0].Entries[1].FilePath:= 'c:\rules\a.rules';
+  Check('samebook.path.casing', Length(SameBookDups(D)) = 1, 'same file, different case, is still the same book');
+
+  D[0].Entries[0].FilePath:= 'C:\rules\A.rules';
+  D[0].Entries[1].FilePath:= 'C:/rules/A.rules';
+  Check('samebook.path.separator', Length(SameBookDups(D)) = 1, 'same file, different separator style, is still the same book');
+end; // procedure
+
 procedure TestRuleCatalogIndex;
 var
   Cat : TRuleCatalog     ;
@@ -5931,6 +5960,7 @@ begin
     TestRulesForType;
     TestRuleCatalogIndex;
     TestRuleCatalogDuplicates;
+    TestSameBookDups;
     TestMappingCatalog;
     TestHeaderIndexFor;
     TestAtomFileNaming;

@@ -4028,11 +4028,11 @@ end;
 
 procedure TConvRulesForm.RefreshFormTypes;
 var
-  Entry : TRuleCatalogEntry;
-  i     : Integer          ;
-  VisIdx: Integer          ; // for-in var over FVisibleRows -- kept distinct from i so nothing can read a for-in loop var's undefined post-loop value
-  k     : Integer          ; // indexed (not for-in) restore loop below -- Checked[] needs the list SLOT, not just the row
-  Cnt   : TRowCounts       ;
+  Entries: TArray<TRuleCatalogEntry>;
+  i      : Integer                  ;
+  VisIdx : Integer                  ; // for-in var over FVisibleRows -- kept distinct from i so nothing can read a for-in loop var's undefined post-loop value
+  k      : Integer                  ; // indexed (not for-in) restore loop below -- Checked[] needs the list SLOT, not just the row
+  Cnt    : TRowCounts               ;
 begin
   if (FFormTypeList = nil) or (FFilterMemo = nil) then
     Exit;
@@ -4062,21 +4062,18 @@ begin
     else
       FFormTypeRows[i].Visual:= tvkUnknown;
 
-    if FindRuleForType(FCatalog, FFormTypeRows[i].TypeName, Entry) then
-    begin
-      FFormTypeRows[i].Ruled:= True;
-      FFormTypeRows[i].RuledBy:= ExtractFileName(Entry.FilePath);
-      // Say it on the ROW, not only in the status line. The status line is gone by
-      // the time the user is looking at this type, and picking the wrong one of two
-      // rules is a silent mistake.
-      if DuplicateSitesFor(FFormTypeRows[i].TypeName) > 1 then
-        FFormTypeRows[i].RuledBy:= Format('%s +%d DUPLICATE', [FFormTypeRows[i].RuledBy, DuplicateSitesFor(FFormTypeRows[i].TypeName) - 1]);
-    end
+    // Several rules for one From type is normal ACROSS books (owner ruling
+    // 2026-09-20) -- RuleCount just says how many, and DescribeFormTypeRow
+    // renders the '+N more' suffix from it. This replaced a FindRuleForType +
+    // DuplicateSitesFor pairing that flagged every such class as a DUPLICATE,
+    // even when its two rules lived in two different, equally valid books.
+    Entries:= RulesForType(FCatalog, FFormTypeRows[i].TypeName);
+    FFormTypeRows[i].RuleCount:= Length(Entries);
+    FFormTypeRows[i].Ruled    := Length(Entries) > 0;
+    if Length(Entries) > 0 then
+      FFormTypeRows[i].RuledBy:= ExtractFileName(Entries[0].FilePath)
     else
-    begin
-      FFormTypeRows[i].Ruled  := False;
       FFormTypeRows[i].RuledBy:= '';
-    end;
   end; // for
 
   FVisibleRows:= VisibleRowIndexes(FFormTypeRows, ClassSearchText);
@@ -4133,17 +4130,24 @@ begin
   begin
     RefreshFormTypes;
 
-    // A duplicate is louder than an unreadable file: an unreadable file is
-    // obviously missing, whereas a duplicate looks like a working corpus right up
-    // until two copies of one rule drift apart.
-    if Length(FCatalogDups) > 0 then
+    // A same-book collision is louder than an unreadable file: an unreadable file
+    // is obviously missing, whereas two rules for one class in one book look like a
+    // working corpus right up until they drift apart, and convert-apply has no
+    // defined way to pick between them. Several rules for one class ACROSS books
+    // is normal (owner ruling 2026-09-20) and only merits a status line pointing at
+    // the chooser.
+    var SameBook: TCatalogDuplicates:= SameBookDups(FCatalogDups);
+    if Length(SameBook) > 0 then
       SetError(Format(
-          '%d conversion(s) from %s -- BUT %d type(s) are claimed by '
-            + 'more than one rule, starting with %s in %s and %s. A rule must live in '
-            + 'exactly one file; move or delete one.',
-          [
-            Length(FCatalog), Folder, Length(FCatalogDups), FCatalogDups[0].FromType, ExtractFileName(FCatalogDups[0].Entries[0].FilePath),
-            ExtractFileName(FCatalogDups[0].Entries[1].FilePath)]))
+          '%d conversion(s) from %s -- BUT %d type(s) are claimed TWICE IN THE SAME '
+            + 'BOOK, starting with %s in %s. One book cannot convert one class two '
+            + 'ways; move or delete one.',
+          [Length(FCatalog), Folder, Length(SameBook), SameBook[0].FromType, ExtractFileName(SameBook[0].Entries[0].FilePath)]))
+    else if Length(FCatalogDups) > 0 then
+      SetStatus(Format(
+          '%d conversion(s) catalogued from %s; %d type(s) have more than one rule '
+            + 'across books -- double-click a class to choose which.',
+          [Length(FCatalog), Folder, Length(FCatalogDups)]))
     else if Length(Errs) > 0 then
       SetStatus(Format('%d conversion(s) catalogued from %s; %d file(s) unreadable: %s', [Length(FCatalog), Folder, Length(Errs), string.Join('; ', Errs)]))
     else
@@ -4298,7 +4302,7 @@ begin
 
   Sites:= DuplicateSitesFor(TypeName);
   if Sites > 1 then
-    Extra:= Format(' -- NOTE %d rules claim %s; this is the first. Move or delete ' + 'the others.', [Sites, TypeName])
+    Extra:= Format(' -- %d rules convert %s; this is the first. Double-click the class to choose.', [Sites, TypeName])
   else
     Extra:= '';
   SetStatus(Format('Opened the rule for %s -- %s, line %d.', [TypeName, ExtractFileName(AEntry.FilePath), AEntry.LineNo]) + Extra);
