@@ -1261,7 +1261,33 @@ type
       /// touches FBook, so both callers stay read-only with respect to the rule book.
       /// First occurrence wins across texts, as it does within one.</remarks>
       procedure HarvestUsedUnits(const APasTexts: TArray<string>);
-      procedure HarvestUnitClasses(const AUnitText: string);
+      /// <summary>Fill the class list for the picked unit: the .dfm component
+      /// classes already in FFormTypeRows, UNIONED with the classes the unit
+      /// declares.</summary>
+      /// <param name="AUnitText">The unit's .pas text -- feeds ScanClassesDeclared,
+      /// the fallback used only when the engine cannot list the unit's
+      /// classes.</param>
+      /// <param name="APasPath">Full path to the .pas, passed to
+      /// TEngineAdapter.OutlineClasses for the declared-class half.</param>
+      /// <returns>'' when there is nothing to say; otherwise a status-line
+      /// suffix -- either noting a one-time scratch index build, or that the
+      /// engine could not answer and a text-scan fallback (blind to
+      /// conditionals and comments) was used instead.</returns>
+      /// <remarks>MERGES into FFormTypeRows, never overwrites it. Before
+      /// 2026-09-20 this rebuilt FFormTypeRows from the text scan alone, so
+      /// picking a unit replaced its form's already-harvested component
+      /// classes with the two or three classes the .pas happens to
+      /// declare.</remarks>
+      function HarvestUnitClasses(const AUnitText, APasPath: string): string;
+      /// <summary>STUB for Task 9: stamps loaded skip marks onto FFormTypeRows.
+      /// Currently a no-op placeholder so HarvestUnitClasses (and its Task 6/7
+      /// siblings) can call it unconditionally; Task 9 replaces this body with
+      /// the real one that reads FSkipList.</summary>
+      /// <remarks>Deliberately an empty-bodied stub kept in the source, not a
+      /// commented-out call site -- a commented-out call would sit in the tree
+      /// for four tasks and trip this repo's own commented-out-code lint
+      /// rule.</remarks>
+      procedure ApplySkipMarks;
       /// <summary>Fill the Unit Rules tab and the left class list from the TEXT of
       /// AUnitName's .pas -- the file, never the index, so a browsed or orphan unit
       /// (VARINSP) answers. This is the "unit selected" half of Fill From-classes:
@@ -2890,40 +2916,54 @@ begin
   end; // try
 end; // procedure
 
-{ Scan a unit file's text for top-level class/interface/record declarations and
-  populate FFormTypeList with them. De-duplicates case-insensitively, applies
-  filters, and marks ruled vs. unruled classes. Called from HarvestUnitFile to fill
-  the left panel whenever a unit is picked. }
-procedure TConvRulesForm.HarvestUnitClasses(const AUnitText: string);
+{ Fill the class list for the picked unit: the .dfm component classes already in
+  FFormTypeRows, UNIONED with the classes the unit declares.
+
+  The declared half comes from the engine's `outline`, not from a text scan: a
+  text scan cannot read comments or conditionals, and the scan this replaces
+  (ScanClassesDeclared) is kept only as the fallback below. When the engine
+  cannot answer we say so -- a silently short class list is exactly the failure
+  this feature exists to remove.
+
+  MERGES, never overwrites. Before 2026-09-20 this routine rebuilt FFormTypeRows
+  from the text scan alone, so choosing a unit replaced its form's component
+  classes with the two or three classes the .pas happens to declare. }
+function TConvRulesForm.HarvestUnitClasses(const AUnitText, APasPath: string): string;
 var
   Classes: TArray<string>;
-  i      : Integer       ;
+  Indexed: Boolean       ;
+  Err    : string        ;
+  Guard  : IInterface    ;  // dl:ok write-only-local@b3f5 -- RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read, same idiom as LGuard elsewhere in this unit
 begin
-  Classes:= ScanClassesDeclared(AUnitText);
-  if Length(Classes) = 0 then
-    Exit;
+  Result:= '';
+  Guard := HourGlass;
+  SetStatus(Format('Reading the classes of %s ...', [ExtractFileName(APasPath)]));
+  Application.ProcessMessages;
 
-  { Build FFormTypeRows with Ruled status from the catalog, then refresh the list. }
-  SetLength(FFormTypeRows, Length(Classes));
-  var RowIdx: Integer:= 0;
-  for i:= 0 to High(Classes) do
+  if FEngine.OutlineClasses(APasPath, Classes, Indexed, Err) then
   begin
-    var Entry: TRuleCatalogEntry;
-    var IsRuled: Boolean:= FindRuleForType(FCatalog, Classes[i], Entry);
-
-    FFormTypeRows[RowIdx].TypeName := Classes[i];
-    FFormTypeRows[RowIdx].Count    := 1;
-    FFormTypeRows[RowIdx].Visual   := tvkUnknown;
-    FFormTypeRows[RowIdx].Ruled    := IsRuled;
-    if IsRuled then
-      FFormTypeRows[RowIdx].RuledBy:= ExtractFileName(Entry.FilePath)
-    else
-      FFormTypeRows[RowIdx].RuledBy:= '';
-
-    Inc(RowIdx);
+    if Indexed then
+      Result:= Format(' (%s was not in any index; a local scratch index was built for it -- once only)', [ExtractFileName(APasPath)]);
+  end
+  else
+  begin
+    Classes:= ScanClassesDeclared(AUnitText);
+    Result := Format(' NOTE: the indexer could not list classes (%s) -- fell back to a text scan, which cannot see conditionals or comments.', [Err]);
   end;
 
+  FFormTypeRows:= MergeClassRows(FFormTypeRows, Classes);
+  ApplySkipMarks;
   RefreshFormTypes;
+end; // function
+
+{ STUB for Task 9 (ConvRules.SkipList persistence): FSkipList does not exist
+  yet, so this has nothing to stamp and is an intentional no-op. Declared and
+  called live rather than commented out, per the 2026-09-20 controller ruling --
+  a commented-out call site would sit in the tree across Tasks 5-8 and trip
+  this repo's own commented-out-code lint rule. Task 9 replaces this body. }
+procedure TConvRulesForm.ApplySkipMarks;
+begin
+  // Intentionally empty until Task 9 wires FSkipList / IsSkipped in.
 end; // procedure
 
 { "Fill From-classes": read the chosen unit's .dfm components and add one FROM-ONLY
@@ -2967,7 +3007,7 @@ begin
   if Txt <> '' then
   begin
     HarvestUsedUnits([Txt]);
-    HarvestUnitClasses(Txt);
+    Result:= Result + HarvestUnitClasses(Txt, PasPath);
   end;
 end; // function
 
