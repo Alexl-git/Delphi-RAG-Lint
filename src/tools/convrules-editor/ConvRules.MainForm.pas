@@ -79,6 +79,14 @@ type
       FEngine   : TEngineAdapter;
       FFilePath : string        ;
       FActiveHdr: Integer       ; // index of the selected #convert node (-1 none)
+      { Set by OpenOwningRuleEntry immediately before a cross-book LoadFile call,
+        cleared in a finally right after -- tells LoadFile's auto-select-first-rule
+        block which entry to select, so it loads the TARGET block instead of
+        FRules row 0. Without this, a cross-book open whose target is not row 0
+        pays two proptree fetches: one wasted on row 0, one on the real target
+        (fix wave, review-final-whole-branch.md Important 2). }
+      FPendingSelectEntry   : TRuleCatalogEntry;
+      FHasPendingSelectEntry: Boolean          ;
       FFromTree : TProptree     ; // active F property tree
       FToTree   : TProptree     ; // active T property tree
 
@@ -204,6 +212,12 @@ type
       Default(TSkipList) (empty), same per-session-until-a-folder-is-known
       lifecycle as FRulesFolder itself. }
       FSkipList : TSkipList;
+      // True while FSkipList holds a mark/filter change SaveSkipList has folded
+      // in but not (yet, or successfully) written to disk; cleared once the
+      // write succeeds. RescanRulesFolder's flush gate reads this instead of
+      // "FSkipList is non-empty" (fix wave, Minor 3).
+      FSkipMarksDirty    : Boolean;
+      FLastSkipLoadFailed: Boolean; // set by LoadSkipList; blocks that flush on a failed read
       FLastFormDir : string; // where the Open-form dialog resumes
       // Three descendant sets, fetched ONCE each (~1.5 s per call, measured against
       // the 3.4 GB Win32 library). They replace a per-type DeclaringUnitOf, which
@@ -3424,6 +3438,11 @@ begin
   Pending:= FSkipList;
   FSkipList:= Default(TSkipList);
   P        := SkipFilePath(FRulesFolder);
+  // A failed read must not let RescanRulesFolder flush memory over the file
+  // (fix wave, Minor 3): the read failing tells us nothing about the file's
+  // actual content, so writing our (possibly stale) in-memory copy over it
+  // could destroy whatever is really there.
+  FLastSkipLoadFailed:= False;
   if (P = '') or not TFile.Exists(P) then
   begin
     FSkipList:= Pending; // no file yet: the pending marks ARE the current list
@@ -3436,6 +3455,7 @@ begin
     begin
       SetError(Format('Could not read %s (%s) -- marks are not loaded this session.', [ExtractFileName(P), E.Message]));
       FSkipList:= Pending; // read failed: keep whatever was already in memory
+      FLastSkipLoadFailed:= True;
     end;
   end;
 end; // procedure
@@ -3451,6 +3471,12 @@ var
   Tmp: string;
 begin
   FSkipList:= SkipListFromRows(FSkipList, FFormTypeRows);
+  // Memory now holds a mark/filter change not yet confirmed on disk -- the
+  // dirty flag RescanRulesFolder's flush gate reads (fix wave, Minor 3). Set
+  // even when P = '' below and this call returns without writing: that is
+  // exactly "ticked before any rules folder was known", the case the flush
+  // gate exists to catch once the folder becomes known.
+  FSkipMarksDirty:= True;
   P:= SkipFilePath(FRulesFolder);
   if P = '' then
     Exit;
@@ -3465,9 +3491,16 @@ begin
     TFile.WriteAllText(Tmp, EmitSkipList(FSkipList), TEncoding.ASCII);
     if not MoveFileEx(PChar(Tmp), PChar(P), MOVEFILE_REPLACE_EXISTING) then
       RaiseLastOSError;
+    FSkipMarksDirty:= False; // written to disk successfully
   except
     on E: Exception do
+    begin
+      // Minor 5: MoveFileEx failing (or WriteAllText itself) can leave Tmp
+      // behind beside the real skip file -- DeleteFile is a no-op, not an
+      // exception, when Tmp was never created.
+      DeleteFile(PChar(Tmp));
       SetError(Format('Could not save %s (%s) -- your marks are only in this session.', [ExtractFileName(P), E.Message]));
+    end;
   end;
 end; // procedure
 
@@ -3731,12 +3764,31 @@ begin
   UpdateToolbarEnabled;
   // Auto-select the first rule so the grid shows content immediately (also makes
   // the tool usable if a click ever fails to register). Selecting fires
-  // OnSelectItem -> LoadGridForBlock.
+  // OnSelectItem -> LoadGridForBlock. When OpenOwningRuleEntry is mid-way through
+  // a cross-book open (FHasPendingSelectEntry), select ITS target row instead of
+  // row 0 -- picking row 0 here would load a block nobody asked for, then
+  // OpenOwningRuleEntry loads the real target right after: two proptree fetches
+  // for one open (fix wave, Important 2). Falls back to row 0 if the target
+  // entry does not resolve to a row in the just-loaded book (should not happen
+  // on the path that sets FHasPendingSelectEntry, but a fresh HeaderIndexFor
+  // miss is a stale-index symptom, not a reason to select nothing).
+  var AutoSelectRow: Integer:= 0;
+  if FHasPendingSelectEntry then
+  begin
+    var TargetHdr: Integer:= HeaderIndexFor(FBook, FPendingSelectEntry);
+    if TargetHdr >= 0 then
+      for var k:= 0 to FRules.Items.Count - 1 do
+        if Integer(FRules.Items[k].Data) = TargetHdr then
+        begin
+          AutoSelectRow:= k;
+          Break;
+        end;
+  end;
   if FRules.Items.Count > 0 then
   begin
-    FRules.ItemIndex:= 0;
-    FRules.Items[0].Selected:= True;
-    FRules.Items[0].Focused := True;
+    FRules.ItemIndex:= AutoSelectRow;
+    FRules.Items[AutoSelectRow].Selected:= True;
+    FRules.Items[AutoSelectRow].Focused := True;
   end;
 
   { A form supplied with --form is harvested in the CONSTRUCTOR, before any book is
@@ -3822,8 +3874,11 @@ begin
       2026-09-20 whole-branch review, Minor 16). The status line names the
       owning file instead; RulesDblClick is the one place that still opens it,
       via the shared cross-book prompt in OpenOwningRuleEntry. }
+    // Item.Caption is the TO type (RefreshRulesList sets it from Entries[k].ToType);
+    // the class that is RULED is the FROM type (fix wave, Minor 6) -- Item.Caption
+    // here read "TcxLabel is ruled in B.rules" for a TLabel entry.
     if (Item.Index >= 0) and (Item.Index <= High(FRulesEntries)) then
-      SetStatus(Format('%s is ruled in %s -- double-click to open it.', [Item.Caption, ExtractFileName(FRulesEntries[Item.Index].FilePath)]));
+      SetStatus(Format('%s is ruled in %s -- double-click to open it.', [BareTypeName(FRulesEntries[Item.Index].FromType), ExtractFileName(FRulesEntries[Item.Index].FilePath)]));
     Exit;
   end;
   LoadGridForBlock(Hdr);
@@ -4480,9 +4535,8 @@ end; // procedure
 
 procedure TConvRulesForm.RescanRulesFolder(Sender: TObject);
 var
-  Errs      : TArray<string>;
-  Folder    : string        ;
-  HadPending: Boolean       ;
+  Errs  : TArray<string>;
+  Folder: string        ;
 begin
   Folder:= Trim(FRulesFolder);
   if Folder = '' then
@@ -4492,15 +4546,6 @@ begin
     SetStatus('No rules folder yet -- open a rule book first, then Rescan rules.');
     Exit;
   end;
-
-  // FSkipList as it stands NOW, before LoadSkipList touches it, is exactly what
-  // LoadSkipList will pass to MergePendingMarks as APending -- marks ticked (or
-  // named filters applied) while no rules folder was known yet, e.g. via
-  // "Open form"/Browse before any book was open. MergePendingMarks already keeps
-  // them in MEMORY; nothing wrote them to DISK until this call (A1, 2026-09-20
-  // whole-branch review). Captured here, before the reset, so it names the right
-  // population rather than "the file just had content".
-  HadPending:= (Length(FSkipList.Classes) > 0) or (Length(FSkipList.Filters) > 0);
 
   FCatalog:= ScanRulesFolder(Folder, Errs);
   FCatalogDups:= FindDuplicates(FCatalog);
@@ -4523,10 +4568,16 @@ begin
   // Flush now: without this, a mark ticked before the folder was known survives
   // in memory and in the checklist UI (MergePendingMarks), but reaches the skip
   // FILE only on the next manual tick -- a restart with no further ticking loses
-  // it. SaveSkipList's own P = '' guard still applies; HadPending is the ADDED
-  // guard so an ordinary rescan with nothing pending does not rewrite the file
-  // for no reason.
-  if HadPending then
+  // it. SaveSkipList's own P = '' guard still applies.
+  // FSkipMarksDirty (fix wave, Minor 3) is a real dirty flag -- set by
+  // SaveSkipList whenever it folds a mark/filter change into FSkipList, cleared
+  // once that change is actually written -- not "FSkipList happens to be
+  // non-empty", which was true on every ordinary rescan once anything had ever
+  // been marked and made the old comment's "nothing pending" claim false.
+  // FLastSkipLoadFailed additionally blocks the flush when LoadSkipList's read
+  // just failed: a failed read says nothing about the file's real content, so
+  // writing our in-memory copy over it could destroy whatever is actually there.
+  if FSkipMarksDirty and not FLastSkipLoadFailed then
     SaveSkipList;
 
   // The index is a CACHE of what the folder says; failing to write it must not
@@ -4692,7 +4743,16 @@ begin
           Exit;
         end;
     end; // case
-    LoadFile(AEntry.FilePath);
+    // Tell LoadFile's auto-select which row to pick (fix wave, Important 2) --
+    // so it loads the TARGET block instead of row 0, avoiding a wasted proptree
+    // fetch when the target is not first in the new book's FRules list.
+    FPendingSelectEntry   := AEntry;
+    FHasPendingSelectEntry:= True;
+    try
+      LoadFile(AEntry.FilePath);
+    finally
+      FHasPendingSelectEntry:= False;
+    end;
   end; // if
 
   Hdr:= HeaderIndexFor(FBook, AEntry);
@@ -6123,15 +6183,28 @@ end; // function
 procedure TConvRulesForm.InsertUnitNode(ANode: TRuleNode);
 var
   Heads: TArray<Integer>;
+  Hdr  : TRuleNode      ;
 begin
   // Unit directives live in the top file-level section (before the first #convert)
   // so SaveCompleteToString always preserves them -- a trailing incomplete #convert
   // block would otherwise swallow nodes appended at EOF.
   Heads:= FBook.ConvertHeaders;
+  // Capture the active block's NODE (not its index) before the insert, the same
+  // pattern DoMappings uses -- inserting before Heads[0] shifts every #convert
+  // node's index by one whenever a block is active, and a stale FActiveHdr can
+  // then equal another block's NEW index (fix wave, Important 1).
+  Hdr:= nil;
+  if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
+    Hdr:= FBook.Nodes[FActiveHdr];
   if Length(Heads) = 0 then
     FBook.Add(ANode)
   else
     FBook.Nodes.Insert(Heads[0], ANode);
+  if Hdr <> nil then
+  begin
+    FActiveHdr:= FBook.Nodes.IndexOf(Hdr);
+    RefreshRulesList; // FRules' Item.Data header indices are stale after the shift too
+  end;
 end;
 
 { The list shows the rule book's unit directives first, then -- underneath them -- the
@@ -6371,7 +6444,22 @@ begin
     Exit;
   end; // if
 
+  // Capture the active block's NODE (not its index) before the delete, the same
+  // pattern DoMappings uses -- deleting a unit-directive node ahead of the active
+  // #convert block shifts every later node's index by one, and a stale
+  // FActiveHdr can then equal another block's NEW index (fix wave, Important 1).
+  // N itself is never the active block's header (that is always an rnkConvert
+  // node; DoDeleteUnit only reaches unit-directive nodes), so Hdr is not the
+  // object TObjectList is about to free.
+  var Hdr: TRuleNode:= nil;
+  if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
+    Hdr:= FBook.Nodes[FActiveHdr];
   FBook.Nodes.Remove(N); // TObjectList owns its items -> frees N
+  if Hdr <> nil then
+  begin
+    FActiveHdr:= FBook.Nodes.IndexOf(Hdr);
+    RefreshRulesList; // FRules' Item.Data header indices are stale after the shift too
+  end;
   RefreshUnitList;
   SyncRawFromModel;
   SetStatus('Deleted unit rule.');

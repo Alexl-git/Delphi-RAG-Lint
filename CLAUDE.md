@@ -208,8 +208,12 @@ A bare "resume" found `.superpowers\sdd\<plan>\progress.md` mid-loop and picked
 the plan up. Another session was already executing it. For ~40 minutes two
 controllers dispatched implementers into ONE working tree; each worker read the
 other's edits as corruption, one ran `git stash push` on the other's files
-twice, and a review verdict was lost. Nothing was destroyed only because the
-stash held a superset and both controllers stopped when they found each other.
+twice, and the verdict the interrupted FIRST session never recorded had to be
+re-dispatched -- lost at its own 02:32 interruption, before the bare resume
+that caused the collision, not because of the collision itself (fix wave,
+2026-09-20 whole-branch review, Minor 7). Nothing was destroyed only because
+the stash held a superset and both controllers stopped when they found each
+other.
 
 **The rule:** before dispatching anything against a ledger you did not create in
 this session, run `ListAgents` and look for a live session whose name or
@@ -236,6 +240,13 @@ stale-annotation sweep and a branch-wide lint over the FULL diff
 drag-lint lint-all --db <db> --enable multiple-statements-per-line,magic-literal,commented-out-code
 drag-lint lint <every changed unit> --db <db> --enable ...   (review-marker-stale included)
 ```
+
+Run `review-marker-stale` WITH the same `--enable` rules the branch's `dl:ok`
+markers suppress, never on bare defaults: a suppressed rule that is OFF makes
+every marker for it read as stale, because the finding it suppresses cannot
+fire to prove the marker still matters. Measured 2026-09-20: 13 false
+positives on defaults, 0 with `--enable magic-literal` (the rule this branch's
+markers suppress) (fix wave, Minor 8).
 
 and every `dl:ok` the branch ADDS is re-checked against the final tree: does it
 still suppress a LIVE finding, and does its reason still hold. A marker whose

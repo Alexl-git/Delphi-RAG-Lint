@@ -184,7 +184,9 @@ function MergePendingMarks(const AFromFile, APending: TSkipList): TSkipList;
 /// <returns>AList with a filter of ANewFilter.Name set to ANewFilter's non-blank
 /// patterns: a filter of the SAME name is REPLACED in place, never duplicated
 /// (Apply pressed twice on one name leaves exactly one record); a new name is
-/// appended.</returns>
+/// appended. The name match is CASE-INSENSITIVE (via IndexOfFilter/SameText),
+/// so 'DevExpress' replaces an existing 'devexpress' filter rather than adding
+/// a second record (fix wave, Minor 9).</returns>
 /// <remarks>
 /// Without this, ApplyNamedFilterClick appended a new TNamedFilter on
 /// every Apply -- ParseSkipList's own by-name merge on the next load then wrote

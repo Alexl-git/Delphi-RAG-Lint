@@ -4533,6 +4533,19 @@ begin
   FilterOther.Patterns:= ['^TRz'];
   var TwoNames: TSkipList:= SetNamedFilter(Twice, FilterOther);
   Check('namedfilter.set.new.name.appends', Length(TwoNames.Filters) = 2, 'a different name is appended, not merged');
+
+  // Fix wave, Minor 9: the name match is case-insensitive (IndexOfFilter ->
+  // SameText) but neither the doc nor a test pinned it -- 'devexpress' must
+  // replace the existing 'DevExpress' record, not add a second one.
+  var FilterCaseDiff: TNamedFilter;
+  FilterCaseDiff.Name    := 'devexpress';
+  FilterCaseDiff.Patterns:= ['^Tcx'];
+  var CaseDiff: TSkipList:= SetNamedFilter(TwoNames, FilterCaseDiff);
+  Check('namedfilter.set.case.insensitive.one.record', Length(CaseDiff.Filters) = 2, 'still 2 names total (DevExpress/Raize) -- ''devexpress'' must replace, not add a third');
+  // IndexOfFilter stays implementation-private (SetNamedFilter's own doc, above,
+  // is what pins case-insensitivity); DevExpress was the FIRST filter set, so a
+  // correct replace-by-name keeps it at Filters[0].
+  Check('namedfilter.set.case.insensitive.replaced', (Length(CaseDiff.Filters[0].Patterns) = 1) and (CaseDiff.Filters[0].Patterns[0] = '^Tcx'), 'the lowercase Apply must have replaced the DevExpress record''s content, in place');
 end; // procedure
 
 procedure TestFormTypesFilter;
@@ -5503,15 +5516,25 @@ begin
     // fallback: if the configured-DB path were broken, OutlineClasses would have
     // nothing to fall through to at ScratchDb and would have to re-index (Indexed =
     // True) or fail (Result = False), either of which this assertion would catch.
-    TFile.Copy(ScratchDb, CopyDb);
-    TFile.Delete(ScratchDb);
-    Covered:= TEngineAdapter.Create(Exe, [CopyDb]);
-    try
-      Check('outline.live.covered.ok', Covered.OutlineClasses(Orphan, Classes, Indexed, Err), Err);
-      Check('outline.live.covered.notindexed', not Indexed, 'a covered unit must never pay the index cost');
-    finally
-      Covered.Free;
-    end;
+    // Fix wave, Minor 10: TFile.Copy raises if ScratchDb is not there -- which
+    // would mean outline.live.orphan.warm's own call above failed to create it,
+    // an EARLIER assertion's job to catch. Guard so that surfaces as a Check
+    // failure here too rather than an exception escaping this procedure and
+    // aborting whatever runs after it.
+    if TFile.Exists(ScratchDb) then
+    begin
+      TFile.Copy(ScratchDb, CopyDb);
+      TFile.Delete(ScratchDb);
+      Covered:= TEngineAdapter.Create(Exe, [CopyDb]);
+      try
+        Check('outline.live.covered.ok', Covered.OutlineClasses(Orphan, Classes, Indexed, Err), Err);
+        Check('outline.live.covered.notindexed', not Indexed, 'a covered unit must never pay the index cost');
+      finally
+        Covered.Free;
+      end;
+    end
+    else
+      Check('outline.live.covered.setup', False, 'ScratchDb missing before the covered/warm split copy -- outline.live.orphan.warm must not have created it');
   finally
     Eng.Free;
     if TFile.Exists(Orphan) then
