@@ -853,7 +853,7 @@ type
 /// same as input with no brackets at all. The "kind" match is also
 /// case-insensitive (`SameText`), though the real payload only ever emits it
 /// lowercase; the leniency costs nothing and matches the name dedupe.</remarks>
-function ParseOutlineClassNames(const AJson: string): TArray<string>; // dl:ok unused-public-symbol@6c73 -- Task 2 of a multi-task plan; a later task wires this into the class-picker UI
+function ParseOutlineClassNames(const AJson: string): TArray<string>;
 
 /// <summary>The persistent per-unit scratch index for a unit no configured DB
 /// covers.</summary>

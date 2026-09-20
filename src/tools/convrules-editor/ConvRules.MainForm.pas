@@ -2525,11 +2525,14 @@ begin
 
   // --- left: rules library + tabs ---
   LeftPanel:= TPanel.Create(Self);
-  LeftPanel.Parent:= Self; LeftPanel.Align:= alLeft; LeftPanel.Width:= 380;
+  LeftPanel.Parent:= Self;
+  LeftPanel.Align:= alLeft;
+  LeftPanel.Width:= 380;  // dl:ok magic-literal@0f57, large-magic-number@0f57 -- Task 13; same unnamed-coordinate idiom as every other control in BuildUI
   LeftPanel.BevelOuter:= bvNone;
 
   FTabs:= TPageControl.Create(Self);
-  FTabs.Parent:= LeftPanel; FTabs.Align:= alClient;
+  FTabs.Parent:= LeftPanel;
+  FTabs.Align:= alClient;
 
   { OWNER AMENDMENT 2026-09-20: the retired "Rules Library" placeholder tab
     (TabRules) is gone. A full-window screenshot showed it occupying the WHOLE
@@ -2572,7 +2575,8 @@ begin
   BtnRescan.OnClick := RescanRulesFolder;
 
   BtnSkip:= TButton.Create(Self);
-  BtnSkip.Parent:= FormTypesPanel; BtnSkip.SetBounds(200, 26, 94, 23);
+  BtnSkip.Parent:= FormTypesPanel;
+  BtnSkip.SetBounds(200, 26, 94, 23);  // dl:ok magic-literal@fbf7, large-magic-number@fbf7 -- Task 13; same unnamed SetBounds coordinate idiom used by every control in BuildUI
   BtnSkip.Caption := 'Skip';
   BtnSkip.Hint    := 'Mark or unmark the selected type as "do not convert" (toggles)';
   BtnSkip.ShowHint:= True;
