@@ -420,7 +420,8 @@ type
       /// currently loaded here. Curation moves VERBATIM block text and deliberately does
       /// NOT go through this form's canonical re-emitter, so a block that was merely
       /// moved stays byte-identical. It works on the file ON DISK, so unsaved edits here
-      /// are invisible to it: Yes = save first,</summary>
+      /// are invisible to it: Yes = save first, No = curate the on-disk version anyway,
+      /// Cancel = out.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -480,12 +481,13 @@ type
       function ChooseTargetForNewRule(const AFrom, ATo: string; ACompletingStub: Boolean): Boolean;
       /// <summary><!-- drag-lint:auto sum -->Auto-Match: for every UNassigned From leaf,
       /// if exactly ONE unassigned To leaf matches by leaf-name (case-insensitive) AND is
-      /// castable, create the #link. Skips</summary>
+      /// castable, create the #link. Skips ambiguous names (more than one candidate) so
+      /// the user resolves those by hand.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.DoAutoMatch.LeafName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.Mappings.ConditionalCasesOf (+7 more)</para>
+      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.DoAutoMatch.LeafName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.Mappings.ConditionalCasesOf (+6 more)</para>
       /// <para>Complexity: 19 (cyclomatic, outer body), 128 lines (full implementation)</para>
       /// <para>Reads: FActiveHdr, FToTree, FFromTree</para>
       /// <para>Pure</para>
@@ -828,12 +830,17 @@ type
       /// exact same prompt, rather than a second copy of it. Displays
       /// BareTypeName(AEntry.FromType) rather than a caller-supplied string, since
       /// the caller may only have the entry.
+      /// Whether the target block still needs loading is FActiveHdr = Hdr, not
+      /// FRules.Items[Sel].Selected -- LoadFile's own auto-select-first-rule (A4,
+      /// 2026-09-20) can select a row before this routine ever looks at it, so
+      /// Selected no longer means "this routine hasn't loaded it yet" (fix
+      /// round 1, review-task-1.md Important 1).
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesDblClick (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, MessageDlg, SameText</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 73 lines (full implementation)</para>
-      /// <para>Reads: FFilePath, FBook, FRules</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 84 lines (full implementation)</para>
+      /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr</para>
       /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor"/>
@@ -1341,7 +1348,8 @@ type
       procedure PoolFilter(Sender: TObject);
       /// <summary><!-- drag-lint:auto sum -->Align the highlighted To leaf to the From
       /// side: select the From-grid row whose property has the SAME last-segment name
-      /// (case-insensitive), so the two sides can</summary>
+      /// (case-insensitive), so the two sides can be assigned by name. Reports when no
+      /// From property carries that name.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1358,7 +1366,8 @@ type
       procedure DoFindInFrom(Sender: TObject);
       /// <summary><!-- drag-lint:auto sum -->Toggle a pool type-narrowing: first press
       /// restricts the pool to leaves whose TYPE matches the highlighted leaf (e.g. only
-      /// Boolean targets); a second press</summary>
+      /// Boolean targets); a second press clears it. Cleared automatically when a
+      /// different rule is loaded.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1909,7 +1918,8 @@ type
       /// </remarks>
       procedure PlatformChanged(Sender: TObject);
       /// <summary><!-- drag-lint:auto sum -->Target surface changed (DFM published
-      /// &lt;-&gt; PAS public+fields): remember the new</summary>
+      /// &lt;-&gt; PAS public+fields): remember the new --min-visibility and re-fetch the
+      /// active rule's From/To trees at that surface.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1988,7 +1998,8 @@ type
       /// <summary><!-- drag-lint:auto sum -->Create or update the #link mapping ToPath
       /// &lt;- FromPath in the active block, choosing a default cast from the leaf types
       /// (identity when same type). Shared by the manual Assign and the Auto-Match pass.
-      /// Does NOT touch the grid/UI -- callers</summary>
+      /// Does NOT touch the grid/UI -- callers refresh. Assumes CanCast(AFromType,
+      /// AToType) was already checked.</summary>
       /// <param name="AFromPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AToPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFromType"><!-- drag-lint:auto type -->const string</param>
@@ -1996,7 +2007,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: CanCast, ConvRules.Casts.CastFnName, ConvRules.Casts.SameFamily, ConvRules.Casts.ValidCasts, ConvRules.MainForm.TConvRulesForm.ClassCastName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, SameText</para>
+      /// <para>Calls: ConvRules.Casts.CastFnName, ConvRules.Casts.SameFamily, ConvRules.Casts.ValidCasts, ConvRules.MainForm.TConvRulesForm.ClassCastName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, SameText</para>
       /// <para>Reads: FActiveHdr, FBook</para>
       /// <para>Pure</para>
       /// <seealso cref="ConvRules.Casts.CastFnName"/>
@@ -4696,20 +4707,31 @@ begin
     if Integer(FRules.Items[k].Data) = Hdr then begin Sel:= k; Break; end;
   if Sel >= 0 then
   begin
-    { Read Selected BEFORE touching ItemIndex/Selected -- TCustomListView.SetItemIndex
-      itself sets Items[Value].Selected:= True, which fires LVN_ITEMCHANGED ->
-      RulesSelectItem -> LoadGridForBlock. Assigning ItemIndex unconditionally and
-      THEN testing Selected (the prior shape) always read True, because the
-      assignment had already made it so -- so the not-yet-selected path loaded
-      twice: once from the event, once from this test. Branch on the PRE-assignment
-      state instead, so exactly one of the two mechanisms ever loads:
-        - already selected  -> ItemIndex is unchanged, no event fires, so load directly.
-        - not yet selected  -> assigning ItemIndex selects it, the event fires
-                                RulesSelectItem, which loads. }
-    if FRules.Items[Sel].Selected then
-      LoadGridForBlock(Hdr)
-    else
-      FRules.ItemIndex:= Sel; // fires RulesSelectItem -> LoadGridForBlock, once
+    { "Already loaded" is FActiveHdr = Hdr -- the fact LoadGridForBlock itself
+      stamps -- not Items[Sel].Selected. Selected stopped answering that question
+      once it could be set by THREE paths (a plain click, this routine's own
+      ItemIndex:= below, and LoadFile's auto-select-first-rule, revived by A4,
+      2026-09-20): a cross-book double-click whose target book has exactly one
+      rule for the class now runs LoadFile -> RefreshRulesList -> auto-select ->
+      RulesSelectItem -> LoadGridForBlock (load #1, which sets FActiveHdr) before
+      this routine gets to look -- so the old Items[Sel].Selected test read True
+      from that auto-select and loaded a second time (fix round 1,
+      review-task-1.md Important 1). FActiveHdr is immune to who did the
+      selecting.
+      Selected is still the right test INSIDE this guard, for the other branch:
+      TCustomListView.SetItemIndex sets Items[Value].Selected:= True itself,
+      firing LVN_ITEMCHANGED -> RulesSelectItem -> LoadGridForBlock, so when the
+      grid does not yet hold Hdr and the row is not already selected, assigning
+      ItemIndex is enough on its own. Only when the row IS already selected does
+      ItemIndex:= become a no-op (VCL does not refire the event for an unchanged
+      selection), so that case still needs the direct call. }
+    if FActiveHdr <> Hdr then
+    begin
+      if FRules.Items[Sel].Selected then
+        LoadGridForBlock(Hdr)
+      else
+        FRules.ItemIndex:= Sel; // fires RulesSelectItem -> LoadGridForBlock, once
+    end;
     FRules.Items[Sel].Focused := True;
     FRules.SetFocus;
   end
