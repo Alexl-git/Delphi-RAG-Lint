@@ -4417,6 +4417,7 @@ const
 var
   L  : TSkipList;
   L2 : TSkipList;
+  L3 : TSkipList;
   Txt: string   ;
 begin
   L:= ParseSkipList(SRC);
@@ -4459,6 +4460,28 @@ begin
 
   Check('skiplist.parse.empty', Length(ParseSkipList('').Classes) = 0);
   Check('skiplist.emit.empty.header.only', StartsText('# ConvRulesEditor --', EmitSkipList(Default(TSkipList))));
+
+  // Malformed-input coverage. Each shape below was chosen because a prior
+  // revision of ParseSkipList silently DESTROYED one of them (a "filter Name ="
+  // line with no value was accepted, created an empty filter record, and then
+  // EmitSkipList rendered nothing for it -- the line vanished on the next
+  // save). The doc-comment's contract is "never raises; an unparseable line
+  // becomes a Foreign line" -- these checks hold the parser to that.
+  L3:= ParseSkipList('filter DevExpress');
+  Check('skiplist.malformed.filter.noequals', (Length(L3.Filters) = 0) and (Length(L3.Foreign) = 1), 'a filter line with no = must be foreign, not silently dropped');
+
+  L3:= ParseSkipList('filter = ^Tdx');
+  Check('skiplist.malformed.filter.noname', (Length(L3.Filters) = 0) and (Length(L3.Foreign) = 1), 'an empty filter name must be foreign');
+
+  L3:= ParseSkipList('filter Name =');
+  Check('skiplist.malformed.filter.novalue', (Length(L3.Filters) = 0) and (Length(L3.Foreign) = 1), 'an empty filter value must be foreign, not a silently dropped record -- this was the regression');
+  Check('skiplist.malformed.filter.novalue.roundtrip', EmitSkipList(ParseSkipList(EmitSkipList(L3))) = EmitSkipList(L3), 'saving twice must not lose the line a second time either');
+
+  L3:= ParseSkipList('skip');
+  Check('skiplist.malformed.skip.bare', (Length(L3.Classes) = 0) and (Length(L3.Foreign) = 1), 'a bare "skip" with no class name must be foreign, not silently dropped');
+
+  L3:= ParseSkipList('filter DevExpress = ^Tdx'#13#10 + 'filter devexpress = ^Tcx');
+  Check('skiplist.filter.name.caseinsensitive.merge', (Length(L3.Filters) = 1) and (Length(L3.Filters[0].Patterns) = 2) and SameText(L3.Filters[0].Name, 'DevExpress'), 'two filter lines whose names differ only by case accumulate into one filter');
 end; // procedure
 
 procedure TestFormTypesFilter;

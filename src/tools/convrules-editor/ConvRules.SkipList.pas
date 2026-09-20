@@ -56,10 +56,6 @@ type
 const
   /// <summary>The skip file's name inside the rules folder.</summary>
   SKIP_FILE_NAME = 'convrules-editor-skip.txt';
-  SKIP_HEADER_1  = '# ConvRulesEditor -- classes marked "do not convert".';
-  SKIP_HEADER_2  = '# Written by the editor; safe to hand-edit or diff.';
-  /// <summary>The pattern token that means "standard VCL/FMX control".</summary>
-  SKIP_STD_TOKEN = '+std';
 
 /// <summary>PURE: parse the skip file's text. Never raises; an unparseable line
 /// becomes a Foreign line rather than an error.</summary>
@@ -102,6 +98,15 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   ;
+
+const
+  { Not part of the public interface -- the brief names only SKIP_FILE_NAME as
+    exported. Kept as file-scope consts rather than literals so ParseSkipList,
+    EmitSkipList and IsGeneratedHeader cannot drift out of sync with each other. }
+  SKIP_HEADER_1  = '# ConvRulesEditor -- classes marked "do not convert".';
+  SKIP_HEADER_2  = '# Written by the editor; safe to hand-edit or diff.';
+  { The pattern token that means "standard VCL/FMX control". }
+  SKIP_STD_TOKEN = '+std';
 
 { True when ALine is one of the two lines EmitSkipList generates. }
 function IsGeneratedHeader(const ALine: string): Boolean;
@@ -171,7 +176,11 @@ begin
       end;
       Nm := Trim(Copy(Arg, 1, p - 1));
       Pat:= Trim(Copy(Arg, p + 1, MaxInt));
-      if Nm = '' then
+      // A blank name OR a blank value carries no usable content -- treat the
+      // WHOLE line as foreign rather than creating an empty filter entry that
+      // EmitSkipList would then render as nothing, silently destroying the
+      // line on the next save (round-trip regression, fixed 2026-09-20).
+      if (Nm = '') or (Pat = '') then
       begin
         Result.Foreign:= Result.Foreign + [Raw];
         Continue;
@@ -185,7 +194,7 @@ begin
       end;
       if SameText(Pat, SKIP_STD_TOKEN) then
         Result.Filters[k].IncludeStandard:= True
-      else if Pat <> '' then
+      else
         Result.Filters[k].Patterns:= Result.Filters[k].Patterns + [Pat];
       Continue;
     end;
