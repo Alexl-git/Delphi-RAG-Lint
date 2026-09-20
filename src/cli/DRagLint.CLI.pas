@@ -5377,6 +5377,10 @@ begin
           0 when the symbol has no body. start_line/end_line stay the decl. }
         JObj.AddPair('impl_start_line', TJSONNumber.Create(Sym.ImplStartLine));
         JObj.AddPair('impl_end_line'  , TJSONNumber.Create(Sym.ImplEndLine  ));
+        { C2.5: the line of the forward declaration this row was folded from
+          (`TFoo = class;` earlier in the same unit). OMITTED when there is none,
+          like heritage: the field's presence IS the statement "a stub was folded". }
+        if Sym.ForwardLine > 0 then JObj.AddPair('forward_line', TJSONNumber.Create(Sym.ForwardLine));
         JArr.AddElement(JObj);
       end; // for
       Writeln(JArr.Format(2));
@@ -5401,6 +5405,8 @@ begin
       end;
       if Sym.Section = 'implementation' then { gap #3: not usable from other units }
         Line:= Line + '  [impl-only]';
+      if Sym.ForwardLine > 0 then { C2.5: the stub was folded into this row }
+        Line:= Line + Format('  forward at line %d', [Sym.ForwardLine]);
       Writeln(Line);
     end;
     Writeln(Format('%d match(es)', [Length(ASymbols)]));

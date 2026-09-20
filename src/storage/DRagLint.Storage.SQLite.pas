@@ -2837,6 +2837,12 @@ type
       /// </remarks>
       function FindWikiDocBlocks: TArray<TWikiDocRow>;
     private
+      /// <summary>C2.5: folds forward stubs out of a by-name result set (design
+      /// section 4). Children are asked from the database, and only for a row that
+      /// already has a later same-name twin in its file, so the extra query is rare.
+      /// Runs AFTER the prepared lookup datasets are closed: FindAllChildSymbols
+      /// opens its own dataset on the same connection.</summary>
+      function FoldStubs(const ARows: TArray<TSymbol>): TArray<TSymbol>;
       /// <summary>Task 3c: the GUI framework (exactly 'Vcl' or 'FMX') that the
       /// classes declared in AFileId demonstrably inherit FROM, or '' when the
       /// index shows no such evidence or shows BOTH. Used as rule 3's scope
@@ -3056,6 +3062,7 @@ uses
   , DRagLint.Storage.FileMembership { HeaderSaysWal: the read-only Connect names the journal mode the file already has }
   , DRagLint.Query  .Fuzzy
   , DRagLint.Index.CallResolver // v14 (D5): receiver-typing engine for ResolveCallTargets
+  , DRagLint.Core.ForwardStub   { C2.5: FoldForwardStubs -- a forward stub is not a class }
   ;
 
 { PROGRESS LINE FOR THE FOUR WHOLE-DB RESOLVE PASSES.
@@ -7032,6 +7039,16 @@ end; // function
 
 function PreferArity(const ARows: TArray<TSymbol>; const AParams: string): TArray<TSymbol>; forward;
 
+function TSQLiteSymbolStore.FoldStubs(const ARows: TArray<TSymbol>): TArray<TSymbol>;
+begin
+  if Length(ARows) < 2 then Exit(ARows);   { a stub needs a twin; one row cannot fold }
+  Result:= FoldForwardStubs(ARows,
+    function(const ASym: TSymbol): Boolean
+    begin
+      Result:= Length(FindAllChildSymbols(ASym.Id)) > 0;
+    end);
+end;
+
 function TSQLiteSymbolStore.FindSymbolsByExactName( const AName: string): TArray<TSymbol>;
 var
   List: TList<TSymbol>;
@@ -7124,6 +7141,9 @@ begin
   finally
     List.Free;
   end;
+  { C2.5: a forward stub and its real declaration are two rows with one name;
+    return the real one, carrying the stub's line in ForwardLine. }
+  Result:= FoldStubs(Result);
 end; // function
 
 function TSQLiteSymbolStore.FindSymbolsByQualifiedName( const AQName: string): TArray<TSymbol>;
@@ -7173,6 +7193,7 @@ begin
     if FQFindByQNameCI.Active then FQFindByQNameCI.Close;
     List.Free;
   end;
+  Result:= FoldStubs(Result);   { C2.5 -- see FindSymbolsByExactName }
 end; // function
 
 function TSQLiteSymbolStore.ResolveFileIdTolerant(const APath: string): Int64;
