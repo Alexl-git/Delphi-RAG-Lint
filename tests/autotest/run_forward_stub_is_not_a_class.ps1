@@ -260,7 +260,7 @@ try {
   $stubCol0 = $lines[$stubLine - 1].IndexOf('TFoo') + 1
   $hStub = Get-HoverValue $db $fixFile ($stubLine - 1) $stubCol0
   Check 'S4: positional hover on the stub line answers' (($hStub -ne '') -and ($hStub -ne '<no-reply>')) "got: [$hStub]"
-  Check "S4: lead line 'forward declaration -> line $realLine'" ($hStub -match "^_?forward declaration -> line $realLine") "got: [$hStub]"
+  Check "S4: lead line 'forward declaration -> line $realLine'" ($hStub -match "^_forward declaration -> line $realLine`_") "got: [$hStub]"
   Check 'S4: it describes the real TFoo (its line appears)' ($hStub -match "line $realLine") "got: [$hStub]"
   # cursor on the REAL declaration: no lead line
   $realCol0 = $lines[$realLine - 1].IndexOf('TFoo') + 1
@@ -320,6 +320,5 @@ try {
 }
 finally { Pop-Location }
 
-# ---- CASE B / C / D are appended by Tasks 3-5 ABOVE this footer ----
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

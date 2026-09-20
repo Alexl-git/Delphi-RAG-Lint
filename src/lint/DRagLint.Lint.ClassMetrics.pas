@@ -51,9 +51,9 @@ type
     /// Project-wide; call from lint-all only. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: CollectDefProcNodes, CollectIdentifiers, CompareText, Connected, Copy, Default, DelegateBaseField, DelegationField, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory (+32 more)</para>
+    /// <para>Calls: CollectDefProcNodes, CollectIdentifiers, CompareText, Connected, Copy, Default, DelegateBaseField, DelegationField, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory (+34 more)</para>
     /// <para>Returns: Roots.Count; Default(TMiddleManResult); nil; Findings.ToArray</para>
-    /// <para>Complexity: 28 (cyclomatic, outer body), 1053 lines (full implementation)</para>
+    /// <para>Complexity: 28 (cyclomatic, outer body), 1063 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory"/>

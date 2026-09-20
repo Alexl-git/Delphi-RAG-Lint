@@ -8950,7 +8950,7 @@ begin
     begin
       S:= Syms[Idx];
       var Row: string:= System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine]);
-      if StubOf[Idx] >= 0 then Row:= Row + System.SysUtils.Format('  [forward -> line %d]', [Syms[StubOf[Idx]].StartLine]);
+      if StubOf[Idx] >= 0 then Row:= Row + System.SysUtils.Format('  [forward -> line %d]', [Syms[StubOf[Idx]].StartLine]);  // dl:ok concat-in-loop@edfd -- Row is a fresh per-iteration inline local, not an accumulator: at most ONE suffix is appended per row, so there is no O(n^2) growth
       Writeln(Row);
     end;
   end;

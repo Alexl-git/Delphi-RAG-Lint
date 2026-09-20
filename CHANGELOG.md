@@ -3,6 +3,11 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Changed
+- **A forward declaration is not a class (C2.5).** `TFoo = class;` completed later in the same unit is folded into the real declaration by every by-name reader: `query --name/--qname` returns ONE row (the real one) with `forward at line N` / `forward_line`; `hover --qname` renders the real declaration; the LSP hover on the stub's line renders the real one led by `forward declaration -> line N`; ClassMetrics measures the real class once (it used to parent every descendant to the stub and anchor `too-many-children` on the stub's line); `outline` keeps both rows and tags the stub `[forward -> line N]` / `forward_target_line`. Interface stubs follow the same rule. A lone stub (`TOnlyStub = class;` with no completion in the unit) and an empty class (`TEmpty = class end;`) still count as classes. Resolution-side join -- no schema, extractor or resolver change; no re-index needed. New `DRagLint.Core.ForwardStub`; guards `run_forward_stub_pairing.ps1`, `run_forward_stub_is_not_a_class.ps1`. Spec: `docs\superpowers\specs\2026-09-17-forward-stub-is-not-a-class-design.md`.
+
 ## v1.15.1-alpha -- 2026-09-17
 
 PATCH: fixes a regression shipped in 1.15.0 (dotted unit names invisible to

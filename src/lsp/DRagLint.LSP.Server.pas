@@ -2025,7 +2025,10 @@ begin
     if (Symbols[si].ForwardLine = CurLine1)
       and SameText(HitStore.GetFilePath(Symbols[si].FileId), Path) then
     begin
-      Chosen:= si; FoundDeclImpl:= True; OnForwardStub:= True; Break;
+      Chosen:= si;
+      FoundDeclImpl:= True;
+      OnForwardStub:= True;
+      Break;
     end;
   if (not FoundDeclImpl) and (Length(Symbols) > 1) then
   begin
