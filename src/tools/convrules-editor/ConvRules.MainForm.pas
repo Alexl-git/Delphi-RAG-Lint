@@ -2495,7 +2495,8 @@ begin
     visible. It must never change a check state -- a search that silently
     unmarked work would make the progress line a lie. }
   FRulesFilter:= TEdit.Create(Self);
-  FRulesFilter.Parent:= FormTypesPanel; FRulesFilter.SetBounds(6, 154, 288, 21);  // dl:ok multiple-statements-per-line@4d37, magic-literal@4d37, large-magic-number@4d37 -- Task 8; same Parent+SetBounds one-liner idiom used by every control in BuildUI
+  FRulesFilter.Parent:= FormTypesPanel;
+  FRulesFilter.SetBounds(6, 154, 288, 21);  // dl:ok magic-literal@19cc, large-magic-number@19cc -- Task 8; same unnamed SetBounds coordinate idiom used by every control in BuildUI
   FRulesFilter.TextHint:= 'find a class...';
   FRulesFilter.OnChange:= ClassSearchChange;
 
