@@ -8909,6 +8909,11 @@ begin
   finally
     List.Free;
   end; // try
+  { C2.5, completion path: LSP.Completion's bare-identifier branch reaches the
+    store through THIS reader, not the by-name ones, so typing `TCompo` against
+    a library index offered two `TComponent` items (stub + real). Fold after the
+    dataset is closed, like FindSymbolsByExactName / FindSymbolsByQualifiedName. }
+  Result:= FoldStubs(Result);
 end; // function
 
 function TSQLiteSymbolStore.FindAllChildSymbols( AParentId: Int64): TArray<TSymbol>;

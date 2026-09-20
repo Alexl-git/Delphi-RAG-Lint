@@ -260,7 +260,7 @@ try {
   $stubCol0 = $lines[$stubLine - 1].IndexOf('TFoo') + 1
   $hStub = Get-HoverValue $db $fixFile ($stubLine - 1) $stubCol0
   Check 'S4: positional hover on the stub line answers' (($hStub -ne '') -and ($hStub -ne '<no-reply>')) "got: [$hStub]"
-  Check "S4: lead line 'forward declaration -> line $realLine'" ($hStub -match "^_forward declaration -> line $realLine`_") "got: [$hStub]"
+  Check "S4: lead line 'forward declaration -> line $realLine'" ($hStub -match "^_forward declaration -> line ${realLine}_") "got: [$hStub]"
   Check 'S4: it describes the real TFoo (its line appears)' ($hStub -match "line $realLine") "got: [$hStub]"
   # cursor on the REAL declaration: no lead line
   $realCol0 = $lines[$realLine - 1].IndexOf('TFoo') + 1
@@ -317,6 +317,87 @@ try {
   Check 'S6 text: two TFoo rows' ($otFoo.Count -eq 2) "rows=$($otFoo.Count)"
   Check "S6 text: the stub row ends with '[forward -> line $realLine]'" (@($otFoo | Where-Object { $_ -match "^\S+\s+fwstub\.TFoo\s+$stubLine\s+\[forward -> line $realLine\]\s*$" }).Count -eq 1) "got: [$($otFoo -join ' | ')]"
   Check 'S6 text: the real row is untagged' (@($otFoo | Where-Object { $_ -match "\s$realLine\s*$" }).Count -eq 1) "got: [$($otFoo -join ' | ')]"
+}
+finally { Pop-Location }
+
+# ============================================================= CASE E =====
+# Completion is the one reader spec section 4 lists that goes through
+# FindSymbolsByPrefix (LSP.Completion.pas, bare-identifier branch), not the
+# by-name readers CASE A covers. MEASURED BEFORE THE FIX (2026-09-20): typing
+# `TFo` offered TWO `TFoo` items -- the stub and the real one.
+#
+# Drives `textDocument/completion` the way Get-HoverValue drives hover. The
+# server reads an unopened document from DISK (TLiveDocuments.Readable falls
+# back to TFile.Exists), so no didOpen is needed; the probe unit is NOT indexed
+# -- the stores queried are the fixture's db, the probe only supplies the line
+# the caret sits on. Returns the labels of every item; '<no-reply>' when id 2
+# never answered.
+function Get-CompletionLabels([string]$Db, [string]$File, [int]$Line0, [int]$Char0) {
+  $uri = 'file:///' + ($File -replace '\\', '/')
+  $msgs  = Frame @{ jsonrpc = '2.0'; id = 1; method = 'initialize'; params = @{ processId = $null; rootUri = $null; capabilities = @{} } }
+  $msgs += Frame @{ jsonrpc = '2.0'; method = 'initialized'; params = @{} }
+  $msgs += Frame @{ jsonrpc = '2.0'; id = 2; method = 'textDocument/completion';
+                    params = @{ textDocument = @{ uri = $uri }; position = @{ line = $Line0; character = $Char0 } } }
+  $msgs += Frame @{ jsonrpc = '2.0'; id = 3; method = 'shutdown'; params = @{} }
+  $inF = Join-Path $WorkDir 'lsp_cmp_in.txt'; $outF = Join-Path $WorkDir 'lsp_cmp_out.txt'; $errF = Join-Path $WorkDir 'lsp_cmp_err.txt'
+  [System.IO.File]::WriteAllText($inF, $msgs, (New-Object System.Text.ASCIIEncoding))
+  Start-Process $Exe -ArgumentList @('lsp', '--db', $Db) -WorkingDirectory $WorkDir `
+    -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -Wait | Out-Null
+  $raw = [System.IO.File]::ReadAllText($outF)
+  foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
+    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    if ($o.id -eq 2) {
+      if ($null -eq $o.result) { return @() }
+      $items = if ($null -ne $o.result.items) { $o.result.items } else { $o.result }
+      return @($items | ForEach-Object { [string]$_.label })
+    }
+  }
+  return @('<no-reply>')
+}
+
+Push-Location $WorkDir
+try {
+  Write-Host ''
+  Write-Host 'CASE E: completion (FindSymbolsByPrefix) offers the real TFoo once' -ForegroundColor Cyan
+  $probeDir = Join-Path $WorkDir 'probe'; New-Item -ItemType Directory $probeDir | Out-Null
+  $probe = @"
+unit fwprobe;
+
+interface
+
+uses fwstub;
+
+implementation
+
+procedure Probe;
+var
+  X: TFoo;
+begin
+  X:= TFo
+  X:= TOnly
+end;
+
+end.
+"@
+  $probeFile = Join-Path $probeDir 'fwprobe.pas'
+  WriteAnsi $probeFile $probe
+  $pl = [System.IO.File]::ReadAllLines($probeFile)
+  $fooLine0 = -1; $onlyLine0 = -1
+  for ($i = 0; $i -lt $pl.Count; $i++) {
+    if ($pl[$i] -eq '  X:= TFo')   { $fooLine0  = $i }
+    if ($pl[$i] -eq '  X:= TOnly') { $onlyLine0 = $i }
+  }
+  Check 'probe anchors located' (($fooLine0 -ge 0) -and ($onlyLine0 -ge 0)) "foo=$fooLine0 only=$onlyLine0"
+  # caret at END of the line, right after the typed prefix (0-based character = line length)
+  $labels = @(Get-CompletionLabels $db $probeFile $fooLine0 $pl[$fooLine0].Length)
+  Check 'completion answered' (($labels.Count -ge 1) -and ($labels[0] -ne '<no-reply>')) "labels=[$($labels -join ',')]"
+  $fooItems = @($labels | Where-Object { $_ -eq 'TFoo' })
+  Check 'S1 completion: exactly ONE TFoo item for prefix TFo (stub folded)' ($fooItems.Count -eq 1) "TFoo items=$($fooItems.Count) labels=[$($labels -join ',')]"
+  # POSITIVE CONTROL: a lone stub is a class and is offered once -- proves the
+  # probe reaches the prefix reader and that the fold drops only PAIRED stubs.
+  $labelsOnly = @(Get-CompletionLabels $db $probeFile $onlyLine0 $pl[$onlyLine0].Length)
+  $onlyItems = @($labelsOnly | Where-Object { $_ -eq 'TOnlyStub' })
+  Check 'S2 control: exactly ONE TOnlyStub item for prefix TOnly' ($onlyItems.Count -eq 1) "TOnlyStub items=$($onlyItems.Count) labels=[$($labelsOnly -join ',')]"
 }
 finally { Pop-Location }
 

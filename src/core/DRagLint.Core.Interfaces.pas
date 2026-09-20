@@ -1663,7 +1663,11 @@ type
     function FindEnclosingRoutineByImpl(AFileId: Int64; ALine: Integer): TSymbol;
 
     // v0.20: completion helpers
-    /// <summary><!-- drag-lint:auto sum -->v0.20: completion helpers</summary>
+    /// <summary>Symbols whose name starts with APrefix (LIKE scan, at most ALimit
+    /// rows read). C2.5, completion path: a forward stub and its real declaration
+    /// are folded into the real row (ForwardLine = the stub's line), the same
+    /// rule FindSymbolsByExactName / FindSymbolsByQualifiedName apply, so the
+    /// bare-identifier completion never offers a type twice.</summary>
     /// <param name="APrefix"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ALimit"><!-- drag-lint:auto type -->Integer</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>

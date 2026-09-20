@@ -9,9 +9,15 @@ unit DRagLint.Core.ForwardStub;
   looks a type up by name therefore saw both, and hover/metrics/search picked
   whichever came first.
 
-  This unit is the ONE definition of "stub" (spec section 2), applied by the
-  readers rather than by the extractor -- a marker would have cost an extractor
-  bump and a multi-hour re-parse for a fact the join derives in memory.
+  This unit is the definition of "stub" (spec section 2) that every READER
+  applies -- query, hover, completion, outline, ClassMetrics -- rather than the
+  extractor: a marker would have cost an extractor bump and a multi-hour
+  re-parse for a fact the join derives in memory. It is NOT the only stub test
+  in the tree: the resolve pass's ResolveTypeNameToClass.IsStub in
+  DRagLint.Storage.SQLite.pas keeps its narrower pre-existing filter (heritage
+  empty AND end_line <= start_line; no children / same-file test) because it is
+  on the resolver surface (tests\resolver-surface.txt); unifying the two is a
+  resolver-surface change deferred to the next DRAGLINT_RESOLVER_VERSION bump.
 
   Design: docs\superpowers\specs\2026-09-17-forward-stub-is-not-a-class-design.md }
 
@@ -34,7 +40,7 @@ type
 /// S.Kind in [skClass, skInterface]; S.Heritage = ''; AHasChildren(S) is
 /// False (or AHasChildren is nil); T.Kind = S.Kind, T.FileId = S.FileId,
 /// SameText(T.QualifiedName, S.QualifiedName), T.StartLine &gt; S.StartLine; and T
-/// is the such row with the SMALLEST StartLine (spec section 2). A row with no
+/// is the row of those with the SMALLEST StartLine (spec section 2). A row with no
 /// later twin -- a lone `TOnlyStub = class;` or an empty `TEmpty = class end;`
 /// -- gets -1 and keeps counting as a class.</summary>
 /// <param name="ARows">Any set of symbol rows, in any order. Rows from several
@@ -58,7 +64,8 @@ function FoldForwardStubs(const ARows: TArray<TSymbol>; const AHasChildren: THas
 /// in ARows has ParentId = ASym.Id. Correct only when ARows holds a whole file's
 /// rows (FindSymbolsByFile), where every member of a type is present.</summary>
 /// <param name="ARows">A whole-file row set.</param>
-/// <returns>The closure; ARows is captured by value.</returns>
+/// <returns>The closure; ARows is captured by reference (a dynamic array), so
+/// callers must not mutate it while the closure is live.</returns>
 function HasChildInSet(const ARows: TArray<TSymbol>): THasChildrenFn;
 
 implementation
