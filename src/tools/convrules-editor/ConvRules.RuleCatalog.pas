@@ -47,8 +47,8 @@ type
   /// directly. LineNo is 1-based, for display and for routing a later save back to
   /// the originating book.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas), ConvRules.RuleCatalog.CatalogFromText (ConvRules.RuleCatalog.pas), declaration (ConvRules.RuleCatalog.pas) (+6 more)</para>
-  /// <para>Used in units: ConvRules.MainForm, ConvRules.RuleCatalog</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas) (+13 more)</para>
+  /// <para>Used in units: ConvRules.MainForm, ConvRules.RuleCatalog, ConvRules.RuleChooser</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleCatalogEntry = record
@@ -78,7 +78,7 @@ type
   /// them ALL is the point: the fix is to delete or move one, and you cannot do
   /// that without being told where both are.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor (ConvRules.MainForm.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas)</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor (ConvRules.MainForm.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.SameBookDups (ConvRules.RuleCatalog.pas)</para>
   /// <para>Used in units: ConvRules.MainForm, ConvRules.RuleCatalog</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -89,7 +89,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (ConvRules.MainForm.pas), declaration (ConvRules.RuleCatalog.pas)</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.RuleCatalog.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCatalogDuplicates = TArray<TCatalogDuplicate>;
@@ -139,16 +139,16 @@ type
   /// </remarks>
   TMappingDuplicates = TArray<TMappingDuplicate>;
 
-  /// <summary>PURE: the bare type name of a possibly unit-qualified name.</summary>
-  /// <param name="AQualified">'Bde.DBTables.TTable' or 'TTable'.</param>
-  /// <returns>The text after the last dot; the input unchanged when there is none.</returns>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.BlockOps.BlocksConvertingTypes (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor (ConvRules.MainForm.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.FindRuleForType (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.HeaderIndexFor (ConvRules.RuleCatalog.pas) (+2 more)</para>
-  /// <para>Calls: Copy, LastDelimiter, Trim</para>
-  /// <para>Pure</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>PURE: the bare type name of a possibly unit-qualified name.</summary>
+/// <param name="AQualified">'Bde.DBTables.TTable' or 'TTable'.</param>
+/// <returns>The text after the last dot; the input unchanged when there is none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockOps.BlocksConvertingTypes (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.FindRuleForType (ConvRules.RuleCatalog.pas) (+4 more)</para>
+/// <para>Calls: Copy, LastDelimiter, Trim</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BareTypeName(const AQualified: string): string;
 
 /// <summary>PURE: every '#convert' in one rule-book text, as catalog entries.</summary>
@@ -250,6 +250,13 @@ function FindDuplicates(const ACatalog: TRuleCatalog): TCatalogDuplicates;
 /// the same separator, because Windows paths are and a mismatch here would
 /// silently under-warn on a real same-book collision written with a different
 /// slash style or case.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.RuleCatalog.SameFileNormalised</para>
+/// <para>Returns: nil; List.ToArray</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.RuleCatalog.SameFileNormalised"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function SameBookDups(const ADups: TCatalogDuplicates): TCatalogDuplicates;
 
@@ -334,33 +341,33 @@ type
     function Summary: string;
   end; // record
 
-  /// <summary>PURE: every '#apply &lt;Name&gt;' in AText must have a matching
-  /// '#mapping &lt;Name&gt; from ... to ...' declaration in AText, and no name may be
-  /// declared twice.</summary>
-  /// <param name="AText">A rule-book text -- in practice a COMPOSED one.</param>
-  /// <returns>The two lists; see TApplyIntegrity.OK.</returns>
-  /// <remarks>
-  /// This runs on the COMPOSED text, not on an authored book, and that is
-  /// the whole point. A composed job book is generated, disposable output for
-  /// --rules, so a #mapping carried into it from a source preamble is not a second
-  /// authored copy and does not breach the one-rule-one-place rule -- but an #apply
-  /// whose declaration stayed behind in a book that is not in the working set
-  /// produces a book the engine cannot apply, silently.
-  /// <para>A #when or #else CLAUSE repeats the name and is NOT a declaration; the
-  /// model marks the declaration with MapFromType &lt;&gt; '', the same rule
-  /// ConvRules.Mappings.ValidateMappings uses for mikUndefined, so the two cannot
-  /// disagree. Names compare case-insensitively, as Pascal does.</para>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas)</para>
-  /// <para>Calls: ConvRules.Model.TRuleBook.Create, ConvRules.Model.TRuleBook.LoadFromString, ConvRules.RuleCatalog.FindDuplicateMappings, ConvRules.RuleCatalog.MappingCatalogFromText, Default, SameText, Trim</para>
-  /// <para>Returns: Default(TApplyIntegrity)</para>
-  /// <para>Pure</para>
-  /// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
-  /// <seealso cref="ConvRules.Model.TRuleBook.LoadFromString"/>
-  /// <seealso cref="ConvRules.RuleCatalog.FindDuplicateMappings"/>
-  /// <seealso cref="ConvRules.RuleCatalog.MappingCatalogFromText"/>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>PURE: every '#apply &lt;Name&gt;' in AText must have a matching
+/// '#mapping &lt;Name&gt; from ... to ...' declaration in AText, and no name may be
+/// declared twice.</summary>
+/// <param name="AText">A rule-book text -- in practice a COMPOSED one.</param>
+/// <returns>The two lists; see TApplyIntegrity.OK.</returns>
+/// <remarks>
+/// This runs on the COMPOSED text, not on an authored book, and that is
+/// the whole point. A composed job book is generated, disposable output for
+/// --rules, so a #mapping carried into it from a source preamble is not a second
+/// authored copy and does not breach the one-rule-one-place rule -- but an #apply
+/// whose declaration stayed behind in a book that is not in the working set
+/// produces a book the engine cannot apply, silently.
+/// <para>A #when or #else CLAUSE repeats the name and is NOT a declaration; the
+/// model marks the declaration with MapFromType &lt;&gt; '', the same rule
+/// ConvRules.Mappings.ValidateMappings uses for mikUndefined, so the two cannot
+/// disagree. Names compare case-insensitively, as Pascal does.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas)</para>
+/// <para>Calls: ConvRules.Model.TRuleBook.Create, ConvRules.Model.TRuleBook.LoadFromString, ConvRules.RuleCatalog.FindDuplicateMappings, ConvRules.RuleCatalog.MappingCatalogFromText, Default, SameText, Trim</para>
+/// <para>Returns: Default(TApplyIntegrity)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
+/// <seealso cref="ConvRules.Model.TRuleBook.LoadFromString"/>
+/// <seealso cref="ConvRules.RuleCatalog.FindDuplicateMappings"/>
+/// <seealso cref="ConvRules.RuleCatalog.MappingCatalogFromText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
 
 /// <summary>PURE: the node index of the '#convert' header a catalog entry names.</summary>
@@ -376,7 +383,7 @@ function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
 /// <para>An out-of-range LineNo is a stale index, not a fault: it falls back like any
 /// other miss and never raises.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor.HeaderMatches, SameText</para>
 /// <para>Returns: -1; Hint; i</para>
 /// <para>Pure</para>
@@ -443,7 +450,7 @@ function UniqueRulePath(const AFolder, AName: string): string;
 /// FIRST match wins, so folder order decides which book is reported as the owner
 /// when two cover the same type -- the panel shows which one.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ConvRules.RuleCatalog.BareTypeName, Default, SameText</para>
 /// <para>Returns: False; True</para>
 /// <para>Mutates: AEntry (out)</para>
@@ -457,10 +464,19 @@ function FindRuleForType(const ACatalog: TRuleCatalog; const ATypeName: string; 
 /// <param name="AType">A bare or qualified type name; matched on the bare name,
 /// case-insensitively, exactly as FindRuleForType matches.</param>
 /// <returns>All matching entries in catalogue order; empty when none.</returns>
-/// <remarks>More than one entry is NOT an error. Owner ruling 2026-09-20: one
+/// <remarks>
+/// More than one entry is NOT an error. Owner ruling 2026-09-20: one
 /// From class may legitimately convert to several To classes, in different rule
 /// books, for different conversion campaigns. FindRuleForType returns only the
-/// first and stays the right call when a single answer is wanted.</remarks>
+/// first and stays the right call when a single answer is wanted.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.RuleCatalog.BareTypeName, SameText</para>
+/// <para>Returns: List.ToArray</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RulesForType(const ACatalog: TRuleCatalog; const AType: string): TArray<TRuleCatalogEntry>;
 
 /// <summary>PURE: render a catalog as the on-disk index text.</summary>
@@ -520,6 +536,7 @@ function CatalogFromIndexText(const AText: string): TRuleCatalog;  // dl:ok unus
 /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
 /// <para>Calls: CompareText, ConvRules.RuleCatalog.CatalogFromText, ConvRules.RuleCatalog.MergeCatalogs, ExtractFileName, Format, Trim</para>
 /// <para>Returns: nil; MergeCatalogs(Parts)</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: AErrors (out)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="ConvRules.RuleCatalog.CatalogFromText"/>
