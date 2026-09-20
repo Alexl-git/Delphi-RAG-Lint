@@ -623,9 +623,9 @@ type
       /// <summary>The class-search text, or '' when the search box does not exist
       /// yet (Task 8 wires FRulesFilter to this list).</summary>
       /// <remarks>
-      /// FRulesFilter is currently the "filter by To type" box -- this is a
-      /// deliberate, temporary overlap. Task 8 repurposes FRulesFilter as the class
-      /// search box proper; until then, typing in it also filters this list.
+      /// FRulesFilter is the class search box: a partial, case-insensitive match
+      /// against form-type class names. It changes only which rows RefreshFormTypes
+      /// shows -- never a check state.
       /// </remarks>
       function ClassSearchText: string;
       /// <summary>TNotifyEvent shim so the filter controls can re-run RefreshFormTypes.</summary>
@@ -1454,19 +1454,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoCheckUnits(Sender: TObject);
-      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <summary>TNotifyEvent shim so the class search box can re-run RefreshFormTypes.</summary>
+      /// <param name="Sender">The class search TEdit (FRulesFilter); unused.</param>
       /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
-      /// <!-- drag-lint:auto END -->
+      /// Search only narrows FVisibleRows via RefreshFormTypes/VisibleRowIndexes; it
+      /// never changes a check state, so the progress line stays truthful.
       /// </remarks>
-      procedure RulesFilterChange(Sender: TObject);
+      procedure ClassSearchChange(Sender: TObject);
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2496,8 +2490,17 @@ begin
   FFilterMemo.ScrollBars:= ssVertical;
   FFilterMemo.OnChange  := FilterChanged;
 
+  { Was the retired rules-library "filter by To type" box. It is now the class
+    SEARCH: a partial, case-insensitive match that changes only which rows are
+    visible. It must never change a check state -- a search that silently
+    unmarked work would make the progress line a lie. }
+  FRulesFilter:= TEdit.Create(Self);
+  FRulesFilter.Parent:= FormTypesPanel; FRulesFilter.SetBounds(6, 154, 288, 21);  // dl:ok multiple-statements-per-line@4d37, magic-literal@4d37, large-magic-number@4d37 -- Task 8; same Parent+SetBounds one-liner idiom used by every control in BuildUI
+  FRulesFilter.TextHint:= 'find a class...';
+  FRulesFilter.OnChange:= ClassSearchChange;
+
   FLblFormTypes:= TLabel.Create(Self);
-  FLblFormTypes.Parent:= FormTypesPanel; FLblFormTypes.SetBounds(6, 158, 288, 15);
+  FLblFormTypes.Parent:= FormTypesPanel; FLblFormTypes.SetBounds(6, 179, 288, 15);  // dl:ok multiple-statements-per-line@dda5, magic-literal@dda5, large-magic-number@dda5 -- Task 8; shifted down to sit under the new class-search box, same unnamed-coordinate idiom as its siblings
   FLblFormTypes.Caption:= '';
 
   { Form types list: reduced height to make room for the rules list below it.
@@ -2506,7 +2509,7 @@ begin
     same decision. }
   FFormTypeList:= TCheckListBox.Create(Self);
   FFormTypeList.Parent:= FormTypesPanel;
-  FFormTypeList.SetBounds(6, 176, 288, 170);
+  FFormTypeList.SetBounds(6, 197, 288, 170);  // dl:ok magic-literal@264f, large-magic-number@264f -- Task 8; shifted down to clear the class-search box + progress label, same unnamed-coordinate idiom as its siblings
   FFormTypeList.Anchors:= [akLeft, akTop, akRight];
   FFormTypeList.Style     := lbOwnerDrawFixed;
   FFormTypeList.ItemHeight:= 18;
@@ -2518,13 +2521,8 @@ begin
   { Rules list: relocated from TabRules into FormTypesPanel below the form types list.
     This consolidates the two redundant left lists into one form-types-driven view. }
   var LblRulesForType: TLabel:= TLabel.Create(Self);
-  LblRulesForType.Parent:= FormTypesPanel; LblRulesForType.SetBounds(6, 354, 288, 15);
+  LblRulesForType.Parent:= FormTypesPanel; LblRulesForType.SetBounds(6, 375, 288, 15);  // dl:ok multiple-statements-per-line@35e5, magic-literal@35e5, large-magic-number@35e5 -- Task 8; shifted down since the search box that used to sit here moved above the form-types list
   LblRulesForType.Caption:= 'Rules for selected type:';
-
-  FRulesFilter:= TEdit.Create(Self);
-  FRulesFilter.Parent:= FormTypesPanel; FRulesFilter.SetBounds(6, 372, 288, 23);
-  FRulesFilter.TextHint:= 'filter by To type...';
-  FRulesFilter.OnChange:= RulesFilterChange;
 
   FRules:= TListView.Create(Self);
   FRules.Parent   := FormTypesPanel; FRules.SetBounds(6, 398, 288, 244);
@@ -5774,9 +5772,9 @@ begin
     SetStatus(Format('Units OK: %d add, %d remove, no doubles.', [Length(S.Adds), Length(S.Removes)]));
 end;
 
-procedure TConvRulesForm.RulesFilterChange(Sender: TObject);
+procedure TConvRulesForm.ClassSearchChange(Sender: TObject);
 begin
-  RefreshRulesList;
+  RefreshFormTypes;
 end;
 
 end.
