@@ -78,6 +78,21 @@ src/storage/DRagLint.Storage.SQLite.pas::ScopedResolveDeclineReason
 src/storage/DRagLint.Storage.SQLite.pas::MaterializeResolveScope
 src/storage/DRagLint.Storage.SQLite.pas::TypeCandidateIds
 
+# The by-name READER the call resolver depends on. DRagLint.Index.CallResolver.pas
+# (~line 2176) calls FindSymbolsByExactName on the EXTRA stores for a receiver's
+# type and declines unless exactly ONE row comes back (Found <> 1 -> no edge).
+# So what this reader returns decides which call_edges are written: when C2.5
+# made it fold a forward stub into its real declaration (TComponent, TReader,
+# TWriter, ... are stub + real in the RTL), receivers that were 2 rows and
+# declined became 1 row and resolve. The manifest's own closure rule -- "a
+# routine that decides what is WRITTEN is surface even though it writes nothing"
+# -- makes the reader and its fold surface. Found by the 2026-09-19 C2.5 review,
+# NOT by the drift regex (none of these names match the vocabulary), which is
+# the second time the hand-written list lagged a real dependency.
+src/storage/DRagLint.Storage.SQLite.pas::FindSymbolsByExactName
+src/storage/DRagLint.Storage.SQLite.pas::FoldStubs
+src/core/DRagLint.Core.ForwardStub.pas::*
+
 # ---------------------------------------------------------------------------
 # EXCLUSIONS. Each is a routine whose NAME matches the resolve vocabulary and
 # which is deliberately NOT part of the surface. The guard fails on a

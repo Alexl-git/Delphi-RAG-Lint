@@ -170,4 +170,21 @@
 #
 #   Superseded: 1.4.0-alpha|c1d56f481b2b1107635f79319f399f9c5b822474a0b9752b1bd5a0c838d304fa
 
-1.4.0-alpha|cc8c86896c828038e9eeb9102faa988fe9aede73f4c6aa0eef65b7049322c2e0
+# 2026-09-19: manifest WIDENED (FindSymbolsByExactName / FoldStubs / the
+#   DRagLint.Core.ForwardStub unit added as resolve surface after the C2.5
+#   review); code on the previously-listed surface unchanged. WHY THEY ARE
+#   SURFACE: DRagLint.Index.CallResolver.pas:2176 calls FindSymbolsByExactName
+#   on the extra stores for a receiver's type and declines on Found <> 1, so
+#   what that reader returns decides which call_edges are written -- the
+#   manifest's own closure rule. The hash moves only because the manifest grew
+#   (three new hashed spans); every span that was already listed hashes to what
+#   it did before. The C2.5 behaviour change itself (RTL forward stubs such as
+#   TComponent/TReader/TWriter were 2 rows and are now 1, so cross-store
+#   receivers that used to decline now resolve) is recorded in CHANGELOG
+#   Unreleased and awaits the owner's bump decision; until then an index
+#   resolved before C2.5 lacks those edges (remedy when the owner bumps:
+#   index --all --resolve-only). Found by the review, not by the drift regex.
+#
+#   Superseded: 1.4.0-alpha|cc8c86896c828038e9eeb9102faa988fe9aede73f4c6aa0eef65b7049322c2e0
+
+1.4.0-alpha|463989bb0a729a967964a9a29ec5913d23133ed5eb6d1d5611b3a89c1acee2d3
