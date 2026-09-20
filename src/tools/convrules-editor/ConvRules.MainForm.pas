@@ -4180,7 +4180,6 @@ var
   i      : Integer                  ;
   Entries: TArray<TRuleCatalogEntry>;
   Entry  : TRuleCatalogEntry        ;
-  Hdr    : Integer                  ;
 begin
   i:= SelectedRowIndex;
   if i < 0 then
@@ -4214,12 +4213,15 @@ begin
       end;
     end; // case
 
+  // OpenOwningRuleEntry has ALREADY loaded the grid exactly once on every path
+  // that reaches here (Result = True): either FRules.Items[Sel].Selected:= True
+  // fired RulesSelectItem -> LoadGridForBlock, or (Sel < 0, e.g. the row is
+  // filtered out of FRules) it called LoadGridForBlock directly. A second call
+  // here doubled the engine's GetProptree cost (measured ~161s) on every
+  // double-click for nothing -- fix round 1.
   if not OpenOwningRuleEntry(Entry) then
     Exit;
   FCbTo.Text:= Entry.ToType;
-  Hdr       := HeaderIndexFor(FBook, Entry);
-  if Hdr >= 0 then
-    LoadGridForBlock(Hdr);
   SetStatus(Format('Loaded %s -> %s from %s.', [Entry.FromType, Entry.ToType, ExtractFileName(Entry.FilePath)]));
 end; // procedure
 
