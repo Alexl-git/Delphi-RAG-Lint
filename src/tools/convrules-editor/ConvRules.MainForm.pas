@@ -43,6 +43,7 @@ uses
   , ConvRules.MappingForm
   , ConvRules.FormTypes
   , ConvRules.RuleCatalog
+  , ConvRules.SkipList // TSkipList: a field's type, so this has to be INTERFACE-visible
   , ConvRules.Usage // TUsedUnitRef: a field's type, so this has to be INTERFACE-visible
   ;
 
@@ -60,6 +61,10 @@ const
   /// successful browse. A missing or stale folder is harmless: TOpenDialog falls
   /// back on its own when InitialDir does not exist.</remarks>
   EDITOR_REG_FORMDIR = 'LastFormDir';
+  /// <summary>Measured cost, in seconds, of one DeclaringUnitCached miss against
+  /// the multi-GB library index (~3.4 GB Win32). Used only to tell the user how
+  /// long a cold standard-controls resolve will take; never a timeout.</summary>
+  DECLARING_UNIT_RESOLVE_SECS = 1.7;
 
 type
   /// <remarks>
@@ -156,8 +161,10 @@ type
       // go through SelectedRowIndex; indexing FFormTypeRows with ItemIndex directly
       // addresses the wrong class the moment a search is active.
       FVisibleRows  : TArray<Integer>;
-      FFilterMemo   : TMemo        ; // one exclusion regex per line
+      FFilterMemo   : TMemo        ; // named filter: one exclusion regex per line
       FChkStdCtrls  : TCheckBox    ; // also exclude Vcl./FMX. declared types
+      FFilterName   : TEdit        ; // named filter's name -- remembered in FSkipList.Filters on Apply
+      FBtnApplyFilter: TButton     ; // "Mark matching" -- bulk-marks and saves, see ApplyNamedFilterClick
       FLblFormTypes : TLabel       ; // "N types, M shown"
       FFilterError  : string       ; // first malformed regex, surfaced in the label
       FSelectedFormType: string    ; // type selected in FFormTypeList (filter FRules to this type)
@@ -173,6 +180,12 @@ type
       survived a restart and the marking would work from the second run on. It does
       not, and it did not. }
       FRulesFolder : string;
+      { The parsed skip file for FRulesFolder -- classes marked "do not convert"
+      and the named filters that set them in bulk. LoadSkipList/SaveSkipList own
+      its lifecycle; ApplySkipMarks stamps it onto FFormTypeRows.Skipped. Starts
+      Default(TSkipList) (empty), same per-session-until-a-folder-is-known
+      lifecycle as FRulesFolder itself. }
+      FSkipList : TSkipList;
       FLastFormDir : string; // where the Open-form dialog resumes
       // Three descendant sets, fetched ONCE each (~1.5 s per call, measured against
       // the 3.4 GB Win32 library). They replace a per-type DeclaringUnitOf, which
@@ -628,20 +641,6 @@ type
       /// shows -- never a check state.
       /// </remarks>
       function ClassSearchText: string;
-      /// <summary>TNotifyEvent shim so the filter controls can re-run RefreshFormTypes.</summary>
-      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
-      procedure FilterChanged(Sender: TObject);
       /// <summary>Rescans FRulesFolder into FCatalog and rewrites its index file.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
@@ -1325,24 +1324,53 @@ type
       /// classes with the two or three classes the .pas happens to
       /// declare.</remarks>
       function HarvestUnitClasses(const AUnitText, APasPath: string): string;
-      /// <summary>STUB for Task 9: stamps loaded skip marks onto FFormTypeRows.
-      /// Currently a no-op placeholder so HarvestUnitClasses (and its Task 6/7
-      /// siblings) can call it unconditionally; Task 9 replaces this body with
-      /// the real one that reads FSkipList.</summary>
-      /// <remarks>Deliberately an empty-bodied stub kept in the source, not a
-      /// commented-out call site -- a commented-out call would sit in the tree
-      /// for four tasks and trip this repo's own commented-out-code lint
-      /// rule.</remarks>
+      /// <summary>Reads the skip file for FRulesFolder into FSkipList.</summary>
+      /// <remarks>
+      /// Silent when there is no file yet -- a rules folder that has never had a
+      /// class marked is the normal first state, not an error. A read failure
+      /// (permissions, a corrupt file) is reported via SetError but does not
+      /// raise: the session continues with FSkipList reset to empty, same as a
+      /// missing file, rather than leaving a half-read value in place.
+      /// </remarks>
+      procedure LoadSkipList;
+      /// <summary>Stamps FSkipList's marks onto FFormTypeRows.Skipped.</summary>
+      /// <remarks>
+      /// The file is the source of truth: a class not currently in FSkipList
+      /// comes back UNMARKED even if a row was marked before this call, so a
+      /// hand-edited file (or a class removed from the skip list some other way)
+      /// takes effect on the next harvest. See
+      /// ConvRules.FormTypes.StampSkipMarks for the pure stamping logic.
+      /// </remarks>
       procedure ApplySkipMarks;
-      /// <summary>STUB for Task 9: persists FFormTypeRows' Skipped marks so they
-      /// survive a restart. Currently a no-op placeholder so ToggleFormTypeSkip can
-      /// call it unconditionally; Task 9 replaces this body with the real
-      /// ConvRules.SkipList write.</summary>
-      /// <remarks>Deliberately an empty-bodied stub kept in the source, not a
-      /// commented-out call site -- a commented-out call would sit in the tree
-      /// for three tasks and trip this repo's own commented-out-code lint
-      /// rule.</remarks>
+      /// <summary>Persists FFormTypeRows' Skipped marks to the skip file so they
+      /// survive a restart.</summary>
+      /// <remarks>
+      /// Writes EVERY row -- marked AND unmarked -- via
+      /// ConvRules.FormTypes.SkipListFromRows, which is what makes UN-marking a
+      /// class persist rather than merely omitting a "skip" line that was never
+      /// there. A class absent from the current FFormTypeRows (not on the
+      /// current unit/form) is left untouched in the file. No rules folder yet
+      /// means no file: the marks stay in memory and are flushed once
+      /// LoadSkipList/RescanRulesFolder have made FRulesFolder known -- the same
+      /// timing trap the --form startup comment on LoadFile documents.
+      /// </remarks>
       procedure SaveSkipList;
+      /// <summary>"Mark matching" button: bulk-marks every class the named
+      /// filter's patterns (and, optionally, the standard-controls flag)
+      /// accept as "do not convert", and saves.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// This is bulk AUTHORING, not a live view: unlike the retired
+      /// FilterChanged, it acts once on Apply and persists the result, rather
+      /// than recomputing on every keystroke. The standard-controls box is
+      /// honoured here and ONLY here, because resolving a declaring unit costs
+      /// an index lookup per type (measured 1.7 s each) and must never run on a
+      /// plain refresh. When FFilterName.Text is non-blank, the pattern set is
+      /// also remembered by name in FSkipList.Filters so a future session could
+      /// re-apply it (re-application itself is not wired to anything yet --
+      /// only the record is kept).
+      /// </remarks>
+      procedure ApplyNamedFilterClick(Sender: TObject);
       /// <summary>Fill the Unit Rules tab and the left class list from the TEXT of
       /// AUnitName's .pas -- the file, never the index, so a browsed or orphan unit
       /// (VARINSP) answers. This is the "unit selected" half of Fill From-classes:
@@ -2310,7 +2338,7 @@ var
   LblFormHdr    : TLabel   ;
   LblFilter     : TLabel   ;
   BtnRescan     : TButton  ;
-  BtnReenable   : TButton  ;
+  BtnSkip       : TButton  ;
   BtnOpenForm   : TButton  ;
   TabRules      : TTabSheet;
   TabRaw        : TTabSheet;
@@ -2469,26 +2497,39 @@ begin
   BtnRescan.ShowHint:= True;
   BtnRescan.OnClick := RescanRulesFolder;
 
-  BtnReenable:= TButton.Create(Self);
-  BtnReenable.Parent:= FormTypesPanel; BtnReenable.SetBounds(200, 26, 94, 23);
-  BtnReenable.Caption := 'Re-enable';
-  BtnReenable.Hint    := 'Ignore the filter for the selected type (toggles)';
-  BtnReenable.ShowHint:= True;
-  BtnReenable.OnClick := ToggleFormTypeSkip;
+  BtnSkip:= TButton.Create(Self);
+  BtnSkip.Parent:= FormTypesPanel; BtnSkip.SetBounds(200, 26, 94, 23);
+  BtnSkip.Caption := 'Skip';
+  BtnSkip.Hint    := 'Mark or unmark the selected type as "do not convert" (toggles)';
+  BtnSkip.ShowHint:= True;
+  BtnSkip.OnClick := ToggleFormTypeSkip;
 
   FChkStdCtrls:= TCheckBox.Create(Self);
   FChkStdCtrls.Parent:= FormTypesPanel; FChkStdCtrls.SetBounds(6, 54, 288, 17);
   FChkStdCtrls.Caption:= 'Exclude standard VCL / FMX controls';
-  FChkStdCtrls.OnClick:= FilterChanged;
 
   LblFilter:= TLabel.Create(Self);
   LblFilter.Parent:= FormTypesPanel; LblFilter.SetBounds(6, 76, 288, 15);
-  LblFilter.Caption:= 'Exclude (one regex per line, any match):';
+  LblFilter.Caption:= 'Named filter -- mark every matching class as "do not convert":';
 
   FFilterMemo:= TMemo.Create(Self);
   FFilterMemo.Parent:= FormTypesPanel; FFilterMemo.SetBounds(6, 94, 288, 60);
   FFilterMemo.ScrollBars:= ssVertical;
-  FFilterMemo.OnChange  := FilterChanged;
+
+  { Named filter: a regex pattern set (FFilterMemo) plus a name (FFilterName) and
+    an Apply button. Task 9 -- see ApplyNamedFilterClick. Sits flush under the
+    memo, same idiom as the rest of this panel's stacked controls; every
+    control from FRulesFilter down is shifted +23px to make room. }
+  FFilterName:= TEdit.Create(Self);
+  FFilterName.Parent:= FormTypesPanel;
+  FFilterName.SetBounds(6, 154, 150, 21);  // dl:ok magic-literal@e347, large-magic-number@e347 -- Task 9; same unnamed SetBounds coordinate idiom used by every control in BuildUI
+  FFilterName.TextHint:= 'filter name, e.g. DevExpress';
+
+  FBtnApplyFilter:= TButton.Create(Self);
+  FBtnApplyFilter.Parent:= FormTypesPanel;
+  FBtnApplyFilter.SetBounds(162, 154, 132, 23);  // dl:ok magic-literal@85a0, large-magic-number@85a0 -- Task 9; same unnamed SetBounds coordinate idiom used by every control in BuildUI
+  FBtnApplyFilter.Caption:= 'Mark matching';
+  FBtnApplyFilter.OnClick:= ApplyNamedFilterClick;
 
   { Was the retired rules-library "filter by To type" box. It is now the class
     SEARCH: a partial, case-insensitive match that changes only which rows are
@@ -2496,21 +2537,20 @@ begin
     unmarked work would make the progress line a lie. }
   FRulesFilter:= TEdit.Create(Self);
   FRulesFilter.Parent:= FormTypesPanel;
-  FRulesFilter.SetBounds(6, 154, 288, 21);  // dl:ok magic-literal@19cc, large-magic-number@19cc -- Task 8; same unnamed SetBounds coordinate idiom used by every control in BuildUI
+  FRulesFilter.SetBounds(6, 177, 288, 21);  // dl:ok magic-literal@543c, large-magic-number@543c -- Task 8, shifted +23 by Task 9 for the named-filter row above; same unnamed SetBounds coordinate idiom used by every control in BuildUI
   FRulesFilter.TextHint:= 'find a class...';
   FRulesFilter.OnChange:= ClassSearchChange;
 
   FLblFormTypes:= TLabel.Create(Self);
-  FLblFormTypes.Parent:= FormTypesPanel; FLblFormTypes.SetBounds(6, 179, 288, 15);  // dl:ok multiple-statements-per-line@dda5, magic-literal@dda5, large-magic-number@dda5 -- Task 8; shifted down to sit under the new class-search box, same unnamed-coordinate idiom as its siblings
+  FLblFormTypes.Parent:= FormTypesPanel; FLblFormTypes.SetBounds(6, 202, 288, 15);  // dl:ok multiple-statements-per-line@7d33, magic-literal@7d33, large-magic-number@7d33 -- Task 8, shifted +23 by Task 9; same unnamed-coordinate idiom as its siblings
   FLblFormTypes.Caption:= '';
 
   { Form types list: reduced height to make room for the rules list below it.
-    A checklist, not a plain listbox -- the box IS the skip/re-enable control;
-    ToggleFormTypeSkip's button remains as the keyboard/no-mouse path to the
-    same decision. }
+    A checklist, not a plain listbox -- the box IS the skip control; ToggleFormTypeSkip's
+    button remains as the keyboard/no-mouse path to the same decision. }
   FFormTypeList:= TCheckListBox.Create(Self);
   FFormTypeList.Parent:= FormTypesPanel;
-  FFormTypeList.SetBounds(6, 197, 288, 170);  // dl:ok magic-literal@264f, large-magic-number@264f -- Task 8; shifted down to clear the class-search box + progress label, same unnamed-coordinate idiom as its siblings
+  FFormTypeList.SetBounds(6, 220, 288, 170);  // dl:ok magic-literal@bc0a, large-magic-number@bc0a -- Task 8, shifted +23 by Task 9; same unnamed-coordinate idiom as its siblings
   FFormTypeList.Anchors:= [akLeft, akTop, akRight];
   FFormTypeList.Style     := lbOwnerDrawFixed;
   FFormTypeList.ItemHeight:= 18;
@@ -2522,11 +2562,11 @@ begin
   { Rules list: relocated from TabRules into FormTypesPanel below the form types list.
     This consolidates the two redundant left lists into one form-types-driven view. }
   var LblRulesForType: TLabel:= TLabel.Create(Self);
-  LblRulesForType.Parent:= FormTypesPanel; LblRulesForType.SetBounds(6, 375, 288, 15);  // dl:ok multiple-statements-per-line@35e5, magic-literal@35e5, large-magic-number@35e5 -- Task 8; shifted down since the search box that used to sit here moved above the form-types list
+  LblRulesForType.Parent:= FormTypesPanel; LblRulesForType.SetBounds(6, 398, 288, 15);  // dl:ok multiple-statements-per-line@b0cd, magic-literal@b0cd, large-magic-number@b0cd -- Task 8, shifted +23 by Task 9; since the search box that used to sit here moved above the form-types list
   LblRulesForType.Caption:= 'Rules for selected type:';
 
   FRules:= TListView.Create(Self);
-  FRules.Parent   := FormTypesPanel; FRules.SetBounds(6, 398, 288, 244);
+  FRules.Parent   := FormTypesPanel; FRules.SetBounds(6, 421, 288, 221);  // dl:ok magic-literal@1a2d, large-magic-number@1a2d -- Task 9; top shifted +23, height reduced by the same 23 so the panel's bottom edge is unchanged
   FRules.Anchors  := [akLeft, akTop, akRight, akBottom];
   FRules.ViewStyle:= vsReport; FRules.ReadOnly     := True;
   FRules.RowSelect:= True    ; FRules.HideSelection:= False;
@@ -3014,24 +3054,85 @@ begin
   RefreshFormTypes;
 end; // function
 
-{ STUB for Task 9 (ConvRules.SkipList persistence): FSkipList does not exist
-  yet, so this has nothing to stamp and is an intentional no-op. Declared and
-  called live rather than commented out, per the 2026-09-20 controller ruling --
-  a commented-out call site would sit in the tree across Tasks 5-8 and trip
-  this repo's own commented-out-code lint rule. Task 9 replaces this body. }
-procedure TConvRulesForm.ApplySkipMarks;
+procedure TConvRulesForm.LoadSkipList;
+var
+  P: string;
 begin
-  // Intentionally empty until Task 9 wires FSkipList / IsSkipped in.
+  FSkipList:= Default(TSkipList);
+  P        := SkipFilePath(FRulesFolder);
+  if (P = '') or not TFile.Exists(P) then
+    Exit;
+  try
+    FSkipList:= ParseSkipList(TFile.ReadAllText(P));
+  except
+    on E: Exception do
+      SetError(Format('Could not read %s (%s) -- marks are not loaded this session.', [ExtractFileName(P), E.Message]));
+  end;
 end; // procedure
 
-{ STUB for Task 9 (ConvRules.SkipList persistence): there is nothing to persist
-  to yet, so this has nothing to write and is an intentional no-op. Declared and
-  called live rather than commented out, per the 2026-09-20 controller ruling --
-  a commented-out call site would sit in the tree across Tasks 6-8 and trip this
-  repo's own commented-out-code lint rule. Task 9 replaces this body. }
-procedure TConvRulesForm.SaveSkipList;
+procedure TConvRulesForm.ApplySkipMarks;
 begin
-  // Intentionally empty until Task 9 wires ConvRules.SkipList persistence in.
+  FFormTypeRows:= StampSkipMarks(FFormTypeRows, FSkipList);
+end; // procedure
+
+procedure TConvRulesForm.SaveSkipList;
+var
+  P: string;
+begin
+  FSkipList:= SkipListFromRows(FSkipList, FFormTypeRows);
+  P:= SkipFilePath(FRulesFolder);
+  if P = '' then
+    Exit;
+  try
+    TFile.WriteAllText(P, EmitSkipList(FSkipList), TEncoding.ASCII);
+  except
+    on E: Exception do
+      SetError(Format('Could not save %s (%s) -- your marks are only in this session.', [ExtractFileName(P), E.Message]));
+  end;
+end; // procedure
+
+procedure TConvRulesForm.ApplyNamedFilterClick(Sender: TObject);
+var
+  Pats  : TArray<string>;
+  DeclU : TArray<string>;
+  Hits  : Integer       ;
+  F     : TNamedFilter  ;
+  i     : Integer       ;
+  Guard : IInterface    ;  // dl:ok write-only-local@b3f5 -- Task 9; RAII cursor guard held for its Release side effect at scope exit (HourGlass), never read, same idiom as HarvestUnitClasses' own Guard local
+begin
+  Pats:= FFilterMemo.Lines.ToStringArray;
+  if (Length(Pats) = 0) and not FChkStdCtrls.Checked then
+  begin
+    SetStatus('Nothing to match: type a pattern, or tick the standard-controls box.');
+    Exit;
+  end;
+
+  Guard:= HourGlass;
+  SetLength(DeclU, Length(FFormTypeRows));
+  if FChkStdCtrls.Checked then
+  begin
+    SetStatus(Format('Resolving declaring units for %d type(s) (~%d s) ...', [Length(FFormTypeRows), Round(Length(FFormTypeRows) * DECLARING_UNIT_RESOLVE_SECS)]));
+    Application.ProcessMessages;
+    for i:= 0 to High(FFormTypeRows) do
+      DeclU[i]:= DeclaringUnitCached(FFormTypeRows[i].TypeName);
+  end;
+
+  FFormTypeRows:= ApplyNamedFilterToRows(FFormTypeRows, Pats, DeclU, FChkStdCtrls.Checked, Hits, FFilterError);
+
+  // Remember the filter by name so a future session could re-apply it.
+  F                := Default(TNamedFilter);
+  F.Name           := Trim(FFilterName.Text);
+  F.Patterns       := Pats;
+  F.IncludeStandard:= FChkStdCtrls.Checked;
+  if F.Name <> '' then
+    FSkipList.Filters:= FSkipList.Filters + [F];
+
+  SaveSkipList;
+  RefreshFormTypes;
+  if FFilterError <> '' then
+    SetError('Pattern error -- ' + FFilterError)
+  else
+    SetStatus(Format('Marked %d more class(es) as "do not convert".', [Hits]));
 end; // procedure
 
 { "Fill From-classes": read the chosen unit's .dfm components and add one FROM-ONLY
@@ -3257,7 +3358,13 @@ begin
   if (Length(FFormTypeRows) > 0) and (Length(FCatalog) = 0) then
   begin
     RescanRulesFolder(nil); // sets its own status; the catalog count is the useful
-    RefreshFormTypes; // message at this point, not the line/rule count above
+    // message at this point, not the line/rule count above. FRulesFolder has just
+    // become known, which is also the first moment LoadSkipList (called inside
+    // RescanRulesFolder) had anything to load -- the constructor's own harvest ran
+    // before that, so ApplySkipMarks there stamped against an empty FSkipList and
+    // left every mark un-applied. Re-stamp now that the file is loaded.
+    ApplySkipMarks;
+    RefreshFormTypes;
   end;
 end; // procedure
 
@@ -3832,11 +3939,6 @@ begin
       Result.Add(Trim(N));
 end; // function
 
-procedure TConvRulesForm.FilterChanged(Sender: TObject);
-begin
-  RefreshFormTypes;
-end;
-
 function TConvRulesForm.SelectedRowIndex: Integer;
 begin
   Result:= -1;
@@ -3854,12 +3956,8 @@ end;
 
 procedure TConvRulesForm.RefreshFormTypes;
 var
-  Pats  : TArray<string>   ;  // dl:ok write-only-local@266c -- Task 4 removed its only reader (the TypeIsExcluded call); Task 9 restores it on the Apply button
-  Err   : string           ;  // dl:ok unused-local@a11c -- same removal; Task 9 restores the filter-error propagation
-  DeclU : string           ;  // dl:ok write-only-local@ca0c -- same removal; still computed for the standard-controls check, consumed again once TypeIsExcluded is back
   Entry : TRuleCatalogEntry;
   i     : Integer          ;
-  Cold  : Integer          ;
   VisIdx: Integer          ; // for-in var over FVisibleRows -- kept distinct from i so nothing can read a for-in loop var's undefined post-loop value
   k     : Integer          ; // indexed (not for-in) restore loop below -- Checked[] needs the list SLOT, not just the row
   Cnt   : TRowCounts       ;
@@ -3867,36 +3965,19 @@ begin
   if (FFormTypeList = nil) or (FFilterMemo = nil) then
     Exit;
 
-  Pats:= FFilterMemo.Lines.ToStringArray;
-  FFilterError:= '';
-
-  // Resolving a declaring unit costs a process spawn against a multi-GB index
-  // (measured 1.7 s each), so it happens ONLY when the standard-controls box is
-  // ticked -- the one thing that needs it -- and the user is told what it costs
-  // rather than watching a frozen window.
-  if FChkStdCtrls.Checked then
-  begin
-    Cold:= 0;
-    for i:= 0 to High(FFormTypeRows) do
-      if (FDeclUnits = nil)
-         or (not FDeclUnits.ContainsKey(UpperCase(FFormTypeRows[i].TypeName))) then
-        Inc(Cold);
-    if Cold > 0 then
-    begin
-      SetStatus(Format('Resolving declaring units for %d type(s) (~%d s) ...', [Cold, Round(Cold * 1.7)]));
-      Application.ProcessMessages;
-    end;
-  end; // if
-
+  // FFilterError is NOT reset here: it is caller-owned state, set once per
+  // ApplyNamedFilterClick and left sticky until the next Apply, so this refresh
+  // (called from many places -- a rescan, a search-box keystroke, a skip toggle)
+  // must not silently erase a filter error the user has not yet acted on.
+  // Resolving declaring units (the standard-controls box) also does NOT happen
+  // here -- it costs ~1.7 s PER TYPE against a multi-GB index and must run only
+  // on demand, from ApplyNamedFilterClick, never as a side effect of a plain
+  // refresh. Before Task 9 restored TypeIsExcluded's caller, this refresh paid
+  // that cost on every call whenever the box was ticked and threw the result
+  // away -- a dead-weight resolve fixed by this removal, not by finding a new
+  // use for it.
   for i:= 0 to High(FFormTypeRows) do
   begin
-    // Only the standard-controls test needs the unit. Everything else works off
-    // the three cached descendant sets.
-    if FChkStdCtrls.Checked then
-      DeclU:= DeclaringUnitCached(FFormTypeRows[i].TypeName)
-    else
-      DeclU:= '';
-
     // '?' is NOT a synonym for non-visual. A type is only tvkNonVisual when the
     // index PLACES it (it descends from TComponent or TPersistent) and it is not a
     // TControl. TField and its kin come through TPersistent, not TComponent, which
@@ -3961,6 +4042,11 @@ begin
   FCatalog:= ScanRulesFolder(Folder, Errs);
   FCatalogDups:= FindDuplicates(FCatalog);
   FRulesFolder:= Folder;
+
+  // FRulesFolder just became known (or was re-confirmed) -- this is the one place
+  // that is true regardless of which caller got us here, so the skip file is
+  // (re)loaded HERE rather than at each of RescanRulesFolder's own callers.
+  LoadSkipList;
 
   // The index is a CACHE of what the folder says; failing to write it must not
   // invalidate the catalog we just built in memory.

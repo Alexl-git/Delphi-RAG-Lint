@@ -4523,6 +4523,62 @@ begin
   Check('formtypes.excl.good.no.error', not TypeIsExcluded('TPanel', 'Vcl.ExtCtrls', ['^TOvc'], False, Err) and (Err = ''));
 end; // procedure
 
+{ StampSkipMarks / SkipListFromRows / ApplyNamedFilterToRows: the pure decision
+  logic behind ApplySkipMarks, SaveSkipList and ApplyNamedFilterClick
+  (ConvRules.MainForm.pas, outside this test project's compile closure), per the
+  2026-09-20 controller ruling that logic left in MainForm is permanently
+  uncovered. }
+procedure TestApplySkipMarks;
+var
+  Rows  : TFormTypeRows;
+  Stamp : TFormTypeRows;
+  List  : TSkipList    ;
+  Hits  : Integer      ;
+  Err   : string       ;
+  Marked: TFormTypeRows;
+begin
+  SetLength(Rows, 3);
+  Rows[0]:= Default(TFormTypeRow); Rows[0].TypeName:= 'TLabel';
+  Rows[1]:= Default(TFormTypeRow); Rows[1].TypeName:= 'TPanel'; Rows[1].Skipped:= True;
+  Rows[2]:= Default(TFormTypeRow); Rows[2].TypeName:= 'TOvcTable';
+
+  // --- StampSkipMarks: file is truth, including UN-marking a row the caller
+  //     had previously marked.
+  List:= SetSkipped(Default(TSkipList), 'TLabel', True);
+  Stamp:= StampSkipMarks(Rows, List);
+  Check('stamp.marks.hit', Stamp[0].Skipped, 'TLabel is in the list');
+  Check('stamp.marks.unmarks', not Stamp[1].Skipped, 'TPanel is NOT in the list, so a prior Skipped=True must be cleared');
+  Check('stamp.marks.miss', not Stamp[2].Skipped);
+  Check('stamp.marks.source.untouched', Length(Rows) = 3, 'ARows is not mutated in place');
+
+  // --- SkipListFromRows: every row is written, marked AND unmarked; a class
+  //     absent from ARows is left untouched (not evicted).
+  List:= SetSkipped(Default(TSkipList), 'TStrayClass', True); // not in Rows at all
+  List:= SkipListFromRows(List, Stamp);
+  Check('skiplistfromrows.marked.kept', IsSkipped(List, 'TLabel'));
+  Check('skiplistfromrows.unmarked.written', not IsSkipped(List, 'TPanel'), 'un-marking must persist, not just skip the write');
+  Check('skiplistfromrows.absent.untouched', IsSkipped(List, 'TStrayClass'), 'a class not present in the current rows must not be evicted');
+
+  // --- ApplyNamedFilterToRows: bulk-marks by pattern/standard-unit, counts only
+  //     NEWLY marked rows, and surfaces the first bad pattern without stopping.
+  Marked:= ApplyNamedFilterToRows(Rows, ['^TOvc'], ['', '', 'ovcTable'], False, Hits, Err);
+  Check('namedfilter.marks.match', Marked[2].Skipped, 'TOvcTable matches ^TOvc');
+  Check('namedfilter.marks.leaves.others', not Marked[0].Skipped);
+  Check('namedfilter.hits.count', Hits = 1, Format('%d', [Hits]));
+  Check('namedfilter.error.clean', Err = '');
+
+  Marked:= ApplyNamedFilterToRows(Rows, [], ['', 'Vcl.ExtCtrls', ''], True, Hits, Err);
+  Check('namedfilter.std.match', Marked[1].Skipped, 'TPanel/Vcl.ExtCtrls matches the standard-controls flag');
+  Check('namedfilter.std.hits.already.marked', Hits = 0, 'TPanel was already Skipped=True in the fixture, so this is not a NEW hit');
+
+  Marked:= ApplyNamedFilterToRows(Rows, ['(unclosed'], ['', '', ''], False, Hits, Err);
+  Check('namedfilter.badpattern.reports', Err <> '', 'a malformed pattern must surface, not fail silently');
+  Check('namedfilter.badpattern.excludes.nothing', Hits = 0, 'a bad pattern must be fail-open, matching TypeIsExcluded');
+
+  Marked:= ApplyNamedFilterToRows(Rows, ['^TL'], nil, False, Hits, Err);
+  Check('namedfilter.declaringunits.short', Marked[0].Skipped, 'fewer declaring units than rows must not raise -- missing entries are treated as blank');
+end; // procedure
+
 procedure TestClassRowModel;
 var
   Dfm : TFormTypeRows;
@@ -5843,6 +5899,7 @@ begin
     TestFormTypesScan;
     TestSkipList;
     TestFormTypesFilter;
+    TestApplySkipMarks;
     TestClassRowModel;
     TestSelectedRowMapping;
     TestFormTypeRendering;

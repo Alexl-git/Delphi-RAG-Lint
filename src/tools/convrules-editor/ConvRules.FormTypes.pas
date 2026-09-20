@@ -25,6 +25,7 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   , System.RegularExpressions
+  , ConvRules.SkipList
   ;
 
 type
@@ -189,7 +190,7 @@ function IsStandardVclOrFmxUnit(const AUnitName: string): Boolean;
 /// <seealso cref="ConvRules.FormTypes.IsStandardVclOrFmxUnit"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function TypeIsExcluded(const ATypeName, ADeclaringUnit: string; const APatterns: TArray<string>; AExcludeStandard: Boolean; out AError: string): Boolean;  // dl:ok unused-public-symbol@6313 -- Task 4 removed its only caller (RefreshFormTypes); Task 9 re-wires it as the Apply-button named-filter matcher
+function TypeIsExcluded(const ATypeName, ADeclaringUnit: string; const APatterns: TArray<string>; AExcludeStandard: Boolean; out AError: string): Boolean;
 
 /// <summary>PURE: union of a form's .dfm instance rows and a unit's declared
 /// class names into one class-row set, origin-marked.</summary>
@@ -379,6 +380,56 @@ function DescribeFormTypeRow(const ARow: TFormTypeRow): string;
 /// </remarks>
 function FormTypesProgressCaption(const ACnt: TRowCounts; AVisibleCount: Integer; const AFilterError: string): string;
 
+/// <summary>PURE: stamps a parsed skip list's marks onto a row set.</summary>
+/// <param name="ARows">The rows to stamp; not mutated in place.</param>
+/// <param name="AList">The parsed skip list -- IsSkipped is the source of truth.</param>
+/// <returns>A copy of ARows with every row's Skipped set from
+/// ConvRules.SkipList.IsSkipped(AList, TypeName).</returns>
+/// <remarks>
+/// A row not present in AList.Classes comes back UNMARKED, even if it was marked
+/// before this call -- a hand edit that removes a "skip" line from the file must
+/// win the moment the file is next loaded, the same "file is truth" rule
+/// ApplySkipMarks (ConvRules.MainForm.pas) exists to apply on every harvest.
+/// </remarks>
+function StampSkipMarks(const ARows: TFormTypeRows; const AList: TSkipList): TFormTypeRows;
+
+/// <summary>PURE: folds a row set's current Skipped flags into a skip list.</summary>
+/// <param name="AList">The skip list to fold into; its Filters and Foreign lines
+/// pass through unchanged.</param>
+/// <param name="ARows">The current rows.</param>
+/// <returns>The updated skip list, ready for ConvRules.SkipList.EmitSkipList.
+/// </returns>
+/// <remarks>
+/// Writes EVERY row -- marked AND unmarked -- via
+/// ConvRules.SkipList.SetSkipped, which is what makes UN-marking a class
+/// persist to the file rather than simply omitting a "skip" line that was
+/// never there to begin with. A class absent from ARows (not on the current
+/// unit/form) is left UNTOUCHED in AList -- this function never evicts a mark
+/// for a class it was not told about.
+/// </remarks>
+function SkipListFromRows(const AList: TSkipList; const ARows: TFormTypeRows): TSkipList;
+
+/// <summary>PURE: marks every row TypeIsExcluded accepts as "do not convert".</summary>
+/// <param name="ARows">The rows to test; not mutated in place.</param>
+/// <param name="APatterns">Regex patterns, OR'd -- see TypeIsExcluded.</param>
+/// <param name="ADeclaringUnits">Per-row declaring unit, PARALLEL to ARows (index i
+/// answers for ARows[i]). The caller resolves these, because it costs an index
+/// lookup per type (~1.7 s each) and must run only on demand, never as a side
+/// effect of this pure function.</param>
+/// <param name="AExcludeStandard">Also match rows whose declaring unit is
+/// Vcl.*/FMX.* -- see IsStandardVclOrFmxUnit.</param>
+/// <param name="AHits">Out: how many PREVIOUSLY-unmarked rows this call marked.
+/// A row already marked stays marked and is not counted again.</param>
+/// <param name="AError">Out: the first malformed pattern's message, or ''.</param>
+/// <returns>A copy of ARows with every matching row's Skipped set True.</returns>
+/// <remarks>
+/// PURE and side-effect-free: it does not touch a skip list, only the rows --
+/// the caller (ApplyNamedFilterClick, ConvRules.MainForm.pas) folds the result
+/// into FSkipList and saves it, and records the filter itself by name for the
+/// next session.
+/// </remarks>
+function ApplyNamedFilterToRows(const ARows: TFormTypeRows; const APatterns: TArray<string>; const ADeclaringUnits: TArray<string>; AExcludeStandard: Boolean; out AHits: Integer; out AError: string): TFormTypeRows;
+
 implementation
 
 uses
@@ -524,6 +575,50 @@ begin
   end; // for
 
   Result:= StdHit or PatHit;
+end; // function
+
+function StampSkipMarks(const ARows: TFormTypeRows; const AList: TSkipList): TFormTypeRows;
+var
+  i: Integer;
+begin
+  Result:= Copy(ARows, 0, Length(ARows));
+  for i:= 0 to High(Result) do
+    Result[i].Skipped:= IsSkipped(AList, Result[i].TypeName);
+end; // function
+
+function SkipListFromRows(const AList: TSkipList; const ARows: TFormTypeRows): TSkipList;
+var
+  i: Integer;
+begin
+  Result:= AList;
+  for i:= 0 to High(ARows) do
+    Result:= SetSkipped(Result, ARows[i].TypeName, ARows[i].Skipped);
+end; // function
+
+function ApplyNamedFilterToRows(const ARows: TFormTypeRows; const APatterns: TArray<string>; const ADeclaringUnits: TArray<string>; AExcludeStandard: Boolean; out AHits: Integer; out AError: string): TFormTypeRows;
+var
+  i     : Integer;
+  DeclU : string ;
+  Err   : string ;
+begin
+  Result:= Copy(ARows, 0, Length(ARows));
+  AHits := 0;
+  AError:= '';
+  for i:= 0 to High(Result) do
+  begin
+    if i <= High(ADeclaringUnits) then
+      DeclU:= ADeclaringUnits[i]
+    else
+      DeclU:= '';
+    if TypeIsExcluded(Result[i].TypeName, DeclU, APatterns, AExcludeStandard, Err) then
+    begin
+      if not Result[i].Skipped then
+        Inc(AHits);
+      Result[i].Skipped:= True;
+    end;
+    if (Err <> '') and (AError = '') then
+      AError:= Err;
+  end; // for
 end; // function
 
 function MergeClassRows(const ADfmRows: TFormTypeRows; const APasClasses: TArray<string>): TFormTypeRows;
