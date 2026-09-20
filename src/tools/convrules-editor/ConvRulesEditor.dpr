@@ -31,6 +31,7 @@ uses
   , ConvRules.OpenSourceClient in 'ConvRules.OpenSourceClient.pas'
   , ConvRules.FormTypes in 'ConvRules.FormTypes.pas'
   , ConvRules.RuleCatalog in 'ConvRules.RuleCatalog.pas'
+  , ConvRules.SkipList in 'ConvRules.SkipList.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

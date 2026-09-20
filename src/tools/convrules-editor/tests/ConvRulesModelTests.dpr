@@ -27,6 +27,7 @@ uses
   , ConvRules.Usage in '..\ConvRules.Usage.pas'
   , ConvRules.FormTypes in '..\ConvRules.FormTypes.pas'
   , ConvRules.RuleCatalog in '..\ConvRules.RuleCatalog.pas'
+  , ConvRules.SkipList in '..\ConvRules.SkipList.pas'
   ;
 
 var
@@ -4401,6 +4402,65 @@ begin
   Check('formtypes.merge.empty', Length(MergeFormTypes([])) = 0);
 end; // procedure
 
+procedure TestSkipList;
+const
+  SRC =
+    '# ConvRulesEditor -- classes marked "do not convert".'#13#10 +
+    '# Written by the editor; safe to hand-edit or diff.'#13#10 +
+    'skip TLabel'#13#10 +
+    'skip TPanel'#13#10 +
+    'filter DevExpress = ^Tdx'#13#10 +
+    'filter DevExpress = ^Tcx'#13#10 +
+    'filter Standard = +std'#13#10 +
+    '# a hand-written note'#13#10 +
+    'somethingelse entirely'#13#10;
+var
+  L  : TSkipList;
+  L2 : TSkipList;
+  Txt: string   ;
+begin
+  L:= ParseSkipList(SRC);
+
+  Check('skiplist.parse.classes', Length(L.Classes) = 2, Format('%d', [Length(L.Classes)]));
+  Check('skiplist.parse.class.first', SameText(L.Classes[0], 'TLabel'), L.Classes[0]);
+  Check('skiplist.parse.filters', Length(L.Filters) = 2, Format('%d', [Length(L.Filters)]));
+  Check('skiplist.parse.filter.accumulates', (Length(L.Filters[0].Patterns) = 2) and (L.Filters[0].Patterns[1] = '^Tcx'), 'two lines with one name make one filter');
+  Check('skiplist.parse.filter.std', L.Filters[1].IncludeStandard and (Length(L.Filters[1].Patterns) = 0), '+std is a flag, not a regex');
+
+  // A hand edit must survive a rewrite. The generated header must NOT come back
+  // as foreign, or it would double on every save.
+  Check('skiplist.parse.foreign.kept', Length(L.Foreign) = 2, Format('%d', [Length(L.Foreign)]));
+  Check('skiplist.parse.header.not.foreign', not ContainsText(string.Join('|', L.Foreign), 'ConvRulesEditor --'), 'the generated header is not user content');
+
+  Txt:= EmitSkipList(L);
+  Check('skiplist.emit.crlf', ContainsText(Txt, #13#10) and not ContainsText(Txt.Replace(#13#10, ''), #10), 'CRLF only');
+  Check('skiplist.emit.header', StartsText('# ConvRulesEditor --', Txt));
+  Check('skiplist.emit.keeps.foreign', ContainsText(Txt, 'somethingelse entirely'));
+
+  L2:= ParseSkipList(Txt);
+  Check('skiplist.roundtrip.classes', Length(L2.Classes) = Length(L.Classes));
+  Check('skiplist.roundtrip.filters', Length(L2.Filters) = Length(L.Filters));
+  Check('skiplist.roundtrip.foreign', Length(L2.Foreign) = Length(L.Foreign));
+  Check('skiplist.roundtrip.stable', EmitSkipList(L2) = Txt, 'a second emit must be byte-identical');
+
+  Check('skiplist.isskipped.hit', IsSkipped(L, 'TLabel'));
+  Check('skiplist.isskipped.ci', IsSkipped(L, 'tlabel'), 'class names are case-insensitive');
+  Check('skiplist.isskipped.miss', not IsSkipped(L, 'TOvcTable'), 'positive control for the two above');
+
+  L2:= SetSkipped(L, 'TOvcTable', True);
+  Check('skiplist.set.on', IsSkipped(L2, 'TOvcTable'));
+  Check('skiplist.set.on.nodup', Length(SetSkipped(L2, 'TOvcTable', True).Classes) = Length(L2.Classes), 'marking twice adds one row');
+  L2:= SetSkipped(L2, 'TLabel', False);
+  Check('skiplist.set.off', not IsSkipped(L2, 'TLabel'));
+  Check('skiplist.set.off.spares.others', IsSkipped(L2, 'TPanel'), 'unmarking one must not clear the rest');
+
+  Check('skiplist.path', SameText(ExtractFileName(SkipFilePath('C:\rules')), SKIP_FILE_NAME));
+  Check('skiplist.path.empty', SkipFilePath('') = '', 'no folder yet -> no path, never a file at the CWD');
+
+  Check('skiplist.parse.empty', Length(ParseSkipList('').Classes) = 0);
+  Check('skiplist.emit.empty.header.only', StartsText('# ConvRulesEditor --', EmitSkipList(Default(TSkipList))));
+end; // procedure
+
 procedure TestFormTypesFilter;
 var
   Err: string      ;
@@ -5478,6 +5538,7 @@ begin
     TestMappingDivergentWhenFrom;
     TestMappingGridHooks;
     TestFormTypesScan;
+    TestSkipList;
     TestFormTypesFilter;
     TestRuleCatalogParse;
     TestRuleCatalogIndex;
