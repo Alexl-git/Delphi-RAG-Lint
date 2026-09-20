@@ -420,8 +420,7 @@ type
       /// currently loaded here. Curation moves VERBATIM block text and deliberately does
       /// NOT go through this form's canonical re-emitter, so a block that was merely
       /// moved stays byte-identical. It works on the file ON DISK, so unsaved edits here
-      /// are invisible to it: Yes = save first, No = curate the on-disk version anyway,
-      /// Cancel = out.</summary>
+      /// are invisible to it: Yes = save first,</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -467,10 +466,10 @@ type
       /// created and no file is written -- the unchanged save path does that.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.RuleCatalog.FindRuleForType, ConvRules.RuleCatalog.RuleFileNameFor (+6 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.RuleCatalog.FindRuleForType, ConvRules.RuleCatalog.RuleFileNameFor (+7 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 18 (cyclomatic, outer body), 96 lines (full implementation)</para>
-      /// <para>Reads: FCatalog, FCbFrom, FRulesFolder, FFilePath, FBook, FLblFile   Writes: FFilePath, FActiveHdr</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 118 lines (full implementation)</para>
+      /// <para>Reads: FCatalog, FFilePath, FCbFrom, FRulesFolder, FBook, FLblFile   Writes: FFilePath, FActiveHdr</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRule"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
@@ -481,13 +480,12 @@ type
       function ChooseTargetForNewRule(const AFrom, ATo: string; ACompletingStub: Boolean): Boolean;
       /// <summary><!-- drag-lint:auto sum -->Auto-Match: for every UNassigned From leaf,
       /// if exactly ONE unassigned To leaf matches by leaf-name (case-insensitive) AND is
-      /// castable, create the #link. Skips ambiguous names (more than one candidate) so
-      /// the user resolves those by hand.</summary>
+      /// castable, create the #link. Skips</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.DoAutoMatch.LeafName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.Mappings.ConditionalCasesOf (+6 more)</para>
+      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.DoAutoMatch.LeafName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.Mappings.ConditionalCasesOf (+7 more)</para>
       /// <para>Complexity: 19 (cyclomatic, outer body), 128 lines (full implementation)</para>
       /// <para>Reads: FActiveHdr, FToTree, FFromTree</para>
       /// <para>Pure</para>
@@ -523,17 +521,34 @@ type
       /// <param name="Selected"><!-- drag-lint:auto type -->Boolean</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, Integer</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetStatus, ExtractFileName, Format, Integer</para>
       /// <para>Reads: FRulesEntries</para>
       /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadGridForBlock"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+      /// <summary>Opens the cross-book prompt for the selected FRules row, via
+      /// OpenOwningRuleEntry -- the ONE place that prompt can fire from FRules.
+      /// A same-book row needs no action: RulesSelectItem already loaded it.</summary>
+      /// <param name="Sender">Unused; matches TNotifyEvent.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, Integer</para>
+      /// <para>Reads: FRules, FRulesEntries</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure RulesDblClick(Sender: TObject);
       /// <param name="AHdrIdx"><!-- drag-lint:auto type -->Integer</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -638,7 +653,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFormFiles (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.FormTypes.MergeFormTypes, ConvRules.FormTypes.ScanDfmTypes, ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadDescendantSet, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, SameText</para>
-      /// <para>Reads: FFormTypeRows, FVisualSet, FCatalog   Writes: FFormTypeRows, FVisualSet, FComponentSet, FPersistentSet</para>
+      /// <para>Reads: FFormTypeRows, FVisualSet, FCatalog   Writes: FFormTypeRows, FHarvestedUnitPath, FVisualSet, FComponentSet, FPersistentSet</para>
       /// <seealso cref="ConvRules.FormTypes.MergeFormTypes"/>
       /// <seealso cref="ConvRules.FormTypes.ScanDfmTypes"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
@@ -713,15 +728,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadSkipList, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.CatalogToIndexText, ConvRules.RuleCatalog.FindDuplicates, ConvRules.RuleCatalog.SameBookDups, ConvRules.RuleCatalog.ScanRulesFolder, ExtractFileName, ExtractFilePath, Format, Trim</para>
-      /// <para>Reads: FRulesFolder, FFilePath, FCatalog, FCatalogDups   Writes: FCatalog, FCatalogDups, FRulesFolder</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadSkipList, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.CatalogToIndexText, ConvRules.RuleCatalog.FindDuplicates, ConvRules.RuleCatalog.SameBookDups, ConvRules.RuleCatalog.ScanRulesFolder, ExtractFileName, ExtractFilePath, Format, Trim</para>
+      /// <para>Reads: FRulesFolder, FFilePath, FSkipList, FCatalog, FCatalogDups   Writes: FCatalog, FCatalogDups, FRulesFolder</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadSkipList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveSkipList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.RuleCatalog.CatalogToIndexText"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RescanRulesFolder(Sender: TObject);
@@ -814,10 +829,10 @@ type
       /// BareTypeName(AEntry.FromType) rather than a caller-supplied string, since
       /// the caller may only have the entry.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesSelectItem (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesDblClick (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, MessageDlg, SameText</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 69 lines (full implementation)</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 73 lines (full implementation)</para>
       /// <para>Reads: FFilePath, FBook, FRules</para>
       /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
@@ -1326,8 +1341,7 @@ type
       procedure PoolFilter(Sender: TObject);
       /// <summary><!-- drag-lint:auto sum -->Align the highlighted To leaf to the From
       /// side: select the From-grid row whose property has the SAME last-segment name
-      /// (case-insensitive), so the two sides can be assigned by name. Reports when no
-      /// From property carries that name.</summary>
+      /// (case-insensitive), so the two sides can</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1344,8 +1358,7 @@ type
       procedure DoFindInFrom(Sender: TObject);
       /// <summary><!-- drag-lint:auto sum -->Toggle a pool type-narrowing: first press
       /// restricts the pool to leaves whose TYPE matches the highlighted leaf (e.g. only
-      /// Boolean targets); a second press clears it. Cleared automatically when a
-      /// different rule is loaded.</summary>
+      /// Boolean targets); a second press</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1496,15 +1509,16 @@ type
       /// would otherwise have zero coverage.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestUnitFile (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.OutlineClasses, ConvRules.FormTypes.DescribeOutlineOutcome, ConvRules.FormTypes.MergeClassRows, ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Usage.ScanClassesDeclared, ExtractFileName, Format</para>
-      /// <para>Returns: ''; DescribeOutlineOutcome(OutlineOK, Indexed, ExtractFileName(APasPath), Err)</para>
-      /// <para>Reads: FEngine, FFormTypeRows   Writes: FFormTypeRows</para>
+      /// <para>Calls: ChangeFileExt, ConvRules.Engine.TEngineAdapter.OutlineClasses, ConvRules.FormTypes.DescribeOutlineOutcome, ConvRules.FormTypes.MergeClassRows, ConvRules.FormTypes.ScanDfmTypes, ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Usage.ScanClassesDeclared, ExtractFileName, Format, SameText</para>
+      /// <para>Reads: FHarvestedUnitPath, FEngine, FFormTypeRows   Writes: FFormTypeRows, FHarvestedUnitPath</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>UI thread only -- touches Application</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.OutlineClasses"/>
       /// <seealso cref="ConvRules.FormTypes.DescribeOutlineOutcome"/>
       /// <seealso cref="ConvRules.FormTypes.MergeClassRows"/>
+      /// <seealso cref="ConvRules.FormTypes.ScanDfmTypes"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HarvestUnitClasses(const AUnitText, APasPath: string): string;
@@ -1517,15 +1531,15 @@ type
       /// missing file, rather than leaving a half-read value in place.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.SkipList.ParseSkipList, ConvRules.SkipList.SkipFilePath, Default, ExtractFileName, Format</para>
-      /// <para>Reads: FRulesFolder   Writes: FSkipList</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.SkipList.MergePendingMarks, ConvRules.SkipList.ParseSkipList, ConvRules.SkipList.SkipFilePath, Default, ExtractFileName, Format</para>
+      /// <para>Reads: FSkipList, FRulesFolder   Writes: FSkipList</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
+      /// <seealso cref="ConvRules.SkipList.MergePendingMarks"/>
       /// <seealso cref="ConvRules.SkipList.ParseSkipList"/>
       /// <seealso cref="ConvRules.SkipList.SkipFilePath"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LoadSkipList;
@@ -1537,7 +1551,7 @@ type
       /// takes effect on the next harvest. See
       /// ConvRules.FormTypes.StampSkipMarks for the pure stamping logic.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.FormTypes.StampSkipMarks</para>
       /// <para>Reads: FFormTypeRows, FSkipList   Writes: FFormTypeRows</para>
       /// <seealso cref="ConvRules.FormTypes.StampSkipMarks"/>
@@ -1560,8 +1574,8 @@ type
       /// LoadSkipList/RescanRulesFolder have made FRulesFolder known -- the same
       /// timing trap the --form startup comment on LoadFile documents.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeCheckClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ToggleFormTypeSkip (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.FormTypes.SkipListFromRows, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.SkipList.EmitSkipList, ConvRules.SkipList.SkipFilePath, ExtractFileName, Format</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeCheckClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ToggleFormTypeSkip (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.FormTypes.SkipListFromRows, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.SkipList.EmitSkipList, ConvRules.SkipList.SkipFilePath, ExtractFileName, Format, MoveFileEx, PChar</para>
       /// <para>Reads: FSkipList, FFormTypeRows, FRulesFolder   Writes: FSkipList</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
@@ -1588,8 +1602,9 @@ type
       /// re-apply it (re-application itself is not wired to anything yet --
       /// only the record is kept).
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.FormTypes.ApplyNamedFilterToRows, ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, Default, Format, Trim</para>
-      /// <para>Reads: FFilterMemo, FChkStdCtrls, FFormTypeRows, FFilterError, FFilterName, FSkipList   Writes: FFormTypeRows</para>
+      /// <para>Calls: ConvRules.FormTypes.ApplyNamedFilterToRows, ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.SkipList.SetNamedFilter, Default, Format, Trim, UpperCase</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 54 lines (full implementation)</para>
+      /// <para>Reads: FFilterMemo, FChkStdCtrls, FFormTypeRows, FDeclUnits, FFilterError, FFilterName, FSkipList   Writes: FFormTypeRows, FSkipList</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.FormTypes.ApplyNamedFilterToRows"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached"/>
@@ -1769,7 +1784,7 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbUnitSelected (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas) (+34 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbUnitSelected (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas) (+35 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
@@ -1894,8 +1909,7 @@ type
       /// </remarks>
       procedure PlatformChanged(Sender: TObject);
       /// <summary><!-- drag-lint:auto sum -->Target surface changed (DFM published
-      /// &lt;-&gt; PAS public+fields): remember the new --min-visibility and re-fetch the
-      /// active rule's From/To trees at that surface.</summary>
+      /// &lt;-&gt; PAS public+fields): remember the new</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1944,6 +1958,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure CbLoadUnits(Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->"Fill From-classes": read the chosen unit's
+      /// .dfm components and add one FROM-ONLY conversion row per distinct component
+      /// CLASS to the rules library (To unassigned). These are CLASSES, not properties,
+      /// so they go in the rules list -- NOT the grid's property column. Selecting a
+      /// From-only row shows that class's flattened property list; assigning a To class
+      /// then auto-matches. A row with no To (and no links) is scratch: SaveComplete
+      /// drops it, so nothing is written until the user picks a To. Existing From classes
+      /// are skipped (no duplicates). Best-effort: a non-form unit (no .dfm) adds
+      /// nothing. (A11, 2026-09-20 whole-branch review: moved here from above
+      /// HarvestUnitFile, the routine it actually described -- this is DoLoadUnit's own
+      /// behaviour.)</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1963,8 +1988,7 @@ type
       /// <summary><!-- drag-lint:auto sum -->Create or update the #link mapping ToPath
       /// &lt;- FromPath in the active block, choosing a default cast from the leaf types
       /// (identity when same type). Shared by the manual Assign and the Auto-Match pass.
-      /// Does NOT touch the grid/UI -- callers refresh. Assumes CanCast(AFromType,
-      /// AToType) was already checked.</summary>
+      /// Does NOT touch the grid/UI -- callers</summary>
       /// <param name="AFromPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AToPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFromType"><!-- drag-lint:auto type -->const string</param>
@@ -1972,7 +1996,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Casts.CastFnName, ConvRules.Casts.SameFamily, ConvRules.Casts.ValidCasts, ConvRules.MainForm.TConvRulesForm.ClassCastName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, SameText</para>
+      /// <para>Calls: CanCast, ConvRules.Casts.CastFnName, ConvRules.Casts.SameFamily, ConvRules.Casts.ValidCasts, ConvRules.MainForm.TConvRulesForm.ClassCastName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, SameText</para>
       /// <para>Reads: FActiveHdr, FBook</para>
       /// <para>Pure</para>
       /// <seealso cref="ConvRules.Casts.CastFnName"/>
@@ -1983,22 +2007,6 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AssignLink(const AFromPath, AToPath, AFromType, AToType: string);
-      /// <param name="AHdrIdx"><!-- drag-lint:auto type -->Integer</param>
-      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 100; 0; Round(done * 100 /
-      /// total).</returns>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Model.TRuleBook.BlockMapsSomething, ConvRules.Model.TRuleBook.NodesInBlock</para>
-      /// <para>Reads: FBook</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.NodesInBlock"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
-      function BlockPercent(AHdrIdx: Integer): Integer;
       /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleNode&gt; -- Observed: nil;
       /// FBook.LinksForBlock(FActiveHdr).</returns>
       /// <remarks>
@@ -2151,7 +2159,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoCurate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoad (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), declaration (ConvRulesEditor.dpr) ?</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.Model.TRuleBook.ConvertHeaders, ConvRules.Model.TRuleBook.LoadFromString, Format</para>
-      /// <para>Reads: FBook, FLblFile, FGrid, FPool, FRules, FFormTypeRows, FCatalog   Writes: FFilePath, FSelectedFormType, FActiveHdr</para>
+      /// <para>Reads: FBook, FLblFile, FGrid, FPool, FRules, FFormTypeRows, FCatalog   Writes: FFilePath, FActiveHdr</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
@@ -2897,6 +2905,7 @@ begin
   FRules.Columns.Add.Caption:= 'File';
   FRules.Columns[1].Width  := RulesFileColWidth;
   FRules.OnSelectItem:= RulesSelectItem;
+  FRules.OnDblClick  := RulesDblClick;
 
   TabRaw:= TTabSheet.Create(FTabs); TabRaw.PageControl:= FTabs;
   TabRaw.Caption:= 'Raw DSL (all directives)';
@@ -3427,14 +3436,24 @@ end; // procedure
 
 procedure TConvRulesForm.SaveSkipList;
 var
-  P: string;
+  P  : string;
+  Tmp: string;
 begin
   FSkipList:= SkipListFromRows(FSkipList, FFormTypeRows);
   P:= SkipFilePath(FRulesFolder);
   if P = '' then
     Exit;
+  // Write-then-replace (A6, 2026-09-20 whole-branch review, Minor 15): a plain
+  // WriteAllText truncates P immediately, so a crash mid-write left a corrupt or
+  // empty skip file with no way back -- rule books get a .bak, this file got
+  // nothing. Tmp is written whole and MoveFileEx only then swaps it in with one
+  // atomic rename; P is never observed half-written. Encoding (ASCII, CRLF via
+  // EmitSkipList) is unchanged.
+  Tmp:= P + '.tmp';
   try
-    TFile.WriteAllText(P, EmitSkipList(FSkipList), TEncoding.ASCII);
+    TFile.WriteAllText(Tmp, EmitSkipList(FSkipList), TEncoding.ASCII);
+    if not MoveFileEx(PChar(Tmp), PChar(P), MOVEFILE_REPLACE_EXISTING) then
+      RaiseLastOSError;
   except
     on E: Exception do
       SetError(Format('Could not save %s (%s) -- your marks are only in this session.', [ExtractFileName(P), E.Message]));
@@ -3448,6 +3467,7 @@ var
   Hits  : Integer       ;
   F     : TNamedFilter  ;
   i     : Integer       ;
+  Misses: Integer       ;
   Guard : IInterface    ;  // dl:ok write-only-local@b3f5 -- Task 9; RAII cursor guard held for its Release side effect at scope exit (HourGlass), never read, same idiom as HarvestUnitClasses' own Guard local
 begin
   Pats:= FFilterMemo.Lines.ToStringArray;
@@ -3461,7 +3481,15 @@ begin
   SetLength(DeclU, Length(FFormTypeRows));
   if FChkStdCtrls.Checked then
   begin
-    SetStatus(Format('Resolving declaring units for %d type(s) (~%d s) ...', [Length(FFormTypeRows), Round(Length(FFormTypeRows) * DECLARING_UNIT_RESOLVE_SECS)]));
+    // The estimate is against the COLD-CACHE count, not every row (A11,
+    // 2026-09-20 whole-branch review): a row DeclaringUnitCached already
+    // resolved this session costs nothing on a repeat Apply, so quoting the
+    // total row count over-estimates every time but the first.
+    Misses:= 0;
+    for i:= 0 to High(FFormTypeRows) do
+      if (FDeclUnits = nil) or not FDeclUnits.ContainsKey(UpperCase(FFormTypeRows[i].TypeName)) then
+        Inc(Misses);
+    SetStatus(Format('Resolving declaring units for %d type(s) (~%d s) ...', [Misses, Round(Misses * DECLARING_UNIT_RESOLVE_SECS)]));
     Application.ProcessMessages;
     for i:= 0 to High(FFormTypeRows) do
       DeclU[i]:= DeclaringUnitCached(FFormTypeRows[i].TypeName);
@@ -3470,12 +3498,15 @@ begin
   FFormTypeRows:= ApplyNamedFilterToRows(FFormTypeRows, Pats, DeclU, FChkStdCtrls.Checked, Hits, FFilterError);
 
   // Remember the filter by name so a future session could re-apply it.
+  // SetNamedFilter REPLACES an existing filter of the same name (Apply pressed
+  // twice on one name leaves one record, not two) and drops blank memo lines
+  // from Patterns (A3, 2026-09-20 whole-branch review, Minor 10).
   F                := Default(TNamedFilter);
   F.Name           := Trim(FFilterName.Text);
   F.Patterns       := Pats;
   F.IncludeStandard:= FChkStdCtrls.Checked;
   if F.Name <> '' then
-    FSkipList.Filters:= FSkipList.Filters + [F];
+    FSkipList:= SetNamedFilter(FSkipList, F);
 
   SaveSkipList;
   RefreshFormTypes;
@@ -3485,14 +3516,6 @@ begin
     SetStatus(Format('Marked %d more class(es) as "do not convert".', [Hits]));
 end; // procedure
 
-{ "Fill From-classes": read the chosen unit's .dfm components and add one FROM-ONLY
-  conversion row per distinct component CLASS to the rules library (To unassigned).
-  These are CLASSES, not properties, so they go in the rules list -- NOT the grid's
-  property column. Selecting a From-only row shows that class's flattened property
-  list; assigning a To class then auto-matches. A row with no To (and no links) is
-  scratch: SaveComplete drops it, so nothing is written until the user picks a To.
-  Existing From classes are skipped (no duplicates). Best-effort: a non-form unit
-  (no .dfm) adds nothing. }
 { Read from the FILE, never from the index. A browsed unit is in no index by
   definition, and so is any form its .dproj does not list -- which on this corpus
   includes VARINSP, the form this work targets. The engine's `uses-report` answers
@@ -3543,6 +3566,16 @@ begin
     [ExtractFileName(UnitName), Length(FUnitCandidates), UsesNote]));
 end; // procedure
 
+{ "Fill From-classes": read the chosen unit's .dfm components and add one FROM-ONLY
+  conversion row per distinct component CLASS to the rules library (To unassigned).
+  These are CLASSES, not properties, so they go in the rules list -- NOT the grid's
+  property column. Selecting a From-only row shows that class's flattened property
+  list; assigning a To class then auto-matches. A row with no To (and no links) is
+  scratch: SaveComplete drops it, so nothing is written until the user picks a To.
+  Existing From classes are skipped (no duplicates). Best-effort: a non-form unit
+  (no .dfm) adds nothing.
+  (A11, 2026-09-20 whole-branch review: moved here from above HarvestUnitFile,
+  the routine it actually described -- this is DoLoadUnit's own behaviour.) }
 procedure TConvRulesForm.DoLoadUnit(Sender: TObject);
 var
   UnitName: string        ;
@@ -3662,7 +3695,14 @@ begin
     Exit;
   end;
   FFilePath:= APath;
-  FSelectedFormType:= ''; // clear the type filter when loading a new file
+  // FSelectedFormType is deliberately NOT cleared here (A4, 2026-09-20
+  // whole-branch review, finding 13). OpenOwningRuleEntry calls LoadFile to
+  // switch books when the class's rule lives in a DIFFERENT book than the one
+  // open; clearing this blanked "Rules for selected class" the moment the new
+  // book loaded, even though the class stayed highlighted in the checklist.
+  // RefreshRulesList below recomputes against the NEW book's catalog regardless,
+  // so a plain manual Load of an unrelated book just shows whatever (if
+  // anything) that class name has there -- never stale data from the old book.
   FBook.LoadFromString(TFile.ReadAllText(APath));
   FLblFile.Caption:= APath;
   RefreshRulesList;
@@ -3752,44 +3792,6 @@ begin
   end; // try
 end; // procedure
 
-function TConvRulesForm.BlockPercent(AHdrIdx: Integer): Integer;
-var
-  Nodes: TArray<TRuleNode>;
-  N    : TRuleNode        ;
-  total: Integer          ;
-  done : Integer          ;
-begin
-  // % = (links with a real From + ignores) / (links + ignores + unfilled ???)
-  // A pragmatic proxy for "F leaves addressed": every #link and #ignore in the
-  // block is one addressed F property; a #link still on '???' is not done.
-  Nodes:= FBook.NodesInBlock(AHdrIdx);
-  total:= 0; done:= 0;
-  for N in Nodes do
-  begin
-    if N.Kind = rnkLink then
-    begin
-      Inc(total);
-      if (N.LinkFrom <> '') and (N.LinkFrom <> '???') then
-        Inc(done);
-    end
-    else if N.Kind = rnkIgnore then
-    begin
-      Inc(total); Inc(done);
-    end;
-  end; // for
-  if total = 0 then
-  begin
-    // Nothing countable. That is 0 % only if the block genuinely maps nothing --
-    // an #apply-only block has no countable ROWS but is a finished rule, and
-    // showing it as 0 % contradicted the save path, which keeps it. Both sides now
-    // ask TRuleBook.BlockMapsSomething, so the list and the file cannot disagree.
-    if TRuleBook.BlockMapsSomething(Nodes) then
-      Exit(100);
-    Exit  (0  );
-  end;
-  Result:= Round(done * 100 / total);
-end; // function
-
 procedure TConvRulesForm.RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
 var
   Hdr: Integer;
@@ -3803,14 +3805,42 @@ begin
   begin
     { HeaderIndexFor returned -1 when this row was built: the rule lives in a
       book that is not the one currently open (a cross-book entry -- several
-      rules per class are legal across books, Task 11's SameBookDups). There is
-      no header in FBook to hand LoadGridForBlock, so route through the one
-      shared cross-book prompt instead of loading a nonsense index. }
+      rules per class are legal across books, Task 11's SameBookDups). A single
+      selection change (arrow keys included) must stay non-destructive browsing
+      -- no modal prompt, no book switch, the grid left exactly as it was (A5,
+      2026-09-20 whole-branch review, Minor 16). The status line names the
+      owning file instead; RulesDblClick is the one place that still opens it,
+      via the shared cross-book prompt in OpenOwningRuleEntry. }
     if (Item.Index >= 0) and (Item.Index <= High(FRulesEntries)) then
-      OpenOwningRuleEntry(FRulesEntries[Item.Index]);
+      SetStatus(Format('%s is ruled in %s -- double-click to open it.', [Item.Caption, ExtractFileName(FRulesEntries[Item.Index].FilePath)]));
     Exit;
   end;
   LoadGridForBlock(Hdr);
+end;
+
+{ Cross-book routing lives here, not in RulesSelectItem: a single selection
+  change fires on every arrow key, and popping the modal save/discard prompt
+  from OpenOwningRuleEntry while browsing with the keyboard was destructive
+  browsing (A5, 2026-09-20 whole-branch review, Minor 16). Double-click is the
+  one gesture that means "act", so it stays the ONE place OpenOwningRuleEntry's
+  cross-book prompt can fire from FRules. A same-book row (Hdr >= 0) needs no
+  handling here -- RulesSelectItem already loaded it on the single click that
+  necessarily preceded this double-click. }
+procedure TConvRulesForm.RulesDblClick(Sender: TObject);
+var
+  Item: TListItem;
+  Hdr : Integer  ;
+begin
+  if FRules = nil then
+    Exit;
+  Item:= FRules.Selected;
+  if Item = nil then
+    Exit;
+  Hdr:= Integer(Item.Data);
+  if Hdr >= 0 then
+    Exit;
+  if (Item.Index >= 0) and (Item.Index <= High(FRulesEntries)) then
+    OpenOwningRuleEntry(FRulesEntries[Item.Index]);
 end;
 
 function TConvRulesForm.ActiveLinks: TArray<TRuleNode>;
@@ -4291,9 +4321,10 @@ begin
   // not merge) even if it happens to re-pick the unit examined here.
   FHarvestedUnitPath:= '';
 
-  // A manual re-enable is the user's decision about a TYPE, not about a scan, so it
-  // survives re-Examining the same form. Without this, re-running Examine would
-  // silently undo every override.
+  // A "do not convert" mark is the user's decision about a TYPE, not about a scan,
+  // so it survives re-Examining the same form. Without this, re-running Examine
+  // would silently undo every Skipped tick (A11, 2026-09-20 whole-branch review --
+  // this comment predated Skipped and still spoke of a session-only "re-enable").
   for i:= 0 to High(FFormTypeRows) do
   for j:= 0 to High(Old          ) do
       if SameText(Old[j].TypeName, FFormTypeRows[i].TypeName) then
@@ -4438,8 +4469,9 @@ end; // procedure
 
 procedure TConvRulesForm.RescanRulesFolder(Sender: TObject);
 var
-  Errs  : TArray<string>;
-  Folder: string        ;
+  Errs      : TArray<string>;
+  Folder    : string        ;
+  HadPending: Boolean       ;
 begin
   Folder:= Trim(FRulesFolder);
   if Folder = '' then
@@ -4450,6 +4482,15 @@ begin
     Exit;
   end;
 
+  // FSkipList as it stands NOW, before LoadSkipList touches it, is exactly what
+  // LoadSkipList will pass to MergePendingMarks as APending -- marks ticked (or
+  // named filters applied) while no rules folder was known yet, e.g. via
+  // "Open form"/Browse before any book was open. MergePendingMarks already keeps
+  // them in MEMORY; nothing wrote them to DISK until this call (A1, 2026-09-20
+  // whole-branch review). Captured here, before the reset, so it names the right
+  // population rather than "the file just had content".
+  HadPending:= (Length(FSkipList.Classes) > 0) or (Length(FSkipList.Filters) > 0);
+
   FCatalog:= ScanRulesFolder(Folder, Errs);
   FCatalogDups:= FindDuplicates(FCatalog);
   FRulesFolder:= Folder;
@@ -4458,6 +4499,24 @@ begin
   // that is true regardless of which caller got us here, so the skip file is
   // (re)loaded HERE rather than at each of RescanRulesFolder's own callers.
   LoadSkipList;
+
+  // Stamp FFormTypeRows from the just-merged FSkipList BEFORE the guarded save
+  // below, unconditionally (not only when Sender <> nil as before): SaveSkipList
+  // folds FFormTypeRows' CURRENT .Skipped values back into FSkipList
+  // (SkipListFromRows), so a class the skip FILE marks but that is only now
+  // becoming a row-in-memory -- not yet re-stamped -- would read as unmarked and
+  // get written back out that way, silently erasing it. Idempotent: a caller
+  // that re-stamps again afterward (LoadFile, HarvestFormTypes) sees no change.
+  ApplySkipMarks;
+
+  // Flush now: without this, a mark ticked before the folder was known survives
+  // in memory and in the checklist UI (MergePendingMarks), but reaches the skip
+  // FILE only on the next manual tick -- a restart with no further ticking loses
+  // it. SaveSkipList's own P = '' guard still applies; HadPending is the ADDED
+  // guard so an ordinary rescan with nothing pending does not rewrite the file
+  // for no reason.
+  if HadPending then
+    SaveSkipList;
 
   // The index is a CACHE of what the folder says; failing to write it must not
   // invalidate the catalog we just built in memory.
@@ -4470,11 +4529,11 @@ begin
 
   if Sender <> nil then
   begin
-    // LoadSkipList just (re)loaded FSkipList from the folder's file -- a hand
-    // edit made while the editor is open would otherwise sit unapplied until
-    // the next harvest, and then get overwritten by the next toggle's
-    // SaveSkipList (Minor 7, 2026-09-20 whole-branch review).
-    ApplySkipMarks;
+    // LoadSkipList/ApplySkipMarks above already (re)loaded FSkipList from the
+    // folder's file and re-stamped FFormTypeRows -- a hand edit made while the
+    // editor is open would otherwise sit unapplied until the next harvest, and
+    // then get overwritten by the next toggle's SaveSkipList (Minor 7,
+    // 2026-09-20 whole-branch review).
     RefreshFormTypes;
 
     // A same-book collision is louder than an unreadable file: an unreadable file
@@ -4721,11 +4780,19 @@ begin
 end; // procedure
 
 procedure TConvRulesForm.FormTypeDrawItem(AControl: TWinControl; AIndex: Integer; ARect: TRect; AState: TOwnerDrawState);
+const
+  // The text inset, shared by TextOut and the skipped strikethrough's MoveTo/
+  // LineTo -- was the same 4px literal written three separate times, each with
+  // its own now-removed magic-literal suppression note (A11, 2026-09-20
+  // whole-branch review, Minor 13).
+  TEXT_INSET_X = 4;
+  TEXT_INSET_Y = 1;
 var
   LB    : TCheckListBox;
   Row   : TFormTypeRow ;
   S     : string       ;
   RowIdx: Integer       ;
+  State : TRowState     ;
 begin
   LB:= TCheckListBox(AControl);
   LB.Canvas.FillRect(ARect);
@@ -4738,28 +4805,29 @@ begin
   // (ConvRules.FormTypes.pas) -- a pure function with its own tests, since this
   // unit is outside the tests project's compile closure. Colour and the
   // skipped strikethrough are VCL painting and stay here.
-  S:= DescribeFormTypeRow(Row);
+  S    := DescribeFormTypeRow(Row);
+  State:= RowState(Row); // computed once (A11) -- was called again below
 
   // Three states, three renderings. Before 2026-09-20 "already ruled" and
   // "filtered out" were the same grey, so the list could not answer the one
   // question it is for: what is still to do.
   if not (odSelected in AState) then
-  case RowState(Row) of
+  case State of
     rsSkipped: LB.Canvas.Font.Color:= clGrayText;
     rsRuled  : LB.Canvas.Font.Color:= clGreen   ;
   else
     LB.Canvas.Font.Color:= LB.Font.Color;
   end;
 
-  LB.Canvas.TextOut(ARect.Left + 4, ARect.Top + 1, S);  // dl:ok magic-literal@0acd -- Task 7; a 4px/1px text inset, same unnamed convention as every other TextOut in this owner-draw file
-  if RowState(Row) = rsSkipped then
+  LB.Canvas.TextOut(ARect.Left + TEXT_INSET_X, ARect.Top + TEXT_INSET_Y, S);
+  if State = rsSkipped then
   begin
     // Struck out, so "we decided against this" reads differently from "dimmed
     // because it is selected elsewhere".
     var Y: Integer:= ARect.Top + (ARect.Height div 2);
     LB.Canvas.Pen.Color:= clGrayText;
-    LB.Canvas.MoveTo(ARect.Left + 4, Y);  // dl:ok magic-literal@5998 -- Task 7; same 4px inset as the TextOut two lines up, so the strikethrough starts under the text
-    LB.Canvas.LineTo(ARect.Left + 4 + LB.Canvas.TextWidth(S), Y);  // dl:ok magic-literal@81a4 -- Task 7; same 4px inset, ends at the text's measured width
+    LB.Canvas.MoveTo(ARect.Left + TEXT_INSET_X, Y);
+    LB.Canvas.LineTo(ARect.Left + TEXT_INSET_X + LB.Canvas.TextWidth(S), Y);
   end;
 end; // procedure
 
