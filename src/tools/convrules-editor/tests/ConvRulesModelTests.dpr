@@ -5104,6 +5104,85 @@ begin
   Check('outline.classes.malformed.inside.brackets', Length(ParseOutlineClassNames('[{"kind": "class", "name":]')) = 0, 'invalid JSON between real brackets must be caught, not raised');
 end; // procedure
 
+{ The persistent per-unit scratch index path: stable per unit, distinct across
+  units sharing a stem, and rooted under %LOCALAPPDATA%\DragLint\ConvRulesEditor. }
+procedure TestScratchDbPath;
+var
+  A: string;
+  B: string;
+begin
+  A:= ScratchDbPath('C:\Projects\M2022\VARINSP.PAS');
+  B:= ScratchDbPath('C:\Projects\DB\ORM3\CLIENT\VARINSP.PAS');
+  Check('scratchdb.stem', ContainsText(ExtractFileName(A), 'VARINSP'), A);
+  Check('scratchdb.ext', SameText(ExtractFileExt(A), '.sqlite'), A);
+  Check('scratchdb.stable', A = ScratchDbPath('C:\Projects\M2022\VARINSP.PAS'), 'same unit -> same DB, or the cold cost is paid every time');
+  Check('scratchdb.ci', A = ScratchDbPath('c:\projects\m2022\varinsp.pas'), 'Windows paths are case-insensitive');
+  Check('scratchdb.distinct', A <> B, 'two units with the SAME stem must not collide');
+  Check('scratchdb.under.localappdata', ContainsText(A, 'ConvRulesEditor'), A);
+  Check('scratchdb.blank', ScratchDbPath('') = '', 'no file -> no path');
+end; // procedure
+
+{ Live: OutlineClasses index-on-demand. Self-contained on purpose -- an orphan
+  unit in no corpus and no manifest is exactly the shape this feature exists
+  for (VARINSP is one), and it keeps the test from depending on which big
+  indexes happen to exist on the machine. Proves: (1) an uncovered unit gets
+  indexed on demand and answers correctly, (2) the scratch DB persists so the
+  SECOND call does not pay the index cost again, (3) a unit a CONFIGURED db
+  already covers is answered directly and never indexed. }
+procedure TestOutlineClassesLive;
+var
+  Exe    : string        ;
+  Eng    : TEngineAdapter;
+  Covered: TEngineAdapter;
+  Classes: TArray<string>;
+  Indexed: Boolean       ;
+  Err    : string        ;
+  Orphan : string        ;
+begin
+  Exe:= ResolveExe;
+  if Exe = '' then
+  begin
+    Skip('outline.classes.live', 'drag-lint.exe not found');
+    Exit;
+  end;
+
+  Orphan:= TPath.Combine(TPath.GetTempPath, 'ConvRulesOrphanProbe.pas');
+  TFile.WriteAllText(Orphan,
+    'unit ConvRulesOrphanProbe;'#13#10 +
+    'interface'#13#10 +
+    'type'#13#10 +
+    '  TOrphanProbe = class(TObject)'#13#10 +
+    '  end;'#13#10 +
+    'implementation'#13#10 +
+    'end.'#13#10);
+  if TFile.Exists(ScratchDbPath(Orphan)) then
+    TFile.Delete(ScratchDbPath(Orphan)); // start cold, or the first assertion lies
+
+  Eng:= TEngineAdapter.Create(Exe, []);
+  try
+    Check('outline.live.orphan.ok', Eng.OutlineClasses(Orphan, Classes, Indexed, Err), Err);
+    Check('outline.live.orphan.indexed', Indexed, 'an uncovered unit must be indexed on demand');
+    Check('outline.live.orphan.class', (Length(Classes) = 1) and (Classes[0] = 'TOrphanProbe'), Format('%d classes', [Length(Classes)]));
+
+    // R1.4: the scratch DB persists, so the SECOND call must not index again.
+    // This is the assertion that proves the 27 s cold cost is paid once.
+    Check('outline.live.orphan.warm', Eng.OutlineClasses(Orphan, Classes, Indexed, Err) and not Indexed, 'the second call must reuse the scratch DB');
+
+    // R1.3: a unit a CONFIGURED db covers is answered directly and never indexed.
+    Covered:= TEngineAdapter.Create(Exe, [ScratchDbPath(Orphan)]);
+    try
+      Check('outline.live.covered.ok', Covered.OutlineClasses(Orphan, Classes, Indexed, Err), Err);
+      Check('outline.live.covered.notindexed', not Indexed, 'a covered unit must never pay the index cost');
+    finally
+      Covered.Free;
+    end;
+  finally
+    Eng.Free;
+    if TFile.Exists(Orphan) then
+      TFile.Delete(Orphan);
+  end; // try
+end; // procedure
+
 procedure TestMappingGridHooks;
 var
   Book   : TArray<TRuleNode>       ;
@@ -5617,6 +5696,8 @@ begin
     TestRuleCatalogRealFolder;
     TestSuggestEnumPairs;
     TestOutlineClassNames;
+    TestScratchDbPath;
+    TestOutlineClassesLive;
 
     FreeAndNil(GParseBook);
 

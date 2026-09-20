@@ -817,6 +817,26 @@ type
       /// </remarks>
       function ValidateText(const ARulesText, AFrom, ATo: string): TValidateResult;
 
+      /// <summary>Every class the unit declares, from the engine's `outline`.</summary>
+      /// <param name="APasFile">Full path to the .pas.</param>
+      /// <param name="AClasses">Out: the class names, document order.</param>
+      /// <param name="AIndexedNow">Out: True when this call had to build a scratch
+      /// index first (the cold path, ~28 s). False on the warm and the
+      /// already-covered paths.</param>
+      /// <param name="AError">Out: why it failed; '' on success.</param>
+      /// <returns>True on success. False leaves AClasses empty and AError set --
+      /// the caller falls back to the text scan AND says so, because a silently
+      /// short class list is the failure this feature exists to remove.</returns>
+      /// <remarks>Tries `outline` against the configured DBs first: it resolves
+      /// its own covering DB and exits 2 with a named ERROR when none does, so a
+      /// covered unit is never indexed. When no configured DB covers it, this
+      /// tries the unit's persistent scratch DB (if one already exists from a
+      /// prior call) BEFORE indexing, so a warm second call never re-indexes.
+      /// The index target is the single FILE -- NEVER a folder, which would
+      /// widen the DB into a directory DB.</remarks>
+      function OutlineClasses(const APasFile: string; out AClasses: TArray<string>;
+        out AIndexedNow: Boolean; out AError: string): Boolean;
+
       property ExePath: string read FExePath;
   end;
 
@@ -834,6 +854,17 @@ type
 /// case-insensitive (`SameText`), though the real payload only ever emits it
 /// lowercase; the leniency costs nothing and matches the name dedupe.</remarks>
 function ParseOutlineClassNames(const AJson: string): TArray<string>; // dl:ok unused-public-symbol@6c73 -- Task 2 of a multi-task plan; a later task wires this into the class-picker UI
+
+/// <summary>The persistent per-unit scratch index for a unit no configured DB
+/// covers.</summary>
+/// <param name="APasFile">Full path to the .pas; '' returns ''.</param>
+/// <returns>%LOCALAPPDATA%\DragLint\ConvRulesEditor\scratch\&lt;stem&gt;-&lt;hash&gt;.sqlite.
+/// ONE DB PER UNIT: an orphan form never contributes rows to any project's index
+/// and never becomes an unasked-for --db in someone else's query. The hash is of
+/// the upper-cased full path, so two units with the same stem cannot collide and
+/// the same unit always resolves to the same DB -- which is what makes the second
+/// pick cost 0.13 s instead of 27 s.</returns>
+function ScratchDbPath(const APasFile: string): string;
 
 implementation
 
@@ -2118,6 +2149,89 @@ begin
   end; // try
 end; // function
 
+function TEngineAdapter.OutlineClasses(const APasFile: string; out AClasses: TArray<string>;
+  out AIndexedNow: Boolean; out AError: string): Boolean;
+var
+  Outp    : string ;
+  Code    : Integer;
+  Db      : string ;
+  CanIndex: Boolean;
+
+  function FirstLine(const AText: string): string;
+  var
+    p: Integer;
+  begin
+    Result:= Trim(AText);
+    p     := Pos(#10, Result);
+    if p > 0 then
+      Result:= Trim(Copy(Result, 1, p - 1));
+  end;
+
+  // Runs `outline` with the given extra --db argument text; on success parses
+  // AClasses (the enclosing out param) and reports True. Factored out so the
+  // 3-attempt structure (configured DB / warm scratch DB / cold index) below
+  // reads as single-exit control flow (if/else assigning Result) rather than
+  // three copies of Exit(True) on success.
+  function TryOutline(const AExtraDbArgs: string): Boolean;
+  var
+    O: string ;
+    C: Integer;
+  begin
+    C     := RunCapture(Format('outline --file "%s" --format json%s', [APasFile, AExtraDbArgs]), O);
+    Result:= C = 0;
+    if Result then
+      AClasses:= ParseOutlineClassNames(O);
+  end;
+
+begin
+  AClasses   := nil;
+  AIndexedNow:= False;
+  AError     := '';
+  Result     := False;
+
+  if Trim(APasFile) = '' then
+    AError:= 'no unit file'
+  else if TryOutline(DbArgs) then
+    Result:= True // 1) a configured DB already covers this unit -- never index for it
+  else
+  begin
+    // 2) the unit's own persistent scratch DB may already exist from a prior
+    // pick -- try it BEFORE indexing, or every warm call would pay the index
+    // cost again (the configured DB list never gains the scratch DB itself).
+    Db:= ScratchDbPath(APasFile);
+    if TFile.Exists(Db) and TryOutline(Format(' --db "%s"', [Db])) then
+      Result:= True // AIndexedNow stays False: warm path, no index call made
+    else
+    begin
+      // 3) cold: build the scratch index, then outline it.
+      CanIndex:= True;
+      try
+        ForceDirectories(ExtractFilePath(Db));
+      except
+        on E: Exception do
+        begin
+          AError  := 'could not create the scratch index folder: ' + E.Message;
+          CanIndex:= False;
+        end;
+      end;
+      if CanIndex then
+      begin
+        Code:= RunCapture(Format('index "%s" --db "%s"', [APasFile, Db]), Outp);
+        if Code <> 0 then
+          AError:= 'index failed: ' + FirstLine(Outp)
+        else
+        begin
+          AIndexedNow:= True;
+          if TryOutline(Format(' --db "%s"', [Db])) then
+            Result:= True
+          else
+            AError:= 'outline failed after indexing';
+        end; // if
+      end; // if
+    end; // else
+  end; // else
+end; // function
+
 function ParseOutlineClassNames(const AJson: string): TArray<string>;
 var
   a   : Integer      ;
@@ -2178,6 +2292,38 @@ begin
     Seen.Free;
     V.Free;
   end; // try
+end; // function
+
+function ScratchDbPath(const APasFile: string): string;
+const
+  FNV_OFFSET_BASIS: Cardinal = 2166136261; // FNV-1a 32-bit initial hash value
+  FNV_PRIME       : Cardinal = 16777619  ; // FNV-1a 32-bit prime multiplier
+var
+  Key : string  ;
+  Hash: Cardinal;
+  i   : Integer ;
+  Dir : string  ;
+begin
+  if Trim(APasFile) = '' then
+    Exit('');
+  // FNV-1a over the upper-cased path: short, stable across runs, and it does not
+  // drag in a hashing unit for eight hex digits.
+  Key := UpperCase(APasFile);
+  Hash:= FNV_OFFSET_BASIS;
+  for i:= 1 to Length(Key) do
+  begin
+    Hash:= Hash xor Cardinal(Ord(Key[i]));
+    Hash:= Hash * FNV_PRIME;
+  end;
+  Dir:= GetEnvironmentVariable('LOCALAPPDATA');
+  if Trim(Dir) = '' then
+    Dir:= TPath.GetHomePath; // %APPDATA% -- still per-user, still writable
+  Dir:= TPath.Combine(TPath.Combine(Dir, 'DragLint'), 'ConvRulesEditor');
+  Dir:= TPath.Combine(Dir, 'scratch');
+  // Stem taken from the already-upper-cased Key, not the raw-case APasFile: the
+  // hash was case-insensitive, and the stem must be too, or scratchdb.ci fails --
+  // 'VARINSP.PAS' and 'varinsp.pas' must resolve to the byte-identical path.
+  Result:= TPath.Combine(Dir, Format('%s-%.8x.sqlite', [TPath.GetFileNameWithoutExtension(Key), Hash]));
 end; // function
 
 end.
