@@ -138,3 +138,77 @@ Notes arrive as `docs\INBOX-*engine-to-converter*.md`; ours go back as
 inherited claim against the tree before repeating it** -- the 2026-09-14 ledger
 found five items that read as open in the correspondence and were already done,
 and one that read as answered and was not.
+
+## Left lists (class picker) -- hand-over notes (Task 13, 2026-09-20)
+
+* **Skip file location:** `<rules folder>\convrules-editor-skip.txt`, beside the
+  `.rules` book(s) -- shared via source control, not per-user. Format is plain
+  text, one `skip <ClassName>` line per marked class (`SkipFilePath`,
+  `ConvRules.SkipList.pas`).
+* **The class-picker's own index is PER-UNIT and PERSISTENT**, under
+  `%LOCALAPPDATA%\DragLint\ConvRulesEditor\scratch\<stem>-<hash>.sqlite` --
+  ONE database per unit, keyed on the upper-cased full path, so two units
+  sharing a stem cannot collide. This is only used by the `OutlineClasses`
+  path (the From-Unit "Browse..." button next to `FCbUnit`, wired to
+  `DoBrowseFromUnit` -> `HarvestUnitFile` -> `HarvestUnitClasses`, which calls
+  `FEngine.OutlineClasses` and merges the result into `FFormTypeRows` via
+  `MergeClassRows`). **It is NOT used by "Open form..." / `HarvestFormTypes`**,
+  which parses `.dfm` text only (`ScanDfmTypes`/`MergeFormTypes`) and never
+  touches the engine or any index -- that is why opening a form is always fast
+  regardless of cold/warm state, and why a `dfm`-only unit's checklist never
+  shows a `pas`-origin row unless the unit was ALSO picked via "Browse...".
+* **Cold-pick cost, measured 2026-09-20:** a small unindexed unit (7 lines, 1
+  class) costs **0.55 s**; VARINSP.PAS (4,000+ lines, 3,946 symbols) costs
+  **27.7 s** (the `calls` resolve pass is 16.5 s of that; nothing skips it).
+  Warm re-index of either, unchanged file, is **0.09-0.13 s**. The 27.7 s
+  figure is the worst case on this corpus, not the typical one -- quote both
+  numbers or the feature reads as slow when the common case is half a second.
+* **The three-column layout is an owner ruling, 2026-09-20 (spec R4.1a):** the
+  class panel (`TabClasses`, `FormTypesPanel` and everything parented to it)
+  is the DEFAULT `Classes` tab of `FTabs`, the leftmost page control's own
+  first tab -- not a fourth column beside it. The form went from four columns
+  to three the same day the old `FormTypesPanel`/`SplitForms` column was
+  retired; the accepted cost is that the checklist is hidden while `Raw DSL`
+  or `Unit Rules` is the active tab.
+* **Skip marks are re-applied on EVERY row rebuild, `HarvestFormTypes`
+  included** (`ApplySkipMarks` runs after every `MergeFormTypes`/
+  `MergeClassRows` call that replaces `FFormTypeRows`). Task 9 filed this as a
+  Critical when the "Open form..." button path was the one omitting it --
+  every rebuild site needs the same call or a re-Examine silently erases
+  marks the skip file still has, and the next `SaveSkipList` then persists the
+  erasure.
+* **`ApplySkipMarks` stamps memory only; `SaveSkipList` writes every row.**
+  The two are not symmetric -- `ApplySkipMarks` sets `FFormTypeRows[i].Skipped`
+  from `FSkipList` in memory and touches no file; only `SaveSkipList` (called
+  from every toggle site: `ToggleFormTypeSkip`, `FormTypeCheckClick`,
+  `ApplyNamedFilterClick`) writes the skip file, and it writes the FULL current
+  row set, which is what makes un-marking a class persist (a naive
+  additive-only writer would leak a stale `skip` line forever).
+* **`ConvRules.MainForm.pas` is OUTSIDE the tests project's compile closure.**
+  `ConvRulesModelTests.dpr` links the pure model/engine units directly; it does
+  not, and cannot, pull in the VCL form unit. Decision logic that needs a test
+  belongs in `ConvRules.FormTypes.pas` / `ConvRules.RuleCatalog.pas` /
+  `ConvRules.SkipList.pas`, not in `MainForm.pas` -- and the tests build can
+  NEVER detect a `MainForm.pas` compile break on its own. Always build
+  `_build_convrules_editor_local.bat` too, not just the tests.
+* **A double-click on an ALREADY-SELECTED rule row forces the grid load
+  directly.** VCL does not re-fire `OnSelectItem`/`LBN_SELCHANGE` when the
+  selection does not change, so `FormTypeDblClick` cannot rely on the
+  single-click handler having just run for that row -- it loads the grid
+  itself rather than assuming `FormTypeClick` already did.
+
+### Pre-existing oddities noticed in passing (not fixed -- for the owner)
+
+* `HeaderIndexFor`/`LoadFile` emits a stale-index message with a BLANK
+  filename on a cross-book reopen.
+* `BlockPercent` (`ConvRules.MainForm.pas`) is dead code since the `%` column
+  became `File` -- `H2219 Private symbol 'BlockPercent' declared but never
+  used` on every build.
+* The "Fill From-classes" hand comment block above `HarvestUnitFile`
+  (~ConvRules.MainForm.pas:2969) describes an unrelated feature -- stale prose,
+  not stale facts (autodoc does not touch hand-written comments).
+* `HarvestFormTypes`'s own hand comment still says "manual re-enable/override"
+  language that predates the current skip-mark carry-forward design.
+* `FormTypeDrawItem`'s 4px text inset is a literal written THREE separate
+  times (`ConvRules.MainForm.pas:4477,4484,4485`), each with its own `dl:ok
+  magic-literal` review instead of one named constant.
