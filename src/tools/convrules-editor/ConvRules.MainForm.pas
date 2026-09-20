@@ -589,7 +589,11 @@ type
       /// Deliberately independent of FActiveHdr: the panel exists to CHOOSE
       /// a From class, so it must work before any conversion is selected. Manual
       /// re-enables are carried over by type name so a re-Examine of the same form
-      /// does not silently undo them.
+      /// does not silently undo them. Also calls ApplySkipMarks after the rebuild
+      /// (fix round 1/5, Task 9 CRITICAL #1) -- this is the "Open form..."/Examine
+      /// BUTTON path, a different entry point from LoadFile's --form path, and it
+      /// did not re-stamp from the persisted skip file: a class already marked
+      /// skip on disk came back unmarked, and the next save then erased the mark.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFormFiles (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.FormTypes.MergeFormTypes, ConvRules.FormTypes.ScanDfmTypes, ConvRules.MainForm.TConvRulesForm.LoadDescendantSet, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, SameText</para>
@@ -3918,7 +3922,26 @@ begin
   end;
 
   if Length(FCatalog) = 0 then
-    RescanRulesFolder(nil);
+    RescanRulesFolder(nil); // FRulesFolder becomes known here on a book opened
+    // WITHOUT --form -- RescanRulesFolder calls LoadSkipList, so FSkipList has
+    // nothing to stamp until THIS line has run at least once.
+
+  // FIX (fix round 1/5, CRITICAL #1): the Old-carry-forward loop above only
+  // carries forward what was already in THIS SESSION'S memory -- on the first
+  // Examine/Open form of a session Old is empty, so a class the SKIP FILE
+  // already marks came back unmarked here, and the next SaveSkipList (any
+  // toggle) then overwrote the file and ERASED it. HarvestUnitClasses and
+  // LoadFile both stamp from FSkipList after rebuilding FFormTypeRows; this
+  // entry point -- the "Open form..."/Examine BUTTON path -- did not.
+  // MUST run AFTER the RescanRulesFolder call immediately above, not before:
+  // on a book opened without --form, FSkipList is still Default(empty) until
+  // RescanRulesFolder's own LoadSkipList call runs, exactly the ordering trap
+  // LoadFile's own comment already warns about for its --form path. FSkipList
+  // is kept in sync with every toggle (ToggleFormTypeSkip/FormTypeCheckClick/
+  // ApplyNamedFilterClick all call SaveSkipList immediately), so re-stamping
+  // from it here is a strict superset of the Old-carry-forward above, not a
+  // conflict with it.
+  ApplySkipMarks;
   RefreshFormTypes;
 end; // procedure
 
