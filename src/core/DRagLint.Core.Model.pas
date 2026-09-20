@@ -279,6 +279,13 @@ type
     // methods). StartLine/EndLine stay the DECLARATION range.
     ImplStartLine: Integer;
     ImplEndLine  : Integer;
+    /// <summary>C2.5 (forward-stub design, 2026-09-17): when a by-name lookup
+    /// folded a forward declaration (`TFoo = class;`) into THIS row -- the real
+    /// declaration further down the same unit -- this is the stub's start line.
+    /// 0 when no stub was folded. TRANSIENT: set only by the readers that fold
+    /// (FindSymbolsByExactName / FindSymbolsByQualifiedName) and never written
+    /// to the database; ReadSymbolFromQuery leaves it 0.</summary>
+    ForwardLine  : Integer;
     /// <summary>The human-visible name: Name, or Name&lt;GenericParams&gt; for a
     /// generic. Renderers print this; nothing matches on it.</summary>
     /// <returns><!-- drag-lint:auto -->string -- Observed: Name + '&lt;' + GenericParams

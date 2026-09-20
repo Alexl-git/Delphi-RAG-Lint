@@ -64,6 +64,7 @@ uses
   DRagLint.Core.Model in '..\core\DRagLint.Core.Model.pas',
   DRagLint.Core.Versions in '..\core\DRagLint.Core.Versions.pas',
   DRagLint.Core.DeclText in '..\core\DRagLint.Core.DeclText.pas',
+  DRagLint.Core.ForwardStub in '..\core\DRagLint.Core.ForwardStub.pas',
   DRagLint.Core.Interfaces in '..\core\DRagLint.Core.Interfaces.pas',
   DRagLint.Wiring in '..\core\DRagLint.Wiring.pas',
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',

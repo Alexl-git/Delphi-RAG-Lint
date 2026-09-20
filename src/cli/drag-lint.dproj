@@ -106,6 +106,7 @@
         <DCCReference Include="..\core\DRagLint.Core.Model.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Versions.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.DeclText.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.ForwardStub.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Interfaces.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.Encoding.pas"/>
         <DCCReference Include="..\core\DRagLint.Wiring.pas"/>
