@@ -293,6 +293,33 @@ try {
 }
 finally { Pop-Location }
 
+# ============================================================= CASE D =====
+Push-Location $WorkDir
+try {
+  Write-Host ''
+  Write-Host 'CASE D: outline lists both rows and tags the stub' -ForegroundColor Cyan
+  $fixFile = Join-Path $srcDir 'fwstub.pas'
+  $oj = @(ParseJsonArray ((& $Exe outline --file $fixFile --db $db --format json 2>$null | Out-String)))
+  $ofoo = @($oj | Where-Object { $_.qname -eq 'fwstub.TFoo' } | Sort-Object line)
+  Check 'S6: outline keeps BOTH fwstub.TFoo rows' ($ofoo.Count -eq 2) "rows=$($ofoo.Count)"
+  if ($ofoo.Count -eq 2) {
+    Check "S6: stub row (line $stubLine) carries forward_target_line = $realLine" (($ofoo[0].line -eq $stubLine) -and ($ofoo[0].forward_target_line -eq $realLine)) "line=$($ofoo[0].line) forward_target_line=$($ofoo[0].forward_target_line)"
+    Check 'S6: real row has NO forward_target_line' ($null -eq $ofoo[1].forward_target_line) "got=$($ofoo[1].forward_target_line)"
+  }
+  $oifoo = @($oj | Where-Object { $_.qname -eq 'fwstub.IFoo' } | Sort-Object line)
+  Check 'S6/S7: interface stub row tagged too' (($oifoo.Count -eq 2) -and ($oifoo[0].forward_target_line -eq $iRealLine)) "rows=$($oifoo.Count) tag=$($oifoo[0].forward_target_line)"
+  $oonly = @($oj | Where-Object { $_.qname -eq 'fwstub.TOnlyStub' })
+  Check 'S2 control: lone stub listed once, untagged' (($oonly.Count -eq 1) -and ($null -eq $oonly[0].forward_target_line))
+  $oempty = @($oj | Where-Object { $_.qname -eq 'fwstub.TEmpty' })
+  Check 'S3 control: empty class listed once, untagged' (($oempty.Count -eq 1) -and ($null -eq $oempty[0].forward_target_line))
+  $ot = (& $Exe outline --file $fixFile --db $db 2>$null | Out-String)
+  $otFoo = @($ot -split "`r?`n" | Where-Object { $_ -match '\s+fwstub\.TFoo\s' })
+  Check 'S6 text: two TFoo rows' ($otFoo.Count -eq 2) "rows=$($otFoo.Count)"
+  Check "S6 text: the stub row ends with '[forward -> line $realLine]'" (@($otFoo | Where-Object { $_ -match "^\S+\s+fwstub\.TFoo\s+$stubLine\s+\[forward -> line $realLine\]\s*$" }).Count -eq 1) "got: [$($otFoo -join ' | ')]"
+  Check 'S6 text: the real row is untagged' (@($otFoo | Where-Object { $_ -match "\s$realLine\s*$" }).Count -eq 1) "got: [$($otFoo -join ' | ')]"
+}
+finally { Pop-Location }
+
 # ---- CASE B / C / D are appended by Tasks 3-5 ABOVE this footer ----
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

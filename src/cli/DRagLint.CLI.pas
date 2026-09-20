@@ -117,6 +117,7 @@ uses
       FireDAC.DApt
   , TreeSitter
   , DRagLint.Core.DeclText { v(A2): TDeclTextReader -- `query find --decl-contains` }
+  , DRagLint.Core.ForwardStub { C2.5: PairForwardStubs/HasChildInSet -- `outline` tags a forward stub row (S6) }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
     must not be listed twice. }
   , DRagLint.Core   .Interfaces
@@ -8913,12 +8914,19 @@ begin
   end;
   if UsedDb = '' then UsedDb:= Dbs[0];
 
+  { C2.5: a forward stub (`TFoo = class;`) STAYS in the outline -- this is the
+    file-structure view and the stub is a line in the file -- but it is tagged
+    with the line of the real declaration it completes to (S6). Whole-file rows
+    are in hand, so children are answered from Syms, not the store. }
+  var StubOf: TArray<Integer>:= PairForwardStubs(Syms, HasChildInSet(Syms));
+
   if SameText(AArgs.Format, 'json') then
   begin
     JArr:= TJSONArray.Create;
     try
-      for S in Syms do
+      for var Idx:= 0 to High(Syms) do
       begin
+        S:= Syms[Idx];
         JObj:= TJSONObject.Create;
         JObj.AddPair('kind', S.Kind.ToText);
         JObj.AddPair('name' , S.Name         );
@@ -8927,6 +8935,8 @@ begin
         JObj.AddPair('signature', S.Signature);
         JObj.AddPair('modifiers', S.Modifiers);
         JObj.AddPair('directives', S.Directives); { v22: see the query emitter for why this is unconditional }
+        { C2.5: present ONLY on a forward stub -- the line of its real declaration. }
+        if StubOf[Idx] >= 0 then JObj.AddPair('forward_target_line', TJSONNumber.Create(Syms[StubOf[Idx]].StartLine));
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -8934,7 +8944,16 @@ begin
       JArr.Free;
     end; // try
   end // if
-  else begin for S in Syms do Writeln(System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine])); end;
+  else
+  begin
+    for var Idx:= 0 to High(Syms) do
+    begin
+      S:= Syms[Idx];
+      var Row: string:= System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine]);
+      if StubOf[Idx] >= 0 then Row:= Row + System.SysUtils.Format('  [forward -> line %d]', [Syms[StubOf[Idx]].StartLine]);
+      Writeln(Row);
+    end;
+  end;
   Result:= 0;
 end; // function
 
