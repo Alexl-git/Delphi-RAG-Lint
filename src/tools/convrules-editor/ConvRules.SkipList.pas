@@ -32,11 +32,17 @@ uses
 
 type
   /// <summary>A named group of exclusion regexes that marks classes in bulk.</summary>
-  /// <remarks>Patterns are the same regexes ConvRules.FormTypes.TypeIsExcluded
+  /// <remarks>
+  /// Patterns are the same regexes ConvRules.FormTypes.TypeIsExcluded
   /// takes, so the matching semantics and their tests are shared. IncludeStandard
   /// is the '+std' flag: it matches types whose declaring unit is Vcl.* or FMX.*,
   /// which costs a declaring-unit resolution per type and so is applied on demand,
-  /// never on a refresh.</remarks>
+  /// never on a refresh.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.SkipList.EmitSkipList (ConvRules.SkipList.pas), ConvRules.SkipList.MergePendingMarks (ConvRules.SkipList.pas), ConvRules.SkipList.SetNamedFilter (ConvRules.SkipList.pas), declaration (ConvRules.SkipList.pas)</para>
+  /// <para>Used in units: ConvRules.MainForm, ConvRules.SkipList</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNamedFilter = record
     Name           : string        ;
     Patterns       : TArray<string>;
@@ -44,9 +50,15 @@ type
   end;
 
   /// <summary>The parsed skip file.</summary>
-  /// <remarks>Foreign holds every unrecognised line verbatim so that emitting
+  /// <remarks>
+  /// Foreign holds every unrecognised line verbatim so that emitting
   /// what was parsed is loss-free; the generated header lines are NOT foreign,
-  /// or they would double on each save.</remarks>
+  /// or they would double on each save.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.LoadSkipList (ConvRules.MainForm.pas), ConvRules.SkipList.ParseSkipList (ConvRules.SkipList.pas), declaration (ConvRules.FormTypes.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.SkipList.pas)</para>
+  /// <para>Used in units: ConvRules.FormTypes, ConvRules.MainForm, ConvRules.SkipList</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSkipList = record
     Classes: TArray<string>      ;
     Filters: TArray<TNamedFilter>;
@@ -61,6 +73,17 @@ const
 /// becomes a Foreign line rather than an error.</summary>
 /// <param name="AText">The whole file; CRLF or LF, both accepted.</param>
 /// <returns>Classes, named filters, and preserved foreign lines.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadSkipList (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.SkipList.IndexOfFilter, ConvRules.SkipList.IsGeneratedHeader, Copy, Default, Pos, SameText, StartsText, Trim</para>
+/// <para>Returns: Default(TSkipList)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 76 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.SkipList.IndexOfFilter"/>
+/// <seealso cref="ConvRules.SkipList.IsGeneratedHeader"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseSkipList(const AText: string): TSkipList;
 
 /// <summary>PURE: render a skip list back to file text (ASCII, CRLF, trailing
@@ -68,12 +91,28 @@ function ParseSkipList(const AText: string): TSkipList;
 /// diffs cleanly; foreign lines follow in their original order.</summary>
 /// <param name="AList">The list to render.</param>
 /// <returns>The file text, always starting with the two header lines.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.SaveSkipList (ConvRules.MainForm.pas)</para>
+/// <para>Calls: CompareText, Copy</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EmitSkipList(const AList: TSkipList): string;
 
 /// <summary>PURE: is this class marked "do not convert"? Case-insensitive.</summary>
 /// <param name="AList">The skip list.</param>
 /// <param name="AClassName">A bare class name.</param>
 /// <returns>True when the class is marked.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.FormTypes.StampSkipMarks (ConvRules.FormTypes.pas), ConvRules.SkipList.MergePendingMarks (ConvRules.SkipList.pas), ConvRules.SkipList.SetSkipped (ConvRules.SkipList.pas)</para>
+/// <para>Calls: SameText, Trim</para>
+/// <para>Returns: False; True</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsSkipped(const AList: TSkipList; const AClassName: string): Boolean;
 
 /// <summary>PURE: return a copy with AClassName marked or unmarked. Marking an
@@ -82,12 +121,29 @@ function IsSkipped(const AList: TSkipList; const AClassName: string): Boolean;
 /// <param name="AClassName">A bare class name; blank is ignored.</param>
 /// <param name="AOn">True to mark, False to unmark.</param>
 /// <returns>The updated list.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.FormTypes.SkipListFromRows (ConvRules.FormTypes.pas)</para>
+/// <para>Calls: ConvRules.SkipList.IsSkipped, SameText, Trim</para>
+/// <para>Returns: AList</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.SkipList.IsSkipped"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SetSkipped(const AList: TSkipList; const AClassName: string; AOn: Boolean): TSkipList;
 
 /// <summary>PURE: where the skip file lives for a rules folder.</summary>
 /// <param name="ARulesFolder">The folder holding the .rules books.</param>
 /// <returns>The full path, or '' when no folder is known -- never a bare file
 /// name, which would land in the process's current directory.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadSkipList (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SaveSkipList (ConvRules.MainForm.pas)</para>
+/// <para>Calls: Trim</para>
+/// <para>Returns: ''; TPath.Combine(ARulesFolder, SKIP_FILE_NAME)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SkipFilePath(const ARulesFolder: string): string;
 
 /// <summary>PURE: merge marks accumulated in memory before a rules folder was
@@ -103,11 +159,48 @@ function SkipFilePath(const ARulesFolder: string): string;
 /// any APending filter whose name AFromFile does not already have (a name
 /// present on both sides keeps the file's entry). Foreign: AFromFile's foreign
 /// lines only -- APending never carries its own.</returns>
-/// <remarks>A skip mark is a presence flag, not a value, so there is no real
+/// <remarks>
+/// A skip mark is a presence flag, not a value, so there is no real
 /// conflict to arbitrate for Classes: a name on either side simply survives.
 /// LoadSkipList is the one caller -- it merges instead of resetting so that
-/// marks ticked before FRulesFolder became known are not thrown away.</remarks>
+/// marks ticked before FRulesFolder became known are not thrown away.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadSkipList (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.SkipList.IndexOfFilter, ConvRules.SkipList.IsSkipped</para>
+/// <para>Returns: AFromFile</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.SkipList.IndexOfFilter"/>
+/// <seealso cref="ConvRules.SkipList.IsSkipped"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MergePendingMarks(const AFromFile, APending: TSkipList): TSkipList;
+
+/// <summary>PURE: fold ANewFilter into AList.Filters, replacing any existing
+/// filter of the same name rather than appending a duplicate, and dropping
+/// blank patterns.</summary>
+/// <param name="AList">The skip list to update.</param>
+/// <param name="ANewFilter">The filter as entered -- Patterns may contain blank
+/// lines, e.g. straight from a memo control's Lines.</param>
+/// <returns>AList with a filter of ANewFilter.Name set to ANewFilter's non-blank
+/// patterns: a filter of the SAME name is REPLACED in place, never duplicated
+/// (Apply pressed twice on one name leaves exactly one record); a new name is
+/// appended.</returns>
+/// <remarks>
+/// Without this, ApplyNamedFilterClick appended a new TNamedFilter on
+/// every Apply -- ParseSkipList's own by-name merge on the next load then wrote
+/// the same pattern line once more per Apply/restart cycle -- and a blank memo
+/// line survived into a Patterns entry, which EmitSkipList renders as
+/// "filter Name = " and ParseSkipList then preserves as a foreign line forever
+/// (A3, 2026-09-20 whole-branch review, Minor 10).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.SkipList.IndexOfFilter, Trim</para>
+/// <para>Returns: AList</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.SkipList.IndexOfFilter"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function SetNamedFilter(const AList: TSkipList; const ANewFilter: TNamedFilter): TSkipList;
 
 implementation
 
@@ -317,6 +410,25 @@ begin
       Result.Filters:= Result.Filters + [F];
   // Foreign is deliberately left as AFromFile's alone -- APending never carries
   // any of its own (see the doc-comment).
+end; // function
+
+function SetNamedFilter(const AList: TSkipList; const ANewFilter: TNamedFilter): TSkipList;
+var
+  F: TNamedFilter;
+  P: string      ;
+  k: Integer     ;
+begin
+  Result:= AList;
+  F:= ANewFilter;
+  F.Patterns:= nil;
+  for P in ANewFilter.Patterns do
+    if Trim(P) <> '' then
+      F.Patterns:= F.Patterns + [P];
+  k:= IndexOfFilter(Result, F.Name);
+  if k >= 0 then
+    Result.Filters[k]:= F
+  else
+    Result.Filters:= Result.Filters + [F];
 end; // function
 
 end.
