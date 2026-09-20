@@ -4588,6 +4588,32 @@ begin
   Check('visible.blank.search', Length(Vis) = 4, 'whitespace is not a filter');
 end; // procedure
 
+{ ResolveSelectedRow / ListIndexForRow: the listbox-position <-> row-index map
+  that SelectedRowIndex, FormTypeDrawItem and ToggleFormTypeSkip
+  (ConvRules.MainForm.pas, outside this test project's compile closure) all
+  route through, so a filtered list can never address the wrong class. }
+procedure TestSelectedRowMapping;
+var
+  Vis: TArray<Integer>;
+begin
+  Vis:= [2, 5, 7]; // list slot 0/1/2 -> row 2/5/7; row count 8 (rows 0..7)
+
+  // --- forward: list index -> row index
+  Check('resolve.first', ResolveSelectedRow(Vis, 0, 8) = 2);
+  Check('resolve.last', ResolveSelectedRow(Vis, 2, 8) = 7);
+  Check('resolve.negative', ResolveSelectedRow(Vis, -1, 8) = -1, 'no selection');
+  Check('resolve.past.end', ResolveSelectedRow(Vis, 3, 8) = -1, 'no such list slot');
+  Check('resolve.empty.map', ResolveSelectedRow(nil, 0, 8) = -1, 'nothing visible, nothing selectable');
+  Check('resolve.stale.row', ResolveSelectedRow(Vis, 2, 5) = -1, 'the mapped row index is outside the current row array');
+
+  // --- reverse: row index -> list index, for re-selecting after a refresh
+  Check('listidx.found.first', ListIndexForRow(Vis, 2) = 0);
+  Check('listidx.found.middle', ListIndexForRow(Vis, 5) = 1);
+  Check('listidx.found.last', ListIndexForRow(Vis, 7) = 2);
+  Check('listidx.missing', ListIndexForRow(Vis, 3) = -1, 'row 3 is filtered out of the current view');
+  Check('listidx.empty.map', ListIndexForRow(nil, 2) = -1);
+end; // procedure
+
 { DescribeOutlineOutcome: the status-line branching HarvestUnitClasses
   (ConvRules.MainForm.pas, outside this test project's compile closure) folds
   into its Result. Extracted so it has automated coverage at all. }
@@ -5761,6 +5787,7 @@ begin
     TestSkipList;
     TestFormTypesFilter;
     TestClassRowModel;
+    TestSelectedRowMapping;
     TestDescribeOutlineOutcome;
     TestRuleCatalogParse;
     TestRuleCatalogIndex;

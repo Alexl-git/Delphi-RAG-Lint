@@ -150,6 +150,11 @@ type
       // recomputed.
       FFormTypeList : TListBox     ; // owner-drawn: [V] TOvcTable (28)
       FFormTypeRows : TFormTypeRows;
+      // List index -> FFormTypeRows index. The list shows only the rows the search
+      // box leaves visible, so the two are NOT the same number. Every handler must
+      // go through SelectedRowIndex; indexing FFormTypeRows with ItemIndex directly
+      // addresses the wrong class the moment a search is active.
+      FVisibleRows  : TArray<Integer>;
       FFilterMemo   : TMemo        ; // one exclusion regex per line
       FChkStdCtrls  : TCheckBox    ; // also exclude Vcl./FMX. declared types
       FLblFormTypes : TLabel       ; // "N types, M shown"
@@ -601,6 +606,27 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshFormTypes;
+      /// <summary>The FFormTypeRows index the user has selected, or -1.</summary>
+      /// <returns>-1 when FFormTypeList does not exist yet, nothing is selected, or
+      /// the selection maps (via FVisibleRows) to a row index that no longer fits
+      /// FFormTypeRows.</returns>
+      /// <remarks>
+      /// The one legal way to turn a FFormTypeList.ItemIndex into a
+      /// FFormTypeRows index -- the two are the same number only when nothing is
+      /// filtered, so every handler routes through this rather than indexing
+      /// FFormTypeRows with ItemIndex directly. The bounds logic itself is
+      /// ConvRules.FormTypes.ResolveSelectedRow, tested there headlessly; this is
+      /// just the UI-facing wrapper that supplies FFormTypeList.ItemIndex.
+      /// </remarks>
+      function SelectedRowIndex: Integer;
+      /// <summary>The class-search text, or '' when the search box does not exist
+      /// yet (Task 8 wires FRulesFilter to this list).</summary>
+      /// <remarks>
+      /// FRulesFilter is currently the "filter by To type" box -- this is a
+      /// deliberate, temporary overlap. Task 8 repurposes FRulesFilter as the class
+      /// search box proper; until then, typing in it also filters this list.
+      /// </remarks>
+      function ClassSearchText: string;
       /// <summary>TNotifyEvent shim so the filter controls can re-run RefreshFormTypes.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
@@ -711,7 +737,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure ToggleFormTypeReenable(Sender: TObject);
+      procedure ToggleFormTypeSkip(Sender: TObject);
       /// <summary>Owner-draws one form-type row: V/N/? mark, name, count, why dimmed.</summary>
       /// <param name="AControl"><!-- drag-lint:auto type -->TWinControl</param>
       /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
@@ -1288,6 +1314,15 @@ type
       /// for four tasks and trip this repo's own commented-out-code lint
       /// rule.</remarks>
       procedure ApplySkipMarks;
+      /// <summary>STUB for Task 9: persists FFormTypeRows' Skipped marks so they
+      /// survive a restart. Currently a no-op placeholder so ToggleFormTypeSkip can
+      /// call it unconditionally; Task 9 replaces this body with the real
+      /// ConvRules.SkipList write.</summary>
+      /// <remarks>Deliberately an empty-bodied stub kept in the source, not a
+      /// commented-out call site -- a commented-out call would sit in the tree
+      /// for three tasks and trip this repo's own commented-out-code lint
+      /// rule.</remarks>
+      procedure SaveSkipList;
       /// <summary>Fill the Unit Rules tab and the left class list from the TEXT of
       /// AUnitName's .pas -- the file, never the index, so a browsed or orphan unit
       /// (VARINSP) answers. This is the "unit selected" half of Fill From-classes:
@@ -2425,7 +2460,7 @@ begin
   BtnReenable.Caption := 'Re-enable';
   BtnReenable.Hint    := 'Ignore the filter for the selected type (toggles)';
   BtnReenable.ShowHint:= True;
-  BtnReenable.OnClick := ToggleFormTypeReenable;
+  BtnReenable.OnClick := ToggleFormTypeSkip;
 
   FChkStdCtrls:= TCheckBox.Create(Self);
   FChkStdCtrls.Parent:= FormTypesPanel; FChkStdCtrls.SetBounds(6, 54, 288, 17);
@@ -2964,6 +2999,16 @@ end; // function
 procedure TConvRulesForm.ApplySkipMarks;
 begin
   // Intentionally empty until Task 9 wires FSkipList / IsSkipped in.
+end; // procedure
+
+{ STUB for Task 9 (ConvRules.SkipList persistence): there is nothing to persist
+  to yet, so this has nothing to write and is an intentional no-op. Declared and
+  called live rather than commented out, per the 2026-09-20 controller ruling --
+  a commented-out call site would sit in the tree across Tasks 6-8 and trip this
+  repo's own commented-out-code lint rule. Task 9 replaces this body. }
+procedure TConvRulesForm.SaveSkipList;
+begin
+  // Intentionally empty until Task 9 wires ConvRules.SkipList persistence in.
 end; // procedure
 
 { "Fill From-classes": read the chosen unit's .dfm components and add one FROM-ONLY
@@ -3769,6 +3814,21 @@ begin
   RefreshFormTypes;
 end;
 
+function TConvRulesForm.SelectedRowIndex: Integer;
+begin
+  Result:= -1;
+  if FFormTypeList = nil then
+    Exit;
+  Result:= ResolveSelectedRow(FVisibleRows, FFormTypeList.ItemIndex, Length(FFormTypeRows));
+end;
+
+function TConvRulesForm.ClassSearchText: string;
+begin
+  if FRulesFilter = nil then
+    Exit('');
+  Result:= Trim(FRulesFilter.Text);
+end;
+
 procedure TConvRulesForm.RefreshFormTypes;
 var
   Pats  : TArray<string>   ;  // dl:ok write-only-local@266c -- Task 4 removed its only reader (the TypeIsExcluded call); Task 9 restores it on the Apply button
@@ -3778,6 +3838,7 @@ var
   i     : Integer          ;
   Active: Integer          ;
   Cold  : Integer          ;
+  VisIdx: Integer          ; // for-in var over FVisibleRows -- kept distinct from i so nothing can read a for-in loop var's undefined post-loop value
 begin
   if (FFormTypeList = nil) or (FFilterMemo = nil) then
     Exit;
@@ -3845,11 +3906,12 @@ begin
       Inc(Active);
   end; // for
 
+  FVisibleRows:= VisibleRowIndexes(FFormTypeRows, ClassSearchText);
   FFormTypeList.Items.BeginUpdate;
   try
     FFormTypeList.Items.Clear;
-    for i:= 0 to High(FFormTypeRows) do
-      FFormTypeList.Items.Add(FFormTypeRows[i].TypeName);
+    for VisIdx in FVisibleRows do
+      FFormTypeList.Items.Add(FFormTypeRows[VisIdx].TypeName);
   finally
     FFormTypeList.Items.EndUpdate;
   end;
@@ -3917,8 +3979,8 @@ var
   Hdr : Integer;
   Entry: TRuleCatalogEntry;
 begin
-  i:= FFormTypeList.ItemIndex;
-  if (i < 0) or (i > High(FFormTypeRows)) then
+  i:= SelectedRowIndex;
+  if i < 0 then
     Exit;
 
   FCbFrom.Text:= FFormTypeRows[i].TypeName;
@@ -3950,8 +4012,8 @@ procedure TConvRulesForm.FormTypeDblClick(Sender: TObject);
 var
   i: Integer;
 begin
-  i:= FFormTypeList.ItemIndex;
-  if (i < 0) or (i > High(FFormTypeRows)) then
+  i:= SelectedRowIndex;
+  if i < 0 then
     Exit;
   if not FFormTypeRows[i].Ruled then
   begin
@@ -4033,30 +4095,39 @@ begin
   Result:= True;
 end; // function
 
-procedure TConvRulesForm.ToggleFormTypeReenable(Sender: TObject);
+procedure TConvRulesForm.ToggleFormTypeSkip(Sender: TObject);
 var
   i: Integer;
+  k: Integer;
 begin
-  i:= FFormTypeList.ItemIndex;
-  if (i < 0) or (i > High(FFormTypeRows)) then
+  i:= SelectedRowIndex;
+  if i < 0 then
     Exit;
   FFormTypeRows[i].Skipped:= not FFormTypeRows[i].Skipped;
+  SaveSkipList;
   RefreshFormTypes;
-  FFormTypeList.ItemIndex:= i;
+  // Re-selecting by ROW, not by the old list slot: the refresh may have moved the
+  // row (a re-sort, or the search box hiding/revealing others), so k must come
+  // from ListIndexForRow rather than reusing the pre-refresh list index.
+  k:= ListIndexForRow(FVisibleRows, i);
+  if k >= 0 then
+    FFormTypeList.ItemIndex:= k;
 end;
 
 procedure TConvRulesForm.FormTypeDrawItem(AControl: TWinControl; AIndex: Integer; ARect: TRect; AState: TOwnerDrawState);
 var
-  LB  : TListBox    ;
-  Row : TFormTypeRow;
-  Mark: string      ;
-  S   : string      ;
+  LB    : TListBox    ;
+  Row   : TFormTypeRow;
+  Mark  : string      ;
+  S     : string      ;
+  RowIdx: Integer      ;
 begin
   LB:= TListBox(AControl);
   LB.Canvas.FillRect(ARect);
-  if (AIndex < 0) or (AIndex > High(FFormTypeRows)) then
+  RowIdx:= ResolveSelectedRow(FVisibleRows, AIndex, Length(FFormTypeRows));
+  if RowIdx < 0 then
     Exit;
-  Row:= FFormTypeRows[AIndex];
+  Row:= FFormTypeRows[RowIdx];
 
   case Row.Visual of
     tvkVisual   : Mark:= '[V]';

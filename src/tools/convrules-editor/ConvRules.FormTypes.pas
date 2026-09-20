@@ -206,11 +206,12 @@ function TypeIsExcluded(const ATypeName, ADeclaringUnit: string; const APatterns
 /// after, so the operator sees "what is really on the form" before "what else
 /// this unit merely declares".
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas)</para>
 /// <para>Calls: CompareText, Copy, Default, SameText, Trim</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function MergeClassRows(const ADfmRows: TFormTypeRows; const APasClasses: TArray<string>): TFormTypeRows;  // dl:ok unused-public-symbol@df80 -- Task 4 of a multi-task plan; Task 5 wires this into HarvestUnitClasses/HarvestFormTypes
+function MergeClassRows(const ADfmRows: TFormTypeRows; const APasClasses: TArray<string>): TFormTypeRows;
 
 /// <summary>PURE: the HarvestUnitClasses status-line suffix for one
 /// TEngineAdapter.OutlineClasses outcome.</summary>
@@ -235,6 +236,12 @@ function MergeClassRows(const ADfmRows: TFormTypeRows; const APasClasses: TArray
 /// existed. Extracted from HarvestUnitClasses (ConvRules.MainForm.pas, which
 /// ConvRulesModelTests.dpr does not compile) so this branching is reachable
 /// by an automated test.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format(' NOTE: the indexer could not list classes (%s) -- fell back to a text scan, which cannot see conditionals or comments.', [AError]); Format(' (%s was not in any index; a local scratch index was built for it -- once only)', [AFileName]); ''</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function DescribeOutlineOutcome(ASucceeded, AIndexedNow: Boolean; const AFileName, AError: string): string;
 
@@ -277,11 +284,54 @@ function CountRows(const ARows: TFormTypeRows): TRowCounts;  // dl:ok unused-pub
 /// never changes CountRows' totals.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ContainsText, Trim</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function VisibleRowIndexes(const ARows: TFormTypeRows; const ASearch: string): TArray<Integer>;  // dl:ok unused-public-symbol@fb8e -- Task 4 of a multi-task plan; Task 6 wires this into the search box
+function VisibleRowIndexes(const ARows: TFormTypeRows; const ASearch: string): TArray<Integer>;
+
+/// <summary>PURE: maps a list-box position through a visible-row index to the
+/// row it stands for.</summary>
+/// <param name="AVisibleRows">The list-slot -> row-index map, as VisibleRowIndexes
+/// returns it.</param>
+/// <param name="AListIndex">The list box's ItemIndex (0-based); -1 means no
+/// selection.</param>
+/// <param name="ARowCount">Length of the full row array AVisibleRows indexes
+/// into -- NOT Length(AVisibleRows).</param>
+/// <returns>The row index into the full row array, or -1 when AListIndex is out
+/// of range, AVisibleRows is empty, or the mapped row index no longer fits
+/// ARowCount (a stale map read against a row array that has since shrunk).</returns>
+/// <remarks>
+/// This is the ONLY place a list position becomes a row index. The list
+/// shows only the rows the search box leaves visible, so a list slot and a row
+/// index are two different numbers the moment a search is active; indexing the
+/// row array with a list position directly addresses the wrong class.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SelectedRowIndex (ConvRules.MainForm.pas)</para>
+/// <para>Returns: -1; AVisibleRows[AListIndex]</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ResolveSelectedRow(const AVisibleRows: TArray<Integer>; AListIndex, ARowCount: Integer): Integer;
+
+/// <summary>PURE: the reverse of ResolveSelectedRow -- the list-box position that
+/// currently shows ARowIndex, so a row can be re-selected after a refresh.</summary>
+/// <param name="AVisibleRows">The list-slot -> row-index map, as VisibleRowIndexes
+/// returns it.</param>
+/// <param name="ARowIndex">A row index into the full row array.</param>
+/// <returns>The list slot showing that row, or -1 when the row is not currently
+/// visible (filtered out, or not present in the map at all).</returns>
+/// <remarks>
+/// Linear scan -- AVisibleRows is one list box's worth of rows, not a large
+/// index, so there is nothing to gain from a reverse lookup structure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.ToggleFormTypeSkip (ConvRules.MainForm.pas)</para>
+/// <para>Returns: -1; k</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ListIndexForRow(const AVisibleRows: TArray<Integer>; ARowIndex: Integer): Integer;
 
 implementation
 
@@ -521,6 +571,26 @@ begin
   for i:= 0 to High(ARows) do
     if (S = '') or ContainsText(ARows[i].TypeName, S) then
       Result:= Result + [i];
+end; // function
+
+function ResolveSelectedRow(const AVisibleRows: TArray<Integer>; AListIndex, ARowCount: Integer): Integer;
+begin
+  Result:= -1;
+  if (AListIndex < 0) or (AListIndex > High(AVisibleRows)) then
+    Exit;
+  Result:= AVisibleRows[AListIndex];
+  if (Result < 0) or (Result >= ARowCount) then
+    Result:= -1;
+end; // function
+
+function ListIndexForRow(const AVisibleRows: TArray<Integer>; ARowIndex: Integer): Integer;
+var
+  k: Integer;
+begin
+  Result:= -1;
+  for k:= 0 to High(AVisibleRows) do
+    if AVisibleRows[k] = ARowIndex then
+      Exit(k);
 end; // function
 
 end.
