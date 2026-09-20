@@ -68,6 +68,10 @@ type
 
 implementation
 
+uses
+  DRagLint.Core.ForwardStub { PairForwardStubs / HasChildInSet -- BuildInventory }
+  ;
+
 type
   { Result of the per-class middle-man delegation scan: how many body methods
     are pure one-line delegations to the dominant field, out of how many total,
@@ -282,7 +286,16 @@ var
     begin
       Path:= AStore.GetFilePath(Fid);
       Syms:= AStore.FindSymbolsByFile(Path);
-      for S in Syms do
+      { C2.5: a forward stub (`TFoo = class;` completed later in this unit) is
+        NOT a class. Left in, it entered ByName FIRST (lower line) and
+        ResolveParents parented every `class(TFoo)` to the stub, so the real
+        TFoo measured NOC 0 and the finding pointed at the stub. Whole-file rows
+        are in hand, so children are answered from Syms, not the store. }
+      var StubOf: TArray<Integer>:= PairForwardStubs(Syms, HasChildInSet(Syms));
+      for var Idx:= 0 to High(Syms) do
+      begin
+        S:= Syms[Idx];
+        if StubOf[Idx] >= 0 then Continue;
         if S.Kind = skClass then
         begin
           Info:= Default(TClassInfo);
@@ -309,8 +322,9 @@ var
             end;
             Lst.Add(Info.Id);
           end;
-        end;
-    end;
+        end; // if skClass
+      end; // for Idx
+    end; // for Fid
   end;
 
   { Resolve each class's direct class-parent (first heritage entry that resolves

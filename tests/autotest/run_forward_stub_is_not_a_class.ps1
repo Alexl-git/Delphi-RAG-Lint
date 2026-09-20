@@ -277,6 +277,22 @@ try {
 }
 finally { Pop-Location }
 
+# ============================================================= CASE C =====
+Push-Location $WorkDir
+try {
+  Write-Host ''
+  Write-Host 'CASE C: ClassMetrics measures the real TFoo once, the stub never' -ForegroundColor Cyan
+  $la = (& $Exe lint-all --db $db --quiet 2>$null | Out-String)
+  $tmc = @($la -split "`r?`n" | Where-Object { $_ -match 'too-many-children' })
+  Check 'S5 POSITIVE CONTROL: too-many-children fires (11 kids > threshold 10)' ($tmc.Count -ge 1) "rows=$($tmc.Count)"
+  Check 'S5: it fires exactly ONCE (the target measured once)' ($tmc.Count -eq 1) "rows=$($tmc.Count)"
+  if ($tmc.Count -ge 1) {
+    $anch = if ($tmc[0] -match '\.pas:(\d+):') { [int]$Matches[1] } else { -1 }
+    Check "S5: anchored on the REAL TFoo (line $realLine), not the stub (line $stubLine)" ($anch -eq $realLine) "anchored=$anch got: [$($tmc[0])]"
+  }
+}
+finally { Pop-Location }
+
 # ---- CASE B / C / D are appended by Tasks 3-5 ABOVE this footer ----
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
