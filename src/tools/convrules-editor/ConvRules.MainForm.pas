@@ -23,6 +23,7 @@ uses
   , Vcl.Forms
   , Vcl.Controls
   , Vcl.StdCtrls
+  , Vcl.CheckLst
   , Vcl.ComCtrls
   , Vcl.ExtCtrls
   , Vcl.Grids
@@ -148,7 +149,7 @@ type
       // Skipped is the user's per-row mark and is preserved ACROSS a refilter and a
       // re-scan, which is the whole reason the mark lives on the row and is not
       // recomputed.
-      FFormTypeList : TListBox     ; // owner-drawn: [V] TOvcTable (28)
+      FFormTypeList : TCheckListBox; // owner-drawn checklist: dfm [V] TOvcTable  (28)
       FFormTypeRows : TFormTypeRows;
       // List index -> FFormTypeRows index. The list shows only the rows the search
       // box leaves visible, so the two are NOT the same number. Every handler must
@@ -738,6 +739,25 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ToggleFormTypeSkip(Sender: TObject);
+      /// <summary>Applies the checklist's ticked state to the selected row's
+      /// Skipped flag and persists it immediately.</summary>
+      /// <param name="Sender">Unused; required by TCheckListBox.OnClickCheck.</param>
+      /// <remarks>
+      /// Checked means "we are not converting this class" -- an explicit user
+      /// decision, saved on the spot rather than at some later Save the user
+      /// may never reach.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList</para>
+      /// <para>Reads: FFormTypeRows, FFormTypeList</para>
+      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveSkipList"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure FormTypeCheckClick(Sender: TObject);
       /// <summary>Owner-draws one form-type row: V/N/? mark, name, count, why dimmed.</summary>
       /// <param name="AControl"><!-- drag-lint:auto type -->TWinControl</param>
       /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
@@ -745,15 +765,15 @@ type
       /// <param name="AState"><!-- drag-lint:auto type -->TOwnerDrawState</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.FormTypes.RowState, Format, TListBox</para>
-      /// <para>Reads: FFormTypeRows</para>
+      /// <para>Calls: ConvRules.FormTypes.DescribeFormTypeRow, ConvRules.FormTypes.ResolveSelectedRow, ConvRules.FormTypes.RowState, TCheckListBox</para>
+      /// <para>Reads: FVisibleRows, FFormTypeRows</para>
       /// <para>UI thread only -- touches AControl</para>
       /// <para>Pure</para>
+      /// <seealso cref="ConvRules.FormTypes.DescribeFormTypeRow"/>
+      /// <seealso cref="ConvRules.FormTypes.ResolveSelectedRow"/>
       /// <seealso cref="ConvRules.FormTypes.RowState"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FormTypeDrawItem(AControl: TWinControl; AIndex: Integer; ARect: TRect; AState: TOwnerDrawState);
@@ -2480,16 +2500,20 @@ begin
   FLblFormTypes.Parent:= FormTypesPanel; FLblFormTypes.SetBounds(6, 158, 288, 15);
   FLblFormTypes.Caption:= '';
 
-  { Form types list: reduced height to make room for the rules list below it. }
-  FFormTypeList:= TListBox.Create(Self);
+  { Form types list: reduced height to make room for the rules list below it.
+    A checklist, not a plain listbox -- the box IS the skip/re-enable control;
+    ToggleFormTypeSkip's button remains as the keyboard/no-mouse path to the
+    same decision. }
+  FFormTypeList:= TCheckListBox.Create(Self);
   FFormTypeList.Parent:= FormTypesPanel;
   FFormTypeList.SetBounds(6, 176, 288, 170);
   FFormTypeList.Anchors:= [akLeft, akTop, akRight];
   FFormTypeList.Style     := lbOwnerDrawFixed;
   FFormTypeList.ItemHeight:= 18;
-  FFormTypeList.OnDrawItem:= FormTypeDrawItem;
-  FFormTypeList.OnClick   := FormTypeClick;
-  FFormTypeList.OnDblClick:= FormTypeDblClick;
+  FFormTypeList.OnDrawItem  := FormTypeDrawItem;
+  FFormTypeList.OnClick     := FormTypeClick;
+  FFormTypeList.OnDblClick  := FormTypeDblClick;
+  FFormTypeList.OnClickCheck:= FormTypeCheckClick;
 
   { Rules list: relocated from TabRules into FormTypesPanel below the form types list.
     This consolidates the two redundant left lists into one form-types-driven view. }
@@ -3836,16 +3860,16 @@ var
   DeclU : string           ;  // dl:ok write-only-local@ca0c -- same removal; still computed for the standard-controls check, consumed again once TypeIsExcluded is back
   Entry : TRuleCatalogEntry;
   i     : Integer          ;
-  Active: Integer          ;
   Cold  : Integer          ;
   VisIdx: Integer          ; // for-in var over FVisibleRows -- kept distinct from i so nothing can read a for-in loop var's undefined post-loop value
+  k     : Integer          ; // indexed (not for-in) restore loop below -- Checked[] needs the list SLOT, not just the row
+  Cnt   : TRowCounts       ;
 begin
   if (FFormTypeList = nil) or (FFilterMemo = nil) then
     Exit;
 
   Pats:= FFilterMemo.Lines.ToStringArray;
   FFilterError:= '';
-  Active      := 0;
 
   // Resolving a declaring unit costs a process spawn against a multi-GB index
   // (measured 1.7 s each), so it happens ONLY when the standard-controls box is
@@ -3901,9 +3925,6 @@ begin
       FFormTypeRows[i].Ruled  := False;
       FFormTypeRows[i].RuledBy:= '';
     end;
-
-    if RowState(FFormTypeRows[i]) = rsToDo then
-      Inc(Active);
   end; // for
 
   FVisibleRows:= VisibleRowIndexes(FFormTypeRows, ClassSearchText);
@@ -3912,16 +3933,16 @@ begin
     FFormTypeList.Items.Clear;
     for VisIdx in FVisibleRows do
       FFormTypeList.Items.Add(FFormTypeRows[VisIdx].TypeName);
+    // Restore the ticked state: FFormTypeList.Items was just rebuilt from
+    // scratch, so every checkbox starts unticked until this puts Skipped back.
+    for k:= 0 to High(FVisibleRows) do
+      FFormTypeList.Checked[k]:= FFormTypeRows[FVisibleRows[k]].Skipped;
   finally
     FFormTypeList.Items.EndUpdate;
   end;
 
-  // A malformed pattern excludes nothing, so without this line the user would read
-  // an un-greyed row as "my filter kept this" when the condition never ran at all.
-  if FFilterError <> '' then
-    FLblFormTypes.Caption:= 'FILTER ERROR -- ' + FFilterError
-  else
-    FLblFormTypes.Caption:= Format('%d type(s), %d active', [Length(FFormTypeRows), Active]);
+  Cnt:= CountRows(FFormTypeRows);
+  FLblFormTypes.Caption:= FormTypesProgressCaption(Cnt, Length(FVisibleRows), FFilterError);
 end; // procedure
 
 procedure TConvRulesForm.RescanRulesFolder(Sender: TObject);
@@ -4114,41 +4135,62 @@ begin
     FFormTypeList.ItemIndex:= k;
 end;
 
+{ The user ticked or cleared a row's box. Checked means "we are not converting
+  this class" -- the decision is the user's, so it is saved immediately rather
+  than at some later Save the user may never reach. }
+procedure TConvRulesForm.FormTypeCheckClick(Sender: TObject);
+var
+  i: Integer;
+begin
+  i:= SelectedRowIndex;
+  if i < 0 then
+    Exit;
+  FFormTypeRows[i].Skipped:= FFormTypeList.Checked[FFormTypeList.ItemIndex];
+  SaveSkipList;
+  RefreshFormTypes;
+end; // procedure
+
 procedure TConvRulesForm.FormTypeDrawItem(AControl: TWinControl; AIndex: Integer; ARect: TRect; AState: TOwnerDrawState);
 var
-  LB    : TListBox    ;
-  Row   : TFormTypeRow;
-  Mark  : string      ;
-  S     : string      ;
-  RowIdx: Integer      ;
+  LB    : TCheckListBox;
+  Row   : TFormTypeRow ;
+  S     : string       ;
+  RowIdx: Integer       ;
 begin
-  LB:= TListBox(AControl);
+  LB:= TCheckListBox(AControl);
   LB.Canvas.FillRect(ARect);
   RowIdx:= ResolveSelectedRow(FVisibleRows, AIndex, Length(FFormTypeRows));
   if RowIdx < 0 then
     Exit;
   Row:= FFormTypeRows[RowIdx];
 
-  case Row.Visual of
-    tvkVisual   : Mark:= '[V]';
-    tvkNonVisual: Mark:= '[N]';
-    else
-      Mark:= '[?]';
+  // The text itself (origin/mark/name/count/ruled-by) is DescribeFormTypeRow
+  // (ConvRules.FormTypes.pas) -- a pure function with its own tests, since this
+  // unit is outside the tests project's compile closure. Colour and the
+  // skipped strikethrough are VCL painting and stay here.
+  S:= DescribeFormTypeRow(Row);
+
+  // Three states, three renderings. Before 2026-09-20 "already ruled" and
+  // "filtered out" were the same grey, so the list could not answer the one
+  // question it is for: what is still to do.
+  if not (odSelected in AState) then
+  case RowState(Row) of
+    rsSkipped: LB.Canvas.Font.Color:= clGrayText;
+    rsRuled  : LB.Canvas.Font.Color:= clGreen   ;
+  else
+    LB.Canvas.Font.Color:= LB.Font.Color;
   end;
 
-  S:= Format('%s %s  (%d)', [Mark, Row.TypeName, Row.Count]);
-  if Row.Ruled then
-    S:= S + '  -- ' + Row.RuledBy;
-  if Row.Skipped then
-    S:= S + '  *';
-
-  // Selection keeps the theme's highlight colours; only unselected non-todo rows
-  // are dimmed, so a row stays readable when the user is on it. Task 6/7 replace
-  // this with state-specific painting (ruled vs skipped must look different).
-  if (RowState(Row) <> rsToDo) and not (odSelected in AState) then
-    LB.Canvas.Font.Color:= clGrayText;
-
-  LB.Canvas.TextOut(ARect.Left + 4, ARect.Top + 1, S);
+  LB.Canvas.TextOut(ARect.Left + 4, ARect.Top + 1, S);  // dl:ok magic-literal@0acd -- Task 7; a 4px/1px text inset, same unnamed convention as every other TextOut in this owner-draw file
+  if RowState(Row) = rsSkipped then
+  begin
+    // Struck out, so "we decided against this" reads differently from "dimmed
+    // because it is selected elsewhere".
+    var Y: Integer:= ARect.Top + (ARect.Height div 2);
+    LB.Canvas.Pen.Color:= clGrayText;
+    LB.Canvas.MoveTo(ARect.Left + 4, Y);  // dl:ok magic-literal@5998 -- Task 7; same 4px inset as the TextOut two lines up, so the strikethrough starts under the text
+    LB.Canvas.LineTo(ARect.Left + 4 + LB.Canvas.TextWidth(S), Y);  // dl:ok magic-literal@81a4 -- Task 7; same 4px inset, ends at the text's measured width
+  end;
 end; // procedure
 
 function TConvRulesForm.ExpandUnitSiblings(const APaths: TArray<string>): TArray<string>;

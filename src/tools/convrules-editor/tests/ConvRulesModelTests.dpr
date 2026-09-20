@@ -4614,6 +4614,63 @@ begin
   Check('listidx.empty.map', ListIndexForRow(nil, 2) = -1);
 end; // procedure
 
+{ DescribeFormTypeRow / FormTypesProgressCaption: the checkbox list's three
+  renderings and the progress line, extracted from FormTypeDrawItem and
+  RefreshFormTypes (ConvRules.MainForm.pas, which ConvRulesModelTests.dpr does
+  not compile) so they are reachable by an automated test. }
+procedure TestFormTypeRendering;
+var
+  Row: TFormTypeRow;
+  Cnt: TRowCounts;
+begin
+  // --- origin and visual mark
+  Row:= Default(TFormTypeRow);
+  Row.TypeName:= 'TFoo';
+  Row.Origin  := roPas;
+  Row.Visual  := tvkVisual;
+  Check('rowtext.pas.visual', DescribeFormTypeRow(Row) = 'pas [V] TFoo', DescribeFormTypeRow(Row));
+
+  Row.Origin:= roDfm;
+  Row.Visual:= tvkNonVisual;
+  Check('rowtext.dfm.nonvisual', DescribeFormTypeRow(Row) = 'dfm [N] TFoo', DescribeFormTypeRow(Row));
+
+  Row.Origin:= roBoth;
+  Check('rowtext.both.is.dfm', DescribeFormTypeRow(Row) = 'dfm [N] TFoo', 'only roPas renders as pas; roBoth reads as dfm, same as roDfm');
+
+  Row.Visual:= tvkUnknown;
+  Check('rowtext.unknown.mark', DescribeFormTypeRow(Row) = 'dfm [?] TFoo');
+
+  // --- instance count, zero is omitted
+  Row:= Default(TFormTypeRow); Row.TypeName:= 'TFoo'; Row.Origin:= roDfm;
+  Check('rowtext.count.zero.omitted', DescribeFormTypeRow(Row) = 'dfm [?] TFoo');
+  Row.Count:= 5;
+  Check('rowtext.count.shown', DescribeFormTypeRow(Row) = 'dfm [?] TFoo  (5)');
+
+  // --- ruled-by suffix, and the +N more guard (RuleCount is 0 until Task 11
+  // fills it in; exercised here directly with a synthetic value)
+  Row.Ruled:= True; Row.RuledBy:= 'bde.rules';
+  Check('rowtext.ruledby', DescribeFormTypeRow(Row) = 'dfm [?] TFoo  (5)  -- bde.rules');
+  Row.RuleCount:= 1;
+  Check('rowtext.rulecount.one.no.suffix', DescribeFormTypeRow(Row) = 'dfm [?] TFoo  (5)  -- bde.rules', 'RuleCount = 1 means only the named rule; no +N more');
+  Row.RuleCount:= 3;
+  Check('rowtext.rulecount.more', DescribeFormTypeRow(Row) = 'dfm [?] TFoo  (5)  -- bde.rules  +2 more');
+
+  // --- progress line: filter error wins over everything, even good counts
+  Cnt:= Default(TRowCounts);
+  Cnt.Total:= 5; Cnt.Ruled:= 2; Cnt.Skipped:= 1; Cnt.ToDo:= 2;
+  Check('progress.filtererror', FormTypesProgressCaption(Cnt, 3, 'bad regex') = 'FILTER ERROR -- bad regex', FormTypesProgressCaption(Cnt, 3, 'bad regex'));
+
+  // --- a search hiding rows: "N of M shown"
+  Check('progress.filtered', FormTypesProgressCaption(Cnt, 3, '') = '3 of 5 shown -- 2 ruled, 1 skipped, 2 to do', FormTypesProgressCaption(Cnt, 3, ''));
+
+  // --- nothing hidden: the plain form
+  Check('progress.full', FormTypesProgressCaption(Cnt, 5, '') = '5 classes -- 2 ruled, 1 skipped, 2 to do', FormTypesProgressCaption(Cnt, 5, ''));
+
+  // --- zero rows is the plain form too, not "0 of 0 shown"
+  Cnt:= Default(TRowCounts);
+  Check('progress.empty', FormTypesProgressCaption(Cnt, 0, '') = '0 classes -- 0 ruled, 0 skipped, 0 to do');
+end; // procedure
+
 { DescribeOutlineOutcome: the status-line branching HarvestUnitClasses
   (ConvRules.MainForm.pas, outside this test project's compile closure) folds
   into its Result. Extracted so it has automated coverage at all. }
@@ -5788,6 +5845,7 @@ begin
     TestFormTypesFilter;
     TestClassRowModel;
     TestSelectedRowMapping;
+    TestFormTypeRendering;
     TestDescribeOutlineOutcome;
     TestRuleCatalogParse;
     TestRuleCatalogIndex;

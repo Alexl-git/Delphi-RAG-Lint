@@ -94,8 +94,8 @@ type
   /// Ruled + Skipped + ToDo always sums to Total -- CountRows partitions
   /// every row into exactly one bucket, via RowState.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.FormTypes.CountRows (ConvRules.FormTypes.pas), declaration (ConvRules.FormTypes.pas)</para>
-  /// <para>Used in units: ConvRules.FormTypes</para>
+  /// <para>Used by: ConvRules.FormTypes.CountRows (ConvRules.FormTypes.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas), declaration (ConvRules.FormTypes.pas)</para>
+  /// <para>Used in units: ConvRules.FormTypes, ConvRules.MainForm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRowCounts = record
@@ -254,7 +254,7 @@ function DescribeOutlineOutcome(ASucceeded, AIndexedNow: Boolean; const AFileNam
 /// Skipped is an explicit user decision and must never be masked by a
 /// derived fact such as Ruled.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.FormTypes.CountRows (ConvRules.FormTypes.pas), ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.FormTypes.CountRows (ConvRules.FormTypes.pas), ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas)</para>
 /// <para>Returns: rsSkipped; rsRuled; rsToDo</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
@@ -268,13 +268,14 @@ function RowState(const ARow: TFormTypeRow): TRowState;
 /// exactly once.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ConvRules.FormTypes.RowState, Default</para>
 /// <para>Returns: Default(TRowCounts)</para>
 /// <para>Pure</para>
 /// <seealso cref="ConvRules.FormTypes.RowState"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function CountRows(const ARows: TFormTypeRows): TRowCounts;  // dl:ok unused-public-symbol@17c4 -- Task 4 of a multi-task plan; Task 7 wires this into the progress line
+function CountRows(const ARows: TFormTypeRows): TRowCounts;
 
 /// <summary>PURE: the indexes of ARows whose TypeName matches ASearch.</summary>
 /// <param name="ARows">The full row set; indexes are into this array.</param>
@@ -332,6 +333,51 @@ function ResolveSelectedRow(const AVisibleRows: TArray<Integer>; AListIndex, ARo
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ListIndexForRow(const AVisibleRows: TArray<Integer>; ARowIndex: Integer): Integer;
+
+/// <summary>PURE: the display text for one form-types-list row -- origin,
+/// visual mark, type name, instance count and ruled-by suffix, in that
+/// order.</summary>
+/// <param name="ARow">A decorated row.</param>
+/// <returns>'&lt;org&gt; &lt;mark&gt; TypeName', with '  (Count)' appended when
+/// Count is nonzero, '  -- RuledBy' appended when Ruled, and a further
+/// '  +N more' when RuleCount counts more rules than the one named in
+/// RuledBy.</returns>
+/// <remarks>
+/// Extracted from FormTypeDrawItem (ConvRules.MainForm.pas, which
+/// ConvRulesModelTests.dpr does not compile) so the three renderings are
+/// reachable by an automated test. Colour and the skipped strikethrough are
+/// VCL painting decisions and stay in FormTypeDrawItem; this function only
+/// produces the text.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DescribeFormTypeRow(const ARow: TFormTypeRow): string;
+
+/// <summary>PURE: the form-types panel's progress-line caption.</summary>
+/// <param name="ACnt">The row counts, as CountRows partitions them.</param>
+/// <param name="AVisibleCount">How many rows the search box currently leaves
+/// visible (Length of VisibleRowIndexes' result).</param>
+/// <param name="AFilterError">The first malformed exclusion pattern's
+/// message, or '' when the filter is well-formed.</param>
+/// <returns>'FILTER ERROR -- ' plus AFilterError when it is set (this wins
+/// over everything else, since a malformed filter's counts cannot be
+/// trusted); otherwise '&lt;shown&gt; of &lt;total&gt; shown -- ...' when the
+/// search is hiding rows; otherwise '&lt;total&gt; classes -- ...'.</returns>
+/// <remarks>
+/// Extracted from RefreshFormTypes (ConvRules.MainForm.pas, which
+/// ConvRulesModelTests.dpr does not compile) so the three-way branching is
+/// reachable by an automated test.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: 'FILTER ERROR -- ' + AFilterError; Format('%d of %d shown -- %d ruled, %d skipped, %d to do', [AVisibleCount, ACnt.Total, ACnt.Ruled, ACnt.Skipped, ACnt.ToDo]); Format('%d classes -- %d ruled, %d skipped, %d to do', [ACnt.Total, ACnt.Ruled, ACnt.Skipped, ACnt.ToDo])</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function FormTypesProgressCaption(const ACnt: TRowCounts; AVisibleCount: Integer; const AFilterError: string): string;
 
 implementation
 
@@ -591,6 +637,51 @@ begin
   for k:= 0 to High(AVisibleRows) do
     if AVisibleRows[k] = ARowIndex then
       Exit(k);
+end; // function
+
+function DescribeFormTypeRow(const ARow: TFormTypeRow): string;
+var
+  Mark: string;
+  Org : string;
+begin
+  case ARow.Visual of
+    tvkVisual   : Mark:= '[V]';
+    tvkNonVisual: Mark:= '[N]';
+  else
+    Mark:= '[?]';
+  end;
+
+  // Origin is what tells a conversion candidate from a class the unit merely
+  // declares; without it the two are indistinguishable in one list. roBoth
+  // reads as dfm, same as roDfm -- the .dfm rows lead the merged list (see
+  // MergeClassRows), so "on the form" is the more useful thing to say first.
+  if ARow.Origin = roPas then
+    Org:= 'pas'
+  else
+    Org:= 'dfm';
+
+  Result:= Format('%s %s %s', [Org, Mark, ARow.TypeName]);
+  if ARow.Count > 0 then
+    Result:= Result + Format('  (%d)', [ARow.Count]);
+  if ARow.Ruled then
+  begin
+    Result:= Result + '  -- ' + ARow.RuledBy;
+    if ARow.RuleCount > 1 then
+      Result:= Result + Format('  +%d more', [ARow.RuleCount - 1]);
+  end;
+end; // function
+
+function FormTypesProgressCaption(const ACnt: TRowCounts; AVisibleCount: Integer; const AFilterError: string): string;
+begin
+  // A malformed pattern excludes nothing, so without this branch the operator
+  // would read an un-greyed row as "my filter kept this" when the condition
+  // never ran at all.
+  if AFilterError <> '' then
+    Result:= 'FILTER ERROR -- ' + AFilterError
+  else if AVisibleCount < ACnt.Total then
+    Result:= Format('%d of %d shown -- %d ruled, %d skipped, %d to do', [AVisibleCount, ACnt.Total, ACnt.Ruled, ACnt.Skipped, ACnt.ToDo])
+  else
+    Result:= Format('%d classes -- %d ruled, %d skipped, %d to do', [ACnt.Total, ACnt.Ruled, ACnt.Skipped, ACnt.ToDo]);
 end; // function
 
 end.
