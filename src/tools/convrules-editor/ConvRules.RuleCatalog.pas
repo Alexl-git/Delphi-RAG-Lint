@@ -428,6 +428,17 @@ function UniqueRulePath(const AFolder, AName: string): string;
 /// </remarks>
 function FindRuleForType(const ACatalog: TRuleCatalog; const ATypeName: string; out AEntry: TRuleCatalogEntry): Boolean;
 
+/// <summary>PURE: every catalogue entry whose From type is AType.</summary>
+/// <param name="ACatalog">The scanned rules folder.</param>
+/// <param name="AType">A bare or qualified type name; matched on the bare name,
+/// case-insensitively, exactly as FindRuleForType matches.</param>
+/// <returns>All matching entries in catalogue order; empty when none.</returns>
+/// <remarks>More than one entry is NOT an error. Owner ruling 2026-09-20: one
+/// From class may legitimately convert to several To classes, in different rule
+/// books, for different conversion campaigns. FindRuleForType returns only the
+/// first and stays the right call when a single answer is wanted.</remarks>
+function RulesForType(const ACatalog: TRuleCatalog; const AType: string): TArray<TRuleCatalogEntry>;
+
 /// <summary>PURE: render a catalog as the on-disk index text.</summary>
 /// <param name="ACatalog"><!-- drag-lint:auto type -->const TRuleCatalog</param>
 /// <returns>CATALOG_INDEX_HEADER then one tab-separated
@@ -949,6 +960,24 @@ begin
       AEntry:= Entry;
       Exit(True);
     end;
+end; // function
+
+function RulesForType(const ACatalog: TRuleCatalog; const AType: string): TArray<TRuleCatalogEntry>;
+var
+  List : TList<TRuleCatalogEntry>;
+  Entry: TRuleCatalogEntry       ;
+  Want : string                  ;
+begin
+  Want:= BareTypeName(AType);
+  List:= TList<TRuleCatalogEntry>.Create;
+  try
+    for Entry in ACatalog do
+      if SameText(BareTypeName(Entry.FromType), Want) then
+        List.Add(Entry);
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end; // try
 end; // function
 
 function CatalogToIndexText(const ACatalog: TRuleCatalog): string;

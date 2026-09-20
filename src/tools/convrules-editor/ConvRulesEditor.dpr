@@ -32,6 +32,7 @@ uses
   , ConvRules.FormTypes in 'ConvRules.FormTypes.pas'
   , ConvRules.RuleCatalog in 'ConvRules.RuleCatalog.pas'
   , ConvRules.SkipList in 'ConvRules.SkipList.pas'
+  , ConvRules.RuleChooser in 'ConvRules.RuleChooser.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

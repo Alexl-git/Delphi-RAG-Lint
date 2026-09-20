@@ -155,6 +155,11 @@ type
       // re-scan, which is the whole reason the mark lives on the row and is not
       // recomputed.
       FFormTypeList : TCheckListBox; // owner-drawn checklist: dfm [V] TOvcTable  (28)
+      { "+ Add rule for this class" -- reachable even when the class has exactly
+        one rule already, since the chooser (TRuleChooserForm) never opens for a
+        single match. Without this button a second To for that From class (R3.5)
+        would be unreachable. Enabled only while a row is selected. }
+      FBtnAddRule   : TButton       ;
       FFormTypeRows : TFormTypeRows;
       // List index -> FFormTypeRows index. The list shows only the rows the search
       // box leaves visible, so the two are NOT the same number. Every handler must
@@ -661,72 +666,103 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RescanRulesFolder(Sender: TObject);
-      /// <summary>Copies the clicked type into the From picker.</summary>
+      /// <summary>Single-click SELECTS a row -- shows its state on the status
+      /// line and touches nothing else.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
+      /// Deliberately does not write FCbFrom, FCbTo or the grid: the class
+      /// list is navigated with the keyboard as much as the mouse, and an arrow key
+      /// that rewrote the From box and reloaded the grid on every move would make
+      /// browsing destructive. Loading From/To and the grid is FormTypeDblClick's
+      /// job. Also enables/disables FBtnAddRule to match whether a row is selected.
       /// Fires whether the row is greyed or not, by design: a greyed row is
       /// a hint, never a prohibition.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SetStatus, Format</para>
-      /// <para>Reads: FFormTypeList, FFormTypeRows, FCbFrom</para>
+      /// <para>Calls: ConvRules.FormTypes.RowState, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, Format</para>
+      /// <para>Reads: FFormTypeList, FFormTypeRows, FBtnAddRule</para>
       /// <para>Pure</para>
+      /// <seealso cref="ConvRules.FormTypes.RowState"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FormTypeClick(Sender: TObject);
-      /// <summary>Double-click a RULED type: open the book that owns it and select
-      /// the block.</summary>
+      /// <summary>Double-click ACTS: loads From (and To, when unambiguous) and
+      /// the grid.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
-      /// The conservative reading of "edit an individual conversion": it
-      /// loads the whole owning FILE and selects the rule inside it, so FFilePath
-      /// keeps meaning exactly what it meant before and there is no new way to lose a
-      /// file. Switching books goes through the same three-way prompt Curate uses,
-      /// worded with DISCARD because that is what No does.
-      /// <para>For a type claimed by several rules it opens the FIRST site -- the one
-      /// FindRuleForType reports as the owner and the panel already names -- and says
-      /// how many others exist, because picking silently between two rules is the
-      /// mistake this whole catalog exists to prevent.</para>
+      /// With no rule yet for the class, only From is set -- the user picks a
+      /// To class and presses "+ New Conversion". With exactly ONE rule, that rule
+      /// opens directly, via OpenOwningRuleEntry. With SEVERAL (RulesForType,
+      /// ConvRules.RuleCatalog.pas), TRuleChooserForm.Execute
+      /// (ConvRules.RuleChooser.pas) lets the user pick which one to open, or say
+      /// "Add a new rule..." for a different To on the same From -- one From class
+      /// may legitimately convert to several To classes across rule books (owner
+      /// ruling 2026-09-20). Every "open" path, single-rule or chosen from the
+      /// picker, goes through OpenOwningRuleEntry -- the one implementation of the
+      /// cross-book save/discard prompt.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.SetStatus, Format</para>
-      /// <para>Reads: FFormTypeList, FFormTypeRows</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRule"/>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.RulesForType, ConvRules.RuleCatalog.HeaderIndexFor, ConvRules.RuleChooser.TRuleChooserForm.Execute, Format</para>
+      /// <para>Reads: FFormTypeList, FFormTypeRows, FCbFrom, FCbTo, FCatalog, FBook</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
+      /// <seealso cref="ConvRules.RuleCatalog.RulesForType"/>
+      /// <seealso cref="ConvRules.RuleChooser.TRuleChooserForm.Execute"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FormTypeDblClick(Sender: TObject);
-      /// <summary>Opens the book that owns ATypeName's rule and selects the block.</summary>
+      /// <summary>Looks up ATypeName's FIRST catalogued rule (FindRuleForType)
+      /// and opens it.</summary>
       /// <param name="ATypeName">A bare or qualified type name.</param>
       /// <returns>False when nothing was opened -- not catalogued, the user cancelled,
       /// a save failed, or the index is stale. The reason is already on the status bar.</returns>
       /// <remarks>
-      /// The single way to reach an existing rule, shared by the form-types
-      /// double-click and by New Conversion when it finds the type already ruled. One
-      /// implementation because both must apply the same discard prompt and the same
-      /// stale-index handling.
+      /// Thin wrapper kept for the callers that still name a TYPE rather than
+      /// an already-chosen entry (New Conversion when it finds the type already
+      /// ruled). The actual opening -- the cross-book save/discard prompt, the
+      /// block lookup, selecting it in FRules -- is OpenOwningRuleEntry, so a type
+      /// name and a picker-chosen entry both open through the SAME code.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.FindRuleForType, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, MessageDlg, SameText</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.RuleCatalog.FindRuleForType, Format</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 75 lines (full implementation)</para>
-      /// <para>Reads: FCatalog, FFilePath, FBook, FRules</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadGridForBlock"/>
+      /// <para>Reads: FCatalog</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
+      /// <seealso cref="ConvRules.RuleCatalog.FindRuleForType"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function OpenOwningRule(const ATypeName: string): Boolean;
+      /// <summary>Opens an ALREADY-CHOSEN catalog entry: the cross-book
+      /// save/discard prompt, then selects its block.</summary>
+      /// <param name="AEntry">A catalog entry -- from FindRuleForType (the "first
+      /// rule" case) or from the user's pick in TRuleChooserForm (the "several
+      /// rules" case).</param>
+      /// <returns>False when nothing was opened -- the user cancelled the
+      /// cross-book prompt, a save failed, or AEntry's book no longer has a
+      /// #convert for it (a stale index). The reason is already on the status bar.</returns>
+      /// <remarks>
+      /// THE single implementation of the cross-book save/discard prompt.
+      /// Extracted from OpenOwningRule's body (from the "is this a different book"
+      /// test onward) so FormTypeDblClick's chooser path can open the entry the
+      /// USER picked -- not necessarily FindRuleForType's first -- through the
+      /// exact same prompt, rather than a second copy of it. Displays
+      /// BareTypeName(AEntry.FromType) rather than a caller-supplied string, since
+      /// the caller may only have the entry.
+      /// </remarks>
+      function OpenOwningRuleEntry(const AEntry: TRuleCatalogEntry): Boolean;
+      /// <summary>"+ Add rule for this class": sets From to the selected row's
+      /// type and clears To, same as double-clicking an UNRULED class.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// Exists because a class with exactly ONE rule never opens
+      /// TRuleChooserForm (FormTypeDblClick opens that rule directly), so without
+      /// this button a second To for the same From class (R3.5) would be
+      /// unreachable from a single-ruled row. Enabled/disabled by FormTypeClick.
+      /// </remarks>
+      procedure DoAddRuleForSelectedClass(Sender: TObject);
       /// <summary>Toggles the selected row's Skipped mark.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
@@ -1980,6 +2016,7 @@ uses
   , ConvRules.Units
   , ConvRules.WorkingSet
   , ConvRules.CurationForm
+  , ConvRules.RuleChooser
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2563,14 +2600,26 @@ begin
   FFormTypeList.OnDblClick  := FormTypeDblClick;
   FFormTypeList.OnClickCheck:= FormTypeCheckClick;
 
+  { "+ Add rule for this class" -- see FBtnAddRule's field comment. Sits in the
+    19px gained by shifting the two controls below it down by the same amount,
+    same idiom Task 8 and Task 9 used for every row inserted into this panel. }
+  FBtnAddRule:= TButton.Create(Self);
+  FBtnAddRule.Parent:= FormTypesPanel;
+  FBtnAddRule.SetBounds(6, 392, 288, 23);  // dl:ok magic-literal@f0b4, large-magic-number@f0b4 -- Task 10; same unnamed-coordinate idiom as its siblings in this panel
+  FBtnAddRule.Caption:= '+ Add rule for this class';
+  FBtnAddRule.Enabled:= False;
+  FBtnAddRule.OnClick:= DoAddRuleForSelectedClass;
+
   { Rules list: relocated from TabRules into FormTypesPanel below the form types list.
     This consolidates the two redundant left lists into one form-types-driven view. }
   var LblRulesForType: TLabel:= TLabel.Create(Self);
-  LblRulesForType.Parent:= FormTypesPanel; LblRulesForType.SetBounds(6, 398, 288, 15);  // dl:ok multiple-statements-per-line@b0cd, magic-literal@b0cd, large-magic-number@b0cd -- Task 8, shifted +23 by Task 9; since the search box that used to sit here moved above the form-types list
+  LblRulesForType.Parent:= FormTypesPanel;
+  LblRulesForType.SetBounds(6, 417, 288, 15);  // dl:ok magic-literal@2ac4, large-magic-number@2ac4 -- Task 8, shifted +23 by Task 9, +19 by Task 10 for FBtnAddRule above; since the search box that used to sit here moved above the form-types list
   LblRulesForType.Caption:= 'Rules for selected type:';
 
   FRules:= TListView.Create(Self);
-  FRules.Parent   := FormTypesPanel; FRules.SetBounds(6, 421, 288, 221);  // dl:ok magic-literal@1a2d, large-magic-number@1a2d -- Task 9; top shifted +23, height reduced by the same 23 so the panel's bottom edge is unchanged
+  FRules.Parent:= FormTypesPanel;
+  FRules.SetBounds(6, 440, 288, 202);  // dl:ok magic-literal@c7ac, large-magic-number@c7ac -- Task 9, shifted +19/-19 by Task 10 for FBtnAddRule above; top shifted, height reduced by the same amount so the panel's bottom edge is unchanged
   FRules.Anchors  := [akLeft, akTop, akRight, akBottom];
   FRules.ViewStyle:= vsReport; FRules.ReadOnly     := True;
   FRules.RowSelect:= True    ; FRules.HideSelection:= False;
@@ -4102,82 +4151,112 @@ begin
   end; // if
 end; // procedure
 
+{ Single click SELECTS. It sets nothing and creates nothing: the class list is
+  navigated with the keyboard as much as the mouse, and an arrow key that
+  rewrote the From box and reloaded the grid would make browsing destructive. }
 procedure TConvRulesForm.FormTypeClick(Sender: TObject);
-var
-  i   : Integer;
-  Hdr : Integer;
-  Entry: TRuleCatalogEntry;
-begin
-  i:= SelectedRowIndex;
-  if i < 0 then
-    Exit;
-
-  FCbFrom.Text:= FFormTypeRows[i].TypeName;
-
-  { Set the selected type filter and refresh the rules list to show only rules for this type. }
-  FSelectedFormType:= FFormTypeRows[i].TypeName;
-  RefreshRulesList;
-
-  // If the type is ruled, load its rule into the grid immediately
-  if FFormTypeRows[i].Ruled and FindRuleForType(FCatalog, FFormTypeRows[i].TypeName, Entry) then
-  begin
-    Hdr:= HeaderIndexFor(FBook, Entry);
-    if Hdr >= 0 then
-    begin
-      LoadGridForBlock(Hdr);
-      SetStatus(Format('Loaded rule for %s from %s.', [FFormTypeRows[i].TypeName, ExtractFileName(Entry.FilePath)]));
-      Exit;
-    end;
-  end;
-
-  // Not ruled, or rule lookup failed: set From and wait for user to pick a To class
-  if FFormTypeRows[i].Ruled then
-    SetStatus(Format('From set to %s -- already converted by %s. Pick a To class, ' + 'then New conversion.', [FFormTypeRows[i].TypeName, FFormTypeRows[i].RuledBy]))
-  else
-    SetStatus(Format('From set to %s. Pick a To class, then New conversion.', [FFormTypeRows[i].TypeName]));
-end; // procedure
-
-procedure TConvRulesForm.FormTypeDblClick(Sender: TObject);
 var
   i: Integer;
 begin
   i:= SelectedRowIndex;
+  FBtnAddRule.Enabled:= i >= 0;
   if i < 0 then
     Exit;
-  if not FFormTypeRows[i].Ruled then
+  FSelectedFormType:= FFormTypeRows[i].TypeName;
+  RefreshRulesList;
+  case RowState(FFormTypeRows[i]) of
+    rsSkipped: SetStatus(Format('%s -- marked "do not convert". Untick the box to work on it.', [FFormTypeRows[i].TypeName]));
+    rsRuled  : SetStatus(Format('%s -- %d rule(s): %s. Double-click to open or add one.', [FFormTypeRows[i].TypeName, FFormTypeRows[i].RuleCount, FFormTypeRows[i].RuledBy]));
+  else
+    SetStatus(Format('%s -- no rule yet. Double-click to start one.', [FFormTypeRows[i].TypeName]));
+  end; // case
+end; // procedure
+
+{ Double-click ACTS: From is filled and the grid is loaded. With exactly one
+  rule the To side is loaded too; with several the user chooses, and may always
+  choose to add another -- one From class may convert to several To classes. }
+procedure TConvRulesForm.FormTypeDblClick(Sender: TObject);
+var
+  i      : Integer                  ;
+  Entries: TArray<TRuleCatalogEntry>;
+  Entry  : TRuleCatalogEntry        ;
+  Hdr    : Integer                  ;
+begin
+  i:= SelectedRowIndex;
+  if i < 0 then
+    Exit;
+
+  FCbFrom.Text     := FFormTypeRows[i].TypeName;
+  FSelectedFormType:= FFormTypeRows[i].TypeName;
+  RefreshRulesList;
+
+  Entries:= RulesForType(FCatalog, FFormTypeRows[i].TypeName);
+
+  if Length(Entries) = 0 then
   begin
-    SetStatus(Format('%s has no rule yet -- pick a To class and press "+ New ' + 'Conversion".', [FFormTypeRows[i].TypeName]));
+    FCbTo.Text:= '';
+    SetStatus(Format('From set to %s. Pick a To class, then "+ New Conversion".', [FFormTypeRows[i].TypeName]));
     Exit;
   end;
-  OpenOwningRule(FFormTypeRows[i].TypeName);
+
+  if Length(Entries) = 1 then
+    Entry:= Entries[0]
+  else
+    // No else on this case is DELIBERATE: crOpen falls through to the open path
+    // below, which IS the crOpen behaviour -- see the type's own remarks.
+    case TRuleChooserForm.Execute(Self, FFormTypeRows[i].TypeName, Entries, Entry) of
+      crCancel: Exit;
+      crNew   :
+      begin
+        FCbTo.Text:= '';
+        SetStatus(Format('From set to %s. Pick a different To class, then "+ New Conversion".', [FFormTypeRows[i].TypeName]));
+        Exit;
+      end;
+    end; // case
+
+  if not OpenOwningRuleEntry(Entry) then
+    Exit;
+  FCbTo.Text:= Entry.ToType;
+  Hdr       := HeaderIndexFor(FBook, Entry);
+  if Hdr >= 0 then
+    LoadGridForBlock(Hdr);
+  SetStatus(Format('Loaded %s -> %s from %s.', [Entry.FromType, Entry.ToType, ExtractFileName(Entry.FilePath)]));
 end; // procedure
 
 function TConvRulesForm.OpenOwningRule(const ATypeName: string): Boolean;
+var
+  Entry: TRuleCatalogEntry;
+begin
+  Result:= False;
+
+  // Ask the catalog again rather than trusting the painted row: the row carries a
+  // display name, and the catalog may have been rescanned since it was drawn.
+  if not FindRuleForType(FCatalog, ATypeName, Entry) then
+  begin
+    SetError(Format('%s is marked as ruled but the catalog no longer has it. ' + 'Press "Rescan rules".', [ATypeName]));
+    Exit;
+  end;
+
+  Result:= OpenOwningRuleEntry(Entry);
+end; // function
+
+function TConvRulesForm.OpenOwningRuleEntry(const AEntry: TRuleCatalogEntry): Boolean;
 var
   Hdr     : Integer          ;
   Sites   : Integer          ;
   Sel     : Integer          ;
   k       : Integer          ;
-  Entry   : TRuleCatalogEntry;
   TypeName: string           ;
   Extra   : string           ;
 begin
   Result  := False;
-  TypeName:= ATypeName;
+  TypeName:= BareTypeName(AEntry.FromType);
 
-  // Ask the catalog again rather than trusting the painted row: the row carries a
-  // display name, and the catalog may have been rescanned since it was drawn.
-  if not FindRuleForType(FCatalog, TypeName, Entry) then
-  begin
-    SetError(Format('%s is marked as ruled but the catalog no longer has it. ' + 'Press "Rescan rules".', [TypeName]));
-    Exit;
-  end;
-
-  if not SameText(Entry.FilePath, FFilePath) then
+  if not SameText(AEntry.FilePath, FFilePath) then
   begin
     if (FFilePath <> '') and (FBook.Nodes.Count > 0) then
     case MessageDlg(
-        Format('Open %s to edit the %s rule?' + sLineBreak + sLineBreak + 'Yes = save %s first.' + sLineBreak + 'No  = DISCARD any unsaved edits in it and open the other book.', [ExtractFileName(Entry.FilePath), TypeName, ExtractFileName(FFilePath)]),
+        Format('Open %s to edit the %s rule?' + sLineBreak + sLineBreak + 'Yes = save %s first.' + sLineBreak + 'No  = DISCARD any unsaved edits in it and open the other book.', [ExtractFileName(AEntry.FilePath), TypeName, ExtractFileName(FFilePath)]),
         mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
       mrCancel: Exit;
       mrYes   :
@@ -4190,13 +4269,13 @@ begin
           Exit;
         end;
     end; // case
-    LoadFile(Entry.FilePath);
+    LoadFile(AEntry.FilePath);
   end; // if
 
-  Hdr:= HeaderIndexFor(FBook, Entry);
+  Hdr:= HeaderIndexFor(FBook, AEntry);
   if Hdr < 0 then
   begin
-    SetError(Format('%s is catalogued in %s but no #convert for it was found there. ' + 'The index is stale -- press "Rescan rules".', [TypeName, ExtractFileName(Entry.FilePath)]));
+    SetError(Format('%s is catalogued in %s but no #convert for it was found there. ' + 'The index is stale -- press "Rescan rules".', [TypeName, ExtractFileName(AEntry.FilePath)]));
     Exit;
   end;
 
@@ -4220,9 +4299,27 @@ begin
     Extra:= Format(' -- NOTE %d rules claim %s; this is the first. Move or delete ' + 'the others.', [Sites, TypeName])
   else
     Extra:= '';
-  SetStatus(Format('Opened the rule for %s -- %s, line %d.', [TypeName, ExtractFileName(Entry.FilePath), Entry.LineNo]) + Extra);
+  SetStatus(Format('Opened the rule for %s -- %s, line %d.', [TypeName, ExtractFileName(AEntry.FilePath), AEntry.LineNo]) + Extra);
   Result:= True;
 end; // function
+
+{ Reachable even when the class has exactly one rule already -- see FBtnAddRule's
+  field comment for why that button has to exist. Same "set From, clear To,
+  wait for New Conversion" ending as the "no rule yet" branch of
+  FormTypeDblClick and the crNew branch of its chooser case. }
+procedure TConvRulesForm.DoAddRuleForSelectedClass(Sender: TObject);
+var
+  i: Integer;
+begin
+  i:= SelectedRowIndex;
+  if i < 0 then
+    Exit;
+  FCbFrom.Text     := FFormTypeRows[i].TypeName;
+  FSelectedFormType:= FFormTypeRows[i].TypeName;
+  RefreshRulesList;
+  FCbTo.Text:= '';
+  SetStatus(Format('From set to %s. Pick a To class, then "+ New Conversion".', [FFormTypeRows[i].TypeName]));
+end; // procedure
 
 procedure TConvRulesForm.ToggleFormTypeSkip(Sender: TObject);
 var

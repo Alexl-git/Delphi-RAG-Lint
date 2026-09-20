@@ -4801,6 +4801,29 @@ begin
   Check('catalog.merge.none', Length(MergeCatalogs([])) = 0);
 end; // procedure
 
+{ RulesForType feeds the rule chooser (ConvRules.RuleChooser): one From class may
+  legitimately be converted by more than one rule, in different books, for
+  different campaigns -- unlike FindRuleForType, which deliberately answers only
+  the first. }
+procedure TestRulesForType;
+var
+  Cat: TRuleCatalog;
+  Got: TArray<TRuleCatalogEntry>;
+begin
+  Cat:= CatalogFromText(
+    '#convert TabcToggleBtn -> TcxButton'#13#10 +
+    '#convert TOvcTable -> TcxGrid'#13#10, 'A.rules');
+  Cat:= MergeCatalogs([Cat, CatalogFromText('#convert TabcToggleBtn -> TdxBarButton'#13#10, 'B.rules')]);
+
+  Got:= RulesForType(Cat, 'TabcToggleBtn');
+  Check('rulesfor.many', Length(Got) = 2, Format('%d', [Length(Got)]));
+  Check('rulesfor.many.tos', (Got[0].ToType <> Got[1].ToType), 'two different To classes for one From is legal');
+  Check('rulesfor.one', Length(RulesForType(Cat, 'TOvcTable')) = 1);
+  Check('rulesfor.none', Length(RulesForType(Cat, 'TNotThere')) = 0, 'positive control for the two above');
+  Check('rulesfor.ci', Length(RulesForType(Cat, 'tabctogglebtn')) = 2, 'type names are case-insensitive');
+  Check('rulesfor.bare', Length(RulesForType(Cat, 'UnitA.TabcToggleBtn')) = 2, 'a qualified name matches the bare From, as FindRuleForType does');
+end; // procedure
+
 { A #mapping NAME must also live in exactly one file. Same invariant as one-rule-
   per-type, different key -- and it matters sooner: atomizing spreads #apply across
   files, so the health check has to be able to see a name declared twice BEFORE the
@@ -5905,6 +5928,7 @@ begin
     TestFormTypeRendering;
     TestDescribeOutlineOutcome;
     TestRuleCatalogParse;
+    TestRulesForType;
     TestRuleCatalogIndex;
     TestRuleCatalogDuplicates;
     TestMappingCatalog;
