@@ -155,4 +155,19 @@
 #
 #   Superseded: 1.4.0-alpha|a35513046797f2f0cf416752672496d55bec00368bb9e08238e0279eb4004389
 
-1.4.0-alpha|c1d56f481b2b1107635f79319f399f9c5b822474a0b9752b1bd5a0c838d304fa
+# 2026-09-19: hash re-pinned WITHIN 1.4.0-alpha for the COMMENT-ONLY autodoc
+#   regen 1307e778 (document --project src\cli\drag-lint.dproj --apply after
+#   the v23 rebuild). That commit re-pinned the EXTRACTOR baseline with the
+#   comment-only note but NOT this one, so this guard has been red on main
+#   since 2026-09-17 (bisected: d318c2c1 PASS, 1307e778 FAIL). What moved the
+#   hash: DRagLint.Index.CallResolver.pas is hashed WHOLE (`::*`), doc comments
+#   included, and its <!-- drag-lint:auto --> blocks were regenerated. Verified
+#   0 non-/// lines changed across src\index, Storage.SQLite and Core.Model
+#   between d318c2c1 and 1307e778 -- nothing resolves differently, no index owes
+#   a re-resolve. Same discipline as the 2026-09-07 autodoc entry above. Ruling
+#   (coordinator, 2026-09-19): do not narrow the `::*` entry, do not move the
+#   constant.
+#
+#   Superseded: 1.4.0-alpha|c1d56f481b2b1107635f79319f399f9c5b822474a0b9752b1bd5a0c838d304fa
+
+1.4.0-alpha|cc8c86896c828038e9eeb9102faa988fe9aede73f4c6aa0eef65b7049322c2e0
