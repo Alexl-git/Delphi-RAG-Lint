@@ -212,6 +212,32 @@ function TypeIsExcluded(const ATypeName, ADeclaringUnit: string; const APatterns
 /// </remarks>
 function MergeClassRows(const ADfmRows: TFormTypeRows; const APasClasses: TArray<string>): TFormTypeRows;  // dl:ok unused-public-symbol@df80 -- Task 4 of a multi-task plan; Task 5 wires this into HarvestUnitClasses/HarvestFormTypes
 
+/// <summary>PURE: the HarvestUnitClasses status-line suffix for one
+/// TEngineAdapter.OutlineClasses outcome.</summary>
+/// <param name="ASucceeded">OutlineClasses' own return value.</param>
+/// <param name="AIndexedNow">OutlineClasses' AIndexedNow -- True only when a
+/// scratch index had to be built to answer. Ignored when ASucceeded is
+/// False: a failed call has nothing to say about indexing.</param>
+/// <param name="AFileName">The unit's bare file name (e.g.
+/// ExtractFileName of the .pas path); used only in the "scratch index built"
+/// message.</param>
+/// <param name="AError">OutlineClasses' AError; used only in the
+/// fallback-to-text-scan message, quoted verbatim.</param>
+/// <returns>'' when the engine answered without having to index (ASucceeded
+/// and not AIndexedNow) -- nothing worth telling the operator. A one-time
+/// "scratch index built" note when ASucceeded and AIndexedNow. A
+/// fallback-to-text-scan NOTE naming AError when not ASucceeded.</returns>
+/// <remarks>
+/// PURE: no process spawn, no I/O -- classifies an outcome the caller already
+/// computed. Deliberately independent of how many classes were found: a
+/// legitimately class-less unit (e.g. a non-form utility unit) is not an
+/// error and gets no message of its own, same as before this function
+/// existed. Extracted from HarvestUnitClasses (ConvRules.MainForm.pas, which
+/// ConvRulesModelTests.dpr does not compile) so this branching is reachable
+/// by an automated test.
+/// </remarks>
+function DescribeOutlineOutcome(ASucceeded, AIndexedNow: Boolean; const AFileName, AError: string): string;
+
 /// <summary>PURE: the row's state -- what the operator should see and how the
 /// row should be painted.</summary>
 /// <param name="ARow">A decorated row.</param>
@@ -448,6 +474,15 @@ begin
     Row.Origin  := roPas;
     Result      := Result + [Row];
   end;
+end; // function
+
+function DescribeOutlineOutcome(ASucceeded, AIndexedNow: Boolean; const AFileName, AError: string): string;
+begin
+  if not ASucceeded then
+    Exit(Format(' NOTE: the indexer could not list classes (%s) -- fell back to a text scan, which cannot see conditionals or comments.', [AError]));
+  if AIndexedNow then
+    Exit(Format(' (%s was not in any index; a local scratch index was built for it -- once only)', [AFileName]));
+  Result:= '';
 end; // function
 
 function RowState(const ARow: TFormTypeRow): TRowState;

@@ -4588,6 +4588,29 @@ begin
   Check('visible.blank.search', Length(Vis) = 4, 'whitespace is not a filter');
 end; // procedure
 
+{ DescribeOutlineOutcome: the status-line branching HarvestUnitClasses
+  (ConvRules.MainForm.pas, outside this test project's compile closure) folds
+  into its Result. Extracted so it has automated coverage at all. }
+procedure TestDescribeOutlineOutcome;
+begin
+  // --- served from an already-covered or already-warm index: nothing to say
+  Check('outline.describe.warm', DescribeOutlineOutcome(True, False, 'Foo.pas', '') = '', 'a normal successful answer needs no status note');
+
+  // --- had to build a scratch index this call: say so, once
+  Check('outline.describe.indexed',
+    DescribeOutlineOutcome(True, True, 'Foo.pas', '') = ' (Foo.pas was not in any index; a local scratch index was built for it -- once only)');
+
+  // --- the engine failed: fall back, and name the error
+  Check('outline.describe.failed',
+    DescribeOutlineOutcome(False, False, 'Foo.pas', 'db locked') = ' NOTE: the indexer could not list classes (db locked) -- fell back to a text scan, which cannot see conditionals or comments.');
+
+  // --- a failed call ignores AIndexedNow -- there is nothing to report about indexing
+  // when the call itself did not succeed.
+  Check('outline.describe.failed.ignores.indexed',
+    DescribeOutlineOutcome(False, True, 'Foo.pas', 'db locked') = ' NOTE: the indexer could not list classes (db locked) -- fell back to a text scan, which cannot see conditionals or comments.',
+    'failure wins over AIndexedNow');
+end; // procedure
+
 { ConvRules.RuleCatalog -- the folder-wide index of what is already converted.
   RC_BOOK mirrors the real convrules\BDE-to-FireDAC.rules shapes: qualified types,
   and a header carrying extra uses-units after the target. }
@@ -5738,6 +5761,7 @@ begin
     TestSkipList;
     TestFormTypesFilter;
     TestClassRowModel;
+    TestDescribeOutlineOutcome;
     TestRuleCatalogParse;
     TestRuleCatalogIndex;
     TestRuleCatalogDuplicates;

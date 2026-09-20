@@ -2927,29 +2927,29 @@ end; // procedure
 
   MERGES, never overwrites. Before 2026-09-20 this routine rebuilt FFormTypeRows
   from the text scan alone, so choosing a unit replaced its form's component
-  classes with the two or three classes the .pas happens to declare. }
+  classes with the two or three classes the .pas happens to declare.
+
+  The status-line branching (indexed-now / already-answered / failed) is
+  ConvRules.FormTypes.DescribeOutlineOutcome, a PURE function with its own
+  tests -- moved there because this unit is outside the tests project's
+  compile closure and the branching would otherwise have zero coverage. }
 function TConvRulesForm.HarvestUnitClasses(const AUnitText, APasPath: string): string;
 var
-  Classes: TArray<string>;
-  Indexed: Boolean       ;
-  Err    : string        ;
-  Guard  : IInterface    ;  // dl:ok write-only-local@b3f5 -- RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read, same idiom as LGuard elsewhere in this unit
+  Classes  : TArray<string>;
+  Indexed  : Boolean       ;
+  Err      : string        ;
+  Guard    : IInterface    ;  // dl:ok write-only-local@b3f5 -- RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read, same idiom as LGuard elsewhere in this unit
+  OutlineOK: Boolean       ;
 begin
   Result:= '';
   Guard := HourGlass;
   SetStatus(Format('Reading the classes of %s ...', [ExtractFileName(APasPath)]));
   Application.ProcessMessages;
 
-  if FEngine.OutlineClasses(APasPath, Classes, Indexed, Err) then
-  begin
-    if Indexed then
-      Result:= Format(' (%s was not in any index; a local scratch index was built for it -- once only)', [ExtractFileName(APasPath)]);
-  end
-  else
-  begin
+  OutlineOK:= FEngine.OutlineClasses(APasPath, Classes, Indexed, Err);
+  if not OutlineOK then
     Classes:= ScanClassesDeclared(AUnitText);
-    Result := Format(' NOTE: the indexer could not list classes (%s) -- fell back to a text scan, which cannot see conditionals or comments.', [Err]);
-  end;
+  Result:= DescribeOutlineOutcome(OutlineOK, Indexed, ExtractFileName(APasPath), Err);
 
   FFormTypeRows:= MergeClassRows(FFormTypeRows, Classes);
   ApplySkipMarks;
