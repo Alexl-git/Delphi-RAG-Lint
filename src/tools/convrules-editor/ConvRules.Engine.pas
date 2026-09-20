@@ -55,8 +55,8 @@ type
   /// (schema proptree/1).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.Engine.ParseProptreeJson (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.LeafType (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LeafWritable (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid (ConvRules.MainForm.pas), declaration (ConvRules.Engine.pas) (+5 more)</para>
-  /// <para>Used in units: ConvRules.Engine, ConvRules.MainForm, ConvRules.Mappings</para>
+  /// <para>Used by: ConvRules.Engine.ParseProptreeJson (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.LeafType (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LeafWritable (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid (ConvRules.MainForm.pas), declaration (ConvRules.Engine.pas) (+6 more)</para>
+  /// <para>Used in units: ConvRules.Engine, ConvRules.MainForm, ConvRules.MappingForm, ConvRules.Mappings</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropLeaf = record
@@ -97,19 +97,19 @@ type
     FirstError: string ; // '' when OK
   end;
 
-  /// <summary>PURE: parse `proptree/1` JSON into a TProptree. Raises on malformed
-  /// JSON; returns an empty Leaves array when the "properties" array is absent.</summary>
-  /// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
-  /// <returns><!-- drag-lint:auto -->TProptree -- Observed: Default(TProptree).</returns>
-  /// <exception cref="Exception"><!-- drag-lint:auto exc -->proptree: response is not a JSON object</exception>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas)</para>
-  /// <para>Calls: ConvRules.Engine.SliceJsonObject, Default</para>
-  /// <para>Pure</para>
-  /// <seealso cref="ConvRules.Engine.SliceJsonObject"/>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>PURE: parse `proptree/1` JSON into a TProptree. Raises on malformed
+/// JSON; returns an empty Leaves array when the "properties" array is absent.</summary>
+/// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TProptree -- Observed: Default(TProptree).</returns>
+/// <exception cref="Exception"><!-- drag-lint:auto exc -->proptree: response is not a JSON object</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas)</para>
+/// <para>Calls: ConvRules.Engine.SliceJsonObject, Default</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Engine.SliceJsonObject"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseProptreeJson(const AJson: string): TProptree;
 
 type
@@ -133,21 +133,22 @@ type
     EndLine      : Integer; // 1-based last  line of the declaration ("end_line")
   end;
 
-  /// <summary>PURE: parse the JSON array `query --json` prints into symbol rows.</summary>
-  /// <param name="AJson">Raw captured output. A "(loaded defaults ...)" note before or
-  /// after the array is tolerated: RunCapture merges the child's stderr into stdout,
-  /// and the exe writes that note to stderr on every call.</param>
-  /// <returns>One entry per array element. [] when the text contains no JSON array --
-  /// garbage in, empty out. Never raises.</returns>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.Engine.ParseQueryLocation (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.EnumMembersOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas)</para>
-  /// <para>Calls: ConvRules.Engine.SliceJsonArray, Default</para>
-  /// <para>Returns: nil; List.ToArray</para>
-  /// <para>Pure</para>
-  /// <seealso cref="ConvRules.Engine.SliceJsonArray"/>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>PURE: parse the JSON array `query --json` prints into symbol rows.</summary>
+/// <param name="AJson">Raw captured output. A "(loaded defaults ...)" note before or
+/// after the array is tolerated: RunCapture merges the child's stderr into stdout,
+/// and the exe writes that note to stderr on every call.</param>
+/// <returns>One entry per array element. [] when the text contains no JSON array --
+/// garbage in, empty out. Never raises.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.Engine.ParseQueryLocation (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.EnumMembersOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas)</para>
+/// <para>Calls: ConvRules.Engine.SliceJsonArray, Default</para>
+/// <para>Returns: nil; List.ToArray</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.Engine.SliceJsonArray"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
 
 /// <summary>PURE: pick the row that actually IS AWantedName.</summary>
@@ -172,7 +173,7 @@ function ParseQuerySymbols(const AJson: string): TArray<TQuerySymbol>;
 /// <para>Called from: ConvRules.Engine.ParseQueryLocation (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.EnumMembersOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas)</para>
 /// <para>Calls: ConvRules.Engine.TieBreakRank, ConvRules.Engine.TypeKindTier, Copy, Default, LastDelimiter, SameText</para>
 /// <para>Returns: False; True</para>
-/// <para>Complexity: 14 (cyclomatic, outer body), 60 lines (full implementation)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 66 lines (full implementation)</para>
 /// <para>Mutates: ASym (out), AAmbiguity (out)</para>
 /// <seealso cref="ConvRules.Engine.TieBreakRank"/>
 /// <seealso cref="ConvRules.Engine.TypeKindTier"/>
@@ -224,7 +225,7 @@ function ParseQueryLocation(const AJson, AWantedName: string; out AFile: string;
 /// <para>Called from: ConvRules.Engine.TEngineAdapter.EnumMembersOf/4 (ConvRules.Engine.pas)</para>
 /// <para>Calls: CharInSet, ConvRules.Engine.LeadingIdentifier, ConvRules.Engine.StripEnumNoise, Copy, Pos</para>
 /// <para>Returns: False; List.Count &gt; 0</para>
-/// <para>Complexity: 21 (cyclomatic, outer body), 80 lines (full implementation)</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 88 lines (full implementation)</para>
 /// <para>Mutates: AMembers (out)</para>
 /// <seealso cref="ConvRules.Engine.LeadingIdentifier"/>
 /// <seealso cref="ConvRules.Engine.StripEnumNoise"/>
@@ -249,9 +250,9 @@ type
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; 3; Integer(ExitCode).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListProjectUnits (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+2 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListProjectUnits (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas) (+4 more)</para>
       /// <para>Calls: AnsiString, CloseHandle, Copy, CreatePipe, CreateProcessW, DWORD, FillChar, Format, GetExitCodeProcess, GetStdHandle (+7 more)</para>
-      /// <para>Complexity: 19 (cyclomatic, outer body), 93 lines (full implementation)</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 97 lines (full implementation)</para>
       /// <para>Reads: FExePath</para>
       /// <para>Mutates: AOutput (out)</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
@@ -431,13 +432,13 @@ type
       /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
       /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
       /// <param name="AUnit"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; FileP.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''; AUnit; FileP.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListControlTypesInUnit (ConvRules.Engine.pas)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListControlTypesInUnit (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitFile (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Copy, Format, Pos, SameText</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 39 lines (full implementation)</para>
-      /// <para>Pure</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 55 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
@@ -525,6 +526,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.ParseProptreeJson, ConvRules.Engine.TEngineAdapter.ResolveClassQName/3, ConvRules.Engine.TEngineAdapter.RunCapture, Default, Format, Trim</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Mutates: AError (out), ANote (out), ATree (out)</para>
       /// <seealso cref="ConvRules.Engine.ParseProptreeJson"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveClassQName"/>
@@ -563,8 +565,8 @@ type
       /// <param name="AAncestor"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ANames"><!-- drag-lint:auto type -->out TArray&lt;string&gt;</param>
       /// <param name="AError"><!-- drag-lint:auto type -->out string</param>
-      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ListDescendantsOf(AAncestor,
-      /// FDbList, ANames, AError).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+      /// ListDescendantsOf(AAncestor, FDbList, ANames, AError).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadDescendantSet (ConvRules.MainForm.pas)</para>
@@ -643,7 +645,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ChangeFileExt, CharInSet, ConvRules.Engine.TEngineAdapter.ResolveUnitFile, Copy, Pos, Trim, TrimLeft</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 64 lines (full implementation)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 70 lines (full implementation)</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Mutates: AError (out), ATypes (out)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveUnitFile"/>
@@ -705,7 +708,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.ResolveTypeLocation/4 (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.DoGoToDefinition (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.BareTypeName, ConvRules.Engine.ParseQueryLocation, ConvRules.Engine.TEngineAdapter.QueryJsonFor/3, Format, Trim</para>
-      /// <para>Returns: False; ParseQueryLocation(Json, AType, AFile, ALine, AAmbiguity)</para>
+      /// <para>Returns: False; ParseQueryLocation(JSON, AType, AFile, ALine, AAmbiguity)</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Mutates: AFile (out), ALine (out), AAmbiguity (out), AError (out)</para>
       /// <para>Directives: overload</para>
@@ -764,7 +767,8 @@ type
       /// <para>Calls: ConvRules.Engine.BareTypeName, ConvRules.Engine.ParseEnumMembers, ConvRules.Engine.ParseQuerySymbols, ConvRules.Engine.SelectQuerySymbol, ConvRules.Engine.TEngineAdapter.QueryJsonFor/3, Format, SameText, Trim</para>
       /// <para>Returns: False; ParseEnumMembers(Decl, AMembers)</para>
       /// <para>Overload 2 of 2</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 74 lines (full implementation)</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 70 lines (full implementation)</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Mutates: AMembers (out), AAmbiguity (out), AError (out)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: overload</para>
@@ -807,6 +811,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoValidate (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Format, Pos, Trim</para>
+      /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
@@ -827,13 +832,28 @@ type
       /// <returns>True on success. False leaves AClasses empty and AError set --
       /// the caller falls back to the text scan AND says so, because a silently
       /// short class list is the failure this feature exists to remove.</returns>
-      /// <remarks>Tries `outline` against the configured DBs first: it resolves
+      /// <remarks>
+      /// Tries `outline` against the configured DBs first: it resolves
       /// its own covering DB and exits 2 with a named ERROR when none does, so a
       /// covered unit is never indexed. When no configured DB covers it, this
       /// tries the unit's persistent scratch DB (if one already exists from a
       /// prior call) BEFORE indexing, so a warm second call never re-indexes.
       /// The index target is the single FILE -- NEVER a folder, which would
-      /// widen the DB into a directory DB.</remarks>
+      /// widen the DB into a directory DB.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.Engine.ScratchDbPath, ConvRules.Engine.TEngineAdapter.OutlineClasses.FirstLine, ConvRules.Engine.TEngineAdapter.OutlineClasses.TryOutline, ConvRules.Engine.TEngineAdapter.RunCapture, Copy, ExtractFilePath, ForceDirectories, Format, ParseOutlineClassNames, Pos, Trim</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>Mutates: AClasses (out), AIndexedNow (out), AError (out)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="ConvRules.Engine.ScratchDbPath"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.OutlineClasses.FirstLine"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.OutlineClasses.TryOutline"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function OutlineClasses(const APasFile: string; out AClasses: TArray<string>;
         out AIndexedNow: Boolean; out AError: string): Boolean;
 
@@ -848,22 +868,40 @@ type
 /// <returns>One entry per distinct `"kind":"class"` name, de-duplicated
 /// case-insensitively so a forward-declaration stub does not produce a second
 /// row. Unparseable input returns an empty array; this never raises.</returns>
-/// <remarks>PURE: no process spawn, no I/O. Never raises -- malformed JSON
+/// <remarks>
+/// PURE: no process spawn, no I/O. Never raises -- malformed JSON
 /// inside a well-formed pair of brackets is caught and treated as no classes,
 /// same as input with no brackets at all. The "kind" match is also
 /// case-insensitive (`SameText`), though the real payload only ever emits it
-/// lowercase; the leniency costs nothing and matches the name dedupe.</remarks>
+/// lowercase; the leniency costs nothing and matches the name dedupe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.Engine.TEngineAdapter.OutlineClasses.TryOutline (ConvRules.Engine.pas)</para>
+/// <para>Calls: Copy, LastDelimiter, Pos, SameText, TJSONArray, TJSONObject, Trim</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseOutlineClassNames(const AJson: string): TArray<string>;
 
 /// <summary>The persistent per-unit scratch index for a unit no configured DB
 /// covers.</summary>
 /// <param name="APasFile">Full path to the .pas; '' returns ''.</param>
-/// <returns>%LOCALAPPDATA%\DragLint\ConvRulesEditor\scratch\&lt;stem&gt;-&lt;hash&gt;.sqlite.
+/// <returns>%LOCALAPPDATA%\DragLint\ConvRulesEditor\scratch\&lt;stem&gt;-&lt;hash&gt;.sqlite,
+/// or %APPDATA% (TPath.GetHomePath) under the same DragLint\ConvRulesEditor\scratch
+/// subpath when %LOCALAPPDATA% is blank -- still per-user, still writable.
 /// ONE DB PER UNIT: an orphan form never contributes rows to any project's index
 /// and never becomes an unasked-for --db in someone else's query. The hash is of
 /// the upper-cased full path, so two units with the same stem cannot collide and
 /// the same unit always resolves to the same DB -- which is what makes the second
 /// pick cost 0.13 s instead of 27 s.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas)</para>
+/// <para>Calls: Cardinal, Format, GetEnvironmentVariable, Trim, UpperCase</para>
+/// <para>Returns: ''; TPath.Combine(Dir, Format('%s-%.8x.sqlite', [TPath.GetFileNameWithoutExtension(Key), Hash]))</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ScratchDbPath(const APasFile: string): string;
 
 implementation
@@ -2239,7 +2277,7 @@ var
   Body: string       ;
   V   : TJSONValue   ;
   Arr : TJSONArray   ;
-  Obj  : TJSONObject ;
+  Obj : TJSONObject  ;
   i   : Integer      ;
   Kind: string       ;
   Nm  : string       ;
@@ -2313,7 +2351,14 @@ begin
   for i:= 1 to Length(Key) do
   begin
     Hash:= Hash xor Cardinal(Ord(Key[i]));
+    // The FNV-1a multiply relies on Cardinal wrap-around, which is the whole
+    // algorithm -- under {$Q+} it raises EIntOverflow instead (A7, 2026-09-20
+    // whole-branch review, Minor 11). Works today only because the local build
+    // scripts leave overflow checking off; guarded locally so a {$Q+} build
+    // elsewhere cannot break the one caller (HarvestUnitClasses) that reaches it.
+    {$IFOPT Q+}{$Q-}{$DEFINE QWASON}{$ENDIF}
     Hash:= Hash * FNV_PRIME;
+    {$IFDEF QWASON}{$Q+}{$UNDEF QWASON}{$ENDIF}
   end;
   Dir:= GetEnvironmentVariable('LOCALAPPDATA');
   if Trim(Dir) = '' then
