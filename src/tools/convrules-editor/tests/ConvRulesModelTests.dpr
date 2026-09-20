@@ -4390,7 +4390,7 @@ begin
   if FtFind(Rows, 'TOvcTable', Row) then
   begin
     Check('formtypes.scan.undecorated.visual', Row.Visual = tvkUnknown);
-    Check('formtypes.scan.undecorated.flags', (not Row.Excluded) and (not Row.Ruled) and (not Row.Reenabled));
+    Check('formtypes.scan.undecorated.flags', (not Row.Ruled) and (not Row.Skipped) and (Row.Origin = roDfm));
   end
   else
     Check('formtypes.scan.undecorated.visual', False, 'TOvcTable missing');
@@ -4486,8 +4486,7 @@ end; // procedure
 
 procedure TestFormTypesFilter;
 var
-  Err: string      ;
-  Row: TFormTypeRow;
+  Err: string;
 begin
   // --- the standard-controls test is deliberately LITERAL: Vcl./FMX. only.
   Check('formtypes.std.vcl', IsStandardVclOrFmxUnit('Vcl.StdCtrls'));
@@ -4522,20 +4521,71 @@ begin
   Err:= '';
   Check('formtypes.excl.bad.other.still.runs', TypeIsExcluded('TOvcTable', 'ovcTable', ['(unclosed', '^TOvc'], False, Err), 'one bad condition must not disable the good ones');
   Check('formtypes.excl.good.no.error', not TypeIsExcluded('TPanel', 'Vcl.ExtCtrls', ['^TOvc'], False, Err) and (Err = ''));
+end; // procedure
 
-  // --- greying: two independent reasons, one override.
+procedure TestClassRowModel;
+var
+  Dfm : TFormTypeRows;
+  Rows: TFormTypeRows;
+  Row : TFormTypeRow ;
+  Cnt : TRowCounts   ;
+  Vis : TArray<Integer>;
+begin
+  Dfm:= ScanDfmTypes(
+    'object Form1: TVarInspForm'#13#10 +
+    '  object Btn1: TabcToggleBtn'#13#10 +
+    '  end'#13#10 +
+    '  object Btn2: TabcToggleBtn'#13#10 +
+    '  end'#13#10 +
+    'end'#13#10);
+
+  // --- union, origin-marked, .dfm first
+  Rows:= MergeClassRows(Dfm, ['TVarInspForm', 'TVarRow', 'TsgDXFImageAccess']);
+  Check('classrows.merge.total', Length(Rows) = 4, Format('%d', [Length(Rows)]));
+  Check('classrows.merge.dfm.first', Rows[0].Origin in [roDfm, roBoth], 'dfm rows sort ahead of pas-only rows');
+  Check('classrows.merge.count.kept', (Rows[0].TypeName = 'TabcToggleBtn') and (Rows[0].Count = 2), 'the dfm instance count survives the merge');
+
+  Check('classrows.merge.both', MergeClassRows(Dfm, ['TVarInspForm'])[1].Origin = roBoth, 'a class on the form AND declared in the unit is one row, both origins');
+  Check('classrows.merge.pasonly', Rows[High(Rows)].Origin = roPas);
+  Check('classrows.merge.nodup', Length(MergeClassRows(Dfm, ['TabcToggleBtn'])) = 2, 'a name in both sources makes ONE row');
+  Check('classrows.merge.ci', Length(MergeClassRows(Dfm, ['tabctogglebtn'])) = 2, 'case-insensitive');
+  Check('classrows.merge.nopas', Length(MergeClassRows(Dfm, [])) = 2, 'a non-form unit still lists its dfm rows');
+  Check('classrows.merge.nodfm', Length(MergeClassRows(nil, ['TOnlyDeclared'])) = 1, 'a unit with no .dfm still lists its declared classes');
+  Check('classrows.merge.blank.ignored', Length(MergeClassRows(nil, ['', '   '])) = 0);
+
+  // --- three states, and which one wins
   Row:= Default(TFormTypeRow);
-  Check('formtypes.grey.none', not RowIsGreyed(Row));
-  Row.Excluded:= True;
-  Check('formtypes.grey.excluded', RowIsGreyed(Row));
-  Row:= Default(TFormTypeRow); Row.Ruled:= True;
-  Check('formtypes.grey.ruled', RowIsGreyed(Row), 'a type we already have a rule for is greyed too');
-  Row.Reenabled:= True;
-  Check('formtypes.grey.reenable.beats.ruled', not RowIsGreyed(Row));
-  Row:= Default(TFormTypeRow); Row.Excluded:= True; Row.Reenabled:= True;
-  Check('formtypes.grey.reenable.beats.filter', not RowIsGreyed(Row), 'a manual re-enable must survive the filter that excluded it');
+  Check('rowstate.todo', RowState(Row) = rsToDo);
   Row.Ruled:= True;
-  Check('formtypes.grey.reenable.beats.both', not RowIsGreyed(Row));
+  Check('rowstate.ruled', RowState(Row) = rsRuled);
+  Row.Skipped:= True;
+  Check('rowstate.skipped.beats.ruled', RowState(Row) = rsSkipped, 'an explicit user decision beats a derived fact');
+  Row:= Default(TFormTypeRow); Row.Skipped:= True;
+  Check('rowstate.skipped', RowState(Row) = rsSkipped);
+
+  // --- the counts are the progress line; they must partition the rows
+  SetLength(Rows, 4);
+  Rows[0]:= Default(TFormTypeRow); Rows[0].TypeName:= 'TA';
+  Rows[1]:= Default(TFormTypeRow); Rows[1].TypeName:= 'TB'; Rows[1].Ruled  := True;
+  Rows[2]:= Default(TFormTypeRow); Rows[2].TypeName:= 'TC'; Rows[2].Skipped:= True;
+  Rows[3]:= Default(TFormTypeRow); Rows[3].TypeName:= 'TD'; Rows[3].Ruled:= True; Rows[3].Skipped:= True;
+  Cnt:= CountRows(Rows);
+  Check('counts.total'  , Cnt.Total   = 4, Format('%d', [Cnt.Total  ]));
+  Check('counts.ruled'  , Cnt.Ruled   = 1, Format('%d', [Cnt.Ruled  ]));
+  Check('counts.skipped', Cnt.Skipped = 2, Format('%d', [Cnt.Skipped]));
+  Check('counts.todo'   , Cnt.ToDo    = 1, Format('%d', [Cnt.ToDo   ]));
+  Check('counts.partition', Cnt.Ruled + Cnt.Skipped + Cnt.ToDo = Cnt.Total, 'every row is counted exactly once');
+
+  // --- the search filters VISIBILITY only
+  Vis:= VisibleRowIndexes(Rows, '');
+  Check('visible.all', Length(Vis) = 4, 'a blank search shows everything');
+  Vis:= VisibleRowIndexes(Rows, 'tb');
+  Check('visible.substring.ci', (Length(Vis) = 1) and (Vis[0] = 1), 'case-insensitive substring');
+  Vis:= VisibleRowIndexes(Rows, 'zzz');
+  Check('visible.none', Length(Vis) = 0);
+  Check('visible.counts.unmoved', CountRows(Rows).Total = 4, 'a search must never change the score');
+  Vis:= VisibleRowIndexes(Rows, '  ');
+  Check('visible.blank.search', Length(Vis) = 4, 'whitespace is not a filter');
 end; // procedure
 
 { ConvRules.RuleCatalog -- the folder-wide index of what is already converted.
@@ -5687,6 +5737,7 @@ begin
     TestFormTypesScan;
     TestSkipList;
     TestFormTypesFilter;
+    TestClassRowModel;
     TestRuleCatalogParse;
     TestRuleCatalogIndex;
     TestRuleCatalogDuplicates;

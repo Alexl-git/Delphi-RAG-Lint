@@ -144,9 +144,10 @@ type
       FUsedUnitRefs: TArray<TUsedUnitRef>;
       // --- form-types panel (leftmost): what is ON the examined form(s) ---
       // FFormTypeRows is the decorated model the list paints; ScanDfmTypes fills
-      // TypeName/Count and RefreshFormTypes applies Visual/Excluded/Ruled on top.
-      // Reenabled is the user's per-row override and is preserved ACROSS a refilter,
-      // which is the whole reason the override lives on the row and is not recomputed.
+      // TypeName/Count and RefreshFormTypes applies Visual/Ruled on top.
+      // Skipped is the user's per-row mark and is preserved ACROSS a refilter and a
+      // re-scan, which is the whole reason the mark lives on the row and is not
+      // recomputed.
       FFormTypeList : TListBox     ; // owner-drawn: [V] TOvcTable (28)
       FFormTypeRows : TFormTypeRows;
       FFilterMemo   : TMemo        ; // one exclusion regex per line
@@ -582,17 +583,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HarvestFormTypes(const ADfmTexts: TArray<string>);
-      /// <summary>Re-applies Visual/Excluded/Ruled decoration and repaints the list.</summary>
+      /// <summary>Re-applies Visual/Ruled decoration and repaints the list.</summary>
       /// <remarks>
-      /// Cheap and idempotent -- called on every filter keystroke.
+      /// Cheap and idempotent -- called on every filter keystroke. The
+      /// TypeIsExcluded filter pass moves to the Apply button in Task 9; until then
+      /// this only tallies RowState.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FilterChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas) (+1 more)</para>
-      /// <para>Calls: ConvRules.FormTypes.RowIsGreyed, ConvRules.FormTypes.TypeIsExcluded, ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.FindRuleForType, ExtractFileName, Format, UpperCase</para>
+      /// <para>Calls: ConvRules.FormTypes.RowState, ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.FindRuleForType, ExtractFileName, Format, UpperCase</para>
       /// <para>Complexity: 23 (cyclomatic, outer body), 96 lines (full implementation)</para>
       /// <para>Reads: FFormTypeList, FFilterMemo, FChkStdCtrls, FFormTypeRows, FDeclUnits, FVisualSet, FComponentSet, FPersistentSet (+3 more)   Writes: FFilterError</para>
       /// <para>UI thread only -- touches Application</para>
-      /// <seealso cref="ConvRules.FormTypes.RowIsGreyed"/>
-      /// <seealso cref="ConvRules.FormTypes.TypeIsExcluded"/>
+      /// <seealso cref="ConvRules.FormTypes.RowState"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
@@ -695,7 +697,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function OpenOwningRule(const ATypeName: string): Boolean;
-      /// <summary>Toggles the selected row's manual re-enable override.</summary>
+      /// <summary>Toggles the selected row's Skipped mark.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -710,18 +712,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ToggleFormTypeReenable(Sender: TObject);
-      /// <summary>Owner-draws one form-type row: V/N/? mark, name, count, why greyed.</summary>
+      /// <summary>Owner-draws one form-type row: V/N/? mark, name, count, why dimmed.</summary>
       /// <param name="AControl"><!-- drag-lint:auto type -->TWinControl</param>
       /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
       /// <param name="ARect"><!-- drag-lint:auto type -->TRect</param>
       /// <param name="AState"><!-- drag-lint:auto type -->TOwnerDrawState</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.FormTypes.RowIsGreyed, Format, TListBox</para>
+      /// <para>Calls: ConvRules.FormTypes.RowState, Format, TListBox</para>
       /// <para>Reads: FFormTypeRows</para>
       /// <para>UI thread only -- touches AControl</para>
       /// <para>Pure</para>
-      /// <seealso cref="ConvRules.FormTypes.RowIsGreyed"/>
+      /// <seealso cref="ConvRules.FormTypes.RowState"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
@@ -2912,8 +2914,6 @@ begin
     FFormTypeRows[RowIdx].TypeName := Classes[i];
     FFormTypeRows[RowIdx].Count    := 1;
     FFormTypeRows[RowIdx].Visual   := tvkUnknown;
-    FFormTypeRows[RowIdx].Excluded := False;
-    FFormTypeRows[RowIdx].Reenabled:= False;
     FFormTypeRows[RowIdx].Ruled    := IsRuled;
     if IsRuled then
       FFormTypeRows[RowIdx].RuledBy:= ExtractFileName(Entry.FilePath)
@@ -3688,7 +3688,7 @@ begin
   for j:= 0 to High(Old          ) do
       if SameText(Old[j].TypeName, FFormTypeRows[i].TypeName) then
       begin
-        FFormTypeRows[i].Reenabled:= Old[j].Reenabled;
+        FFormTypeRows[i].Skipped:= Old[j].Skipped;
         Break;
       end;
 
@@ -3731,9 +3731,9 @@ end;
 
 procedure TConvRulesForm.RefreshFormTypes;
 var
-  Pats  : TArray<string>   ;
-  Err   : string           ;
-  DeclU : string           ;
+  Pats  : TArray<string>   ;  // dl:ok write-only-local@266c -- Task 4 removed its only reader (the TypeIsExcluded call); Task 9 restores it on the Apply button
+  Err   : string           ;  // dl:ok unused-local@a11c -- same removal; Task 9 restores the filter-error propagation
+  DeclU : string           ;  // dl:ok write-only-local@ca0c -- same removal; still computed for the standard-controls check, consumed again once TypeIsExcluded is back
   Entry : TRuleCatalogEntry;
   i     : Integer          ;
   Active: Integer          ;
@@ -3785,10 +3785,6 @@ begin
     else
       FFormTypeRows[i].Visual:= tvkUnknown;
 
-    FFormTypeRows[i].Excluded:= TypeIsExcluded(FFormTypeRows[i].TypeName, DeclU, Pats, FChkStdCtrls.Checked, Err);
-    if (Err <> '') and (FFilterError = '') then
-      FFilterError:= Err;
-
     if FindRuleForType(FCatalog, FFormTypeRows[i].TypeName, Entry) then
     begin
       FFormTypeRows[i].Ruled:= True;
@@ -3805,7 +3801,7 @@ begin
       FFormTypeRows[i].RuledBy:= '';
     end;
 
-    if not RowIsGreyed(FFormTypeRows[i]) then
+    if RowState(FFormTypeRows[i]) = rsToDo then
       Inc(Active);
   end; // for
 
@@ -4004,7 +4000,7 @@ begin
   i:= FFormTypeList.ItemIndex;
   if (i < 0) or (i > High(FFormTypeRows)) then
     Exit;
-  FFormTypeRows[i].Reenabled:= not FFormTypeRows[i].Reenabled;
+  FFormTypeRows[i].Skipped:= not FFormTypeRows[i].Skipped;
   RefreshFormTypes;
   FFormTypeList.ItemIndex:= i;
 end;
@@ -4032,12 +4028,13 @@ begin
   S:= Format('%s %s  (%d)', [Mark, Row.TypeName, Row.Count]);
   if Row.Ruled then
     S:= S + '  -- ' + Row.RuledBy;
-  if Row.Reenabled then
+  if Row.Skipped then
     S:= S + '  *';
 
-  // Selection keeps the theme's highlight colours; only unselected greyed rows are
-  // dimmed, so a greyed row stays readable when the user is on it.
-  if RowIsGreyed(Row) and not (odSelected in AState) then
+  // Selection keeps the theme's highlight colours; only unselected non-todo rows
+  // are dimmed, so a row stays readable when the user is on it. Task 6/7 replace
+  // this with state-specific painting (ruled vs skipped must look different).
+  if (RowState(Row) <> rsToDo) and not (odSelected in AState) then
     LB.Canvas.Font.Color:= clGrayText;
 
   LB.Canvas.TextOut(ARect.Left + 4, ARect.Top + 1, S);
@@ -5170,12 +5167,12 @@ begin
   end; // case
 
   { Hand the curation window the types actually on the examined form, so its
-    "Select by form types" can check exactly the rules this job needs. Filtered-
-    out rows are excluded (Reenabled is the user's per-row override); Ruled is
-    deliberately NOT consulted -- an unruled type simply matches no block. }
+    "Select by form types" can check exactly the rules this job needs. Skipped
+    rows are excluded (the user's own mark); Ruled is deliberately NOT consulted
+    -- an unruled type simply matches no block. }
   FormTypes:= nil;
   for TypeRow in FFormTypeRows do
-    if not (TypeRow.Excluded and not TypeRow.Reenabled) then
+    if not TypeRow.Skipped then
       FormTypes:= FormTypes + [TypeRow.TypeName];
 
   Reload:= TCurationForm.Execute(Self, FFilePath, FormTypes);

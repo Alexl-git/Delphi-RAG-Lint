@@ -41,16 +41,40 @@ type
   /// </remarks>
   TTypeVisualKind = (tvkUnknown, tvkVisual, tvkNonVisual);
 
-  /// <summary>One distinct component type found on the scanned form(s).</summary>
+  /// <summary>Where a class row came from.</summary>
   /// <remarks>
-  /// ScanDfmTypes fills TypeName and Count only. Visual, Excluded, Ruled
-  /// and RuledBy are decoration applied afterwards by the caller, which is what
-  /// keeps the harvest independent of the index and of the rule catalog.
-  /// Reenabled is the user's per-row override and is deliberately NOT derived:
-  /// it must survive an edit to the filter that would otherwise re-exclude the
-  /// row.
+  /// roDfm: instantiated on the form (the real conversion candidates).
+  /// roPas: declared by the unit. roBoth: both -- a form class is normally this.
+  /// roDfm is ordinal 0, so Default(TFormTypeRow) -- as ScanDfmTypes builds every
+  /// row -- already carries the right origin without an explicit assignment.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.FormTypes.MergeFormTypes (ConvRules.FormTypes.pas), ConvRules.FormTypes.RowsFromCounts (ConvRules.FormTypes.pas), ConvRules.FormTypes.ScanDfmTypes (ConvRules.FormTypes.pas), ConvRules.FormTypes.SortedByName (ConvRules.FormTypes.pas), declaration (ConvRules.FormTypes.pas) (+2 more)</para>
+  /// <para>Used by: declaration (ConvRules.FormTypes.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TRowOrigin = (roDfm, roPas, roBoth);
+
+  /// <summary>What the row means to the operator, and so how it is painted.</summary>
+  /// <remarks>
+  /// Skipped WINS over Ruled: it is the user's explicit decision and must
+  /// not be masked by a derived fact. Before 2026-09-20 both rendered as the same
+  /// grey, which made "already done" and "filtered out" indistinguishable -- the
+  /// defect this type exists to remove.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (ConvRules.FormTypes.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TRowState = (rsToDo, rsRuled, rsSkipped);
+
+  /// <summary>One distinct component type found on the scanned form(s), or
+  /// declared in the unit.</summary>
+  /// <remarks>
+  /// ScanDfmTypes fills TypeName and Count only. Visual, Origin, Ruled,
+  /// RuledBy and RuleCount are decoration applied afterwards by the caller, which
+  /// is what keeps the harvest independent of the index and of the rule catalog.
+  /// Skipped is the user's own mark, loaded from and saved to the skip file -- it
+  /// is deliberately NOT derived, so re-scanning a form never discards a decision.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.FormTypes.MergeFormTypes (ConvRules.FormTypes.pas), ConvRules.FormTypes.RowsFromCounts (ConvRules.FormTypes.pas), ConvRules.FormTypes.ScanDfmTypes (ConvRules.FormTypes.pas), ConvRules.FormTypes.SortedByName (ConvRules.FormTypes.pas), declaration (ConvRules.FormTypes.pas) (+4 more)</para>
   /// <para>Used in units: ConvRules.FormTypes, ConvRules.MainForm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -58,10 +82,27 @@ type
     TypeName : string         ;
     Count    : Integer        ;
     Visual   : TTypeVisualKind;
-    Excluded : Boolean        ;
+    Origin   : TRowOrigin     ;
+    Skipped  : Boolean        ;
     Ruled    : Boolean        ;
     RuledBy  : string         ;
-    Reenabled: Boolean        ;
+    RuleCount: Integer        ;
+  end;
+
+  /// <summary>The progress line: how many classes, and where they stand.</summary>
+  /// <remarks>
+  /// Ruled + Skipped + ToDo always sums to Total -- CountRows partitions
+  /// every row into exactly one bucket, via RowState.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: ConvRules.FormTypes.CountRows (ConvRules.FormTypes.pas), declaration (ConvRules.FormTypes.pas)</para>
+  /// <para>Used in units: ConvRules.FormTypes</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TRowCounts = record
+    Total  : Integer;
+    Ruled  : Integer;
+    Skipped: Integer;
+    ToDo   : Integer;
   end;
 
   /// <remarks>
@@ -71,26 +112,26 @@ type
   /// </remarks>
   TFormTypeRows = TArray<TFormTypeRow>;
 
-  /// <summary>PURE: the distinct component types declared in one .dfm text, with an
-  /// instance count each, sorted by type name (case-insensitive ascending).</summary>
-  /// <param name="AText">The whole .dfm as text. A binary .dfm simply yields
-  /// nothing, as it does everywhere else in this editor.</param>
-  /// <returns>One row per distinct type; Count is the number of 'object'/'inherited'/
-  /// 'inline' declarations of it. Only TypeName and Count are set.</returns>
-  /// <remarks>
-  /// Name-ascending, not count-descending, on purpose: it groups a family
-  /// (every TOvc*) together, which is how a conversion is actually chosen. The high
-  /// counts are noise -- VARINSP.dfm's largest is 388 TLabel.
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas)</para>
-  /// <para>Calls: ConvRules.BlockFile.SplitRawLines, ConvRules.FormTypes.RowsFromCounts, ConvRules.Usage.ParseBlockHeader, Default, UpperCase</para>
-  /// <para>Returns: RowsFromCounts(Counts)</para>
-  /// <para>Pure</para>
-  /// <seealso cref="ConvRules.BlockFile.SplitRawLines"/>
-  /// <seealso cref="ConvRules.FormTypes.RowsFromCounts"/>
-  /// <seealso cref="ConvRules.Usage.ParseBlockHeader"/>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>PURE: the distinct component types declared in one .dfm text, with an
+/// instance count each, sorted by type name (case-insensitive ascending).</summary>
+/// <param name="AText">The whole .dfm as text. A binary .dfm simply yields
+/// nothing, as it does everywhere else in this editor.</param>
+/// <returns>One row per distinct type; Count is the number of 'object'/'inherited'/
+/// 'inline' declarations of it. Only TypeName and Count are set.</returns>
+/// <remarks>
+/// Name-ascending, not count-descending, on purpose: it groups a family
+/// (every TOvc*) together, which is how a conversion is actually chosen. The high
+/// counts are noise -- VARINSP.dfm's largest is 388 TLabel.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.BlockFile.SplitRawLines, ConvRules.FormTypes.RowsFromCounts, ConvRules.Usage.ParseBlockHeader/2, Default, UpperCase</para>
+/// <para>Returns: RowsFromCounts(Counts)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.BlockFile.SplitRawLines"/>
+/// <seealso cref="ConvRules.FormTypes.RowsFromCounts"/>
+/// <seealso cref="ConvRules.Usage.ParseBlockHeader"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ScanDfmTypes(const AText: string): TFormTypeRows;
 
 /// <summary>PURE: union of several forms' type rows, summing the counts of a type
@@ -110,7 +151,7 @@ function MergeFormTypes(const AParts: TArray<TFormTypeRows>): TFormTypeRows;
 
 /// <summary>PURE: True when AUnitName is a standard Delphi VCL or FMX unit.</summary>
 /// <param name="AUnitName">A declaring unit name, qualified or not; '' is False.</param>
-/// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
 /// <remarks>
 /// Deliberately LITERAL -- only the 'Vcl.' and 'FMX.' namespaces, because
 /// that is what the checkbox offering this says. System./Data./Winapi. types such
@@ -141,29 +182,80 @@ function IsStandardVclOrFmxUnit(const AUnitName: string): Boolean;
 /// OPEN (excluding nothing) is only safe because AError is surfaced in the panel;
 /// a silent fail-open here would hide the fact that a condition never ran.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ConvRules.FormTypes.IsStandardVclOrFmxUnit, Format, Trim</para>
 /// <para>Returns: StdHit or PatHit</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: AError (out)</para>
 /// <seealso cref="ConvRules.FormTypes.IsStandardVclOrFmxUnit"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function TypeIsExcluded(const ATypeName, ADeclaringUnit: string; const APatterns: TArray<string>; AExcludeStandard: Boolean; out AError: string): Boolean;
+function TypeIsExcluded(const ATypeName, ADeclaringUnit: string; const APatterns: TArray<string>; AExcludeStandard: Boolean; out AError: string): Boolean;  // dl:ok unused-public-symbol@6313 -- Task 4 removed its only caller (RefreshFormTypes); Task 9 re-wires it as the Apply-button named-filter matcher
 
-/// <summary>PURE: True when the row is greyed in the panel, for any reason.</summary>
-/// <param name="ARow">A decorated row.</param>
-/// <returns><!-- drag-lint:auto -->Boolean -- Observed: (ARow.Excluded or ARow.Ruled) and
-/// (not ARow.Reenabled).</returns>
+/// <summary>PURE: union of a form's .dfm instance rows and a unit's declared
+/// class names into one class-row set, origin-marked.</summary>
+/// <param name="ADfmRows">Rows already scanned from the form (ScanDfmTypes /
+/// MergeFormTypes); their order and Count survive unchanged.</param>
+/// <param name="APasClasses">Class names declared in the unit; blank entries are
+/// ignored.</param>
+/// <returns>The .dfm rows first (unchanged order), then the pas-only names
+/// name-sorted; a name present in both becomes ONE row with Origin = roBoth.
+/// </returns>
 /// <remarks>
-/// The two reasons -- filtered out, already covered by a rule -- render
-/// identically but are tracked separately on the row, because Reenabled must
-/// override both without erasing WHY the row was grey.
+/// Matching is case-insensitive (SameText). The .dfm rows lead because they are
+/// the classes a conversion actually targets; declared-only classes are offered
+/// after, so the operator sees "what is really on the form" before "what else
+/// this unit merely declares".
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
+/// <para>Calls: CompareText, Copy, Default, SameText, Trim</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RowIsGreyed(const ARow: TFormTypeRow): Boolean;
+function MergeClassRows(const ADfmRows: TFormTypeRows; const APasClasses: TArray<string>): TFormTypeRows;  // dl:ok unused-public-symbol@df80 -- Task 4 of a multi-task plan; Task 5 wires this into HarvestUnitClasses/HarvestFormTypes
+
+/// <summary>PURE: the row's state -- what the operator should see and how the
+/// row should be painted.</summary>
+/// <param name="ARow">A decorated row.</param>
+/// <returns>rsSkipped when Skipped is set (wins), else rsRuled when Ruled is
+/// set, else rsToDo.</returns>
+/// <remarks>
+/// Skipped is an explicit user decision and must never be masked by a
+/// derived fact such as Ruled.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.FormTypes.CountRows (ConvRules.FormTypes.pas), ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
+/// <para>Returns: rsSkipped; rsRuled; rsToDo</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function RowState(const ARow: TFormTypeRow): TRowState;
+
+/// <summary>PURE: partitions ARows into Total/Ruled/Skipped/ToDo via RowState.
+/// </summary>
+/// <param name="ARows">The full row set, unfiltered.</param>
+/// <returns>Ruled + Skipped + ToDo always equals Total -- every row is counted
+/// exactly once.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: ConvRules.FormTypes.RowState, Default</para>
+/// <para>Returns: Default(TRowCounts)</para>
+/// <para>Pure</para>
+/// <seealso cref="ConvRules.FormTypes.RowState"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function CountRows(const ARows: TFormTypeRows): TRowCounts;  // dl:ok unused-public-symbol@17c4 -- Task 4 of a multi-task plan; Task 7 wires this into the progress line
+
+/// <summary>PURE: the indexes of ARows whose TypeName matches ASearch.</summary>
+/// <param name="ARows">The full row set; indexes are into this array.</param>
+/// <param name="ASearch">A case-insensitive substring match against TypeName;
+/// blank or whitespace-only means "everything is visible".</param>
+/// <returns>Indexes in ascending order; the search filters VISIBILITY only and
+/// never changes CountRows' totals.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: ContainsText, Trim</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function VisibleRowIndexes(const ARows: TFormTypeRows; const ASearch: string): TArray<Integer>;  // dl:ok unused-public-symbol@fb8e -- Task 4 of a multi-task plan; Task 6 wires this into the search box
 
 implementation
 
@@ -312,11 +404,88 @@ begin
   Result:= StdHit or PatHit;
 end; // function
 
-function RowIsGreyed(const ARow: TFormTypeRow): Boolean;
+function MergeClassRows(const ADfmRows: TFormTypeRows; const APasClasses: TArray<string>): TFormTypeRows;
+var
+  j   : Integer;
+  Nm  : string ;
+  Hit : Boolean;
+  Pas : TArray<string>;
+  Row : TFormTypeRow  ;
 begin
-  // Reenabled is the user's explicit override and beats BOTH reasons. The reasons
-  // stay on the row so the panel can still say why it was grey.
-  Result:= (ARow.Excluded or ARow.Ruled) and (not ARow.Reenabled);
-end;
+  // .dfm rows keep their order (ScanDfmTypes already sorted them by name) and lead,
+  // because they are the classes a conversion actually targets. Declared-only
+  // classes follow, name-sorted. roDfm is ordinal 0, so a row ScanDfmTypes built
+  // with Default(TFormTypeRow) already carries the right origin.
+  Result:= Copy(ADfmRows);
+  Pas   := nil;
+  for Nm in APasClasses do
+  begin
+    if Trim(Nm) = '' then
+      Continue;
+    Hit:= False;
+    for j:= 0 to High(Result) do
+      if SameText(Result[j].TypeName, Nm) then
+      begin
+        Result[j].Origin:= roBoth;
+        Hit             := True;
+        Break;
+      end;
+    if not Hit then
+      Pas:= Pas + [Trim(Nm)];
+  end;
+
+  TArray.Sort<string>(Pas, TComparer<string>.Construct(
+    function(const L, R: string): Integer
+    begin
+      Result:= CompareText(L, R);
+    end));
+
+  for Nm in Pas do
+  begin
+    Row         := Default(TFormTypeRow);
+    Row.TypeName:= Nm;
+    Row.Count   := 0;
+    Row.Origin  := roPas;
+    Result      := Result + [Row];
+  end;
+end; // function
+
+function RowState(const ARow: TFormTypeRow): TRowState;
+begin
+  if ARow.Skipped then
+    Exit(rsSkipped);
+  if ARow.Ruled then
+    Exit(rsRuled);
+  Result:= rsToDo;
+end; // function
+
+function CountRows(const ARows: TFormTypeRows): TRowCounts;
+var
+  R: TFormTypeRow;
+begin
+  Result:= Default(TRowCounts);
+  for R in ARows do
+  begin
+    Inc(Result.Total);
+    case RowState(R) of
+      rsSkipped: Inc(Result.Skipped);
+      rsRuled  : Inc(Result.Ruled  );
+    else
+      Inc(Result.ToDo);
+    end;
+  end;
+end; // function
+
+function VisibleRowIndexes(const ARows: TFormTypeRows; const ASearch: string): TArray<Integer>;
+var
+  i: Integer;
+  S: string ;
+begin
+  Result:= nil;
+  S     := Trim(ASearch);
+  for i:= 0 to High(ARows) do
+    if (S = '') or ContainsText(ARows[i].TypeName, S) then
+      Result:= Result + [i];
+end; // function
 
 end.
