@@ -129,6 +129,13 @@ type
     FLblConv      : TLabel;
       // rules library
       FRules : TListView;
+      { Parallel to FRules.Items, same index -- RefreshRulesList fills both from
+        one RulesForType call. Item.Data carries HeaderIndexFor's result (-1 for
+        a cross-book entry, whose book is not FBook); RulesSelectItem needs the
+        full TRuleCatalogEntry, not just that index, to route a -1 row through
+        OpenOwningRuleEntry (Task 10's one shared cross-book prompt) rather than
+        loading a nonsense header. }
+      FRulesEntries: TArray<TRuleCatalogEntry>;
       // grid
       FGrid        : TStringGrid   ; // col0 From, col1 To-assigned, col2 cast
       FGridFindFrom: TEdit         ; // grid filter: From column substring
@@ -2371,7 +2378,6 @@ procedure TConvRulesForm.BuildUI;
 var
   Split1        : TSplitter;
   Split2        : TSplitter;
-  SplitForms    : TSplitter;
   LeftPanel     : TPanel   ;
   GridPanel     : TPanel   ;
   PoolPanel     : TPanel   ;
@@ -2381,7 +2387,7 @@ var
   BtnRescan     : TButton  ;
   BtnSkip       : TButton  ;
   BtnOpenForm   : TButton  ;
-  TabRules      : TTabSheet;
+  TabClasses    : TTabSheet;
   TabRaw        : TTabSheet;
   TabUnits      : TTabSheet;
 begin
@@ -2513,11 +2519,38 @@ begin
   FLblFile.Parent:= FPanelTop; FLblFile.SetBounds(8, 101, 1080, 15);
   FLblFile.Caption:= '(no file)';
 
-  // --- leftmost: the types ON the examined form ---
-  // Created BEFORE LeftPanel so it wins the leftmost alLeft slot: VCL orders same-
-  // aligned siblings by creation, so swapping these two swaps the columns.
+  // --- the "types on examined form" panel now BUILDS inside TabClasses, the
+  //     new first tab of FTabs below (OWNER AMENDMENT 2026-09-20) -- see that
+  //     block for FormTypesPanel and everything parented to it.
+
+  // --- left: rules library + tabs ---
+  LeftPanel:= TPanel.Create(Self);
+  LeftPanel.Parent:= Self; LeftPanel.Align:= alLeft; LeftPanel.Width:= 380;
+  LeftPanel.BevelOuter:= bvNone;
+
+  FTabs:= TPageControl.Create(Self);
+  FTabs.Parent:= LeftPanel; FTabs.Align:= alClient;
+
+  { OWNER AMENDMENT 2026-09-20: the retired "Rules Library" placeholder tab
+    (TabRules) is gone. A full-window screenshot showed it occupying the WHOLE
+    leftmost column, empty, while the real "Types on form" panel sat one
+    column over -- so deleting the tab alone would have left the checklist
+    behind a page control that still carried "Raw DSL" and "Unit Rules". This
+    new tab is the panel's home instead: FormTypesPanel (and everything
+    parented to it -- Open form / Rescan / Skip, the standard-controls
+    checkbox, the named-filter editor, FFormTypeList, FRules) reparents onto
+    TabClasses, alClient, rather than onto Self, alLeft. That is also why the
+    old FormTypesPanel column and its SplitForms splitter are gone entirely:
+    the form goes from four columns to three. Accepted cost, the owner's own
+    words: the checklist is hidden while Raw DSL or Unit Rules is selected. }
+  TabClasses:= TTabSheet.Create(FTabs);
+  TabClasses.PageControl:= FTabs;
+  TabClasses.Caption:= 'Classes';
+
+  // --- the types ON the examined form, now living inside TabClasses ---
   FormTypesPanel:= TPanel.Create(Self);
-  FormTypesPanel.Parent:= Self; FormTypesPanel.Align:= alLeft; FormTypesPanel.Width:= 300;
+  FormTypesPanel.Parent:= TabClasses;
+  FormTypesPanel.Align := alClient;
   FormTypesPanel.BevelOuter:= bvNone;
 
   LblFormHdr:= TLabel.Create(Self);
@@ -2623,27 +2656,17 @@ begin
   FRules.Anchors  := [akLeft, akTop, akRight, akBottom];
   FRules.ViewStyle:= vsReport; FRules.ReadOnly     := True;
   FRules.RowSelect:= True    ; FRules.HideSelection:= False;
+  { '%' retired 2026-09-20: RefreshRulesList can list a rule from a book that is
+    not the one currently open (a cross-book entry, HeaderIndexFor -> -1), and a
+    percentage computed against the WRONG book, or a bare 0 for one that was
+    never computed at all, both read as "unfinished" when the rule may be
+    complete. The file name is unambiguous regardless of which book is open. }
   FRules.Columns.Add.Caption:= 'To'  ; FRules.Columns[0].Width:= 140;
-  FRules.Columns.Add.Caption:= '%'   ; FRules.Columns[1].Width:= 40;
+  // Widened from the retired '%' column's 40px so a file name is not clipped.
+  var RulesFileColWidth: Integer:= 130;  // dl:ok magic-literal@075a, large-magic-number@075a -- Task 12; the literal IS the named constant's own initializer, but the rule does not special-case that
+  FRules.Columns.Add.Caption:= 'File';
+  FRules.Columns[1].Width  := RulesFileColWidth;
   FRules.OnSelectItem:= RulesSelectItem;
-
-  SplitForms:= TSplitter.Create(Self);
-  SplitForms.Parent:= Self; SplitForms.Align:= alLeft; SplitForms.Width:= 4;
-
-  // --- left: rules library + tabs ---
-  LeftPanel:= TPanel.Create(Self);
-  LeftPanel.Parent:= Self; LeftPanel.Align:= alLeft; LeftPanel.Width:= 380;
-  LeftPanel.BevelOuter:= bvNone;
-
-  FTabs:= TPageControl.Create(Self);
-  FTabs.Parent:= LeftPanel; FTabs.Align:= alClient;
-
-  { FRules tab superseded 2026-09-16: FRules and FRulesFilter were moved into
-    FormTypesPanel below FFormTypeList, consolidating the two redundant left lists.
-    This tab now serves as a placeholder and is hidden. }
-  TabRules:= TTabSheet.Create(FTabs); TabRules.PageControl:= FTabs;
-  TabRules.Caption:= 'Rules Library (retired)';
-  TabRules.Visible:= False;
 
   TabRaw:= TTabSheet.Create(FTabs); TabRaw.PageControl:= FTabs;
   TabRaw.Caption:= 'Raw DSL (all directives)';
@@ -2665,6 +2688,12 @@ begin
   FUnitList.Columns.Add.Caption:= 'Old'   ; FUnitList.Columns[1].Width:= 110;
   FUnitList.Columns.Add.Caption:= 'New(s)'; FUnitList.Columns[2].Width:= 150;
   FUnitList.Columns.Add.Caption:= 'Flag'  ; FUnitList.Columns[3].Width:= 90;
+
+  // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
+  // than relying on "index 0 happens to be first created", which TabRules.
+  // Visible:= False used to make untrue for a sighted user even though it was
+  // still technically page 0.
+  FTabs.ActivePageIndex:= 0;
 
   Split1:= TSplitter.Create(Self);
   Split1.Parent:= Self; Split1.Align:= alLeft; Split1.Left:= LeftPanel.Width + 1;
@@ -3421,11 +3450,38 @@ begin
   end;
 end; // procedure
 
+{ The rules that convert the selected class. Retired on 2026-09-16 when the tab
+  was hidden and never rebuilt, which left the list permanently empty while it was
+  still the grid's selection model. It is now driven by the class list above it:
+  Items[k].Data carries the catalogue index, as it always did. FRulesEntries is
+  filled in lockstep so RulesSelectItem can recover the full entry for a row
+  whose header index is -1 (a cross-book rule). }
 procedure TConvRulesForm.RefreshRulesList;
+var
+  Entries: TArray<TRuleCatalogEntry>;
+  Item   : TListItem                ;
+  k      : Integer                  ;
 begin
-  { Retired 2026-09-16: FRules tab is no longer populated. The rules library
-    functionality was replaced by loading classes directly from the selected unit. }
-  FRules.Items.Clear;
+  if FRules = nil then
+    Exit;
+  FRules.Items.BeginUpdate;
+  try
+    FRules.Items.Clear;
+    FRulesEntries:= nil;
+    if FSelectedFormType = '' then
+      Exit;
+    Entries:= RulesForType(FCatalog, FSelectedFormType);
+    FRulesEntries:= Entries;
+    for k:= 0 to High(Entries) do
+    begin
+      Item         := FRules.Items.Add;
+      Item.Caption := Entries[k].ToType;
+      Item.SubItems.Add(ExtractFileName(Entries[k].FilePath));
+      Item.Data    := Pointer(NativeInt(HeaderIndexFor(FBook, Entries[k])));
+    end;
+  finally
+    FRules.Items.EndUpdate;
+  end; // try
 end; // procedure
 
 function TConvRulesForm.BlockPercent(AHdrIdx: Integer): Integer;
@@ -3467,12 +3523,26 @@ begin
 end; // function
 
 procedure TConvRulesForm.RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+var
+  Hdr: Integer;
 begin
   if not Selected then
     Exit;
   if Item = nil then
     Exit;
-  LoadGridForBlock(Integer(Item.Data));
+  Hdr:= Integer(Item.Data);
+  if Hdr < 0 then
+  begin
+    { HeaderIndexFor returned -1 when this row was built: the rule lives in a
+      book that is not the one currently open (a cross-book entry -- several
+      rules per class are legal across books, Task 11's SameBookDups). There is
+      no header in FBook to hand LoadGridForBlock, so route through the one
+      shared cross-book prompt instead of loading a nonsense index. }
+    if (Item.Index >= 0) and (Item.Index <= High(FRulesEntries)) then
+      OpenOwningRuleEntry(FRulesEntries[Item.Index]);
+    Exit;
+  end;
+  LoadGridForBlock(Hdr);
 end;
 
 function TConvRulesForm.ActiveLinks: TArray<TRuleNode>;
@@ -4291,7 +4361,15 @@ begin
   if Sel >= 0 then
   begin
     FRules.ItemIndex:= Sel;
-    FRules.Items[Sel].Selected:= True;
+    { A TListView does not fire OnSelectItem when Selected:= True lands on a
+      row that is ALREADY selected (measured behaviour of this control) -- so
+      re-opening the same class's already-highlighted rule would silently skip
+      LoadGridForBlock. Call it directly in that case rather than relying on
+      the event to fire it; otherwise let Selected:= True do it as before. }
+    if FRules.Items[Sel].Selected then
+      LoadGridForBlock(Hdr)
+    else
+      FRules.Items[Sel].Selected:= True; // fires RulesSelectItem -> LoadGridForBlock
     FRules.Items[Sel].Focused := True;
     FRules.SetFocus;
   end
