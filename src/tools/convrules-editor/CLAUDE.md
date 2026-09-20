@@ -141,6 +141,12 @@ and one that read as answered and was not.
 
 ## Left lists (class picker) -- hand-over notes (Task 13, 2026-09-20)
 
+Line numbers below are deliberately omitted (this unit moved ~600 lines in
+ONE DAY during this branch, and a cited `:NNNN` is wrong by the next session)
+-- resolve a routine name with `drag-lint outline --file <U.pas> --db <db>` or
+get its full context with `drag-lint context --task "modify <Unit.Routine>"
+--db <db>`.
+
 * **Skip file location:** `<rules folder>\convrules-editor-skip.txt`, beside the
   `.rules` book(s) -- shared via source control, not per-user. Format is plain
   text, one `skip <ClassName>` line per marked class (`SkipFilePath`,
@@ -196,6 +202,18 @@ and one that read as answered and was not.
   selection does not change, so `FormTypeDblClick` cannot rely on the
   single-click handler having just run for that row -- it loads the grid
   itself rather than assuming `FormTypeClick` already did.
+* **A per-task "touched hunks" lint gate has a real blind spot: a line whose
+  TEXT is unchanged can still be swept into a LATER task's diff** when
+  surrounding lines are inserted/deleted around it (git attributes the whole
+  replaced region to the new commit even where content did not change). Task
+  13 found 13 `--enable`'d findings on `MainForm.pas` branch-authored lines
+  that no single task's own per-task lint run had reported: 9 on the `BtnSkip`
+  creation line (last rewritten by the "several rules... warn" task, whose own
+  commit was ABOUT splitting statements onto one per line and still missed
+  this one) and 4 on the `LeftPanel`/`FTabs` creation lines (swept into the
+  "retire the placeholder Rules Library tab" task's replaced region). Only the
+  WHOLE-BRANCH diff (`cfe19ec9..HEAD`) caught them -- run that, not just the
+  latest commit's own diff, before calling a branch lint-clean.
 
 ### Pre-existing oddities noticed in passing (not fixed -- for the owner)
 
@@ -204,11 +222,12 @@ and one that read as answered and was not.
 * `BlockPercent` (`ConvRules.MainForm.pas`) is dead code since the `%` column
   became `File` -- `H2219 Private symbol 'BlockPercent' declared but never
   used` on every build.
-* The "Fill From-classes" hand comment block above `HarvestUnitFile`
-  (~ConvRules.MainForm.pas:2969) describes an unrelated feature -- stale prose,
-  not stale facts (autodoc does not touch hand-written comments).
+* The `{ "Fill From-classes": ... }` hand comment block directly above
+  `HarvestUnitFile` describes an unrelated feature -- stale prose, not stale
+  facts (autodoc does not touch hand-written comments).
 * `HarvestFormTypes`'s own hand comment still says "manual re-enable/override"
   language that predates the current skip-mark carry-forward design.
 * `FormTypeDrawItem`'s 4px text inset is a literal written THREE separate
-  times (`ConvRules.MainForm.pas:4477,4484,4485`), each with its own `dl:ok
-  magic-literal` review instead of one named constant.
+  times -- the `TextOut` call, then the strikethrough's `MoveTo` and `LineTo`
+  -- each with its own `dl:ok magic-literal` review instead of one named
+  constant.
