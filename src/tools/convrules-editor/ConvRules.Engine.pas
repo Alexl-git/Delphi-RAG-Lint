@@ -828,7 +828,12 @@ type
 /// <returns>One entry per distinct `"kind":"class"` name, de-duplicated
 /// case-insensitively so a forward-declaration stub does not produce a second
 /// row. Unparseable input returns an empty array; this never raises.</returns>
-function ParseOutlineClassNames(const AJson: string): TArray<string>;
+/// <remarks>PURE: no process spawn, no I/O. Never raises -- malformed JSON
+/// inside a well-formed pair of brackets is caught and treated as no classes,
+/// same as input with no brackets at all. The "kind" match is also
+/// case-insensitive (`SameText`), though the real payload only ever emits it
+/// lowercase; the leniency costs nothing and matches the name dedupe.</remarks>
+function ParseOutlineClassNames(const AJson: string): TArray<string>; // dl:ok unused-public-symbol@6c73 -- Task 2 of a multi-task plan; a later task wires this into the class-picker UI
 
 implementation
 
@@ -2133,10 +2138,9 @@ begin
     Exit;
   Body:= Copy(AJson, a, b - a + 1);
 
-  V:= nil;
   try
     V:= TJSONObject.ParseJSONValue(Body);
-  except
+  except // dl:ok try-except-swallowed@6149 -- deliberate: malformed JSON must yield [] not raise, per this function's docstring contract and test outline.classes.garbage
     on E: Exception do
       V:= nil;
   end;
@@ -2148,7 +2152,9 @@ begin
 
   Seen:= TStringList.Create;
   try
-    Seen.Sorted:= True; Seen.Duplicates:= dupIgnore; Seen.CaseSensitive:= False;
+    Seen.Sorted:= True;
+    Seen.Duplicates:= dupIgnore;
+    Seen.CaseSensitive:= False;
     Arr:= TJSONArray(V);
     for i:= 0 to Arr.Count - 1 do
     begin

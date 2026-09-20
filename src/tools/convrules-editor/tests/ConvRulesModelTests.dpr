@@ -5071,13 +5071,21 @@ const
     ' {"kind":"record","name":"TRectangleAround","qname":"VARINSP.TRectangleAround","line":172}' +
     ']';
 var
-  N: TArray<string>;
+  N : TArray<string>;
+  N2: TArray<string>;
 begin
   N:= ParseOutlineClassNames(JSON);
   Check('outline.classes.count', Length(N) = 2, Format('%d', [Length(N)]));
   Check('outline.classes.first', N[0] = 'TVarInspForm', N[0]);
   Check('outline.classes.order', N[1] = 'TsgDXFImageAccess', 'document order, not sorted');
-  Check('outline.classes.dedupe.ci', Length(ParseOutlineClassNames(JSON)) = 2, 'a forward stub repeats the name -- one row only');
+
+  // A fresh, separate call (not the same N above) -- proves the case-insensitive
+  // dedupe reliably keeps the FIRST-SEEN casing ('TVarInspForm') rather than
+  // letting the later lowercase stub ('tvarinspform') win or overwrite it.
+  N2:= ParseOutlineClassNames(JSON);
+  Check(
+    'outline.classes.dedupe.ci', (Length(N2) = 2) and (N2[0] = 'TVarInspForm'),
+    'a forward stub repeats the name -- one row only, and first-seen casing must survive de-duplication');
 
   // The CLI prints a '(loaded defaults from ...)' preamble on some runs and not
   // others. Slicing first-'[' .. last-']' is what the IDE plugin does; without
@@ -5089,6 +5097,11 @@ begin
   Check('outline.classes.garbage', Length(ParseOutlineClassNames('not json at all')) = 0, 'never raises');
   Check('outline.classes.blank', Length(ParseOutlineClassNames('')) = 0);
   Check('outline.classes.no.classes', Length(ParseOutlineClassNames('[{"kind":"unit","name":"U"}]')) = 0, 'positive control: the parser can return empty for a real payload');
+
+  // Well-formed brackets around MALFORMED JSON -- the hardest case for "never
+  // raises": Pos('[')/LastDelimiter(']') both succeed, so ParseJSONValue is
+  // actually reached and must throw into the except handler, not before it.
+  Check('outline.classes.malformed.inside.brackets', Length(ParseOutlineClassNames('[{"kind": "class", "name":]')) = 0, 'invalid JSON between real brackets must be caught, not raised');
 end; // procedure
 
 procedure TestMappingGridHooks;
