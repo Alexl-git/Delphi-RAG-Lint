@@ -820,6 +820,16 @@ type
       property ExePath: string read FExePath;
   end;
 
+/// <summary>PURE: the distinct class names in a `drag-lint outline --format json`
+/// payload, in document order.</summary>
+/// <param name="AJson">The raw CLI output. A '(loaded defaults ...)' preamble or a
+/// trailing 'note:' line is tolerated -- the text is sliced from the first '[' to
+/// the last ']' before parsing, exactly as the IDE plugin's ParseOutlineJson does.</param>
+/// <returns>One entry per distinct `"kind":"class"` name, de-duplicated
+/// case-insensitively so a forward-declaration stub does not produce a second
+/// row. Unparseable input returns an empty array; this never raises.</returns>
+function ParseOutlineClassNames(const AJson: string): TArray<string>;
+
 implementation
 
 uses
@@ -2100,6 +2110,67 @@ begin
   finally
     if TFile.Exists(Tmp) then
     try TFile.Delete(Tmp); except end;
+  end; // try
+end; // function
+
+function ParseOutlineClassNames(const AJson: string): TArray<string>;
+var
+  a   : Integer      ;
+  b   : Integer      ;
+  Body: string       ;
+  V   : TJSONValue   ;
+  Arr : TJSONArray   ;
+  Obj  : TJSONObject ;
+  i   : Integer      ;
+  Kind: string       ;
+  Nm  : string       ;
+  Seen: TStringList  ;
+begin
+  Result:= nil;
+  a:= Pos('[', AJson);
+  b:= LastDelimiter(']', AJson);
+  if (a <= 0) or (b <= a) then
+    Exit;
+  Body:= Copy(AJson, a, b - a + 1);
+
+  V:= nil;
+  try
+    V:= TJSONObject.ParseJSONValue(Body);
+  except
+    on E: Exception do
+      V:= nil;
+  end;
+  if not (V is TJSONArray) then
+  begin
+    V.Free;
+    Exit;
+  end;
+
+  Seen:= TStringList.Create;
+  try
+    Seen.Sorted:= True; Seen.Duplicates:= dupIgnore; Seen.CaseSensitive:= False;
+    Arr:= TJSONArray(V);
+    for i:= 0 to Arr.Count - 1 do
+    begin
+      if not (Arr.Items[i] is TJSONObject) then
+        Continue;
+      Obj := TJSONObject(Arr.Items[i]);
+      Kind:= '';
+      Nm  := '';
+      Obj.TryGetValue<string>('kind', Kind);
+      Obj.TryGetValue<string>('name', Nm  );
+      if not SameText(Kind, 'class') then
+        Continue;
+      if Trim(Nm) = '' then
+        Continue;
+      if Seen.IndexOf(Nm) >= 0 then
+        Continue;
+      Seen.Add(Nm);
+      Result:= Result + [Nm];
+    end; // for
+  finally
+    Seen.Free;
+    V.Free;
   end; // try
 end; // function
 

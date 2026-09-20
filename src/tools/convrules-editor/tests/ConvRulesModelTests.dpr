@@ -5059,6 +5059,38 @@ begin
   Check('enum.pairs.used.once.no.surplus', Length(Surplus) = 0, 'the target was consumed, so it is not surplus');
 end; // begin
 
+procedure TestOutlineClassNames;
+const
+  JSON =
+    '[' +
+    ' {"kind":"unit","name":"VARINSP","qname":"VARINSP","line":9},' +
+    ' {"kind":"enum","name":"TFinalColor","qname":"VARINSP.TFinalColor","line":160},' +
+    ' {"kind":"class","name":"TVarInspForm","qname":"VARINSP.TVarInspForm","line":190},' +
+    ' {"kind":"class","name":"TsgDXFImageAccess","qname":"VARINSP.TsgDXFImageAccess","line":178},' +
+    ' {"kind":"class","name":"tvarinspform","qname":"VARINSP.tvarinspform","line":9999},' +
+    ' {"kind":"record","name":"TRectangleAround","qname":"VARINSP.TRectangleAround","line":172}' +
+    ']';
+var
+  N: TArray<string>;
+begin
+  N:= ParseOutlineClassNames(JSON);
+  Check('outline.classes.count', Length(N) = 2, Format('%d', [Length(N)]));
+  Check('outline.classes.first', N[0] = 'TVarInspForm', N[0]);
+  Check('outline.classes.order', N[1] = 'TsgDXFImageAccess', 'document order, not sorted');
+  Check('outline.classes.dedupe.ci', Length(ParseOutlineClassNames(JSON)) = 2, 'a forward stub repeats the name -- one row only');
+
+  // The CLI prints a '(loaded defaults from ...)' preamble on some runs and not
+  // others. Slicing first-'[' .. last-']' is what the IDE plugin does; without
+  // it the parse fails on exactly the runs that print it.
+  Check('outline.classes.preamble', Length(ParseOutlineClassNames('(loaded defaults from C:\x.json)'#13#10 + JSON)) = 2, 'CLI preamble must be tolerated');
+  Check('outline.classes.trailing', Length(ParseOutlineClassNames(JSON + #13#10'note: 1 of 2 files changed')) = 2, 'trailing note must be tolerated');
+
+  Check('outline.classes.empty.array', Length(ParseOutlineClassNames('[]')) = 0);
+  Check('outline.classes.garbage', Length(ParseOutlineClassNames('not json at all')) = 0, 'never raises');
+  Check('outline.classes.blank', Length(ParseOutlineClassNames('')) = 0);
+  Check('outline.classes.no.classes', Length(ParseOutlineClassNames('[{"kind":"unit","name":"U"}]')) = 0, 'positive control: the parser can return empty for a real payload');
+end; // procedure
+
 procedure TestMappingGridHooks;
 var
   Book   : TArray<TRuleNode>       ;
@@ -5571,6 +5603,7 @@ begin
     TestAtomFileNaming;
     TestRuleCatalogRealFolder;
     TestSuggestEnumPairs;
+    TestOutlineClassNames;
 
     FreeAndNil(GParseBook);
 
