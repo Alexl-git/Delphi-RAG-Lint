@@ -109,7 +109,15 @@ const
   /// ResolveAncestry, ResolveTypeNameToClass, GetTransitiveAncestors);
   /// NormalizeAncestorName hands back the type arguments. Note: 1.2.0 -&gt; 1.3.0
   /// (bc2e39dc) was never pinned in the baseline; this pin absorbs it.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.4.0-alpha';
+  /// <para>1.4.0-alpha -&gt; 1.5.0-alpha (2026-09-21, purity v2): a new `purity`
+  /// resolve stage writes symbol_facts.effect_free / effect_summary /
+  /// effect_witness from call_edges, member_accesses, refs and source text.
+  /// DERIVED columns only, no parse change: remedy is `index --all
+  /// --resolve-only`. The stage recomputes only while some body row still has
+  /// effect_free IS NULL, so a filled database would keep OLD verdicts forever
+  /// -- this stamp is the only thing that can force it to think again.
+  /// Spec: docs\superpowers\specs\2026-09-15-interprocedural-purity.md</para>
+  DRAGLINT_RESOLVER_VERSION = '1.5.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

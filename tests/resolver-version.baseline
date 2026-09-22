@@ -187,4 +187,69 @@
 #
 #   Superseded: 1.4.0-alpha|cc8c86896c828038e9eeb9102faa988fe9aede73f4c6aa0eef65b7049322c2e0
 
-1.4.0-alpha|463989bb0a729a967964a9a29ec5913d23133ed5eb6d1d5611b3a89c1acee2d3
+# 2026-09-21: 1.4.0-alpha -> 1.5.0-alpha (purity v2, plan C6.1). A new `purity`
+#   resolve stage -- src\analysis\DRagLint.Analysis.PurityStage.pas over the
+#   pure model in src\analysis\DRagLint.Analysis.Purity.pas -- derives
+#   symbol_facts.effect_free / effect_summary / effect_witness from call_edges,
+#   member_accesses, refs and routine bodies the index already holds. DERIVED
+#   columns only, no parse change: remedy is index --all --resolve-only.
+#
+#   THE MANIFEST WAS WIDENED, AND A LITERAL READING OF THE HEADER ABOVE WOULD
+#   HAVE REFUSED IT. That header scopes the resolve surface to "the code that
+#   DERIVES call_edges, type_ancestors, type_helpers and unit_uses targets", and
+#   the purity stage derives none of those -- it writes symbol_facts columns.
+#   Both analysis units go in anyway, and the reason is the staleness mechanics
+#   rather than the list of tables:
+#
+#     TPurityStage recomputes ONLY when PurityNeedsRun is True, i.e. only while
+#     some row with body_loc > 0 still has effect_free IS NULL. Once a database
+#     has been FILLED by a stage, every row has a verdict, PurityNeedsRun goes
+#     False, and that database keeps the OLD verdicts forever. There is no
+#     second trigger -- not a changed file, not a re-lint, not a re-resolve of
+#     the call pass. The resolver fingerprint is the ONLY thing left that can
+#     force it to think again.
+#
+#   So without these entries, any future change to purity logic goes silently
+#   stale in every index: the columns are populated, the answers look complete,
+#   and they are the previous build's. That is verbatim the failure mode this
+#   file's own header calls out -- "the failure mode of getting it wrong is
+#   SILENT" -- and it is why the entry is judged by what the stamp PROTECTS
+#   rather than by which four tables the header happens to name.
+#
+#   THIS IS THE SAME PRINCIPLE AS THE 2026-09-19 WIDENING, ONE STEP FURTHER.
+#   That entry admitted a READER the resolve pass depends on (FindSymbolsByExactName
+#   / FoldStubs), on the manifest's own closure rule: a routine that decides
+#   what is WRITTEN is surface even though it writes nothing. This entry extends
+#   the same rule from readers the pass depends on to WRITES the pass performs
+#   -- a second derived-data producer, sharing the one resolve stamp because it
+#   shares the one remedy and the one silent-staleness hazard.
+#
+#   WHAT ELSE MOVED THE HASH, so the diff is not mistaken for code drift:
+#   the manifest gained the two analysis units (hashed whole, `::*`) plus the
+#   store surface the stage uses -- PutEffectFacts, PurityNeedsRun,
+#   GetAllSymbolFacts, FindSymbolsWithFacts, DumpAllMemberAccesses -- and
+#   DumpAllCallEdges MOVED OUT OF THE EXCLUSION LIST. It had been excluded as a
+#   query-side reader on the stated ground that "a reader cannot make stored
+#   data stale"; PurityStage.pas:578 now loads every call edge through it, one
+#   line above the DumpAllMemberAccesses call, so that ground is false and the
+#   exclusion's reason no longer held. Every span that was already listed hashes
+#   to what it hashed before; no previously-listed code changed in this commit.
+#
+#   KNOWN AND DELIBERATE GAP, recorded in the manifest beside the entries: the
+#   stage reads eight further store routines (FindAllChildSymbols,
+#   FindChildSymbolByName, FindSymbolsByKind, GetAllFileStamps, GetFilePath,
+#   GetReferencesFromFile, GetSymbolById, and GetTransitiveAncestors which was
+#   already listed). Strict closure puts all of them in; widening that far is a
+#   scoping decision larger than this stage and is left for the owner. It is
+#   written down rather than skipped so that a purity verdict changing without
+#   this guard noticing is diagnosable instead of mysterious.
+#
+#   THE C2.5 CROSS-STORE QUESTION RECORDED IN THE 2026-09-19 ENTRY IS NOT
+#   SETTLED HERE. That bump still awaits the owner's decision; this bump is
+#   about purity and carries no verdict on it. An index re-resolved under
+#   1.5.0-alpha does, as a side effect, pick the C2.5 edges up -- worth knowing,
+#   but not a decision this entry is making.
+#
+#   Superseded: 1.4.0-alpha|463989bb0a729a967964a9a29ec5913d23133ed5eb6d1d5611b3a89c1acee2d3
+
+1.5.0-alpha|690833814ff9efb59db95b51343d52e17ab8b759650cc5a9605da2095f9b3cdf

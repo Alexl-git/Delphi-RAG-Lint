@@ -94,6 +94,55 @@ src/storage/DRagLint.Storage.SQLite.pas::FoldStubs
 src/core/DRagLint.Core.ForwardStub.pas::*
 
 # ---------------------------------------------------------------------------
+# PURITY V2 (2026-09-21). The `purity` resolve stage DERIVES
+# symbol_facts.effect_free / effect_summary / effect_witness from rows and
+# source the index already holds -- call_edges, member_accesses, refs and the
+# routine bodies. A change to the model or to the stage changes what is
+# WRITTEN, which is this manifest's own test for surface, and the remedy is
+# `index --all --resolve-only`, never a re-parse.
+#
+# IT IS LISTED EVEN THOUGH THE HEADER ABOVE SCOPES THE SURFACE TO "call_edges,
+# type_ancestors, type_helpers and unit_uses". A literal reading of that
+# sentence would exclude a stage that writes symbol_facts instead. What decides
+# it is the staleness mechanics: TPurityStage recomputes only when
+# PurityNeedsRun is True -- i.e. some row with body_loc > 0 still has
+# effect_free IS NULL -- so a database already FILLED by an older stage keeps
+# its old verdicts FOREVER. There is no other trigger. A resolver-fingerprint
+# mismatch is the only thing that forces recomputation, so without these
+# entries any future change to purity logic would go silently stale in every
+# index, which is precisely the failure mode the baseline's header warns about.
+src/analysis/DRagLint.Analysis.Purity.pas::*
+src/analysis/DRagLint.Analysis.PurityStage.pas::*
+
+# The store surface the stage writes through, plus the readers whose answers
+# decide what it writes (the closure rule above, applied to the stage's own
+# dependencies rather than the call resolver's).
+src/storage/DRagLint.Storage.SQLite.pas::PutEffectFacts
+src/storage/DRagLint.Storage.SQLite.pas::PurityNeedsRun
+src/storage/DRagLint.Storage.SQLite.pas::GetAllSymbolFacts
+src/storage/DRagLint.Storage.SQLite.pas::FindSymbolsWithFacts
+src/storage/DRagLint.Storage.SQLite.pas::DumpAllMemberAccesses
+# MOVED OUT OF THE EXCLUSION LIST, 2026-09-21. DumpAllCallEdges was EXCLUDEd as
+# a query-side reader on the stated ground that "a reader cannot make stored
+# data stale". That ground is now false: DRagLint.Analysis.PurityStage.pas:578
+# loads every call edge through it, one line above the DumpAllMemberAccesses
+# call listed directly above, and the edge set is what the fixpoint propagates
+# effects along. Leaving the two halves of one load on opposite sides of the
+# manifest would have been an exclusion whose reason no longer held.
+src/storage/DRagLint.Storage.SQLite.pas::DumpAllCallEdges
+#
+# NOT ADDED HERE, AND NAMED SO THE GAP IS AUDITABLE RATHER THAN INVISIBLE. The
+# stage reads eight further store routines -- FindAllChildSymbols,
+# FindChildSymbolByName, FindSymbolsByKind, GetAllFileStamps, GetFilePath,
+# GetReferencesFromFile, GetSymbolById (and GetTransitiveAncestors, which is
+# already listed above for ancestry). By the closure rule each of them also
+# decides what purity writes, so a strict reading puts all of them in. They are
+# left out of THIS change because widening the manifest that far is a scoping
+# decision beyond the purity stage, and it is recorded rather than silently
+# skipped: the next reader who wonders why a purity verdict changed without the
+# guard noticing should start here.
+
+# ---------------------------------------------------------------------------
 # EXCLUSIONS. Each is a routine whose NAME matches the resolve vocabulary and
 # which is deliberately NOT part of the surface. The guard fails on a
 # vocabulary-matching routine that is in neither list, so "someone forgot"
@@ -117,7 +166,8 @@ EXCLUDE findresolvedcallers
 EXCLUDE findunresolvednamecallers
 EXCLUDE getcalledgesfromsymbol
 EXCLUDE countcalledges
-EXCLUDE dumpallcalledges
+# (dumpallcalledges was here until 2026-09-21; it is now in the manifest above,
+# because the purity stage loads the whole edge set through it.)
 EXCLUDE finddiresolvesites
 EXCLUDE finddiunresolved
 # Reports which ancestor edges this index left unresolved, so the ANCESTRY
