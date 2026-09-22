@@ -182,6 +182,7 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ParseCache.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.Cfg.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.DataFlow.pas"/>
+        <DCCReference Include="..\analysis\DRagLint.Analysis.Purity.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.Flow.Lattices.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.Liveness.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.ExtractMethod.pas"/>
