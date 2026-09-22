@@ -760,7 +760,7 @@ begin
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census] [--layers <f.json>] [--json]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
@@ -17394,6 +17394,16 @@ begin
       OptIn:= OptIn + ['dfm-property-not-declared'];
     if Cfg.ShouldKeep('dependent-project-not-recompiled', {ADefaultDisabled=}False) then
       OptIn:= OptIn + ['dependent-project-not-recompiled'];
+    { Purity v2 (spec section 14). ADefaultDisabled=True, unlike the four above:
+      these two ship OFF, so the id must be in the config's ENABLED set before
+      the scan runs at all. That makes the catalogue flag and the runtime gate
+      say the same thing -- a bare lint-all never pays for the scan AND never
+      prints a finding -- instead of running it and discarding the output the
+      way a PROJECT_RULES_OFF_BY_DEFAULT entry would. }
+    if Cfg.ShouldKeep('discarded-effect-free-result', {ADefaultDisabled=}True) then
+      OptIn:= OptIn + ['discarded-effect-free-result'];
+    if Cfg.ShouldKeep('query-name-with-effect', {ADefaultDisabled=}True) then
+      OptIn:= OptIn + ['query-name-with-effect'];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
     { LibStore is the platform library index, already open above for the
@@ -17782,6 +17792,13 @@ begin
       OptIn2:= OptIn2 + ['dfm-property-not-declared'];
     if LoadLintConfig(AArgs).ShouldKeep('dependent-project-not-recompiled', {ADefaultDisabled=}False) then
       OptIn2:= OptIn2 + ['dependent-project-not-recompiled'];
+    { Purity v2 (spec section 14) -- see DoLintAll for why these two pass True
+      where the four above pass False. `--rule <id>` still reaches them: the
+      OptedIn gate treats an explicit rule request as opting in. }
+    if LoadLintConfig(AArgs).ShouldKeep('discarded-effect-free-result', {ADefaultDisabled=}True) then
+      OptIn2:= OptIn2 + ['discarded-effect-free-result'];
+    if LoadLintConfig(AArgs).ShouldKeep('query-name-with-effect', {ADefaultDisabled=}True) then
+      OptIn2:= OptIn2 + ['query-name-with-effect'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge

@@ -28,6 +28,12 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.SharedUnit { ProjectsOf -- unused-public-symbol must not call a
                                shared unit's API dead on one project's index }
+  , DRagLint.Analysis.Purity { TEffectSummary.Decode + the effect flags -- the
+                               purity v2 rules read the STORED summary and
+                               re-derive nothing }
+  , DRagLint.Refactor.DocStub { SignatureDeclaresReturn -- "is this indexed
+                                signature value-returning", the shape test that
+                                a parameterless function needs }
   ;
 
 type
@@ -2815,6 +2821,262 @@ begin
   end;
 end; // function
 
+{ ---------------------------------------------------------------------------
+  Purity v2 lint rules (spec docs\superpowers\specs\2026-09-15-interprocedural-
+  purity.md section 14). BOTH read the STORED verdict the `purity` resolve
+  stage wrote -- symbol_facts.effect_free / effect_summary / effect_witness --
+  and neither re-derives anything. That is the whole point of shipping them
+  here rather than as per-file AST checks: `separate-query-from-modifier`
+  already asks the AST-only question ("does this function write a field
+  somewhere in its own body") and cannot tell a PROVEN effect from an
+  UNPROVEN one. effect_free = 0 with summary '?' is a binding gap, and
+  reporting a gap as a defect is how a linter teaches a reader to skim.
+
+  Both are OFF by default and OptedIn-gated in TProjectLintRules.Run.
+  --------------------------------------------------------------------------- }
+
+/// <summary>Rule 14.1: every resolved call site of a PROVEN effect-free
+/// (<c>effect_free = 1</c>) value-returning routine where the call is the WHOLE
+/// statement -- <c>Name(args);</c> or <c>Rcv.Name(args);</c> alone on its line.
+/// Such a call cannot do anything, so discarding its result is dead code.</summary>
+/// <param name="AStore">The project index; must carry the purity columns.</param>
+/// <returns>One finding per discarded call, anchored at the call line. Empty on
+/// an index whose <c>purity</c> stage has not run (every verdict is -1).</returns>
+/// <remarks>THE SUMMARY DECIDES, NEVER "is a function": a routine that returns a
+/// value AND fills an out parameter has summary <c>p&lt;k&gt;</c>, is not
+/// effect-free, and therefore never fires -- which is what keeps the ordinary
+/// out-parameter idiom out of the report. Statement position comes from a
+/// BALANCED scan of the source line, never from "the line ends in a semicolon"
+/// (spec 14.1's named false positive), and the name must begin a dotted segment
+/// so <c>OtherTwice(3);</c> cannot be read as a call to <c>Twice</c>. Never
+/// raises; an unreadable file yields no finding for its call sites.</remarks>
+function CollectDiscardedEffectFreeResult(const AStore: ISymbolStore): TArray<TLintFinding>;
+const
+  CInheritedKw = 'inherited ';
+  { A receiver may only be a dotted chain of identifiers. }
+  CReceiverChars: TSysCharSet = ['A'..'Z', 'a'..'z', '0'..'9', '_', '.'];
+  CEffectFreeProven = 1;
+var
+  Findings : TList<TLintFinding>;
+  Facts    : TDictionary<Int64, TSymbolFacts>;
+  LineCache: TDictionary<string, TArray<string>>;
+
+  function LinesOf(const APath: string): TArray<string>;
+  begin
+    if not LineCache.TryGetValue(APath, Result) then
+    begin
+      try
+        Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+      except  // dl:ok bare-except@4381 -- deliberately bare: naming a class would have to enumerate every way TFile.ReadAllLines can fail, and the one it missed would abort the whole lint run over one unreadable file
+        { A source file that vanished or cannot be read since indexing costs
+          this rule its finding for that file and nothing else. There is no
+          diagnostic to raise here -- the caller treats nil as "no line to
+          judge" and stays silent, which is the conservative answer for a
+          rule that reports dead code. The except is DELIBERATELY bare: naming
+          a class would have to enumerate every way TFile.ReadAllLines can
+          fail, and the one it missed would abort the whole lint run. }
+        Result:= nil;
+      end;
+      LineCache.Add(APath, Result);
+    end;
+  end;
+
+  { The code part of ALine: everything before the first comment opener that is
+    not inside a string literal. A BRACE comment matters as much as a '//' one
+    -- a trailing brace-comment note is the house style on exactly the kind of
+    line this rule judges, and cutting only at '//' would silently under-report. }
+  function StatementText(const ALine: string): string;
+  var
+    I: Integer;
+  begin
+    I:= 1;
+    while I <= Length(ALine) do
+    begin
+      case ALine[I] of
+        '''':
+          begin
+            Inc(I);
+            while (I <= Length(ALine)) and (ALine[I] <> '''') do Inc(I);
+          end;
+        '{': Exit(Trim(Copy(ALine, 1, I - 1)));
+        '/':
+          if (I < Length(ALine)) and (ALine[I + 1] = '/') then
+            Exit(Trim(Copy(ALine, 1, I - 1)));
+        '(':
+          if (I < Length(ALine)) and (ALine[I + 1] = '*') then
+            Exit(Trim(Copy(ALine, 1, I - 1)));
+      end;
+      Inc(I);
+    end;
+    Result:= Trim(ALine);
+  end;
+
+  { The call's own tail, starting at AFrom -- the character just past the name.
+    True when nothing follows (a bare `Name;`), or when a '(' opens there and
+    its MATCHING ')' is the last character of S. The match is balanced and
+    string-aware on purpose: `Twice(3) + 1;` closes early and is an expression,
+    not a discarded call, and a naive "does it end in ')'" test would take it. }
+  function CallTailEndsStatement(const S: string; AFrom: Integer): Boolean;
+  var
+    I, Depth: Integer;
+  begin
+    if AFrom > Length(S) then Exit(True);          { bare `Name;` }
+    if S[AFrom] <> '(' then Exit(False);
+    Depth:= 0;
+    I:= AFrom;
+    while I <= Length(S) do
+    begin
+      case S[I] of
+        '(': Inc(Depth);
+        ')':
+          begin
+            Dec(Depth);
+            if Depth = 0 then Exit(I = Length(S));
+          end;
+        '''':
+          begin
+            Inc(I);
+            while (I <= Length(S)) and (S[I] <> '''') do Inc(I);
+          end;
+      end;
+      Inc(I);
+    end;
+    Result:= False;
+  end;
+
+  { True when ALine is exactly `[Rcv.]Name[(balanced)];` plus an optional
+    trailing comment. }
+  function IsWholeStatement(const ALine, AName: string): Boolean;
+  var
+    S   : string ;
+    P, I: Integer;
+  begin
+    S:= StatementText(ALine);
+    if (S = '') or (S[Length(S)] <> ';') then Exit(False);
+    S:= Trim(Copy(S, 1, Length(S) - 1));
+    if StartsText(CInheritedKw, S) then
+      S:= Trim(Copy(S, Length(CInheritedKw) + 1, MaxInt));
+    P:= Pos(LowerCase(AName), LowerCase(S));
+    if P = 0 then Exit(False);
+    { The name must START a dotted segment. Without this, `MyTwice(3);` matches
+      `Twice` with a receiver of 'My' -- every character of which is a legal
+      identifier character, so the loop below would wave it through. }
+    if (P > 1) and (S[P - 1] <> '.') then Exit(False);
+    for I:= 1 to P - 1 do
+      if not CharInSet(S[I], CReceiverChars) then Exit(False);
+    Result:= CallTailEndsStatement(S, P + Length(AName));
+  end;
+
+begin
+  Findings := TList<TLintFinding>.Create;
+  Facts    := TDictionary<Int64, TSymbolFacts>.Create;
+  LineCache:= TDictionary<string, TArray<string>>.Create;
+  try
+    for var F in AStore.GetAllSymbolFacts do Facts.AddOrSetValue(F.SymbolId, F);
+    for var Sym in AStore.FindSymbolsWithFacts do
+    begin
+      var SF: TSymbolFacts;
+      if not Facts.TryGetValue(Sym.Id, SF) or (SF.EffectFree <> CEffectFreeProven) then Continue;
+      { Value-returning, from the STORED row: the kind the extractor assigned
+        for a free routine, and the indexed signature's own shape for a method
+        (a class function is indexed as skMethod, and a PARAMETERLESS function's
+        signature is ': Integer' -- which is why a `'):'` substring test would
+        silently skip every one of them). }
+      if (Sym.Kind <> skFunction) and (not SignatureDeclaresReturn(Sym.Signature)) then Continue;
+      for var C in AStore.FindResolvedCallers(Sym.Id) do
+      begin
+        if (C.FullPath = '') or (C.CallSiteLine <= 0) then Continue;
+        var L: TArray<string>:= LinesOf(C.FullPath);
+        if (L = nil) or (C.CallSiteLine > Length(L)) then Continue;
+        if not IsWholeStatement(L[C.CallSiteLine - 1], Sym.Name) then Continue;
+        var Fd: TLintFinding:= Default(TLintFinding);
+        Fd.RuleId    := 'discarded-effect-free-result';
+        Fd.FilePath  := C.FullPath;
+        Fd.StartLine := C.CallSiteLine;
+        Fd.EndLine   := C.CallSiteLine;
+        Fd.StartCol  := 1;
+        Fd.EndCol    := Fd.StartCol + Length(Sym.Name);
+        Fd.Severity  := 'info';
+        Fd.SymbolName:= Sym.Name;
+        Fd.Message   := Format('Result of effect-free %s is discarded -- the call does nothing',
+                               [Sym.QualifiedName]);
+        Findings.Add(Fd);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    LineCache.Free;
+    Facts.Free;
+    Findings.Free;
+  end;
+end; // function
+
+/// <summary>Rule 14.2: a routine named <c>Get*</c>/<c>Is*</c>/<c>Has*</c>/
+/// <c>Find*</c>/<c>Can*</c>/<c>Should*</c> whose STORED summary carries
+/// <c>g</c>, <c>h</c> or <c>s</c> -- a PROVEN escaping effect. It asks a
+/// question and also changes something.</summary>
+/// <param name="AStore">The project index; must carry the purity columns.</param>
+/// <returns>One finding per routine, anchored at its declaration line.</returns>
+/// <remarks>A summary that is only <c>?</c> (a binding gap) or only
+/// <c>p&lt;k&gt;</c> (a written parameter, i.e. a declared out/var contract)
+/// NEVER fires, and a routine the 7.3 local-table gate marked incomplete is
+/// <c>?</c> and therefore never fires either. This is the axis on which it
+/// differs from the AST-only <c>separate-query-from-modifier</c>, which ships
+/// beside it unchanged by deliberate ruling. Never raises.</remarks>
+function CollectQueryNameWithEffect(const AStore: ISymbolStore): TArray<TLintFinding>;
+const
+  CEffectFreeNotProven = 0;
+var
+  Findings: TList<TLintFinding>;
+  Facts   : TDictionary<Int64, TSymbolFacts>;
+
+  { A prefix counts only when the next character starts a NEW word, so `Canvas`,
+    `Island` and `Finder` are not questions. }
+  function QueryNamed(const AName: string): Boolean;
+  const
+    CPrefixes : array[0..5] of string = ('Get', 'Is', 'Has', 'Find', 'Can', 'Should');
+    CWordStart: TSysCharSet = ['A'..'Z', '_'];
+  begin
+    for var P in CPrefixes do
+      if StartsText(P, AName) and (Length(AName) > Length(P)) and
+         CharInSet(AName[Length(P) + 1], CWordStart) then
+        Exit(True);
+    Result:= False;
+  end;
+
+begin
+  Findings:= TList<TLintFinding>.Create;
+  Facts   := TDictionary<Int64, TSymbolFacts>.Create;
+  try
+    for var F in AStore.GetAllSymbolFacts do Facts.AddOrSetValue(F.SymbolId, F);
+    for var Sym in AStore.FindSymbolsWithFacts do
+    begin
+      if not QueryNamed(Sym.Name) then Continue;
+      var SF: TSymbolFacts;
+      if not Facts.TryGetValue(Sym.Id, SF) or (SF.EffectFree <> CEffectFreeNotProven) then Continue;
+      var Sum: TEffectSummary:= TEffectSummary.Decode(SF.EffectSummary);
+      if Sum.Flags * [efGlobal, efHeap, efSelfFields] = [] then Continue;
+      var Fd: TLintFinding:= Default(TLintFinding);
+      Fd.RuleId    := 'query-name-with-effect';
+      Fd.FileId    := Sym.FileId;
+      Fd.FilePath  := AStore.GetFilePath(Sym.FileId);
+      Fd.StartLine := Sym.StartLine;
+      Fd.EndLine   := Sym.StartLine;
+      Fd.StartCol  := Sym.StartCol;
+      Fd.EndCol    := Sym.StartCol + Length(Sym.Name);
+      Fd.Severity  := 'info';
+      Fd.SymbolName:= Sym.Name;
+      Fd.Message   := Format('%s answers a question and also has an effect: %s',
+                             [Sym.QualifiedName, SF.EffectWitness]);
+      Findings.Add(Fd);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Facts.Free;
+    Findings.Free;
+  end;
+end; // function
+
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>): TArray<TLintFinding>;
@@ -2863,6 +3125,9 @@ var
   TGlob: Int64;
   TDupD: Int64;
   TCens: Int64;
+  { purity v2 (spec 14): the two summary-driven rules, timed together --
+    they share the one symbol_facts scan. }
+  TPurity: Int64;
   { "Referenced at all?" as two sets, built with one scan each instead of two
     queries per symbol. See IsReferenced. }
   RefdIds       : TDictionary<Int64 , Boolean>;
@@ -3142,6 +3407,7 @@ begin
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   TGlob:= 0; TDupD:= 0; TCens:= 0;
+    TPurity:= 0;
   try
     { Built only for the rules that need them -- on a large index these are two
       scans of the whole refs table, which is pure waste for a --rule run that
@@ -3194,6 +3460,17 @@ begin
     if WantRule('uses-global-census') and OptedIn('uses-global-census') then
       for var Cf in CollectUsesGlobalCensus(AStore) do Findings.Add(Cf);
     Inc(TCens, Tick - T0); T0:= Tick;
+
+    { purity v2 rules (spec section 14): OFF by default and OptedIn-gated for
+      the same reason as uses-global-census -- a full symbol_facts scan, plus a
+      resolved-callers query per proven routine for 14.1, which a post-hoc
+      config filter would hide perfectly while still charging for it. }
+    if WantRule('discarded-effect-free-result') and OptedIn('discarded-effect-free-result') then
+      for var Pf1 in CollectDiscardedEffectFreeResult(AStore) do Findings.Add(Pf1);
+    if WantRule('query-name-with-effect') and OptedIn('query-name-with-effect') then
+      for var Pf2 in CollectQueryNameWithEffect(AStore) do Findings.Add(Pf2);
+    Inc(TPurity, Tick - T0);
+    T0:= Tick;
 
     { enum-helper-separate-units (Task 7, enum-helper-generator milestone):
       whole-DB helper-edge pass (not per-file). ON by default -- do NOT add
@@ -3562,6 +3839,7 @@ begin
       ProfLine('global-only-uses-edge'     , TGlob  );
       ProfLine('duplicate-global-decl'     , TDupD  );
       ProfLine('uses-global-census'        , TCens  );
+    ProfLine('purity-v2 rules'           , TPurity);
       ProfLine('enum-helper-separate-units', TEnum  );
       ProfLine('repeated-type-switch'      , TRts   );
       ProfLine('unused-unit-in-uses'       , TUuiu  );

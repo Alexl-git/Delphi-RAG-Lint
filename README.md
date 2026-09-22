@@ -667,7 +667,7 @@ Win64 build.
 
 #### Lint
 
-**181 rules across 16 categories -- 128 built-in + 53 external `.scm`, 156
+**183 rules across 16 categories -- 130 built-in + 53 external `.scm`, 156
 enabled by default, 23 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -838,10 +838,10 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (181 rules)
+### Lint rule pack (183 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.15.1-alpha: **181 rules across 16 categories -- 128
+external `.scm`). As of v1.16.0-alpha: **183 rules across 16 categories -- 130
 built-in and 53 external `.scm`, 156 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
@@ -1086,7 +1086,7 @@ the PowerShell battery.
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
-**v1.15.1-alpha**; development continues daily.
+**v1.16.0-alpha**; development continues daily.
 
 ---
 

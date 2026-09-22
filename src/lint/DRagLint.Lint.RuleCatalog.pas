@@ -513,6 +513,17 @@ begin
     B('uses-global-census', 'project-wide', 'info', 'How many of a used unit''s globals and consts this unit actually draws, against how many that unit declares -- acknowledge a travels-together pair with // dl:unit <unit> accepted', True); { ON by default since 2026-08-30 on the owner's ruling (see global-only-uses-edge above). A census rather than a defect report, but a small one -- and `// dl:census-ok <unit>` is the acknowledgement path for a pair that legitimately travels together. Still gated on OptedIn in TProjectLintRules.Run for its cost (1.26 s full refs scan); the gate now defaults to KEEPING it. }
     B('enum-helper-separate-units', 'project-wide', 'warning', 'Enum helper (record/class helper) is declared in a different unit than its target enum -- consider co-locating'); { ON by default (explicit user decision, enum-helper-generator milestone 2026-07-07) -- diverges from the recent OFF-by-default convention for advisory rules; whole-DB helper edge (type_helpers, v15) via ISymbolStore.FindHelpersOfTypeSymbol (symbol-identity match, Task 9b), no heritage string-parsing }
 
+    { --- purity v2 (spec 2026-09-15 section 14) --- BOTH OFF BY DEFAULT until
+      the corpus counts are audited. They read the `purity` resolve stage's
+      STORED verdict (symbol_facts.effect_free / effect_summary), so they say
+      nothing at all on an index built before that stage existed -- silence
+      there is "not computed", never "nothing to report". Opt in via --enable
+      or "enabled":["<id>"]; the CLI's OptIn array is what actually makes the
+      scan run (see DoLintAll/DoLintProject), so a catalogue flag alone would
+      leave them unreachable rather than merely off. }
+    B('discarded-effect-free-result', 'project-wide', 'info', 'A proven effect-free value-returning routine is called in statement position and its result discarded -- the call does nothing', False);
+    B('query-name-with-effect',       'project-wide', 'info', 'A Get*/Is*/Has*/Find*/Can*/Should* routine has a PROVEN escaping effect (writes a field, global state or frees storage) -- a question that also changes something', False);
+
     { --- documentation (ADF milestone) --- }
     B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment', False); // OFF by default -- fires 1302x on drag-lint's own first-run wave; opt in via "enabled"
     B('doc-drift',   'documentation', 'warning', 'DocInsight comment has drifted from the code it documents (--fix repairs the mechanically-safe subset)');
