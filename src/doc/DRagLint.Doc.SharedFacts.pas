@@ -380,12 +380,25 @@ const
     so an unregistered label makes the PRECEDING fact's slice swallow it, and the
     residual compare then reports drift on a block that is perfectly correct. }
   { gap 3: 'Catches:' joins the list, for the reason 'Directives:' did. }
-  ALL_LABELS: array[0..21] of string = (
+  { v23 (INBOX-2026-09-17-autodoc-used-in-units-gains-class-names): 'Implemented
+    by:'/'Extended by:' join the list, for the reason 'Directives:' did. Their
+    absence here was the actual defect: RenderFactsBlock started emitting them
+    for interfaces on 2026-09-16 (an interface's reverse edge), but nobody
+    updated this array, so NextLabelPos could not find the boundary between an
+    interface's 'Used in units:' line and the 'Implemented by:' line right
+    after it. FactContentEnd then ran the 'Used in units:' slice on into the
+    implementor class list, and MergeInboundFacts's accumulate-only
+    reconciliation -- believing those class names were caller-visible units
+    this project's index could not vouch for -- fed the plausible ones straight
+    back into the freshly rendered 'Used in units:' line on every subsequent
+    `document` run. Not a missing-drift-report this time: a UNIT list gaining
+    CLASS names, and never converging. }
+  ALL_LABELS: array[0..23] of string = (
     'Called from:', 'Used by:', 'Calls:', 'Returns:', 'Used in units:',
     'Complexity:', 'Owns returned:', 'Handles:', 'Catches:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',
     'Reads:', 'Writes:', 'Recursive', 'UI thread only', 'Pure',
-    'Directives:');
+    'Directives:', 'Implemented by:', 'Extended by:');
 
   MORE_MARK = '(+';
   UNCERTAIN_SUFFIX = ' ?';
