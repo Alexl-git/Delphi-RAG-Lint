@@ -11,8 +11,47 @@ breaking changes** until v1.0.
 ### Known
 - `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.6.0.
 
-## v1.15.1-alpha -- 2026-09-17
+## v1.16.0-alpha -- 2026-09-22
 
+MINOR: two new lint rules, both OFF by default. Extractor 1.17.0 and schema v23
+are UNCHANGED -- no index needs a re-parse. `DRAGLINT_RESOLVER_VERSION` moves
+1.5.0-alpha -> 1.5.1-alpha for the witness-text fix below, so an index resolved
+under 1.5.0-alpha owes one `index --all --resolve-only` (minutes, not hours).
+
+### Added
+- **`discarded-effect-free-result`** (project-wide, info, OFF by default) --
+  a PROVEN effect-free value-returning routine is called in statement position
+  and its result thrown away, so the call cannot do anything. Driven by the
+  stored `symbol_facts.effect_free` verdict, never by "is a function": a
+  routine that returns a value AND fills an out parameter has summary `p<k>`,
+  is not effect-free, and never fires. Statement position is decided by a
+  balanced, string-aware scan of the call line PLUS the preceding code line, so
+  a wrapped expression (`X := A +` / newline / `Twice(3);`) is not mistaken
+  for a discarded call.
+- **`query-name-with-effect`** (project-wide, info, OFF by default) -- a
+  `Get*`/`Is*`/`Has*`/`Find*`/`Can*`/`Should*` routine whose stored
+  effect summary carries `g`, `h` or `s`: it answers a question and also
+  changes something. A summary that is only `?` (a binding gap) or only
+  `p<k>` never fires, which is the axis on which it differs from the AST-only
+  `separate-query-from-modifier` -- that rule ships beside it, unchanged.
+- Opt in with `--enable <id>` or `"enabled":["<id>"]`. Catalogue totals move
+  to **183 rules, 130 built-in**; fixable stays 23 and default-on stays 156.
+- Guard `tests\lint-project\purity-rules\run_purity_rules.ps1`: a bare
+  `lint-all` must report zero for both ids, and the same run with `--enable`
+  must report the exact expected counts.
+
+### Fixed
+- The `purity` stage no longer concatenates `symbol_facts.touches` into the
+  effect witness raw. That column is the two-field wire string
+  `resources|transactions` whose separator is always present, so the witness
+  read `touches file system|` -- visible to users through the new
+  `query-name-with-effect` message and in the stored column. It is now split
+  the way `DRagLint.Doc.Regions` already renders the fact, with the
+  transaction half labelled: `touches file system; transactions: starts,
+  commits`. Verdicts are unchanged -- `effect_free` and `effect_summary`
+  are identical; only the witness text moves.
+
+## v1.15.1-alpha -- 2026-09-17
 PATCH: fixes a regression shipped in 1.15.0 (dotted unit names invisible to
 `unit-usage` / `unused-unit-in-uses`). Extractor 1.17.0 / schema v23 /
 resolver 1.4.0 are UNCHANGED; an index built by 1.15.0 needs no re-parse.

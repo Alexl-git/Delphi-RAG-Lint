@@ -117,7 +117,20 @@ const
   /// effect_free IS NULL, so a filled database would keep OLD verdicts forever
   /// -- this stamp is the only thing that can force it to think again.
   /// Spec: docs\superpowers\specs\2026-09-15-interprocedural-purity.md</para>
-  DRAGLINT_RESOLVER_VERSION = '1.5.0-alpha';
+  /// <para>1.5.0-alpha -&gt; 1.5.1-alpha (2026-09-22, purity v2 Task 7 fix round):
+  /// the purity stage no longer concatenates symbol_facts.touches into the
+  /// witness raw. That column is the two-field wire string
+  /// 'resources|transactions' with the separator ALWAYS present, so the stored
+  /// witness read 'touches file system|' and reached users through the new
+  /// query-name-with-effect rule. TouchesWitness now splits it the way
+  /// DRagLint.Doc.Regions renders it. VERDICTS ARE UNCHANGED -- effect_free and
+  /// effect_summary are identical; only effect_witness TEXT moves, on every
+  /// routine with a non-empty touches fact (316 rows on this repo's own index).
+  /// A PATCH bump, not 1.6.0: that number is reserved for C2.3 + the IsStub
+  /// unification. Remedy: `index --all --resolve-only`. It is billed rather
+  /// than absorbed because TPurityStage recomputes only while some verdict is
+  /// NULL, so a filled database would keep the old witness text forever.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.5.1-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

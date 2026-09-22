@@ -2855,11 +2855,18 @@ const
   CInheritedKw = 'inherited ';
   { A receiver may only be a dotted chain of identifiers. }
   CReceiverChars: TSysCharSet = ['A'..'Z', 'a'..'z', '0'..'9', '_', '.'];
+  CWordChars    : TSysCharSet = ['A'..'Z', 'a'..'z', '0'..'9', '_'];
+  { A preceding CODE line ending in one of these opens a NEW statement on the
+    line after it. Anything else -- an operator, a comma, an open parenthesis,
+    a bare identifier -- is a CONTINUATION. }
+  CBoundaryWords: array[0..8] of string =
+    ('begin', 'then', 'else', 'do', 'repeat', 'try', 'finally', 'except', 'of');
   CEffectFreeProven = 1;
 var
   Findings : TList<TLintFinding>;
   Facts    : TDictionary<Int64, TSymbolFacts>;
   LineCache: TDictionary<string, TArray<string>>;
+  FileIdOf : TDictionary<string, Int64>;
 
   function LinesOf(const APath: string): TArray<string>;
   begin
@@ -2909,6 +2916,49 @@ var
       Inc(I);
     end;
     Result:= Trim(ALine);
+  end;
+
+  { True when a statement can BEGIN at ALineNo -- the nearest preceding
+    non-blank CODE line ends at a statement boundary.
+
+    THIS IS THE LINE-WRAP GATE, and without it the rule reports results that
+    are USED:
+
+        X := A +
+          Twice(3);
+
+    The second line ALONE trims to `Twice(3);` and passes every whole-statement
+    test there is, including the balanced-tail scan -- that scan defeats a
+    TRAILING operand (`Twice(3) + 1;`), never a LEADING continuation. Only the
+    previous line can tell the two apart, and a proven effect-free routine is
+    precisely what turns up inside a wrapped expression, so this is the common
+    shape rather than an exotic one.
+
+    Conservative by construction: no preceding code line, or an ending this
+    cannot classify, answers False and the rule stays silent. Under-reporting a
+    discarded call costs nothing; reporting a used result is the one thing that
+    makes a reader stop trusting the whole report. }
+  function StartsNewStatement(const ALines: TArray<string>; ALineNo: Integer): Boolean;
+  var
+    I, W: Integer;
+    S   : string ;
+  begin
+    for I:= ALineNo - 1 downto 1 do
+    begin
+      S:= StatementText(ALines[I - 1]);
+      if S = '' then Continue;                 { blank, or comment-only }
+      { ';' ends a statement; ':' ends a label or a case arm. }
+      if CharInSet(S[Length(S)], [';', ':']) then Exit(True);
+      { Otherwise only a boundary KEYWORD will do, and only when the line
+        actually ends in an identifier. }
+      W:= Length(S);
+      while (W > 0) and CharInSet(S[W], CWordChars) do Dec(W);
+      if W < Length(S) then
+        for var B in CBoundaryWords do
+          if SameText(Copy(S, W + 1, MaxInt), B) then Exit(True);
+      Exit(False);
+    end;
+    Result:= False;
   end;
 
   { The call's own tail, starting at AFrom -- the character just past the name.
@@ -2971,7 +3021,13 @@ begin
   Findings := TList<TLintFinding>.Create;
   Facts    := TDictionary<Int64, TSymbolFacts>.Create;
   LineCache:= TDictionary<string, TArray<string>>.Create;
+  { FindResolvedCallers hands back a PATH, not a file id, and a finding that
+    carries only a path makes every consumer re-resolve it. One pass over the
+    file table fills the other half. }
+  FileIdOf := TDictionary<string, Int64>.Create(TIStringComparer.Ordinal);
   try
+    for var Fi in AStore.GetAllFileIds do
+      FileIdOf.AddOrSetValue(AStore.GetFilePath(Fi), Fi);
     for var F in AStore.GetAllSymbolFacts do Facts.AddOrSetValue(F.SymbolId, F);
     for var Sym in AStore.FindSymbolsWithFacts do
     begin
@@ -2988,23 +3044,32 @@ begin
         if (C.FullPath = '') or (C.CallSiteLine <= 0) then Continue;
         var L: TArray<string>:= LinesOf(C.FullPath);
         if (L = nil) or (C.CallSiteLine > Length(L)) then Continue;
+        if not StartsNewStatement(L, C.CallSiteLine) then Continue;
         if not IsWholeStatement(L[C.CallSiteLine - 1], Sym.Name) then Continue;
         var Fd: TLintFinding:= Default(TLintFinding);
         Fd.RuleId    := 'discarded-effect-free-result';
         Fd.FilePath  := C.FullPath;
+        if not FileIdOf.TryGetValue(C.FullPath, Fd.FileId) then Fd.FileId:= 0;
         Fd.StartLine := C.CallSiteLine;
         Fd.EndLine   := C.CallSiteLine;
         Fd.StartCol  := 1;
         Fd.EndCol    := Fd.StartCol + Length(Sym.Name);
         Fd.Severity  := 'info';
         Fd.SymbolName:= Sym.Name;
-        Fd.Message   := Format('Result of effect-free %s is discarded -- the call does nothing',
-                               [Sym.QualifiedName]);
+        { The EVIDENCE travels with the finding, as it does for 14.2's witness:
+          a reader must be able to see WHY the call is claimed to do nothing
+          without re-running the resolve stage. An empty summary is the proof
+          of purity, so it is printed rather than omitted. }
+        Fd.Message   := Format(
+          'Result of effect-free %s is discarded -- the call does nothing ' +
+          '(effect_free=1, effect_summary ''%s'')',
+          [Sym.QualifiedName, SF.EffectSummary]);
         Findings.Add(Fd);
       end;
     end;
     Result:= Findings.ToArray;
   finally
+    FileIdOf.Free;
     LineCache.Free;
     Facts.Free;
     Findings.Free;
@@ -3407,7 +3472,7 @@ begin
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   TGlob:= 0; TDupD:= 0; TCens:= 0;
-    TPurity:= 0;
+  TPurity:= 0;
   try
     { Built only for the rules that need them -- on a large index these are two
       scans of the whole refs table, which is pure waste for a --rule run that
@@ -3839,7 +3904,7 @@ begin
       ProfLine('global-only-uses-edge'     , TGlob  );
       ProfLine('duplicate-global-decl'     , TDupD  );
       ProfLine('uses-global-census'        , TCens  );
-    ProfLine('purity-v2 rules'           , TPurity);
+      ProfLine('purity-v2 rules'           , TPurity);
       ProfLine('enum-helper-separate-units', TEnum  );
       ProfLine('repeated-type-switch'      , TRts   );
       ProfLine('unused-unit-in-uses'       , TUuiu  );

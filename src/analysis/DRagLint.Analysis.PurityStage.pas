@@ -787,6 +787,39 @@ begin
   end;
 end;
 
+{ symbol_facts.touches is a TWO-FIELD wire string, 'resources|transactions',
+  and EITHER SIDE MAY BE EMPTY with the separator always present -- so the
+  stored value is routinely 'file system|' or '|starts, commits' (measured on
+  this repo's own index: 308 rows of 'file system|', 13 of
+  '|starts, commits, rolls back'). Concatenating it into a sentence therefore
+  prints the separator: 'touches file system|'. It reached a user, in 14.2's
+  message and in the stored witness.
+
+  This splits it the way DRagLint.Doc.Regions already renders it -- omit an
+  empty side -- and labels the transaction half, because 'touches starts,
+  commits' is not English. Both sides populated reads
+  'touches file system; transactions: starts, commits'. }
+function TouchesWitness(const ATouches: string): string;
+var
+  Parts: TArray<string>;
+  Res  : string        ;
+  Txn  : string        ;
+begin
+  Parts:= ATouches.Split(['|']);
+  Res:= if Length(Parts) > 0 then Trim(Parts[0]) else '';
+  Txn:= if Length(Parts) > 1 then Trim(Parts[1]) else '';
+  Result:= '';
+  if Res <> '' then Result:= 'touches ' + Res;
+  if Txn <> '' then
+  begin
+    if Result <> '' then Result:= Result + '; ';
+    Result:= Result + 'transactions: ' + Txn;
+  end;
+  { A value this cannot split is still better reported verbatim than dropped --
+    an empty witness would read as "proven", which is the opposite of true. }
+  if Result = '' then Result:= 'touches ' + ATouches;
+end;
+
 procedure TPurityRun.ApplyFacts(AIndex: Integer; const AFacts: TSymbolFacts; var ASum: TEffectSummary; var AChanged: Boolean);
 var
   Names  : TArray<string>;
@@ -795,7 +828,7 @@ var
   Decl   : string;
   K      : Integer;
 begin
-  if AFacts.Touches <> '' then ASum.AddFlag(efGlobal, 'touches ' + AFacts.Touches, AChanged);
+  if AFacts.Touches <> '' then ASum.AddFlag(efGlobal, TouchesWitness(AFacts.Touches), AChanged);
   if AFacts.SqlWrites <> '' then ASum.AddFlag(efGlobal, 'writes SQL ' + AFacts.SqlWrites, AChanged);
   if AFacts.SqlReads <> '' then ASum.AddFlag(efGlobal, 'reads SQL ' + AFacts.SqlReads, AChanged);
   if AFacts.WritesFields <> '' then

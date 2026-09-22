@@ -298,4 +298,51 @@
 #
 #   Superseded: 1.5.0-alpha|690833814ff9efb59db95b51343d52e17ab8b759650cc5a9605da2095f9b3cdf
 
-1.5.0-alpha|5ec79c8c501a536a2f202355a5148f3dd87cae9d8c524f5d0fe609f50edb9509
+# 2026-09-22 (Task 7 fix round 1, review IMPORTANT 2): 1.5.0-alpha -> 1.5.1-alpha.
+#   DERIVED TEXT CHANGES, so this is a BUMP and not one of the "genuinely
+#   cannot affect what is derived" re-pins above.
+#
+#   WHAT CHANGED: src\analysis\DRagLint.Analysis.PurityStage.pas (hashed whole,
+#   `::*`) stopped composing the witness as 'touches ' + AFacts.Touches.
+#   symbol_facts.touches is the TWO-FIELD wire string 'resources|transactions'
+#   whose separator is ALWAYS present when anything was found, so one-sided
+#   values are stored as 'file system|' or '|starts, commits' -- measured on
+#   this repo's own index: 308 rows 'file system|', 13 rows
+#   '|starts, commits, rolls back', 1 row with both sides. Concatenating printed
+#   the separator. The new TouchesWitness splits on '|' and omits an empty side,
+#   the same way DRagLint.Doc.Regions already renders the fact, and labels the
+#   transaction half.
+#
+#   WHY IT REACHED A USER AND NOT JUST A COLUMN: the new query-name-with-effect
+#   rule (spec section 14, same task) quotes effect_witness verbatim in its
+#   message, so the first corpus run printed 'FindHgRoot answers a question and
+#   also has an effect: touches file system|'.
+#
+#   SCOPE, stated precisely so the bill is judged rather than assumed: VERDICTS
+#   ARE UNCHANGED. effect_free and effect_summary are computed from the same
+#   flags as before -- ApplyFacts still calls AddFlag(efGlobal, ...) on exactly
+#   the same condition. Only the WITNESS TEXT moves, and only on routines whose
+#   touches fact is non-empty.
+#
+#   WHY BILL A RE-RESOLVE FOR DISPLAY TEXT: TPurityStage recomputes only while
+#   PurityNeedsRun is True (some body row still has effect_free IS NULL). A
+#   database already filled under 1.5.0-alpha would keep the old witness text
+#   FOREVER -- there is no other trigger -- and this repo's own self-index has
+#   already been resolved under 1.5.0-alpha. Re-pinning within 1.5.0 would be
+#   exactly the silent staleness this file's header warns about in capitals.
+#   Remedy: index --all --resolve-only.
+#
+#   WHY 1.5.1 AND NOT 1.6.0: 1.6.0 is reserved by the engine backlog for C2.3 +
+#   the IsStub unification (see the T6-R2 entry above). Consuming it for a
+#   witness-text fix would make the real bump lie about what it contains.
+#
+#   DEVIATION FLAGGED TO THE CONTROLLER: Task 7's plan ruling 11 said
+#   DRAGLINT_RESOLVER_VERSION must not move in this task. That ruling was written
+#   when Task 7 touched no resolve surface; the fix round then assigned a change
+#   to PurityStage.pas, which this manifest hashes whole. Both cannot hold. The
+#   bump is taken because this baseline's own discipline makes it mandatory for a
+#   derived-data change; it is one commit and two lines to revert.
+#
+#   Superseded: 1.5.0-alpha|5ec79c8c501a536a2f202355a5148f3dd87cae9d8c524f5d0fe609f50edb9509
+
+1.5.1-alpha|92cfb2a2e060dcf3261caaa542c8b1d74ff2919a952b76c6383f97f547551bef
