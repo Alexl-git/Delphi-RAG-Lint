@@ -44,7 +44,10 @@
                               header quoted in a comment does not move the
                               attribution -- the scan reads the CODE projection
                               (RED 2026-09-21: the regenerated autodoc block
-                              on Create was attributed as two sites).
+                              on Create was attributed as two sites). S0c
+                              replays the old raw-line scan over the same
+                              plant and requires it to MISattribute, so S0b is
+                              a negative that can actually fail.
 
   RED FIRST against 1.12.0-alpha: C2 (header 1 -> 2), C3 (v12 md5 changes,
   no refusal on stderr) and S fail; C1 and PC pass.
@@ -277,9 +280,18 @@ Write-Host 'S: STATIC -- every .Migrate in the LSP server belongs to BuildEpheme
 # depth as a per-line local was the root cause of two earlier scan defects.
 # The same projection feeds the routine-header match, so a header quoted in a
 # comment cannot move $cur either.
-. (Join-Path $PSScriptRoot 'lib\CliFlagVerbMap.ps1')
+# Resolve-PascalConditionals is deliberately NOT applied: a `.Migrate` inside an
+# inactive {$IFDEF} branch still counts as a site. That is the conservative
+# direction (over-attribution turns S2 red, never silently green); do not "fix"
+# it the other way.
+# The lib turns on Set-StrictMode for the scope it is dot-sourced into, so it
+# is sourced inside this function and strict mode never reaches S1-S4 below.
+function Get-CodeProjection([string]$Text) {
+  . (Join-Path $PSScriptRoot 'lib\CliFlagVerbMap.ps1')
+  return (ConvertTo-PascalProjections -Text $Text).Code
+}
 function Find-MigrateSites([string[]]$Lines) {
-  $code  = (ConvertTo-PascalProjections -Text ($Lines -join "`n")).Code
+  $code  = Get-CodeProjection ($Lines -join "`n")
   $cl    = $code -split "`n"
   $cur   = '(before any routine)'
   $sites = @()
@@ -308,16 +320,19 @@ Check 'S0 POSITIVE CONTROL: the scan attributes a .Migrate planted in the constr
 # PLANTED: the four ways the raw-line scan went wrong, each beside the real
 # constructor site so a scan that blanks too much (loses S0) or too little
 # (attributes a comment) fails here and not only in the field. The brace
-# comment spans THREE lines and quotes a routine header, which must not move
-# $cur off TLSPServer.Create for the real site under it.
+# comment spans THREE lines and quotes a routine header AT COLUMN 0 -- the
+# header regex is ^-anchored, so an indented quote could never move $cur under
+# ANY scan and S0b was incapable of failing (review-task-2 I1, 2026-09-22).
+# At column 0 the raw-line scan DOES move $cur to ZzNotARoutine (S0c proves
+# it), so S0b is a real negative for the projection scan.
 $planted = @(
   '/// <summary>Autodoc prose.</summary>',
   '/// <para>Calls: TSQLiteSymbolStore.Create, ISymbolStore.Migrate</para>',
   '/// <seealso cref="DRagLint.Storage.ISymbolStore.Migrate"/>',
   'constructor TLSPServer.Create(const ADbPaths: TArray<string>);',
   'begin',
-  '  { a brace comment that spans lines and quotes a header:',
-  '    procedure TLSPServer.ZzNotARoutine;',
+  '  { a brace comment that spans lines and quotes a header at column 0:',
+  'procedure TLSPServer.ZzNotARoutine;',
   '    and names Store.Migrate before it closes }',
   '  // a line comment naming Store.Migrate',
   '  (* an old-style comment naming Store.Migrate *)',
@@ -333,6 +348,23 @@ Check 'S0a PLANT: a .Migrate inside /// doc-comment, { } (multi-line), (* *), //
 Check 'S0b PLANT: a routine header quoted inside a { } comment does not move the attribution' `
       (($pl.Count -ge 1) -and ($pl[$pl.Count - 1].Routine -eq 'TLSPServer.Create')) `
       ("last site attributed to: " + $(if ($pl.Count -ge 1) { $pl[$pl.Count - 1].Routine } else { '(none)' }))
+# S0c: the plant CAN fail S0b. Replay the pre-2026-09-21 RAW-LINE scan (same
+# regexes, no projection) over the same plant: it must attribute the real site
+# to the quoted header, i.e. S0b would be red under that scan. Without this the
+# S0b negative is a claim, not a measurement.
+function Find-MigrateSitesRawLines([string[]]$Lines) {
+  $cur = '(before any routine)'; $sites = @()
+  for ($i = 0; $i -lt $Lines.Count; $i++) {
+    $l = $Lines[$i]
+    if ($l -match '^(function|procedure|constructor|destructor)\s+([A-Za-z_][A-Za-z0-9_.]*)') { $cur = $Matches[2] }
+    if ($l -match '\.Migrate\b') { $sites += [pscustomobject]@{ Routine = $cur; Line = ($i + 1) } }
+  }
+  return $sites
+}
+$raw = @(Find-MigrateSitesRawLines $planted)
+Check 'S0c CONTROL: under the OLD raw-line scan the same plant moves the attribution to the quoted header (S0b is capable of failing)' `
+      (($raw.Count -gt 1) -and ($raw[$raw.Count - 1].Routine -eq 'TLSPServer.ZzNotARoutine')) `
+      ("raw-line sites: " + (($raw | ForEach-Object { "$($_.Routine)@$($_.Line)" }) -join ', '))
 $srcLines = [System.IO.File]::ReadAllLines($Source)
 $sites = @(Find-MigrateSites $srcLines)
 Check 'S1 the scan found .Migrate sites at all (the ephemeral store still migrates its own %TEMP% db)' ($sites.Count -gt 0) ''
