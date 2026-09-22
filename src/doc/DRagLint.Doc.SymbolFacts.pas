@@ -674,10 +674,76 @@ procedure WalkFieldRW(const N: TTSNode; const ASrc: TBytes; AFields: TDictionary
     if ResolveField(AIdent, Disp, AUnresWrites) and (AWrites.IndexOf(Disp) < 0) then AWrites.Add(Disp);
   end;
 
+  // v(D4, INBOX-autodoc-pure-mislabel-on-event-handlers): the base identifier
+  // of an `Ident[...] := X` / `Ident[...].Member := X` assignment LHS, or a
+  // null node when the shape is not exactly that.
+  //
+  // WHY THIS ONE HOP, AND NO MORE. `Ident[i] := v` cannot execute without
+  // writing through Ident -- WalkMutatedParams already trusts that shape for
+  // var/out PARAMETERS (see its header). For a FIELD whose declared type is
+  // `array of <record>` (a Delphi dynamic array of records stores its
+  // elements INLINE, not by reference), `Ident[i].Member := v` is the exact
+  // same fact one dot further in: the array's own backing storage changed.
+  // `Ident.Member := v` with NO index at all stays excluded (falls through to
+  // the existing exprDot-is-a-read handling below) for the reason
+  // WalkMutatedParams already states for the analogous case: a class-typed
+  // field's dot-write mutates the POINTEE, not the field itself. So this
+  // function requires the dot's receiver to be an INDEXING step and declines
+  // everything else -- `Ident.Sub[i].Member := v` (dot BEFORE the index) is
+  // exactly as ambiguous as the bare-dot case and is declined too.
+  //
+  // The residual imprecision this accepts -- `array of <class>` element
+  // writes still get counted as a write to the array field, when strictly
+  // only the pointee changed -- is the SAME shape of imprecision
+  // WalkMutatedParams's own `AList[0] :=` rule accepts, one hop further, and
+  // is absence-over-guessing's boundary condition, not a new risk class:
+  // this fact already means "state reachable through this field changed",
+  // and that is true either way. Resolving record-vs-class needs the field's
+  // declared type, which is the cross-referenced work this walk has always
+  // declined (see WalkMutatedParams' SetLength note) -- accepting the small
+  // known imprecision is what keeps the fix local to this file.
+  // The grammar node for `A[i]` is 'exprSubscript', NOT 'exprIndex' --
+  // verified by a temporary AST trace during this fix (dumping NodeType at
+  // each descent step against the real fixture body), per this repo's own
+  // standing lesson that the parser's own comments guess node names and are
+  // not to be trusted uncross-checked (reference_ast_dumper_and_grammar_
+  // node_names.md). Its base child is not reliably field 'entity' either --
+  // same fallback chain BaseIdentOfLhs above already uses: 'entity', then
+  // 'lhs', then the first named child.
+  function SubscriptBase(const AIdx: TTSNode): TTSNode;
+  begin
+    Result:= AIdx.ChildByField('entity');
+    if Result.IsNull then Result:= AIdx.ChildByField('lhs');
+    if Result.IsNull and (AIdx.NamedChildCount > 0) then Result:= AIdx.NamedChild(0);
+  end;
+
+  function IndexedFieldWriteBase(const ALhs: TTSNode): TTSNode;
+  var Inner: TTSNode;
+  begin
+    Result:= Default(TTSNode);
+    if ALhs.IsNull then Exit;
+    Inner:= ALhs;
+    if Inner.NodeType = 'exprDot' then Inner:= Inner.ChildByField('lhs');
+    if Inner.IsNull or (Inner.NodeType <> 'exprSubscript') then Exit; // not an indexed shape -- decline
+    Inner:= SubscriptBase(Inner);
+    if Inner.IsNull then Exit;
+    if Inner.NodeType = 'identifier' then
+    begin
+      Result:= Inner;
+      Exit;
+    end;
+    if Inner.NodeType = 'exprSubscript' then // A[i][j] / A[i][j].F -- one more hop
+    begin
+      Inner:= SubscriptBase(Inner);
+      if (not Inner.IsNull) and (Inner.NodeType = 'identifier') then Result:= Inner;
+    end;
+  end;
+
 var
   I         : Integer;
   Lhs, Rhs  : TTSNode ;
   Ent, ArgsN: TTSNode ;
+  WriteBase : TTSNode ;
 begin
   if N.IsNull then Exit;
 
@@ -688,7 +754,15 @@ begin
     if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
       MarkWrite(Lhs)
     else
+    begin
+      WriteBase:= IndexedFieldWriteBase(Lhs);
+      if not WriteBase.IsNull then MarkWrite(WriteBase);
+      // The LHS subtree is still walked either way -- an index expression can
+      // reference another field (`FField[FIndex].Member := v` reads FIndex),
+      // and a shape IndexedFieldWriteBase declined still gets its previous
+      // read-only treatment (unchanged behaviour when WriteBase is null).
       WalkFieldRW(Lhs, ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
+    end;
     WalkFieldRW(Rhs, ASrc, AFields, AVars, AReads, AWrites, AUnresReads, AUnresWrites);
     Exit;
   end;
