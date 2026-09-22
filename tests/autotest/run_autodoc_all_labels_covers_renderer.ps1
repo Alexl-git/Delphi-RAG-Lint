@@ -59,8 +59,11 @@ function Get-NoCommentsProjection([string]$Text) {
 # THE THREE BARE-WORD MARKERS deliberately NOT in ALL_LABELS -- see the
 # ALL_LABELS header in Doc.SharedFacts.pas for the ruling: NextLabelPos is a raw
 # substring search, so 'virtual' would cut a fact at `Directives: virtual;` and
-# 'constructor' at any caller named `...Constructor...`, and since P8 every
-# rendered fact is bounded by its own </para> before the label list is consulted.
+# 'constructor' at any caller named `...Constructor...`. Since P8 every rendered
+# fact is WRAPPED, and for a wrapped fact FactContentEnd never consults the label
+# list at all (its own </para> is the terminator -- re-review N1, 2026-09-22); the
+# list only bounds UNWRAPPED pre-P8 / hand-written blocks, where the substring
+# hazard is real.
 $Exempt = @('abstract', 'virtual', 'constructor')
 
 # The emit sites, and only those: AppendFact(...) / Lines.Add(...) in the two

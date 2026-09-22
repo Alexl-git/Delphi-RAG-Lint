@@ -717,10 +717,13 @@ begin
   end;
 end;
 
-{ Where a fact's content ENDS: the earlier of the next label and the next tag,
-  or one past the end of AFlat when there is neither.
+{ FactContentEnd (below InsidePara): where a fact's content ENDS. For an
+  UNWRAPPED fact it is the earlier of the next label and the next tag; for a
+  WRAPPED one (AFrom inside a <para>) it is the next tag ONLY -- see the N1 note
+  on FactContentEnd itself. One past the end of AFlat when there is neither.
 
-  BOTH terminators are required, and this is the third time this repo has had to
+  For the unwrapped case BOTH terminators are required, and this is the third
+  time this repo has had to
   promote a hand-expanded twin into a shared function. A fact's content is plain
   text: JoinRefs and JoinEsc escape every rendered entry, so a stored inbound
   line can carry '&lt;' but never a raw '<' outside a tag. A '<' after a label
