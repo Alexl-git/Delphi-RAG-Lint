@@ -23,9 +23,14 @@
     hash changed, version NOT bumped    -> FAIL   <-- the whole point
 
   WHAT COUNTS AS EXTRACTION: the parsers, the preprocessor (it decides which
-  branches are parsed at all), the indexer, and the storage WRITE side. Not the
-  lint rules, not the doc engine, not the LSP or the IDE plugin -- nothing
-  downstream of the index can make a stored parse wrong.
+  branches are parsed at all), the indexer, the storage WRITE side, and --
+  since 2026-09-21, spec 10.3 -- src\doc\DRagLint.Doc.SymbolFacts.pas, the
+  local-facts analyzer the indexer calls per routine to decide what
+  symbol_facts CONTAINS. It lives under src\doc and is named for the doc
+  engine, but it runs INSIDE a walk, so a change to it leaves stored facts
+  rows stale in exactly the way a parser change leaves stored parses stale.
+  Not the lint rules, not the rest of the doc engine, not the LSP or the IDE
+  plugin -- nothing downstream of the index can make a stored parse wrong.
 
   WHEN IT FAILS LEGITIMATELY (you did change an extractor):
     1. bump DRAGLINT_EXTRACTOR_VERSION in src\core\DRagLint.Core.Model.pas
@@ -60,6 +65,13 @@ foreach ($r in $roots) {
   if (Test-Path $p) { $files += @(Get-ChildItem $p -Recurse -File -Filter *.pas) }
 }
 $files += @(Get-ChildItem (Join-Path $repo 'src\core') -File -Filter 'DRagLint.Core.Indexer.pas')
+# Purity v2 (spec 10.3): the local-facts analyzer is called by the indexer --
+# TSymbolFactsAnalyzer.Analyze, from TIndexer.IndexFile, its result written
+# straight out through PutSymbolFacts -- and it decides what symbol_facts
+# CONTAINS. A change to it makes every stored facts row stale exactly as a
+# parser change makes every stored parse stale, and until it joined this list
+# nothing billed for that. Joined 2026-09-21.
+$files += @(Get-ChildItem (Join-Path $repo 'src\doc') -File -Filter 'DRagLint.Doc.SymbolFacts.pas')
 
 $rel = @($files | ForEach-Object { $_.FullName.Substring($repo.Length + 1) } | Sort-Object)
 Check 'the extraction surface is non-empty' ($rel.Count -gt 5) "$($rel.Count) file(s)"

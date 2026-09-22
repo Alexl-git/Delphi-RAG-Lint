@@ -738,4 +738,58 @@
 #   git diff -U0 filtered to lines that are not '///'). Same precedent as the
 #   v1.14.0-alpha release. Nothing parses differently. Superseded line:
 #   1.17.0-alpha|f5d9e5086c95712800ee7f7271297a479fe5d233cd5e67ab9cf7d2ea020e3104
-1.17.0-alpha|08af464e8ba0c86fc7e67e0fa0163b4008b3cd7ef539c120d0a1e245b015b06b
+# 2026-09-21: hash updated WITHOUT a version bump, per the rule above -- and
+#   this one is unlike every entry before it, because THE FILE DID NOT CHANGE.
+#   THE LIST DID. src\doc\DRagLint.Doc.SymbolFacts.pas JOINED the hashed
+#   surface (purity v2, spec section 10.3); the four roots are otherwise
+#   untouched, and the guard's file count moves 24 -> 25.
+#
+#   WHY IT BELONGS IN THE SURFACE. TSymbolFactsAnalyzer.Analyze is called from
+#   TIndexer.IndexFile (src\core\DRagLint.Core.Indexer.pas:1336) once per
+#   routine, and its result is written straight out through PutSymbolFacts on
+#   the next line. It runs INSIDE a walk and decides what symbol_facts
+#   CONTAINS. Its unit name says src\doc, so it read as "the doc engine" and
+#   sat outside both stamps -- neither this hash nor the resolver's covered it,
+#   which is exactly how a fact-emitting analyzer changes with nothing billing
+#   for the staleness it creates. Purity v2 made that intolerable rather than
+#   merely untidy: the effect model reads those same facts rows.
+#
+#   WHY NO BUMP FOR THIS COMMIT, verified rather than asserted. The question
+#   this file asks is "does any STORED PARSE become stale?". This commit
+#   changes two files -- tests\autotest\run_extractor_version_guard.ps1 and
+#   this baseline. Neither is compiled into the engine; `git diff --stat` over
+#   the commit shows no .pas at all. Every build before and after it extracts
+#   byte-identical rows from byte-identical input, so there is no mechanism by
+#   which a stored parse or a stored facts row could have been invalidated HERE.
+#   What changed is what the guard can SEE, and widening a guard's eyes is not
+#   an extraction change. Bumping would bill a ~3h17m re-parse of every database
+#   to say nothing new.
+#
+#   WHAT THIS RE-PIN INHERITS, AND IT IS A LIVE DEBT RATHER THAN A CLEAN SLATE.
+#   The analyzer has changed FOUR times since the 2026-09-17 19:05 pin, and two
+#   of those were code (measured with `git diff -U0` per commit over just this
+#   file, counting lines that are neither blank nor a `//`/`///` comment):
+#
+#       1307e778  11 changed,  0 non-comment   (autodoc regen)
+#       21f359a5  67 changed,  0 non-comment   (autodoc regen)
+#       ae84f0f0  19 changed,  6 non-comment   (AnalyzeReadsWrites drops AFilePath)
+#       e71abafb  74 changed, 32 non-comment   (WalkFieldRW records an indexed-
+#                                               then-dotted field write, so Pure
+#                                               stops mislabelling event handlers)
+#
+#   e71abafb changes what the analyzer RECORDS, so a facts row written by a
+#   build older than it holds the old reads/writes strings. That staleness is
+#   real, it is not created by this commit, and this commit does not discharge
+#   it -- the remedy is a re-index of the affected files, not a stamp. It is
+#   written down here because the failure mode of leaving it unwritten is the
+#   silent one this whole file exists to prevent, and because purity verdicts
+#   are computed from those rows, so a stale fact becomes a stale verdict.
+#
+#   FROM HERE ON, the next change to the analyzer moves this hash and forces
+#   the bump question to be ASKED. That is the entire point of the addition,
+#   and it is the same argument the 2026-09-14 entry makes in reverse: the
+#   surface is deliberately broader than the extractor proper, because a broad
+#   surface turns a judgement into a question instead of an omission.
+#
+#   Superseded: 1.17.0-alpha|08af464e8ba0c86fc7e67e0fa0163b4008b3cd7ef539c120d0a1e245b015b06b
+1.17.0-alpha|1ec134b883423b73e4c76b5f476e38a97b63709b76d4bb918ae99778fc676791
