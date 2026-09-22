@@ -54,6 +54,13 @@ function Write-Ascii([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
 
+# NOTE (re-review N3, 2026-09-22): the unit name `uPureFix1` and `PureAdd`
+# contain the registered bare-word label 'Pure'. That is harmless here -- only
+# MutateRow/PureAdd are documented and neither renders a `Called from:` line
+# -- and since the N1 fix a WRAPPED fact is never cut by a label substring
+# anyway; run_autodoc_document_is_fixed_point.ps1 fixture 3 (`uLeakPure`) is
+# the explicit pin for that hazard. Keep it in mind if this guard ever
+# documents `Helper` (called from `PureAdd`).
 $FixtureBody = @'
 unit uPureFix1;
 interface
