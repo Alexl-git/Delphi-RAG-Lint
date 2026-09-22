@@ -55,6 +55,12 @@ Schema history, one line per step:
   pre-v23 row still carries the list in its name until the next re-parse. A
   consumer that matched `name LIKE '%<%'` finds nothing on a v23 index; read
   `generic_params` instead. **This is the current version.**
+- 2026-09-21 (no version step): three additive columns on `symbol_facts` --
+  `effect_free`, `effect_summary`, `effect_witness` -- written by the `purity`
+  resolve stage, NULL until it runs. `Migrate` ALTERs on the `member_accesses`
+  precedent: SQLite ALTER TABLE ADD COLUMN needs no rebuild, and every reader
+  already treats a missing/NULL fact as absence, so the `>=` gate is unchanged
+  and `SCHEMA_VERSION` does not move.
 
 All facts in this document were cross-checked against the DDL in
 `src/storage/DRagLint.Storage.SQLite.pas` and
@@ -638,6 +644,9 @@ popup (a single shared formatter renders both, so they cannot drift).
 | `ui_affinity` | TEXT (nullable) | **v19.** CSV of the UI controls/globals the routine touches -- `'cxGrid1, Application'`. A field/local/parameter whose declared type is, or descends from, a curated VCL/DevExpress base type, plus bare `Application`/`Screen`. **POSITIVE FINDINGS ONLY:** NULL means "no UI touch was detected", NEVER "this routine is thread-safe" -- the curated list under-reports by construction. |
 | `touches` | TEXT (nullable) | **v19.** External surfaces and transaction verbs, as CATEGORIES not call sites, in ONE column with a **`|` separator**: `'<resources>|<transactions>'`, e.g. `'file system, registry|starts, commits'`. Either side may be empty and the separator is still present (`'file system|'`, `'|starts, commits'`); NULL when both are. Resource words: `file system`, `registry`, `network`. Transaction words: `starts`, `commits`, `rolls back`. Both sides are emitted in that fixed order, never discovery order. |
 | `wiring` | TEXT (nullable) | **v19, RESERVED / currently unpopulated** -- same status as `covered_by` below and for the same class of reason. The DI/ORM wiring fact is computed LAZILY at `document`/`hover` time by joining `di_bindings` / `orm_links` / `fb_relations` / `fb_columns`, because `orm_links` is written by a SEPARATE post-index pass (`orm-link`): an index-time value would be empty on every first index and would afterwards reference `symbols.id` values the reindex had already replaced. Rendered shape, for reference: `'di:IFolderService (singleton); ds:qryFolders -> FOLDERS (ID, NAME)'`. Do not rely on this column being filled. |
+| `effect_free` | INTEGER (nullable) | **purity v2 (2026-09-21).** Interprocedural effect-free verdict: NULL = not yet computed (the in-memory model reads this back as `-1`); `0` = not proven effect-free; `1` = proven effect-free (no global/unit-state write, no heap free of storage it did not allocate, no write to its own fields, no write through a parameter, and no unresolved/unbound callee). Written by the `purity` resolve stage, NEVER by the facts analyzer; a per-file reindex replaces the routine's `symbol_facts` row and this column goes back to NULL until the stage re-runs. |
+| `effect_summary` | TEXT (nullable) | **purity v2 (2026-09-21).** Comma-joined effect tokens backing `effect_free`: `g` (writes global/unit state, a resource, or SQL), `h` (frees storage it did not allocate), `s` (writes its own `Self` fields), `p<k>` (writes through parameter `k`, 0-based), `?` (a callee or member could not be bound). Empty string when `effect_free = 1` (proven, nothing to name); NULL when not yet computed. Written by the `purity` stage, NEVER by the facts analyzer; NULL again after a per-file reindex until it re-runs. |
+| `effect_witness` | TEXT (nullable) | **purity v2 (2026-09-21).** The FIRST blocker that kept `effect_free` from being `1`, display-ready and translated through the call site, e.g. `'writes through SetLength(#0 = FBuffer, a field)'` or `'calls SubString (unbound; receiver S)'`. Empty string when proven; NULL when not yet computed. Written by the `purity` stage, NEVER by the facts analyzer; NULL again after a per-file reindex until it re-runs. |
 | `covered_by` | TEXT (nullable) | **RESERVED / currently unpopulated.** The "Covered by (tests)" fact is computed LAZILY at `document`/`hover` time from the live reverse-call graph (a test->routine edge is non-deterministic to persist per-file at index time), so the current engine leaves this column NULL. Do not rely on it being filled. |
 
 Consumers: this table is purely additive -- pre-v18 tools that do not read it

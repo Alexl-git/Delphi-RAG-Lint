@@ -793,7 +793,7 @@ begin
   Writeln('                               --proxy [--delphi-lsp <path>] [--trace <file>]: relay in front of RAD Studio''s DelphiLSP,');
   Writeln('                               so registering drag-lint as the Code Insight server keeps the compiler front end.');
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
-  Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers from the STORED parses; skips the walk entirely --');
+  Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --');
   Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
   Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
