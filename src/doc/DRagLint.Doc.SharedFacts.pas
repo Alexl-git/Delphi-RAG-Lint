@@ -373,11 +373,14 @@ const
   { THE CONTRACT, stated exactly (review-task-1 I1, 2026-09-22): every PREFIXED
     label RenderFactsBlock and FormatPhase2FactLines can emit -- a label ending
     in ':' or '.', or a fixed word followed by a space -- plus the bare-word
-    markers 'Recursive', 'UI thread only' and 'Pure'. It is NOT every label:
-    the three bare-word markers 'abstract', 'virtual' and 'constructor' are
-    deliberately absent, see below. tests\autotest\
-    run_autodoc_all_labels_covers_renderer.ps1 holds this list and that
-    exemption list against Doc.Regions two-way and fails on any drift.
+    markers 'Recursive', 'UI thread only' and 'Effect-free (proven)'. It is NOT
+    every label: the three bare-word markers 'abstract', 'virtual' and
+    'constructor' are deliberately absent, see below, and 'Pure' is present but
+    no longer EMITTED (purity v2, 2026-09-22 -- see its own note by the array).
+    tests\autotest\
+    run_autodoc_all_labels_covers_renderer.ps1 holds this list, that
+    exemption list and that legacy list against Doc.Regions two-way and fails on
+    any drift.
 
     WHAT THE LIST IS FOR. NextLabelPos/FactContentEnd use it to find where one
     fact ENDS inside stored text -- but ONLY for an UNWRAPPED fact. Since P8
@@ -434,11 +437,28 @@ const
     MergeInboundFacts fed it back into 'Called from:' forever;
     `Deprecated: use X, Y` leaked the bare token `Y` in the own project.
     Pinned by run_autodoc_document_is_fixed_point.ps1's second fixture. }
-  ALL_LABELS: array[0..29] of string = (
+  { purity v2 (2026-09-22): 'Effect-free (proven)' joins the list as the label
+    the renderer now emits in the slot 'Pure' held, read from
+    symbol_facts.effect_free instead of derived from five local facts.
+
+    'Pure' STAYS REGISTERED, and it is the first entry here that is a LEGACY
+    PARSE LABEL: the engine never writes it again, but every block already
+    stored in every indexed corpus still carries it, and in an UNWRAPPED
+    (pre-P8 or hand-written) block that word is the only terminator the fact
+    ABOVE it has. De-registering it would make the preceding inbound slice
+    swallow it -- the exact v22/v23 defect the rest of this array's history
+    records. It costs nothing to keep: NextLabelPos only ever LOOKS for these,
+    so an entry the renderer no longer produces can only ever bound something,
+    never manufacture it.
+    tests\autotest\run_autodoc_all_labels_covers_renderer.ps1 holds that split
+    two-way -- 'Pure' must be registered and NOT emitted, 'Effect-free
+    (proven)' must be both -- so neither half can rot silently. }
+  ALL_LABELS: array[0..30] of string = (
     'Called from:', 'Used by:', 'Calls:', 'Returns:', 'Used in units:',
     'Complexity:', 'Owns returned:', 'Handles:', 'Catches:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',
     'Reads:', 'Writes:', 'Recursive', 'UI thread only', 'Pure',
+    'Effect-free (proven)',
     'Directives:', 'Implemented by:', 'Extended by:',
     'Deprecated:', 'Deprecated.', 'Overrides:', 'Overridden by:', 'Implements:',
     'Overload ');

@@ -348,6 +348,25 @@ type
     /// are deliberately not (an ordinary call's var argument, e.g. SetLength,
     /// and a dot LHS are both absent by design).</remarks>
     MutatesParams    : string           ;
+    /// <summary>Purity v2: the stored interprocedural verdict, RAW PASSTHROUGH
+    /// of symbol_facts.effect_free (-1 not computed / 0 not proven / 1 proven),
+    /// effect_summary and effect_witness. The renderer prints
+    /// 'Effect-free (proven)' on 1 and nothing otherwise -- absence is not a
+    /// claim (spec 2026-09-15 section 11).</summary>
+    /// <remarks>Written by the `purity` resolve stage, never by PutSymbolFacts,
+    /// so a per-file reindex that rewrites the row leaves EffectFree at -1 until
+    /// the stage runs again. Nothing here re-derives it: the render-time guess
+    /// this replaced could not see past the routine's own body, and called a
+    /// routine that writes a unit-level global -- or one that merely CALLS such
+    /// a routine -- 'Pure'.</remarks>
+    EffectFree       : Integer          ;
+    /// <summary>The machine-readable effect summary ('g', 'h', 's', 'p&lt;k&gt;',
+    /// '?', comma-joined; '' = writes nothing outside itself). Passthrough of
+    /// symbol_facts.effect_summary; NULL reads back ''.</summary>
+    EffectSummary    : string           ;
+    /// <summary>The FIRST blocker, display-ready and translated through the call
+    /// site. '' when proven. Passthrough of symbol_facts.effect_witness.</summary>
+    EffectWitness    : string           ;
     /// <summary>v22: the routine's declared directives, exactly as
     /// symbols.directives stores them -- canonical lowercase, declaration order,
     /// space-joined ('virtual overload stdcall'). '' when the routine declares
@@ -699,8 +718,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
     /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+39 more)</para>
-    /// <para>Complexity: 78 (cyclomatic, outer body), 1082 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Complexity: 78 (cyclomatic, outer body), 1089 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -4502,6 +4520,13 @@ begin
   // v(ADP3 T11): var/out parameter writes -- same raw-passthrough contract
   // again (capped and formatted at analysis time by AnalyzeMutatesParams).
   Result.MutatesParams:= SFacts.MutatesParams;
+  // Purity v2: the stored verdict, same passthrough contract. SFacts.EffectFree
+  // is -1 when the row is absent or the column is NULL (GetSymbolFacts maps
+  // both), so a pre-purity index renders no effect line at all rather than
+  // claiming "not proven" about a routine nothing ever judged.
+  Result.EffectFree   := SFacts.EffectFree;
+  Result.EffectSummary:= SFacts.EffectSummary;
+  Result.EffectWitness:= SFacts.EffectWitness;
   { v22: straight from the indexed symbol, no probe. On a pre-v22 index this is
     '' for every routine, so the Directives line simply does not render until
     that index is re-parsed -- the same degradation every other v-column has. }

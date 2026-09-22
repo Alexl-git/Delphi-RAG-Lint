@@ -27,6 +27,19 @@
   registered; every registered label IS emitted. A stale registration, a
   stale exemption and a missing registration all fail.
 
+  THE LEGACY LIST IS THE SAME KIND OF DECISION, and is asserted the same way.
+  A legacy label is one the renderer DELIBERATELY no longer emits while the
+  registration must stay, because ALL_LABELS also has to bound facts in blocks
+  that are ALREADY STORED. 'Pure' is the first: purity v2 (2026-09-22) replaced
+  the render-time guess with the stored verdict and renamed the line
+  'Effect-free (proven)', but every pre-v2 block in every indexed corpus still
+  carries a `Pure` line, and in an UNWRAPPED (pre-P8 / hand-written) block that
+  word is the only terminator the fact above it has. Dropping the registration
+  would make the preceding inbound slice swallow it -- the exact defect E1/E2
+  exist to catch. So: every legacy label IS registered and is NOT emitted. A
+  legacy label the renderer starts emitting again, and a legacy label that
+  leaves ALL_LABELS, both FAIL.
+
   CONTROLS. P1: a planted `AppendFact('Planted label: ' + X)` in a synthetic
   snippet is found by the extractor (it can see). N1: the same call inside a
   `{ }` comment, a `//` comment and a `(* *)` comment is NOT found (it does not
@@ -65,6 +78,13 @@ function Get-NoCommentsProjection([string]$Text) {
 # list only bounds UNWRAPPED pre-P8 / hand-written blocks, where the substring
 # hazard is real.
 $Exempt = @('abstract', 'virtual', 'constructor')
+
+# LEGACY LABELS -- registered, deliberately NOT emitted. See the header block:
+# 'Pure' is retired as an OUTPUT by purity v2 (the renderer now writes
+# 'Effect-free (proven)' from symbol_facts.effect_free) but survives as a PARSE
+# label, because ALL_LABELS also bounds facts inside blocks written before the
+# rename. Asserted two-way by E4 below, exactly like $Exempt.
+$Legacy = @('Pure')
 
 # The emit sites, and only those: AppendFact(...) / Lines.Add(...) in the two
 # renderers, the RefVerb:= pair that feeds AppendFact for the inbound verb, and
@@ -159,7 +179,7 @@ $stale = @()
 foreach ($r in $registered) {
   $hit = $false
   foreach ($e in $emitted) { if (Test-Covers $r $e) { $hit = $true; break } }
-  if (-not $hit) { $stale += $r }
+  if (-not $hit -and ($Legacy -notcontains $r)) { $stale += $r }
 }
 Check 'E2 every registered label is still emitted by the renderer (no stale registration)' ($stale.Count -eq 0) `
       ("stale: " + (($stale | ForEach-Object { "[$_]" }) -join ' '))
@@ -172,6 +192,22 @@ foreach ($x in $Exempt) {
 }
 Check 'E3 every exempt bare word IS emitted and is NOT registered (the exemption is live, two-way)' ($badExempt.Count -eq 0) `
       ("bad: " + ($badExempt -join ' '))
+
+$badLegacy = @()
+foreach ($g in $Legacy) {
+  $isEmitted    = ($emitted    | Where-Object { $_.TrimEnd() -eq $g }).Count -gt 0
+  $isRegistered = ($registered | Where-Object { $_ -eq $g }).Count -gt 0
+  if ($isEmitted -or -not $isRegistered) { $badLegacy += "$g(emitted=$isEmitted registered=$isRegistered)" }
+}
+Check 'E4 every legacy label IS registered and is NOT emitted (the retirement is live, two-way)' ($badLegacy.Count -eq 0) `
+      ("bad: " + ($badLegacy -join ' '))
+
+# The label that REPLACED the legacy one must be both -- otherwise E4 could be
+# satisfied by deleting the feature rather than by renaming it.
+$efEmitted    = ($emitted    | Where-Object { $_.TrimEnd() -eq 'Effect-free (proven)' }).Count -gt 0
+$efRegistered = ($registered | Where-Object { $_ -eq 'Effect-free (proven)' }).Count -gt 0
+Check 'E5 CONTROL the replacement label "Effect-free (proven)" IS emitted AND IS registered' `
+      ($efEmitted -and $efRegistered) "emitted=$efEmitted registered=$efRegistered"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'ALL-LABELS GUARD: FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'ALL-LABELS GUARD: PASS' -ForegroundColor Green; exit 0 }

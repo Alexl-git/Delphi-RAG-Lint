@@ -168,9 +168,13 @@ try {
 
   # --- 4. CONTROL: a non-inbound line still byte-compares ------------------
   # Order-insensitivity was ruled for inbound lists only. Nothing about it makes
-  # a wrong Calls:/Pure line right, so the residual keeps byte semantics.
+  # a wrong Calls:/effect line right, so the residual keeps byte semantics.
+  # Purity v2 (2026-09-22): 'Pure' -> 'Effect-free (proven)'; both spellings are
+  # accepted here because this only needs to FIND one non-inbound line to tamper
+  # with, and the else-branch below would quietly skip the control if none
+  # matched.
   $all = [System.IO.File]::ReadAllText($src)
-  $resid = ($all -split "`r?`n" | Where-Object { $_ -match '<para>(Calls|Pure|Complexity|Mutates|Touches)' } | Select-Object -First 1)
+  $resid = ($all -split "`r?`n" | Where-Object { $_ -match '<para>(Calls|Pure|Effect-free|Complexity|Mutates|Touches)' } | Select-Object -First 1)
   if ($resid) {
     ReplaceLine $resid ($resid -replace '<para>', '<para>TAMPERED ')
     Reindex

@@ -15,8 +15,10 @@ implementation
   Marked's body used to be `Result := Length(AText);` alone, and its facts block
   was `Calls: Length`. When compiler intrinsics stopped being rendered as
   callees -- Inc and SetLength are syntax, not collaborators -- that block
-  became empty, and by the long-standing rule that `Pure` never creates a block
-  of its own, Marked stopped getting a managed comment at all. Four assertions
+  became empty, and by the long-standing rule that the effect line (`Pure` when
+  this was written; `Effect-free (proven)` since purity v2, 2026-09-22) never
+  creates a block of its own, Marked stopped getting a managed comment at all.
+  The rule is unchanged by the rename. Four assertions
   in run_doc_p3_provenance went red, none of them about intrinsics.
 
   That rule is deliberate and is not being relaxed here: writing a doc block is

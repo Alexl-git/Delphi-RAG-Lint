@@ -13,6 +13,18 @@
   being empty -- a downstream symptom of the missing Writes: entry, not an
   independent bug in the render gate itself.
 
+  PURITY V2 (2026-09-22) RENAMED THE LINE AND CHANGED WHAT PROVES IT. The fact
+  is now 'Effect-free (proven)', read from symbol_facts.effect_free, which the
+  `purity` resolve stage writes by translating every callee's effect summary
+  through the caller's arguments to a fixpoint. Both assertions below are kept,
+  and both still mean what they meant -- but the POSITIVE side now holds for a
+  different and stronger reason: PureAdd renders the line because the stage
+  PROVED it (effect_free = 1; its one callee, Helper, is itself proven), not
+  because five local facts happen to be empty. The negative side is
+  correspondingly stronger too: MutateRow's own-field write is a blocker in the
+  stage's own model ('s'), so it is refused even if WalkFieldRW were to regress
+  and the 'Writes:' pin above were the only thing left failing.
+
   THE FIX (DRagLint.Doc.SymbolFacts.pas, WalkFieldRW): a new
   IndexedFieldWriteBase helper recognises exactly `Ident[...] := X` and
   `Ident[...].Member := X` (mirroring WalkMutatedParams' own "A[i] := v
@@ -24,10 +36,11 @@
 
   THE FIXTURE mirrors the real shape: TFixClass.MutateRow writes
   FRows[AIndex].Skipped (FRows: TArray<TRowRec>, a record array -- exactly
-  ConvRules' TFormTypeRows/TFormTypeRow shape) and must NOT render Pure.
-  TFixClass.PureAdd has a body with no field write, no mutated param, no
-  touches, no SQL -- the POSITIVE CONTROL: it MUST still render Pure, so the
-  two assertions cannot both pass by a broken/always-false 'Pure' gate.
+  ConvRules' TFormTypeRows/TFormTypeRow shape) and must NOT render the effect
+  line. TFixClass.PureAdd has a body with no field write, no mutated param, no
+  touches, no SQL, and calls only a proven helper -- the POSITIVE CONTROL: it
+  MUST still render the line, so the two assertions cannot both pass by a
+  broken/always-false gate.
 #>
 [CmdletBinding()]
 param(
@@ -106,12 +119,12 @@ function Invoke-Engine([string]$Label, [string[]]$EngineArgs) {
 }
 Invoke-Engine 'index' @('index', $WorkDir, '--db', $db)
 
-# PureAdd CALLS Helper -- 'Pure' never creates a managed block on its own
-# (DRagLint.Doc.Regions.pas ~2187, the AHasOtherContent gate: "a statement
-# about the absence of findings" is not by itself "something to say"). The
-# 'Calls:' fact is what earns PureAdd a block at all; Pure still applies
-# alongside it because PureAdd itself writes no field, mutates no param,
-# touches nothing and reads/writes no SQL.
+# PureAdd CALLS Helper -- the effect line never creates a managed block on its
+# own (DRagLint.Doc.Regions.pas ~2187, the AHasOtherContent gate, unchanged by
+# purity v2). The 'Calls:' fact is what earns PureAdd a block at all; the
+# effect line applies alongside it because the purity stage proved PureAdd
+# effect-free -- which requires Helper to be proven too, since a call to an
+# unproven callee is itself a blocker.
 Push-Location $WorkDir
 try {
   Invoke-Engine 'document MutateRow' @('document', '--qname', 'uPureFix1.TFixClass.MutateRow', '--db', $db, '--apply', '--no-backup')
@@ -158,17 +171,21 @@ Write-Host 'MutateRow: writes FRows[AIndex].Skipped' -ForegroundColor Cyan
 Write-Host "  Writes: line present = $($mutateBlock -match 'Writes:')" -ForegroundColor DarkGray
 Check 'THE PIN: MutateRow''s Writes: line names FRows' `
   ($mutateBlock -match 'Writes:\s*FRows') $mutateBlock
-Check 'THE PIN: MutateRow does NOT render <para>Pure</para>' `
+Check 'THE PIN: MutateRow does NOT render <para>Effect-free (proven)</para>' `
+  ($mutateBlock -notmatch '<para>Effect-free \(proven\)</para>') $mutateBlock
+Check 'THE PIN: the retired <para>Pure</para> label is not rendered either' `
   ($mutateBlock -notmatch '<para>Pure</para>') $mutateBlock
 
 Write-Host ''
-Write-Host 'CONTROL: PureAdd has no write/mutate/touch/sql at all' -ForegroundColor Cyan
-Check 'CONTROL: PureAdd DOES render <para>Pure</para> (gate is live, not vacuous)' `
-  ($pureAddBlock -match '<para>Pure</para>') $pureAddBlock
-if ($pureAddBlock -notmatch '<para>Pure</para>') {
+Write-Host 'CONTROL: PureAdd has no write/mutate/touch/sql and calls only a proven helper' -ForegroundColor Cyan
+Check 'CONTROL: PureAdd DOES render <para>Effect-free (proven)</para> (gate is live, not vacuous)' `
+  ($pureAddBlock -match '<para>Effect-free \(proven\)</para>') $pureAddBlock
+Check 'CONTROL: PureAdd does NOT render the retired <para>Pure</para>' `
+  ($pureAddBlock -notmatch '<para>Pure</para>') $pureAddBlock
+if ($pureAddBlock -notmatch '<para>Effect-free \(proven\)</para>') {
   Write-Host '  !! The control failed. The pin above proves nothing -- it would' -ForegroundColor Yellow
-  Write-Host '  !! pass with Pure never rendering for ANYONE, which is exactly' -ForegroundColor Yellow
-  Write-Host '  !! what a broken/always-false Pure gate looks like.' -ForegroundColor Yellow
+  Write-Host '  !! pass with the effect line never rendering for ANYONE, which is' -ForegroundColor Yellow
+  Write-Host '  !! exactly what a broken/always-false gate looks like.' -ForegroundColor Yellow
 }
 
 Write-Host ''

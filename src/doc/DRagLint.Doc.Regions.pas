@@ -561,8 +561,7 @@ type
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
     /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2, Format, StartsStr, StringReplace</para>
     /// <para>Returns: Lines.ToStringArray</para>
-    /// <para>Complexity: 44 (cyclomatic, outer body), 274 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Complexity: 39 (cyclomatic, outer body), 283 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2"/>
@@ -2171,41 +2170,50 @@ begin
       if DiPart <> '' then Lines.Add('Registered as: ' + EscXml(DiPart));
       if DsPart <> '' then Lines.Add('Dataset: ' + EscXml(DsPart));
     end;
-    // v(ADP3 T13): 'Pure' is DERIVED at render time from the other facts and
-    // has NO column of its own -- so it can never disagree with them. Emitted
-    // for a routine WITH A BODY that writes no field, mutates no var/out
-    // parameter, touches no external surface and reads/writes no SQL. It is a
-    // CONCLUSION, not an observation: it says "none of the effects this engine
-    // can detect were detected", which is exactly as strong as the facts
-    // beneath it -- and no stronger, which is why it is not called
-    // 'side-effect free'. Emitted LAST, per the fixed Phase 3 line order.
+    // PURITY V2 (spec docs\superpowers\specs\2026-09-15-interprocedural-
+    // purity.md section 12): 'Effect-free (proven)' is READ from
+    // symbol_facts.effect_free, written by the `purity` resolve stage. It is a
+    // POSITIVE CLAIM -- the stage proved it, by translating every callee's
+    // effect summary through this routine's own arguments to a fixpoint -- and
+    // its ABSENCE says nothing at all: -1 means nobody judged this routine and
+    // 0 means the proof did not go through, which is not the same as an effect
+    // having been observed. Emitted LAST, per the fixed Phase 3 line order,
+    // in the slot the old line held.
     //
-    // BodyLoc > 0 is the with-a-body gate: an interface-only declaration, or a
-    // symbol with no symbol_facts row at all, reads 0 and must not be called
-    // Pure on the strength of five facts that were never computed.
+    // WHAT IT REPLACED, and why the rename is the point. Until 2026-09-22 this
+    // line was 'Pure', DERIVED here from five local facts being empty --
+    // BodyLoc > 0 with no WritesFields / MutatesParams / Touches / SqlWrites /
+    // SqlReads. That could never see past the routine's own body, so it was
+    // wrong in both directions the moment a routine called anything: a routine
+    // writing a unit-level GLOBAL (not a field, so WritesFields stayed empty)
+    // was labelled Pure, and so was every routine that merely called it. The
+    // with-a-body gate is gone from here because the stage subsumes it -- it
+    // judges only routines that have a symbol_facts row, and a symbol with no
+    // row reads back -1.
     //
-    // PURE NEVER CREATES A BLOCK OF ITS OWN -- the AHasOtherContent gate. This
-    // is a DEVIATION from the plan's snippet, taken deliberately after the
-    // literal version was implemented and run. `Pure` is true of a very large
-    // fraction of any real codebase, so an unconditional emit gives a managed
-    // block to nearly every trivial effect-free routine -- reversing the
-    // long-standing "omit when empty" contract corpus-wide, and silently: five
-    // existing suites assert in so many words that a symbol with nothing to say
-    // gets NO managed block at all (run_doc_p2_sql's 'NoSql has NO managed
-    // block at all (no fact fires)' and its four siblings), and every one of
-    // them went red on the literal version. Writing a doc block into a file is
-    // an EDIT; the bar for creating one is "there was something to say", and
-    // 'Pure' alone is a statement about the absence of findings. It still
-    // appears on every block that exists for any other reason, which is where
-    // it is actually useful. Widening this later is one condition; unwinding a
-    // corpus-wide block explosion is not.
-    if (AFacts.BodyLoc > 0)
-       and (AFacts.WritesFields = '') and (AFacts.MutatesParams = '')
-       and (AFacts.Touches = '') and (AFacts.SqlWrites = '') and (AFacts.SqlReads = '')
-       and ((Lines.Count > 0) or AHasOtherContent) then
-      Lines.Add('Pure');
+    // THE LINE NEVER CREATES A BLOCK OF ITS OWN -- the AHasOtherContent gate,
+    // carried over unchanged and for the unchanged reason. Being effect-free is
+    // true of a very large fraction of any real codebase, so an unconditional
+    // emit would give a managed block to nearly every trivial routine --
+    // reversing the long-standing "omit when empty" contract corpus-wide, and
+    // silently: five existing suites assert in so many words that a symbol with
+    // nothing to say gets NO managed block at all (run_doc_p2_sql's 'NoSql has
+    // NO managed block at all (no fact fires)' and its four siblings), and every
+    // one of them went red when the literal version was tried. Writing a doc
+    // block into a file is an EDIT; the bar for creating one is "there was
+    // something to say". The line still appears on every block that exists for
+    // any other reason, which is where it is actually useful.
+    //
+    // 'Pure' IS NEVER EMITTED AGAIN. It stays registered in
+    // DRagLint.Doc.SharedFacts.ALL_LABELS as a LEGACY PARSE label only -- see
+    // the comment there -- because every block written before this change still
+    // carries it, and in an unwrapped block it is the only terminator the fact
+    // above it has. run_autodoc_all_labels_covers_renderer.ps1 asserts that
+    // split two-way.
+    if (AFacts.EffectFree = 1) and ((Lines.Count > 0) or AHasOtherContent) then
+      Lines.Add('Effect-free (proven)');
     { v22 (PLAN-routine-directives-in-index.md): the routine's declared
-      DIRECTIVES, appended AFTER Pure.
+      DIRECTIVES, appended AFTER the effect line.
       POSITION. Every other Phase 3 line has a fixed slot and the order is a
       contract, because this ONE function feeds BOTH the managed doc block and
       hover -- a line inserted mid-block would rewrite every already-documented

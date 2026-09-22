@@ -72,8 +72,7 @@ type
 /// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Hover.Renderer.BuildHoverModel, DRagLint.Hover.Returns.MineReturnExpressionsEx, DRagLint.Query.HoverModel.ModifierOf, DRagLint.Symbol.Describe.DescribeTypeKind, ExtractFileName, SameText</para>
 /// <para>Returns: Default(THoverAssembly)</para>
-/// <para>Complexity: 22 (cyclomatic, outer body), 134 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 141 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc"/>
@@ -279,6 +278,13 @@ begin
   begin
     var Facts: TDocFacts:= TDocFactsBuilder.Build(AStore, ASym, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
     Result.FactLines:= TDocRegions.FormatPhase2FactLines(Facts, LoadDocComplexityMin);
+    { Purity v2: the SAME verdict the fact line above was rendered from, handed
+      to the JSON consumer structured. BuildHoverModel left these at -1/''/'';
+      they are overwritten only here, inside the AWithFacts branch, because
+      outside it no facts row was read and -1 is the honest answer. }
+    Result.Model.EffectFree   := Facts.EffectFree;
+    Result.Model.EffectSummary:= Facts.EffectSummary;
+    Result.Model.EffectWitness:= Facts.EffectWitness;
   end;
 end; // function
 

@@ -171,7 +171,10 @@ Check 'ATTRIBUTION: Ping''s block carries Ping''s facts, not Create''s' `
 # Compared on the FACT lines only: the two paths need not agree on ordering of
 # unrelated tags, but they must agree about the content they mined.
 function Get-FactLines([string]$block) {
-  return (($block -split "`n" | Where-Object { $_ -match 'Called from:|Calls:|Pure' } |
+  # Purity v2 (2026-09-22): 'Pure' -> 'Effect-free (proven)'. Both spellings are
+  # matched -- this function compares what TWO engine paths mined from the SAME
+  # tree, so a block carried over from before the rename must still be sliced.
+  return (($block -split "`n" | Where-Object { $_ -match 'Called from:|Calls:|Pure|Effect-free' } |
            ForEach-Object { ($_ -replace '^\s*///\s?','' -replace '</?para>','').Trim() }) -join ' ; ')
 }
 Check 'the --qname pair mined the same facts as the single --unit pass (Create)' `

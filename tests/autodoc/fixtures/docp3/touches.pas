@@ -40,7 +40,8 @@ end;
 
 // Gives the three routines above a caller fact so each one has a doc block --
 // see harvest_drift.pas for why the parentheses are load-bearing. AddUp is the
-// Pure case, so it must have a block for "Pure is present" to be assertable.
+// effect-free case, so it must have a block for "Effect-free (proven) is
+// present" to be assertable.
 function Driver: Integer;
 var
   T: TTxn;

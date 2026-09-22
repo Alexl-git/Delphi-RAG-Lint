@@ -387,11 +387,16 @@ try {
     '/// Called from: tagoccurrence.CallsPlainDocumented (tagoccurrence.pas)',
     '/// Returns: AValue * 2',
     # v(ADP3 T13): PlainDocumented has a body and no detected effect, so the
-    # derived Pure line is part of the expected block now. Kept in the literal
+    # effect line is part of the expected block now. Kept in the literal
     # expectation rather than filtered out: this check exists precisely to
     # catch churn in the ordinary shape, so a fact-line change SHOULD land here
     # and be looked at, not be masked away.
-    '/// Pure',
+    # Purity v2 (2026-09-22): '/// Pure' became '/// Effect-free (proven)' --
+    # the line is now read from symbol_facts.effect_free, proven
+    # interprocedurally, instead of derived from five local facts being empty.
+    # This literal is also the byte-identity pin for every OTHER line of the
+    # block: only this one may differ from the pre-change expectation.
+    '/// Effect-free (proven)',
     '/// <!-- drag-lint:auto END -->',
     '/// </remarks>'
   ) -join "`n"

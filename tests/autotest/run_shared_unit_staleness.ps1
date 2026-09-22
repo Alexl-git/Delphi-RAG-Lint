@@ -394,7 +394,10 @@ Check 'a truncated STORED line is still not forgiven' ((DriftCount $dbB 'MarkTru
 # path inherits the merge; that is exactly what was believed both previous times.
 # Assert it instead. Runs LAST because --fix repairs everything fixable in scope,
 # including the controls asserted above.
-# REGRESSION, YADF 2026-08-13. Every fixture above ends its block with 'Pure',
+# REGRESSION, YADF 2026-08-13. Every fixture above ends its block with the
+# effect line ('Pure' when this was written; 'Effect-free (proven)' since
+# purity v2, 2026-09-22 -- both are registered in ALL_LABELS, which is the only
+# property this paragraph relies on),
 # which is a LABEL, so the stored-side slice always stopped in time and the bug
 # below could not show. On YADF.Tokens the last fact in the block was the inbound
 # line itself, so the slice ran past AUTO_END and swallowed the marker into an

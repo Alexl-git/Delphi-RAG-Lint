@@ -75,7 +75,6 @@ function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const 
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen</para>
 /// <para>Overload 1 of 2</para>
-/// <para>Pure</para>
 /// <para>Directives: overload</para>
 /// <seealso cref="DRagLint.Core.Model.DocFormatToStr"/>
 /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
@@ -152,6 +151,14 @@ type
     Returns      : TArray<TReturnFact>;
     ReturnsMore  : Integer            ;
     Doc          : TParsedDoc         ;
+    { Purity v2 (spec 2026-09-15 section 12): the STRUCTURED verdict, beside the
+      display lines. -1 = not computed, 0 = not proven, 1 = proven effect-free.
+      BuildHoverModel sets -1 explicitly -- it never sees facts -- so a consumer
+      can tell "nobody judged this" from "judged, not proven" without parsing
+      the prose fact lines. }
+    EffectFree   : Integer            ;
+    EffectSummary: string             ;
+    EffectWitness: string             ;
   end;
 
 /// <summary>Parses a routine signature's parameter list -- e.g.
@@ -190,7 +197,6 @@ function ParseSignatureParams(const ASignature: string): TArray<TParamPart>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
 /// <para>Calls: DRagLint.Hover.Renderer.KindQualifier, DRagLint.Hover.Renderer.ParseSignatureParams, DRagLint.Hover.Renderer.ReturnTypeFromSig</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Renderer.KindQualifier"/>
 /// <seealso cref="DRagLint.Hover.Renderer.ParseSignatureParams"/>
 /// <seealso cref="DRagLint.Hover.Renderer.ReturnTypeFromSig"/>
@@ -780,6 +786,14 @@ begin
       reads this array and renders a FACTS section -- previously the JSON omitted
       facts entirely, so the plugin's colored popup never showed them (only the
       `--format md` path did). Empty array when the symbol has no facts. }
+    { Purity v2 (spec section 12): the structured verdict beside the display
+      lines, so a JSON consumer can tell a real effect from a binding gap
+      without parsing prose. -1 = not computed, and on the LSP ephemeral
+      (unsaved-buffer) store the resolve stage never runs, so -1 is what it
+      reads there -- which is why the fact LINE is simply absent rather than
+      asserting "not proven". }
+    SB.Append(Format('"effect_free":%d,"effect_summary":"%s","effect_witness":"%s",',
+      [AModel.EffectFree, JsonEscape(AModel.EffectSummary), JsonEscape(AModel.EffectWitness)]));
     SB.Append('"facts":[');
     for i:= 0 to High(AFactLines) do
     begin
@@ -863,6 +877,13 @@ begin
   Result.ReturnType   := ReturnTypeFromSig(ASym.Signature);
   Result.Doc          := ADoc;
   Result.Kind         := KindQualifier(ASym.Kind); // v(FB #3): friendly qualifier for the header
+  { Purity v2: this function never sees a facts row, so the verdict is NOT
+    COMPUTED here, not "not proven". Set explicitly rather than left to the
+    record's zero-init, which would be 0 and would read as a claim. Callers that
+    do load facts (DRagLint.Query.HoverModel) overwrite all three. }
+  Result.EffectFree   := -1;
+  Result.EffectSummary:= '';
+  Result.EffectWitness:= '';
   Cap:= Length(AReturnRhs);
   if Cap > 10 then begin Result.ReturnsMore:= Cap - 10; Cap:= 10; end
   else Result.ReturnsMore:= 0;

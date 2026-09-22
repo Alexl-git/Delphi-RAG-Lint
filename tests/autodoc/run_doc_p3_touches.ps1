@@ -1,6 +1,6 @@
 <#
   run_doc_p3_touches.ps1 -- Auto-Document Phase 3, Task 13:
-  the Touches:/Transaction: facts, and the DERIVED Pure line.
+  the Touches:/Transaction: facts, and the 'Effect-free (proven)' line.
 
   CATEGORIES, NOT CALL SITES. 'Touches: file system' says what class of external
   surface the routine reaches, not which method it called -- the call site is
@@ -18,11 +18,15 @@
   Without that discipline a method named Reset or Commit -- both extremely
   common -- would manufacture a false "file system" or "Transaction:" claim.
 
-  PURE IS A CONCLUSION, NOT AN OBSERVATION. It is derived at render time from
-  the other facts and has no column, so it can never disagree with them. It
-  means "none of the effects this engine can detect were detected", which is
-  exactly as strong as the facts beneath it -- assertion 4 is the one that keeps
-  it honest, by proving a routine WITH a detected effect never gets it.
+  THE EFFECT LINE IS A POSITIVE CLAIM. Purity v2 (2026-09-22) replaced the
+  render-time `Pure` guess -- derived from these same facts being empty, so it
+  could never see past the routine's own body -- with 'Effect-free (proven)',
+  read from symbol_facts.effect_free, which the `purity` resolve stage proves
+  interprocedurally by translating every callee's summary through the caller's
+  arguments. Its ABSENCE is no longer a claim of any kind. Assertion 4 is what
+  keeps it honest, by proving a routine WITH a detected effect never gets it;
+  assertion 3 is the positive control, without which 4 would pass on a gate
+  that fires for nobody.
 
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -59,9 +63,19 @@ function Get-FactLine([string]$block, [string]$label) {
   return ''
 }
 
-# True when the block carries a standalone 'Pure' fact line. Anchored on the
-# WHOLE line: 'Pure' must never be matched inside another line's prose.
-function Test-HasPure([string]$block) {
+# True when the block carries a standalone 'Effect-free (proven)' fact line.
+# Anchored on the WHOLE line: the label must never be matched inside another
+# line's prose.
+function Test-HasEffectFree([string]$block) {
+  foreach ($l in ($block -split "`n")) {
+    if ((($l -replace '^\s*///\s?','' -replace '</?para>','').Trim()) -eq 'Effect-free (proven)') { return $true }
+  }
+  return $false
+}
+# The retired label. Kept as its own probe so assertion 3b can state that the
+# rename really happened, rather than leaving "no Pure anywhere" to be inferred
+# from Test-HasEffectFree passing.
+function Test-HasLegacyPure([string]$block) {
   foreach ($l in ($block -split "`n")) {
     if ((($l -replace '^\s*///\s?','' -replace '</?para>','').Trim()) -eq 'Pure') { return $true }
   }
@@ -85,7 +99,7 @@ Push-Location C:\TEMP
 try {
 
 Write-Host ''
-Write-Host '=== touches.pas -- Touches:/Transaction: + Pure ===' -ForegroundColor Cyan
+Write-Host '=== touches.pas -- Touches:/Transaction: + Effect-free (proven) ===' -ForegroundColor Cyan
 
 $sc = Join-Path C:\TEMP 'draglint_docp3_touches'
 if (Test-Path $sc) { Remove-Item $sc -Recurse -Force }
@@ -122,16 +136,18 @@ $txn = Get-FactLine $blkTxn 'Transaction'
 Check '2. RunTxn renders "Transaction: starts, commits"' ($txn -eq 'starts, commits') `
   ("got=[$txn] block=" + ($blkTxn -replace "`n",' | '))
 
-# --- (3) Pure, on a routine with a body and no detected effect. -------------
-Check '3. AddUp renders the Pure line' (Test-HasPure $blkAdd) `
+# --- (3) the effect line, on a routine the stage proved effect-free. --------
+Check '3. AddUp renders the Effect-free (proven) line' (Test-HasEffectFree $blkAdd) `
+  ("block=" + ($blkAdd -replace "`n",' | '))
+Check '3b. AddUp does NOT render the retired Pure line' (-not (Test-HasLegacyPure $blkAdd)) `
   ("block=" + ($blkAdd -replace "`n",' | '))
 Check '3. AddUp has no Touches: line'     ((Get-FactLine $blkAdd 'Touches')     -eq '') ''
 Check '3. AddUp has no Transaction: line' ((Get-FactLine $blkAdd 'Transaction') -eq '') ''
 
-# --- (4) THE HONESTY CHECK: a routine WITH an effect is never Pure. ---------
-Check '4. ReadConfig is NOT Pure (it touches the file system)' (-not (Test-HasPure $blkRead)) `
+# --- (4) THE HONESTY CHECK: a routine WITH an effect is never effect-free. --
+Check '4. ReadConfig is NOT effect-free (it touches the file system)' (-not (Test-HasEffectFree $blkRead)) `
   ("block=" + ($blkRead -replace "`n",' | '))
-Check '4. RunTxn is NOT Pure (it drives a transaction)' (-not (Test-HasPure $blkTxn)) `
+Check '4. RunTxn is NOT effect-free (it drives a transaction)' (-not (Test-HasEffectFree $blkTxn)) `
   ("block=" + ($blkTxn -replace "`n",' | '))
 
 # --- (5) the wire format, pinned. -------------------------------------------

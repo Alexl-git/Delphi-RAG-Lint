@@ -48,16 +48,22 @@ procedure CallsQuotedBlockExact;
 // the quoted file name says .pos where the real block says .pas. The runner
 // derives both lengths and asserts that relation rather than trusting it.
 //
-// v(ADP3 T13): the quoted block gained a `Pure` line because the real one did
-// -- QuotedBlockNearMiss has a body and no detected effect, so the engine now
-// renders Pure for it. Without this line the existing region would be SHORTER
+// v(ADP3 T13): the quoted block gained an effect line because the real one did
+// -- QuotedBlockNearMiss has an empty body, so the engine renders one for it.
+// Without this line the existing region would be SHORTER
 // than the block to insert, the early-out would answer first, and the
 // discrimination check would (correctly) report that it no longer discriminates.
 // Keep the two in step: if the rendered fact lines change again, this quoted
 // copy must change with them, and only the .pos/.pas character may differ.
 //
+// v(PURITY V2, 2026-09-22): that line is now `Effect-free (proven)`, read from
+// symbol_facts.effect_free rather than derived from five local facts being
+// empty. It is the SAME slot and the same one-line contribution, so the length
+// relation this fixture exists to hold is unchanged -- but it is longer text,
+// and the rule above ("keep the two in step") is why it had to be edited here.
+//
 // v(PHASE C, B8): the quoted block gained the two <summary> lines below for the
-// same reason it gained `Pure` at T13 -- the real block grew. B8 wraps
+// same reason it gained the effect line at T13 -- the real block grew. B8 wraps
 // engine-owned prose at 100 columns, so the harvested summary the engine renders
 // for this symbol is now TWO lines instead of one, and the block measured off
 // the N6 shape went from 7 lines to 9. Without these the existing region is
@@ -70,7 +76,7 @@ procedure CallsQuotedBlockExact;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// Called from: decayrouting.CallsQuotedBlockNearMiss (decayrouting.pos)
-/// Pure
+/// Effect-free (proven)
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure QuotedBlockNearMiss;
