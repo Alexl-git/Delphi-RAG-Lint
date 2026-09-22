@@ -603,10 +603,23 @@ end;
 // This walk is deliberately NOT the shared TDataFlowSolver/IDataFlowAnalysis
 // lattice machinery (field read/write is a focused AST classification here,
 // not a fixpoint dataflow property):
-//   - 'assignment': a BARE-IDENTIFIER lhs is a WRITE. Any other lhs shape (an
-//     indexed/qualified write, e.g. `a[i] :=` / `x.f :=`) is walked as a READ
-//     of its own subtree instead -- absence over guessing a field write for
-//     a shape this fact does not attempt to resolve.
+//   - 'assignment': a BARE-IDENTIFIER lhs is a WRITE. An INDEXED lhs, with or
+//     without one trailing member access -- `a[i] :=`, `a[i][j] :=`,
+//     `a[i].f :=`, `a[i][j].f :=` -- is a WRITE of the base identifier `a`
+//     (IndexedFieldWriteBase, v(D4)); the lhs subtree is STILL walked as reads,
+//     so an indexed write lands on BOTH 'Reads:' and 'Writes:' (indexing reads
+//     the array reference, and the index expression may name another field),
+//     whereas a bare `FField := X` lands on 'Writes:' only. Any other lhs
+//     shape -- a bare dotted write `x.f :=`, a dot BEFORE the index
+//     `x.Sub[i] :=`, a dereference `a[i]^ :=`, `Self.F[i] :=` -- is walked as
+//     a READ of its own subtree instead: absence over guessing a field write
+//     for a shape this fact does not attempt to resolve.
+//     WalkMutatedParams applies the same bare/indexed rule to var/out
+//     PARAMETERS through its own BaseIdentOfLhs -- a hand-expanded near-twin
+//     of IndexedFieldWriteBase, not the same routine: it descends any wrapper
+//     up to 8 hops and stops dead at the first exprDot, while this one admits
+//     exactly one leading exprDot over an exprSubscript and at most two
+//     subscript hops. Same claim, two shapes; see the D4 helper's comment.
 //   - 'exprCall' whose entity is 'Inc'/'Dec': the first argument, if a bare
 //     identifier, is a WRITE (the mutating-intrinsic rule); any further
 //     argument (Inc/Dec's optional step N) and the callee identifier itself
@@ -692,16 +705,20 @@ procedure WalkFieldRW(const N: TTSNode; const ASrc: TBytes; AFields: TDictionary
   // everything else -- `Ident.Sub[i].Member := v` (dot BEFORE the index) is
   // exactly as ambiguous as the bare-dot case and is declined too.
   //
-  // The residual imprecision this accepts -- `array of <class>` element
-  // writes still get counted as a write to the array field, when strictly
-  // only the pointee changed -- is the SAME shape of imprecision
-  // WalkMutatedParams's own `AList[0] :=` rule accepts, one hop further, and
-  // is absence-over-guessing's boundary condition, not a new risk class:
-  // this fact already means "state reachable through this field changed",
-  // and that is true either way. Resolving record-vs-class needs the field's
-  // declared type, which is the cross-referenced work this walk has always
-  // declined (see WalkMutatedParams' SetLength note) -- accepting the small
-  // known imprecision is what keeps the fix local to this file.
+  // The residual imprecision this accepts: a field whose CLASS type has a
+  // DEFAULT INDEXED PROPERTY -- `FList[i] := v` on a TList<T>, `FDict[k] := v`
+  // on an IDictionary<K,V> -- is by far the common case, and there `F[i] :=`
+  // is a SETTER CALL on the pointee, not a write to the field; the rarer
+  // `array of <class>` element write (`FObjs[i].Prop := v`) likewise changes
+  // only the pointee. Both are still counted as a write to the field. That is
+  // the SAME shape of imprecision WalkMutatedParams's own `AList[0] :=` rule
+  // accepts, one hop further, and is absence-over-guessing's boundary
+  // condition, not a new risk class: this fact already means "state reachable
+  // through this field changed", and that is true either way. Resolving
+  // record-vs-class (or array-vs-indexed-property) needs the field's declared
+  // type, which is the cross-referenced work this walk has always declined
+  // (see WalkMutatedParams' SetLength note) -- accepting the small known
+  // imprecision is what keeps the fix local to this file.
   // The grammar node for `A[i]` is 'exprSubscript', NOT 'exprIndex' --
   // verified by a temporary AST trace during this fix (dumping NodeType at
   // each descent step against the real fixture body), per this repo's own
@@ -933,15 +950,21 @@ end;
 // this task -- carries the DECLARATION spelling, so the rendered name is the
 // one the author wrote, not the (possibly differently-cased) use site.
 //
-// WHAT COUNTS AS A MUTATION. Deliberately the same shapes WalkFieldRW already
-// treats as writes, plus one:
+// WHAT COUNTS AS A MUTATION. Deliberately the same shapes WalkFieldRW treats
+// as writes:
 //   - 'assignment' with a BARE-IDENTIFIER lhs        -> mutation.
-//   - 'assignment' with an INDEXED lhs (`AList[0] :=`) whose base resolves to
-//     a bare identifier -> mutation. This one is NEW relative to WalkFieldRW,
-//     and it is not a guess: `A[i] := v` cannot execute without writing through
-//     A. WalkFieldRW declines it because for a FIELD the indexed base may be
-//     an unrelated expression; here the base must resolve to a var/out
-//     parameter of THIS routine or nothing is reported.
+//   - 'assignment' with an INDEXED lhs (`AList[0] :=`, `A[i][j] :=`) whose
+//     base resolves to a bare identifier -> mutation. Not a guess: `A[i] := v`
+//     cannot execute without writing through A. This rule was here FIRST
+//     (WalkFieldRW declined every indexed lhs until v(D4), when its
+//     IndexedFieldWriteBase adopted the same claim for FIELDS, one dot further:
+//     it also takes `F[i].Member :=`). The two are hand-expanded near-twins,
+//     not one routine: BaseIdentOfLhs below descends ANY wrapper up to 8 hops
+//     and stops dead at the first exprDot, so `A[i].Member :=` is NOT a
+//     mutation here, while IndexedFieldWriteBase admits exactly one leading
+//     exprDot over an exprSubscript and at most two subscript hops. Here the
+//     base must resolve to a var/out parameter of THIS routine or nothing is
+//     reported.
 //   - 'exprCall' on Inc/Dec, first argument a bare identifier -> mutation.
 //
 // WHAT IS DELIBERATELY NOT DETECTED, absence over a wrong fact:
