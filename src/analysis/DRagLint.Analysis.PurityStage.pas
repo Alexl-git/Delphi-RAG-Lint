@@ -73,6 +73,13 @@ const
   /// <summary>How many unbound callee names the summary line lists.</summary>
   TOP_UNBOUND_COUNT = 10;
   PERCENT_SCALE     = 100;
+  /// <summary>Budget for the cached source lines, in CHARACTERS (so ~64 MB of
+  /// UTF-16). The scan reads each file once and the lazy lex re-reads a file
+  /// that has since been evicted; the budget bounds a structure that otherwise
+  /// grows with the corpus's total SOURCE SIZE -- measured at ~800 MB of a
+  /// 2.9 GB peak on the 7,001-file Win64 library index.</summary>
+  BYTES_PER_MB            = 1024 * 1024;
+  PURITY_LINE_CACHE_CHARS = 32 * BYTES_PER_MB;
 
   KIND_TEXT_PARAM     = 'param';
   KIND_TEXT_LOCAL_VAR = 'local_var';
@@ -133,8 +140,8 @@ type
     Escaping  : TNameSet;         // nil until the first escaping local
     ClassId   : Int64;
   end;
-
-  TPurityRun = class  // dl:ok god-class@13c7, high-response@13c7 -- REVIEWED 2026-09-22: the fields ARE the loaded index tables and the methods are the five phases of ONE pass over them (load, contexts, scan, fixpoint, write); splitting them would give the fixpoint a second owner of the same tables for no behavioural gain, and the model (lattice, lexer, body scanner) already lives in DRagLint.Analysis.Purity
+  // dl:ok god-class@e3b0, high-response@e3b0 -- REVIEWED 2026-09-22: the fields ARE the loaded index tables (routines, facts, edges, members, params, locals, fields, stamps, the bounded line cache) and the methods are the five phases of ONE pass over them: load, contexts, scan, fixpoint, write. Splitting them would give the fixpoint a second owner of the same tables for no behavioural gain, and the model (lattice, lexer, body scanner) already lives in DRagLint.Analysis.Purity.
+  TPurityRun = class
   private
     FStore       : ISymbolStore;
     FRoutines    : TArray<TSymbol>;
@@ -151,7 +158,15 @@ type
     FPropsOf     : TDictionary<Int64, TNameSet>;
     FAncestorsOf : TDictionary<Int64, TArray<TTypeAncestor>>;
     FStamps      : TDictionary<string, Int64>;
+    { The line cache is BOUNDED (PURITY_LINE_CACHE_CHARS). Holding every file's
+      lines for the whole run cost ~800 MB of the 2.9 GB peak measured on the
+      7,001-file Win64 library index (295 MB of source, one Delphi string per
+      line); the stage reads each file once during the scan and needs it again
+      only for the lazy argument lex, which re-reads on a miss. }
     FLines       : TDictionary<Int64, TArray<string>>;
+    FLineOrder   : TQueue<Int64>;
+    FLineChars   : Int64;
+    FLineReReads : Integer;
     FSymCache    : TDictionary<Int64, TSymbol>;
     FOwnedSets   : TObjectList<TNameSet>;
     FOwnedMaps   : TObjectList<TParamMap>;
@@ -174,6 +189,9 @@ type
     function  FieldsOfClass(AClassId: Int64): TNameSet;
     function  PropsOfClass(AClassId: Int64): TNameSet;
     function  DeclaringAncestorOfField(AClassId: Int64; const AName: string): string;
+    function  ReadFileLines(AFileId: Int64; out ALines: TArray<string>): Boolean;
+    procedure CacheLines(AFileId: Int64; const ALines: TArray<string>);
+    function  LinesOf(AFileId: Int64; out ALines: TArray<string>): Boolean;
     function  IsBound(const ARef: TReference): Boolean;
     function  Classify(AIndex: Integer; const AText: string): TArgInfo;
     function  SelfReceiver: TArgInfo;
@@ -239,6 +257,7 @@ begin
   FAncestorsOf:= TDictionary<Int64, TArray<TTypeAncestor>>.Create;
   FStamps     := TDictionary<string, Int64>.Create(TIStringComparer.Ordinal);
   FLines      := TDictionary<Int64, TArray<string>>.Create;
+  FLineOrder  := TQueue<Int64>.Create;
   FSymCache   := TDictionary<Int64, TSymbol>.Create;
   FOwnedSets  := TObjectList<TNameSet>.Create(True);
   FOwnedMaps  := TObjectList<TParamMap>.Create(True);
@@ -253,6 +272,7 @@ begin
   FOwnedMaps.Free;
   FOwnedSets.Free;
   FSymCache.Free;
+  FLineOrder.Free;
   FLines.Free;
   FStamps.Free;
   FAncestorsOf.Free;
@@ -369,6 +389,60 @@ begin
       if (S.Id > 0) and (S.Kind in FIELD_KINDS) then
         Exit(if Anc.ResolvedName <> '' then Anc.ResolvedName else Anc.Name);
     end;
+end;
+
+{ Reads one indexed file's lines. False when it cannot be read -- the caller
+  decides what that means (the scan treats it as stale; the lexer as unlexable). }
+function TPurityRun.ReadFileLines(AFileId: Int64; out ALines: TArray<string>): Boolean;
+begin
+  ALines:= nil;
+  try
+    ALines:= TFile.ReadAllLines(FStore.GetFilePath(AFileId), TEncoding.ANSI);
+    Result:= True;
+  except
+    { Both callers have a defined answer for "could not read" -- the scan treats
+      the file as stale, the lexer as unlexable -- and each RECORDS it, so the
+      condition is reported rather than swallowed; re-raising would fail a
+      whole-DB pass over one unreadable file. }
+    on E: Exception do Result:= False;
+  end;
+end;
+
+{ Caches one file's lines and evicts the OLDEST entries until the character
+  budget holds. The newest entry is never evicted: the scan is mid-file in it. }
+procedure TPurityRun.CacheLines(AFileId: Int64; const ALines: TArray<string>);
+var
+  Chars: Int64;
+  Old  : Int64;
+  Gone : TArray<string>;
+begin
+  if FLines.ContainsKey(AFileId) then Exit;
+  Chars:= 0;
+  for var L in ALines do Inc(Chars, Length(L));
+  FLines.Add(AFileId, ALines);
+  FLineOrder.Enqueue(AFileId);
+  Inc(FLineChars, Chars);
+  while (FLineChars > PURITY_LINE_CACHE_CHARS) and (FLineOrder.Count > 1) do
+  begin
+    Old:= FLineOrder.Dequeue;
+    if FLines.TryGetValue(Old, Gone) then
+    begin
+      for var L in Gone do Dec(FLineChars, Length(L));
+      FLines.Remove(Old);
+    end;
+  end;
+end;
+
+{ The lines of AFileId, from the cache or re-read from disk. }
+function TPurityRun.LinesOf(AFileId: Int64; out ALines: TArray<string>): Boolean;
+begin
+  if FLines.TryGetValue(AFileId, ALines) then Exit(True);
+  Result:= ReadFileLines(AFileId, ALines);
+  if Result then
+  begin
+    Inc(FLineReReads);
+    CacheLines(AFileId, ALines);
+  end;
 end;
 
 function TPurityRun.IsBound(const ARef: TReference): Boolean;
@@ -617,12 +691,9 @@ begin
     { [I, J) is this file's routines (FindSymbolsWithFacts orders by file). }
     Path:= FStore.GetFilePath(FileId);
     Stale:= not (TryGetFileMTimeUnix(Path, DiskUnix) and FStamps.TryGetValue(Path, Stored) and (DiskUnix = Stored));
-    if not Stale then
-      try
-        Lines:= TFile.ReadAllLines(Path, TEncoding.ANSI);
-      except   // dl:ok try-except-swallowed@0cc2 -- an unreadable file IS the stale case (ruling 7): every routine in it is marked unknown with the stale witness below, which is the report; nothing is lost by not re-raising
-        on E: Exception do Stale:= True;
-      end;
+    { An unreadable file IS the stale case (ruling 7): every routine in it is
+      marked unknown with the stale witness below, which is the report. }
+    if not Stale then Stale:= not ReadFileLines(FileId, Lines);
     if Stale then
     begin
       Inc(FStats.StaleFiles);
@@ -636,7 +707,7 @@ begin
       I:= J;
       Continue;
     end;
-    FLines.AddOrSetValue(FileId, Lines);
+    CacheLines(FileId, Lines);
     ByRoutine:= TObjectDictionary<Int64, TList<TReference>>.Create([doOwnsValues]);
     try
       for var R in FStore.GetReferencesFromFile(FileId) do
@@ -1050,7 +1121,7 @@ var
 begin
   T0:= TStopwatch.GetTimeStamp;
   U:= FUses[AIndex][AUse];
-  if FLines.TryGetValue(U.FileId, Lines) and LexCallArguments(Lines, U.Line, U.ColAfter, Texts) then
+  if LinesOf(U.FileId, Lines) and LexCallArguments(Lines, U.Line, U.ColAfter, Texts) then
   begin
     SetLength(U.Args, Length(Texts));
     for var K:= 0 to High(Texts) do U.Args[K]:= Classify(AIndex, Texts[K]);
@@ -1112,7 +1183,17 @@ begin
       begin
         if FUses[I][J].IsBuiltin then CalleeSum:= FUses[I][J].Builtin
         else if FIndexOf.TryGetValue(FUses[I][J].TargetId, T) then CalleeSum:= FSummary[T]
-        else Continue;   { cannot happen: BoundCall admits only targets with a facts row }
+        else
+        begin
+          { BoundCall and AddInheritedUse both admit only targets that own a
+            facts row, so this is unreachable today -- and it FAILS CLOSED
+            anyway. Skipping the use would drop the callee's effects and move
+            the caller TOWARDS proven, which is the one direction a purity
+            verdict must never drift on its own. }
+          FSummary[I].AddFlag(efUnknown,
+            'calls ' + FUses[I][J].Name + ' (callee lost its facts row between load and fixpoint)', Changed);
+          Continue;
+        end;
         if (Length(CalleeSum.Params) > 0) and not FUses[I][J].ArgsLexed then LexUse(I, J);
         TranslateCallee(CalleeSum, FUses[I][J].Name, FUses[I][J].Args, FUses[I][J].ArgsKnown,
           FUses[I][J].Receiver, FSummary[I], Changed);
@@ -1181,8 +1262,10 @@ begin
      FStats.UnlexableCalls, FStats.StaleFiles, FStats.GatedIncomplete, FStats.Rounds]));
   Flush(Output);
   if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
-    Writeln(ErrOutput, Format('purity: load %.1fs  scan %.1fs  lex %.1fs  fixpoint %.1fs  write %.1fs  (%d visit(s); lex is part of fixpoint)',
-      [ALoad, AScan, FLexTicks / TStopwatch.Frequency, AFix, AWrite, FVisits]));
+    Writeln(ErrOutput, Format('purity: load %.1fs  scan %.1fs  lex %.1fs  fixpoint %.1fs  write %.1fs  ' +
+                              '(%d visit(s); lex is part of fixpoint; %d file re-read(s) after a line-cache eviction, %d MB cached at the end)',
+      [ALoad, AScan, FLexTicks / TStopwatch.Frequency, AFix, AWrite, FVisits, FLineReReads,
+       Round(FLineChars * SizeOf(Char) / BYTES_PER_MB)]));
 end;
 
 function TPurityRun.Execute: TPurityStats;

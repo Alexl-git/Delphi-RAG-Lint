@@ -69,7 +69,16 @@ Check '10. one stage: purity -- done in line' ((@($out | Select-String 'stage: p
 $pl = PurityLine $out
 Check '15. the resolve: purity line carries unbound count and top names' ($pl -match 'resolve: purity -- .*\d+ unbound call ref\(s\) \[top: ') $pl
 Check '15. the top list names Trim, Free and SubString (the three unbound callees)' (($pl -match 'trim \(1\)') -and ($pl -match 'free \(1\)') -and ($pl -match 'substring \(1\)')) $pl
-Check '7. the resolve: purity line carries the unlexable, stale, gated and pass counts' (($pl -match '\d+ unlexable call\(s\)') -and ($pl -match '0 stale file\(s\)') -and ($pl -match '0 gated') -and ($pl -match '\d+ pass\(es\)')) $pl
+# The unlexable count is asserted EXACT, not '\d+': a bare \d+ is satisfied by 0,
+# which is what the fixtures produced before uEffects.UnlexableArgs existed -- the
+# counter could have been dead and the check would still have passed.
+Check '7. the resolve: purity line carries the unlexable, stale, gated and pass counts (unlexable EXACTLY 1 -- see uEffects.UnlexableArgs)' (($pl -match '1 unlexable call\(s\)') -and ($pl -match '0 stale file\(s\)') -and ($pl -match '0 gated') -and ($pl -match '\d+ pass\(es\)')) $pl
+$v = Verdict 'uEffects.UnlexableArgs'
+Check '7. a directive inside a p0 callee argument list is UNLEXABLE: the caller is ? with the not-lexed witness' (($v.ef -eq 0) -and ($v.es -eq '?') -and ($v.ew -eq 'calls SetLength (argument list not lexed)')) "$($v.es) | $($v.ew)"
+# HEALTHY PATH, so the check above cannot pass by making the lexer fail everywhere:
+# the same built-in with an ordinary argument list still lexes and still proves.
+$v = Verdict 'uEffects.TThing.GrowLocal'
+Check '7-control. an ordinary SetLength argument list still lexes (the routine stays proven)' ($v.ef -eq 1) "$($v.es) | $($v.ew)"
 
 Write-Host 'SUMMARIES AND TRANSLATION (spec 3)' -ForegroundColor Cyan
 $v = Verdict 'uEffects.WriteGlobal';        Check '1. WriteGlobal = g, witness names GCounter'   (($v.ef -eq 0) -and ($v.es -eq 'g') -and ($v.ew -eq 'writes GCounter (non-local)')) "$($v.es) | $($v.ew)"

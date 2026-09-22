@@ -37,6 +37,7 @@ procedure NewLocal;                                  { New(LocalP) and nothing e
 function OnlyIntrinsics(const S: string): Integer;   { Exit/Length/Ord only -> proven }
 function Ident(P: Pointer): Pointer;                 { proven, empty summary }
 procedure AddrEscape;                                { Addr(L) lets L escape (T2-ii), so FillOut(L) is NOT a local write -> ? }
+procedure UnlexableArgs;                             { a compiler directive INSIDE the argument list of a p0 callee -> UNLEXABLE -> ? }
 implementation
 procedure TThing.SetCount(AValue: Integer);
 begin
@@ -137,5 +138,11 @@ var
 begin
   Ident(Addr(L));
   FillOut(L);
+end;
+procedure UnlexableArgs;
+var
+  Arr: TArray<Integer>;
+begin
+  SetLength(Arr, 4 {$R+});
 end;
 end.
