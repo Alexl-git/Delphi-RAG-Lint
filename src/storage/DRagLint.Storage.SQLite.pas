@@ -109,6 +109,7 @@ type
       FQSetRefSymbol         : TFDQuery     ;
       FQInsertMemberAccess   : TFDQuery     ; { 2026-09-16: member_accesses writer }
       FHasMemberAccesses     : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasMemberAccesses }
+      FHasEffectCols         : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasEffectCols }
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -564,6 +565,22 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasMemberAccesses: Boolean;
+      /// <summary>Purity v2: True when symbol_facts carries the three effect
+      /// columns. They are Migrate ALTERs with NO schema bump, and a READ-ONLY
+      /// open never runs Migrate, so every schema-23 DB indexed before this
+      /// engine lacks them while still reading as schema-current. Probed lazily
+      /// from sqlite_master's stored CREATE TABLE text (SQLite rewrites it on
+      /// ADD COLUMN); memoised in FHasEffectCols; Migrate resets the memo after
+      /// its ALTERs.</summary>
+      /// <returns>True iff symbol_facts has effect_witness -- the LAST of the
+      /// three ALTERs, so its presence implies all three.</returns>
+      function HasEffectCols: Boolean;
+      /// <summary>The symbol_facts SELECT column list for THIS database:
+      /// SYMBOL_FACTS_BASE_COLS, plus the three effect columns only when
+      /// HasEffectCols -- so a reader never names a column the DB lacks.
+      /// ReadSymbolFactsFromQuery tolerates either shape.</summary>
+      /// <returns>A comma-separated column list without the SELECT keyword.</returns>
+      function SymbolFactsSelectCols: string;
       // v(merge main -> autodoc-phase3): the AStrict PARAMETER IS GONE, and with
       // it the Ex form. Task 4d had introduced it to pick the ambiguity policy
       // when several candidates are in the reference file's uses-scope -- False
@@ -1753,6 +1770,8 @@ type
       /// them alone on purpose, so a per-file reindex resets them to NULL and
       /// the stage restores them.</summary>
       /// <param name="ARows">Verdicts; may be empty.</param>
+      /// <exception cref="EInvalidOperation">The store has no effect_* columns
+      /// (Migrate has not run on it -- a read-only open). Defensive; never a silent no-op.</exception>
       /// <remarks>Implements ISymbolStore.PutEffectFacts.</remarks>
       procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
       /// <summary>True when at least one routine with a body has no purity
@@ -1760,12 +1779,13 @@ type
       /// stage run after a per-file reindex even when the calls stage was
       /// skipped. False on a DB with no routines.</summary>
       /// <returns>True when a symbol_facts row with body_loc &gt; 0 has
-      /// effect_free IS NULL.</returns>
+      /// effect_free IS NULL, and True when the DB has no effect_* columns yet
+      /// (pre-purity index: a writable open migrates them in first).</returns>
       /// <remarks>Implements ISymbolStore.PurityNeedsRun.</remarks>
       function PurityNeedsRun: Boolean;
       /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
       /// the purity stage (one query instead of one per routine).</summary>
-      /// <returns>All rows; EffectFree is -1 where the column is NULL.</returns>
+      /// <returns>All rows; EffectFree is -1 where the column is NULL or ABSENT (pre-purity DB).</returns>
       /// <remarks>Implements ISymbolStore.GetAllSymbolFacts.</remarks>
       function GetAllSymbolFacts: TArray<TSymbolFacts>;
       /// <summary>Every symbol that owns a symbol_facts row with body_loc &gt; 0 --
@@ -3099,15 +3119,19 @@ uses
   ;
 
 const
-  { The ONE symbol_facts column list every reader selects, so that
-    ReadSymbolFactsFromQuery (the one column -> TSymbolFacts mapper, shared by
-    GetSymbolFacts and GetAllSymbolFacts) always finds every field it names.
-    A new stored fact is added HERE, in the mapper, and in FQPutSymbolFacts --
-    except the three purity columns, which PutSymbolFacts must never write. }
-  SYMBOL_FACTS_SELECT_COLS =
+  { The ONE symbol_facts column list every reader selects (through
+    SymbolFactsSelectCols), so that ReadSymbolFactsFromQuery -- the one
+    column -> TSymbolFacts mapper, shared by GetSymbolFacts and
+    GetAllSymbolFacts -- always finds every field it names. A new stored fact
+    is added HERE, in the mapper, and in FQPutSymbolFacts. The three purity
+    columns are kept APART: PutSymbolFacts must never write them, and a DB
+    indexed before this engine does not have them (Migrate ALTERs, no schema
+    bump; a read-only open never migrates), so SymbolFactsSelectCols appends
+    SYMBOL_FACTS_EFFECT_COLS only when HasEffectCols says the DB has them. }
+  SYMBOL_FACTS_BASE_COLS =
     'symbol_id, reads_fields, writes_fields, returns_owner, cyclomatic, body_loc, ' +
-    ' dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring, ' +
-    ' effect_free, effect_summary, effect_witness';
+    ' dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring';
+  SYMBOL_FACTS_EFFECT_COLS = ', effect_free, effect_summary, effect_witness';
 
 { PROGRESS LINE FOR THE FOUR WHOLE-DB RESOLVE PASSES.
 
@@ -3169,6 +3193,7 @@ begin
   inherited Create;
   FReadOnly      := AReadOnly;
   FHasMemberAccesses:= -1; { probed lazily -- see HasMemberAccesses }
+  FHasEffectCols    := -1; { probed lazily -- see HasEffectCols }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -3187,7 +3212,8 @@ begin
   { v0.86 Task 4: a read-only open still needs its SELECT queries built. In the
     write path PrepareStatements is Migrate's last step; read verbs never call
     Migrate, so build the statements here. PrepareStatements executes no SQL
-    (FireDAC auto-prepares on first use) -- safe on a read-only connection. }
+    (FireDAC auto-prepares on first use) beyond the read-only sqlite_master
+    probe behind SymbolFactsSelectCols -- safe on a read-only connection. }
   { Build the SELECT/UPSERT statements when the schema is current. Needed by any
     open that will run queries WITHOUT first calling Migrate: every read-only verb,
     AND a writable open that skips Migrate (proptree --write-back). On a pre-current
@@ -3229,6 +3255,40 @@ begin
     end;
   end;
   Result:= FHasMemberAccesses = 1;
+end;
+
+function TSQLiteSymbolStore.HasEffectCols: Boolean;
+var
+  Q: TFDQuery;
+begin
+  if FHasEffectCols < 0 then
+  begin
+    FHasEffectCols:= 0;
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      { sqlite_master exists on every SQLite database, so this SELECT cannot
+        fail on an open connection (same argument as HasMemberAccesses). The
+        stored CREATE TABLE text is rewritten by every ADD COLUMN, so it names
+        Migrate's retrofitted columns too. effect_witness is the LAST of the
+        three ALTERs: if an interrupted Migrate left only the first, this reads
+        "absent" and no reader names a column that might not be there. }
+      Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = ''symbol_facts'' ' +
+                     'AND instr(sql, ''effect_witness'') > 0 LIMIT 1';
+      Q.Open;
+      if not Q.IsEmpty then FHasEffectCols:= 1;
+      Q.Close;
+    finally
+      Q.Free;
+    end;
+  end;
+  Result:= FHasEffectCols = 1;
+end;
+
+function TSQLiteSymbolStore.SymbolFactsSelectCols: string;
+begin
+  Result:= SYMBOL_FACTS_BASE_COLS;
+  if HasEffectCols then Result:= Result + SYMBOL_FACTS_EFFECT_COLS;
 end;
 
 function TSQLiteSymbolStore.Fts5TableExists: Boolean;
@@ -3681,6 +3741,17 @@ begin
   TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_free INTEGER'  );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_summary TEXT'  );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_witness TEXT'  );
+  { The columns may have just appeared: forget the HasEffectCols memo, and if
+    the constructor already built FQGetSymbolFacts (it prepares BEFORE Migrate
+    on a schema-current DB, and the PrepareStatements call below is then a
+    no-op) re-point it at the full column list, or this process would read
+    EffectFree = -1 for every row the purity stage is about to write. }
+  FHasEffectCols:= -1;
+  if FQGetSymbolFacts <> nil then
+  begin
+    if FQGetSymbolFacts.Active then FQGetSymbolFacts.Close;
+    FQGetSymbolFacts.SQL.Text:= 'SELECT ' + SymbolFactsSelectCols + ' FROM symbol_facts WHERE symbol_id = :sid';
+  end;
   { PER-FILE RESUME (INBOX-index-runs-are-not-resumable). The indexer fingerprint
     THIS file's rows were produced by -- the same string
     DRagLint.CLI.IndexerFingerprint builds, e.g.
@@ -4310,10 +4381,13 @@ begin
   FQPutSymbolFacts.Params.ParamByName('wir'   ).DataType:= ftWideMemo;
   FQPutSymbolFacts.Prepare;
 
-  { The column list is SYMBOL_FACTS_SELECT_COLS so GetSymbolFacts and
-    GetAllSymbolFacts share ReadSymbolFactsFromQuery, one row mapper. }
+  { The column list comes from SymbolFactsSelectCols (probed per DB: a schema-23
+    index made before purity v2 has no effect_* columns and a read-only open
+    never migrates) so GetSymbolFacts and GetAllSymbolFacts share
+    ReadSymbolFactsFromQuery, one row mapper. Migrate re-points this query
+    after its ALTERs when the constructor prepared it first. }
   FQGetSymbolFacts:= NewQuery(
-    'SELECT ' + SYMBOL_FACTS_SELECT_COLS + ' FROM symbol_facts WHERE symbol_id = :sid');
+    'SELECT ' + SymbolFactsSelectCols + ' FROM symbol_facts WHERE symbol_id = :sid');
 
   { 2026-08-17: this query used to implement exactly TWO tags -- 'deprecated' and
     'since'. Every other tag name fell through every OR branch and returned 0
@@ -7091,12 +7165,16 @@ begin
 end; // function
 
 { The one symbol_facts row -> TSymbolFacts mapper (mirrors ReadSymbolFromQuery).
-  AQ must be positioned on a row selected with SYMBOL_FACTS_SELECT_COLS. Sets
+  AQ must be positioned on a row selected with SymbolFactsSelectCols. Sets
   Present = True; the transient Own*/Held* arrays stay empty (never stored).
-  effect_free NULL -> -1 ("not computed"), the two texts NULL -> ''. }
+  The three effect columns are read with FindField tolerance (the
+  impl_start_line pattern): ABSENT column and NULL column both read
+  EffectFree = -1 ("not computed") and '' texts, so a pre-purity schema-23 DB
+  opened read-only (never migrated) is served, never crashed. }
 function ReadSymbolFactsFromQuery(AQ: TFDQuery): TSymbolFacts;
 begin
   Result:= Default(TSymbolFacts);
+  Result.EffectFree   := -1;
   Result.SymbolId     := AQ.FieldByName('symbol_id'     ).AsLargeInt;
   Result.ReadsFields  := AQ.FieldByName('reads_fields'  ).AsString;
   Result.WritesFields := AQ.FieldByName('writes_fields' ).AsString;
@@ -7111,10 +7189,13 @@ begin
   Result.UiAffinity   := AQ.FieldByName('ui_affinity'   ).AsString;
   Result.Touches      := AQ.FieldByName('touches'       ).AsString;
   Result.Wiring       := AQ.FieldByName('wiring'        ).AsString;
-  if AQ.FieldByName('effect_free').IsNull then Result.EffectFree:= -1
-  else Result.EffectFree:= AQ.FieldByName('effect_free').AsInteger;
-  Result.EffectSummary:= AQ.FieldByName('effect_summary').AsString;
-  Result.EffectWitness:= AQ.FieldByName('effect_witness').AsString;
+  if AQ.FindField('effect_free') <> nil then { tolerate a pre-purity (un-migrated) DB }
+  begin
+    if not AQ.FieldByName('effect_free').IsNull then
+      Result.EffectFree:= AQ.FieldByName('effect_free').AsInteger;
+    Result.EffectSummary:= AQ.FieldByName('effect_summary').AsString;
+    Result.EffectWitness:= AQ.FieldByName('effect_witness').AsString;
+  end;
   Result.Present      := True;
 end; // function
 
@@ -7914,6 +7995,12 @@ procedure TSQLiteSymbolStore.PutEffectFacts(const ARows: TArray<TEffectFactRow>)
 var
   Q: TFDQuery;
 begin
+  { Defensive, never expected: the stage runs after Migrate on a writable store,
+    so the columns exist. A store that lacks them must say so, not update
+    nothing -- a silent no-op would leave every verdict NULL with no trace. }
+  if not HasEffectCols then
+    raise EInvalidOperation.Create('PutEffectFacts: symbol_facts has no effect_* columns -- ' +
+                                   'Migrate has not run on this store (read-only open?)');
   if Length(ARows) = 0 then Exit;
   Q:= TFDQuery.Create(nil);
   try
@@ -7949,6 +8036,9 @@ end; // procedure
 
 function TSQLiteSymbolStore.PurityNeedsRun: Boolean;
 begin
+  { No columns yet = nothing computed: a writable open migrates them in and the
+    stage fills them. Probing the column would itself be "no such column". }
+  if not HasEffectCols then Exit(True);
   Result:= ProbeExists('SELECT 1 FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NULL LIMIT 1');
 end; // function
 
@@ -7961,7 +8051,7 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT ' + SYMBOL_FACTS_SELECT_COLS + ' FROM symbol_facts';
+    Q.SQL.Text:= 'SELECT ' + SymbolFactsSelectCols + ' FROM symbol_facts';
     Q.Open;
     while not Q.Eof do
     begin

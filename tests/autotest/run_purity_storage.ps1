@@ -66,12 +66,50 @@ try {
     (($nRows -ge 1) -and ($nNull -eq $nRows)) "rows=$nRows null=$nNull"
   $null = & $Exe index $src --db $db 2>&1
   $cols2 = (& $Exe sql --db $db --format text --query $colSql 2>&1) -join "`n"
-  Check '3. a second index run keeps the columns (Migrate is idempotent)' ($cols2 -match '\beffect_witness\b') ''
+  $nulls2 = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NULL AND effect_summary IS NULL AND effect_witness IS NULL" 2>&1) -join "`n"
+  $nNull2 = [int]([regex]::Match($nulls2, '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
+  Check '3. a second index run keeps the columns AND leaves them NULL (Migrate is idempotent, PutSymbolFacts does not touch them)' `
+    (($cols2 -match '\beffect_witness\b') -and ($nNull2 -eq $nRows)) "null=$nNull2 rows=$nRows"
+
+  # 5. A schema-23 DB indexed BEFORE purity v2 has no effect_* columns, still
+  #    reads as schema-current, and a READ-ONLY open never runs Migrate -- so
+  #    every reader must tolerate the columns being ABSENT, not only NULL.
+  #    Fixture: index a second DB with THIS engine, then DROP the three columns
+  #    through python's sqlite3 (drag-lint sql is read-only by design). The
+  #    precondition (5a) proves the fixture really lacks them, so 5b cannot
+  #    pass vacuously against a DB that still has the columns.
+  $db2 = Join-Path $WorkDir 'legacy.sqlite'
+  $null = & $Exe index $src --db $db2 2>&1
+  $py = Get-Command python -ErrorAction SilentlyContinue
+  if ($null -eq $py) {
+    Check '5a. legacy fixture: python (sqlite3) available to drop the columns' $false 'python not on PATH -- cannot build the column-less fixture'
+  } else {
+    $drop = "import sqlite3; c = sqlite3.connect(r'$db2'); [c.execute('ALTER TABLE symbol_facts DROP COLUMN ' + n) for n in ('effect_free', 'effect_summary', 'effect_witness')]; c.commit(); c.close()"
+    $pyOut = (& python -c $drop 2>&1) -join "`n"
+    $cols5 = (& $Exe sql --db $db2 --format text --query $colSql 2>&1) -join "`n"
+    Check '5a. legacy fixture lacks the three columns (precondition for 5b)' `
+      (($cols5 -match '\bwiring\b') -and ($cols5 -notmatch 'effect_free') -and ($cols5 -notmatch 'effect_summary') -and ($cols5 -notmatch 'effect_witness')) $pyOut
+    # document --unit WITHOUT --apply is a preview: read-only open, reaches
+    # GetSymbolFacts for every public decl (Doc.Facts), writes nothing.
+    $docOut = (& $Exe document --unit (Join-Path $src 'uOne.pas') --db $db2 --json 2>&1) -join "`n"
+    $docExit = $LASTEXITCODE
+    Check '5b. read-only verb on the column-less DB: exit 0, no "no such column"' `
+      (($docExit -eq 0) -and ($docOut -notmatch 'no such column')) ("exit=$docExit " + (($docOut -split "`n" | Where-Object { $_ -match 'FATAL|no such column|error' } | Select-Object -First 1)))
+    # A WRITABLE open migrates the columns back in (the path that lets the
+    # purity stage fill them on the next index run).
+    $null = & $Exe index $src --db $db2 2>&1
+    $cols5c = (& $Exe sql --db $db2 --format text --query $colSql 2>&1) -join "`n"
+    Check '5c. a writable index run on the legacy DB adds the columns (Migrate ALTER)' ($cols5c -match '\beffect_witness\b') ''
+  }
 } finally { Pop-Location }
 # POSITIVE CONTROL against the source: the prepared UPSERT must not name them.
+# The capture must be the REAL column list -- it names the table and a known
+# stored column -- so a refactor that moved the list into a const (leaving the
+# NewQuery(...) argument free of column names) fails here instead of passing
+# vacuously.
 $sqlite = [System.IO.File]::ReadAllText((Join-Path $repo 'src\storage\DRagLint.Storage.SQLite.pas'))
 $upsert = [regex]::Match($sqlite, "FQPutSymbolFacts:= NewQuery\((.*?)\);", 'Singleline').Groups[1].Value
 Check '4. FQPutSymbolFacts does NOT write the three columns' `
-  (($upsert -ne '') -and ($upsert -notmatch 'effect_free') -and ($upsert -notmatch 'effect_summary') -and ($upsert -notmatch 'effect_witness')) ''
+  (($upsert -match 'INSERT OR REPLACE INTO symbol_facts') -and ($upsert -match '\bwiring\b') -and ($upsert -notmatch 'effect_free') -and ($upsert -notmatch 'effect_summary') -and ($upsert -notmatch 'effect_witness')) ''
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

@@ -2329,17 +2329,20 @@ type
     /// them alone on purpose, so a per-file reindex resets them to NULL and
     /// the stage restores them.</summary>
     /// <param name="ARows">Verdicts; may be empty.</param>
+    /// <exception cref="EInvalidOperation">The store has no effect_* columns
+    /// (Migrate has not run on it -- a read-only open). Defensive; never a silent no-op.</exception>
     procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
     /// <summary>True when at least one routine with a body has no purity
     /// verdict yet (effect_free IS NULL) -- the gate that makes the `purity`
     /// stage run after a per-file reindex even when the calls stage was
     /// skipped. False on a DB with no routines.</summary>
     /// <returns>True when a symbol_facts row with body_loc &gt; 0 has
-    /// effect_free IS NULL.</returns>
+    /// effect_free IS NULL, and True when the DB has no effect_* columns yet
+    /// (pre-purity index: a writable open migrates them in first).</returns>
     function PurityNeedsRun: Boolean;
     /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
     /// the purity stage (one query instead of one per routine).</summary>
-    /// <returns>All rows; EffectFree is -1 where the column is NULL.</returns>
+    /// <returns>All rows; EffectFree is -1 where the column is NULL or ABSENT (pre-purity DB).</returns>
     function GetAllSymbolFacts: TArray<TSymbolFacts>;
     /// <summary>Every symbol that owns a symbol_facts row with body_loc &gt; 0 --
     /// the population the purity stage judges.</summary>
