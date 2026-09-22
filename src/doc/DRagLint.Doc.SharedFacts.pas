@@ -370,11 +370,39 @@ const
     it. }
   INBOUND_LABELS: array[0..2] of string = ('Called from:', 'Used by:', 'Used in units:');
 
-  { EVERY label RenderFactsBlock and FormatPhase2FactLines can emit. Used only to
-    find where one fact ends in the FLATTENED stored text, so a missing entry
-    here makes an inbound slice swallow the fact that follows -- which the
-    residual compare then reports as drift. That is the fail-safe direction, but
-    it is still wrong, so keep this list in step with Doc.Regions. }
+  { THE CONTRACT, stated exactly (review-task-1 I1, 2026-09-22): every PREFIXED
+    label RenderFactsBlock and FormatPhase2FactLines can emit -- a label ending
+    in ':' or '.', or a fixed word followed by a space -- plus the bare-word
+    markers 'Recursive', 'UI thread only' and 'Pure'. It is NOT every label:
+    the three bare-word markers 'abstract', 'virtual' and 'constructor' are
+    deliberately absent, see below. tests\autotest\
+    run_autodoc_all_labels_covers_renderer.ps1 holds this list and that
+    exemption list against Doc.Regions two-way and fails on any drift.
+
+    WHAT THE LIST IS FOR. NextLabelPos/FactContentEnd use it to find where one
+    fact ENDS inside stored text. Since P8 (2026-08-24) every fact the renderer
+    emits is wrapped in its own <para>, and ParseBlock/LabelContent now slice
+    BEFORE stripping that wrapper, so in every block rendered since then the
+    '</para>' is what terminates a fact and this list is never consulted for
+    the boundary. It still decides the boundary in a pre-P8 block (or a hand-
+    written one) whose facts carry no wrapper, and a missing entry there makes
+    an inbound slice swallow the fact that follows -- which the residual compare
+    reports as drift (fail-safe) and MergeInboundFacts feeds back as entries
+    (not fail-safe: that was the v23 defect below).
+
+    WHY THE THREE BARE WORDS STAY OUT. NextLabelPos is a raw PosEx, so an entry
+    here matches ANYWHERE in the text, entry names included: 'virtual' would
+    terminate a fact at `Directives: virtual; overload` and 'constructor' at
+    any caller named `...Constructor...`, cutting a real inbound list short --
+    and a short stored list is the one direction this unit must never fail in
+    (a dropped entry is a caller only another project can see). Those markers
+    only ever sit after 'Overrides:'/'Overridden by:'/'Implements:'/'Overload '
+    or at the end of the block, where the wrapper or the block end bounds them
+    anyway. 'Pure', 'Recursive', 'Deprecated.' and 'Overload ' carry the same
+    substring hazard in principle (a caller named `TFoo.Pure` or
+    `TFoo.Overload`); they stay registered because they were, or are, the ONLY
+    terminator a pre-P8 block has for the fact before them, and because the
+    wrapper makes them inert on every block rendered since. }
   { v22: 'Directives:' joins the list. Registering it is not optional bookkeeping
     -- this array is how a fact's text is bounded in the FLATTENED stored form,
     so an unregistered label makes the PRECEDING fact's slice swallow it, and the
@@ -393,12 +421,23 @@ const
     back into the freshly rendered 'Used in units:' line on every subsequent
     `document` run. Not a missing-drift-report this time: a UNIT list gaining
     CLASS names, and never converging. }
-  ALL_LABELS: array[0..23] of string = (
+  { 2026-09-22 (review-task-1 I1): the six prefixed labels the v23 fix left
+    out join the list -- 'Deprecated:', 'Deprecated.', 'Overrides:',
+    'Overridden by:', 'Implements:', 'Overload ' (the 'Overload %d of %d' line,
+    up to its first number). 'Overridden by:' was the live leak: a comma list
+    of qualified names directly after 'Called from:' yielded `P.TC2.M` as a
+    plausible entry no closure lacking unit P could vouch for, and
+    MergeInboundFacts fed it back into 'Called from:' forever;
+    `Deprecated: use X, Y` leaked the bare token `Y` in the own project.
+    Pinned by run_autodoc_document_is_fixed_point.ps1's second fixture. }
+  ALL_LABELS: array[0..29] of string = (
     'Called from:', 'Used by:', 'Calls:', 'Returns:', 'Used in units:',
     'Complexity:', 'Owns returned:', 'Handles:', 'Catches:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',
     'Reads:', 'Writes:', 'Recursive', 'UI thread only', 'Pure',
-    'Directives:', 'Implemented by:', 'Extended by:');
+    'Directives:', 'Implemented by:', 'Extended by:',
+    'Deprecated:', 'Deprecated.', 'Overrides:', 'Overridden by:', 'Implements:',
+    'Overload ');
 
   MORE_MARK = '(+';
   UNCERTAIN_SUFFIX = ' ?';
@@ -459,6 +498,15 @@ begin
   finally
     Sb.Free;
   end;
+end;
+
+{ The text with every <para>/</para> wrapper removed. Applied to a RESIDUAL
+  after the inbound facts have been sliced out of it (see ParseBlock) -- never
+  to text that still has to be sliced, because the wrapper is what bounds a
+  fact whose successor label the ALL_LABELS array does not know. }
+function StripPara(const S: string): string;
+begin
+  Result:= S.Replace('<para>', '').Replace('</para>', '');
 end;
 
 { The managed block's body as it exists in ALREADY STORED text -- and '' when
@@ -707,8 +755,19 @@ begin
     trailing '</para>' and the next one's leading '<para>'. The merged render
     differs from the stored text on every run, and `document` edits the same
     unit forever. Caught by run_shared_unit_staleness's idempotency check, which
-    is the only assertion in the battery that exercises this merge path. }
-  Text     := CollapseWs(ABlock.Replace('<para>', '').Replace('</para>', ''));
+    is the only assertion in the battery that exercises this merge path.
+
+    2026-09-22 (review-task-1 I1): the wrapper is stripped AFTER slicing, not
+    before. FactContentEnd already stops at the next '<', so with the wrapper
+    still in place every fact ends at its own '</para>' -- whatever label, or
+    no label at all, follows it. Stripping first (what P8 did) threw that
+    boundary away and left ALL_LABELS as the only terminator, so every label
+    the array had not learned made the preceding inbound slice swallow the next
+    fact ('Implemented by:' in v23, 'Overridden by:'/'Deprecated:' next). The
+    value never carries a tag either way: '<' ends it. The RESIDUAL is stripped
+    once the inbound facts are out, so a wrapped and an unwrapped block still
+    collapse to the same residual text and the byte compare is unchanged. }
+  Text     := CollapseWs(ABlock);
   Sb       := TStringBuilder.Create;
   try
     Pos1:= 1;
@@ -735,7 +794,7 @@ begin
       AInbound.AddOrSetValue(Lab, Trim(Copy(Text, LP + Length(Lab), Stop - LP - Length(Lab))));
       Pos1:= Stop;
     end;
-    AResidual:= CollapseWs(Sb.ToString);
+    AResidual:= CollapseWs(StripPara(Sb.ToString));
   finally
     Sb.Free;
   end;
@@ -1326,14 +1385,16 @@ end;
   sitting between two others -- or followed by crefs -- is not swallowed.
 
   This function carried the tag-stop clause privately for a while and ParseBlock
-  did not, which is precisely how the two drifted apart. They now share it. }
+  did not, which is precisely how the two drifted apart. They now share it --
+  including the 2026-09-22 rule that the <para> wrapper stays in the text
+  until AFTER the slice, so the fact's own '</para>' bounds it (see ParseBlock). }
 function LabelContent(const AText, ALabel: string): string;
 var
   P, Stop: Integer;
   Flat   : string;
 begin
   Result:= '';
-  Flat  := CollapseWs(AText.Replace('<para>', '').Replace('</para>', ''));
+  Flat  := CollapseWs(AText);
   P     := Pos(ALabel, Flat);
   if P = 0 then Exit;
   Stop:= FactContentEnd(Flat, P + Length(ALabel));
