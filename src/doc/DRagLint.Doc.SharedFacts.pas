@@ -380,29 +380,33 @@ const
     exemption list against Doc.Regions two-way and fails on any drift.
 
     WHAT THE LIST IS FOR. NextLabelPos/FactContentEnd use it to find where one
-    fact ENDS inside stored text. Since P8 (2026-08-24) every fact the renderer
-    emits is wrapped in its own <para>, and ParseBlock/LabelContent now slice
-    BEFORE stripping that wrapper, so in every block rendered since then the
-    '</para>' is what terminates a fact and this list is never consulted for
-    the boundary. It still decides the boundary in a pre-P8 block (or a hand-
-    written one) whose facts carry no wrapper, and a missing entry there makes
-    an inbound slice swallow the fact that follows -- which the residual compare
-    reports as drift (fail-safe) and MergeInboundFacts feeds back as entries
-    (not fail-safe: that was the v23 defect below).
+    fact ENDS inside stored text -- but ONLY for an UNWRAPPED fact. Since P8
+    (2026-08-24) every fact the renderer emits is wrapped in its own <para>,
+    ParseBlock/LabelContent slice BEFORE stripping that wrapper, and
+    FactContentEnd bounds a fact that starts inside a <para> by the next '<'
+    alone (InsidePara); this list is NOT consulted for such a fact (re-review
+    N1, 2026-09-22 -- before that it WAS, and a bare word matching inside an
+    entry's name cut a wrapped inbound list short, see FactContentEnd). The
+    list decides the boundary only in a pre-P8 block (or a hand-written one)
+    whose facts carry no wrapper; a missing entry there makes an inbound slice
+    swallow the fact that follows -- which the residual compare reports as
+    drift (fail-safe) and MergeInboundFacts feeds back as entries (not
+    fail-safe: that was the v23 defect below).
 
-    WHY THE THREE BARE WORDS STAY OUT. NextLabelPos is a raw PosEx, so an entry
-    here matches ANYWHERE in the text, entry names included: 'virtual' would
-    terminate a fact at `Directives: virtual; overload` and 'constructor' at
-    any caller named `...Constructor...`, cutting a real inbound list short --
-    and a short stored list is the one direction this unit must never fail in
-    (a dropped entry is a caller only another project can see). Those markers
-    only ever sit after 'Overrides:'/'Overridden by:'/'Implements:'/'Overload '
-    or at the end of the block, where the wrapper or the block end bounds them
-    anyway. 'Pure', 'Recursive', 'Deprecated.' and 'Overload ' carry the same
-    substring hazard in principle (a caller named `TFoo.Pure` or
-    `TFoo.Overload`); they stay registered because they were, or are, the ONLY
-    terminator a pre-P8 block has for the fact before them, and because the
-    wrapper makes them inert on every block rendered since. }
+    WHY THE THREE BARE WORDS STAY OUT. NextLabelPos is a raw PosEx, so on an
+    UNWRAPPED block an entry here matches ANYWHERE in the text, entry names
+    included: 'virtual' would terminate a fact at `Directives: virtual;
+    overload` and 'constructor' at any caller named `...Constructor...`,
+    cutting a real inbound list short -- and a short stored list is the one
+    direction this unit must never fail in (a dropped entry is a caller only
+    another project can see). Those markers only ever sit after 'Overrides:'/
+    'Overridden by:'/'Implements:'/'Overload ' or at the end of the block,
+    where the wrapper or the block end bounds them anyway. 'Pure',
+    'Recursive', 'Deprecated.' and 'Overload ' carry that same substring
+    hazard, and on an unwrapped block it is REAL (a caller named `TFoo.Pure`
+    or a unit `uLeakPure` is cut there); they stay registered because they
+    are the ONLY terminator an unwrapped block has for the fact before them.
+    On a wrapped block none of this applies: the para bounds the fact. }
   { v22: 'Directives:' joins the list. Registering it is not optional bookkeeping
     -- this array is how a fact's text is bounded in the FLATTENED stored form,
     so an unregistered label makes the PRECEDING fact's slice swallow it, and the
@@ -441,6 +445,9 @@ const
 
   MORE_MARK = '(+';
   UNCERTAIN_SUFFIX = ' ?';
+  { The per-fact wrapper the renderer has emitted since P8 (2026-08-24). }
+  PARA_OPEN  = '<para>';
+  PARA_CLOSE = '</para>';
 
   { Labels whose content is derived from OTHER units and which a compile-closure
     index therefore cannot reproduce at all -- as opposed to the inbound labels,
@@ -506,7 +513,7 @@ end;
   fact whose successor label the ALL_LABELS array does not know. }
 function StripPara(const S: string): string;
 begin
-  Result:= S.Replace('<para>', '').Replace('</para>', '');
+  Result:= S.Replace(PARA_OPEN, '').Replace(PARA_CLOSE, '');
 end;
 
 { The managed block's body as it exists in ALREADY STORED text -- and '' when
@@ -726,11 +733,47 @@ end;
   that could never be reaped, a phantom block the checker could not even see,
   and the one-time reordering of every inbound list. See
   tests\autodoc\run_doc_fact_terminator.ps1. }
+{ True when position APos of AFlat lies inside a <para>...</para> element: the
+  nearest wrapper tag before APos is an opening one. A fact sliced from such a
+  position is WRAPPED and its own '</para>' is its terminator. }
+function InsidePara(const AFlat: string; APos: Integer): Boolean;
+var
+  OpenAt, CloseAt, P: Integer;
+begin
+  OpenAt:= 0;
+  P:= Pos(PARA_OPEN, AFlat);
+  while (P > 0) and (P < APos) do
+  begin
+    OpenAt:= P;
+    P:= PosEx(PARA_OPEN, AFlat, P + 1);
+  end;
+  CloseAt:= 0;
+  P:= Pos(PARA_CLOSE, AFlat);
+  while (P > 0) and (P < APos) do
+  begin
+    CloseAt:= P;
+    P:= PosEx(PARA_CLOSE, AFlat, P + 1);
+  end;
+  Result:= (OpenAt > 0) and (OpenAt > CloseAt);
+end;
+
+{ Re-review N1 (2026-09-22): a WRAPPED fact -- AFrom inside a <para> -- is
+  bounded by the next '<' ONLY, and the label list is not consulted for it.
+  NextLabelPos is a raw substring search, so with the list in play a bare-word
+  label matched INSIDE an entry's own name: the stored
+  `<para>Called from: uLeakPure.TRecursiveHelper.Drive (uLeakPure.pas)</para>`
+  was cut at `uLeak` (the 'Pure' in the unit name) before its own '</para>',
+  and MergeInboundFacts fed `uLeak` back on every run. Every block the renderer
+  has written since P8 is wrapped, so for those the list is irrelevant; it
+  remains the terminator only for an UNWRAPPED (pre-P8 or hand-written) block,
+  where nothing else marks where one fact ends. Pinned by
+  run_autodoc_document_is_fixed_point.ps1's third fixture. }
 function FactContentEnd(const AFlat: string; AFrom: Integer): Integer;
 var
   TagAt: Integer;
 begin
-  Result:= NextLabelPos(AFlat, AFrom);
+  if InsidePara(AFlat, AFrom) then Result:= 0
+  else Result:= NextLabelPos(AFlat, AFrom);
   if Result = 0 then Result:= Length(AFlat) + 1;
   TagAt:= PosEx('<', AFlat, AFrom);
   if (TagAt > 0) and (TagAt < Result) then Result:= TagAt;
@@ -758,15 +801,18 @@ begin
     is the only assertion in the battery that exercises this merge path.
 
     2026-09-22 (review-task-1 I1): the wrapper is stripped AFTER slicing, not
-    before. FactContentEnd already stops at the next '<', so with the wrapper
-    still in place every fact ends at its own '</para>' -- whatever label, or
-    no label at all, follows it. Stripping first (what P8 did) threw that
-    boundary away and left ALL_LABELS as the only terminator, so every label
-    the array had not learned made the preceding inbound slice swallow the next
-    fact ('Implemented by:' in v23, 'Overridden by:'/'Deprecated:' next). The
-    value never carries a tag either way: '<' ends it. The RESIDUAL is stripped
-    once the inbound facts are out, so a wrapped and an unwrapped block still
-    collapse to the same residual text and the byte compare is unchanged. }
+    before. FactContentEnd stops at the next '<', so with the wrapper still in
+    place every fact ends at its own '</para>' -- whatever label, or no label
+    at all, follows it. Stripping first (what P8 did) threw that boundary away
+    and left ALL_LABELS as the only terminator, so every label the array had
+    not learned made the preceding inbound slice swallow the next fact
+    ('Implemented by:' in v23, 'Overridden by:'/'Deprecated:' next). Re-review
+    N1 (same day): for a wrapped fact FactContentEnd now stops at '<' ONLY --
+    a registered bare word inside an entry's own name ('Pure' in `uLeakPure`)
+    had still cut the fact before its '</para>'. The value never carries a
+    tag either way: '<' ends it. The RESIDUAL is stripped once the inbound
+    facts are out, so a wrapped and an unwrapped block still collapse to the
+    same residual text and the byte compare is unchanged. }
   Text     := CollapseWs(ABlock);
   Sb       := TStringBuilder.Create;
   try

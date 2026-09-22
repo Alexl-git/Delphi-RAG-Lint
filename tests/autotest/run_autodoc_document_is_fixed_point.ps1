@@ -29,6 +29,17 @@
   labels), GREEN once ALL_LABELS covers every renderer label AND ParseBlock
   bounds each fact at its own <para> before the wrapper is stripped.
 
+  THE SAME MECHANISM, THROUGH A LABEL THAT WAS ALREADY REGISTERED (re-review
+  N1, 2026-09-22): NextLabelPos is a raw substring search, so a BARE-WORD label
+  ('Pure', 'Recursive') matches INSIDE an entry's own name. A stored
+  `<para>Called from: uLeakPure.TRecursiveHelper.Drive (uLeakPure.pas)</para>`
+  was cut at `uLeak` -- the `Pure` inside the unit name -- BEFORE its own
+  </para>, and MergeInboundFacts fed `uLeak` back: pass 1 rendered the full
+  caller, pass 2 rendered `Called from: uLeak, uLeakPure...` (measured live on
+  728afb74). Fixture 3 below carries a caller whose unit AND class names each
+  contain a bare-word label. RED on 728afb74; GREEN once FactContentEnd bounds
+  a WRAPPED fact by its '<' only and never consults the label list for it.
+
   THE FIXTURES. Fixture 1: one interface with two implementors, whose
   declaration ALREADY carries a hand-authored managed block shaped exactly like
   a prior `document` run's output: a deliberately STALE 'Used in units:' entry
@@ -37,6 +48,9 @@
   Fixture 2: a class with a virtual method and a deprecated method, each
   called from the unit's own driver, each carrying a stored block whose
   `Called from:` line is directly followed by the reviewer's two leak shapes.
+  Fixture 3: unit `uLeakPure`, class `TRecursiveHelper`, whose `Drive` calls
+  `Target` -- no hand-authored block; pass 1 writes the wrapped `Called from:`
+  and pass 2 must re-parse it whole.
 
   ASSERTIONS:
     0. Every engine call exits 0 -- a crash must not surface only through the
@@ -48,10 +62,13 @@
        on an empty string).
     2. THE PINS -- after that same first run, 'Used in units:' names units
        only (neither 'TImplA' nor 'TImplB'), and neither `Called from:` line in
-       fixture 2 gained `P.TC2.Hook` or `HookY`.
+       fixture 2 gained `P.TC2.Hook` or `HookY`. After the SECOND run, fixture
+       3's `Called from:` still names the full caller
+       `uLeakPure.TRecursiveHelper.Drive (uLeakPure.pas)` and carries no
+       truncated `uLeak` entry.
     3. FIXED POINT -- a second `document --apply` per symbol, with no source
        change in between, produces byte-identical file content (hash match)
-       for BOTH fixture units.
+       for ALL THREE fixture units.
 #>
 [CmdletBinding()]
 param(
@@ -179,10 +196,36 @@ end.
 $file2 = Join-Path $WorkDir 'uGenFix2.pas'
 Write-Ascii $file2 $FixtureBody2
 
+# Fixture 3 -- the re-review N1 shape. The caller's UNIT name contains the
+# registered bare word 'Pure' and its CLASS name contains 'Recursive'. No
+# stored block: pass 1 renders it, pass 2 has to re-parse it whole. The
+# earlier substring ('Pure' in `uLeakPure`) is where a raw label search cuts.
+$FixtureBody3 = @'
+unit uLeakPure;
+interface
+type
+  TRecursiveHelper = class
+    function Target(A: Integer): Integer;
+    function Drive(A: Integer): Integer;
+  end;
+implementation
+function TRecursiveHelper.Target(A: Integer): Integer;
+begin
+  Result := A + 1;
+end;
+function TRecursiveHelper.Drive(A: Integer): Integer;
+begin
+  Result := Target(A) * 2;
+end;
+end.
+'@
+$file3 = Join-Path $WorkDir 'uLeakPure.pas'
+Write-Ascii $file3 $FixtureBody3
+
 $db = Join-Path $WorkDir 'fx.sqlite'
 Invoke-Engine 'index' @('index', $WorkDir, '--db', $db)
 
-$Symbols = @('uGenFix1.IAnalysisFix1', 'uGenFix2.TBaseFix2.Hook', 'uGenFix2.TBaseFix2.OldHook')
+$Symbols = @('uGenFix1.IAnalysisFix1', 'uGenFix2.TBaseFix2.Hook', 'uGenFix2.TBaseFix2.OldHook', 'uLeakPure.TRecursiveHelper.Target')
 Push-Location $WorkDir
 try {
   foreach ($q in $Symbols) {
@@ -198,11 +241,15 @@ $hash1b = (Get-FileHash -LiteralPath $file2 -Algorithm SHA256).Hash
 $hookLines1 = @($text1b -split "`r?`n" | Where-Object { $_ -match 'Called from:' })
 $hookCalled1 = if ($hookLines1.Count -ge 1) { $hookLines1[0] } else { '' }
 $oldCalled1  = if ($hookLines1.Count -ge 2) { $hookLines1[1] } else { '' }
+$text1c = Get-Content $file3 -Raw
+$hash1c = (Get-FileHash -LiteralPath $file3 -Algorithm SHA256).Hash
+$leakCalled1 = Line-Of $text1c 'Called from:'
 
 Write-Host 'Pass 1: document --apply against a stale existing block' -ForegroundColor Cyan
 Write-Host "  Used in units: line = $usedLine1" -ForegroundColor DarkGray
 Write-Host "  Hook    Called from: line = $hookCalled1" -ForegroundColor DarkGray
 Write-Host "  OldHook Called from: line = $oldCalled1" -ForegroundColor DarkGray
+Write-Host "  Target  Called from: line = $leakCalled1" -ForegroundColor DarkGray
 # NOTE: 'BogusStaleUnit' is EXPECTED to survive here -- INBOUND_LABELS
 # entries this store cannot vouch for are deliberately UNIONED IN, never
 # dropped (TSharedFacts.MergeInboundFacts' whole accumulate-only contract).
@@ -222,6 +269,10 @@ Check 'THE PIN: Hook Called from: gained no Overridden-by name (P.TC2.Hook) -- c
   ($hookCalled1 -notmatch 'P\.TC2\.Hook') $hookCalled1
 Check 'THE PIN: OldHook Called from: gained no Deprecated-message token (HookY)' `
   ($oldCalled1 -notmatch '\bHookY\b') $oldCalled1
+# Pass 1 has no stored block to re-parse, so it renders the full caller even
+# on a broken engine; this is the control that the pass-2 pin reads a line.
+Check 'CONTROL: Target Called from: names the full caller after pass 1' `
+  ($leakCalled1 -match 'Called from: uLeakPure\.TRecursiveHelper\.Drive \(uLeakPure\.pas\)') $leakCalled1
 
 Push-Location $WorkDir
 try {
@@ -234,14 +285,26 @@ $text2 = Get-Content $file -Raw
 $hash2 = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
 $usedLine2 = Line-Of $text2 'Used in units:'
 $hash2b = (Get-FileHash -LiteralPath $file2 -Algorithm SHA256).Hash
+$text2c = Get-Content $file3 -Raw
+$hash2c = (Get-FileHash -LiteralPath $file3 -Algorithm SHA256).Hash
+$leakCalled2 = Line-Of $text2c 'Called from:'
 
 Write-Host ''
 Write-Host 'Pass 2: document --apply again, no source change in between' -ForegroundColor Cyan
 Write-Host "  Used in units: line = $usedLine2" -ForegroundColor DarkGray
+Write-Host "  Target  Called from: line = $leakCalled2" -ForegroundColor DarkGray
+# Pass 2 re-parses the wrapped block pass 1 wrote. A raw label search cuts
+# `uLeakPure...` at the 'Pure' inside the unit name and feeds `uLeak` back.
+Check 'THE PIN: Target Called from: still names the full caller after pass 2' `
+  ($leakCalled2 -match 'Called from: uLeakPure\.TRecursiveHelper\.Drive \(uLeakPure\.pas\)') $leakCalled2
+Check 'THE PIN: Target Called from: carries no truncated entry (uLeak) after pass 2' `
+  ($leakCalled2 -notmatch '\buLeak\b') $leakCalled2
 Check 'FIXED POINT: uGenFix1 pass 2 is byte-identical to pass 1 (hash match)' `
   ($hash1 -eq $hash2) "pass1=$hash1 pass2=$hash2"
 Check 'FIXED POINT: uGenFix2 pass 2 is byte-identical to pass 1 (hash match)' `
   ($hash1b -eq $hash2b) "pass1=$hash1b pass2=$hash2b"
+Check 'FIXED POINT: uLeakPure pass 2 is byte-identical to pass 1 (hash match)' `
+  ($hash1c -eq $hash2c) "pass1=$hash1c pass2=$hash2c"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
