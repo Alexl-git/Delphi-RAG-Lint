@@ -170,6 +170,19 @@ function ScanRoutineBody(const ALines: TArray<string>; AImplStart, AImplEnd: Int
 /// <returns>The stripped line. Column positions are NOT preserved.</returns>
 function StripCommentsAndStrings(const ALine: string; var AInBrace, AInParen: Boolean): string;
 
+/// <summary>Returns <c>ALine</c> with every comment and the CONTENTS of every
+/// string literal replaced by blanks, column for column, so a column measured
+/// on the raw line lands on the same character of the result. The quotes of a
+/// literal are kept; a <c>{</c> or <c>(*</c> comment left open by an earlier
+/// line is not known here (each line is masked on its own, as
+/// <see cref="ReadEscapesOnLine"/> does).</summary>
+/// <param name="ALine">One raw source line.</param>
+/// <returns>A string of the same length as <c>ALine</c>.</returns>
+/// <remarks>The stage uses it to find the <c>(</c> that encloses a read at a
+/// known column, where the compact form of <see cref="StripCommentsAndStrings"/>
+/// would have shifted the columns.</remarks>
+function MaskLinePreservingColumns(const ALine: string): string;
+
 /// <summary>Classifies one call argument against the caller's own names
 /// (spec 3.5, plan ruling 8).</summary>
 /// <param name="AArgText">The argument as lexed.</param>
@@ -510,6 +523,15 @@ end;
 function StripCommentsAndStrings(const ALine: string; var AInBrace, AInParen: Boolean): string;
 begin
   Result:= MaskLine(ALine, AInBrace, AInParen, False);
+end;
+
+function MaskLinePreservingColumns(const ALine: string): string;
+var
+  InBrace, InParen: Boolean;
+begin
+  InBrace:= False;
+  InParen:= False;
+  Result:= MaskLine(ALine, InBrace, InParen, True);
 end;
 
 { --------------------------------------------------------------------- lexer }

@@ -56,20 +56,27 @@ try {
   $cols = (& $Exe sql --db $db --format text --query $colSql 2>&1) -join "`n"
   Check '2. effect_free / effect_summary / effect_witness columns exist' `
     (($cols -match '\beffect_free\b') -and ($cols -match '\beffect_summary\b') -and ($cols -match '\beffect_witness\b')) ($cols -replace '\s+', ' ')
-  # Nothing in the index run writes them: every routine row (body_loc > 0)
-  # starts with all three NULL -- the shape the purity stage's gate looks for.
-  $nulls = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NULL AND effect_summary IS NULL AND effect_witness IS NULL" 2>&1) -join "`n"
-  $rows  = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0" 2>&1) -join "`n"
-  $nNull = [int]([regex]::Match($nulls, '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
-  $nRows = [int]([regex]::Match($rows,  '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
-  Check '2b. the columns start NULL on every routine row (index never writes them)' `
-    (($nRows -ge 1) -and ($nNull -eq $nRows)) "rows=$nRows null=$nNull"
+  # UPDATED 2026-09-22 (C6.1 Task 3), deliberately, NOT to get green: until the
+  # purity STAGE existed, an index run left all three columns NULL and 2b/3
+  # asserted exactly that. The stage now runs inside the same index command and
+  # fills them, so the old assertion is false BY DESIGN -- keeping it would pin
+  # the stage out of existence. Task 1's real property, that the WALK never
+  # writes the columns, is still carried by check 4 below (the prepared UPSERT
+  # does not name them) and by run_purity_stage.ps1's gate control, where
+  # deleting rows behind the engine's back FLIPS the verdict -- which it could
+  # not do if the verdict came from the parse.
+  $rows   = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0" 2>&1) -join "`n"
+  $filled = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NOT NULL" 2>&1) -join "`n"
+  $nRows = [int]([regex]::Match($rows,   '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
+  $nFill = [int]([regex]::Match($filled, '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
+  Check '2b. after an index run every routine row carries a verdict (the stage filled what the walk left NULL)' `
+    (($nRows -ge 1) -and ($nFill -eq $nRows)) "rows=$nRows filled=$nFill"
   $null = & $Exe index $src --db $db 2>&1
   $cols2 = (& $Exe sql --db $db --format text --query $colSql 2>&1) -join "`n"
-  $nulls2 = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NULL AND effect_summary IS NULL AND effect_witness IS NULL" 2>&1) -join "`n"
-  $nNull2 = [int]([regex]::Match($nulls2, '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
-  Check '3. a second index run keeps the columns AND leaves them NULL (Migrate is idempotent, PutSymbolFacts does not touch them)' `
-    (($cols2 -match '\beffect_witness\b') -and ($nNull2 -eq $nRows)) "null=$nNull2 rows=$nRows"
+  $filled2 = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NOT NULL" 2>&1) -join "`n"
+  $nFill2 = [int]([regex]::Match($filled2, '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
+  Check '3. a second index run keeps the columns AND every verdict (Migrate is idempotent, PutSymbolFacts does not reset them)' `
+    (($cols2 -match '\beffect_witness\b') -and ($nFill2 -eq $nRows)) "filled=$nFill2 rows=$nRows"
 
   # 5. A schema-23 DB indexed BEFORE purity v2 has no effect_* columns, still
   #    reads as schema-current, and a READ-ONLY open never runs Migrate -- so

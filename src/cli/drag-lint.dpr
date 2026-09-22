@@ -128,6 +128,7 @@ uses
   DRagLint.Analysis.Cfg in '..\analysis\DRagLint.Analysis.Cfg.pas',
   DRagLint.Analysis.DataFlow in '..\analysis\DRagLint.Analysis.DataFlow.pas',
   DRagLint.Analysis.Purity in '..\analysis\DRagLint.Analysis.Purity.pas',
+  DRagLint.Analysis.PurityStage in '..\analysis\DRagLint.Analysis.PurityStage.pas',
   DRagLint.Analysis.Flow.Lattices in '..\analysis\DRagLint.Analysis.Flow.Lattices.pas',
   DRagLint.Diagnostics.FlowChecks in '..\diagnostics\DRagLint.Diagnostics.FlowChecks.pas',
   DRagLint.Output.Sarif in '..\output\DRagLint.Output.Sarif.pas',

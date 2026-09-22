@@ -123,6 +123,7 @@ uses
   , DRagLint.Core   .Interfaces
   , DRagLint.Core   .Indexer
   , DRagLint.Analysis.LintTree
+  , DRagLint.Analysis.PurityStage { Purity v2: TPurityStage.Run after the `calls` stage at every index site }
   , DRagLint.Storage.SQLite
   , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in }
   , DRagLint.Parser .Delphi13
@@ -3420,11 +3421,19 @@ begin
       resolver -- which is precisely the 2026-08-30 failure, reproduced by the
       fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
     if ResolverStale or AResolveOnly then Store.ClearCallEdges;
-    if (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
-       Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly then
+    var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
+       Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly;
+    if RanCalls then
       Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
     else
       Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
+    { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
+      were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
+      rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun). }
+    if RanCalls or Store.PurityNeedsRun then
+      Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
+    else
+      Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { The checkpoint below folds the -wal in and is NOT free on a multi-gigabyte
       index, so it is announced too: it is the last thing between the operator
       and the section summary, and an unannounced pause there reads exactly like
@@ -5175,12 +5184,22 @@ begin
       flag would announce a re-derive and then skip it -- the one outcome worse
       than not having the flag. }
     if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
-    if (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
+    var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
        (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale or
-       AArgs.ResolveOnly then
+       AArgs.ResolveOnly;
+    if RanCalls then
       Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end) { v14 (D5) + v21 cross-DB }
     else
       Writeln('stage: calls -- skipped, no file changed, so every call edge already holds.');
+    { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
+      were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
+      rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun).
+      Before CommitIndexerFingerprint on purpose: an interrupted purity pass must
+      leave the stamp absent so the next run repeats it. }
+    if RanCalls or Store.PurityNeedsRun then
+      Stage('', 'purity', procedure begin TPurityStage.Run(Store); end)
+    else
+      Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
     CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
@@ -5282,10 +5301,17 @@ begin
   { CallEdgesNeedRebuild: the third and last site that skips this pass on an
     unchanged corpus -- see the DoIndex site for the argument. A dictionary build
     can open a database whose edges were dropped just as the other two can. }
-  if (Indexer.ParsedFiles > 0) or Store.CallEdgesNeedRebuild then
+  var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or Store.CallEdgesNeedRebuild;
+  if RanCalls then
     Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
   else
     Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
+  { Purity v2 -- same gate as the DoIndex site: after the edges, or when a
+    per-file reindex left NULL verdicts behind a skipped calls pass. }
+  if RanCalls or Store.PurityNeedsRun then
+    Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
+  else
+    Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
@@ -26277,6 +26303,7 @@ begin
             Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end);
             Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
+            Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
           end;
 
           // Recompile + refresh compiler_findings for the whole project when
