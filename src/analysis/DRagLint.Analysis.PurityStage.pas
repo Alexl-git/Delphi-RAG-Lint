@@ -140,8 +140,7 @@ type
     Escaping  : TNameSet;         // nil until the first escaping local
     ClassId   : Int64;
   end;
-  // dl:ok god-class@e3b0, high-response@e3b0 -- REVIEWED 2026-09-22: the fields ARE the loaded index tables (routines, facts, edges, members, params, locals, fields, stamps, the bounded line cache) and the methods are the five phases of ONE pass over them: load, contexts, scan, fixpoint, write. Splitting them would give the fixpoint a second owner of the same tables for no behavioural gain, and the model (lattice, lexer, body scanner) already lives in DRagLint.Analysis.Purity.
-  TPurityRun = class
+  TPurityRun = class  // dl:ok god-class@13c7, high-response@13c7 -- REVIEWED 2026-09-22: the fields ARE the loaded index tables (routines, facts, edges, members, params, locals, fields, stamps, the bounded line cache) and the methods are the five phases of ONE pass over them: load, contexts, scan, fixpoint, write. Splitting them would give the fixpoint a second owner of the same tables for no behavioural gain, and the model (lattice, lexer, body scanner) already lives in DRagLint.Analysis.Purity.
   private
     FStore       : ISymbolStore;
     FRoutines    : TArray<TSymbol>;

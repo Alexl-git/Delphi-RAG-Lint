@@ -3130,7 +3130,7 @@ const
     SYMBOL_FACTS_EFFECT_COLS only when HasEffectCols says the DB has them. }
   SYMBOL_FACTS_BASE_COLS =
     'symbol_id, reads_fields, writes_fields, returns_owner, cyclomatic, body_loc, ' +
-    ' dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring';
+    'dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring';
   SYMBOL_FACTS_EFFECT_COLS = ', effect_free, effect_summary, effect_witness';
 
 { PROGRESS LINE FOR THE FOUR WHOLE-DB RESOLVE PASSES.
