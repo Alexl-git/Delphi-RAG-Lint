@@ -2322,6 +2322,34 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure PutSymbolFacts(const AFacts: TSymbolFacts);
+    /// <summary>Purity v2: writes the three effect columns for every row in
+    /// ARows in ONE transaction (UPDATE by symbol_id; a row with no
+    /// symbol_facts entry is silently skipped). The only writer of
+    /// effect_free / effect_summary / effect_witness -- PutSymbolFacts leaves
+    /// them alone on purpose, so a per-file reindex resets them to NULL and
+    /// the stage restores them.</summary>
+    /// <param name="ARows">Verdicts; may be empty.</param>
+    procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
+    /// <summary>True when at least one routine with a body has no purity
+    /// verdict yet (effect_free IS NULL) -- the gate that makes the `purity`
+    /// stage run after a per-file reindex even when the calls stage was
+    /// skipped. False on a DB with no routines.</summary>
+    /// <returns>True when a symbol_facts row with body_loc &gt; 0 has
+    /// effect_free IS NULL.</returns>
+    function PurityNeedsRun: Boolean;
+    /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
+    /// the purity stage (one query instead of one per routine).</summary>
+    /// <returns>All rows; EffectFree is -1 where the column is NULL.</returns>
+    function GetAllSymbolFacts: TArray<TSymbolFacts>;
+    /// <summary>Every symbol that owns a symbol_facts row with body_loc &gt; 0 --
+    /// the population the purity stage judges.</summary>
+    /// <returns>The symbols, ordered by file then id.</returns>
+    function FindSymbolsWithFacts: TArray<TSymbol>;
+    /// <summary>Every member_accesses row as a TCallEdge: RefId, TargetSymbolId
+    /// = member_symbol_id, MemberMode, AccessorSymbolId, AccessorKind. Empty
+    /// when the DB has no member_accesses table (pre-1.3.0 resolve).</summary>
+    /// <returns>One edge per row; nil when the table is absent.</returns>
+    function DumpAllMemberAccesses: TArray<TCallEdge>;
     /// <summary>This store's flow-oracle memo, created with the store and
     /// living exactly as long as it. Never nil.</summary>
     /// <returns>The store's own TFlowOracleCache; the store owns it and the

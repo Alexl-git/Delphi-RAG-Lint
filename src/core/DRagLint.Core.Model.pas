@@ -363,7 +363,33 @@ type
     /// written, that the facts-inherited post-pass matches against ancestor
     /// fields.</summary>
     HeldWrites: TArray<string>;
+    /// <summary>Purity v2 (spec 2026-09-15 section 9.2): the interprocedural
+    /// verdict written by the `purity` resolve stage, NEVER by PutSymbolFacts.
+    /// -1 = not computed (column NULL: pre-stage index, or the row was just
+    /// rewritten by a per-file reindex); 0 = not proven; 1 = proven effect-free.</summary>
+    EffectFree   : Integer;
+    /// <summary>The machine-readable effect summary: comma-joined components
+    /// 'g' (writes global/unit state, resource, SQL), 'h' (frees storage it did
+    /// not allocate), 's' (writes its own Self's fields), 'p&lt;k&gt;' (writes through
+    /// parameter k, 0-based) and '?' (a callee or member could not be bound).
+    /// '' = writes nothing outside itself. NULL reads back ''.</summary>
+    EffectSummary: string;
+    /// <summary>The FIRST blocker, display-ready and TRANSLATED through the call
+    /// site, e.g. 'writes through SetLength(#0 = FBuffer, a field)' or
+    /// 'calls SubString (unbound; receiver S)'. '' when proven.</summary>
+    EffectWitness: string;
   end; // record
+
+  /// <summary>One purity verdict to persist -- the row the `purity` resolve
+  /// stage hands ISymbolStore.PutEffectFacts for a routine that has a
+  /// symbol_facts row.</summary>
+  TEffectFactRow = record
+    SymbolId  : Int64  ;
+    /// <summary>0 or 1; the stage never writes -1.</summary>
+    EffectFree: Integer;
+    Summary   : string ;
+    Witness   : string ;
+  end;
 
   /// <summary>v11 (M1): one resolved ancestor edge of a class/interface --
   /// either a direct heritage entry (type_ancestors row) or, in a transitive

@@ -50,6 +50,8 @@ const
   // table's shape untouched -- so e.g. an index on such a column aborts the
   // whole migration with "no such column" on every pre-vN database. Indexes
   // on retrofitted columns belong in Migrate(), after their ALTER.
+  // Purity v2: symbol_facts.effect_free / effect_summary / effect_witness are
+  // Migrate() ALTERs too (no SCHEMA_VERSION bump) and must never enter this array.
   SCHEMA_DDL: array[0..60] of string = (
     'CREATE TABLE IF NOT EXISTS schema_meta (' + '  key   TEXT PRIMARY KEY,' + '  value TEXT NOT NULL' + ')',
 

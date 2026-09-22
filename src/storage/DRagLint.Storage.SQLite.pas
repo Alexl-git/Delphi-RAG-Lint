@@ -1746,6 +1746,39 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PutSymbolFacts(const AFacts: TSymbolFacts);
+      /// <summary>Purity v2: writes the three effect columns for every row in
+      /// ARows in ONE transaction (UPDATE by symbol_id; a row with no
+      /// symbol_facts entry is silently skipped). The only writer of
+      /// effect_free / effect_summary / effect_witness -- PutSymbolFacts leaves
+      /// them alone on purpose, so a per-file reindex resets them to NULL and
+      /// the stage restores them.</summary>
+      /// <param name="ARows">Verdicts; may be empty.</param>
+      /// <remarks>Implements ISymbolStore.PutEffectFacts.</remarks>
+      procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
+      /// <summary>True when at least one routine with a body has no purity
+      /// verdict yet (effect_free IS NULL) -- the gate that makes the `purity`
+      /// stage run after a per-file reindex even when the calls stage was
+      /// skipped. False on a DB with no routines.</summary>
+      /// <returns>True when a symbol_facts row with body_loc &gt; 0 has
+      /// effect_free IS NULL.</returns>
+      /// <remarks>Implements ISymbolStore.PurityNeedsRun.</remarks>
+      function PurityNeedsRun: Boolean;
+      /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
+      /// the purity stage (one query instead of one per routine).</summary>
+      /// <returns>All rows; EffectFree is -1 where the column is NULL.</returns>
+      /// <remarks>Implements ISymbolStore.GetAllSymbolFacts.</remarks>
+      function GetAllSymbolFacts: TArray<TSymbolFacts>;
+      /// <summary>Every symbol that owns a symbol_facts row with body_loc &gt; 0 --
+      /// the population the purity stage judges.</summary>
+      /// <returns>The symbols, ordered by file then id.</returns>
+      /// <remarks>Implements ISymbolStore.FindSymbolsWithFacts.</remarks>
+      function FindSymbolsWithFacts: TArray<TSymbol>;
+      /// <summary>Every member_accesses row as a TCallEdge: RefId, TargetSymbolId
+      /// = member_symbol_id, MemberMode, AccessorSymbolId, AccessorKind. Empty
+      /// when the DB has no member_accesses table (pre-1.3.0 resolve).</summary>
+      /// <returns>One edge per row; nil when the table is absent.</returns>
+      /// <remarks>Implements ISymbolStore.DumpAllMemberAccesses.</remarks>
+      function DumpAllMemberAccesses: TArray<TCallEdge>;
 
       /// <summary>This store's flow-oracle memo (C1b). Never nil; the store
       /// owns it and frees it.</summary>
@@ -3065,6 +3098,17 @@ uses
   , DRagLint.Core.ForwardStub   { C2.5: FoldForwardStubs -- a forward stub is not a class }
   ;
 
+const
+  { The ONE symbol_facts column list every reader selects, so that
+    ReadSymbolFactsFromQuery (the one column -> TSymbolFacts mapper, shared by
+    GetSymbolFacts and GetAllSymbolFacts) always finds every field it names.
+    A new stored fact is added HERE, in the mapper, and in FQPutSymbolFacts --
+    except the three purity columns, which PutSymbolFacts must never write. }
+  SYMBOL_FACTS_SELECT_COLS =
+    'symbol_id, reads_fields, writes_fields, returns_owner, cyclomatic, body_loc, ' +
+    ' dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring, ' +
+    ' effect_free, effect_summary, effect_witness';
+
 { PROGRESS LINE FOR THE FOUR WHOLE-DB RESOLVE PASSES.
 
   Each of ResolveUnitUseTargets / ResolveAncestry / ResolveHelpers /
@@ -3628,6 +3672,15 @@ begin
   TryExec('ALTER TABLE symbol_facts ADD COLUMN ui_affinity TEXT'   );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN touches TEXT'       );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN wiring TEXT'        );
+  { Purity v2 (spec 2026-09-15 section 9.2): three ADDITIVE columns, written by
+    the `purity` resolve stage and never by PutSymbolFacts. NO SCHEMA_VERSION
+    BUMP, on the member_accesses precedent below: the indexer fingerprint embeds
+    the schema number, so a bump would re-parse every database to add columns
+    that a TryExec adds in place. NULL = not computed, and every reader maps
+    NULL to "print nothing". }
+  TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_free INTEGER'  );
+  TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_summary TEXT'  );
+  TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_witness TEXT'  );
   { PER-FILE RESUME (INBOX-index-runs-are-not-resumable). The indexer fingerprint
     THIS file's rows were produced by -- the same string
     DRagLint.CLI.IndexerFingerprint builds, e.g.
@@ -4257,10 +4310,10 @@ begin
   FQPutSymbolFacts.Params.ParamByName('wir'   ).DataType:= ftWideMemo;
   FQPutSymbolFacts.Prepare;
 
+  { The column list is SYMBOL_FACTS_SELECT_COLS so GetSymbolFacts and
+    GetAllSymbolFacts share ReadSymbolFactsFromQuery, one row mapper. }
   FQGetSymbolFacts:= NewQuery(
-    'SELECT reads_fields, writes_fields, returns_owner, cyclomatic, body_loc, ' +
-    ' dfm_event, sql_reads, sql_writes, covered_by, mutates_params, ui_affinity, touches, wiring ' +
-    'FROM symbol_facts WHERE symbol_id = :sid');
+    'SELECT ' + SYMBOL_FACTS_SELECT_COLS + ' FROM symbol_facts WHERE symbol_id = :sid');
 
   { 2026-08-17: this query used to implement exactly TWO tags -- 'deprecated' and
     'since'. Every other tag name fell through every OR branch and returned 0
@@ -7037,6 +7090,34 @@ begin
   end;
 end; // function
 
+{ The one symbol_facts row -> TSymbolFacts mapper (mirrors ReadSymbolFromQuery).
+  AQ must be positioned on a row selected with SYMBOL_FACTS_SELECT_COLS. Sets
+  Present = True; the transient Own*/Held* arrays stay empty (never stored).
+  effect_free NULL -> -1 ("not computed"), the two texts NULL -> ''. }
+function ReadSymbolFactsFromQuery(AQ: TFDQuery): TSymbolFacts;
+begin
+  Result:= Default(TSymbolFacts);
+  Result.SymbolId     := AQ.FieldByName('symbol_id'     ).AsLargeInt;
+  Result.ReadsFields  := AQ.FieldByName('reads_fields'  ).AsString;
+  Result.WritesFields := AQ.FieldByName('writes_fields' ).AsString;
+  Result.ReturnsOwner := AQ.FieldByName('returns_owner' ).AsString;
+  Result.Cyclomatic   := AQ.FieldByName('cyclomatic'    ).AsInteger;
+  Result.BodyLoc      := AQ.FieldByName('body_loc'      ).AsInteger;
+  Result.DfmEvent     := AQ.FieldByName('dfm_event'     ).AsString;
+  Result.SqlReads     := AQ.FieldByName('sql_reads'     ).AsString;
+  Result.SqlWrites    := AQ.FieldByName('sql_writes'    ).AsString;
+  Result.CoveredBy    := AQ.FieldByName('covered_by'    ).AsString;
+  Result.MutatesParams:= AQ.FieldByName('mutates_params').AsString;
+  Result.UiAffinity   := AQ.FieldByName('ui_affinity'   ).AsString;
+  Result.Touches      := AQ.FieldByName('touches'       ).AsString;
+  Result.Wiring       := AQ.FieldByName('wiring'        ).AsString;
+  if AQ.FieldByName('effect_free').IsNull then Result.EffectFree:= -1
+  else Result.EffectFree:= AQ.FieldByName('effect_free').AsInteger;
+  Result.EffectSummary:= AQ.FieldByName('effect_summary').AsString;
+  Result.EffectWitness:= AQ.FieldByName('effect_witness').AsString;
+  Result.Present      := True;
+end; // function
+
 function PreferArity(const ARows: TArray<TSymbol>; const AParams: string): TArray<TSymbol>; forward;
 
 function TSQLiteSymbolStore.FoldStubs(const ARows: TArray<TSymbol>): TArray<TSymbol>;
@@ -7817,27 +7898,144 @@ function TSQLiteSymbolStore.GetSymbolFacts(ASymbolId: Int64): TSymbolFacts;
 begin
   Result:= Default(TSymbolFacts);
   Result.SymbolId:= ASymbolId;
+  Result.EffectFree:= -1; { an ABSENT row is "not computed" too, never 0 = "not proven" }
   if FQGetSymbolFacts.Active then FQGetSymbolFacts.Close;
   FQGetSymbolFacts.ParamByName('sid').AsLargeInt:= ASymbolId;
   FQGetSymbolFacts.Open;
   try
     if FQGetSymbolFacts.IsEmpty then Exit; // Present stays False (Default() above zeroed it)
-    Result.ReadsFields := FQGetSymbolFacts.FieldByName('reads_fields' ).AsString;
-    Result.WritesFields:= FQGetSymbolFacts.FieldByName('writes_fields').AsString;
-    Result.ReturnsOwner:= FQGetSymbolFacts.FieldByName('returns_owner').AsString;
-    Result.Cyclomatic  := FQGetSymbolFacts.FieldByName('cyclomatic'   ).AsInteger;
-    Result.BodyLoc     := FQGetSymbolFacts.FieldByName('body_loc'     ).AsInteger;
-    Result.DfmEvent    := FQGetSymbolFacts.FieldByName('dfm_event'    ).AsString;
-    Result.SqlReads    := FQGetSymbolFacts.FieldByName('sql_reads'    ).AsString;
-    Result.SqlWrites   := FQGetSymbolFacts.FieldByName('sql_writes'   ).AsString;
-    Result.CoveredBy   := FQGetSymbolFacts.FieldByName('covered_by'   ).AsString;
-    Result.MutatesParams:= FQGetSymbolFacts.FieldByName('mutates_params').AsString;
-    Result.UiAffinity  := FQGetSymbolFacts.FieldByName('ui_affinity'  ).AsString;
-    Result.Touches     := FQGetSymbolFacts.FieldByName('touches'      ).AsString;
-    Result.Wiring      := FQGetSymbolFacts.FieldByName('wiring'       ).AsString;
-    Result.Present     := True;
+    Result:= ReadSymbolFactsFromQuery(FQGetSymbolFacts);
   finally
     FQGetSymbolFacts.Close;
+  end; // try
+end; // function
+
+procedure TSQLiteSymbolStore.PutEffectFacts(const ARows: TArray<TEffectFactRow>);
+var
+  Q: TFDQuery;
+begin
+  if Length(ARows) = 0 then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'UPDATE symbol_facts SET effect_free = :ef, effect_summary = :es, ' +
+                 'effect_witness = :ew WHERE symbol_id = :sid';
+    Q.ParamByName('ef' ).DataType:= ftInteger ;
+    Q.ParamByName('es' ).DataType:= ftWideMemo;
+    Q.ParamByName('ew' ).DataType:= ftWideMemo;
+    Q.ParamByName('sid').DataType:= ftLargeint;
+    Q.Prepare;
+    FConn.StartTransaction;
+    try
+      for var R in ARows do
+      begin
+        Q.ParamByName('ef' ).AsInteger := R.EffectFree;
+        Q.ParamByName('sid').AsLargeInt:= R.SymbolId;
+        { Clear, not AsString := '': an empty string would flip DataType and
+          break the next call (the PutSymbolFacts.SetNullableText lesson). }
+        if R.Summary = '' then Q.ParamByName('es').Clear else Q.ParamByName('es').Value:= R.Summary;
+        if R.Witness = '' then Q.ParamByName('ew').Clear else Q.ParamByName('ew').Value:= R.Witness;
+        Q.ExecSQL;
+      end;
+      FConn.Commit;
+    except  // dl:ok bare-except@4bef -- rollback-then-reraise: every exception must undo the partial write, and none is swallowed
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    Q.Free;
+  end; // try
+end; // procedure
+
+function TSQLiteSymbolStore.PurityNeedsRun: Boolean;
+begin
+  Result:= ProbeExists('SELECT 1 FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NULL LIMIT 1');
+end; // function
+
+function TSQLiteSymbolStore.GetAllSymbolFacts: TArray<TSymbolFacts>;
+var
+  Q   : TFDQuery;
+  List: TList<TSymbolFacts>;
+begin
+  List:= TList<TSymbolFacts>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT ' + SYMBOL_FACTS_SELECT_COLS + ' FROM symbol_facts';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(ReadSymbolFactsFromQuery(Q));
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.FindSymbolsWithFacts: TArray<TSymbol>;
+var
+  Q   : TFDQuery;
+  List: TList<TSymbol>;
+begin
+  List:= TList<TSymbol>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { s.* is FindSymbolsByFile's own column list (SELECT * FROM symbols), so
+      ReadSymbolFromQuery maps it; the join is the only difference. }
+    Q.SQL.Text:= 'SELECT s.* FROM symbols s ' +
+                 'JOIN symbol_facts f ON f.symbol_id = s.id WHERE ifnull(f.body_loc, 0) > 0 ORDER BY s.file_id, s.id';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(ReadSymbolFromQuery(Q));
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.DumpAllMemberAccesses: TArray<TCallEdge>;
+var
+  Q                                                 : TFDQuery;
+  List                                              : TList<TCallEdge>;
+  E                                                 : TCallEdge;
+  RefFld, MemberFld, ModeFld, AccessorFld, KindFld  : TField;
+begin
+  Result:= nil;
+  if not HasMemberAccesses then Exit;
+  List:= TList<TCallEdge>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT ref_id, member_symbol_id, mode, accessor_symbol_id, accessor_kind FROM member_accesses';
+    Q.Open;
+    RefFld     := Q.FieldByName('ref_id'            );
+    MemberFld  := Q.FieldByName('member_symbol_id'  );
+    ModeFld    := Q.FieldByName('mode'              );
+    AccessorFld:= Q.FieldByName('accessor_symbol_id');
+    KindFld    := Q.FieldByName('accessor_kind'     );
+    while not Q.Eof do
+    begin
+      E:= Default(TCallEdge);
+      E.RefId         := RefFld   .AsLargeInt;
+      E.TargetSymbolId:= MemberFld.AsLargeInt;
+      E.MemberMode    := ModeFld  .AsString;
+      if not AccessorFld.IsNull then E.AccessorSymbolId:= AccessorFld.AsLargeInt;
+      E.AccessorKind  := KindFld  .AsString;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
   end; // try
 end; // function
 
