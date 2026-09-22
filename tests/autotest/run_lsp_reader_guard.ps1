@@ -37,7 +37,14 @@
                               single-unit store, which is legitimately
                               writable); the --db loop opens read-only. With a
                               positive control that the attribution scan can
-                              see a `.Migrate` planted in the constructor.
+                              see a `.Migrate` planted in the constructor, and
+                              PLANTED negatives (S0a/S0b) that a `.Migrate` in
+                              a `///` doc-comment, a multi-line `{ }`, `(* *)`,
+                              `//` or a string literal is not a site and a
+                              header quoted in a comment does not move the
+                              attribution -- the scan reads the CODE projection
+                              (RED 2026-09-21: the regenerated autodoc block
+                              on Create was attributed as two sites).
 
   RED FIRST against 1.12.0-alpha: C2 (header 1 -> 2), C3 (v12 md5 changes,
   no refusal on stderr) and S fail; C1 and PC pass.
@@ -259,11 +266,25 @@ Check 'PC md5 CHANGED -- so byte-identity above is a real assertion' ((Md5 $v12w
 # ---- S: static -- .Migrate reachable only from the ephemeral store -----------
 Write-Host ''
 Write-Host 'S: STATIC -- every .Migrate in the LSP server belongs to BuildEphemeralStore; the --db loop opens read-only' -ForegroundColor Cyan
+# A text scan cannot read comments. The autodoc block on TLSPServer.Create
+# legitimately says `Calls: ... ISymbolStore.Migrate` and carries a
+# `<seealso cref="...ISymbolStore.Migrate"/>` -- both matched `\.Migrate\b` on
+# the raw line and were attributed to "(before any routine)" (RED 2026-09-21).
+# So the scan runs over the CODE projection of the whole unit -- comments and
+# string literals blanked to spaces, length preserved, so line numbers survive
+# -- from the lexer the flag-verb guard already proves with planted cases.
+# Whole-text, not per-line: a `{ }` comment can span lines, and tracking brace
+# depth as a per-line local was the root cause of two earlier scan defects.
+# The same projection feeds the routine-header match, so a header quoted in a
+# comment cannot move $cur either.
+. (Join-Path $PSScriptRoot 'lib\CliFlagVerbMap.ps1')
 function Find-MigrateSites([string[]]$Lines) {
-  $cur = '(before any routine)'
+  $code  = (ConvertTo-PascalProjections -Text ($Lines -join "`n")).Code
+  $cl    = $code -split "`n"
+  $cur   = '(before any routine)'
   $sites = @()
-  for ($i = 0; $i -lt $Lines.Count; $i++) {
-    $l = $Lines[$i]
+  for ($i = 0; $i -lt $cl.Count; $i++) {
+    $l = $cl[$i]
     if ($l -match '^(function|procedure|constructor|destructor)\s+([A-Za-z_][A-Za-z0-9_.]*)') { $cur = $Matches[2] }
     if ($l -match '\.Migrate\b') { $sites += [pscustomobject]@{ Routine = $cur; Line = ($i + 1) } }
   }
@@ -284,6 +305,34 @@ $ctl = @(Find-MigrateSites $synthetic)
 Check 'S0 POSITIVE CONTROL: the scan attributes a .Migrate planted in the constructor' `
       (($ctl.Count -eq 2) -and ($ctl[0].Routine -eq 'TLSPServer.Create') -and ($ctl[1].Routine -eq 'TLSPServer.BuildEphemeralStore')) `
       (($ctl | ForEach-Object { "$($_.Routine)@$($_.Line)" }) -join ', ')
+# PLANTED: the four ways the raw-line scan went wrong, each beside the real
+# constructor site so a scan that blanks too much (loses S0) or too little
+# (attributes a comment) fails here and not only in the field. The brace
+# comment spans THREE lines and quotes a routine header, which must not move
+# $cur off TLSPServer.Create for the real site under it.
+$planted = @(
+  '/// <summary>Autodoc prose.</summary>',
+  '/// <para>Calls: TSQLiteSymbolStore.Create, ISymbolStore.Migrate</para>',
+  '/// <seealso cref="DRagLint.Storage.ISymbolStore.Migrate"/>',
+  'constructor TLSPServer.Create(const ADbPaths: TArray<string>);',
+  'begin',
+  '  { a brace comment that spans lines and quotes a header:',
+  '    procedure TLSPServer.ZzNotARoutine;',
+  '    and names Store.Migrate before it closes }',
+  '  // a line comment naming Store.Migrate',
+  '  (* an old-style comment naming Store.Migrate *)',
+  "  Writeln('a string literal naming Store.Migrate');",
+  '  S:= TSQLiteSymbolStore.Create(Path);',
+  '  S.Migrate;',
+  'end;'
+)
+$pl = @(Find-MigrateSites $planted)
+Check 'S0a PLANT: a .Migrate inside /// doc-comment, { } (multi-line), (* *), // and a string literal is NOT a site' `
+      (($pl.Count -eq 1) -and ($pl[0].Line -eq 13)) `
+      ("sites: " + (($pl | ForEach-Object { "$($_.Routine)@$($_.Line)" }) -join ', '))
+Check 'S0b PLANT: a routine header quoted inside a { } comment does not move the attribution' `
+      (($pl.Count -ge 1) -and ($pl[$pl.Count - 1].Routine -eq 'TLSPServer.Create')) `
+      ("last site attributed to: " + $(if ($pl.Count -ge 1) { $pl[$pl.Count - 1].Routine } else { '(none)' }))
 $srcLines = [System.IO.File]::ReadAllLines($Source)
 $sites = @(Find-MigrateSites $srcLines)
 Check 'S1 the scan found .Migrate sites at all (the ephemeral store still migrates its own %TEMP% db)' ($sites.Count -gt 0) ''
