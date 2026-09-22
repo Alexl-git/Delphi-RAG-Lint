@@ -97,7 +97,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if (-not $Ok) { $script:Failed = $true }
 }
 
-# RECORDED BASELINE -- see the header. Measured 2026-09-15 at 44a2b0a.
+# RECORDED BASELINE -- see the header. Measured 2026-09-15 at 44a2b0a; re-measured
+# 2026-09-22 (C3a) at 124/33 after glyph-vacuum's banner gained the --output alias
+# (the row that had pushed it to 125/34).
 $BaselineCells = 124
 $BaselineVerbs = 33
 
