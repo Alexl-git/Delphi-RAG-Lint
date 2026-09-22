@@ -89,7 +89,15 @@ $file = Join-Path $WorkDir 'uPureFix1.pas'
 Write-Ascii $file $FixtureBody
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>$null | Out-Null
+# Every engine call pins its exit code: the assertions below read the FILE, so
+# a crash would otherwise be visible only through whichever pin it happened to
+# trip (review-task-1 M5).
+function Invoke-Engine([string]$Label, [string[]]$EngineArgs) {
+  $out = (& $Exe @EngineArgs 2>&1 | Out-String)
+  $code = $LASTEXITCODE
+  Check "ENGINE: $Label exits 0" ($code -eq 0) ("exit=$code " + (($out -split "`r?`n" | Where-Object { $_ -ne '' } | Select-Object -Last 1)))
+}
+Invoke-Engine 'index' @('index', $WorkDir, '--db', $db)
 
 # PureAdd CALLS Helper -- 'Pure' never creates a managed block on its own
 # (DRagLint.Doc.Regions.pas ~2187, the AHasOtherContent gate: "a statement
@@ -99,8 +107,8 @@ $db = Join-Path $WorkDir 'fx.sqlite'
 # touches nothing and reads/writes no SQL.
 Push-Location $WorkDir
 try {
-  & $Exe document --qname uPureFix1.TFixClass.MutateRow --db $db --apply --no-backup 2>$null | Out-Null
-  & $Exe document --qname uPureFix1.TFixClass.PureAdd    --db $db --apply --no-backup 2>$null | Out-Null
+  Invoke-Engine 'document MutateRow' @('document', '--qname', 'uPureFix1.TFixClass.MutateRow', '--db', $db, '--apply', '--no-backup')
+  Invoke-Engine 'document PureAdd'   @('document', '--qname', 'uPureFix1.TFixClass.PureAdd',   '--db', $db, '--apply', '--no-backup')
 } finally { Pop-Location }
 
 $text = (Get-Content $file -Raw)
