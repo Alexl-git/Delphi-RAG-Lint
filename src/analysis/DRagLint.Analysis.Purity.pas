@@ -142,9 +142,12 @@ function BuiltinSummary(const AName: string; out ASummary: TEffectSummary): Bool
 /// <c>CMaxArgListLines</c> lines or before the end of <c>ALines</c>.</returns>
 /// <remarks>Commas inside nested parentheses, brackets, string literals and
 /// comments do not split; comment text is dropped from the argument text; a
-/// line break inside an argument becomes one space. The argument COUNT agrees
-/// with <c>CountCallArgs</c> in DRagLint.Index.CallResolver for every lexable
-/// input.</remarks>
+/// line break inside an argument becomes one space. The ( is looked for on
+/// the name's OWN line with only blanks between; when it follows a comment or
+/// a line break the call is lexed as zero arguments, and the stage treats that
+/// conservatively. Within that contract the argument COUNT agrees with
+/// <c>CountCallArgs</c> in DRagLint.Index.CallResolver (which additionally
+/// skips comments and newlines before the parenthesis).</remarks>
 function LexCallArguments(const ALines: TArray<string>; ALine, AColAfterName: Integer;
   out AArgs: TArray<string>): Boolean;
 

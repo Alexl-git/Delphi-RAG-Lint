@@ -121,6 +121,12 @@ begin
   Check('empty parentheses = zero args', Ok and (Length(Args) = 0));
   Ok:= LexCallArguments(Lines(['  Obj.Method(X).Other(Y);']), 1, 13, Args);
   Check('only the FIRST group after the name', Ok and (JoinArgs(Args) = 'X'), JoinArgs(Args));
+  Ok:= LexCallArguments(Lines(['  F(''it''''s'', B);']), 1, 4, Args);
+  Check('doubled quote inside a literal', Ok and (JoinArgs(Args) = '''it''''s''|B'), JoinArgs(Args));
+  Ok:= LexCallArguments(Lines(['  F(A, (* c, d *) B);']), 1, 4, Args);
+  Check('paren-star comment skipped', Ok and (JoinArgs(Args) = 'A|B'), JoinArgs(Args));
+  Ok:= LexCallArguments(Lines(['  F(@Arg, PChar(S));']), 1, 4, Args);
+  Check('address-of and typecast are single arguments', Ok and (JoinArgs(Args) = '@Arg|PChar(S)'), JoinArgs(Args));
 end;
 
 procedure TestScanner;
@@ -184,6 +190,9 @@ begin
     Check('LHS of := does not', not ReadEscapesOnLine('  L := 3;', 3, 1, Inside));
     Check('argument position is reported, not an escape', (not ReadEscapesOnLine('  SetLength(L, 4);', 13, 1, Inside)) and Inside);
     Check('address-of escapes', ReadEscapesOnLine('  P := @L;', 9, 1, Inside));
+    { positive control for the '@' branch alone: no ':=' left of the read }
+    Check('address-of inside a call escapes (no := present)', ReadEscapesOnLine('  Foo(@L);', 8, 1, Inside) and Inside);
+    Check('an @ on ANOTHER argument does not escape this one', not ReadEscapesOnLine('  Foo(@M, L);', 11, 1, Inside));
     Check('condition does not escape', not ReadEscapesOnLine('  if L > 0 then', 6, 1, Inside));
     Check('receiver position does not escape', not ReadEscapesOnLine('  L.Add(1);', 3, 1, Inside));
   finally
