@@ -252,4 +252,50 @@
 #
 #   Superseded: 1.4.0-alpha|463989bb0a729a967964a9a29ec5913d23133ed5eb6d1d5611b3a89c1acee2d3
 
-1.5.0-alpha|690833814ff9efb59db95b51343d52e17ab8b759650cc5a9605da2095f9b3cdf
+# 2026-09-22 (Task 6, T4-R3 correction; controller ruling T6-R2): hash re-pinned
+#   WITHIN 1.5.0-alpha -- the "genuinely cannot affect what is derived" case,
+#   same discipline as the 2026-09-06 (C1b) and 2026-09-07/2026-09-19
+#   comment-only entries above.
+#
+#   WHAT MOVED THE HASH: a comment-only edit inside
+#   src\core\DRagLint.Core.ForwardStub.pas, which is on the resolve surface as
+#   `src/core/DRagLint.Core.ForwardStub.pas::*` and is therefore hashed WHOLE,
+#   doc/comment text included. The edit corrects a stale forward-reference --
+#   the file's header `{ }` comment said the IsStub unification was "deferred to
+#   the next DRAGLINT_RESOLVER_VERSION bump", which was true when written but
+#   became false the moment THIS baseline's own 1.4.0 -> 1.5.0 bump (purity v2,
+#   entry above) landed without doing that unification. The sentence now names
+#   the version that work is actually reserved for: `DRAGLINT_RESOLVER_VERSION
+#   1.6.0`. (CHANGELOG.md carries the matching correction; it is not part of the
+#   hashed surface.)
+#
+#   PROVEN comment-only, not asserted. `git diff -U0 9dfef952 HEAD --
+#   src\core\DRagLint.Core.ForwardStub.pas`, classifying the one changed line:
+#
+#       comment lines changed     : 2 (1 removed + 1 added, both inside the
+#                                    file's header `{ }` block comment, line 20)
+#       NON-comment lines changed : 0
+#
+#   Zero. No routine body changed -- the file's own logic (PairForwardStubs,
+#   FoldForwardStubs, the THasChildrenFn type) below the header comment is
+#   untouched -- so every resolve pass derives exactly the same call_edges /
+#   type_ancestors / type_helpers / unit_uses rows it derived before, and no
+#   index owes a re-resolve.
+#
+#   NOT BUMPING TO 1.6.0: that number is already reserved by the engine backlog
+#   for C2.3 + the actual IsStub unification -- the very work this sentence is
+#   ABOUT, not performing. Consuming 1.6.0 here for a comment fix would make the
+#   real future bump lie about what it contains, and would bill every database
+#   another re-resolve for a comment. 1.5.0-alpha has already resolved at least
+#   one database (this worktree's own self-index, during Task 4/this task's
+#   reindex) -- staying within 1.5.0 is correct precisely because nothing
+#   derived changed: there is no altered derived row for a bump to protect
+#   against, only an already-correct resolve that a bump would needlessly
+#   re-run.
+#
+#   Same warning as every entry above: the failure mode of getting this wrong is
+#   SILENT.
+#
+#   Superseded: 1.5.0-alpha|690833814ff9efb59db95b51343d52e17ab8b759650cc5a9605da2095f9b3cdf
+
+1.5.0-alpha|5ec79c8c501a536a2f202355a5148f3dd87cae9d8c524f5d0fe609f50edb9509
