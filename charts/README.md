@@ -72,3 +72,37 @@ and edge must be a fact with a file and a line.
 * Strict 7-bit ASCII, CRLF, no BOM in every `.pas` / `.ps1` / `.bat`.
 * `scratch\` is throwaway; nothing there is ever committed.
 * Commit by explicit pathspec. Never push.
+
+## What is built (2026-09-23)
+
+Two questions run end to end. `New-DiagramArtifact.ps1 -Question <q> -Target <t>
+-DbPath <db>` dispatches on the question exactly as `drag-lint ask --question`
+will, and writes an 8-file bundle plus the xref to paste into the unit.
+
+| question | select | rows are | clusters are | measured |
+|---|---|---|---|---|
+| `butterfly` | a method | methods | units | SendDeltaOperation 9+8+focus = 18 rows, 18 click targets |
+| `deps` | a unit | units | directories | Blueprint4.ViewModel 3 used-by + 18 uses = 21 rows, 21 click targets |
+
+Verified against Graphviz 16.1.0, not assumed:
+
+* ONE `dot` run emits `-Tsvg`, `-Tplain`, `-Tpng` and `-Tpdf`, so the picture and
+  the hit-test geometry come from the SAME layout and cannot drift.
+* `HREF` on an HTML-like `TD` survives into the SVG as a real `<a xlink:href>`,
+  one anchor per row -- so clickable text rows cost nothing.
+
+`Test-FormA.ps1` is the executable verification walk for the Form A grammar:
+99/99 lines classified, counts recomputed, verb set regenerated, and proven to
+FAIL on five mutations of the golden.
+
+### Two traps worth knowing
+
+* **`unit_name_norm` is the LAST DOTTED SEGMENT, lowercased.**
+  `Blueprint4.ViewModel` and `Blueprint4.CADImport.ViewModel` both normalise to
+  `viewmodel`. Matching on it either misses everything or over-matches across
+  namespaces. Join on the resolved `target_file_id` instead.
+* **`butterfly/1` JSON nests the CALLEES tree under a field named `callers`.**
+  Reading `callees.root.callees` returns nothing with no error.
+
+`scratch\` and `artifacts\` are gitignored -- both are regenerable, and each
+bundle's `meta.json` carries the command that regenerates it.

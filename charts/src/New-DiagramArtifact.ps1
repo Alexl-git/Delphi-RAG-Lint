@@ -25,9 +25,10 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)][string] $Qname,
+  # the SELECTION: a qualified symbol for butterfly, a unit name for deps
+  [Parameter(Mandatory)][Alias('Qname','Unit')][string] $Target,
   [Parameter(Mandatory)][string] $DbPath,
-  [ValidateSet('butterfly')][string] $Question = 'butterfly',
+  [ValidateSet('butterfly','deps')][string] $Question = 'butterfly',
   [int]    $Depth   = 2,
   [string] $OutRoot = (Join-Path $PSScriptRoot '..\artifacts'),
   [switch] $Open
@@ -35,12 +36,21 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$slug    = ($Qname -replace '[^A-Za-z0-9]', '_')
+$Qname   = $Target
+$slug    = ($Target -replace '[^A-Za-z0-9]', '_')
 $dir     = Join-Path $OutRoot "$Question-$slug"
 New-Item -ItemType Directory -Force $dir | Out-Null
 
-# ---- 1. emit ----------------------------------------------------------------
-$r = & (Join-Path $PSScriptRoot 'Emit-Butterfly.ps1') -Qname $Qname -DbPath $DbPath -Depth $Depth -OutDir $dir
+# ---- 1. emit -- dispatch on the question, exactly as `ask --question` will ---
+$r = switch ($Question) {
+  'butterfly' { & (Join-Path $PSScriptRoot 'Emit-Butterfly.ps1') -Qname $Target -DbPath $DbPath -Depth $Depth -OutDir $dir }
+  'deps'      { & (Join-Path $PSScriptRoot 'Emit-Deps.ps1')      -Unit  $Target -DbPath $DbPath -OutDir $dir }
+}
+# the two emitters report different row vocabularies; normalise for the shell
+$leftCount  = if ($null -ne $r.Callers) { $r.Callers } else { $r.UsedBy }
+$rightCount = if ($null -ne $r.Callees) { $r.Callees } else { $r.Uses }
+$leftLabel  = if ($Question -eq 'deps') { 'used by' } else { 'callers' }
+$rightLabel = if ($Question -eq 'deps') { 'uses'    } else { 'callees' }
 foreach ($pair in @(@($r.Svg,'graph.svg'), @($r.Plain,'graph.plain'), @($r.Dot,'graph.dot'))) {
   if (Test-Path $pair[0]) { Move-Item $pair[0] (Join-Path $dir $pair[1]) -Force }
 }
@@ -59,10 +69,14 @@ $fp = [pscustomobject]@{
   indexBytes  = $dbItem.Length
   indexMtime  = $dbItem.LastWriteTimeUtc.ToString('s') + 'Z'
   generated   = (Get-Date).ToUniversalTime().ToString('s') + 'Z'
-  callers     = $r.Callers
-  callees     = $r.Callees
+  leftLabel   = $leftLabel
+  leftCount   = $leftCount
+  rightLabel  = $rightLabel
+  rightCount  = $rightCount
   clickTargets= $r.ClickTargets
-  regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Qname $Qname -DbPath `"$DbPath`" -Depth $Depth"
+  allClickable= $r.AllClickable
+  regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
+                $(if ($Question -eq 'butterfly') { " -Depth $Depth" } else { '' })
 }
 $fp | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $dir 'meta.json') -Encoding ascii
 
@@ -112,8 +126,8 @@ $html = @"
 <header>
   <h1>$Question &mdash; <code>$short</code></h1>
   <div class="meta">
-    <span><b>$($r.Callers)</b> callers</span>
-    <span><b>$($r.Callees)</b> callees</span>
+    <span><b>$leftCount</b> $leftLabel</span>
+    <span><b>$rightCount</b> $rightLabel</span>
     <span><b>$($r.ClickTargets)</b> click targets</span>
     <span>index <b>$([IO.Path]::GetFileName($DbPath))</b></span>
     <span>generated <b>$($fp.generated)</b></span>
@@ -165,7 +179,7 @@ $html = @"
 $rel = (Resolve-Path (Join-Path $dir 'index.html')).Path
 $xref = @"
 /// <remarks>
-/// Diagram: $Question of $Qname
+/// Diagram: $Question of $Target
 /// Artifact: $rel
 /// Generated: $($fp.generated) from $([IO.Path]::GetFileName($DbPath))
 /// Regenerate: $($fp.regenerate)
