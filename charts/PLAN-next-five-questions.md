@@ -184,6 +184,13 @@ design decision, and each is cheap:
 1. **`with`-block attribution** (finding 2) -- are member accesses inside a
    Delphi `with` recorded at all? If not, `who-writes` undercounts on legacy
    code and must say so on the chart.
+   **HOLD THIS ONE. Engine reply 2026-09-23:** Task 7 of their enum-binding
+   plan measures the `with` risk on CLIENT and will file a note with a real
+   number and the METHOD for getting it. That measures **enum-value reads**
+   inside `with` -- a DIFFERENT population from our member accesses generally,
+   and they explicitly will not assert on ours. Wait for that note, reuse the
+   method, then decide whether our half still needs its own pass. If the two
+   share a root cause it will be visible there.
 2. **`modifiers` shape** (Task 5) -- does it carry visibility in a parseable
    form? If not, cluster `class-surface` by `kind` and label it as such.
 3. **Selection ambiguity** -- `Get-SymbolLocation` currently takes the FIRST of
@@ -420,6 +427,12 @@ exist). Prove the extended suite can still FAIL once before trusting it.
 * Trust a grouped query to dodge the row cap. Finding 4.
 * Open a second project DB. Library-vs-project is the only authoritative pair.
 * Run `drag-lint index` / `fb-snapshot` / `autodoc` against ANY database.
+  **This rule got much sharper on 2026-09-23.** The enum-binding re-resolve is
+  gated on `DRAGLINT_RESOLVER_VERSION` 1.5.1-alpha -> 1.6.0-alpha, and THIS
+  worktree's engine is still 1.5.1. Indexing a corpus DB that the engine team
+  has already re-resolved silently re-resolves it BACK and drops the enum
+  bindings -- recoverable, but indistinguishable from "the feature does not
+  work", and we would be the cause. See `STATUS-questions.md`.
 * Attempt `effects` until the engine team supplies the `effect_summary` legend.
 * Attempt `lands-where` / `feeds-from` / `consumers` -- they need a live
   Firebird connection via `fb-snapshot` and are not near-term work.
