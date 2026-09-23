@@ -10967,12 +10967,18 @@ begin
     one seam is what makes the verbs agree, and doing it after ApplyLineMarkers
     also drops the review-marker-* findings a --rule run manufactures: a dl:ok
     for another rule has no finding to suppress in a narrowed run, so it would
-    otherwise read as unused. }
+    otherwise read as unused.
+
+    A review-marker-* finding ABOUT the requested rule stays: every one of them
+    names its marker's rule as `"<id>"` (ApplyLineMarkers' messages), and a
+    stale dl:ok for the rule being asked about is part of that rule's answer --
+    run_marker_metric_scope.ps1 check 6 prints its remedy from exactly that line. }
   Cfg:= LoadLintConfig(AArgs);
   Survivors:= nil;
   for F in AFindings do
   begin
-    if (AArgs.Rule <> '') and not SameText(F.RuleId, AArgs.Rule) then Continue;
+    if (AArgs.Rule <> '') and not SameText(F.RuleId, AArgs.Rule)
+       and not (StartsText('review-marker-', F.RuleId) and ContainsText(F.Message, '"' + AArgs.Rule + '"')) then Continue;
     IsDefDis:= False;
     for DId in ADefaultDisabled do
       if SameText(DId, F.RuleId) then begin IsDefDis:= True; Break; end;
@@ -20992,7 +20998,11 @@ var
   Findings: TArray<TLintFinding>;
 begin
   if not ExplicitDbsExist(AArgs, 'check-ast') then Exit(2);
-  if AArgs.Target = '' then begin Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]'); Exit (2 ); end;
+  if AArgs.Target = '' then
+  begin
+    Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]');
+    Exit(2);
+  end;
   if not TFile.Exists(AArgs.Target) then begin Writeln('ERROR: file not found: ', AArgs.Target); Exit(2); end;
   if NoDbResolved(AArgs.DbPath, 'check-ast') then Exit(2);
   if TFile.Exists(AArgs.DbPath) then

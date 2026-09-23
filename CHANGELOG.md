@@ -55,7 +55,9 @@ breaking changes** until v1.0.
   ran, and `check-ast` gains `--rule` for free (documented). The report's circular-dependency
   section says `NOT REPORTED` on a run narrowed to another rule instead of "none detected".
   Documented on the `lint-all` and `check-ast` banner lines, README and AI-USAGE. Guard:
-  `tests\autotest\run_lintall_rule_enables.ps1`.
+  `tests\autotest\run_lintall_rule_enables.ps1`. A `review-marker-*` finding ABOUT the requested rule
+  (its message names the marker's rule as `"<id>"`) survives the narrowing, so `lint --rule X` still
+  reports a stale `dl:ok` for X with its re-record command (`run_marker_metric_scope.ps1` check 6).
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
   every `index` preprocess, and every project closure) used to union only the `.dproj`'s `Base` group
   and the selected config's `Cfg_N` group. MSBuild also applies `Base_<Platform>` and
