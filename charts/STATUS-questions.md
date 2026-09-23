@@ -134,16 +134,48 @@ GAP 2 (raise/handle) is NOT touched by this change and they declined to guess.
 
 ---
 
+## >>> THE ENGINE IS AHEAD OF OUR BINARY. READ BEFORE MEASURING ANYTHING <<<
+
+**2026-09-23 05:30 -- the engine team reindexed the whole corpus** (CLIENT,
+SERVER and the DL self-index) with `v=1.17.0-alpha` / `r=1.6.0-alpha`.
+**Our deployed engine is `1.16.0-alpha` / resolver `1.5.1-alpha` -- OLDER on two
+axes**, and `RefuseIfEngineOlderThanDb` does not cover the resolver axis, so
+nothing refused.
+
+The skew gives WRONG ANSWERS, not errors: `call_edges` unchanged at 20,343 on
+CLIENT, yet `reverse-calltree --direction callees` on `SendDeltaOperation` fell
+from 9 nodes to 4. Callers unaffected.
+
+* **The suite is RED -- 9 failures, and they must STAY red.** They are the
+  detector for the redeploy. Two families only: callee-direction (7) and the
+  field-backed property accessor (2). Everything else still passes.
+* **Work on CLONES** in `charts\scratch\db\` (gitignored, verified identical to
+  live). They remove the lock risk -- `graph` fails `database is locked`
+  against a live DB -- and freeze the asserted counts. They do NOT fix the skew.
+* **Reads are safe** -- a full day of them left both DBs still `r=1.6.0-alpha`.
+  Only `index` re-resolves, and we never run it.
+* Filed urgent:
+  `C:\Projects\Delphi-RAG-lint\docs\INBOX-URGENT-resolver-downgrade-not-refused.md`
+  -- `DRagLint.CLI.pas:4362` guards extractor + schema but not resolver, and
+  `:1880`'s `Prev <> Cur` is direction-blind.
+
 ## Resume point
 
-The five-question batch is DONE (commits `94c6f634`, `d99e283a`, `769d47c4`).
-`charts\PLAN-next-five-questions.md` records what was built and where reality
-differed from the plan.
+The first five-question batch is DONE (`94c6f634`, `d99e283a`, `769d47c4`);
+`charts\PLAN-next-five-questions.md` records its six deviations.
 
-**Next:** pick from the nine unplanned-but-unblocked questions above and
-MEASURE FIRST, exactly as the shipped ten did. `lifecycle` (S) and `cycles`
-(S-M) are the cheapest; `effects` (M) is deferred but NOT blocked -- the
-`effect_summary` encoder is in this repo and can simply be read.
+**Next: `charts\PLAN-next-five-verbs.md`** -- lifecycle, cycles, wiring,
+effects, architecture. Chosen because **none of them touches the skewed path**,
+so all five can be built AND verified now. Every premise in it is measured and
+listed as P1-P12 for direct attack.
+
+**Held until the engine matches the index:** `change-impact` and `tested-by` --
+both walk `call_edges`. `tested-by` is cheaper than the table above says: the
+TEST project DB already CONTAINS the code under test, so it is a single-DB pass
+run per test project, not a cross-DB join.
+
+After those five: re-check the INBOX, re-clone, and re-measure the premises of
+everything remaining before trusting any effort estimate here.
 
 **Still owed, and not ours to do yet:** the `with`-block attribution
 measurement from Task 0 remains ON HOLD pending the engine team's Task 7,
