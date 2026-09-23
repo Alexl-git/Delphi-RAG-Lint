@@ -5,6 +5,16 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Added
+
+- **`assert-with-side-effect`** (project-wide, warning, OFF by default) -- a resolved call inside
+  `Assert(Cond[, Msg])` to a routine with a PROVEN effect (`symbol_facts.effect_free = 0` and a stored
+  `effect_summary` carrying `g`, `h`, `s` or `p<k>`). Release builds compile `Assert` out, so the effect
+  happens in Debug only. A summary that is only `?`, an unbound or ambiguous callee, and a same-line call
+  outside the Assert never fire; the message carries the callee's summary and witness. OFF for the same
+  reason as the two purity v2 rules: it needs a resolved index with the `purity` stage. Rule count
+  183 -> 184 (131 built-in). Guard: `tests\lint-project\assert-side-effect\run_assert_side_effect.ps1`.
+
 ### Fixed
 
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
