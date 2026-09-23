@@ -65,7 +65,7 @@
     check 10  doc: "Used by:" lists UseIt ONCE (REGRESSION) . green already
     check 11  lint-tree: stale-interface-reference ......... **task 8 (LAST)**
     check 12  E5: scoped pass NULLs its own universe ....... task 4
-    check 13  rule 0: duplicate declarations collapse ...... task 4
+    check 13  rule 0: pinned INERT (collapsed = 0, R12) .... task 4
 
   **Task 8 is the last check to go green** -- it wires `enum_value` into
   LintTree.IsRoutineKind, which the prior art (INBOX-property-refs-never-
@@ -83,15 +83,44 @@
     * **Check 2 is the control on the FIXTURE.** The routine `DoWork` resolves
       today and must resolve in every later task. If check 2 ever reddens, the
       fixture broke, not the engine -- stop and fix the fixture.
-    * **Check 13's MECHANISM assertion is REQUIRED, not optional.** Fixture B
-      holds two content-identical copies of `uEnumDecl.pas`, so `cmdLoad` has
+    * **Check 13's MECHANISM assertion is a PINNED MEASUREMENT -- owner ruling
+      R12, 2026-09-23 -- and it asserts `collapsed = 0`, not `>= 1`.** Fixture
+      B holds two content-identical copies of `uEnumDecl.pas`, so `cmdLoad` has
       two `enum_value` rows with the SAME qualified_name and the SAME
-      (start_line, end_line) -- the library-twin shape. The OUTCOME assertion
-      (A1 binds) would be green even with rule 0 absent, if `unit_uses`
-      happened to resolve to exactly one copy. So check 13 ALSO asserts the
-      `index` output's `enum-values:` line reports `collapsed >= 1`. That log
-      line does not exist on 1.5.1-alpha -- it lands in task 4 -- and its
-      absence is part of what makes check 13 red today. That is intended.
+      (start_line, end_line) -- the library-twin shape. The assertion was
+      originally written as `collapsed >= 1`, on the assumption that the twins
+      would meet as two candidates and rule 0 would fold them.
+
+      THEY CANNOT MEET, AND THAT IS A PROPERTY OF THE ENGINE, NOT OF THIS
+      FIXTURE. Two twins share a qualified_name, which implies they share a
+      unit name; `unit_uses` resolves a unit name to exactly ONE
+      `target_file_id`; and R1 visibility is built from those resolved edges
+      (`GetUnitScopeEdges` -> `CandInScope`). So at most one twin is ever
+      visible to a given ref, `Visible` never reaches length 2, and
+      `CollapseIdenticalEnumCopies` returns at its `Length(AVisible) < 2`
+      guard. Measured on `library-Win64`, the only database in the corpus with
+      duplicate `enum_value` groups (6, from task 1): all six are
+      `Web.WebReq.TRequestNotification.*`, twinned across file 4771
+      (`...\source\Internet\Web.WebReq.pas`) and 5883
+      (`...\source\data\dsnap\Web.WebReq.pas`); ZERO files carry `unit_uses`
+      edges to both twins, and twin 4771 is referenced by nothing at all.
+      **Rule 0 is measured INERT on real data, not defeated by this fixture.**
+
+      So the assertion is inverted into a control that can still fail: if
+      `collapsed` is ever non-zero, the visibility model or unit-name
+      resolution has CHANGED and rule 0 has become reachable. That is a SIGNAL
+      TO RE-EVALUATE rule 0 -- read the counters, decide whether it is still
+      wanted -- and it is NOT a regression. Do not "fix" it by editing this
+      number back; find out what changed first.
+
+      Rule 0 is NOT removed. Owner ruling 4 said build it now, and removing it
+      on this evidence is the owner's call; the counters on the `enum-values:`
+      line are the audit that ruling asked for.
+
+      The OUTCOME assertion (A1 binds despite the duplicate) stays as it was,
+      and the `enum-values:` line must still be PRESENT -- that log line does
+      not exist on 1.5.1-alpha, it lands in task 4, and its absence is what
+      keeps check 13 red on the engine this file was committed against.
     * **Check 7 is the invariant fence.** `call_edges` stays ROUTINE-ONLY and
       `member_accesses` stays property/field-only; an enum binding is
       `refs.symbol_id` and NOTHING else (spec U3).
@@ -567,14 +596,20 @@ CheckN 13 'fixture B indexes clean' (($LASTEXITCODE -eq 0) -and ($idxB -match '0
 $twins = Sql $dbB "SELECT s.id, s.qualified_name AS qn, s.start_line AS sl, s.end_line AS el, f.path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.kind = 'enum_value' AND s.name = 'cmdLoad' ORDER BY f.path"
 CheckN 13 'fixture B really holds TWO cmdLoad enum_value rows (the library-twin shape)' (@($twins).Count -eq 2) ($twins | ConvertTo-Json -Compress)
 CheckN 13 'the twins share qualified_name AND (start_line, end_line)' (@($twins).Count -eq 2 -and $twins[0].qn -eq $twins[1].qn -and $twins[0].sl -eq $twins[1].sl -and $twins[0].el -eq $twins[1].el) ($twins | ConvertTo-Json -Compress)
-# THE MECHANISM ASSERTION -- required, see the header. Without it the outcome
-# below is green even with rule 0 absent, whenever unit_uses happens to pick
-# exactly one copy.
+# THE MECHANISM ASSERTION -- a PINNED MEASUREMENT under owner ruling R12, see
+# the header for the library-Win64 evidence. Two twins share a unit name,
+# unit_uses resolves a unit name to ONE file, and R1 is built from those
+# resolved edges -- so at most one twin is ever visible and rule 0 is INERT.
+# `collapsed` is therefore pinned at 0. A non-zero value is a SIGNAL TO
+# RE-EVALUATE rule 0 (the visibility or unit-resolution model changed and it
+# has become reachable), NOT a regression -- do not edit the number back.
+# The line must still be PRESENT: that is what keeps check 13 red on
+# 1.5.1-alpha, where the enum-values line does not exist at all.
 $evLine = @(($idxB -split "`r?`n") | Where-Object { $_ -match 'enum-values:' })
 CheckN 13 'MECHANISM: the index output carries an "enum-values:" stage line' ($evLine.Count -ge 1) (($idxB -split "`r?`n" | Where-Object { $_ -match 'resolve:' }) -join ' | ')
 $collapsed = -1
 if ($evLine.Count -ge 1 -and (($evLine -join ' ') -match 'collapsed\D{0,20}(\d+)')) { $collapsed = [int]$Matches[1] }
-CheckN 13 'MECHANISM: "enum-values:" reports collapsed >= 1' ($collapsed -ge 1) ("collapsed=$collapsed line=" + ($evLine -join ' '))
+CheckN 13 'MECHANISM (pinned, R12): "enum-values:" reports collapsed = 0 -- rule 0 measured inert; non-zero = re-evaluate rule 0, not a regression' ($collapsed -eq 0) ("collapsed=$collapsed line=" + ($evLine -join ' '))
 # THE OUTCOME.
 $bUseFile = Join-Path $dirB 'uEnumUse.pas'
 $bA1Line  = LineOf $bUseFile '{ A1 bind }'

@@ -5036,13 +5036,25 @@ begin
     THREE writers: call refs through UpsertCallEdge (2026-08-31), property and
     field member-accesses (2026-09-16), and enum-value reads plus their
     qualified member-accesses (2026-09-23). "Clear it all" is therefore WIDER
-    than "clear what the edges wrote", and deliberately so: every one of those
-    writers rebuilds its own rows in the same pass, so clearing the column
-    wholesale cannot lose a fact this run will not re-derive, while a statement
-    scoped to the edges would leave the other two writers' stale identities
-    behind. The enum stream's own NULL-over-its-universe
-    (ResolveEnumValueRefs) is redundant with THIS on a whole-database run; it
-    exists for the SCOPED run, which never reaches here. }
+    than "clear what the edges wrote", and deliberately so: a statement scoped
+    to the edges would leave the other two writers' stale identities behind.
+
+    AND IT IS WIDER THAN WHAT THIS RUN RE-DERIVES, under a stated condition --
+    do not read it as "cleared then rebuilt". This UPDATE is unconditional, so
+    it reaches the refs of STALE files too; the streams that rebuild the column
+    are all narrowed by the stale-file prescan's predicate and deliberately
+    skip those files, because their line/col no longer match the source. So
+    whenever the prescan withholds a file, that file's refs end this pass with
+    symbol_id NULL and no binding until it is REINDEXED. Measured on the
+    self-index while this was written: 93 enum-value `read` refs in 2 withheld
+    files lost their binding exactly this way (see
+    docs\MEASURED-enum-value-refs-2026-09-23.md). The signal a reader should
+    look for is the `N file(s) WITHHELD` line at the end of the calls stage --
+    if it is absent, clear and re-derive do cover the same set.
+
+    The enum stream's own NULL-over-its-universe (ResolveEnumValueRefs) is
+    redundant with THIS on a whole-database run; it exists for the SCOPED run,
+    which never reaches here. }
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL');
   { and the member accesses the same pass wrote -- same lifetime as the edges }
   if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');
@@ -12404,14 +12416,43 @@ begin
       correctly-empty corpus are indistinguishable from outside.
       The collapse pair audits owner ruling 4, which took the rule-0 fold
       WITHOUT a prior measurement and required the counts be recorded so the
-      decision stays checkable after the fact. }
-    ResolveLog(Format('calls      enum-values: %d bound of %d bare read(s) + %d qualified; ' +
-      'declined not-visible %d, ambiguous %d, shadowed %d; ' +
+      decision stays checkable after the fact.
+
+      EVERY NUMBER NAMES ITS OWN POPULATION, and that phrasing is a FIX, not a
+      style choice. The first wording read `%d bound of %d bare read(s) + %d
+      qualified`, which a reader parses as one fraction -- "1232 of 1241" --
+      when the truth is two separate populations: 1232 of 1232 bare reads, and
+      9 qualified that all bound. Worse, the three decline counters are fed by
+      BOTH streams (Shape A calls ResolveEnumValueRead directly; rung 3c
+      reaches its own counters through ResolveOne), while EnumCandidates counts
+      Shape A alone -- so the moment a decline is non-zero, no reader can say
+      which stream it came from and `candidates = bound + declines` does not
+      reconcile. Today every decline is 0 on this repository's own index, which
+      is exactly why the defect would have shipped invisibly and surfaced first
+      on a corpus that has real name collisions. }
+    ResolveLog(Format('calls      enum-values: %d of %d bare read(s) bound (Shape A); ' +
+      '%d qualified bound (Shape B); declined (both streams) ' +
+      'not-visible %d, ambiguous %d, shadowed %d; ' +
       'duplicate groups collapsed %d (decisive %d); unit-level shadow decls %d',
       [EnumBound, EnumCandidates, WrittenValues,
        Resolver.EnumStats.NotVisible, Resolver.EnumStats.Ambiguous, Resolver.EnumStats.Shadowed,
        Resolver.EnumStats.DupGroupsCollapsed, Resolver.EnumStats.CollapseDecisive,
        EnumShadowDecls]));
+    { THE RECONCILIATION, printed rather than left implicit. The resolver counts
+      its own successes on BOTH paths -- ResolveEnumValueRead's final
+      Inc(FEnumStats.Bound) for Shape A, and rung 3c's for Shape B -- while the
+      store counts what it WROTE. The two must agree, and stating the identity
+      turns three unrelated numbers into something a later reader can check:
+      a Shape-B hit that the write branch silently failed to persist would show
+      up here and nowhere else. }
+    if Resolver.EnumStats.Bound = EnumBound + WrittenValues then
+      ResolveLog(Format('calls      enum-values: total bound %d = %d + %d (resolver and store agree)',
+        [Resolver.EnumStats.Bound, EnumBound, WrittenValues]))
+    else
+      ResolveLog(Format('calls      enum-values: WARNING -- the resolver counted %d binding(s) but the store ' +
+        'wrote %d (%d Shape A + %d Shape B). A resolved enum value did not reach refs.symbol_id; ' +
+        'the bindings above are INCOMPLETE and the write path is the place to look.',
+        [Resolver.EnumStats.Bound, EnumBound + WrittenValues, EnumBound, WrittenValues]));
     { A SILENTLY EMPTY SHADOW SET IS A FAIL-OPEN, the failure mode this
       repository has been bitten by before: R3(c) would stop shadowing, the pass
       would OVER-BIND, and the run would report a clean result. Loud, and on its
