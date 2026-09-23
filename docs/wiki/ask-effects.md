@@ -20,7 +20,7 @@ A method or routine.
 
 ## The chart shows
 
-The purity verdict and the effect summary, token by token: `g` writes global state, `h` allocates or frees on the heap, `s` writes its own fields, `p<k>` writes through parameter k (named from the signature), `?` a blocker the analysis could not see through. A routine with no tokens and a proven verdict is shown as **Effect-free (proven)** -- the same words hover and autodoc use.
+The purity verdict and the effect summary, token by token: `g` writes global state (or a resource, or runs SQL), `h` frees heap storage it did not allocate, `s` writes its own fields, `p<k>` writes through parameter k (0-based, named from the signature), `?` a blocker the analysis could not see through. A routine with no tokens and a proven verdict is shown as **Effect-free (proven)** -- the same words hover and autodoc use. The full key is the [Effect Summary Legend](Effect-Summary-Legend).
 
 ## It stands on
 

@@ -28,7 +28,9 @@ carries the analysis fact **Effect-free (proven)**. The JSON form
 (`hover --format json`) carries the verdict for every routine as
 `effect_free` (1 / 0), `effect_summary` (tokens: `g` globals, `h` heap, `s` own
 fields, `p<k>` parameter k, `?` not analysable) and `effect_witness` (the first
-effect in words, e.g. `writes through parameter #1 (AReason)`). Older builds
+effect in words, e.g. `writes through parameter #1 (AReason)`). Every token,
+and the difference between an empty summary and a missing one, is spelled out
+in the [Effect Summary Legend](Effect-Summary-Legend). Older builds
 printed `Pure`; that word is no longer emitted. For the same data as a chart,
 see [`ask effects`](ask-effects).
 
