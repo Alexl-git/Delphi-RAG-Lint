@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>drag-lint + Component Converter -- Feature List</title>
+<style>
+  body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 11pt;
+         line-height: 1.45; color: #1a1a1a; max-width: 52em; margin: 2em auto; padding: 0 1em; }
+  h1 { font-size: 20pt; margin: 0 0 .15em 0; }
+  h2 { font-size: 15pt; margin: 1.6em 0 .4em 0; padding-bottom: .15em;
+       border-bottom: 2px solid #b8b8b8; }
+  h3 { font-size: 12pt; margin: 1.1em 0 .3em 0; color: #222; }
+  .sub { color: #555; font-size: 10pt; margin: 0 0 1.4em 0; }
+  .lede { background: #f4f6f8; border-left: 4px solid #7a8a99; padding: .7em 1em; margin: 1.2em 0; }
+  .new { background: #eef6ee; border-left: 4px solid #5a8a5a; padding: .7em 1em; margin: 1.2em 0; }
+  .warn { background: #fbf7ec; border-left: 4px solid #c9a227; padding: .7em 1em; margin: 1.2em 0; }
+  ul { margin: .3em 0 .9em 0; padding-left: 1.5em; }
+  li { margin: .22em 0; }
+  b.f { color: #000; }
+  table { border-collapse: collapse; margin: .6em 0 1em 0; width: 100%; }
+  th, td { border: 1px solid #b8b8b8; padding: .32em .6em; text-align: left; vertical-align: top; font-size: 10.5pt; }
+  th { background: #eceff1; }
+  td.n { text-align: right; width: 4em; }
+  tr.tot td { font-weight: bold; background: #f7f7f7; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 10pt; }
+  .foot { color: #555; font-size: 9.5pt; border-top: 1px solid #ccc; margin-top: 2.5em; padding-top: .8em; }
+  .st { font-family: Consolas, "Courier New", monospace; font-size: 8.5pt; font-weight: bold;
+        padding: 0 .35em; border: 1px solid #888; white-space: nowrap; }
+  .st-ship { background: #dff0df; border-color: #5a8a5a; color: #234d23; }
+  .st-prog { background: #e3ecf8; border-color: #4a6fa5; color: #1f3d66; }
+  .st-plan { background: #fbf2d6; border-color: #c9a227; color: #5e4a0a; }
+  .st-spec { background: #f3e6f6; border-color: #8a5a99; color: #4a2657; }
+  .st-prop { background: #f1f1f1; border-color: #888; color: #333; }
+  .st-def  { background: #fbe3e3; border-color: #b34747; color: #6b1f1f; }
+  .st-park { background: #ececec; border-color: #aaa; color: #666; }
+  table.small td, table.small th { font-size: 9.5pt; padding: .22em .45em; }
+</style>
+</head>
+<body>
+
+<h1>drag-lint + Component Converter</h1>
+<p class="sub">Feature list &middot; 23 September 2026 &middot; drag-lint <b class="f">1.17.0-alpha</b><br>
+(index extractor <b class="f">1.18.0-alpha</b>, call resolver <b class="f">1.6.0-alpha</b>, schema <b class="f">23</b>)<br>
+Supersedes the 16 September 2026 edition (1.13.0-alpha). New in this edition: a
+"What is new" chapter at the front, chapter 12 (Diagrams and charts), a complete
+command reference (Appendix B) and a complete lint-rule catalogue (Appendix C).
+Chapters 1-11 keep their numbers.</p>
+
+<p><b class="f">What it is.</b> drag-lint is an AST-exact symbol index, linter and refactoring
+engine for Delphi / Object Pascal. It parses your code with tree-sitter into a
+SQLite index, then answers questions about it -- symbols, callers, types,
+dependencies, documentation -- without a compiler and without the IDE having the
+project open. The Component Converter is a rules-driven system built on that
+index for migrating legacy VCL components to modern replacements.</p>
+
+<p><b class="f">Status badges used in this edition.</b>
+<span class="st st-ship">SHIPPED</span> / <span class="st st-ship">READY</span> in the build or tool-set this document describes;
+<span class="st st-prog">IN PROGRESS</span> being implemented now;
+<span class="st st-plan">PLANNED</span> an implementation plan exists;
+<span class="st st-spec">SPECIFIED</span> a design spec exists, no plan yet;
+<span class="st st-prop">PROPOSED</span> an idea written down, not yet designed;
+<span class="st st-prop">OWNER DECISION</span> waiting on a ruling rather than on effort;
+<span class="st st-def">OPEN DEFECT</span> a known wrong answer being tracked;
+<span class="st st-park">PARKED</span> deliberately on hold.</p>
+
+<h2>What is new since the 16 September edition</h2>
+<p class="sub">Changes between 1.13.0-alpha (16 September) and 1.17.0-alpha (23 September):
+releases 1.14.0, 1.15.0, 1.15.1 and 1.16.0, plus the 1.17.0 work recorded under
+"Unreleased" in the CHANGELOG. Every figure below is quoted from the CHANGELOG or the
+commit that measured it.</p>
+
+<div class="new">
+<h3>Enum values are now references (resolver 1.6.0-alpha)</h3>
+<p>Until this release a read of an enum value -- <code>cmdDelta</code>, or
+<code>TCommandID.cmdDelta</code> -- was recorded but never tied to the value it names,
+on every index ever built. It now is, by name <em>and scope</em>: the value must be
+visible from the reading unit, exactly one candidate may qualify, and a same-named
+local, parameter, member or unit-level declaration makes the engine decline rather
+than guess. The result is either <em>certain</em> or nothing.</p>
+<ul>
+<li><b class="f">Who reads this value?</b> <code>query find-callers --name cmdDelta --resolved</code> lists every bound read, tagged <code>[certain, read]</code>. On ORM3 CLIENT, <code>cmdTableLoad</code> now shows 42 reads and <code>cmdDelta</code> 38; both were 0 before.</li>
+<li><b class="f">Removing an enum member is caught before the build.</b> <code>lint-tree</code> reports a removed member as a stale reference at every bound read in the dependent closure. A member whose <em>ordinal</em> moved gets a different, truthful message: the code still compiles, but any ordinal already stored or transmitted now means a different member.</li>
+<li><b class="f">Two stated caveats.</b> Scoped enums (<code>{$SCOPEDENUMS ON}</code>): measured <b class="f">0</b> wrong bindings across all 33 project databases (13,443 bare reads bind, none to a scoped value); the platform libraries were not measured. <code>with</code> blocks: the engine does not model <code>with</code> scope, and on ORM3 CLIENT <b class="f">178</b> bound bare reads sit inside a routine that contains a <code>with</code> -- verify those against the declaration. Qualified reads are unaffected by either. The new rule <code>enum-read-inside-with</code> (below) makes the <code>with</code> case visible.</li>
+<li><b class="f">Upgrade cost:</b> derived data only, so a re-resolve, not a re-parse -- about 6 minutes for all project indexes and roughly 70 minutes per platform library (<code>index --all --resolve-only</code>).</li>
+</ul>
+</div>
+
+<div class="new">
+<h3>Purity v2: "effect-free" is now proven, not guessed (resolver 1.5.x)</h3>
+<p>The generated documentation used to label a routine <code>Pure</code> when its own
+body touched no field, parameter, file or SQL. That could not see past the routine:
+a routine writing a global, and every routine calling it, was labelled Pure. A new
+<b class="f">purity</b> stage in the resolve pass now computes an effect summary for every
+routine across the whole call graph, to a fixed point, and stores three facts per
+routine -- <code>effect_free</code>, <code>effect_summary</code> and
+<code>effect_witness</code> (the reason it is not effect-free).</p>
+<ul>
+<li>Documentation and hover say <b class="f">Effect-free (proven)</b> only when the stage proved it; absence claims nothing. Hover JSON carries the three <code>effect_*</code> keys.</li>
+<li>Measured: <b class="f">2,896 of 10,150</b> routines proven effect-free on ORM3 CLIENT; 193 of 2,922 (7%) on drag-lint's own index on first run. Both figures are upper bounds until the affected indexes are re-parsed (commit 2fad5cef).</li>
+<li>Two new project-wide rules, both <b class="f">off by default</b>: <code>discarded-effect-free-result</code> (an effect-free function called and its result thrown away) and <code>query-name-with-effect</code> (a <code>Get*</code>/<code>Is*</code>/<code>Find*</code>... routine that also changes state). Measured with <code>--enable</code>: 3 findings, and 6 / 5 / 0 / 54 on CLIENT / DataCopy / YADF / drag-lint.</li>
+<li>Owed: about 850 stored <code>Pure</code> lines in this repository (259 in DataCopy) await one regeneration pass, deliberately deferred until the libraries are re-resolved.</li>
+</ul>
+</div>
+
+<div class="new">
+<h3>Three rules built on the new facts</h3>
+<p>Proposed, built and merged the same day the facts they stand on landed. The
+catalogue moves to <b class="f">186 rules</b> (133 built-in, 157 on by default).</p>
+<ul>
+<li><code>enum-read-inside-with</code> (bug pattern, warning, <b class="f">on by default</b>) -- a bare name inside a <code>with</code> body names both an enum value and a member of the <code>with</code> target: the compiler binds the member, the index records the enum value. The one wrong-binding channel this release measured, now reported where it happens.</li>
+<li><code>assert-with-side-effect</code> (project-wide, warning, off by default) -- a routine with a <em>proven</em> effect is called inside <code>Assert</code>; Release builds compile <code>Assert</code> out, so the effect happens in Debug only. Needs an index resolved with the purity stage; an unknown effect never fires.</li>
+<li><code>ifdef-undefined-symbol</code> (project-wide, warning, off by default) -- an <code>{$IFDEF}</code> / <code>{$IFNDEF}</code> / <code>defined()</code> tests a symbol no build of the project defines, so the branch is dead. Measured 175 findings on ORM3 CLIENT, all deliberate trace switches such as <code>TRACE_CODESITE</code> rather than typos -- which is why it ships off; known switches go in the <code>ifdef_allow</code> configuration key.</li>
+</ul>
+</div>
+
+<div class="new">
+<h3>A forward declaration is no longer counted as a class</h3>
+<p><code>TFoo = class;</code> completed later in the same unit used to appear as a second
+class: two rows from <code>query</code>, two completion entries, and class metrics that
+parented every descendant to the empty stub. Every by-name lookup now folds the stub
+into the real declaration (<code>query</code> prints <code>forward at line N</code>, hover
+leads with <code>forward declaration -&gt; line N</code>, <code>outline</code> keeps both rows
+and tags the stub). No re-index needed.</p>
+</div>
+
+<div class="new">
+<h3>Conditional compilation now matches what MSBuild compiles (extractor 1.18.0-alpha)</h3>
+<p>The define profile read only the <code>Base</code> and configuration property groups of a
+<code>.dproj</code>, and missed the per-platform groups MSBuild also applies. On ORM3 CLIENT
+<code>EUREKALOG</code> is defined only per platform, so an <code>{$IFDEF EurekaLog}</code> uses
+block was treated as inactive and one unit the compiler does build dropped out of
+the index (625 -&gt; 624 files). All four groups are now read, in MSBuild order.
+Because this changes which branches are parsed, every index re-parses once (about
+3 hours 17 minutes for the whole estate, measured 17 September).</p>
+</div>
+
+<h3>Also shipped since 16 September (1.14.0 - 1.16.0)</h3>
+<ul>
+<li><b class="f">Property and field references resolve</b> (resolver 1.3.0). <code>find-callers --resolved</code> on a property or field lists each access as <code>[certain, read]</code> or <code>[certain, write]</code>; <code>lint-tree</code> reports every stale reference when a public property is removed (it previously reported "0 places" for a property with 207 dependents).</li>
+<li><b class="f">Generic types resolve by arity</b> (extractor 1.17.0, schema 23). <code>TObjectList&lt;T&gt;</code> climbs to the generic <code>TList&lt;T&gt;</code>, not the unrelated <code>System.Classes.TList</code>; ORM3's 134 descendants of <code>TMicObjectBase&lt;I&gt;</code> now resolve their base.</li>
+<li><b class="f">Inherited fields</b> appear in a method's <code>Reads:</code>/<code>Writes:</code> facts, own fields first. <b class="f">Nested-routine and inline variables</b> are indexed.</li>
+<li><b class="f">Exceptions a routine handles</b> -- a new <code>Catches:</code> fact, e.g. <code>Catches: EConvertError (dialog: ShowMessage); Exception (re-raise)</code>, with dispositions re-raise, raises X, dialog, empty and swallowed.</li>
+<li><b class="f">The converter no longer drops image data.</b> Class casts are realised in code, and a streamed image whose format the target accepts is carried byte-for-byte; one it cannot carry is reported loudly rather than dropped. This was the destructive limitation flagged in the previous edition.</li>
+<li><b class="f">Unlinked source properties are warned</b>, as "dropped on N of M converted instances", and a <code>#link</code> between two properties of the same class carries every sub-property automatically.</li>
+<li><b class="f">New verb <code>glyph-vacuum</code></b> -- measures every streamed graphic in a form tree (format, size, strip count) before a glyph rule is written. Measured on the M2022 extraction tree: 223 forms, 2,721 graphics, 673 distinct.</li>
+<li><b class="f">Rule editor</b> -- class list with checkboxes, origin marks and a partial-name search; named filters and persistent "do not convert" marks; several rules per source class across rule books; double-click loads a rule's source and target together; "already used" marks now require the right receiver and real code.</li>
+<li><b class="f"><code>duplicate-global-decl</code> library tier</b> -- a project global that re-declares an RTL name it uses (44 genuine findings on ORM3 CLIENT). Two false positives fixed: a version string read as an IP address, and a reviewed suppression reported as unnecessary.</li>
+<li><b class="f">Smaller fixes:</b> <code>context</code> resolves <code>Class.Member</code> and lists every field of a record; <code>uses-report --name</code> matching no unit now fails instead of writing an empty report; <code>dataset-open-without-close</code> no longer fires on a field named <code>Open</code>.</li>
+</ul>
+
+<h3>The previous edition's roadmap, scored</h3>
+<table>
+<tr><th>Item in the 16 September roadmap</th><th>Status now</th></tr>
+<tr><td>Realize class casts in the converter (A.1)</td><td><span class="st st-ship">SHIPPED</span> 1.14.0 -- image payloads carried when compatible, reported when not</td></tr>
+<tr><td>Generic base-class resolution (A.2)</td><td><span class="st st-ship">SHIPPED</span> 1.15.0</td></tr>
+<tr><td>Inherited fields in analysis (A.2)</td><td><span class="st st-ship">SHIPPED</span> 1.15.0</td></tr>
+<tr><td>Exceptions a routine handles (A.2)</td><td><span class="st st-ship">SHIPPED</span> 1.14.0 (<code>Catches:</code>)</td></tr>
+<tr><td>Nested-routine variables (A.2)</td><td><span class="st st-ship">SHIPPED</span> 1.15.0</td></tr>
+<tr><td>Property references (A.2)</td><td><span class="st st-ship">SHIPPED</span> 1.14.0 (resolver 1.3.0); enum values followed in 1.17.0</td></tr>
+<tr><td>Numbers as searchable facts (A.2)</td><td><span class="st st-prop">PROPOSED</span> -- carried forward; no open note tracks it (A.4)</td></tr>
+<tr><td>Calls across process boundaries (A.3)</td><td><span class="st st-ship">READY</span> -- <code>protocol-trace</code> and <code>crosses-boundary</code> charts (chapter 12), on the enum-value binding</td></tr>
+<tr><td>Visual code map (A.3)</td><td><span class="st st-prog">IN PROGRESS</span> -- chart pipeline with Graphviz layout and click-to-source is ready (chapter 12); the standalone viewer continues</td></tr>
+<tr><td>Trustworthy "already used" marks (A.4)</td><td><span class="st st-ship">SHIPPED</span> -- receiver-checked, comments skipped</td></tr>
+<tr><td>Two lint false positives (A.5)</td><td><span class="st st-ship">SHIPPED</span> 1.14.0</td></tr>
+</table>
+
+<h2>1. Indexing and the code database</h2>
+<ul>
+<li><b class="f">AST-exact indexing</b> via tree-sitter grammars for Pascal and DFM -- no regex, no string-literal or comment noise.</li>
+<li><b class="f">One database per project</b>, stored beside the project in <code>_D-RAG\</code>, plus per-platform library indexes for the RTL/VCL and third-party code.</li>
+<li><b class="f">Compile-closure indexing</b> -- a project index contains exactly what the compiler sees: project members, transitively used project-local units, each unit's sibling <code>.dfm</code>, and its <code>{$I}</code> includes. Loose unreferenced files stay out.</li>
+<li><b class="f">Build-accurate conditional compilation</b> <b>(improved)</b> -- the define profile is read from all four MSBuild property groups (base, configuration, and the per-platform variant of each), so the branches indexed are the branches compiled.</li>
+<li><b class="f">Generics by arity</b> <b>(new)</b> -- generic types and methods are indexed under their bare name with their parameter list; ancestry resolves by parameter count, so a generic base is never confused with a same-named non-generic class.</li>
+<li><b class="f">Library and browsing-path scans</b> read the IDE's own registered paths (Win32 + Win64, or every platform including Android / iOS / Linux / macOS).</li>
+<li><b class="f">Incremental re-indexing</b> with per-file fingerprints -- only changed files are re-parsed; interrupted runs resume rather than restart.</li>
+<li><b class="f">Resolve-only mode</b> re-derives call edges, ancestry, helper targets, member and enum-value bindings and purity verdicts from parses the index already holds, skipping the file walk entirely.</li>
+<li><b class="f">Watch mode</b> re-indexes on file change at a configurable interval.</li>
+<li><b class="f">Cross-database resolution</b> -- a project index can consult a library index for calls it cannot resolve locally, without ever inventing an edge.</li>
+<li><b class="f">Parallel indexing</b> across configurable job counts, driven by a named manifest so a whole estate rebuilds with one command.</li>
+<li><b class="f">Project registration and reconciliation</b> -- add a project to the manifest, and sync its <code>.dproj</code> / <code>.dpr</code> member list against the units it actually uses.</li>
+<li><b class="f">Full-text index</b> (FTS5, unicode + trigram) over source text, comments, DFM content and SQL.</li>
+</ul>
+
+<h2>2. Search and navigation</h2>
+<ul>
+<li><b class="f">Symbol lookup</b> by name, qualified name, or substring -- exact, fuzzy and case-sensitive modes, filterable by symbol kind. A forward declaration is folded into its real declaration <b>(new)</b>.</li>
+<li><b class="f">Find callers / find callees</b> for any routine, method or event handler, with surrounding source context. With <code>--resolved</code>, precise per-target answers now cover <b class="f">properties and fields</b> (read / write) and <b class="f">enum values</b> (read) <b>(new)</b>.</li>
+<li><b class="f">Which unit declares this?</b> -- resolves a symbol to the unit you need to add to a <code>uses</code> clause.</li>
+<li><b class="f">What implements this interface?</b> -- hovering an interface lists the classes that implement it and, separately, the interfaces that extend it.</li>
+<li><b class="f">Type-at-position</b> -- resolve the identifier at a file/line/column.</li>
+<li><b class="f">Text, message and caption search</b> across <code>.pas</code>, <code>.dfm</code> and <code>.sql</code> -- string literals, DFM captions, SQL exception text and comment prose, with exact-phrase, any-order and substring matching.</li>
+<li><b class="f">Declaration-clause search</b> -- finds declarations by clauses the index does not model (<code>stored IsFontStored</code>, <code>default 0</code>).</li>
+<li><b class="f">Unit outline</b> -- every type, method and its line, without opening the file.</li>
+<li><b class="f">Where-used / usages</b> reporting across the whole indexed estate.</li>
+<li><b class="f">Concept lookup</b> -- routes a human phrase ("the scheduler", "delta streaming") to the owning symbol via topics authors write in ordinary <code>///</code> comments.</li>
+</ul>
+
+<h2>3. Dependency and architecture analysis</h2>
+<ul>
+<li><b class="f">Circular-dependency detection</b> with generated cycle reports that explain why a cycle exists and recommend a fix.</li>
+<li><b class="f">Uses-clause audit and auto-fix</b> -- unused units, misplaced interface/implementation entries, missing units.</li>
+<li><b class="f">Impact analysis</b> -- the transitive blast radius of a symbol, by depth.</li>
+<li><b class="f">Interface-edit impact before the build</b> -- <code>lint-tree</code> reports every dependent reference an edit to a unit's interface would break, now including removed properties, fields and enum members <b>(extended)</b>.</li>
+<li><b class="f">Call graph and butterfly view</b> -- callers and callees composed into one navigable chart (DOT, Mermaid, text or JSON).</li>
+<li><b class="f">Reverse call tree</b> to arbitrary depth, and the shortest resolved call path between two routines.</li>
+<li><b class="f">Effect analysis</b> <b>(new)</b> -- which routines are proven free of side effects across the whole call graph, and, for the rest, a one-line witness saying why.</li>
+<li><b class="f">Third-party dependency reporting</b> -- what your code pulls in from where.</li>
+<li><b class="f">Spring4D dependency-injection wiring</b> -- interface to implementation class, lifetime, and resolve sites.</li>
+<li><b class="f">Class surface and code slices</b> -- the public interface of a type, or a minimal self-contained compilable slice.</li>
+<li><b class="f">Type hierarchy</b> -- ancestors (with generic type arguments), descendants and class helpers.</li>
+</ul>
+
+<h2>4. Linting and auto-fix</h2>
+<p><b class="f">186 rules across 16 categories</b> -- 133 built-in and 53 external
+<code>.scm</code> rules, <b class="f">157 enabled by default</b>, and <b class="f">23 with an automatic
+fix</b>. Rules can be enabled, disabled, re-prioritised and parameterised per
+project; individual findings can be suppressed with an accountable, reviewed
+annotation rather than silently ignored. Every rule is listed in Appendix C.</p>
+
+<table>
+<tr><th>Rule group</th><th class="n">Rules</th><th>Covers</th></tr>
+<tr><td>Object lifetime and resources</td><td class="n">17</td><td>Use-after-free, double-free, leaked objects, unprotected create/free without <code>try-finally</code>, destructors not marked <code>override</code>, missing <code>inherited</code> calls, <code>FreeAndNil</code> on an interface, object/interface dual-handle mixing, unreleased critical sections, virtual calls from a constructor, instantiating a class with an unimplemented abstract method</td></tr>
+<tr><td>Exceptions and control flow</td><td class="n">18</td><td>Bare and empty <code>except</code> blocks, swallowed exceptions, <code>raise</code> or <code>Exit</code> / <code>Break</code> inside <code>finally</code>, re-raising in a way that loses the stack trace, raising the root <code>Exception</code> class, unreachable duplicate handlers, exceptions constructed but never raised, unreachable code after <code>Exit</code>, loops that run at most once, empty conditional / loop / case / procedure bodies</td></tr>
+<tr><td>Logic, comparisons and type safety</td><td class="n">20</td><td>Operator-precedence traps (<code>not X in S</code>, <code>not A = B</code>), comparisons that are always true or always false, identical operands, self-assignment, off-by-one loop bounds, float equality, string and case-insensitive comparison mistakes, division by literal zero, <code>Format()</code> argument count and specifier type mismatches, non-exhaustive <code>case</code> on an enum, unguarded hard casts, lossy Unicode-to-Ansi casts</td></tr>
+<tr><td>Data flow, concurrency and source integrity</td><td class="n">16</td><td>Use before assignment, <code>Result</code> or <code>out</code> parameters not set on every path, values overwritten before being read, write-only locals, loop variable used after the loop, UI access from a background thread, <code>Sleep</code> on the VCL main thread, <code>with</code> silently shadowing an outer symbol, an enum value read inside <code>with</code> that the compiler binds to a same-named member <b>(new)</b>, destructive actions gated on a file-existence check, unnamed literal constants, and syntax or unbalanced <code>begin</code> / <code>end</code> errors</td></tr>
+<tr><td>Dead code and project hygiene</td><td class="n">38</td><td>Unreachable and unused code (12), project-wide checks that only a whole-project run can see, such as unused public symbols, unused units and -- new, off by default -- discarded effect-free results, query-named routines with side effects, side effects inside <code>Assert</code>, and <code>{$IFDEF}</code> symbols no build defines (<b class="f">19</b>), structural issues (7)</td></tr>
+<tr><td>Complexity and maintainability</td><td class="n">30</td><td>Complexity limits (11), size and shape metrics (8), refactoring opportunities (11)</td></tr>
+<tr><td>Conventions and documentation</td><td class="n">24</td><td>Naming conventions (10), documentation completeness and accuracy (5), review markers (3), other (6)</td></tr>
+<tr><td>Security, platform and data access</td><td class="n">23</td><td>Security issues including injection and unsafe API use (10), platform and portability (10), FireDAC-specific data-access (3)</td></tr>
+<tr class="tot"><td>Total</td><td class="n">186</td><td>8 groups, drawn from the engine's 16 rule categories</td></tr>
+</table>
+
+<ul>
+<li><b class="f">Two scopes</b> -- single file, or whole project. Project-wide rules can only fire in a whole-project run.</li>
+<li><b class="f">Fact-driven rules</b> <b>(new)</b> -- rules can now key on proven facts from the resolve pass (effect summaries, enum-value bindings and the full define profile -- three such rules are new in this release), not only on the shape of the syntax tree.</li>
+<li><b class="f">Auto-fix</b> -- preview or apply, targeted by file, line or rule.</li>
+<li><b class="f">Severity model</b> -- error, warning, info and hint, mapped to the IDE's own colour scheme.</li>
+<li><b class="f">Machine-readable output</b> -- JSON and SARIF for CI; baselines so CI reports only new findings.</li>
+<li><b class="f">Ownership scoping</b> -- vendored and third-party roots are reported as skipped by name, never silently dropped from the count.</li>
+</ul>
+
+<h2>5. Compiler-less diagnostics and compile checking</h2>
+<ul>
+<li><b class="f">AST diagnostics without a build</b> -- unbalanced <code>begin</code> / <code>end</code>, undeclared identifiers, and structural errors found by parsing alone.</li>
+<li><b class="f">Semantic compile-check from the CLI</b> -- spawns the real compiler against a file or project and returns hints, warnings, errors and fatals as JSON.</li>
+<li><b class="f">Ghost-compile of unsaved buffers</b> -- compiles what is currently in the editor, in a separate process, so real compiler errors appear as you type without saving and without freezing the IDE. Each unsaved buffer is staged into a temporary shadow directory and compiled there, in full project context; your source files are never written.</li>
+<li><b class="f">Build-log import</b> -- fold an existing compiler log into the findings view.</li>
+<li><b class="f">Preprocessor awareness</b> -- conditional-compilation branches are resolved so inactive code is not misread as active; <code>pp-profile</code> prints the exact define set a project, platform and configuration produce.</li>
+</ul>
+
+<h2>6. Documentation</h2>
+<ul>
+<li><b class="f">DocInsight support</b> -- native Delphi <code>///</code> XML doc comments, rendered in the IDE's own Help Insight tooltips.</li>
+<li><b class="f">Automatic documentation generation</b> -- summaries, parameters, returns, exceptions and cross-references derived from the index, for a symbol, a unit or a whole project.</li>
+<li><b class="f">Documentation drift detection</b> -- finds comments that no longer match the code they document, including parameters that no longer exist.</li>
+<li><b class="f">Undocumented-symbol reporting</b>, filterable by kind and visibility.</li>
+<li><b class="f">Deprecation and version tracking</b> -- find symbols tagged deprecated or carrying a <code>since</code> annotation.</li>
+<li><b class="f">Exception documentation</b> -- what a routine raises, traced transitively through the calls it makes, and <b>(new)</b> what it <em>catches</em> and what it does with each (<code>Catches:</code>).</li>
+<li><b class="f">Proven effect-freedom</b> <b>(new)</b> -- <code>Effect-free (proven)</code> replaces the old locally-guessed <code>Pure</code> label.</li>
+<li><b class="f">Implementor documentation</b> -- an interface's declaration records which classes implement it and which interfaces extend it.</li>
+<li><b class="f">Manual export</b> -- the full documentation set as PDF and Word.</li>
+</ul>
+
+<h2>7. Refactoring and code actions</h2>
+<ul>
+<li><b class="f">Cross-unit rename</b>, with preview before applying; routine-local parameter and variable rename.</li>
+<li><b class="f">Extract method</b>.</li>
+<li><b class="f">Safe delete</b> -- refuses when references remain.</li>
+<li><b class="f">Uses-clause quick fixes</b> -- add the missing unit, remove the unused one, compiler-verified.</li>
+<li><b class="f">Enum helper generation</b>.</li>
+<li><b class="f">Exception-class synchronisation</b> -- generates named exception classes from <code>raise</code> sites and rewrites those sites to use them.</li>
+<li><b class="f">Local-variable cleanup</b>.</li>
+<li><b class="f">Code formatting through YADF</b>, with a minimum-version gate, a post-format check that only layout changed (restoring the file if it did not), and a preview mode that writes nothing.</li>
+<li><b class="f">Test-helper scaffolding</b> generated from the real class surface.</li>
+</ul>
+
+<h2>8. AI and tooling integration</h2>
+<div class="lede">
+<p><b class="f">Context bundles</b> -- assembles exactly what an AI assistant needs to work
+on a symbol (documentation, class surface, the symbol's own body, and a capped
+set of callers) instead of whole source files. Measured roughly <b class="f">60x</b>
+leaner on a real project (~556 tokens versus ~33,762), and <b class="f">269x</b> on this
+engine's own largest unit (~1,259 versus ~338,500). <code>Class.Member</code> task
+names now resolve when unambiguous, and a record's surface lists every field.</p>
+</div>
+<ul>
+<li><b class="f">MCP server with 15 tools</b> for Claude, Cursor and other MCP clients -- symbol lookup, callers, linting, documentation, doc-tag and undocumented search, impact, DI wiring, class surface, code slice, context bundle, type-at-position, rename, AST checks and compile check.</li>
+<li><b class="f">JSON everywhere</b> -- every query verb emits structured output for scripting; hover JSON now carries the effect facts.</li>
+<li><b class="f">Guarded read-only SQL</b> over the index for questions the verbs do not cover, with a self-documenting live schema.</li>
+<li><b class="f">Engine self-report</b> -- <code>info</code> reports product, extractor and resolver versions and, per database, whether it is current, owes a re-resolve, or owes a re-parse, with the remedy.</li>
+<li><b class="f">Obsidian export</b> and <b class="f">graph export</b> for external analysis.</li>
+</ul>
+
+<h2>9. Editor and IDE integration</h2>
+<ul>
+<li><b class="f">Language server (LSP)</b> -- hover, go-to-definition, find-references, workspace symbols, completion and signature help, answered from the index across every project at once, with no compiler and no project open. Hover on a forward declaration now shows the real one; completion offers a forward-declared type once.</li>
+<li><b class="f">Proxy mode</b> -- runs alongside RAD Studio's own language server and relays between it and the IDE, so you keep the compiler front end (generics, <code>with</code>, inline variables, unsaved buffers) instead of trading it away.</li>
+<li><b class="f">RAD Studio 13 plugin</b> -- 66 entry points across four surfaces: 50 main-menu items, 2 tool windows, 13 on the Structure view's right-click menu, and 1 on the Project Manager. Includes 12 Ctrl+Alt shortcuts.</li>
+<li><b class="f">In-editor diagnostics</b> -- gutter markers and wavy underlines, coloured from the IDE's own scheme, with hover tooltips.</li>
+<li><b class="f">Dockable panels</b> -- Structure, Usages and Call Graph, all click-to-navigate.</li>
+<li><b class="f">Rebuild without closing the IDE</b> -- <code>ide-release</code> asks the plugin to stand its engine down for a set time; <code>shutdown</code> stops running language-server engines over a per-user named pipe.</li>
+<li><b class="f">VS Code extension</b> -- findings in the Problems panel on save, a Pascal TextMate grammar, and a colour theme generated from your own RAD Studio scheme. It runs a private copy of the engine, so an open window never blocks a rebuild.</li>
+<li><b class="f">Zed</b> -- tree-sitter highlighting today.</li>
+<li><b class="f">Any LSP editor</b> -- Neovim, Helix and others point at the same server.</li>
+</ul>
+
+<h2>10. Reporting, maintenance and integrity</h2>
+<ul>
+<li><b class="f">Reports</b> -- dead code, TODOs, compiler hints, top symbols, forms inventory, dependency and cycle reports.</li>
+<li><b class="f">Index freshness verification</b> -- proves every configured database is current rather than relying on a per-query guess, and names whether a stale one needs a re-resolve (minutes) or a re-parse (hours).</li>
+<li><b class="f">Database maintenance</b> -- schema inspection, migration between layouts, and resolution of which database answers for a given project, file or platform.</li>
+<li><b class="f">Library drift detection</b> -- registry library roots whose source is on disk but not yet indexed.</li>
+<li><b class="f">Crash recovery</b> -- detects and restores files left modified by an interrupted operation.</li>
+<li><b class="f">Findings history</b> -- refresh and diff findings between runs.</li>
+<li><b class="f">Project wiki</b> -- reference topics authored in the units themselves, so the explanation lives with the code.</li>
+</ul>
+
+<h2>11. Component Converter</h2>
+<p>A rules-driven system for migrating legacy components (for example Orpheus
+<code>TOvc*</code> controls, or BDE data access) to modern replacements such as
+DevExpress or FireDAC -- across every surface a component touches, not just the
+declaration.</p>
+
+<h3>Conversion rules language</h3>
+<ul>
+<li><b class="f">A documented DSL with 13 directive kinds</b>, a superset of the reFind format -- covering type conversion, property and event linking, defaults, notes, unit add/remove/swap, regular-expression rules, and reusable named value mappings.</li>
+<li><b class="f">Property and event linking</b> between source and target components, including value casts where the two components express the same idea differently.</li>
+<li><b class="f">Whole-object links</b> <b>(new)</b> -- linking two properties of the same class (<code>Font</code> to <code>Font</code>) carries every sub-property the form streams; when the classes differ, every leaf must still be named, because an invented target path is how a form stops loading.</li>
+<li><b class="f">Reusable value mappings</b> with conditional branches, so an enum or a set of related properties translates once and is applied wherever needed.</li>
+<li><b class="f">Tagging</b> -- rules can be labelled so a single rule book serves several migration jobs.</li>
+<li><b class="f">Validation against reality</b> -- every referenced property path is checked against the real property tree of the real class in the index.</li>
+</ul>
+
+<h3>Conversion engine</h3>
+<ul>
+<li><b class="f">Rule scaffolding</b> -- generates a valid, ready-to-edit rule file from the actual property trees of the source and target classes.</li>
+<li><b class="f">Five-surface rewrite</b> -- declaration type, <code>uses</code> clauses, the <code>.dfm</code>, every property and event access site in code, and runtime construction sites.</li>
+<li><b class="f">Value and class casts realised</b> <b>(new)</b> -- a cast with a code template is applied at every access site; a cast found without a template, and a cast not found at all, are reported as two different problems because they need two different fixes.</li>
+<li><b class="f">Image payloads carried, never silently dropped</b> <b>(new)</b> -- the image format is sniffed from the bytes; a format the target accepts is carried verbatim, anything else is reported as a warning naming the instance, the property, the format found and the formats accepted.</li>
+<li><b class="f">Unlinked-property warnings</b> <b>(new)</b> -- a source property that no rule carries is reported once per type as "dropped on N of M converted instances"; a minority count, the controls somebody deliberately styled, is the stronger signal.</li>
+<li><b class="f">Graphics census</b> <b>(new)</b> -- <code>glyph-vacuum</code> decodes every streamed graphic under a folder tree and writes per-instance and per-class tables plus a visual gallery, as the measured input to glyph rules.</li>
+<li><b class="f">Dry run by default</b>, <b class="f">backups and a recovery file</b> on every write, <b class="f">selective application</b> to named components, and a <b class="f">machine-readable remainder</b> as typed JSON items.</li>
+<li><b class="f">Cast library</b> -- shared value-translation blocks reused across rule books.</li>
+</ul>
+
+<h3>Rule editor (ConvRulesEditor)</h3>
+<ul>
+<li><b class="f">Visual rule authoring</b> -- a Windows desktop application that turns rule writing into a mapping exercise rather than text editing.</li>
+<li><b class="f">Three-column mapping grid</b> -- source properties, assigned targets, and the pool of unassigned targets -- with assign, unassign and double-click in place.</li>
+<li><b class="f">Completion tracking</b>, <b class="f">real property trees</b> from the index, <b class="f">auto-match</b>, <b class="f">class pickers</b>, <b class="f">mapping and curation editors</b>, a <b class="f">rule catalog</b>, a <b class="f">raw DSL view</b>, <b class="f">validation on save</b>, and light and dark themes.</li>
+<li><b class="f">Form-driven and unit-driven workflow</b> -- open a real <code>.dfm</code>, or any <code>.pas</code> even if no project lists it; the Unit Rules tab lists each used unit and the section it is declared in.</li>
+<li><b class="f">Class list with state</b> <b>(new)</b> -- checkboxes, origin marks and three states (ruled, skipped, open), a progress line, and partial-name search; a unit's classes come from an on-demand scratch index, so a unit outside every project still lists its classes.</li>
+<li><b class="f">Named filters and "do not convert" marks</b> <b>(new)</b> -- mark classes in bulk; the marks persist beside the rules.</li>
+<li><b class="f">Several rules per source class</b> <b>(new)</b> -- legal across rule books, with a chooser on double-click; only a collision inside one book warns.</li>
+<li><b class="f">Trustworthy "already used" marks</b> <b>(fixed)</b> -- a property is marked used in code only on a receiver the form file names as an instance of that class, and never from a comment; what the filter rejects is listed with the reason rather than hidden.</li>
+<li><b class="f">Pinned engine with a drift check</b> by content hash, not version string.</li>
+</ul>
+
+<h2>12. Diagrams and charts <span class="st st-ship">READY</span></h2>
+<p>Twenty-one questions about a codebase can now be answered with a <b class="f">picture</b>
+rather than a list: who calls this, who writes this field, what does this form wire,
+where does this protocol command go. Every box and every arrow in a chart is a fact
+from the index with a file and a line behind it -- nothing is drawn from prose or
+guessed -- and every row in the picture is a click target that opens the source in
+RAD Studio.</p>
+
+<div class="lede">
+<p><b class="f">How a chart is made.</b> A chart is one formal call: a <em>question</em>, a
+<em>selection</em> (a method, a field, a type, a unit, a form, a protocol command...) and
+a few parameters (depth, caps). You ask it with one command,
+<code>drag-lint ask --question &lt;id&gt; --target &lt;selection&gt; [--db &lt;db&gt;]</code>,
+which reads the index through the engine's own verbs and lays the result out with
+Graphviz 16.1. The same dispatch is available as the charts script
+<code>New-DiagramArtifact.ps1 -Question &lt;id&gt; -Target &lt;selection&gt; -DbPath &lt;db&gt;</code>.</p>
+<p><b class="f">What comes out -- one bundle per chart:</b> an <b class="f">HTML</b> page that
+opens in any browser; an <b class="f">SVG</b> whose rows are real links; <b class="f">PNG</b> and
+<b class="f">PDF</b> exports; the <b class="f">Graphviz</b> <code>.dot</code> source and its layout
+geometry, both from the same layout run so picture and click areas cannot drift; a
+<code>meta.json</code> recording the index fingerprint and the command that regenerates
+it; and a ready-to-paste DocInsight <code>&lt;remarks&gt;</code> cross-reference, so a
+unit's documentation can point at its chart. The underlying engine verbs
+(<code>graph</code>, <code>butterfly</code>, <code>reverse-calltree</code>) also emit
+<b class="f">Mermaid</b> and DOT directly.</p>
+<p><b class="f">Click to source.</b> Links use a <code>draglint://open?file=..&amp;line=..</code>
+address that a small registered handler passes to the IDE plugin's open-source pipe;
+verified live against a running IDE on 23 September.</p>
+</div>
+
+<!-- CHART-SAMPLES -->
+<h3>Samples: drag-lint charting its own code</h3>
+<p class="sub">Each picture below is a real run against drag-lint's own index (extractor
+1.18.0-alpha, resolver 1.6.0-alpha, 130 files), unedited. Every row in the SVG version is
+a link to its source line.</p>
+
+<p><b class="f">1. Change impact: what one function reaches.</b> <code>drag-lint ask --question
+change-impact --target DRagLint.Preprocess.Profile.ProfileFromDproj</code>, depth 3. This is
+the function fixed on 23 September (it now reads the platform PropertyGroups), and the
+chart shows why that fix forced a full re-parse: the same profile feeds the project closure,
+per-file preprocessing and lint. 15 routines in 1 unit.</p>
+<p><img src="Images/charts/change-impact-ProfileFromDproj.png" alt="change-impact chart of ProfileFromDproj" style="width:100%;max-width:960px;border:1px solid #d0d7de"></p>
+
+<p><b class="f">2. Dependencies of one unit, both directions.</b> <code>drag-lint ask --question deps
+--target DRagLint.Lint.Linter</code>. 10 units, 15 edges: 6 units use the linter core and it
+uses 9. A focused deps chart is readable where the whole-project architecture chart (129 units,
+598 edges) is not, which is why the question takes a target.</p>
+<p><img src="Images/charts/deps-Lint-Linter.png" alt="deps chart of DRagLint.Lint.Linter" style="width:100%;max-width:960px;border:1px solid #d0d7de"></p>
+
+<p><b class="f">3. Butterfly: callers on the left, callees on the right.</b> <code>drag-lint ask
+--question butterfly --target DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead</code>, depth 2.
+The entry point of the enum-value binding added in resolver 1.6.0-alpha: 2 callers, 14 callees.</p>
+<p><img src="Images/charts/butterfly-ResolveEnumValueRead.png" alt="butterfly chart of ResolveEnumValueRead" style="width:100%;max-width:960px;border:1px solid #d0d7de"></p>
+
+<h3>12.1 The questions</h3>
+<p class="sub">"Measured" is a real run on the ORM3 (Micronite) corpus or drag-lint's own
+index, quoted from the charts status board of 23 September 2026.</p>
+<table class="small">
+<tr><th>Question</th><th>Select</th><th>What the chart shows</th><th>Built on</th><th>Measured</th></tr>
+<tr><td colspan="5"><b class="f">Calls and change</b></td></tr>
+<tr><td><code>who-calls</code></td><td>method</td><td>N-deep tree of every caller, cycle-guarded</td><td><code>reverse-calltree</code></td><td>10 sites + 1 cycle at depth 3</td></tr>
+<tr><td><code>what-it-calls</code></td><td>method</td><td>N-deep tree of everything it calls</td><td><code>callgraph</code> / <code>reverse-calltree --direction callees</code></td><td>2 / 8 / 16 rows at depth 1 / 2 / 3</td></tr>
+<tr><td><code>butterfly</code></td><td>method</td><td>callers above, callees below, in one chart</td><td><code>butterfly</code></td><td>9 callers, 8 callees, 18 click targets</td></tr>
+<tr><td><code>change-impact</code></td><td>method / type</td><td>everything a change here could break, grouped by unit</td><td><code>impact</code></td><td>a type reaching 591 routines over 174 units (capped)</td></tr>
+<tr><td><code>tested-by</code></td><td>any symbol</td><td>which test methods exercise it, directly or through callers</td><td>caller walk over the test project's index</td><td>11 / 8 / 13 covering tests from 71 test methods</td></tr>
+<tr><td colspan="5"><b class="f">Data and state</b></td></tr>
+<tr><td><code>who-writes</code></td><td>field / property</td><td>fan-in of every write site</td><td>resolved property/field accesses</td><td>7 writes over 3 routines</td></tr>
+<tr><td><code>who-reads</code></td><td>field / property</td><td>fan-out of every read site</td><td>resolved property/field accesses</td><td><code>Connected</code>: 602 reads in 598 routines</td></tr>
+<tr><td><code>effects</code></td><td>method</td><td>what it mutates (globals, heap, own fields, which parameters), and whether it is proven effect-free</td><td>purity v2 effect summaries</td><td>parameter names recovered on 351 of 351 rows</td></tr>
+<tr><td><code>touches-tables</code></td><td>method</td><td>which database tables it reads and writes (server-side code; a client with no connection says so)</td><td>SQL read/write facts</td><td>5 read / 5 written / 2 both</td></tr>
+<tr><td><code>shown-where</code></td><td>database column</td><td>which forms and controls display this column</td><td>DFM data bindings</td><td>4 bindings on 2 forms, of 903 over 459 columns</td></tr>
+<tr><td colspan="5"><b class="f">Across the process boundary</b></td></tr>
+<tr><td><code>protocol-trace</code></td><td>command constant / wire field</td><td>the round trip of a value: UI, memtable, boundary, server, database and back</td><td>enum-value binding (resolver 1.6.0)</td><td><code>cmdDelta</code> 38 references in 2 zones</td></tr>
+<tr><td><code>protocol-trace</code></td><td>method</td><td>the call tree pruned to branches that still carry the payload, ranked, capped, and never silently dropped</td><td>enum-value binding + call graph</td><td>a dispatcher speaking all 42 command members</td></tr>
+<tr><td><code>crosses-boundary</code></td><td>method</td><td>whether and where this leaves the process, and what answers on the far side</td><td>enum-value binding, optional second index</td><td>crosses (2 commands, 1 transport) / is the boundary / no evidence</td></tr>
+<tr><td colspan="5"><b class="f">Types and forms</b></td></tr>
+<tr><td><code>hierarchy</code></td><td>type</td><td>ancestors and descendants</td><td><code>query ancestors</code> / <code>descendants</code></td><td>145 descendants, 2 ancestors</td></tr>
+<tr><td><code>class-surface</code></td><td>type</td><td>members grouped by visibility, with inheritance</td><td><code>surface</code></td><td>392 members in 2 visibility clusters</td></tr>
+<tr><td><code>event-wiring</code></td><td>form class</td><td>which handler runs on which control event</td><td>DFM event facts</td><td>41 events, 41 handlers, 40 controls</td></tr>
+<tr><td><code>lifecycle</code></td><td>form class</td><td>create, show, close and destroy, with the handlers wired, implemented-but-unwired, and absent</td><td>DFM event facts</td><td>2 wired / 1 unwired / 4 absent</td></tr>
+<tr><td><code>wiring</code></td><td>interface</td><td>Spring4D registrations and resolve sites</td><td><code>wiring</code></td><td>2 registrations, 4 sites (server)</td></tr>
+<tr><td colspan="5"><b class="f">Units and architecture</b></td></tr>
+<tr><td><code>deps</code></td><td>unit</td><td>the unit's dependency neighbourhood, clustered by folder</td><td>uses graph</td><td>3 used-by + 18 uses, 21 click targets</td></tr>
+<tr><td><code>cycles</code></td><td>unit / project</td><td>circular dependencies as strongly-connected groups, every measured edge drawn; optional refactoring playbook</td><td><code>cycles</code></td><td>2 groups / 5 edges on CLIENT; 0 on DataCopy</td></tr>
+<tr><td><code>architecture</code></td><td>project</td><td>units as zones by source directory, with dependency flow and back-edges</td><td>uses graph + DI bindings</td><td>563 units, 3 zones, 2,858 edges, 3 back-edges</td></tr>
+</table>
+
+<div class="warn">
+<p><b class="f">Stated limits.</b> <code>who-writes</code> / <code>who-reads</code> may undercount in
+legacy code that uses <code>with</code> heavily, because <code>with</code> scope is not modelled
+(the same caveat as enum values, chapter "What is new"). <code>wiring</code> on a client
+project sees few registrations (4 on ORM3 CLIENT against 535 on SERVER) and is being
+checked. Four more questions ship with the charts release -- <code>exception-paths</code>,
+<code>lands-where</code>, <code>feeds-from</code> and <code>consumers</code>. Their parameters are being
+finalised, so this edition says what each answers and leaves the syntax to the charts
+release notes (Appendix A.6).</p>
+</div>
+
+<h2>13. What is planned</h2>
+<div class="warn">
+<p><b class="f">This is a pipeline, not a commitment.</b> Items are listed in the order the
+owner has currently stated, with rough effort. Order and scope change as priorities
+do. The complete list, with a status badge on every row, is Appendix A.</p>
+</div>
+
+<table>
+<tr><th>Next</th><th>What it is</th><th>Rough effort</th></tr>
+<tr><td>Project tags on shared-unit documentation</td>
+    <td>A unit shared by several projects (an application and its tests, say) gets documentation entries tagged with the project that saw them, so each project's run keeps the others' entries and a stale one can finally be removed. Includes a small command to retire or rename a project's tags.</td>
+    <td>half a day + a few hours</td></tr>
+<tr><td><b class="f">What a routine raises and catches, as a fact</b></td>
+    <td>Record <code>raise</code> and <code>except</code> sites as distinct references, so a chart can show where an exception starts and where it is caught instead of drawing handlers as throwers. Unblocks the <code>exception-paths</code> chart and the parked editor-integration work. Needs one full re-parse.</td>
+    <td>2-3 days + re-parse</td></tr>
+<tr><td>Calls through an interface</td>
+    <td>Attribute a call made through an interface variable to the interface method, so callers, coverage and impact are right for interface-heavy code (resolver 1.7.0).</td>
+    <td>2-3 days</td></tr>
+<tr><td>Refuse an engine older than its index</td>
+    <td>An older engine can currently re-resolve an index back to its own, poorer, answers without being refused, as it already is for the extractor and schema. Urgent; one policy decision owed.</td>
+    <td>hours</td></tr>
+<tr><td>Glyph-strip conversion grammar</td>
+    <td>A rule-book syntax for multi-frame button glyphs, so legacy image strips convert to DevExpress smart glyphs with the right frame count, measured per class by <code>glyph-vacuum</code>.</td>
+    <td>spec 1 day + build 3-5 days</td></tr>
+</table>
+
+
+<h2>How quality is held</h2>
+<div class="lede">
+<p>Every change in this period shipped with a test written <em>before</em> the fix and
+required to fail first, plus a positive control proving that test can fail at all.
+The enum-value work, for example, landed its guard RED against the previous resolver
+by design, and the lint-tree gate was widened only <em>after</em> the binding it relies
+on was proven.</p>
+<p>The full test battery now runs <b class="f">568</b> suites. The last whole run before this
+edition (the enum-value branch review, 23 September) passed <b class="f">562</b>; the six reds
+were each attributed and none belonged to the change under review -- a version guard
+awaiting a deliberate re-pin (re-pinned in the next commit), two suites missing a
+helper executable on that machine, two legacy suites with an incomplete compiler
+search path, and one timing flake green in isolation. The same review measured
+<code>lint-all</code> on the engine's own code at <b class="f">1,246</b> findings, identical to the
+baseline, with zero stale suppression markers.</p>
+</div>
+
+<h2>Appendix A -- Roadmap (everything not yet shipped)</h2>
+<p class="sub">Every open item on the board at 23 September 2026, compiled from the
+project's open INBOX notes, backlogs, plans and design specs, each checked against
+the CHANGELOG, the git history and the live <code>--help</code>. Effort is a working
+estimate where one was written down. <b class="f">Order changes as priorities do;
+nothing here is a commitment or a delivery date.</b> Items shipped since the previous
+edition are scored in "What is new"; the chart questions that already work are in
+chapter 12.</p>
+
+<h3>A.1 Lint rules made possible by this release's facts</h3>
+<p>Nine rules proposed on 23 September after the enum-value binding, purity v2 and the
+full define profile landed; none duplicated one of the 183 rules shipped at the time. Owner
+ruling: build 1, 4 and 8 now -- all three have since SHIPPED in 1.17.0-alpha (catalogue
+now 186); the other six stay proposed.</p>
+<table>
+<tr><th>Rule id</th><th>What it would catch</th><th>Fact it needs</th><th>Status</th></tr>
+<tr><td><code>enum-read-inside-with</code></td>
+    <td>A bare enum-value read inside a <code>with</code> body where a <code>with</code> target declares a member of the same name: the compiler binds the member, the index binds the enum value. Makes the measured wrong-binding channel (178 reads on ORM3 CLIENT) visible.</td>
+    <td>enum-value binding</td>
+    <td><!-- STATUS:enum-read-inside-with --><span class="st st-ship">SHIPPED</span></td></tr>
+<tr><td><code>unused-enum-value</code></td>
+    <td>An enum member nothing reads, reported per type; suppressed when the type is iterated, used in sets, cast from integers, streamed or persisted.</td>
+    <td>enum-value binding</td>
+    <td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>enum-ordinal-cast</code></td>
+    <td>A hard-coded ordinal -- <code>TCommandID(5)</code>, <code>Ord(X) = 3</code> -- that silently changes meaning when the enum is reordered.</td>
+    <td>enum-value binding + enum declarations</td>
+    <td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>assert-with-side-effect</code></td>
+    <td><code>Assert(Cond)</code> where <code>Cond</code> calls a routine with a proven side effect; Release builds compile <code>Assert</code> out, so the effect exists only in Debug. An unknown effect never fires.</td>
+    <td>purity v2 <code>effect_free</code></td>
+    <td><!-- STATUS:assert-with-side-effect --><span class="st st-ship">SHIPPED</span></td></tr>
+<tr><td><code>side-effect-in-short-circuit</code></td>
+    <td><code>A and F()</code> / <code>A or F()</code> where <code>F</code> has a proven effect that silently does not run when <code>A</code> decides the result.</td>
+    <td>purity v2 <code>effect_free</code></td>
+    <td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>property-getter-with-effect</code></td>
+    <td>A property whose read accessor writes its own object or global state -- reading it changes something. Lazy-initialising getters are recognised as the legitimate exception.</td>
+    <td>purity v2 <code>effect_summary</code></td>
+    <td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>ui-access-in-thread</code> (transitive)</td>
+    <td>The shipped rule sees UI access written directly in <code>TThread.Execute</code>; this follows resolved calls from <code>Execute</code> and reports the call path to UI-bound code, stopping at <code>Synchronize</code>/<code>Queue</code>.</td>
+    <td>call edges + UI affinity</td>
+    <td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>ifdef-undefined-symbol</code></td>
+    <td><code>{$IFDEF X}</code> where <code>X</code> is defined by no configuration, no platform, no <code>{$DEFINE}</code> and no known built-in -- usually a typo guarding dead code. Fires only with a project context.</td>
+    <td>full define profile (extractor 1.18.0)</td>
+    <td><!-- STATUS:ifdef-undefined-symbol --><span class="st st-ship">SHIPPED</span></td></tr>
+<tr><td><code>platform-divergent-define</code></td>
+    <td>A define present for one platform but not the other in the same configuration, and tested by an <code>{$IFDEF}</code> -- the silent-divergence shape behind this release's EurekaLog finding.</td>
+    <td>full define profile</td>
+    <td><span class="st st-prop">PROPOSED</span></td></tr>
+</table>
+
+<h3>A.2 Further rule candidates (discussion only)</h3>
+<p class="sub">From a separate note of 23 September on rules the call graph and converter
+facts enable. Nothing designed; some overlap A.1.</p>
+<table>
+<tr><th>Rule id</th><th>What it would catch</th><th>Status</th></tr>
+<tr><td><code>enum-ordinal-persisted</code></td><td>An enum whose values are written to storage and whose declared order has changed -- saved data silently changes meaning.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>enum-bare-read-in-with</code></td><td>Broader, off-by-default form of <code>enum-read-inside-with</code>.</td><td><span class="st st-prop">PROPOSED</span> (superseded by A.1 rule 1 if that ships)</td></tr>
+<tr><td><code>enum-bare-read-scoped</code></td><td>A bare read of a scoped-enum value. Needs the extractor to record scopedness.</td><td><span class="st st-prop">PROPOSED</span> -- blocked on a fact</td></tr>
+<tr><td><code>review-marker-placeholder-hash</code></td><td>A <code>dl:ok</code> review marker whose verification hash is a placeholder and therefore suppresses nothing.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>review-marker-reason-unreviewed</code></td><td>Require a review date inside a <code>dl:ok</code> justification so a stale reason is detectable.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>cycle-participant-unit</code></td><td>Per-file finding: this unit is part of a dependency cycle, with the narrowest fix from the cycle report.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>opaque-to-analysis</code></td><td>A routine where most non-library calls cannot be resolved, so impact and dead-code answers are blind there.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td>Effect-free call in a loop</td><td>An effect-free call inside a loop with unchanging arguments -- a provable candidate to hoist.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>unused-public-symbol</code> on enum values</td><td>Not a new rule: re-measure the existing rule now that enum reads bind.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
+</table>
+
+<h3>A.3 Planned new commands and flags</h3>
+<p class="sub">Every command or flag described in a plan, spec or note that is not in
+today's <code>--help</code>.</p>
+<table>
+<tr><th>Command / flag</th><th>What it would do</th><th>Status</th><th class="n">Effort</th></tr>
+<tr><td><code>ask --list | --question &lt;id&gt; --at &lt;file:line:col&gt;</code></td><td>One engine verb for the chart questions of chapter 12: list the questions valid at a caret, then render one (<code>--depth</code>, <code>--max-branches</code>, <code>--sinks</code>, <code>--format svg|mermaid|json</code>).</td><td><span class="st st-plan">PLANNED</span></td><td class="n">days</td></tr>
+<tr><td><code>doc-forget --project &lt;P&gt; [--rename P=Q] [--list-tags] [--apply]</code></td><td>Retire or rename a project's tags on shared-unit documentation; list orphan or misspelt tags.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">hours</td></tr>
+<tr><td><code>project-facts --dproj &lt;X&gt;</code></td><td>What a project's build actually does -- imports, output paths, packages, and which defines come from where -- without reading the <code>.dproj</code>.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">1-2 d</td></tr>
+<tr><td><code>bookmarks</code> (list / find / go to)</td><td>Named, code-anchored bookmarks written as ordinary comments (<code>// dl:bk&lt;N&gt;</code>); they stay until the user removes them.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">1 d engine</td></tr>
+<tr><td><code>query find-callers --resolved --sites</code></td><td>Report the exact call-site line and column, not only the caller's declaration.</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">small</td></tr>
+<tr><td><code>path &lt;A&gt; &lt;B&gt;</code>, <code>neighbors &lt;qname&gt; --hops N</code></td><td>Shortest path and neighbourhood over call and uses edges together (<code>call-path</code> already covers calls alone).</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">1-2 d each</td></tr>
+<tr><td><code>init</code></td><td>One command to wire the MCP server into an assistant's configuration.</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">1-2 d</td></tr>
+<tr><td><code>butterfly --format json</code> <code>children</code> key</td><td>A direction-neutral name for child nodes; today the callees tree's children sit under a key named <code>callers</code>.</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">hours</td></tr>
+</table>
+
+<h3>A.4 Engine analysis</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th>Status</th><th class="n">Effort</th></tr>
+<tr><td><b class="f">Raise / handle as facts</b></td><td>Distinguish throwing an exception from catching one in the index. Unblocks <code>exception-paths</code> and the parked LSP work; needs an extractor bump and one full re-parse.</td><td><span class="st st-spec">SPECIFIED</span></td><td class="n">2-3 d + re-parse</td></tr>
+<tr><td>Calls through an interface</td><td>Attribute interface-dispatched calls to the interface method (resolver 1.7.0); also unifies the resolver's forward-stub test with the one used everywhere else.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">2-3 d</td></tr>
+<tr><td>Refuse a resolver downgrade</td><td>An engine with an older resolver silently re-resolves a newer index back to poorer answers; refuse it as extractor and schema already are.</td><td><span class="st st-spec">SPECIFIED</span></td><td class="n">hours</td></tr>
+<tr><td>Attach the library at index time</td><td>Let indexing consult the platform library so cross-store <em>edges</em> are written, not only cross-store lookups.</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">--</td></tr>
+<tr><td>Scoped enums recorded</td><td>Record <code>{$SCOPEDENUMS}</code> so a bare read cannot bind to a scoped value (caveat R5); needs a re-parse.</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">+ re-parse</td></tr>
+<tr><td>Data-path tracing (use edges)</td><td>Follow a value from a UI field through datasets and queries to a table, and across the client-server hop.</td><td><span class="st st-spec">SPECIFIED</span></td><td class="n">weeks</td></tr>
+<tr><td>Database authority, enforced</td><td>A database answering outside its authority is refused or degraded, not just warned about (the freshness half shipped in August).</td><td><span class="st st-spec">SPECIFIED</span></td><td class="n">--</td></tr>
+<tr><td>Cross-database identity contract</td><td>Promote "qualified name + file + line, tolerant of absence" to a documented contract for joining two project indexes.</td><td><span class="st st-prop">OWNER DECISION</span></td><td class="n">confirm only</td></tr>
+<tr><td>Client-side DI registrations</td><td>Check whether local-container registrations are captured (4 on ORM3 CLIENT against 535 on SERVER).</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">1 d look</td></tr>
+<tr><td>Compiler-exact answers merged in</td><td>Merge DelphiLSP's compiler-exact answers (generics, <code>with</code>, overloads) into drag-lint's own, with provenance. The relay-only proxy shipped in August.</td><td><span class="st st-spec">SPECIFIED</span></td><td class="n">--</td></tr>
+<tr><td>Library DCU indexing</td><td>Hover and completion for third-party units shipped only as <code>.dcu</code>.</td><td><span class="st st-park">PARKED</span></td><td class="n">1 d spike; 2-4 wk</td></tr>
+<tr><td>Numbers as searchable facts</td><td>Find a port number or similar constant by value. Carried from the previous edition; no open note currently tracks it.</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">small</td></tr>
+<tr><td>Re-parse for stale fact rows</td><td>One analyzer change landed without an extractor bump, so the corpus's "proven effect-free" counts are upper bounds until a full re-parse (about 3 hours 17 minutes). Now due anyway with extractor 1.18.0.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">3 h unattended</td></tr>
+</table>
+
+<h3>A.5 Documentation and autodoc</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th>Status</th><th class="n">Effort</th></tr>
+<tr><td><b class="f">Project tags on shared units</b></td><td>Entries tagged <code>[Project]</code> so each project keeps the others' entries and a stale one is reaped when its set empties; optional test-project marking renders test callers as <code>Covered by:</code>.</td><td><span class="st st-plan">PLANNED</span> (design settled)</td><td class="n">0.5 d + hours</td></tr>
+<tr><td>One-time documentation regeneration</td><td>About 850 stored <code>Pure</code> lines here and 259 in DataCopy (about 214 of which will be retracted, not relabelled) regenerate as <code>Effect-free (proven)</code>, together with the enum-value <code>Used by:</code> re-windowing, in one pass after the library re-resolve.</td><td><span class="st st-plan">PLANNED</span> (owner-gated)</td><td class="n">1 run</td></tr>
+<tr><td>What <code>Covered by:</code> means</td><td>Reachability, or a direct asserting call? Deliberately left as-is for now.</td><td><span class="st st-park">PARKED</span></td><td class="n">1-2 d</td></tr>
+<tr><td>Preserved tags may move</td><td>A hand-written tag keeps its text but can change position on regeneration; the rule chosen needs one confirming run.</td><td><span class="st st-park">PARKED</span></td><td class="n">--</td></tr>
+<tr><td>Help text for <code>--resolve-only</code></td><td>The banner implies a re-resolve links symbols across databases; it does not.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">1 h</td></tr>
+<tr><td><code>--output</code> as the canonical flag</td><td>Document <code>--output</code> everywhere; <code>--out</code> stays a silent alias.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">1 h</td></tr>
+</table>
+
+<h3>A.6 Diagrams and charts shipping with the charts release</h3>
+<table>
+<tr><th>Question</th><th>What it would show</th><th>Status</th></tr>
+<tr><td><code>exception-paths</code></td><td>What a method can raise and where each exception is caught.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised</td></tr>
+<tr><td><code>lands-where</code></td><td>Field to dataset to table column.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised; richer with a live-Firebird <code>fb-snapshot</code></td></tr>
+<tr><td><code>feeds-from</code></td><td>Control to data source to memtable to table.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised</td></tr>
+<tr><td><code>consumers</code></td><td>Every unit that reads or writes a table or column.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised</td></tr>
+<tr><td>Charts into the main tree</td><td>The chart tool-set lives on its own branch; it moves into the engine as the <code>ask</code> verb (A.3) once proven.</td><td><span class="st st-prog">IN PROGRESS</span></td></tr>
+<tr><td>Visual code map (standalone viewer)</td><td>Professional layout and export for the existing standalone viewer; the chart pipeline now supplies Graphviz layout and click-to-source.</td><td><span class="st st-prog">IN PROGRESS</span></td></tr>
+</table>
+
+<h3>A.7 Language server and IDE plugin</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th>Status</th><th class="n">Effort</th></tr>
+<tr><td>Lint findings merged into DelphiLSP diagnostics</td><td>One problems list in the IDE instead of two; the owner's top LSP priority, queued behind the raise/handle fact.</td><td><span class="st st-park">PARKED</span></td><td class="n">6-7 d</td></tr>
+<tr><td>LSP phase 2 (merge completion)</td><td>Full and minimum-slice plans written.</td><td><span class="st st-park">PARKED</span></td><td class="n">2.5-4 d</td></tr>
+<tr><td>Editor integration programme</td><td>VS Code client and proxy-versus-union decisions; first step is to start the never-tried VS Code client.</td><td><span class="st st-park">PARKED</span></td><td class="n">weeks</td></tr>
+<tr><td>Caret line selects its finding</td><td>Moving the caret onto a flagged line highlights that finding in the panel. Written and compiling; a live-IDE check is owed.</td><td><span class="st st-prog">IN PROGRESS</span></td><td class="n">30 min check</td></tr>
+<tr><td>Live-IDE confirmations</td><td>Handshake timeout, hover on an unindexed file, and related fixes are in code; each needs a short confirmation in a running IDE.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">about 3 h</td></tr>
+<tr><td>Severity icons in the IDE</td><td>Coloured severity icons for findings, as VS Code shows.</td><td><span class="st st-park">PARKED</span></td><td class="n">--</td></tr>
+<tr><td>Unsaved form edits in the ghost compile</td><td>Recompile a unit when its form is changed in the designer but not saved; engine side done, plugin side not built.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">1 d + live test</td></tr>
+<tr><td>IDE memory ranking</td><td>Which loaded module uses the most memory, live in the IDE.</td><td><span class="st st-park">PARKED</span></td><td class="n">--</td></tr>
+<tr><td>Engine binary held by the IDE</td><td>The Delphi IDE's copy of the engine blocks a rebuild (VS Code's does not); a deliberate trade-off awaiting a decision. <code>ide-release</code> is the interim remedy.</td><td><span class="st st-park">PARKED</span></td><td class="n">--</td></tr>
+<tr><td>Shutdown channel beyond <code>lsp</code></td><td>Graceful <code>shutdown</code> for other long-running engine modes.</td><td><span class="st st-prop">OWNER DECISION</span></td><td class="n">cheap</td></tr>
+</table>
+
+<h3>A.8 Component Converter and its editor</h3>
+<table>
+<tr><th>Item</th><th>Why it matters</th><th>Status</th><th class="n">Effort</th></tr>
+<tr><td><b class="f">Glyph-strip grammar <code>G[I/N]</code></b></td><td>Multi-frame legacy glyphs convert to DevExpress smart glyphs with the right frame count; the reader and the <code>glyph-vacuum</code> census already ship.</td><td><span class="st st-spec">SPECIFIED</span></td><td class="n">1 d + 3-5 d</td></tr>
+<tr><td>Split / merge value conversion</td><td>One source property feeding several targets, or several feeding one.</td><td><span class="st st-park">PARKED</span> (ruled in principle, spec owed)</td><td class="n">--</td></tr>
+<tr><td>Section-aware <code>#use</code> / <code>#unuse</code> / <code>#useswap</code></td><td>Make the uses directives actually rewrite the right <code>uses</code> section during <code>convert-apply</code> (parsed today, not applied), plus a used-units picker in the editor.</td><td><span class="st st-spec">SPECIFIED</span> (draft, unblocked)</td><td class="n">--</td></tr>
+<tr><td>Wider class-cast source list</td><td>Honour every accepted image source type (<code>TPicture</code>, <code>TBitmap</code>, <code>TGraphic</code>, <code>TPngImage</code>, <code>TIcon</code>), not only the one the current rule book exercises.</td><td><span class="st st-prop">PROPOSED</span></td><td class="n">unscoped</td></tr>
+<tr><td>Naming autofix edge cases</td><td>Underscore names, reserved-word collisions and case-insensitive prefixes, so more naming findings are auto-fixable.</td><td><span class="st st-spec">SPECIFIED</span></td><td class="n">--</td></tr>
+<tr><td>Autofix campaign on real projects</td><td>Apply the accumulated safe autofixes and missing documentation on ORM3 CLIENT, then YADF (about 17,000 fixable findings).</td><td><span class="st st-plan">PLANNED</span></td><td class="n">multi-day</td></tr>
+<tr><td>Class picker residue</td><td>Hand verification and branch clean-up after the 20 September merge.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">hours</td></tr>
+</table>
+
+<h3>A.9 Known wrong answers being tracked</h3>
+<table>
+<tr><th>Defect</th><th>Effect</th><th>Status</th></tr>
+<tr><td>Staleness note inside JSON</td><td>When an index is out of date, a human-readable note is spliced into <code>--format json</code> output and breaks parsers.</td><td><span class="st st-def">OPEN DEFECT</span></td></tr>
+<tr><td><code>document --apply</code> drops facts outside the chosen database</td><td>Regenerating documentation can delete true caller entries the chosen database cannot see, while reporting success. The project-tag work (A.5) is the fix.</td><td><span class="st st-def">OPEN DEFECT</span></td></tr>
+<tr><td><code>used-before-assignment</code> on <code>out</code> parameters</td><td>Fires on an <code>out</code> parameter, which Delphi allows to be used before assignment.</td><td><span class="st st-def">OPEN DEFECT</span></td></tr>
+<tr><td>Stored <code>covered_by</code> column empty</td><td>The column is deliberately never written (coverage is computed when rendered); the schema note should say so.</td><td><span class="st st-def">OPEN DEFECT</span> (documentation)</td></tr>
+<tr><td>Intermittent database error on incremental re-index</td><td>A rare foreign-key failure; diagnostic logging is in place, awaiting a recurrence.</td><td><span class="st st-def">OPEN DEFECT</span></td></tr>
+<tr><td><code>format</code> on a stale shared checkout</td><td>Formatting a shared unit through a stale sibling copy can rewrite source from the wrong text.</td><td><span class="st st-plan">PLANNED</span> fix, 4-6 h</td></tr>
+</table>
+
+<h3>A.10 Process and owner decisions</h3>
+<table>
+<tr><th>Item</th><th>Status</th></tr>
+<tr><td>Library re-resolve under resolver 1.6.0 and re-parse under extractor 1.18.0 -- owner-gated runs of about 70 minutes per library and about 3 hours 17 minutes for the whole estate</td><td><span class="st st-plan">PLANNED</span></td></tr>
+<tr><td>Test whether a low-cost AI model can follow the cycle-fix playbook</td><td><span class="st st-plan">PLANNED</span></td></tr>
+<tr><td>Publishing the unpushed commits on <code>main</code>, and merging the charts branch</td><td><span class="st st-prop">OWNER DECISION</span></td></tr>
+</table>
+
+
+<h2>Appendix B -- Command reference (every command in <code>--help</code>)</h2>
+<p class="sub">One row per command form printed by <code>drag-lint --help</code> for 1.17.0-alpha:
+96 rows -- 81 verbs, the 13 sub-verbs of <code>query</code>, <code>export</code> and
+<code>workspace</code>, and the global <code>--version</code> and <code>--help</code>
+(83 top-level verbs in all, counting <code>export</code> and <code>workspace</code>). Nearly every verb also takes <code>--db</code>
+(repeatable; the first is the primary) and <code>--json</code> or <code>--format json</code>; those
+are not repeated per row. Commands marked <b>(new)</b> or <b>(extended)</b> changed since 16 September.</p>
+
+<h3>B.1 Indexing, databases and engine housekeeping</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>index</code></td><td>Build or update an index: a folder (library), a project's compile closure (<code>--project</code>), the IDE's library paths, or every manifest section (<code>--all</code>). <code>--resolve-only</code> re-derives call edges, member and enum-value bindings and purity verdicts from stored parses without walking files.</td><td><code>--project</code>, <code>--all [--only --jobs --platform]</code>, <code>--scan-libraries-win|-all</code>, <code>--rebuild|--recompile</code>, <code>--force-reparse</code>, <code>--resolve-only</code>, <code>--watch [--interval]</code>, <code>--library-db</code>, <code>--dry-run</code>, <code>--no-prune|--prune</code>, <code>--exclude-under</code>, <code>--include-only</code>, <code>--deep</code></td></tr>
+<tr><td><code>workspace index</code></td><td>Index every project listed in a workspace file.</td><td><code>--config</code></td></tr>
+<tr><td><code>workspace status</code></td><td>Show the freshness of every project in a workspace.</td><td><code>--config</code></td></tr>
+<tr><td><code>workspace add</code></td><td>Add a project file to a workspace.</td><td><code>&lt;projfile&gt;</code>, <code>--config</code></td></tr>
+<tr><td><code>register-project</code></td><td>Add a new project to the index manifest so <code>index --all</code> and the IDE see it (dry run by default).</td><td><code>--name</code>, <code>--apply</code></td></tr>
+<tr><td><code>reconcile-project</code></td><td>Sync a project's <code>.dpr</code>/<code>.dproj</code> member list with the units it actually uses; optionally heal the index for every member.</td><td><code>--apply</code>, <code>--only</code>, <code>--db</code>, <code>--full</code></td></tr>
+<tr><td><code>resolve-dbs</code></td><td>Say which database answers for a platform, owns a project (the write target), or covers a file (the read list) -- never guess a path.</td><td><code>--platform</code>, <code>--project</code>, <code>--in</code>, <code>--config</code></td></tr>
+<tr><td><code>migrate-dbs</code></td><td>Move project indexes into each project's own <code>_D-RAG</code> folder.</td><td><code>--config</code>, <code>--apply</code></td></tr>
+<tr><td><code>library-drift</code></td><td>List registry library roots that have source on disk but none in the index (exit 2 on drift).</td><td><code>--platform</code>, <code>--config</code></td></tr>
+<tr><td><code>purge-locals</code></td><td>Size escape hatch: drop local-variable and parameter symbols and vacuum; the call graph is unchanged.</td><td><code>--db</code></td></tr>
+<tr><td><code>schema</code></td><td>Self-documenting live schema: version, tables, columns, row counts (read-only).</td><td><code>--format</code>, <code>--output</code></td></tr>
+<tr><td><code>info</code></td><td>Engine self-report: product, extractor and resolver versions; per database, whether it is current, owes a re-resolve or owes a re-parse, and the remedy.</td><td><code>--db</code> (repeatable), <code>--json</code></td></tr>
+<tr><td><code>diff</code></td><td>Compare two index databases.</td><td><code>--db &lt;old&gt; --db &lt;new&gt;</code></td></tr>
+<tr><td><code>shutdown</code></td><td>Ask running language-server engines to release their databases and exit, over a per-user named pipe.</td><td><code>--db</code>, <code>--wait</code>, <code>--dry-run</code>, <code>--all</code>, <code>--force</code></td></tr>
+<tr><td><code>ide-release</code></td><td>Tell the IDE plugin to hold off respawning the engine for a while, so the engine can be rebuilt with the IDE open.</td><td><code>--seconds</code>, <code>--resume</code>, <code>--status</code></td></tr>
+</table>
+
+<h3>B.2 Search, navigation and lookup</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>query</code></td><td>Find a symbol by name or qualified name (exact, fuzzy fallback), by substring (<code>--name-like</code>), or search string literals, DFM, SQL and comment prose (<code>--text</code>). A forward declaration is folded into its real declaration <b>(new)</b>.</td><td><code>--name</code>, <code>--qname</code>, <code>--exact</code>, <code>--case-sensitive</code>, <code>--name-like [--kind --limit]</code>, <code>--text [--any-order|--substring --source --kind --limit]</code></td></tr>
+<tr><td><code>query find-callers</code></td><td>Every call or use site of a name, with context. <code>--resolved</code> gives precise, per-target answers -- routines, property/field reads and writes, and <b>(new)</b> enum-value reads <code>[certain, read]</code>.</td><td><code>--name</code> (bare member name), <code>--context N</code>, <code>--resolved</code></td></tr>
+<tr><td><code>query find</code></td><td>Find declarations by doc tag, doc-comment text, declaring-line clause, or missing docs.</td><td><code>--doc-tag</code>, <code>--doc-contains</code>, <code>--decl-contains</code>, <code>--no-docs</code>, <code>--kind</code>, <code>--name</code>, <code>--unit</code>, <code>--public</code></td></tr>
+<tr><td><code>query type-usage</code></td><td>Of a list of type names, which does this file actually reference (not in comments or strings)?</td><td><code>--in</code>, <code>--names | --names-file</code></td></tr>
+<tr><td><code>query unit-usage</code></td><td>Which files reference a unit, and which merely import it; with <code>--in</code>, which of its exports one file uses.</td><td><code>--unit</code>, <code>--in</code></td></tr>
+<tr><td><code>query ancestors</code></td><td>Transitive class/interface ancestry, with generic type arguments.</td><td><code>--name</code>, <code>--of</code></td></tr>
+<tr><td><code>query descendants</code></td><td>Every class descending from a given ancestor, across all scanned databases.</td><td><code>--of</code></td></tr>
+<tr><td><code>query typecat</code></td><td>Resolve a type's category (float, string, class, interface, ...).</td><td><code>--name</code></td></tr>
+<tr><td><code>query hints</code></td><td>List imported compiler hints and warnings.</td><td><code>--name &lt;code&gt;</code>, <code>--rule &lt;severity&gt;</code></td></tr>
+<tr><td><code>usages</code></td><td>Grouped usage report for a name (backs the IDE Symbol Search dialog).</td><td><code>--name</code>, <code>--width</code>, <code>--depth</code>, <code>--format</code></td></tr>
+<tr><td><code>outline</code></td><td>Every type, method and line in one unit, without reading it; forward stubs tagged <code>[forward -&gt; line N]</code> <b>(new)</b>.</td><td><code>--file</code>, <code>--format</code></td></tr>
+<tr><td><code>find-unit</code></td><td>Which unit declares a symbol; optionally add it to the <code>uses</code> clause.</td><td><code>--name</code>, <code>--in</code>, <code>--apply</code>, <code>--no-backup</code></td></tr>
+<tr><td><code>typeat</code></td><td>Resolve the identifier at <code>file:line:col</code>.</td><td><code>--format</code></td></tr>
+<tr><td><code>hover</code></td><td>The hover card for a qualified symbol; JSON now carries <code>effect_free</code>, <code>effect_summary</code>, <code>effect_witness</code> <b>(new)</b>.</td><td><code>--qname</code>, <code>--format plain|md|json</code></td></tr>
+<tr><td><code>helpers-of</code></td><td>Record and class helpers that target a type.</td><td><code>&lt;T&gt;</code>, <code>--json</code></td></tr>
+<tr><td><code>wiki</code></td><td>Route a human phrase to the owning symbol via <code>dl:wiki</code> topics; list or check topics.</td><td><code>--term</code>, <code>--list</code>, <code>--check</code></td></tr>
+<tr><td><code>sql</code></td><td>Guarded read-only SQL over the index (one statement, 200-row and 10-second caps).</td><td><code>--query | --file</code>, <code>--limit</code>, <code>--timeout-ms</code>, <code>--output</code></td></tr>
+</table>
+
+<h3>B.3 Call graph, dependencies and architecture</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>find-callees</code></td><td>Resolved outgoing calls of one routine.</td><td><code>--qname</code></td></tr>
+<tr><td><code>callgraph</code></td><td>N-deep resolved call tree, cycle-guarded.</td><td><code>--qname</code>, <code>--direction callers|callees</code>, <code>--depth</code></td></tr>
+<tr><td><code>reverse-calltree</code></td><td>N-deep caller (or callee) tree, as text, JSON, DOT or Mermaid.</td><td><code>--qname</code>, <code>--direction</code>, <code>--depth</code>, <code>--format text|json|dot|mermaid</code></td></tr>
+<tr><td><code>butterfly</code></td><td>Callers above and callees below one routine in a single chart.</td><td><code>--qname</code>, <code>--depth</code>, <code>--format dot|mermaid|text|json</code>, <code>--output</code></td></tr>
+<tr><td><code>call-path</code></td><td>Shortest resolved call path from A to B (exit 1 = none).</td><td><code>--from</code>, <code>--to</code>, <code>--max-depth</code></td></tr>
+<tr><td><code>ambiguous-calls</code></td><td>Resolver-coverage diagnostic: call sites left unresolved or ambiguous.</td><td><code>--qname | --file</code></td></tr>
+<tr><td><code>dump-call-edges</code></td><td>Diagnostic dump of every resolved call edge.</td><td><code>--db</code></td></tr>
+<tr><td><code>dump-refs</code></td><td>Diagnostic dump of one file's references and their enclosing routines.</td><td><code>&lt;file&gt;</code>, <code>--db</code></td></tr>
+<tr><td><code>impact</code></td><td>Transitive blast radius of a symbol, by depth.</td><td><code>--qname</code>, <code>--depth</code>, <code>--format</code></td></tr>
+<tr><td><code>cycles</code></td><td>Circular unit dependencies, with causes and a followable refactoring plan.</td><td><code>--edges</code>, <code>--causes</code>, <code>--plan</code>, <code>--format</code></td></tr>
+<tr><td><code>uses-audit</code></td><td>Interface-to-implementation moves and unused units for one unit.</td><td><code>&lt;unit.pas&gt;</code>, <code>--format</code></td></tr>
+<tr><td><code>uses-fix</code></td><td>Compiler-verified <code>uses</code> clean-up, with per-candidate status and reviewed partial apply.</td><td><code>--project</code>, <code>--platform</code>, <code>--apply</code>, <code>--remove-unused</code>, <code>--only</code></td></tr>
+<tr><td><code>uses-report</code></td><td>CSV of the uses graph; a <code>--name</code> matching no unit now fails instead of writing an empty report <b>(fixed)</b>.</td><td><code>--output</code>, <code>--depth</code>, <code>--include-external</code>, <code>--all-sources</code>, <code>--name</code></td></tr>
+<tr><td><code>deps-report</code></td><td>Third-party dependency roll-up.</td><td><code>--depth</code>, <code>--edges</code>, <code>--all-sources</code>, <code>--name</code>, <code>--format text|json|csv</code>, <code>--output</code></td></tr>
+<tr><td><code>graph</code></td><td>Unit/call graph export as DOT or Mermaid.</td><td><code>--format dot|mermaid</code>, <code>--name</code>, <code>--output</code></td></tr>
+<tr><td><code>top</code></td><td>Most-depended-on symbols.</td><td><code>--by fanin</code>, <code>--limit</code></td></tr>
+<tr><td><code>wiring</code></td><td>Spring4D DI registrations and DFM event edges for an interface or form; <code>--coverage</code> lists registrations not resolved.</td><td><code>--qname</code>, <code>--coverage</code>, <code>--format</code></td></tr>
+<tr><td><code>surface</code></td><td>The member surface of a type: names, types, trailing comments.</td><td><code>--qname</code>, <code>--include-impl</code>, <code>--all-visibility</code>, <code>--format</code></td></tr>
+<tr><td><code>slice</code></td><td>A minimal self-contained compilable slice of a type.</td><td><code>--qname</code>, <code>--format</code></td></tr>
+<tr><td><code>proptree</code></td><td>Flattened deep property tree of a class, own and inherited (foundation for conversion).</td><td><code>--qname</code>, <code>--depth</code>, <code>--refs-as-leaves</code>, <code>--no-to-persistent</code>, <code>--no-write-back</code>, <code>--min-visibility</code></td></tr>
+<tr><td><code>fb-snapshot</code></td><td>Snapshot a live Firebird database's metadata into a SQL index.</td><td><code>--connection</code>, <code>--db</code></td></tr>
+<tr><td><code>link-orm</code></td><td>Link a Delphi project index to a SQL index (ORM links).</td><td><code>--db &lt;proj&gt; --db &lt;sql&gt;</code></td></tr>
+</table>
+
+<h3>B.4 Linting and diagnostics</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>rules</code></td><td>List every lint rule with category, severity, default and fixability.</td><td><code>--json</code>, <code>--category</code>, <code>--rules-dir</code></td></tr>
+<tr><td><code>lint</code></td><td>Lint one file or folder; autofix one file; check a project's member list.</td><td><code>--rule</code>, <code>--disable</code>, <code>--db</code>, <code>--project-rules</code>, <code>--stand-in-for</code>, <code>--file --fix [--fix-line --fix-rule] [--apply]</code>, <code>--project --rule unit-not-in-dpr</code>, plus the CI flags below</td></tr>
+<tr><td><code>lint-all</code></td><td>Whole-project lint, including the project-wide rules a per-file run cannot see; project-wide autofix.</td><td><code>--project</code>, <code>--disable</code>, <code>--output</code>, <code>--quiet</code>, <code>--lint-third-party</code>, <code>--fix [--apply]</code>, <code>--no-preprocess</code></td></tr>
+<tr><td><code>lint-project</code></td><td>Run one named project-wide rule (now including <code>discarded-effect-free-result</code>, <code>query-name-with-effect</code> and <code>assert-with-side-effect</code> <b>(new)</b>).</td><td><code>--rule</code>, <code>--layers</code></td></tr>
+<tr><td><code>lint-tree</code></td><td>Before the build: would an interface edit to this unit break any dependent? Now covers removed properties, fields and enum members, and moved enum ordinals <b>(extended)</b>.</td><td><code>--unit</code>, <code>--buffer</code>, <code>--project</code>, <code>--baseline</code>, <code>--write-baseline</code>, <code>--platform</code>, <code>--with-rules</code>, <code>--compile</code></td></tr>
+<tr><td><code>allow</code></td><td>Record an accountable <code>dl:ok</code> review of one finding (dry run by default).</td><td><code>--fix-line</code>, <code>--fix-rule</code>, <code>--apply</code></td></tr>
+<tr><td><code>shared-unit</code></td><td>Read or extend a unit's <code>dl:shared</code> marker (which projects share it).</td><td><code>--in</code>, <code>--add-project</code>, <code>--apply</code></td></tr>
+<tr><td><code>check-ast</code></td><td>Parse-only structural diagnostics (unbalanced blocks, syntax errors).</td><td><code>--format</code></td></tr>
+<tr><td><code>doc-drift</code></td><td>Diagnostic: deterministic doc-versus-code drift findings for one symbol.</td><td><code>--qname</code></td></tr>
+<tr><td><code>find-deadcode</code></td><td>List unreferenced routines and symbols.</td><td><code>--kind</code>, <code>--include-private</code></td></tr>
+<tr><td><code>todos</code></td><td>TODO / FIXME / HACK / XXX / REVIEW / NOTE scanner.</td><td><code>[&lt;path&gt;]</code>, <code>--json</code></td></tr>
+<tr><td colspan="3"><b class="f">CI flags</b> (<code>lint</code>, <code>lint-all</code>, <code>check-ast</code>): <code>--format sarif</code>, <code>--fail-on &lt;level&gt;</code>, <code>--config</code>, <code>--enable</code>, <code>--profile</code>, <code>--baseline</code>, <code>--write-baseline</code>.</td></tr>
+</table>
+
+<h3>B.5 Compiling and the preprocessor</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>compile-check</code></td><td>Run the real compiler on a project or unit; findings as JSON.</td><td><code>--format</code></td></tr>
+<tr><td><code>refresh-findings</code></td><td>Recompile stale units and refresh stored compiler findings.</td><td><code>--project</code>, <code>--full</code></td></tr>
+<tr><td><code>ghost-check</code></td><td>Compile unsaved editor buffers from a shadow directory; real files are never written.</td><td><code>--unit --buffer | --overlays</code>, <code>--platform</code>, <code>--in-place</code></td></tr>
+<tr><td><code>ghost-recover</code></td><td>Restore any file left overlaid by an interrupted ghost-check.</td><td><code>&lt;dproj&gt;</code></td></tr>
+<tr><td><code>check-unit</code></td><td>Compile-check one unit in project context.</td><td><code>--project</code>, <code>--platform</code>, <code>--shadow</code>, <code>--resolve-uses</code></td></tr>
+<tr><td><code>import-log</code></td><td>Parse a dcc/msbuild log into stored findings.</td><td><code>&lt;logfile&gt;</code>, <code>--db</code></td></tr>
+<tr><td><code>preprocess-file</code></td><td>Diagnostic: print a file with <code>{$IFDEF}</code> branches resolved.</td><td><code>--file</code>, <code>--define</code>, <code>--numeric</code>, <code>--include-mode</code>, <code>--tolerances</code></td></tr>
+<tr><td><code>pp-profile</code></td><td>Print the resolved define profile for a project, platform and configuration -- now from all four property groups <b>(fixed)</b>.</td><td><code>--dproj</code>, <code>--platform</code>, <code>--config</code></td></tr>
+</table>
+
+<h3>B.6 Documentation</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>document</code></td><td>Generate or repair managed DocInsight comments for a symbol, a unit or a project; strip generated ones.</td><td><code>--qname | --unit | --project</code>, <code>--apply</code>, <code>--stubs</code>, <code>--strip</code>, <code>--include-accessors</code>, <code>--reindex</code>, <code>--document-third-party</code>, <code>--no-seealso</code>, <code>--since</code></td></tr>
+<tr><td><code>document-all</code></td><td>Document every public declaration in every indexed unit.</td><td><code>--stubs</code>, <code>--apply</code>, <code>--include-accessors</code></td></tr>
+<tr><td><code>generate-docs</code></td><td>Print a generated doc comment for one symbol.</td><td><code>--qname</code>, <code>--format xmldoc|pasdoc</code></td></tr>
+<tr><td><code>export obsidian</code></td><td>Export the index as an Obsidian vault.</td><td><code>--output-dir</code>, <code>--open</code></td></tr>
+<tr><td><code>export enums</code></td><td>Export enum declarations as Firebird SQL, CSV, JSON or Delphi constants.</td><td><code>--format</code></td></tr>
+</table>
+
+<h3>B.7 Refactoring and code generation</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>rename</code></td><td>Cross-unit symbol rename, or routine-local parameter/variable rename.</td><td><code>--kind symbol|param</code>, <code>--name|--qname</code>, <code>--to</code>, <code>--file --line --col</code>, <code>--apply</code>, <code>--dry-run</code>, <code>--no-backup</code></td></tr>
+<tr><td><code>safe-delete</code></td><td>Delete a symbol only if nothing references it.</td><td><code>--name</code>, <code>--apply</code></td></tr>
+<tr><td><code>extract-method</code></td><td>Pull a statement run into a new method.</td><td><code>--file</code>, <code>--from-line</code>, <code>--to-line</code>, <code>--name</code>, <code>--apply</code></td></tr>
+<tr><td><code>create-enum-helper</code></td><td>Generate a record helper for an enum (to/from byte, integer, string).</td><td><code>--qname</code>, <code>--methods</code>, <code>--tostring rtti|case</code>, <code>--apply</code></td></tr>
+<tr><td><code>exceptions-sync</code></td><td>Declare one named exception class per distinct <code>raise Exception.Create('...')</code> message.</td><td><code>--config</code>, <code>--apply</code></td></tr>
+<tr><td><code>format</code></td><td>Format a file through YADF with version gate, declaration check and preview.</td><td><code>--yadf-path</code>, <code>--dry-run</code>, <code>--diff</code></td></tr>
+<tr><td><code>generate-test</code></td><td>Scaffold a DUnitX or DUnit test from a real class surface.</td><td><code>--qname</code>, <code>--framework</code></td></tr>
+<tr><td><code>forms-csv</code></td><td>Test-helper navigation CSV, one row per form.</td><td><code>--project</code>, <code>--out</code>, <code>--root</code></td></tr>
+</table>
+
+<h3>B.8 AI, editor and server integration</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>context</code></td><td>AI-ready bundle for a task on one symbol: doc, class surface, the body, capped callers, matching wiki topics.</td><td><code>--task "modify X"</code>, <code>--format md|json|raw</code>, <code>--full-surface</code>, <code>--max-callers</code>, <code>--no-docs</code></td></tr>
+<tr><td><code>bench-context</code></td><td>Measure context-bundle size against whole-file reads.</td><td><code>--n</code></td></tr>
+<tr><td><code>serve</code></td><td>MCP stdio server (15 tools).</td><td><code>--db</code></td></tr>
+<tr><td><code>lsp</code></td><td>Language server; <code>--proxy</code> relays in front of RAD Studio's own DelphiLSP.</td><td><code>--proxy [--delphi-lsp --trace]</code>, <code>--parent-pid</code></td></tr>
+</table>
+
+<h3>B.9 Component Converter</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>convert-validate</code></td><td>Parse and validate a conversion rule book against real property trees.</td><td><code>--rules</code>, <code>--from</code>, <code>--to</code>, <code>--print-parsed</code></td></tr>
+<tr><td><code>convert-scaffold</code></td><td>Generate a valid rule file from the source and target property trees.</td><td><code>--from</code>, <code>--to</code>, <code>--out</code>, <code>--surface dfm|pas</code></td></tr>
+<tr><td><code>convert-apply</code></td><td>Apply a conversion across all five surfaces (dry run by default); realises casts and carries compatible image payloads <b>(extended)</b>.</td><td><code>--unit</code>, <code>--rules</code>, <code>--only</code>, <code>--castlib</code>, <code>--apply</code>, <code>--no-backup</code>, <code>--no-warn-unlinked</code>, <code>--format json</code></td></tr>
+<tr><td><code>glyph-vacuum</code> <b>(new)</b></td><td>Census every streamed graphic under folder trees: instances, per-class summary, decoded images and a gallery.</td><td><code>--root</code> (repeatable), <code>--out|--output</code>, <code>--append</code>, <code>--db</code></td></tr>
+</table>
+
+<h3>B.10 Global</h3>
+<table class="small">
+<tr><th>Command</th><th>Purpose</th><th>Key flags</th></tr>
+<tr><td><code>--version</code></td><td>Print the product version.</td><td>--</td></tr>
+<tr><td><code>--help</code></td><td>Print the full banner (also <code>-h</code>, <code>-?</code>, and after any verb).</td><td>--</td></tr>
+</table>
+
+
+<h2>Appendix C -- Lint rule catalogue (all 186 rules)</h2>
+<p class="sub">Generated from <code>drag-lint rules --json</code> (1.17.0-alpha, merged build of 23 September 2026). "On" means enabled by default; an off rule runs with <code>--enable &lt;id&gt;</code> or a profile. "Fix" marks the rules with an automatic fix. Source "scm" is an external tree-sitter query rule shipped in <code>rules\</code>; "builtin" is compiled into the engine.</p>
+<h3>C.1 By engine category</h3>
+<table><tr><th>Category</th><th>Covers</th><th class="n">Rules</th><th class="n">On</th><th class="n">Fix</th></tr>
+<tr><td><code>bug-patterns</code></td><td>Common Delphi bug shapes: exceptions, lifetime, logic, comparisons, casts</td><td class="n">54</td><td class="n">50</td><td class="n">6</td></tr>
+<tr><td><code>complexity</code></td><td>Complexity limits per routine and class</td><td class="n">11</td><td class="n">11</td><td class="n">0</td></tr>
+<tr><td><code>data-flow</code></td><td>Use before assignment, overwritten values, unset results and out parameters</td><td class="n">9</td><td class="n">9</td><td class="n">0</td></tr>
+<tr><td><code>dead-code</code></td><td>Unreachable and unused code</td><td class="n">12</td><td class="n">10</td><td class="n">6</td></tr>
+<tr><td><code>documentation</code></td><td>Documentation completeness and accuracy</td><td class="n">5</td><td class="n">4</td><td class="n">2</td></tr>
+<tr><td><code>firedac</code></td><td>FireDAC data-access mistakes</td><td class="n">3</td><td class="n">3</td><td class="n">0</td></tr>
+<tr><td><code>metrics</code></td><td>Size and shape metrics</td><td class="n">8</td><td class="n">5</td><td class="n">0</td></tr>
+<tr><td><code>naming</code></td><td>Naming conventions</td><td class="n">10</td><td class="n">8</td><td class="n">8</td></tr>
+<tr><td><code>other</code></td><td>Miscellaneous conventions</td><td class="n">6</td><td class="n">6</td><td class="n">0</td></tr>
+<tr><td><code>platform</code></td><td>Platform and portability</td><td class="n">10</td><td class="n">9</td><td class="n">0</td></tr>
+<tr><td><code>project-wide</code></td><td>Checks only a whole-project run can see</td><td class="n">19</td><td class="n">15</td><td class="n">0</td></tr>
+<tr><td><code>refactoring</code></td><td>Refactoring opportunities (mostly off by default)</td><td class="n">11</td><td class="n">1</td><td class="n">0</td></tr>
+<tr><td><code>resource-lifetime</code></td><td>Object and resource lifetime</td><td class="n">8</td><td class="n">7</td><td class="n">1</td></tr>
+<tr><td><code>review-markers</code></td><td>Health of dl:ok review annotations</td><td class="n">3</td><td class="n">3</td><td class="n">0</td></tr>
+<tr><td><code>security</code></td><td>Injection, unsafe APIs, secrets</td><td class="n">10</td><td class="n">10</td><td class="n">0</td></tr>
+<tr><td><code>structure</code></td><td>Structural issues</td><td class="n">7</td><td class="n">6</td><td class="n">0</td></tr>
+<tr class="tot"><td>Total</td><td>16 categories; 133 built-in + 53 scm</td><td class="n">186</td><td class="n">157</td><td class="n">23</td></tr></table>
+<h3>C.2 <code>bug-patterns</code> (54)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>bare-except</code></td><td>Bare except (no 'on E: ... do') catches every exception, even EOutOfMemory -- catch a specific exception class.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>case-magic-numbers</code></td><td>Case label is a literal -- consider naming the constant</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>classname-string-compare</code></td><td>Comparing ClassName to a string literal is fragile -- use 'is' or InheritsFrom().</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>code-after-exit</code></td><td>Unreachable code after Exit/raise/Break/Continue/Halt</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>comparison-same-operands</code></td><td>Both operands of this comparison are identical -- the result is constant; likely a typo.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>constant-condition</code></td><td>Condition is always the same constant -- likely dead code or a logic error.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>control-flow-in-finally</code></td><td>Exit/Break/Continue/Halt inside a finally block</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>criticalsection-not-released</code></td><td>Critical section acquired without a matching Leave/Release/TMonitor.Exit in finally</td><td>error</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>division-by-zero-literal</code></td><td>Division/modulo by a literal zero -- always raises a runtime division error.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>duplicate-exception-handler</code></td><td>Two 'on &lt;Class&gt;' handlers for the same class in one try -- the second is unreachable</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>empty-case-branch</code></td><td>Empty case branch -- the label has no statement (forgotten body, or add a comment if intentional).</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>empty-conditional</code></td><td>Empty then/else branch is a no-op -- likely a stray ';' after 'then'/'else'.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>empty-except</code></td><td>Empty except block silently swallows every exception -- log it or re-raise.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>empty-finally</code></td><td>Empty finally block does nothing -- remove it, or release the resource it was meant to free.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>empty-loop-body</code></td><td>Empty loop body -- a stray ';' after 'do', or a busy-wait that should sleep/yield.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>empty-on-handler</code></td><td>Empty exception handler ('on ... do ;') silently swallows the exception -- log it or re-raise.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>empty-procedure-body</code></td><td>Empty procedure/function body</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>enum-read-inside-with</code></td><td>A bare name inside a with body names an enum value AND a member of the with-target -- the compiler binds the member, drag-lint's index records the enum value</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>exception-constructed-but-not-raised</code></td><td>Exception E...Create(...) constructed as a statement but never raised</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>exhaustive-enum-case</code></td><td>case on an enum type omits some members and has no else (store-aware; same-file enums covered without a DB)</td><td>warning</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>float-equality-comparison</code></td><td>Floating-point value compared with =</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>format-argument-count</code></td><td>Format() argument count does not match the specifiers</td><td>error</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>format-specifier-type-mismatch</code></td><td>Format() specifier type does not match the literal argument</td><td>error</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>global-form-variable</code></td><td>Unit-level global variable of the form class type -- potential leak</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>ifthen-both-branches</code></td><td>IfThen() evaluates both branches unconditionally -- side effects in either argument always execute. Use if/then/else instead.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>large-magic-number</code></td><td>Integer literal -- consider naming the constant</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>length-zero-compare</code></td><td>Length(s) compared to 0 -- use s = '' / s &lt;&gt; ''</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>loop-executes-at-most-once</code></td><td>Loop body starts with Exit/Break/raise -- runs at most once</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>lossy-cast</code></td><td>Ansi-narrowing cast of a Unicode string -- characters outside the code page are lost (W1057)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>missing-inherited-ctor</code></td><td>Constructor without an inherited call</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>missing-inherited-dtor</code></td><td>Destructor without an inherited call</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>nil-comparison</code></td><td>Prefer Assigned(X) over 'X = nil' / 'X &lt;&gt; nil' -- clearer, and correct for method-pointer references.</td><td>info</td><td>off</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>not-comparison-precedence</code></td><td>'not A = B' parses as '(not A) = B' -- likely a bug; write 'not (A = B)'.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>not-in-precedence</code></td><td>'not X in S' parses as '(not X) in S' -- almost certainly a bug; write 'not (X in S)'.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>off-by-one-count</code></td><td>'for I := 0 to X.Count/Length(X)' runs one past the end -- use 'to X.Count - 1' (or 'to High(X)').</td><td>warning</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>parser-error</code></td><td>Syntax error: parser failed to recognize this construct</td><td>error</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>property-references-itself</code></td><td>A property's read/write accessor is the property itself -- infinite recursion</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>raise-bare-exception</code></td><td>Raising the root Exception class -- raise a specific subclass so callers can handle it selectively.</td><td>warning</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>raise-in-finally</code></td><td>raise inside a finally block masks the in-flight exception</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>repeated-else-if-condition</code></td><td>The same condition repeats in an if/else-if chain -- the later branch is unreachable</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>reraise-loses-stack</code></td><td>'raise E;' resets the stack trace -- use a bare 'raise;' to re-raise and preserve the original origin.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>self-assignment</code></td><td>'X := X' is a no-op self-assignment -- likely a copy-paste error.</td><td>warning</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>sleep-in-vcl</code></td><td>Sleep() on the main thread freezes the VCL UI. Use TTimer for delays or TThread.Sleep in a background thread.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>stat-gated-destructive</code></td><td>Destructive act gated on a file-existence check (a failed stat answers False)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>string-equality-comparison</code></td><td>String compared with = -- consider SameText/SameStr semantics</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>syntax-error</code></td><td>Source has a syntax error</td><td>error</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>try-except-swallowed</code></td><td>try..except swallows the exception (no raise/log)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>ui-access-in-thread</code></td><td>UI access inside a TThread.Execute (not thread-safe)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>unbalanced-begin-end</code></td><td>Unbalanced begin/end</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>unsafe-typecast-without-is</code></td><td>Hard cast TFoo(x) of an object reference with no guarding 'x is TFoo'</td><td>warning</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>uppercase-compare</code></td><td>UpperCase/LowerCase(...) compared to a string literal allocates a new string on every evaluation -- SameText compares in place and is clearer. (The literal's case agrees with the conversion here, so the comparison is correct; a literal in the OPPOSITE case is reported separately as uppercase-compare-always-false.)</td><td>warning</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>uppercase-compare-always-false</code></td><td>UpperCase/LowerCase(...) compared to a literal in the opposite case -- the two can NEVER be equal, so '=' is always False and '&lt;&gt;' always True. Correct the literal's case to match the conversion (or use SameText if a case-insensitive match was intended).</td><td>error</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>virtual-method-in-constructor</code></td><td>Virtual/dynamic method called from a constructor</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>with-hides-outer-symbol</code></td><td>A bare name inside a with body binds to the with-target while an outer scope declares the same name -- the compiler never warns</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.3 <code>complexity</code> (11)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>boolean-expression-complexity</code></td><td>Boolean expression has more than N and/or/xor operators</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>case-with-too-few-branches</code></td><td>case has fewer than N branches -- an if is clearer</td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>cognitive-complexity</code></td><td>Cognitive complexity is too high (nesting-weighted)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>cyclomatic-complexity</code></td><td>Cyclomatic complexity is too high</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>deep-nesting</code></td><td>Nesting is too deep</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>duplicate-code</code></td><td>Duplicated code block detected (Type-2, renamed-identifier tolerant)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>method-too-long</code></td><td>Routine body is too long</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>too-many-exit-points</code></td><td>Routine has too many Exit statements</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>too-many-locals</code></td><td>Routine has too many local variables</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>too-many-parameters</code></td><td>Routine has too many parameters</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>unit-too-large</code></td><td>Unit exceeds N source lines</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.4 <code>data-flow</code> (9)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>double-free</code></td><td>Object freed twice on a path with no reassignment between (double free)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>function-result-not-set</code></td><td>Function Result not assigned on every path</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>loop-var-after-loop</code></td><td>Loop variable used after the loop</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>not-assigned-interface</code></td><td>Interface variable dereferenced before assignment (nil interface call)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>object-leak</code></td><td>Created object may leak (not freed on every path)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>out-param-not-set</code></td><td>out parameter not assigned on every path</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>overwrite-before-read</code></td><td>Value overwritten before it is read</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>used-before-assignment</code></td><td>Variable used before assignment</td><td>error</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>write-only-local</code></td><td>Local assigned but never read</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.5 <code>dead-code</code> (12)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>boolean-comparison-true</code></td><td>Redundant comparison with boolean literal (use the expression directly)</td><td>info</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>boolean-result-returned-directly</code></td><td>Redundant if/else assigning True/False to Result. Write 'Result := &lt;cond&gt;' (or 'Result := not &lt;cond&gt;') directly.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>commented-out-code</code></td><td>Comment appears to be commented-out code (assignment or call)</td><td>hint</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>function-result-ignored</code></td><td>Result of a same-unit function call is discarded</td><td>hint</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>identical-then-else</code></td><td>then and else branches are identical</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>redundant-as-tobject</code></td><td>Redundant 'as TObject' cast - every Delphi object is already a TObject</td><td>info</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>redundant-cast</code></td><td>Cast of a value to the type it already has (no-op)</td><td>hint</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>redundant-not-not</code></td><td>Double negation 'not not X' -- simplify to X.</td><td>info</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>redundant-parentheses</code></td><td>Redundant parentheses around a single term or nested parens</td><td>hint</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>referenced-never-set</code></td><td>Private field is read but never assigned</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>unused-local</code></td><td>Local variable is never used</td><td>hint</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>unused-parameter</code></td><td>Parameter is never used</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.6 <code>documentation</code> (5)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>doc-drift</code></td><td>DocInsight comment has drifted from the code it documents (--fix repairs the mechanically-safe subset)</td><td>warning</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>doc-orphan-block</code></td><td>Managed facts block is attached to no declaration -- a previous --apply stacked it above an existing block</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>doc-param-no-description</code></td><td>A &lt;param&gt; tag is present but has no description -- the parameter's meaning is still undocumented</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>doc-param-not-in-signature</code></td><td>A &lt;param&gt; tag names a parameter the routine does not declare</td><td>error</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>missing-doc</code></td><td>Public declaration has no DocInsight doc-comment</td><td>warning</td><td>off</td><td>yes</td><td>builtin</td></tr>
+</table>
+<h3>C.7 <code>firedac</code> (3)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>dataset-open-without-close</code></td><td>Dataset opened without a matching Close in finally</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>field-by-name-in-loop</code></td><td>FieldByName called inside a loop -- cache the field</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>firedac-open-execsql-mismatch</code></td><td>Open vs ExecSQL does not match the SQL kind</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.8 <code>metrics</code> (8)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>deep-inheritance</code></td><td>Class inheritance is too deep (DIT)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>fan-in</code></td><td>Class is referenced by too many other classes (afferent coupling Ca)</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>fan-out</code></td><td>Class depends on too many other classes (efferent coupling Ce; aliases CBO)</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>high-coupling</code></td><td>Class is coupled to too many other classes (CBO)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>high-response</code></td><td>Class response set is too large (RFC)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>instability</code></td><td>Class instability (I=Ce/(Ca+Ce)) is high -- unstable: depends on many, nothing depends on it</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>low-cohesion</code></td><td>Class methods lack cohesion (LCOM4)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>too-many-children</code></td><td>Class has too many direct subclasses (NOC)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.9 <code>naming</code> (10)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>const-casing</code></td><td>Constant name casing</td><td>info</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>field-name-prefix</code></td><td>Field name must carry the configured prefix</td><td>info</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>hungarian-or-short-identifier</code></td><td>Short or Hungarian-prefixed identifier</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>local-field-prefix</code></td><td>Local variable wears the field/param prefix</td><td>info</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>local-var-casing</code></td><td>Local variable name casing</td><td>info</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>method-pascalcase</code></td><td>Method/routine name casing</td><td>info</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>param-name-prefix</code></td><td>Parameter name must carry the configured prefix</td><td>info</td><td>off</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>reserved-word-casing</code></td><td>Reserved words must be lowercase</td><td>info</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>type-name-prefix</code></td><td>Type name must carry the configured prefix</td><td>info</td><td>on</td><td>yes</td><td>builtin</td></tr>
+<tr><td><code>unit-name-matches-file</code></td><td>Unit name must equal the file base name</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.10 <code>other</code> (6)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>assert-call</code></td><td>Assert without a message argument -- add a second argument describing the failure.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>compiler-magic-comments</code></td><td>TODO/FIXME/HACK comment -- track in issue tracker</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>concat-in-loop</code></td><td>S := S + X inside a loop is O(n^2) -- each '+' allocates a new string. Accumulate with TStringList or use string.Join.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>inherited-bare</code></td><td>Bare 'inherited' call - verify it invokes the intended ancestor method</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>outputdebugstring</code></td><td>OutputDebugString -- debug output left in code; remove it or guard with {$IFDEF DEBUG}.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>writeln-in-source</code></td><td>Direct WriteLn call -- consider a logger.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+</table>
+<h3>C.11 <code>platform</code> (10)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>default-encoding-io</code></td><td>File I/O (LoadFromFile/SaveToFile, TFile.*, TStreamReader/Writer) with no explicit TEncoding -- defaults to ANSI/locale</td><td>warning</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>deprecated-rtl-function</code></td><td>Obsolete RTL routine. Prefer TEncoding / modern string APIs.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>gettickcount-wraparound</code></td><td>GetTickCount wraps after ~49.7 days -- use GetTickCount64 for elapsed-time calculations.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>inline-assembly</code></td><td>Inline asm block -- not portable across compilers/platforms; prefer Pascal where possible.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>locale-sensitive-conversion</code></td><td>Locale-sensitive conversion without a TFormatSettings -- behaves differently per regional settings; pass an explicit TFormatSettings.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>nativeint-truncation</code></td><td>NativeInt/pointer-sized value cast to a 32-bit integer type -- truncates on Win64</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>pchar-arithmetic</code></td><td>Pointer arithmetic on PChar -- unsafe and platform-specific (pointer size differs Win32/Win64). Use PChar[N] or string APIs.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>sizeof-pointer-assumption</code></td><td>SizeOf(Pointer) compared to a literal -- breaks on Win32 vs Win64. Guard with {$IFDEF WIN64} or compare to SizeOf of a platform-aware type.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>unsafe-string-api</code></td><td>Unsafe PChar string routine -- no length bound. Use System.AnsiStrings or TStringHelper equivalents.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>win64-pointer-cast</code></td><td>Pointer cast to a 32-bit integer type -- unsafe on Win64</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.12 <code>project-wide</code> (19)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>assert-with-side-effect</code></td><td>A routine with a PROVEN effect (writes a field, a global, a parameter or frees storage) is called inside Assert -- release builds compile Assert out, so the effect happens in Debug only</td><td>warning</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>circular-uses</code></td><td>Circular unit dependency (a uses-graph cycle among project units)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>dependent-project-not-recompiled</code></td><td>A dl:shared unit was changed after another project that also compiles it last built -- that project still holds object code for the older text</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>dfm-property-not-declared</code></td><td>A .dfm sets a property that the component's class and its ancestors do not declare -- the form fails to load or silently drops the setting</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>discarded-effect-free-result</code></td><td>A proven effect-free value-returning routine is called in statement position and its result discarded -- the call does nothing</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>duplicate-global-decl</code></td><td>The same name is declared at interface unit level in two or more units -- const, var, type, record, class, interface, enum or routine -- so which one compiles depends on uses order; or a project global that ALSO exists in a library unit the declaring file uses (masking an RTL name -- almost always a naming error; no autofix, a refactoring tool knows which one you meant)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>enum-helper-separate-units</code></td><td>Enum helper (record/class helper) is declared in a different unit than its target enum -- consider co-locating</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>global-only-uses-edge</code></td><td>A global variable is the ONLY link from one unit to another -- relocating it (or injecting it, when it is interface-typed) deletes the uses edge</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>god-class</code></td><td>Class has too many members/responsibilities</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>ifdef-undefined-symbol</code></td><td>IFDEF/IFNDEF/defined() tests a symbol no build of the project defines -- dead branch, usually a typo</td><td>warning</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>interface-reference-cycle</code></td><td>Interface reference cycle (ARC leak)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>layering-violation</code></td><td>Unit dependency crosses an architectural layer</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>query-name-with-effect</code></td><td>A Get*/Is*/Has*/Find*/Can*/Should* routine has a PROVEN escaping effect (writes a field, global state or frees storage) -- a question that also changes something</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>unit-not-in-dpr</code></td><td>Unit is referenced but not listed in the .dpr</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>unused-private-member</code></td><td>Private member is never referenced</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>unused-public-symbol</code></td><td>Public symbol is never referenced</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>unused-unit-in-uses</code></td><td>Unit in uses is never referenced</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>used-unit-not-resolvable</code></td><td>Used unit resolves to no known unit (project/library/alias)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>uses-global-census</code></td><td>How many of a used unit's globals and consts this unit actually draws, against how many that unit declares -- acknowledge a travels-together pair with // dl:unit &lt;unit&gt; accepted</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.13 <code>refactoring</code> (11)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>boolean-flag-parameter</code></td><td>Boolean flag parameter selects behavior -- consider splitting the routine</td><td>hint</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>feature-envy</code></td><td>Method accesses another class more than its own -- Move Method closer to the data it uses</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>loop-control-flag</code></td><td>Loop exit driven by a boolean flag -- consider Break</td><td>hint</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>magic-literal</code></td><td>Unexplained numeric literal -- extract a named constant</td><td>hint</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>message-chain</code></td><td>Message chain too long -- consider Hide Delegate</td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>middle-man</code></td><td>Class mostly delegates to one field -- Remove Middle Man (inline or expose the delegate)</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>mutable-global-variable</code></td><td>Mutable global variable -- shared mutable state (Fowler Global Data)</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>public-writable-field</code></td><td>Public class field -- expose via a property instead</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>repeated-type-switch</code></td><td>Same case-selector repeated across 3+ methods -- Replace Conditional with Polymorphism (project-wide)</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>separate-query-from-modifier</code></td><td>Value-returning function also mutates state -- Command-Query Separation violation; split into a pure query and a command</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>split-variable</code></td><td>Local reused for two unrelated purposes (disjoint lifetimes) -- Split Variable into two locals</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.14 <code>resource-lifetime</code> (8)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>abstract-method-instantiation</code></td><td>TFoo.Create on a class with an unimplemented abstract method -- raises EAbstractError (store-backed)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>create-inside-try</code></td><td>Object constructed as the first statement inside its try..finally -- construct before the try</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>destructor-without-override</code></td><td>Destructor not declared 'override' -- hides the inherited destructor (leak)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>freeandnil-on-interface</code></td><td>FreeAndNil on an interface reference</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>interface-object-mixing</code></td><td>Object aliased into an interface AND manually freed in the same routine -- dual-handle double-free risk</td><td>info</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>redundant-assigned-free</code></td><td>'if Assigned(X) then X.Free' -- the guard is redundant; Free and FreeAndNil already handle nil.</td><td>info</td><td>on</td><td>yes</td><td>scm</td></tr>
+<tr><td><code>unprotected-object-free</code></td><td>Object created + freed without try-finally</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>use-after-free</code></td><td>Object used after X.Free</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.15 <code>review-markers</code> (3)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>review-marker-malformed</code></td><td>dl:ok names something that is not a rule id -- the marker suppresses nothing</td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>review-marker-stale</code></td><td>dl:ok marker no longer matches the line it reviews -- the finding is reported again; re-review and re-mark</td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>review-marker-unused</code></td><td>dl:ok marker records a finding that no longer occurs -- remove the marker</td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.16 <code>security</code> (10)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>dfm-hardcoded-credential</code></td><td>A credential-named DFM property (Password/Secret/ApiKey) holds a literal string</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>hardcoded-absolute-path</code></td><td>A hardcoded ABSOLUTE root -- a drive letter or a UNC lead. A COMPLETE path reaching a file/directory/ini/dataset-location sink reports at warning; a bare root at info; a literal reaching NO modelled sink at info, for review (a relative path and a bare file name + extension are allowed)</td><td>info</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>hardcoded-connection-string</code></td><td>Hardcoded connection string -- embeds credentials / environment coupling (CWE-798); load it from config.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>hardcoded-credential</code></td><td>Hardcoded credential -- a secret-like const is set to a string literal (CWE-798); load it from config/secret store.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>hardcoded-ip-address</code></td><td>Hardcoded IP address -- ties the code to one host/network; read it from config.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>insecure-temp-file</code></td><td>File written to a hardcoded temp path (\Temp\, C:\Temp) -- predictable/insecure location</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>path-traversal</code></td><td>Concatenated path passed to a file API -- path traversal risk</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>sql-injection-concat</code></td><td>SQL string concatenated with a variable -- SQL injection risk (CWE-89); use a parameterized query.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>unsafe-shellexecute</code></td><td>A command line built at runtime: WinExec/CreateProcess with a non-literal command, or ShellExecute with runtime parameters, a non-plain verb, or an interpreter as lpFile</td><td>error</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>weak-random-for-security</code></td><td>A security-named variable is generated with System.Random (not a CSPRNG)</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+</table>
+<h3>C.17 <code>structure</code> (7)</h3>
+<table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>goto-statement</code></td><td>goto statement is generally considered harmful</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>inline-comment-in-multiline-args</code></td><td>Inline comment inside a multi-line argument list</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>multiple-statements-per-line</code></td><td>Two or more statements share one source line</td><td>hint</td><td>off</td><td></td><td>builtin</td></tr>
+<tr><td><code>nested-with</code></td><td>Nested with statement (scope highly ambiguous)</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>public-field</code></td><td>Public field on a class breaks encapsulation -- expose it via a property.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>with-multiple-items</code></td><td>'with A, B do' lists multiple objects -- name resolution is highly ambiguous; use explicit qualified access.</td><td>warning</td><td>on</td><td></td><td>scm</td></tr>
+<tr><td><code>with-statement</code></td><td>'with' statement makes symbol scope ambiguous</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
+</table>
+
+<p class="foot">
+Counts in this document are derived from the shipping build, not from the
+previous edition: rule totals come from <code>drag-lint rules --json</code>, the
+command surface from <code>drag-lint --help</code> (<b class="f">96 command forms</b>,
+every one listed in Appendix B), the engine versions from <code>drag-lint info
+--json</code>, and the MCP tool count from the README's server-verified tool list --
+all taken on 23 September 2026 against drag-lint 1.17.0-alpha (build 2026-09-23
+11:39, the merged build that carries the three rules of Appendix A.1). Corpus measurements are quoted from the CHANGELOG and the commits that made
+them, with their caveats. The roadmap in Appendix A is compiled from the project's
+open INBOX notes, backlogs, plans and design specs on that date, not a selection.<br><br>
+The eight rule groups in chapter 4 are a presentation grouping over the engine's 16
+categories; every one of the 186 rules appears in exactly one group, and the
+subtotals sum to 186. The change from the previous edition's 181 is five new rules:
+four project-wide (15 to 19) and one bug pattern (53 to 54), all listed in "What is new". Run <code>drag-lint rules</code> for the
+authoritative, always-current catalog.
+</p>
+
+</body>
+</html>
