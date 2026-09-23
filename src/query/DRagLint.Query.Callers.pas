@@ -30,9 +30,12 @@ type
   /// FilePath is file-NAME-only for resolved and callback rows (the
   /// idempotency design the JSON contract already carries) and the FULL path
   /// for name-matched rows, because the hover popup navigates to them. Line is
-  /// meaningful only when HasLine is True: a resolved row whose caller symbol
-  /// id is unknown deliberately carries no line, and the JSON renderer must
-  /// omit the pair rather than emit 0.
+  /// meaningful only when HasLine is True: a resolved or callback row whose
+  /// caller symbol id is unknown deliberately carries no caller line, and the
+  /// JSON renderer must omit the pair rather than emit 0.
+  /// TWO LINES, TWO FIELDS: CallSiteLine is the site on every row; Line is the
+  /// caller ROUTINE's declaration line on resolved and callback rows (the
+  /// CLI's `caller_line`) and the reference's own line on name-matched rows.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas)</para>
   /// <para>Used in units: DRagLint.Query.Callers</para>
@@ -68,13 +71,14 @@ type
     /// the full path.</remarks>
     FullPath   : string ;
     /// <summary>The line of the CALL ITSELF, as opposed to Line, which for a
-    /// resolved row is the caller ROUTINE's start line.</summary>
-    /// <remarks>Both are wanted and neither substitutes for the other. Line is
-    /// routine-granular and is what the CLI has always printed -- changing it
-    /// would move every golden. CallSiteLine is what a reader means by "called
-    /// from": the exact statement. The index has carried it all along in
-    /// TResolvedCaller.CallSiteLine and this layer was dropping it. 0 when
-    /// unknown.</remarks>
+    /// resolved or callback row is the caller ROUTINE's start line.</summary>
+    /// <remarks>Both are wanted and neither substitutes for the other.
+    /// CallSiteLine is what a reader means by "called from": the exact
+    /// statement, and it is what the CLI prints as `line` on EVERY row
+    /// (2026-09-23, C1). Until then the CLI printed Line there for the
+    /// call_edges rows and the site for callback rows -- one key, two meanings
+    /// chosen by the arm that produced the row. Line survives as the CLI's
+    /// `caller_line`. 0 when unknown.</remarks>
     CallSiteLine: Integer;
     /// <summary>Id of the symbol whose body contains this reference; 0 at unit
     /// level. Filled by NameCallersForName only.</summary>
@@ -224,9 +228,9 @@ begin
       Row.Confidence  := RC.Confidence    ;
       Row.Mode        := RC.Mode          ;
       Row.TargetQName := T.QualifiedName  ;
-      { The line is the caller SYMBOL's own start line (routine-granular, not
-        the exact call-site line) -- unchanged from the CLI, whose JSON omits
-        the pair entirely when the enclosing symbol is unknown. }
+      { Line is the caller SYMBOL's own start line (routine-granular; the CLI's
+        `caller_line`, omitted when the enclosing symbol is unknown). The site
+        is CallSiteLine above. }
       if RC.EnclosingSymbolId > 0 then
       begin
         Row.Line   := AStore.GetSymbolById(RC.EnclosingSymbolId).StartLine;
@@ -272,17 +276,25 @@ begin
       var CbWhere: string:= AStore.GetFilePath(CbRef.FileId);
       if ResolvedSites.ContainsKey(Format('%s:%d', [LowerCase(CbWhere), CbRef.StartLine])) then Continue;
       var CbWho  : string:= '';
+      var CbDecl : Integer:= 0;
       if CbRef.EnclosingSymbolId > 0 then
-        CbWho:= AStore.GetSymbolById(CbRef.EnclosingSymbolId).QualifiedName;
+      begin
+        var CbSym: TSymbol:= AStore.GetSymbolById(CbRef.EnclosingSymbolId);
+        CbWho := CbSym.QualifiedName;
+        CbDecl:= CbSym.StartLine;
+      end;
       if CbWho = '' then CbWho:= '(unit level)';
 
       Row:= Default(TQueryCallerRow);
       Row.CallerQName := CbWho                    ;
       Row.FilePath    := ExtractFileName(CbWhere) ;
       Row.FullPath    := CbWhere                  ;
-      Row.Line        := CbRef.StartLine          ;
+      { Same two lines as a resolved row: Line = the caller's declaration,
+        CallSiteLine = the site. Before C1 this row put the SITE in Line, which
+        is what made `line` mean two things across arms. }
+      Row.Line        := CbDecl                   ;
       Row.CallSiteLine:= CbRef.StartLine          ;
-      Row.HasLine     := True                     ;
+      Row.HasLine     := CbDecl > 0               ;
       Row.Confidence := 'callback'               ;
       Row.TargetQName:= AName                    ;
       SetLength(Result, Length(Result) + 1);

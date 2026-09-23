@@ -150,7 +150,7 @@ try {
 
   # --- check 7: consumer reach (run before the mutation below) ---------------------
   # find-callers --resolved emits a `certain` row per resolved edge (its "line" is
-  # the CALLER's declaration line, not the site) and a `callback` row per `read`
+  # the SITE since C1, 2026-09-23; the caller's declaration is `caller_line`) and a `callback` row per `read`
   # of the routine's name that no call covers. So: four certain Driver rows, the
   # three parenless Driver sites NOT ALSO listed as callbacks (the double listing
   # the new edges would otherwise cause), and the genuine callback passes --

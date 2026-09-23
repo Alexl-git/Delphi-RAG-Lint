@@ -82,8 +82,11 @@ the tree after every build.
 ### After an upgrade
 
 An index records TWO fingerprints, and they owe different remedies.
-`drag-lint info --db <index>` prints both and a verdict (`current`,
-`resolve-owed`, `reparse-owed`) with the command to run.
+`drag-lint info --json --db <index>` prints both and a verdict (`current`,
+`resolve-owed`, `reparse-owed`, `index-newer`) with the command to run.
+`index-newer` means the index was built or resolved by a NEWER engine than the
+one answering: reads work, but `index` with this engine is refused (a writer
+never downgrades an index), so the remedy is a newer engine, not a re-resolve.
 
 * **Indexer fingerprint** -- EXTRACTOR version (not the product version),
   schema, whether preprocessing was on, and the effective platform, e.g.

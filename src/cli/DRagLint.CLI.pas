@@ -6963,8 +6963,9 @@ begin
         `draglint/hoverBundle` answers from the same code instead of the IDE
         having to spawn this exe. Only the RENDERING lives here now, and it is
         unchanged: per-target headers in the text form, callbacks without one,
-        and a JSON key order of caller_qname,file,confidence,target_qname[,line]
-        with the line pair OMITTED when the enclosing symbol is unknown.
+        and a JSON key order of
+        caller_qname,file,confidence,target_qname[,line][,caller_line][,mode]
+        with caller_line OMITTED when the enclosing symbol is unknown.
         Pinned by run_query_callers_shared_guard.ps1. }
       var TotalCallers:= 0;
       var JOut: TJSONArray:= nil;
@@ -6989,27 +6990,39 @@ begin
               JObj.AddPair('file'        , Row.FilePath   );
               JObj.AddPair('confidence'  , Row.Confidence );
               JObj.AddPair('target_qname', Row.TargetQName);
-              if Row.HasLine then JObj.AddPair('line', TJSONNumber.Create(Row.Line));
+              { C1 (2026-09-23): `line` is the SITE on every row. It used to be
+                the caller routine's declaration line on the call_edges rows
+                (call, property/field, enum value, parenless) and the site on
+                callback rows -- one key, two meanings. The declaration line is
+                kept under its own key, `caller_line`, omitted when the
+                enclosing symbol is unknown. }
+              if Row.CallSiteLine > 0 then JObj.AddPair('line', TJSONNumber.Create(Row.CallSiteLine));
+              if Row.HasLine then JObj.AddPair('caller_line', TJSONNumber.Create(Row.Line));
               { 2026-09-16: a PROPERTY/FIELD access carries its mode; routine rows
                 keep the pinned key order exactly (no key when empty). }
               if Row.Mode <> '' then JObj.AddPair('mode', Row.Mode);
               JOut.AddElement(JObj);
             end
-            else if Row.Confidence = 'callback' then
-              { A callback reach is reported WITHOUT a target header and WITH its
-                call-site line -- it is a reach, not a call, and the shape is
-                what keeps the two from being confused. }
-              Writeln(Format('    %s  (%s:%d)  [callback]',
-                [Row.CallerQName, Row.FilePath, Row.Line]))
             else
             begin
-              { Header per TARGET, not per distinct name -- two OVERLOADS share
-                one qualified name and each gets its own header, exactly as the
-                inline version printed it. }
-              if Row.FirstOfTarget then Writeln(Format('  %s:', [Row.TargetQName]));
-              var Tag: string:= Row.Confidence;
-              if Row.Mode <> '' then Tag:= Tag + ', ' + Row.Mode;
-              Writeln(Format('    %s  (%s)  [%s]', [Row.CallerQName, Row.FilePath, Tag]));
+              { The text form names the same line the JSON `line` does (C1). }
+              var Where: string:= Row.FilePath;
+              if Row.CallSiteLine > 0 then Where:= Format('%s:%d', [Row.FilePath, Row.CallSiteLine]);
+              if Row.Confidence = 'callback' then
+                { A callback reach is reported WITHOUT a target header -- it is a
+                  reach, not a call, and the shape is what keeps the two from
+                  being confused. }
+                Writeln(Format('    %s  (%s)  [callback]', [Row.CallerQName, Where]))
+              else
+              begin
+                { Header per TARGET, not per distinct name -- two OVERLOADS share
+                  one qualified name and each gets its own header, exactly as the
+                  inline version printed it. }
+                if Row.FirstOfTarget then Writeln(Format('  %s:', [Row.TargetQName]));
+                var Tag: string:= Row.Confidence;
+                if Row.Mode <> '' then Tag:= Tag + ', ' + Row.Mode;
+                Writeln(Format('    %s  (%s)  [%s]', [Row.CallerQName, Where, Tag]));
+              end;
             end;
             Inc(TotalCallers);
           end; // for Row
@@ -15129,18 +15142,41 @@ begin
                 `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is
                 compared, because platform and preprocess differences are
                 legitimate per-index facts, not staleness. }
-              var IdxStale: Boolean:= (PrevIfp = '')
-                or (Pos('v=' + DRAGLINT_EXTRACTOR_VERSION + ';', PrevIfp) <> 1);
-              var ResStale: Boolean:= (PrevRfp = '') or (PrevRfp <> CurRfp);
+              { C2 (2026-09-23): THE DIRECTION IS THE ADVICE. A stamp NEWER than
+                this engine is not owed anything -- re-parsing or re-resolving
+                it here would be the downgrade RefuseIfEngineOlderThanDb refuses
+                (ENG-2), so advising it named a command that fails. Compared
+                with the refusal's own comparison, semantically; an absent or
+                unparseable stamp is never newer (MISSING IS STALE). }
+              var IdxVer: string:= ExtractorVersionOfFingerprint(PrevIfp);
+              var ResVer: string:= ResolverVersionOfFingerprint(PrevRfp);
+              var IdxNewer: Boolean:= (IdxVer <> '')
+                and (CompareDottedVersions(DRAGLINT_EXTRACTOR_VERSION, IdxVer) < 0);
+              var ResNewer: Boolean:= (ResVer <> '')
+                and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, ResVer) < 0);
+              var IdxStale: Boolean:= (not IdxNewer) and ((PrevIfp = '')
+                or (Pos('v=' + DRAGLINT_EXTRACTOR_VERSION + ';', PrevIfp) <> 1));
+              var ResStale: Boolean:= (not ResNewer) and ((PrevRfp = '') or (PrevRfp <> CurRfp));
               JOne.AddPair('indexer_stale' , TJSONBool.Create(IdxStale));
               JOne.AddPair('resolver_stale', TJSONBool.Create(ResStale));
-              if IdxStale then
+              JOne.AddPair('indexer_newer' , TJSONBool.Create(IdxNewer));
+              JOne.AddPair('resolver_newer', TJSONBool.Create(ResNewer));
+              { index-newer outranks both owed verdicts: this engine may not
+                write the index at all, so neither remedy is available to it. }
+              if IdxNewer or ResNewer then
+                JOne.AddPair('verdict', 'index-newer')
+              else if IdxStale then
                 JOne.AddPair('verdict', 'reparse-owed')
               else if ResStale then
                 JOne.AddPair('verdict', 'resolve-owed')
               else
                 JOne.AddPair('verdict', 'current');
-              if IdxStale then
+              if IdxNewer or ResNewer then
+                JOne.AddPair('remedy', Format('use a newer engine: the index is at extractor %s / resolver %s, ' +
+                  'this engine is extractor %s / resolver %s (drag-lint %s). Reads work; an index run ' +
+                  'with this engine is refused (a writer never downgrades an index).',
+                  [IdxVer, ResVer, DRAGLINT_EXTRACTOR_VERSION, DRAGLINT_RESOLVER_VERSION, DRAGLINT_VERSION]))
+              else if IdxStale then
                 JOne.AddPair('remedy', 'index <dir> --db <db>   (a re-parse: hours across the box)')
               else if ResStale then
                 JOne.AddPair('remedy', 'index <dir> --db <db> --resolve-only   (minutes, no parse becomes wrong)');

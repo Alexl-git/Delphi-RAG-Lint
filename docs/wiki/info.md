@@ -7,10 +7,21 @@ you are running, or to script a version check.
 ## Running it from the CLI
 
 ```
-drag-lint info [--json]
+drag-lint info [--json] [--db <file.sqlite>]...
 ```
 
 Read-only.
+
+With `--json --db <index>` (repeatable) it adds an `indexes` array: per index,
+its `indexer_fingerprint` / `resolver_fingerprint`, the booleans
+`indexer_stale` / `resolver_stale` / `indexer_newer` / `resolver_newer`, a
+`verdict` and a `remedy`. The verdict is one of `current`, `resolve-owed`
+(re-resolve: minutes), `reparse-owed` (re-parse: hours), `index-newer` (the
+index was built or resolved by a NEWER engine than this one -- reads work, but
+`index` with this engine is refused because a writer never downgrades an index;
+the remedy is to use a newer engine), `missing` or `unreadable`. Versions are
+compared semantically (`1.10.0` is newer than `1.9.0`); an absent stamp is
+stale, never newer.
 
 ## Reaching it in the IDE
 

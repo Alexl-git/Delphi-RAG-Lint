@@ -18,8 +18,9 @@
 
   WHY BOTH FORMATS:
     The text path groups rows under a per-target header and prints callbacks
-    WITHOUT one; the JSON path emits a fixed key order and OMITS the 'line' pair
-    entirely when the enclosing symbol is unknown. Both are easy to get subtly
+    WITHOUT one; the JSON path emits a fixed key order and OMITS the
+    'caller_line' pair entirely when the enclosing symbol is unknown ('line' is
+    the call site since C1, 2026-09-23 -- run_find_callers_site_line.ps1). Both are easy to get subtly
     wrong when flattening the computation into rows, and neither is covered by
     the other.
 
