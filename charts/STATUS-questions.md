@@ -208,20 +208,22 @@ from 9 nodes to 4. Callers unaffected.
 question the index can answer now ships; the five that do not are blocked on
 facts that do not exist, each measured and each filed.
 
-**The withheld-file reindex LANDED (2026-09-23 09:42) and cleared all 9.**
-CLIENT was re-cloned (stamp 1790174548; the 05:30 clone is kept beside it as
-`*.pre-reindex-0530`). The suite is now **3 red, all one KNOWN ENGINE DEFECT**:
+**THE SUITE IS GREEN (2026-09-23 10:31) on extractor 1.18.0 / resolver 1.6.0.**
+All 8 project clones were re-taken after the engine's full re-parse (pre-1.18
+copies kept beside them as `*.pre-1.18`; the 05:30 CLIENT as
+`*.pre-reindex-0530`). Plus `SQL-drag-lint-sql.sqlite`, cloned at 10:01, final.
 
-* `A-AR1-UNITS/EXTUNITS/EXTEDGES` read 562/280/30697. The engine's preprocessor
-  profile ignores the `Base_Win64` group that defines `EUREKALOG`, so the .dpr's
-  `{$IFDEF EurekaLog}` block is blanked and the local `EExtraExceptionInfo.pas`
-  (a real member) drops out of the closure. Engine ruling: **563/283/30702 is
-  right -- do NOT re-baseline.** Filed by them:
-  `INBOX-pp-profile-ignores-platform-propertygroups.md`. The fix is an extractor
-  bump + full re-parse, not today. When it lands: re-clone, re-run; OTHER counts
-  may shift by a few (units that `{$IFDEF EurekaLog}` internally).
-* `A-PT2-REFS/ROUTINES` WERE re-baselined 1043/727 -> 1047/728: the old pair was
-  taken while the withheld file had no resolved refs. Recovered data.
+Every re-baseline on the way was traced to a mechanism before it was made:
+
+* withheld-file reindex (09:42): the 9 callee/accessor failures cleared;
+  `A-PT2` 1043/727 -> 1047/728 (4 recovered CommandID reads).
+* extractor 1.18 define-profile fix (EUREKALOG now live): `A-EW1` +2 handlers
+  (`EurekaLogEvents1`), `A-FX3` `s` -> `s,?` (`HandleException` body is all
+  EurekaLog, calls `ExceptionManager.Handle`), `A-AR1` +1 internal / +10 external
+  units (the .dpr's EurekaLog uses block). `EXTEDGES` +14 vs +12 raw uses rows:
+  deps-report attribution, asked in the engine INBOX.
+
+Next: the last four verbs -- `charts\PLAN-last-four-verbs.md` (Fable).
 
 ### Batch 3 findings (2026-09-23)
 

@@ -190,13 +190,16 @@ Step 'E-WIC' {
 Note 'event-wiring uMain.TfrmMAIN ...'
 Step 'E-EW1' {
   $script:e1 = & "$SRC\Emit-EventWiring.ps1" -Form 'uMain.TfrmMAIN' -DbPath $DbCli -OutDir $OutDir
-  Chk 'A-EW1-EVENTS'     $e1.Events 41
-  Chk 'A-EW1-HANDLERS'   $e1.Handlers 41
-  Chk 'A-EW1-COMPONENTS' $e1.Components 40
-  Chk 'A-EW1-KINDS'      $e1.EventKinds 3
-  Chk 'A-EW1-DFMSUM'     ($e1.DfmResolved + $e1.DfmFallback) 41
-  Chk 'A-EW1-EXP'        $e1.Expected 82
-  Chk 'A-EW1-CLICKS'     $e1.ClickTargets 82
+  # 43/41/5, was 41/40/3 before extractor 1.18 (2026-09-23): the define profile
+  # now reads Base_Win64, EUREKALOG is live, and the two EurekaLogEvents1 handlers
+  # (OnCustomDataRequest, OnExceptionNotify) declared under {$IFDEF EurekaLog} parse.
+  Chk 'A-EW1-EVENTS'     $e1.Events 43
+  Chk 'A-EW1-HANDLERS'   $e1.Handlers 43
+  Chk 'A-EW1-COMPONENTS' $e1.Components 41
+  Chk 'A-EW1-KINDS'      $e1.EventKinds 5
+  Chk 'A-EW1-DFMSUM'     ($e1.DfmResolved + $e1.DfmFallback) 43
+  Chk 'A-EW1-EXP'        $e1.Expected 86
+  Chk 'A-EW1-CLICKS'     $e1.ClickTargets 86
   $te = Dot $e1
   foreach ($ln in 52, 790, 4371) {                       # DFM: OnCreate / OnClick / Exit2
     if (-not (HasLine $te $ln)) { Fail 'A-EW1-DFMHREF' "uMain.dfm:$ln is not anchored" }
@@ -400,7 +403,7 @@ NegTest 'N1' 'engine returned nothing for' 'No_Such_Method' {
   & "$SRC\Emit-WhoCalls.ps1" -Qname 'No.Such.Method' -DbPath $DbCli -OutDir $negDir }
 NegTest 'N2' 'ask event-wiring instead' 'uMain_TfrmMAIN_FormCreate' {
   & "$SRC\Emit-WhoCalls.ps1" -Qname 'uMain.TfrmMAIN.FormCreate' -DbPath $DbCli -Depth 2 -OutDir $negDir }
-NegTest 'N3' 'control NoSuchControl has no dfm_event rows on uMain.TfrmMAIN (the form has 41)' 'uMain_TfrmMAIN_NoSuchControl' {
+NegTest 'N3' 'control NoSuchControl has no dfm_event rows on uMain.TfrmMAIN (the form has 43)' 'uMain_TfrmMAIN_NoSuchControl' {
   & "$SRC\Emit-EventWiring.ps1" -Form 'uMain.TfrmMAIN' -Control 'NoSuchControl' -DbPath $DbCli -OutDir $negDir }
 NegTest 'N4' 'is this a form class?' 'Blueprint4_ViewModel_TBlueprint_ViewModel' {
   & "$SRC\Emit-EventWiring.ps1" -Form 'Blueprint4.ViewModel.TBlueprint_ViewModel' -DbPath $DbCli -OutDir $negDir }
@@ -571,9 +574,12 @@ Step 'E-FX' {
   if ((Dot $fx2) -notmatch 'not analysed') { Fail 'A-FX2-NOTE' 'the unanalysed case does not say so' }
 
   $script:fx3 = & "$SRC\Emit-Effects.ps1" -Qname 'uMain.TExit.HandleException' -DbPath $DbCli -OutDir $OutDir
-  Chk 'A-FX3-SUMMARY' $fx3.Summary 's'
+  # 's,?' / 1 unknown, was 's' / 0 before extractor 1.18: the whole body is under
+  # {$IFDEF EUREKALOG}, now live, and calls ExceptionManager.Handle -- an external
+  # routine with no effect facts, so the unknown is CORRECT, not a regression.
+  Chk 'A-FX3-SUMMARY' $fx3.Summary 's,?'
   Chk 'A-FX3-EFFECTS' $fx3.Effects 1
-  Chk 'A-FX3-UNKNOWN' $fx3.Unknown 0
+  Chk 'A-FX3-UNKNOWN' $fx3.Unknown 1
 
   $script:fx4 = & "$SRC\Emit-Effects.ps1" -Qname 'uMain.TExit.Execute' -DbPath $DbCli -OutDir $OutDir
   Chk 'A-FX4-SUMMARY' $fx4.Summary 'g,s,?'
@@ -599,17 +605,18 @@ Step 'E-FX' {
 Note 'architecture ...'
 Step 'E-AR' {
   $script:ar1 = & "$SRC\Emit-Architecture.ps1" -DbPath $DbCli -OutDir $OutDir
-  # KNOWN RED since the 2026-09-23 09:42 CLIENT reindex: UNITS/EXTUNITS/EXTEDGES
-  # read 562/280/30697. Engine defect, NOT data: the preprocessor profile ignores
-  # the Base_Win64 group that defines EUREKALOG, so the .dpr's {$IFDEF EurekaLog}
-  # block is blanked and the local EExtraExceptionInfo.pas (a real member) drops
-  # out of the closure. Engine ruling: 563/283/30702 is right. Do NOT re-baseline.
-  # C:\Projects\Delphi-RAG-lint\docs\INBOX-pp-profile-ignores-platform-propertygroups.md
+  # Extractor 1.18 (2026-09-23) fixed the define profile, so the .dpr's
+  # {$IFDEF EurekaLog} uses block is live: +1 internal edge (EExtraExceptionInfo),
+  # +10 external units (EAppVCL, EDebugExports, EDebugMap, EDialogWinAPISteps-
+  # ToReproduce, EFixSafeCallException, EMapWin32, EMemLeaks, EResLeaks,
+  # EResourceStrings, ExceptionLog7). EXTEDGES is deps-report's own count: +14
+  # against +12 raw unresolved unit_uses rows -- the 2 extra are its attribution
+  # of ETypes/EEvents/ECompatibility, asked about in the engine INBOX.
   Chk 'A-AR1-UNITS'    $ar1.Units 563
   Chk 'A-AR1-ZONES'    $ar1.Zones 3
-  Chk 'A-AR1-INTERNAL' $ar1.InternalEdges 2858
-  Chk 'A-AR1-EXTUNITS' $ar1.ExternalUnits 283
-  Chk 'A-AR1-EXTEDGES' $ar1.ExternalEdges 30702
+  Chk 'A-AR1-INTERNAL' $ar1.InternalEdges 2859
+  Chk 'A-AR1-EXTUNITS' $ar1.ExternalUnits 293
+  Chk 'A-AR1-EXTEDGES' $ar1.ExternalEdges 30716
   Chk 'A-AR1-GROUPS'   $ar1.Groups 5
   Chk 'A-AR1-BACK'     $ar1.BackEdges 3
   # The red-team's classifier gap: bare `spring` lands in `unknown`.
