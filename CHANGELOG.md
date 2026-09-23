@@ -46,6 +46,24 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`query find-callers --resolved`: `line` is the CALL SITE on every row (C1).** The rows built from
+  `call_edges` -- routine call, property/field access, enum-value read, parenless call -- put the
+  caller ROUTINE's declaration line in JSON `line`, while callback rows put the site there: one key,
+  two meanings, chosen by the arm. JSON `line` is now the site on every row; the declaration line
+  moved to a new key, `caller_line` (omitted when the enclosing routine is unknown). The text form,
+  which printed no line for those rows, now prints `(<file>:<site line>)` on every row, the same
+  number as the JSON. **Consumers reading `line` as the caller routine's line must switch to
+  `caller_line`.** The LSP hover bundle already used the site and is unchanged. Reader-side only
+  (`DRagLint.Query.Callers`, CLI rendering): no extractor or resolver bump. Guard:
+  `tests\callresolve\run_find_callers_site_line.ps1` (one fixture, all five arms, text and JSON).
+- **`info --json --db`: an index NEWER than the engine is `index-newer`, not owed a re-resolve (C2).**
+  The verdict compared fingerprints for inequality, so an index resolved at a newer resolver (or
+  parsed by a newer extractor) than the running engine read `resolve-owed` / `reparse-owed` with a
+  remedy that is exactly the downgrade `index` refuses (ENG-2). Both axes now use the refusal's own
+  `CompareDottedVersions`: newer -> verdict `index-newer`, remedy "use a newer engine", new booleans
+  `indexer_newer` / `resolver_newer`, and the matching `*_stale` false. Older and absent stamps are
+  unchanged. The IDE About window shows the new verdict through its generic branch (warning, verdict
+  text only). Guard: `tests\autotest\run_info_index_newer_than_engine.ps1` (with older-stamp controls).
 - **`lint <file> --rule with-hides-outer-symbol` runs the check (D2).** `CheckWithHiding` sat under the
   type-aware rule gate, whose id list names `enum-read-inside-with` but not `with-hides-outer-symbol`,
   so the named rule always answered 0. The with-hiding walk now has its own gate (both of its ids); the

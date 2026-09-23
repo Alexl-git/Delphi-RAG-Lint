@@ -33,6 +33,16 @@ resolver DECLINED (two visible candidates, or a same-named local, constant or
 member in scope) is not listed, so an absent caller means "not bound with
 certainty", never "not present".
 
+**Which line a row names.** Every `--resolved` row -- call, property/field
+access, enum-value read, parenless call, callback -- names the CALL SITE: the
+text form prints `(<file>:<site line>)` and the JSON `line` key is the same
+number. The caller routine's own declaration line is a separate JSON key,
+`caller_line`, omitted when the enclosing routine is unknown (a unit-level
+reference). Key order: `caller_qname, file, confidence, target_qname, line,
+caller_line, mode`. Before 2026-09-23 the JSON `line` on every row except a
+callback was the caller's DECLARATION line, and the text form printed no line
+for those rows.
+
 **Two known wrong-bind risks, both on BARE enum reads only.** Inside a routine
 that contains a `with` block (`with` scope is not modelled), and inside a
 `{$SCOPEDENUMS ON}` unit, a bare name can bind to an enum value the compiler
