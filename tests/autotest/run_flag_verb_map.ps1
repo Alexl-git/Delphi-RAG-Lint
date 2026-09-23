@@ -99,8 +99,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 
 # RECORDED BASELINE -- see the header. Measured 2026-09-15 at 44a2b0a; re-measured
 # 2026-09-22 (C3a) at 124/33 after glyph-vacuum's banner gained the --output alias
-# (the row that had pushed it to 125/34).
-$BaselineCells = 124
+# (the row that had pushed it to 125/34). 123 on 2026-09-23 (D4): lint-all's banner
+# line gained --rule, which the verb already consumed (ifdef-undefined-symbol).
+$BaselineCells = 123
 $BaselineVerbs = 33
 
 $Repo = (Resolve-Path $Repo).Path

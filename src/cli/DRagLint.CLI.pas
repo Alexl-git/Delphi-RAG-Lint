@@ -764,7 +764,9 @@ begin
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]');
-  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('                               --rule <id>: report ONLY that rule; naming an OFF-by-default rule opts it in');
+  Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
@@ -888,7 +890,7 @@ begin
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
-  Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
+  Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
@@ -10957,11 +10959,20 @@ begin
   end;
   AFindings:= ApplyLineMarkers(AFindings, ScopedScan);
 
-  { 1: config -- severity remap + enable/disable filter. }
+  { 1: config -- severity remap + enable/disable filter.
+
+    --rule NARROWS HERE, after the markers and before the config filter (D4).
+    lint and lint-project already emit only the requested rule; lint-all never
+    read --rule at all and printed every OTHER rule instead. Filtering at this
+    one seam is what makes the verbs agree, and doing it after ApplyLineMarkers
+    also drops the review-marker-* findings a --rule run manufactures: a dl:ok
+    for another rule has no finding to suppress in a narrowed run, so it would
+    otherwise read as unused. }
   Cfg:= LoadLintConfig(AArgs);
   Survivors:= nil;
   for F in AFindings do
   begin
+    if (AArgs.Rule <> '') and not SameText(F.RuleId, AArgs.Rule) then Continue;
     IsDefDis:= False;
     for DId in ADefaultDisabled do
       if SameText(DId, F.RuleId) then begin IsDefDis:= True; Break; end;
@@ -16983,6 +16994,15 @@ begin
   end;
 end;
 
+{ AIds without ARule (case-insensitive); AIds unchanged when ARule is ''. The
+  default-disabled list a --rule run hands FinalizeAndOutput. }
+function ExceptRuleId(const AIds: TArray<string>; const ARule: string): TArray<string>;
+begin
+  Result:= nil;
+  for var Id: string in AIds do
+    if (ARule = '') or not SameText(Id, ARule) then Result:= Result + [Id];
+end;
+
 const
   { The per-file scan is only PART of a lint-all run, so it only gets part of
     the bar. Everything between the scan and the report is the tail, and it is
@@ -17541,6 +17561,8 @@ begin
       OptIn:= OptIn + ['query-name-with-effect'];
     if Cfg.ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
       OptIn:= OptIn + ['assert-with-side-effect'];
+    { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
+    if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
     { LibStore is the platform library index, already open above for the
@@ -17756,7 +17778,9 @@ begin
     stays ON -- do NOT add it. }
   LintPhase('finalize+output');
   Result:= FinalizeAndOutput(
-    AArgs, Findings, ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT,
+    { ...less the --rule id: naming a rule opts it back in for this run, the
+      contract `lint` states at its own DefDisabled build-up (D4). }
+    AArgs, Findings, ExceptRuleId(ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT, AArgs.Rule),
     { The roll-up counts EVERY severity, not just error-vs-everything-else. It
       used to be `if error then Inc(EC) else Inc(WC)`, so a run of 62 hint + 138
       info + 79 warning reported "0 error(s), 279 warning(s)" -- the one number a
@@ -17800,6 +17824,10 @@ begin
         OL.AppendLine('--------------------------');
         if not LoadLintConfig(AArgs).ShouldKeep('circular-uses', False) then
           OL.AppendLine('  NOT CHECKED -- circular-uses is disabled by config. This is NOT "none found".')
+        { A --rule run narrows ASurv to one rule (D4), so an empty CycF there
+          means "not asked", and "none detected" would be the same lie. }
+        else if (AArgs.Rule <> '') and not SameText(AArgs.Rule, 'circular-uses') then
+          OL.AppendLine(Format('  NOT REPORTED -- this run was narrowed to --rule %s. This is NOT "none found".', [AArgs.Rule]))
         else if Length(CycF) = 0 then
           OL.AppendLine(Format('  none detected across %d file(s) scanned.', [Length(FilePaths)]))
         else
@@ -20964,7 +20992,7 @@ var
   Findings: TArray<TLintFinding>;
 begin
   if not ExplicitDbsExist(AArgs, 'check-ast') then Exit(2);
-  if AArgs.Target = '' then begin Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--format text|json]'); Exit (2 ); end;
+  if AArgs.Target = '' then begin Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]'); Exit (2 ); end;
   if not TFile.Exists(AArgs.Target) then begin Writeln('ERROR: file not found: ', AArgs.Target); Exit(2); end;
   if NoDbResolved(AArgs.DbPath, 'check-ast') then Exit(2);
   if TFile.Exists(AArgs.DbPath) then

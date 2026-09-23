@@ -46,6 +46,16 @@ breaking changes** until v1.0.
   18.0 s -> 2.5 s; identical findings. `DRAGLINT_DEBUG` now traces each heavy checker entered
   (`[lint-checker] <name>`, stderr). Guard: `tests\autotest\run_lint_rule_narrows_checkers.ps1`,
   which also pins every gate list against its checker's emit sites both ways.
+- **`lint-all --rule <id>` means what `lint --rule <id>` means (D4).** lint-all never read `--rule`
+  (bar `ifdef-undefined-symbol`): it printed every OTHER rule, and an OFF-by-default rule appeared
+  only with `--enable <id>` as well. Now `--rule` narrows the report to that rule and opts an OFF
+  rule in for the run -- the id is dropped from the default-disabled list and added to the project
+  pass's opt-in set. The narrowing sits in `FinalizeAndOutput`, after the review markers, so it also
+  stops a `--rule` run of any lint verb reporting `review-marker-*` for markers of rules it never
+  ran, and `check-ast` gains `--rule` for free (documented). The report's circular-dependency
+  section says `NOT REPORTED` on a run narrowed to another rule instead of "none detected".
+  Documented on the `lint-all` and `check-ast` banner lines, README and AI-USAGE. Guard:
+  `tests\autotest\run_lintall_rule_enables.ps1`.
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
   every `index` preprocess, and every project closure) used to union only the `.dproj`'s `Base` group
   and the selected config's `Cfg_N` group. MSBuild also applies `Base_<Platform>` and
