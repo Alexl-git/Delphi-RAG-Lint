@@ -23,14 +23,17 @@ What that means for this document:
 | part | status after the fixture correction |
 |---|---|
 | Sections 1, 2 (lexical, layout, indentation, trivia) | **Stands.** Derived from structure, not from the defective counts. |
-| Section 3 (EBNF) | **Stands structurally**, but the `verb` production is INCOMPLETE -- the corrected fixture adds `DESERIALIZES`, `ATTACHES`, `SELECTS`, `COUNTS`, `RECORDS`. The closed verb set must be regenerated against the corrected fixture before implementation. |
+| Section 3 (EBNF) | **Stands structurally.** The `verb` production as drafted is superseded by the regenerated 26-verb set in section 7. |
 | Section 4 (model) | **Stands.** |
-| Section 5 (35 EARS criteria) | **Stands as patterns**, but every criterion quoting a COUNT or a LINE NUMBER must be re-derived: the block is now lines 40..138, not 40..123, and holds 30 anchors, not 29. |
-| Section 6 (open questions) | **OQ-1, OQ-2, OQ-3 and OQ-4 are now RESOLVED by the correction** -- counts recompute, numbering is contiguous from [01], `CROSSES` carries structured `FROM`/`TO`/`OVER`/`WITH`, and `TIERS` is present. The rest stand. |
-| Section 7 (line-by-line walk) | **SUPERSEDED.** It walks the old 84-line block. It must be re-run against the corrected block, and that re-run is a gate on accepting this spec. |
+| Section 5 (35 EARS criteria) | **Stands as patterns.** Criteria quoting a COUNT or a LINE NUMBER must take their values from section 7: the block is lines 40..138 with 30 anchors, not 40..123 with 29. |
+| Section 6 (open questions) | **OQ-1, OQ-2, OQ-3 and OQ-4 are RESOLVED by the correction** -- counts recompute, numbering is contiguous from [01], `CROSSES` carries structured `FROM`/`TO`/`OVER`/`WITH`, and `TIERS` is present. The rest stand. |
+| Section 7 (verification walk) | **RE-RUN 2026-09-23 and PASSING.** Now executable: `charts\src\Test-FormA.ps1`, 99/99 lines classified, counts recomputed, verb set regenerated, and proven to FAIL on five mutations. |
 
-Do not implement from this document until the verb set and section 7 have been
-regenerated. The structural decisions are the durable part.
+The gate named in the original draft has been cleared: the verb set is
+regenerated and the walk has been re-run against the corrected block, by a
+checker that is demonstrated to fail as well as to pass. What remains open is
+the ten unresolved questions in section 6, which are owner decisions, not
+defects.
 
 Inputs consulted (nothing else):
 
@@ -434,19 +437,65 @@ proposed as an amendment for owner review.
   step it guards. The model records position and parent only. Confirm no scope
   rule is wanted in the grammar.
 
-## 7. Verification walk -- SUPERSEDED, MUST BE RE-RUN
+## 7. Verification walk -- RE-RUN 2026-09-23, PASSING
 
-The original walk covered the pre-correction block (84 lines) and derived every
-line, with five lines requiring deliberate rules rather than obvious ones:
-anchor-only continuation, the statement rule giving one step two anchors,
-OTHERWISE-only continuation, CROSSES with fields living in a comment, and the
-verbatim epilogue.
+The walk is no longer done by eye. `charts\src\Test-FormA.ps1` implements the
+lexical and layout rules of sections 2.1-2.7 far enough to classify every line,
+regenerate the verb set and recompute the counts. It is the executable form of
+AC-01, AC-29, AC-33 and AC-35.
 
-That walk no longer describes the fixture. The corrected Form A block is
-**lines 40..138, 33 steps, 12 guards, 4 crossings, 30 anchors**, and it uses
-five verbs the drafted grammar does not list plus the structured `CROSSES`
-fields now in section 3.
+```
+Form A verification walk -- golden-operat-name-roundtrip.md
+  block            : lines 40..138 (99 lines)
+  classified       : 99/99
+  steps/guards/xing: 33 / 12 / 4
+  anchors          : 30
+  bytes            : 0 non-ascii, 0 bare LF
+  PASS
+```
 
-**Re-running this walk against the corrected block is a gate on accepting this
-spec.** Until it is re-run, section 3's verb production and section 5's numeric
-expectations are known-stale.
+**Every line of the corrected block classifies under the grammar.** No line
+required a rule the grammar does not have.
+
+### The checker is proven to fail, not merely to pass
+
+A guard that has only ever passed is evidence of nothing. Five mutations of the
+golden, each caught with the right code:
+
+| mutation | result |
+|---|---|
+| `33 steps` -> `34 steps` | `E-COUNTS` steps: declared 34, recomputed 33 |
+| `12 guards` -> `11 guards` | `E-COUNTS` guards: declared 11, recomputed 12 |
+| a TAB inserted | `E-CHARSET` 1 byte outside 0x20-0x7E/CR/LF |
+| a bare LF introduced | `E-EOL` 1 bare LF |
+| step `[29]` renumbered `[19]` | `E-STEP-ORDER` step [19] does not exceed [28] |
+| unmodified golden (control) | PASS, exit 0 |
+
+### Verb set, REGENERATED from the corrected fixture (26)
+
+```
+ADDS  APPLIES  ATTACHES  BINDS  BROADCASTS  BUILDS  CALLS  COUNTS
+DESERIALIZES  EXTRACTS  FIRES  LOADS  LOGS  NOTIFIES  OPENS
+PREFIXES  READS  RECEIVES  ROUTES  RUNS  SENDS  SERIALIZES  SETS
+SPLITS  VALIDATES  WRITES
+```
+
+This supersedes the drafted list in section 2.3. Differences worth noting:
+`DESERIALIZES`, `ATTACHES`, `SELECTS`, `COUNTS` and `RECORDS` were missing from
+the draft; `LOOKS UP` is no longer used (the corrected fixture expresses it as
+`LOADS` with `VIA` / `FROM` facets); and `SELECTS` and `RECORDS` classify as
+FACET heads rather than verbs, which is why the regenerated set is 26 and not
+28. Facet heads are deliberately kept out of the verb set so `E-UNKNOWN-HEAD`
+stays meaningful.
+
+### Two defects the re-run found -- both in the CHECKER, not the grammar
+
+1. A subject-only step line (`FMTOperation.CommitUpdates @...:279`) failed to
+   classify because the checker took the trailing anchor as the verb. The
+   grammar already allows it -- `step-core` alternative 1 is `subject , [ verb ,
+   [ operand ] ]`. Fixed by dropping annotation tokens before head analysis,
+   which is what section 3 already says (`text` ends at the first anchor).
+2. Facet heads were being counted as verbs, inflating the regenerated set.
+
+Neither required a grammar change, which is the result this walk was looking
+for.
