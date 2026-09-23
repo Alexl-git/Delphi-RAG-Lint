@@ -61,14 +61,7 @@ New-DiagramArtifact.ps1 -Question <id> -Target <Unit.TType.Member | Unit | proje
 | [`exception-paths`](ask-exception-paths) | method | what it raises, what it handles, and where each exception is caught up the caller chain |
 | [`consumers`](ask-consumers) | table / column | the routines that read and write it, plus its triggers, procedures and indexes |
 | [`feeds-from`](ask-feeds-from) | form control | the chain that feeds it: control -> datasource -> dataset -> view-model -> table.column |
-
-One more question is **shipping with the charts release**. What it answers
-is fixed; its parameters are still settling, so it is described here without
-syntax:
-
-| Question | Answers |
-|---|---|
-| [`lands-where`](ask-lands-where) | where a field's value ends up: field -> dataset -> table.column |
+| [`lands-where`](ask-lands-where) | ORM property / field / form control | where its value lands: TABLE.COLUMN, the server code that writes and reads it, and the triggers that use it |
 
 ## What you get
 

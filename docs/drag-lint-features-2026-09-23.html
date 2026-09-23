@@ -357,7 +357,7 @@ declaration.</p>
 </ul>
 
 <h2>12. Diagrams and charts <span class="st st-ship">READY</span></h2>
-<p>Twenty-three questions about a codebase can now be answered with a <b class="f">picture</b>
+<p>Twenty-four questions about a codebase can now be answered with a <b class="f">picture</b>
 rather than a list: who calls this, who writes this field, what does this form wire,
 where does this protocol command go. Every box and every arrow in a chart is a fact
 from the index with a file and a line behind it -- nothing is drawn from prose or
@@ -430,6 +430,7 @@ index, quoted from the charts status board of 23 September 2026.</p>
 <tr><td><code>exception-paths</code></td><td>method</td><td>which exception types it raises (anchored raise sites), which it handles in its own body, and where each raised type is caught up the caller chain -- solid only when the call site is verified inside the handler's <code>try</code>, otherwise dashed <code>[inferred]</code>; it never says "unhandled", it says where the walk ended</td><td>raise / handler sites, resolved <code>call_edges</code>, type ancestry</td><td>shipped 23 September (charts commits f77a58ba..ae645b2a)</td></tr>
 <tr><td><code>consumers</code></td><td>table / column</td><td>the routines that read and write it, plus the triggers FOR the table (bodies scanned, <code>NEW.</code>/<code>OLD.</code> column use), procedures naming it and indexes ON it; the column form adds the form bindings whose data-source chain reaches it. Schema is SCRIPT-derived (the <code>MS*.SQL</code> migrations, newest wins), not the live database; writers <code>[certain]</code> from <code>sql_writes</code>, readers mostly <code>[inferred]</code> because <code>sql_reads</code> misses multi-line <code>SQL.Add</code></td><td>SQL-script index, <code>sql_reads</code>/<code>sql_writes</code>, SQL literals, DFM bindings</td><td>shipped 23 September (charts commit 410e9247)</td></tr>
 <tr><td><code>feeds-from</code></td><td>form control (<code>Form.Control</code>)</td><td>the chain that feeds one data-aware control, one graded and anchored row per hop: control -&gt; datasource (DFM) -&gt; dataset (DFM or code assignment, every site scanned) -&gt; view-model type -&gt; table -&gt; <code>TABLE.COLUMN</code>. The table hop is <code>[inferred]</code> (table-name literals in the view-model unit, tie-broken on bound columns); a broken chain ends in "chain stops here: &lt;reason&gt;" and never guesses; interface-typed view-models stop the chain; datasources pointing at modules outside the project show as <code>[dangling]</code>, code re-pointing as <code>[re-pointed at routine:line]</code></td><td>DFM bindings, dataset assignments, view-model types, SQL-script index</td><td>shipped 23 September (charts commit 13cea4b1); ORM3 CLIENT: 267 of 808 field-bound controls reach one table, 426 under dangling designer datasources</td></tr>
+<tr><td><code>lands-where</code></td><td>ORM property, interface property, backing field or form control</td><td>where the value lands: ORM property -&gt; <code>TABLE.COLUMN</code> (anchored to the script declaration) -&gt; the SERVER DataService rows that write and read it (INSERT/UPDATE column list, SELECT alias, <code>Obj.PROP</code> accesses) -&gt; triggers using <code>NEW.</code>/<code>OLD.</code> on the column; plus client form bindings reaching the table. The property-to-column hop is a naming convention (<code>TmcT.PROP = T.PROP</code>), graded <code>[inferred]</code>; <code>Params[i]</code> binds visible only through <code>Obj.PROP</code>; quoted (reserved-word) columns currently show as <code>quoted</code> because of an SQL-index gap</td><td>CLIENT + SERVER project indexes and the SQL-script index, joined by the cross-DB identity contract</td><td>shipped 23 September (charts commit 7279923f); convention holds for 1,991 of 1,997 table-class properties on ORM3 CLIENT</td></tr>
 <tr><td colspan="5"><b class="f">Across the process boundary</b></td></tr>
 <tr><td><code>protocol-trace</code></td><td>command constant / wire field</td><td>the round trip of a value: UI, memtable, boundary, server, database and back</td><td>enum-value binding (resolver 1.6.0)</td><td><code>cmdDelta</code> 38 references in 2 zones</td></tr>
 <tr><td><code>protocol-trace</code></td><td>method</td><td>the call tree pruned to branches that still carry the payload, ranked, capped, and never silently dropped</td><td>enum-value binding + call graph</td><td>a dispatcher speaking all 42 command members</td></tr>
@@ -451,10 +452,8 @@ index, quoted from the charts status board of 23 September 2026.</p>
 legacy code that uses <code>with</code> heavily, because <code>with</code> scope is not modelled
 (the same caveat as enum values, chapter "What is new"). <code>wiring</code> on a client
 project sees few registrations (4 on ORM3 CLIENT against 535 on SERVER) and is being
-checked. One more question ships with the charts release -- <code>lands-where</code>.
-Its parameters are being
-finalised, so this edition says what it answers and leaves the syntax to the charts
-release notes (Appendix A.6).</p>
+checked. All twenty-four questions are built and reviewed; the last four (<code>exception-paths</code>,
+<code>consumers</code>, <code>feeds-from</code>, <code>lands-where</code>) shipped on 23 September.</p>
 </div>
 
 <h2>13. What is planned</h2>
@@ -615,12 +614,11 @@ today's <code>--help</code>.</p>
 <tr><td><code>--output</code> as the canonical flag</td><td>Document <code>--output</code> everywhere; <code>--out</code> stays a silent alias.</td><td><span class="st st-plan">PLANNED</span></td><td class="n">1 h</td></tr>
 </table>
 
-<h3>A.6 Diagrams and charts shipping with the charts release</h3>
+<h3>A.6 Diagrams and charts: remaining work</h3>
 <table>
-<tr><th>Question</th><th>What it would show</th><th>Status</th></tr>
-<tr><td><code>lands-where</code></td><td>Field to dataset to table column.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised; richer with a live-Firebird <code>fb-snapshot</code></td></tr>
+<tr><th>Item</th><th>What it is</th><th>Status</th></tr>
 <tr><td>Charts into the main tree</td><td>The chart tool-set lives on its own branch; it moves into the engine as the <code>ask</code> verb (A.3) once proven.</td><td><span class="st st-prog">IN PROGRESS</span></td></tr>
-<tr><td>Visual code map (standalone viewer)</td><td>Professional layout and export for the existing standalone viewer; the chart pipeline now supplies Graphviz layout and click-to-source.</td><td><span class="st st-prog">IN PROGRESS</span></td></tr>
+<tr><td>Visual code map (standalone viewer)</td><td>The live graph viewer takes the charts' visual language. Built 23 September on branch <code>feat/graphviz-export</code>: an Export... action writing a charts-style SVG and a self-contained HTML (pan, zoom, search, light/dark) of exactly the visible view. Measured: Graphviz costs ~2 s per run, so it is right for export and wrong for per-click live layout. Next: shared palette, Skia renderer with GDI fallback, speed at ORM3 scale.</td><td><span class="st st-prog">IN PROGRESS</span> -- phases 0-1 built, awaiting merge</td></tr>
 </table>
 
 <h3>A.7 Language server and IDE plugin</h3>

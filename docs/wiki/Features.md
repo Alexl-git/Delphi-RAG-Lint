@@ -199,13 +199,12 @@ DevExpress `cx`/`dx`).
 ## Diagrams and charts
 
 Ask a formal question about one symbol and get a clickable chart back -- the
-`ask` family, shipping in the charts release. Twenty-three questions: `butterfly`,
+`ask` family, shipping in the charts release. Twenty-four questions: `butterfly`,
 `who-calls`, `what-it-calls`, `who-writes`, `who-reads`, `change-impact`,
 `tested-by`, `effects`, `touches-tables`, `class-surface`, `hierarchy`, `deps`,
 `cycles`, `wiring`, `lifecycle`, `event-wiring`, `architecture`,
 `protocol-trace`, `crosses-boundary`, `shown-where`, `exception-paths`,
-`consumers` and `feeds-from` -- plus `lands-where`, shipping with the
-same release. Every row in a chart is a fact with a file and a line, and links
+`consumers`, `feeds-from` and `lands-where`. Every row in a chart is a fact with a file and a line, and links
 back to it.
 
 | Feature | Command |
