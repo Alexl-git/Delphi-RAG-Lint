@@ -58,6 +58,10 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`tests\ergonomics\run_threshold_test.ps1` runs from any directory (DOC-9).** It resolved
+  `third_party\...` and `tests\ergonomics\...` against the CURRENT directory, so it died in
+  `Resolve-Path` unless launched from the repo root. Every path is now anchored on `$PSScriptRoot`,
+  and `-Exe` overrides the engine.
 - **`query find-callers --resolved`: `line` is the CALL SITE on every row (C1).** The rows built from
   `call_edges` -- routine call, property/field access, enum-value read, parenless call -- put the
   caller ROUTINE's declaration line in JSON `line`, while callback rows put the site there: one key,
