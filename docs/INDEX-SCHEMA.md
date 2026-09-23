@@ -55,6 +55,11 @@ Schema history, one line per step:
   pre-v23 row still carries the list in its name until the next re-parse. A
   consumer that matched `name LIKE '%<%'` finds nothing on a v23 index; read
   `generic_params` instead. **This is the current version.**
+- 2026-09-23 (no schema step; resolver 1.6.0-alpha): `refs.symbol_id` is now also
+  set for enum-value reads -- a bare `read` ref naming an enum value, and a
+  `member-access` ref qualified by the enum type or its unit. No new table, no
+  new column, no `call_edges` or `member_accesses` row; an index resolved under
+  1.5.1-alpha acquires them on its next `index --all --resolve-only` (see 2.3).
 - 2026-09-21 (no version step): three additive columns on `symbol_facts` --
   `effect_free`, `effect_summary`, `effect_witness` -- written by the `purity`
   resolve stage, NULL until it runs. `Migrate` ALTERs on the `member_accesses`
@@ -289,11 +294,37 @@ Join: `refs.symbol_id -> symbols.id`; `refs.file_id -> files.id`;
 > would launder a guess into a fact, and the column's entire value is that a
 > non-NULL means *this IS the declaration*.
 >
-> **Only `call` and `member-access` refs have one at all.** `read`, `write` and
-> `type_use` are still NULL: the resolver knows a call's target because it is
-> already computing it, but resolving the others is a new problem, not a
-> write-back. Measured on this repo's own index: call 5,880 of 30,739,
-> member-access 1,713 of 27,594, everything else 0.
+> **Which ref kinds have one, as of 2026-09-23.** `call` (a certain call target,
+> since 2026-08-31); `member-access` (routines since 2026-08-31, properties and
+> fields since 2026-09-16, and enum values since 2026-09-23); and `read` refs
+> **that name an ENUM VALUE** (2026-09-23, resolver 1.6.0-alpha -- bound by name
+> and scope, `certain` or NULL, never a guess). `write`, `type_use`,
+> `event-binding` and `attribute` remain NULL on every row: resolving a general
+> value read means locals, params, fields, globals, `with` scopes and type flow,
+> which is a new problem rather than a write-back. Enum values are the one value
+> kind whose resolution is purely lexical, which is why they could be done
+> exactly and separately.
+>
+> Measured on this repo's own index (`src\cli\_D-RAG\drag-lint.sqlite`,
+> 2026-09-23, engine 1.16.0-alpha / resolver 1.6.0-alpha), `SELECT kind,
+> COUNT(*), SUM(symbol_id IS NOT NULL) FROM refs GROUP BY kind`:
+>
+> | kind | rows | bound |
+> |---|---|---|
+> | `call` | 37,563 | 8,093 |
+> | `member-access` | 35,195 | 14,047 |
+> | `read` | 76,954 | 1,325 |
+> | `type_use` | 20,078 | 0 |
+> | `write` | 16,682 | 0 |
+>
+> Every one of the 1,325 bound `read` rows is an enum value; this index has no
+> `event-binding` or `attribute` rows at all. Of the enum-value candidate set --
+> refs whose `name_text` matches an `enum_value` name -- 1,325 of 1,325 bare
+> reads and 9 of 17 qualified `member-access` refs bound; the 8 that did not are
+> the declines the rules require (the resolve stage prints the per-reason counts
+> on its `enum-values:` line). An enum-value binding writes NO `call_edges` row
+> and NO `member_accesses` row, so a bound ref that owns neither is exactly how a
+> consumer recognises a value USAGE.
 >
 > **So a NULL still means "not resolved", never "no such symbol"**, and a query
 > that must cover every ref still has to name-join. The other identity columns

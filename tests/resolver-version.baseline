@@ -412,4 +412,127 @@
 #   SILENT.
 #
 #   Superseded: 1.5.1-alpha|92cfb2a2e060dcf3261caaa542c8b1d74ff2919a952b76c6383f97f547551bef
-1.5.1-alpha|8d1034e88ce8debb8a6e1d8e11c67c6905ff8c0fa65d50f11893eb4c6ffb4c16
+# 2026-09-23 (enum-value-ref binding, Task 5): 1.5.1-alpha -> 1.6.0-alpha. This
+#   is a BUMP, not one of the "genuinely cannot affect what is derived" re-pins
+#   above -- a NEW CLASS OF DERIVED ROW starts being written.
+#
+#   WHAT CHANGED, by file and routine:
+#     tests\resolver-surface.txt -- three entries ADDED to the manifest, which
+#       is itself part of the hashed identity (path::routine is hashed with the
+#       body): src/storage/DRagLint.Storage.SQLite.pas::ResolveEnumValueRefs
+#       (the new store stream), ::GetEnumValueSymbols and
+#       ::GetUnitLevelValueDecls (the two bulk readers that supply the
+#       candidate set and the R3(c) shadow set). ResolveEnumValueRefs matches
+#       the guard's drift vocabulary (`resolve`), so it had to be classified or
+#       the guard fails on drift -- it did fail that way after Task 4. The two
+#       readers match no vocabulary term and are listed by this manifest's own
+#       CLOSURE RULE: what they return decides what is written. Checked against
+#       the exclusion list before adding -- none of resolvelog, resolvesecs,
+#       resolvefileidtolerant or resolvetypeat shadows any of the three names.
+#     src\index\DRagLint.Index.CallResolver.pas -- already hashed WHOLE
+#       (`::*`); Task 3 added the enum candidate/shadow maps,
+#       ResolveEnumValueRead (R1 visibility, R2 uniqueness, R3 shadowing, R4
+#       unit-level code, rule-0 duplicate collapse) and rung 3c for the
+#       qualified `TEnum.value` / `Unit.value` shape.
+#     src\storage\DRagLint.Storage.SQLite.pas -- Task 4 added the second stream
+#       inside ResolveCallTargets, the NULL-over-its-own-universe UPDATE that
+#       makes a SCOPED re-resolve able to RETRACT a binding, and the ValueOnly
+#       write branch that calls FQSetRefSymbol and writes no edge row.
+#     src\core\DRagLint.Core.ForwardStub.pas -- hashed WHOLE, so the one
+#       comment line naming the reserved version (1.6.0 -> 1.7.0, see below)
+#       moves this hash too. It is NOT the reason for the bump; the derived
+#       rows are. Called out because the T-FW1 entry directly above bumped
+#       nothing for a change to exactly this kind of line.
+#     src\core\DRagLint.Core.Model.pas -- the constant and its <para> history.
+#       The three Model.pas routines on the surface (GenericArity,
+#       SplitGenericName, StripGenericSegments) are untouched; only the
+#       implementation section is hashed, so the const and its doc comment are
+#       outside the hashed span by construction.
+#
+#   WHY THIS IS A BUMP AND NOT A RE-PIN. The calls stage now writes
+#   refs.symbol_id on two ref shapes that were NULL on every index ever built:
+#   a bare `read` ref naming an enum value, and a `member-access` ref qualified
+#   by the enum type or by the declaring unit. That is a new class of DERIVED
+#   ROW, not new text in an existing one. A database resolved under 1.5.1-alpha
+#   has NONE of them, and -- this is the load-bearing half -- it would never
+#   acquire them on its own: the calls stage runs WHOLE-DB only on a
+#   resolver-fingerprint mismatch, and otherwise runs SCOPED over the files
+#   that changed. Files that never change would keep NULL forever. The stamp is
+#   the only trigger there is.
+#
+#   SCOPE -- what does NOT change, stated so the bill can be judged rather than
+#   assumed. No call_edges row and no member_accesses row is written for an
+#   enum value (CanBeCallTarget is untouched); CallSiteRefKindSql, the
+#   COMPLEMENT universe the unresolved-call readers take, is not widened
+#   (register item E1); no table, no column, no SCHEMA_VERSION move (23
+#   unchanged); no extractor change (DRAGLINT_EXTRACTOR_VERSION 1.17.0-alpha
+#   unchanged -- the refs already exist and are indexed, this is a resolve-time
+#   binding). Purity verdicts are unchanged: TPurityStage reads `read` refs by
+#   Kind/NameText against the routine's locals and never consults SymbolId for
+#   them, and its edges come from call_edges and member_accesses, to which
+#   nothing is added. MEASURED, not asserted -- Task 4's M4 A/B on this repo's
+#   self-index, the same parses re-resolved by the pre-change engine and by the
+#   new one (`index --project ... --resolve-only`):
+#
+#       run                 edges  accesses  proven  not_proven  not_computed
+#       M4_A (old engine)   11137     10366     187        2757             0
+#       M4_B (new engine)   11137     10366     187        2757             0
+#
+#   Every column equal, and both runs reported the same
+#   `21493 edge(s) from 65719 call-site ref(s)`. The enum-value invariant was
+#   checked directly on the same database: 0 call_edges rows and 0
+#   member_accesses rows whose target/member symbol is an enum_value.
+#
+#   REMEDY AND COST. A RE-RESOLVE, never a re-parse: `index --all
+#   --resolve-only`. Measured 2026-09-22: ~6 min for all project sections; ~74
+#   min per platform library (Win32 calls 3641.4 s + purity 726.8 s; Win64
+#   3500.6 s + 635.3 s). The enum stream itself adds one indexed name-IN scan
+#   over `refs` (EXPLAIN QUERY PLAN on the self-index:
+#   `SEARCH refs USING INDEX idx_refs_name_nocase`) plus an in-memory lookup
+#   per candidate -- seconds on a project DB.
+#
+#   WHY 1.6.0 AND NOT 1.5.2. This file's own discipline, applied to itself: a
+#   PATCH is for a change to DERIVED TEXT inside rows that already exist (1.5.0
+#   -> 1.5.1 was the purity witness STRING), and a MINOR is for a new class of
+#   derived row. This is the second. Shipping a new binding kind under a patch
+#   number would mislead exactly the reader this file is written for -- someone
+#   deciding whether their database owes a re-resolve.
+#   1.6.0 WAS RESERVED for C2.3 + the IsStub unification, by the T6-R2, Task 7
+#   and T-FW1 entries above. The owner ruled on 2026-09-23 that the reservation
+#   was a SEQUENCING note, not a semantic claim about the number, and that the
+#   enum binding -- which lands first -- takes 1.6.0-alpha. C2.3 + IsStub move
+#   to 1.7.0-alpha. Those three entries above are append-only history and are
+#   left exactly as written; the forward references a future reader will
+#   actually consult were edited in FOUR places, and all four now say 1.7.0:
+#     1. src\core\DRagLint.Core.Model.pas -- the 1.5.0 -> 1.5.1 <para>'s
+#        "A PATCH bump, not 1.6.0" sentence.
+#     2. src\core\DRagLint.Core.ForwardStub.pas -- the unit's header comment,
+#        "deferred to DRAGLINT_RESOLVER_VERSION 1.7.0".
+#     3. CHANGELOG.md -- the Unreleased `### Known` bullet on
+#        ResolveTypeNameToClass.IsStub.
+#     4. docs\BACKLOG-SESSION-100-TRIAGE.md -- the three C2.3 rows (the
+#        decisions table, the sequencing list, the open-questions table). That
+#        file is gitignored (`docs/BACKLOG-*`), so it is edited in the working
+#        checkout and is not part of this commit.
+#   Whoever writes C2.3's plan will reach one of those four; none of them still
+#   says 1.6.0.
+#
+#   CONTRAST WITH THE ENTRY ABOVE, recorded so the two adjacent calls can be
+#   read side by side. T-FW1 RE-PINNED within 1.5.1 for a `dl:ok` marker
+#   relocated inside a whole-file-hashed unit: comment text, 0 code lines, so
+#   no derived row anywhere could differ and a bump would have billed every
+#   database a re-resolve for an annotation. This entry BUMPS, for the opposite
+#   reason: rows that did not exist begin to exist. The distinction that
+#   decides it is the one T-FW1 itself states -- DERIVED-ROW CHANGE vs COMMENT
+#   TEXT, not which file moved. Note that this change ALSO edits a comment line
+#   in the same whole-hashed ForwardStub.pas that T-FW1's sibling edit sat in;
+#   on its own that would have been a re-pin, and it is not what is being
+#   billed here.
+#
+#   Same warning as every entry above: the failure mode of getting this wrong
+#   is SILENT. A database that owes a re-resolve and does not get one does not
+#   error, does not warn and does not return an empty result -- it answers
+#   confidently with fewer rows than the truth.
+#
+#   Superseded: 1.5.1-alpha|8d1034e88ce8debb8a6e1d8e11c67c6905ff8c0fa65d50f11893eb4c6ffb4c16
+1.6.0-alpha|95080b86976b780299f60f1f3e4c5fec372170db4b3fb980b23feca790aadec6

@@ -94,6 +94,24 @@ src/storage/DRagLint.Storage.SQLite.pas::FoldStubs
 src/core/DRagLint.Core.ForwardStub.pas::*
 
 # ---------------------------------------------------------------------------
+# ENUM-VALUE BINDING (2026-09-23, resolver 1.6.0-alpha). The calls stage now
+# DERIVES refs.symbol_id for `read` refs that name an enum value (Shape A) and
+# for `member-access` refs qualified by the enum type or its unit (Shape B).
+# DRagLint.Index.CallResolver.pas is already hashed whole; these are the store
+# routines that decide WHAT IS WRITTEN (the closure rule above).
+#
+# ResolveEnumValueRefs matches the drift vocabulary below (`resolve`), so it
+# MUST be listed or the guard fails on drift. The two bulk readers match none
+# of the vocabulary; they are here by the closure rule, because what they
+# return is the candidate set and the shadow set the binding is decided from.
+# Checked against the EXCLUSIONS below before adding: none of the four
+# `resolve*` exclusions (resolvelog, resolvesecs, resolvefileidtolerant,
+# resolvetypeat) names any of these three routines.
+src/storage/DRagLint.Storage.SQLite.pas::ResolveEnumValueRefs
+src/storage/DRagLint.Storage.SQLite.pas::GetEnumValueSymbols
+src/storage/DRagLint.Storage.SQLite.pas::GetUnitLevelValueDecls
+
+# ---------------------------------------------------------------------------
 # PURITY V2 (2026-09-21). The `purity` resolve stage DERIVES
 # symbol_facts.effect_free / effect_summary / effect_witness from rows and
 # source the index already holds -- call_edges, member_accesses, refs and the

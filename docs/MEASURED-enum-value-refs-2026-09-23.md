@@ -545,3 +545,184 @@ before/after comparison run that way silently linted `purity-v2`'s copy of the
 same unit and reported "identical counts, zero new findings" -- which was true
 of a file this task never touched. Every lint figure above was taken with an
 ABSOLUTE path.
+
+## Task 5 -- resolver 1.6.0-alpha: surface, baseline, forward references
+
+Engine rebuilt from this worktree at Task 5 (`build\build_draglint_win64.bat`,
+Win64 Debug, staged to `third_party\dll-win64\`). `drag-lint info --json` after
+the build:
+
+```
+version=1.16.0-alpha  extractor_version=1.17.0-alpha  resolver_version=1.6.0-alpha
+build_date=2026-09-23 04:10:11
+```
+
+`DRAGLINT_EXTRACTOR_VERSION` and `SCHEMA_VERSION` are unchanged (1.17.0-alpha,
+23), as U4 requires.
+
+### Resolver-version guard: the hash was RECOMPUTED, not carried
+
+The guard was run three times, from a neutral cwd (`C:\TEMP`) against
+`-Repo C:\Projects\Delphi-RAG-lint-wt\enum-refs`:
+
+| run | state of the tree | exit | what it said |
+|---|---|---|---|
+| before any Task 5 edit | Task 4's tree | 1 | `ResolveEnumValueRefs` UNCLASSIFIED, and `resolve changed but DRAGLINT_RESOLVER_VERSION did NOT` |
+| after the manifest + constant edits, baseline not yet touched | -- | 0 | `resolve changed AND the version was bumped -- 1.5.1-alpha -> 1.6.0-alpha`, printing the line to store |
+| after the baseline was written | final | 0 | `resolve surface unchanged -- version=1.6.0-alpha` |
+
+The pinned line is the one the SECOND run printed:
+
+```
+1.6.0-alpha|95080b86976b780299f60f1f3e4c5fec372170db4b3fb980b23feca790aadec6
+```
+
+It is not any of the three hashes recorded earlier on this branch
+(`6d13893c...`, `f3ffa3a3...`, `2674da43...`), all of which are superseded, nor
+the 1.5.1-alpha line it replaces (`8d1034e8...`). The baseline carries exactly
+one active line; the guard asserts that shape and passed.
+
+### Self-index reindex (incremental, worktree root as cwd)
+
+```
+drag-lint index --project <wt>\src\cli\drag-lint.dproj --db <wt>\src\cli\_D-RAG\drag-lint.sqlite
+```
+
+Exit code 0. `Done. Files: 130, Symbols: 23351, Refs: 186472, skipped 128
+up-to-date, 118.13s`; `0 errors` on every reparsed file line. The calls stage
+ran WHOLE-DB, as a resolver bump requires:
+
+```
+resolve: calls      starting WHOLE-DB pass over all 130 indexed file(s)
+resolve: calls      ... whole database because the call-edge set is missing or incomplete, so there is no delta to update
+resolve: calls      22731 edge(s) from 72758 call-site ref(s), WHOLE DB  [106.5s, clear 0.0s, maps 0.0s]
+```
+
+**Deviation from the task brief, recorded rather than smoothed over.** The brief
+expected the line `resolver: edges were derived by 1.5.1-alpha, this build is
+1.6.0-alpha`. It was NOT printed, and the whole-DB pass was attributed to a
+different (also true) condition. The reason is mechanical, not a defect: that
+sentence is emitted by a read-side advisory in `src\cli\DRagLint.CLI.pas:1876-1881`,
+which compares `schema_meta.resolver_fingerprint` against the running build when
+a store is OPENED -- it is not the calls stage's own decision text. On an
+`index` run the stage prints its own reason and then re-stamps. The stamp did
+move, which is the fact that matters:
+
+```
+schema_meta.resolver_fingerprint = r=1.6.0-alpha;schema=23
+```
+
+### M3 (self-index, 1.6.0-alpha) -- the `enum-values:` line, verbatim
+
+```
+resolve: calls      enum-values: 1325 of 1325 bare read(s) bound (Shape A); 9 qualified bound (Shape B); declined (both streams) not-visible 0, ambiguous 0, shadowed 0; duplicate groups collapsed 0 (decisive 0); unit-level shadow decls 450
+resolve: calls      enum-values: total bound 1334 = 1325 + 9 (resolver and store agree)
+```
+
+Candidate universe on the same database immediately after that run:
+
+| kind | bound | rows |
+|---|---|---|
+| `read` | 1 | 1325 |
+| `member-access` | 1 | 9 |
+| `member-access` | 0 | 8 |
+
+Reading only that table: every `read` candidate row is bound (there is no
+`read` / bound 0 row at all), and of the qualified candidates 9 are bound and 8
+are not, i.e. 17 in total. The stage line's `1325` and `9` are the same two
+numbers, so the log and the stored rows agree. Task 4 measured the same
+database at 1232 + 93 bare reads (the 93 were inside two WITHHELD files) and 9
+qualified; 1232 + 93 = 1325, so this run's single whole-DB figure is the same
+population, now bound in one pass.
+
+Declines are 0 on all three reasons here, which is a property of THIS corpus
+(the self-index has 0 cross-kind collisions), not evidence that the decline
+paths are dead -- the guard's fixture exercises them (check 6 and check 12,
+which report `shadowed 2` and `ambiguous 1` respectively).
+
+### M4 again (self-index) -- no collateral
+
+Same query as Task 1 and Task 4, run immediately before and immediately after
+this task's reindex:
+
+| point | edges | accesses | proven | not_proven | not_computed |
+|---|---|---|---|---|---|
+| before the 1.6.0-alpha reindex | 11626 | 11115 | 194 | 2751 | 0 |
+| after the 1.6.0-alpha reindex | 11626 | 11115 | 194 | 2751 | 0 |
+
+Every column in the second row equals the column above it, so M4 HELD across
+the resolver bump and its whole-DB re-resolve. (These five numbers differ from
+Task 4's M4_A/M4_B pair -- 11137 / 10366 / 187 / 2757 / 0 -- because Task 4's
+A/B was run against a partially withheld index; the comparison that matters is
+before-vs-after within one task, and both tasks' comparisons are internally
+consistent.)
+
+Enum-value invariant on the same database after the reindex:
+
+| bad_edges | bad_accesses |
+|---|---|
+| 0 | 0 |
+
+No enum value owns a `call_edges` row or a `member_accesses` row (U3).
+
+### Bound-by-kind across the whole self-index (the numbers INDEX-SCHEMA.md now carries)
+
+```sql
+SELECT kind, COUNT(*) AS total, SUM(symbol_id IS NOT NULL) AS bound FROM refs GROUP BY kind
+```
+
+| kind | rows | bound |
+|---|---|---|
+| `call` | 37563 | 8093 |
+| `member-access` | 35195 | 14047 |
+| `read` | 76954 | 1325 |
+| `type_use` | 20078 | 0 |
+| `write` | 16682 | 0 |
+
+Five kinds appear; this index has no `event-binding` and no `attribute` rows,
+so those two are absent rather than zero-bound. The `read` row's 1325 is the
+same number as the M3 table's bound `read` count, which is the check that no
+non-enum `read` acquired a binding.
+
+### Guards
+
+| guard | result |
+|---|---|
+| `run_resolver_version_guard.ps1` | PASS (exit 0) |
+| `run_schema.ps1` | PASS (exit 0); `SCHEMA_VERSION = 23` unmoved |
+| `run_encoding_guard.ps1` | PASS (exit 0) |
+| `run_docs_sync_guard.ps1` | PASS (exit 0) |
+| `run_forward_stub_pairing.ps1` | PASS (exit 0) |
+| `run_forward_stub_is_not_a_class.ps1` | PASS (exit 0) |
+| `run_extractor_version_guard.ps1` | FAIL (exit 1) -- expected, see below |
+| `tests\callresolve\run_enum_value_refs_bind.ps1` | `PASS: 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 13` / `FAIL: 9, 11` -- unchanged from Task 4's end state |
+
+`run_extractor_version_guard.ps1` was NOT cleared by this task, and could not
+have been: its surface is `$roots = @('src\parser', 'src\preprocess',
+'src\index')` (line 61 of the guard), and NONE of this task's six changed files
+is under those roots -- `git diff --name-only` lists `CHANGELOG.md`,
+`docs/INDEX-SCHEMA.md`, `src/core/DRagLint.Core.ForwardStub.pas`,
+`src/core/DRagLint.Core.Model.pas`, `tests/resolver-surface.txt`,
+`tests/resolver-version.baseline`. So the red predates Task 5 (Task 3 edited
+`src\index\DRagLint.Index.CallResolver.pas`, which IS on that surface), and it
+is red for a second, independent reason recorded at the branch point:
+`docs\INBOX-symbolfacts-stale-since-e71abafb.md`, owner-pending.
+`DRAGLINT_EXTRACTOR_VERSION` was deliberately not bumped -- a bump costs a
+~3h17m full re-parse of every database for a change that alters no extraction.
+
+### Lint on the changed units (absolute paths)
+
+```
+drag-lint lint --file <abs> --db <abs> --enable multiple-statements-per-line,magic-literal,commented-out-code --json
+```
+
+| file | findings total | findings on lines this task changed |
+|---|---|---|
+| `src\core\DRagLint.Core.ForwardStub.pas` | 0 | 0 |
+| `src\core\DRagLint.Core.Model.pas` | 18 | 0 |
+
+The changed lines in `Model.pas` are 130-131 and 134-144 (`git diff -U0`
+hunks `@@ -130 +130,2 @@` and `@@ -133 +134,11 @@`). Every one of the 18
+findings anchors outside that range: line 1 (`unit-too-large`), line 157
+(`review-marker-unused`), 958-961, and 2203-2371. No `dl:ok` marker was added
+by this task.

@@ -127,10 +127,21 @@ const
   /// effect_summary are identical; only effect_witness TEXT moves, on every
   /// routine with a non-empty touches fact (316 rows on this repo's own index).
   /// A PATCH bump, not 1.6.0: that number is reserved for C2.3 + the IsStub
-  /// unification. Remedy: `index --all --resolve-only`. It is billed rather
+  /// unification -- since moved to 1.7.0 by the 2026-09-23 ruling; 1.6.0 is the
+  /// enum-value binding. Remedy: `index --all --resolve-only`. It is billed rather
   /// than absorbed because TPurityStage recomputes only while some verdict is
   /// NULL, so a filled database would keep the old witness text forever.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.5.1-alpha';
+  /// <para>1.5.1-alpha -&gt; 1.6.0-alpha (2026-09-23, enum-value-ref-binding): the
+  /// calls stage binds refs.symbol_id for a `read` ref that names an ENUM VALUE
+  /// (by name + scope, certain or NULL: R1 visibility, R2 uniqueness, R3
+  /// shadowing, rule-0 duplicate collapse) and for a `member-access` ref
+  /// qualified by the enum type or its unit. No call_edges row, no
+  /// member_accesses row, no new table. DERIVED rows only, no parse change:
+  /// remedy is `index --all --resolve-only`. A MINOR, not a patch: a new class
+  /// of derived row, and the 1.6.0 reservation for C2.3 + IsStub moved to 1.7.0
+  /// by owner ruling the same day.
+  /// Spec: docs\superpowers\specs\2026-09-23-enum-value-ref-binding.md</para>
+  DRAGLINT_RESOLVER_VERSION = '1.6.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
