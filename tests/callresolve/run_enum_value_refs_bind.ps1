@@ -12,7 +12,7 @@
   # against -- drag-lint 1.16.0-alpha, extractor 1.17.0-alpha, resolver      #
   # **1.5.1-alpha** -- the measured result is:                               #
   #                                                                          #
-  #     PASS  1, 2, 6, 7, 8          FAIL  3, 4, 5, 9, 10, 11, 12, 13        #
+  #     PASS  1, 2, 6, 7, 8, 10          FAIL  3, 4, 5, 9, 11, 12, 13        #
   #                                                                          #
   # Any OTHER pattern on 1.5.1-alpha means THIS FIXTURE is broken, not the   #
   # engine. Fix the fixture; never relax a check to match what you saw.      #
@@ -43,6 +43,12 @@
          values that follows from R-A. Bound sites render PLAIN, never with
          ` ?`. Check 10 asserts the outcome (no double listing); this guard
          never runs `document --apply`, so it triggers none of that churn.
+         NOTE, from ruling R9 below: R-B's premise looks WRONG on this
+         fixture. The verb is `Used by:`, sites already render plain with no
+         ` ?`, and the list comes from an UNGATED name bucket -- so on this
+         evidence the enum-value doc render does not change at all and there
+         may be no churn to accept. Not settled here; task 6 should measure
+         it on real corpus data and tell the owner.
   (Also ruled: rule-0 duplicate collapse ships NOW -- check 13.)
 
   CHECK -> TASK MAP. Which task is expected to turn each check green:
@@ -56,7 +62,7 @@
     check  7  invariants: no enum in call_edges/member_accesses . green already
     check  8  E1 fence: complement universe untouched ...... green already
     check  9  R-A: find-callers --resolved reports reads ... task 6
-    check 10  doc: "Used by:" driven by BOUND refs, deduped .. task 6
+    check 10  doc: "Used by:" lists UseIt ONCE (REGRESSION) . green already
     check 11  lint-tree: stale-interface-reference ......... **task 8 (LAST)**
     check 12  E5: scoped pass NULLs its own universe ....... task 4
     check 13  rule 0: duplicate declarations collapse ...... task 4
@@ -125,46 +131,61 @@
   pinned to a literal line number silently stops testing what it names the
   moment the fixture is edited.
 
-  CHECK 10 AND THE LABEL -- OWNER RULING R6, 2026-09-23, which CORRECTS the
-  spec's surface table and the task brief. Both said `Called from:`. They are
-  wrong, and a check asserting it could never go green:
+  ##########################################################################
+  # CHECK 10 IS A GREEN-TODAY **REGRESSION GUARD**, NOT FEATURE EVIDENCE.  #
+  # It is GREEN on 1.5.1-alpha and must stay green. It proves NOTHING      #
+  # about whether enum-value binding works, and NO LATER TASK MAY CITE IT  #
+  # AS SUCH. Checks 3, 4, 5, 9, 12 and 13 are the feature evidence.        #
+  ##########################################################################
 
-    Doc.Facts.pas:561-568 -- TDocFacts.SymbolKind's single consumer is
-    RenderFactsBlock, which picks the verb via CanBeCallTarget: a callable
-    reads "Called from:", everything else reads "Used by:".
+  This check was specified twice and was wrong both times. The corrections
+  are recorded here because THE PLAN AND THE SPEC STILL DISAGREE WITH THIS
+  FILE, and a later reader must be able to see that the disagreement was
+  deliberate and what evidence settled it.
 
-  `CanBeCallTarget(enum_value)` is False and spec U3 forbids touching it, so
-  an enum value's bound references render under **`Used by:`**. A check that
-  can never go green corrupts the grading contract exactly as badly as one
-  that can never go red -- it would push task 6 toward the forbidden fix.
+  **Owner ruling R6 (superseded in part by R9).** The spec's surface table
+  and the task brief both said `Called from:`. Wrong: Doc.Facts.pas:561-568
+  -- RenderFactsBlock picks the verb via CanBeCallTarget, a callable reads
+  "Called from:" and everything else reads "Used by:". CanBeCallTarget
+  (enum_value) is False and spec U3 / plan ruling 2 freeze it, so an enum
+  value renders **`Used by:`**. Relabelled.
 
-  BUT RELABELLING ALONE WOULD MAKE CHECK 10 GREEN TODAY, which is why this
-  check does not stop at the relabel. Doc.Facts.pas:1451-1459 records that for
-  a NON-ROUTINE symbol the reference list is not call-site-restricted at all:
-  "the unresolved bucket has never held call sites ... it holds plain
-  references to the symbol's NAME". So today's `Used by:` line is ALREADY
-  produced by a name match. Measured on 1.5.1-alpha, 2026-09-23:
+  **Owner ruling R9, 2026-09-23 -- THE SPEC'S PREMISE FOR THIS CHECK IS
+  FACTUALLY FALSE, and no version of check 10 can detect the binding.**
+  Spec line 384 describes today's state as "name-bucket entries with ` ?`".
+  Measured on 1.5.1-alpha, 2026-09-23, dry `document --qname`:
 
-    --qname uEnumDecl.TCmd.cmdLoad   -> Used by: uEnumBoth.Both, uEnumUse.UseIt
-    --qname uEnumDecl.TCmd.cmdShadow -> Used by: uEnumUse.UseIt
-    --qname uEnumDecl.TCmd.cmdDelta  -> Used by: uEnumBoth.Both, uEnumUse.UseIt
+    uEnumDecl.TCmd.cmdLoad   -> Used by: uEnumBoth.Both, uEnumUse.UseIt
+    uEnumDecl.TCmd.cmdShadow -> Used by: uEnumUse.UseIt
+    uEnumDecl.TCmd.cmdDelta  -> Used by: uEnumBoth.Both, uEnumUse.UseIt
 
-  The first line already lists UseIt exactly once, plain, with no ` ?`, so the
-  dedupe assertions alone pass today. Check 10 therefore carries TWO
-  DISCRIMINATING assertions, each the doc-layer twin of a control this guard
-  already has elsewhere, and each RED today for a reason task 6 can clear:
+  **Zero ` ?` entries.** One plain `Used by:` line each. The mechanism:
+  Doc.Facts.pas computes `NameUnambiguous := (not CanBeCallTarget(ASym.Kind))
+  or (Distinct.Count > 0)`, unconditionally True for a non-callable kind, so
+  `FindUnresolvedNameCallers` -- a pure `name_text` match -- runs **UNGATED**
+  for every enum value, whatever the bound-ref bucket found.
+  Doc.Facts.pas:1451-1459 says that is deliberate and permanent; the plan
+  says the same at its line 692. Consequences, both binding here:
 
-    * **cmdShadow must list NO usages** (doc-layer twin of check 6's
-      name-join control). Today the name bucket lists `uEnumUse.UseIt` via the
-      LOCAL `cmdShadow`; once the list is driven by BOUND refs, `cmdShadow`
-      has zero bound references and the line disappears.
-    * **cmdDelta must list uEnumUse.UseIt and NEVER uEnumBoth.Both**
-      (doc-layer twin of check 9's cmdDelta assertion). Today the name bucket
-      lists both; after binding, N4 declines under R2 (two visible candidates)
-      and Both must go.
+    * An enum value's doc render is **not observably changed by this
+      feature at all**. The plan's check-10 row ("RED today, green in 6")
+      was derived from the false premise and is CORRECTED to "green today,
+      stays green".
+    * An earlier round of this guard asserted that `cmdShadow` would list
+      nothing and that `cmdDelta` would stop naming `uEnumBoth.Both`. Both
+      are UNSATISFIABLE by any task 3-8 implementation, because the name
+      bucket that supplies those entries is never gated off. Removed under
+      R9. Gating it is real unplanned code that would change doc output
+      across every corpus; it is the OWNER'S call, escalated separately,
+      and MUST NOT be built to make this check go green.
 
-  The "the line exists at all" assertion is kept so the check still fails on
-  empty output rather than passing on nothing.
+  **What is left, and why it is still worth running.** The dedupe assertion
+  is TRIVIAL today -- one bucket feeds the list, so `uEnumUse.UseIt` cannot
+  appear twice. It becomes NON-TRIVIAL at task 6, when `FindResolvedCallers`
+  grows its value arm and `UseIt` is present in BOTH the resolved bucket and
+  the ungated name bucket. If task 6's arm causes double-listing, check 10
+  catches it. That is a real risk created by task 6 and worth a guard -- as a
+  REGRESSION guard, which is all it is.
 
   FIXTURE A (four units, one scratch project):
     uEnumDecl.pas   TCmd = (cmdLoad, cmdDelta, cmdShadow, cmdClash)
@@ -493,35 +514,22 @@ $co = @(Resolved $dbA 'cmdOther')
 CheckN 9 'cmdOther: exactly 1 resolved row, uEnumBoth.Both -> uEnumDecl2.TOther.cmdOther' ($co.Count -eq 1 -and $co[0].caller_qname -eq 'uEnumBoth.Both' -and $co[0].target_qname -eq 'uEnumDecl2.TOther.cmdOther') ($co | ConvertTo-Json -Compress)
 
 Write-Host ''
-Write-Host '== check 10: doc -- UseIt listed ONCE plain, and the list driven by BOUND refs not NAMES ==' -ForegroundColor Cyan
+Write-Host '== check 10: doc REGRESSION guard -- GREEN TODAY, not feature evidence (ruling R9) ==' -ForegroundColor Cyan
+Write-Host '   (trivial dedupe today; becomes non-trivial at task 6 when the value arm lands)' -ForegroundColor DarkGray
 # DRY RUN ONLY -- no --apply. R-B accepts the corpus churn, but this guard
 # must never cause any of it. --qname targets the VALUE, not its parent type
 # (verified 2026-09-23: --qname on a sibling value, cmdShadow, renders a
-# DIFFERENT usage set). The verb is "Used by:", not "Called from:" -- owner
-# ruling R6, see the header.
-function UsedByLine([string]$qname) {
-  $o = (& $exePath document --qname $qname --db $dbA 2>$null) -join "`n"
-  $lines = @(($o -split "`r?`n") | Where-Object { $_ -match 'Used by:' })
-  return [pscustomobject]@{ Raw = $o; Lines = $lines; Text = ($lines -join ' ') }
-}
-# (a) DEDUPE, on the symbol with THREE bound sites in one routine.
-$dLoad = UsedByLine 'uEnumDecl.TCmd.cmdLoad'
-CheckN 10 'cmdLoad has a "Used by:" line at all' ($dLoad.Lines.Count -ge 1) $dLoad.Raw
-$useItHits = @([regex]::Matches($dLoad.Text, [regex]::Escape('uEnumUse.UseIt'))).Count
-CheckN 10 'cmdLoad "Used by:" lists uEnumUse.UseIt EXACTLY once (3 bound sites, one entry)' ($useItHits -eq 1) "hits=$useItHits line=$($dLoad.Text)"
-CheckN 10 'cmdLoad "Used by:" carries no " ?" unverified marker' ($dLoad.Lines.Count -ge 1 -and $dLoad.Text -notmatch '\s\?') "line=$($dLoad.Text)"
-# (b) DISCRIMINATOR 1 -- the doc-layer twin of check 6's name-join control.
-# cmdShadow's only same-named references are the LOCAL in UseIt, which binds
-# to nothing. A name-driven list shows UseIt; a BOUND-ref-driven list is empty.
-$dShadow = UsedByLine 'uEnumDecl.TCmd.cmdShadow'
-CheckN 10 'cmdShadow lists NO usages -- the list is driven by BOUND refs, not by NAME' ($dShadow.Lines.Count -eq 0) "lines=$($dShadow.Lines.Count) raw=$($dShadow.Raw)"
-# (c) DISCRIMINATOR 2 -- the doc-layer twin of check 9's cmdDelta assertion.
-# N4 in uEnumBoth.Both declines under R2 (two visible cmdDelta), so Both must
-# never appear on uEnumDecl.TCmd.cmdDelta's line; only UseIt's A2 may.
-$dDelta = UsedByLine 'uEnumDecl.TCmd.cmdDelta'
-CheckN 10 'cmdDelta has a "Used by:" line at all' ($dDelta.Lines.Count -ge 1) $dDelta.Raw
-CheckN 10 'cmdDelta "Used by:" names uEnumUse.UseIt (A2 bound)' ($dDelta.Text -match [regex]::Escape('uEnumUse.UseIt')) "line=$($dDelta.Text)"
-CheckN 10 'cmdDelta "Used by:" NEVER names uEnumBoth.Both (N4 declined under R2)' ($dDelta.Lines.Count -ge 1 -and $dDelta.Text -notmatch [regex]::Escape('uEnumBoth.Both')) "line=$($dDelta.Text)"
+# DIFFERENT usage set). The verb is "Used by:", not "Called from:" (R6), and
+# this check asserts ONLY the dedupe, never the membership of the list (R9).
+# See the header for why the plan's and the spec's claims about this check
+# are corrected here.
+$docRaw = (& $exePath document --qname 'uEnumDecl.TCmd.cmdLoad' --db $dbA 2>$null) -join "`n"
+$usedBy = @(($docRaw -split "`r?`n") | Where-Object { $_ -match 'Used by:' })
+$ubText = ($usedBy -join ' ')
+CheckN 10 'cmdLoad has a "Used by:" line at all' ($usedBy.Count -ge 1) $docRaw
+$useItHits = @([regex]::Matches($ubText, [regex]::Escape('uEnumUse.UseIt'))).Count
+CheckN 10 'cmdLoad "Used by:" names uEnumUse.UseIt EXACTLY once, never twice (the task-6 double-listing risk)' ($useItHits -eq 1) "hits=$useItHits line=$ubText"
+CheckN 10 'cmdLoad "Used by:" carries no " ?" unverified marker' ($usedBy.Count -ge 1 -and $ubText -notmatch '\s\?') "line=$ubText"
 
 Write-Host ''
 Write-Host '== check 11: lint-tree sees a removed ENUM MEMBER (TASK 8, the LAST to go green) ==' -ForegroundColor Cyan
@@ -624,7 +632,7 @@ $passed = @($script:checkOrder | Where-Object { $script:checkState[$_] } | Sort-
 $failed = @($script:checkOrder | Where-Object { -not $script:checkState[$_] } | Sort-Object)
 Write-Host ("  PASS: " + ($passed -join ', ')) -ForegroundColor Green
 Write-Host ("  FAIL: " + ($failed -join ', ')) -ForegroundColor Red
-Write-Host '  On resolver 1.5.1-alpha the EXPECTED result is PASS 1,2,6,7,8 / FAIL 3,4,5,9,10,11,12,13.' -ForegroundColor DarkGray
+Write-Host '  On resolver 1.5.1-alpha the EXPECTED result is PASS 1,2,6,7,8,10 / FAIL 3,4,5,9,11,12,13.' -ForegroundColor DarkGray
 Write-Host '  Any other pattern there means the FIXTURE is broken, not the engine.' -ForegroundColor DarkGray
 
 Write-Host ''
