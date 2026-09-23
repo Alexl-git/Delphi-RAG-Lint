@@ -36,10 +36,13 @@ type
     /// False when it is unresolved/not indexed.</summary>
     Resolved: Boolean;
     /// <summary>Full distinct-project-unit count that imports this external,
-    /// NOT capped by AMaxList (unlike UsedBy).</summary>
+    /// NOT capped by AMaxList (unlike UsedBy). Counts only units whose own
+    /// uses clause names it; a unit that merely reaches it through another
+    /// unit's uses is not counted.</summary>
     UsedByCount: Integer;
-    /// <summary>Importing project units, sorted ascending, capped at
-    /// AOpts.MaxList entries.</summary>
+    /// <summary>Importing project units -- units whose own uses clause names
+    /// this external, never a unit that only reaches it transitively --
+    /// sorted ascending, capped at AOpts.MaxList entries.</summary>
     UsedBy: TArray<string>;
     /// <summary>Count of importing project units beyond the UsedBy cap;
     /// 0 when UsedByCount &lt;= AOpts.MaxList.</summary>
@@ -130,7 +133,9 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsOptions = record
-    /// <summary>BFS depth cap for shortest-path computation. Default 3.</summary>
+    /// <summary>BFS depth cap for shortest-path computation. Default 3.
+    /// Depth widens which externals are discovered and how ShortestPath is
+    /// chained; it never changes who is credited in UsedBy or Edges.</summary>
     Depth: Integer;
     /// <summary>When True, every store's files are eligible project sources;
     /// when False (default), only the first store (AStores[0]) is.</summary>
@@ -152,7 +157,6 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.WalkBfs (DRagLint.Report.Deps.pas)</para>
 /// <para>Calls: LowerCase, Pos</para>
-/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsLibraryPath(const APath: string): Boolean;
@@ -170,7 +174,6 @@ function IsLibraryPath(const APath: string): Boolean;
 /// <para>Called from: DRagLint.Report.Deps.NoteEdgeIfExternal (DRagLint.Report.Deps.pas)</para>
 /// <para>Calls: DRagLint.Report.Deps.ClassifyByName, LowerCase, Pos</para>
 /// <para>Complexity: 12 (cyclomatic, outer body), 17 lines (full implementation)</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Report.Deps.ClassifyByName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -184,7 +187,7 @@ function ClassifyDepsGroup(const AUnitName, AResolvedPath: string; AResolved: Bo
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoDepsReport.RenderCsv (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas)</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DepsGroupStr(AGroup: TDepsGroup): string;
@@ -192,7 +195,9 @@ function DepsGroupStr(AGroup: TDepsGroup): string;
 /// <summary>Builds the third-party dependency report from the index's uses-graph.
 /// Borrows AStores (does not open/free them). Classifies each used unit as project
 /// vs external (unresolved OR library-path), groups externals, and computes the
-/// per-external rollup + the flat edge list + summary. No I/O.</summary>
+/// per-external rollup + the flat edge list + summary. No I/O. Each external
+/// is credited only to the units whose own uses clause names it, and each
+/// (importer, external) pair yields exactly one edge.</summary>
 /// <param name="AStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
 /// <param name="AOpts"><!-- drag-lint:auto type -->const TDepsOptions</param>
 /// <returns><!-- drag-lint:auto type -->TDepsReport</returns>
@@ -201,7 +206,6 @@ function DepsGroupStr(AGroup: TDepsGroup): string;
 /// <para>Called from: DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)</para>
 /// <para>Calls: CompareText, Copy, DRagLint.Report.Deps.GroupOrd, DRagLint.Report.Deps.IsLibraryPath, DRagLint.Report.Deps.LoadFilesAndEdges, DRagLint.Report.Deps.WalkBfs, LowerCase, Pos</para>
 /// <para>Complexity: 30 (cyclomatic, outer body), 181 lines (full implementation)</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Report.Deps.GroupOrd"/>
 /// <seealso cref="DRagLint.Report.Deps.IsLibraryPath"/>
 /// <seealso cref="DRagLint.Report.Deps.LoadFilesAndEdges"/>
@@ -528,8 +532,14 @@ begin
     Acc.Group   := ClassifyDepsGroup(AEdge.UnitName, ResolvedPath, Resolved);
     AExternals.Add(AEdge.UnitNameNorm, Acc);
   end;
-  Acc.UsedBySet.AddOrSetValue(ASourceStem, True);
   Acc.SectionsSet.AddOrSetValue(LowerCase(AEdge.Section), True);
+  NoteShortestPath(AShortestPath, AEdge.UnitNameNorm, AFullChain);
+
+  { One edge per (importer, external): the same uses row is met again when
+    its file is walked as its own root and from every root whose BFS
+    expands it, and each sighting used to append another edge. }
+  if Acc.UsedBySet.ContainsKey(ASourceStem) then Exit;
+  Acc.UsedBySet.Add(ASourceStem, True);
 
   DepsEdge.SourceUnit  := ASourceStem;
   DepsEdge.ExternalUnit:= AEdge.UnitName;
@@ -537,8 +547,6 @@ begin
   DepsEdge.Section     := LowerCase(AEdge.Section);
   DepsEdge.Resolved    := Resolved;
   AEdgeList.Add(DepsEdge);
-
-  NoteShortestPath(AShortestPath, AEdge.UnitNameNorm, AFullChain);
 end;
 
 { BFS from ASourceIdx over AEdges up to AMaxDepth, recording the shortest
@@ -562,6 +570,7 @@ var
   EdgeList  : TArray<TDepsUsesEdge>;
   SourceMeta: TDepsFileMeta;
   NextVia   : string;
+  OwnerStem : string;
   IsProjSrc : Boolean;
 begin
   Queue  := TQueue<TDepsBfsItem>.Create;
@@ -607,6 +616,11 @@ begin
       if Item.Via = '' then NextVia:= SourceMeta.Stem + '>' + Item.UsedUnit
       else NextVia:= Item.Via + '>' + Item.UsedUnit;
 
+      { D5: these edges belong to the file being expanded, not to the BFS
+        root. Crediting the root listed the program as a user of every unit
+        its uses reached within Depth (micronite2027 -> ETypes, which only
+        EExtraExceptionInfo.pas names). }
+      OwnerStem:= AAllFiles[Integer(Item.FileId)].Stem;
       for Edge in EdgeList do
       begin
         if Visited.ContainsKey(Edge.UnitNameNorm) then Continue;
@@ -619,7 +633,7 @@ begin
         Queue.Enqueue(Nx);
 
         NoteEdgeIfExternal(AAllFiles, AExternals, AEdgeList, AShortestPath,
-          SourceMeta.Stem, Edge, NextVia + '>' + Edge.UnitName);
+          OwnerStem, Edge, NextVia + '>' + Edge.UnitName);
       end;
     end;
   finally
