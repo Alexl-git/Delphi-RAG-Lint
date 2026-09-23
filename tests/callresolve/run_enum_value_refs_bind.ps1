@@ -56,7 +56,7 @@
     check  7  invariants: no enum in call_edges/member_accesses . green already
     check  8  E1 fence: complement universe untouched ...... green already
     check  9  R-A: find-callers --resolved reports reads ... task 6
-    check 10  doc dedupe: Called from: lists UseIt once .... task 6
+    check 10  doc: "Used by:" driven by BOUND refs, deduped .. task 6
     check 11  lint-tree: stale-interface-reference ......... **task 8 (LAST)**
     check 12  E5: scoped pass NULLs its own universe ....... task 4
     check 13  rule 0: duplicate declarations collapse ...... task 4
@@ -125,16 +125,46 @@
   pinned to a literal line number silently stops testing what it names the
   moment the fixture is edited.
 
-  KNOWN HAZARD ON CHECK 10, recorded rather than designed around: the autodoc
-  emitter picks its label from the documented symbol's own kind (a callable
-  reads "Called from:", a non-callable reads "Used by:" --
-  tests\autodoc\run_doc_p3_callerline.ps1). An `enum_value` is not a callable,
-  so task 6 may find that the bound reads surface under `Used by:` instead.
-  The spec's surface table and the brief both say `Called from:`, so that is
-  what is asserted here; if task 6 measures otherwise, that is an owner
-  question about the SPEC, not licence to weaken this check. The failure
-  detail prints the whole dry-run block so the implementer can see what it
-  actually rendered.
+  CHECK 10 AND THE LABEL -- OWNER RULING R6, 2026-09-23, which CORRECTS the
+  spec's surface table and the task brief. Both said `Called from:`. They are
+  wrong, and a check asserting it could never go green:
+
+    Doc.Facts.pas:561-568 -- TDocFacts.SymbolKind's single consumer is
+    RenderFactsBlock, which picks the verb via CanBeCallTarget: a callable
+    reads "Called from:", everything else reads "Used by:".
+
+  `CanBeCallTarget(enum_value)` is False and spec U3 forbids touching it, so
+  an enum value's bound references render under **`Used by:`**. A check that
+  can never go green corrupts the grading contract exactly as badly as one
+  that can never go red -- it would push task 6 toward the forbidden fix.
+
+  BUT RELABELLING ALONE WOULD MAKE CHECK 10 GREEN TODAY, which is why this
+  check does not stop at the relabel. Doc.Facts.pas:1451-1459 records that for
+  a NON-ROUTINE symbol the reference list is not call-site-restricted at all:
+  "the unresolved bucket has never held call sites ... it holds plain
+  references to the symbol's NAME". So today's `Used by:` line is ALREADY
+  produced by a name match. Measured on 1.5.1-alpha, 2026-09-23:
+
+    --qname uEnumDecl.TCmd.cmdLoad   -> Used by: uEnumBoth.Both, uEnumUse.UseIt
+    --qname uEnumDecl.TCmd.cmdShadow -> Used by: uEnumUse.UseIt
+    --qname uEnumDecl.TCmd.cmdDelta  -> Used by: uEnumBoth.Both, uEnumUse.UseIt
+
+  The first line already lists UseIt exactly once, plain, with no ` ?`, so the
+  dedupe assertions alone pass today. Check 10 therefore carries TWO
+  DISCRIMINATING assertions, each the doc-layer twin of a control this guard
+  already has elsewhere, and each RED today for a reason task 6 can clear:
+
+    * **cmdShadow must list NO usages** (doc-layer twin of check 6's
+      name-join control). Today the name bucket lists `uEnumUse.UseIt` via the
+      LOCAL `cmdShadow`; once the list is driven by BOUND refs, `cmdShadow`
+      has zero bound references and the line disappears.
+    * **cmdDelta must list uEnumUse.UseIt and NEVER uEnumBoth.Both**
+      (doc-layer twin of check 9's cmdDelta assertion). Today the name bucket
+      lists both; after binding, N4 declines under R2 (two visible candidates)
+      and Both must go.
+
+  The "the line exists at all" assertion is kept so the check still fails on
+  empty output rather than passing on nothing.
 
   FIXTURE A (four units, one scratch project):
     uEnumDecl.pas   TCmd = (cmdLoad, cmdDelta, cmdShadow, cmdClash)
@@ -378,7 +408,19 @@ Write-Host '== check 8: E1 fence -- the unresolved-call COMPLEMENT universe is u
 # cannot quietly narrow what this fence looks for.
 $enumNames = @((Sql $dbA "SELECT DISTINCT name FROM symbols WHERE kind = 'enum_value' ORDER BY name") | ForEach-Object { $_.name })
 CheckN 8 'fixture health: the DB carries the expected enum values (fence has something to look for)' ($enumNames.Count -ge 8) ($enumNames -join ',')
-$acRaw = (& $exePath ambiguous-calls --db $dbA --json 2>$null) -join "`n"
+$acRaw  = (& $exePath ambiguous-calls --db $dbA --json 2>$null) -join "`n"
+$acExit = $LASTEXITCODE
+# The fence is "no enum value is named", which an EMPTY $acRaw satisfies
+# trivially -- so a failed, renamed or refused `ambiguous-calls` would report
+# GREEN with the E1 fence never evaluated. Prove the verb actually ran before
+# reading anything into its silence. A clean fixture legitimately emits `[]`,
+# so the test is that it PARSES as JSON, not that it is non-empty (verified
+# 2026-09-23: good DB -> exit 0, `[]`; missing DB -> exit 2, 63 bytes of
+# non-JSON error text).
+CheckN 8 'ambiguous-calls actually ran (exit 0) -- an empty result must not pass by default' ($acExit -eq 0) "exit=$acExit raw=$acRaw"
+$acParsed = $false
+try { $null = $acRaw | ConvertFrom-Json; $acParsed = $true } catch { $acParsed = $false }
+CheckN 8 'ambiguous-calls returned parseable JSON' $acParsed "raw=$acRaw"
 $acHit = @($enumNames | Where-Object { $acRaw -match ("\b" + [regex]::Escape($_) + "\b") })
 CheckN 8 'ambiguous-calls names NO fixture enum value' ($acHit.Count -eq 0) ("hits=" + ($acHit -join ',') + " raw=" + $acRaw)
 $uniPath = Join-Path $PSScriptRoot 'run_callsite_kind_universe.ps1'
@@ -451,18 +493,35 @@ $co = @(Resolved $dbA 'cmdOther')
 CheckN 9 'cmdOther: exactly 1 resolved row, uEnumBoth.Both -> uEnumDecl2.TOther.cmdOther' ($co.Count -eq 1 -and $co[0].caller_qname -eq 'uEnumBoth.Both' -and $co[0].target_qname -eq 'uEnumDecl2.TOther.cmdOther') ($co | ConvertTo-Json -Compress)
 
 Write-Host ''
-Write-Host '== check 10: doc dedupe -- UseIt listed ONCE, plain, never also with " ?" ==' -ForegroundColor Cyan
+Write-Host '== check 10: doc -- UseIt listed ONCE plain, and the list driven by BOUND refs not NAMES ==' -ForegroundColor Cyan
 # DRY RUN ONLY -- no --apply. R-B accepts the corpus churn, but this guard
-# must never cause any of it. --qname targets cmdLoad specifically (verified
-# 2026-09-23: --qname on a sibling value, cmdShadow, renders a DIFFERENT
-# usage set, so the qname really does resolve to the value, not to TCmd).
-$docOut = (& $exePath document --qname 'uEnumDecl.TCmd.cmdLoad' --db $dbA 2>$null) -join "`n"
-$calledFrom = @(($docOut -split "`r?`n") | Where-Object { $_ -match 'Called from:' })
-CheckN 10 'cmdLoad has a "Called from:" line at all' ($calledFrom.Count -ge 1) $docOut
-$cfText = ($calledFrom -join ' ')
-$useItHits = @([regex]::Matches($cfText, [regex]::Escape('uEnumUse.UseIt'))).Count
-CheckN 10 'cmdLoad "Called from:" lists uEnumUse.UseIt EXACTLY once (3 bound sites, one entry)' ($useItHits -eq 1) "hits=$useItHits line=$cfText"
-CheckN 10 'cmdLoad "Called from:" carries no " ?" unverified marker' ($calledFrom.Count -ge 1 -and $cfText -notmatch '\s\?') "line=$cfText"
+# must never cause any of it. --qname targets the VALUE, not its parent type
+# (verified 2026-09-23: --qname on a sibling value, cmdShadow, renders a
+# DIFFERENT usage set). The verb is "Used by:", not "Called from:" -- owner
+# ruling R6, see the header.
+function UsedByLine([string]$qname) {
+  $o = (& $exePath document --qname $qname --db $dbA 2>$null) -join "`n"
+  $lines = @(($o -split "`r?`n") | Where-Object { $_ -match 'Used by:' })
+  return [pscustomobject]@{ Raw = $o; Lines = $lines; Text = ($lines -join ' ') }
+}
+# (a) DEDUPE, on the symbol with THREE bound sites in one routine.
+$dLoad = UsedByLine 'uEnumDecl.TCmd.cmdLoad'
+CheckN 10 'cmdLoad has a "Used by:" line at all' ($dLoad.Lines.Count -ge 1) $dLoad.Raw
+$useItHits = @([regex]::Matches($dLoad.Text, [regex]::Escape('uEnumUse.UseIt'))).Count
+CheckN 10 'cmdLoad "Used by:" lists uEnumUse.UseIt EXACTLY once (3 bound sites, one entry)' ($useItHits -eq 1) "hits=$useItHits line=$($dLoad.Text)"
+CheckN 10 'cmdLoad "Used by:" carries no " ?" unverified marker' ($dLoad.Lines.Count -ge 1 -and $dLoad.Text -notmatch '\s\?') "line=$($dLoad.Text)"
+# (b) DISCRIMINATOR 1 -- the doc-layer twin of check 6's name-join control.
+# cmdShadow's only same-named references are the LOCAL in UseIt, which binds
+# to nothing. A name-driven list shows UseIt; a BOUND-ref-driven list is empty.
+$dShadow = UsedByLine 'uEnumDecl.TCmd.cmdShadow'
+CheckN 10 'cmdShadow lists NO usages -- the list is driven by BOUND refs, not by NAME' ($dShadow.Lines.Count -eq 0) "lines=$($dShadow.Lines.Count) raw=$($dShadow.Raw)"
+# (c) DISCRIMINATOR 2 -- the doc-layer twin of check 9's cmdDelta assertion.
+# N4 in uEnumBoth.Both declines under R2 (two visible cmdDelta), so Both must
+# never appear on uEnumDecl.TCmd.cmdDelta's line; only UseIt's A2 may.
+$dDelta = UsedByLine 'uEnumDecl.TCmd.cmdDelta'
+CheckN 10 'cmdDelta has a "Used by:" line at all' ($dDelta.Lines.Count -ge 1) $dDelta.Raw
+CheckN 10 'cmdDelta "Used by:" names uEnumUse.UseIt (A2 bound)' ($dDelta.Text -match [regex]::Escape('uEnumUse.UseIt')) "line=$($dDelta.Text)"
+CheckN 10 'cmdDelta "Used by:" NEVER names uEnumBoth.Both (N4 declined under R2)' ($dDelta.Lines.Count -ge 1 -and $dDelta.Text -notmatch [regex]::Escape('uEnumBoth.Both')) "line=$($dDelta.Text)"
 
 Write-Host ''
 Write-Host '== check 11: lint-tree sees a removed ENUM MEMBER (TASK 8, the LAST to go green) ==' -ForegroundColor Cyan
