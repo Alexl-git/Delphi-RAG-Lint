@@ -563,6 +563,13 @@ type
     MemberMode          : string;
     AccessorSymbolId    : Int64 ;
     AccessorKind        : string;
+    { 2026-09-23 (enum-value-ref-binding): True when TargetSymbolId is an ENUM
+      VALUE reached through a qualified member-access (TEnum.value / Unit.value).
+      The store then writes refs.symbol_id ONLY -- no call_edges row
+      (CanBeCallTarget stays routine-only), no member_accesses row (there is no
+      mode/accessor to record). Default False so Default(TCallEdge) keeps its
+      meaning. }
+    ValueOnly           : Boolean;
   end;
 
   /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see
@@ -656,6 +663,75 @@ type
     /// -- a call_edges row IS the proof, so those callers are verified whatever
     /// this holds.</remarks>
     ReceiverText     : string;
+  end;
+
+  /// <summary>2026-09-23 (enum-value-ref-binding): one enum_value declaration as
+  /// the enum-value resolve stream sees it (ISymbolStore.GetEnumValueSymbols).
+  /// OwnerTypeId is the class/record/interface that DECLARES the enum when the
+  /// enum is nested inside a type, and 0 for a unit-level enum.</summary>
+  /// <remarks>
+  /// Deliberately NOT a TSymbol. The enum-value pass keys on exactly six facts --
+  /// identity, declaring file, the parent enum, the declaring type (for the
+  /// nested-enum visibility rule), the name pair rule 0 groups on, and the span
+  /// rule 0 compares -- and carrying a full TSymbol would invite a later rung to
+  /// consult a field (Signature, Heritage, Modifiers) that the bulk SQL does not
+  /// select and which would therefore read back empty rather than absent.
+  ///
+  /// Section is the VALUE's own section, measured identical to its parent enum's
+  /// on both reference corpora; R1 uses it directly rather than re-deriving it
+  /// from EnumId, so a future extractor change that lets the two differ makes the
+  /// value's own section win, which is the correct reading.
+  /// </remarks>
+  TEnumValueDecl = record
+    /// <summary>symbols.id of the enum_value itself -- what lands in
+    /// refs.symbol_id when the ref binds.</summary>
+    Id           : Int64;
+    /// <summary>Declaring file; the left-hand side of every R1 visibility test.</summary>
+    FileId       : Int64;
+    /// <summary>symbols.id of the parent enum TYPE (the value's parent_id).</summary>
+    EnumId       : Int64;
+    /// <summary>symbols.id of the class/record/interface declaring the parent
+    /// enum, or 0 when the enum is declared at unit level. Non-zero means the
+    /// bare form is only reachable from inside that type or a descendant.</summary>
+    OwnerTypeId  : Int64;
+    /// <summary>The bare identifier as written; matched case-insensitively.</summary>
+    Name         : string;
+    /// <summary>Fully qualified name; rule 0's grouping key (lowercased).</summary>
+    QualifiedName: string;
+    /// <summary>'interface' | 'implementation' | ''; R1's cross-unit gate.</summary>
+    Section      : string;
+    /// <summary>Declaration span start; half of rule 0's identity test.</summary>
+    StartLine    : Integer;
+    /// <summary>Declaration span end; the other half.</summary>
+    EndLine      : Integer;
+  end;
+
+  /// <summary>2026-09-23 (enum-value-ref-binding): per-run counters of the
+  /// enum-value pass, printed on the calls stage's ResolveLog line and recorded
+  /// by the corpus measurement.</summary>
+  /// <remarks>
+  /// Every DECLINE is counted by reason, and that is the point of the record
+  /// rather than a nicety: the pass answers `certain` or nothing, so a ref that
+  /// does not bind leaves no trace anywhere else. Without these counters an
+  /// over-strict rule and a correctly-empty corpus look identical from outside.
+  /// Bound counts BOTH shapes (the bare read and rung 3c's qualified hit).
+  /// DupGroupsCollapsed / CollapseDecisive make owner ruling 4's rule-0 collapse
+  /// auditable after the fact: how many duplicate groups were folded, and in how
+  /// many of those the fold is what turned an ambiguous set into a binding.
+  /// </remarks>
+  TEnumResolveStats = record
+    /// <summary>Refs bound, both shapes.</summary>
+    Bound             : Int64;
+    /// <summary>Declined: no candidate visible under R1.</summary>
+    NotVisible        : Int64;
+    /// <summary>Declined: two or more visible candidates survived rule 0 (R2).</summary>
+    Ambiguous         : Int64;
+    /// <summary>Declined: a nearer or same-scope same-named symbol (R3 a/b/c).</summary>
+    Shadowed          : Int64;
+    /// <summary>Duplicate groups folded to one representative by rule 0.</summary>
+    DupGroupsCollapsed: Int64;
+    /// <summary>Of those, the folds that turned &gt;1 candidate into exactly 1.</summary>
+    CollapseDecisive  : Int64;
   end;
 
   /// <summary>v8: one Spring4D DI registration (interface implemented by impl,

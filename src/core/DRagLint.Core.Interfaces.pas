@@ -2246,6 +2246,43 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetUnitLevelRoutines: TArray<TSymbol>;
+    /// <summary>2026-09-23 (enum-value-ref-binding): every enum_value symbol in
+    /// the index, with the columns the enum-value resolve pass keys on. One bulk
+    /// read; TCallResolver builds its lowercased name map from it in BuildMaps,
+    /// exactly as it does from GetUnitLevelRoutines.</summary>
+    /// <returns>Empty when the index holds no enum values. Each row carries
+    /// qualified_name and the declaration span (rule 0 groups on the first and
+    /// compares the second) plus OwnerTypeId -- the class/record/interface that
+    /// declares the parent enum, or 0 for a unit-level enum.</returns>
+    /// <remarks>
+    /// OwnerTypeId is computed in the SQL rather than left to the caller because
+    /// it costs one LEFT JOIN here and a query per candidate there: the value's
+    /// parent is the enum, and the enum's parent is the declaring type -- two
+    /// hops the resolver would otherwise walk per ref over a whole-DB pass.
+    ///
+    /// Returning EVERY enum value and letting the caller apply visibility keeps
+    /// the R1/R2/R3 rules in one place (TCallResolver), which is the same
+    /// division GetUnitLevelRoutines makes with Section.
+    /// </remarks>
+    function GetEnumValueSymbols: TArray<TEnumValueDecl>;
+    /// <summary>2026-09-23 (enum-value-ref-binding): every unit-level const and
+    /// var -- a const/var symbol whose parent is the unit itself. This is the
+    /// SHADOW set rule R3(c) declines against, not a candidate set.</summary>
+    /// <returns>Empty when the index holds none. Same shape as
+    /// GetUnitLevelRoutines: Id, FileId, ParentId, Kind, Name, Signature and
+    /// Section are filled.</returns>
+    /// <remarks>
+    /// Section is load-bearing for the same reason it is on GetUnitLevelRoutines:
+    /// an implementation-section const shadows the enum value only inside its own
+    /// unit, while an interface-section one shadows it in every unit that uses
+    /// that one. The caller applies R1 to this set exactly as it does to the
+    /// routine set, so both shadow arms share one visibility rule.
+    ///
+    /// The parent-kind join is what makes this exact: filtering on kind alone
+    /// would sweep in class constants and record fields, which R3(b) already
+    /// covers through the enclosing-class chain and which are NOT unit-scoped.
+    /// </remarks>
+    function GetUnitLevelValueDecls: TArray<TSymbol>;
     /// <summary>v14 (D5): every call_edges row (ref_id, target_symbol_id,
     /// confidence, receiver_type_symbol_id), unordered. Diagnostic dump backing
     /// the dump-call-edges verb / tests; not for production queries (use

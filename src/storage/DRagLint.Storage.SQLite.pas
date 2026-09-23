@@ -1211,6 +1211,21 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetUnitLevelRoutines: TArray<TSymbol>;
+      /// <summary>Implements ISymbolStore.GetEnumValueSymbols -- every enum_value
+      /// symbol with the columns the enum-value resolve pass keys on, in one
+      /// bulk read.</summary>
+      /// <returns>Empty when the index holds no enum values; otherwise one
+      /// TEnumValueDecl per enum_value row, OwnerTypeId resolved in SQL.</returns>
+      /// <remarks>SQL: reads SYMBOLS (self-joined twice).</remarks>
+      function GetEnumValueSymbols: TArray<TEnumValueDecl>;
+      /// <summary>Implements ISymbolStore.GetUnitLevelValueDecls -- every const
+      /// and var parented directly by a unit symbol.</summary>
+      /// <returns>Empty when the index holds none; otherwise one TSymbol per
+      /// row with Id, FileId, ParentId, Kind, Name, Signature, Section set.</returns>
+      /// <exception cref="Exception">via TSymbolKindHelper.FromText when a kind
+      /// text in the database is not one this build knows.</exception>
+      /// <remarks>SQL: reads SYMBOLS (self-joined on parent).</remarks>
+      function GetUnitLevelValueDecls: TArray<TSymbol>;
       /// <returns><!-- drag-lint:auto -->TArray&lt;TCallEdge&gt; -- Observed:
       /// List.ToArray.</returns>
       /// <remarks>
@@ -6200,6 +6215,139 @@ begin
       S.Name     := Q.FieldByName('name'     ).AsString;
       S.Signature:= Q.FieldByName('signature').AsString;
       S.Section  := Q.FieldByName('section'  ).AsString;
+      List.Add(S);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetEnumValueSymbols: TArray<TEnumValueDecl>;
+{ 2026-09-23 (enum-value-ref-binding): every enum_value in the index, read once
+  and mapped in memory by TCallResolver.BuildMaps -- the same prepare-once shape
+  as GetTypeCandidates and GetUnitLevelRoutines, and for the same reason: the
+  pass runs over every candidate ref in the database, so a query per ref would
+  dominate the calls stage.
+
+  The two joins are not decoration. A value's parent is its enum TYPE, and that
+  enum's parent is either the unit or a class/record/interface that declares it
+  nested. Resolving that second hop HERE costs one LEFT JOIN; resolving it in the
+  resolver costs a GetSymbolById per candidate. The CASE collapses "parented by
+  a unit" (and "parented by nothing", which a malformed index can produce) to 0,
+  so OwnerTypeId > 0 means exactly "nested in a type" and the resolver needs no
+  second test.
+
+  No section filter and no visibility filter: R1/R2/R3 live in the resolver, so
+  that the shadow arms and the candidate arm apply ONE visibility rule rather
+  than two that can drift apart. Measured row counts at the time of writing: 261
+  on this repo's own index, 592 on ORM3 CLIENT. }
+var
+  Q   : TFDQuery             ;
+  List: TList<TEnumValueDecl>;
+  E   : TEnumValueDecl       ;
+  ColId, ColFile, ColEnum, ColOwner: TField;
+  ColName, ColQName, ColSection    : TField;
+  ColStart, ColEnd                 : TField;
+begin
+  List:= TList<TEnumValueDecl>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT v.id, v.file_id, v.parent_id AS enum_id, v.name, ' +
+                   '       v.qualified_name, v.section, v.start_line, v.end_line, ' +
+                   '       CASE WHEN o.kind IN (''class'',''record'',''interface'') ' +
+                   '            THEN o.id ELSE 0 END AS owner_type_id ' +
+                   'FROM symbols v ' +
+                   'JOIN symbols e ON e.id = v.parent_id ' +
+                   'LEFT JOIN symbols o ON o.id = e.parent_id ' +
+                   'WHERE v.kind = ''enum_value''';
+    Q.Open;
+    { Bound ONCE after Open: this is the whole-index read, so a FieldByName per
+      column per row is nine name lookups times every enum value in the database. }
+    ColId     := Q.FieldByName('id'            );
+    ColFile   := Q.FieldByName('file_id'       );
+    ColEnum   := Q.FieldByName('enum_id'       );
+    ColOwner  := Q.FieldByName('owner_type_id' );
+    ColName   := Q.FieldByName('name'          );
+    ColQName  := Q.FieldByName('qualified_name');
+    ColSection:= Q.FieldByName('section'       );
+    ColStart  := Q.FieldByName('start_line'    );
+    ColEnd    := Q.FieldByName('end_line'      );
+    while not Q.Eof do
+    begin
+      E:= Default(TEnumValueDecl);
+      E.Id           := ColId     .AsLargeInt;
+      E.FileId       := ColFile   .AsLargeInt;
+      E.EnumId       := ColEnum   .AsLargeInt;
+      E.OwnerTypeId  := ColOwner  .AsLargeInt;
+      E.Name         := ColName   .AsString  ;
+      E.QualifiedName:= ColQName  .AsString  ;
+      E.Section      := ColSection.AsString  ;
+      E.StartLine    := ColStart  .AsInteger ;
+      E.EndLine      := ColEnd    .AsInteger ;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetUnitLevelValueDecls: TArray<TSymbol>;
+{ 2026-09-23 (enum-value-ref-binding): every const/var parented directly by a
+  UNIT symbol -- the unit-level value declarations. This is the SHADOW set rule
+  R3(c) declines against, not a candidate set: a unit-level const spelled like an
+  enum value makes the bare identifier ambiguous to the compiler's reader as well
+  as to this engine, so the pass refuses to bind rather than pick.
+
+  Deliberately the same parent-kind join as GetUnitLevelRoutines, for the same
+  exactness: `kind IN ('const','var')` alone would also sweep in class constants
+  and record fields, which are NOT unit-scoped and which R3(b) already covers
+  through the enclosing-class chain -- counting them here would decline reads in
+  unrelated units.
+
+  Section is carried because it decides cross-unit visibility, and Signature
+  because the shape matches GetUnitLevelRoutines and a caller reading one set
+  should not have to remember that the other is narrower. }
+var
+  Q   : TFDQuery      ;
+  List: TList<TSymbol>;
+  S   : TSymbol       ;
+  ColId, ColFile, ColParent, ColKind, ColName, ColSig, ColSection: TField;
+begin
+  List:= TList<TSymbol>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT s.id, s.file_id, s.parent_id, s.kind, s.name, ' +
+                   '       s.signature, s.section ' +
+                   'FROM symbols s ' +
+                   'JOIN symbols p ON p.id = s.parent_id AND p.kind = ''unit'' ' +
+                   'WHERE s.kind IN (''const'',''var'')';
+    Q.Open;
+    { Bound ONCE after Open -- see GetEnumValueSymbols for why. }
+    ColId     := Q.FieldByName('id'       );
+    ColFile   := Q.FieldByName('file_id'  );
+    ColParent := Q.FieldByName('parent_id');
+    ColKind   := Q.FieldByName('kind'     );
+    ColName   := Q.FieldByName('name'     );
+    ColSig    := Q.FieldByName('signature');
+    ColSection:= Q.FieldByName('section'  );
+    while not Q.Eof do
+    begin
+      S:= Default(TSymbol);
+      S.Id       := ColId    .AsLargeInt;
+      S.FileId   := ColFile  .AsLargeInt;
+      S.ParentId := ColParent.AsLargeInt;
+      S.Kind     := TSymbolKind.FromText(ColKind.AsString);
+      S.Name     := ColName  .AsString;
+      S.Signature:= ColSig   .AsString;
+      S.Section  := ColSection.AsString;
       List.Add(S);
       Q.Next;
     end;

@@ -58,6 +58,21 @@ type
     // holds TYPES for receiver typing, and a bare call resolves against
     // routines, so merging them would make every lookup filter by kind.
     FNameToRoutines: TObjectDictionary<string, TList<TSymbol>>;
+    // 2026-09-23 (enum-value-ref-binding): lowercased enum-value name -> every
+    // enum_value declaration of that name in the index. The CANDIDATE set of the
+    // enum-value pass; R1/R2/R3 narrow it per ref. A third map rather than a
+    // wider FNameToCands for the reason that map's own comment gives: this one
+    // holds VALUES, FNameToCands holds TYPES for receiver typing, and merging
+    // them would make every receiver lookup filter by kind.
+    FNameToEnumValues: TObjectDictionary<string, TList<TEnumValueDecl>>;
+    // 2026-09-23: lowercased name -> unit-level const/var declarations. The
+    // SHADOW set of rule R3(c), never a candidate set -- a hit here makes the
+    // pass DECLINE.
+    FNameToUnitValues: TObjectDictionary<string, TList<TSymbol>>;
+    // 2026-09-23: per-run counters of the enum-value pass. Every decline is
+    // counted by reason, because a pass that answers `certain` or nothing leaves
+    // no other trace of what it refused.
+    FEnumStats       : TEnumResolveStats;
     // Declaring file id -> the resolved target file ids it can see (uses graph).
     FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
@@ -509,6 +524,54 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
+    /// <summary>R3(a): True when the enclosing routine, or any routine on its
+    /// lexical chain, declares a local, parameter, const, var or nested routine
+    /// spelled AName -- i.e. something NEARER than the enum's unit scope.</summary>
+    /// <param name="AEnclosingSymbolId">The ref's enclosing routine; 0 makes the
+    /// rule vacuous (R4) and answers False.</param>
+    /// <param name="AName">The bare identifier, matched case-insensitively.</param>
+    /// <returns>True on the first hit; the climb stops at the first non-routine
+    /// parent, exactly as LookupInLexicalScopes does.</returns>
+    /// <remarks>Unlike LookupInLexicalScopes this does not care WHICH symbol won
+    /// or whether the scope is unambiguous: any same-named declaration on the
+    /// chain is a reason to decline, so the first hit ends the walk.</remarks>
+    function LexicalScopeDeclaresValue(AEnclosingSymbolId: Int64; const AName: string): Boolean;
+    /// <summary>R3(b): True when the enclosing routine's owning class/record/
+    /// interface -- or any resolved transitive ancestor of it -- declares a
+    /// member spelled AName.</summary>
+    /// <param name="AEnclosingSymbolId">The ref's enclosing routine; 0 makes the
+    /// rule vacuous (R4).</param>
+    /// <param name="AName">The bare identifier, matched case-insensitively.</param>
+    /// <param name="AClassId">OUT: the OUTERMOST enclosing routine's owning type,
+    /// or 0 when the ref is not inside a method. Set whatever the result, because
+    /// the nested-enum visibility test needs it even when nothing is shadowed.</param>
+    /// <returns>True on the first hit; False when AClassId is 0.</returns>
+    function EnclosingClassChainDeclares(AEnclosingSymbolId: Int64; const AName: string;
+      out AClassId: Int64): Boolean;
+    /// <summary>Shape B: the files.id of the unit AReceiver names, or 0.</summary>
+    /// <param name="AReceiver">The receiver text verbatim, dotted unit names
+    /// included ('DRagLint.Doc.Document').</param>
+    /// <returns>The file id when EXACTLY ONE unit symbol carries that name; 0
+    /// otherwise. Two units of one name is a decline, not a pick.</returns>
+    function UnitNameToFileId(const AReceiver: string): Int64;
+    /// <summary>Rule 0 (owner ruling 4, 2026-09-23): fold groups of
+    /// content-identical duplicate declarations down to one representative, so
+    /// one declaration the index holds twice does not read as an R2 ambiguity.</summary>
+    /// <param name="AVisible">The R1-visible candidates, in reader order.</param>
+    /// <param name="ARefFileId">The referencing file, for the representative
+    /// choice.</param>
+    /// <returns>AVisible with each collapsible group reduced to one member, in
+    /// the input's original order. A group whose members genuinely DIFFER is
+    /// returned intact, so a real ambiguity still declines.</returns>
+    /// <remarks>The representative is chosen SCOPE-AWARE -- own-file copy, then a
+    /// copy this file can see, then the lowest id -- and that ordering differs
+    /// deliberately from CollapseIdenticalCopies' own-file-then-lowest-id.
+    /// This rule feeds a visibility test built on FILE-ID uses edges rather than
+    /// textual uses names, so a lowest-id twin that is not the uses target would
+    /// be carried forward and then wrongly declined.
+    /// Increments FEnumStats.DupGroupsCollapsed once per collapsed group.</remarks>
+    function CollapseIdenticalEnumCopies(const AVisible: TArray<TEnumValueDecl>;
+      ARefFileId: Int64): TArray<TEnumValueDecl>;
   public
     { Probes AFileId (reading + caching it if not already read) and reports
       whether its on-disk content still matches what the index recorded. Called
@@ -595,6 +658,35 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveOne(const ACallRef: TReference): TCallEdge;
+
+    /// <summary>Shape A (2026-09-23, enum-value-ref-binding): resolve a bare
+    /// `read` ref that names an enum value, by NAME and SCOPE only -- rules
+    /// R1-R4 of the spec. Answers `certain` or nothing; there is no ambiguous
+    /// value binding.</summary>
+    /// <param name="ARef">The candidate read ref. FileId, NameText and
+    /// EnclosingSymbolId are the only fields consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound OR when its name is not
+    /// an enum-value name at all; otherwise the decline reason --
+    /// 'not-visible' | 'ambiguous' | 'shadowed'.</param>
+    /// <returns>The enum_value symbol id, or 0 for every decline.</returns>
+    /// <remarks>
+    /// READS NO SOURCE LINE, deliberately. Every other rung of this resolver
+    /// starts by reading the ref's line to recover a receiver, which is why they
+    /// need the stale-file withholding in ResolveOne; with no line read there is
+    /// nothing here for staleness to withhold, and the answer is a pure function
+    /// of the symbol table.
+    ///
+    /// Not counted as a decline when the name matches no enum value: the store's
+    /// candidate SQL already filtered the stream to enum-value names, so such a
+    /// call is the caller asking about a ref that was never a candidate.
+    /// </remarks>
+    function ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;
+
+    /// <summary>Per-run counters of the enum-value pass -- bindings, and every
+    /// decline by reason. Read by the calls stage for its ResolveLog line.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
+    /// pass, so these are that pass's totals.</remarks>
+    property EnumStats: TEnumResolveStats read FEnumStats;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -1163,6 +1255,9 @@ begin
   FExtraStores:= AExtraStores;
   FNameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FNameToRoutines:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
+  FNameToEnumValues:= TObjectDictionary<string, TList<TEnumValueDecl>>.Create([doOwnsValues]);
+  FNameToUnitValues:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
+  FEnumStats  := Default(TEnumResolveStats);
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
@@ -1176,6 +1271,8 @@ begin
   FStaleFiles.Free;
   FChildCache.Free;
   FFileScope .Free;
+  FNameToUnitValues.Free;
+  FNameToEnumValues.Free;
   FNameToRoutines.Free;
   FNameToCands.Free;
   FStore:= nil;
@@ -1208,6 +1305,24 @@ begin
     if Lc = '' then Continue;
     if not FNameToRoutines.ContainsKey(Lc) then FNameToRoutines.Add(Lc, TList<TSymbol>.Create);
     FNameToRoutines[Lc].Add(S);
+  end;
+  // 1c. 2026-09-23 (enum-value-ref-binding): the enum-value CANDIDATE map and
+  // the unit-level const/var SHADOW map, built in the same single pass for the
+  // same reason -- the enum-value rules are consulted per candidate ref over a
+  // whole-DB stream, so both sets are bulk-read once here or paid for per ref.
+  for var EV: TEnumValueDecl in FStore.GetEnumValueSymbols do  // dl:ok duplicate-code@3a9a -- REVIEWED 2026-09-23: the four-line "append to a name-keyed list map" idiom, now written over THREE element types (TSymbol twice, TEnumValueDecl once). Collapsing it needs a generic helper method, and two of the three loops are pre-existing code this change does not own -- so the de-duplication would rewrite BuildMaps, and with it the resolver surface hash, for a token-count heuristic rather than for behaviour.
+  begin
+    Lc:= LowerCase(EV.Name);
+    if Lc = '' then Continue;
+    if not FNameToEnumValues.ContainsKey(Lc) then FNameToEnumValues.Add(Lc, TList<TEnumValueDecl>.Create);
+    FNameToEnumValues[Lc].Add(EV);
+  end;
+  for S in FStore.GetUnitLevelValueDecls do
+  begin
+    Lc:= LowerCase(S.Name);
+    if Lc = '' then Continue;
+    if not FNameToUnitValues.ContainsKey(Lc) then FNameToUnitValues.Add(Lc, TList<TSymbol>.Create);
+    FNameToUnitValues[Lc].Add(S);
   end;
   // 2. per-file in-scope target file ids from the uses graph.
   Edges:= FStore.GetUnitScopeEdges;
@@ -1617,6 +1732,365 @@ begin
   finally
     Matches.Free;
   end;
+end;
+
+{ 2026-09-23 (enum-value-ref-binding) -- the enum-value pass, Shape A.
+
+  Five routines, and they exist because an enum value is the ONE value kind whose
+  resolution is purely lexical: a unit scope plus a shadowing rule. That is why a
+  targeted pass can be exact where a general `read` resolver -- locals, params,
+  fields, globals, `with` scopes, type flow -- could only guess.
+
+  The posture throughout is the resolver's existing one, stated once here rather
+  than at every Exit: the answer is `certain` or NOTHING. There is no ambiguous
+  value binding, because a wrong refs.symbol_id is exactly the name-match failure
+  this binding exists to replace. Losing an edge is the safe direction; every
+  decline is counted by reason so that the loss is auditable rather than silent. }
+
+function TCallResolver.LexicalScopeDeclaresValue(AEnclosingSymbolId: Int64;
+  const AName: string): Boolean;
+var
+  Kinds  : TSymbolKindSet;
+  ScopeId: Int64         ;
+  Scope  : TSymbol       ;
+  Parent : TSymbol       ;
+  Kids   : TList<TSymbol>;
+  S      : TSymbol       ;
+  Depth  : Integer       ;
+begin
+  Result:= False;
+  { R4: a ref with no enclosing routine -- unit-level initialisation, a const
+    initialiser -- makes this rule vacuous. It is NOT excluded from the pass. }
+  if (AEnclosingSymbolId <= 0) or (AName = '') then Exit;
+  { METHOD_KINDS is a TYPED constant, so this union cannot itself be a const.
+    Computing it once per call keeps METHOD_KINDS the single source of truth
+    without paying for the union on every child. }
+  Kinds  := METHOD_KINDS + [skLocalVar, skParam, skConstDecl, skVarDecl];
+  ScopeId:= AEnclosingSymbolId;
+  Depth  := 0;
+  while (ScopeId > 0) and (Depth < MAX_LEXICAL_DEPTH) do
+  begin
+    Inc(Depth);
+    Kids:= ChildrenOf(ScopeId);
+    if Kids <> nil then
+      for S in Kids do
+        { Unlike LookupInLexicalScopes this does not care WHICH declaration wins
+          or whether the scope is unambiguous -- any same-named one is a reason
+          to decline -- so the first hit ends the walk. }
+        if (S.Kind in Kinds) and SameText(S.Name, AName) then Exit(True);
+
+    { Climb one lexical level, and only while the enclosing scope is itself a
+      ROUTINE. A class / record / unit parent ends the chain -- the same stop
+      condition LookupInLexicalScopes uses, and for the same reason: beyond it
+      the scope is no longer nearer than the unit. }
+    Scope:= FStore.GetSymbolById(ScopeId);
+    if (Scope.Id <= 0) or (Scope.ParentId <= 0) then Exit;
+    Parent:= FStore.GetSymbolById(Scope.ParentId);
+    if (Parent.Id <= 0) or not (Parent.Kind in METHOD_KINDS) then Exit;
+    ScopeId:= Parent.Id;
+  end;
+end;
+
+function TCallResolver.EnclosingClassChainDeclares(AEnclosingSymbolId: Int64;  // dl:ok too-many-exit-points@8c65 -- REVIEWED 2026-09-23: all seven exits ARE the guard clauses the rule's own remedy asks for. Three end the climb (no symbol, no parent, no owning type) and four are independent shadow hits -- member, own const/var/method, ancestor const/var/method. Routing them through one exit needs a result variable plus a found flag, which is precisely what makes a decline path unreadable in a routine whose whole job is to decline.
+  const AName: string; out AClassId: Int64): Boolean;
+var
+  Kinds  : TSymbolKindSet;
+  ScopeId: Int64         ;
+  Scope  : TSymbol       ;
+  Parent : TSymbol       ;
+  Depth  : Integer       ;
+  A      : TTypeAncestor ;
+begin
+  Result  := False;
+  AClassId:= 0;
+  if AEnclosingSymbolId <= 0 then Exit; // R4: vacuous
+
+  { Climb to the OUTERMOST enclosing routine and take ITS owner. TypeReceiver's
+    kind-1 logic takes the enclosing symbol's ParentId in one hop, which is right
+    for a method but answers a ROUTINE -- not a class -- for any ref inside a
+    nested routine, and those refs are in scope of the owning class all the same. }
+  ScopeId:= AEnclosingSymbolId;
+  Depth  := 0;
+  while Depth < MAX_LEXICAL_DEPTH do
+  begin
+    Inc(Depth);
+    Scope:= FStore.GetSymbolById(ScopeId);
+    if (Scope.Id <= 0) or (Scope.ParentId <= 0) then Exit;
+    Parent:= FStore.GetSymbolById(Scope.ParentId);
+    if Parent.Id <= 0 then Exit;
+    if not (Parent.Kind in METHOD_KINDS) then
+    begin
+      if Parent.Kind in TYPE_KINDS then AClassId:= Parent.Id;
+      Break;
+    end;
+    ScopeId:= Parent.Id;
+  end;
+  { AClassId is set whatever the answer below: the nested-enum visibility test in
+    ResolveEnumValueRead needs the class even when nothing is shadowed. }
+  if (AClassId <= 0) or (AName = '') then Exit;
+
+  // Properties and fields, own type then resolved ancestors, in one call.
+  if LookupMemberOnType(AClassId, AName).Id > 0 then Exit(True);
+  // Class constants, class vars and methods, which LookupMemberOnType excludes.
+  Kinds:= METHOD_KINDS + [skConstDecl, skVarDecl];
+  if FindChildOfKind(AClassId, AName, Kinds, False).Id > 0 then Exit(True);
+  for A in FStore.GetTransitiveAncestors(AClassId) do
+    if A.Resolved and (A.SymbolId > 0)
+       and (FindChildOfKind(A.SymbolId, AName, Kinds, False).Id > 0) then Exit(True);
+end;
+
+function TCallResolver.UnitNameToFileId(const AReceiver: string): Int64;
+var
+  S    : TSymbol;
+  Found: Int64  ;
+  Hits : Integer;
+begin
+  Result:= 0;
+  if AReceiver = '' then Exit;
+  Found := 0;
+  Hits  := 0;
+  { FindSymbolsByExactName already handles a DOTTED unit name verbatim -- a
+    unit's symbols.name carries its dots -- so 'DRagLint.Doc.Document' matches
+    without being split. Two units of one name is a decline, not a pick: the
+    whole point of this rung is that the source qualified the value, and a
+    receiver that names two units qualifies nothing. }
+  for S in FStore.FindSymbolsByExactName(AReceiver) do
+    if S.Kind = skUnit then
+    begin
+      Inc(Hits);
+      Found:= S.FileId;
+    end;
+  if Hits = 1 then Result:= Found;
+end;
+
+function TCallResolver.CollapseIdenticalEnumCopies(const AVisible: TArray<TEnumValueDecl>;
+  ARefFileId: Int64): TArray<TEnumValueDecl>;
+
+  { 0 = the referencing file's own copy, 1 = a copy that file can see through the
+    uses graph, 2 = neither. Lower wins; ties go to the lowest id, so the choice
+    is stable across runs rather than dependent on row order.
+
+    This ordering differs DELIBERATELY from CollapseIdenticalCopies' own-file-
+    then-lowest-id. That rule feeds candidate scoring over textual uses names;
+    this one feeds a visibility test built on FILE-ID uses edges, so a lowest-id
+    twin that is not the uses target would be carried forward and then declined
+    as not visible -- losing an edge the index plainly holds. }
+  function Rank(const AE: TEnumValueDecl): Integer;
+  begin
+    if ARefFileId <= 0 then Exit(2);
+    if AE.FileId = ARefFileId then Exit(0);
+    if CandInScope(ARefFileId, AE.FileId) then Exit(1);
+    Result:= 2;
+  end;
+
+var
+  Groups : TObjectDictionary<string, TList<Integer>>;
+  Keep   : TList<Integer>;
+  Grp    : TList<Integer>;
+  Key    : string        ;
+  I, J   : Integer       ;
+  Same   : Boolean       ;
+  Rep    : Integer       ;
+  RepRank: Integer       ;
+  R      : Integer       ;
+begin
+  Result:= AVisible;
+  if Length(AVisible) < 2 then Exit;
+  Groups:= TObjectDictionary<string, TList<Integer>>.Create([doOwnsValues]);
+  Keep  := TList<Integer>.Create;
+  try
+    for I:= 0 to High(AVisible) do
+    begin
+      Key:= LowerCase(AVisible[I].QualifiedName);
+      if not Groups.TryGetValue(Key, Grp) then
+      begin
+        Grp:= TList<Integer>.Create;
+        Groups.Add(Key, Grp);
+      end;
+      Grp.Add(I);
+    end;
+    for Grp in Groups.Values do
+    begin
+      if Grp.Count = 1 then
+      begin
+        Keep.Add(Grp[0]);
+        Continue;
+      end;
+      { THE DISCRIMINATOR IS CONTENT, NOT IDENTITY -- the same rule
+        CollapseIdenticalCopies applies to types. Identical spans mean one
+        declaration the index reached by two paths; anything else is two
+        declarations that happen to share a qualified name. }
+      Same:= True;
+      for J:= 1 to Grp.Count - 1 do
+        if (AVisible[Grp[J]].StartLine <> AVisible[Grp[0]].StartLine)
+           or (AVisible[Grp[J]].EndLine <> AVisible[Grp[0]].EndLine) then
+        begin
+          Same:= False;
+          Break;
+        end;
+      if not Same then
+      begin
+        { Keep every member, so R2 still sees the real ambiguity and declines.
+          This is what stops rule 0 degrading into "take the first candidate". }
+        for J:= 0 to Grp.Count - 1 do Keep.Add(Grp[J]);
+        Continue;
+      end;
+      Rep    := Grp[0];
+      RepRank:= Rank(AVisible[Rep]);
+      for J:= 1 to Grp.Count - 1 do
+      begin
+        R:= Rank(AVisible[Grp[J]]);
+        if (R < RepRank) or ((R = RepRank) and (AVisible[Grp[J]].Id < AVisible[Rep].Id)) then
+        begin
+          Rep    := Grp[J];
+          RepRank:= R;
+        end;
+      end;
+      Keep.Add(Rep);
+      Inc(FEnumStats.DupGroupsCollapsed);
+    end;
+    { Restore the caller's original ordering. Nothing downstream settles a tie by
+      order, but a stable output keeps the counters and logs comparable run to
+      run. }
+    Keep.Sort;
+    SetLength(Result, Keep.Count);
+    for I:= 0 to Keep.Count - 1 do Result[I]:= AVisible[Keep[I]];
+  finally
+    Keep.Free;
+    Groups.Free;
+  end;
+end;
+
+function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@5ca2 -- REVIEWED 2026-09-23: each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
+
+  { R1: a value declared in AFileId / ASection is visible from ARef's file when
+    it is the SAME file (both sections of one's own unit are in scope), or it is
+    an INTERFACE declaration of a unit this file directly uses. An
+    implementation-section declaration of another unit is never visible.
+    CandInScope supplies the uses relation from the same resolved edges receiver
+    typing uses, so a unit merely present in the index is never consulted. }
+  function VisibleHere(AFileId: Int64; const ASection: string): Boolean;
+  begin
+    Result:= (AFileId = ARef.FileId)
+             or (SameText(ASection, 'interface') and CandInScope(ARef.FileId, AFileId));
+  end;
+
+  { R3(c) over one shadow map: True when ANY same-named symbol in it is visible
+    under the same R1 rule. Both shadow arms therefore apply ONE visibility rule
+    rather than two that can drift apart. }
+  function AnyVisibleIn(AMap: TObjectDictionary<string, TList<TSymbol>>;
+    const ALc: string): Boolean;
+  var
+    L: TList<TSymbol>;
+    S: TSymbol       ;
+  begin
+    Result:= False;
+    if not AMap.TryGetValue(ALc, L) then Exit;
+    for S in L do
+      if VisibleHere(S.FileId, S.Section) then Exit(True);
+  end;
+
+var
+  Lc          : string                 ;
+  Cands       : TList<TEnumValueDecl>  ;
+  Visible     : TArray<TEnumValueDecl> ;
+  E           : TEnumValueDecl         ;
+  A           : TTypeAncestor          ;
+  ClassId     : Int64                  ;
+  ClassShadows: Boolean                ;
+  OwnerOk     : Boolean                ;
+  Before      : Integer                ;
+begin
+  Result := 0;
+  AReason:= '';
+  if ARef.NameText = '' then Exit;
+  Lc:= LowerCase(ARef.NameText);
+  { Not a candidate name, and NOT counted as a decline: the store's candidate SQL
+    already filtered the stream to enum-value names, so reaching here means the
+    caller asked about a ref that was never a candidate. }
+  if not FNameToEnumValues.TryGetValue(Lc, Cands) then Exit;
+
+  { The enclosing class is needed TWICE -- by the nested-enum visibility test
+    below and by R3(b) -- and finding it costs two GetSymbolById per lexical
+    level, so it is walked once here and both answers kept. }
+  ClassShadows:= EnclosingClassChainDeclares(ARef.EnclosingSymbolId, ARef.NameText, ClassId);
+
+  { --- R1 visibility, plus the nested-enum rule (plan ruling 4). A value whose
+    enum is declared INSIDE a type is reachable by its BARE name only from that
+    type or a descendant of it; treating such a value as unit-scoped is how a
+    bare identifier binds to a declaration the compiler would not have seen. }
+  Visible:= nil;
+  for var C: TEnumValueDecl in Cands do
+  begin
+    if not VisibleHere(C.FileId, C.Section) then Continue;
+    if C.OwnerTypeId > 0 then
+    begin
+      OwnerOk:= (ClassId > 0) and (ClassId = C.OwnerTypeId);
+      if not OwnerOk and (ClassId > 0) then
+        for A in FStore.GetTransitiveAncestors(ClassId) do
+          if A.Resolved and (A.SymbolId = C.OwnerTypeId) then
+          begin
+            OwnerOk:= True;
+            Break;
+          end;
+      if not OwnerOk then Continue;
+    end;
+    Visible:= Visible + [C];
+  end;
+
+  { --- rule 0 (owner ruling 4, 2026-09-23). One declaration the index holds
+    twice is not an ambiguity, and declining it would lose a real edge for an
+    artefact of indexing. Counted rather than silent so the ruling -- taken
+    without a prior measurement, by the owner's own note -- stays auditable. }
+  Before := Length(Visible);
+  Visible:= CollapseIdenticalEnumCopies(Visible, ARef.FileId);
+  if (Before > 1) and (Length(Visible) = 1) then Inc(FEnumStats.CollapseDecisive);
+
+  { --- R2 uniqueness. Zero and many are both declines, counted APART: an
+    over-strict visibility rule and a genuine name clash are different defects
+    and would otherwise be indistinguishable from the totals. Delphi settles a
+    tie between two used units by uses-clause ORDER; this engine does not model
+    that order and must not pretend to. }
+  if Length(Visible) = 0 then
+  begin
+    AReason:= 'not-visible';
+    Inc(FEnumStats.NotVisible);
+    Exit;
+  end;
+  if Length(Visible) > 1 then
+  begin
+    AReason:= 'ambiguous';
+    Inc(FEnumStats.Ambiguous);
+    Exit;
+  end;
+  E:= Visible[0];
+
+  { --- R3 shadowing. ANY same-named declaration in a nearer or the SAME scope
+    ends it: the compiler resolves the identifier to that declaration, not to the
+    enum value, so binding here would write a wrong `certain` fact. }
+  if LexicalScopeDeclaresValue(ARef.EnclosingSymbolId, ARef.NameText) { (a) }
+     or ClassShadows then                                            { (b) }
+  begin
+    AReason:= 'shadowed';
+    Inc(FEnumStats.Shadowed);
+    Exit;
+  end;
+  { (c) unit scope: a unit-level const/var, a free routine, or a TYPE spelled
+    like the value. FNameToCands holds class/interface/record/type/enum symbols
+    and never enum_value (GetTypeCandidates' own WHERE), so a value can never
+    shadow ITSELF here. A type ALIAS spelled like the value does decline, and
+    that is intended -- the identifier is genuinely ambiguous to a reader. }
+  if AnyVisibleIn(FNameToUnitValues, Lc)
+     or AnyVisibleIn(FNameToRoutines, Lc)
+     or AnyVisibleIn(FNameToCands   , Lc) then
+  begin
+    AReason:= 'shadowed';
+    Inc(FEnumStats.Shadowed);
+    Exit;
+  end;
+
+  Result:= E.Id;
+  Inc(FEnumStats.Bound);
 end;
 
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
@@ -2082,6 +2556,58 @@ begin
         end;
         Exit;
       end;
+    end;
+  end;
+
+  { 3c. ENUM VALUE through a qualified receiver (2026-09-23,
+    enum-value-ref-binding, spec rule R6). `TEnum.value` types its receiver to
+    the enum -- enums joined GetTypeCandidates on 2026-08-30 -- then finds no
+    routine and no property/field, and until now fell out unbound; the store's
+    routine branch then refused it (QIsRoutine) and wrote NOTHING, so
+    refs.symbol_id stayed NULL. `Unit.value` never types at all.
+
+    Placed AFTER 3b and BEFORE rung 4 on purpose: a routine or a property on the
+    receiver still wins, and rungs 4/5 still see the ref when this does not fire.
+    Gated on the name map first, so the common case costs one dictionary miss.
+
+    `Rcv <> ''` is load-bearing rather than tidiness: TypeReceiver returns the
+    ENCLOSING CLASS for a bare or `Self` receiver, so without it a bare call
+    could reach this rung carrying a receiver the source never wrote.
+
+    Marks the edge ValueOnly -- refs.symbol_id and nothing else: no call_edges
+    row (CanBeCallTarget stays routine-only) and no member_accesses row (an enum
+    value carries no mode and no accessor to record). }
+  if SameText(ACallRef.Kind, 'member-access') and (Rcv <> '')
+     and FNameToEnumValues.ContainsKey(LowerCase(ACallRef.NameText)) then
+  begin
+    var V: Int64:= 0;
+    if (TypeId > 0) and (FStore.GetSymbolById(TypeId).Kind = skEnum) then
+      V:= FindChildOfKind(TypeId, ACallRef.NameText, [skEnumValue], False).Id
+    else if TypeId = 0 then
+    begin
+      { A UNIT-name receiver: `Pipes.Protocol.cmdDelta`. Narrow the candidates to
+        that unit's file -- its interface section, or either section when the
+        unit IS this file -- and bind only when exactly one survives. R3 is moot
+        here: the source qualified the name itself, so nothing shadows it. }
+      var UnitFile: Int64:= UnitNameToFileId(Rcv);
+      if UnitFile > 0 then
+      begin
+        var InUnit: TArray<TEnumValueDecl>:= nil;
+        for var C: TEnumValueDecl in FNameToEnumValues[LowerCase(ACallRef.NameText)] do
+          if (C.FileId = UnitFile)
+             and (SameText(C.Section, 'interface') or (UnitFile = ACallRef.FileId)) then
+            InUnit:= InUnit + [C];
+        InUnit:= CollapseIdenticalEnumCopies(InUnit, ACallRef.FileId);
+        if Length(InUnit) = 1 then V:= InUnit[0].Id;
+      end;
+    end;
+    if V > 0 then
+    begin
+      Result.TargetSymbolId:= V;
+      Result.Confidence    := 'certain';
+      Result.ValueOnly     := True;
+      Inc(FEnumStats.Bound);
+      Exit;
     end;
   end;
 
