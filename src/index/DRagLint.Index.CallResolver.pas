@@ -35,6 +35,40 @@ type
   /// </remarks>
   TSymbolKindSet = set of TSymbolKind;
 
+  /// <summary>2026-09-23 (parenless-call binding, resolver 1.7.0-alpha): per-run
+  /// counters of the parenless-call pass, printed on the calls stage's
+  /// `parenless:` ResolveLog line.</summary>
+  /// <remarks>
+  /// Every DECLINE is counted by reason. A declined ref writes nothing, so
+  /// these counters are the only trace of what the pass refused, and the only
+  /// way to tell an over-strict rule from a corpus that has nothing to bind.
+  /// Bound + the seven declines = the refs the pass was asked about.
+  /// </remarks>
+  TParenlessResolveStats = record
+    /// <summary>Refs that earned a call edge.</summary>
+    Bound      : Int64;
+    /// <summary>Declined: no routine of the name is visible from the ref.</summary>
+    NotFound   : Int64;
+    /// <summary>Declined: a nearer or same-scope VALUE of the name (local,
+    /// parameter, field, property, const, var, type, enum value) wins.</summary>
+    Shadowed   : Int64;
+    /// <summary>Declined: the routine the name reaches is a procedure, needs an
+    /// argument, or shares its name with an overload that does.</summary>
+    NotCallable: Int64;
+    /// <summary>Declined: the site takes the routine as a VALUE -- `@F`, or the
+    /// whole right side of an assignment / a whole argument whose declared type
+    /// is procedural.</summary>
+    ProcValue  : Int64;
+    /// <summary>Declined: the enclosing routine contains a `with`, whose
+    /// subject may supply the name.</summary>
+    WithScope  : Int64;
+    /// <summary>Declined: a receiver other than Self qualifies the name.</summary>
+    Qualified  : Int64;
+    /// <summary>Declined: the ref's source line could not be read, or the file
+    /// no longer matches the index.</summary>
+    Unreadable : Int64;
+  end;
+
   /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare
   /// once (Create builds the name-candidate + file-scope maps from the whole DB),
   /// then call ResolveOne per call-site ref.</summary>
@@ -73,6 +107,8 @@ type
     // counted by reason, because a pass that answers `certain` or nothing leaves
     // no other trace of what it refused.
     FEnumStats       : TEnumResolveStats;
+    // 2026-09-23: per-run counters of the parenless-call pass, same reason.
+    FParenlessStats  : TParenlessResolveStats;
     // Declaring file id -> the resolved target file ids it can see (uses graph).
     FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
@@ -576,6 +612,106 @@ type
     /// `Unit.value` path alike -- contributes to it; see the body.</remarks>
     function CollapseIdenticalEnumCopies(const AVisible: TArray<TEnumValueDecl>;
       ARefFileId: Int64): TArray<TEnumValueDecl>;
+
+    { ---- 2026-09-23: the parenless-call pass (resolver 1.7.0-alpha). ---- }
+
+    /// <summary>Walks the lexical scopes of AEnclosingSymbolId outward and stops
+    /// at the FIRST level that declares AName: its routines go into AMatches;
+    /// a local, parameter, const or var of the name answers True instead.</summary>
+    /// <param name="AEnclosingSymbolId">The ref's enclosing routine; 0 is vacuous.</param>
+    /// <param name="AName">The identifier as written.</param>
+    /// <param name="AMatches">Receives the routines of the nearest declaring
+    /// level; left untouched when the walk finds a value or nothing.</param>
+    /// <param name="AValue">Out: the shadowing value symbol, Default when none.</param>
+    /// <returns>True when a VALUE of the name is the nearest declaration.</returns>
+    function LexicalParenlessLookup(AEnclosingSymbolId: Int64; const AName: string;
+      AMatches: TList<TSymbol>; out AValue: TSymbol): Boolean;
+    /// <summary>Adds every routine named AName that ATypeId or one of its resolved
+    /// ancestors declares to AMatches. No-op for ATypeId &lt;= 0.</summary>
+    /// <param name="ATypeId">A class/record/interface symbol id.</param>
+    /// <param name="AName">The member name.</param>
+    /// <param name="AMatches">Appended to; never cleared.</param>
+    procedure AddMethodsOnTypeChain(ATypeId: Int64; const AName: string; AMatches: TList<TSymbol>);
+    /// <summary>The class-scope rung: True when AClassId or an ancestor declares
+    /// a property, field, const or var named AName (a shadow); otherwise its
+    /// methods of that name are added to AMatches.</summary>
+    /// <param name="AClassId">The ref's enclosing class.</param>
+    /// <param name="AName">The identifier as written.</param>
+    /// <param name="AMatches">Appended to when nothing shadows.</param>
+    /// <returns>True when a value member shadows the name.</returns>
+    function ClassChainParenlessLookup(AClassId: Int64; const AName: string;
+      AMatches: TList<TSymbol>): Boolean;
+    /// <summary>True when a unit-level const/var, a type, or an enum value named
+    /// ALc is visible from ARefFileId (own unit, or the interface of a used unit).</summary>
+    /// <param name="ARefFileId">The referencing file.</param>
+    /// <param name="ALc">The lowercased identifier.</param>
+    /// <returns>True when such a declaration is visible.</returns>
+    function UnitScopeDeclaresValue(ARefFileId: Int64; const ALc: string): Boolean;
+    /// <summary>The unit rung of a bare name: the routines named ALc declared in
+    /// ARefFileId itself or, when it has none, in the interface of a unit it
+    /// uses. Same two rungs as LookupUnitLevelRoutine.</summary>
+    /// <param name="ARefFileId">The referencing file.</param>
+    /// <param name="ALc">The lowercased identifier.</param>
+    /// <param name="AMatches">Appended to; never cleared.</param>
+    procedure AddVisibleUnitRoutines(ARefFileId: Int64; const ALc: string; AMatches: TList<TSymbol>);
+    /// <summary>Collects the routines a parenless `read` of ARef.NameText can
+    /// reach, nearest scope first: lexical, then the enclosing class chain, then
+    /// the unit and the units it uses.</summary>
+    /// <param name="ARef">The candidate read ref.</param>
+    /// <param name="AReceiver">'' for a bare name, 'Self' for `Self.Name`.</param>
+    /// <param name="AMatches">Receives the routines of the answering scope.</param>
+    /// <returns>'' when AMatches holds the answer; otherwise the decline reason,
+    /// 'shadowed' or 'not-found'.</returns>
+    function FindParenlessCandidates(const ARef: TReference; const AReceiver: string;
+      AMatches: TList<TSymbol>): string;
+    /// <summary>True when the enclosing routine's text, from its first line up
+    /// to the ref, contains the keyword `with` outside comments and strings.</summary>
+    /// <param name="ARef">The candidate read ref.</param>
+    /// <param name="ALines">The ref's source file.</param>
+    /// <returns>True when a `with` may supply the name.</returns>
+    /// <remarks>Deliberately coarse: any `with` earlier in the routine declines,
+    /// whether or not its statement encloses the ref. A false decline loses an
+    /// edge; a missed `with` would write a wrong one.</remarks>
+    function EnclosingBodyUsesWith(const ARef: TReference; ALines: TStringList): Boolean;
+    /// <summary>True when ATypeText names a PROCEDURAL type: written inline
+    /// (`function: Integer`, `reference to ...`, `TFunc&lt;...&gt;`), or a type
+    /// alias in this index whose declaration is one.</summary>
+    /// <param name="ATypeText">A stored declaration's type text.</param>
+    /// <param name="AFileId">The file whose scope the type name is resolved in.</param>
+    /// <returns>True for a procedural type; False for any other or unknown type.</returns>
+    function IsProceduralTypeText(const ATypeText: string; AFileId: Int64): Boolean;
+    /// <summary>The declared type text of the target of `ALhs :=` on ALine: a
+    /// local, parameter, `Result`, class member, unit-level var, or a member of a
+    /// typed receiver. '' when it cannot be typed.</summary>
+    /// <param name="ARef">The read ref on the assignment's right side.</param>
+    /// <param name="ALine">The ref's source line.</param>
+    /// <param name="ALhs">ALine up to (not including) the `:=`.</param>
+    /// <returns>The type text, or ''.</returns>
+    function AssignedTypeText(const ARef: TReference; const ALine, ALhs: string): string;
+    /// <summary>True when the routine called at AOpenCol's `(` declares a
+    /// procedural parameter at AArgIndex, in ANY of its visible candidates.</summary>
+    /// <param name="ARef">The read ref standing as that whole argument.</param>
+    /// <param name="ALine">The ref's source line.</param>
+    /// <param name="AOpenCol">1-based column of the argument list's `(`.</param>
+    /// <param name="AArgIndex">0-based argument position of the ref.</param>
+    /// <param name="AResultType">The parenless target's return type; a
+    /// parameter of exactly that type takes the CALL's result.</param>
+    /// <returns>True when the argument may be a procedure value.</returns>
+    function CalleeTakesProcedural(const ARef: TReference; const ALine: string;
+      AOpenCol, AArgIndex: Integer; const AResultType: string): Boolean;
+    /// <summary>True when the site hands the routine over as a VALUE rather than
+    /// calling it: `@Name`, or Name as the whole right side of an assignment /
+    /// a whole argument whose declared type is procedural.</summary>
+    /// <param name="ARef">The candidate read ref.</param>
+    /// <param name="ALine">Its source line.</param>
+    /// <param name="AReceiver">'' or 'Self'.</param>
+    /// <param name="AResultType">The target's return type text.</param>
+    /// <returns>True when the read is (or may be) a procedure value.</returns>
+    function ParenlessIsProcValue(const ARef: TReference; const ALine, AReceiver,
+      AResultType: string): Boolean;
+    /// <summary>Counts one outcome of ResolveParenlessRead into FParenlessStats.</summary>
+    /// <param name="AReason">'' for a binding, else the decline reason.</param>
+    procedure TallyParenless(const AReason: string);
   public
     { Probes AFileId (reading + caching it if not already read) and reports
       whether its on-disk content still matches what the index recorded. Called
@@ -691,6 +827,47 @@ type
     /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
     /// pass, so these are that pass's totals.</remarks>
     property EnumStats: TEnumResolveStats read FEnumStats;
+
+    /// <summary>D1 (2026-09-23, resolver 1.7.0-alpha): decide whether a `read`
+    /// ref is a PARENLESS CALL -- a routine with no required parameters named
+    /// without parentheses in an expression (`Assert(NextId &gt; 0)`,
+    /// `N := NextId`, a bare `Tick` inside its class) -- and if so, to what.</summary>
+    /// <param name="ARef">The candidate read ref. FileId, NameText, StartLine,
+    /// StartCol and EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; otherwise the decline
+    /// reason -- 'unreadable' | 'qualified' | 'with-scope' | 'shadowed' |
+    /// 'not-found' | 'not-callable' | 'proc-value'.</param>
+    /// <returns>An edge whose TargetSymbolId is the called routine and whose
+    /// Confidence is 'certain' or 'ambiguous' (an override or duplicate set, the
+    /// same policy as a `call` ref), or TargetSymbolId = 0 for every decline.</returns>
+    /// <remarks>
+    /// The NEAREST declaration of the name decides, exactly as the compiler's
+    /// scoping does: lexical scopes, then the enclosing class and its ancestors,
+    /// then the own unit, then the interfaces of the units it uses. When that
+    /// declaration is a VALUE (local, parameter, field, property, const, var,
+    /// type, enum value) the read is not a call -- 'shadowed'. When it is a
+    /// routine set, every member must return a value and accept zero arguments,
+    /// or the read may be a procedure VALUE -- 'not-callable'.
+    ///
+    /// A procedure value is also refused by SITE: `@Name`, or Name as the whole
+    /// right side of an assignment or a whole argument whose declared type is
+    /// procedural. A target type the index cannot see (an RTL `TFunc&lt;T&gt;`
+    /// named through an alias it does not hold, a property of a class outside the
+    /// index) is not detected, and the read binds -- recorded as the pass's known
+    /// blind spot.
+    ///
+    /// Any `with` earlier in the enclosing routine declines ('with-scope'); a
+    /// receiver other than Self declines ('qualified' -- a qualified parenless
+    /// call is a `member-access` ref and the main stream owns it).
+    /// Counted into ParenlessStats, one outcome per call.
+    /// </remarks>
+    function ResolveParenlessRead(const ARef: TReference; out AReason: string): TCallEdge;
+
+    /// <summary>Per-run counters of the parenless-call pass. Read by the calls
+    /// stage for its ResolveLog line.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
+    /// pass.</remarks>
+    property ParenlessStats: TParenlessResolveStats read FParenlessStats;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -1262,6 +1439,7 @@ begin
   FNameToEnumValues:= TObjectDictionary<string, TList<TEnumValueDecl>>.Create([doOwnsValues]);
   FNameToUnitValues:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FEnumStats  := Default(TEnumResolveStats);
+  FParenlessStats:= Default(TParenlessResolveStats);
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
@@ -2103,6 +2281,681 @@ begin
 
   Result:= E.Id;
   Inc(FEnumStats.Bound);
+end;
+
+{ 2026-09-23 (parenless-call binding, resolver 1.7.0-alpha) -- defect D1.
+
+  Delphi lets a routine with no required parameters be called WITHOUT
+  parentheses. In statement position (`NextId;`) the parser records a `call` ref
+  and the main stream resolves it. In EXPRESSION position -- `Assert(NextId > 0)`,
+  `N := NextId`, `Consume(NextId)`, a bare `Tick` inside its own class -- it
+  records a `read` ref, and until this pass the calls stage never looked at one.
+  So none of those sites owned a call_edges row, and every call-based consumer
+  (assert-with-side-effect, the purity callee walk, find-callers --resolved, the
+  who-calls charts) missed them. Measured on ORM3 CLIENT at resolver 1.6.0:
+  1,715 such unbound reads over 59 routine names.
+
+  The layer is the RESOLVER, not the extractor: the ref already carries its name,
+  position and enclosing routine. What was missing is the decision "is this read
+  a call?", and these routines make it with the posture the rest of this unit
+  takes -- an edge, or NOTHING, with every refusal counted by reason. }
+
+{ The RETURN type text of a stored routine signature: the text after the colon
+  that follows the (optional) parameter list. '' for a procedure, a constructor,
+  or a shape this does not recognise. }
+function SignatureReturnType(const ASignature: string): string;
+var
+  Rest : string ;
+  Depth: Integer;
+  K    : Integer;
+  InStr: Boolean;
+begin
+  Result:= '';
+  Rest  := TrimLeft(ASignature);
+  if (Rest <> '') and (Rest[1] = '(') then
+  begin
+    Depth:= 0;
+    InStr:= False;
+    for K:= 1 to Length(Rest) do
+    begin
+      if InStr then
+        InStr:= Rest[K] <> ''''
+      else if Rest[K] = '''' then
+        InStr:= True
+      else if Rest[K] = '(' then
+        Inc(Depth)
+      else if Rest[K] = ')' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          Rest:= TrimLeft(Copy(Rest, K + 1, MaxInt));
+          Break;
+        end;
+      end;
+    end;
+    if Depth <> 0 then Exit;
+  end;
+  if (Rest = '') or (Rest[1] <> ':') then Exit;
+  Rest:= Trim(Copy(Rest, 2, MaxInt));
+  K   := Pos(';', Rest);
+  if K > 0 then Rest:= Trim(Copy(Rest, 1, K - 1));
+  Result:= Rest;
+end;
+
+{ The declared TYPE text of the AIndex-th (0-based) parameter of a stored
+  signature. '' when there is no such parameter, it is untyped, or the
+  signature has no parameter list. Groups are split at top-level ';', names at
+  ','; the type is the text after the group's ':' up to any default. }
+function ParamTypeAt(const ASignature: string; AIndex: Integer): string;
+var
+  Open  : Integer;
+  Depth : Integer;
+  K     : Integer;
+  Start : Integer;
+  InStr : Boolean;
+  Group : string ;
+  Colon : Integer;
+  Count : Integer;
+  Remain: Integer;
+
+  { One parameter group: consume its names from Remain; when the wanted index
+    falls inside it, answer the group's type. }
+  function TakeGroup(const AGroup: string): Boolean;
+  var
+    TypeText: string ;
+    Eq      : Integer;
+  begin
+    Colon:= Pos(':', AGroup);
+    if Colon > 0 then Count:= Length(SplitString(Copy(AGroup, 1, Colon - 1), ','))
+    else Count:= Length(SplitString(AGroup, ','));
+    Result:= Remain < Count;
+    if not Result then
+    begin
+      Dec(Remain, Count);
+      Exit;
+    end;
+    if Colon = 0 then Exit;
+    TypeText:= Copy(AGroup, Colon + 1, MaxInt);
+    Eq      := Pos('=', TypeText);
+    if Eq > 0 then TypeText:= Copy(TypeText, 1, Eq - 1);
+    ParamTypeAt:= Trim(TypeText);
+  end;
+
+begin
+  Result:= '';
+  Open  := Pos('(', ASignature);
+  if (Open = 0) or (AIndex < 0) then Exit;
+  Remain:= AIndex;
+  Depth := 0;
+  InStr := False;
+  Start := Open + 1;
+  for K:= Open to Length(ASignature) do
+  begin
+    if InStr then
+    begin
+      InStr:= ASignature[K] <> '''';
+      Continue;
+    end;
+    case ASignature[K] of
+      '''': InStr:= True;
+      '(', '[': Inc(Depth);
+      ']': Dec(Depth);
+      ')', ';':
+        begin
+          if ASignature[K] = ')' then Dec(Depth);
+          if (Depth = 0) or ((Depth = 1) and (ASignature[K] = ';')) then
+          begin
+            Group:= Copy(ASignature, Start, K - Start);
+            Start:= K + 1;
+            if (Trim(Group) <> '') and TakeGroup(Group) then Exit;
+            if Depth = 0 then Exit;
+          end;
+        end;
+    end;
+  end;
+end;
+
+{ True for a routine a parenless read may CALL: a function (unit-level or a
+  method with a return type) that accepts zero arguments. A procedure named
+  bare in an expression cannot be a call, and a routine that needs an argument
+  can only be a procedure value there. }
+function IsParenlessCallable(const ASym: TSymbol): Boolean;
+var
+  Lo, Hi: Integer;
+begin
+  Result:= (ASym.Kind in [skFunction, skMethod])
+           and (SignatureReturnType(ASym.Signature) <> '')
+           and SignatureArityRange(ASym.Signature, Lo, Hi)
+           and (Lo = 0);
+end;
+
+{ True when AText begins with the keyword AWord followed by a non-identifier
+  character or the end -- so 'function: Integer' matches 'function' and
+  'FunctionList' does not. AText must already be lowercased. }
+function StartsWithWord(const AText, AWord: string): Boolean;
+begin
+  Result:= StartsStr(AWord, AText)
+           and ((Length(AText) = Length(AWord)) or not IsIdentPart(AText[Length(AWord) + 1]));
+end;
+
+{ True when AAfter -- the rest of a line after an identifier -- ends the
+  statement there: nothing, `;`, a comment, or `end` / `else`. }
+function EndsStatement(const AAfter: string): Boolean;
+var
+  L: string;
+begin
+  L     := LowerCase(AAfter);
+  Result:= (L = '') or StartsStr(';', L) or StartsStr('//', L) or StartsStr('{', L) or StartsStr('(*', L);
+  Result:= Result or StartsWithWord(L, 'end') or StartsWithWord(L, 'else');
+end;
+
+{ True when a declaration's type text is itself a procedural type. }
+function IsProceduralText(const AText: string): Boolean;
+var
+  L: string;
+begin
+  L:= LowerCase(Trim(AText));
+  Result:= StartsWithWord(L, 'procedure') or StartsWithWord(L, 'function')
+           or StartsStr('reference to', L) or StartsStr('tfunc<', L);
+end;
+
+// One line of a `with` scan. AInBrace / AInStar carry an open brace or
+// paren-star comment across lines; a // comment ends the line; string literals
+// are skipped. True when the keyword `with` occurs outside all of them.
+function LineHasWithKeyword(const ALine: string; var AInBrace, AInStar: Boolean): Boolean;
+
+  { True when ALine[K] opens the two-character token ATwo. }
+  function OpensPair(K: Integer; const ATwo: string): Boolean;
+  begin
+    Result:= (K < Length(ALine)) and (ALine[K] = ATwo[1]) and (ALine[K + 1] = ATwo[2]);
+  end;
+
+  { Consumes ALine[K] when it is comment or string text, or opens either,
+    advancing K past what it consumed. False leaves K untouched. }
+  function SkipNonCode(var K: Integer): Boolean;
+  begin
+    Result:= True;
+    if AInBrace then
+      AInBrace:= ALine[K] <> '}'
+    else if AInStar then
+    begin
+      AInStar:= not OpensPair(K, '*)');
+      if not AInStar then Inc(K);
+    end
+    else if ALine[K] = '{' then
+      AInBrace:= True
+    else if OpensPair(K, '(*') then
+    begin
+      AInStar:= True;
+      Inc(K);
+    end
+    else if ALine[K] = '''' then
+    begin
+      Inc(K);
+      while (K <= Length(ALine)) and (ALine[K] <> '''') do Inc(K);
+    end
+    else
+      Result:= False;
+    if Result then Inc(K);
+  end;
+
+var
+  K, W: Integer;
+begin
+  Result:= False;
+  K     := 1;
+  while (K <= Length(ALine)) and not Result and not OpensPair(K, '//') do
+    if not SkipNonCode(K) then
+    begin
+      W:= K;
+      while (K <= Length(ALine)) and IsIdentPart(ALine[K]) do Inc(K);
+      if K = W then
+        Inc(K) { not an identifier character: step over it }
+      else
+        Result:= IsIdentStart(ALine[W]) and SameText(Copy(ALine, W, K - W), 'with');
+    end;
+end;
+
+{ Scans ABefore -- a line up to a read ref standing as a whole argument --
+  right to left for the bracket that opens its argument list. AOpenCol receives
+  that bracket's 1-based column and AArgIndex the ref's 0-based argument
+  position. False when no bracket opens on this line, or when it is a `[`: a set
+  or open-array constructor takes values, never procedures. }
+function FindArgumentListOpen(const ABefore: string; out AOpenCol, AArgIndex: Integer): Boolean;
+var
+  K, Depth: Integer;
+begin
+  Result   := False;
+  AOpenCol := 0;
+  AArgIndex:= 0;
+  Depth    := 0;
+  K        := Length(ABefore);
+  while (K >= 1) and (AOpenCol = 0) do
+  begin
+    case ABefore[K] of
+      '''':
+        begin
+          Dec(K);
+          while (K >= 1) and (ABefore[K] <> '''') do Dec(K);
+        end;
+      ')', ']': Inc(Depth);
+      '(', '[':
+        if Depth > 0 then Dec(Depth)
+        else
+        begin
+          AOpenCol:= K;
+          Result  := ABefore[K] = '(';
+        end;
+      ',': if Depth = 0 then Inc(AArgIndex);
+    end;
+    Dec(K);
+  end;
+end;
+
+function TCallResolver.LexicalParenlessLookup(AEnclosingSymbolId: Int64;
+  const AName: string; AMatches: TList<TSymbol>; out AValue: TSymbol): Boolean;
+var
+  ValueKinds: TSymbolKindSet;
+  Found     : TList<TSymbol>;
+  ScopeId   : Int64         ;
+  Scope     : TSymbol       ;
+  Kids      : TList<TSymbol>;
+  S         : TSymbol       ;
+  Depth     : Integer       ;
+begin
+  AValue    := Default(TSymbol);
+  ValueKinds:= [skLocalVar, skParam, skConstDecl, skVarDecl];
+  ScopeId   := AEnclosingSymbolId;
+  Depth     := 0;
+  Found     := TList<TSymbol>.Create;
+  try
+    while (ScopeId > 0) and (Depth < MAX_LEXICAL_DEPTH) and (Found.Count = 0) and (AValue.Id = 0) do
+    begin
+      Inc(Depth);
+      Kids:= ChildrenOf(ScopeId);
+      if Kids <> nil then
+        for S in Kids do
+          if SameText(S.Name, AName) and (S.Kind in ValueKinds) then AValue:= S
+          else if SameText(S.Name, AName) and (S.Kind in METHOD_KINDS) then Found.Add(S);
+      { Climb only while the enclosing scope is itself a routine -- the stop
+        condition LookupInLexicalScopes uses. }
+      Scope:= FStore.GetSymbolById(ScopeId);
+      ScopeId:= 0;
+      if (Scope.Id > 0) and (Scope.ParentId > 0)
+         and (FStore.GetSymbolById(Scope.ParentId).Kind in METHOD_KINDS) then ScopeId:= Scope.ParentId;
+    end;
+    { A level declaring BOTH a value and a routine of one name is not legal
+      Delphi; should the index say so anyway, the value wins and nothing is
+      offered as a call target. }
+    Result:= AValue.Id > 0;
+    if not Result then AMatches.AddRange(Found);
+  finally
+    Found.Free;
+  end;
+end;
+
+procedure TCallResolver.AddMethodsOnTypeChain(ATypeId: Int64; const AName: string;
+  AMatches: TList<TSymbol>);
+var
+  A: TTypeAncestor;
+
+  procedure AddFrom(AOwnerId: Int64);
+  var
+    Kids: TList<TSymbol>;
+    S   : TSymbol       ;
+  begin
+    Kids:= ChildrenOf(AOwnerId);
+    if Kids <> nil then
+      for S in Kids do
+        if (S.Kind in METHOD_KINDS) and SameText(S.Name, AName) then AMatches.Add(S);
+  end;
+
+begin
+  if ATypeId <= 0 then Exit;
+  AddFrom(ATypeId);
+  for A in FStore.GetTransitiveAncestors(ATypeId) do
+    if A.Resolved and (A.SymbolId > 0) then AddFrom(A.SymbolId);
+end;
+
+function TCallResolver.ClassChainParenlessLookup(AClassId: Int64; const AName: string;
+  AMatches: TList<TSymbol>): Boolean;
+var
+  Kinds: TSymbolKindSet;
+  A    : TTypeAncestor ;
+begin
+  Kinds := [skConstDecl, skVarDecl];
+  { Properties and fields, own type then ancestors, in one call; then class
+    constants and class vars, which LookupMemberOnType excludes. }
+  Result:= (LookupMemberOnType(AClassId, AName).Id > 0)
+           or (FindChildOfKind(AClassId, AName, Kinds, False).Id > 0);
+  if not Result then
+    for A in FStore.GetTransitiveAncestors(AClassId) do
+      if A.Resolved and (A.SymbolId > 0)
+         and (FindChildOfKind(A.SymbolId, AName, Kinds, False).Id > 0) then Result:= True;
+  if not Result then AddMethodsOnTypeChain(AClassId, AName, AMatches);
+end;
+
+function TCallResolver.UnitScopeDeclaresValue(ARefFileId: Int64; const ALc: string): Boolean;
+
+  { R1 of the enum binding, verbatim: the own unit sees both sections, another
+    unit only its interface, and only when this file uses it. }
+  function Visible(AFileId: Int64; const ASection: string): Boolean;
+  begin
+    Result:= (AFileId = ARefFileId)
+             or (SameText(ASection, 'interface') and CandInScope(ARefFileId, AFileId));
+  end;
+
+var
+  L: TList<TSymbol>       ;
+  E: TList<TEnumValueDecl>;
+  S: TSymbol              ;
+  V: TEnumValueDecl       ;
+begin
+  Result:= False;
+  if FNameToUnitValues.TryGetValue(ALc, L) then
+    for S in L do Result:= Result or Visible(S.FileId, S.Section);
+  if not Result and FNameToCands.TryGetValue(ALc, L) then
+    for S in L do Result:= Result or Visible(S.FileId, S.Section);
+  if not Result and FNameToEnumValues.TryGetValue(ALc, E) then
+    for V in E do Result:= Result or Visible(V.FileId, V.Section);
+end;
+
+procedure TCallResolver.AddVisibleUnitRoutines(ARefFileId: Int64; const ALc: string;
+  AMatches: TList<TSymbol>);
+var
+  Cands : TList<TSymbol>;
+  S     : TSymbol       ;
+  Before: Integer       ;
+begin
+  if not FNameToRoutines.TryGetValue(ALc, Cands) then Exit;
+  Before:= AMatches.Count;
+  { RUNG 1 -- the ref's own unit, which shadows anything a used unit exports. }
+  for S in Cands do
+    if S.FileId = ARefFileId then AMatches.Add(S);
+  if AMatches.Count > Before then Exit;
+  { RUNG 2 -- the interface of a unit this file uses. }
+  for S in Cands do
+    if SameText(S.Section, 'interface') and CandInScope(ARefFileId, S.FileId) then AMatches.Add(S);
+end;
+
+function TCallResolver.FindParenlessCandidates(const ARef: TReference; const AReceiver: string;
+  AMatches: TList<TSymbol>): string;
+var
+  ClassId: Int64  ;
+  Value  : TSymbol;
+  Lc     : string ;
+begin
+  Result:= '';
+  Lc    := LowerCase(ARef.NameText);
+  { 1. Lexical scopes -- a bare name only; `Self.Name` names a member. }
+  if (AReceiver = '') and LexicalParenlessLookup(ARef.EnclosingSymbolId, ARef.NameText, AMatches, Value) then
+    Result:= 'shadowed';
+  { 2. The enclosing class and its ancestors (the outermost routine's owner, so
+    a nested routine inside a method is in the class's scope too). }
+  if (Result = '') and (AMatches.Count = 0) then
+  begin
+    EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
+    if (ClassId > 0) and ClassChainParenlessLookup(ClassId, ARef.NameText, AMatches) then
+      Result:= 'shadowed';
+  end;
+  { 3. The unit, then the interfaces of the units it uses. A value spelled like
+    the routine anywhere visible declines -- Delphi settles such a clash by
+    uses-clause ORDER, which this engine does not model. }
+  if (Result = '') and (AMatches.Count = 0) then
+  begin
+    if AReceiver <> '' then Result:= 'not-found'
+    else if UnitScopeDeclaresValue(ARef.FileId, Lc) then Result:= 'shadowed'
+    else AddVisibleUnitRoutines(ARef.FileId, Lc, AMatches);
+  end;
+  if (Result = '') and (AMatches.Count = 0) then Result:= 'not-found';
+end;
+
+function TCallResolver.EnclosingBodyUsesWith(const ARef: TReference; ALines: TStringList): Boolean;
+const
+  { When the routine's own first line is unknown, scan this far back instead --
+    a bound, not a model: a longer routine can only produce a false decline. }
+  FALLBACK_SCAN_LINES = 400;
+var
+  Encl   : TSymbol;
+  From   : Integer;
+  Ln     : Integer;
+  S      : string ;
+  InBrace: Boolean;
+  InStar : Boolean;
+begin
+  Result:= False;
+  if ARef.EnclosingSymbolId <= 0 then Exit;
+  Encl:= FStore.GetSymbolById(ARef.EnclosingSymbolId);
+  From:= (if Encl.ImplStartLine > 0 then Encl.ImplStartLine else Encl.StartLine);
+  if (From <= 0) or (From > ARef.StartLine) then From:= Max(1, ARef.StartLine - FALLBACK_SCAN_LINES);
+  InBrace:= False;
+  InStar := False;
+  Ln     := From;
+  while (Ln <= ARef.StartLine) and (Ln <= ALines.Count) and not Result do
+  begin
+    S:= ALines[Ln - 1];
+    if Ln = ARef.StartLine then S:= Copy(S, 1, ARef.StartCol - 1);
+    Result:= LineHasWithKeyword(S, InBrace, InStar);
+    Inc(Ln);
+  end;
+end;
+
+function TCallResolver.IsProceduralTypeText(const ATypeText: string; AFileId: Int64): Boolean;
+var
+  Id: Int64;
+  S : TSymbol;
+begin
+  Result:= IsProceduralText(ATypeText);
+  if Result or (Trim(ATypeText) = '') then Exit;
+  Id:= ResolveTypeNameToSymbol(ATypeText, AFileId);
+  if Id <= 0 then Exit;
+  S     := FStore.GetSymbolById(Id);
+  Result:= (S.Kind = skTypeAlias) and IsProceduralText(S.Signature);
+end;
+
+function TCallResolver.AssignedTypeText(const ARef: TReference; const ALine, ALhs: string): string;
+var
+  Lhs      : string ;
+  LeafStart: Integer;
+  Leaf     : string ;
+  Rcv      : string ;
+  ClassId  : Int64  ;
+  S        : TSymbol;
+  Scratch  : TList<TSymbol>;
+begin
+  Result   := '';
+  Lhs      := TrimRight(ALhs);
+  LeafStart:= Length(Lhs);
+  while (LeafStart >= 1) and IsIdentPart(Lhs[LeafStart]) do Dec(LeafStart);
+  Inc(LeafStart);
+  Leaf:= Copy(Lhs, LeafStart, MaxInt);
+  if (Leaf = '') or not IsIdentStart(Leaf[1]) then Exit;
+  { Lhs is a prefix of ALine, so LeafStart is the leaf's column in ALine too. }
+  Rcv:= ExtractReceiverExpr(ALine, LeafStart);
+  if Rcv <> '' then
+    Result:= LookupMemberOnType(TypeReceiver(ARef, Rcv), Leaf).Signature
+  else if SameText(Leaf, 'Result') then
+    Result:= SignatureReturnType(FStore.GetSymbolById(ARef.EnclosingSymbolId).Signature)
+  else
+  begin
+    Scratch:= TList<TSymbol>.Create;
+    try
+      if LexicalParenlessLookup(ARef.EnclosingSymbolId, Leaf, Scratch, S) then Result:= S.Signature;
+    finally
+      Scratch.Free;
+    end;
+    if Result = '' then
+    begin
+      EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
+      if ClassId > 0 then Result:= LookupMemberOnType(ClassId, Leaf).Signature;
+    end;
+    if (Result = '') and FNameToUnitValues.ContainsKey(LowerCase(Leaf)) then
+      for S in FNameToUnitValues[LowerCase(Leaf)] do
+        if (Result = '') and ((S.FileId = ARef.FileId)
+           or (SameText(S.Section, 'interface') and CandInScope(ARef.FileId, S.FileId))) then
+          Result:= S.Signature;
+  end;
+end;
+
+function TCallResolver.CalleeTakesProcedural(const ARef: TReference; const ALine: string;
+  AOpenCol, AArgIndex: Integer; const AResultType: string): Boolean;
+var
+  NameEnd  : Integer;
+  NameStart: Integer;
+  Callee   : string ;
+  Rcv      : string ;
+  ClassId  : Int64  ;
+  Cands    : TList<TSymbol>;
+  Value    : TSymbol;
+  C        : TSymbol;
+  PType    : string ;
+begin
+  Result := False;
+  NameEnd:= AOpenCol - 1;
+  while (NameEnd >= 1) and CharInSet(ALine[NameEnd], [' ', #9]) do Dec(NameEnd);
+  NameStart:= NameEnd;
+  while (NameStart >= 1) and IsIdentPart(ALine[NameStart]) do Dec(NameStart);
+  Inc(NameStart);
+  Callee:= Copy(ALine, NameStart, NameEnd - NameStart + 1);
+  { A keyword or a bare `(` groups an expression; nothing here is a callee, and
+    no routine in the index is named `if`, so the lookup below finds nothing. }
+  if (Callee = '') or not IsIdentStart(Callee[1]) then Exit;
+  Rcv  := ExtractReceiverExpr(ALine, NameStart);
+  Cands:= TList<TSymbol>.Create;
+  try
+    { EVERY candidate the name could reach, not just the one a call ref would
+      pick: one procedural parameter among an overload set is enough doubt. }
+    if Rcv = '' then
+    begin
+      LexicalParenlessLookup(ARef.EnclosingSymbolId, Callee, Cands, Value);
+      EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
+      AddMethodsOnTypeChain(ClassId, Callee, Cands);
+      AddVisibleUnitRoutines(ARef.FileId, LowerCase(Callee), Cands);
+    end
+    else
+      AddMethodsOnTypeChain(TypeReceiver(ARef, Rcv), Callee, Cands);
+    for C in Cands do
+    begin
+      PType:= ParamTypeAt(C.Signature, AArgIndex);
+      if (PType <> '') and not SameText(PType, AResultType)
+         and IsProceduralTypeText(PType, C.FileId) then Result:= True;
+    end;
+  finally
+    Cands.Free;
+  end;
+end;
+
+function TCallResolver.ParenlessIsProcValue(const ARef: TReference; const ALine, AReceiver,
+  AResultType: string): Boolean;
+var
+  Before  : string ;
+  After   : string ;
+  LhsType : string ;
+  OpenCol : Integer;
+  ArgIndex: Integer;
+  WholeArg: Boolean;
+begin
+  Before:= TrimRight(Copy(ALine, 1, ARef.StartCol - 1));
+  if AReceiver <> '' then
+  begin
+    { `Self.Name`: the expression starts at the receiver. }
+    if EndsStr('.', Before) then Before:= TrimRight(Copy(Before, 1, Length(Before) - 1));
+    if EndsText(AReceiver, Before) then Before:= TrimRight(Copy(Before, 1, Length(Before) - Length(AReceiver)));
+  end;
+  After:= TrimLeft(Copy(ALine, ARef.StartCol + Length(ARef.NameText), MaxInt));
+
+  if EndsStr('@', Before) then
+    Result:= True { the ADDRESS of the routine }
+  else if EndsStr(':=', Before) and EndsStatement(After) then
+  begin
+    { The WHOLE right side of an assignment: a call when the target holds a
+      value, the routine's address when the target is procedural. A target of
+      exactly the routine's return type takes the result, even when that type
+      is itself procedural. }
+    LhsType:= AssignedTypeText(ARef, ALine, Copy(Before, 1, Length(Before) - 2));
+    Result := (LhsType <> '') and not SameText(LhsType, AResultType)
+              and IsProceduralTypeText(LhsType, ARef.FileId);
+  end
+  else
+  begin
+    { A WHOLE argument: the callee's parameter type decides the same way. }
+    WholeArg:= (EndsStr('(', Before) or EndsStr(',', Before))
+               and (StartsStr(')', After) or StartsStr(',', After));
+    Result  := WholeArg and FindArgumentListOpen(Before, OpenCol, ArgIndex)
+               and CalleeTakesProcedural(ARef, ALine, OpenCol, ArgIndex, AResultType);
+  end;
+end;
+
+procedure TCallResolver.TallyParenless(const AReason: string);
+begin
+  if AReason = '' then Inc(FParenlessStats.Bound)
+  else if AReason = 'not-found' then Inc(FParenlessStats.NotFound)
+  else if AReason = 'shadowed' then Inc(FParenlessStats.Shadowed)
+  else if AReason = 'not-callable' then Inc(FParenlessStats.NotCallable)
+  else if AReason = 'proc-value' then Inc(FParenlessStats.ProcValue)
+  else if AReason = 'with-scope' then Inc(FParenlessStats.WithScope)
+  else if AReason = 'qualified' then Inc(FParenlessStats.Qualified)
+  else Inc(FParenlessStats.Unreadable);
+end;
+
+function TCallResolver.ResolveParenlessRead(const ARef: TReference; out AReason: string): TCallEdge;
+var
+  Lines  : TStringList   ;
+  Line   : string        ;
+  Rcv    : string        ;
+  Matches: TList<TSymbol>;
+  S      : TSymbol       ;
+  Conf   : string        ;
+  Target : Int64         ;
+  RetType: string        ;
+begin
+  Result      := Default(TCallEdge);
+  Result.RefId:= ARef.Id;
+  AReason     := '';
+  Line        := '';
+  Rcv         := '';
+  Lines       := LinesOf(ARef.FileId);
+  { The site's own text decides three of the rules, so a line that does not
+    match the index is a decline, not a guess -- the stale-file rule every other
+    rung of this unit follows. }
+  if (Lines = nil) or FileIsStale(ARef.FileId) or (ARef.NameText = '')
+     or (ARef.StartLine < 1) or (ARef.StartLine > Lines.Count) then
+    AReason:= 'unreadable'
+  else
+  begin
+    Line:= Lines[ARef.StartLine - 1];
+    Rcv := ExtractReceiverExpr(Line, ARef.StartCol);
+    if (Rcv <> '') and not SameText(Rcv, 'Self') then AReason:= 'qualified'
+    else if (Rcv = '') and EnclosingBodyUsesWith(ARef, Lines) then AReason:= 'with-scope';
+  end;
+  Matches:= TList<TSymbol>.Create;
+  try
+    if AReason = '' then AReason:= FindParenlessCandidates(ARef, Rcv, Matches);
+    { EVERY member of the answering set must be callable bare. One that needs
+      an argument means the name may stand for a procedure value here. }
+    if AReason = '' then
+      for S in Matches do
+        if not IsParenlessCallable(S) then AReason:= 'not-callable';
+    if AReason = '' then
+    begin
+      Target := PickFromMatches(Matches, 0, True, Conf);
+      RetType:= '';
+      for S in Matches do
+        if S.Id = Target then RetType:= SignatureReturnType(S.Signature);
+      if ParenlessIsProcValue(ARef, Line, Rcv, RetType) then AReason:= 'proc-value'
+      else
+      begin
+        { ReceiverTypeSymbolId stays 0, as on the lexical and unit rungs of
+          ResolveOne: a bare call has no receiver the source wrote. }
+        Result.TargetSymbolId:= Target;
+        Result.Confidence    := Conf;
+      end;
+    end;
+  finally
+    Matches.Free;
+  end;
+  TallyParenless(AReason);
 end;
 
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;

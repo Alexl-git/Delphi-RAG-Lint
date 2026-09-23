@@ -112,6 +112,24 @@ src/storage/DRagLint.Storage.SQLite.pas::GetEnumValueSymbols
 src/storage/DRagLint.Storage.SQLite.pas::GetUnitLevelValueDecls
 
 # ---------------------------------------------------------------------------
+# PARENLESS-CALL BINDING (2026-09-23, resolver 1.7.0-alpha, defect D1). A THIRD
+# calls-stage stream writes call_edges (and refs.symbol_id for a certain edge)
+# for `read` refs that are parenless calls. The resolver side is in
+# DRagLint.Index.CallResolver.pas, already hashed whole. The stream matches the
+# drift vocabulary (`resolve`), so it MUST be listed. It writes through
+# UpsertCallEdge and decides from the resolver's maps. Three of those readers
+# (GetTypeCandidates, GetUnitLevelValueDecls, GetEnumValueSymbols) were listed
+# already; the two below were NOT, although the Option 4 unit rung has depended
+# on them since it shipped -- GetUnitLevelRoutines is the candidate set of a
+# bare name's unit rung, GetUnitScopeEdges the uses graph every visibility test
+# (CandInScope) reads. Neither matches the drift vocabulary, which is why the
+# guard never asked. Added by the closure rule: what they return decides which
+# edge this stream (and ResolveOne's unit rung) writes.
+src/storage/DRagLint.Storage.SQLite.pas::ResolveParenlessCallRefs
+src/storage/DRagLint.Storage.SQLite.pas::GetUnitLevelRoutines
+src/storage/DRagLint.Storage.SQLite.pas::GetUnitScopeEdges
+
+# ---------------------------------------------------------------------------
 # PURITY V2 (2026-09-21). The `purity` resolve stage DERIVES
 # symbol_facts.effect_free / effect_summary / effect_witness from rows and
 # source the index already holds -- call_edges, member_accesses, refs and the

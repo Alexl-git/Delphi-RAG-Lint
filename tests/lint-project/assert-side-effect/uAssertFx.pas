@@ -74,9 +74,10 @@ begin
   S:= TStack.Create;
   Assert(Pop(N) > 0);                    { TRIGGER-1: p0 }
   Assert(S.Bump > 0, 'bumped');          { TRIGGER-2: s }
-  Assert(NextId() > 0);                  { TRIGGER-3: g (parens: a PARENLESS free-routine call is an unbound 'read' ref today) }
+  Assert(NextId() > 0);                  { TRIGGER-3: g (parens; its parenless twin is trigger five) }
   Assert(N >= 0,
     'left ' + IntToStr(Pop(N)));         { TRIGGER-4: in the message, wrapped }
+  Assert(NextId > 0);                    { TRIGGER-5: g, PARENLESS -- a 'read' ref, a call edge since resolver 1.7.0 }
   Assert(S.Peek >= 0);                   { CONTROL-1: proven effect-free }
   Assert(S.Guess);                       { CONTROL-2: summary '?' only }
   Assert(Trim('y') <> '');               { CONTROL-3: unbound callee }
@@ -84,6 +85,7 @@ begin
   N:= Pop(N);                            { CONTROL-5: effect outside any Assert }
   if S.Bump > 0 then Assert(N > -100);   { CONTROL-6: same line, outside the Assert }
   N:= NextId(); // Assert(NextId() > 0)   CONTROL-7: the Assert is a comment
+  N:= NextId;                            { CONTROL-8: parenless effect outside any Assert }
   S.Free;
 end;
 

@@ -128,6 +128,9 @@ type
 /// because that ref's receiver is NULL.</para>
 /// <para>Still name-keyed, so a local variable sharing a routine's name can
 /// produce a spurious row; the 'callback' marker is what keeps that honest.</para>
+/// <para>A 'read' that OWNS a call_edges row is a PARENLESS CALL
+/// (<c>N := NextId</c>, bound since resolver 1.7.0-alpha) and is already a
+/// resolved row, so a line holding one is not listed again as a callback.</para>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, ExtractFileName, Format, Trim</para>
@@ -246,7 +249,16 @@ begin
   if not NameIsRoutine then Exit;
 
   var CallSites: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  { 2026-09-23 (resolver 1.7.0-alpha): a PARENLESS call in an expression is a
+    'read' ref that now owns a call_edges row, so it is already listed above as
+    a resolved caller. Its line is recorded here so the callback loop does not
+    list the same site a second time. Keyed by path, because a resolved row
+    carries the path and not the file id. }
+  var ResolvedSites: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
   try
+    for var R in Result do
+      if (R.Mode = '') and (R.CallSiteLine > 0) then
+        ResolvedSites.AddOrSetValue(Format('%s:%d', [LowerCase(R.FullPath), R.CallSiteLine]), True);
     var AllRefs:= AStore.FindCallersByName(AName);
     for var PosRef in AllRefs do
       if (PosRef.Kind = 'call') or (PosRef.Kind = 'member-access') then
@@ -258,6 +270,7 @@ begin
       if CallSites.ContainsKey(Format('%d:%d', [CbRef.FileId, CbRef.StartLine])) then Continue;
 
       var CbWhere: string:= AStore.GetFilePath(CbRef.FileId);
+      if ResolvedSites.ContainsKey(Format('%s:%d', [LowerCase(CbWhere), CbRef.StartLine])) then Continue;
       var CbWho  : string:= '';
       if CbRef.EnclosingSymbolId > 0 then
         CbWho:= AStore.GetSymbolById(CbRef.EnclosingSymbolId).QualifiedName;
@@ -276,6 +289,7 @@ begin
       Result[High(Result)]:= Row;
     end; // for CbRef
   finally
+    ResolvedSites.Free;
     CallSites.Free;
   end; // try
 end; // function

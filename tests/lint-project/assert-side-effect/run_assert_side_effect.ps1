@@ -46,8 +46,8 @@ function LineOf([string]$Marker) {
 Write-Host "Indexing fixture..."
 & $exePath index $dir --db $db | Out-Null
 
-$t1 = LineOf 'TRIGGER-1'; $t2 = LineOf 'TRIGGER-2'; $t3 = LineOf 'TRIGGER-3'; $t4 = LineOf 'TRIGGER-4'
-$controls = @(1..7 | ForEach-Object { LineOf "CONTROL-$_" })
+$t1 = LineOf 'TRIGGER-1'; $t2 = LineOf 'TRIGGER-2'; $t3 = LineOf 'TRIGGER-3'; $t4 = LineOf 'TRIGGER-4'; $t5 = LineOf 'TRIGGER-5'
+$controls = @(1..8 | ForEach-Object { LineOf "CONTROL-$_" })
 
 Write-Host "RUN 1: bare lint-all (the rule must be OFF by default)..."
 $f0 = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
@@ -64,24 +64,26 @@ function MsgAt([int]$L) { $m = @($a | Where-Object { [int]$_.start_line -eq $L }
 $c0  = ($off -eq 0)
 $c0b = ($f0.Count -gt 0)                           # a crashed run also reports zero
 # positive controls: one finding per trigger line, and nothing else
-$c1  = ($a.Count -eq 4)
+$c1  = ($a.Count -eq 5)
 $c2  = ($lines -contains $t1) -and ((MsgAt $t1) -like '*Pop*') -and ((MsgAt $t1) -like '*p0*')
 $c3  = ($lines -contains $t2) -and ((MsgAt $t2) -like '*Bump*') -and ((MsgAt $t2) -like "*'s'*")
 $c4  = ($lines -contains $t3) -and ((MsgAt $t3) -like '*NextId*') -and ((MsgAt $t3) -like "*'g'*")
 # the call sits on the SECOND line of a wrapped Assert, in the message argument
 $c5  = ($lines -contains $t4) -and ((MsgAt $t4) -like '*Pop*')
+# resolver 1.7.0-alpha: the PARENLESS call -- a 'read' ref that owns a call edge -- fires too
+$c5b = ($lines -contains $t5) -and ((MsgAt $t5) -like '*NextId*') -and ((MsgAt $t5) -like "*'g'*")
 # the witness travels with the finding (NextId's witness names the global)
 $c6  = ((MsgAt $t3) -like '*GNext*')
 # negative controls: none of the CONTROL lines fires
 $hit = @($controls | Where-Object { $lines -contains $_ })
 $c7  = ($hit.Count -eq 0)
 
-$pass = $c0 -and $c0b -and $c1 -and $c2 -and $c3 -and $c4 -and $c5 -and $c6 -and $c7
+$pass = $c0 -and $c0b -and $c1 -and $c2 -and $c3 -and $c4 -and $c5 -and $c5b -and $c6 -and $c7
 if ($pass) {
-  Write-Host "PASS  OFF by default (run 1); 4 triggers (p0, s, g, wrapped message) fire with witness, 7 controls silent (run 2)"
+  Write-Host "PASS  OFF by default (run 1); 5 triggers (p0, s, g, wrapped message, parenless g) fire with witness, 8 controls silent (run 2)"
   exit 0
 } else {
-  Write-Host ("FAIL  off={0} run1Real={1} count4={2} p0={3} s={4} g={5} wrapped={6} witness={7} controlsSilent={8} (controls hit: {9})" -f `
-    $c0, $c0b, $c1, $c2, $c3, $c4, $c5, $c6, $c7, ($hit -join ','))
+  Write-Host ("FAIL  off={0} run1Real={1} count5={2} p0={3} s={4} g={5} wrapped={6} parenless={10} witness={7} controlsSilent={8} (controls hit: {9})" -f `
+    $c0, $c0b, $c1, $c2, $c3, $c4, $c5, $c6, $c7, ($hit -join ','), $c5b)
   exit 1
 }

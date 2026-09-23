@@ -450,6 +450,45 @@ type
       procedure ResolveEnumValueRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound, AShadowDecls: Int64);
+      /// <summary>2026-09-23 (parenless-call binding, resolver 1.7.0-alpha): the
+      /// calls stage's THIRD stream. Offers every `read` ref named like a
+      /// function or method to TCallResolver.ResolveParenlessRead and writes a
+      /// call_edges row (plus refs.symbol_id for a certain edge, through
+      /// UpsertCallEdge) for each one that is a parenless call.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: rows offered to the resolver.</param>
+      /// <param name="ABound">Out: rows that earned a call edge.</param>
+      /// <remarks>
+      /// Runs INSIDE ResolveCallTargets' transaction, AFTER the enum-value
+      /// stream: that stream NULLs refs.symbol_id over every `read` of an
+      /// enum-value NAME, and a name that is both an enum value and a function
+      /// would otherwise lose this stream's binding to it. The two cannot both
+      /// bind one ref -- each declines when the other's declaration is visible.
+      ///
+      /// It NULLs the symbol_id of the `read` refs it previously bound (those
+      /// pointing at a function or method) before rebuilding, narrowed by the
+      /// same scope and stale predicates, for the reason ResolveEnumValueRefs
+      /// gives: on a SCOPED run a ref that now declines would otherwise keep a
+      /// binding this engine no longer derives. Its call_edges rows need no
+      /// such step -- the scoped and whole-database deletes above already
+      /// cover every ref in scope, whatever its kind.
+      ///
+      /// A ref with a co-located `call` ref is skipped, so a site can never
+      /// own two edges. None is known to exist: `NextId()` emits only a call
+      /// ref, and a parenless statement emits only a call ref.
+      ///
+      /// The complement universe (CallSiteRefKindSql) is NOT widened: a `read`
+      /// this stream declines is not an unresolved call and must never be
+      /// reported as one.
+      /// </remarks>
+      procedure ResolveParenlessCallRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       /// <summary>Record the names a file is about to lose, before OpenFileTx
       /// deletes its symbols.</summary>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
@@ -11924,6 +11963,84 @@ begin
   end;
 end;
 
+{ The parenless-call stream of the calls stage. The contract, the ordering
+  against the enum stream and the NULL-own-bindings argument live on the
+  DECLARATION -- see the DocInsight block on ResolveParenlessCallRefs. }
+procedure TSQLiteSymbolStore.ResolveParenlessCallRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  { The candidates: a `read` spelled like any function or method in the index,
+    with no `call` ref at the identical position. The resolver narrows it. }
+  PARENLESS_UNIVERSE = 'refs.kind = ''read'' AND refs.name_text COLLATE NOCASE IN ' +
+                       '(SELECT name FROM symbols WHERE kind IN (''function'', ''method'')) ' +
+                       'AND NOT EXISTS (SELECT 1 FROM refs c WHERE c.file_id = refs.file_id ' +
+                       'AND c.start_line = refs.start_line AND c.start_col = refs.start_col ' +
+                       'AND c.kind = ''call'')';
+  { What this stream wrote on an earlier pass: a `read` bound to a routine. No
+    other writer binds a `read` to one -- the enum stream binds enum values. }
+  PARENLESS_WRITTEN  = 'refs.kind = ''read'' AND refs.symbol_id IN ' +
+                       '(SELECT id FROM symbols WHERE kind IN (''function'', ''method''))';
+var
+  Suffix : string       ;
+  Q      : TFDQuery     ;
+  Ref    : TReference   ;
+  Edge   : TCallEdge    ;
+  Reason : string       ;
+  Tok    : TFileTxToken ;
+  FldId  : TField       ;
+  FldFile: TField       ;
+  FldName: TField       ;
+  FldEncl: TField       ;
+  FldLine: TField       ;
+  FldCol : TField       ;
+begin
+  ACandidates:= 0;
+  ABound     := 0;
+  Tok        := Default(TFileTxToken);
+  Suffix     := '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + PARENLESS_WRITTEN + Suffix);  // dl:ok sql-injection-concat@4232 -- REVIEWED 2026-09-23: Suffix is SQL this pass BUILT -- MaterializeResolveScope's and the stale prescan's own refs predicates -- never user text, the identical construction ResolveEnumValueRefs uses. It cannot be parameterised: the scope predicate names a temp table and the stale one an IN-list of file ids.
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + PARENLESS_UNIVERSE + Suffix;
+    Q.Open;
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      Ref.Kind     := 'read';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      { Every decline is counted by reason inside the resolver (ParenlessStats)
+        and printed on the stage's log line -- a decline writes nothing. }
+      Edge:= AResolver.ResolveParenlessRead(Ref, Reason);
+      if Edge.TargetSymbolId > 0 then
+      begin
+        Edge.RefId:= Ref.Id;
+        UpsertCallEdge(Tok, Edge);
+        Inc(ABound);
+      end;
+      Inc(ACandidates);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
 procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
@@ -11957,6 +12074,8 @@ var
   EnumCandidates: Int64     ; { Shape A -- bare `read` rows examined by the enum stream   }
   EnumBound     : Int64     ; { Shape A -- of those, the rows that bound                  }
   EnumShadowDecls: Int64    ; { size of the R3(c) unit-level const/var shadow set         }
+  ParenCandidates: Int64    ; { parenless stream -- read rows offered to the resolver       }
+  ParenBound     : Int64    ; { of those, the rows that earned a call edge                 }
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
   T0        : Int64         ;
   TMaps     : Double        ; { seconds spent building TCallResolver's maps }
@@ -12030,6 +12149,8 @@ begin
   EnumCandidates := 0;
   EnumBound      := 0;
   EnumShadowDecls:= 0;
+  ParenCandidates:= 0;
+  ParenBound     := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
   { Split out because it is O(symbols) and independent of how many refs this run
@@ -12388,6 +12509,10 @@ begin
         lifetime of the edges above and an interrupted pass rolls back whole. }
       ResolveEnumValueRefs(Resolver, ScopeWhere, StaleWhere,
                            EnumCandidates, EnumBound, EnumShadowDecls);
+      { 2026-09-23 (parenless-call binding): the THIRD stream, and AFTER the enum
+        stream on purpose -- see ResolveParenlessCallRefs' remarks. Same
+        transaction, so its edges share the pass's all-or-nothing lifetime. }
+      ResolveParenlessCallRefs(Resolver, ScopeWhere, StaleWhere, ParenCandidates, ParenBound);
       FConn.Commit;
     except
       on E: Exception do
@@ -12501,6 +12626,16 @@ begin
         'wrote %d (%d Shape A + %d Shape B). A resolved enum value did not reach refs.symbol_id; ' +
         'the bindings above are INCOMPLETE and the write path is the place to look.',
         [Resolver.EnumStats.Bound, EnumBound + WrittenValues, EnumBound, WrittenValues]));
+    { 2026-09-23 (parenless-call binding). Every decline by reason, for the same
+      reason as the enum line above: a declined read writes nothing, so these
+      numbers are the only trace of what the stream refused. The edges it wrote
+      are NOT in the 'edge(s)' count above, which remains the main stream's. }
+    ResolveLog(Format('calls      parenless: %d of %d bare read(s) bound as call(s); declined ' +
+      'not-found %d, shadowed %d, not-callable %d, proc-value %d, with-scope %d, qualified %d, unreadable %d',
+      [ParenBound, ParenCandidates,
+       Resolver.ParenlessStats.NotFound, Resolver.ParenlessStats.Shadowed, Resolver.ParenlessStats.NotCallable,
+       Resolver.ParenlessStats.ProcValue, Resolver.ParenlessStats.WithScope, Resolver.ParenlessStats.Qualified,
+       Resolver.ParenlessStats.Unreadable]));
     { A SILENTLY EMPTY SHADOW SET IS A FAIL-OPEN, the failure mode this
       repository has been bitten by before: R3(c) would stop shadowing, the pass
       would OVER-BIND, and the run would report a clean result. Loud, and on its
