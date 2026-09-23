@@ -214,6 +214,73 @@ Step 'E-EW3' {
   Chk 'A-EW3-FALLBACK'   $e3.DfmFallback 0
 }
 
+# who-writes / who-reads. Every number here came from TWO independent routes --
+# the uncapped verb and the bounded site SQL -- and CrossCheck asserts they
+# agreed. A mismatch is a finding, so the suite treats it as a failure rather
+# than reporting whichever number happened to be larger.
+Note 'who-writes/who-reads R (field, both wings) ...'
+Step 'E-MA1' {
+  $script:m1 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'MSCTYPES.RChartSampleData.R' -Mode both -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-MA1-KIND'     $m1.Kind 'field'
+  Chk 'A-MA1-WRITES'   $m1.Writes 7
+  Chk 'A-MA1-READS'    $m1.Reads 13
+  Chk 'A-MA1-ROUTINES' $m1.Routines 4
+  Chk 'A-MA1-SITES'    $m1.Sites 20
+  Chk 'A-MA1-HIDDEN'   $m1.HiddenRoutines 0
+  Chk 'A-MA1-UNANCH'   $m1.Unanchored 0
+  Chk 'A-MA1-XCHECK'   $m1.CrossCheck 'agree'
+  # 3 writers + 4 readers: three routines appear on BOTH sides, which is the
+  # honest answer, not a double count. Routines (4) is DISTINCT; Shown (7) is rows.
+  Chk 'A-MA1-WRITERS'  $m1.ShownWriters 3
+  Chk 'A-MA1-READERS'  $m1.ShownReaders 4
+  Chk 'A-MA1-SHOWN'    $m1.Shown 7
+  # a field access has accessor_symbol_id NULL by owner ruling -- 0 routines
+  # here would mean the emitter read that column instead of asking the verb
+  if ($m1.Routines -eq 0) { Fail 'A-MA1-FINDING1' 'read accessor_symbol_id instead of asking the verb' }
+  # the site anchor is the ACCESS, not the routine declaration
+  if (-not (HasLine (Dot $m1) 4072)) { Fail 'A-MA1-SITE' 'BASICSF.pas:4072 is not anchored' }
+}
+
+Note 'who-writes/who-reads VERDICT (property with method accessors) ...'
+Step 'E-MA2' {
+  $script:m2 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'iINSPRSLT.ImcINSPRSLT.VERDICT' -Mode both -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-MA2-KIND'     $m2.Kind 'property'
+  Chk 'A-MA2-WRITES'   $m2.Writes 34
+  Chk 'A-MA2-READS'    $m2.Reads 12
+  Chk 'A-MA2-ROUTINES' $m2.Routines 30
+  Chk 'A-MA2-SITES'    $m2.Sites 46
+  Chk 'A-MA2-XCHECK'   $m2.CrossCheck 'agree'
+  # backed by METHODS, so the note offers who-calls, not who-writes
+  Chk 'A-MA2-BACKING'  (($m2.Backing | Sort-Object) -join ',') 'GetVERDICT,SetVERDICT'
+}
+
+Note 'who-reads Connected at scale (602 sites, 598 routines, cap 25) ...'
+Step 'E-MA3' {
+  $script:m3 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'uPipeClientConnection.TPipeClientConnection.Connected' -Mode read -Cap 25 -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-MA3-READS'    $m3.Reads 602          # the VERB is uncapped; sql truncates at 200
+  Chk 'A-MA3-ROUTINES' $m3.Routines 598
+  Chk 'A-MA3-SHOWN'    $m3.ShownReaders 25
+  Chk 'A-MA3-HIDDEN'   $m3.HiddenRoutines 573
+  Chk 'A-MA3-UNANCH'   $m3.Unanchored 0
+  Chk 'A-MA3-XCHECK'   $m3.CrossCheck 'agree'
+  Chk 'A-MA3-BACKING'  ($m3.Backing -join ',') 'FConnected'
+  # nothing is dropped silently: the disclosure row must be in the picture
+  if ((Dot $m3) -notmatch '\+573 more routines') { Fail 'A-MA3-DISCLOSE' 'the disclosure row is missing' }
+}
+
+# The backing-field regression. The verb attributes these 602 reads to
+# FConnected; member_accesses records them against Connected with FConnected as
+# the ACCESSOR. Matching the site query on the member alone left every row
+# unanchored, so Unanchored 0 here is what guards the accessor OR-clause.
+Note 'who-reads FConnected (the backing field itself) ...'
+Step 'E-MA4' {
+  $script:m4 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'uPipeClientConnection.TPipeClientConnection.FConnected' -Mode read -Cap 5 -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-MA4-KIND'   $m4.Kind 'field'
+  Chk 'A-MA4-READS'  $m4.Reads 602
+  Chk 'A-MA4-UNANCH' $m4.Unanchored 0
+  Chk 'A-MA4-XCHECK' $m4.CrossCheck 'agree'
+}
+
 Note 'touches-tables HandleCopyOperation (SERVER) ...'
 Step 'E-TT1' {
   $script:s1 = & "$SRC\Emit-TouchesTables.ps1" -Qname $Q_COPY -DbPath $DbSrv -OutDir $OutDir
@@ -277,6 +344,32 @@ try { & "$SRC\Emit-WhoCalls.ps1" -Qname $Q_LEAF -DbPath $DbCli -Direction callee
 catch { $n8msg = $_.Exception.Message }
 if ($n8msg -match 'event-wiring') { Fail 'N8-HINT' "the callee refusal offered the event-wiring hint: $n8msg" }
 
+Note 'negatives N9-N10 + ambiguity ...'
+NegTest 'N9' 'is a method, not a field or property -- ask who-calls instead' 'Blueprint4_ViewModel_TBlueprint_ViewModel_SendDeltaOperation_both' {
+  & "$SRC\Emit-MemberAccess.ps1" -Qname $Q_SEND -DbPath $DbCli -OutDir $negDir }
+NegTest 'N10' 'No.Such.Field is not in this index' 'No_Such_Field_both' {
+  & "$SRC\Emit-MemberAccess.ps1" -Qname 'No.Such.Field' -DbPath $DbCli -OutDir $negDir }
+# Refusing an ambiguous BARE name is the whole reason Resolve-MemberSelection
+# exists: 40% of bare field/property names on this index match more than one
+# symbol, and picking the wrong one mislabels every row in the picture rather
+# than just one. Kind-filtered, so the 150 properties named ID are what counts.
+NegTest 'N10b' 'ID is ambiguous -- 154 symbols share that name' 'ID_both' {
+  & "$SRC\Emit-MemberAccess.ps1" -Qname 'ID' -DbPath $DbCli -OutDir $negDir }
+
+# N13 is NOT a refusal: zero in the rendered direction is a real answer, and it
+# must still draw and exit 0 -- with the OTHER direction's count beside it, so
+# "0 writes" cannot read as "nothing uses this".
+Note 'N13 (zero writes is an answer, not a failure) ...'
+Step 'N13' {
+  $script:m13 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'uPipeClientConnection.TPipeClientConnection.Connected' -Mode write -DbPath $DbCli -OutDir (Join-Path $OutDir 'zero')
+  Chk 'A-N13-WRITES' $m13.Writes 0
+  Chk 'A-N13-READS'  $m13.Reads 602
+  if (-not (Test-Path $m13.Svg)) { Fail 'A-N13-SVG' 'the zero case must still produce an .svg' }
+  $t13 = Dot $m13
+  if ($t13 -notmatch 'no write sites \(602 reads\)') { Fail 'A-N13-NOTE' 'the zero note does not carry the read count' }
+  if ($t13 -match 'cluster_writers') { Fail 'A-N13-EMPTY' 'an empty writers cluster was drawn' }
+}
+
 # N7 is the BUNDLER's contract, not an emitter's: the refusal must propagate AND
 # leave no directory for someone to find later and mistake for an answer.
 Note 'negative N7 (bundle cleanup) ...'
@@ -293,15 +386,17 @@ if (Test-Path $n7Dir) { Fail 'N7-DIR' 'the failed bundle directory still exists'
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
-  Write-Host 'Emitter verification -- six questions, five emitters, two indexes'
+  Write-Host 'Emitter verification -- eight questions, six emitters, two indexes'
   Write-Host ("  bytes          : {0} non-ascii, {1} bare LF" -f $nonAscii, $bareLf)
   Write-Host ("  butterfly      : {0} callers / {1} callees, {2} clicks" -f (V $b 'Callers'), (V $b 'Callees'), (V $b 'ClickTargets'))
   Write-Host ("  deps           : {0} used by / {1} uses" -f (V $d 'UsedBy'), (V $d 'Uses'))
   Write-Host ("  who-calls      : {0} sites d2, {1} sites + {2} cycle d3, {3} name-only NOT merged" -f (V $w1 'Callers'), (V $w2 'Callers'), (V $w2 'Cycles'), (V $w2 'NameOnly'))
   Write-Host ("  what-it-calls  : {0}/{1}/{2} rows at d1/d2/d3, {3} cycles, ties butterfly's {4}" -f (V $c1 'Rows'), (V $c2 'Rows'), (V $c3 'Rows'), (V $c3 'Cycles'), (V $b 'Callees'))
+  Write-Host ("  who-writes     : {0} writes / {1} reads over {2} routines, {3} sites; verb-vs-sql {4}" -f (V $m1 'Writes'), (V $m1 'Reads'), (V $m1 'Routines'), (V $m1 'Sites'), (V $m1 'CrossCheck'))
+  Write-Host ("  who-reads      : {0} reads over {1} routines, {2} shown + {3} disclosed" -f (V $m3 'Reads'), (V $m3 'Routines'), (V $m3 'ShownReaders'), (V $m3 'HiddenRoutines'))
   Write-Host ("  event-wiring   : {0} events / {1} handlers / {2} controls; {3} at scale" -f (V $e1 'Events'), (V $e1 'Handlers'), (V $e1 'Components'), (V $e3 'Events'))
   Write-Host ("  touches-tables : {0} read / {1} written / {2} both, of {3} SQL symbols" -f (V $s1 'Reads'), (V $s1 'Writes'), (V $s1 'Both'), (V $s1 'IndexSqlSymbols'))
-  Write-Host ("  negatives      : N1-N8, each asserting message AND absent .svg")
+  Write-Host ("  negatives      : N1-N10b, each asserting message AND absent .svg; N13 draws")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

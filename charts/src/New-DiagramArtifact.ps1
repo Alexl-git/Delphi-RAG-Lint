@@ -37,10 +37,14 @@ param(
   # for event-wiring.
   [Parameter(Mandatory)][Alias('Qname','Unit','Form')][string] $Target,
   [Parameter(Mandatory)][string] $DbPath,
-  [ValidateSet('butterfly','deps','who-calls','what-it-calls','event-wiring','touches-tables')]
+  [ValidateSet('butterfly','deps','who-calls','what-it-calls','who-writes','who-reads',
+               'event-wiring','touches-tables')]
   [string] $Question = 'butterfly',
   [string] $Control,                      # event-wiring only: filter, not selector
   [int]    $Depth   = 2,
+  [int]    $Cap     = 20,                 # member-access only: readability cap
+  [ValidateSet('write','read','both')]
+  [string] $Mode    = 'both',             # member-access only; who-writes/who-reads force it
   [string] $OutRoot = (Join-Path $PSScriptRoot '..\artifacts'),
   [switch] $Open
 )
@@ -70,6 +74,11 @@ try {
       if ($Control) { $ew.Control = $Control }
       & (Join-Path $PSScriptRoot 'Emit-EventWiring.ps1') @ew
     }
+    # The question NAMES the direction, so -Mode is not consulted here: asking
+    # who-writes and getting both wings back would answer a different question
+    # than the one the bundle is labelled with.
+    'who-writes'     { & (Join-Path $PSScriptRoot 'Emit-MemberAccess.ps1')   -Qname $Target -DbPath $DbPath -Mode write -Cap $Cap -OutDir $dir }
+    'who-reads'      { & (Join-Path $PSScriptRoot 'Emit-MemberAccess.ps1')   -Qname $Target -DbPath $DbPath -Mode read  -Cap $Cap -OutDir $dir }
     'touches-tables' { & (Join-Path $PSScriptRoot 'Emit-TouchesTables.ps1') -Qname $Target -DbPath $DbPath -OutDir $dir }
   }
 } catch {
@@ -87,6 +96,10 @@ $vocab = @{
   'deps'           = @('UsedBy', 'used by',     'Uses',   'uses')
   'who-calls'      = @('Callers','call sites',  'Cycles', 'cycle rows')
   'what-it-calls'  = @('Callees','call sites',  'Cycles', 'cycle rows')
+  # Both totals are reported whichever wing was drawn, so a zero never reads as
+  # "nothing uses this" -- "0 writes / 602 reads" is the honest header.
+  'who-writes'     = @('Writes', 'write sites', 'Routines','routines')
+  'who-reads'      = @('Reads',  'read sites',  'Routines','routines')
   'event-wiring'   = @('Events', 'events',      'Handlers','handlers')
   'touches-tables' = @('Reads',  'tables read', 'Writes', 'tables written')
 }
@@ -120,6 +133,7 @@ $fp = [pscustomobject]@{
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
                 $(if ($Question -in 'butterfly','who-calls','what-it-calls') { " -Depth $Depth" } else { '' }) +
+                $(if ($Question -in 'who-writes','who-reads') { " -Cap $Cap" } else { '' }) +
                 $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })
   # every count the emitter reported, not just the two the shell shows. The
   # ones the header omits are exactly the ones worth auditing later --

@@ -193,6 +193,17 @@ SELECT s.id AS id, s.kind AS kind, s.qualified_name AS qualified_name,
   $exact = @($rows | Where-Object { [string]$_.qualified_name -eq $Qname })
   $cand  = if ($exact.Count) { $exact } else { $rows }
 
+  # Narrow a BARE name to the kinds actually asked for before judging ambiguity.
+  # `ID` matches 170 symbols on CLIENT but only 4 are fields -- refusing on the
+  # 150 properties and 16 params/locals would reject a selection that is not
+  # ambiguous among the things this chart can even draw. Only narrow when it
+  # leaves something: otherwise fall through to the kind error below, which
+  # says what the symbol IS rather than that it is ambiguous.
+  if (-not $exact.Count -and $Kinds) {
+    $ofKind = @($cand | Where-Object { $Kinds -contains [string]$_.kind })
+    if ($ofKind.Count) { $cand = $ofKind }
+  }
+
   if ($cand.Count -gt 1) {
     $head = ($cand | Select-Object -First 6 | ForEach-Object { [string]$_.qualified_name }) -join ', '
     $tail = if ($cand.Count -gt 6) { ", +$($cand.Count - 6) more" } else { '' }
@@ -217,26 +228,38 @@ SELECT s.id AS id, s.kind AS kind, s.qualified_name AS qualified_name,
 
 # ---- ranking and disclosure -------------------------------------------------
 
-# The correlated subquery that maps a ref/access row to its INNERMOST enclosing
-# routine, as SQL TEXT. It lives here so the emitters that need a SITE anchor
-# cannot drift apart on it.
+# Maps a `refs` row to its enclosing routine, as the SQL fragments to splice in.
+# One place, so the emitters that need a SITE anchor cannot drift apart on it.
 #
-# `find-callers --resolved` answers WHICH ROUTINE but never WHERE INSIDE IT --
-# its `line` is the caller's DECLARATION line, measured uniformly. This is how
-# you get the line+col the verb does not report.
+# WHY A COLUMN AND NOT THE CONTAINMENT SUBQUERY THE PLAN SPECIFIED
+# ----------------------------------------------------------------
+# PLAN-next-five-questions.md finding 2 hand-rolls this as a correlated subquery
+# over symbols.impl_start_line/impl_end_line with `ORDER BY impl_start_line DESC
+# LIMIT 1` to make the INNERMOST routine win. That subquery is correct -- and
+# unnecessary. `refs.enclosing_symbol_id` already holds the answer.
 #
-# `ORDER BY impl_start_line DESC LIMIT 1` is LOAD-BEARING: it picks the
-# innermost enclosing routine. Without it, a nested routine's accesses are
-# attributed to its parent. Measured resolution: CLIENT 9,311/0 unresolved,
-# SERVER 14,836/0.
-function Get-EnclosingRoutineSql([string] $RefAlias) {
-  @"
-(SELECT encl.qualified_name FROM symbols encl
-  WHERE encl.file_id = $RefAlias.file_id
-    AND encl.impl_start_line IS NOT NULL
-    AND $RefAlias.start_line BETWEEN encl.impl_start_line AND encl.impl_end_line
-  ORDER BY encl.impl_start_line DESC LIMIT 1)
-"@
+# MEASURED 2026-09-23, every member-access row on both indexes, both ways:
+#
+#   index    rows     stored NULL  subquery NULL  DISAGREE
+#   CLIENT   9,311    0            0              0
+#   SERVER  14,836    0            0              0
+#
+# Zero disagreements, so the stored column IS the innermost-enclosing answer,
+# computed by the engine. Using it means the chart cannot drift from the
+# engine's own notion of "enclosing" the way a reimplementation silently can --
+# and it is a join instead of a per-row subquery.
+#
+# The plan's totals were right; only its method was doing work already done.
+# Same lesson as its finding 1 in a new place: ask what the index already
+# stores before writing SQL to recompute it.
+#
+# `find-callers --resolved` still cannot answer this -- its `line` is the
+# caller's DECLARATION line -- which is why a site anchor needs SQL at all.
+function Get-EnclosingRoutineSql([string] $RefAlias, [string] $JoinAlias = 'encl') {
+  [pscustomobject]@{
+    Join   = "LEFT JOIN symbols $JoinAlias ON $JoinAlias.id = $RefAlias.enclosing_symbol_id"
+    Select = "$JoinAlias.qualified_name"
+  }
 }
 
 # Take the top $Cap of an ALREADY-RANKED row list and report exactly what was
@@ -247,7 +270,12 @@ function Get-EnclosingRoutineSql([string] $RefAlias) {
 # chart whose rows are routines hides two different quantities at once: the
 # routines it dropped and the access sites inside them.
 function Get-TopRanked($Rows, [int] $Cap, [string] $SiteProperty = 'Sites') {
-  $all = @($Rows)
+  # Strip nulls rather than trusting the caller. `$x = if (...) { @() }` assigns
+  # $null, not an empty array -- an empty array enumerates to NOTHING on the
+  # output stream -- and `@($null)` is then a ONE-element array holding $null.
+  # That produced a phantom cross-check finding against an empty wing
+  # ("write: verb , sql 0") before this guard existed.
+  $all = @($Rows | Where-Object { $null -ne $_ })
   $shown = $all
   $hiddenRows = 0
   $hiddenSites = 0
@@ -355,6 +383,15 @@ function Add-RowCluster {
   $ports = New-Object System.Collections.ArrayList
   $p = 0
   foreach ($r in $Rows) {
+    # An empty row is always a dot SYNTAX ERROR ("<FONT ...></FONT>" in a TD)
+    # and kills the whole layout. THROW rather than skip: the port map is keyed
+    # by ORDINAL, so quietly dropping a row would shift every port after it and
+    # mis-attach the edges -- a wrong picture instead of no picture. The usual
+    # cause is nesting a `, $array` return inside @().
+    if ($null -eq $r -or ([string]::IsNullOrWhiteSpace([string]$r.Label) -and
+                          [string]::IsNullOrWhiteSpace([string]$r.Href))) {
+      throw "Add-RowCluster ($Cid): row $($p + 1) is empty -- did a `, `$array` return get wrapped in @()?"
+    }
     $p++
     # A row with NO Href is a note/disclosure line. It must carry neither HREF
     # nor TITLE: HREF="" still makes dot emit an <a>, which both inflates the
