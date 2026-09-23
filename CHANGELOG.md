@@ -52,6 +52,11 @@ breaking changes** until v1.0.
   `ifdef_allow` key: verified first that `SaveToFile` already PRESERVED it through unrelated edits, but a
   preserved key cannot be edited -- the on-disk value won over `ACfg`. It is written from `ACfg` when
   non-empty and removed when cleared. Guard: `tests\lintconfig\LintConfigTests.dpr` TestIfdefAllow.
+- **`used-before-assignment` and `out` parameters (ENG-7): re-measured, NOT reproduced, now guarded.** The
+  DataCopy report (an `out` argument in `if not F(...)`, callee in another unit with a wrapped signature)
+  does not reproduce on this build -- not on a copy of its shape, not on DataCopy's own rev-339 sources.
+  `out` has been modelled since 2026-08-28. `tests\autotest\run_uba_out_param_datacopy_shape.ps1` pins the
+  exact reported shape, with a by-value positive control that must still fire. No engine change.
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
   every `index` preprocess, and every project closure) used to union only the `.dproj`'s `Base` group
   and the selected config's `Cfg_N` group. MSBuild also applies `Base_<Platform>` and
