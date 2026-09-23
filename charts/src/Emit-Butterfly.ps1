@@ -28,6 +28,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# This emitter predates Emit-Common and was the last one still self-contained,
+# which is precisely why it broke alone on 2026-09-23: its private copy of the
+# engine-output filter never learned the two rules Get-EngineText had gained.
+# Dot-sourced here for the ENGINE helpers. The three helpers it defines below
+# (ConvertTo-XmlText / Get-UnitName / Get-ShortName) shadow the shared ones,
+# because a later definition wins in PowerShell -- so this changes what the
+# emitter can CALL without changing anything it already does.
+. (Join-Path $PSScriptRoot 'Emit-Common.ps1')
+
 # ---- palette. Role-coded, because the butterfly's meaning IS the role. -------
 $PAL = @{
   callerBorder = '#3B5BDB'; callerFill = '#EDF2FF'; callerHdr = '#3B5BDB'
@@ -71,11 +80,18 @@ function Flatten($node, [string] $childKey, [System.Collections.ArrayList] $acc,
 
 # ---- 1. ask the engine -------------------------------------------------------
 Write-Host "butterfly: $Qname (depth $Depth)"
-$raw = & $Engine butterfly --qname $Qname --depth $Depth --format json --db $DbPath 2>&1 |
-       Where-Object { $_ -notmatch 'loaded defaults' -and $_ -notmatch '^drag-lint: ' -and $_ -notmatch '^\s+may be stale' -and $_ -notmatch '^\s+drag-lint index ' }
-$json = ($raw -join "`n")
-if ([string]::IsNullOrWhiteSpace($json)) { throw "engine returned nothing for $Qname" }
-$bf = $json | ConvertFrom-Json
+# Routed through Invoke-EngineJson like every other emitter. This call used to
+# roll its OWN inline filter, which predated Get-EngineText and never learned
+# two of its rules -- it did not drop ErrorRecords and did not bracket to the
+# first `{`. That was invisible until 2026-09-23, when the engine started
+# emitting a `  resolver: edges were derived by ...` line on stderr for an index
+# re-resolved by a NEWER build: the line joined the document and ConvertFrom-Json
+# died on "Path 'callees.summary.truncated' ... unexpected character: r".
+#
+# The lesson is the duplicate, not the message. A second copy of a filter cannot
+# be kept in step with the first, and this one silently fell behind for weeks.
+$bf = Invoke-EngineJson @('butterfly', '--qname', $Qname, '--depth', "$Depth",
+                          '--format', 'json', '--db', $DbPath)
 
 $callers = New-Object System.Collections.ArrayList
 $callees = New-Object System.Collections.ArrayList

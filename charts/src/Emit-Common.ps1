@@ -62,7 +62,14 @@ function Get-EngineText([string[]] $ArgList) {
            $s -notmatch '^\(?loaded defaults' -and
            $s -notmatch '^drag-lint:'         -and
            $s -notmatch '^\s+may be stale'    -and
-           $s -notmatch '^\s+drag-lint index '
+           $s -notmatch '^\s+drag-lint index ' -and
+           # The resolver-mismatch note, emitted when the index was resolved by a
+           # NEWER build than this engine. It goes to stderr, so the ErrorRecord
+           # filter above already catches it -- this line is belt and braces for
+           # a host that merges the streams, because when it does reach the
+           # document the failure is an opaque ConvertFrom-Json error a long way
+           # from its cause.
+           $s -notmatch '^\s*resolver:'
          }
   $script:LastEngineExit = $LASTEXITCODE
   $txt = ($raw -join "`n")
