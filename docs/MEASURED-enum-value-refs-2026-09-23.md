@@ -205,12 +205,16 @@ FROM refs r JOIN files f ON f.id=r.file_id
 WHERE r.kind='read' AND r.name_text LIKE 'LotStatus_%'
 GROUP BY r.name_text, f.path, bound ORDER BY 1,2
 ```
-Result: 29 rows, all `bound = 0`, over **three files**:
-`C:\Projects\DB\ORM3\CLIENT\uJobList.ViewModel.pas`,
-`C:\Projects\DB\ORM3\COMMON\OBJECTS\iFOLDERS.PAS`, and
-`C:\Projects\DB\ORM3\CLIENT\uJobList.pas` (a THIRD, distinct file from
-`uJobList.ViewModel.pas` -- do not conflate the two). Per-name breakdown of
-the wildcard-incidental (non-`LotStatus_<Suffix>`) matches, all `bound = 0`:
+Result: 29 rows, all `bound = 0`. File union taken from the two tables
+below (Query B's file columns plus the incidental-match table's file
+column), de-duplicated: `uJobList.ViewModel.pas` + `iFOLDERS.PAS` (Query B
+table) union `uFOLDERS.PAS` + `iFOLDERS.PAS` + `uJobList.pas` (incidental
+table below) = **4 distinct files** (`iFOLDERS.PAS` appears in both tables
+and is counted once): `uJobList.ViewModel.pas`, `iFOLDERS.PAS`,
+`uJobList.pas`, `uFOLDERS.PAS`. Note `uJobList.pas` and
+`uJobList.ViewModel.pas` are two DIFFERENT files -- do not conflate them.
+Per-name breakdown of the wildcard-incidental (non-`LotStatus_<Suffix>`)
+matches, all `bound = 0`:
 
 | name_text | file | count |
 |---|---|---|
@@ -296,7 +300,7 @@ these exact literal strings.
 | Candidate universe CLIENT (read/member-access) | 6064 / 8 | member-access exact; read +20 vs plan's 6,044 |
 | Duplicate `enum_value` groups (self/CLIENT/lib64/lib32) | 0 / 0 / 6 / 6 | not stated by plan as an expected number; recorded |
 | `write` negative control (CLIENT) | bound 0 of 12 | YES (bound=0 as required) |
-| `LotStatus_*` accounting (CLIENT), verbatim query | 29 rows, all bound=0, 3 files (incl. 4 wildcard-incidental names) | plan's "11 names" not applicable to this query's raw output |
+| `LotStatus_*` accounting (CLIENT), verbatim query | 29 rows, all bound=0, 4 files (incl. 4 wildcard-incidental names) | plan's "11 names" not applicable to this query's raw output |
 | `LotStatus_*` accounting (CLIENT), escaped query (Ruling R4) | 23 rows, 12 names, 55 occurrences, all bound=0, 2 files | disagrees on name count (12 not 11); bound=0 confirmed; this is Task 7's comparison set |
 
 All commands, DBs and raw outputs are reproducible from this file alone.
@@ -314,3 +318,42 @@ wrong, and it has been replaced with per-name tables generated from the
 re-run bytes. Section 7 now carries both the verbatim-plan query/result and
 the escaped query/result (12 names, 23 rows, 55 occurrences, all bound=0),
 labelled as such, per Ruling R4. No other section was touched.
+
+## Fix round 2 (Query A file count undercounted)
+
+Reviewer finding: the round-1 fix said Query A's result spans "three
+files" but omitted `uFOLDERS.PAS`, which the document's own incidental-match
+table and a later sentence both already named. Fix: no new SQL was run (no
+DB access needed or made this round). The file-count sentence was rewritten
+to derive its answer from the two tables already in the document -- Query
+B's table (files `uJobList.ViewModel.pas`, `iFOLDERS.PAS`) unioned with the
+incidental-match table (files `uFOLDERS.PAS`, `iFOLDERS.PAS`,
+`uJobList.pas`), de-duplicating the shared `iFOLDERS.PAS` -- giving **4**
+distinct files, not 3. Corrected at two sites: the Query A headline
+sentence (Section 7) and the Summary table's verbatim-query row (now
+"4 files"). Query B's "two files" statement was left untouched per the
+reviewer's independent verification.
+
+Sweep of the whole of Section 7 and the Summary table for any other
+prose count/file-list not matching the table it summarises:
+- Incidental-match sentence ("4 extra names, 6 rows, 9 occurrences ...
+  spread across uFOLDERS.PAS, iFOLDERS.PAS and uJobList.pas") -- checked
+  against the 6-row incidental table: 4 distinct names, 6 rows, occurrences
+  1+1+3+2+1+1=9, 3 distinct files. Matches. No change.
+- Query B headline ("23 rows, ... 12 distinct names ... two files") --
+  checked against the 12-row Query B table: 12 names, 2 file columns, 23
+  rows (12 names x up to 2 files each, one name -- LotStatus_Other -- has
+  only 1 nonzero file). Matches. No change (also the one Ruling-R4 item the
+  reviewer said was already independently verified correct).
+- "12 names, 23 rows, 55 occurrences total" closing sentence -- checked by
+  summing the Query B table's `total` column: 5+5+5+4+4+4+7+4+5+5+5+2 = 55.
+  Matches. No change.
+- Summary table's other rows (lint-all, M1 CLIENT/SERVER, candidate
+  universe, duplicate groups, write negative control) -- each checked
+  against its own detailed table/result earlier in the document. All
+  match. No change.
+
+Result of the sweep: **nothing else found.** The only wrong prose in
+Section 7 / the Summary table was the Query A file-count sentence and its
+mirror in the Summary table row, both already fixed above; every other
+prose count checked against its table matched exactly.
