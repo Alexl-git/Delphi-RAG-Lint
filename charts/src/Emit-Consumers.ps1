@@ -107,7 +107,6 @@ $BIND = @('DataBinding.FieldName', 'DataBinding.DataField', 'FieldName', 'DataFi
           'DataController.KeyFieldNames', 'Properties.KeyFieldNames',
           'DataController.DetailKeyFieldNames', 'DataController.MasterKeyFieldNames',
           'IndexFieldNames')
-$DS_PROPS = @('DataSource', 'DataBinding.DataSource', 'DataController.DataSource')
 # Measured 2026-09-23 against the live Firebird DB, VALIDATION ONLY (P16).
 $SCHEMA_NOTE = '5 live tables are not in the scripts (2026-09-23)'
 
@@ -436,10 +435,7 @@ if ($colName) {
   # CLIENT data bindings of C, drawn only when the chain resolves to T (P32-P34)
   $binds = Get-AllIndexRows @"
 SELECT sl.id AS id, sl.start_line AS line, sl.owner_name AS prop, f.path AS dfm, c.name AS ctl,
-       (SELECT d.text FROM string_literals d
-         WHERE d.kind = 'dfm-prop' AND d.file_id = sl.file_id AND d.owner_name IN ($(ConvertTo-SqlInList $DS_PROPS))
-           AND d.symbol_id IN (c.id, c.parent_id, (SELECT g.parent_id FROM symbols g WHERE g.id = c.parent_id))
-         ORDER BY d.start_line LIMIT 1) AS ds
+       $(Get-ControlDataSourceSql 'sl' 'c') AS ds
   FROM string_literals sl
   JOIN files f ON f.id = sl.file_id
   LEFT JOIN symbols c ON c.id = sl.symbol_id

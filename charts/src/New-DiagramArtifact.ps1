@@ -34,7 +34,8 @@
 param(
   # the SELECTION, and it differs per question: a qualified symbol for
   # butterfly / who-calls / touches-tables, a unit name for deps, a form CLASS
-  # for event-wiring, a TABLE or TABLE.COLUMN for consumers.
+  # for event-wiring, a TABLE or TABLE.COLUMN for consumers, a <Form>.<Control>
+  # (e.g. frmCausFail.colREASON) for feeds-from.
   # `cycles` and `architecture` select the PROJECT, not a symbol. Target stays
   # mandatory rather than gaining a special "omit it" mode, because a bundle with
   # no target in its name and no target in its meta.json is unidentifiable six
@@ -45,14 +46,15 @@ param(
                'hierarchy','class-surface','event-wiring','touches-tables',
                'lifecycle','cycles','wiring','effects','architecture',
                'protocol-trace','crosses-boundary','shown-where','change-impact','tested-by',
-               'exception-paths','consumers')]
+               'exception-paths','consumers','feeds-from')]
   [string] $Question = 'butterfly',
   # crosses-boundary only: the other half of the system, so the far side of a
   # protocol command can be named. Optional -- without it the chart shows one side
   # and says so.
   [string] $CounterpartDb,
-  # consumers only: the SQL-SCRIPT index clone (tables, triggers, procedures).
-  # -DbPath stays the Delphi project index; -Target is TABLE or TABLE.COLUMN.
+  # consumers and feeds-from: the SQL-SCRIPT index clone (tables, triggers,
+  # procedures). -DbPath stays the Delphi project index; -Target is TABLE or
+  # TABLE.COLUMN for consumers, <Form>.<Control> for feeds-from.
   [string] $SqlDbPath,
   [string] $Control,                      # event-wiring only: filter, not selector
   [int]    $Depth   = 2,
@@ -70,8 +72,8 @@ $ErrorActionPreference = 'Stop'
 
 # exception-paths walks CALLERS three levels by default (who-calls' precedent in
 # the plan), while the shared -Depth default here is 2. An explicit -Depth wins.
-if ($Question -eq 'consumers' -and -not $SqlDbPath) {
-  throw 'consumers needs -SqlDbPath: the SQL-script index clone (charts\scratch\db\SQL-drag-lint-sql.sqlite)'
+if ($Question -in 'consumers', 'feeds-from' -and -not $SqlDbPath) {
+  throw "$Question needs -SqlDbPath: the SQL-script index clone (charts\scratch\db\SQL-drag-lint-sql.sqlite)"
 }
 
 $EffDepth = $(if ($Question -eq 'exception-paths' -and -not $PSBoundParameters.ContainsKey('Depth')) { 3 } else { $Depth })
@@ -131,6 +133,8 @@ try {
       if ($Target.Contains('.')) { $co.Column = $Target } else { $co.Table = $Target }
       & (Join-Path $PSScriptRoot 'Emit-Consumers.ps1') @co
     }
+    # a data-aware CONTROL; the SQL clone checks the TABLE.COLUMN at the bottom
+    'feeds-from'     { & (Join-Path $PSScriptRoot 'Emit-FeedsFrom.ps1')     -Control $Target -DbPath $DbPath -SqlDbPath $SqlDbPath -Cap $Cap -OutDir $dir }
     # splatted so -CounterpartDb is ABSENT rather than empty: Get-CloneDb would
     # reject '' and the far side would fail instead of simply not being drawn.
     'crosses-boundary' {
@@ -184,6 +188,9 @@ $vocab = @{
   'exception-paths'= @('Raises', 'raise sites',  'Handles',  'handler clauses in body')
   # certain + inferred together; the split is on the focus box itself (R7)
   'consumers'      = @('Readers','reading routines','Writers','writing routines')
+  # the hops drawn, and how many controls in the whole index resolve to one
+  # table -- the per-control coverage (R9), not the per-datasource 41%
+  'feeds-from'     = @('ChainRows','chain rows','CtlTable','controls in the index that resolve to one table')
 }
 $v = $vocab[$Question]
 $leftCount  = $r.($v[0]); $leftLabel  = $v[1]
@@ -215,8 +222,8 @@ $fp = [pscustomobject]@{
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
                 $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact','exception-paths') { " -Depth $EffDepth" } else { '' }) +
-                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary','exception-paths','consumers') { " -Cap $Cap" } else { '' }) +
-                $(if ($Question -eq 'consumers') { " -SqlDbPath `"$SqlDbPath`"" } else { '' }) +
+                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary','exception-paths','consumers','feeds-from') { " -Cap $Cap" } else { '' }) +
+                $(if ($Question -in 'consumers', 'feeds-from') { " -SqlDbPath `"$SqlDbPath`"" } else { '' }) +
                 $(if ($Question -eq 'crosses-boundary' -and $CounterpartDb) { " -CounterpartDb `"$CounterpartDb`"" } else { '' }) +
                 $(if ($Question -eq 'class-surface') { " -SurfaceCap $SurfaceCap" } else { '' }) +
                 $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })

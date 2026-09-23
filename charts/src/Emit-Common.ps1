@@ -1064,6 +1064,117 @@ SELECT s.id AS id, s.name AS name, s.start_line AS line, f.path AS path,
   $o
 }
 
+# ---- small pieces of the datasource chain, shared and separately checked ----------
+#
+# Each of these was a defect inside Get-DataSourceChain found by the Task 0
+# review (routed to Task 3); they are functions now so Test-FeedsFromHelpers.ps1
+# can check them on synthetic input that the corpus happens not to contain.
+
+# SQL predicate: $ReceiverSql (a column or a quoted literal) IS $Name, bare or
+# as the last segment of a qualified receiver (`Self.dsrX`, `frm.dsrX`),
+# case-insensitively. An exact suffix comparison, NOT `LIKE '%.name'`: `_` is a
+# LIKE wildcard, so `dsr_A` matched `Self.dsrXA` (Task 0 review, fix b).
+function Get-ReceiverMatchSql([string] $ReceiverSql, [string] $Name) {
+  $n = ConvertTo-SqlText $Name
+  $k = $Name.Length + 1
+  "(UPPER($ReceiverSql) = UPPER('$n') OR (LENGTH($ReceiverSql) > $k AND UPPER(SUBSTR($ReceiverSql, -$k)) = UPPER('.$n')))"
+}
+
+# The control a `<ctl>[.DataBinding|.DataController|.Properties].<Prop> :=` names.
+# From receiver_text when it has one (a leading `Self.` is skipped -- it used to
+# yield the control `Self`, fix c); otherwise from the comment-stripped text
+# BEFORE the ref, because `edtF2   .DataBinding   .DataSource:=` stores
+# receiver_text '.DataBinding' with the control lost (P29).
+# Returns Control ('' when none) and From ('receiver' | 'source' | '').
+function Get-RePointControl([string] $ReceiverText, [string] $Before) {
+  if ($ReceiverText -and -not $ReceiverText.StartsWith('.')) {
+    $segs = @($ReceiverText -split '\.' | ForEach-Object { $_.Trim() })
+    $ctl = $(if ($segs[0] -eq 'Self' -and $segs.Count -gt 1) { $segs[1] } else { $segs[0] })
+    return [pscustomobject]@{ Control = $ctl; From = 'receiver' }
+  }
+  if ($null -ne $Before) {
+    $bef = $Before -replace '\s', ''
+    if ($bef -match '(?:^|[^A-Za-z0-9_.])(?:Self\.)?([A-Za-z_][A-Za-z0-9_]*)\.(?:DataBinding|DataController|Properties)\.$') {
+      return [pscustomobject]@{ Control = $Matches[1]; From = 'source' }
+    }
+  }
+  [pscustomobject]@{ Control = ''; From = '' }
+}
+
+# The identifier whose DECLARED TYPE the chain follows from an RHS such as
+# `FViewModel.MemTable`. A leading `Self.` is skipped. An RHS that starts with a
+# parenthesis (`(VM as IFoo).MemTable`) or a call / hard cast (`TFoo(X)`,
+# `GetTable(1).MT`) has no declared root: Root is '' and Reason is a sentence
+# the chart can print after "chain stops here:" (it used to be an empty root and
+# a malformed `no-type` reason, fix c).
+function Get-RhsRoot([string] $Rhs) {
+  $r = ([string]$Rhs).Trim() -replace '^Self\s*\.\s*', ''
+  if (-not $r) { return [pscustomobject]@{ Root = ''; Reason = 'RHS is empty -- nothing to follow' } }
+  if ($r.StartsWith('(')) {
+    return [pscustomobject]@{ Root = ''; Reason = "RHS $Rhs is a cast expression -- its type is not followed" }
+  }
+  if ($r -match '^([A-Za-z_][A-Za-z0-9_]*)\s*\(') {
+    return [pscustomobject]@{ Root = ''; Reason = "RHS $Rhs starts with a call or hard cast ($($Matches[1])(...)) -- its result type is not followed" }
+  }
+  if ($r -match '^([A-Za-z_][A-Za-z0-9_]*)') { return [pscustomobject]@{ Root = $Matches[1]; Reason = '' } }
+  [pscustomobject]@{ Root = ''; Reason = "RHS $Rhs has no identifier root -- nothing to follow" }
+}
+
+# SQL scalar subquery: the datasource text that feeds the component $CtlAlias,
+# whose DFM row is $SlAlias -- its OWN DataSource property, else its parent's,
+# else its grandparent's (a grid column is fed through its view's
+# DataController.DataSource). Nearest first. Measured 2026-09-23 on CLIENT: of
+# 842 field-binding rows none has a datasource on more than one of the three, so
+# nearest-first and consumers' earlier line-order rule agree on this corpus; the
+# rule is written down once so consumers and feeds-from cannot drift.
+# (A COALESCE of three lookups, because SQLite refuses an outer column inside a
+# correlated subquery's ORDER BY -- "no such column: c.id".)
+function Get-ControlDataSourceSql([string] $SlAlias = 'sl', [string] $CtlAlias = 'c') {
+  $c = $CtlAlias
+  $one = { param($who)
+    "(SELECT d.text FROM string_literals d WHERE d.kind = 'dfm-prop' AND d.file_id = $SlAlias.file_id " +
+    "AND d.owner_name IN ('DataSource','DataBinding.DataSource','DataController.DataSource') " +
+    "AND d.symbol_id = $who ORDER BY d.start_line LIMIT 1)" }
+  "COALESCE($(& $one "$c.id"), $(& $one "$c.parent_id"), " +
+  "$(& $one "(SELECT g.parent_id FROM symbols g WHERE g.id = $c.parent_id)"))"
+}
+
+# Code ASSIGNMENTS to <control>[.DataBinding|...].<one of $Props> in $PasPath,
+# for the controls in $Names. A READ of the property is not a re-pointing
+# (ControlPlan2.pas:1689-1702 read `.DataController.DataSource.DataSet`). A row
+# in a stale file is kept with Stale = $true and no RHS: the LINE is still a
+# fact of the index, the text is not (R11). Used by the chain (DataSource /
+# ListSource) and by feeds-from (DataField / FieldName re-binding).
+function Get-RePointSites([string] $PasPath, [string[]] $Names, [string[]] $Props, [hashtable] $SourceOverride) {
+  $out = New-Object System.Collections.ArrayList
+  if (-not $PasPath -or -not @($Names).Count) { return , $out.ToArray() }
+  [void](Get-IndexedFileShas)                       # loads the path -> file id map
+  $fid = $script:DlFileIds[$DbPath][$PasPath]
+  $sites = Invoke-IndexQuery @"
+SELECT r.receiver_text AS rt, r.name_text AS prop, r.start_line AS line, r.start_col AS col, r.end_col AS ecol,
+       encl.qualified_name AS routine
+  FROM refs r LEFT JOIN symbols encl ON encl.id = r.enclosing_symbol_id
+ WHERE r.file_id = $fid AND r.kind = 'member-access' AND r.name_text IN ($(ConvertTo-SqlInList $Props))
+ ORDER BY r.start_line, r.start_col
+"@ 'Get-RePointSites'
+  foreach ($s in $sites) {
+    $rt = [string]$s.rt
+    $ctx = Get-SourceContext $PasPath ([int]$s.line) ([int]$s.col) ([int]$s.ecol - [int]$s.col) $SourceOverride
+    $who = Get-RePointControl $rt $(if ($ctx.Stale) { $null } else { $ctx.Before })
+    if (-not $who.Control -or ($Names -notcontains $who.Control)) { continue }
+    $rhs = ''
+    if (-not $ctx.Stale) {
+      if ($ctx.After -notmatch '^\s*:=') { continue }   # a read is not a re-pointing
+      $rhs = (($ctx.After -replace '^\s*:=', '') -split ';')[0].Trim()
+    }
+    [void]$out.Add([pscustomobject]@{
+      Control = $who.Control; ControlFrom = $who.From; Receiver = $rt; Prop = [string]$s.prop
+      File = $PasPath; Line = [int]$s.line; Routine = [string]$s.routine; Rhs = $rhs; Stale = $ctx.Stale
+    })
+  }
+  , $out.ToArray()
+}
+
 # ---- the datasource chain (feeds-from and lands-where share it) ------------------
 #
 # control --DataSource--> TDataSource --DataSet--> memtable --owner--> view model
@@ -1099,13 +1210,15 @@ SELECT s.id AS id, s.name AS name, s.start_line AS line, f.path AS path,
 # Returns (grades are the chart vocabulary: certain / inferred / by name /
 # dangling / unresolved / stale source):
 #   Form, FormFile, PasFile, DsName, Module, Dangling
-#   DataSource      $null | Id, Name, Qname, Type, File, Line
+#   DataSource      $null | Id, Name, Qname, Type, File, Line, SameFile
+#                   (SameFile $false = reached through a module NAME: [by name])
 #   Controls[]      Control, ControlType, ControlId, Prop, File, Line, IsLookup
-#   RePointedAt[]   Control, ControlFrom ('receiver'|'source'), Receiver, File,
-#                   Line, Routine, Rhs, Stale
+#   RePointedAt[]   Control, ControlFrom ('receiver'|'source'), Receiver, Prop,
+#                   File, Line, Routine, Rhs, Stale   (Get-RePointSites)
 #   DataSetSites[]  Kind ('dfm'|'assign'|'read'|'stale'), File, Line, Routine, Rhs
 #   RhsType         $null | Rhs, Root, RootKind, TypeName, TypeKind, TypeFile, TypeLine
-#   CandidateTables[], BoundColumns[], ColumnMatch[], MissingColumns[]
+#   CandidateTables[] (first-literal order), CandidateLines{table -> line},
+#   BoundColumns[], ColumnMatch[], MissingColumns[]
 #   ResolvedTable   string | $null
 #   Grade           one-table | by-columns | many | none | no-type | no-assignment
 #                   | dfm-dataset | dangling | no-datasource | stale source
@@ -1162,47 +1275,15 @@ SELECT sl.owner_name AS prop, sl.start_line AS line, c.id AS cid, c.name AS ctl,
     } })
 
   # ---- re-pointing in code: <control>[.DataBinding|.DataController].DataSource := ...
-  $repoint = New-Object System.Collections.ArrayList
   $names = @($controls | Where-Object { $_.Control } | ForEach-Object { $_.Control } | Sort-Object -Unique)
-  if ($pasId -and $names.Count) {
-    $sites = Invoke-IndexQuery @"
-SELECT r.receiver_text AS rt, r.start_line AS line, r.start_col AS col, r.end_col AS ecol,
-       encl.qualified_name AS routine
-  FROM refs r LEFT JOIN symbols encl ON encl.id = r.enclosing_symbol_id
- WHERE r.file_id = $pasId AND r.kind = 'member-access' AND r.name_text IN ('DataSource','ListSource')
- ORDER BY r.start_line, r.start_col
-"@ 'Get-DataSourceChain (re-pointing)'
-    foreach ($s in $sites) {
-      $rt = [string]$s.rt
-      $fromRecv = ($rt -and -not $rt.StartsWith('.'))
-      $ctx = Get-SourceContext $pasPath ([int]$s.line) ([int]$s.col) ([int]$s.ecol - [int]$s.col) $SourceOverride
-      $ctl = ''; $from = ''
-      if ($fromRecv) { $ctl = ($rt -split '\.')[0]; $from = 'receiver' }
-      elseif (-not $ctx.Stale) {
-        $bef = $ctx.Before -replace '\s', ''
-        if ($bef -match '(?:^|[^A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)\.(?:DataBinding|DataController|Properties)\.$') {
-          $ctl = $Matches[1]; $from = 'source'
-        }
-      }
-      if (-not $ctl -or ($names -notcontains $ctl)) { continue }
-      $rhs = ''
-      if (-not $ctx.Stale) {
-        if ($ctx.After -notmatch '^\s*:=') { continue }   # a read of .DataSource is not a re-pointing
-        $rhs = (($ctx.After -replace '^\s*:=', '') -split ';')[0].Trim()
-      }
-      [void]$repoint.Add([pscustomobject]@{
-        Control = $ctl; ControlFrom = $from; Receiver = $rt; File = $pasPath; Line = [int]$s.line
-        Routine = [string]$s.routine; Rhs = $rhs; Stale = $ctx.Stale
-      })
-    }
-  }
+  $repoint = $(if ($pasId) { Get-RePointSites $pasPath $names @('DataSource', 'ListSource') $SourceOverride } else { , @() })
 
   $o = [ordered]@{
     Form = $Form; FormFile = $dfmPath; PasFile = $pasPath; DsName = $DsName
     Module = ''; Dangling = $false; DataSource = $null
-    Controls = $controls; RePointedAt = $repoint.ToArray()
+    Controls = $controls; RePointedAt = @($repoint)
     DataSetSites = @(); RhsType = $null
-    CandidateTables = @(); BoundColumns = @(); ColumnMatch = @(); MissingColumns = @()
+    CandidateTables = @(); CandidateLines = @{}; BoundColumns = @(); ColumnMatch = @(); MissingColumns = @()
     ResolvedTable = $null; Grade = ''; Hops = $null; StopReason = ''
   }
   function Complete([string] $grade, [string] $stop) {
@@ -1243,9 +1324,21 @@ SELECT c.id AS id, c.name AS name, c.qualified_name AS q, c.signature AS sig, c.
     return (Complete 'no-datasource' $why)
   }
   $d = $ds[0]
+  $sameFile = ([int]$d.fid -eq $dfmId)
   $o.DataSource = [pscustomobject]@{ Id = [int]$d.id; Name = [string]$d.name; Qname = [string]$d.q
-                                     Type = [string]$d.sig; File = [string]$d.path; Line = [int]$d.line }
-  Add-Hop 'datasource' 'certain' "$($d.name): $($d.sig)" ([string]$d.path) ([int]$d.line) ''
+                                     Type = [string]$d.sig; File = [string]$d.path; Line = [int]$d.line
+                                     SameFile = $sameFile }
+  # Only a SAME-FILE component is certain (P28). A module prefix naming ANOTHER
+  # form's file is a match on the module's NAME -- `dsrFtrs` exists in three
+  # forms -- so it is [by name] (plan R5; Task 0 review, fix a). Measured
+  # 2026-09-23: no CLIENT binding takes this branch today (all 65 prefixed rows
+  # are dangling); Test-FeedsFromHelpers.ps1 exercises it on real components.
+  if ($sameFile) {
+    Add-Hop 'datasource' 'certain' "$($d.name): $($d.sig)" ([string]$d.path) ([int]$d.line) ''
+  } else {
+    Add-Hop 'datasource' 'by name' "$($d.name): $($d.sig)" ([string]$d.path) ([int]$d.line) `
+      "resolved through the module NAME $($o.Module) to $([IO.Path]::GetFileName([string]$d.path)), not declared in $([IO.Path]::GetFileName($dfmPath))"
+  }
   $dsFile = [string]$d.path
   $dsPas = if ([int]$d.fid -eq $dfmId) { $pasPath } else {
     $g = [IO.Path]::ChangeExtension($dsFile, '.pas')
@@ -1278,13 +1371,12 @@ SELECT sl.text AS t, sl.start_line AS line FROM string_literals sl
   }
   if ($dsPas) {
     $pid2 = $fileIds[$dsPas]
-    $lq = ConvertTo-SqlText $local
     $code = Invoke-IndexQuery @"
 SELECT r.start_line AS line, r.start_col AS col, r.end_col AS ecol, r.enclosing_symbol_id AS eid,
        encl.qualified_name AS routine
   FROM refs r LEFT JOIN symbols encl ON encl.id = r.enclosing_symbol_id
  WHERE r.file_id = $pid2 AND r.kind = 'member-access' AND r.name_text = 'DataSet'
-   AND (UPPER(r.receiver_text) = UPPER('$lq') OR UPPER(r.receiver_text) LIKE UPPER('%.$lq'))
+   AND $(Get-ReceiverMatchSql 'r.receiver_text' $local)
  ORDER BY r.start_line, r.start_col
 "@ 'Get-DataSourceChain (dataset sites)'
     foreach ($x in $code) {
@@ -1296,7 +1388,8 @@ SELECT r.start_line AS line, r.start_col AS col, r.end_col AS ecol, r.enclosing_
       if ($ctx.After -match '^\s*:=') {
         $buf = $ctx.After -replace '^\s*:=', ''
         foreach ($f in $ctx.Following) { if ($buf -match ';') { break }; $buf += ' ' + $f }
-        $rhs = (($buf -split ';')[0].Trim()) -replace '\s+', ''
+        # whitespace is collapsed, not deleted: `(VM as IFoo)` must not read `(VMasIFoo)`
+        $rhs = ((($buf -split ';')[0].Trim()) -replace '\s*\.\s*', '.') -replace '\s+', ' '
         [void]$sites.Add([pscustomobject]@{ Kind = 'assign'; File = $dsPas; Line = [int]$x.line; Routine = [string]$x.routine; Rhs = $rhs; Eid = [int]$x.eid })
       } else {
         [void]$sites.Add([pscustomobject]@{ Kind = 'read'; File = $dsPas; Line = [int]$x.line; Routine = [string]$x.routine; Rhs = ''; Eid = [int]$x.eid })
@@ -1325,10 +1418,23 @@ SELECT r.start_line AS line, r.start_col AS col, r.end_col AS ecol, r.enclosing_
     return (Complete 'no-assignment' $why)
   }
   $a0 = $assigns[0]
-  Add-Hop 'dataset' 'inferred' "$local.DataSet := $($a0.Rhs)" $a0.File $a0.Line $(if ($staleSites.Count) { "$($staleSites.Count) other site(s) in a stale file not read" } else { '' })
+  # The assignment LINE is a fact read from fresh source, so the hop is certain
+  # -- when it is the only story. EVERY site was scanned (dsrFolder's first site
+  # is a CodeSite.Send read); if the non-nil assignments disagree on the RHS, or
+  # a stale file hides some sites, following the first one is a choice: inferred.
+  $rhsSet = @($assigns | ForEach-Object { $_.Rhs.ToUpperInvariant() } | Sort-Object -Unique)
+  $dsWhy = @()
+  if ($rhsSet.Count -gt 1) { $dsWhy += "$($assigns.Count) assignments with $($rhsSet.Count) different right-hand sides; following the first" }
+  if ($staleSites.Count) { $dsWhy += "$($staleSites.Count) other site(s) in a stale file not read" }
+  Add-Hop 'dataset' $(if ($dsWhy.Count) { 'inferred' } else { 'certain' }) "$local.DataSet := $($a0.Rhs)" $a0.File $a0.Line ($dsWhy -join '; ')
 
   # ---- hop 3: the declared type of the RHS root ----------------------------------
-  $root = ($a0.Rhs -replace '^Self\.', '' -split '[.\[(^]')[0]
+  $rr = Get-RhsRoot $a0.Rhs
+  $root = $rr.Root
+  if (-not $root) {
+    Add-Hop 'rhs-type' 'unresolved' $a0.Rhs $dsPas $a0.Line $rr.Reason
+    return (Complete 'no-type' $rr.Reason)
+  }
   $rq = ConvertTo-SqlText $root
   $decl = Invoke-IndexQuery @"
 SELECT s.kind AS kind, s.signature AS sig, s.parent_id AS pid
@@ -1340,7 +1446,7 @@ SELECT s.kind AS kind, s.signature AS sig, s.parent_id AS pid
   if (-not $pick.Count) { $pick = @($decl | Where-Object { $_.kind -in 'field', 'property' }) }
   if (-not $pick.Count) { $pick = @($decl) }
   if (-not $pick.Count) {
-    $why = "$root is not declared in $([IO.Path]::GetFileName($dsPas))"
+    $why = "$root is not declared as a field, property, parameter or variable in $([IO.Path]::GetFileName($dsPas))"
     Add-Hop 'rhs-type' 'unresolved' $root $dsPas $a0.Line $why
     return (Complete 'no-type' $why)
   }
@@ -1365,10 +1471,16 @@ SELECT s.kind AS kind, s.start_line AS line, f.path AS path, s.file_id AS fid
   # ---- hop 4: table-name literals in the unit that declares that type ------------
   $inNames = ConvertTo-SqlInList $SqlSet.Names
   $lit = Invoke-IndexQuery @"
-SELECT DISTINCT sl.text AS t FROM string_literals sl
+SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
  WHERE sl.file_id = $([int]$ts[0].fid) AND sl.kind IN ('literal','const') AND sl.text IN ($inNames)
+ GROUP BY sl.text ORDER BY MIN(sl.start_line), sl.text
 "@ 'Get-DataSourceChain (table literals)'
-  $o.CandidateTables = @($lit | ForEach-Object { [string]$_.t } | Sort-Object -Unique)
+  # In FIRST-LITERAL order, not alphabetical: the order the view model names its
+  # tables is how a reader finds them (uMachineList.ViewModel.pas: MACHINES :42,
+  # STATIONS :143, PLANT :144, DEPARTTBL :145). CandidateLines anchors each one.
+  $o.CandidateTables = @($lit | ForEach-Object { [string]$_.t })
+  foreach ($x in $lit) { $o.CandidateLines[[string]$x.t] = [int]$x.line }
+  $typeFile = [string]$ts[0].path
   $unit = [IO.Path]::GetFileName([string]$ts[0].path)
   $cand = $o.CandidateTables
 
@@ -1381,19 +1493,108 @@ SELECT DISTINCT sl.text AS t FROM string_literals sl
   if ($cand.Count -eq 1) {
     $o.ResolvedTable = $cand[0]
     $o.MissingColumns = @($o.BoundColumns | Where-Object { -not $SqlSet.Tables[$cand[0]].Columns.Contains($_) })
-    Add-Hop 'table' 'inferred' $cand[0] ([string]$ts[0].path) ([int]$ts[0].line) "the only table-name literal in $unit"
+    Add-Hop 'table' 'inferred' $cand[0] $typeFile $o.CandidateLines[$cand[0]] "the only table-name literal in $unit"
     return (Complete 'one-table' '')
   }
   $o.ColumnMatch = $fits
   if ($o.BoundColumns.Count -and $fits.Count -eq 1) {
     $o.ResolvedTable = $fits[0]
-    Add-Hop 'table' 'inferred' $fits[0] ([string]$ts[0].path) ([int]$ts[0].line) "$($cand.Count) tables named in $unit; only $($fits[0]) holds all $($o.BoundColumns.Count) bound column(s)"
+    Add-Hop 'table' 'inferred' $fits[0] $typeFile $o.CandidateLines[$fits[0]] "$($cand.Count) tables named in $unit; only $($fits[0]) holds all $($o.BoundColumns.Count) bound column(s)"
     return (Complete 'by-columns' '')
   }
   $why = if (-not $o.BoundColumns.Count) { "$unit names $($cand.Count) tables and no column is bound through $local to tell them apart" }
          else { "$unit names $($cand.Count) tables; $($fits.Count) of them hold all $($o.BoundColumns.Count) bound column(s)" }
   Add-Hop 'table' 'unresolved' "$($cand.Count) candidates" ([string]$ts[0].path) ([int]$ts[0].line) $why
   Complete 'many' $why
+}
+
+# The cache key of one chain: the DFM path and the datasource TEXT, case-folded.
+function Get-ChainKey([string] $Dfm, [string] $Ds) { "$Dfm|$Ds".ToUpperInvariant() }
+
+# EVERY datasource chain in the index, and every DFM FIELD BINDING of a
+# data-aware control classified by where its chain ends -- the population behind
+# feeds-from's disclosure rows (and lands-where's DFM-field selection).
+#
+# Per DATASOURCE: every `TDataSource` component (54 on CLIENT).
+# Per CONTROL (plan R9: the 41% is per datasource and must NOT be quoted): every
+# `DataBinding.FieldName` / `DataBinding.DataField` / `DataField` row -- 808 on
+# CLIENT. Plain `FieldName` is left out ON PURPOSE: measured 2026-09-23, all 34
+# such rows are persistent TField definitions on a dataset (`TBLNAME:
+# TStringField`), not controls. The datasource is the control's own, else its
+# parent's, else its grandparent's (Get-ControlDataSourceSql). Outcome per row:
+#   column       chain resolves to one table, and the table has the column
+#   not-column   chain resolves to one table, which has no such column
+#   ambiguous    several candidate tables survive (grade many)
+#   dangling     the DFM datasource names a module this index does not hold
+#   stops        the chain stops before a table (none / no-type / no-assignment /
+#                dfm-dataset / no-datasource)
+#   stale        a source file on the chain differs from the indexed copy
+#   no-ds        no DataSource on the control or its two enclosing components
+#
+# COST AND CACHE: about 70 chains at ~7 engine calls each, ~60 s on CLIENT. The
+# result is cached in $global:DlFeedChains for the life of the PowerShell
+# process, keyed on both databases' size + mtime and this file's mtime, so the
+# gate pays once. A -SourceOverride run is never cached (its answer is about a
+# manufactured file). The cache does not see a source file edited mid-process
+# -- start a new process after editing the corpus.
+function Get-FieldBindingChains($SqlSet, [hashtable] $SourceOverride) {
+  $key = $null
+  if (-not $SourceOverride) {
+    $di = Get-Item -LiteralPath $DbPath; $si = Get-Item -LiteralPath $SqlSet.Db
+    $ci = Get-Item -LiteralPath (Join-Path $PSScriptRoot 'Emit-Common.ps1')
+    $key = "$($di.FullName)|$($di.Length)|$($di.LastWriteTimeUtc.Ticks)|$($si.FullName)|$($si.Length)|$($si.LastWriteTimeUtc.Ticks)|$($ci.LastWriteTimeUtc.Ticks)"
+    if (-not $global:DlFeedChains) { $global:DlFeedChains = @{} }
+    if ($global:DlFeedChains.ContainsKey($key)) { return $global:DlFeedChains[$key] }
+  }
+
+  $chains = @{}
+  $dsRows = Get-AllIndexRows @"
+SELECT c.id AS id, c.name AS name, f.path AS path
+  FROM symbols c JOIN files f ON f.id = c.file_id
+ WHERE c.kind = 'component' AND c.signature = 'TDataSource'
+"@ 'c.id'
+  $perDs = New-Object System.Collections.ArrayList
+  foreach ($d in $dsRows) {
+    $k = Get-ChainKey ([string]$d.path) ([string]$d.name)
+    if (-not $chains.ContainsKey($k)) { $chains[$k] = Get-DataSourceChain ([string]$d.path) ([string]$d.name) $SqlSet $SourceOverride }
+    [void]$perDs.Add($chains[$k])
+  }
+
+  $binds = Get-AllIndexRows @"
+SELECT sl.id AS id, sl.start_line AS line, sl.owner_name AS prop, sl.text AS col, f.path AS dfm,
+       c.id AS cid, c.name AS ctl, $(Get-ControlDataSourceSql 'sl' 'c') AS ds
+  FROM string_literals sl JOIN files f ON f.id = sl.file_id LEFT JOIN symbols c ON c.id = sl.symbol_id
+ WHERE sl.kind = 'dfm-prop' AND sl.owner_name IN ('DataBinding.FieldName','DataBinding.DataField','DataField')
+"@ 'sl.id'
+  $rows = New-Object System.Collections.ArrayList
+  foreach ($b in $binds) {
+    $ds = [string]$b.ds
+    $outcome = 'no-ds'; $table = $null
+    if ($ds) {
+      $k = Get-ChainKey ([string]$b.dfm) $ds
+      if (-not $chains.ContainsKey($k)) { $chains[$k] = Get-DataSourceChain ([string]$b.dfm) $ds $SqlSet $SourceOverride }
+      $ch = $chains[$k]
+      $table = $ch.ResolvedTable
+      $outcome = if ($ch.Grade -eq 'stale source') { 'stale' }
+                 elseif ($ch.Dangling) { 'dangling' }
+                 elseif ($table) {
+                   $t = $SqlSet.Tables[$table]
+                   $cu = ([string]$b.col).ToUpperInvariant()
+                   if ($t.Columns.Contains($cu) -or $t.OlderOnlyColumns.Contains($cu)) { 'column' } else { 'not-column' }
+                 }
+                 elseif ($ch.Grade -eq 'many') { 'ambiguous' }
+                 else { 'stops' }
+    }
+    [void]$rows.Add([pscustomobject]@{
+      Id = [int]$b.id; Dfm = [string]$b.dfm; Line = [int]$b.line; Prop = [string]$b.prop; Column = [string]$b.col
+      ControlId = $(if ($b.cid) { [int]$b.cid } else { 0 }); Control = [string]$b.ctl; Ds = $ds
+      Outcome = $outcome; Table = $table
+    })
+  }
+
+  $o = [pscustomobject]@{ Chains = $chains; DataSources = $perDs.ToArray(); Bindings = $rows.ToArray() }
+  if ($key) { $global:DlFeedChains[$key] = $o }
+  $o
 }
 
 # ---- exception paths: the ref classifier and the source-only scan -----------------

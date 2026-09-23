@@ -830,7 +830,12 @@ Step 'E-T0' {
   Chk 'A-FF0-GRADES'    $t0.DsGrades 'by-columns=6,dfm-dataset=5,many=11,no-type=1,none=9,one-table=22'
   Chk 'A-FF0-REASON'    $t0.DsNoReason 0
   Chk 'A-FF0-HOPS'      $t0.DsNoHops 0
-  Chk 'A-FF0-CAUSFAIL'  $t0.CausFailChain 'one-table:CAUSFAIL:certain>inferred>by name>inferred'
+  # MOVED by Task 3 (was certain>inferred>by name>inferred): the dataset hop is
+  # CERTAIN when every non-nil assignment site in the unit agrees on one RHS and
+  # none is in a stale file (brief section 6: "certain, anchored to the
+  # assignment line"). dsrCausFail has one: uCausFailForm.pas:125. It stays
+  # inferred, with the reason, when the sites disagree.
+  Chk 'A-FF0-CAUSFAIL'  $t0.CausFailChain 'one-table:CAUSFAIL:certain>certain>by name>inferred'
   # 65 dangling rows, 63 of them re-pointed by an ASSIGNMENT in code. The plan's
   # 21 was receiver_text-only and counted 3 READS as re-pointings
   # (viewSPCMU/PP/CP.DataController.DataSource.DataSet.Append, ControlPlan2.pas
@@ -1261,6 +1266,135 @@ Step 'CO-STALE' {
   if ($ts -notmatch 'CAUSFAIL_BIU5</FONT>\s*<FONT[^>]*>:15</FONT>\s*<FONT[^>]*>&#183; \[stale source\]') { Fail 'A-CO-STALE-TRIG' 'CAUSFAIL_BIU5 (MS5.SQL) is not marked [stale source]' }
   if ($ts -notmatch '77 of 168 procedure bodies not scanned') { Fail 'A-CO-STALE-NOTE' 'the unscanned-procedure disclosure is missing' }
 }
+# ---- PLAN-last-four-verbs, Task 3: feeds-from --------------------------------------
+# CLIENT (-DbPath) + the SQL-SCRIPT clone (-SqlDbPath). Every number measured
+# 2026-09-23 and PINNED (R5); where a pin differs from the plan the comment names
+# the mechanism (R6). Gate codes carry an FF- prefix: N20-N24 were taken.
+Note 'feeds-from: the three routed chain fixes ...'
+Step 'E-FF0' {
+  $script:ff0 = & "$SRC\Test-FeedsFromHelpers.ps1" -DbCli $DbCli -DbSql $DbSql
+  # (a) a module prefix naming ANOTHER form's file is a name match, not a fact;
+  # the same prefix naming the form's own file stays certain
+  Chk 'A-FF0-FIXA'      $ff0.FixA 'datasource:by name'
+  Chk 'A-FF0-FIXA-SELF' $ff0.FixASelf 'certain:CAUSFAIL'
+  # (b) `_` is not a LIKE wildcard any more (5 literal cases, evaluated by SQLite)
+  if (@($ff0.FixBFailures).Count) { Fail 'A-FF0-FIXB' (@($ff0.FixBFailures) -join '; ') }
+  # (c) Self.edtX.DataBinding -> edtX; (VM as IFoo).MemTable -> a sentence, not ''
+  if (@($ff0.FixC1Failures).Count) { Fail 'A-FF0-FIXC1' (@($ff0.FixC1Failures) -join '; ') }
+  if (@($ff0.FixC2Failures).Count) { Fail 'A-FF0-FIXC2' (@($ff0.FixC2Failures) -join '; ') }
+  # candidates in FIRST-LITERAL order -- the brief's "SERID, SERREAD, SERPART"
+  Chk 'A-FF0-ORDER'     "$($ff0.PListOrder)@$($ff0.PListLines)" 'SERID,SERREAD,SERPART@76,310,311'
+  # the shared control -> datasource rule reaches a grid column through its view
+  Chk 'A-FF0-CTLDS'     $ff0.ColReasonDs 'dsrCausFail'
+}
+
+Note 'feeds-from ...'
+Step 'E-FF' {
+  $script:ff1 = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmCausFail.colREASON' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-FF1-TABLE'     $ff1.TableColumn 'CAUSFAIL.REASON'
+  Chk 'A-FF1-COLUMN'    $ff1.ColumnExists 'yes'
+  # control, datasource, assignment, type, table.column
+  Chk 'A-FF1-HOPS'      $ff1.ChainRows 5
+  Chk 'A-FF1-GRADES'    $ff1.HopGrades 'certain>certain>certain>by name>inferred'
+  Chk 'A-FF1-CLICK'     "$($ff1.ClickTargets)/$($ff1.Expected)" '7/7'
+  $tf1 = Dot $ff1
+  # colREASON FieldName (.dfm:60), dsrCausFail (.dfm:88), the assignment
+  # (uCausFailForm.pas:125, FormActivate), the CAUSFAIL literal
+  # (uCausFail.ViewModel.pas:37), the REASON column (MS1.SQL:1410)
+  foreach ($ln in 60, 88, 125, 37, 1410) { if (-not (HasLine $tf1 $ln)) { Fail 'A-FF1-HREF' "no row anchored on line $ln" } }
+  if ($tf1 -notmatch 'TfrmCausFail\.FormActivate') { Fail 'A-FF1-ROUTINE' 'the assignment row does not name FormActivate' }
+  if ($tf1 -notmatch 'cluster_hop_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-FF1-DASHED' 'no dashed hop' }
+
+  # THE INDEX-WIDE ROWS. Per datasource, as Task 0 measured (54 / 5 / 49, NOT
+  # the plan's 51: same-file DataSet matching, see A-FF0-DS).
+  Chk 'A-FF0-DS-CHART'  "$($ff1.IndexDs)/$($ff1.IndexDsDfm)/$($ff1.IndexDsCode)" '54/5/49'
+  Chk 'A-FF0-RES-CHART' "$($ff1.IndexDsOne)/$($ff1.IndexDsMany)/$($ff1.IndexDsNone)/$($ff1.IndexDsByCol)/$($ff1.IndexDsOther)" '22/17/9/6/6'
+  # PER CONTROL (R9: measured, the 41% is NOT quoted). 808 DataBinding.FieldName
+  # / DataField rows (the 34 plain FieldName rows are persistent TFields, not
+  # controls). 267 resolve to one table = 33.0%, 254 to a column that table has:
+  # LOWER than 41%, as R9 predicted, because the busy forms sit on the
+  # unresolved datasources:
+  #   dangling 426 -- Blueprint4_Model.* 226 (dsrFtrs 154, dsrOperation 50, ...),
+  #                   ControlPlan_Model.* 171 (dsrFtrs 132, ...), dmlSystem2 29;
+  #                   the brief's 65 counts the DataSource-bearing ROWS, this
+  #                   counts every field-bound control under them
+  #   stops 77     -- dfm-dataset 42, none 34 (interface-typed VMs), no-type 1
+  #   ambiguous 37 -- CompGroup2 dsrFtrs 31, dsrPList 2, AssignGroups/Tools2 dsrFtrs 2+2
+  #   not-column 13 -- all uJobList on FOLDERS (DueInStr, LotStatusC, *VerdictStr,
+  #                   Status_*Str ...): memtable-computed fields, not DB columns
+  #   no-ds 1      -- CADFNotes.dxDBEdit1, whose DataSource is set only in code
+  Chk 'A-FF0-PERCTL'    "$($ff1.Controls):$($ff1.CtlTable)/$($ff1.CtlColumn)/$($ff1.CtlNotColumn)/$($ff1.CtlAmbiguous)/$($ff1.CtlStops)/$($ff1.CtlDangling)/$($ff1.CtlNoDs)/$($ff1.CtlStale)" '808:267/254/13/37/77/426/1/0'
+  if ($tf1 -notmatch 'per control: 808 field-bound controls; 267 resolve to one table \(33%\)') { Fail 'A-FF0-PERCTL' 'the per-control coverage is not printed on the chart' }
+  if ($tf1 -match '41 ?%') { Fail 'A-FF0-R9' 'the chart quotes the per-datasource 41%' }
+
+  # P33 tie-break: 4 candidates in literal order, 6 bound columns, one survivor
+  $script:ff2 = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmMachineList.colMACHINEID' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-FF2-CANDS'     "$(@($ff2.Candidates -split ',').Count)/$($ff2.AfterTieBreak) ($($ff2.ResolvedTable))" '4/1 (MACHINES)'
+  Chk 'A-FF2-ORDER'     "$($ff2.Candidates) bound=$($ff2.BoundColumns)" 'MACHINES,STATIONS,PLANT,DEPARTTBL bound=6'
+  Chk 'A-FF2-TABLE'     $ff2.TableColumn 'MACHINES.MACHINEID'
+  if ((Dot $ff2) -notmatch 'tie broken by 6 bound column') { Fail 'A-FF2-TIE' 'the tie-break is not stated' }
+
+  # the interface-typed view model: the chain stops, exit 0, no table
+  $script:ff4 = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmBlueprintCADImport.grdBalsViewNUM' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-FF4-STOP'      "$($ff4.Grade):$([string]$ff4.ResolvedTable):$($ff4.HopGrades)" 'none::certain>certain>certain>by name>stop'
+  if ((Dot $ff4) -notmatch 'chain stops here' -or (Dot $ff4) -notmatch 'interface-typed view-model\] .*IBlueprintCADImport_ViewModel') { Fail 'A-FF4-STOP' 'no interface-typed stop row' }
+}
+
+Note 'feeds-from negatives and draws ...'
+NegTest 'FF-N28' 'feeds-from selects a data-aware CONTROL, not a datasource -- ask consumers/shown-where' 'feedsfrom_frmCausFail_dsrCausFail' {
+  & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmCausFail.dsrCausFail' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $negDir }
+# a persistent TField is not a control either
+NegTest 'FF-N28b' 'is a persistent FIELD' 'feedsfrom_frmCompGroupSetup2_tblCompTreeName' {
+  & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmCompGroupSetup2.tblCompTreeName' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $negDir }
+NegTest 'FF-N34' 'is not a SQL index (0 sql_table symbols)' 'feedsfrom_frmCausFail_colREASON' {
+  & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmCausFail.colREASON' -DbPath $DbCli -SqlDbPath $DbCli -OutDir $negDir }
+# N29 (R8). The brief names the DFM module `Blueprint4_Model.dsrFolder`; the DFM
+# actually says `dmlSystem2.dsrFolder` (Blueprint4.dfm:235) -- Blueprint4_Model
+# is the prefix of the OTHER 27 dangling rows. Both are dangling; the line is
+# what is asserted.
+Step 'FF-N29' {
+  $script:ff29 = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmBlueprint4.edtF1' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
+  $t29 = Dot $ff29
+  if ($t29 -notmatch '\[dangling\]') { Fail 'A-FF-N29' 'the DFM row does not read [dangling]' }
+  if ($t29 -notmatch '\[re-pointed at TfrmBlueprint4\.RepointJobHeaderToFolder:1015\] edtF1\.DataBinding\.DataSource := DS') { Fail 'A-FF-N29' 'no [re-pointed at] row for Blueprint4.pas:1015' }
+  if ($t29 -notmatch 'the DFM names dmlSystem2, which is not in this project') { Fail 'A-FF-N29' 'the dangling disclosure is missing' }
+  # the DataField is ALSO re-bound in code (:1016) -- drawn, because the DFM
+  # column is then not the runtime column
+  Chk 'A-FF-N29-ROWS'   "$($ff29.Grade):$($ff29.RePointedAt):$($ff29.Rebound):$($ff29.HopGrades)" 'dangling:Blueprint4.pas:1015:1:certain>dangling>stop'
+}
+# N30: ambiguous after the tie-break -- exit 0, the candidates printed, NO TABLE.COLUMN
+Step 'FF-N30' {
+  $script:ff30 = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmDefineSerialNumbers.cxGrid1DBTableView1SID1' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-FF3-AMBIG'     "$($ff30.AfterTieBreak):$($ff30.BoundColumns):$([string]$ff30.TableColumn)" '3:2:'
+  $t30 = Dot $ff30
+  if ($t30 -notmatch 'ambiguous: SERID, SERREAD, SERPART') { Fail 'A-FF-N30' 'no "ambiguous: SERID, SERREAD, SERPART"' }
+  if ($t30 -match 'SER(ID|READ|PART)\.SID') { Fail 'A-FF-N30' 'a TABLE.COLUMN row was drawn for an ambiguous chain' }
+  foreach ($ln in 76, 310, 311) { if (-not (HasLine $t30 $ln)) { Fail 'A-FF-N30' "candidate literal :$ln not anchored" } }
+}
+# R11: a MANUFACTURED stale uCausFailForm.pas (one trailing blank) -- the chain
+# stops [stale source] and no table is drawn; the index-wide rows are recomputed
+# against the same override (never cached), so the CausFail controls count stale.
+Step 'FF-STALE' {
+  $stDir = Join-Path $OutDir 'ff-stale'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $cfp = 'C:\Projects\DB\ORM3\CLIENT\uCausFailForm.pas'
+  $l = [IO.File]::ReadAllLines($cfp); $l[125] = $l[125] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'uCausFailForm.pas'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $script:ffst = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmCausFail.colREASON' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $stDir `
+                   -SourceOverride @{ $cfp = (Join-Path $stDir 'uCausFailForm.pas') }
+  Chk 'A-FF-STALE'      "$($ffst.Grade):$([string]$ffst.ResolvedTable):$($ffst.HopGrades)" 'stale source::certain>certain>stop'
+  # colREASON + colSEVERITY... every field-bound control on dsrCausFail
+  Chk 'A-FF-STALE-CTL'  $ffst.CtlStale 4
+  if ((Dot $ffst) -notmatch 'chain stops here.*\[stale source\]') { Fail 'A-FF-STALE' 'no [stale source] stop row' }
+}
+# the verb through the bundler: dispatch, -SqlDbPath carried into meta.json
+Step 'FF-ART' {
+  $artRoot = Join-Path $OutDir 'bundle-ff'
+  $art = & "$SRC\New-DiagramArtifact.ps1" -Question feeds-from -Target 'frmCausFail.colREASON' -DbPath $DbCli -SqlDbPath $DbSql -OutRoot $artRoot
+  $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
+  Chk 'A-FF-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount)" '5 chain rows / 267'
+  if ($meta.regenerate -notmatch '-SqlDbPath ') { Fail 'A-FF-ART' 'the regenerate command drops -SqlDbPath' }
+}
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
@@ -1290,7 +1424,8 @@ if (-not $Quiet) {
   Write-Host ("  disk vs index  : CLIENT files differing today (informational, not pinned): {0}" -f (V $t0 'DiskStaleCli'))
   Write-Host ("  exception-paths: {0} raises / {1} callers / {2} caught; index {3}/{4}; source bare/on/reraise/var {5}/{6}/{7}/{8}" -f (V $ep1 'Raises'), (V $ep1 'Callers'), (V $ep1 'Caught'), (V $ep1 'IndexRaise'), (V $ep1 'IndexHandle'), (V $ex0 'BareExcept'), (V $ex0 'OnExcept'), (V $ex0 'Reraise'), (V $ex0 'RaiseVar'))
   Write-Host ("  consumers      : CAUSFAIL cert/inf readers {0}/{1}, writers {2}/{3}, {4} triggers; REASON bindings {5}/{6}; facts {7}/{8}/{9}; literals {10}/{11}/{12}; proc bodies {13}" -f (V $co1 'CertainReaders'), (V $co1 'InferredReaders'), (V $co1 'CertainWriters'), (V $co1 'InferredWriters'), (V $co1 'Triggers'), (V $co2c 'IndexBindings'), (V $co2c 'DrawnBindings'), (V $co1 'IndexReadFacts'), (V $co1 'IndexWriteFacts'), (V $co1 'IndexFactSymbols'), (V $co1 'IndexVerbLiterals'), (V $co1 'IndexFromJoinTables'), (V $co1 'IndexFactReadTables'), (V $co1 'ProcBodies'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE draw")
+  Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, FF-N28, FF-N28b, FF-N34, each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE, FF-N29/N30/STALE draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }
