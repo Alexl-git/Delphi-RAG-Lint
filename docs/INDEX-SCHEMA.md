@@ -320,9 +320,18 @@ Join: `refs.symbol_id -> symbols.id`; `refs.file_id -> files.id`;
 > Every one of the 1,325 bound `read` rows is an enum value; this index has no
 > `event-binding` or `attribute` rows at all. Of the enum-value candidate set --
 > refs whose `name_text` matches an `enum_value` name -- 1,325 of 1,325 bare
-> reads and 9 of 17 qualified `member-access` refs bound; the 8 that did not are
-> the declines the rules require (the resolve stage prints the per-reason counts
-> on its `enum-values:` line). An enum-value binding writes NO `call_edges` row
+> reads and 9 of 17 qualified `member-access` refs bound. The 8 that did not are
+> NOT declines: the stage's own `enum-values:` line reports `not-visible 0,
+> ambiguous 0, shadowed 0`, because these refs never reached the scope rules at
+> all. Checked directly -- all 8 are `TTSInputEncoding.TSInputEncodingUTF8`,
+> whose receiver `TTSInputEncoding` is a type ALIAS
+> (`TTSInputEncoding = TreeSitterLib.TSInputEncoding;`,
+> `third_party\delphi-tree-sitter\TreeSitter.pas:224`) and so resolves to a
+> symbol of kind `type`, not `enum`. The qualified rung fires only on an `enum`
+> receiver, so an alias receiver is a recorded non-goal of the 2026-09-23 change
+> rather than a refusal. The 9 that did bind all carry a UNIT receiver
+> (`DRagLint.Doc.Document.<value>`); no type-receiver ref binds on this index.
+> An enum-value binding writes NO `call_edges` row
 > and NO `member_accesses` row, so a bound ref that owns neither is exactly how a
 > consumer recognises a value USAGE.
 >

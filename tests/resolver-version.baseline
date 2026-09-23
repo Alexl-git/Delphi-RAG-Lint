@@ -484,9 +484,11 @@
 #   member_accesses rows whose target/member symbol is an enum_value.
 #
 #   REMEDY AND COST. A RE-RESOLVE, never a re-parse: `index --all
-#   --resolve-only`. Measured 2026-09-22: ~6 min for all project sections; ~74
-#   min per platform library (Win32 calls 3641.4 s + purity 726.8 s; Win64
-#   3500.6 s + 635.3 s). The enum stream itself adds one indexed name-IN scan
+#   --resolve-only`. Measured 2026-09-22: ~6 min for all project sections; up to
+#   ~73 min per platform library -- Win32 calls 3641.4 s + purity 726.8 s =
+#   4368.2 s = 72.8 min, Win64 3500.6 s + 635.3 s = 4135.9 s = 68.9 min. Neither
+#   figure is 74; the headline is the larger of the two, not rounded past it.
+#   The enum stream itself adds one indexed name-IN scan
 #   over `refs` (EXPLAIN QUERY PLAN on the self-index:
 #   `SEARCH refs USING INDEX idx_refs_name_nocase`) plus an in-memory lookup
 #   per candidate -- seconds on a project DB.
