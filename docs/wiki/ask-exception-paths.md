@@ -1,13 +1,46 @@
 # ask: exception-paths
 
-**What can this routine raise, and where is each exception caught?**
+**What can this routine raise, and where is each exception caught?** One of the diagram questions of the `ask` verb -- see [Diagrams and Charts](Diagrams-and-Charts) for the model, the bundle and click-to-source.
 
-**Shipping with the charts release.** Its parameters are still settling, so this page describes what the question answers and not yet how to call it. See [Diagrams and Charts](Diagrams-and-Charts) for the `ask` model, the bundle every question produces, and click-to-source.
+## Asking it
 
-## The chart answers
+```
+drag-lint ask --question exception-paths --at <file.pas>:<line>:<col> --db <project.sqlite>
+```
 
-For a selected routine: the exception classes it can raise -- directly or through the routines it calls -- and, for each, the `try ... except` / `on E: T do` handlers on the way up that catch it, with the paths that reach no handler shown as escaping.
+The selection is the routine under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). The same question by name, through the chart pipeline:
+
+```
+New-DiagramArtifact.ps1 -Question exception-paths -Target <Unit.Class.Method> -DbPath <project.sqlite> [-Depth 3] [-Cap N]
+```
+
+## You select
+
+A method or routine.
+
+## The chart shows
+
+For the selected routine:
+
+* the exception types it RAISES, each anchored to its raise site;
+* the types it HANDLES in its own body (`try ... except` / `on E: T do`);
+* for every raised type, WHERE it is caught up the caller chain -- walked call edge by call edge.
+
+A routine can catch an exception on one call and let it escape on another; the chart draws both paths.
+
+## Parameters
+
+* `-Depth` (default 3) -- how many caller levels each exception is followed.
+* `-Cap` -- the maximum number of callers walked per level; the rest are counted, not dropped silently.
+
+## Read it carefully
+
+* **Solid vs dashed.** A "caught" edge is SOLID only when the call site is verified to sit inside the handler's `try`. Otherwise it is dashed and tagged `[inferred]`.
+* **Re-raise does not stop the walk.** A handler that re-raises (`raise;`) is drawn, and the exception keeps going up.
+* **External ancestry.** When a handler's class ancestry is not in the index (a library type the project index does not hold), the edge reads "may catch -- ancestry not in this index".
+* **It never says "unhandled".** It says where the walk ENDED: "escapes after N levels", "no resolved caller of its own", or "N callers not walked (cap)". Absence of a handler in the index is not proof that none exists at runtime.
+* **Callers the index does not bind are not walked.** Parenless calls such as `NextId` bind from resolver 1.7.0-alpha; on an index resolved earlier, those callers are missing until `index --all --resolve-only` runs.
 
 ## It stands on
 
-A raise/handle reference fact: which references are a `raise` and which are an `except` handler, so a handler is never drawn as a thrower. The exception classes themselves, and their ancestry, are already in the index (see also the `Catches:` fact block in autodoc).
+The raise and handler sites in the routine bodies, resolved `call_edges` for the caller walk, and the index's type ancestry to decide whether `on E: T do` catches a given exception class.

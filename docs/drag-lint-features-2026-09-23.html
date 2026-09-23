@@ -427,6 +427,7 @@ index, quoted from the charts status board of 23 September 2026.</p>
 <tr><td><code>effects</code></td><td>method</td><td>what it mutates (globals, heap, own fields, which parameters), and whether it is proven effect-free</td><td>purity v2 effect summaries</td><td>parameter names recovered on 351 of 351 rows</td></tr>
 <tr><td><code>touches-tables</code></td><td>method</td><td>which database tables it reads and writes (server-side code; a client with no connection says so)</td><td>SQL read/write facts</td><td>5 read / 5 written / 2 both</td></tr>
 <tr><td><code>shown-where</code></td><td>database column</td><td>which forms and controls display this column</td><td>DFM data bindings</td><td>4 bindings on 2 forms, of 903 over 459 columns</td></tr>
+<tr><td><code>exception-paths</code></td><td>method</td><td>which exception types it raises (anchored raise sites), which it handles in its own body, and where each raised type is caught up the caller chain -- solid only when the call site is verified inside the handler's <code>try</code>, otherwise dashed <code>[inferred]</code>; it never says "unhandled", it says where the walk ended</td><td>raise / handler sites, resolved <code>call_edges</code>, type ancestry</td><td>shipped 23 September (charts commits f77a58ba..ae645b2a)</td></tr>
 <tr><td colspan="5"><b class="f">Across the process boundary</b></td></tr>
 <tr><td><code>protocol-trace</code></td><td>command constant / wire field</td><td>the round trip of a value: UI, memtable, boundary, server, database and back</td><td>enum-value binding (resolver 1.6.0)</td><td><code>cmdDelta</code> 38 references in 2 zones</td></tr>
 <tr><td><code>protocol-trace</code></td><td>method</td><td>the call tree pruned to branches that still carry the payload, ranked, capped, and never silently dropped</td><td>enum-value binding + call graph</td><td>a dispatcher speaking all 42 command members</td></tr>
@@ -448,8 +449,8 @@ index, quoted from the charts status board of 23 September 2026.</p>
 legacy code that uses <code>with</code> heavily, because <code>with</code> scope is not modelled
 (the same caveat as enum values, chapter "What is new"). <code>wiring</code> on a client
 project sees few registrations (4 on ORM3 CLIENT against 535 on SERVER) and is being
-checked. Four more questions ship with the charts release -- <code>exception-paths</code>,
-<code>lands-where</code>, <code>feeds-from</code> and <code>consumers</code>. Their parameters are being
+checked. Three more questions ship with the charts release -- <code>lands-where</code>,
+<code>feeds-from</code> and <code>consumers</code>. Their parameters are being
 finalised, so this edition says what each answers and leaves the syntax to the charts
 release notes (Appendix A.6).</p>
 </div>
@@ -615,7 +616,6 @@ today's <code>--help</code>.</p>
 <h3>A.6 Diagrams and charts shipping with the charts release</h3>
 <table>
 <tr><th>Question</th><th>What it would show</th><th>Status</th></tr>
-<tr><td><code>exception-paths</code></td><td>What a method can raise and where each exception is caught.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised</td></tr>
 <tr><td><code>lands-where</code></td><td>Field to dataset to table column.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised; richer with a live-Firebird <code>fb-snapshot</code></td></tr>
 <tr><td><code>feeds-from</code></td><td>Control to data source to memtable to table.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised</td></tr>
 <tr><td><code>consumers</code></td><td>Every unit that reads or writes a table or column.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised</td></tr>
