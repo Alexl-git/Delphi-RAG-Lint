@@ -38,50 +38,72 @@ projects; the authoritative-set rule forbids unioning them) plus the SQL index.
 
 ```
 TRACE OPERAT.NAME
-  TITLE  "How an edited operation name reaches Firebird and comes back"
-  INDEX  Micronite2027@2026-09-22 + MicroniteMW1Service@2026-09-22 + SQL
+  TITLE "How an edited operation name reaches Firebird and comes back"
+  INDEX Micronite2027 + MicroniteMW1Service + SQL   AS OF 2026-09-22
+  TIERS client -> pipe -> server -> database
 
 WRITE
-  USER EDITS  grid cell
-    BOUND VIA  FDsrOperation : TDataSource   @CLIENT\Blueprint4.ViewModel.pas:99
-    ONTO       FMTOperation  : TFDMemTable   @CLIENT\Blueprint4.ViewModel.pas:78
+[01] USER EDITS grid cell "Operation Name"
+       BOUND VIA FDsrOperation : TDataSource  @Blueprint4.ViewModel.pas:99
+       ONTO      FMTOperation  : TFDMemTable  @Blueprint4.ViewModel.pas:78
+[02] FMTOperation.Post FIRES AfterPost        @Blueprint4.ViewModel.pas:639
+[03] CALLS DoAfterPostOperation               @Blueprint4.ViewModel.pas:277
+       GUARD FSuppressEvents IS False         OTHERWISE SILENT
+[04] CALLS SendDeltaOperation("AfterPost")    @Blueprint4.ViewModel.pas:279
+       GUARD FMTOperation.ChangeCount > 0     OTHERWISE RETURNS True
+       GUARD FConn.Connected                  OTHERWISE RETURNS False
+[05] SERIALIZES FMTOperation TO sfBinary stream
+[06] PREFIXES "TABLE=OPERAT|" AS UTF-8
 
-  FMTOperation.Post FIRES AfterPost           @CLIENT\Blueprint4.ViewModel.pas:639
-    CALLS  DoAfterPostOperation               @CLIENT\Blueprint4.ViewModel.pas:277
-      GUARD  FSuppressEvents IS False
-      CALLS  SendDeltaOperation("AfterPost")  @CLIENT\Blueprint4.ViewModel.pas:279
-
-  SendDeltaOperation
-    GUARD    FMTOperation.ChangeCount > 0     OTHERWISE SUCCEEDS SILENTLY
-    GUARD    FConn.Connected
-    SERIALIZES  FMTOperation TO sfBinary stream
-    PREFIXES    "TABLE=OPERAT|"  AS UTF-8
-    SENDS       cmdDelta         OVER pipe    @COMMON\Pipes.Protocol.pas:389
+[07] CROSSES process boundary
+       FROM     Micronite2027.exe             -- client, Win32
+       TO       MicroniteMW1Service.exe       -- server, Win64
+       OVER     named pipe                    -- or TCP/IP, serial, HTTP API
+       WITH     cmdDelta "TABLE=OPERAT|" + sfBinary stream
+       CONTRACT                               @Pipes.Protocol.pas:389
 
 SERVER
-  RECEIVES cmdDelta
-    AT     TPipeSessionBuilder.HandleDelta    @SERVER\uPipeSessionBuilder.pas:63
-    ROUTES TGenericTableRoute.HandleDelta     @SERVER\uGenericTableRoute.pas:75
-      SPLITS   payload AT first "|"
-      EXTRACTS table name -> "OPERAT"
-      LOOKS UP TDatasetsDef.GetTable          @SERVER\uDatasetsDef.pas:59
-        SOURCED FROM  FIB$DATASETS_INFO       @SERVER\uDatasetsDef.pas:130
-      LOADS    delta VIA Mem.LoadFromStream(sfBinary)
-      APPLIES  HandleUpdateRecord             @SERVER\uGenericTableRoute.pas:63
-        BINDS  Field.OldValue AND Field.Value TO params
-        RUNS   the UPDATE template FROM the dataset definition
+[08] RECEIVES cmdDelta
+       AT     TPipeSessionBuilder.HandleDelta @uPipeSessionBuilder.pas:63
+       ROUTES TGenericTableRoute.HandleDelta  @uGenericTableRoute.pas:75
+[09] SPLITS payload AT first "|"
+[10] EXTRACTS table name -> "OPERAT"
+       GUARD table name IS NOT empty          OTHERWISE rspError "TABLE= prefix missing"
+       GUARD delta stream IS NOT empty        OTHERWISE rspError "empty delta stream"
+[11] LOADS dataset definition
+       VIA  TDatasetsDef.GetTable             @uDatasetsDef.pas:59
+       FROM FIB$DATASETS_INFO                 @uDatasetsDef.pas:130
+       GUARD definition EXISTS                OTHERWISE rspError "no FIB$DATASETS_INFO entry"
+[12] DESERIALIZES Mem.LoadFromStream sfBinary
+       GUARD deserialization SUCCEEDS         OTHERWISE rspError "LoadFromStream failed"
+[13] ATTACHES OnUpdateRecord                  @uGenericTableRoute.pas:479
+[14] OPENS write transaction
+[15] APPLIES TGenericApplyContext.HandleUpdateRecord
+                                              @uGenericTableRoute.pas:63
+       SELECTS arUpdate -> Def.UpdateSQL
+       GUARD SQL IS NOT empty                 OTHERWISE eaFail "No SQL for arUpdate"
+[16] BINDS Field.OldValue AND Field.Value TO params
+[17] RUNS TFDCommand.Execute
 
 DATABASE
-  WRITES  OPERAT.NAME                         @DB\SQL\MS1.SQL:2808
+[18] WRITES OPERAT.NAME                       @MS1.SQL:2808
+[19] COUNTS FAppliedUpd
+       RECORDS ID and OPERID INTO log         CAPPED AT 900 chars
+
+[20] CROSSES process boundary
+       FROM     MicroniteMW1Service.exe       -- server, Win64
+       TO       Micronite2027.exe             -- client, Win32
+       OVER     named pipe                    -- response frame
+       WITH     rspOK or rspError + UTF-8 reason
 
 RESPONSE
-  ON rspOK
-    FMTOperation.CommitUpdates                @CLIENT\Blueprint4.ViewModel.pas:279
-    BROADCASTS to other clients               @SERVER\uBroadcastServer.pas:120
-  ON FAILURE
-    SETS   FLastPersistError FROM response payload
-    CALLS  FMTOperation.CancelUpdates         -- the edit is ROLLED BACK on screen
-    LOGS   PersistLog AND CodeSite
+[21] ON rspOK
+       FMTOperation.CommitUpdates             @Blueprint4.ViewModel.pas:279
+       BROADCASTS TableChanged TO other clients @uBroadcastServer.pas:120
+[22] ON FAILURE
+       SETS  FLastPersistError FROM response payload
+       CALLS FMTOperation.CancelUpdates       -- the edit is REVERTED on screen
+       LOGS  PersistLog AND CodeSite
 
 READ
 [23] LoadAllForFolder                         @Blueprint4.ViewModel.pas:321
