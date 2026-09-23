@@ -878,6 +878,153 @@ if (Test-Path $preCli) {
   Note '  N35 skipped: no pre-1.18 history copy beside the clones'
 }
 
+# ---- PLAN-last-four-verbs, Task 1: exception-paths ------------------------------
+# Every number measured 2026-09-23 on the CLIENT clone and PINNED (R5). Where a
+# pin differs from the plan, the comment names the mechanism (R6).
+# The words "unhandled" may appear in NO chart (R3): the walk ending is not the
+# exception escaping.
+function NoUnhandled([string] $code, $r) {
+  if ((Dot $r) -match '(?i)unhandled') { Fail $code 'the chart says "unhandled" -- it may only say where the walk ended (R3)' }
+}
+Note 'exception-paths ...'
+Step 'E-EP' {
+  $script:ep1 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'Blueprint4.PDFImport.ViewModel.TBlueprintPDFImport_ViewModel.PersistScanToDB' -DbPath $DbCli -OutDir $OutDir
+  # the index-wide line on the focus box: the name-filtered candidates, minus
+  # the names declared only as non-classes (P5), each classified by source token
+  Chk 'A-EP0-CANDS'     "$($ep1.IndexRaise)/$($ep1.IndexHandle)" '168/185'
+  Chk 'A-EP0-ROUTINES'  "$($ep1.IndexRaiseRoutines)/$($ep1.IndexHandleRoutines)" '120/106'
+  # 30 decl + 17 class( + 8 is + 2 as + 8 call-cast + 7 member-access; 425 = 168 + 185 + 72
+  Chk 'A-EP0-DROPPED'   $ep1.IndexDropped 72
+  Chk 'A-EP0-CANDCOUNT' $ep1.IndexCandidates 425
+
+  Chk 'A-EP1-RAISES'    $ep1.Raises 6
+  Chk 'A-EP1-LINES'     $ep1.RaiseLines '1624,1653,1667,1679,1691,1707'
+  Chk 'A-EP1-TYPES'     "$($ep1.RaiseTypes):$($ep1.RaiseTypeNames)" '1:Exception'
+  Chk 'A-EP1-HANDLES'   $ep1.Handles 0
+  Chk 'A-EP1-CALLERS'   $ep1.Callers 2
+  Chk 'A-EP1-CHAIN'     $ep1.CallerNames 'd1:AutoScanIfNeeded,d2:ForceRescan'
+  Chk 'A-EP1-CAUGHT'    $ep1.Caught 0
+  Chk 'A-EP1-WALK'      $ep1.WalkSentence 'no handler found within 3 caller levels (2 callers walked)'
+  Chk 'A-EP1-FRESH'     $ep1.StaleFiles 0
+  Chk 'A-EP1-CLICK'     "$($ep1.ClickTargets)/$($ep1.Expected)" '9/9'
+  $t1 = Dot $ep1
+  foreach ($ln in 1624, 1653, 1667, 1679, 1691, 1707) { if (-not (HasLine $t1 $ln)) { Fail 'A-EP1-ANCHOR' "raise row :$ln is not anchored" } }
+  if ($t1 -notmatch 'no handler found within 3 caller levels \(2 callers walked\)') { Fail 'A-EP1-SENTENCE' 'the walk sentence is not on the chart' }
+  NoUnhandled 'A-EP1-WORDS' $ep1
+
+  $script:ep2 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'Gagefrm2.TfrmGageport2.Configure_ComPort' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-EP2-RAISES'    "$($ep2.Raises):$($ep2.RaiseLines)" '1:1703'
+  Chk 'A-EP2-HANDLES'   "$($ep2.Handles):$($ep2.HandleLines)" '3:1690,1705,1732'
+  # the `is EAPDException` at :1695 (type_use) and the EAPDException(E) cast at
+  # :1696 (call) -- counted, never drawn
+  Chk 'A-EP2-DROPPED'   $ep2.Dropped 2
+  Chk 'A-EP2-CALLERS'   "$($ep2.Callers):$($ep2.WalkSentence)" '0:no resolved caller in this index'
+  Chk 'A-EP2-FRESH'     $ep2.StaleFiles 0
+  NoUnhandled 'A-EP2-WORDS' $ep2
+
+  $script:ep3 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'uMain.Model.TMainModel.LoadInspectionNames' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-EP3-RAISES'    "$($ep3.Raises):$($ep3.RaiseTypeNames):$($ep3.RaiseLines)" '7:EDataError:65,68,71,74,78,81,85'
+  Chk 'A-EP3-CALLERS'   $ep3.Callers 0
+  Chk 'A-EP3-FRESH'     $ep3.StaleFiles 0
+  if ((Dot $ep3) -notmatch 'no resolved caller in this index') { Fail 'A-EP3-SENTENCE' 'the no-caller sentence is not on the chart' }
+  NoUnhandled 'A-EP3-WORDS' $ep3
+
+  $script:ep4 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'BASICSF.CopyRecords' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-EP4-HANDLES'   "$($ep4.Handles):$($ep4.HandleLines)" '1:5037'
+  # 5, NOT the plan's 2. The plan named `raise E`@5046 and `raise`@5064 only; the
+  # same span (4957-5074) also holds `raise;`@5054 (`if not IgnoreErrors then
+  # raise;`) and two BARE `except` blocks (5053, 5063) that the plan's own step 3
+  # requires drawing. And `raise E`@5046 DOES have a ref (`read E`, col 26) --
+  # on the caught VARIABLE, so the classifier leaves it to the source scan.
+  Chk 'A-EP4-INFERRED'  $ep4.InferredLines 'raise-var@5046,bare-except@5053,reraise@5054,bare-except@5063,reraise@5064'
+  Chk 'A-EP4-SPLIT'     "$($ep4.InferredRaises)/$($ep4.BareExcepts)" '3/2'
+  Chk 'A-EP4-RAISES'    $ep4.Raises 0
+  Chk 'A-EP4-FRESH'     $ep4.StaleFiles 0
+  NoUnhandled 'A-EP4-WORDS' $ep4
+
+  $script:ep5 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'uAutoTest.RunAutoTest' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-EP5-HANDLES'   $ep5.Handles 41
+  if ((Dot $ep5) -notmatch '\+29 more handler clauses not shown') { Fail 'A-EP5-CAP' 'the 41 handlers are not capped at 12 with the +29 disclosure' }
+  Chk 'A-EP5-FRESH'     $ep5.StaleFiles 0
+  NoUnhandled 'A-EP5-WORDS' $ep5
+
+  # NOT in the plan: none of its five focuses reaches a handler, so the SOLID
+  # catch edge was otherwise untested. BuildSchema raises EDatabaseError at :289;
+  # both depth-1 callers (ApplyRawPayload, LoadAll) hold on E: EDatabaseError,
+  # so the first (by name) is drawn and the second disclosed as "+1 more".
+  $script:ep6 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'uJobList.ViewModel.TJobListViewModel.BuildSchema' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-EP6-CAUGHT'    "$($ep6.Raises):$($ep6.RaiseTypeNames):$($ep6.Caught):$($ep6.MayCatch)" '1:EDatabaseError:1:0'
+  Chk 'A-EP6-CALLERS'   "$($ep6.Callers)/$($ep6.CallerLevels)" '7/3'
+  Chk 'A-EP6-WALK'      "$($ep6.WalkSentence)" ''
+  if ((Dot $ep6) -notmatch 'caught \(exact\) \+1 more at depth 1') { Fail 'A-EP6-EDGE' 'the solid exact-catch edge is not drawn' }
+  NoUnhandled 'A-EP6-WORDS' $ep6
+
+  # the SOURCE-ONLY rows inside every indexed impl span, index-wide
+  $script:ex0 = & "$SRC\Test-ExceptionPathsHelpers.ps1" -DbCli $DbCli
+  Chk 'A-EP0-SPANS'     "$($ex0.Spans)/$($ex0.SpanStaleFiles)" '11007/1'
+  # bare except / on-except / raise; / raise <var> / routines with a bare except.
+  # 13 / 1, NOT the plan's 12 / 2: BASICSF.pas:5064 is `then raise` + newline +
+  # `else` -- a re-raise with no semicolon. The plan's scan read `else` as the
+  # raised variable. P6's own census agrees (12 `raise;` + 1 `then raise` + 1 `raise E`).
+  Chk 'A-EP0-SOURCE'    "$($ex0.BareExcept)/$($ex0.OnExcept)/$($ex0.Reraise)/$($ex0.RaiseVar)/$($ex0.BareRoutines)" '86/180/13/1/56'
+  # 169, NOT the plan's 180: every in-span `raise X.Create` has a raise-classified
+  # read ref (168 name-filtered + EdxException, uStyles.pas:965). Whole-file the
+  # stripped count is 177; the other 8 are the uJobList.pas {$IFDEF
+  # M2022_REFERENCE} lines, where the index has no routine span (P6).
+  Chk 'A-EP0-CREATE'    "$($ex0.RaiseCreate)/$($ex0.RaiseOther)" '169/0'
+}
+
+Note 'exception-paths negatives and stale source ...'
+# N20: a field is not a routine, and the refusal names the kind and the verb's selection.
+NegTest 'EP-N20' 'is a field, not a method or procedure or function or constructor or destructor -- exception-paths selects a routine' 'excpaths_MSCTYPES_RChartSampleData_R' {
+  & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'MSCTYPES.RChartSampleData.R' -DbPath $DbCli -OutDir $negDir }
+# N21: a MANUFACTURED stale source (R4) -- a copy with one trailing blank on line
+# 1, handed over through -SourceOverride. Nothing writes to a database, and the
+# check does not depend on uMain.ViewModel.pas happening to differ on disk.
+Step 'EP-N21' {
+  $stDir = Join-Path $OutDir 'ep-stale'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $mk = { param($src, $dst) $l = [IO.File]::ReadAllLines($src); $l[0] = $l[0] + ' '
+          [IO.File]::WriteAllText($dst, (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding)) }
+  $vm = 'C:\Projects\DB\ORM3\CLIENT\uMain.ViewModel.pas'
+  & $mk $vm (Join-Path $stDir 'uMain.ViewModel.pas')
+  $script:ep21 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'uMain.ViewModel.TMainViewModel.LoadFolders' -DbPath $DbCli -OutDir $stDir `
+                   -SourceOverride @{ $vm = (Join-Path $stDir 'uMain.ViewModel.pas') }
+  Chk 'A-EP-N21-FRESH'  $ep21.FocusFresh $false
+  Chk 'A-EP-N21-CLASS'  "$($ep21.Raises)/$($ep21.Handles)/$($ep21.Inferred)/$($ep21.Dropped)" '0/0/0/0'
+  if ((Dot $ep21) -notmatch '\[stale source\]') { Fail 'A-EP-N21-MARK' 'the stale focus is not marked [stale source]' }
+  # the same mechanism on a body that HAS exception rows, so "every row reads
+  # [stale source]" is asserted on rows that would otherwise be classified
+  $gf = 'C:\Projects\DB\ORM3\CLIENT\Gagefrm2.pas'
+  & $mk $gf (Join-Path $stDir 'Gagefrm2.pas')
+  $script:ep21b = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'Gagefrm2.TfrmGageport2.Configure_ComPort' -DbPath $DbCli -OutDir $stDir `
+                    -SourceOverride @{ $gf = (Join-Path $stDir 'Gagefrm2.pas') }
+  Chk 'A-EP-N21B-CLASS' "$($ep21b.Raises)/$($ep21b.Handles)/$($ep21b.Inferred)/$($ep21b.Dropped)" '0/0/0/0'
+  Chk 'A-EP-N21B-STALE' $ep21b.StaleRows 5
+  $labels = @([regex]::Matches((Dot $ep21b), '(?i)HREF="[^"]*Gagefrm2\.pas[^"]*" TITLE="[^"]*"><FONT COLOR="[^"]*">([^<]*)</FONT>') |
+              ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne 'Gagefrm2' })
+  Chk 'A-EP-N21B-ROWS'  $labels.Count 5
+  if (@($labels | Where-Object { $_ -notmatch '\[stale source\]$' }).Count) {
+    Fail 'A-EP-N21B-ROWS' "a row of the stale file was not marked [stale source]: $($labels -join '; ')" }
+}
+# N22: the source-only rows are DASHED ([inferred] clusters) and the one ref-anchored
+# handler is solid. 1 solid + 5 dashed, not the plan's 1 + 2 -- see A-EP4-INFERRED.
+Step 'EP-N22' {
+  $t22 = Dot $ep4
+  $solid = [regex]::Match($t22, '(?s)subgraph cluster_handlers_\d+ \{\s*style="rounded,filled";.*?\n  \}')
+  $dash  = @([regex]::Matches($t22, '(?s)subgraph cluster_inferred(raises|handlers)_\d+ \{\s*style="rounded,filled,dashed";.*?\n  \}'))
+  if (-not $solid.Success) { Fail 'A-EP-N22-SOLID' 'no solid HANDLERS IN BODY cluster' }
+  else { Chk 'A-EP-N22-SOLID' ([regex]::Matches($solid.Value, 'HREF=')).Count 1 }
+  Chk 'A-EP-N22-DASHED' (($dash | ForEach-Object { ([regex]::Matches($_.Value, 'HREF=')).Count } | Measure-Object -Sum).Sum) 5
+  if ($t22 -notmatch 'compiler directives not evaluated') { Fail 'A-EP-N22-NOTE' 'the [inferred] rows do not carry the directive note' }
+}
+# N23: the `is`-test at :1695 and the cast at :1696 are neither raise nor handle rows.
+Step 'EP-N23' {
+  $t23 = Dot $ep2
+  if (HasLine $t23 1695) { Fail 'A-EP-N23' 'the is-test at :1695 was drawn' }
+  if (HasLine $t23 1696) { Fail 'A-EP-N23' 'the cast at :1696 was drawn' }
+}
+
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
@@ -905,7 +1052,8 @@ if (-not $Quiet) {
   Write-Host ("  tested-by      : {0} / {1} / {2} covering tests, from {3} test methods" -f (V $tb1 'Tests'), (V $tb2 'Tests'), (V $tb3 'Tests'), (V $tb1 'TestMethods'))
   Write-Host ("  task-0 helpers : SQL {0}/{1} tables, {2}/{3} trigger bodies; raise/handle {4}/{5}; datasources {6}/{7}/{8} resolve {9}/{10}/{11}; dangling {12}/{13}" -f (V $t0 'SqlTables'), (V $t0 'SqlDeclarations'), (V $t0 'TriggerBodies'), (V $t0 'Triggers'), (V $t0 'ExcRaise'), (V $t0 'ExcHandle'), (V $t0 'DsTotal'), (V $t0 'DsDfmWired'), (V $t0 'DsCodeSite'), (V $t0 'DsOne'), (V $t0 'DsMany'), (V $t0 'DsNone'), (V $t0 'DanglingRows'), (V $t0 'RePointedAny'))
   Write-Host ("  disk vs index  : CLIENT files differing today (informational, not pinned): {0}" -f (V $t0 'DiskStaleCli'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, each asserting message AND absent .svg; N13/N16/N17 draw")
+  Write-Host ("  exception-paths: {0} raises / {1} callers / {2} caught; index {3}/{4}; source bare/on/reraise/var {5}/{6}/{7}/{8}" -f (V $ep1 'Raises'), (V $ep1 'Callers'), (V $ep1 'Caught'), (V $ep1 'IndexRaise'), (V $ep1 'IndexHandle'), (V $ex0 'BareExcept'), (V $ex0 'OnExcept'), (V $ex0 'Reraise'), (V $ex0 'RaiseVar'))
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, each asserting message AND absent .svg; N13/N16/N17 and EP-N21..N23 draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

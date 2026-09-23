@@ -1247,6 +1247,179 @@ SELECT DISTINCT sl.text AS t FROM string_literals sl
   Complete 'many' $why
 }
 
+# ---- exception paths: the ref classifier and the source-only scan -----------------
+#
+# THE KIND IS THE PRE-FILTER, THE SOURCE TOKEN IS THE CLASSIFIER (plan R1).
+# `raise EFoo.Create(...)` emits a `read` on EFoo and `on E: EFoo do` a `type_use`
+# -- but so do `EFoo.ClassName`, `EFoo(E).Code` and `var X: EFoo`. So a ref is a
+# RAISE only when the stripped text before it ends in `raise` AND the text after
+# it is `.Create...` (Create, CreateFmt, CreateRes, CreateHelp ...), and a HANDLE
+# only when the text before it ends in `on` or `on <id>:`. Everything else is
+# 'other': a declaration, an `is`/`as` test, a cast -- dropped from the picture
+# and counted by the caller.
+#
+# `raise E;` (re-raising the caught OBJECT) also emits a `read` after `raise`,
+# but on a VARIABLE: the text after it is `;`, not `.Create`, so it is 'other'
+# here and is drawn by the source scan below as `raise <var>` -- a statement whose
+# raised TYPE is not a fact of the index.
+#
+# A qualifier between the keyword and the name (`raise SysUtils.Exception.Create`)
+# is skipped. When nothing precedes the ref on its line the clause began on the
+# previous line (R12: measured 0 times on CLIENT; Delphi permits it).
+#
+# $Ctx is a Get-SourceContext result; a stale one returns 'stale' and is never
+# classified (R11).
+function Get-ExceptionRefClass($Ctx, [string] $Kind) {
+  if ($Ctx.Stale) { return 'stale' }
+  if ([string]::IsNullOrWhiteSpace([string]$Ctx.Token)) { return 'other' }
+  $b = [regex]::Replace([string]$Ctx.Before, '(?:[A-Za-z_]\w*\s*\.\s*)+$', '')
+  if (-not $b.Trim()) { $b = [string]$Ctx.PrevLine }
+  if ($Kind -eq 'read' -and $b -match '\braise\s*$' -and [string]$Ctx.After -match '^\s*\.\s*Create\w*\b') {
+    return 'raise'
+  }
+  if ($Kind -eq 'type_use' -and $b -match '\bon(\s+[A-Za-z_]\w*\s*:)?\s*$') { return 'handle' }
+  'other'
+}
+
+# The SOURCE-ONLY exception rows of one line range (plan R2 / P9): statements
+# that carry no identifier and therefore no ref -- they can only be found by
+# reading source, so every row returned here is `[inferred]`:
+#
+#   bare-except   `except` whose next token (same or next non-blank line) is not `on`
+#   on-except     `except` followed by `on` (counted, not drawn: its `on` clauses
+#                 are ref-anchored HANDLE rows)
+#   reraise       `raise;`, or `raise` followed by `else`/`end`/... or nothing
+#   raise-var     `raise <ident>` NOT followed by `.` or `(` -- re-raises an object
+#   raise-create  `raise X.Create...` (counted for the ref-vs-source comparison;
+#                 the ref-anchored RAISE row is what is drawn)
+#   raise-other   anything else after `raise` (`raise MakeError(...)`)
+#
+# Read over the comment/string/directive-STRIPPED text (Get-StrippedSourceLines),
+# so a `raise` in a `{ ... }` block is not found -- P6's 7 commented-out raises.
+# Directive STATE is not evaluated: code in an inactive `{$IFDEF}` branch inside
+# the range is scanned like live code, and every drawn row says so.
+#
+# $Skip holds [int[]] line pairs (from, to) to leave out -- the bodies of nested
+# routines, whose statements belong to THEM. A stale file returns Stale = $true
+# and no rows (R11).
+function Get-ExceptionSourceRows([string] $Path, [int] $From, [int] $To,
+                                 [hashtable] $SourceOverride, $Skip) {
+  if (-not (Test-SourceFresh $Path $SourceOverride)) {
+    return [pscustomobject]@{ Path = $Path; Stale = $true; Rows = @() }
+  }
+  $lines = Get-StrippedSourceLines (Resolve-SourceReadPath $Path $SourceOverride)
+  $rows = New-Object System.Collections.ArrayList
+  $hi = [Math]::Min($To, $lines.Count)
+  for ($ln = [Math]::Max($From, 1); $ln -le $hi; $ln++) {
+    $skipIt = $false
+    foreach ($s in @($Skip)) { if ($s -and $ln -ge $s[0] -and $ln -le $s[1]) { $skipIt = $true; break } }
+    if ($skipIt) { continue }
+    $t = $lines[$ln - 1]
+    if ($t -notmatch '(?i)\b(except|raise)\b') { continue }
+    foreach ($m in [regex]::Matches($t, '(?i)\b(except|raise)\b')) {
+      $rest = $t.Substring($m.Index + $m.Length)
+      if (-not $rest.Trim()) {
+        $rest = ''
+        for ($k = $ln; $k -lt $lines.Count; $k++) { if ($lines[$k].Trim()) { $rest = $lines[$k]; break } }
+      }
+      if ($m.Groups[1].Value -ieq 'except') {
+        $kind = $(if ($rest -match '^\s*on\b') { 'on-except' } else { 'bare-except' })
+        $what = 'except'
+      } elseif ($rest -match '^\s*;' -or -not $rest.Trim() -or
+                $rest -match '^\s*(else|end|until|except|finally)\b') {
+        $kind = 'reraise'; $what = 'raise'
+      } elseif ($rest -match '^\s*[A-Za-z_][\w\s\.]*?\.\s*Create\w*\b') {
+        $kind = 'raise-create'; $what = 'raise'
+      } elseif ($rest -match '^\s*([A-Za-z_]\w*)(?>\s*)(?![\.\(\w])') {
+        # atomic whitespace: `raise Foo (x)` must not backtrack into a match
+        $kind = 'raise-var'; $what = "raise $($Matches[1])"
+      } else {
+        $kind = 'raise-other'; $what = 'raise'
+      }
+      [void]$rows.Add([pscustomobject]@{ Kind = $kind; Line = $ln; Col = $m.Index + 1; Text = $what })
+    }
+  }
+  [pscustomobject]@{ Path = $Path; Stale = $false; Rows = $rows.ToArray() }
+}
+
+# THE EXCEPTION-TYPE NAME FILTER, in one place. It decides only what is COUNTED
+# as a reference to an exception type -- the index-wide line on the focus box
+# and the per-body "declarations or tests" disclosure. It never decides a RAISE
+# or a HANDLE row: those come from the source token (R1), over EVERY read and
+# type_use in the body, so `raise EdxException.Create` is not lost to it.
+#
+# A name qualifies when it is `E<Capital>...` with at least one lower-case letter,
+# or `Exception` (plan P2), and this index does not declare it ONLY as something
+# other than a class (P5):
+#   * the lower-case letter keeps out the all-capitals Windows constants
+#     (`ERROR_SUCCESS`, `EM_SETSEL`) and DB-column properties (`EDTLL1`) --
+#     without it the CLIENT set is 1,109 refs, not 430 (measured 2026-09-23);
+#   * the declared-kind rule drops `EOPart` (local), `EWclassconv` (const) and
+#     `ET` (local x9) on CLIENT, and SERVER's `ERollback` -- the VARIABLE of
+#     `on ERollback: Exception do`, 798 rows. A name with at least one class
+#     declaration stays.
+# Get-ExceptionNameSql is the SQL pre-filter; Test-ExceptionTypeName the full test.
+function Get-ExceptionNameSql([string] $Column) {
+  "($Column GLOB 'E[A-Z]*[a-z]*' OR $Column = 'Exception')"
+}
+function Test-ExceptionTypeName([string] $Name) {
+  if ($Name -cnotmatch '^(E[A-Z]\w*[a-z]\w*|Exception)$') { return $false }
+  if (-not $script:DlExcNonClass) { $script:DlExcNonClass = @{} }
+  if (-not $script:DlExcNonClass.ContainsKey($DbPath)) {
+    $set = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($r in (Get-AllIndexRows @"
+SELECT name AS name FROM symbols
+ WHERE $(Get-ExceptionNameSql 'name')
+ GROUP BY name HAVING SUM(kind = 'class') = 0
+"@ 'name')) { [void]$set.Add([string]$r.name) }
+    $script:DlExcNonClass[$DbPath] = $set
+  }
+  -not $script:DlExcNonClass[$DbPath].Contains($Name)
+}
+
+# The INDEX-WIDE exception candidates of $DbPath, classified -- the pre-check and
+# the "approximately N raise sites / M handlers" line on the exception-paths
+# focus. Candidates are the refs of ANY kind passing Test-ExceptionTypeName;
+# each is classified by Get-ExceptionRefClass (a `call` or `member-access` cast
+# is therefore always 'other' -- dropped and counted).
+#
+# Returns Candidates, Raise, Handle, Dropped, Stale, RaiseRoutines,
+# HandleRoutines, Files, FreshFiles. Cached per DB per override per run
+# (CLIENT: 425 source contexts, ~3 s).
+function Get-ExceptionIndexStats([hashtable] $SourceOverride) {
+  if (-not $script:DlExcStats) { $script:DlExcStats = @{} }
+  $key = "$DbPath|$(if ($SourceOverride) { (@($SourceOverride.Keys | ForEach-Object { "$_=$($SourceOverride[$_])" }) | Sort-Object) -join ';' })"
+  if ($script:DlExcStats.ContainsKey($key)) { return $script:DlExcStats[$key] }
+  $cand = Get-AllIndexRows @"
+SELECT r.id AS id, r.kind AS kind, r.name_text AS name, r.start_line AS line,
+       r.start_col AS col, r.end_col AS ecol, r.enclosing_symbol_id AS encl, f.path AS path
+  FROM refs r JOIN files f ON f.id = r.file_id
+ WHERE $(Get-ExceptionNameSql 'r.name_text')
+"@ 'r.id'
+  $cand = @($cand | Where-Object { Test-ExceptionTypeName ([string]$_.name) })
+  $n = @{ raise = 0; handle = 0; other = 0; stale = 0 }
+  $rr = @{}; $hr = @{}; $files = @{}
+  foreach ($r in $cand) {
+    $p = [string]$r.path
+    if (-not $files.ContainsKey($p)) { $files[$p] = Test-SourceFresh $p $SourceOverride }
+    $c = Get-SourceContext $p ([int]$r.line) ([int]$r.col) ([int]$r.ecol - [int]$r.col) $SourceOverride
+    $cls = Get-ExceptionRefClass $c ([string]$r.kind)
+    $n[$cls]++
+    if ($r.encl) {
+      if ($cls -eq 'raise')  { $rr[[int]$r.encl] = $true }
+      if ($cls -eq 'handle') { $hr[[int]$r.encl] = $true }
+    }
+  }
+  $o = [pscustomobject]@{
+    Candidates = $cand.Count; Raise = $n.raise; Handle = $n.handle
+    Dropped = $n.other; Stale = $n.stale
+    RaiseRoutines = $rr.Count; HandleRoutines = $hr.Count
+    Files = $files.Count; FreshFiles = @($files.Values | Where-Object { $_ }).Count
+  }
+  $script:DlExcStats[$key] = $o
+  $o
+}
+
 # ---- dot --------------------------------------------------------------------
 
 # ONE layout run, four outputs -- so the geometry in .plain can never drift from

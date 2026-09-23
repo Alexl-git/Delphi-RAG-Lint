@@ -44,7 +44,8 @@ param(
   [ValidateSet('butterfly','deps','who-calls','what-it-calls','who-writes','who-reads',
                'hierarchy','class-surface','event-wiring','touches-tables',
                'lifecycle','cycles','wiring','effects','architecture',
-               'protocol-trace','crosses-boundary','shown-where','change-impact','tested-by')]
+               'protocol-trace','crosses-boundary','shown-where','change-impact','tested-by',
+               'exception-paths')]
   [string] $Question = 'butterfly',
   # crosses-boundary only: the other half of the system, so the far side of a
   # protocol command can be named. Optional -- without it the chart shows one side
@@ -63,6 +64,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# exception-paths walks CALLERS three levels by default (who-calls' precedent in
+# the plan), while the shared -Depth default here is 2. An explicit -Depth wins.
+$EffDepth = $(if ($Question -eq 'exception-paths' -and -not $PSBoundParameters.ContainsKey('Depth')) { 3 } else { $Depth })
 
 $Qname   = $Target
 $slug    = (($Target + $(if ($Control) { ".$Control" } else { '' })) -replace '[^A-Za-z0-9]', '_')
@@ -112,6 +117,7 @@ try {
     'shown-where'    { & (Join-Path $PSScriptRoot 'Emit-ShownWhere.ps1')    -Column $Target -DbPath $DbPath -Cap $Cap -OutDir $dir }
     'change-impact'  { & (Join-Path $PSScriptRoot 'Emit-ChangeImpact.ps1')  -Target $Target -DbPath $DbPath -Depth $Depth -OutDir $dir }
     'tested-by'      { & (Join-Path $PSScriptRoot 'Emit-TestedBy.ps1')      -Target $Target -DbPath $DbPath -Cap $Cap -OutDir $dir }
+    'exception-paths'{ & (Join-Path $PSScriptRoot 'Emit-ExceptionPaths.ps1') -Qname $Target -DbPath $DbPath -Depth $EffDepth -Cap $Cap -OutDir $dir }
     # splatted so -CounterpartDb is ABSENT rather than empty: Get-CloneDb would
     # reject '' and the far side would fail instead of simply not being drawn.
     'crosses-boundary' {
@@ -160,6 +166,9 @@ $vocab = @{
   'shown-where'    = @('Bindings','data bindings','Forms',   'forms')
   'change-impact'  = @('Affected','routines affected','Units','units')
   'tested-by'      = @('Tests',  'covering tests','Fixtures','fixtures')
+  # raises beside handlers-in-body; where they are CAUGHT is the picture itself,
+  # and it is never summarised as 'unhandled' (plan R3).
+  'exception-paths'= @('Raises', 'raise sites',  'Handles',  'handler clauses in body')
 }
 $v = $vocab[$Question]
 $leftCount  = $r.($v[0]); $leftLabel  = $v[1]
@@ -178,7 +187,7 @@ $dbItem = Get-Item $DbPath
 $fp = [pscustomobject]@{
   question    = $Question
   qname       = $Qname
-  depth       = $Depth
+  depth       = $EffDepth
   index       = $dbItem.FullName
   indexBytes  = $dbItem.Length
   indexMtime  = $dbItem.LastWriteTimeUtc.ToString('s') + 'Z'
@@ -190,8 +199,8 @@ $fp = [pscustomobject]@{
   clickTargets= $r.ClickTargets
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
-                $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact') { " -Depth $Depth" } else { '' }) +
-                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary') { " -Cap $Cap" } else { '' }) +
+                $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact','exception-paths') { " -Depth $EffDepth" } else { '' }) +
+                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary','exception-paths') { " -Cap $Cap" } else { '' }) +
                 $(if ($Question -eq 'crosses-boundary' -and $CounterpartDb) { " -CounterpartDb `"$CounterpartDb`"" } else { '' }) +
                 $(if ($Question -eq 'class-surface') { " -SurfaceCap $SurfaceCap" } else { '' }) +
                 $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })
