@@ -148,7 +148,19 @@ const
   /// of derived row, and the 1.6.0 reservation for C2.3 + IsStub moved to 1.7.0
   /// by owner ruling the same day.
   /// Spec: docs\superpowers\specs\2026-09-23-enum-value-ref-binding.md</para>
-  DRAGLINT_RESOLVER_VERSION = '1.6.0-alpha';
+  /// <para>1.6.0-alpha -&gt; 1.7.0-alpha (2026-09-23, parenless-call binding, D1):
+  /// a THIRD calls-stage stream (ResolveParenlessCallRefs -&gt;
+  /// TCallResolver.ResolveParenlessRead) writes a call_edges row, and
+  /// refs.symbol_id for a certain edge, for a `read` ref that is a PARENLESS
+  /// CALL -- a value-returning routine with no required parameters named
+  /// without parentheses in an expression (`Assert(NextId &gt; 0)`,
+  /// `N := NextId`, a bare `Tick` in its class). Nearest declaration wins; a
+  /// shadowing value, a procedure-value site, an argument-taking overload or a
+  /// `with` declines, each counted. 1,715 such unbound reads on ORM3 CLIENT at
+  /// 1.6.0. DERIVED rows only, no parse change: remedy is `index --all
+  /// --resolve-only`. A MINOR: a new class of derived edge. The reservation for
+  /// C2.3 + the IsStub unification MOVES from 1.7.0 to 1.8.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.7.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

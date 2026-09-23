@@ -537,4 +537,23 @@
 #   confidently with fewer rows than the truth.
 #
 #   Superseded: 1.5.1-alpha|8d1034e88ce8debb8a6e1d8e11c67c6905ff8c0fa65d50f11893eb4c6ffb4c16
-1.6.0-alpha|95080b86976b780299f60f1f3e4c5fec372170db4b3fb980b23feca790aadec6
+
+# 2026-09-23: 1.6.0-alpha -> 1.7.0-alpha (parenless-call binding, defect D1).
+#   A THIRD calls-stage stream, ResolveParenlessCallRefs ->
+#   TCallResolver.ResolveParenlessRead, writes a call_edges row (and
+#   refs.symbol_id for a certain edge) for a `read` ref that is a PARENLESS CALL
+#   -- `Assert(NextId > 0)`, `N := NextId`, a bare `Tick` inside its class. Rows
+#   that did not exist begin to exist, so this BUMPS. 1,715 candidate reads on
+#   ORM3 CLIENT at 1.6.0 (59 routine names). No parse change: the remedy is
+#   `index --all --resolve-only`, never a re-parse.
+#   The manifest also gained GetUnitLevelRoutines and GetUnitScopeEdges, readers
+#   the Option 4 unit rung already depended on and the manifest never listed;
+#   their hash rides on this bump.
+#   The reservation for C2.3 + the IsStub unification moves from 1.7.0 to
+#   1.8.0-alpha.
+#
+#   The ForwardStub.pas header comment (whole-file surface) was updated in the same
+#   change to name 1.8.0 as the C2.3 + IsStub reservation; comment text only.
+#
+#   Superseded: 1.6.0-alpha|95080b86976b780299f60f1f3e4c5fec372170db4b3fb980b23feca790aadec6
+1.7.0-alpha|a1732971a9b5624931b52c79578b9d0bfbf53ac0d6f70085d0e554472193f945
