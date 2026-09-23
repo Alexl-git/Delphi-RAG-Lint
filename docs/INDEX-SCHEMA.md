@@ -122,6 +122,55 @@ read as absent, never wrong) until it is re-indexed with a current engine.
   (see `USER-GUIDE.md` / `INSTALL.md` for indexing commands). This document
   only covers what to READ from it.
 
+### Cross-database symbol identity (normative)
+
+Each project has its own index, so a unit shared by several projects is
+indexed once PER project DB. This is the contract for telling whether a row in
+one DB and a row in another describe the same declaration.
+
+1. **The identity key is the triple `symbols.qualified_name` + the declaring
+   file's `files.path` + `symbols.start_line`.** Two rows in two DBs that agree
+   on all three describe the same declaration. Compare `path` case-insensitively
+   (Windows paths) after full-path normalisation; `qualified_name` compares
+   case-insensitively too, as Delphi identifiers do.
+2. **`symbols.id` is NEVER an identity across databases**, and not even within
+   one database across a full reindex (`18 -> 19` reassigned every id). It is a
+   row handle for joins inside one DB, valid until that DB is next rebuilt.
+   The same holds for every other `*_id` column.
+3. **The symbol SETS of two DBs differ, legitimately.** Each project indexes
+   under its own defines and conditional branches, so a declaration inside an
+   `{$IFDEF}` branch can exist in one DB and be absent from another that shares
+   the file. A consumer MUST tolerate a key that one DB has and another lacks,
+   and MUST NOT read "not present in DB B" as "removed", "dead" or "renamed".
+   Absence across databases is a statement about that project's build, never
+   about the source.
+
+Why all three parts are needed: `qualified_name` alone is not unique --
+overloads share it, a declaration can appear once per `{$IF}` branch, and since
+v23 a generic and a non-generic type of the same name are both BARE; the file
+path separates two units that declare the same name for different projects;
+`start_line` separates the rest.
+
+Limits -- where the triple stops identifying, stated so a consumer can guard:
+
+- **The file must be the same bytes in both DBs.** `start_line` is a position in
+  the file as it was when that DB parsed it; if one DB is stale against an
+  edited file, the same declaration can carry two different lines. Compare
+  `files.sha256` first: equal hashes make the triple exact; unequal hashes make
+  a line mismatch expected, and a consumer should re-index the stale DB (or fall
+  back to `qualified_name` + `path` and accept the overload ambiguity) rather
+  than report a difference.
+- **Parse-version differences leak into the key.** A DB written before v23
+  still carries the generic parameter list in `qualified_name`
+  (`TList<T>`); normalise to the bare name, or treat such a DB as stale.
+- **Only declarations are covered.** Refs, call edges and facts have no
+  cross-DB identity of their own; address them through the symbol they belong
+  to. A resolved `refs.symbol_id` in DB A says nothing about DB B -- use
+  `refs.external_target` (2.3) for a target another DB owns.
+- **Library DBs are not project DBs.** A unit on a Library/Browsing path lives
+  in the per-platform library index, not in any project DB; the triple matches
+  across that boundary too, but only for the same platform's library.
+
 ### Table of tables
 
 | Table | Rows (Micronite2027, v21 2026-09-09) | What it holds |
