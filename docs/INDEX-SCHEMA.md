@@ -525,6 +525,15 @@ default (empty) even when those steps have not been run.
 These are specialist tables for Delphi<->SQL ORM tooling; most consumers
 interested in "what code exists and how it's used" can ignore them.
 
+**They are NOT reproducible from source.** The `fb_*` tables are filled only by
+`drag-lint fb-snapshot --connection "..." --db <sql.sqlite>`, which needs a LIVE
+Firebird connection, and they belong in the SQL index, not in a project index.
+No `index` run ever writes them. As of 2026-09-23 they are empty in every index
+on the reference machine. A consumer that must reproduce its answer from the
+index alone (a diagram, a report, a CI gate) must treat them as optional
+enrichment: when they are empty, the answer is "not snapshotted", never "no
+such column" and never "no link".
+
 ### 2.11 `compiler_findings`
 
 One row per finding extracted from an ingested `dcc32`/`dcc64`/`msbuild`
@@ -636,15 +645,29 @@ Single-row-per-key metadata table.
 | `value` | TEXT | Its value (schema_version is stored as a stringified integer) |
 
 This is the table to check first (see section 1). The keys a current index
-carries, read from the 2026-09-09 sample:
+carries, read from ORM3 CLIENT on 2026-09-23 (engine 1.17.0-alpha):
 
 | `key` | Example value | Meaning |
 |---|---|---|
-| `schema_version` | `21` | The structural contract this document describes. Check it before reading anything else. |
-| `indexer_fingerprint` | `v=1.14.0-alpha;schema=21;pp=1;plat=win64` | What PRODUCED the stored parses: extractor version, schema, preprocessor flag, platform. The engine re-parses a file when this no longer matches, so a consumer can use it to tell whether an index predates an extractor change. |
-| `resolver_fingerprint` | `r=1.1.0-alpha;schema=21` | What produced the DERIVED edges (`call_edges`, `type_ancestors`, `type_helpers`, resolved `unit_uses`). Deliberately separate: when only this is stale the remedy is `index --resolve-only`, which re-derives edges from parses the index already holds instead of re-parsing anything. |
+| `schema_version` | `23` | The structural contract this document describes. Check it before reading anything else. |
+| `indexer_fingerprint` | `v=1.18.0-alpha;schema=23;pp=1;plat=win64` | What PRODUCED the stored parses: extractor version, schema, preprocessor flag, platform. The engine re-parses a file when this no longer matches, so a consumer can use it to tell whether an index predates an extractor change. |
+| `resolver_fingerprint` | `r=1.6.0-alpha;schema=23` | What produced the DERIVED data (`call_edges`, `member_accesses`, `type_ancestors`, `type_helpers`, resolved `unit_uses`, bound `refs.symbol_id` including enum-value reads, and the `symbol_facts.effect_*` purity columns). Deliberately separate: when only this is stale the remedy is `index --resolve-only`, which re-derives from parses the index already holds instead of re-parsing anything. |
 | `scan_type` | `project` or `library` | Which KIND of index this is -- a project's compile closure, or a folder/library tree. This is what makes a membership question answerable: in a `project` index a hit IS membership, and a miss IS non-membership. |
-| `indexed_at_unix` | `1788972499` | When the index was last written, seconds since the Unix epoch. |
+| `indexed_at_unix` | `1790174548` | When the index was last written, seconds since the Unix epoch. |
+| `out_of_closure_count` | `0` | Project indexes only: how many stored `files` rows lie OUTSIDE the project's current compile closure. Non-zero means the DB was once widened (typically by `index <dir> --db <projectDb>`), and only `index --project ... --rebuild` clears those rows. |
+
+**`pp=1` and the define profile.** With the preprocessor on (`pp=1`), every file
+is parsed on the `{$IFDEF}` branches that are live for the index's platform
+(`plat=`). For a project index, the defines come from the `.dproj`: the platform
+built-ins, plus the `DCC_Define` of the four PropertyGroups MSBuild applies for
+one platform and config, in order `Base`, `Base_<Platform>`, `Cfg_N`,
+`Cfg_N_<Platform>`. Print the exact set with
+`drag-lint pp-profile --dproj <x.dproj> --platform <p> --config <c>`. Before
+extractor **1.18.0-alpha** (2026-09-23) the two platform groups were skipped.
+So an older index parsed the wrong branch of any `{$IFDEF}` on a per-platform
+define, and could leave units out of the project closure (ORM3 CLIENT lost
+`EExtraExceptionInfo.pas`, behind `{$IFDEF EurekaLog}`). That is why the
+extractor version moved and every index re-parses once.
 
 **Do not infer freshness from `indexed_at_unix` alone.** It says when the index
 was written, not whether the files it describes have changed since. Compare the
@@ -687,7 +710,7 @@ popup (a single shared formatter renders both, so they cannot drift).
 | `effect_free` | INTEGER (nullable) | **purity v2 (2026-09-21).** Interprocedural effect-free verdict: NULL = not yet computed (the in-memory model reads this back as `-1`); `0` = not proven effect-free; `1` = proven effect-free (no global/unit-state write, no heap free of storage it did not allocate, no write to its own fields, no write through a parameter, and no unresolved/unbound callee). Written by the `purity` resolve stage, NEVER by the facts analyzer; a per-file reindex replaces the routine's `symbol_facts` row and this column goes back to NULL until the stage re-runs. |
 | `effect_summary` | TEXT (nullable) | **purity v2 (2026-09-21).** Comma-joined effect tokens backing `effect_free`: `g` (writes global/unit state, a resource, or SQL), `h` (frees storage it did not allocate), `s` (writes its own `Self` fields), `p<k>` (writes through parameter `k`, 0-based), `?` (a callee or member could not be bound). Empty string when `effect_free = 1` (proven, nothing to name); NULL when not yet computed. Written by the `purity` stage, NEVER by the facts analyzer; NULL again after a per-file reindex until it re-runs. |
 | `effect_witness` | TEXT (nullable) | **purity v2 (2026-09-21).** The FIRST blocker that kept `effect_free` from being `1`, display-ready and translated through the call site, e.g. `'writes through SetLength(#0 = FBuffer, a field)'` or `'calls SubString (unbound; receiver S)'`. Empty string when proven; NULL when not yet computed. Written by the `purity` stage, NEVER by the facts analyzer; NULL again after a per-file reindex until it re-runs. |
-| `covered_by` | TEXT (nullable) | **RESERVED / currently unpopulated.** The "Covered by (tests)" fact is computed LAZILY at `document`/`hover` time from the live reverse-call graph (a test->routine edge is non-deterministic to persist per-file at index time), so the current engine leaves this column NULL. Do not rely on it being filled. |
+| `covered_by` | TEXT (nullable) | **RESERVED / currently unpopulated.** The "Covered by (tests)" fact is computed LAZILY at `document`/`hover` time from the live reverse-call graph (a test->routine edge is non-deterministic to persist per-file at index time), so the current engine leaves this column NULL. Do not rely on it being filled. The lazy computation (`ComputeCoveredBy`) walks resolved AND name-matched callers, so part of its output is inferred. In a project index it sees only tests that are members of that project; tests in a separate test project live in that project's own DB. |
 
 Consumers: this table is purely additive -- pre-v18 tools that do not read it
 are unaffected. A `.sqlite` produced by a pre-v18 engine has NO `symbol_facts`

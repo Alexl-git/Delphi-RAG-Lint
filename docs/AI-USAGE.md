@@ -650,7 +650,11 @@ profile, `--include-mode off|defines-only` (how `{$I}` includes are handled,
 default `off`), `--no-near-search` (resolve includes strictly beside the
 source) and `--tolerances` (opt into the dcc-tolerance `;` replacement pass);
 `pp-profile [--dproj P] [--platform win32|win64] [--config Release|Debug]`
-prints the resolved define profile; `fb-snapshot --connection "..." --db
+prints the resolved define profile (platform built-ins plus the `DCC_Define` of
+the `.dproj`'s `Base`, `Base_<Platform>`, `Cfg_N` and `Cfg_N_<Platform>` groups;
+the two platform groups were skipped before extractor 1.18.0-alpha, so an older
+index could parse the wrong branch of a per-platform `{$IFDEF}` and drop units
+from a project closure); `fb-snapshot --connection "..." --db
 <sql.sqlite>` snapshots a live Firebird schema; `ghost-check <dproj>` compiles
 an UNSAVED buffer from a shadow dir -- `--unit <real.pas> --buffer <buf>` for
 one unit or `--overlays <manifest>` for several, and `--in-place` restores the

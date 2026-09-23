@@ -777,7 +777,7 @@ verify, and `lint --json` carries a `metric` field on these findings.
 | [`ghost-check`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-check) `<dproj>` | Compile an **unsaved** editor buffer (single- or multi-unit overlay); restores files byte-for-byte | `--unit --buffer` or `--overlays <manifest>`, `--platform` |
 | [`ghost-recover`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-recover) `<dproj>` | Restore files left overlaid by an interrupted ghost-check | |
 | `import-log <logfile> --db <db>` | Parse a saved dcc/msbuild log into the DB | |
-| [`pp-profile`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/pp-profile) | Print the resolved `{$IFDEF}` define profile for a project | `--dproj`, `--platform`, `--config Release\|Debug` |
+| [`pp-profile`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/pp-profile) | Print the resolved `{$IFDEF}` define profile for a project: platform built-ins plus the `DCC_Define` of the `.dproj`'s `Base`, `Base_<Platform>`, `Cfg_N` and `Cfg_N_<Platform>` groups (the platform groups since v1.17.0-alpha / extractor 1.18.0-alpha, which is why every index re-parses once) | `--dproj`, `--platform`, `--config Release\|Debug` |
 | [`preprocess-file`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/preprocess-file) `--file <f>` | Print `{$IFDEF}`-resolved source to stdout (diagnostic) | `--define`, `--numeric K=V`, `--include-mode off\|defines-only` (how `{$I}` includes are handled; default `off`), `--no-near-search` (resolve includes strictly beside the source, no near-directory search), `--tolerances` (opt into the dcc-tolerance `;` replacement pass) |
 
 #### Database
@@ -1086,7 +1086,7 @@ the PowerShell battery.
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
-**v1.16.0-alpha**; development continues daily.
+**v1.17.0-alpha**; development continues daily.
 
 ---
 
