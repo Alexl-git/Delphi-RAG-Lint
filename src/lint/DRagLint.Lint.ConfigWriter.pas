@@ -51,6 +51,15 @@ type
     class function LoadOrDefault(const APath: string): TLintConfig; static;
 
     /// <summary>Writes ToJson to APath as strict ANSI bytes, CRLF, no BOM.</summary>
+    /// <param name="APath">The drag-lint-lint.json to write; created when absent.</param>
+    /// <param name="ACfg">The configuration whose writer-owned keys are written.</param>
+    /// <remarks>
+    /// Writer-owned top-level keys -- disabled, enabled, autofix, severity,
+    /// thresholds, naming, ifdef_allow -- come from ACfg and REPLACE what the
+    /// file held; every other key (profiles, exclude_paths, ...) is preserved
+    /// verbatim. ifdef_allow is written only when ACfg.IfdefAllow is non-empty,
+    /// so an empty list removes it. Pinned by LintConfigTests TestIfdefAllow.
+    /// </remarks>
     class procedure SaveToFile(const APath: string; const ACfg: TLintConfig); static;
 
     /// <summary>Returns the names of all profiles defined under the "profiles"
@@ -155,6 +164,13 @@ begin
   NamObj.AddPair('hungarian_prefixes', ArrayToJsonArr(N.HungarianPrefixes));
 
   Result.AddPair('naming', NamObj);
+
+  { ifdef_allow (ifdef-undefined-symbol's list param). Written only when
+    non-empty, and OWNED (see SaveToFile): an empty list therefore REMOVES the
+    key, so clearing the field in the options frame actually clears it instead
+    of the preserved on-disk value resurrecting. }
+  if Length(ACfg.IfdefAllow) > 0 then
+    Result.AddPair('ifdef_allow', ArrayToJsonArr(ACfg.IfdefAllow));
 end;
 
 class procedure TLintConfigWriter.WriteAnsiCrlf(const APath, AJson: string);
@@ -256,8 +272,8 @@ class procedure TLintConfigWriter.SaveToFile(const APath: string;
   const ACfg: TLintConfig);
 { Writer-owned top-level keys; all others are preserved from an existing file. }
 const
-  OwnedKeys: array[0..5] of string = (
-    'disabled', 'enabled', 'autofix', 'severity', 'thresholds', 'naming');
+  OwnedKeys: array[0..6] of string = (
+    'disabled', 'enabled', 'autofix', 'severity', 'thresholds', 'naming', 'ifdef_allow');
 var
   Json   : string;
   k   : Integer;

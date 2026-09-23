@@ -43,8 +43,15 @@ breaking changes** until v1.0.
   built -- it needs VCS history the linter does not read; the `@hash` already covers code change.
   INBOX B2. Guard: `tests\autotest\run_review_marker_reason_unreviewed.ps1`. 186 -> 188 rules
   (135 built-in, 158 on by default).
+
 ### Fixed
 
+- **RAD Studio options frame: `ifdef_allow` is now editable (D9).** The frame already rendered a text box for
+  `ifdef-undefined-symbol`'s list parameter, but loaded it from the catalogue default and silently skipped it
+  on save. It now loads and saves `IfdefAllow` (comma-separated). `TLintConfigWriter` OWNS the top-level
+  `ifdef_allow` key: verified first that `SaveToFile` already PRESERVED it through unrelated edits, but a
+  preserved key cannot be edited -- the on-disk value won over `ACfg`. It is written from `ACfg` when
+  non-empty and removed when cleared. Guard: `tests\lintconfig\LintConfigTests.dpr` TestIfdefAllow.
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
   every `index` preprocess, and every project closure) used to union only the `.dproj`'s `Base` group
   and the selected config's `Cfg_N` group. MSBuild also applies `Base_<Platform>` and
