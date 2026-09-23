@@ -211,6 +211,10 @@ function Get-FileSize([string] $f) { if (Test-Path $f) { (Get-Item $f).Length } 
   Dot          = $dotOut
   Svg          = $svgOut
   Plain        = $plnOut
+  # Png/Pdf as PATHS, not just sizes: the bundler moves outputs BY PROPERTY, so
+  # it never has to guess that the raster is called "<slug>.png".
+  Png          = $pngOut
+  Pdf          = $pdfOut
   Callers      = $callers.Count
   Callees      = $callees.Count
   ClickTargets = $anchors

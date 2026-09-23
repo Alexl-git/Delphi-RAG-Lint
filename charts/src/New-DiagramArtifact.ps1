@@ -32,10 +32,14 @@
 #>
 [CmdletBinding()]
 param(
-  # the SELECTION: a qualified symbol for butterfly, a unit name for deps
-  [Parameter(Mandatory)][Alias('Qname','Unit')][string] $Target,
+  # the SELECTION, and it differs per question: a qualified symbol for
+  # butterfly / who-calls / touches-tables, a unit name for deps, a form CLASS
+  # for event-wiring.
+  [Parameter(Mandatory)][Alias('Qname','Unit','Form')][string] $Target,
   [Parameter(Mandatory)][string] $DbPath,
-  [ValidateSet('butterfly','deps')][string] $Question = 'butterfly',
+  [ValidateSet('butterfly','deps','who-calls','event-wiring','touches-tables')]
+  [string] $Question = 'butterfly',
+  [string] $Control,                      # event-wiring only: filter, not selector
   [int]    $Depth   = 2,
   [string] $OutRoot = (Join-Path $PSScriptRoot '..\artifacts'),
   [switch] $Open
@@ -44,26 +48,56 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $Qname   = $Target
-$slug    = ($Target -replace '[^A-Za-z0-9]', '_')
+$slug    = (($Target + $(if ($Control) { ".$Control" } else { '' })) -replace '[^A-Za-z0-9]', '_')
 $dir     = Join-Path $OutRoot "$Question-$slug"
+$dirWasNew = -not (Test-Path $dir)
 New-Item -ItemType Directory -Force $dir | Out-Null
 
 # ---- 1. emit -- dispatch on the question, exactly as `ask --question` will ---
-$r = switch ($Question) {
-  'butterfly' { & (Join-Path $PSScriptRoot 'Emit-Butterfly.ps1') -Qname $Target -DbPath $DbPath -Depth $Depth -OutDir $dir }
-  'deps'      { & (Join-Path $PSScriptRoot 'Emit-Deps.ps1')      -Unit  $Target -DbPath $DbPath -OutDir $dir }
+# A refusal is a RESULT here (touches-tables on a client index, who-calls on an
+# event handler), so a failed emitter must not leave a half-made bundle behind
+# for someone to find later and mistake for an answer.
+try {
+  $r = switch ($Question) {
+    'butterfly'      { & (Join-Path $PSScriptRoot 'Emit-Butterfly.ps1')     -Qname $Target -DbPath $DbPath -Depth $Depth -OutDir $dir }
+    'deps'           { & (Join-Path $PSScriptRoot 'Emit-Deps.ps1')          -Unit  $Target -DbPath $DbPath -OutDir $dir }
+    'who-calls'      { & (Join-Path $PSScriptRoot 'Emit-WhoCalls.ps1')      -Qname $Target -DbPath $DbPath -Depth $Depth -OutDir $dir }
+    'event-wiring'   {
+      # splatted, because -Control must be ABSENT rather than empty: passing
+      # -Control '' would filter every component away and read as "no rows"
+      $ew = @{ Form = $Target; DbPath = $DbPath; OutDir = $dir }
+      if ($Control) { $ew.Control = $Control }
+      & (Join-Path $PSScriptRoot 'Emit-EventWiring.ps1') @ew
+    }
+    'touches-tables' { & (Join-Path $PSScriptRoot 'Emit-TouchesTables.ps1') -Qname $Target -DbPath $DbPath -OutDir $dir }
+  }
+} catch {
+  if ($dirWasNew -and (Test-Path $dir) -and -not (Get-ChildItem $dir -Force)) {
+    Remove-Item $dir -Force
+  }
+  throw
 }
-# the two emitters report different row vocabularies; normalise for the shell
-$leftCount  = if ($null -ne $r.Callers) { $r.Callers } else { $r.UsedBy }
-$rightCount = if ($null -ne $r.Callees) { $r.Callees } else { $r.Uses }
-$leftLabel  = if ($Question -eq 'deps') { 'used by' } else { 'callers' }
-$rightLabel = if ($Question -eq 'deps') { 'uses'    } else { 'callees' }
-foreach ($pair in @(@($r.Svg,'graph.svg'), @($r.Plain,'graph.plain'), @($r.Dot,'graph.dot'))) {
-  if (Test-Path $pair[0]) { Move-Item $pair[0] (Join-Path $dir $pair[1]) -Force }
+
+# Each emitter reports its own row vocabulary; the shell needs one pair of
+# labelled numbers. Naming them per question beats guessing from property
+# presence, which silently mislabels the moment two emitters share a name.
+$vocab = @{
+  'butterfly'      = @('Callers','callers',     'Callees','callees')
+  'deps'           = @('UsedBy', 'used by',     'Uses',   'uses')
+  'who-calls'      = @('Callers','call sites',  'Cycles', 'cycle rows')
+  'event-wiring'   = @('Events', 'events',      'Handlers','handlers')
+  'touches-tables' = @('Reads',  'tables read', 'Writes', 'tables written')
 }
-foreach ($ext in 'png','pdf') {
-  $src = Join-Path $dir "$slug.$ext"
-  if (Test-Path $src) { Move-Item $src (Join-Path $dir "graph.$ext") -Force }
+$v = $vocab[$Question]
+$leftCount  = $r.($v[0]); $leftLabel  = $v[1]
+$rightCount = $r.($v[2]); $rightLabel = $v[3]
+
+# Move BY PROPERTY. The old form rebuilt "<slug>.png" by hand, which coupled the
+# bundler to each emitter's private naming; event-wiring's -Control slug broke
+# that coupling immediately.
+foreach ($pair in @(@($r.Svg,'graph.svg'), @($r.Plain,'graph.plain'), @($r.Dot,'graph.dot'),
+                    @($r.Png,'graph.png'), @($r.Pdf,'graph.pdf'))) {
+  if ($pair[0] -and (Test-Path $pair[0])) { Move-Item $pair[0] (Join-Path $dir $pair[1]) -Force }
 }
 
 # ---- 2. fingerprint the index, so staleness is DETECTABLE not merely visible -
@@ -83,7 +117,12 @@ $fp = [pscustomobject]@{
   clickTargets= $r.ClickTargets
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
-                $(if ($Question -eq 'butterfly') { " -Depth $Depth" } else { '' })
+                $(if ($Question -in 'butterfly','who-calls') { " -Depth $Depth" } else { '' }) +
+                $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })
+  # every count the emitter reported, not just the two the shell shows. The
+  # ones the header omits are exactly the ones worth auditing later --
+  # who-calls' NameOnly, event-wiring's DfmFallback, touches-tables' Unresolved.
+  emitter     = ($r | Select-Object -ExcludeProperty Dot, Svg, Plain, Png, Pdf)
 }
 $fp | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $dir 'meta.json') -Encoding ascii
 

@@ -223,6 +223,8 @@ $rows = $userRows.Count + $useRows.Count
 
 [pscustomobject]@{
   Dot = $dotO; Svg = $svgO; Plain = $plnO
+  # paths, so the bundler moves outputs BY PROPERTY rather than guessing names
+  Png = $pngO; Pdf = $pdfO
   UsedBy = $userRows.Count; Uses = $useRows.Count
   ImplementationUses = @($useRows | Where-Object { $_.Section -eq 'implementation' }).Count
   ClickTargets = $anchors; Expected = $rows
