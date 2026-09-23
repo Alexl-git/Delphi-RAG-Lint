@@ -726,3 +726,109 @@ hunks `@@ -130 +130,2 @@` and `@@ -133 +134,11 @@`). Every one of the 18
 findings anchors outside that range: line 1 (`unit-too-large`), line 157
 (`review-marker-unused`), 958-961, and 2203-2371. No `dl:ok` marker was added
 by this task.
+
+## Task 6 -- R-B churn shape: MEASURED, and the spec's premise is FALSE
+
+The brief asked this section to describe the churn as "each bound site's entry
+loses its ` ?` suffix". **That premise does not survive measurement, and neither
+does its replacement in ruling R9 ("not observably changed at all").** Both are
+recorded here with the evidence, because the owner is sizing a regeneration on
+this number.
+
+### Method
+
+A/B on a REAL corpus, not the four-unit fixture: drag-lint's own self-index
+(`src\cli\_D-RAG\drag-lint.sqlite`, 130 files, 270 `enum_value` symbols,
+re-resolved at resolver 1.6.0-alpha). Same DB, same product version
+(1.16.0-alpha), two engines differing ONLY in the `ValueArm`:
+
+* BEFORE -- `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (2026-09-22, no value arm)
+* AFTER  -- `...\enum-refs\third_party\dll-win64\drag-lint.exe` (this task's build)
+
+`document --qname <value> --db <db>`, **DRY RUN, never `--apply`.**
+
+### What actually changes
+
+| Property | BEFORE | AFTER | Verdict |
+|---|---|---|---|
+| ` ?` suffixes on the `Used by:` line | 0 | 0 | **unchanged** |
+| `CalledFromTotal` (the `(+N more)` count) | e.g. 13 / 9 / 62 | 13 / 9 / 62 | **unchanged** |
+| the DISTINCT caller SET | -- | -- | **unchanged** (proved below) |
+| WHICH 5 entries are rendered | first-5 by name-bucket insertion | first-5 by resolved-bucket insertion | **CHANGES** |
+
+So the answer is none of the four offered outcomes. Entries do not lose ` ?`,
+none appear, none are removed, and it is not "no change at all". **The churn is a
+re-WINDOWING: the same N callers, the same total, a different 5 of them shown.**
+
+### Why -- the mechanism, read out of the code rather than guessed
+
+Two facts compose:
+
+1. `Doc.Facts.Build`'s `AMaxCallers` contract (`DRagLint.Doc.Facts.pas:709`):
+   "at most this many distinct resolved/unverified callers are kept **(same
+   first-seen order as the underlying dedupe)**, truncated; `CalledFromTotal`
+   always carries the true distinct count". The cap is applied in INSERTION
+   order, and `JoinRefs` sorts only the survivors. Default 5.
+2. `AddDistinct` is first-seen-wins on `(Display, Location)`, and resolved rows
+   are inserted BEFORE the name bucket. Before this task an enum value had an
+   EMPTY resolved bucket, so insertion order was the name bucket's
+   `ORDER BY f.path, r.start_line`. It is now `FindResolvedCallers`' own
+   `ORDER BY <confidence>, encl_qname` for the bound sites, then the rest.
+
+The ` ?` half of the spec's premise fails for a third, independent reason:
+`JoinRefs` (`DRagLint.Doc.Regions.pas:2359`) computes
+`Mixed := AnyCertain and AnyUncertain` and renders ` ?` ONLY on a mixed list. An
+enum value's list was uniformly `unverified` before (so: suppressed, plain) and
+is uniformly `certain` after for a fully-bound value (so: still plain). There was
+no ` ?` to lose.
+
+### Proof that the caller SET is unchanged (the dedupe held)
+
+The task's named risk was that `ValueArm`'s `Display`/`Location` might diverge
+from `FindUnresolvedNameCallers`', breaking the `(Display, Location)` dedupe and
+double-listing the caller. Set difference on `TSymbolKind.skClass` (62 distinct
+callers, the widest in the index), my arm's rows EXCEPT the name bucket's rows:
+
+```
+0 row(s)
+```
+
+Zero rows unique to the value arm. The two computations agree, which is also why
+guard check 10 ("names `uEnumUse.UseIt` EXACTLY once, never twice") stays green.
+
+### Size of the regeneration -- UPPER BOUND 44 of 270 blocks
+
+A value whose distinct-caller count is <= the cap renders identically whatever the
+insertion order, because all entries survive and `JoinRefs` sorts them. So only
+values with MORE than 5 distinct callers can re-window:
+
+| self-index | count |
+|---|---|
+| `enum_value` symbols | 270 |
+| ... with at least one bound read | 252 |
+| ... with > 5 distinct callers (window CAN change) | **44** |
+| ... with <= 5 (render provably identical) | 208 |
+
+**44 is an upper bound, not a count**, and that was checked rather than assumed:
+`TSymbolKind.skTypeAlias` has 16 distinct callers (so it is inside the 44) and
+still rendered BYTE-IDENTICAL, because its first 5 happened to coincide. Three of
+the four values sampled did change: `efUnknown` (13 callers), `tekReplaceInLine`
+(9), `skClass` (62).
+
+ORM3 CLIENT/SERVER could NOT be measured: those indexes are read-only to this
+task and are still resolved at 1.5.1-alpha, so they have no enum bindings to
+render until `index --all --resolve-only` runs.
+
+### Consequence for the owner
+
+The churn is real but COSMETIC and bounded: no fact is added, removed, or
+re-qualified in any documented block -- only which subset of an over-cap caller
+list is displayed. It cannot change a ` ?` marker and cannot change a `(+N more)`
+total.
+
+Recommended fold, unchanged from the plan: run the one owed `document --apply`
+together with the `Pure` -> `Effect-free (proven)` regeneration
+(`docs\MEASURED-purity-v2-2026-09-21.md`, Phase 2 runbook), **after** the library
+re-resolve, so every corpus is regenerated exactly once. Task 9 should count it as
+`doc-drift` findings on enum-value blocks and should expect a number at or below
+44 for this repo's own index.

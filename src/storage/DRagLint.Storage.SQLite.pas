@@ -5653,6 +5653,8 @@ var
   List: TList<TResolvedCaller>;
   R   : TResolvedCaller       ;
   MemberArm: string           ; { the member_accesses UNION arm, '' on a DB without the table }
+  ValueArm : string           ; { the bound-USAGE UNION arm (enum values today) }
+  NoMemberAccess: string      ; { ValueArm's member_accesses exclusion, '' without the table }
 begin
   List:= TList<TResolvedCaller>.Create;
   Q:= TFDQuery.Create(nil);
@@ -5669,6 +5671,48 @@ begin
         'WHERE ma.member_symbol_id = :x OR (ma.accessor_kind = ''field'' AND ma.accessor_symbol_id = :x) '
     else
       MemberArm:= '';
+
+    { 2026-09-23 (enum-value-ref-binding, owner ruling R-A): a BOUND USAGE -- a
+      ref whose symbol_id is this symbol and which owns neither a call_edges nor
+      a member_accesses row. Today that is exactly an enum-value read (bare or
+      qualified); a later widening to const/var reuses this arm unchanged.
+
+      THE TWO `NOT EXISTS` ARE WHAT KEEP ROUTINE AND PROPERTY ROWS BYTE-
+      IDENTICAL. A resolved call already owns a call_edges row and a bound
+      property/field access already owns a member_accesses row, so both are
+      EXCLUDED here rather than emitted a second time. Without them this arm
+      would double every row the first two arms already produce.
+
+      MODE IS THE LITERAL 'read' FOR BOTH SHAPES (owner ruling R7), including
+      the Shape B qualified read whose ref kind is 'member-access'. The spec's
+      arm sketch said `mode = r.kind`, which would render 'member-access' to a
+      consumer that has only ever seen read/write there -- noise a chart
+      consumer would then have to explain away. An enum value can only be read.
+
+      DISPLAY/LOCATION PARITY IS LOAD-BEARING, not incidental. Doc.Facts
+      AddDistinct dedupes on '(Display, Location)' -- line-free -- and
+      FindUnresolvedNameCallers feeds the SAME physical caller into the same
+      list from its ungated name bucket. The joins below are therefore the exact
+      ones that routine uses (`LEFT JOIN symbols s ON
+      s.id = r.enclosing_symbol_id`, `JOIN files f ON f.id = r.file_id`), so
+      encl_qname and file_path -- and hence ExtractFileName(FullPath) -- agree
+      and the two rows FOLD. Diverge on either and the caller renders TWICE;
+      tests\callresolve\run_enum_value_refs_bind.ps1 check 10 is that guard. }
+    if HasMemberAccesses then
+      NoMemberAccess:=
+        'AND NOT EXISTS (SELECT 1 FROM member_accesses ma2 WHERE ma2.ref_id = r.id) '
+    else
+      NoMemberAccess:= '';
+    ValueArm:=
+      'UNION ALL ' +
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ''certain'' AS confidence, ''read'' AS mode ' +
+      'FROM refs r ' +
+      'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
+      'JOIN files f ON f.id = r.file_id ' +
+      'WHERE r.symbol_id = :x AND r.kind IN (''read'', ''member-access'') ' +
+      'AND NOT EXISTS (SELECT 1 FROM call_edges ce2 WHERE ce2.ref_id = r.id) ' +
+      NoMemberAccess;
+
     Q.SQL.Text:=
       { Wrapped in a subquery: a compound SELECT may only ORDER BY a result
         column, and the confidence CASE below is an expression. }
@@ -5685,6 +5729,10 @@ begin
         is already a call_edges row above; not repeated. Empty string in the
         first arm keeps the routine rows byte-identical. }
       MemberArm +
+      { 2026-09-23 (R-A): BOUND USAGES -- enum-value reads today. Appended AFTER
+        MemberArm so the first two arms' row order is untouched; the ORDER BY
+        below is what actually fixes the output order. }
+      ValueArm +
       // D5 fast-follow (T7): confidence is TEXT ('certain' | 'ambiguous'), and a
       // plain 'ORDER BY ce.confidence DESC' only puts 'certain' first because
       // 'c' > 'a' lexically -- an accident of English spelling, not an intended

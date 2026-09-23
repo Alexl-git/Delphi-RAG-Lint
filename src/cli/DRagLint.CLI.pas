@@ -592,7 +592,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@4a77 -- one Writeln per verb, so length IS the verb count; run_docs_sync_guard.ps1 harvests the banner as ONE surface, and splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@cda3 -- one Writeln per verb, so length IS the verb count; run_docs_sync_guard.ps1 harvests the banner as ONE surface, and splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -721,7 +721,9 @@ begin
   Writeln('                               Only BODY-INLINE comments need grep. (INBOX 2.7; the old line here');
   Writeln('                               sent people to grep for prose the index already had.)');
   Writeln('  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]');
-  Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous)');
+  Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);');
+  Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
+  Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
   Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
