@@ -38,11 +38,14 @@ param(
   [Parameter(Mandatory)][Alias('Qname','Unit','Form')][string] $Target,
   [Parameter(Mandatory)][string] $DbPath,
   [ValidateSet('butterfly','deps','who-calls','what-it-calls','who-writes','who-reads',
-               'event-wiring','touches-tables')]
+               'hierarchy','class-surface','event-wiring','touches-tables')]
   [string] $Question = 'butterfly',
   [string] $Control,                      # event-wiring only: filter, not selector
   [int]    $Depth   = 2,
-  [int]    $Cap     = 20,                 # member-access only: readability cap
+  [int]    $Cap     = 20,                 # member-access / hierarchy: readability cap
+  # class-surface caps PER VISIBILITY CLUSTER, so its useful value is much
+  # smaller -- a shared default of 20 would put 40 rows in one picture.
+  [int]    $SurfaceCap = 12,
   [ValidateSet('write','read','both')]
   [string] $Mode    = 'both',             # member-access only; who-writes/who-reads force it
   [string] $OutRoot = (Join-Path $PSScriptRoot '..\artifacts'),
@@ -79,6 +82,8 @@ try {
     # than the one the bundle is labelled with.
     'who-writes'     { & (Join-Path $PSScriptRoot 'Emit-MemberAccess.ps1')   -Qname $Target -DbPath $DbPath -Mode write -Cap $Cap -OutDir $dir }
     'who-reads'      { & (Join-Path $PSScriptRoot 'Emit-MemberAccess.ps1')   -Qname $Target -DbPath $DbPath -Mode read  -Cap $Cap -OutDir $dir }
+    'hierarchy'      { & (Join-Path $PSScriptRoot 'Emit-Hierarchy.ps1')     -Type  $Target -DbPath $DbPath -Cap $Cap -OutDir $dir }
+    'class-surface'  { & (Join-Path $PSScriptRoot 'Emit-ClassSurface.ps1')  -Type  $Target -DbPath $DbPath -Cap $SurfaceCap -OutDir $dir }
     'touches-tables' { & (Join-Path $PSScriptRoot 'Emit-TouchesTables.ps1') -Qname $Target -DbPath $DbPath -OutDir $dir }
   }
 } catch {
@@ -100,6 +105,8 @@ $vocab = @{
   # "nothing uses this" -- "0 writes / 602 reads" is the honest header.
   'who-writes'     = @('Writes', 'write sites', 'Routines','routines')
   'who-reads'      = @('Reads',  'read sites',  'Routines','routines')
+  'hierarchy'      = @('Ancestors','ancestors', 'Descendants','descendants')
+  'class-surface'  = @('Members','members',     'Shown',   'shown')
   'event-wiring'   = @('Events', 'events',      'Handlers','handlers')
   'touches-tables' = @('Reads',  'tables read', 'Writes', 'tables written')
 }
@@ -133,7 +140,8 @@ $fp = [pscustomobject]@{
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
                 $(if ($Question -in 'butterfly','who-calls','what-it-calls') { " -Depth $Depth" } else { '' }) +
-                $(if ($Question -in 'who-writes','who-reads') { " -Cap $Cap" } else { '' }) +
+                $(if ($Question -in 'who-writes','who-reads','hierarchy') { " -Cap $Cap" } else { '' }) +
+                $(if ($Question -eq 'class-surface') { " -SurfaceCap $SurfaceCap" } else { '' }) +
                 $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })
   # every count the emitter reported, not just the two the shell shows. The
   # ones the header omits are exactly the ones worth auditing later --

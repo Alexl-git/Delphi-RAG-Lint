@@ -281,6 +281,71 @@ Step 'E-MA4' {
   Chk 'A-MA4-XCHECK' $m4.CrossCheck 'agree'
 }
 
+Note 'hierarchy TBlueprint_ViewModel (RTL parent is unresolved, not missing) ...'
+Step 'E-HI1' {
+  $script:h1 = & "$SRC\Emit-Hierarchy.ps1" -Type 'TBlueprint_ViewModel' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-HI1-DECLARED'  $h1.FocusDeclared $true
+  Chk 'A-HI1-ANCESTORS' $h1.Ancestors 2
+  Chk 'A-HI1-UNRES'     $h1.UnresolvedAnc 1      # TInterfacedObject: RTL, real, not drawable
+  Chk 'A-HI1-DESC'      $h1.Descendants 0
+  Chk 'A-HI1-SELFREF'   $h1.SelfRefs 0
+  # the unresolved parent is NAMED and NOT linked -- a dead link is worse than none
+  $t = Dot $h1
+  if ($t -notmatch 'TInterfacedObject') { Fail 'A-HI1-RTL' 'the RTL ancestor is not named at all' }
+  if ($t -notmatch "outside this project") { Fail 'A-HI1-DISCLOSE' 'the unresolved ancestor is not disclosed as outside the closure' }
+}
+
+# The focus is RTL, so this index does not declare it -- and that is NOT a
+# refusal: 145 types here inherit from it. Guards the -AllowMissing path.
+Note 'hierarchy TInterfacedObject (145 descendants, focus not declared here) ...'
+Step 'E-HI2' {
+  $script:h2 = & "$SRC\Emit-Hierarchy.ps1" -Type 'TInterfacedObject' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-HI2-DECLARED' $h2.FocusDeclared $false
+  Chk 'A-HI2-DESC'     $h2.Descendants 145
+  Chk 'A-HI2-SHOWN'    $h2.ShownDescendants 20
+  Chk 'A-HI2-HIDDEN'   $h2.HiddenDescendants 125
+  Chk 'A-HI2-CLICKS'   $h2.ClickTargets 20      # no focus anchor: nothing to open
+  $t = Dot $h2
+  foreach ($n in 'TBlueprint_ViewModel','TBlueprintCADImport_ViewModel','TBlueprintPDFImport_ViewModel','TABZLoggingSys','TCADFileService') {
+    if ($t -notmatch ('>' + [regex]::Escape($n) + '<')) { Fail 'A-HI2-NAMED' "$n is not a row" }
+  }
+  if ($t -notmatch '\+125 more descendants not shown') { Fail 'A-HI2-DISCLOSE' 'the disclosure row is missing' }
+}
+
+# A colliding ancestor name must be drawn UN-ANCHORED and counted, never linked
+# to an arbitrary one of the candidates. IDataService is two real types here
+# (generic and non-generic), each with a forward declaration -- FOUR rows, TWO
+# types -- so Collisions 1 also guards the forward-declaration collapse.
+Note 'hierarchy TDataService_DRA1_CLIENT (ancestor name collides) ...'
+Step 'E-HI3' {
+  $script:h3 = & "$SRC\Emit-Hierarchy.ps1" -Type 'TDataService_DRA1_CLIENT' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-HI3-COLLISIONS' $h3.Collisions 1
+  Chk 'A-HI3-UNLOCATE'   $h3.Unlocatable 0
+  $t = Dot $h3
+  if ($t -notmatch '2 types share this name') { Fail 'A-HI3-TEXT' 'the collision is not stated as 2 types (forward decls not collapsed?)' }
+}
+
+Note 'class-surface TBlueprint_ViewModel (392 members, clustered by visibility) ...'
+Step 'E-CS1' {
+  $script:cs1 = & "$SRC\Emit-ClassSurface.ps1" -Type 'Blueprint4.ViewModel.TBlueprint_ViewModel' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-CS1-MEMBERS'  $cs1.Members 392
+  Chk 'A-CS1-FIELD'    $cs1.ByKind['field'] 174
+  Chk 'A-CS1-PROP'     $cs1.ByKind['property'] 115
+  Chk 'A-CS1-METHOD'   $cs1.ByKind['method'] 101
+  Chk 'A-CS1-CTOR'     $cs1.ByKind['constructor'] 1
+  Chk 'A-CS1-DTOR'     $cs1.ByKind['destructor'] 1
+  # nothing dropped silently: the totals come from an AGGREGATE the 200-row cap
+  # cannot distort, and every member is either shown or disclosed
+  Chk 'A-CS1-ACCOUNT'  ($cs1.Shown + $cs1.Hidden) 392
+  # visibility is real, measured -- not a kind fallback
+  Chk 'A-CS1-VIS'      (($cs1.ByVisibility.Keys | Sort-Object) -join ',') 'public,strict private'
+  Chk 'A-CS1-PUBLIC'   $cs1.ByVisibility['public'] 191
+  Chk 'A-CS1-PRIVATE'  $cs1.ByVisibility['strict private'] 201
+  if (-not $cs1.AllClickable) { Fail 'A-CS1-CLICK' 'not every shown member row is anchored' }
+  # the $PAL/$pal case-insensitivity trap: an empty colour kills dot's rendering
+  if ((Dot $cs1) -match 'color=""') { Fail 'A-CS1-COLOR' 'an empty colour reached the dot file' }
+}
+
 Note 'touches-tables HandleCopyOperation (SERVER) ...'
 Step 'E-TT1' {
   $script:s1 = & "$SRC\Emit-TouchesTables.ps1" -Qname $Q_COPY -DbPath $DbSrv -OutDir $OutDir
@@ -356,6 +421,16 @@ NegTest 'N10' 'No.Such.Field is not in this index' 'No_Such_Field_both' {
 NegTest 'N10b' 'ID is ambiguous -- 154 symbols share that name' 'ID_both' {
   & "$SRC\Emit-MemberAccess.ps1" -Qname 'ID' -DbPath $DbCli -OutDir $negDir }
 
+Note 'negatives N11-N12 ...'
+NegTest 'N11' 'NoSuchType is not in this index, and nothing in it inherits' 'NoSuchType_hierarchy' {
+  & "$SRC\Emit-Hierarchy.ps1" -Type 'NoSuchType' -DbPath $DbCli -OutDir $negDir }
+NegTest 'N12' 'is a unit, not a class or interface or record' 'Blueprint4_ViewModel_surface' {
+  & "$SRC\Emit-ClassSurface.ps1" -Type 'Blueprint4.ViewModel' -DbPath $DbCli -OutDir $negDir }
+# A bare type name matching two REAL types is refused, and the message must name
+# what separates them: they share a qualified name, so "qualify it" is useless.
+NegTest 'N12b' 'they differ by generic parameters' 'IDataService_hierarchy' {
+  & "$SRC\Emit-Hierarchy.ps1" -Type 'IDataService' -DbPath $DbCli -OutDir $negDir }
+
 # N13 is NOT a refusal: zero in the rendered direction is a real answer, and it
 # must still draw and exit 0 -- with the OTHER direction's count beside it, so
 # "0 writes" cannot read as "nothing uses this".
@@ -386,7 +461,7 @@ if (Test-Path $n7Dir) { Fail 'N7-DIR' 'the failed bundle directory still exists'
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
-  Write-Host 'Emitter verification -- eight questions, six emitters, two indexes'
+  Write-Host 'Emitter verification -- ten questions, eight emitters, two indexes'
   Write-Host ("  bytes          : {0} non-ascii, {1} bare LF" -f $nonAscii, $bareLf)
   Write-Host ("  butterfly      : {0} callers / {1} callees, {2} clicks" -f (V $b 'Callers'), (V $b 'Callees'), (V $b 'ClickTargets'))
   Write-Host ("  deps           : {0} used by / {1} uses" -f (V $d 'UsedBy'), (V $d 'Uses'))
@@ -395,8 +470,10 @@ if (-not $Quiet) {
   Write-Host ("  who-writes     : {0} writes / {1} reads over {2} routines, {3} sites; verb-vs-sql {4}" -f (V $m1 'Writes'), (V $m1 'Reads'), (V $m1 'Routines'), (V $m1 'Sites'), (V $m1 'CrossCheck'))
   Write-Host ("  who-reads      : {0} reads over {1} routines, {2} shown + {3} disclosed" -f (V $m3 'Reads'), (V $m3 'Routines'), (V $m3 'ShownReaders'), (V $m3 'HiddenRoutines'))
   Write-Host ("  event-wiring   : {0} events / {1} handlers / {2} controls; {3} at scale" -f (V $e1 'Events'), (V $e1 'Handlers'), (V $e1 'Components'), (V $e3 'Events'))
+  Write-Host ("  hierarchy      : {0} ancestors ({1} outside closure), {2} descendants, {3} collision(s)" -f (V $h1 'Ancestors'), (V $h1 'UnresolvedAnc'), (V $h2 'Descendants'), (V $h3 'Collisions'))
+  Write-Host ("  class-surface  : {0} members over {1} visibility clusters, {2} shown + {3} disclosed" -f (V $cs1 'Members'), (V $cs1 'Clusters'), (V $cs1 'Shown'), (V $cs1 'Hidden'))
   Write-Host ("  touches-tables : {0} read / {1} written / {2} both, of {3} SQL symbols" -f (V $s1 'Reads'), (V $s1 'Writes'), (V $s1 'Both'), (V $s1 'IndexSqlSymbols'))
-  Write-Host ("  negatives      : N1-N10b, each asserting message AND absent .svg; N13 draws")
+  Write-Host ("  negatives      : N1-N12b, each asserting message AND absent .svg; N13 draws")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

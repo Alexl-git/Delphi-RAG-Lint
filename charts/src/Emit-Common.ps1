@@ -158,6 +158,34 @@ SELECT s.id AS id, s.kind AS kind, s.start_line AS start_line,
 
 # ---- member selection -------------------------------------------------------
 
+# Collapse FORWARD DECLARATIONS onto the real declaration they announce.
+#
+# A Delphi interface section routinely declares a type twice -- `IDataService =
+# interface;` up front, then the body further down -- and the index stores both,
+# with the SAME qualified_name. Counting them as separate types makes a chart
+# report an ambiguity that does not exist.
+#
+# The key is (qualified_name, generic_params), NOT qualified_name alone, because
+# a generic and a non-generic type can legitimately share a name and this corpus
+# has exactly that case: IuMicObject.pas declares `IDataService` and
+# `IDataService<I: IMicObject>`, each with its own forward declaration -- FOUR
+# rows, TWO real types. Collapsing on the name alone would merge two different
+# types; collapsing on the pair does not.
+#
+# MEASURED 2026-09-23, CLIENT: 857 (qualified_name, generic_params) groups and
+# ZERO of them span more than one file. So every group really is one type's
+# declarations in one unit, and the widest line span is its body.
+function Select-DeclarationRows($Rows) {
+  $out = New-Object System.Collections.ArrayList
+  foreach ($g in @($Rows | Group-Object { "$([string]$_.qualified_name)|$([string]$_.generic_params)" })) {
+    $best = @($g.Group | Sort-Object `
+                @{ E = { [int]$_.end_line - [int]$_.start_line }; Descending = $true }, `
+                @{ E = { [int]$_.start_line }; Descending = $false })[0]
+    [void]$out.Add($best)
+  }
+  , $out.ToArray()
+}
+
 # Resolve a FIELD or PROPERTY selection, REFUSING an ambiguous name rather than
 # taking the first match the way Get-SymbolLocation does.
 #
@@ -175,18 +203,35 @@ SELECT s.id AS id, s.kind AS kind, s.start_line AS start_line,
 # Refusing is the whole point: this chart is about ONE member, so resolving to
 # the wrong one does not mislabel a row, it mislabels every row in the picture.
 # `FConnected` resolving uniquely here is luck, not a rule.
-function Resolve-MemberSelection([string] $Qname, [string[]] $Kinds) {
+# -AllowMissing returns $null instead of throwing when NOTHING matches, while
+# still refusing an ambiguous name. The two outcomes are different questions:
+# "I cannot tell WHICH one you mean" is always fatal, but "this index does not
+# declare it" is a legitimate answer for a type whose DESCENDANTS live here even
+# though its declaration does not -- TInterfacedObject has 145 descendants on
+# CLIENT and no declaration in it, because it is RTL.
+#
+# -Hint is the advice appended when the symbol exists but is the WRONG KIND.
+# It differs per emitter -- who-calls is the right redirect for a method asked
+# of who-writes, and the wrong one for a unit asked of class-surface.
+function Resolve-MemberSelection([string] $Qname, [string[]] $Kinds, [switch] $AllowMissing,
+                                 [string] $Hint = 'ask who-calls instead') {
   $q = ConvertTo-SqlText $Qname
   $rows = Invoke-IndexQuery @"
 SELECT s.id AS id, s.kind AS kind, s.qualified_name AS qualified_name,
-       s.name AS name, s.start_line AS start_line,
+       s.name AS name, s.start_line AS start_line, s.end_line AS end_line,
        s.impl_start_line AS impl_start_line, s.impl_end_line AS impl_end_line,
-       s.prop_access AS prop_access, f.path AS path
+       s.prop_access AS prop_access, s.generic_params AS generic_params,
+       f.path AS path
   FROM symbols s JOIN files f ON f.id = s.file_id
  WHERE s.qualified_name = '$q' OR s.name = '$q'
  ORDER BY s.qualified_name
 "@
-  if ($rows.Count -eq 0) { throw "$Qname is not in this index" }
+  if ($rows.Count -eq 0) {
+    if ($AllowMissing) { return $null }
+    throw "$Qname is not in this index"
+  }
+  # Forward declarations are not alternatives to choose between.
+  $rows = Select-DeclarationRows $rows
 
   # An exact QUALIFIED hit wins outright: `R` as a qualified name and `R` as a
   # bare name are different questions, and the caller asked the precise one.
@@ -205,14 +250,28 @@ SELECT s.id AS id, s.kind AS kind, s.qualified_name AS qualified_name,
   }
 
   if ($cand.Count -gt 1) {
-    $head = ($cand | Select-Object -First 6 | ForEach-Object { [string]$_.qualified_name }) -join ', '
-    $tail = if ($cand.Count -gt 6) { ", +$($cand.Count - 6) more" } else { '' }
-    throw "$Qname is ambiguous -- $($cand.Count) symbols share that name: $head$tail. Pass a fully qualified name."
+    # Name what actually TELLS THEM APART. Advising "qualify it" is useless when
+    # the candidates already share a qualified name, which happens for a generic
+    # and a non-generic type of the same name (IuMicObject.IDataService and
+    # IDataService<I: IMicObject>) -- there the generic parameters are the
+    # difference, and for everything else it is the unit.
+    $sameQ = @($cand | Group-Object { [string]$_.qualified_name }).Count -eq 1
+    $head = ($cand | Select-Object -First 6 | ForEach-Object {
+      $g = [string]$_.generic_params
+      "$([string]$_.qualified_name)$(if ($g) { "<$g>" }) at $([IO.Path]::GetFileName([string]$_.path)):$($_.start_line)"
+    }) -join '; '
+    $tail = if ($cand.Count -gt 6) { "; +$($cand.Count - 6) more" } else { '' }
+    $advice = if ($sameQ) {
+      'They share a qualified name, so qualifying will not separate them -- they differ by generic parameters.'
+    } else {
+      'Pass a fully qualified name.'
+    }
+    throw "$Qname is ambiguous -- $($cand.Count) symbols share that name: $head$tail. $advice"
   }
 
   $r = $cand[0]
   if ($Kinds -and ($Kinds -notcontains [string]$r.kind)) {
-    throw "$($r.qualified_name) is a $($r.kind), not a $($Kinds -join ' or ') -- ask who-calls instead"
+    throw "$($r.qualified_name) is a $($r.kind), not a $($Kinds -join ' or ') -- $Hint"
   }
   $focus = if ($r.impl_start_line) { [int]$r.impl_start_line } else { [int]$r.start_line }
   [pscustomobject]@{
