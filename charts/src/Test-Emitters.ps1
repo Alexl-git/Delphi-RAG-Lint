@@ -599,6 +599,12 @@ Step 'E-FX' {
 Note 'architecture ...'
 Step 'E-AR' {
   $script:ar1 = & "$SRC\Emit-Architecture.ps1" -DbPath $DbCli -OutDir $OutDir
+  # KNOWN RED since the 2026-09-23 09:42 CLIENT reindex: UNITS/EXTUNITS/EXTEDGES
+  # read 562/280/30697. Engine defect, NOT data: the preprocessor profile ignores
+  # the Base_Win64 group that defines EUREKALOG, so the .dpr's {$IFDEF EurekaLog}
+  # block is blanked and the local EExtraExceptionInfo.pas (a real member) drops
+  # out of the closure. Engine ruling: 563/283/30702 is right. Do NOT re-baseline.
+  # C:\Projects\Delphi-RAG-lint\docs\INBOX-pp-profile-ignores-platform-propertygroups.md
   Chk 'A-AR1-UNITS'    $ar1.Units 563
   Chk 'A-AR1-ZONES'    $ar1.Zones 3
   Chk 'A-AR1-INTERNAL' $ar1.InternalEdges 2858
@@ -660,8 +666,11 @@ Step 'E-PT' {
 
   $script:pt2 = & "$SRC\Emit-ProtocolTrace.ps1" -Target 'Pipes.Protocol.TPipeMessageHeader.CommandID' -DbPath $DbCli -OutDir $OutDir
   Chk 'A-PT2-MODE'     $pt2.Mode 'field'
-  Chk 'A-PT2-REFS'     $pt2.Refs 1043
-  Chk 'A-PT2-ROUTINES' $pt2.Routines 727
+  # 1047/728, was 1043/727. The old pair was baselined while uPipeClientConnection
+  # was a WITHHELD file with no resolved refs; the 2026-09-23 CLIENT reindex bound
+  # its 4 CommandID reads (all in HeaderCommandID). Recovered data, not drift.
+  Chk 'A-PT2-REFS'     $pt2.Refs 1047
+  Chk 'A-PT2-ROUTINES' $pt2.Routines 728
   Chk 'A-PT2-KINDS'    $pt2.Kinds 'member-access'
 
   $script:pt3 = & "$SRC\Emit-ProtocolTrace.ps1" -Target 'Pipes.Protocol.CommandIDToStr' -DbPath $DbSrv -OutDir $OutDir

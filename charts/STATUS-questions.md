@@ -208,18 +208,20 @@ from 9 nodes to 4. Callers unaffected.
 question the index can answer now ships; the five that do not are blocked on
 facts that do not exist, each measured and each filed.
 
-**Next: a REINDEX, not a re-baseline.** All 9 red assertions are one recoverable
-data defect in a single withheld file (finding 1 below), so:
+**The withheld-file reindex LANDED (2026-09-23 09:42) and cleared all 9.**
+CLIENT was re-cloned (stamp 1790174548; the 05:30 clone is kept beside it as
+`*.pre-reindex-0530`). The suite is now **3 red, all one KNOWN ENGINE DEFECT**:
 
-1. **Do NOT re-baseline any of the 9.** Editing them would bake the defect into
-   the fixtures. An earlier version of this section said to re-baseline the 7
-   and to expect the 2 property ones to persist -- both were wrong, and rested
-   on a mechanism we had inferred rather than measured.
-2. The recovery is `index --project ...\Micronite2027.dproj --db ...` run with a
-   **1.6.0-alpha** engine. We must not run it: ours is 1.5.1 and would downgrade
-   the corpus. The engine team has it ready and is holding off until we say.
-3. It does **not** clear when the engine is redeployed -- it is data, not skew.
-4. After the reindex: **re-clone**, then re-run. The suite should go green.
+* `A-AR1-UNITS/EXTUNITS/EXTEDGES` read 562/280/30697. The engine's preprocessor
+  profile ignores the `Base_Win64` group that defines `EUREKALOG`, so the .dpr's
+  `{$IFDEF EurekaLog}` block is blanked and the local `EExtraExceptionInfo.pas`
+  (a real member) drops out of the closure. Engine ruling: **563/283/30702 is
+  right -- do NOT re-baseline.** Filed by them:
+  `INBOX-pp-profile-ignores-platform-propertygroups.md`. The fix is an extractor
+  bump + full re-parse, not today. When it lands: re-clone, re-run; OTHER counts
+  may shift by a few (units that `{$IFDEF EurekaLog}` internally).
+* `A-PT2-REFS/ROUTINES` WERE re-baselined 1043/727 -> 1047/728: the old pair was
+  taken while the withheld file had no resolved refs. Recovered data.
 
 ### Batch 3 findings (2026-09-23)
 
