@@ -52,23 +52,45 @@ wait on the engine team.
 These cost a measurement pass to establish. Do not re-litigate them; they are
 the reason this plan differs from what `question-catalogue.md` implies.
 
-### 1. `member_accesses.accessor_symbol_id` is NOT "who touched it"
+### 1. Use `find-callers --resolved`. Do NOT hand-roll this from `member_accesses`.
 
-**The catalogue describes `who-writes` as standing on `member_accesses.mode`
-and implies the accessor is the writer. It is not.** `accessor_symbol_id` is
-the PROPERTY BACKING -- how the property is implemented, not who used it:
+```
+drag-lint query find-callers --name <member> --db <db> --resolved --json
+  -> [ { caller_qname, file, confidence, target_qname, line, mode } ]
+```
 
-| property | accessor recorded | reading |
-|---|---|---|
-| `TPipeClientConnection.Connected` (602 reads) | `FConnected`, `accessor_kind=field` | its `read` clause |
-| `ImcINSPRSLT.VERDICT` | `GetVERDICT` / `SetVERDICT`, `accessor_kind=method` | its getter/setter |
+`caller_qname` IS the enclosing routine, `mode` is `read`/`write`, and
+`confidence` is `certain`/`ambiguous`. Measured against SQL ground truth on
+`MSCTYPES.RChartSampleData.R` -- identical: `DrawSample` r2/w3,
+`DrawSampleChartHoriz` r7, `DrawChartCol` r2/w2, `DrawChartColSampleRec` r2/w2,
+20 rows total.
 
-Measured on CLIENT: **every `field` access is unattributed (3,355 / 3,355);
-every `property` access is "attributed" but only to its own getter/setter
-(5,955 / 5,956).** Building `who-writes` on this column produces a chart whose
-every row says "FConnected writes Connected", which is true and useless.
+**The verb is NOT subject to the 200-row sql cap** -- measured 602 rows / 598
+distinct callers for `Connected`, where the `sql` verb truncates at 200.
 
-### 2. The enclosing routine comes from LINE CONTAINMENT, and it is total
+**A WARNING, because this nearly became this project's second false defect
+report.** `member_accesses.accessor_symbol_id` does NOT mean "who touched the
+member" -- it names the property's BACKING (`Connected` -> `FConnected`,
+`VERDICT` -> `GetVERDICT`/`SetVERDICT`), and every `field` access has it NULL
+(3,355 / 3,355 on CLIENT). That looks exactly like a defect and IS NOT ONE. It
+is a shipped, owner-ruled design: *a property read is a call to its read
+accessor; a field-backed accessor is a read/write use of that field*
+(`docs\INBOX-property-refs-never-resolve.md`, RETIRED, shipped in `bc2e39dc`,
+resolver 1.3.0-alpha). The column answers "which accessor implements this
+access". That is a real question. It is simply not OUR question.
+
+**Do not file it. Do not "work around" it. Ask the verb instead.**
+
+### 2. The SITE anchor still needs SQL -- `--resolved` gives you the routine, not the spot
+
+Measured: `--resolved`'s `line` is the **caller's DECLARATION line**, uniformly
+for methods and members -- `AddOperation` 362, `ImportJenVICI` 376,
+`DrawChartCol` 304, each matching `symbols.start_line` exactly. It answers
+*which routine*, never *where inside it*.
+
+A row in these charts must open the place the member is actually touched, so
+the emitter needs a second, SMALL query for the sites of the routines it is
+about to SHOW. That query is where line containment earns its place:
 
 ```sql
 (SELECT s.qualified_name FROM symbols s
@@ -86,11 +108,9 @@ unresolved**, SERVER **14,836 resolved / 0 unresolved**. Spot-checked correct
 INNERMOST enclosing routine. Without it a nested routine's accesses are
 attributed to its parent.
 
-**This is a WORKAROUND for an engine defect, and Task 0 isolates it in one
-helper for that reason.** `accessor_symbol_id` is, on the evidence, misnamed
-for what a caller would expect it to mean. It has been filed to the engine
-INBOX; if the engine grows a real "enclosing routine" fact, exactly one
-function changes.
+This is NOT a workaround for a defect (see finding 1) -- it is how you get a
+line+col the engine's verb does not report. Task 0 still isolates it in one
+helper so the three emitters cannot drift apart on it.
 
 **STILL UNVERIFIED -- check this in Task 0 before building on it.** Whether
 accesses written inside a Delphi `with` block are recorded in
@@ -107,11 +127,17 @@ col 34 and col 51, a write at col 63. Keying or grouping by line alone silently
 merges three facts into one. Same rule as who-calls' call sites; key the port
 map by ORDINAL.
 
-### 4. Aggregation does NOT defeat the 200-row cap -- ranking does
+### 4. The cap belongs to the `sql` verb only -- but the CHART still needs a cap
 
 The guarded SQL caps at 200 rows and truncation is SILENT. Grouping the 602
 reads of `Connected` by routine still returns 200 rows `truncated=True`,
-because those 602 sites live in **598 distinct routines**. Measured totals:
+because those 602 sites live in **598 distinct routines**. `find-callers
+--resolved` is not capped and returns all 602 -- which is why step 1 uses the
+verb and step 2 uses bounded SQL.
+
+**The readability cap is a separate decision and still applies.** A chart with
+598 rows is not a chart. Rank, cap and disclose regardless of what the engine
+is willing to return. Measured totals:
 
 | target | writes | reads | distinct routines | sites |
 |---|---|---|---|---|
@@ -225,21 +251,24 @@ Selection is a FIELD or PROPERTY qname. Resolve it with `Get-SymbolLocation`;
 if the symbol's `kind` is neither `field` nor `property`, throw
 `"<Q> is a <kind>, not a field or property -- ask who-calls instead"`.
 
-**TWO queries only.**
+**Step 1 -- the routines, from the VERB, uncapped:**
+`query find-callers --name <bare member name> --db <db> --resolved --json`.
+Filter `target_qname` to the selected member (a bare `--name` can match members
+of several classes -- measured: `R` matched only `RChartSampleData.R` here, but
+do not rely on that). Group by `caller_qname` + `mode`; that gives totals,
+distinct routines and per-routine counts in ONE call with no cap.
 
-**Query A, totals** (never capped -- one row):
-`SUM(mode='write')`, `SUM(mode='read')`, `COUNT(DISTINCT enc)`, `COUNT(*)`.
+**Step 2 -- site anchors, SQL, for the SHOWN routines only:** the containment
+query of finding 2, bounded by an IN-list of the routines that survived the
+cap, carrying `start_line` AND `start_col`. Bounded that way it cannot approach
+200 rows.
 
-**Query B, ranked routines**: `GROUP BY enc, mode` selecting
-`COUNT(*) AS sites, MIN(start_line) AS anchor`, `ORDER BY sites DESC LIMIT
-<cap+1>`. Cap default 25; the `+1` is how you detect there is more without a
-third query. Compare against Query A to compute the disclosure row.
+Two queries total. **Never one query per routine** -- that is N process spawns
+for data the chart does not display.
 
-There is deliberately **no Query C**. An earlier draft fetched the individual
-sites for each shown routine; that is one process spawn per row for data the
-chart never displays, since a row IS a routine and `MIN(start_line)` is
-already an exact, clickable anchor into it. The per-site detail belongs in the
-tooltip only if a single query can carry it.
+**Cross-check step 1 against step 2 on the demo target.** If the verb reports
+7 writes and the SQL finds 7 write sites, both agree; a mismatch is a finding
+worth reporting, not a number to average.
 
 **DECISION -- a property and its backing field are DIFFERENT selections.**
 `Connected` is backed by `FConnected`. Asking `who-writes Connected` reports
@@ -385,7 +414,8 @@ exist). Prove the extended suite can still FAIL once before trusting it.
 
 * Touch anything outside `charts\`. The CLI `ask` verb is added LAST, by
   someone else.
-* Build `who-writes` on `accessor_symbol_id`. Finding 1.
+* Build `who-writes` on `accessor_symbol_id`, and do NOT file it as a defect --
+  it is a shipped owner ruling. Finding 1. Use `find-callers --resolved`.
 * Group accesses by line. Finding 3.
 * Trust a grouped query to dodge the row cap. Finding 4.
 * Open a second project DB. Library-vs-project is the only authoritative pair.
