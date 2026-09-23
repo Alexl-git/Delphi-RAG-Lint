@@ -907,7 +907,8 @@ Step 'E-EP' {
   # per-node walk (R12): AutoScanIfNeeded -> ForceRescan, which has no resolved
   # caller of its own -- counted, not left implicit
   Chk 'A-EP1-WALK'      $ep1.WalkSentence 'no handler found within 3 caller levels (2 callers walked); reaches 1 caller with no resolved caller of its own'
-  Chk 'A-EP1-PATHS'     $ep1.TypePaths 'Exception:0/0/1/2'
+  # type:caught edges/escapes/no-caller ends/callers walked/capped callers
+  Chk 'A-EP1-PATHS'     $ep1.TypePaths 'Exception:0/0/1/2/0'
   Chk 'A-EP1-FRESH'     $ep1.StaleFiles 0
   Chk 'A-EP1-CLICK'     "$($ep1.ClickTargets)/$($ep1.Expected)" '9/9'
   $t1 = Dot $ep1
@@ -974,8 +975,8 @@ Step 'E-EP' {
   # has a resolved caller (DFM event handlers) -- 3 path ends, counted. 6 of the 7
   # callers are walked: DoInitLoad is reached only through LoadAllAsync, which caught.
   # catchers / escapes past the depth bound / no-caller ends / callers walked:
-  Chk 'A-EP6-PATHS'     $ep6.TypePaths 'EDatabaseError:1/0/3/6'
-  Chk 'A-EP6-WALK'      $ep6.WalkSentence 'caught at 1 caller (LoadAllAsync:632) within 3 caller levels (6 callers walked); reaches 3 callers with no resolved caller of their own'
+  Chk 'A-EP6-PATHS'     $ep6.TypePaths 'EDatabaseError:1/0/3/6/0'
+  Chk 'A-EP6-WALK'      $ep6.WalkSentence 'caught on 1 call edge (LoadAllAsync:632 on the call to ApplyRawPayload) within 3 caller levels (6 callers walked); reaches 3 callers with no resolved caller of their own'
   $t6 = Dot $ep6
   foreach ($ln in 532, 579, 627) { if (HasLine $t6 $ln) { Fail 'A-EP6-NOTCONTAINED' "the handler at :$ln guards another statement but was drawn" } }
   if ($t6 -notmatch 'caught \(catch-all\) at LoadAllAsync:632') { Fail 'A-EP6-EDGE' 'the verified catch at LoadAllAsync:632 is not drawn' }
@@ -988,19 +989,41 @@ Step 'E-EP' {
   # no re-raise. The other handler in that body (:402) closes its try at :403,
   # before the call.
   $script:ep7 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'MStreams.TABZMemoryStream.ReadBuffer' -DbPath $DbCli -OutDir $OutDir
-  Chk 'A-EP7-EVENTS'    $ep7.Events 'caught:AutoTestSetupDefaults:466'
-  Chk 'A-EP7-CAUGHT'    "$($ep7.RaiseTypeNames):$($ep7.Caught):$($ep7.SolidEdges)" 'EReadError:1:1'
-  Chk 'A-EP7-CALLERS'   "$($ep7.Callers)/$($ep7.NotGuarding)" '140/1'
-  # THE SIBLING-PATH ROW (R12). ReadBuffer has 134 direct callers; ONE catches.
-  # Per node, EReadError still walks the other 133 and everything above them:
-  # 139 callers walked (AutoTestSetupDefaults' own caller is reached only through
-  # it), 133 path ends with no resolved caller (mostly interface-dispatched
-  # Save methods), 2 past the depth bound (SaveDefaults, AutoTestSetupBools at
-  # depth 3). Round 1 stopped the TYPE after depth 1 and reported none of these.
-  Chk 'A-EP7-PATHS'     $ep7.TypePaths 'EReadError:1/2/133/139'
-  Chk 'A-EP7-WALK'      $ep7.WalkSentence 'caught at 1 caller (AutoTestSetupDefaults:466) within 3 caller levels (139 callers walked); escapes the walk on 2 path ends after 3 levels; reaches 133 callers with no resolved caller of their own'
-  if ((Dot $ep7) -notmatch 'escapes the walk on 2 path ends after 3 levels') { Fail 'A-EP7-DISCLOSE' 'the escaping paths are not on the chart' }
-  if ((Dot $ep7) -notmatch 'caught \(catch-all\) at AutoTestSetupDefaults:466') { Fail 'A-EP7-EDGE' 'the verified catch is not drawn' }
+  # EDGE-LEVEL truth (R13, fix round 3), verified by targeted reads of uAutoTest.pas.
+  # AutoTestSetupDefaults stops EReadError on TWO call edges -- ReadBuffer at :433
+  # and uSTATIONS_CLIENT...Save at :461, both inside the try at :411 whose except
+  # (:465) holds `on E: Exception` at :466 -- and lets it ESCAPE on a third: its
+  # calls to TSetupDefaultsViewModel.Save at :513/:561 sit in try..finally only.
+  # Round 2 marked it visited after the catch and dropped that path.
+  Chk 'A-EP7-EVENTS'    $ep7.Events 'caught:AutoTestSetupDefaults:466,caught:AutoTestSetupDefaults:466'
+  Chk 'A-EP7-CAUGHT'    "$($ep7.RaiseTypeNames):$($ep7.Caught):$($ep7.CatchAndPass)" 'EReadError:2:1'
+  # not guarding: :402 (its try is 390..401) on each of the three edges, and
+  # :466 on the escaping Save edge (513/561 lie outside the try at 411..465)
+  Chk 'A-EP7-CALLERS'   "$($ep7.Callers)/$($ep7.NotGuarding)" '140/4'
+  # THE SIBLING-PATH ROW. Per edge, EReadError walks all 134 direct callers and
+  # everything above the ones that pass it: 139 callers evaluated, 133 path ends
+  # with no resolved caller (mostly interface-dispatched Save methods), 3 past the
+  # depth bound -- SaveDefaults and AutoTestSetupBools at depth 3, and
+  # AutoTestSetupDefaults itself, which PASSES at level 3 through Save and whose
+  # caller RunAutoTest (:1651, inside `try .. except on E: Exception`) is beyond
+  # the bound. Round 1 stopped the type after depth 1; round 2 read 1/2/133/139.
+  Chk 'A-EP7-PATHS'     $ep7.TypePaths 'EReadError:2/3/133/139/0'
+  Chk 'A-EP7-WALK'      $ep7.WalkSentence 'caught on 2 call edges (AutoTestSetupDefaults:466 on the call to ReadBuffer, AutoTestSetupDefaults:466 on the call to Save) within 3 caller levels (139 callers walked); 1 catching caller also lets it escape on another call; escapes the walk on 3 path ends after 3 levels; reaches 133 callers with no resolved caller of their own'
+  $t7 = Dot $ep7
+  if ($t7 -notmatch 'escapes the walk on 3 path ends after 3 levels') { Fail 'A-EP7-DISCLOSE' 'the escaping paths are not on the chart' }
+  if ($t7 -notmatch 'caught \(catch-all\) at AutoTestSetupDefaults:466 on the call to ReadBuffer') { Fail 'A-EP7-EDGE' 'the verified catch is not drawn' }
+  # both halves of the same node, anchored: the escaping calls are rows at :513 / :561
+  foreach ($ln in 513, 561) { if (-not (HasLine $t7 $ln)) { Fail 'A-EP7-ESCROW' "the escaping call at :$ln is not an anchored row" } }
+  if ($t7 -notmatch 'escapes via the call to Save') { Fail 'A-EP7-ESCROW' 'the escaping call is not labelled' }
+
+  # THE CAP (fix round 3): -MaxCallers 10 keeps 124 of ReadBuffer's 134 direct
+  # callers out of the walk. They are counted as NOT WALKED (cap) -- never as
+  # "no resolved caller". The 10 walked ones are real no-caller ends (their own
+  # callers were queried and, had any existed, would show as capped too).
+  $script:ep10 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'MStreams.TABZMemoryStream.ReadBuffer' -DbPath $DbCli -OutDir (Join-Path $OutDir 'ep-cap') -MaxCallers 10
+  Chk 'A-EP10-PATHS'    $ep10.TypePaths 'EReadError:0/0/10/10/124'
+  Chk 'A-EP10-WALK'     $ep10.WalkSentence 'no handler found within 3 caller levels (10 callers walked); reaches 10 callers with no resolved caller of their own; 124 callers not walked (cap)'
+  if ((Dot $ep10) -notmatch '124 callers not walked \(cap\)') { Fail 'A-EP10-DISCLOSE' 'the capped callers are not on the chart' }
   NoUnhandled 'A-EP7-WORDS' $ep7
 
   # Finding 3: a STALE caller is not read, and the sentence says so instead of
@@ -1018,7 +1041,7 @@ Step 'E-EP' {
   # the stale catcher passes EReadError on, so all 140 are walked and one more
   # node ends without a caller (134, not 133)
   Chk 'A-EP9-WALK'      $ep9.WalkSentence 'no handler found within 3 caller levels (140 callers walked); escapes the walk on 2 path ends after 3 levels; reaches 134 callers with no resolved caller of their own; 3 callers not read: source changed since indexing'
-  Chk 'A-EP9-PATHS'     $ep9.TypePaths 'EReadError:0/2/134/140'
+  Chk 'A-EP9-PATHS'     $ep9.TypePaths 'EReadError:0/2/134/140/0'
   if ((Dot $ep9) -notmatch '3 callers not read: source changed since indexing') { Fail 'A-EP9-DISCLOSE' 'the unread callers are not on the chart' }
 
   # the SOURCE-ONLY rows inside every indexed impl span, index-wide
@@ -1052,6 +1075,10 @@ Step 'E-EP' {
   # ref col / scan col of the same name / try col / call inside -- on
   # LoadAllAsync:632, where the call and its try/except share one line
   Chk 'A-EP-R12-COLBASE' $ex0.ColumnBase '40/40/25/True'
+  # the per-EDGE walk (R13) on synthetic graphs: catch on one edge + escape on
+  # another reaching the same node deeper, a full stop, a cycle that must
+  # terminate, the depth bound, capped-only callers, a focus without callers
+  if (@($ex0.WalkFailures).Count) { Fail 'A-EP-R13-WALK' (@($ex0.WalkFailures) -join '; ') }
   if (@($ex0.ReraiseFailures).Count)    { Fail 'A-EP-R10-RERAISE' (@($ex0.ReraiseFailures) -join '; ') }
 }
 

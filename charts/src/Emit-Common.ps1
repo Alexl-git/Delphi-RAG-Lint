@@ -1494,6 +1494,97 @@ function Test-HandlerReraises([string[]] $Lines, $Blk, [int] $Pos, [bool] $Bare)
       $_.Kind -eq 'reraise' -or ($var -and $_.Kind -eq 'raise-var' -and $_.Text -ieq "raise $var") }).Count -gt 0
 }
 
+# The upward walk of ONE raised type over the CALL EDGES of a caller graph
+# (controller rulings R12/R13, fix rounds 2-3). Pure over its inputs, so a check
+# can drive it with a synthetic graph.
+#
+# WHY EDGES, NOT NODES. Round 2 walked nodes with a visited set, and a node that
+# CAUGHT the type on one call was never looked at again -- measured: uAutoTest's
+# AutoTestSetupDefaults catches ReadBuffer's EReadError at :433 (inside the try
+# at :411) but ALSO calls TSetupDefaultsViewModel.Save at :513/:561, a deeper
+# callee that lets EReadError through, inside a try..FINALLY only. On that edge
+# the exception leaves AutoTestSetupDefaults, and round 2 dropped the path.
+#
+# So: every incoming edge (caller X, callee C, its call sites) is evaluated on
+# its own. X stops T on that edge only when $Evaluate says so (every site inside
+# a matching, non-re-raising handler's try). X PASSES T upward when ANY of its
+# incoming edges is not stopped, and a passing node's callers are expanded ONCE
+# (the visited set holds nodes already PASSING T -- which is also what makes a
+# cycle terminate). A node may therefore both catch on one edge and pass on
+# another; the result carries both.
+#
+#   $CallersOf   callee id -> @( { Caller; Sites[] } )  (only walked edges)
+#   $Fetched     node id -> $true when its callers were queried
+#   $CappedOf    callee id -> @(caller ids NOT walked because of -MaxCallers)
+#   $Evaluate    { param($Caller, $Callee, $Sites, $Type) } -> { Stopped; Events; NotGuarding; No; Stale }
+#   $HasCallers  { param([int[]] $Ids) } -> hashtable of the ids that have a caller
+#                (asked only for nodes at the depth bound whose callers were not queried)
+#
+# Returns Edges[] (every evaluated edge with its result), Passing[] (callers that
+# pass T), Evaluated (distinct callers looked at), Escapes[] (passing nodes at
+# the bound whose callers exist but were not walked), Ends[] (passing callers
+# with no resolved caller at all), Capped[] (distinct capped callers of passing
+# nodes -- NOT walked, never reported as "no caller"), FocusNoCaller, Levels.
+function Invoke-ExceptionWalk([int] $FocusId, $CallersOf, $Fetched, $CappedOf, [int] $Depth,
+                              [string] $Type, [scriptblock] $Evaluate, [scriptblock] $HasCallers) {
+  $wPassing = @{ $FocusId = $true }
+  $wEvaluated = @{}
+  $wEdges = New-Object System.Collections.ArrayList
+  $wEnds = New-Object System.Collections.ArrayList
+  $wEsc = New-Object System.Collections.ArrayList
+  $wCapped = @{}
+  $wFocusNoCaller = $false
+  $wFront = @($FocusId)
+  $wLvl = 0
+  while ($wFront.Count -and $wLvl -lt $Depth) {
+    $wLvl++
+    $wNext = New-Object System.Collections.ArrayList
+    foreach ($wn in $wFront) {
+      $wCs = $(if ($CallersOf.ContainsKey($wn)) { @($CallersOf[$wn]) } else { @() })
+      $wCap = $(if ($CappedOf.ContainsKey($wn)) { @($CappedOf[$wn]) } else { @() })
+      foreach ($wx in $wCap) { $wCapped[$wx] = $true }
+      if (-not $wCs.Count) {
+        if ($wCap.Count) { continue }                          # callers exist; the cap hid them
+        if ($wn -eq $FocusId) { $wFocusNoCaller = $true }
+        elseif ($Fetched.ContainsKey($wn)) { [void]$wEnds.Add($wn) } else { [void]$wEsc.Add($wn) }
+        continue
+      }
+      foreach ($we in $wCs) {
+        $wr = & $Evaluate $we.Caller $wn @($we.Sites) $Type
+        $wEvaluated[$we.Caller] = $true
+        [void]$wEdges.Add([pscustomobject]@{ Caller = $we.Caller; Callee = $wn; Sites = @($we.Sites); Result = $wr })
+        if (-not $wr.Stopped -and -not $wPassing.ContainsKey($we.Caller)) {
+          $wPassing[$we.Caller] = $true
+          [void]$wNext.Add($we.Caller)
+        }
+      }
+    }
+    $wFront = @($wNext.ToArray())
+  }
+  # the depth bound: nodes still carrying T whose callers were not expanded
+  if ($wFront.Count) {
+    $wUnq = @($wFront | Where-Object { -not $Fetched.ContainsKey($_) })
+    $wHas = $(if ($wUnq.Count) { & $HasCallers $wUnq } else { @{} })
+    foreach ($wn in $wFront) {
+      $wKnown = $(if ($CallersOf.ContainsKey($wn)) { @($CallersOf[$wn]).Count } else { 0 })
+      $wCap = $(if ($CappedOf.ContainsKey($wn)) { @($CappedOf[$wn]) } else { @() })
+      foreach ($wx in $wCap) { $wCapped[$wx] = $true }
+      if ($Fetched.ContainsKey($wn)) {
+        if ($wKnown) { [void]$wEsc.Add($wn) }
+        elseif (-not $wCap.Count) { [void]$wEnds.Add($wn) }
+      } elseif ($wHas.ContainsKey($wn)) { [void]$wEsc.Add($wn) }
+      else { [void]$wEnds.Add($wn) }
+    }
+  }
+  [pscustomobject]@{
+    Type = $Type; Edges = $wEdges.ToArray()
+    Passing = @($wPassing.Keys | Where-Object { $_ -ne $FocusId } | Sort-Object)
+    Evaluated = $wEvaluated.Count
+    Escapes = @($wEsc | Sort-Object -Unique); Ends = @($wEnds | Sort-Object -Unique)
+    Capped = @($wCapped.Keys | Sort-Object); FocusNoCaller = $wFocusNoCaller; Levels = $wLvl
+  }
+}
+
 # The INDEX-WIDE exception candidates of $DbPath, classified -- the pre-check and
 # the "approximately N raise sites / M handlers" line on the exception-paths
 # focus. Candidates are the refs of ANY kind passing Test-ExceptionTypeName;

@@ -209,4 +209,54 @@ $tb = Get-TryBlocks $L ([int]$la[0].a) ([int]$la[0].b)
 $site = [int]$la[0].l * 100000 + [int]$la[0].c
 $blk = @($tb.Blocks | Where-Object { $_.Except -and $site -gt $_.Try -and $site -lt $_.Except })[0]
 $res.ColumnBase = "$($la[0].c)/$($L[[int]$la[0].l - 1].IndexOf('ApplyRawPayload') + 1)/$(if ($blk) { $blk.Try % 100000 } else { 'none' })/$([bool]$blk)"
+# ---- 7. focused checks: the per-EDGE walk (R13) on synthetic caller graphs --------
+# Nodes are ints; an edge is caller <- callee with fake sites; $stopSet names the
+# edges ("caller<-callee") whose caller catches. Each case pins the WHOLE result.
+function SynWalk($Edges, $StopSet, [int] $Depth, $Unfetched = @(), $Capped = @{}, $Has = @{}) {
+  $co = @{}; $fe = @{}
+  foreach ($e in $Edges) {
+    $c, $cal = $e -split '<-'
+    if (-not $co.ContainsKey([int]$cal)) { $co[[int]$cal] = New-Object System.Collections.ArrayList }
+    [void]$co[[int]$cal].Add([pscustomobject]@{ Caller = [int]$c; Sites = @(100001) })
+    $fe[[int]$cal] = $true
+  }
+  foreach ($k in @($co.Keys)) { foreach ($x in $co[$k]) { $fe[[int]$x.Caller] = $true } }
+  $fe[1] = $true
+  foreach ($u in $Unfetched) { $fe.Remove([int]$u) }
+  $ev = { param($c, $cal, $s, $ty) [pscustomobject]@{ Stopped = ($StopSet -contains "$c<-$cal"); Events = @(); NotGuarding = 0; No = 0 } }.GetNewClosure()
+  $hc = { param([int[]] $ids) $h = @{}; foreach ($i in $ids) { if ($Has.ContainsKey($i)) { $h[$i] = $true } }; $h }.GetNewClosure()
+  $w = Invoke-ExceptionWalk 1 $co $fe $Capped $Depth 'EX' $ev $hc
+  "stops=$((@($w.Edges | Where-Object { $_.Result.Stopped } | ForEach-Object { "$($_.Caller)<-$($_.Callee)" }) | Sort-Object) -join ',')" +
+  " pass=$($w.Passing -join ',') esc=$($w.Escapes -join ',') ends=$($w.Ends -join ',') cap=$($w.Capped -join ',') eval=$($w.Evaluated) nocaller=$($w.FocusNoCaller)"
+}
+$walks = [ordered]@{
+  # 2 catches the call to 1 but ALSO calls 3, which lets EX through: 2 passes at
+  # level 2 and its caller 5 is walked (the AutoTestSetupDefaults shape)
+  'catch on one edge, escape on another' = @(
+    (SynWalk @('2<-1', '3<-1', '2<-3', '5<-2') @('2<-1') 5),
+    'stops=2<-1 pass=2,3,5 esc= ends=5 cap= eval=3 nocaller=False')
+  # the round-2 behaviour would have stopped at 2 and never walked 5
+  'catch everywhere stops the path' = @(
+    (SynWalk @('2<-1', '5<-2') @('2<-1') 5),
+    'stops=2<-1 pass= esc= ends= cap= eval=1 nocaller=False')
+  # a cycle 2 -> 3 -> 2 above the focus must terminate, and nothing "ends"
+  'cycle terminates' = @(
+    (SynWalk @('2<-1', '3<-2', '2<-3') @() 50),
+    'stops= pass=2,3 esc= ends= cap= eval=2 nocaller=False')
+  # the depth bound: 3 is at the bound, unfetched, and HAS callers -> escapes
+  'depth bound escapes' = @(
+    (SynWalk @('2<-1', '3<-2') @() 2 @(3) @{} @{ 3 = $true }),
+    'stops= pass=2,3 esc=3 ends= cap= eval=2 nocaller=False')
+  # 2's only callers were capped: counted as capped, NEVER as "no caller"
+  'capped is not no-caller' = @(
+    (SynWalk @('2<-1') @() 5 @() @{ 2 = @(7, 8) }),
+    'stops= pass=2 esc= ends= cap=7,8 eval=1 nocaller=False')
+  'focus without callers' = @(
+    (SynWalk @() @() 3),
+    'stops= pass= esc= ends= cap= eval=0 nocaller=True')
+}
+$bad = New-Object System.Collections.ArrayList
+foreach ($k in $walks.Keys) { if ($walks[$k][0] -ne $walks[$k][1]) { [void]$bad.Add("[$k] expected '$($walks[$k][1])' got '$($walks[$k][0])'") } }
+$res.WalkFailures = $bad.ToArray()
+
 [pscustomobject]$res

@@ -290,6 +290,7 @@ Write-Host ("  body: {0} raise ({1} types), {2} handle, {3} dropped, {4} inferre
 $dist = @{ $sel.Id = 0 }
 $callersOf = @{}     # callee id -> @( { Caller; Sites[] } )
 $fetched = @{}       # node id -> its callers were queried
+$cappedOf = @{}      # callee id -> caller ids kept out by -MaxCallers
 $frontier = @($sel.Id)
 $callerCapped = $false
 $levels = 0
@@ -309,7 +310,14 @@ SELECT r.enclosing_symbol_id AS caller, ce.target_symbol_id AS callee,
     foreach ($p in $pairs) {
       $cid = [int]$p.caller; $tid = [int]$p.callee
       if (-not $dist.ContainsKey($cid)) {
-        if (($dist.Count - 1) -ge $MaxCallers) { $callerCapped = $true; continue }
+        if (($dist.Count - 1) -ge $MaxCallers) {
+          # recorded, not walked: a node whose callers were capped must never read
+          # as "no resolved caller" (fix round 3)
+          $callerCapped = $true
+          if (-not $cappedOf.ContainsKey($tid)) { $cappedOf[$tid] = New-Object System.Collections.ArrayList }
+          if (-not $cappedOf[$tid].Contains($cid)) { [void]$cappedOf[$tid].Add($cid) }
+          continue
+        }
         $dist[$cid] = $d
         [void]$next.Add($cid)
       }
@@ -355,18 +363,21 @@ Write-Host ("  callers walked: {0} over {1} level(s){2}{3}" -f $callers.Count, $
 # A matching handler whose try holds none of the sites guards something else:
 # counted (NotGuarding), never drawn. A 'no' type verdict is counted (R11).
 #
-# PROPAGATION IS PER NODE (ruling R12, fix round 2). The first version stopped a
-# TYPE at the first depth where any caller caught it, which dropped every
-# sibling path silently: one of ReadBuffer's 140 callers catches, and the other
-# paths vanished from the answer. Now, per raised type T, a frontier of nodes
-# carrying T moves up one level at a time; a caller with a `caught` event stops
-# T through ITSELF only (its callers are not walked for T); every other caller
-# -- no handler, partial, re-raised, unverified, may, or stale -- passes T on. A
-# visited set per type makes cycles terminate. What is left when the walk ends
-# is counted, never dropped:
+# PROPAGATION IS PER CALL EDGE (rulings R12/R13, fix rounds 2-3), done by
+# Invoke-ExceptionWalk in Emit-Common. Round 1 stopped a TYPE at the first depth
+# any caller caught it (dropping every sibling path); round 2 stopped it per
+# NODE, and a node that caught on one call was never revisited -- but
+# AutoTestSetupDefaults catches ReadBuffer's EReadError at :433 and ALSO lets it
+# escape through its calls to TSetupDefaultsViewModel.Save at :513/:561 (a
+# try..finally only). Now each incoming edge is judged on its own sites; a
+# caller passes T up when ANY incoming edge is not stopped, and a passing
+# caller's own callers are walked once. What is left when the walk ends is
+# counted, never dropped:
 #   escapes      a T-carrying node at the depth bound whose callers exist but
 #                were not walked
 #   no-caller    a T-carrying node with no resolved caller at all
+#   capped       callers the -MaxCallers cap kept out of the walk -- counted,
+#                never reported as "no resolved caller"
 # Find-HandlerBlock / Get-TryBlocks / Test-HandlerReraises live in Emit-Common.
 
 # All handler events of caller $C for type $T over the call sites $Sites.
@@ -411,64 +422,47 @@ SELECT DISTINCT ce.target_symbol_id AS t FROM call_edges ce JOIN refs r ON r.id 
   $has
 }
 
+# One incoming CALL EDGE for type $wType: does its caller stop it there? A stale
+# caller is not read, so it passes the type on (counted in $staleCallers).
+$evalEdge = {
+  param($eCaller, $eCallee, $eSites, $eType)
+  $ec = $callerById[[int]$eCaller]
+  if (-not $ec -or -not $ec.Body.Fresh) {
+    return [pscustomobject]@{ Stopped = $false; Events = @(); NotGuarding = 0; No = 0; Stale = $true }
+  }
+  $er = Get-CallerVerdict $ec $eType @($eSites)
+  foreach ($ev in $er.Events) { $ev | Add-Member -NotePropertyName Callee -NotePropertyValue $eCallee -Force }
+  [pscustomobject]@{ Stopped = $er.Catches; Events = $er.Events; NotGuarding = $er.NotGuarding; No = $er.No; Stale = $false }
+}
+$hasCallersBlock = { param([int[]] $hIds) Get-HasCallers $hIds }
+
 $typeResults = New-Object System.Collections.ArrayList
 $events = New-Object System.Collections.ArrayList
 $types = @(@($raiseTypes) + $(if ($infRaise.Count) { @('(re-raise)') } else { @() }))
 foreach ($t in $types) {
-  $vis = @{ $sel.Id = $true }
-  $front = @($sel.Id)
-  $catchers = New-Object System.Collections.ArrayList
-  $ends = New-Object System.Collections.ArrayList       # no resolved caller
-  $esc = New-Object System.Collections.ArrayList        # callers exist, not walked
-  $mine = New-Object System.Collections.ArrayList
-  $notGuarding = 0; $noCount = 0; $lvl = 0
-  while ($front.Count -and $lvl -lt $Depth) {
-    $lvl++
-    # a typed Dictionary, NOT [ordered]@{}: an OrderedDictionary indexed with an INT
-    # key treats it as a POSITION and throws "index out of range"
-    $incoming = New-Object 'System.Collections.Generic.Dictionary[int,System.Collections.ArrayList]'
-    foreach ($n in $front) {
-      $cs = $(if ($callersOf.ContainsKey($n)) { @($callersOf[$n]) } else { @() })
-      if (-not $cs.Count) { if ($fetched.ContainsKey($n)) { [void]$ends.Add($n) } else { [void]$esc.Add($n) }; continue }
-      foreach ($e2 in $cs) {
-        if ($vis.ContainsKey($e2.Caller) -or -not $callerById.ContainsKey($e2.Caller)) { continue }
-        if (-not $incoming.ContainsKey($e2.Caller)) { $incoming[$e2.Caller] = New-Object System.Collections.ArrayList }
-        foreach ($sp in $e2.Sites) { [void]$incoming[$e2.Caller].Add($sp) }
-      }
-    }
-    $nx = New-Object System.Collections.ArrayList
-    foreach ($cid in @($incoming.Keys)) {
-      $vis[$cid] = $true
-      $c = $callerById[$cid]
-      if (-not $c.Body.Fresh) { [void]$nx.Add($cid); continue }     # not read: passes T on
-      $r = Get-CallerVerdict $c $t @($incoming[$cid])
-      $notGuarding += $r.NotGuarding; $noCount += $r.No
-      foreach ($ev in $r.Events) { [void]$mine.Add($ev) }
-      if ($r.Catches) { [void]$catchers.Add(@($r.Events | Where-Object { $_.Kind -eq 'caught' })[0]) }
-      else { [void]$nx.Add($cid) }
-    }
-    $front = @($nx.ToArray())
-  }
-  # what is still carrying T when the depth bound is reached
-  if ($front.Count) {
-    $unq = @($front | Where-Object { -not $fetched.ContainsKey($_) })
-    $has = $(if ($unq.Count) { Get-HasCallers $unq } else { @{} })
-    foreach ($n in $front) {
-      $more = $(if ($fetched.ContainsKey($n)) { @(@($callersOf[$n]) | Where-Object { $_ -and -not $vis.ContainsKey($_.Caller) }).Count -gt 0 }
-                else { $has.ContainsKey($n) })
-      if ($more) { [void]$esc.Add($n) }
-      elseif (-not ($fetched.ContainsKey($n) -and @($callersOf[$n] | Where-Object { $_ }).Count)) { [void]$ends.Add($n) }
-    }
-  }
+  $w = Invoke-ExceptionWalk $sel.Id $callersOf $fetched $cappedOf $Depth $t $evalEdge $hasCallersBlock
+  $mine = @($w.Edges | ForEach-Object { $_.Result.Events } | Where-Object { $_ })
   foreach ($ev in $mine) { [void]$events.Add($ev) }
+  $stops = @($w.Edges | Where-Object { $_.Result.Stopped })
+  # a caller that stops T on one edge and lets it through on another: both drawn
+  $both = @($stops | ForEach-Object { $_.Caller } | Sort-Object -Unique | Where-Object { $w.Passing -contains $_ })
   [void]$typeResults.Add([pscustomobject]@{
-    Type = $t; Catchers = $catchers.ToArray(); Escapes = @($esc | Sort-Object -Unique); Ends = @($ends | Sort-Object -Unique)
-    Walked = $vis.Count - 1; Levels = $lvl; Events = $mine.ToArray(); NotGuarding = $notGuarding; No = $noCount })
+    Type = $t; Walk = $w
+    Catchers = @($stops | ForEach-Object { @($_.Result.Events | Where-Object { $_.Kind -eq 'caught' })[0] })
+    CatchAndPass = $both
+    Escapes = $w.Escapes; Ends = $w.Ends; Capped = $w.Capped; Walked = $w.Evaluated
+    Events = $mine
+    NotGuarding = ($w.Edges | ForEach-Object { $_.Result.NotGuarding } | Measure-Object -Sum).Sum
+    No = ($w.Edges | ForEach-Object { $_.Result.No } | Measure-Object -Sum).Sum })
 }
 $caughtCount = ($typeResults | ForEach-Object { $_.Catchers.Count } | Measure-Object -Sum).Sum
 $escapeCount = ($typeResults | ForEach-Object { $_.Escapes.Count } | Measure-Object -Sum).Sum
-$endCount    = ($typeResults | ForEach-Object { @($_.Ends | Where-Object { $_ -ne $sel.Id }).Count } | Measure-Object -Sum).Sum
-foreach ($vn in 'caughtCount', 'escapeCount', 'endCount') { if (-not (Get-Variable $vn -ValueOnly)) { Set-Variable $vn 0 } }
+$endCount    = ($typeResults | ForEach-Object { $_.Ends.Count } | Measure-Object -Sum).Sum
+$cappedCount = ($typeResults | ForEach-Object { $_.Capped.Count } | Measure-Object -Sum).Sum
+$bothCount   = ($typeResults | ForEach-Object { $_.CatchAndPass.Count } | Measure-Object -Sum).Sum
+foreach ($vn in 'caughtCount', 'escapeCount', 'endCount', 'cappedCount', 'bothCount') {
+  if (-not (Get-Variable $vn -ValueOnly)) { Set-Variable $vn 0 }
+}
 function Get-EventCount([string] $K) { @($events | Where-Object { $_.Kind -eq $K }).Count }
 $mayCount        = Get-EventCount 'may'
 $reraisedCount   = Get-EventCount 'reraised'
@@ -481,27 +475,34 @@ if (-not $notGuardingCount) { $notGuardingCount = 0 }
 if (-not $noVerdictCount) { $noVerdictCount = 0 }
 
 # The handled-where sentence, one per raised type, NEVER suppressed (R12) and
-# never "unhandled" (R3). It counts where the walk ENDED -- caught, past the
-# depth bound, or at a node with no caller -- and the callers it could not read.
+# never "unhandled" (R3). It counts where the walk ENDED -- caught on an edge,
+# past the depth bound, at a node with no caller, or at the caller cap -- and
+# the callers it could not read. A capped node is NEVER "no resolved caller".
 $staleNote = $(if ($staleCallers) { "; $staleCallers caller$(if ($staleCallers -ne 1) { 's' }) not read: source changed since indexing" } else { '' })
 function Get-WalkSentence($Tr) {
-  if ($callers.Count -eq 0) { return 'no resolved caller in this index' }
+  if ($Tr.Walk.FocusNoCaller -and -not $Tr.Capped.Count) { return 'no resolved caller in this index' }
   $lv = "$Depth caller level$(if ($Depth -ne 1) { 's' })"
   $cw = "$($Tr.Walked) caller$(if ($Tr.Walked -ne 1) { 's' }) walked"
   $k = $Tr.Catchers.Count
   if ($k) {
     $top = Get-TopRanked @($Tr.Catchers) $Cap 'none'
-    $names = @($top.Shown | ForEach-Object { "$($_.Caller.Info.Name):$($_.Handler.Line)" })
+    $names = @($top.Shown | ForEach-Object {
+      $cn = $(if ($_.Callee -eq $sel.Id) { $sel.Name } elseif ($cinfo.ContainsKey([int]$_.Callee)) { $cinfo[[int]$_.Callee].Name } else { '?' })
+      "$($_.Caller.Info.Name):$($_.Handler.Line) on the call to $cn" })
     if ($top.HiddenRows) { $names += "+$($top.HiddenRows) more" }
-    $s = "caught at $k caller$(if ($k -ne 1) { 's' }) ($($names -join ', ')) within $lv ($cw)"
+    $s = "caught on $k call edge$(if ($k -ne 1) { 's' }) ($($names -join ', ')) within $lv ($cw)"
   } else {
     $s = "no handler found within $lv ($cw)"
   }
   $parts = New-Object System.Collections.ArrayList
+  $b = $Tr.CatchAndPass.Count
+  if ($b) { [void]$parts.Add("$b catching caller$(if ($b -ne 1) { 's' }) also let$(if ($b -eq 1) { 's' }) it escape on another call") }
   $m = $Tr.Escapes.Count
   if ($m) { [void]$parts.Add("escapes the walk on $m path end$(if ($m -ne 1) { 's' }) after $Depth level$(if ($Depth -ne 1) { 's' })") }
-  $pe = @($Tr.Ends | Where-Object { $_ -ne $sel.Id }).Count
+  $pe = $Tr.Ends.Count
   if ($pe) { [void]$parts.Add("reaches $pe caller$(if ($pe -ne 1) { 's with no resolved caller of their own' } else { ' with no resolved caller of its own' })") }
+  $cp = $Tr.Capped.Count
+  if ($cp) { [void]$parts.Add("$cp caller$(if ($cp -ne 1) { 's' }) not walked (cap)") }
   foreach ($kn in 'reraised', 'partial', 'unverified', 'may') {
     $kc = @($Tr.Events | Where-Object { $_.Kind -eq $kn }).Count
     if ($kc) { [void]$parts.Add("$kc $(switch ($kn) { 'reraised' { 'caught and re-raised' } 'partial' { 'caught at only some call sites' } 'unverified' { 'handler(s) not verified around the call' } default { 'may catch' } })") }
@@ -515,9 +516,27 @@ $walkSentence = $(if ($walkLines.Count) { $walkLines -join '; ' } else { $null }
 
 # per node, where a raised type's walk ended -- a note on that caller's row
 $endNote = @{}
+$cappedAt = @{}
+foreach ($k2 in $cappedOf.Keys) { $cappedAt[[int]$k2] = @($cappedOf[$k2]).Count }
 foreach ($tr in $typeResults) {
   foreach ($n in $tr.Escapes) { $endNote[$n] = "walk ends here: callers beyond $Depth levels" }
-  foreach ($n in $tr.Ends) { if ($n -ne $sel.Id) { $endNote[$n] = 'no resolved caller' } }
+  foreach ($n in $tr.Ends) { $endNote[$n] = 'no resolved caller' }
+  foreach ($n in $tr.Walk.Passing) {
+    if ($cappedAt.ContainsKey([int]$n)) { $endNote[$n] = "$($cappedAt[[int]$n]) caller(s) not walked (cap)" }
+  }
+}
+# a caller that catches on one edge and passes on another: its escaping calls,
+# as anchored rows under it
+$escapeRows = @{}   # caller id -> @( { Callee; Line } )
+foreach ($tr in $typeResults) {
+  foreach ($cid in $tr.CatchAndPass) {
+    foreach ($ed in @($tr.Walk.Edges | Where-Object { $_.Caller -eq $cid -and -not $_.Result.Stopped })) {
+      if (-not $escapeRows.ContainsKey($cid)) { $escapeRows[$cid] = New-Object System.Collections.ArrayList }
+      foreach ($sp in @($ed.Sites | Sort-Object)) {
+        [void]$escapeRows[$cid].Add([pscustomobject]@{ Callee = $ed.Callee; Line = [int][Math]::Floor($sp / 100000); Type = $tr.Type })
+      }
+    }
+  }
 }
 
 # files touched: the focus file and every caller file
@@ -713,6 +732,18 @@ for ($d = 1; $d -le $levels; $d++) {
       })
       [void]$keys.Add("$($ci.Id)|$hp")
     }
+    # it caught on one call but lets the type through another (R13): anchored
+    if ($escapeRows.ContainsKey($ci.Id)) {
+      foreach ($er in @($escapeRows[$ci.Id] | Sort-Object Line -Unique)) {
+        $cn = $(if ($er.Callee -eq $sel.Id) { $sel.Name } elseif ($cinfo.ContainsKey([int]$er.Callee)) { $cinfo[[int]$er.Callee].Name } else { '?' })
+        [void]$rows.Add([pscustomobject]@{
+          Label = "  escapes via the call to $cn"; Line = $er.Line; Href = New-RowHref $ci.Path $er.Line
+          Tip = "$($er.Type) passes $($ci.Q) at $([IO.Path]::GetFileName($ci.Path)):$($er.Line) -- this call is not inside a catching try"
+          Note = 'not caught here'
+        })
+        [void]$keys.Add("esc|$($ci.Id)|$($er.Line)")
+      }
+    }
   }
   # no cap on handler rows (they carry edges); callers beyond -Cap are disclosed
   $nodeId++; $clusters++
@@ -745,7 +776,8 @@ foreach ($ev in $events) {
   $from = $(if ($portOfType.ContainsKey($ev.Type)) { $portOfType[$ev.Type] } elseif ($raiseNid) { $raiseNid } else { $fnid })
   $k = "$($ev.Caller.Info.Id)|$($ev.Handler.Pos)"
   if (-not $catchPort.ContainsKey($k)) { continue }
-  $at = "$($ev.Caller.Info.Name):$($ev.Handler.Line)"
+  $cn = $(if ($ev.Callee -eq $sel.Id) { $sel.Name } elseif ($cinfo.ContainsKey([int]$ev.Callee)) { $cinfo[[int]$ev.Callee].Name } else { '?' })
+  $at = "$($ev.Caller.Info.Name):$($ev.Handler.Line) on the call to $cn"
   switch ($ev.Kind) {
     'caught'     { $lbl = "caught ($($ev.How)) at $at"; $st = 'penwidth=2' }
     'partial'    { $lbl = "caught ($($ev.How)) at $at for $($ev.Inside) of $($ev.Total) call sites"; $st = 'penwidth=2' }
@@ -784,10 +816,13 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir ('excpaths_' + ($sel.Qname -repla
   CallerLevels   = $levels
   CallerNames    = (@($callers | ForEach-Object { "d$($_.D):$($_.Info.Name)" }) -join ',')
   CallersCapped  = $callerCapped
-  Caught         = $caughtCount       # caller NODES that stop a raised type (verified, non-re-raising), summed over types
+  Caught         = $caughtCount       # call EDGES on which a raised type is stopped (verified, non-re-raising), summed over types
   Escapes        = $escapeCount       # T-carrying nodes at the depth bound whose callers were not walked
   NoCallerEnds   = $endCount          # T-carrying callers with no resolved caller of their own
-  TypePaths      = (@($typeResults | ForEach-Object { "$($_.Type):$($_.Catchers.Count)/$($_.Escapes.Count)/$(@($_.Ends | Where-Object { $_ -ne $sel.Id }).Count)/$($_.Walked)" }) -join ',')
+  CappedCallers  = $cappedCount       # callers kept out of the walk by -MaxCallers (never 'no resolved caller')
+  CatchAndPass   = $bothCount         # callers that catch on one call edge and pass the type on another
+  # type:caught edges/escapes past the bound/no-caller ends/callers walked/capped callers
+  TypePaths      = (@($typeResults | ForEach-Object { "$($_.Type):$($_.Catchers.Count)/$($_.Escapes.Count)/$($_.Ends.Count)/$($_.Walked)/$($_.Capped.Count)" }) -join ',')
   SolidEdges     = $solidCount
   ReRaised       = $reraisedCount
   Partial        = $partialCount
