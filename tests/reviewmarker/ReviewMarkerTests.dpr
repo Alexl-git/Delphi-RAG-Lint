@@ -309,6 +309,111 @@ begin
     (Length(M) = 1) and (M[0].Hash = TReviewMarkers.HashLine(Fresh)));
 end;
 
+{ ---- review-marker-placeholder-hash ------------------------------------------
+
+  A hash that was never computed is not a hash. `@0000` on a `//` marker can
+  never equal the window hash except by a 1-in-65536 accident, so it suppresses
+  nothing while reading as a review; in a brace block it is not even parsed. }
+
+procedure TestPlaceholderHash;
+var
+  M: TArray<TReviewMarker>;
+  B: TArray<Boolean>;
+begin
+  Check('P1 all-zero is a placeholder', TReviewMarkers.IsPlaceholderHash('0000'));
+  Check('P1b any run of zeros is a placeholder', TReviewMarkers.IsPlaceholderHash('00'));
+  Check('P2 a computed-looking hash is not a placeholder', not TReviewMarkers.IsPlaceholderHash('7f3a'));
+  Check('P3 empty is not a placeholder (that is the hashless case)', not TReviewMarkers.IsPlaceholderHash(''));
+
+  Check('P4 4 lowercase hex is well formed', not TReviewMarkers.IsMalformedHash('7f3a'));
+  Check('P4b 0000 is well formed (placeholder is a separate test)', not TReviewMarkers.IsMalformedHash('0000'));
+  Check('P5 xxxx is malformed', TReviewMarkers.IsMalformedHash('xxxx'));
+  Check('P5b three chars is malformed', TReviewMarkers.IsMalformedHash('7f3'));
+  Check('P5c five chars is malformed', TReviewMarkers.IsMalformedHash('7f3a1'));
+  Check('P5d <hash> is malformed', TReviewMarkers.IsMalformedHash('<hash>'));
+  Check('P6 empty is not malformed (hashless is reported elsewhere)', not TReviewMarkers.IsMalformedHash(''));
+
+  { EmbeddedMarkers reads a dl:ok WHEREVER it sits on the line -- the shape
+    Parse deliberately refuses, used only to find markers that can never work. }
+  M:= TReviewMarkers.EmbeddedMarkers('{ REVIEWED 2026-09-11, dl:ok deep-nesting@0000 -- six levels');
+  Check('P7 a marker in a brace comment is found', Length(M) = 1);
+  if Length(M) = 1 then
+  begin
+    Check('P7 rule id', M[0].RuleId = 'deep-nesting');
+    Check('P7 hash', M[0].Hash = '0000');
+  end;
+  Check('P7b Parse still ignores it (not a live marker)',
+    Length(TReviewMarkers.Parse('{ REVIEWED 2026-09-11, dl:ok deep-nesting@0000 -- six levels')) = 0);
+  Check('P8 no tag, no markers', Length(TReviewMarkers.EmbeddedMarkers('{ just prose }')) = 0);
+
+  { P9: A STRING LITERAL IS NOT A COMMENT. Found by dogfooding: this very file's
+    P7 line quotes the LintTree marker inside a Pascal literal, and the rule
+    reported it. Starting in code state, only a tag inside a comment counts. }
+  Check('P9 a tag inside a string literal is not embedded',
+    Length(TReviewMarkers.EmbeddedMarkers('  S:= ''{ dl:ok deep-nesting@0000 }'';')) = 0);
+  Check('P9b a doubled quote does not end the literal early',
+    Length(TReviewMarkers.EmbeddedMarkers('  S:= ''it''''s dl:ok deep-nesting@0000'';')) = 0);
+  Check('P9c code, then a brace comment carrying the tag, is embedded',
+    Length(TReviewMarkers.EmbeddedMarkers('  X:= 1; { dl:ok deep-nesting@0000 }')) = 1);
+  { A line that begins INSIDE a multi-line block comment has no code state to
+    track -- the caller says so, and the whole line counts. }
+  Check('P10 continuation line of a block comment, apostrophe in prose',
+    Length(TReviewMarkers.EmbeddedMarkers('  it''s why: dl:ok deep-nesting@0000', True)) = 1);
+  { P11: BlockOpenAtLineStart is what the CLI passes as AStartsInComment. A
+    quoted brace opens nothing; a real one carries over to the next line. }
+  B:= TReviewMarkers.BlockOpenAtLineStart(['x:= 1; { open', 'inside', 'close } y:= 2;',
+                                           'S:= ''{'';', 'z:= 3;']);
+  Check('P11 block state at line start',
+    (Length(B) = 5) and (not B[0]) and B[1] and B[2] and (not B[3]) and (not B[4]));
+  Check('P10b the same line read from code state is not a comment',
+    Length(TReviewMarkers.EmbeddedMarkers('  it''s why: dl:ok deep-nesting@0000')) = 0);
+end;
+
+{ ---- review-marker-reason-unreviewed -----------------------------------------
+
+  OWNER RULING OWN-7 (2026-09-23): an optional `REVIEWED <yyyy-mm-dd>` stamp in
+  the marker's reason. Uppercase keyword, case-SENSITIVE, so the ordinary prose
+  "reviewed, the loop is bounded" is not mistaken for a stamp. }
+
+procedure TestReviewStamp;
+var
+  Today, D: TDate;
+begin
+  Today:= EncodeDate(2026, 9, 23);
+  Check('R1 no stamp -> missing',
+    TReviewMarkers.ReviewStamp('rethrown by the caller', Today, 180, D) = rssMissing);
+  Check('R1b lowercase prose is not a stamp',
+    TReviewMarkers.ReviewStamp('reviewed 2026-09-01, the loop is bounded', Today, 180, D) = rssMissing);
+  Check('R2 recent stamp -> current',
+    TReviewMarkers.ReviewStamp('REVIEWED 2026-09-01 rethrown by the caller', Today, 180, D) = rssCurrent);
+  Check('R2 stamp date returned', D = EncodeDate(2026, 9, 1));
+  Check('R2b stamp anywhere in the reason',
+    TReviewMarkers.ReviewStamp('rethrown by the caller (REVIEWED 2026-09-01)', Today, 180, D) = rssCurrent);
+  Check('R3 exactly at the limit is current',
+    TReviewMarkers.ReviewStamp('REVIEWED 2026-03-27', Today, 180, D) = rssCurrent);
+  Check('R3b one day past the limit is expired',
+    TReviewMarkers.ReviewStamp('REVIEWED 2026-03-26', Today, 180, D) = rssExpired);
+  Check('R4 a future stamp is reported',
+    TReviewMarkers.ReviewStamp('REVIEWED 2026-10-01', Today, 180, D) = rssFuture);
+  Check('R5 an impossible date is malformed',
+    TReviewMarkers.ReviewStamp('REVIEWED 2026-02-30', Today, 180, D) = rssMalformed);
+  Check('R5b keyword with no date is malformed',
+    TReviewMarkers.ReviewStamp('REVIEWED yesterday', Today, 180, D) = rssMalformed);
+  Check('R6 max age 0 means presence only',
+    TReviewMarkers.ReviewStamp('REVIEWED 2020-01-01', Today, 0, D) = rssCurrent);
+
+  { THE HASH MUST NOT SEE THE STAMP. HashLine drops `//` comments, so editing
+    the reason -- re-stamping it -- cannot make the marker stale. Verified, not
+    assumed: a stamp edit that invalidated the hash would turn every re-review
+    into a second review. }
+  Check('R7 stamp edit leaves HashLine unchanged',
+    TReviewMarkers.HashLine('  S := S + T; // dl:ok concat-in-loop@1a2b -- bounded') =
+    TReviewMarkers.HashLine('  S := S + T; // dl:ok concat-in-loop@1a2b -- REVIEWED 2026-09-23 bounded'));
+  Check('R7b stamp edit leaves HashWindow unchanged',
+    TReviewMarkers.HashWindow(['  except // dl:ok bare-except@1a2b -- rethrown', '    raise;', '  end;'], 0) =
+    TReviewMarkers.HashWindow(['  except // dl:ok bare-except@1a2b -- REVIEWED 2026-09-23 rethrown', '    raise;', '  end;'], 0));
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -316,6 +421,8 @@ begin
     TestParse;
     TestInsert;
     TestRefresh;
+    TestPlaceholderHash;
+    TestReviewStamp;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

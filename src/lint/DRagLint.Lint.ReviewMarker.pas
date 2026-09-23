@@ -42,6 +42,20 @@ type
     Reason: string;
   end;
 
+  /// <summary>How a marker reason's `REVIEWED &lt;yyyy-mm-dd&gt;` stamp stands
+  /// against a date and an age limit. See TReviewMarkers.ReviewStamp.</summary>
+  TReviewStampState = (
+    /// <summary>No `REVIEWED` keyword in the reason.</summary>
+    rssMissing,
+    /// <summary>The keyword is there but no valid yyyy-mm-dd date follows it.</summary>
+    rssMalformed,
+    /// <summary>The stamp is dated after the reference date.</summary>
+    rssFuture,
+    /// <summary>The stamp is older than the age limit.</summary>
+    rssExpired,
+    /// <summary>A valid stamp within the age limit.</summary>
+    rssCurrent);
+
   /// <summary>Parsing, hashing and insertion of `dl:ok` reviewed-markers. All
   /// members are pure.</summary>
   /// <remarks>
@@ -115,7 +129,26 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RuleToken(const ARuleId, AHash: string): string; static;
+    { The one comment-state walk behind MarkerBearingLines and
+      BlockOpenAtLineStart: per line, whether a `//` reached in code state can
+      carry a marker, and whether a brace or star-paren block is already open
+      when the line begins. }
+    class procedure ScanCommentState(const ALines: TArray<string>;
+      out ACanBear, AInBlockAtStart: TArray<Boolean>); static;
   public
+    /// <summary>For each line of a whole file, whether it BEGINS inside a
+    /// brace or star-paren block comment opened on an earlier line.</summary>
+    /// <param name="ALines">Every line of the file, in order, without terminators.</param>
+    /// <returns>One flag per input line (0-based, line N is Result[N - 1]).</returns>
+    /// <remarks>
+    /// The same walk as <see cref="MarkerBearingLines"/> -- string literals
+    /// open nothing, block state carries across lines. It feeds
+    /// <see cref="EmbeddedMarkers"/>'s AStartsInComment, which cannot be derived
+    /// from MarkerBearingLines: that is False for EVERY line without a live `//`,
+    /// code lines included, and treating those as comment text reported a
+    /// `dl:ok` quoted inside a string literal. Pure.
+    /// </remarks>
+    class function BlockOpenAtLineStart(const ALines: TArray<string>): TArray<Boolean>; static;
     /// <summary>For each line of a whole file, whether a `dl:ok` on that line
     /// could be a REAL marker rather than prose ABOUT one.</summary>
     /// <param name="ALines">Every line of the file, in order, without terminators.</param>
@@ -266,6 +299,73 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Parse(const ALineText: string): TArray<TReviewMarker>; static;
+    /// <summary>Every `dl:ok` entry written ANYWHERE on the line -- inside a
+    /// `{ }` or `(* *)` block, a `///` doc comment, or a `//` comment alike.</summary>
+    /// <param name="ALineText">One source line, without its line terminator.</param>
+    /// <param name="AStartsInComment">True when the line begins INSIDE a block
+    /// comment opened on an earlier line (see <see cref="BlockOpenAtLineStart"/>)
+    /// -- the whole line is then comment text. False (the default) reads the
+    /// line from code state: a tag counts only inside a comment that opens on
+    /// the line (`{`, `(*`, `//` or `///`), never inside a string literal.</param>
+    /// <returns>[] when no qualifying `dl:ok` tag is found; otherwise the entries
+    /// after the FIRST qualifying tag, split exactly as <see cref="Parse"/>
+    /// splits them.</returns>
+    /// <remarks>
+    /// NOT A MARKER READER. Only a `//` line comment carries a live marker,
+    /// and Parse is the only function that decides suppression. This exists for
+    /// `review-marker-placeholder-hash`, which must SEE the markers that can
+    /// never work -- a `dl:ok` in a brace comment suppresses nothing and was, until
+    /// that rule, reported by nothing either. It also reads prose ABOUT markers
+    /// (a doc comment quoting the grammar), so its callers must filter hard: the
+    /// CLI reports an entry only when it names a known rule AND carries an
+    /// all-zero hash. Pure.
+    /// </remarks>
+    class function EmbeddedMarkers(const ALineText: string;
+      AStartsInComment: Boolean = False): TArray<TReviewMarker>; static;
+    /// <summary>True when AHash is a PLACEHOLDER -- non-empty and made only of
+    /// `0` characters, e.g. `@0000`.</summary>
+    /// <param name="AHash">The hash as <see cref="Parse"/> returned it (lowercased).</param>
+    /// <returns>False for '' (the hashless form, which is reported separately
+    /// as unverifiable) and for any hash containing a non-zero character.</returns>
+    /// <remarks>
+    /// `0000` IS a value HashLine can produce, with probability 1 in 65536.
+    /// This predicate cannot tell the two apart and does not try: the CLI asks
+    /// it only AFTER the hash has failed to equal the line's real hash, and a
+    /// hash that matches is honoured however it is spelled. Pure.
+    /// </remarks>
+    class function IsPlaceholderHash(const AHash: string): Boolean; static;
+    /// <summary>True when AHash cannot be a computed hash at all: non-empty and
+    /// not exactly 4 characters from [0-9a-f].</summary>
+    /// <param name="AHash">The hash as <see cref="Parse"/> returned it (lowercased).</param>
+    /// <returns>False for '' and for any 4-lowercase-hex value, `0000`
+    /// included (see <see cref="IsPlaceholderHash"/>).</returns>
+    /// <remarks>Pure.</remarks>
+    class function IsMalformedHash(const AHash: string): Boolean; static;
+    /// <summary>Finds the `REVIEWED &lt;yyyy-mm-dd&gt;` stamp in a marker's
+    /// reason and classifies it against a date and an age limit.</summary>
+    /// <param name="AReason">The reason text (TReviewMarker.Reason).</param>
+    /// <param name="AToday">The reference date; the CLI passes the system date.</param>
+    /// <param name="AMaxAgeDays">Oldest acceptable stamp, in days. 0 or less
+    /// disables the age check, so only presence and validity are required.</param>
+    /// <param name="AStampDate">The stamp's date when one parsed; 0 otherwise.</param>
+    /// <returns>rssMissing when the reason has no `REVIEWED` keyword;
+    /// rssMalformed when it has the keyword but no valid yyyy-mm-dd date after
+    /// it; rssFuture when the date is after AToday; rssExpired when it is more
+    /// than AMaxAgeDays before AToday; rssCurrent otherwise.</returns>
+    /// <remarks>
+    /// THE STAMP SYNTAX (owner ruling OWN-7, 2026-09-23): the uppercase word
+    /// `REVIEWED`, whitespace, an ISO date, anywhere in the reason:
+    /// `// dl:ok concat-in-loop@1a2b -- REVIEWED 2026-09-23 the loop is bounded`.
+    /// The keyword is CASE-SENSITIVE and must stand as a whole word, so ordinary
+    /// prose ("reviewed, the loop is bounded") is never mistaken for a stamp. The
+    /// FIRST occurrence is the one classified.
+    /// The stamp lives in the `//` comment, which NormalizeLine drops, so adding
+    /// or refreshing a stamp never changes the marker's @hash and never makes it
+    /// stale -- pinned by ReviewMarkerTests R7/R7b and
+    /// run_review_marker_reason_unreviewed.ps1. Pure.
+    /// </remarks>
+    class function ReviewStamp(const AReason: string; AToday: TDate; AMaxAgeDays: Integer;
+      out AStampDate: TDate): TReviewStampState; static;
     /// <summary>The marker body (without the leading `//`) recording ARuleId as
     /// reviewed on ALineText.</summary>
     /// <param name="ARuleId">Rule id being accepted.</param>
@@ -379,6 +479,10 @@ const
   REVIEW_REASON_SEP = '--';
   /// <summary>The shared-unit marker tag. Same family as dl:ok.</summary>
   SHARED_MARK = 'dl:shared';
+  /// <summary>Default age limit, in days, of a `REVIEWED` stamp before
+  /// `review-marker-reason-unreviewed` asks for a re-review. Overridden per
+  /// project by the rule's threshold in drag-lint-lint.json.</summary>
+  REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS = 180;
 
 implementation
 
@@ -596,6 +700,21 @@ end;
 
 class function TReviewMarkers.MarkerBearingLines(const ALines: TArray<string>): TArray<Boolean>;
 var
+  Ignored: TArray<Boolean>;
+begin
+  ScanCommentState(ALines, Result, Ignored);
+end;
+
+class function TReviewMarkers.BlockOpenAtLineStart(const ALines: TArray<string>): TArray<Boolean>;
+var
+  Ignored: TArray<Boolean>;
+begin
+  ScanCommentState(ALines, Ignored, Result);
+end;
+
+class procedure TReviewMarkers.ScanCommentState(const ALines: TArray<string>;
+  out ACanBear, AInBlockAtStart: TArray<Boolean>);
+var
   LI, I, Len : Integer;
   { Named in prose, not shown: a closing brace inside a braced comment ends it
     early. That is the same trap DRagLint.Lint.SharedUnit's header records
@@ -606,7 +725,8 @@ var
   Line       : string ;
   CanBear    : Boolean;
 begin
-  SetLength(Result, Length(ALines));
+  SetLength(ACanBear, Length(ALines));
+  SetLength(AInBlockAtStart, Length(ALines));
   { Block-comment state is the whole point: it is carried ACROSS lines. String
     and `//` state are not -- neither can span a line in Object Pascal -- so both
     are re-initialised per line below. }
@@ -614,6 +734,7 @@ begin
   InParen:= False;
   for LI:= 0 to High(ALines) do
   begin
+    AInBlockAtStart[LI]:= InBrace or InParen;
     Line   := ALines[LI];
     Len    := Length(Line);
     CanBear:= False;
@@ -668,7 +789,7 @@ begin
       end;
       Inc(I);
     end; // while
-    Result[LI]:= CanBear;
+    ACanBear[LI]:= CanBear;
   end; // for
 end;
 
@@ -803,6 +924,128 @@ begin
       M.RuleId:= Trim(Part);
     if M.RuleId <> '' then Result:= Result + [M];
   end;
+end;
+
+class function TReviewMarkers.EmbeddedMarkers(const ALineText: string;
+  AStartsInComment: Boolean): TArray<TReviewMarker>;
+var
+  TagPos : Integer;
+  I, Len : Integer;
+  InLit  : Boolean;
+  InBrace: Boolean;
+  InParen: Boolean;
+  InLineCmt : Boolean;
+begin
+  TagPos:= 0;
+  if AStartsInComment then
+    TagPos:= Pos(REVIEW_MARK, LowerCase(ALineText))
+  else
+  begin
+    { From code state, a tag counts only where a comment has opened and no
+      string literal is open: a quoted brace-and-tag is data, not a comment.
+      A doubled quote closes and reopens the literal, which is exactly its
+      meaning, so plain toggling is correct. }
+    InLit    := False;
+    InBrace  := False;
+    InParen  := False;
+    InLineCmt:= False;
+    Len:= Length(ALineText);
+    I:= 1;
+    while (I <= Len) and (TagPos = 0) do
+    begin
+      if InLineCmt or InBrace or InParen then
+      begin
+        if InBrace and (ALineText[I] = '}') then InBrace:= False
+        else if InParen and (ALineText[I] = '*') and (I < Len) and (ALineText[I + 1] = ')') then InParen:= False
+        else if SameText(Copy(ALineText, I, Length(REVIEW_MARK)), REVIEW_MARK) then TagPos:= I;
+      end
+      else if InLit then
+        InLit:= ALineText[I] <> ''''
+      else if ALineText[I] = '''' then InLit:= True
+      else if ALineText[I] = '{' then InBrace:= True
+      else if (ALineText[I] = '(') and (I < Len) and (ALineText[I + 1] = '*') then InParen:= True
+      else if (ALineText[I] = '/') and (I < Len) and (ALineText[I + 1] = '/') then InLineCmt:= True;
+      Inc(I);
+    end;
+  end;
+  if TagPos = 0 then Exit(nil);
+  { Re-use Parse rather than a second splitter: re-open the tail as if it were a
+    `//` comment, so the rule list, @hash and reason come out byte-for-byte the
+    way a live marker's would. }
+  Result:= Parse('//' + Copy(ALineText, TagPos, MaxInt));
+end;
+
+class function TReviewMarkers.IsPlaceholderHash(const AHash: string): Boolean;
+var
+  C: Char;
+begin
+  Result:= AHash <> '';
+  for C in AHash do
+    if C <> '0' then Exit(False);
+end;
+
+class function TReviewMarkers.IsMalformedHash(const AHash: string): Boolean;
+const
+  HASH_LEN = 4;
+var
+  C: Char;
+begin
+  if AHash = '' then Exit(False);
+  if Length(AHash) <> HASH_LEN then Exit(True);
+  Result:= False;
+  for C in AHash do
+    if not CharInSet(C, ['0'..'9', 'a'..'f']) then Exit(True);
+end;
+
+{ Whether AText holds an ISO yyyy-mm-dd date starting at AFrom, and that date.
+  Digits are checked one by one -- TryStrToInt alone would take ' 1' or '+1' for
+  a month -- and a digit straight after the ten characters means the text was
+  longer than an ISO date. }
+function TryParseIsoDateAt(const AText: string; AFrom: Integer; out ADate: TDate): Boolean;
+const
+  DATE_LEN = 10;          { yyyy-mm-dd }
+  DASH1    = 5;           { 1-based offsets of the two dashes inside it }
+  DASH2    = 8;
+var
+  Txt: string;
+  Dt : TDateTime;
+begin
+  ADate:= 0;
+  Txt  := Copy(AText, AFrom, DATE_LEN);
+  Result:= (Length(Txt) = DATE_LEN) and (Txt[DASH1] = '-') and (Txt[DASH2] = '-')
+           and not ((AFrom + DATE_LEN <= Length(AText)) and CharInSet(AText[AFrom + DATE_LEN], ['0'..'9']));
+  for var K: Integer:= 1 to DATE_LEN do
+    if Result and (K <> DASH1) and (K <> DASH2) then Result:= CharInSet(Txt[K], ['0'..'9']);
+  Result:= Result and TryEncodeDate(StrToInt(Copy(Txt, 1, DASH1 - 1)),
+                                    StrToInt(Copy(Txt, DASH1 + 1, DASH2 - DASH1 - 1)),
+                                    StrToInt(Copy(Txt, DASH2 + 1, DATE_LEN - DASH2)), Dt);
+  if Result then ADate:= Trunc(Dt);
+end;
+
+class function TReviewMarkers.ReviewStamp(const AReason: string; AToday: TDate;
+  AMaxAgeDays: Integer; out AStampDate: TDate): TReviewStampState;
+const
+  STAMP_WORD = 'REVIEWED';
+  WORD_CHARS: TSysCharSet = ['A'..'Z', 'a'..'z', '0'..'9', '_'];
+var
+  P, Q: Integer;
+begin
+  AStampDate:= 0;
+  { Whole-word, case-sensitive: `REVIEWEDX` and `xREVIEWED` are not stamps. }
+  P:= Pos(STAMP_WORD, AReason);
+  while (P > 0) and (((P > 1) and CharInSet(AReason[P - 1], WORD_CHARS)) or
+        ((P + Length(STAMP_WORD) <= Length(AReason)) and
+         CharInSet(AReason[P + Length(STAMP_WORD)], WORD_CHARS))) do
+    P:= Pos(STAMP_WORD, AReason, P + 1);
+  if P = 0 then Exit(rssMissing);
+
+  Q:= P + Length(STAMP_WORD);
+  while (Q <= Length(AReason)) and CharInSet(AReason[Q], [' ', #9]) do Inc(Q);
+  if not TryParseIsoDateAt(AReason, Q, AStampDate) then Exit(rssMalformed);
+
+  if AStampDate > Trunc(AToday) then Result:= rssFuture
+  else if (AMaxAgeDays > 0) and (Trunc(AToday) - AStampDate > AMaxAgeDays) then Result:= rssExpired
+  else Result:= rssCurrent;
 end;
 
 { ---------------------------------------------------------------------------

@@ -729,7 +729,7 @@ Win64 build.
 
 #### Lint
 
-**186 rules across 16 categories -- 133 built-in + 53 external `.scm`, 157
+**188 rules across 16 categories -- 135 built-in + 53 external `.scm`, 158
 enabled by default, 23 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -806,6 +806,28 @@ the live number. An unrelated body edit that leaves the metric where it was does
 line that produces no metric finding rather than writing a hash that could never
 verify, and `lint --json` carries a `metric` field on these findings.
 
+**A marker that suppresses nothing is reported, whatever the reason.** Besides
+`review-marker-stale` (the code moved), `review-marker-unused` (the finding is
+gone) and `review-marker-malformed` (not a rule id), **`review-marker-placeholder-hash`**
+(ON) flags a `dl:ok` whose `@hash` was never computed -- `@0000` or a non-hex
+`@xxxx` on a `//` marker, or an `@0000` marker written inside a `{ }` block
+comment, where no marker is ever read. Record the real one with `allow`.
+
+**The `REVIEWED` stamp (optional).** The `@hash` covers code only, so a marker's
+*reason* can go false without the marker ever going stale. Write
+`REVIEWED <yyyy-mm-dd>` (uppercase keyword, ISO date, anywhere in the reason) to
+record when a human last re-read it:
+
+```pascal
+S := S + T; // dl:ok concat-in-loop@1a2b -- REVIEWED 2026-09-23 the loop is bounded
+```
+
+The stamp lives in the comment, so adding or refreshing it never changes the
+hash. **`review-marker-reason-unreviewed`** (OFF by default -- every older marker
+would report; opt in per project with `"enabled"` or `--enable`) flags a
+reason with no stamp, an invalid or future date, or a stamp older than
+`max_age_days` (default 180; `"thresholds": {"review-marker-reason-unreviewed": N}`,
+`0` = presence only).
 #### Component conversion
 
 | Command | What it does | Notable flags |
@@ -907,11 +929,11 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (186 rules)
+### Lint rule pack (188 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.17.0-alpha: **186 rules across 16 categories -- 133
-built-in and 53 external `.scm`, 157 enabled by default, and 23 with an
+external `.scm`). As of v1.17.0-alpha: **188 rules across 16 categories -- 135
+built-in and 53 external `.scm`, 158 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |

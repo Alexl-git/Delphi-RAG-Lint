@@ -88,6 +88,9 @@ const
                                   worth a warning per site is not. Opt in to
                                   hunt typos, or list the switches in
                                   ifdef_allow.
+      review-marker-reason-unreviewed  owner ruling OWN-7 2026-09-23: the
+                                  REVIEWED stamp is new, so every existing
+                                  dl:ok would report at once. Opt in per project.
 
     Every one of them is opt-in, unchanged: `--rule <id>` on the CLI, or
     "enabled":["<id>"] in drag-lint-lint.json, which ShouldKeep honours. }
@@ -97,7 +100,7 @@ const
     'boolean-flag-parameter', 'commented-out-code', 'string-equality-comparison',
     'nil-comparison', 'public-writable-field', 'loop-control-flag',
     'mutable-global-variable', 'default-encoding-io', 'split-variable',
-    'separate-query-from-modifier', 'ifdef-undefined-symbol'];
+    'separate-query-from-modifier', 'ifdef-undefined-symbol', 'review-marker-reason-unreviewed'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -486,7 +489,8 @@ begin
 
     { --- review markers (dl:ok; 2026-08-12) ---
       Meta-rules ABOUT the suppression mechanism, emitted by the one central
-      marker filter rather than by any checker. Both ship ON: a review marker
+      marker filter rather than by any checker. They ship ON (reason-unreviewed
+      excepted, see below): a review marker
       that has quietly stopped describing its code is the exact silent-wrong-
       answer this project keeps paying for, so noticing it is the default. }
     B('review-marker-stale',  'review-markers', 'hint', 'dl:ok marker no longer matches the line it reviews -- the finding is reported again; re-review and re-mark');
@@ -498,6 +502,22 @@ begin
       source read as reviewed while the linter had never agreed. hint, not
       warning, because the remedy is always a one-line edit. }
     B('review-marker-malformed', 'review-markers', 'hint', 'dl:ok names something that is not a rule id -- the marker suppresses nothing');
+    { The third way a marker can suppress nothing while reading as a review: its
+      @hash was never computed. `@0000` or a non-hex `@xxxx` on a `//` marker, or
+      an all-zero one stranded in a block comment where no marker is ever read
+      (INBOX B1: LintTree.pas carried exactly that, and stale/unused were both
+      clean over it). ON, because it cannot flood: it needs a known rule id AND a
+      hash no hash function produces, and in block comments only the all-zero
+      form counts, so prose quoting the grammar stays silent. }
+    B('review-marker-placeholder-hash', 'review-markers', 'hint', 'dl:ok carries a placeholder or malformed @hash (e.g. @0000) -- it suppresses nothing; re-record it with `allow`');
+    { OWNER RULING OWN-7 (2026-09-23). The @hash covers CODE only, so a reason
+      can go false without the marker ever going stale (INBOX B2). The optional
+      `REVIEWED <yyyy-mm-dd>` stamp in the reason records when a human last
+      re-read it. OFF by default: every marker written before the stamp existed
+      would report at once. Opt in per project; max_age_days is the threshold
+      key "review-marker-reason-unreviewed" (0 = presence only). }
+    B('review-marker-reason-unreviewed', 'review-markers', 'hint', 'dl:ok reason has no REVIEWED <yyyy-mm-dd> stamp, or it is older than max_age_days -- re-read the reason and re-stamp it', False,
+      [MkParam('max_age_days', 'int', '180')]);
 
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
