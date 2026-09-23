@@ -7,21 +7,22 @@ The live scoreboard for `charts\question-catalogue.md`. **26 catalogue rows**
 Updated 2026-09-23. Branch `feat/archify-ir`, 24 commits, NOTHING PUSHED.
 
 ```
-SHIPPED                     15   emitters exist, tested, clickable
-PLANNED (ready to build)     0   the second five-verb batch is DONE
-UNPLANNED, unblocked         4   implementable today, nobody has planned them
-BLOCKED on data              3   need a live Firebird via fb-snapshot
-BLOCKED on the engine        4   3 of them are now DATA-ready -- see below
+SHIPPED                     21   emitters exist, tested, clickable
+PLANNED (ready to build)     0
+UNPLANNED, unblocked         0   there is nothing left that the index can answer
+BLOCKED on data              3   need a live Firebird via fb-snapshot (0 rows today)
+BLOCKED on the engine        1   exception-paths -- no raise/handle fact, MEASURED
+PARKED by owner              1   compare
                             --
                             26
 ```
 
-**11 of 26 are not resolved**, down from 16. Nothing is planned-but-unbuilt any
-more.
+**Every question this index can answer now ships.** The five remaining are
+blocked on facts that do not exist yet, not on work nobody has done -- and each
+one's blocker was measured, not assumed.
 
-**Selection-kind coverage is method / unit / form-class / field / property /
-type / interface / project.** `architecture` added the PROJECT kind and `wiring`
-the INTERFACE kind.
+**Selection kinds: method / unit / form-class / field / property / type /
+interface / project / command constant / wire field / db column / any symbol.**
 
 ---
 
@@ -45,26 +46,37 @@ the INTERFACE kind.
 | `effects` | method | `Emit-Effects.ps1` | pure / not-analysed / `g,p0,p3,?` over 6 params |
 | `architecture` | project | `Emit-Architecture.ps1` | 563 units / 3 zones / 2,858 edges / 3 back-edges |
 
-**Fifteen questions, THIRTEEN emitters** -- `what-it-calls` is a `-Direction`
-switch and `who-writes`/`who-reads` are one `-Mode` switch. Say it that way:
-counting emitters as questions understates the result, counting questions as
-emitters overstates the work.
+| `protocol-trace` | command / wire field | `Emit-ProtocolTrace.ps1` | cmdDelta 38 refs / 2 zones; CommandID 1,043 / 727 routines |
+| `protocol-trace` | method | `Emit-ProtocolTrace.ps1` | CommandIDToStr speaks all 42 TCommandID members |
+| `crosses-boundary` | method | `Emit-CrossesBoundary.ps1` | crosses (2 cmds / 1 transport / 18 far) &#183; is-the-boundary &#183; no-evidence |
+| `shown-where` | db column | `Emit-ShownWhere.ps1` | FTRNAMESTR 4 bindings / 2 forms, of 903 over 459 columns |
+| `change-impact` | method / type | `Emit-ChangeImpact.ps1` | 9 routines / 1 unit; a TYPE reaches 591 over 174 units (capped) |
+| `tested-by` | any symbol | `Emit-TestedBy.ps1` | 11 / 8 / 13 covering tests, computed from 71 test methods |
+
+**Twenty-one questions, EIGHTEEN emitters** -- `what-it-calls` is a `-Direction`
+switch, `who-writes`/`who-reads` are one `-Mode` switch, and both
+`protocol-trace` rows are one emitter dispatching on the selection's kind. Say
+it that way: counting emitters as questions understates the result, counting
+questions as emitters overstates the work.
 
 Gate: `charts\src\Test-Emitters.ps1` (exit 0 = green). Proven to fail correctly
 on every batch -- see each commit for the mutation it was checked against.
 
-## UNPLANNED but IMPLEMENTABLE TODAY (4)
+## NOT SHIPPED (5), each with a MEASURED blocker
 
-Nothing blocks these; no one has measured or planned them. Effort is a first
-estimate, NOT a measured one -- treat each as needing its own measurement pass
-before it is trusted, exactly as the shipped ten did.
+Nothing here is waiting on effort. Each row names the fact that does not exist.
 
-| question | selects | effort | why that effort |
-|---|---|---|---|
-| `change-impact` | method / type | **M** | `impact` verb exists (text/json); fan-out tree, close to who-calls. **Held: walks `call_edges`** |
-| `tested-by` | any symbol | **M** | `covered_by` is 0/0 BY DESIGN -- COMPUTE it from the test project's own call edges. Single-DB pass per test project, not a cross-DB join. **Held: walks `call_edges`** |
-| `shown-where` | field / column | **L** | `ui_affinity` only 230 CLIENT / 37 SERVER rows; partial by nature, needs a DFM join and honest coverage reporting |
-| `compare` | two index runs | **XL** | needs the IR and a diff model; no emitter precedent, and two indexes must be opened at once. Parked by owner |
+| question | selects | blocker, measured |
+|---|---|---|
+| `exception-paths` | method | **No raise/handle fact.** `refs.kind` has no `raise`/`except` value (only read / type_use / call / member-access / write / event-binding / attribute / di-*), and `symbol_facts` has no exception column. 17 `E*` classes ARE referenced, but a `type_use` of `EMicroniteError` is produced identically by `raise E.Create`, `on E: T do` and a bare declaration -- so a chart would draw handlers as throwers. Asked for two ref kinds in `INBOX-no-raise-handle-fact-blocks-exception-paths.md` |
+| `lands-where` | field | `orm_links` **0 rows** |
+| `feeds-from` | control | `orm_links`, `fb_datasets` **0 rows** |
+| `consumers` | table / column | `fb_columns`, `fb_relations` **0 rows** |
+| `compare` | two index runs | parked by owner; no `ir` or `compare` verb exists in the deployed engine |
+
+The three `fb_*` rows all need `drag-lint fb-snapshot` against a **live
+Firebird**. That is an INGEST task, not a chart task, and it is on this
+session's STOP list. Their effort is unknowable until the ingest runs.
 
 ## BLOCKED ON DATA -- not near-term (3)
 
@@ -192,16 +204,45 @@ from 9 nodes to 4. Callers unaffected.
 
 ## Resume point
 
-Both five-verb batches are DONE. `charts\PLAN-next-five-questions.md` records
-the first batch's six deviations; `charts\PLAN-next-five-verbs.md` is the second
-and its deviations are recorded at the foot of this section.
+**All three batches are DONE and there is no next batch.** Every catalogue
+question the index can answer now ships; the five that do not are blocked on
+facts that do not exist, each measured and each filed.
 
-**Next: nothing is planned.** Pick from the four unplanned rows above and
-measure its premises FIRST -- both batches proved a fully-measured plan still
-ships wrong premises.
+**Next, when the engine lands:** re-run the suite and re-baseline the 7
+callee-direction assertions WITH a note -- they are now known to be a DATA
+change, not a misread (see below). Expect the 2 property-accessor ones to
+persist. Then re-clone and re-measure before trusting anything here.
 
-**Held until the engine matches the index:** `change-impact` and `tested-by` --
-both walk `call_edges`, which is the demonstrably skewed path.
+### Batch 3 findings (2026-09-23)
+
+1. **The callee-direction mystery is SOLVED, and it was not our engine.** Raw
+   SQL over `call_edges` returns the SAME 2 direct callees for
+   `SendDeltaOperation` that the verb does, against a frozen assertion of 8. So
+   the engine reads the data correctly and the 1.6.0 resolver produced FEWER
+   edges. The lost population looks like interface dispatch: that method's body
+   has 32 `kind='call'` refs and only 2 with a `call_edges` row, the missing ones
+   being `Send`, `SaveToStream`, `CommitUpdates` and friends. Filed as
+   `INBOX-resolver-1.6.0-gained-enums-lost-callee-edges.md`.
+2. **Which is why `change-impact` and `tested-by` shipped anyway.** Both walk
+   CALLERS -- from a symbol up to its dependents, and from code under test up to
+   the tests -- and the caller direction is intact (9 callers, matching the
+   pre-reindex assertion).
+3. **`shown-where`'s premise was wrong in KIND, not degree.** `ui_affinity` is a
+   thread-affinity hint carried only by routines; **0 of 13,131 fields and
+   properties have one**, and 0 of its 230 tokens match any control. Rebuilt on
+   DFM data bindings (903 rows / 459 columns / 38 forms), which resolve to a
+   `component` symbol every time.
+4. **`tested-by` is a SINGLE-DB pass** -- the test closure contains the code
+   under test (MicroniteTests: 5,152 symbols, 724 of them from `MSCTYPES.PAS`).
+   One `[Test]` marks the NEAREST FOLLOWING declaration; a "+/-2 lines" window
+   matched three methods per attribute on these fixtures.
+5. **The `sql` 200-row cap bit again, and silently.** An unpaged
+   `SELECT DISTINCT path FROM files` returned the first 200 of 625 -- all under
+   `\CLIENT\` -- so the common root came back as `...\ORM3\CLIENT` and every
+   protocol-trace row collapsed into ONE zone. Page every population query.
+6. **`@(Invoke-IndexQuery ...)` bit again too**, exactly as the contract warns:
+   the nesting makes `.Count` read 1 on an empty result, which made every method
+   report "is the boundary".
 
 ### Deviations and findings from the second batch (2026-09-23)
 

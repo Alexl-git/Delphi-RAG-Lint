@@ -26,6 +26,9 @@ param(
   # three shapes CLIENT and SERVER simply do not contain.
   [string] $DbDl   = (Join-Path $PSScriptRoot '..\scratch\db\DL-drag-lint.sqlite'),
   [string] $DbDc   = (Join-Path $PSScriptRoot '..\scratch\db\DataCopy-DataCopy.sqlite'),
+  # A TEST project index. tested-by cannot be asked of CLIENT or SERVER at all:
+  # the [Test] attributes live here, and so does the code under test.
+  [string] $DbMt   = (Join-Path $PSScriptRoot '..\scratch\db\TESTS-MicroniteTests.sqlite'),
   [string] $OutDir = (Join-Path $PSScriptRoot ('..\scratch\test-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
   [switch] $Quiet
 )
@@ -638,6 +641,120 @@ if (Test-Path $liveDb) {
   Note '  N19 skipped: the live corpus DB is not on this machine'
 }
 
+# ---- the third batch: protocol-trace / crosses-boundary / shown-where /
+#      change-impact / tested-by -------------------------------------------------
+
+Note 'protocol-trace ...'
+Step 'E-PT' {
+  # These numbers were ZERO before 2026-09-23: enum-value refs were unbound.
+  # They are the regression guard for the engine team's enum binding.
+  $script:pt1 = & "$SRC\Emit-ProtocolTrace.ps1" -Target 'cmdDelta' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-PT1-REFS'     $pt1.Refs 38
+  Chk 'A-PT1-ROUTINES' $pt1.Routines 38
+  Chk 'A-PT1-KINDS'    $pt1.Kinds 'read'
+  Chk 'A-PT1-UNATTR'   $pt1.Unattributed 0
+  # 2 zones, not 1. The unpaged file query returned only the first 200 paths, so
+  # the common root came back as ...\ORM3\CLIENT and every row collapsed into one
+  # zone -- a wrong chart caused by a cap that reports nothing.
+  Chk 'A-PT1-ZONES'    $pt1.Zones 2
+
+  $script:pt2 = & "$SRC\Emit-ProtocolTrace.ps1" -Target 'Pipes.Protocol.TPipeMessageHeader.CommandID' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-PT2-MODE'     $pt2.Mode 'field'
+  Chk 'A-PT2-REFS'     $pt2.Refs 1043
+  Chk 'A-PT2-ROUTINES' $pt2.Routines 727
+  Chk 'A-PT2-KINDS'    $pt2.Kinds 'member-access'
+
+  $script:pt3 = & "$SRC\Emit-ProtocolTrace.ps1" -Target 'Pipes.Protocol.CommandIDToStr' -DbPath $DbSrv -OutDir $OutDir
+  Chk 'A-PT3-MODE'     $pt3.Mode 'method'
+  Chk 'A-PT3-COMMANDS' $pt3.Commands 42      # every TCommandID member
+}
+
+Note 'crosses-boundary ...'
+Step 'E-CB' {
+  $script:cb1 = & "$SRC\Emit-CrossesBoundary.ps1" -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation' `
+                    -DbPath $DbCli -CounterpartDb $DbSrv -OutDir $OutDir
+  Chk 'A-CB1-VERDICT'  $cb1.Verdict 'crosses'
+  Chk 'A-CB1-COMMANDS' $cb1.Commands 2
+  Chk 'A-CB1-PIPE'     $cb1.PipeCalls 1
+  Chk 'A-CB1-FAR'      $cb1.FarSide 18
+  Chk 'A-CB1-SELFPIPE' $cb1.SelfIsPipe $false
+
+  # SelfIsPipe was TRUE for every method until @(Invoke-IndexQuery ...) was
+  # unwrapped -- the nesting makes .Count read 1 on an EMPTY result.
+  $script:cb2 = & "$SRC\Emit-CrossesBoundary.ps1" -Target 'uPipeClientConnection.TPipeClientConnection.ExecuteCommand' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-CB2-VERDICT'  $cb2.Verdict 'is the boundary'
+  Chk 'A-CB2-SELFPIPE' $cb2.SelfIsPipe $true
+
+  # The honest negative: no evidence is NOT "does not cross".
+  $script:cb3 = & "$SRC\Emit-CrossesBoundary.ps1" -Target 'gammafunc.LnGamma' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-CB3-VERDICT' $cb3.Verdict 'no evidence in this index'
+  if (-not (Test-Path $cb3.Svg)) { Fail 'A-CB3-SVG' 'the no-evidence case must still render' }
+  if ((Dot $cb3) -notmatch 'absence is NOT proof') { Fail 'A-CB3-NOTE' 'the no-evidence case overclaims' }
+}
+
+Note 'shown-where ...'
+Step 'E-SW' {
+  $script:sw1 = & "$SRC\Emit-ShownWhere.ps1" -Column 'FTRNAMESTR' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-SW1-BINDINGS' $sw1.Bindings 4
+  Chk 'A-SW1-FORMS'    $sw1.Forms 2
+  Chk 'A-SW1-UNRES'    $sw1.Unresolved 0
+  Chk 'A-SW1-IDXROWS'  $sw1.IndexRows 903
+  Chk 'A-SW1-IDXCOLS'  $sw1.IndexColumns 459
+
+  $script:sw2 = & "$SRC\Emit-ShownWhere.ps1" -Column 'ID' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-SW2-BINDINGS' $sw2.Bindings 72
+  Chk 'A-SW2-FORMS'    $sw2.Forms 25
+}
+
+Note 'change-impact ...'
+Step 'E-CI' {
+  $script:ci1 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.ReserveNextID' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-CI1-AFFECTED' $ci1.Affected 9
+  Chk 'A-CI1-UNITS'    $ci1.Units 1
+  Chk 'A-CI1-ZONES'    $ci1.Zones 1
+  Chk 'A-CI1-CAPPED'   $ci1.Capped $false
+
+  $script:ci2 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'uPipeClientConnection.TPipeClientConnection' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-CI2-ISTYPE'   $ci2.IsType $true
+  Chk 'A-CI2-AFFECTED' $ci2.Affected 591
+  Chk 'A-CI2-UNITS'    $ci2.Units 174
+  Chk 'A-CI2-CAPPED'   $ci2.Capped $true
+  if ((Dot $ci2) -notmatch 'frontier CAPPED') { Fail 'A-CI2-DISCLOSE' 'the capped radius does not admit it' }
+}
+
+Note 'tested-by ...'
+Step 'E-TB' {
+  $script:tb1 = & "$SRC\Emit-TestedBy.ps1" -Target 'uCompGroupTree.TCompGroupTree.Build' -DbPath $DbMt -OutDir $OutDir
+  Chk 'A-TB1-TESTS'    $tb1.Tests 11
+  Chk 'A-TB1-FIXTURES' $tb1.Fixtures 1
+  # 71, not 213: one [Test] marks ONE method -- the nearest FOLLOWING declaration.
+  # A "+/- 2 lines" window matched three methods per attribute on these fixtures.
+  Chk 'A-TB1-METHODS'  $tb1.TestMethods 71
+
+  $script:tb2 = & "$SRC\Emit-TestedBy.ps1" -Target 'uGageLineQueue.TGageLineQueue.TryDequeue' -DbPath $DbMt -OutDir $OutDir
+  Chk 'A-TB2-TESTS' $tb2.Tests 8
+
+  $script:tb3 = & "$SRC\Emit-TestedBy.ps1" -Target 'uCompGroupTree.TCompGroupTree' -DbPath $DbMt -OutDir $OutDir
+  Chk 'A-TB3-TESTS' $tb3.Tests 13
+}
+
+Note 'negatives N20-N24 ...'
+# SERVER has no data-aware UI. "Not applicable to this index" and "0 found" are
+# different claims and the emitter must make the first one.
+NegTest 'N20' 'contains NO DFM data bindings at all' 'shownwhere_FTRNAMESTR' {
+  & "$SRC\Emit-ShownWhere.ps1" -Column 'FTRNAMESTR' -DbPath $DbSrv -OutDir $negDir }
+# The ui_affinity premise, refused with the reason: 0 of 13,131 fields carry one.
+NegTest 'N21' 'is a Delphi field' 'shownwhere_MSCTYPES_RChartSampleData_R' {
+  & "$SRC\Emit-ShownWhere.ps1" -Column 'MSCTYPES.RChartSampleData.R' -DbPath $DbCli -OutDir $negDir }
+NegTest 'N22' 'it is not a test project index' 'testedby_uMain_TfrmMAIN_FormCreate' {
+  & "$SRC\Emit-TestedBy.ps1" -Target 'uMain.TfrmMAIN.FormCreate' -DbPath $DbCli -OutDir $negDir }
+# A DFM-dispatched handler has no callers, which is a true answer about ORM3 and
+# must not be dressed up as an empty blast radius.
+NegTest 'N23' '0 callers at any depth' 'impact_uMain_TfrmMAIN_FormCreate' {
+  & "$SRC\Emit-ChangeImpact.ps1" -Target 'uMain.TfrmMAIN.FormCreate' -DbPath $DbCli -OutDir $negDir }
+NegTest 'N24' 'references no enum constant at all' 'prototrace_gammafunc_LnGamma' {
+  & "$SRC\Emit-ProtocolTrace.ps1" -Target 'gammafunc.LnGamma' -DbPath $DbCli -OutDir $negDir }
+
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
@@ -658,7 +775,12 @@ if (-not $Quiet) {
   Write-Host ("  wiring         : {0} regs / {1} sites on SERVER ({2} index-wide); CLIENT {3} of {4}" -f (V $wi1 'Registrations'), (V $wi1 'ResolvedAt'), (V $wi1 'IndexRegs'), (V $wi3 'Registrations'), (V $wi3 'IndexRegs'))
   Write-Host ("  effects        : pure={0}, not-analysed={1}, 'g,s,?'={2}+{3}?, p-ordinals zero-based over {4} params" -f (V $fx1 'Outcome'), (V $fx2 'Outcome'), (V $fx4 'Effects'), (V $fx4 'Unknown'), (V $fx6 'ParamCount'))
   Write-Host ("  architecture   : {0} units / {1} zones / {2} internal edges, {3} back-edge(s); {4} externals in {5} groups" -f (V $ar1 'Units'), (V $ar1 'Zones'), (V $ar1 'InternalEdges'), (V $ar1 'BackEdges'), (V $ar1 'ExternalUnits'), (V $ar1 'Groups'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, each asserting message AND absent .svg; N13/N16/N17 draw")
+  Write-Host ("  protocol-trace : {0} refs over {1} zones (was 0 before the enum binding); field {2} refs; method speaks {3} commands" -f (V $pt1 'Refs'), (V $pt1 'Zones'), (V $pt2 'Refs'), (V $pt3 'Commands'))
+  Write-Host ("  crosses-bndry  : {0} ({1} cmds / {2} transport / {3} far); transport itself {4}; no-evidence {5}" -f (V $cb1 'Verdict'), (V $cb1 'Commands'), (V $cb1 'PipeCalls'), (V $cb1 'FarSide'), (V $cb2 'Verdict'), (V $cb3 'Verdict'))
+  Write-Host ("  shown-where    : {0} bindings on {1} forms, of {2} index-wide over {3} columns" -f (V $sw1 'Bindings'), (V $sw1 'Forms'), (V $sw1 'IndexRows'), (V $sw1 'IndexColumns'))
+  Write-Host ("  change-impact  : {0} routines / {1} unit; a TYPE reaches {2} over {3} units (capped {4})" -f (V $ci1 'Affected'), (V $ci1 'Units'), (V $ci2 'Affected'), (V $ci2 'Units'), (V $ci2 'Capped'))
+  Write-Host ("  tested-by      : {0} / {1} / {2} covering tests, from {3} test methods" -f (V $tb1 'Tests'), (V $tb2 'Tests'), (V $tb3 'Tests'), (V $tb1 'TestMethods'))
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, each asserting message AND absent .svg; N13/N16/N17 draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

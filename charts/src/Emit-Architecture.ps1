@@ -106,29 +106,17 @@ SELECT s.qualified_name AS q, s.start_line AS line, f.path AS path, f.id AS fid
 if ($units.Count -eq 0) { throw 'architecture: this index holds no unit symbols at all' }
 
 # ---- 2. zones = source directory relative to the common root ------------------------
+# Get-CommonRootLen / Get-PathZone live in Emit-Common because protocol-trace and
+# crosses-boundary zone the same paths, and a chart that compares zones across
+# indexes cannot afford two definitions of where the root is.
 $dirs = @($units | ForEach-Object { [IO.Path]::GetDirectoryName([string]$_.path) } | Sort-Object -Unique)
-$split = @($dirs | ForEach-Object { , ($_ -split '\\') })
-$common = @($split[0])
-foreach ($s in $split) {
-  $n = [Math]::Min($common.Count, $s.Count)
-  $keep = 0
-  while ($keep -lt $n -and $common[$keep] -eq $s[$keep]) { $keep++ }
-  $common = @($common[0..([Math]::Max($keep - 1, 0))])
-  if ($keep -eq 0) { $common = @(); break }
-}
-$rootLen = $common.Count
-$rootPath = ($common -join '\')
-
-function Get-Zone([string] $Path) {
-  $parts = @([IO.Path]::GetDirectoryName($Path) -split '\\')
-  if ($parts.Count -le $rootLen) { return '(root)' }
-  ($parts[$rootLen..($parts.Count - 1)]) -join '/'
-}
+$rootLen = Get-CommonRootLen $dirs
+$rootPath = $(if ($rootLen -gt 0) { (($dirs[0] -split '\\')[0..($rootLen - 1)]) -join '\' } else { '(no common root)' })
 
 $zoneOf = @{}     # file id -> zone
 $zoneUnits = @{}  # zone -> list of unit rows
 foreach ($u in $units) {
-  $z = Get-Zone ([string]$u.path)
+  $z = Get-PathZone ([string]$u.path) $rootLen
   $zoneOf[[int]$u.fid] = $z
   if (-not $zoneUnits.ContainsKey($z)) { $zoneUnits[$z] = New-Object System.Collections.ArrayList }
   [void]$zoneUnits[$z].Add($u)

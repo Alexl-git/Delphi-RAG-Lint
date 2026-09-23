@@ -35,11 +35,21 @@ param(
   # the SELECTION, and it differs per question: a qualified symbol for
   # butterfly / who-calls / touches-tables, a unit name for deps, a form CLASS
   # for event-wiring.
-  [Parameter(Mandatory)][Alias('Qname','Unit','Form')][string] $Target,
+  # `cycles` and `architecture` select the PROJECT, not a symbol. Target stays
+  # mandatory rather than gaining a special "omit it" mode, because a bundle with
+  # no target in its name and no target in its meta.json is unidentifiable six
+  # months later. The literal 'project' IS the selection for those two.
+  [Parameter(Mandatory)][Alias('Qname','Unit','Form','Interface','Type')][string] $Target,
   [Parameter(Mandatory)][string] $DbPath,
   [ValidateSet('butterfly','deps','who-calls','what-it-calls','who-writes','who-reads',
-               'hierarchy','class-surface','event-wiring','touches-tables')]
+               'hierarchy','class-surface','event-wiring','touches-tables',
+               'lifecycle','cycles','wiring','effects','architecture',
+               'protocol-trace','crosses-boundary','shown-where','change-impact','tested-by')]
   [string] $Question = 'butterfly',
+  # crosses-boundary only: the other half of the system, so the far side of a
+  # protocol command can be named. Optional -- without it the chart shows one side
+  # and says so.
+  [string] $CounterpartDb,
   [string] $Control,                      # event-wiring only: filter, not selector
   [int]    $Depth   = 2,
   [int]    $Cap     = 20,                 # member-access / hierarchy: readability cap
@@ -85,6 +95,30 @@ try {
     'hierarchy'      { & (Join-Path $PSScriptRoot 'Emit-Hierarchy.ps1')     -Type  $Target -DbPath $DbPath -Cap $Cap -OutDir $dir }
     'class-surface'  { & (Join-Path $PSScriptRoot 'Emit-ClassSurface.ps1')  -Type  $Target -DbPath $DbPath -Cap $SurfaceCap -OutDir $dir }
     'touches-tables' { & (Join-Path $PSScriptRoot 'Emit-TouchesTables.ps1') -Qname $Target -DbPath $DbPath -OutDir $dir }
+    'lifecycle'      { & (Join-Path $PSScriptRoot 'Emit-Lifecycle.ps1')     -Form  $Target -DbPath $DbPath -OutDir $dir }
+    'wiring'         { & (Join-Path $PSScriptRoot 'Emit-Wiring.ps1')        -Interface $Target -DbPath $DbPath -MaxRows $Cap -OutDir $dir }
+    'effects'        { & (Join-Path $PSScriptRoot 'Emit-Effects.ps1')       -Qname $Target -DbPath $DbPath -OutDir $dir }
+    # PROJECT-scoped: 'project' means "no -Unit", i.e. every cycle in the index.
+    # Splatted for the same reason event-wiring is -- passing -Unit '' would
+    # filter every cycle away and render as "no cycles", which is a different
+    # and wrong answer.
+    'cycles'         {
+      $cy = @{ DbPath = $DbPath; OutDir = $dir }
+      if ($Target -ne 'project') { $cy.Unit = $Target }
+      & (Join-Path $PSScriptRoot 'Emit-Cycles.ps1') @cy
+    }
+    'architecture'   { & (Join-Path $PSScriptRoot 'Emit-Architecture.ps1')  -DbPath $DbPath -OutDir $dir }
+    'protocol-trace' { & (Join-Path $PSScriptRoot 'Emit-ProtocolTrace.ps1') -Target $Target -DbPath $DbPath -Cap $Cap -OutDir $dir }
+    'shown-where'    { & (Join-Path $PSScriptRoot 'Emit-ShownWhere.ps1')    -Column $Target -DbPath $DbPath -Cap $Cap -OutDir $dir }
+    'change-impact'  { & (Join-Path $PSScriptRoot 'Emit-ChangeImpact.ps1')  -Target $Target -DbPath $DbPath -Depth $Depth -OutDir $dir }
+    'tested-by'      { & (Join-Path $PSScriptRoot 'Emit-TestedBy.ps1')      -Target $Target -DbPath $DbPath -Cap $Cap -OutDir $dir }
+    # splatted so -CounterpartDb is ABSENT rather than empty: Get-CloneDb would
+    # reject '' and the far side would fail instead of simply not being drawn.
+    'crosses-boundary' {
+      $cb = @{ Target = $Target; DbPath = $DbPath; OutDir = $dir; Cap = $Cap }
+      if ($CounterpartDb) { $cb.CounterpartDb = $CounterpartDb }
+      & (Join-Path $PSScriptRoot 'Emit-CrossesBoundary.ps1') @cb
+    }
   }
 } catch {
   if ($dirWasNew -and (Test-Path $dir) -and -not (Get-ChildItem $dir -Force)) {
@@ -109,6 +143,23 @@ $vocab = @{
   'class-surface'  = @('Members','members',     'Shown',   'shown')
   'event-wiring'   = @('Events', 'events',      'Handlers','handlers')
   'touches-tables' = @('Reads',  'tables read', 'Writes', 'tables written')
+  # The pair chosen per question is the one a reader needs to judge the chart at
+  # a glance. For lifecycle that is NOT "wired / absent": the middle state is the
+  # whole point, so the header carries wired and implemented-but-unwired.
+  'lifecycle'      = @('Wired',  'stages wired', 'NotWired', 'implemented, not wired')
+  'cycles'         = @('Cycles', 'groups',       'Edges',    'uses edges')
+  'wiring'         = @('Registrations','registrations','ResolvedAt','resolution sites')
+  # Unknown beside Effects on purpose: `?` is an admission, and a header showing
+  # only the effect count would let an incomplete answer read as a complete one.
+  'effects'        = @('Effects','effects',      'Unknown',  'unclassified tokens')
+  'architecture'   = @('Units',  'project units','BackEdges','back-edges')
+  'protocol-trace' = @('Refs',   'references',   'Zones',    'zones')
+  # Commands beside the verdict: the verdict is a judgement made FROM the
+  # evidence, so the header carries the evidence count too.
+  'crosses-boundary'= @('Commands','commands',   'PipeCalls','transport calls')
+  'shown-where'    = @('Bindings','data bindings','Forms',   'forms')
+  'change-impact'  = @('Affected','routines affected','Units','units')
+  'tested-by'      = @('Tests',  'covering tests','Fixtures','fixtures')
 }
 $v = $vocab[$Question]
 $leftCount  = $r.($v[0]); $leftLabel  = $v[1]
@@ -139,8 +190,9 @@ $fp = [pscustomobject]@{
   clickTargets= $r.ClickTargets
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
-                $(if ($Question -in 'butterfly','who-calls','what-it-calls') { " -Depth $Depth" } else { '' }) +
-                $(if ($Question -in 'who-writes','who-reads','hierarchy') { " -Cap $Cap" } else { '' }) +
+                $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact') { " -Depth $Depth" } else { '' }) +
+                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary') { " -Cap $Cap" } else { '' }) +
+                $(if ($Question -eq 'crosses-boundary' -and $CounterpartDb) { " -CounterpartDb `"$CounterpartDb`"" } else { '' }) +
                 $(if ($Question -eq 'class-surface') { " -SurfaceCap $SurfaceCap" } else { '' }) +
                 $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })
   # every count the emitter reported, not just the two the shell shows. The

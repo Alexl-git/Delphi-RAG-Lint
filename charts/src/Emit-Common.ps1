@@ -351,6 +351,42 @@ SELECT s.id AS id, s.kind AS kind, s.qualified_name AS qualified_name,
   }
 }
 
+# ---- source zones -------------------------------------------------------------
+
+# A "zone" is a source DIRECTORY relative to the project's common root, and it is
+# the only layering signal this corpus actually carries.
+#
+# MEASURED on the CLIENT clone 2026-09-23, after testing the alternatives:
+#   namespace prefix   512 of 563 units have NO DOT            -- unusable
+#   dotted suffix      ViewModel 36, Interfaces 4, Model 2     -- 9% coverage
+#   SOURCE DIRECTORY   CLIENT 268, COMMON/OBJECTS 268, COMMON 27 -- 100%
+#
+# Shared rather than copied because three charts now zone the same paths
+# (architecture, protocol-trace, crosses-boundary) and two of them compare zones
+# ACROSS indexes. If they computed the root differently, "CLIENT" in one chart
+# and "CLIENT" in the next would silently mean different directories.
+function Get-CommonRootLen([string[]] $Dirs) {
+  $uniq = @($Dirs | Where-Object { $_ } | Sort-Object -Unique)
+  if ($uniq.Count -eq 0) { return 0 }
+  $split = @($uniq | ForEach-Object { , ($_ -split '\\') })
+  $common = @($split[0])
+  foreach ($s in $split) {
+    $n = [Math]::Min($common.Count, $s.Count)
+    $keep = 0
+    while ($keep -lt $n -and $common[$keep] -eq $s[$keep]) { $keep++ }
+    if ($keep -eq 0) { return 0 }
+    $common = @($common[0..($keep - 1)])
+  }
+  $common.Count
+}
+
+function Get-PathZone([string] $Path, [int] $RootLen) {
+  if ([string]::IsNullOrWhiteSpace($Path)) { return '(unknown)' }
+  $parts = @([IO.Path]::GetDirectoryName($Path) -split '\\')
+  if ($RootLen -le 0 -or $parts.Count -le $RootLen) { return '(root)' }
+  ($parts[$RootLen..($parts.Count - 1)]) -join '/'
+}
+
 # ---- ranking and disclosure -------------------------------------------------
 
 # Maps a `refs` row to its enclosing routine, as the SQL fragments to splice in.
