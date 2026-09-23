@@ -588,7 +588,7 @@ type
     // field, not three. A second field for a flag that already exists is how two
     // switches with the same name end up meaning different things.
     AddProjectName: string ; // shared-unit: --add-project <ProjectName>
-    // glyph-vacuum: --append merges this run into an existing --out (rows keyed
+    // glyph-vacuum: --append merges this run into an existing --output (rows keyed
     // on dfm_path+object_path+property, images keyed on sha) instead of replacing it.
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
@@ -805,7 +805,7 @@ begin
   Writeln('                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)');
   Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
-  Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
+  Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
   Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
@@ -904,10 +904,10 @@ begin
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
-  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
+  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count)');
-  Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --out|--output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --out; --append merges into an existing --out; --db only qualifies class_unit / declared count default / runtime_refs)');
+  Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -924,7 +924,7 @@ begin
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
-  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
+  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
   Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
@@ -1432,7 +1432,7 @@ begin
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
-    else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --out
+    else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --output
     else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)  // dl:ok duplicate-code@f979 -- pre-existing ParseArgs shape shared by every single-string-value flag branch; swept into this hunk by the unrelated --append line added just above
     begin
       Inc(i);
@@ -22483,13 +22483,13 @@ begin
   if Res.Ok then Exit(0) else Exit(1);
 end; // function
 
-/// <summary>drag-lint convert-scaffold --from FromType --to ToType [--out FILE]
+/// <summary>drag-lint convert-scaffold --from FromType --to ToType [--output FILE]
 /// [--surface dfm|pas] --db PATH [--db ...] -- Track 3 Batch 1: auto-generate a
 /// VALID reFind-superset conversion-rules file from the REAL deep-property trees
 /// of the From and To types (Task 1's BuildPropTree over BOTH), pre-filling the
 /// assignments it can safely infer and leaving only genuine ambiguities as '???'
 /// for the user to resolve. --from (reuses CallFrom) and --to (reuses RenameTo)
-/// are BOTH required (missing -&gt; usage + exit 2). --out (reuses Output) writes
+/// are BOTH required (missing -&gt; usage + exit 2). --output (reuses Output) writes
 /// an ASCII/CRLF file; omitted -&gt; stdout. Multiple --db are tried in order; the
 /// FIRST db that resolves BOTH types is used (ids are per-DB). If either type is
 /// unresolved the verb names it and exits 1.
@@ -22522,7 +22522,7 @@ end; // function
 /// is a filtered-out To leaf is correctly reported DROPPED rather than silently
 /// neither linked nor noted.</summary>
 /// <param name="AArgs">CallFrom=--from (FromType qname), RenameTo=--to (ToType
-/// qname), Output=--out (file; empty=stdout), Surface=--surface dfm|pas ('' =
+/// qname), Output=--output (file; empty=stdout), Surface=--surface dfm|pas ('' =
 /// default 'dfm'), DbPath/DbPaths=index(es).</param>
 /// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
 /// --from/--to, invalid --surface value) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
@@ -22707,7 +22707,10 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'convert-scaffold') then Exit(2);
   if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
-  begin Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--out FILE] [--surface dfm|pas] --db PATH [--db ...]'); Exit(2); end;
+  begin
+    Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--output FILE] [--surface dfm|pas] --db PATH [--db ...]');
+    Exit(2);
+  end;
 
   // proptree assignability engine (Task 5): --surface dfm|pas picks the
   // TARGET-side visibility bar (see IsValidTarget above); unset defaults to
@@ -23382,10 +23385,10 @@ begin
   Result:= 0;
 end; // function
 
-// drag-lint glyph-vacuum --root DIR [--root DIR ...] --out DIR [--append] [--db PATH ...]
+// drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]
 // Walk every .dfm/.fmx under the roots, extract and decode every streamed graphic,
 // pair it with its count property, write instances.tsv / classes.tsv / skipped.tsv /
-// gallery.html / images\ into --out. --db only QUALIFIES (class_unit, declared count
+// gallery.html / images\ into --output. --db only QUALIFIES (class_unit, declared count
 // default, runtime_refs); without one those columns are empty, never guessed.
 // Exit 0 on a completed walk (0 graphics is an answer); 2 on bad args or a missing root.
 function DoGlyphVacuum(const AArgs: TArgs): Integer;
@@ -23400,7 +23403,7 @@ var
 begin
   if (Length(AArgs.Roots) = 0) or (AArgs.Output = '') then
   begin
-    Writeln('Usage: drag-lint glyph-vacuum --root DIR [--root DIR ...] --out DIR [--append] [--db PATH ...]');
+    Writeln('Usage: drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]');
     Exit(2);
   end;
   if not ExplicitDbsExist(AArgs, 'glyph-vacuum') then Exit(2);
@@ -24557,7 +24560,7 @@ begin
 end; // begin
 
 /// <summary>Implements the forms-csv CLI command: generates a navigation-map CSV
-/// for a project index and writes it to --out or stdout. Multi-DB: when the
+/// for a project index and writes it to --output or stdout. Multi-DB: when the
 /// caller supplies no --db, falls back through ResolveConsumerDbs (manifest /
 /// platform resolution) so forms-csv sees the same DB set as query/lsp/serve;
 /// the first resolved path is primary (drives enumeration), the rest widen the

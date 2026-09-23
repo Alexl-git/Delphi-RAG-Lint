@@ -101,8 +101,14 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # 2026-09-22 (C3a) at 124/33 after glyph-vacuum's banner gained the --output alias
 # (the row that had pushed it to 125/34). 123 on 2026-09-23 (D4): lint-all's banner
 # line gained --rule, which the verb already consumed (ifdef-undefined-symbol).
-$BaselineCells = 123
-$BaselineVerbs = 33
+# 112/27 on 2026-09-23 (ENG-6, docs\INBOX-output-flag-canonicalisation.md): --out
+# left the banner (silent alias of --output by owner ruling), which removes the 8
+# cells where a verb consumed Output but its line named only --output
+# (lint-all, schema, export, butterfly, sql, uses-report, graph, deps-report),
+# and export / forms-csv / convert-scaffold gained --output on their own lines
+# (3 cells). Six verbs had nothing else missing and left the table.
+$BaselineCells = 112
+$BaselineVerbs = 27
 
 $Repo = (Resolve-Path $Repo).Path
 . (Join-Path $Repo 'tests\autotest\lib\CliFlagVerbMap.ps1')

@@ -811,10 +811,10 @@ verify, and `lint --json` carries a `metric` field on these findings.
 | Command | What it does | Notable flags |
 |---|---|---|
 | [`proptree`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/proptree) `--qname <T>` | Recursive deep-property enumerator (foundation for component conversion) | `--depth N`, `--no-to-persistent` (climb past the `TPersistent`/`TObject` stop), `--refs-as-leaves`, `--no-write-back` (read-only: types the ancestry-bridge recovers are otherwise memoised back into the index), `--min-visibility published\|public`, `--format text\|json` |
-| [`convert-scaffold`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-scaffold) `--from F --to T` | Auto-draft a valid conversion-rules file from the real F/T property trees | `--out <f>`, `--surface dfm\|pas` |
+| [`convert-scaffold`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-scaffold) `--from F --to T` | Auto-draft a valid conversion-rules file from the real F/T property trees | `--output <f>`, `--surface dfm\|pas` |
 | [`convert-validate`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-validate) `--rules <f>` | Validate a conversion-rules file against the real property trees | `--print-parsed` |
 | [`convert-apply`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-apply) `--unit F.pas --rules <f> --db <db>` | Rewrite all 5 conversion surfaces (dry-run unless `--apply`) | `--only Name1,Name2`, `--no-backup`, `--castlib <f>`, `--no-warn-unlinked` (keep the json unlinked count, drop the per-(source type, property) warnings), `--format json` (schema `apply/1`) |
-| `glyph-vacuum --root <dir> --out <dir>` | Measure every streamed graphic (Picture.Data / Glyph.Data) under the roots before writing a glyph rule: decodes each blob (binary `.dfm` converted in memory), pairs it with its count property, and writes `instances.tsv`, `classes.tsv`, `skipped.tsv`, the images and a `gallery.html` | `--root` (repeatable), `--append` (merge a rescan; idempotent), `--db` (qualify class units and runtime refs) |
+| `glyph-vacuum --root <dir> --output <dir>` | Measure every streamed graphic (Picture.Data / Glyph.Data) under the roots before writing a glyph rule: decodes each blob (binary `.dfm` converted in memory), pairs it with its count property, and writes `instances.tsv`, `classes.tsv`, `skipped.tsv`, the images and a `gallery.html` | `--root` (repeatable), `--append` (merge a rescan; idempotent), `--db` (qualify class units and runtime refs) |
 
 #### Graphs
 
@@ -830,8 +830,8 @@ verify, and `lint --json` carries a `metric` field on these findings.
 | [`deps-report`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/deps-report) `--db <db>` | Third-party dependency rollup | `--edges`, `--format text\|json\|csv` |
 | `uses-report --output <f.csv>` | Uses graph as CSV | `--depth N`, `--include-external`, `--all-sources` (every unit across every `--db`, not just the first DB's files; `deps-report` takes it too), `--name <pattern>` (substring on the unit stem; a pattern matching NO source unit exits 2 with `ERROR: uses-report: no index passed contains a source unit named ...` and writes nothing, the same refusal `outline` gives an unindexed file) |
 | `find-deadcode` | Symbols with no callers outside their own unit | `--kind`, `--include-private` |
-| `forms-csv --project <dproj> --db <db>` | Test-helper navigation CSV, one row per form | `--out <f.csv>`, `--root <TfrmMAIN>` |
-| `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const` |
+| `forms-csv --project <dproj> --db <db>` | Test-helper navigation CSV, one row per form | `--output <f.csv>`, `--root <TfrmMAIN>` |
+| `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const`, `--output <file>` |
 | `export obsidian --db <db> --output-dir <dir>` | Export the index into an Obsidian vault | `--open` |
 | [`diff`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) `--db <old> --db <new>` | Diff two index snapshots | `--json` |
 | [`ask`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Diagrams-and-Charts) (charts release) | Render one of the diagram questions for the symbol under a caret position as a clickable SVG/PNG/PDF bundle -- see [Diagrams and charts](#diagrams-and-charts) | question id, caret position, depth |
