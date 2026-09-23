@@ -22,9 +22,9 @@
 
   ORDER. The manual is ordered as a manual -- getting started, then the IDE, then
   the CLI, then reference -- not as the wiki's flat alphabetical page set.
-  Grouping comes from docs\wiki-featuremap.tsv's Surface column, which is derived
-  from the product, so a new feature lands in the right part without editing this
-  script.
+  Grouping comes from the section of docs\wiki\Feature-Index.md that links each
+  page (tracked, so a fresh clone builds the same manual), so a new feature lands
+  in the right part without editing this script.
 
   STALENESS. This output goes out of date the moment a wiki page changes, and
   nobody will remember to regenerate it. tests\autotest\run_manual_freshness_guard.ps1
@@ -200,23 +200,101 @@ function ConvertFrom-Markdown([string]$Md, [string]$PageName) {
       continue
     }
 
-    # lists
-    if ($line -match '^(\s*)([-*+]|\d+\.)\s+(.*)$') {
-      $marker = $Matches[2]
-      $tag    = if ($marker -match '^\d') { 'ol' } else { 'ul' }
+    # lists. An item owns every line after its marker line that is indented
+    # under it: a wrapped continuation line joins the item's text, and after a
+    # blank line an indented fence or paragraph is a further block of the SAME
+    # item. Without this each wrapped line closed the list, became a paragraph
+    # of its own, and the next item opened a new list -- numbered from 1 again.
+    $lm = [regex]::Match($line, '^(\s*)([-*+]|(\d+)\.)\s+(.*)$')
+    if ($lm.Success) {
+      # Take everything from the match object: a later -match would overwrite
+      # $Matches, which is how every ordered-list item once rendered empty.
+      $itemIndent    = $lm.Groups[1].Length
+      $contentIndent = $lm.Groups[4].Index
+      $tag = if ($lm.Groups[3].Success) { 'ol' } else { 'ul' }
       if ($listStack.Count -eq 0 -or $listStack[$listStack.Count-1] -ne $tag) {
         CloseLists $sb $listStack
-        [void]$sb.AppendLine("<$tag>")
+        $start = if ($tag -eq 'ol' -and [int]$lm.Groups[3].Value -ne 1) { " start=""$([int]$lm.Groups[3].Value)""" } else { '' }
+        [void]$sb.AppendLine("<$tag$start>")
         $listStack.Add($tag)
       }
-      [void]$sb.AppendLine("<li>$(ConvertTo-HtmlText $Matches[3])</li>")
+      $text  = New-Object System.Collections.Generic.List[string]
+      $text.Add($lm.Groups[4].Value)
+      # $inner: further paragraphs INSIDE the <li>. $after: a fenced block and
+      # anything following it, emitted AFTER the list is closed and indented to
+      # sit under the item. Word's HTML import numbers every line of a <pre>
+      # nested in an <li> as a list item of its own (item 2 of a 3-item list
+      # came out as items 2..10), so a fence closes the list; the next item
+      # reopens it with start="N" from its own marker, keeping the numbering.
+      $inner = New-Object System.Text.StringBuilder
+      $after = New-Object System.Text.StringBuilder
       $i++
+      while ($i -lt $lines.Count) {
+        $next = $lines[$i]
+        if ([string]::IsNullOrWhiteSpace($next)) {
+          # A blank line ends the item unless the next content is indented
+          # to the item's content column.
+          $j = $i
+          while ($j -lt $lines.Count -and [string]::IsNullOrWhiteSpace($lines[$j])) { $j++ }
+          if ($j -ge $lines.Count) { break }
+          $nextIndent = $lines[$j].Length - $lines[$j].TrimStart().Length
+          if ($nextIndent -lt $contentIndent) { break }
+          if ($text.Count -gt 0) {
+            $para = ConvertTo-HtmlText ($text -join ' ')
+            if ($after.Length -eq 0) { [void]$inner.AppendLine("<p>$para</p>") }
+            else { [void]$after.AppendLine("<p style=""margin-left:36pt"">$para</p>") }
+            $text.Clear()
+          }
+          $i = $j
+          continue
+        }
+        $nextIndent = $next.Length - $next.TrimStart().Length
+        if ($next -match '^\s*```' -and $nextIndent -ge $contentIndent) {
+          if ($text.Count -gt 0) {
+            $para = ConvertTo-HtmlText ($text -join ' ')
+            if ($after.Length -eq 0) { [void]$inner.AppendLine("<p>$para</p>") }
+            else { [void]$after.AppendLine("<p style=""margin-left:36pt"">$para</p>") }
+            $text.Clear()
+          }
+          $i++
+          [void]$after.AppendLine('<pre style="margin-left:36pt"><code>')
+          while ($i -lt $lines.Count -and $lines[$i] -notmatch '^\s*```') {
+            $codeLine = $lines[$i]
+            $strip = [Math]::Min($contentIndent, $codeLine.Length - $codeLine.TrimStart().Length)
+            [void]$after.AppendLine($codeLine.Substring($strip).Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;'))
+            $i++
+          }
+          [void]$after.AppendLine('</code></pre>')
+          $i++
+          continue
+        }
+        # A new marker, or anything not indented under this item, ends it.
+        if ($next -match '^\s*([-*+]|\d+\.)\s' -or $nextIndent -le $itemIndent) { break }
+        $text.Add($next.Trim())
+        $i++
+      }
+      if ($text.Count -gt 0) {
+        $para = ConvertTo-HtmlText ($text -join ' ')
+        if ($after.Length -gt 0) { [void]$after.AppendLine("<p style=""margin-left:36pt"">$para</p>") }
+        elseif ($inner.Length -gt 0) { [void]$inner.AppendLine("<p>$para</p>") }
+        else { [void]$inner.Append($para) }
+      }
+      [void]$sb.AppendLine("<li>$($inner.ToString().TrimEnd())</li>")
+      if ($after.Length -gt 0) {
+        CloseLists $sb $listStack
+        [void]$sb.Append($after.ToString())
+      }
       continue
     }
 
     if ([string]::IsNullOrWhiteSpace($line)) {
-      CloseLists $sb $listStack
-      $i++
+      # A blank line between two items of one list does not end the list.
+      $j = $i
+      while ($j -lt $lines.Count -and [string]::IsNullOrWhiteSpace($lines[$j])) { $j++ }
+      if ($listStack.Count -eq 0 -or $j -ge $lines.Count -or $lines[$j] -notmatch '^\s*([-*+]|\d+\.)\s') {
+        CloseLists $sb $listStack
+      }
+      $i = $j
       continue
     }
 
@@ -246,16 +324,37 @@ $Front = @('Home', 'Installation', 'Maintenance', 'Features')
 $IdeIntro = @('IDE-Menu-Reference', 'About-and-Status')
 $Back  = @('Rules', 'LSP', 'Feature-Index')
 
-# Everything else is grouped by the feature map's Surface column, which is
-# derived from the product rather than maintained by hand here.
+# Everything else is grouped by the section of the TRACKED wiki page
+# Feature-Index.md that first links to it: a page under "Main menu",
+# "Right-click menus" or "Tool windows" goes to the IDE part, a page under
+# "CLI verbs" to the command-line part. This used to come from
+# docs\wiki-featuremap.tsv, which is gitignored and has no generator in the
+# repository: a fresh clone silently built a manual with no Part II or III, and
+# the copy that did exist had already fallen behind the wiki. Feature-Index is
+# published, reviewed and kept current with the pages, so the order is now a
+# function of tracked inputs only.
 $surfaceOf = @{}
-$fmPath = Join-Path $Repo 'docs\wiki-featuremap.tsv'
-if (Test-Path -LiteralPath $fmPath) {
-  $rows = Get-Content -LiteralPath $fmPath | Select-Object -Skip 1
-  foreach ($r in $rows) {
-    $c = @($r -split "`t" | ForEach-Object { $_.Trim('"') })
-    if ($c.Count -ge 7 -and $c[6]) { $surfaceOf[$c[6]] = $c[1] }
+$fiPath = Join-Path $WikiDir 'Feature-Index.md'
+if (Test-Path -LiteralPath $fiPath) {
+  $section = ''
+  foreach ($r in (Get-Content -LiteralPath $fiPath)) {
+    if ($r -match '^##\s+(.*)$') { $section = $Matches[1].Trim(); continue }
+    $surface = switch -Regex ($section) {
+      '^(Main menu|Right-click menus|Tool windows)$' { 'IDE'; break }
+      '^CLI verbs$'                                   { 'CLI'; break }
+      default                                         { '' }
+    }
+    if (-not $surface) { continue }
+    foreach ($lk in [regex]::Matches($r, '\]\(([^)#/:]+)(#[^)]*)?\)')) {
+      $pg = $lk.Groups[1].Value
+      if (-not $surfaceOf.ContainsKey($pg)) { $surfaceOf[$pg] = $surface }
+    }
   }
+}
+if ($surfaceOf.Count -eq 0) {
+  # Loud, not fatal: the manual is still complete, but every feature page lands
+  # in the Reference part and the reader loses the IDE / CLI split.
+  Write-Warning "no page grouping read from $fiPath -- every feature page will be filed under Reference. Check the page's '## Main menu' / '## CLI verbs' sections."
 }
 
 $allPages = @(Get-ChildItem -LiteralPath $WikiDir -Filter *.md -File | Select-Object -ExpandProperty BaseName)
