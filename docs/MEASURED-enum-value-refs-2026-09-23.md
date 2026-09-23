@@ -887,3 +887,439 @@ blocks, but do NOT treat 44 as a ceiling: 44 bounds channel 1 only, and a
 channel-2 block can legitimately push the total above it. A count above 44 is
 therefore NOT by itself a regression; confirm which channel produced the excess
 (a ` ?` count that moved 0 -> N is channel 2) before reading it as one.
+
+## Task 7 -- corpus re-resolved under 1.6.0-alpha; projects only (libraries owner-gated)
+
+**Engine:** `C:\Projects\Delphi-RAG-lint-wt\enum-refs\third_party\dll-win64\drag-lint.exe`
+(product 1.16.0-alpha, resolver 1.6.0-alpha). All paths absolute; PowerShell only.
+
+**TRAP, stated first.** The 33 project DBs are now resolved at `r=1.6.0-alpha;schema=23`
+while the MAIN tree's deployed engine is still 1.5.1-alpha. Any `index` run issued from
+the main tree before merge + redeploy sees a resolver-version mismatch, re-derives every
+edge with the OLD resolver, and DROPS every enum-value binding recorded below.
+
+### Scope actually run (owner ruling: "projects now, libraries after merge")
+
+The manifest (`third_party\dll-win64\drag-lint.json`) has **34** sections, of which
+**33** are non-`Library`. The brief said 35; the section list was read from the manifest,
+not copied, and 33 is the number passed to `--only`.
+
+| Run | Sections | Mode | Exit | Elapsed |
+|---|---|---|---|---|
+| A (all non-Library) | 33 | `index --all --resolve-only --jobs 2` | 0, `parallel build: 33/33 sections OK` | 294 s |
+| B (attribution re-run) | ORM3-Micronite2027 | `--jobs 1`, merged stdout+stderr | 0 | 155 s |
+| C (attribution re-run) | ORM3-MicroniteMW1Service | `--jobs 1`, merged | 0 | 111 s |
+| D (attribution re-run) | the other 31 | `--jobs 1`, merged | 0 | 278 s |
+
+Runs B-D exist because `--jobs 2` writes the stage lines to **stderr** and the section
+banners to **stdout**, so with two workers no `enum-values:` line can be attributed to a
+section from the logs. Re-resolving is idempotent; B-D reproduced run A's counters exactly.
+
+**No section reported a lock.** Four main-tree `serve` daemons were live throughout
+(PIDs 13712 CLIENT, 22224 SERVER, 18400 library-Win64, 20032 SQL, all
+`C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`, started 2026-09-22
+20:59). **Nothing was killed.** They did not block the writes.
+
+**Library sections: NOT RUN -- pending owner-gated pass, sequenced after merge + redeploy.**
+`library-Win64.sqlite` and `library-Win32.sqlite` both still read
+`resolver_fingerprint = r=1.5.1-alpha;schema=23`. The commands a later operator runs, from
+the MAIN tree after the redeploy, one platform per run, blocking and logged:
+
+```
+<main>\third_party\dll-win64\drag-lint.exe index --all --resolve-only --jobs 2 --only Library --platform win64
+<main>\third_party\dll-win64\drag-lint.exe index --all --resolve-only --jobs 2 --only Library --platform win32
+```
+
+### Evidence that each section re-resolved
+
+The brief's expected line `resolver: edges were derived by 1.5.1-alpha, this build is
+1.6.0-alpha` is **not** printed by the calls stage (Task 5 established it as a read-side
+advisory on store OPEN). The three facts that were checked instead, on every section:
+
+1. `Resolver changed since this DB was resolved (r=1.5.1-alpha;schema=23 ->
+   r=1.6.0-alpha;schema=23): re-deriving every edge.`
+2. a WHOLE-DB calls pass (`resolve: calls starting WHOLE-DB pass over all N indexed file(s)`);
+3. an `enum-values:` line, and afterwards
+   `schema_meta.resolver_fingerprint = r=1.6.0-alpha;schema=23`.
+
+Fingerprint sweep over the 33 project DBs: **33 of 33** read `r=1.6.0-alpha;schema=23`,
+0 read anything else.
+
+### Per-section counters (from the serial merged logs)
+
+`A` = bare reads bound / bare-read candidates (Shape A). `B` = qualified bound (Shape B).
+`NV/AM/SH` = declined not-visible / ambiguous / shadowed. `C(D)` = duplicate groups
+collapsed (decisive). `SD` = unit-level shadow decls. `W` = files WITHHELD.
+
+| Section | A bound | A cand | B | NV | AM | SH | C(D) | SD | W |
+|---|---|---|---|---|---|---|---|---|---|
+| ORM3-Micronite2027 (CLIENT) | 5983 | 6036 | 0 | 53 | 0 | 0 | 0 (0) | 1141 | 1 |
+| ORM3-MicroniteMW1Service (SERVER) | 1970 | 3454 | 0 | 1484 | 0 | 0 | 0 (0) | 814 | 0 |
+| ORM3-Interfaces | 84 | 84 | 0 | 0 | 0 | 0 | 0 (0) | 3 | 0 |
+| ORM3-TestMicroniteObjects | 902 | 902 | 0 | 0 | 0 | 0 | 0 (0) | 213 | 0 |
+| ORM3-MicroniteTests | 584 | 590 | 67 | 0 | 3 | 3 | 0 (0) | 331 | 0 |
+| ORM3-TestCachedUpdates | 0 | 0 | 0 | 0 | 0 | 0 | 0 (0) | 0 | 0 |
+| ORM3-PdfOcrImportTests | 64 | 70 | 67 | 0 | 3 | 3 | 0 (0) | 189 | 0 |
+| ORM3-TEST_uSetupDefaultsFrm | 608 | 608 | 0 | 0 | 0 | 0 | 0 (0) | 713 | 1 |
+| SQL | 0 | 0 | 0 | 0 | 0 | 0 | 0 (0) | 0 | 0 |
+| Loader | 9 | 9 | 0 | 0 | 0 | 0 | 0 (0) | 1566 | 0 |
+| TableTools-TableTools370P | 48 | 48 | 0 | 0 | 0 | 0 | 0 (0) | 661 | 0 |
+| TableTools-MemTableFieldWizard | 0 | 0 | 0 | 0 | 0 | 0 | 0 (0) | 3 | 0 |
+| DragLint-Cli (MAIN tree self-index) | 835 | 835 | 0 | 0 | 0 | 0 | 0 (0) | 403 | 14 |
+| DragLint-Wizard | 333 | 333 | 0 | 0 | 0 | 0 | 0 (0) | 254 | 5 |
+| DragLint-Tests | 3 | 3 | 0 | 0 | 0 | 0 | 0 (0) | 17 | 3 |
+| DragLint-CorpusScan | 5 | 5 | 0 | 0 | 0 | 0 | 0 (0) | 18 | 0 |
+| DragLintGraph-Viewer | 227 | 227 | 0 | 0 | 0 | 0 | 0 (0) | 38 | 0 |
+| DragLintGraph-Pkg | 121 | 121 | 0 | 0 | 0 | 0 | 0 (0) | 22 | 0 |
+| DragLintGraph-DbPkg | 54 | 54 | 0 | 0 | 0 | 0 | 0 (0) | 1 | 0 |
+| DragLintGraph-Dcl | 121 | 121 | 0 | 0 | 0 | 0 | 0 (0) | 19 | 0 |
+| DragLintGraph-Tests | 182 | 182 | 0 | 0 | 0 | 0 | 0 (0) | 24 | 0 |
+| OCRPDF-App | 0 | 0 | 0 | 0 | 0 | 0 | 0 (0) | 0 | 0 |
+| OCRPDF-TestPDFFragments | 0 | 0 | 0 | 0 | 0 | 0 | 0 (0) | 6 | 0 |
+| DataCopy-App | 169 | 169 | 0 | 0 | 0 | 0 | 0 (0) | 186 | 0 |
+| DataCopy-SortTest | 0 | 0 | 0 | 0 | 0 | 0 | 0 (0) | 1 | 0 |
+| YADF | 128 | 128 | 0 | 0 | 0 | 0 | 0 (0) | 11 | 0 |
+| YADFOT | 132 | 132 | 0 | 0 | 0 | 0 | 0 (0) | 22 | 1 |
+| YADFSetup | 137 | 137 | 0 | 0 | 0 | 0 | 0 (0) | 12 | 1 |
+| YADF-GuardTest | 128 | 128 | 0 | 0 | 0 | 0 | 0 (0) | 9 | 1 |
+| YADF-OptionsTest | 65 | 65 | 0 | 0 | 0 | 0 | 0 (0) | 1 | 0 |
+| DataCopy-Tests | 168 | 168 | 0 | 0 | 0 | 0 | 0 (0) | 231 | 8 |
+| DragLint-ConvRulesEditor | 196 | 196 | 0 | 0 | 0 | 0 | 0 (0) | 61 | 3 |
+| DragLint-ConvRulesTests | 187 | 187 | 0 | 0 | 0 | 0 | 0 (0) | 27 | 3 |
+
+Counts derived from that table only: 33 rows; the `W` column is non-zero on **10** rows
+and sums to **41** withheld files; the `C(D)` column is `0 (0)` on all 33 rows; `AM` and
+`SH` are non-zero on exactly **2** rows (ORM3-MicroniteTests and ORM3-PdfOcrImportTests,
+3 and 3 each); `B` is non-zero on the same 2 rows (67 each); `NV` is non-zero on exactly
+**2** rows (CLIENT 53, SERVER 1484).
+
+**`DragLint-Cli` is the MAIN tree's self-index** (`C:\Projects\Delphi-RAG-lint\src\cli\
+_D-RAG\drag-lint.sqlite`), not the worktree self-index Tasks 1/4/5 measured
+(`...\enum-refs\src\cli\_D-RAG\drag-lint.sqlite`). The worktree self-index is not a
+manifest section and was NOT touched by this run; its Task 5 numbers stand unchanged
+(M3 1325 + 9; M4 11626 / 11115 / 194 / 2751 / 0, re-read after this run and identical).
+The two must not be conflated: 835 of 835 with 14 withheld is a different database.
+
+**`enum-shadow-set: WARNING -- the unit-level const/var shadow set is EMPTY` fired on 3
+sections** -- ORM3-TestCachedUpdates, SQL, OCRPDF-App. Each of those three has `A cand = 0`
+in the table above, so no binding was made under the fail-open and the warning is inert
+on this run. It is still a warning worth watching on a section that does bind.
+
+### WITHHELD files -- read this BEFORE any bind count
+
+`ClearCallEdges` NULLs `refs.symbol_id` unconditionally, while the enum stream is narrowed
+by the stale predicate and does not re-derive those refs. So a section's bind count can be
+short because it is STALE, not because the resolver declined. Per section, the `W` column
+above. On CLIENT the effect is exactly measurable:
+
+| CLIENT accounting | value |
+|---|---|
+| candidate `read` universe at Task 1 (4ccd1779) | 6064 |
+| bare-read candidates the stage actually saw | 6036 |
+| difference -- refs inside the 1 WITHHELD file | 28 |
+| bound | 5983 |
+| declined (not-visible) | 53 |
+
+5983 + 53 + 28 = 6064, so every Task-1 candidate is accounted for.
+
+The withheld file is `C:\Projects\DB\ORM3\CLIENT\uPipeClientConnection.pas`.
+
+**The withheld predicate is mtime-based and misses content-only drift.** A SHA256 sweep of
+every indexed file against `files.sha256`:
+
+| DB | files rows | SHA mismatches | reported WITHHELD |
+|---|---|---|---|
+| CLIENT | 625 | 3 | 1 |
+| SERVER | 470 | 2 | 0 |
+
+Of CLIENT's 3, only `uPipeClientConnection.pas` also has a differing `mtime_unix`
+(1789379662 stored vs 1790142302 on disk) and only that one was withheld.
+`uMain.ViewModel.pas` and `SOFTWID.PAS` have byte-identical mtimes and different content,
+and were silently re-resolved from stale parses. SERVER's `uMicFactory.pas` differs by one
+second of mtime and was not withheld either. 622 of CLIENT's 625 files hash-match, so the
+stored `sha256` is the plain file SHA256 and the mismatches are real content drift.
+
+### M1 -- `cmdDelta` / `cmdTableLoad` (the reproducing query)
+
+CLIENT:
+
+| name_text | kind | bound | count |
+|---|---|---|---|
+| cmdDelta | read | 1 | 38 |
+| cmdTableLoad | read | 1 | 42 |
+
+SERVER:
+
+| name_text | kind | bound | count |
+|---|---|---|---|
+| cmdDelta | read | 1 | 2 |
+| cmdTableLoad | read | 1 | 2 |
+
+Both tables have **4 rows in total and no `bound = 0` row**, so there is no `bound = 0`
+row to explain by rule. Baseline at 4ccd1779 was the same four (name, kind, count) triples
+with `bound = 0`; only the `bound` column moved.
+
+### Candidate universe after the re-resolve
+
+| DB | kind | bound | rows |
+|---|---|---|---|
+| CLIENT | member-access | 0 | 8 |
+| CLIENT | read | 0 | 81 |
+| CLIENT | read | 1 | 5983 |
+| SERVER | member-access | 0 | 4 |
+| SERVER | read | 0 | 1484 |
+| SERVER | read | 1 | 1970 |
+
+CLIENT has no bound `member-access` row and SERVER has none either: **neither CLIENT nor
+SERVER binds a single qualified (Shape B) reference.**
+
+### Every `bound = 0` read explained, by rule
+
+**CLIENT -- 81 unbound reads.** 28 are in the WITHHELD file and were never offered to the
+resolver (not a decline). The remaining 53 are the stage's `not-visible` count, and all 53
+are R1 declines that a naive name join would have got WRONG:
+
+| declining site | name(s) | occurrences | why R1 is right |
+|---|---|---|---|
+| `uJobList.ViewModel.pas` | 11 `LotStatus_*` | 17 | reads the unit's OWN `const LotStatus_*`; it has no `uses` edge to `iFOLDERS` at all (queried `unit_uses`: 0 rows matching `%folder%`) |
+| `uIPCHART.PAS` | fM1..fM4 | 16 | the only `enum_value` twins are `INSPFLDR.Messages.TFLDRMessageID.fm1..fm4`, a different unit |
+| 13 CLIENT/COMMON units | mtError, mtWarning | 20 | the only `enum_value` twins are `iLoggingServiceP.TMessageType.*`; these sites are reading VCL `TMsgDlgType` |
+
+17 + 16 + 20 = 53, and 53 + 28 = 81, so the table accounts for every unbound read.
+
+**SERVER -- 1484 unbound reads, 7 distinct names:**
+
+| name | occurrences | files |
+|---|---|---|
+| CmdNextID | 1463 | 133 |
+| mtWarning | 4 | 2 |
+| fM4 | 4 | 1 |
+| fM3 | 4 | 1 |
+| fM2 | 4 | 1 |
+| fM1 | 4 | 1 |
+| mtError | 1 | 1 |
+
+Those seven rows sum to 1484. `CmdNextID` alone is 1463 of them and is the single most
+load-bearing decline on the whole corpus: it is declared as a **field**
+(`TDataService_<TABLE>_SERVER.CmdNextID`) in well over 100 server units, and exactly once
+as an `enum_value` (`Pipes.Protocol.TCommandID.cmdNextID`). Of 1598 refs to that name,
+**2 bound** -- both in `Pipes.Commands.pas` and `Pipes.Protocol.pas`, the two units that
+genuinely see `TCommandID` -- and 1596 did not. R1 prevented ~1463 wrong bindings here.
+
+### The `LotStatus_*` accounting (CLIENT), escaped query
+
+`LIKE 'LotStatus\_%' ESCAPE '\'` (the plan's bare `_` is a single-character wildcard and
+also sweeps in `LotStatusCodes`, `LotStatusColors`, `LOTSTATUSCODE`,
+`LotStatusCodeDescription`, which are not enum values).
+
+| name_text | uJobList.ViewModel.pas (bound) | iFOLDERS.PAS (bound) |
+|---|---|---|
+| LotStatus_CustAcWithCond | 2 (0) | 3 (1) |
+| LotStatus_CustAccept | 2 (0) | 3 (1) |
+| LotStatus_CustReject | 2 (0) | 3 (1) |
+| LotStatus_InspAccept | 1 (0) | 3 (1) |
+| LotStatus_InspDone | 1 (0) | 3 (1) |
+| LotStatus_InspInProgress | 1 (0) | 3 (1) |
+| LotStatus_InspNotStarted | 1 (0) | 6 (1) |
+| LotStatus_InspReject | 1 (0) | 3 (1) |
+| LotStatus_MRBAcNotify | 2 (0) | 3 (1) |
+| LotStatus_MRBAcSortRework | 2 (0) | 3 (1) |
+| LotStatus_MRBReject | 2 (0) | 3 (1) |
+| LotStatus_Other | -- | 2 (1) |
+
+23 rows; **12** distinct names (Task 1's 12, not the plan's 11); 11 names appear in
+`uJobList.ViewModel.pas` for 17 occurrences, all `bound = 0`; 12 names appear in
+`iFOLDERS.PAS` for 38 occurrences, all `bound = 1`; 17 + 38 = 55, matching Task 1's 55.
+
+`symbols` confirms the shape: 11 of the 12 names are declared BOTH as a `const` in
+`uJobList.ViewModel` and as an `enum_value` in `iFOLDERS.LotStatusCodes`; `LotStatus_Other`
+has no `const` twin. The unit that sees only the enum binds; the unit that owns the const
+declines. **That is the plan's predicted outcome.**
+
+**But it is decided by R1, not R3, and that matters.** The stage line reports
+`shadowed 0` for CLIENT. `uJobList.ViewModel.pas` has no `uses` edge to `iFOLDERS`, so R1
+(visibility) rejects the candidate before R3 (shadowing) is ever consulted. The 12
+`LotStatus_*` collisions therefore exercise **R1**, and R3 gets no exercise on CLIENT at all.
+
+### What R1/R2/R3 actually got exercised by, corpus-wide
+
+Reading only the per-section table above: `NV` is non-zero on 2 sections (1537 declines
+total), `AM` and `SH` are non-zero on 2 sections (3 + 3 each). So:
+
+* **R1 is heavily and decisively exercised** -- 1537 declines, spot-checked correct in
+  three independent shapes (a local const, a same-named field in 133 units, a VCL enum).
+  This is the discriminating evidence the branch needed: a naive name join would have
+  written 1537 wrong bindings.
+* **R2 and R3 are exercised only by ORM3-MicroniteTests and ORM3-PdfOcrImportTests**, at
+  3 ambiguous + 3 shadowed each, against the vendored DUnitX sources both sections share.
+  That is thin. The branch's confidence in R2/R3 still rests mostly on the guard fixture.
+* The declines are NOT zero, so the "zero declines would discriminate nothing" concern
+  does not apply to R1. It does still apply to R2/R3.
+
+### Does the corpus exercise rung 3c's TYPE arm?
+
+**Yes.** CLIENT and SERVER bind 0 qualified refs, so they do not. The 67 qualified
+bindings in ORM3-MicroniteTests (and the same 67 in ORM3-PdfOcrImportTests) were read back
+with their source lines:
+
+| receiver kind | count | examples |
+|---|---|---|
+| TYPE receiver | 65 | `TTestResultType.Pass`, `TLogLevel.Error`, `TDUnitXExitBehavior.Continue`, `TDunitXConsoleMode.Verbose` |
+| UNIT receiver | 2 | `DUnitX.Types.exExact`, `DUnitX.Types.exDescendant` (`DUnitX.TestFramework.pas:122-123`) |
+
+65 + 2 = 67. The TYPE arm is exercised 65 times per section on real code -- the opposite
+of the self-index, where all 9 qualified bindings carried a UNIT receiver.
+
+### R5 -- scoped enums (`{$SCOPEDENUMS ON}`)
+
+Measured across all 33 project DBs: for every bound **bare** read, the declaring
+`enum_value`'s file was text-scanned and the last `{$SCOPEDENUMS ON|OFF}` before the
+declaration line taken as the state.
+
+| metric | value |
+|---|---|
+| distinct enum values with a bound bare read | 1758 |
+| ... declared under `{$SCOPEDENUMS ON}` | **0** |
+| bare reads bound to a scoped value | **0** |
+| bare reads bound to an unscoped value | 13443 |
+
+**Positive control**, because a zero is a claim about the detector first: of 1185 distinct
+indexed `.pas` files across the 33 project DBs, exactly **1** contains
+`{$SCOPEDENUMS ON}` -- `C:\Projects\DUnitX\Source\DUnitX.TestFramework.pas`, which toggles
+ON at line 100, OFF at 106, ON again at 244. `TLogLevel` (102-104), `TTestResultType`
+(246-251), `TDUnitXExitBehavior` (484-485) and `TDunitXConsoleMode` (489-491) all sit
+inside an ON region. Every one of the 65 refs bound to those 14 values is a
+`member-access` with a non-empty receiver; the 4 bare `read` refs naming those values are
+`bound = 0`. So the detector can see the one scoped file in the corpus, and the answer is
+still zero.
+
+**No `docs\INBOX-enum-binding-scoped-enums.md` was filed**: the exposure measured 0 on the
+whole project corpus, which is the opposite of non-trivial. The hazard is real in the
+abstract (the extractor still does not record scopedness) and would need re-measuring
+against the LIBRARY indexes, where RTL/VCL scoped enums are common.
+
+### R7 -- reads inside a routine that contains a `with` block (CLIENT)
+
+Candidate reads joined to `refs.enclosing_symbol_id`, the enclosing symbol's
+`impl_start_line..impl_end_line` scanned for a `with ` token.
+
+| population | bound | declined | total |
+|---|---|---|---|
+| enclosing routine contains `with ` | 178 | 9 | 187 |
+| enclosing routine does not | 5771 | 72 | 5843 |
+
+187 + 5843 = 6030; the candidate universe is 6064, so 34 candidate reads have no enclosing
+symbol and are in neither row. **178 bound reads sit inside a `with`-bearing routine** and
+could in principle be naming a `with` receiver's member rather than the enum value.
+
+Top ten enclosing routines by candidate-read count:
+
+| routine | candidate reads |
+|---|---|
+| uAutoTest.RunAutoTest | 24 |
+| uINSPRSLT.TmcINSPRSLT.ResultAdvisory | 14 |
+| uJobList.ViewModel.TJobListViewModel.LoadAll | 11 |
+| uJobList.ViewModel.TJobListViewModel.LoadAllAsync | 10 |
+| Blueprint4.TfrmBlueprint4.FormShow | 9 |
+| uSetupDefaultsFrm.TdlgSetupDefaults.PopulateFromRec | 8 |
+| Blueprint4.ViewModel.TBlueprint_ViewModel.ImportLK | 8 |
+| uMain.ViewModel.TMainViewModel.LoadFolders | 6 |
+| MSCTYPES.DimSpec_StrReprf | 6 |
+| z19Slct.TZ19slctFrm.ApplySelections | 5 |
+
+Filed for the owner as `docs\INBOX-enum-binding-inside-with.md` (untracked). **No rule was
+added -- R7 is a stated non-goal of this branch.**
+
+### Rule 0 -- duplicate `enum_value` groups (owner ruling 4, the audit)
+
+`collapsed 0 (decisive 0)` on **all 33** sections (the `C(D)` column above). Independently,
+the duplicate-group query returns `dup_groups = 0` on **all 33** project DBs, so there was
+nothing for rule 0 to collapse and the counters could not have been anything but zero.
+**The collapse was decisive nowhere. That is the recorded answer, not a disappointment** --
+it matches the prior finding that rule 0 is structurally inert, and the only DBs that ever
+showed duplicate groups (library-Win64/Win32, 6 groups each at Task 1) are exactly the two
+not re-resolved here.
+
+### M4 -- no collateral
+
+| DB | point | edges | accesses | proven | not_proven | not_computed |
+|---|---|---|---|---|---|---|
+| CLIENT | before | 20409 | 9311 | 2896 | 7254 | 0 |
+| CLIENT | after | 20343 | 9281 | 2892 | 7258 | 0 |
+| SERVER | before | 25793 | 14836 | 2818 | 5284 | 0 |
+| SERVER | after | 25793 | 14836 | 2818 | 5284 | 0 |
+| worktree self-index | before | 11626 | 11115 | 194 | 2751 | 0 |
+| worktree self-index | after | 11626 | 11115 | 194 | 2751 | 0 |
+
+**SERVER and the worktree self-index are identical column for column. CLIENT is not, and
+it is not rounded away here.** CLIENT lost 66 `call_edges`, 30 `member_accesses`, and moved
+4 routines from `proven` to `not_proven`.
+
+The cause is the WITHHELD file, and it is the opposite of what the log line claims:
+
+| CLIENT file | call refs | member-access refs | call_edges owned | member_accesses owned |
+|---|---|---|---|---|
+| uMain.ViewModel.pas (sha drift, NOT withheld) | 106 | 111 | 34 | 32 |
+| uPipeClientConnection.pas (WITHHELD) | 161 | 42 | **0** | **0** |
+
+The withheld file now owns **zero** edges and **zero** accesses despite 161 call refs, and
+66 - 0 and 30 - 0 are exactly CLIENT's M4 deltas. The log says withheld files' "call edges
+and receivers were left alone"; they were in fact CLEARED and then not re-derived. SERVER,
+which withheld nothing, moved nothing -- which is the control showing the resolver bump
+itself is collateral-free.
+
+### Invariants and the `write` negative control -- all 33 DBs
+
+Swept over every project DB:
+
+| check | result |
+|---|---|
+| `call_edges` whose target is an `enum_value` | 0 on 33 of 33 |
+| `member_accesses` whose member is an `enum_value` | 0 on 33 of 33 |
+| `write` refs naming an enum value, `bound` | 0 on 33 of 33 |
+
+`write` totals are non-zero on two DBs only -- CLIENT 12 (Task 1 measured 12) and SERVER
+145 -- and bound is 0 on both, so the negative control holds where it can actually fail.
+
+### R-B autodoc churn, re-measured on CLIENT (Task 6 could not)
+
+`document --qname <v> --db <CLIENT>`, **DRY RUN, never `--apply`**, same CLIENT DB, two
+engines differing only in the value arm: BEFORE
+`C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`, AFTER the worktree
+engine. The BEFORE engine prints a one-line read-side resolver advisory on a 1.6.0-stamped
+DB; that line is stripped before comparison (it was the ENTIRE diff on the first two
+samples and would otherwise have been read as churn).
+
+**Channel 1 -- re-windowing.** CLIENT has 592 `enum_value` symbols, 224 with at least one
+bound read, and **45** with more than 5 distinct enclosing callers, so 45 is the upper
+bound on blocks whose rendered window can move. Confirmed on real blocks: `mtError`,
+`mtWarning`, `mtInfo` and `cmdLoad` each render a DIFFERENT first five while the
+`(+N more)` total is unchanged (`+625`, `+76`, `+412`, `+133` before and after).
+
+**Channel 2 -- marker appearance.** An over-approximating SQL query (no reach filter, so it
+can only over-count) predicted **18** partially bound values. Running the A/B on all 18:
+
+| outcome | count |
+|---|---|
+| rendered differently at all | 18 of 18 |
+| gained a ` ?` marker (0 -> N) | **3 of 18** |
+
+The 3 are `Pipes.Protocol.TCommandID.cmdGoodbye`, `...rspDenied` and `...cmdHello`, each
+0 -> 1. **This is the first non-zero measurement of channel 2 anywhere** -- Task 6 measured
+0 on the self-index and predicted ORM3 would be non-zero. The surviving unverified reader
+in all three cases lives in `uPipeClientConnection.pas`, the WITHHELD file, whose reads
+were cleared and never re-bound; a fourth value with a survivor in the same file
+(`rspOK`, 317 callers) does NOT gain a marker because its survivor falls outside the
+5-entry window. So on CLIENT channel 2 is entirely an artefact of the withheld file, and
+reindexing that one unit would plausibly return it to 0.
+
+### Open concerns handed forward
+
+1. **Withheld files clear edges they do not re-derive** (CLIENT M4 delta, and all 3
+   channel-2 instances). The log line's wording ("left alone") is wrong about what happens.
+2. **The withheld predicate is mtime-only** and missed 2 of 3 content-drifted files on
+   CLIENT and 1 of 2 on SERVER.
+3. **R2/R3 remain thinly exercised on real code** -- 3 + 3 declines on two sections that
+   share one vendored dependency.
+4. **The library sections are still at 1.5.1-alpha** and must be run once from the main
+   tree after merge + redeploy.
