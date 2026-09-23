@@ -131,3 +131,39 @@ only the BROWSER hop, because a browser cannot write to a named pipe:
   server answers, mirroring the standalone viewer.
 * `src\Register-DragLintProtocol.ps1` -- one HKCU key, no elevation,
   `-Unregister` to undo. Nothing else on the machine is touched.
+## Fact POPULATION, measured 2026-09-23 -- check this before planning a question
+
+A column EXISTING in schema 23 does not mean it holds rows. We made that mistake
+twice (orm_links, then covered_by). Measured on ORM3:
+
+| fact | CLIENT | SERVER | usable? |
+|---|---|---|---|
+| `call_edges` | 20,409 | - | yes |
+| `effect_summary` | 7,254 | 5,284 | yes -- the richest fact available |
+| `dfm_event` | 762 | 37 | yes, CLIENT-side (UI tier) |
+| `ui_affinity` | 230 | 37 | partial |
+| `sql_writes` / `sql_reads` | **0 / 0** | 148 / 19 | **SERVER ONLY** |
+| `covered_by` | **0** | **0** | **no -- never populated** |
+| `orm_links`, `fb_*` | **0** | **0** | **no -- needs a live Firebird** |
+
+`sql_reads`/`sql_writes` being 0 on the CLIENT is CORRECT, not a gap: the client
+owns TFDMemTables only and has no FireDAC connection at all. A `touches-tables`
+question must SAY that when asked on a client index rather than draw an empty
+chart.
+
+### `effect_summary` token legend
+
+Documented on the declaration in `src\analysis\DRagLint.Analysis.Purity.pas`
+(`TEffectSummary.Encode` / `.Decode`, tokens at :252-255):
+
+| token | flag | meaning |
+|---|---|---|
+| `g` | `efGlobal` | writes global state |
+| `h` | `efHeap` | heap allocation / free |
+| `s` | `efSelfFields` | writes its own fields |
+| `p<k>` | | writes through parameter k, 0-based, ascending |
+| `?` | `efUnknown` | a blocker this build could not analyse |
+| *(empty)* | | effect-free |
+
+Stored values are comma-joined in that order, e.g. `g,p0,p3,?`. Most common on
+ORM3 CLIENT: `?` (3,128), `s` (2,500), `s,?` (871), `g,?` (238).
