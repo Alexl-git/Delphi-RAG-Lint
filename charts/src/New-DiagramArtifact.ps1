@@ -37,7 +37,7 @@ param(
   # for event-wiring.
   [Parameter(Mandatory)][Alias('Qname','Unit','Form')][string] $Target,
   [Parameter(Mandatory)][string] $DbPath,
-  [ValidateSet('butterfly','deps','who-calls','event-wiring','touches-tables')]
+  [ValidateSet('butterfly','deps','who-calls','what-it-calls','event-wiring','touches-tables')]
   [string] $Question = 'butterfly',
   [string] $Control,                      # event-wiring only: filter, not selector
   [int]    $Depth   = 2,
@@ -61,7 +61,8 @@ try {
   $r = switch ($Question) {
     'butterfly'      { & (Join-Path $PSScriptRoot 'Emit-Butterfly.ps1')     -Qname $Target -DbPath $DbPath -Depth $Depth -OutDir $dir }
     'deps'           { & (Join-Path $PSScriptRoot 'Emit-Deps.ps1')          -Unit  $Target -DbPath $DbPath -OutDir $dir }
-    'who-calls'      { & (Join-Path $PSScriptRoot 'Emit-WhoCalls.ps1')      -Qname $Target -DbPath $DbPath -Depth $Depth -OutDir $dir }
+    'who-calls'      { & (Join-Path $PSScriptRoot 'Emit-WhoCalls.ps1')      -Qname $Target -DbPath $DbPath -Depth $Depth -OutDir $dir -Direction callers }
+    'what-it-calls'  { & (Join-Path $PSScriptRoot 'Emit-WhoCalls.ps1')      -Qname $Target -DbPath $DbPath -Depth $Depth -OutDir $dir -Direction callees }
     'event-wiring'   {
       # splatted, because -Control must be ABSENT rather than empty: passing
       # -Control '' would filter every component away and read as "no rows"
@@ -85,6 +86,7 @@ $vocab = @{
   'butterfly'      = @('Callers','callers',     'Callees','callees')
   'deps'           = @('UsedBy', 'used by',     'Uses',   'uses')
   'who-calls'      = @('Callers','call sites',  'Cycles', 'cycle rows')
+  'what-it-calls'  = @('Callees','call sites',  'Cycles', 'cycle rows')
   'event-wiring'   = @('Events', 'events',      'Handlers','handlers')
   'touches-tables' = @('Reads',  'tables read', 'Writes', 'tables written')
 }
@@ -117,7 +119,7 @@ $fp = [pscustomobject]@{
   clickTargets= $r.ClickTargets
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
-                $(if ($Question -in 'butterfly','who-calls') { " -Depth $Depth" } else { '' }) +
+                $(if ($Question -in 'butterfly','who-calls','what-it-calls') { " -Depth $Depth" } else { '' }) +
                 $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })
   # every count the emitter reported, not just the two the shell shows. The
   # ones the header omits are exactly the ones worth auditing later --

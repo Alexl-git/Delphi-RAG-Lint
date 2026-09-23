@@ -134,6 +134,47 @@ Step 'E-WC4' {
   Chk 'A-WC4-EDGES' ([regex]::Matches((Dot $w4), '(?m)^\s+n\d+:p\d+ -> ')).Count 10
 }
 
+# what-it-calls is who-calls walked the other way, so it is tested at THREE
+# depths: the rows+1 == node_count invariant was challenged for the callee
+# direction and then verified, cycles present and all (2/3, 8/9, 16/17). The
+# depth-2 row count is also the regression that ties this emitter to butterfly's
+# Callees -- if those two ever disagree, one of them is reading the tree wrong.
+Note 'what-it-calls SendDeltaOperation d1/d2/d3 ...'
+Step 'E-WIC' {
+  $script:c1 = & "$SRC\Emit-WhoCalls.ps1" -Qname $Q_SEND -DbPath $DbCli -Direction callees -Depth 1 -OutDir $OutDir
+  Chk 'A-WIC1-ROWS'  $c1.Rows 2
+  Chk 'A-WIC1-NODES' $c1.NodeCount 3
+  Chk 'A-WIC1-TRUNC' $c1.Truncated $true
+
+  $script:c2 = & "$SRC\Emit-WhoCalls.ps1" -Qname $Q_SEND -DbPath $DbCli -Direction callees -Depth 2 -OutDir $OutDir
+  Chk 'A-WIC2-ROWS'    $c2.Rows 8
+  Chk 'A-WIC2-NODES'   $c2.NodeCount 9
+  Chk 'A-WIC2-CYCLES'  $c2.Cycles 0
+  Chk 'A-WIC2-CALLERS' $c2.Callers 0        # the callers counter must stay empty
+  # the tie to butterfly: same method, same depth, same callee count
+  if ($b -and $b.Callees -ne $c2.Rows) {
+    Fail 'A-WIC2-BUTTERFLY' "butterfly says $($b.Callees) callees, what-it-calls says $($c2.Rows)"
+  }
+  # NOT asked downward, so it must be $null -- a 0 would read as a measured zero
+  if ($null -ne $c2.NameMatches) { Fail 'A-WIC2-NAMENULL' "NameMatches must be null walking callees, got $($c2.NameMatches)" }
+
+  $script:c3 = & "$SRC\Emit-WhoCalls.ps1" -Qname $Q_SEND -DbPath $DbCli -Direction callees -Depth 3 -OutDir $OutDir
+  Chk 'A-WIC3-ROWS'   $c3.Rows 16
+  Chk 'A-WIC3-NODES'  $c3.NodeCount 17
+  Chk 'A-WIC3-CYCLES' $c3.Cycles 5
+  # the arrow means "calls", so walking callees it must leave the FOCUS, never
+  # arrive at it. An edge INTO focus here would assert the relationship backwards.
+  $t3 = Dot $c3
+  if ([regex]::Matches($t3, '(?m)^\s+focus -> ').Count -eq 0) {
+    Fail 'A-WIC3-EDGEDIR' 'no edge leaves the focus -- the callee arrows are reversed'
+  }
+  if ([regex]::Matches($t3, '(?m)^\s+n\d+:p\d+ -> focus').Count -gt 0) {
+    Fail 'A-WIC3-EDGEDIR2' 'an edge points INTO the focus -- that is the caller direction'
+  }
+  # the two directions must not overwrite each other's artifacts
+  if ($w1 -and $c2.Svg -eq $w1.Svg) { Fail 'A-WIC-COLLIDE' 'callers and callees wrote the same .svg path' }
+}
+
 Note 'event-wiring uMain.TfrmMAIN ...'
 Step 'E-EW1' {
   $script:e1 = & "$SRC\Emit-EventWiring.ps1" -Form 'uMain.TfrmMAIN' -DbPath $DbCli -OutDir $OutDir
@@ -224,6 +265,18 @@ NegTest 'N5' 'this project has no FireDAC connection' 'Blueprint4_ViewModel_TBlu
 NegTest 'N6' 'No.Such.Method is not in this index' 'No_Such_Method' {
   & "$SRC\Emit-TouchesTables.ps1" -Qname 'No.Such.Method' -DbPath $DbSrv -OutDir $negDir }
 
+# N8: a leaf must say "calls nothing". The event-wiring hint would be nonsense
+# pointed downward -- a DFM is never a callee -- so the message is asserted to
+# NOT mention it, not merely to mention the right thing.
+Note 'negative N8 (leaf calls nothing) ...'
+$Q_LEAF = 'AssignGroups.ViewModel.TAssignGroupsViewModel.CanAddGroup'
+NegTest 'N8' 'calls nothing in call_edges' 'AssignGroups_ViewModel_TAssignGroupsViewModel_CanAddGroup_callees' {
+  & "$SRC\Emit-WhoCalls.ps1" -Qname $Q_LEAF -DbPath $DbCli -Direction callees -OutDir $negDir }
+$n8msg = ''
+try { & "$SRC\Emit-WhoCalls.ps1" -Qname $Q_LEAF -DbPath $DbCli -Direction callees -OutDir $negDir | Out-Null }
+catch { $n8msg = $_.Exception.Message }
+if ($n8msg -match 'event-wiring') { Fail 'N8-HINT' "the callee refusal offered the event-wiring hint: $n8msg" }
+
 # N7 is the BUNDLER's contract, not an emitter's: the refusal must propagate AND
 # leave no directory for someone to find later and mistake for an answer.
 Note 'negative N7 (bundle cleanup) ...'
@@ -240,14 +293,15 @@ if (Test-Path $n7Dir) { Fail 'N7-DIR' 'the failed bundle directory still exists'
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
-  Write-Host 'Emitter verification -- five questions, two indexes'
+  Write-Host 'Emitter verification -- six questions, five emitters, two indexes'
   Write-Host ("  bytes          : {0} non-ascii, {1} bare LF" -f $nonAscii, $bareLf)
   Write-Host ("  butterfly      : {0} callers / {1} callees, {2} clicks" -f (V $b 'Callers'), (V $b 'Callees'), (V $b 'ClickTargets'))
   Write-Host ("  deps           : {0} used by / {1} uses" -f (V $d 'UsedBy'), (V $d 'Uses'))
   Write-Host ("  who-calls      : {0} sites d2, {1} sites + {2} cycle d3, {3} name-only NOT merged" -f (V $w1 'Callers'), (V $w2 'Callers'), (V $w2 'Cycles'), (V $w2 'NameOnly'))
+  Write-Host ("  what-it-calls  : {0}/{1}/{2} rows at d1/d2/d3, {3} cycles, ties butterfly's {4}" -f (V $c1 'Rows'), (V $c2 'Rows'), (V $c3 'Rows'), (V $c3 'Cycles'), (V $b 'Callees'))
   Write-Host ("  event-wiring   : {0} events / {1} handlers / {2} controls; {3} at scale" -f (V $e1 'Events'), (V $e1 'Handlers'), (V $e1 'Components'), (V $e3 'Events'))
   Write-Host ("  touches-tables : {0} read / {1} written / {2} both, of {3} SQL symbols" -f (V $s1 'Reads'), (V $s1 'Writes'), (V $s1 'Both'), (V $s1 'IndexSqlSymbols'))
-  Write-Host ("  negatives      : N1-N7, each asserting message AND absent .svg")
+  Write-Host ("  negatives      : N1-N8, each asserting message AND absent .svg")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

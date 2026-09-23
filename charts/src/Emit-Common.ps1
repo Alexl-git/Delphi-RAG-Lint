@@ -156,6 +156,139 @@ SELECT s.id AS id, s.kind AS kind, s.start_line AS start_line,
   }
 }
 
+# ---- member selection -------------------------------------------------------
+
+# Resolve a FIELD or PROPERTY selection, REFUSING an ambiguous name rather than
+# taking the first match the way Get-SymbolLocation does.
+#
+# MEASURED 2026-09-23 on BOTH ORM3 indexes, and the two halves disagree sharply:
+#
+#   form        CLIENT                      SERVER
+#   qualified   13,131 names / 0 ambiguous   9,095 names / 0 ambiguous
+#   bare         6,849 names / 2,716 (40%)   3,592 names / 2,136 (59%)
+#
+# So a QUALIFIED field/property name is a safe key -- not one of the 22,226
+# measured is ambiguous -- while a BARE one is a coin toss, worst case `ID` at
+# 154 distinct symbols. A bare name is therefore accepted only when it happens
+# to be unique, and an ambiguous one is refused WITH its candidates.
+#
+# Refusing is the whole point: this chart is about ONE member, so resolving to
+# the wrong one does not mislabel a row, it mislabels every row in the picture.
+# `FConnected` resolving uniquely here is luck, not a rule.
+function Resolve-MemberSelection([string] $Qname, [string[]] $Kinds) {
+  $q = ConvertTo-SqlText $Qname
+  $rows = Invoke-IndexQuery @"
+SELECT s.id AS id, s.kind AS kind, s.qualified_name AS qualified_name,
+       s.name AS name, s.start_line AS start_line,
+       s.impl_start_line AS impl_start_line, s.impl_end_line AS impl_end_line,
+       s.prop_access AS prop_access, f.path AS path
+  FROM symbols s JOIN files f ON f.id = s.file_id
+ WHERE s.qualified_name = '$q' OR s.name = '$q'
+ ORDER BY s.qualified_name
+"@
+  if ($rows.Count -eq 0) { throw "$Qname is not in this index" }
+
+  # An exact QUALIFIED hit wins outright: `R` as a qualified name and `R` as a
+  # bare name are different questions, and the caller asked the precise one.
+  $exact = @($rows | Where-Object { [string]$_.qualified_name -eq $Qname })
+  $cand  = if ($exact.Count) { $exact } else { $rows }
+
+  if ($cand.Count -gt 1) {
+    $head = ($cand | Select-Object -First 6 | ForEach-Object { [string]$_.qualified_name }) -join ', '
+    $tail = if ($cand.Count -gt 6) { ", +$($cand.Count - 6) more" } else { '' }
+    throw "$Qname is ambiguous -- $($cand.Count) symbols share that name: $head$tail. Pass a fully qualified name."
+  }
+
+  $r = $cand[0]
+  if ($Kinds -and ($Kinds -notcontains [string]$r.kind)) {
+    throw "$($r.qualified_name) is a $($r.kind), not a $($Kinds -join ' or ') -- ask who-calls instead"
+  }
+  $focus = if ($r.impl_start_line) { [int]$r.impl_start_line } else { [int]$r.start_line }
+  [pscustomobject]@{
+    Id = [int]$r.id; Kind = [string]$r.kind; Path = [string]$r.path
+    Qname = [string]$r.qualified_name; Name = [string]$r.name
+    PropAccess = [string]$r.prop_access
+    DeclLine = [int]$r.start_line
+    ImplStart = $(if ($r.impl_start_line) { [int]$r.impl_start_line } else { 0 })
+    ImplEnd   = $(if ($r.impl_end_line)   { [int]$r.impl_end_line }   else { 0 })
+    FocusLine = $focus
+  }
+}
+
+# ---- ranking and disclosure -------------------------------------------------
+
+# The correlated subquery that maps a ref/access row to its INNERMOST enclosing
+# routine, as SQL TEXT. It lives here so the emitters that need a SITE anchor
+# cannot drift apart on it.
+#
+# `find-callers --resolved` answers WHICH ROUTINE but never WHERE INSIDE IT --
+# its `line` is the caller's DECLARATION line, measured uniformly. This is how
+# you get the line+col the verb does not report.
+#
+# `ORDER BY impl_start_line DESC LIMIT 1` is LOAD-BEARING: it picks the
+# innermost enclosing routine. Without it, a nested routine's accesses are
+# attributed to its parent. Measured resolution: CLIENT 9,311/0 unresolved,
+# SERVER 14,836/0.
+function Get-EnclosingRoutineSql([string] $RefAlias) {
+  @"
+(SELECT encl.qualified_name FROM symbols encl
+  WHERE encl.file_id = $RefAlias.file_id
+    AND encl.impl_start_line IS NOT NULL
+    AND $RefAlias.start_line BETWEEN encl.impl_start_line AND encl.impl_end_line
+  ORDER BY encl.impl_start_line DESC LIMIT 1)
+"@
+}
+
+# Take the top $Cap of an ALREADY-RANKED row list and report exactly what was
+# left out, so every caller discloses in the same words. Ranking is the
+# caller's job; this only cuts and counts.
+#
+# $SiteProperty names the per-row count that must ALSO be totalled, because a
+# chart whose rows are routines hides two different quantities at once: the
+# routines it dropped and the access sites inside them.
+function Get-TopRanked($Rows, [int] $Cap, [string] $SiteProperty = 'Sites') {
+  $all = @($Rows)
+  $shown = $all
+  $hiddenRows = 0
+  $hiddenSites = 0
+  if ($Cap -gt 0 -and $all.Count -gt $Cap) {
+    $shown = @($all[0..($Cap - 1)])
+    foreach ($h in @($all[$Cap..($all.Count - 1)])) {
+      $hiddenRows++
+      if ($h.PSObject.Properties.Name -contains $SiteProperty) { $hiddenSites += [int]$h.$SiteProperty }
+    }
+  }
+  [pscustomobject]@{
+    Shown = $shown; Total = $all.Count
+    HiddenRows = $hiddenRows; HiddenSites = $hiddenSites
+  }
+}
+
+# The ONE place the "not shown" wording is built, so two charts never disclose
+# the same fact in two different sentences.
+function Get-DisclosureText([int] $HiddenRows, [int] $HiddenSites, [string] $Noun = 'routines') {
+  if ($HiddenRows -le 0) { return '' }
+  $t = "+$HiddenRows more $Noun"
+  if ($HiddenSites -gt 0) { $t += " (+$HiddenSites more sites)" }
+  "$t not shown"
+}
+
+# Append a NON-ANCHORED row to a raw HTML-label table builder (the focus box).
+# Deliberately carries no HREF: there is no line to go to, and a dead link is
+# worse than no link. touches-tables' zero case built this inline; both use it
+# now so the two cannot diverge.
+function Add-DisclosureRow([System.Text.StringBuilder] $Table, [string] $Text,
+                           [string] $Ink = '#8A94A6', [int] $PointSize = 12) {
+  if ([string]::IsNullOrWhiteSpace($Text)) { return }
+  [void]$Table.Append("<TR><TD ALIGN=`"LEFT`"><FONT COLOR=`"$Ink`" POINT-SIZE=`"$PointSize`">$(ConvertTo-XmlText $Text)</FONT></TD></TR>")
+}
+
+# A row object for Add-RowCluster that carries NO Href, so the cluster renders
+# it as a plain note line. Use it for disclosure and for "see also" notes.
+function New-NoteRow([string] $Text) {
+  [pscustomobject]@{ Label = $Text; Line = $null; Href = $null; Tip = $null; Note = $null }
+}
+
 # ---- dot --------------------------------------------------------------------
 
 # ONE layout run, four outputs -- so the geometry in .plain can never drift from
@@ -223,6 +356,15 @@ function Add-RowCluster {
   $p = 0
   foreach ($r in $Rows) {
     $p++
+    # A row with NO Href is a note/disclosure line. It must carry neither HREF
+    # nor TITLE: HREF="" still makes dot emit an <a>, which both inflates the
+    # anchor count the emitters assert on and offers the reader a dead link.
+    # It KEEPS its port, so the caller's ordinal port map stays aligned.
+    if ([string]::IsNullOrWhiteSpace([string]$r.Href)) {
+      [void]$tbl.Append("<TR><TD PORT=`"p$p`" ALIGN=`"LEFT`"><FONT COLOR=`"$LineInk`" POINT-SIZE=`"12`">$(ConvertTo-XmlText $r.Label)</FONT></TD></TR>")
+      [void]$ports.Add("${Nid}:p$p")
+      continue
+    }
     [void]$tbl.Append("<TR><TD PORT=`"p$p`" ALIGN=`"LEFT`" HREF=`"$($r.Href)`" TITLE=`"$(ConvertTo-XmlText $r.Tip)`">")
     [void]$tbl.Append("<FONT COLOR=`"$RowInk`">$(ConvertTo-XmlText $r.Label)</FONT>")
     [void]$tbl.Append("  <FONT COLOR=`"$LineInk`" POINT-SIZE=`"12`">:$($r.Line)</FONT>")

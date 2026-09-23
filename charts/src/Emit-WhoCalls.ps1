@@ -1,5 +1,23 @@
 <#
-  Emit-WhoCalls.ps1 -- the `who-calls` question: the N-deep CALLER tree.
+  Emit-WhoCalls.ps1 -- TWO catalogue questions from one emitter:
+
+    -Direction callers   `who-calls`      the N-deep CALLER tree   (default)
+    -Direction callees   `what-it-calls`  the N-deep CALLEE tree
+
+  One file, not two, because `reverse-calltree` returns an IDENTICAL schema in
+  both directions -- children under `callers` at every level EVEN WHEN WALKING
+  DOWNWARD (the trap butterfly already documents). The flatten, the ordinal port
+  map, the cycle handling and the cluster rule are therefore the same code, and
+  a second file would be a copy that drifts. Only three things actually differ:
+  edge direction, palette role, and the empty-result message.
+
+  THE NAME BUCKET IS CALLERS-ONLY, AND THAT IS NOT AN OVERSIGHT
+  -------------------------------------------------------------
+  `query find-callers --name` answers the CALLER question. There is no downward
+  analogue -- nothing asks "which symbols share a name with something this
+  routine might call" -- so in the callee direction the bucket is not run and
+  NameMatches is reported as $null, never 0. A 0 would read as a measured
+  absence; $null says the question was not asked.
 
   Different in shape from both shipping emitters, and the difference is the
   point:
@@ -47,6 +65,7 @@ param(
   [Parameter(Mandatory)][string] $DbPath,   # NOT -Db: CmdletBinding aliases that to -Debug
   [string] $OutDir,
   [int]    $Depth      = 2,
+  [ValidateSet('callers', 'callees')][string] $Direction = 'callers',
   [switch] $WithNameMatches,
   [string] $Engine     = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe',
   [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
@@ -67,9 +86,17 @@ $PAL = @{
   rowInk       = '#1F2933'; lineInk    = '#8A94A6'; focusInk  = '#0B3F39'
 }
 
+# ---- 0. what the direction changes -------------------------------------------
+$isCallees = ($Direction -eq 'callees')
+$question  = if ($isCallees) { 'what-it-calls' } else { 'who-calls' }
+# role colours: callers keep butterfly's blue, callees take its amber
+$roleBorder = if ($isCallees) { $PAL.calleeBorder } else { $PAL.callerBorder }
+$roleFill   = if ($isCallees) { $PAL.calleeFill }   else { $PAL.callerFill }
+$roleHdr    = if ($isCallees) { $PAL.calleeHdr }    else { $PAL.callerHdr }
+
 # ---- 1. the RESOLVED bucket --------------------------------------------------
-Write-Host "who-calls: $Qname (depth $Depth)"
-$tree = Invoke-EngineJson @('reverse-calltree', '--qname', $Qname, '--direction', 'callers',
+Write-Host "${question}: $Qname (depth $Depth, direction $Direction)"
+$tree = Invoke-EngineJson @('reverse-calltree', '--qname', $Qname, '--direction', $Direction,
                             '--depth', "$Depth", '--format', 'json', '--db', $DbPath)
 
 # Children live under `callers` at EVERY level. Parent is tracked by ORDINAL so
@@ -98,6 +125,12 @@ if (($rows.Count + 1) -ne $nodeCount) {
   throw "flatten mismatch: $($rows.Count) rows vs node_count $nodeCount -- did you read the wrong child key?"
 }
 if ($rows.Count -eq 0) {
+  # The two directions fail for DIFFERENT reasons, so they must not share a
+  # message. A leaf routine simply calls nothing; the event-wiring hint would be
+  # nonsense pointed downward, because a DFM is never a CALLEE.
+  if ($isCallees) {
+    throw "$Qname calls nothing in call_edges (node_count $nodeCount)."
+  }
   throw "$Qname has 0 callers in call_edges (node_count $nodeCount). If it is an event handler the caller is the DFM -- ask event-wiring instead."
 }
 
@@ -117,9 +150,20 @@ $focusUnit = Get-UnitName $focusFile
 $bare = ($Qname -split '\.')[-1]
 $nameRows = @()
 $nameOnly = @()
+$nameProbed = -not $isCallees
+if (-not $nameProbed) {
+  # See the header: there is no downward analogue of find-callers --name, so the
+  # bucket is NOT RUN rather than run and reported as zero.
+  Write-Host '  name matches: not applicable walking callees (find-callers --name answers the caller question only)'
+  if ($WithNameMatches) {
+    Write-Host '  NOTE: -WithNameMatches ignored in the callee direction'
+  }
+}
 try {
-  $nm = Get-EngineText @('query', 'find-callers', '--name', $bare, '--db', $DbPath, '--json')
-  if ($nm) { $nameRows = @($nm | ConvertFrom-Json) }
+  if ($nameProbed) {
+    $nm = Get-EngineText @('query', 'find-callers', '--name', $bare, '--db', $DbPath, '--json')
+    if ($nm) { $nameRows = @($nm | ConvertFrom-Json) }
+  }
 } catch {
   Write-Host "  NOTE: name-match probe failed ($($_.Exception.Message)); reporting resolved bucket only"
 }
@@ -132,13 +176,15 @@ if ($nameRows.Count) {
     -not $seen.ContainsKey("$(([string]$_.file_path).ToLowerInvariant())|$([int]$_.start_line)")
   })
 }
-Write-Host ("  name matches={0}  of which NOT resolved callers={1}{2}" -f `
-            $nameRows.Count, $nameOnly.Count,
-            $(if ($nameOnly.Count -and -not $WithNameMatches) { '  (pass -WithNameMatches to draw them)' } else { '' }))
+if ($nameProbed) {
+  Write-Host ("  name matches={0}  of which NOT resolved callers={1}{2}" -f `
+              $nameRows.Count, $nameOnly.Count,
+              $(if ($nameOnly.Count -and -not $WithNameMatches) { '  (pass -WithNameMatches to draw them)' } else { '' }))
+}
 
 # ---- 4. dot ------------------------------------------------------------------
 $sb = New-Object System.Text.StringBuilder
-[void]$sb.AppendLine('digraph whocalls {')
+[void]$sb.AppendLine("digraph $($question -replace '-', '') {")
 [void]$sb.AppendLine('  rankdir=LR; bgcolor="transparent"; compound=true;')
 [void]$sb.AppendLine('  nodesep=0.35; ranksep=1.1; splines=spline;')
 [void]$sb.AppendLine("  graph [fontname=`"$FontSans`"];")
@@ -150,9 +196,11 @@ $nodeId  = 0
 $portOf  = @{}   # row ORDINAL -> "nodeN:pM"
 $clusters = 0
 
-# deepest first, so the left-to-right flow is depth N -> ... -> depth 1 -> focus
+# CALLERS: deepest first, so the flow reads depth N -> ... -> depth 1 -> focus.
+# CALLEES: shallowest first, so it reads focus -> depth 1 -> ... -> depth N.
+# Either way the focus sits at the end the arrows converge on or fan out from.
 $groups = $rows | Group-Object { "$($_.Level)|$(Get-UnitName $_.File)" } |
-          Sort-Object { [int](($_.Name -split '\|')[0]) } -Descending
+          Sort-Object { [int](($_.Name -split '\|')[0]) } -Descending:(-not $isCallees)
 foreach ($g in $groups) {
   $parts = @($g.Name -split '\|')
   $lvl   = [int]$parts[0]
@@ -171,7 +219,7 @@ foreach ($g in $groups) {
 
   $ports = Add-RowCluster -Sb $sb -Cid "cluster_d${lvl}_$nodeId" -Nid $nid `
              -Title $unit -Subtitle "depth $lvl" -Rows $cellRows `
-             -Border $PAL.callerBorder -Fill $PAL.callerFill -Hdr $PAL.callerHdr `
+             -Border $roleBorder -Fill $roleFill -Hdr $roleHdr `
              -RowInk $PAL.rowInk -LineInk $PAL.lineInk -FontSans $FontSans
   for ($i = 0; $i -lt $g.Group.Count; $i++) { $portOf[$g.Group[$i].Idx] = $ports[$i] }
 }
@@ -189,7 +237,7 @@ $ftip  = ConvertTo-XmlText "$Qname  --  $([IO.Path]::GetFileName($focusFile)):$(
 # the name bucket: DASHED, labelled, and deliberately NOT edged to the focus.
 # An edge would assert a call relationship that is exactly what is unproven.
 $nameRendered = $false
-if ($WithNameMatches -and $nameOnly.Count) {
+if ($nameProbed -and $WithNameMatches -and $nameOnly.Count) {
   $nameRendered = $true
   foreach ($g in ($nameOnly | Group-Object { Get-UnitName $_.file_path } | Sort-Object Name)) {
     $nodeId++; $clusters++
@@ -211,18 +259,24 @@ if ($WithNameMatches -and $nameOnly.Count) {
 
 [void]$sb.AppendLine('')
 foreach ($r in $rows) {
-  $from = $portOf[$r.Idx]
-  if (-not $from) { continue }
-  $to = if ($r.Parent -lt 0) { 'focus' } else { $portOf[$r.Parent] }
-  if (-not $to) { continue }
+  $mine   = $portOf[$r.Idx]
+  $parent = if ($r.Parent -lt 0) { 'focus' } else { $portOf[$r.Parent] }
+  if (-not $mine -or -not $parent) { continue }
+  # The arrow means "calls". A CALLER row calls its parent (the focus, or the
+  # row above it); walking CALLEES the parent calls the row. Same tree, reversed
+  # arrow -- drawing both the same way would assert the relationship backwards.
+  if ($isCallees) { $from = $parent; $to = $mine } else { $from = $mine; $to = $parent }
   $st = if ($r.Cycle) { ', style=dashed' } else { '' }
-  [void]$sb.AppendLine("  $from -> $to [color=`"$($PAL.callerBorder)`"$st];")
+  [void]$sb.AppendLine("  $from -> $to [color=`"$roleBorder`"$st];")
 }
 [void]$sb.AppendLine('}')
 
 # ---- 5. lay out --------------------------------------------------------------
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $PSScriptRoot '..\scratch' }
-$base = ($Qname -replace '[^A-Za-z0-9]', '_')
+# The two directions MUST NOT share a basename: asking both questions about one
+# method into one -OutDir would otherwise have the second silently overwrite the
+# first. Callers keeps the bare name so existing artifacts stay put.
+$base = ($Qname -replace '[^A-Za-z0-9]', '_') + $(if ($isCallees) { '_callees' } else { '' })
 $lay  = Invoke-DotLayout $sb.ToString() $OutDir $base
 
 $drawn    = $rows.Count + $(if ($nameRendered) { $nameOnly.Count } else { 0 })
@@ -234,13 +288,19 @@ $expected = $drawn + 1
   Plain        = $lay.Plain
   Png          = $lay.Png
   Pdf          = $lay.Pdf
-  Callers      = $rows.Count          # RESOLVED call sites. Never includes NameOnly.
+  Direction    = $Direction
+  Question     = $question
+  Rows         = $rows.Count          # RESOLVED call sites, either direction
+  Callers      = $(if ($isCallees) { 0 } else { $rows.Count })
+  Callees      = $(if ($isCallees) { $rows.Count } else { 0 })
+  NodeCount    = $nodeCount
   Cycles       = $cycles
   MaxDepth     = $maxDepth
   Truncated    = [bool]$tree.summary.truncated   # depth limit TOUCHED, not rows dropped
   Clusters     = $clusters
-  NameMatches  = $nameRows.Count
-  NameOnly     = $nameOnly.Count
+  # $null, NOT 0, walking callees: the bucket was not asked, not measured empty.
+  NameMatches  = $(if ($nameProbed) { $nameRows.Count } else { $null })
+  NameOnly     = $(if ($nameProbed) { $nameOnly.Count } else { $null })
   NameRendered = $nameRendered
   ClickTargets = $lay.Anchors
   Expected     = $expected
