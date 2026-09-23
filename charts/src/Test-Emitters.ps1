@@ -1395,6 +1395,146 @@ Step 'FF-ART' {
   Chk 'A-FF-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount)" '5 chain rows / 267'
   if ($meta.regenerate -notmatch '-SqlDbPath ') { Fail 'A-FF-ART' 'the regenerate command drops -SqlDbPath' }
 }
+# ---- PLAN-last-four-verbs, Task 4: lands-where -------------------------------------
+# THREE clones: CLIENT (-DbPath: ORM classes + DFM bindings), SERVER (-ServerDbPath:
+# TDataService_<T>_SERVER) and the SQL scripts (-SqlDbPath). Every number measured
+# 2026-09-23 and PINNED (R5); where a pin differs from the plan the comment names
+# the mechanism (R6). Gate codes carry an LW- prefix: N20-N24 were taken.
+Note 'lands-where ...'
+Step 'E-LW' {
+  # PATH B DETECTOR (plan section 7): orm_links is EXPECTED empty on both Delphi
+  # clones. A non-zero here is the SIGNAL that fb-snapshot landed in a clone and
+  # the switch must be built -- not a number to re-pin.
+  # Emit-Common resolves $Engine from the CALLER's scope (its header), so the block names it
+  $script:ol = & { $Engine = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"; "$((Get-OrmLinksState $DbCli).Rows)/$((Get-OrmLinksState $DbSrv).Rows)" }
+  Chk 'A-OL-ROWS'       $ol '0/0'
+
+  $script:lw1 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  # P35, measured on this run and printed on the chart (R10). 1,991 = 1,990 in the
+  # newest declaration + IPCHART.ACTION, which only the older MScript2.SQL copy
+  # carries (the R8 known gap; MS1.SQL:2243 declares it QUOTED, "ACTION").
+  Chk 'A-LW0-CONV'      "$($lw1.ConvProps)/$($lw1.ConvOnTable)/$($lw1.ConvColumn)" '2063/1997/1991'
+  # FINDING vs the plan's list: the 6 are TmcFOLDERCOUNT.TABLE (not TmcFOLDERS),
+  # INSPRSLT x3 and STATIONS x2 -- and FOLDERCOUNT.TABLE is a QUOTED column,
+  # MS1.SQL:3848 `"TABLE"`, which the SQL index does not extract
+  Chk 'A-LW0-NONCOL'    "$($lw1.ConvNonColumn) quoted=$($lw1.ConvQuoted)" 'FOLDERCOUNT.TABLE,INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS quoted=FOLDERCOUNT.TABLE'
+  Chk 'A-LW0-DS'        $lw1.DsClasses 133
+  # P37: 189 / 182 reproduce. The plan's 390 index-wide is 383 on the SERVER
+  # clone (the index join and a raw regex over every indexed .pas agree: 383 in
+  # 135 files); not reconciled with the plan, which recorded no query. All 189 in
+  # a DataService routine are in Load (188) or FindOperatorName (1): Save binds
+  # Params[i] positionally, so there is no "Save ParamByName" row.
+  Chk 'A-LW-PARAM'      "$($lw1.ParamByNameDs)/$($lw1.ParamByNameCol) of $($lw1.ParamByNameAll)" '189/182 of 383'
+  Chk 'A-LW-OL-CHART'   "$($lw1.OrmLinksCli)/$($lw1.OrmLinksSrv)" '0/0'
+  Chk 'A-LW1-COL'       "$($lw1.TableColumn):$($lw1.ColumnState)" 'CAUSFAIL.REASON:yes'
+  # 4 server rows as the plan says, but the Save row is the member access
+  # Obj.REASON (:229, [certain]) -- the plan's "Save ParamByName" does not exist
+  Chk 'A-LW1-SRV'       $lw1.ServerRows 4
+  Chk 'A-LW1-SRV-ROWS'  "W=$($lw1.ServerWrite) R=$($lw1.ServerRead)" 'W=PrepareSaveQuery:124,Save:229 R=PrepareLoadQuery:109,Load:159'
+  Chk 'A-LW1-TRIG'      $lw1.TriggerNames 'CAUSFAIL_BIU5@MS5.SQL:15'
+  # the reverse of feeds-from: 7 REASON bindings, 1 resolves to CAUSFAIL (the
+  # same 7/1 consumers' column form counts, A-CO2-BIND)
+  Chk 'A-LW1-CLIENT'    "$($lw1.ClientBindings) $($lw1.ClientRows) +$($lw1.ClientOther)" '1 uCausFailForm.dfm:60:colREASON +6'
+  Chk 'A-LW1-PROCS'     $lw1.Procedures 0
+  Chk 'A-LW1-CLICK'     "$($lw1.ClickTargets)/$($lw1.Expected)" '9/9'
+  $tl1 = Dot $lw1
+  foreach ($ln in 81, 124, 109, 229, 159, 1410, 15, 60) { if (-not (HasLine $tl1 $ln)) { Fail 'A-LW1-HREF' "no row anchored on line $ln" } }
+  if ($tl1 -notmatch 'inferred -- naming convention, 1,991 of 1,997 properties on table-named classes are a column of that table') { Fail 'A-LW1-GRADE' 'the convention grade with its measured count is missing' }
+  if ($tl1 -notmatch 'cluster_db_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-LW1-DASHED' 'the convention hop (TABLE.COLUMN) is not dashed' }
+  if ($tl1 -notmatch 'orm_links rows: 0 on CLIENT-Micronite2027\.sqlite, 0 on SERVER-MicroniteMW1Service\.sqlite') { Fail 'A-LW1-ROUTE' 'the path-A route is not printed' }
+  if ($tl1 -notmatch 'positional Fields\[i\]') { Fail 'A-LW1-DISC' 'positional-read disclosure missing' }
+  if ($tl1 -notmatch 'script-derived schema: 135 tables; 5 live tables are not in the scripts') { Fail 'A-LW1-DISC' 'script-derived disclosure missing' }
+  if ($tl1 -match '99\.7') { Fail 'A-LW1-R10' 'the chart quotes the plan''s 99.7%' }
+
+  # the interface property: SYSTID is touched by TWO triggers (P39)
+  $script:lw2 = & "$SRC\Emit-LandsWhere.ps1" -Field 'iCAUSFAIL.ImcCAUSFAIL.SYSTID' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW2-TRIG'      $lw2.TriggerNames 'CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44'
+  Chk 'A-LW2-SRV'       "W=$($lw2.ServerWrite) R=$($lw2.ServerRead)" 'W=PrepareSaveQuery:124,Save:231 R=PrepareLoadQuery:109,Load:161'
+
+  # the backing field resolves to its property, [by name]; same landing
+  $script:lw3 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.fREASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW3-FIELD'     "$($lw3.Property)|$($lw3.TableColumn)|$($lw3.ServerRows)" 'uCAUSFAIL.TmcCAUSFAIL.REASON|CAUSFAIL.REASON|4'
+  if ((Dot $lw3) -notmatch '\[by name\] backing field of REASON') { Fail 'A-LW3-FIELD' 'the field -> property hop is not graded [by name]' }
+
+  # the DFM-field kind: the SAME chain feeds-from draws (A-FF1), continued as the ORM case
+  $script:lw4 = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmCausFail.colREASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW4-DFM'       "$($lw4.Kind):$($lw4.ChainOutcome):$($lw4.TableColumn):$($lw4.Property):$($lw4.ServerRows)" 'dfm:column:CAUSFAIL.REASON:uCAUSFAIL.TmcCAUSFAIL.REASON:4'
+  foreach ($ln in 60, 88, 125, 37) { if (-not (HasLine (Dot $lw4) $ln)) { Fail 'A-LW4-HREF' "chain hop :$ln not anchored" } }
+  Chk 'A-LW4-CLICK'     "$($lw4.ClickTargets)/$($lw4.Expected)" '14/14'
+}
+
+Note 'lands-where: the not-a-column rows, refusals and draws ...'
+# N31. The plan's selector `uFOLDERS.TmcFOLDERS.TABLE` does not exist -- TABLE is a
+# property of TmcFOLDERCOUNT (FINDING) -- so it REFUSES, naming what it tried.
+NegTest 'LW-N31-BRIEF' 'uFOLDERS.TmcFOLDERS.TABLE resolves to no property or field in this index' 'landswhere_uFOLDERS_TmcFOLDERS_TABLE' {
+  & "$SRC\Emit-LandsWhere.ps1" -Field 'uFOLDERS.TmcFOLDERS.TABLE' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+# N31 on a TRUE non-column: INSPRSLT.DistHist is in no script AND no server SQL
+# -> "not a column", no DB side, no trigger rows, exits 0 with a chart
+Step 'LW-N31' {
+  $script:lw31 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uINSPRSLT.TmcINSPRSLT.DistHist' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW-N31'        "$($lw31.ColumnState):$([string]$lw31.TableColumn):$($lw31.Triggers):$($lw31.Procedures):$($lw31.ServerRows)" 'no::0:0:0'
+  if ((Dot $lw31) -notmatch 'DistHist is not a column of INSPRSLT -- computed or UI-only') { Fail 'A-LW-N31' 'no "not a column of INSPRSLT" row' }
+  if (-not (Test-Path $lw31.Svg)) { Fail 'A-LW-N31' 'no .svg' }
+}
+# FINDING: STATIONS.GRIDS is in no script, but uSTATIONS_SERVER.PAS:129 writes it
+# (`UPDATE OR INSERT INTO STATIONS (... GRIDS ...)`) -- NOT "computed or UI-only"
+Step 'LW-N31-SRVSQL' {
+  $script:lw31g = & "$SRC\Emit-LandsWhere.ps1" -Field 'uSTATIONS.TmcSTATIONS.GRIDS' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW-N31-SRVSQL' "$($lw31g.ColumnState):$($lw31g.TableColumn):W=$($lw31g.ServerWrite) R=$($lw31g.ServerRead)" 'server-sql:STATIONS.GRIDS:W=PrepareSaveQuery:129,Save:271 R=PrepareLoadQuery:110,Load:176'
+  $tg = Dot $lw31g
+  if ($tg -match 'computed or UI-only') { Fail 'A-LW-N31-SRVSQL' 'a server-persisted column is called computed or UI-only' }
+  if ($tg -notmatch 'NOT in the SQL scripts') { Fail 'A-LW-N31-SRVSQL' 'the scripts-lag sentence is missing' }
+}
+# FINDING: FOLDERCOUNT."TABLE" is a QUOTED column (MS1.SQL:3848) the SQL index drops
+Step 'LW-N31-QUOTED' {
+  $script:lw31q = & "$SRC\Emit-LandsWhere.ps1" -Field 'uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW-N31-QUOTED' "$($lw31q.ColumnState):$($lw31q.TableColumn)" 'quoted:FOLDERCOUNT.TABLE'
+  if (-not (HasLine (Dot $lw31q) 3848)) { Fail 'A-LW-N31-QUOTED' 'the quoted column is not anchored on MS1.SQL:3848' }
+}
+# R17: a uJobList control on a COMPUTED FOLDERS field classifies exactly as
+# feeds-from does (A-FF0-PERCTL not-column 13) -- the SAME chain, the SAME test
+Step 'LW-R17' {
+  $script:lw17 = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmJobList.cxGrid1DBTableView1DueInStr1' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW-R17'        "$($lw17.ChainOutcome):$($lw17.Table):$($lw17.ColumnState):$($lw17.Triggers):$($lw17.ServerRows)" 'not-column:FOLDERS:no:0:0'
+  if ((Dot $lw17) -notmatch 'DueInStr is not a column of FOLDERS -- computed or UI-only') { Fail 'A-LW-R17' 'no "not a column of FOLDERS -- computed or UI-only"' }
+}
+NegTest 'LW-N32' 'not an ORM object property (class is not Tmc<T>) and not a DFM-bound field' 'landswhere_uPipeClientConnection_TPipeClientConnection_Connected' {
+  & "$SRC\Emit-LandsWhere.ps1" -Field 'uPipeClientConnection.TPipeClientConnection.Connected' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+NegTest 'LW-FIB' 'no table named FIB_FIELDS_INFO in the SQL index (the scripts declare FIB$FIELDS_INFO)' 'landswhere_uFIB_FIELDS_INFO_TmcFIB_FIELDS_INFO_FIELD_NAME' {
+  & "$SRC\Emit-LandsWhere.ps1" -Field 'uFIB_FIELDS_INFO.TmcFIB_FIELDS_INFO.FIELD_NAME' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+NegTest 'LW-MEMCTL' 'no table named MEMCONTROLPLANNINGPRESETS in the SQL index (script-derived' 'landswhere_uMEMCONTROLPLANNINGPRESETS_TmcMEMCONTROLPLANNINGPRESETS_OLDID' {
+  & "$SRC\Emit-LandsWhere.ps1" -Field 'uMEMCONTROLPLANNINGPRESETS.TmcMEMCONTROLPLANNINGPRESETS.OLDID' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+NegTest 'LW-PERSIST' 'is a persistent FIELD' 'landswhere_frmCompGroupSetup2_tblCompTreeName' {
+  & "$SRC\Emit-LandsWhere.ps1" -Field 'frmCompGroupSetup2.tblCompTreeName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+NegTest 'LW-ROLES' 'holds no TDataService_<T>_SERVER class' 'landswhere_uCAUSFAIL_TmcCAUSFAIL_REASON' {
+  & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbCli -SqlDbPath $DbSql -OutDir $negDir }
+NegTest 'LW-ROLES2' 'so it is a SERVER index' 'landswhere_uCAUSFAIL_TmcCAUSFAIL_REASON' {
+  & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbSrv -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+NegTest 'LW-N34' 'is not a SQL index (0 sql_table symbols)' 'landswhere_uCAUSFAIL_TmcCAUSFAIL_REASON' {
+  & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbCli -OutDir $negDir }
+# R11 on the SQL side: a MANUFACTURED stale MS5.SQL (one trailing blank) -- its
+# CAUSFAIL_BIU5 is not scanned, so REASON shows 0 triggers AND says 1 is stale
+Step 'LW-STALE' {
+  $stDir = Join-Path $OutDir 'lw-stale'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $ms5 = 'C:\Projects\DB\SQL\MS5.SQL'
+  $l = [IO.File]::ReadAllLines($ms5); $l[0] = $l[0] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'MS5.SQL'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $script:lwst = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir `
+                   -SourceOverride @{ $ms5 = (Join-Path $stDir 'MS5.SQL') }
+  Chk 'A-LW-STALE'      "$($lwst.Triggers)/$($lwst.TriggersStale)" '0/1'
+  if ((Dot $lwst) -notmatch '1 trigger\(s\) FOR CAUSFAIL in a script that differs from the index \[stale source\]') { Fail 'A-LW-STALE' 'the stale-trigger disclosure is missing' }
+}
+# the verb through the bundler: dispatch, -ServerDbPath and -SqlDbPath carried into meta.json
+Step 'LW-ART' {
+  $artRoot = Join-Path $OutDir 'bundle-lw'
+  $art = & "$SRC\New-DiagramArtifact.ps1" -Question lands-where -Target 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutRoot $artRoot
+  $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
+  Chk 'A-LW-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '4 server DataService rows / 1 triggers touching the column'
+  if ($meta.regenerate -notmatch '-SqlDbPath ' -or $meta.regenerate -notmatch '-ServerDbPath ') { Fail 'A-LW-ART' "the regenerate command drops a DB: $($meta.regenerate)" }
+}
+NegTest 'LW-ART-N' 'lands-where needs -ServerDbPath' 'never' {
+  & "$SRC\New-DiagramArtifact.ps1" -Question lands-where -Target 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -SqlDbPath $DbSql -OutRoot (Join-Path $OutDir 'bundle-lw-n') }
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
@@ -1425,7 +1565,8 @@ if (-not $Quiet) {
   Write-Host ("  exception-paths: {0} raises / {1} callers / {2} caught; index {3}/{4}; source bare/on/reraise/var {5}/{6}/{7}/{8}" -f (V $ep1 'Raises'), (V $ep1 'Callers'), (V $ep1 'Caught'), (V $ep1 'IndexRaise'), (V $ep1 'IndexHandle'), (V $ex0 'BareExcept'), (V $ex0 'OnExcept'), (V $ex0 'Reraise'), (V $ex0 'RaiseVar'))
   Write-Host ("  consumers      : CAUSFAIL cert/inf readers {0}/{1}, writers {2}/{3}, {4} triggers; REASON bindings {5}/{6}; facts {7}/{8}/{9}; literals {10}/{11}/{12}; proc bodies {13}" -f (V $co1 'CertainReaders'), (V $co1 'InferredReaders'), (V $co1 'CertainWriters'), (V $co1 'InferredWriters'), (V $co1 'Triggers'), (V $co2c 'IndexBindings'), (V $co2c 'DrawnBindings'), (V $co1 'IndexReadFacts'), (V $co1 'IndexWriteFacts'), (V $co1 'IndexFactSymbols'), (V $co1 'IndexVerbLiterals'), (V $co1 'IndexFromJoinTables'), (V $co1 'IndexFactReadTables'), (V $co1 'ProcBodies'))
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, FF-N28, FF-N28b, FF-N34, each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE, FF-N29/N30/STALE draw")
+  Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

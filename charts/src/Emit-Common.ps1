@@ -1597,6 +1597,23 @@ SELECT sl.id AS id, sl.start_line AS line, sl.owner_name AS prop, sl.text AS col
   $o
 }
 
+# ---- path B detector: the engine's own ORM links (plan section 7, "Path B") -------
+#
+# `orm_links` is the engine's version of the hops lands-where and feeds-from
+# DERIVE (Delphi symbol -> SQL table/column, with a confidence). It is filled
+# only by `fb-snapshot`, which is not run this cycle (engine ruling 1), so it is
+# 0 rows on every clone. ONE query, here, so every verb reads the same answer:
+# the row count and the newest computed_at. The gate asserts the count it
+# EXPECTS today (A-OL-ROWS = 0 on CLIENT and SERVER), so a snapshot landing in a
+# clone is a FAILING assertion -- the signal to build the switch -- not a silent
+# change of route. Nothing reads the rows yet (the owner rules on the snapshot
+# first). Returns Db, Rows, ComputedAt ('' when there are none).
+function Get-OrmLinksState([string] $Db) {
+  $DbPath = Get-CloneDb $Db       # shadowed: the caller's $DbPath is untouched
+  $r = Invoke-IndexQuery 'SELECT COUNT(*) AS n, MAX(computed_at) AS at FROM orm_links'
+  [pscustomobject]@{ Db = $DbPath; Rows = [int]$r[0].n; ComputedAt = [string]$r[0].at }
+}
+
 # ---- exception paths: the ref classifier and the source-only scan -----------------
 #
 # THE KIND IS THE PRE-FILTER, THE SOURCE TOKEN IS THE CLASSIFIER (plan R1).
