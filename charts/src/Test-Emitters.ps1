@@ -29,6 +29,9 @@ param(
   # A TEST project index. tested-by cannot be asked of CLIENT or SERVER at all:
   # the [Test] attributes live here, and so does the code under test.
   [string] $DbMt   = (Join-Path $PSScriptRoot '..\scratch\db\TESTS-MicroniteTests.sqlite'),
+  # The SQL-SCRIPT index (12 Firebird .SQL files). consumers / lands-where read
+  # tables, columns and trigger bodies from it; it holds no Delphi code.
+  [string] $DbSql  = (Join-Path $PSScriptRoot '..\scratch\db\SQL-drag-lint-sql.sqlite'),
   [string] $OutDir = (Join-Path $PSScriptRoot ('..\scratch\test-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
   [switch] $Quiet
 )
@@ -771,6 +774,110 @@ NegTest 'N23' '0 callers at any depth' 'impact_uMain_TfrmMAIN_FormCreate' {
 NegTest 'N24' 'references no enum constant at all' 'prototrace_gammafunc_LnGamma' {
   & "$SRC\Emit-ProtocolTrace.ps1" -Target 'gammafunc.LnGamma' -DbPath $DbCli -OutDir $negDir }
 
+# ---- PLAN-last-four-verbs, Task 0: the shared helpers ----------------------------
+# Every number below was measured on 2026-09-23 against the clones and is PINNED
+# (controller ruling R5: no >= assertions). Where a pin differs from the plan's
+# section 1, the comment names the mechanism (R6) -- none was silently re-based.
+Note 'task-0 helpers (SQL set, triggers, verb scan, source context, datasource chain) ...'
+Step 'E-T0' {
+  $script:t0 = & "$SRC\Test-Task0Helpers.ps1" -DbCli $DbCli -DbSql $DbSql -OutDir $OutDir
+
+  # P15: 252 declarations collapse to 135 names; 117 names are declared twice
+  # (MS1.SQL and MScript2.SQL -- no other script declares a table).
+  Chk 'A-CO0-TABLES'    "$($t0.SqlTables)/$($t0.SqlDeclarations)" '135/252'
+  Chk 'A-CO0-COLLAPSED' $t0.SqlCollapsed 117
+  Chk 'A-CO0-PROCS'     $t0.SqlProcedures '90/168'
+  # FINDING vs the plan's "LAST declaration in file order": that picks
+  # MScript2.SQL, which is the OLDER script (mtime 2025-02-11 vs MS1 2026-06-22)
+  # and gives FOLDERS 47 columns. The newest-file rule picks MS1: FOLDERS 79 and
+  # CAUSFAIL 4, exactly the live Firebird counts (P16/P24).
+  Chk 'A-CO0-WINNER'    "$($t0.FoldersColumns) from $($t0.FoldersFrom)" '79 from MS1.SQL'
+  Chk 'A-CO0-CAUSCOLS'  $t0.CausfailColumns 'ID,REASON,SEVERITY,SYSTID'
+
+  Chk 'A-CO0-TRIGGERS'  "$($t0.TriggerBodies)/$($t0.Triggers)" '183/183'
+  Chk 'A-CO0-TRIGSTALE' $t0.TriggerStale 0
+  # 183, NOT the plan's 177. The 6 "missing" triggers are FOR FIB$... tables: a
+  # `\w+` read of the FOR clause stops at the `$` (the same truncation as P21's
+  # `FIB`). The engine's own sql_table_ref on each CREATE TRIGGER line carries
+  # the whole name, and all 183 are in the collapsed set.
+  Chk 'A-CO0-FORTABLE'  $t0.TriggerForKnown 183
+  Chk 'A-CO0-NEWOLD'    $t0.TriggerNewOld 183
+  # P19's "4 also name ANOTHER table", by name
+  Chk 'A-CO0-OTHER'     $t0.TriggerOther 'HEATBOOK_AIU5>FOLHEAT,MACHINES_AI10>MACHINESTAT,MACHINES_AU10>MACHINESTAT,TOOLS_AI0>TOOLGR12'
+  # P39's CAUSFAIL rows
+  Chk 'A-CO0-CAUSTRIG'  $t0.CausfailTriggers 'CAUSFAIL_BIU0=ID,CAUSFAIL_BIU5=REASON+SEVERITY+SYSTID,CAUSFAIL_BUD0=SYSTID'
+  if (@($t0.VerbCaseFailures).Count) { Fail 'A-CO0-VERB' (@($t0.VerbCaseFailures) -join '; ') }
+
+  # P2 through Get-SourceContext: of 430 candidate refs, 168 reads sit after
+  # `raise` and 185 type_uses after `on [E:]` -- with 0 stale files among them
+  # and 0 refs whose stripped token is not the ref's own name (column alignment).
+  Chk 'A-EP0-CAND'      $t0.ExcCandidates 430
+  Chk 'A-EP0-CLASSIFY'  "$($t0.ExcRaise)/$($t0.ExcHandle)" '168/185'
+  Chk 'A-EP0-FRESH'     $t0.ExcStale 0
+  Chk 'A-EP0-TOKEN'     $t0.ExcTokenMiss 0
+
+  # 54 / 5 / 49, NOT the plan's 54 / 5 / 51. The plan matched `.DataSet` sites
+  # by BARE receiver name across files; the two DFM-wired `DSR` datasources then
+  # "had" 8 code sites each in uAutoTest.pas, where DSR is a LOCAL variable
+  # (`var DSR : TDataSource:= VM.GetpdsrFolder`) -- the P28 collision. Same-file
+  # matching: 49 datasources have a code site, all 49 assign.
+  Chk 'A-FF0-DS'        "$($t0.DsTotal)/$($t0.DsDfmWired)/$($t0.DsCodeSite)" '54/5/49'
+  Chk 'A-FF0-ASSIGN'    $t0.DsAssigned 49
+  Chk 'A-FF0-RESOLVE'   "$($t0.DsOne)/$($t0.DsMany)/$($t0.DsNone)" '22/17/9'
+  # 6 of the 17 break the tie on bound columns. The plan listed 5 NAMES --
+  # dsrAssigned is two datasources (AssignGroups and AssignTools2), both resolve.
+  Chk 'A-FF0-BYCOL'     $t0.DsByColumns 6
+  Chk 'A-FF0-GRADES'    $t0.DsGrades 'by-columns=6,dfm-dataset=5,many=11,no-type=1,none=9,one-table=22'
+  Chk 'A-FF0-REASON'    $t0.DsNoReason 0
+  Chk 'A-FF0-HOPS'      $t0.DsNoHops 0
+  Chk 'A-FF0-CAUSFAIL'  $t0.CausFailChain 'one-table:CAUSFAIL:certain>inferred>by name>inferred'
+  # 65 dangling rows, 63 of them re-pointed by an ASSIGNMENT in code. The plan's
+  # 21 was receiver_text-only and counted 3 READS as re-pointings
+  # (viewSPCMU/PP/CP.DataController.DataSource.DataSet.Append, ControlPlan2.pas
+  # 1689-1702); receiver_text alone finds 18 assignments. The other 45 have the
+  # control recovered from source because `edtF2   .DataBinding   .DataSource:=`
+  # stores receiver_text '.DataBinding' (P29).
+  Chk 'A-FF0-DANGLING'  "$($t0.DanglingRows)/$($t0.RePointedAny)" '65/63'
+  Chk 'A-FF0-DANGMOD'   $t0.DanglingMissing 65
+  Chk 'A-FF0-DANGRECV'  $t0.RePointedRecv 18
+
+  # N21 at helper level: a MANUFACTURED stale copy (one trailing blank added) is
+  # stale, every DataSet site in it reads `stale`, none is classified, and the
+  # context carries no text; an UNCHANGED copy under a different path is fresh
+  # and resolves -- so the check is on content, not on the path.
+  Chk 'A-T0-OVR-SAME'   $t0.OverrideSameFresh $true
+  Chk 'A-T0-OVR-STALE'  $t0.OverrideStaleFresh $false
+  Chk 'A-T0-STALECHAIN' $t0.StaleChain 'stale source::stale,stale'
+  Chk 'A-T0-STALECLASS' $t0.StaleClassified 0
+  Chk 'A-T0-STALECTX'   $t0.StaleContext 'True:True:True'
+  Chk 'A-T0-FRESHCOPY'  $t0.FreshCopyChain 'one-table:CAUSFAIL'
+  # ...and on the SQL side: one changed line in MS5.SQL stales exactly its 73
+  # triggers, and not one of them is scanned.
+  Chk 'A-T0-SQLSTALE'   "$($t0.SqlStaleTriggers)/$($t0.Ms5Triggers)" '73/73'
+  Chk 'A-T0-SQLSCAN'    $t0.SqlStaleScanned 0
+}
+
+Note 'negatives N33, N35 (database refusals for the new helpers) ...'
+# N33: the SQL index is reached through Get-CloneDb like every other DB, so a
+# -SqlDbPath habit cannot open the live one. Get-CloneDb only resolves the path;
+# it never opens the file.
+$liveSql = 'C:\Projects\DB\SQL\drag-lint-sql.sqlite'
+if (Test-Path $liveSql) {
+  NegTest 'N33' 'refusing a non-clone database' 't0_n33' {
+    & { . "$SRC\Emit-Common.ps1"; Get-SqlTableSet $liveSql } }
+} else {
+  Note '  N33 skipped: the live SQL index is not on this machine'
+}
+# N35 (ruling R3): a history copy sits UNDER the clone root, so the whitelist
+# alone accepts it and it answers with the older parse. The suffix rule refuses.
+$preCli = Join-Path $PSScriptRoot '..\scratch\db\CLIENT-Micronite2027.sqlite.pre-1.18'
+if (Test-Path $preCli) {
+  NegTest 'N35' 'does not end in .sqlite' 'shownwhere_FTRNAMESTR' {
+    & "$SRC\Emit-ShownWhere.ps1" -Column 'FTRNAMESTR' -DbPath $preCli -OutDir $negDir }
+} else {
+  Note '  N35 skipped: no pre-1.18 history copy beside the clones'
+}
+
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
@@ -796,7 +903,9 @@ if (-not $Quiet) {
   Write-Host ("  shown-where    : {0} bindings on {1} forms, of {2} index-wide over {3} columns" -f (V $sw1 'Bindings'), (V $sw1 'Forms'), (V $sw1 'IndexRows'), (V $sw1 'IndexColumns'))
   Write-Host ("  change-impact  : {0} routines / {1} unit; a TYPE reaches {2} over {3} units (capped {4})" -f (V $ci1 'Affected'), (V $ci1 'Units'), (V $ci2 'Affected'), (V $ci2 'Units'), (V $ci2 'Capped'))
   Write-Host ("  tested-by      : {0} / {1} / {2} covering tests, from {3} test methods" -f (V $tb1 'Tests'), (V $tb2 'Tests'), (V $tb3 'Tests'), (V $tb1 'TestMethods'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, each asserting message AND absent .svg; N13/N16/N17 draw")
+  Write-Host ("  task-0 helpers : SQL {0}/{1} tables, {2}/{3} trigger bodies; raise/handle {4}/{5}; datasources {6}/{7}/{8} resolve {9}/{10}/{11}; dangling {12}/{13}" -f (V $t0 'SqlTables'), (V $t0 'SqlDeclarations'), (V $t0 'TriggerBodies'), (V $t0 'Triggers'), (V $t0 'ExcRaise'), (V $t0 'ExcHandle'), (V $t0 'DsTotal'), (V $t0 'DsDfmWired'), (V $t0 'DsCodeSite'), (V $t0 'DsOne'), (V $t0 'DsMany'), (V $t0 'DsNone'), (V $t0 'DanglingRows'), (V $t0 'RePointedAny'))
+  Write-Host ("  disk vs index  : CLIENT files differing today (informational, not pinned): {0}" -f (V $t0 'DiskStaleCli'))
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, each asserting message AND absent .svg; N13/N16/N17 draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }
