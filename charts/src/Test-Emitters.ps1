@@ -1133,6 +1133,134 @@ Step 'EP-N23' {
   if (HasLine $t23 1696) { Fail 'A-EP-N23' 'the cast at :1696 was drawn' }
 }
 
+# ---- PLAN-last-four-verbs, Task 2: consumers ---------------------------------------
+# Two indexes per run: a Delphi project clone (-DbPath) and the SQL-SCRIPT clone
+# (-SqlDbPath). Every number measured 2026-09-23 and PINNED (R5); where a pin
+# differs from the plan, the comment names the mechanism (R6). Gate codes carry
+# a CO- prefix: N20-N24 were already taken by earlier emitters.
+Note 'consumers ...'
+Step 'E-CO' {
+  # the body-end scanner on SYNTHETIC lines (a manufactured .SQL copy is always
+  # stale and never scanned, so the Task 0 review's "stop at the next CREATE"
+  # can only be shown on text): trigger A lost its terminator and must NOT run
+  # on into B; B ends at its own `END^`; SET TERM state is read from above.
+  $script:co0 = & {
+    . "$SRC\Emit-Common.ps1"
+    $syn = [string[]]@('SET TERM ^ ;', 'CREATE TRIGGER A FOR T', 'AS BEGIN', '  NEW.X = 1;', 'END', '',
+                       'CREATE TRIGGER B FOR U', 'AS BEGIN NEW.Y = 2;', 'END^', 'SET TERM ; ^', 'CREATE TABLE Z (ID INTEGER);')
+    $a = Find-SqlBodyEnd $syn 2 '^'
+    $b = Find-SqlBodyEnd $syn 7 '^'
+    [pscustomobject]@{ A = "$($a.Found):$($a.EndLine)"; AReason = $a.Reason; B = "$($b.Found):$($b.EndLine)"
+                       Term = "$(Get-SqlTermAt $syn 7)$(Get-SqlTermAt $syn 11)" }
+  }
+  Chk 'A-CO0-BODYEND-A' $co0.A 'False:0'
+  if ($co0.AReason -notlike '*next statement at line 7*') { Fail 'A-CO0-BODYEND-A' "reason: $($co0.AReason)" }
+  Chk 'A-CO0-BODYEND-B' $co0.B 'True:9'
+  Chk 'A-CO0-TERM'      $co0.Term '^;'
+
+  $script:co1 = & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-CO1-CERT-W'    $co1.CertainWriters 1
+  Chk 'A-CO1-CERT-WN'   $co1.CertainWriterNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery'
+  Chk 'A-CO1-CERT-R'    $co1.CertainReaders 0
+  # EXACT, measured (R5): the plan said ">= 1 (PrepareLoadQuery)". It is exactly
+  # that one routine: `SQL.Add('FROM CAUSFAIL')` at uCAUSFAIL_SERVER.PAS:110 with
+  # no sql_reads fact (P22). PrepareSaveQuery's `UPDATE OR INSERT INTO CAUSFAIL`
+  # is a WRITE literal and is already certain, so it adds no inferred writer.
+  Chk 'A-CO1-INF-R'     $co1.InferredReaders 1
+  Chk 'A-CO1-INF-RN'    $co1.InferredReaderNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery'
+  Chk 'A-CO1-INF-W'     $co1.InferredWriters 0
+  Chk 'A-CO1-TRIG'      $co1.TriggerNames 'CAUSFAIL_BIU0@MS6.SQL:34,CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44'
+  # the procedure scanner (R2) converged: 168/168 bodies; two of them name CAUSFAIL
+  Chk 'A-CO1-PROCS'     "$($co1.ProcBodies) $($co1.ProcedureNames)" '168/168 SP_GET_CAUSFAIL_ID,SP_MAXID_FORALL_TABLES'
+  Chk 'A-CO1-INDEXES'   $co1.Indexes 0
+  # on SERVER the [by name] half is the log-context / generator literals
+  # (TLogContext.ForDB('CAUSFAIL', ...)), none inside a routine already drawn
+  Chk 'A-CO1-BYNAME-SRV' $co1.ByNameLines 'uCAUSFAIL_SERVER:71+134+188+211+252+283'
+  Chk 'A-CO1-CLICK'     "$($co1.ClickTargets)/$($co1.Expected)" '9/9'
+  $tc1 = Dot $co1
+  if ($tc1 -notmatch 'declared 2 times in the scripts; showing the newest \(MS1\.SQL:1408') { Fail 'A-CO1-DECL' 'the collapse sentence is missing' }
+  if ($tc1 -notmatch '\[certain\] by fact: 0 reader\(s\) / 1 writer\(s\); \[inferred\] by SQL literal: 1 reader\(s\) / 0 writer\(s\)') { Fail 'A-CO1-R7' 'both grades are not on the focus box (R7)' }
+  if ($tc1 -notmatch 'cluster_infreads_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-CO1-DASHED' 'the inferred readers are not dashed' }
+  if ($tc1 -notmatch 'script-derived schema: 135 tables; 5 live tables are not in the scripts') { Fail 'A-CO1-SCHEMA' 'the script-derived disclosure is missing' }
+  if (-not (HasLine $tc1 110)) { Fail 'A-CO1-HREF' 'PrepareLoadQuery is not anchored on its FROM CAUSFAIL literal (:110)' }
+  if (-not (HasLine $tc1 123)) { Fail 'A-CO1-HREF' 'PrepareSaveQuery is not anchored on its INSERT INTO literal (:123)' }
+
+  # index-wide (P21/P22): 19 / 148 / 157 facts; 14 tables read by fact. 791, NOT
+  # the plan's 782: the count here is every literal/format string holding an
+  # upper-case SELECT/INSERT/UPDATE/DELETE/FROM/JOIN/INTO/EXECUTE as a word. The
+  # plan recorded no query; no variant tried (statement verbs only 603, verb +
+  # following token 643, case-insensitive 952, verb+name 614) gives 782, and the
+  # 133 FROM/JOIN tables and 14 fact tables DO reproduce -- so the population
+  # definition, not the data, differs.
+  Chk 'A-CO-IDX'        "$($co1.IndexReadFacts)/$($co1.IndexWriteFacts)/$($co1.IndexFactSymbols)" '19/148/157'
+  Chk 'A-CO-LITS'       "$($co1.IndexVerbLiterals)/$($co1.IndexFromJoinTables)/$($co1.IndexFactReadTables)" '791/133/14'
+
+  $script:co2 = & "$SRC\Emit-Consumers.ps1" -Column 'CAUSFAIL.REASON' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-CO2-SRV'       $co2.ServerRoutineNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery,uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery'
+  Chk 'A-CO2-TRIG'      $co2.ColumnTriggerNames 'CAUSFAIL_BIU5'
+  $script:co2c = & "$SRC\Emit-Consumers.ps1" -Column 'CAUSFAIL.REASON' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
+  # 7 REASON bindings index-wide; each chain resolves (one-table), and only the
+  # one on dsrCausFail lands on CAUSFAIL -- the other 6 are CHIPFORM, ENDPROC x2,
+  # STOPREAS, SURFFIN, TLLWEAR, counted and never drawn (P34)
+  Chk 'A-CO2-BIND'      "$($co2c.IndexBindings)/$($co2c.DrawnBindings)" '7/1'
+  Chk 'A-CO2-BINDROW'   $co2c.DrawnBindingRows 'uCausFailForm.dfm:60:colREASON'
+  Chk 'A-CO2-BINDELSE'  "$($co2c.BindingsElsewhere)/$($co2c.BindingsUnresolved)" '6/0'
+
+  $script:co3 = & "$SRC\Emit-Consumers.ps1" -Column 'DRA1.FLDRID' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-CO3-SRV'       $co3.ServerRoutineNames 'uDRA1_SERVER.TDataService_DRA1_SERVER.PrepareLoadQuery,uDRA1_SERVER.TDataService_DRA1_SERVER.PrepareSaveQuery,uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation'
+
+  $script:co4 = & "$SRC\Emit-Consumers.ps1" -Table 'FOLDERS' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-CO4-DECL'      "$($co4.Declarations)/$($co4.Columns)" '2/79'
+  Chk 'A-CO4-ROWS'      "$($co4.CertainReaders)/$($co4.CertainWriters)/$($co4.InferredReaders)/$($co4.InferredWriters)/$($co4.Triggers)/$($co4.Procedures)/$($co4.Indexes)" '1/2/3/0/3/1/2'
+  if ((Dot $co4) -notmatch 'declared 2 times in the scripts; showing the newest') { Fail 'A-CO4-DECL' 'the collapse sentence is missing' }
+
+  # THE KNOWN GAP (Get-SqlTableSet): IPCHART.ACTION is live but only the older
+  # MScript2.SQL declaration carries it -- accepted and labelled, never refused
+  $script:co5 = & "$SRC\Emit-Consumers.ps1" -Column 'IPCHART.ACTION' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-CO5-OLDER'     $co5.ColumnOlderOnly $true
+  if ((Dot $co5) -notmatch 'column ONLY in an older declaration \(MScript2\.SQL\)') { Fail 'A-CO5-OLDER' 'the older-declaration label is missing' }
+}
+
+Note 'consumers negatives and draws ...'
+# N24: OPERATION is in the scripts (dropped live) -- it RENDERS; absence from the
+# live schema is a human validation step the emitter cannot make.
+Step 'CO-N24' {
+  $script:co24 = & "$SRC\Emit-Consumers.ps1" -Table 'OPERATION' -SqlDbPath $DbSql -DbPath $DbSrv -OutDir $OutDir
+  $t24 = Dot $co24
+  if ($t24 -notmatch 'declared 1 time in the scripts \(MScript2\.SQL') { Fail 'A-CO-N24' 'no "declared 1 time" on the focus box' }
+  if ($t24 -notmatch 'script-derived schema') { Fail 'A-CO-N24' 'no script-derived sentence' }
+}
+NegTest 'CO-N25' 'no table PDF_SCAN in the SQL index (script-derived; the scripts may lag the live schema) -- nearest: PDF1' 'consumers_PDF_SCAN' {
+  & "$SRC\Emit-Consumers.ps1" -Table 'PDF_SCAN' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+NegTest 'CO-N26' 'no column NOPE in FOLDERS (79 columns in the newest declaration' 'consumers_FOLDERS_NOPE' {
+  & "$SRC\Emit-Consumers.ps1" -Column 'FOLDERS.NOPE' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+# N27: CLIENT has no facts but DOES have text -- the [by name] half renders
+Step 'CO-N27' {
+  $script:co27 = & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbCli -SqlDbPath $DbSql -OutDir (Join-Path $OutDir 'cli')
+  Chk 'A-CO1-CLIENT'    "$($co27.ByNameUnits) $($co27.ByNameLines)" '1 uCausFail.ViewModel:37+258+259'
+  Chk 'A-CO-N27-FACTS'  $co27.NoSqlFacts $true
+  if ((Dot $co27) -notmatch 'this index has no SQL facts') { Fail 'A-CO-N27' 'the fact half does not say "this index has no SQL facts"' }
+  if (-not (Test-Path $co27.Svg)) { Fail 'A-CO-N27' 'no .svg for the CLIENT render' }
+}
+NegTest 'CO-N34' 'is not a SQL index (0 sql_table symbols)' 'consumers_CAUSFAIL' {
+  & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbCli -OutDir $negDir }
+# R11 on the SQL side: a MANUFACTURED stale MS5.SQL (one trailing blank, via
+# -SourceOverride). Its trigger renders [stale source] and its procedure bodies
+# are not scanned -- the two CAUSFAIL-named procedures fall back to name-only rows.
+Step 'CO-STALE' {
+  $stDir = Join-Path $OutDir 'co-stale'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $ms5 = 'C:\Projects\DB\SQL\MS5.SQL'
+  $l = [IO.File]::ReadAllLines($ms5); $l[0] = $l[0] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'MS5.SQL'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $script:cost = & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir `
+                   -SourceOverride @{ $ms5 = (Join-Path $stDir 'MS5.SQL') }
+  # 77 MS5 procedure declarations are not scanned: 168 - 77 = 91
+  Chk 'A-CO-STALE-PROCS' "$($cost.ProcBodies)/$($cost.Procedures)/$($cost.ProcsUnscanned)" '91/168/0/2'
+  $ts = Dot $cost
+  if ($ts -notmatch 'CAUSFAIL_BIU5</FONT>\s*<FONT[^>]*>:15</FONT>\s*<FONT[^>]*>&#183; \[stale source\]') { Fail 'A-CO-STALE-TRIG' 'CAUSFAIL_BIU5 (MS5.SQL) is not marked [stale source]' }
+  if ($ts -notmatch '77 of 168 procedure bodies not scanned') { Fail 'A-CO-STALE-NOTE' 'the unscanned-procedure disclosure is missing' }
+}
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
@@ -1161,7 +1289,8 @@ if (-not $Quiet) {
   Write-Host ("  task-0 helpers : SQL {0}/{1} tables, {2}/{3} trigger bodies; raise/handle {4}/{5}; datasources {6}/{7}/{8} resolve {9}/{10}/{11}; dangling {12}/{13}" -f (V $t0 'SqlTables'), (V $t0 'SqlDeclarations'), (V $t0 'TriggerBodies'), (V $t0 'Triggers'), (V $t0 'ExcRaise'), (V $t0 'ExcHandle'), (V $t0 'DsTotal'), (V $t0 'DsDfmWired'), (V $t0 'DsCodeSite'), (V $t0 'DsOne'), (V $t0 'DsMany'), (V $t0 'DsNone'), (V $t0 'DanglingRows'), (V $t0 'RePointedAny'))
   Write-Host ("  disk vs index  : CLIENT files differing today (informational, not pinned): {0}" -f (V $t0 'DiskStaleCli'))
   Write-Host ("  exception-paths: {0} raises / {1} callers / {2} caught; index {3}/{4}; source bare/on/reraise/var {5}/{6}/{7}/{8}" -f (V $ep1 'Raises'), (V $ep1 'Callers'), (V $ep1 'Caught'), (V $ep1 'IndexRaise'), (V $ep1 'IndexHandle'), (V $ex0 'BareExcept'), (V $ex0 'OnExcept'), (V $ex0 'Reraise'), (V $ex0 'RaiseVar'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, each asserting message AND absent .svg; N13/N16/N17 and EP-N21..N23 draw")
+  Write-Host ("  consumers      : CAUSFAIL cert/inf readers {0}/{1}, writers {2}/{3}, {4} triggers; REASON bindings {5}/{6}; facts {7}/{8}/{9}; literals {10}/{11}/{12}; proc bodies {13}" -f (V $co1 'CertainReaders'), (V $co1 'InferredReaders'), (V $co1 'CertainWriters'), (V $co1 'InferredWriters'), (V $co1 'Triggers'), (V $co2c 'IndexBindings'), (V $co2c 'DrawnBindings'), (V $co1 'IndexReadFacts'), (V $co1 'IndexWriteFacts'), (V $co1 'IndexFactSymbols'), (V $co1 'IndexVerbLiterals'), (V $co1 'IndexFromJoinTables'), (V $co1 'IndexFactReadTables'), (V $co1 'ProcBodies'))
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

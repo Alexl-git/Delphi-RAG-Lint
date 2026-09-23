@@ -736,6 +736,15 @@ function Get-SourceContext([string] $Path, [int] $Line, [int] $Col, [int] $Len,
 # the winner is the declaration in the NEWEST file (files.mtime_unix), then the
 # latest line -- a recorded fact of the index, not a guess from file names.
 # Every declaration is still carried in .Declarations for disclosure.
+#
+# THE KNOWN GAP IN THAT RULE (Task 0 review, measured 2026-09-23): the winner is
+# not a superset. 12 column names across 10 tables exist ONLY in the older
+# MScript2.SQL copy -- OPTORID on 8 tables, GONOFF.OFF, MET1.NOTE, IPCHART.ACTION
+# and IPCHART.OPTRID -- and at least one of them is LIVE: live Firebird IPCHART
+# has 137 columns, the winner 136, and the missing one is ACTION. So "not in the
+# winning declaration" does NOT mean "not in the database". Each table carries
+# them in .OlderOnlyColumns, and a chart that selects such a column must say
+# which declaration it came from rather than refuse it.
 function Get-SqlTableSet([string] $SqlDb) {
   $SqlDb = Get-CloneDb $SqlDb
   if (-not $script:DlSqlSets) { $script:DlSqlSets = @{} }
@@ -767,6 +776,17 @@ SELECT c.parent_id AS tid, GROUP_CONCAT(c.name, ',') AS cols
     if ($cols.ContainsKey([int]$win.id)) { $names = [string[]]$cols[[int]$win.id] }
     $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
     foreach ($c in $names) { [void]$set.Add($c) }
+    # column name -> the first (newest) LOSING declaration that carries it, for
+    # names the winner lacks (see THE KNOWN GAP above)
+    $older = [ordered]@{}
+    foreach ($d in @($ordered | Select-Object -Skip 1)) {
+      if (-not $cols.ContainsKey([int]$d.id)) { continue }
+      foreach ($c in $cols[[int]$d.id]) {
+        if (-not $set.Contains($c) -and -not $older.Contains($c.ToUpperInvariant())) {
+          $older[$c.ToUpperInvariant()] = [pscustomobject]@{ Column = $c; File = [string]$d.path; Line = [int]$d.line }
+        }
+      }
+    }
     $tables[[string]$win.name] = [pscustomobject]@{
       Name = [string]$win.name; Id = [int]$win.id; File = [string]$win.path; Line = [int]$win.line
       DeclCount = $g.Count
@@ -774,6 +794,7 @@ SELECT c.parent_id AS tid, GROUP_CONCAT(c.name, ',') AS cols
         [pscustomobject]@{ Id = [int]$_.id; File = [string]$_.path; Line = [int]$_.line
                            Columns = $(if ($cols.ContainsKey([int]$_.id)) { $cols[[int]$_.id].Count } else { 0 }) } })
       Columns = $set; ColumnNames = $names
+      OlderOnlyColumns = $older
     }
   }
 
@@ -841,26 +862,154 @@ function Get-StrippedSqlLines([string] $ReadPath) {
 
 # A TRIGGER body read from the .SQL source, because the index stores none: every
 # trigger and procedure symbol has start_line == end_line (P18). Scans from the
-# declaration line to the next line that is exactly `^` (after comments are
-# blanked and trailing blanks trimmed) -- 183/183 triggers terminate that way.
-# PROCEDURES DO NOT (P20: 1 of 168; MS1/MS5 use a SET TERM layout) -- that
-# scanner is Task 2's, so this is for triggers only.
+# declaration line to the first line that ENDS in `^` (after comments are
+# blanked and trailing blanks trimmed). Procedures have their own scanner
+# (Get-SqlProcBodyText) because they need the SET TERM state.
 # $DbPath must be the SQL index (freshness is checked against it).
-# Returns Stale, Found, StartLine, EndLine (the `^` line, 0 when not found) and
-# Text (the stripped body, declaration line included, `^` excluded).
+# Returns Stale, Found, StartLine, EndLine (the `^` line, 0 when not found),
+# Text (the stripped body, declaration line included, `^` excluded) and Reason
+# ('' when found).
+#
+# A body that reaches the NEXT statement before its `^` is NOT FOUND (Task 0
+# review): a trigger missing its terminator must not run on into the following
+# trigger's body and inherit its tables and NEW./OLD. columns. Find-SqlBodyEnd
+# stops at a line that starts a new DDL statement (CREATE / RECREATE / ALTER) or
+# a SET TERM, and says so in Reason.
+#
+# FINDING, 2026-09-23 (Task 2): the Task 0 rule "the next line that is EXACTLY
+# `^`" reported 183/183 bodies, but 3 of them were WRONG. GINSP_BIU5 (MS5.SQL:400),
+# STATIONS_BIU5 (MS5.SQL:1118) and DEFCTRPL_BIU0 (MS6.SQL:171) end in `END^` on
+# the body's last line, so the bare-`^` scan ran on through the NEXT trigger and
+# gave each one its neighbour's NEW./OLD. columns. The CREATE stop exposed them
+# (180/183 found); ending the scan at a line that ENDS in `^` -- the procedure
+# rule -- finds all 183, each ending at its own terminator.
 function Get-SqlBodyText([string] $Path, [int] $Line, [hashtable] $SourceOverride, [int] $MaxLines = 400) {
   if (-not (Test-SourceFresh $Path $SourceOverride)) {
-    return [pscustomobject]@{ Stale = $true; Found = $false; StartLine = $Line; EndLine = 0; Text = $null }
+    return [pscustomobject]@{ Stale = $true; Found = $false; StartLine = $Line; EndLine = 0; Text = $null; Reason = 'stale source' }
   }
   $lines = Get-StrippedSqlLines (Resolve-SourceReadPath $Path $SourceOverride)
-  $last = [Math]::Min($lines.Count, $Line - 1 + $MaxLines)
-  for ($j = $Line - 1; $j -lt $last; $j++) {
-    if ($lines[$j].TrimEnd() -eq '^') {
-      $body = if ($j -gt $Line - 1) { $lines[($Line - 1)..($j - 1)] -join "`n" } else { '' }
-      return [pscustomobject]@{ Stale = $false; Found = $true; StartLine = $Line; EndLine = $j + 1; Text = $body }
-    }
+  $end = Find-SqlBodyEnd $lines $Line '^' -MaxLines $MaxLines
+  if (-not $end.Found) {
+    return [pscustomobject]@{ Stale = $false; Found = $false; StartLine = $Line; EndLine = 0; Text = $null; Reason = $end.Reason }
   }
-  [pscustomobject]@{ Stale = $false; Found = $false; StartLine = $Line; EndLine = 0; Text = $null }
+  $j = $end.EndLine - 1
+  $body = if ($j -gt $Line - 1) { $lines[($Line - 1)..($j - 1)] -join "`n" } else { '' }
+  [pscustomobject]@{ Stale = $false; Found = $true; StartLine = $Line; EndLine = $end.EndLine; Text = $body; Reason = '' }
+}
+
+# The ONE body-end scanner, over already-stripped lines, so it can be tested on
+# synthetic text (a manufactured .SQL copy is always stale, and a stale file is
+# never scanned). From 1-based $Line, find the terminator:
+#   -BareTerm   a line that is exactly $Term      (triggers: `^` on its own line)
+#   otherwise   a line that ENDS in $Term         (procedures: `END^`, `END ^`)
+# A line after the first that starts a new statement -- CREATE, RECREATE, ALTER,
+# or SET TERM -- ends the search NOT FOUND. PSQL cannot contain DDL (only inside
+# EXECUTE STATEMENT strings, which are blanked), so such a line means the
+# terminator is missing, and running on would attribute the next object's body
+# to this one. Returns Found, EndLine (1-based terminator line, 0 when not found)
+# and Reason.
+function Find-SqlBodyEnd([string[]] $Lines, [int] $Line, [string] $Term, [switch] $BareTerm, [int] $MaxLines = 400) {
+  $last = [Math]::Min($Lines.Count, $Line - 1 + $MaxLines)
+  for ($j = $Line - 1; $j -lt $last; $j++) {
+    $t = $Lines[$j].Trim()
+    if ($j -gt $Line - 1 -and $t -match '^(CREATE|RECREATE|ALTER)\s|^SET\s+TERM\b') {
+      return [pscustomobject]@{ Found = $false; EndLine = 0
+                                Reason = "reached the next statement at line $($j + 1) before a $Term terminator" }
+    }
+    $hit = $(if ($BareTerm) { $t -eq $Term } else { $t.EndsWith($Term) })
+    if ($hit) { return [pscustomobject]@{ Found = $true; EndLine = $j + 1; Reason = '' } }
+  }
+  [pscustomobject]@{ Found = $false; EndLine = 0; Reason = "no $Term terminator within $MaxLines lines" }
+}
+
+# The statement terminator in force at 1-based $Line: the last `SET TERM x`
+# above it, else `;`. `SET TERM ^ ;` and `SET TERM ^;` both switch to `^`, and
+# `SET TERM ; ^` / `SET TERM ;^` back to `;` -- the NEW terminator is the first
+# character after TERM (every terminator in these scripts is one character).
+function Get-SqlTermAt([string[]] $Lines, [int] $Line) {
+  $term = ';'
+  for ($j = 0; $j -lt [Math]::Min($Line - 1, $Lines.Count); $j++) {
+    $m = [regex]::Match($Lines[$j], '^\s*SET\s+TERM\s*(\S)')
+    if ($m.Success) { $term = $m.Groups[1].Value }
+  }
+  $term
+}
+
+# A PROCEDURE body read from the .SQL source (plan P20, controller ruling R2:
+# Task 2's scanner, time-boxed). The trigger rule does not fit procedures: only
+# 1 of 168 ends at a bare `^` line, because MS1 and MS5 write `END^` / `END ^`
+# on the last line of the body inside a `SET TERM ^ ;` block. So: find the
+# terminator in force at the declaration (Get-SqlTermAt), refuse to scan when it
+# is still `;` (a `;`-terminated scan would stop at the first statement inside
+# the body), and scan to the first line that ENDS in it (Find-SqlBodyEnd).
+# Same contract as Get-SqlBodyText, plus Term.
+function Get-SqlProcBodyText([string] $Path, [int] $Line, [hashtable] $SourceOverride, [int] $MaxLines = 400) {
+  if (-not (Test-SourceFresh $Path $SourceOverride)) {
+    return [pscustomobject]@{ Stale = $true; Found = $false; StartLine = $Line; EndLine = 0; Text = $null; Term = ''; Reason = 'stale source' }
+  }
+  $lines = Get-StrippedSqlLines (Resolve-SourceReadPath $Path $SourceOverride)
+  $term = Get-SqlTermAt $lines $Line
+  if ($term -eq ';') {
+    return [pscustomobject]@{ Stale = $false; Found = $false; StartLine = $Line; EndLine = 0; Text = $null; Term = $term
+                              Reason = 'no SET TERM in force at the declaration' }
+  }
+  $end = Find-SqlBodyEnd $lines $Line $term -MaxLines $MaxLines
+  if (-not $end.Found) {
+    return [pscustomobject]@{ Stale = $false; Found = $false; StartLine = $Line; EndLine = 0; Text = $null; Term = $term; Reason = $end.Reason }
+  }
+  $body = $lines[($Line - 1)..($end.EndLine - 1)] -join "`n"
+  $body = $body.Substring(0, $body.LastIndexOf($term))      # the terminator itself is not body text
+  [pscustomobject]@{ Stale = $false; Found = $true; StartLine = $Line; EndLine = $end.EndLine; Text = $body; Term = $term; Reason = '' }
+}
+
+# Every procedure declaration with its scanned body, cached per SQL index per
+# run. 168 declarations are 90 names: MS1.SQL declares 89 of them as STUBS
+# (`BEGIN SUSPEND; END^` -- forward declarations so the real bodies can refer to
+# each other) and MS5.SQL carries the real bodies. So the NEWEST-file rule that
+# picks a table's columns would pick the empty stub here; a procedure instead
+# names a table when ANY of its declarations' bodies does, and the row anchors
+# on that declaration.
+# Per declaration: Id, Name, File, Line, EndLine, Stale, Found, Reason, Tables
+# (tables named after an upper-case verb, Get-SqlVerbTables) and Procs (procedures
+# after EXECUTE PROCEDURE). The body text is kept for column matching.
+function Get-SqlProcedureSet([string] $SqlDb, [hashtable] $SourceOverride) {
+  $set = Get-SqlTableSet $SqlDb
+  $SqlDb = $set.Db
+  if (-not $script:DlProcSets) { $script:DlProcSets = @{} }
+  if (-not $SourceOverride -and $script:DlProcSets.ContainsKey($SqlDb)) { return $script:DlProcSets[$SqlDb] }
+  $DbPath = $SqlDb   # see Get-SqlTableSet
+
+  $rows = Get-AllIndexRows @"
+SELECT s.id AS id, s.name AS name, s.start_line AS line, f.path AS path
+  FROM symbols s JOIN files f ON f.id = s.file_id
+ WHERE s.kind = 'sql_procedure'
+"@ 's.id'
+  $out = New-Object System.Collections.ArrayList
+  foreach ($r in $rows) {
+    $b = Get-SqlProcBodyText ([string]$r.path) ([int]$r.line) $SourceOverride
+    $tabs = @(); $procs = @()
+    if ($b.Found) {
+      $hits = Get-SqlVerbTables $b.Text $set
+      $tabs  = @($hits | Where-Object { $_.Kind -eq 'table' }     | ForEach-Object { $_.Name } | Sort-Object -Unique)
+      $procs = @($hits | Where-Object { $_.Kind -eq 'procedure' } | ForEach-Object { $_.Name } | Sort-Object -Unique)
+    }
+    [void]$out.Add([pscustomobject]@{
+      Id = [int]$r.id; Name = [string]$r.name; File = [string]$r.path; Line = [int]$r.line
+      EndLine = $b.EndLine; Stale = $b.Stale; Found = $b.Found; Reason = $b.Reason
+      Tables = $tabs; Procs = $procs; Text = $b.Text
+    })
+  }
+  $all = $out.ToArray()
+  $o = [pscustomobject]@{
+    Declarations = $all
+    Count        = $all.Count
+    Names        = @($all | ForEach-Object { $_.Name.ToUpperInvariant() } | Sort-Object -Unique).Count
+    BodiesFound  = @($all | Where-Object { $_.Found }).Count
+    Stale        = @($all | Where-Object { $_.Stale }).Count
+    WithTables   = @($all | Where-Object { $_.Tables.Count -gt 0 }).Count
+  }
+  if (-not $SourceOverride) { $script:DlProcSets[$SqlDb] = $o }
+  $o
 }
 
 # Every trigger with its table and scanned body, cached per SQL index per run.
