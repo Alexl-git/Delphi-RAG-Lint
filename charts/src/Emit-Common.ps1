@@ -50,6 +50,65 @@ function New-RowHref([string] $File, [int] $Line) {
   'draglint://open?file=' + [uri]::EscapeDataString($File) + '&amp;line=' + $Line
 }
 
+# ---- database safety ---------------------------------------------------------
+
+# Resolve a database path and REFUSE a live corpus DB.
+#
+# WHY THIS EXISTS -- and what it is NOT about
+# -------------------------------------------
+# On 2026-09-23 at 05:30 the engine team reindexed the corpus to
+# v=1.17.0-alpha / r=1.6.0-alpha. The engine deployed in this worktree is
+# 1.16.0-alpha with resolver 1.5.1-alpha -- OLDER on two axes -- and
+# RefuseIfEngineOlderThanDb does not cover the resolver axis, so nothing
+# refuses. The skew yields SMALLER CONFIDENT ANSWERS, never an error.
+#
+# This guard is NOT about corruption. Reads are proven safe: only `index`
+# re-resolves, and a full day of reads left both DBs still on r=1.6.0-alpha.
+# It exists for two things a habit produces:
+#
+#   * a live DB is opened RW by some verbs and fails `database is locked`
+#     against a WAL writer, which reads as an emitter bug rather than as
+#     contention;
+#   * a live DB can be re-indexed underneath a run, so an asserted count stops
+#     being reproducible. The clones FREEZE the numbers the suite asserts --
+#     which is the whole reason the 9 known-red assertions are evidence.
+#
+# It is a WHITELIST of the clone root, not a blacklist of known corpus paths.
+# A blacklist would not know about a new project's DB, and the miss would be
+# silent -- the exact failure mode this project exists to prevent.
+#
+# $PSScriptRoot resolves in the CALLER's scope (see the file header), which is
+# charts\src for every emitter and for the test harness, so the clone root is
+# always its sibling scratch\db.
+#
+# The override is an ENVIRONMENT VARIABLE on purpose: a parameter can be passed
+# by habit, and "by habit" is precisely what is being guarded against.
+function Get-CloneDb([string] $Path) {
+  if ([string]::IsNullOrWhiteSpace($Path)) { throw 'Get-CloneDb: no database path given' }
+
+  $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\scratch\db'))
+
+  if (-not (Test-Path -LiteralPath $Path)) {
+    throw "database not found: $Path (clones live in $root)"
+  }
+  $full = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Path).ProviderPath)
+
+  if ($full.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    return $full
+  }
+
+  if ($env:DRAGLINT_CHARTS_ALLOW_LIVE_DB -eq '1') {
+    Write-Host "  NOTE: DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 -- using a NON-CLONE database: $full"
+    return $full
+  }
+
+  throw ("refusing a non-clone database: $full -- charts run against the clones in $root. " +
+         'The deployed engine (1.16.0-alpha / resolver 1.5.1-alpha) is OLDER than the indexed ' +
+         'corpus (v=1.17.0-alpha / r=1.6.0-alpha), and a live DB can be re-indexed mid-run, so ' +
+         'an asserted count would not be reproducible. Set DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 to ' +
+         'override deliberately once the engine has been redeployed.')
+}
+
 # ---- engine -----------------------------------------------------------------
 
 # Runs the engine and returns ONLY the JSON document, or '' when there is none.

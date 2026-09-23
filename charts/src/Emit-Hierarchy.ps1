@@ -56,6 +56,9 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
 
+# Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
+$DbPath = Get-CloneDb $DbPath
+
 # Ancestors share caller blue (what this type came FROM), descendants callee
 # amber (what came FROM it) -- the same up/down reading the call charts use.
 $PAL = @{

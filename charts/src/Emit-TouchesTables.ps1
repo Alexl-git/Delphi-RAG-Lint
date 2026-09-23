@@ -40,6 +40,9 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
 
+# Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
+$DbPath = Get-CloneDb $DbPath
+
 # New role, this emitter only: the DB tier is neither a caller, a callee, nor
 # UI. Both wings share it -- DIRECTION carries read vs write, not hue.
 $PAL = @{

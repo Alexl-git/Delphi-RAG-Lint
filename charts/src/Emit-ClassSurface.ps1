@@ -54,6 +54,9 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
 
+# Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
+$DbPath = Get-CloneDb $DbPath
+
 $PAL = @{
   pubBorder   = '#0F766E'; pubFill   = '#E2F1EF'; pubHdr   = '#0F766E'
   protBorder  = '#B45309'; protFill  = '#FEF6EC'; protHdr  = '#B45309'

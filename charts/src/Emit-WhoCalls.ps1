@@ -76,6 +76,9 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
 
+# Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
+$DbPath = Get-CloneDb $DbPath
+
 # butterfly's palette, verbatim. No new roles: the name bucket is distinguished
 # by a DASHED border and its own header text, the channel deps already uses for
 # "true, but not the same grade of fact".

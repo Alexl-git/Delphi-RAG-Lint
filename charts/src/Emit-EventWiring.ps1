@@ -36,6 +36,9 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
 
+# Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
+$DbPath = Get-CloneDb $DbPath
+
 # One new role, this emitter only: the UI tier is a different KIND of thing
 # from a caller or a callee, and violet is unused by the other four roles.
 $PAL = @{

@@ -7,20 +7,21 @@ The live scoreboard for `charts\question-catalogue.md`. **26 catalogue rows**
 Updated 2026-09-23. Branch `feat/archify-ir`, 24 commits, NOTHING PUSHED.
 
 ```
-SHIPPED                     10   emitters exist, tested, clickable
-PLANNED (ready to build)     0   the five-question batch is DONE
-UNPLANNED, unblocked         9   implementable today, nobody has planned them
+SHIPPED                     15   emitters exist, tested, clickable
+PLANNED (ready to build)     0   the second five-verb batch is DONE
+UNPLANNED, unblocked         4   implementable today, nobody has planned them
 BLOCKED on data              3   need a live Firebird via fb-snapshot
-BLOCKED on the engine        4   waiting on enum-value binding / raise-handle
+BLOCKED on the engine        4   3 of them are now DATA-ready -- see below
                             --
                             26
 ```
 
-**16 of 26 are not resolved**, down from 21. Nothing is planned-but-unbuilt any
-more: the next person picks from the nine unplanned ones and measures first.
+**11 of 26 are not resolved**, down from 16. Nothing is planned-but-unbuilt any
+more.
 
-**Selection-kind coverage is now method / unit / form-class / field / property /
-type** -- the batch's actual purpose. It was three kinds this morning.
+**Selection-kind coverage is method / unit / form-class / field / property /
+type / interface / project.** `architecture` added the PROJECT kind and `wiring`
+the INTERFACE kind.
 
 ---
 
@@ -38,32 +39,32 @@ type** -- the batch's actual purpose. It was three kinds this morning.
 | `class-surface` | type | `Emit-ClassSurface.ps1` | 392 members over 2 visibility clusters |
 | `event-wiring` | form class | `Emit-EventWiring.ps1` | 41 events / 41 handlers / 40 controls |
 | `touches-tables` | method | `Emit-TouchesTables.ps1` | 5 read / 5 written / 2 both |
+| `lifecycle` | form class | `Emit-Lifecycle.ps1` | uMain: 2 wired / 1 implemented-not-wired / 4 absent |
+| `cycles` | unit / project | `Emit-Cycles.ps1` | CLIENT 2 groups / 5 edges; DL's SCC 5 edges; DataCopy 0 |
+| `wiring` | interface | `Emit-Wiring.ps1` | SERVER 2 regs / 4 sites of 535; CLIENT 1 of 4 |
+| `effects` | method | `Emit-Effects.ps1` | pure / not-analysed / `g,p0,p3,?` over 6 params |
+| `architecture` | project | `Emit-Architecture.ps1` | 563 units / 3 zones / 2,858 edges / 3 back-edges |
 
-**Ten questions, EIGHT emitters** -- `what-it-calls` is a `-Direction` switch and
-`who-writes`/`who-reads` are one `-Mode` switch. Say it that way: counting
-emitters as questions understates the result, counting questions as emitters
-overstates the work.
+**Fifteen questions, THIRTEEN emitters** -- `what-it-calls` is a `-Direction`
+switch and `who-writes`/`who-reads` are one `-Mode` switch. Say it that way:
+counting emitters as questions understates the result, counting questions as
+emitters overstates the work.
 
 Gate: `charts\src\Test-Emitters.ps1` (exit 0 = green). Proven to fail correctly
 on every batch -- see each commit for the mutation it was checked against.
 
-## UNPLANNED but IMPLEMENTABLE TODAY (9)
+## UNPLANNED but IMPLEMENTABLE TODAY (4)
 
 Nothing blocks these; no one has measured or planned them. Effort is a first
 estimate, NOT a measured one -- treat each as needing its own measurement pass
-before it is trusted, exactly as the shipped five did.
+before it is trusted, exactly as the shipped ten did.
 
 | question | selects | effort | why that effort |
 |---|---|---|---|
-| `lifecycle` | form / type | **S** | reuses event-wiring's `dfm_event` query wholesale (762 rows); adds create/show/destroy ordering |
-| `cycles` | unit / project | **S-M** | `cycles --plan` verb already emits a followable playbook; unit-graph shape like `deps` |
-| `change-impact` | method / type | **M** | `impact` verb exists (text/json); fan-out tree, close to who-calls |
-| `effects` | method | **M** | facts well populated (`effect_free` 10,150 / `effect_summary` 7,254) but the encoding (`g,s,?`) must be decoded first -- the encoder is IN-REPO, so read it; do NOT wait on the engine |
-| `wiring` | interface / type | **M** | `wiring` verb + `di_bindings`, but CLIENT 4 vs SERVER 535 registrations -- the client gap must be disclosed, not rendered as "no DI" |
+| `change-impact` | method / type | **M** | `impact` verb exists (text/json); fan-out tree, close to who-calls. **Held: walks `call_edges`** |
+| `tested-by` | any symbol | **M** | `covered_by` is 0/0 BY DESIGN -- COMPUTE it from the test project's own call edges. Single-DB pass per test project, not a cross-DB join. **Held: walks `call_edges`** |
 | `shown-where` | field / column | **L** | `ui_affinity` only 230 CLIENT / 37 SERVER rows; partial by nature, needs a DFM join and honest coverage reporting |
-| `tested-by` | any symbol | **L** | `covered_by` is 0/0 BY DESIGN -- must be COMPUTED from a test project's call edges, so it needs a second index and a reachability pass |
-| `architecture` | project | **XL** | project-scale trust-zoned rectangles; `graph` + `deps-report` + `di_bindings`, and a layout strategy that does not exist yet |
-| `compare` | two index runs | **XL** | needs the IR and a diff model; no emitter precedent, and two indexes must be opened at once |
+| `compare` | two index runs | **XL** | needs the IR and a diff model; no emitter precedent, and two indexes must be opened at once. Parked by owner |
 
 ## BLOCKED ON DATA -- not near-term (3)
 
@@ -90,7 +91,37 @@ ingest, not the chart.
 | `crosses-boundary` | method | GAP 1 |
 | `exception-paths` | method | raise/handle fact (GAP 2) |
 
-Interim: keep the `[inferred]` dashed-edge convention. Do not attempt these.
+Interim: keep the `[inferred]` dashed-edge convention.
+
+### >>> GAP 1 IS NOW CLOSED IN THE DATA (measured 2026-09-23, 07:0x) <<<
+
+`INBOX-enum-value-refs-never-bound.md` was RETIRED into `INBOX-Done` at 07:01
+with: *"RETIRED 2026-09-23 by resolver 1.6.0-alpha (branch feat/enum-value-refs):
+enum-value reads bind by name + scope, certain or NULL; find-callers --resolved
+reports them [certain, read]."*
+
+Our corpus is already re-resolved at `r=1.6.0-alpha`, so **the bindings are
+present in the clones right now.** The original reproducing case, re-measured on
+the CLIENT clone:
+
+| | before | now |
+|---|---|---|
+| `cmdDelta` refs / bound | 38 / **0** | 38 / **38** |
+| `cmdTableLoad` refs / bound | 42 / **0** | 42 / **42** |
+| refs bound to an `enum_value` | -- | **5,983** over 592 enum_value symbols |
+
+**But our 1.5.1 engine cannot surface them**: `find-callers --name cmdDelta
+--resolved` returns `[]`, because the union arm that reads enum-value bindings
+is 1.6.0 code we do not have. Plain name-match `find-callers` still works.
+
+So for `protocol-trace` x2 and `crosses-boundary` the position is now:
+
+* **the fact exists and is queryable by raw SQL over `refs` today**;
+* **the verb-level route needs the redeploy.**
+
+An emitter for these built on SQL rather than on `find-callers --resolved` is
+buildable NOW. That is a decision for whoever picks them up -- it is recorded
+here because "blocked on the engine" is no longer the whole truth.
 
 ### >>> DO NOT INDEX ANYTHING. Engine reply, 2026-09-23 <<<
 
@@ -161,21 +192,46 @@ from 9 nodes to 4. Callers unaffected.
 
 ## Resume point
 
-The first five-question batch is DONE (`94c6f634`, `d99e283a`, `769d47c4`);
-`charts\PLAN-next-five-questions.md` records its six deviations.
+Both five-verb batches are DONE. `charts\PLAN-next-five-questions.md` records
+the first batch's six deviations; `charts\PLAN-next-five-verbs.md` is the second
+and its deviations are recorded at the foot of this section.
 
-**Next: `charts\PLAN-next-five-verbs.md`** -- lifecycle, cycles, wiring,
-effects, architecture. Chosen because **none of them touches the skewed path**,
-so all five can be built AND verified now. Every premise in it is measured and
-listed as P1-P12 for direct attack.
+**Next: nothing is planned.** Pick from the four unplanned rows above and
+measure its premises FIRST -- both batches proved a fully-measured plan still
+ships wrong premises.
 
 **Held until the engine matches the index:** `change-impact` and `tested-by` --
-both walk `call_edges`. `tested-by` is cheaper than the table above says: the
-TEST project DB already CONTAINS the code under test, so it is a single-DB pass
-run per test project, not a cross-DB join.
+both walk `call_edges`, which is the demonstrably skewed path.
 
-After those five: re-check the INBOX, re-clone, and re-measure the premises of
-everything remaining before trusting any effort estimate here.
+### Deviations and findings from the second batch (2026-09-23)
+
+Seven, all measured, each one a premise that would have shipped a wrong chart:
+
+1. **`cycles` returns strongly-connected COMPONENTS, not rings.** DL's "size 4
+   cycle" is two loops sharing `regions` and has no Hamiltonian cycle. A
+   ring-walk refused to draw its arrows; the emitter now draws every measured
+   edge and assumes no traversal order.
+2. **`units[]` is not in cycle order** (P3 extension). Following the array would
+   draw `blueprint4 -> controlplan2`, an edge that does not exist.
+3. **`mutates_params` is not the p-token name column.** It lists `var`/`out`
+   params; EVERY multi-p row on CLIENT has it empty. Names now come from parsing
+   `symbols.signature` by ordinal -- validated against the engine's own witness
+   text on **351 of 351 rows** (256 CLIENT + 95 SERVER), zero disagreements. The
+   plan's "roughly 12% cannot be named" no longer holds: 0 could not be named.
+4. **`cycles --plan` costs 46.5s against 0.8s for `--format json`** -- 58x, for
+   one label per cycle. It is now behind `-Playbook`, off by default.
+5. **`wiring` cannot distinguish a class from an unregistered interface** -- it
+   returns the same empty document for both. The kind check moved into the
+   emitter.
+6. **No namespace or folder layering exists for `architecture`**: 512 of 563
+   units have no dot. Zones are SOURCE DIRECTORIES (100% coverage). This
+   surfaced **3 back-edges** -- 13 edges against a 1,170-edge flow.
+7. **Two plan counts were off**: form classes owning lifecycle events are **44**,
+   not 43; and **2** form-rooted classes wire nothing (1 TForm + 1 TDataModule),
+   not 1.
+
+`Get-CloneDb` now guards every emitter, and `Test-Emitters.ps1` defaults to the
+clones instead of the live corpus.
 
 **Still owed, and not ours to do yet:** the `with`-block attribution
 measurement from Task 0 remains ON HOLD pending the engine team's Task 7,

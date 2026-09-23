@@ -38,6 +38,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# This emitter predates Emit-Common.ps1 and keeps its own copies of the small
+# helpers below. Dot-sourcing HERE -- before those local definitions -- means the
+# local ones still win, so nothing about this emitter's behaviour changes; the
+# only thing taken from Common is Get-CloneDb.
+. (Join-Path $PSScriptRoot 'Emit-Common.ps1')
+
+# Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
+$DbPath = Get-CloneDb $DbPath
+
 $PAL = @{
   userBorder = '#3B5BDB'; userFill = '#EDF2FF'; userHdr = '#3B5BDB'
   rootBorder = '#0F766E'; rootFill = '#E2F1EF'; rootHdr = '#0F766E'

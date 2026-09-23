@@ -37,6 +37,9 @@ $ErrorActionPreference = 'Stop'
 # emitter can CALL without changing anything it already does.
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
 
+# Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
+$DbPath = Get-CloneDb $DbPath
+
 # ---- palette. Role-coded, because the butterfly's meaning IS the role. -------
 $PAL = @{
   callerBorder = '#3B5BDB'; callerFill = '#EDF2FF'; callerHdr = '#3B5BDB'

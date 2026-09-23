@@ -1,5 +1,5 @@
 <#
-  Test-Emitters.ps1 -- executable verification for the five diagram emitters.
+  Test-Emitters.ps1 -- executable verification for the diagram emitters.
 
   Mirrors Test-FormA.ps1: param block, $fail list, Fail, exit 0/1, -Quiet.
 
@@ -15,8 +15,17 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $DbCli  = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite',
-  [string] $DbSrv  = 'C:\Projects\DB\ORM3\SERVER\_D-RAG\MicroniteMW1Service.sqlite',
+  # The CLONES, not the live corpus. The defaults used to be the originals, which
+  # made the safe path the one you had to remember -- and Get-CloneDb now refuses
+  # them outright, so the old defaults would fail every block for the right
+  # reason but at the wrong moment. Clones also freeze the counts asserted below.
+  [string] $DbCli  = (Join-Path $PSScriptRoot '..\scratch\db\CLIENT-Micronite2027.sqlite'),
+  [string] $DbSrv  = (Join-Path $PSScriptRoot '..\scratch\db\SERVER-MicroniteMW1Service.sqlite'),
+  # DL carries the only INTERFACE cycle in the corpus and DataCopy the only
+  # acyclic index and the only single-folder project, so between them they cover
+  # three shapes CLIENT and SERVER simply do not contain.
+  [string] $DbDl   = (Join-Path $PSScriptRoot '..\scratch\db\DL-drag-lint.sqlite'),
+  [string] $DbDc   = (Join-Path $PSScriptRoot '..\scratch\db\DataCopy-DataCopy.sqlite'),
   [string] $OutDir = (Join-Path $PSScriptRoot ('..\scratch\test-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
   [switch] $Quiet
 )
@@ -458,10 +467,181 @@ if (-not $threw) { Fail 'N7' 'did not throw' }
 elseif ($m7 -notlike '*no FireDAC connection*') { Fail 'N7' "wrong message: $m7" }
 if (Test-Path $n7Dir) { Fail 'N7-DIR' 'the failed bundle directory still exists' }
 
+# ---- the second batch: lifecycle / cycles / wiring / effects / architecture ----
+# Same rule as above: every number was MEASURED on 2026-09-23 against the clones
+# and is asserted, not recomputed.
+
+Note 'lifecycle ...'
+Step 'E-LC' {
+  # uMain wires OnCreate + OnShow and IMPLEMENTS FormDestroy without wiring it.
+  $script:lc1 = & "$SRC\Emit-Lifecycle.ps1" -Form 'uMain.TfrmMAIN' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-LC1-WIRED'    $lc1.Wired 2
+  Chk 'A-LC1-NOTWIRED' $lc1.NotWired 1
+  Chk 'A-LC1-ABSENT'   $lc1.Absent 4
+  Chk 'A-LC1-HERITAGE' $lc1.Heritage 'TdxRibbonForm'
+  $t = Dot $lc1
+  # N14b: the whole point of the chart. FormDestroy exists at uMain.pas:422.
+  if ($t -notmatch 'implemented, NOT wired') { Fail 'A-LC1-UNWIRED-ROW' 'the unwired stage is not labelled' }
+  if (-not (HasLine $t 422)) { Fail 'A-LC1-ANCHOR' 'FormDestroy is not anchored to its body at 422' }
+  if (-not $lc1.AllClickable) { Fail 'A-LC1-CLICK' 'lifecycle rows are not all anchored' }
+
+  $script:lc2 = & "$SRC\Emit-Lifecycle.ps1" -Form 'varnames.TfrmVarNames' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-LC2-WIRED' $lc2.Wired 3
+  Chk 'A-LC2-NOTWIRED' $lc2.NotWired 0
+
+  # U2: a REAL form that wires nothing still renders. "Not a form" and "a form
+  # with nothing wired" are different answers and must not collapse together.
+  $script:lc3 = & "$SRC\Emit-Lifecycle.ps1" -Form 'WarningFlags.TfrmWarningFlags' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-LC3-WIRED'  $lc3.Wired 0
+  Chk 'A-LC3-ABSENT' $lc3.Absent 7
+  if (-not (Test-Path $lc3.Svg)) { Fail 'A-LC3-SVG' 'a form with zero wired events must still render' }
+}
+
+Note 'cycles ...'
+Step 'E-CY' {
+  $script:cy1 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-CY1-GROUPS'   $cy1.Cycles 2
+  Chk 'A-CY1-EDGES'    $cy1.Edges 5
+  Chk 'A-CY1-ANCHORED' $cy1.Anchored 5
+  Chk 'A-CY1-UNANCH'   $cy1.Unanchored 0
+  $t = Dot $cy1
+  # P4: names come back lowercased; anchoring is case-insensitive or nothing clicks.
+  if ($t -notmatch 'Blueprint4\.ViewModel') { Fail 'A-CY1-CASE' 'unit names did not resolve to their real casing' }
+  # The array order would have drawn blueprint4 -> controlplan2, which does not exist.
+  if ($t -match 'Blueprint4</FONT>[^<]*</TD></TR>[^!]*uses controlplan2') { Fail 'A-CY1-FAKE-EDGE' 'drew the array-order edge' }
+
+  # DL is a strongly-connected component with NO Hamiltonian ring: five edges,
+  # four members, two loops sharing `regions`. All five must still be drawn.
+  $script:cy2 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDl -OutDir $OutDir
+  Chk 'A-CY2-GROUPS' $cy2.Cycles 1
+  Chk 'A-CY2-EDGES'  $cy2.Edges 5
+  Chk 'A-CY2-GAPS'   $cy2.Unwalkable 0
+
+  # N18: no cycles is an ANSWER -- it renders and exits 0.
+  $script:cy3 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDc -OutDir $OutDir
+  Chk 'A-CY3-GROUPS' $cy3.Cycles 0
+  if (-not (Test-Path $cy3.Svg)) { Fail 'A-CY3-SVG' 'the acyclic case must still produce an .svg' }
+  if ((Dot $cy3) -notmatch 'no cycles') { Fail 'A-CY3-NOTE' 'the acyclic case does not say so' }
+}
+
+Note 'wiring ...'
+Step 'E-WI' {
+  $script:wi1 = & "$SRC\Emit-Wiring.ps1" -Interface 'IABZLoggingSys' -DbPath $DbSrv -OutDir $OutDir
+  Chk 'A-WI1-REGS'      $wi1.Registrations 2
+  Chk 'A-WI1-RESOLVED'  $wi1.ResolvedAt 4
+  Chk 'A-WI1-LIFETIME'  $wi1.Lifetimes 'singleton'
+  Chk 'A-WI1-IDXREGS'   $wi1.IndexRegs 535
+  $t = Dot $wi1
+  foreach ($ln in @(425, 429, 194, 227)) {
+    if (-not (HasLine $t $ln)) { Fail "A-WI1-L$ln" "registration/resolution line $ln is not anchored" }
+  }
+
+  # N16: zero registrations is an ANSWER, and it is only readable next to the
+  # index-wide total -- so the total must be on the chart.
+  $script:wi2 = & "$SRC\Emit-Wiring.ps1" -Interface 'IMicObject' -DbPath $DbSrv -OutDir $OutDir
+  Chk 'A-WI2-REGS' $wi2.Registrations 0
+  if (-not (Test-Path $wi2.Svg)) { Fail 'A-WI2-SVG' 'the unregistered case must still render' }
+  if ((Dot $wi2) -notmatch 'index-wide: 535 registration') { Fail 'A-WI2-DISCLOSE' 'the index-wide total is missing' }
+
+  # P7: the SAME interface on CLIENT, where the whole index holds 4 registrations.
+  # P7b: state the number, never the cause.
+  $script:wi3 = & "$SRC\Emit-Wiring.ps1" -Interface 'IABZLoggingSys' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-WI3-REGS'    $wi3.Registrations 1
+  Chk 'A-WI3-IDXREGS' $wi3.IndexRegs 4
+  $t3 = Dot $wi3
+  if ($t3 -notmatch 'index-wide: 4 registration') { Fail 'A-WI3-DISCLOSE' 'CLIENT does not disclose its 4-registration total' }
+  if ($t3 -match '(?i)pipe') { Fail 'A-WI3-CAUSE' 'the chart asserts a CAUSE we have not evidenced (P7b)' }
+}
+
+Note 'effects ...'
+Step 'E-FX' {
+  # N17: NULL summary + effect_free=1 is PURE. The naive reading calls this
+  # "not analysed" and is wrong for 2,892 CLIENT methods.
+  $script:fx1 = & "$SRC\Emit-Effects.ps1" -Qname 'uMain.TfrmMAIN.GetConnection' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-FX1-OUTCOME' $fx1.Outcome 'pure'
+  Chk 'A-FX1-FREE'    $fx1.EffectFree '1'
+  if ((Dot $fx1) -match 'not analysed') { Fail 'A-FX1-MISLABEL' 'a PURE method was labelled not analysed' }
+
+  # N17b: effect_free IS NULL genuinely is "not analysed" -- only 855 on CLIENT.
+  $script:fx2 = & "$SRC\Emit-Effects.ps1" -Qname 'uSetupDefaults.TGlobalSetupDefaults.GetDebug1' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-FX2-OUTCOME' $fx2.Outcome 'not-analysed'
+  if ((Dot $fx2) -notmatch 'not analysed') { Fail 'A-FX2-NOTE' 'the unanalysed case does not say so' }
+
+  $script:fx3 = & "$SRC\Emit-Effects.ps1" -Qname 'uMain.TExit.HandleException' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-FX3-SUMMARY' $fx3.Summary 's'
+  Chk 'A-FX3-EFFECTS' $fx3.Effects 1
+  Chk 'A-FX3-UNKNOWN' $fx3.Unknown 0
+
+  $script:fx4 = & "$SRC\Emit-Effects.ps1" -Qname 'uMain.TExit.Execute' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-FX4-SUMMARY' $fx4.Summary 'g,s,?'
+  Chk 'A-FX4-EFFECTS' $fx4.Effects 2
+  Chk 'A-FX4-UNKNOWN' $fx4.Unknown 1
+
+  # P8: parameter ordinals are ZERO-BASED. p1 on (Sender; var Key; Shift) is Key.
+  $script:fx5 = & "$SRC\Emit-Effects.ps1" -Qname 'EWrkSLCT.TfrmEwrkSlct.FormKeyUp' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-FX5-SUMMARY' $fx5.Summary 'g,p1,?'
+  if ((Dot $fx5) -notmatch 'parameter #1 \(Key\)') { Fail 'A-FX5-ORDINAL' 'p1 did not resolve to the SECOND parameter' }
+
+  # The grouped-parameter form the plan expected to be unnameable:
+  # ( V1; I11, I12; V2; I21, I22 ) -- p0 is V1 and p3 is V2, and mutates_params
+  # is EMPTY here, so the name can only come from parsing the signature.
+  $script:fx6 = & "$SRC\Emit-Effects.ps1" -Qname 'Ap.APVDotProduct' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-FX6-PARAMS'  $fx6.ParamCount 6
+  Chk 'A-FX6-UNNAMED' $fx6.Unnamed 0
+  $t6 = Dot $fx6
+  if ($t6 -notmatch 'parameter #0 \(V1\)') { Fail 'A-FX6-P0' 'p0 did not resolve to V1' }
+  if ($t6 -notmatch 'parameter #3 \(V2\)') { Fail 'A-FX6-P3' 'p3 did not resolve to V2 across grouped parameters' }
+}
+
+Note 'architecture ...'
+Step 'E-AR' {
+  $script:ar1 = & "$SRC\Emit-Architecture.ps1" -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-AR1-UNITS'    $ar1.Units 563
+  Chk 'A-AR1-ZONES'    $ar1.Zones 3
+  Chk 'A-AR1-INTERNAL' $ar1.InternalEdges 2858
+  Chk 'A-AR1-EXTUNITS' $ar1.ExternalUnits 283
+  Chk 'A-AR1-EXTEDGES' $ar1.ExternalEdges 30702
+  Chk 'A-AR1-GROUPS'   $ar1.Groups 5
+  Chk 'A-AR1-BACK'     $ar1.BackEdges 3
+  # The red-team's classifier gap: bare `spring` lands in `unknown`.
+  Chk 'A-AR1-GAPS'     $ar1.ClassifierGaps 1
+  if (-not $ar1.AllClickable) { Fail 'A-AR1-CLICK' 'architecture rows are not all anchored' }
+
+  # A single-folder project has no internal zones, and must SAY so rather than
+  # manufacture layers.
+  $script:ar2 = & "$SRC\Emit-Architecture.ps1" -DbPath $DbDc -OutDir $OutDir
+  Chk 'A-AR2-ZONES' $ar2.Zones 1
+  Chk 'A-AR2-CROSS' $ar2.CrossZone 0
+  if ((Dot $ar2) -notmatch 'every unit in one folder') { Fail 'A-AR2-NOTE' 'the single-zone case does not disclose itself' }
+}
+
+Note 'negatives N14-N19 ...'
+# U2: refusing must be a HERITAGE decision. A real form that wires nothing also
+# has zero dfm_event rows, and A-LC3 above proves it still renders.
+NegTest 'N14' 'is not a form: its heritage is TInterfacedObject' 'lifecycle_Blueprint4_ViewModel_TBlueprint_ViewModel' {
+  & "$SRC\Emit-Lifecycle.ps1" -Form 'Blueprint4.ViewModel.TBlueprint_ViewModel' -DbPath $DbCli -OutDir $negDir }
+# N15: the verb returns the same empty document for a class as for an
+# unregistered interface, so the emitter must name the KIND itself.
+NegTest 'N15' 'is a class, not a interface' 'wiring_TABZLoggingSys' {
+  & "$SRC\Emit-Wiring.ps1" -Interface 'TABZLoggingSys' -DbPath $DbSrv -OutDir $negDir }
+NegTest 'N18b' 'is in no cycle in this index' 'cycles_uMain' {
+  & "$SRC\Emit-Cycles.ps1" -Unit 'uMain' -DbPath $DbCli -OutDir $negDir }
+
+# N19: no emitter may be pointed at a live corpus DB by habit. Skipped rather
+# than failed where the live corpus is not present on this machine -- a guard
+# that cannot be exercised is not the same as a guard that failed.
+$liveDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite'
+if (Test-Path $liveDb) {
+  NegTest 'N19' 'refusing a non-clone database' 'lifecycle_uMain_TfrmMAIN' {
+    & "$SRC\Emit-Lifecycle.ps1" -Form 'uMain.TfrmMAIN' -DbPath $liveDb -OutDir $negDir }
+} else {
+  Note '  N19 skipped: the live corpus DB is not on this machine'
+}
+
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
-  Write-Host 'Emitter verification -- ten questions, eight emitters, two indexes'
+  Write-Host 'Emitter verification -- fifteen questions, thirteen emitters, four indexes'
   Write-Host ("  bytes          : {0} non-ascii, {1} bare LF" -f $nonAscii, $bareLf)
   Write-Host ("  butterfly      : {0} callers / {1} callees, {2} clicks" -f (V $b 'Callers'), (V $b 'Callees'), (V $b 'ClickTargets'))
   Write-Host ("  deps           : {0} used by / {1} uses" -f (V $d 'UsedBy'), (V $d 'Uses'))
@@ -473,7 +653,12 @@ if (-not $Quiet) {
   Write-Host ("  hierarchy      : {0} ancestors ({1} outside closure), {2} descendants, {3} collision(s)" -f (V $h1 'Ancestors'), (V $h1 'UnresolvedAnc'), (V $h2 'Descendants'), (V $h3 'Collisions'))
   Write-Host ("  class-surface  : {0} members over {1} visibility clusters, {2} shown + {3} disclosed" -f (V $cs1 'Members'), (V $cs1 'Clusters'), (V $cs1 'Shown'), (V $cs1 'Hidden'))
   Write-Host ("  touches-tables : {0} read / {1} written / {2} both, of {3} SQL symbols" -f (V $s1 'Reads'), (V $s1 'Writes'), (V $s1 'Both'), (V $s1 'IndexSqlSymbols'))
-  Write-Host ("  negatives      : N1-N12b, each asserting message AND absent .svg; N13 draws")
+  Write-Host ("  lifecycle      : {0} wired / {1} implemented-not-wired / {2} absent, heritage {3}" -f (V $lc1 'Wired'), (V $lc1 'NotWired'), (V $lc1 'Absent'), (V $lc1 'Heritage'))
+  Write-Host ("  cycles         : {0} groups / {1} edges on CLIENT, {2} edges in DL's SCC, {3} on DataCopy" -f (V $cy1 'Cycles'), (V $cy1 'Edges'), (V $cy2 'Edges'), (V $cy3 'Cycles'))
+  Write-Host ("  wiring         : {0} regs / {1} sites on SERVER ({2} index-wide); CLIENT {3} of {4}" -f (V $wi1 'Registrations'), (V $wi1 'ResolvedAt'), (V $wi1 'IndexRegs'), (V $wi3 'Registrations'), (V $wi3 'IndexRegs'))
+  Write-Host ("  effects        : pure={0}, not-analysed={1}, 'g,s,?'={2}+{3}?, p-ordinals zero-based over {4} params" -f (V $fx1 'Outcome'), (V $fx2 'Outcome'), (V $fx4 'Effects'), (V $fx4 'Unknown'), (V $fx6 'ParamCount'))
+  Write-Host ("  architecture   : {0} units / {1} zones / {2} internal edges, {3} back-edge(s); {4} externals in {5} groups" -f (V $ar1 'Units'), (V $ar1 'Zones'), (V $ar1 'InternalEdges'), (V $ar1 'BackEdges'), (V $ar1 'ExternalUnits'), (V $ar1 'Groups'))
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, each asserting message AND absent .svg; N13/N16/N17 draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }
