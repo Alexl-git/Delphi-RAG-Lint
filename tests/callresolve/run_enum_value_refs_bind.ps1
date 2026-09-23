@@ -573,8 +573,22 @@ $lt = & $exePath lint-tree --unit $fDecl --db $dbA --buffer $buf --baseline $bas
 $lj = $null; try { $lj = $lt | ConvertFrom-Json } catch { }
 CheckN 11 'lint-tree returned JSON' ($null -ne $lj) $lt
 if ($null -ne $lj) {
-  $stale = @($lj.findings | Where-Object { $_.rule -eq 'stale-interface-reference' -or $_.message -match 'no longer declares' })
-  CheckN 11 ("removing cmdLoad reports {0} stale references, one per BOUND site (A1, A3, B2, A5)" -f $cmdLoadSites.Count) ($stale.Count -eq $cmdLoadSites.Count) ("n=$($stale.Count) expected=$($cmdLoadSites.Count) " + ($lj.findings | ConvertTo-Json -Compress -Depth 4))
+  # TWO finding CLASSES arrive the moment the gate admits enum_value, and they
+  # are counted SEPARATELY because they answer different questions:
+  #   REMOVED -- "no longer declares ...cmdLoad", one per BOUND cmdLoad site.
+  #   CHANGED -- dropping cmdLoad shifts every LATER member's ordinal, so
+  #              cmdDelta goes 1 -> 0 and its one bound site (A2) reports a
+  #              changed declaration. That is a TRUE consequence of the edit.
+  # It is pinned below rather than absorbed: the original filter here was
+  #   rule -eq 'stale-interface-reference' -or message -match 'no longer declares'
+  # which swept the cmdDelta finding into a count whose own label says "one per
+  # BOUND site (A1, A3, B2, A5)" -- a cmdLoad claim -- and so read n=5
+  # expected=4 the first time the gate was widened (2026-09-23, task 8).
+  $stale   = @($lj.findings | Where-Object { $_.message -match 'no longer declares' })
+  $changed = @($lj.findings | Where-Object { $_.message -match 'has changed the declaration' })
+  CheckN 11 ("removing cmdLoad reports {0} stale references, one per BOUND site (A1, A3, B2, A5)" -f $cmdLoadSites.Count) ($stale.Count -eq $cmdLoadSites.Count -and @($stale | Where-Object { $_.message -match 'cmdLoad' }).Count -eq $cmdLoadSites.Count) ("n=$($stale.Count) expected=$($cmdLoadSites.Count) " + ($lj.findings | ConvertTo-Json -Compress -Depth 4))
+  CheckN 11 'the ORDINAL SHIFT is reported too: cmdDelta (1 -> 0) at its one bound site A2' ($changed.Count -eq 1 -and $changed[0].message -match 'cmdDelta') ("n=$($changed.Count) " + ($changed | ConvertTo-Json -Compress -Depth 4))
+  CheckN 11 'nothing else leaked in: every finding is rule stale-interface-reference and is one of those two classes' ((@($lj.findings).Count -eq ($stale.Count + $changed.Count)) -and (@($lj.findings | Where-Object { $_.rule -ne 'stale-interface-reference' }).Count -eq 0)) ("total=$(@($lj.findings).Count) removed=$($stale.Count) changed=$($changed.Count)")
   CheckN 11 'enum_value is no longer in not_reportable' (-not (@($lj.not_reportable) -contains 'enum_value')) (@($lj.not_reportable) -join ',')
 }
 

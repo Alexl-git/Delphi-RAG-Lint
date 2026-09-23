@@ -454,11 +454,28 @@ begin
     belong here on the same terms as the routines: their references are found
     by id. run_property_refs_resolve.ps1 pins the removal of a property
     producing stale-interface-reference findings AND `property` leaving
-    not_reportable -- the positive control this comment's predecessor lacked. }
-  Result:= SameText(pKind, 'procedure') or SameText(pKind, 'function')
+    not_reportable -- the positive control this comment's predecessor lacked.
+
+    ENUM_VALUE JOINED 2026-09-23, on exactly those terms and no others. The
+    resolver now binds enum-value reads by id -- it writes refs.symbol_id for a
+    bare read (Shape A) and a qualified one (Shape B) alike (resolver
+    1.6.0-alpha, spec docs\superpowers\specs\2026-09-23-enum-value-ref-binding.md)
+    -- so FindReferencesTo(id) answers for an enum member the same way it
+    answers for a routine, a property or a field.
+
+    The evidence is tests\callresolve\run_enum_value_refs_bind.ps1 check 11,
+    which pins BOTH halves: removing an enum member reports a stale reference at
+    every bound site, AND `enum_value` leaves not_reportable. It was RED through
+    the seven preceding tasks of this plan -- the resolver, the store, the
+    version bump, the reader arm and the corpus re-resolve all landed while this
+    gate stayed narrow, and lint-tree kept reporting nothing. That persisting red
+    is the positive control this comment's predecessor lacked, and it is why the
+    gate was widened LAST rather than first. }
+  Result:= SameText(pKind, 'procedure') or SameText(pKind, 'function')  // dl:ok boolean-expression-complexity@2af0 -- REVIEWED 2026-09-23. A flat or-chain of kind names IS the readable form here, and it is what the comment above spends thirty lines justifying: each term is one kind the resolver binds by id, added on a dated line of evidence. Extracting named sub-expressions would group kinds that have nothing in common but their arrival date and hide the one fact a reader needs -- which kinds are in. Pre-existing at 6 operators (HEAD:458); enum_value took it to 7.
         or SameText(pKind, 'method')    or SameText(pKind, 'constructor')
         or SameText(pKind, 'destructor')
-        or SameText(pKind, 'property')  or SameText(pKind, 'field');
+        or SameText(pKind, 'property')  or SameText(pKind, 'field')
+        or SameText(pKind, 'enum_value');
 end;
 
 function SymbolKeyOf(const pQName, pSignature: string): string;
