@@ -72,7 +72,7 @@ function Flatten($node, [string] $childKey, [System.Collections.ArrayList] $acc,
 # ---- 1. ask the engine -------------------------------------------------------
 Write-Host "butterfly: $Qname (depth $Depth)"
 $raw = & $Engine butterfly --qname $Qname --depth $Depth --format json --db $DbPath 2>&1 |
-       Where-Object { $_ -notmatch 'loaded defaults' }
+       Where-Object { $_ -notmatch 'loaded defaults' -and $_ -notmatch '^drag-lint: ' -and $_ -notmatch '^\s+may be stale' -and $_ -notmatch '^\s+drag-lint index ' }
 $json = ($raw -join "`n")
 if ([string]::IsNullOrWhiteSpace($json)) { throw "engine returned nothing for $Qname" }
 $bf = $json | ConvertFrom-Json
@@ -85,6 +85,25 @@ Flatten $bf.callers.root 'callers' $callers 1
 Flatten $bf.callees.root 'callers' $callees 1
 
 Write-Host ("  callers={0}  callees={1}" -f $callers.Count, $callees.Count)
+
+# DISCLOSE the known undercount rather than drawing a confident, empty wing.
+# Measured 2026-09-23: `reverse-calltree` is RESOLVED-ONLY
+# (DRagLint.Report.RCallTree.pas:149 uses FindResolvedCallers and nothing else),
+# and TCallResolver.TypeReceiver types a BARE call to the CALLING routine's own
+# enclosing class. A routine with NO enclosing class therefore never earns a
+# call_edges row, so its caller wing comes back EMPTY, not merely short:
+# BASICSF.ProcessMessages 0 vs 63 name-matched sites; Pipes.Protocol.WriteString
+# 0 vs 88. A METHOD target is unaffected. Filed as
+# docs\INBOX-reverse-calltree-resolved-only-and-json-note.md.
+$leaf = ($Qname -split '\.')[-1]
+$isUnitLevelRoutine = ($Qname -split '\.').Count -le 2 -or
+                      (($Qname -split '\.') | Where-Object { $_ -cmatch '^T[A-Z]' }).Count -eq 0
+if ($isUnitLevelRoutine -and $callers.Count -eq 0) {
+  Write-Warning ("caller wing is EMPTY for '$leaf', which looks like a unit-level routine. " +
+    "reverse-calltree is resolved-only and cannot see bare calls to a routine with no " +
+    "enclosing class -- this is an engine defect, not an absence of callers. Cross-check " +
+    "with: drag-lint query find-callers --name $leaf --db <db>")
+}
 
 $focusFile = [string]$bf.callers.root.file
 if ([string]::IsNullOrWhiteSpace($focusFile)) { $focusFile = [string]$bf.callees.root.file }
@@ -193,7 +212,7 @@ if (-not (Test-Path $svgOut)) { throw "dot produced no SVG" }
 $svg     = [IO.File]::ReadAllText($svgOut)
 $anchors = ([regex]::Matches($svg, '<a[\s>]')).Count
 $rows    = $callers.Count + $callees.Count + 1
-function Size-Of([string] $f) { if (Test-Path $f) { (Get-Item $f).Length } else { 0 } }
+function Get-FileSize([string] $f) { if (Test-Path $f) { (Get-Item $f).Length } else { 0 } }
 
 [pscustomobject]@{
   Dot          = $dotOut
@@ -204,7 +223,7 @@ function Size-Of([string] $f) { if (Test-Path $f) { (Get-Item $f).Length } else 
   ClickTargets = $anchors
   Expected     = $rows
   AllClickable = ($anchors -ge $rows)
-  ExportSvg    = Size-Of $svgOut
-  ExportPng    = Size-Of $pngOut
-  ExportPdf    = Size-Of $pdfOut
+  ExportSvg    = Get-FileSize $svgOut
+  ExportPng    = Get-FileSize $pngOut
+  ExportPdf    = Get-FileSize $pdfOut
 }

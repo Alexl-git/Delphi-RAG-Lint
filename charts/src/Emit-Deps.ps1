@@ -61,7 +61,7 @@ function Get-DirLeaf([string] $path) {
 # not objects -- zip them here so callers can use property names.
 function Invoke-IndexQuery([string] $sql) {
   $raw = & $Engine sql --db $DbPath --query $sql --format json 2>&1 |
-         Where-Object { $_ -notmatch 'loaded defaults' }
+         Where-Object { $_ -notmatch 'loaded defaults' -and $_ -notmatch '^drag-lint: ' -and $_ -notmatch '^\s+may be stale' -and $_ -notmatch '^\s+drag-lint index ' }
   $txt = ($raw -join "`n")
   if ([string]::IsNullOrWhiteSpace($txt)) { return @() }
   try { $o = $txt | ConvertFrom-Json } catch { throw "index query returned non-JSON: $txt" }
