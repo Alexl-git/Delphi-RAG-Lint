@@ -1,5 +1,31 @@
-<!-- dl:backlog status=open last-measured=2026-09-23 -->
+<!-- dl:backlog status=done completed=2026-09-23 last-measured=2026-09-23 -->
 # PLAN: the next three diagram commands
+
+**DONE 2026-09-23 -- all three tasks, the integration and the test suite are
+implemented and committed (91f1b383, 12440bde, 04a4b8dc, 5a035204, e17bf456).
+Every measured number in this document reproduced exactly; none was edited.**
+The suite is `charts\src\Test-Emitters.ps1` -- run it rather than re-reading
+this plan. Kept for its measurements and its reasoning, not as a work item.
+
+Two deviations from what is written below, both deliberate and both verified:
+
+* `who-calls` also carries a NAME-MATCH bucket, counted always and rendered
+  only under `-WithNameMatches` as a dashed, labelled cluster with no edge to
+  the focus. Off by default, so every number in Task 1's VERIFY table stands
+  unchanged. See the commit message on 91f1b383.
+* `Get-EngineText` brackets on whichever of `{` or `[` comes FIRST, not on `{`
+  alone as section 0.1 says. `query find-callers --json` returns a bare ARRAY,
+  and the `{`-only rule silently corrupts it into an object plus trailing
+  garbage.
+
+One INBOX candidate was found and deliberately NOT fixed (the STOP list says
+to report it): for an unresolvable `--qname`, the engine exits 2 with
+`ERROR: no readable drag-lint index among --db path(s)`. The index is
+perfectly readable -- it answers every other query against the same path in
+the same session. The message names the wrong cause and would send a reader
+to reindex a healthy database.
+
+---
 
 For a COLD session. Work ONLY under `charts\`. Two commands already ship
 (`butterfly`, `deps`) and are the reference implementations.
