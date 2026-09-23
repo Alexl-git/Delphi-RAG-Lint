@@ -277,8 +277,55 @@ $ drag-lint convert-validate --rules bad-rules.txt --from ConvFix.TFrom --to Con
 line 4: link ToPath not found in --to tree: Sub.Nonexistent
 ```
 
-Exit codes: **0** valid / parse-ok; **1** errors found (parse or validation); **2**
-bad args (no `--rules`) or unreadable rules file.
+#### Glyph expressions -- `#link <ToPath> <- <FromPath> G[I/N] ... [: <Cast>]`
+
+A `#link` may carry a **glyph expression** after its FromPath (design:
+`docs\superpowers\specs\2026-09-17-glyph-strip-G-grammar-design.md`):
+
+| term | meaning |
+|---|---|
+| `G[I/N]` | glyph slot I of a source known to hold N glyphs |
+| `G[I]` | slot I of the source's ACTUAL count |
+| `G[*/N]` | all N slots in order (the identity for that N) |
+| `G[count]` | an integer: the number of terms in the alternative chosen for the sibling image link on the same FromPath |
+
+Terms written side by side stitch into one image (`G[1/6]G[2/6]`); commas
+separate **per-N alternatives** (`G[*/4], G[1/5]G[2/5]G[3/5]G[4/5]` = "when the
+source holds 4 take all four, when it holds 5 take the first four"). Spaces are
+allowed between terms and around commas, never inside `G[..]`. The cast suffix is
+split off first, then the expression at the first ` G[`, so FromPath is still the
+bare source property the `--from` tree check sees.
+
+`convert-validate` checks every expression **in parse-only mode too** (no tree is
+needed) and names the column inside the expression. Errors: a malformed term;
+`I < 1`, `N < 1` or `I > N` (a `G[I]` is bounded by the N its alternative's
+denominators fix); two denominators in one alternative; two alternatives for one
+N; two denominator-less alternatives; `G[count]` anywhere but as the whole
+expression; and a `G[count]` link without **exactly one** image link from the same
+FromPath in its `#convert` block. A straight carry of a glyph-count property
+(`NumGlyphs`, `GlyphCount`, `NumStates`, `ImageCount`) beside a G-link in the same
+block is a **warning** -- printed as `line N: warning: ...`, it never changes the
+exit code:
+
+```
+$ drag-lint convert-validate --rules glyph.rules
+line 2: link OptionsImage.Glyph <- Picture: G-expression column 27: slot 6 exceeds its count 5 (in "G[*/4], G[1/5]G[2/5]G[3/5]G[6/5]")
+line 4: link Glyph2 <- Picture: G-expression column 9: two alternatives for N=4 -- at most one alternative may apply to a given N (in "G[1/4], G[*/4]")
+line 3: warning: link OptionsImage.NumGlyphs <- NumGlyphs is a straight carry of the source glyph count beside the G-link on line 2 -- right only for identity alternatives; write "#link OptionsImage.NumGlyphs <- Picture G[count]" instead
+```
+
+`--print-parsed` shows the expression as its own field:
+`line 2: link OptionsImage.Glyph <- Picture [glyph G[*/4], G[1/5]G[2/5]G[3/5]G[4/5]] [cast AssignGraphic]`.
+
+**Not yet realised.** Extracting and stitching the slots is the next build
+(CV-2). Until it lands, `convert-apply` (and the hidden `convert-reemit`)
+**refuse** a book whose `#link` carries a glyph expression (exit 1, one
+`line N: ... not yet realised` line per G-link) instead of carrying the source
+image whole. Also still to come with CV-2: the validate error for a G-link on a
+source class that has no N reader in `docs\GLYPH-CLASSES.md`.
+
+Exit codes: **0** valid / parse-ok (warnings allowed); **1** errors found (parse or
+validation); **2** bad args (no `--rules`) or unreadable rules file.
 
 ### 4. `glyph-vacuum` -- measure before you rule
 

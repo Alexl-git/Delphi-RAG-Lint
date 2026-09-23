@@ -92,7 +92,8 @@ type
   /// below), Old (the LHS identifier), New (the RHS identifier), UnitsAdd
   /// (0+ trailing uses-units).
   /// rkConvert -&gt; FromType, ToType, UnitsAdd (0+ target units to add).
-  /// rkLink -&gt; ToPath (LHS of '&lt;-'), FromPath (RHS of '&lt;-').
+  /// rkLink -&gt; ToPath (LHS of '&lt;-'), FromPath (RHS of '&lt;-'), Cast and
+  /// GlyphExpr (both optional, split off the RHS).
   /// rkDefault -&gt; ToPath, Value (RHS of '=').
   /// rkNote -&gt; Text.
   /// rkPcre -&gt; Search (LHS of ' -&gt; '), Replace (RHS).
@@ -105,7 +106,7 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.HasConvertFor (DRagLint.Convert.DfmReemit.pas) (+18 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.HasConvertFor (DRagLint.Convert.DfmReemit.pas) (+21 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -120,6 +121,14 @@ type
     /// performed by convert-apply, which refuses to rewrite a link carrying one
     /// rather than silently dropping the conversion.</summary>
     Cast    : string;
+    /// <summary>rkLink only: the optional glyph expression after the FromPath
+    /// ('G[*/4], G[1/5]G[2/5]', see DRagLint.Convert.GlyphExpr), kept VERBATIM;
+    /// '' = none. Split off at the first ' G[' AFTER the cast suffix, so
+    /// FromPath is the bare source property the tree check expects. Validated by
+    /// ValidateConversionRules; NOT yet realised by convert-apply, which refuses
+    /// a book carrying one (UnrealisedGlyphLinks) rather than carry the source
+    /// image whole.</summary>
+    GlyphExpr: string;
     /// <summary>rkMapping/rkApply: the mapping's name. This is the ONLY thing
     /// tying a declaration, its #when branches and its #else together -- they
     /// are three flat sibling lines, not a nested block.</summary>
@@ -147,7 +156,7 @@ type
   /// ASCII-only description (e.g. 'unknown directive: #frobnicate' or
   /// 'link ToPath not found in --to tree: Bogus.Path').
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Rules.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) (+7 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -191,8 +200,10 @@ type
 /// '#unuse &lt;unit&gt;'; '#remove &lt;prop&gt;' / '#remove DFM: &lt;prop&gt;'
 /// (DFM-only); '#migrate [&lt;Class&gt; :] [&lt;obj&gt; .] &lt;old&gt; -&gt;
 /// &lt;new&gt; [, &lt;unit&gt; ...]'; '#convert &lt;FromType&gt; -&gt;
-/// &lt;ToType&gt; [, &lt;unit&gt; ...]'; '#link &lt;ToPath&gt; &lt;- &lt;FromPath&gt;'
-/// (note the '&lt;-' arrow); '#default &lt;ToPath&gt; = &lt;value&gt;';
+/// &lt;ToType&gt; [, &lt;unit&gt; ...]'; '#link &lt;ToPath&gt; &lt;- &lt;FromPath&gt;
+/// [&lt;G-expr&gt;] [: &lt;Cast&gt;]' (note the '&lt;-' arrow; the cast is split
+/// off first, then the glyph expression at the first ' G[' -- see
+/// TConversionRule.GlyphExpr); '#default &lt;ToPath&gt; = &lt;value&gt;';
 /// '#note &lt;text&gt;'; '#ignore &lt;FromPath&gt;' (acknowledge an F property is
 /// intentionally unmapped -- suppresses its unmapped-non-default warning).
 /// A NON-'#' line containing ' -&gt; ' is a raw PCRE
@@ -200,9 +211,8 @@ type
 /// recorded in ParseErrors. Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
-/// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.Rules.ParseConversionRules.AddError, DRagLint.Convert.Rules.ParseConversionRules.AddRule, DRagLint.Convert.Rules.ParseConversionRules.Directive, DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective, DRagLint.Convert.Rules.SplitCastSuffix, DRagLint.Convert.Rules.SplitHeadAndUnits, DRagLint.Convert.Rules.SplitLines (+10 more)</para>
-/// <para>Complexity: 30 (cyclomatic, outer body), 454 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.Rules.ParseConversionRules.AddError, DRagLint.Convert.Rules.ParseConversionRules.AddRule, DRagLint.Convert.Rules.ParseConversionRules.Directive, DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective, DRagLint.Convert.Rules.SplitCastSuffix, DRagLint.Convert.Rules.SplitGlyphExpr, DRagLint.Convert.Rules.SplitHeadAndUnits (+11 more)</para>
+/// <para>Complexity: 30 (cyclomatic, outer body), 455 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.AddError"/>
 /// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.AddRule"/>
 /// <seealso cref="DRagLint.Convert.Rules.ParseConversionRules.Directive"/>
@@ -235,27 +245,71 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// (rkUnuse/rkRemove/rkMigrate/rkNote/rkPcre) are not path-checked in Batch 1.
 /// rkIgnore is not path-checked either -- a #ignore for a non-existent F path is
 /// tolerated (it simply matches nothing), never a hard error.
+/// A #link carrying a glyph expression is checked by ParseGlyphExpr and
+/// ValidateGlyphExpr (errors name the expression column), and a 'G[count]' link
+/// must have exactly one image link from the same FromPath in its #convert
+/// block. These checks need no tree, so they also run in parse-only mode.
 /// Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Convert.Rules.PathExists, DRagLint.Convert.Rules.ValidateConversionRules.Add, DRagLint.Convert.Rules.ValidateConversionRules.IsStub, DRagLint.Convert.Rules.ValidateConversionRules.MappingDeclared, Format, SameText, Trim</para>
+/// <para>Calls: DRagLint.Convert.Rules.ConvertBlocks, DRagLint.Convert.Rules.PathExists, DRagLint.Convert.Rules.ValidateConversionRules.Add, DRagLint.Convert.Rules.ValidateConversionRules.CheckGlyphLink, DRagLint.Convert.Rules.ValidateConversionRules.IsStub, DRagLint.Convert.Rules.ValidateConversionRules.MappingDeclared, Format, IsGlyphCountExpr, IsGlyphImageLink, ParseGlyphExpr, SameText, Trim, ValidateGlyphExpr</para>
 /// <para>Returns: Errs.ToArray</para>
-/// <para>Complexity: 27 (cyclomatic, outer body), 106 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Complexity: 29 (cyclomatic, outer body), 141 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Convert.Rules.ConvertBlocks"/>
 /// <seealso cref="DRagLint.Convert.Rules.PathExists"/>
 /// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.Add"/>
+/// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.CheckGlyphLink"/>
 /// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.IsStub"/>
-/// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.MappingDeclared"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ValidateConversionRules(const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
 
+/// <summary>Non-fatal findings on a parsed rule set: things that validate but
+/// are almost certainly not what the author meant.</summary>
+/// <param name="ARules">The parsed rule set.</param>
+/// <returns>One TRuleError per warning, in source order; empty when there is
+/// nothing to say. A warning never makes a rule set invalid.</returns>
+/// <remarks>
+/// Today one warning (G-grammar design 3.3): a straight #link of a glyph-count
+/// property (IsGlyphCountPropName on the FromPath, e.g. 'NumGlyphs') in the same
+/// #convert block as a G image link. That carry is right for identity
+/// alternatives only; the author almost certainly means 'G[count]'. Needs no
+/// property tree. Pure; deterministic; no I/O.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Convert.GlyphExpr.IsGlyphCountPropName, DRagLint.Convert.Rules.ConvertBlocks, DRagLint.Convert.Rules.IsGlyphImageLink, Format</para>
+/// <seealso cref="DRagLint.Convert.GlyphExpr.IsGlyphCountPropName"/>
+/// <seealso cref="DRagLint.Convert.Rules.ConvertBlocks"/>
+/// <seealso cref="DRagLint.Convert.Rules.IsGlyphImageLink"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ConversionRuleWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;
+
+/// <summary>The #link rules convert-apply cannot perform yet because they
+/// carry a glyph expression.</summary>
+/// <param name="ARules">The parsed rule set.</param>
+/// <returns>One TRuleError per #link whose GlyphExpr is set, in source order;
+/// empty when the book has none.</returns>
+/// <remarks>
+/// convert-validate accepts a valid G-expression (CV-4), but extracting and
+/// stitching the slots is CV-2's build. Until it lands, convert-apply refuses
+/// a book listed here instead of carrying the source image WHOLE, which the
+/// owner's ruling forbids ("never fall back to carry-whole"). CV-2 retires this
+/// function when it realises the links. Pure; deterministic; no I/O.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function UnrealisedGlyphLinks(const ARules: TConversionRuleSet): TArray<TRuleError>;
+
 implementation
 
 uses
   System.StrUtils,
-  System.Generics.Collections;
+  System.Generics.Collections,
+  DRagLint.Convert.GlyphExpr;
 
 const
   ARROW_MIGRATE = ' -> ';  // #migrate / #convert / raw PCRE separator
@@ -366,6 +420,23 @@ begin
   if (Tail = '') or (Pos(' ', Tail) > 0) or (Pos('.', Tail) > 0) or (Pos('<', Tail) > 0) then Exit;
   ACast:= Tail;
   APath:= Trim(Copy(APath, 1, ColonAt - 1));
+end;
+
+{ Splits an optional glyph expression off a #link FromPath (G-grammar design
+  3.1): everything from the first ' G[' on is the expression, kept verbatim; a
+  FromPath never contains ' G[' itself. Runs AFTER SplitCastSuffix, so
+  'Picture G[*/4] : AssignGraphic' has already lost its cast. }
+procedure SplitGlyphExpr(var APath: string; out AGlyphExpr: string);
+const
+  GlyphMarker = ' G[';
+var
+  At: Integer;
+begin
+  AGlyphExpr:= '';
+  At:= Pos(GlyphMarker, APath);
+  if At <= 0 then Exit;
+  AGlyphExpr:= Trim(Copy(APath, At + 1, MaxInt));
+  APath     := Trim(Copy(APath, 1, At - 1));
 end;
 
 function ParseConversionRules(const AText: string): TConversionRuleSet;
@@ -719,6 +790,7 @@ begin
           R.ToPath  := Trim(Copy(Arg, 1, ArrPos - 1));
           R.FromPath:= Trim(Copy(Arg, ArrPos + Length(ARROW_LINK), MaxInt));
           SplitCastSuffix(R.FromPath, R.Cast);
+          SplitGlyphExpr(R.FromPath, R.GlyphExpr);
         end
         else
         begin
@@ -834,6 +906,34 @@ begin
     if SameText(N.Path, APath) then Exit(True);
 end;
 
+// The #convert block of every rule, index-aligned with ARules.Rules: 0 before
+// the first #convert, then 1, 2, ... -- a block starts AT its #convert line.
+function ConvertBlocks(const ARules: TConversionRuleSet): TArray<Integer>;
+var
+  I    : Integer;
+  Block: Integer;
+begin
+  SetLength(Result, Length(ARules.Rules));
+  Block:= 0;
+  for I:= 0 to High(ARules.Rules) do
+  begin
+    if ARules.Rules[I].Kind = rkConvert then Inc(Block);
+    Result[I]:= Block;
+  end;
+end;
+
+// True for a #link carrying an IMAGE glyph expression -- any G-expression that
+// is not a well-formed 'G[count]'. A malformed one still counts: it is an image
+// link with an error, and counting it keeps a sibling G[count] from reporting a
+// second, misleading "found 0".
+function IsGlyphImageLink(const ARule: TConversionRule): Boolean;
+var
+  Expr: TGlyphExpr;
+begin
+  Result:= (ARule.Kind = rkLink) and (ARule.GlyphExpr <> '') and
+           ((Length(ParseGlyphExpr(ARule.GlyphExpr, Expr)) > 0) or not IsGlyphCountExpr(Expr));
+end;
+
 function ValidateConversionRules(const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
 var
@@ -843,6 +943,8 @@ var
   HaveTo : Boolean         ;
   HaveFrom: Boolean        ;
   SP     : TMappingSetPair        ;
+  Blocks : TArray<Integer>;
+  I      : Integer        ;
 
   procedure Add(ALineNo: Integer; const AMsg: string);
   var
@@ -869,6 +971,36 @@ var
       if (M.Kind = rkMapping) and SameText(M.MapName, AName) then Exit(True);
   end;
 
+  { G-grammar design 3.2/3.3/8: the expression's own syntax and ranges, then --
+    for 'G[count]' -- exactly one image link from the same FromPath in the same
+    #convert block. Needs no property tree, so it fires in parse-only mode too
+    (the editor's save-validate). }
+  procedure CheckGlyphLink(AIdx: Integer);
+  var
+    Link : TConversionRule;
+    Expr : TGlyphExpr;
+    GErrs: TArray<TGlyphExprError>;
+    GE   : TGlyphExprError;
+    J    : Integer;
+    Found: Integer;
+  begin
+    Link := ARules.Rules[AIdx];
+    GErrs:= ParseGlyphExpr(Link.GlyphExpr, Expr);
+    if Length(GErrs) = 0 then GErrs:= ValidateGlyphExpr(Expr);
+    for GE in GErrs do
+      Add(Link.LineNo, Format('link %s <- %s: G-expression column %d: %s (in "%s")',
+        [Link.ToPath, Link.FromPath, GE.Column, GE.Message, Link.GlyphExpr]));
+    if (Length(GErrs) > 0) or not IsGlyphCountExpr(Expr) then Exit;
+    Found:= 0;
+    for J:= 0 to High(ARules.Rules) do
+      if (Blocks[J] = Blocks[AIdx]) and SameText(ARules.Rules[J].FromPath, Link.FromPath) and
+         IsGlyphImageLink(ARules.Rules[J]) then
+        Inc(Found);
+    if Found <> 1 then
+      Add(Link.LineNo, Format('G[count] needs exactly one image link from %s; found %d',
+        [Link.FromPath, Found]));
+  end;
+
 begin
   Errs:= TList<TRuleError>.Create;
   try
@@ -879,10 +1011,12 @@ begin
     // A tree with an empty RootType means "no tree supplied" -> skip its checks.
     HaveTo  := AToTree.RootType   <> '';
     HaveFrom:= AFromTree.RootType <> '';
+    Blocks  := ConvertBlocks(ARules);
 
-    // 2. Path checks for #link and #default.
-    for R in ARules.Rules do
+    // 2. Path checks for #link and #default; glyph-expression checks for #link.
+    for I:= 0 to High(ARules.Rules) do
     begin
+      R:= ARules.Rules[I];
       case R.Kind of
         rkLink:
         begin
@@ -892,6 +1026,7 @@ begin
           if HaveFrom and (not IsStub(R.FromPath)) and (R.FromPath <> '') and
              (not PathExists(AFromTree, R.FromPath)) then
             Add(R.LineNo, Format('link FromPath not found in --from tree: %s', [R.FromPath]));
+          if R.GlyphExpr <> '' then CheckGlyphLink(I);
         end;
         rkDefault:
         begin
@@ -939,6 +1074,52 @@ begin
     Result:= Errs.ToArray;
   finally
     Errs.Free;
+  end;
+end;
+
+function ConversionRuleWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;
+var
+  Blocks: TArray<Integer>;
+  I     : Integer;
+  J     : Integer;
+  R     : TConversionRule;
+  G     : TConversionRule;
+  W     : TRuleError;
+begin
+  Result:= nil;
+  Blocks:= ConvertBlocks(ARules);
+  for I:= 0 to High(ARules.Rules) do
+  begin
+    R:= ARules.Rules[I];
+    if (R.Kind <> rkLink) or (R.GlyphExpr <> '') or not IsGlyphCountPropName(R.FromPath) then Continue;
+    for J:= 0 to High(ARules.Rules) do
+    begin
+      if (Blocks[J] <> Blocks[I]) or not IsGlyphImageLink(ARules.Rules[J]) then Continue;
+      G:= ARules.Rules[J];
+      W.LineNo := R.LineNo;
+      W.Message:= Format('link %s <- %s is a straight carry of the source glyph count beside the G-link ' +
+        'on line %d -- right only for identity alternatives; write "#link %s <- %s G[count]" instead',
+        [R.ToPath, R.FromPath, G.LineNo, R.ToPath, G.FromPath]);
+      Result:= Result + [W];
+      Break;
+    end;
+  end;
+end;
+
+function UnrealisedGlyphLinks(const ARules: TConversionRuleSet): TArray<TRuleError>;
+var
+  R: TConversionRule;
+  E: TRuleError;
+begin
+  Result:= nil;
+  for R in ARules.Rules do
+  begin
+    if (R.Kind <> rkLink) or (R.GlyphExpr = '') then Continue;
+    E.LineNo := R.LineNo;
+    E.Message:= Format('link %s <- %s %s: glyph-expression links are validated but not yet realised ' +
+      'by convert-apply (CV-2) -- refusing rather than carrying the source image whole',
+      [R.ToPath, R.FromPath, R.GlyphExpr]);
+    Result:= Result + [E];
   end;
 end;
 

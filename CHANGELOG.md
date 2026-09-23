@@ -7,6 +7,18 @@ breaking changes** until v1.0.
 
 ### Added
 
+- **`convert-validate` checks `G[I/N]` glyph expressions on `#link` (CV-4, the validate half of
+  the glyph grammar).** `#link <ToPath> <- <FromPath> G[..] [: <Cast>]`: the expression is split off
+  at the first ` G[` and kept verbatim (`TConversionRule.GlyphExpr`), so FromPath is the bare source
+  property again. New pure unit `src\report\DRagLint.Convert.GlyphExpr.pas` (`ParseGlyphExpr`,
+  `ValidateGlyphExpr`, `IsGlyphCountExpr`, `IsGlyphCountPropName`). Errors, with the rule line AND the
+  column inside the expression, in parse-only mode too: malformed term, I < 1, N < 1, I > N, mixed
+  denominators, two alternatives for one N, two denominator-less alternatives, `G[count]` not alone,
+  and `G[count]` without exactly one image link from its FromPath in its `#convert` block. New
+  `line N: warning:` output (exit code unchanged) for a straight `NumGlyphs` carry beside a G-link.
+  `convert-apply`/`convert-reemit` REFUSE a G-linked book (exit 1) until CV-2 realises it, rather
+  than carry the image whole. Not yet: the no-N-reader class error (needs CV-2's reader table).
+  Guard: `tests\autotest\run_convert_glyph_expr.ps1` (38 checks). No extractor/resolver bump.
 - **New rule `enum-read-inside-with` (bug-patterns, warning, ON by default).** A bare name inside a
   `with` body that is BOTH a member of a with-target (class with ancestry, or record) AND a read the
   index binds to an enum value. The compiler binds the member; the resolver records the enum value
