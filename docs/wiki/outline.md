@@ -31,6 +31,14 @@ A file that is in **no** index is refused (exit `2`) rather than answered with
 an empty outline, which would be indistinguishable from a unit that declares
 nothing.
 
+## Forward declarations
+
+A forward stub (`TFoo = class;` completed later in the same unit) and its real
+declaration BOTH stay listed, and the stub row is tagged `[forward -> line N]`
+(JSON: `forward_target_line`). Everywhere else a name is looked up -- `query`,
+`hover`, completion, class metrics -- the stub is folded into the real
+declaration. A lone stub with no completion in the unit is still a class.
+
 ## Reaching it in the IDE
 No menu item calls this directly. The plugin's structure cache
 (StructureCache.pas:338) shells out to this verb to populate the Structure

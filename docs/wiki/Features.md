@@ -35,6 +35,9 @@ The foundation. Everything below that says *(index)* reads what this produces.
 | Per-file resume -- an interrupted walk continues where it stopped | automatic |
 | Preprocessing -- per-config `{$IFDEF}` resolution before parsing | on by default; `--no-preprocess` |
 | Show which databases a target resolves to | `resolve-dbs` |
+| Add a NEW project to the manifest so `index --all` and the IDE can see it | `register-project <file.dproj>` (dry run without `--apply`) |
+| Re-derive call edges, ancestry, enum-value bindings and purity verdicts from the stored parses, without re-parsing | `index --all --resolve-only` |
+| Define profile per project/platform/config -- `Base`, `Base_<Platform>`, `Cfg_N`, `Cfg_N_<Platform>` read in MSBuild order, so a define set only per platform (EurekaLog is the common one) is honoured | automatic; inspect with [`pp-profile`](pp-profile) |
 | Schema inspection / migration | [`schema`](schema), [`migrate-dbs`](migrate-dbs) |
 
 ## Search and navigation *(index)*
@@ -43,7 +46,7 @@ The foundation. Everything below that says *(index)* reads what this produces.
 |---|---|
 | Find a symbol by name or qualified name | `query --name` / `--qname` |
 | **Text search over string literals** -- string constants, resourcestrings, DFM captions, SQL exception messages | `query --text "<phrase>"` |
-| Who calls this | [`query find-callers`](query-find-callers) (`--resolved` for precise call edges) |
+| Who calls this -- and, with `--resolved`, who reads/writes a property or field and who reads an **enum value** (`[certain, read]`) | [`query find-callers`](query-find-callers) (`--resolved` for precise call edges and bound accesses) |
 | What does this call | [`find-callees`](find-callees) |
 | Class / interface ancestry, transitively | [`query ancestors`](query-ancestors) |
 | Resolve a type category (class, interface, float, string, ...) | [`query typecat`](query-typecat) |
@@ -56,6 +59,8 @@ The foundation. Everything below that says *(index)* reads what this produces.
 | Symbol slice, class surface, context bundle | `slice`, `surface`, [`context`](context) |
 | Hover card | `hover` |
 | Which unit declares this symbol (and add it to `uses`) | [`find-unit`](find-unit) |
+| Route a human word ("the scheduler") to the code that owns it, via `dl:wiki` topics in doc comments | [`wiki`](wiki) |
+| A forward declaration (`TFoo = class;`) is folded into the real class wherever a name is looked up -- one `query` row, hover on the real declaration, `outline` tags the stub `[forward -> line N]` | automatic |
 
 ## Linting
 
@@ -104,6 +109,8 @@ Scopes:
 | Restrict the report to one project's compile closure | `lint-all --project <.dproj>` |
 | Machine-readable output | `--json`, and SARIF |
 | Apply the fixable subset | `lint-all --fix` |
+| Does an interface edit to this unit reach a dependent? Reports `stale-interface-reference` at every bound read of a removed or changed routine, property, field or **enum member** | [`lint-tree`](lint-tree) |
+| Declare one exception class per distinct `raise Exception.Create('...')` message, then rewrite the raise sites | `exceptions-sync`, then `lint --fix --fix-rule raise-bare-exception` |
 
 Formatting: drag-lint drives **YADF** (the Delphi formatter) for the current
 unit or the whole active project, straight from the IDE menu -- see
@@ -136,6 +143,7 @@ guesswork.
 | Strip generated blocks | `document --unit --strip` |
 | Generate a doc comment for a symbol | `generate-docs` |
 | Shared-unit markers, so several projects can document one unit without fighting | [`shared-unit`](shared-unit) |
+| Purity: every routine gets an effect summary (globals, heap, own fields, parameters written) computed to a fixpoint over the whole index; a proven one renders **Effect-free (proven)** in hover and autodoc. Two OFF-by-default rules use it: `discarded-effect-free-result` and `query-name-with-effect` | automatic; `--enable <id>` for the rules |
 
 ## Refactoring and code generation
 
@@ -162,6 +170,7 @@ DevExpress `cx`/`dx`).
 | Scaffold a conversion rule from a real from/to pair | [`convert-scaffold`](convert-scaffold) |
 | Validate a rulebook | [`convert-validate`](convert-validate) |
 | Apply rules to a unit and its DFM | [`convert-apply`](convert-apply) |
+| Measure every streamed glyph/picture under a tree before writing a glyph rule (`instances.tsv`, `classes.tsv`, `gallery.html`) | `glyph-vacuum --root <dir> --out <dir>` |
 | Visual rulebook editor | `ConvRulesEditor.exe` |
 
 ## Graphs and reports
@@ -180,6 +189,26 @@ DevExpress `cx`/`dx`).
 | Form hierarchy CSV for test helpers | `forms-csv` |
 | Export to DOT / Mermaid / Obsidian / Delphi consts | `export`, `--format dot\|mermaid` |
 | Interactive graph viewer | `drag_lint_graph.exe`, dockable in the IDE |
+
+## Diagrams and charts
+
+Ask a formal question about one symbol and get a clickable chart back -- the
+`ask` family, shipping in the charts release. Twenty questions: `butterfly`,
+`who-calls`, `what-it-calls`, `who-writes`, `who-reads`, `change-impact`,
+`tested-by`, `effects`, `touches-tables`, `class-surface`, `hierarchy`, `deps`,
+`cycles`, `wiring`, `lifecycle`, `event-wiring`, `architecture`,
+`protocol-trace`, `crosses-boundary` and `shown-where` -- plus
+`exception-paths`, `consumers`, `feeds-from` and `lands-where`, shipping with the
+same release. Every row in a chart is a fact with a file and a line, and links
+back to it.
+
+| Feature | Command |
+|---|---|
+| List the questions valid for a selection | `ask --list --at <file>:<line>:<col>` |
+| Answer one, as an SVG/PNG/PDF bundle that records how to regenerate it | `ask --question <id> --at <file>:<line>:<col>` |
+
+See [Diagrams and Charts](Diagrams-and-Charts), with three samples drawn from
+drag-lint's own code.
 
 ## Compiler integration
 
@@ -216,6 +245,7 @@ DevExpress `cx`/`dx`).
 | Feature | Command |
 |---|---|
 | Which databases cover what | `resolve-dbs`, [`info`](info) |
+| Ask running `lsp` engines to close their indexes and stand down, so an index can be rebuilt without killing them | `shutdown` |
 | Library path drift after a third-party update | `library-drift` |
 | Per-phase timing breakdown | `DRAGLINT_PROFILE=1` |
 | Ambiguous call diagnosis | [`ambiguous-calls`](ambiguous-calls) |
@@ -224,5 +254,5 @@ DevExpress `cx`/`dx`).
 
 ---
 
-*Counts verified against v1.16.0-alpha. `drag-lint rules` is always the
+*Counts verified against v1.17.0-alpha (extractor 1.18.0-alpha, resolver 1.6.0-alpha, schema 23). `drag-lint rules` is always the
 authority -- this page can lag the catalogue.*

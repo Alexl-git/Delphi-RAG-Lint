@@ -74,6 +74,28 @@ function ConvertTo-HtmlText([string]$Text) {
       return [char]0x1 + ($codes.Count - 1).ToString() + [char]0x2
     })
 
+  # Images, BEFORE links (an image is a link with a leading '!'). Only images
+  # this repository ships are embedded: a docs/Images/ path, given relative or
+  # as the raw.githubusercontent URL a wiki page has to use (a GitHub wiki is a
+  # separate repository and cannot reach docs/ by a relative path). Word's HTML
+  # import cannot be relied on for SVG, so a sibling .png is preferred when one
+  # exists. Anything else keeps its alt text and drops the picture.
+  $s = [regex]::Replace($s, '!\[([^\]]*)\]\(([^)]+)\)', {
+      param($m)
+      $alt  = $m.Groups[1].Value
+      $href = $m.Groups[2].Value
+      $mm = [regex]::Match($href, 'docs/Images/(.+)$')
+      if (-not $mm.Success) { return $alt }
+      $local = Join-Path $Repo ('docs\Images\' + $mm.Groups[1].Value.Replace('/', '\'))
+      if ($local -match '\.svg$') {
+        $png = [IO.Path]::ChangeExtension($local, '.png')
+        if (Test-Path -LiteralPath $png) { $local = $png }
+      }
+      if (-not (Test-Path -LiteralPath $local)) { return $alt }
+      $uri = ([Uri]$local).AbsoluteUri
+      return "<img src=""$uri"" alt=""$($alt.Replace('"', '&quot;'))""/>"
+    })
+
   # Links. A bare page name (no scheme, no slash) is an internal wiki link and
   # becomes an anchor into this same document.
   $s = [regex]::Replace($s, '\[([^\]]+)\]\(([^)]+)\)', {
@@ -237,7 +259,15 @@ if (Test-Path -LiteralPath $fmPath) {
 }
 
 $allPages = @(Get-ChildItem -LiteralPath $WikiDir -Filter *.md -File | Select-Object -ExpandProperty BaseName)
-$named    = @($Front + $IdeIntro + $Back)
+
+# Diagrams and charts get a Part of their own: the `ask` questions are one
+# family with one model, and scattered alphabetically through the CLI part they
+# would read as twenty unrelated verbs. The index page leads; the question
+# pages (ask-*) follow in name order.
+$Charts   = @(@('Diagrams-and-Charts' | Where-Object { $allPages -contains $_ }) +
+              @($allPages | Where-Object { $_ -like 'ask-*' } | Sort-Object))
+
+$named    = @($Front + $IdeIntro + $Back + $Charts)
 $rest     = @($allPages | Where-Object { $named -notcontains $_ } | Sort-Object)
 
 $idePages = @($rest | Where-Object { $s = $surfaceOf[$_]; $s -and $s -match 'IDE' })
@@ -248,7 +278,8 @@ $parts = @(
   @{ Title = 'Part I -- Getting started';        Pages = @($Front | Where-Object { $allPages -contains $_ }) },
   @{ Title = 'Part II -- The RAD Studio plugin'; Pages = @(@($IdeIntro | Where-Object { $allPages -contains $_ }) + $idePages) },
   @{ Title = 'Part III -- The command line';     Pages = $cliPages },
-  @{ Title = 'Part IV -- Reference';             Pages = @(@($Back | Where-Object { $allPages -contains $_ }) + $other) }
+  @{ Title = 'Part IV -- Diagrams and charts';   Pages = $Charts },
+  @{ Title = 'Part V -- Reference';              Pages = @(@($Back | Where-Object { $allPages -contains $_ }) + $other) }
 )
 
 # Anchors must exist before any page is converted, so cross-page links resolve
@@ -327,6 +358,29 @@ try {
   $word.DisplayAlerts = 0
 
   $doc = $word.Documents.Open($tmpHtml, $false, $true)   # ConfirmConversions=false, ReadOnly=true
+
+  # Pictures arrive LINKED to their files, not embedded: a .docx saved as-is
+  # would show them on this machine and an empty frame everywhere else. Embed
+  # each one, then break the link, and scale anything wider than the text
+  # column down to it (a 1,600 px chart otherwise runs off the page).
+  $colWidth = $doc.PageSetup.PageWidth - $doc.PageSetup.LeftMargin - $doc.PageSetup.RightMargin
+  $embedded = 0
+  foreach ($shp in @($doc.InlineShapes)) {
+    try {
+      if ($shp.LinkFormat -ne $null) {
+        $shp.LinkFormat.SavePictureWithDocument = $true
+        $shp.LinkFormat.BreakLink()
+      }
+    } catch { }
+    try {
+      if ($shp.Width -gt $colWidth) {
+        $shp.LockAspectRatio = -1
+        $shp.Width = $colWidth
+      }
+    } catch { }
+    $embedded++
+  }
+  if ($embedded -gt 0) { Write-Host "  embedded $embedded picture(s)" -ForegroundColor Cyan }
 
   # A native TOC gives page numbers in the PDF, which an HTML list cannot.
   # Non-fatal: the document is still complete and navigable without it.
