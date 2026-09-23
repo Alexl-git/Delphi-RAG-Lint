@@ -5,7 +5,7 @@ category, and its default enabled/fixable status. Reach for it to see what a
 lint run can find, or to filter by category.
 
 The catalog currently holds 186 rules -- 157 enabled by default, 23 marked
-fixable -- across 16 categories. Of the 186, 132 are built-in and 53 are
+fixable -- across 16 categories. Of the 186, 133 are built-in and 53 are
 external `.scm` rule files.
 
 ## Running it from the CLI

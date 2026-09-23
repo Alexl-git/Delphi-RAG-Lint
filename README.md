@@ -910,7 +910,7 @@ CLI-only verbs).
 ### Lint rule pack (186 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.17.0-alpha: **186 rules across 16 categories -- 132
+external `.scm`). As of v1.17.0-alpha: **186 rules across 16 categories -- 133
 built-in and 53 external `.scm`, 157 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
