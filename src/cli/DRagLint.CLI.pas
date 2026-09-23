@@ -800,6 +800,9 @@ begin
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
   Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --');
   Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
+  Writeln('                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured');
+  Writeln('                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under');
+  Writeln('                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)');
   Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
