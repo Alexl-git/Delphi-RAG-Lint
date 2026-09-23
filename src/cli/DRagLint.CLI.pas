@@ -1786,6 +1786,31 @@ const
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
 
+{ The version limb of a stored fingerprint whose FIRST limb is `<APrefix><ver>`
+  (`v=` for the indexer, `r=` for the resolver), or '' when the stamp is absent
+  or not in that form. }
+function FingerprintVersionLimb(const AFingerprint, APrefix: string): string;
+var
+  Rest   : string ;
+  SemiPos: Integer;
+begin
+  Result:= '';
+  if Pos(APrefix, AFingerprint) <> 1 then Exit;
+  Rest   := Copy(AFingerprint, Length(APrefix) + 1, MaxInt);
+  SemiPos:= Pos(';', Rest);
+  Result := if SemiPos > 0 then Copy(Rest, 1, SemiPos - 1) else Rest;
+end;
+
+{ The `r=` limb of a stored resolver fingerprint (`r=<ver>;schema=N`), or ''.
+  Read by the never-downgrade refusal and by the freshness note, which must
+  both know the DIRECTION of a difference, not only that there is one. }
+function ResolverVersionOfFingerprint(const AFingerprint: string): string;
+const
+  RESOLVER_LIMB_PREFIX = 'r=';
+begin
+  Result:= FingerprintVersionLimb(AFingerprint, RESOLVER_LIMB_PREFIX);
+end;
+
 var GFreshnessNoted: Boolean = False;
 
 procedure NoteIndexFreshnessOnce(const AStore: ISymbolStore; const ADbPath: string);
@@ -1883,8 +1908,17 @@ begin
     guard is scoped by function too. }
   var Prev: string:= AStore.GetMetaValue(RESOLVER_FP_KEY);
   var Cur : string:= ResolverFingerprint(AStore);
+  { THE DIRECTION IS THE ADVICE. "Edges are stale, re-derive" is right when the
+    index is OLDER than this build and is exactly the downgrade when it is NEWER
+    -- and the old `Prev <> Cur` gave that advice for both (ENG-2). An index
+    newer than this build is refused by RefuseIfEngineOlderThanDb anyway, so
+    the note says so rather than advising a command that would fail. }
+  var PrevVer: string:= ResolverVersionOfFingerprint(Prev);
   if Prev = '' then
     Writeln(ErrOutput, Format('  resolver: this index carries NO resolver stamp (current %s) -- its edges will be re-derived on the next index run.', [Cur]))
+  else if (PrevVer <> '') and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, PrevVer) < 0) then
+    Writeln(ErrOutput, Format('  resolver: edges were derived by a NEWER resolver (%s) than this build (%s) -- reads are fine; ' +
+      'an index run with this engine is refused. Use the engine that resolved it.', [Prev, Cur]))
   else if Prev <> Cur then
     Writeln(ErrOutput, Format('  resolver: edges were derived by %s, this build is %s -- re-derive with `index <dir> --db <db> --resolve-only` (minutes, not a re-parse).', [Prev, Cur]));
 end;
@@ -4331,15 +4365,8 @@ end;
 function ExtractorVersionOfFingerprint(const AFingerprint: string): string;
 const
   VERSION_LIMB_PREFIX = 'v=';
-var
-  Rest   : string ;
-  SemiPos: Integer;
 begin
-  Result:= '';
-  if Pos(VERSION_LIMB_PREFIX, AFingerprint) <> 1 then Exit;
-  Rest   := Copy(AFingerprint, Length(VERSION_LIMB_PREFIX) + 1, MaxInt);
-  SemiPos:= Pos(';', Rest);
-  Result := if SemiPos > 0 then Copy(Rest, 1, SemiPos - 1) else Rest;
+  Result:= FingerprintVersionLimb(AFingerprint, VERSION_LIMB_PREFIX);
 end;
 
 { NEVER DOWNGRADE -- the owner's ruling 1 of 2026-09-14
@@ -4366,7 +4393,10 @@ end;
   integer, because Migrate would write it down too. No flag overrides this --
   not --rebuild, not --force-reparse: both would still produce a downgraded
   database. The way back is the engine that built the index, or a delete.
-  Pinned by tests\autotest\run_index_never_downgrades.ps1. }
+  Pinned by tests\autotest\run_index_never_downgrades.ps1.
+
+  THREE AXES since 2026-09-23: extractor, RESOLVER (resolver_fingerprint's r=
+  limb vs DRAGLINT_RESOLVER_VERSION -- see the check below), and schema. }
 function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean;
 var
   Stamp, DbVer   : string ;
@@ -4383,6 +4413,27 @@ begin
     Writeln(ErrOutput, '  A writer never downgrades an index: re-parsing with an older extractor would throw away');
     Writeln(ErrOutput, '  the newer parse and stamp the database down, silently. Run the engine that built it,');
     Writeln(ErrOutput, '  or delete the index and rebuild it with this one. No flag overrides this.');
+    Exit(True);
+  end;
+  { THE RESOLVER AXIS (ENG-2, docs\INBOX-URGENT-resolver-downgrade-not-refused.md).
+    The resolver fingerprint is compared for INEQUALITY too: any difference
+    clears every call edge, re-derives them with THIS engine's resolver and
+    stamps ITS version. So an engine on resolver 1.5.1 re-resolving an index
+    stamped 1.6.0 undid the newer resolve silently -- and --resolve-only, the
+    one write that touches nothing BUT the resolver's output, was the purest
+    form of it. Same semantics as the extractor check above: older refuses,
+    equal or newer proceeds, an absent stamp is stale (never newer), compared
+    semantically, and no flag -- --resolve-only included -- overrides it.
+    Pinned by tests\autotest\run_index_never_downgrades_resolver.ps1. }
+  DbVer:= ResolverVersionOfFingerprint(AStore.GetMetaValue(RESOLVER_FP_KEY));
+  if (DbVer <> '') and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, DbVer) < 0) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: refusing to write %s', [ADbPath]));
+    Writeln(ErrOutput, Format('  the index was resolved by resolver %s; this engine is resolver %s (drag-lint %s) -- OLDER.',
+                              [DbVer, DRAGLINT_RESOLVER_VERSION, DRAGLINT_VERSION]));
+    Writeln(ErrOutput, '  A writer never downgrades an index: re-deriving with an older resolver would throw away');
+    Writeln(ErrOutput, '  the newer call edges and stamp the database down, silently. Run the engine that resolved it,');
+    Writeln(ErrOutput, '  or delete the index and rebuild it with this one. No flag overrides this, --resolve-only included.');
     Exit(True);
   end;
   AStore.IsSchemaCurrent(Found, Expected);

@@ -58,6 +58,18 @@ breaking changes** until v1.0.
   `tests\autotest\run_lintall_rule_enables.ps1`. A `review-marker-*` finding ABOUT the requested rule
   (its message names the marker's rule as `"<id>"`) survives the narrowing, so `lint --rule X` still
   reports a stale `dl:ok` for X with its re-record command (`run_marker_metric_scope.ps1` check 6).
+- **An older engine refuses to re-resolve a NEWER index (ENG-2, urgent).** `RefuseIfEngineOlderThanDb`
+  covered the extractor and schema axes, not the resolver: `resolver_fingerprint` is compared for
+  inequality, so an engine on resolver 1.5.1 running `index` (or `index --resolve-only`) against an
+  index stamped `r=1.6.0-alpha` cleared every call edge, re-derived them with the older resolver and
+  stamped the database DOWN, exit 0. The resolver is now the third axis, with the extractor's
+  semantics: older refuses (exit 2, both versions named, file byte-identical), equal or newer
+  proceeds, an absent stamp is stale (never newer), compared semantically, and no flag -- not
+  `--rebuild`, `--force-reparse` or `--resolve-only` -- overrides it. Covers the single-target and
+  `index --all` paths. The read-side freshness note now states the DIRECTION: an index resolved by a
+  NEWER resolver is named as such instead of being told to re-derive with `--resolve-only` (the
+  downgrade itself). No version constant moves. Guard:
+  `tests\autotest\run_index_never_downgrades_resolver.ps1`.
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
   every `index` preprocess, and every project closure) used to union only the `.dproj`'s `Base` group
   and the selected config's `Cfg_N` group. MSBuild also applies `Base_<Platform>` and
