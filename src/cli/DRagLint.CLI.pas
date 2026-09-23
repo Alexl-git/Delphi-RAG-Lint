@@ -592,7 +592,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@cda3 -- one Writeln per verb, so length IS the verb count; run_docs_sync_guard.ps1 harvests the banner as ONE surface, and splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@cda3 -- REVIEWED 2026-09-23: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');

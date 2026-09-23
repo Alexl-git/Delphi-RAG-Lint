@@ -12,10 +12,20 @@
   # against -- drag-lint 1.16.0-alpha, extractor 1.17.0-alpha, resolver      #
   # **1.5.1-alpha** -- the measured result is:                               #
   #                                                                          #
-  #     PASS  1, 2, 6, 7, 8, 10          FAIL  3, 4, 5, 9, 11, 12, 13        #
+  #     PASS  1, 2, 6, 7, 8, 10          FAIL  3, 4, 5, 9, 11, 12, 13, 14    #
   #                                                                          #
   # Any OTHER pattern on 1.5.1-alpha means THIS FIXTURE is broken, not the   #
   # engine. Fix the fixture; never relax a check to match what you saw.      #
+  #                                                                          #
+  # Check 14 was ADDED after the branch was reviewed (fix wave, 2026-09-23)  #
+  # and so was never run on 1.5.1-alpha. Its FAIL above is DERIVED, by the   #
+  # same argument the header already records for check 13: the whole         #
+  # `enum-values:` log line does not exist on 1.5.1-alpha, so a check that   #
+  # reads its counters cannot pass there. It is a SEPARATE check rather      #
+  # than more assertions inside check 6 precisely so that every existing     #
+  # check keeps the 1.5.1-alpha verdict it was actually measured with --     #
+  # folding it into check 6 would have turned that measured PASS into a      #
+  # FAIL and made the pinned pattern above a claim nobody could check.       #
   ############################################################################
 
   THE DEFECT. An enum value is referenced bare (`cmdDelta`) or qualified
@@ -67,6 +77,7 @@
               (AMENDED at task 8, see below)
     check 12  E5: scoped pass NULLs its own universe ....... task 4
     check 13  rule 0: pinned INERT (collapsed = 0, R12) .... task 4
+    check 14  declines pinned BY REASON (R2 / R3) .......... fix wave (task 9)
 
   **Task 8 is the last check to go green** -- it wires `enum_value` into
   LintTree.IsRoutineKind, which the prior art (INBOX-property-refs-never-
@@ -149,13 +160,14 @@
   The 1-13 numbering above is a LISTING order, not an execution order. This
   guard runs:
 
-      1, 2, 7, 8, 3, 4, 5, 6, 9, 10, 11, 13, **12 LAST**
+      1, 2, 7, 8, 3, 4, 5, 6, 14, 9, 10, 11, 13, **12 LAST**
 
   because **check 12 deliberately MUTATES fixture A** (it rewrites
   uEnumDecl2.pas to add `const cmdLoad = 9;` to its interface, then
   re-indexes), and that mutation changes A5's expected state from BOUND to
-  NULL. Every check that asserts the UNMUTATED state -- 3, 4, 5, 6, 9, 10 and
-  11 -- must therefore run before it. Check 13 uses fixture B, a separate
+  NULL. Every check that asserts the UNMUTATED state -- 3, 4, 5, 6, 9, 10, 11
+  and 14 -- must therefore run before it. Check 14 reads the counters printed
+  by the FIRST (check-1) index of fixture A, which is the unmutated one. Check 13 uses fixture B, a separate
   project and a separate database, so it is unaffected and sits wherever is
   convenient. The mutation point carries this note again in situ, and the
   guard prints its summary IN THE ORDER IT RAN, not in numeric order, so a
@@ -430,6 +442,22 @@ $dbA   = Join-Path $scratch 'a.sqlite'
 # Every site, located from the fixture text written above. The A/B/N labels
 # are the spec's; `exp` is the qualified_name the site must bind to, or $null
 # for a site that must stay NULL.
+#
+# `why` is the RULE REASON the resolver must give for a declining site, and it
+# is the fixture's statement of intent, NOT a transcript of a run. Check 14
+# sums these into the expected `enum-values:` decline counters, so they are
+# derived from the fixture the way check 9's and check 11's counts already are.
+# Each one is read straight off the fixture text above:
+#   N2 cmdShadow -- UseIt declares a LOCAL `cmdShadow: Integer`, so exactly one
+#                   candidate is visible and R3(a) declines it   -> shadowed
+#   N3 cmdClash  -- uEnumUse's own interface declares `cmdClash = 5`, a
+#                   unit-level const, so R3(c) declines it       -> shadowed
+#   N4 cmdDelta  -- uEnumBoth uses BOTH declaring units, so TWO candidates are
+#                   visible (uEnumDecl.TCmd, uEnumDecl2.TOther) -> ambiguous
+# N1 carries NO reason: it is a `write` ref and ENUM_UNIVERSE admits only
+# `read`, so it never enters the candidate stream and is not a decline.
+# `not-visible` is expected ZERO: every candidate name in fixture A has at
+# least one declaration reachable through a uses edge or in its own file.
 $L = @{
   A1 = @{ f = $fUse;  l = (LineOf $fUse  '{ A1 bind }');                      k = 'read';          n = 'cmdLoad';   exp = 'uEnumDecl.TCmd.cmdLoad' }
   A2 = @{ f = $fUse;  l = (LineOf $fUse  '{ A2 bind + routine CONTROL }');    k = 'read';          n = 'cmdDelta';  exp = 'uEnumDecl.TCmd.cmdDelta' }
@@ -439,9 +467,9 @@ $L = @{
   B1 = @{ f = $fUse;  l = (LineOf $fUse  '{ B1 bind, Shape B type receiver }'); k = 'member-access'; n = 'scOne';   exp = 'uEnumDecl.TScoped.scOne' }
   B2 = @{ f = $fUse;  l = (LineOf $fUse  '{ B2 bind, Shape B UNIT receiver }'); k = 'member-access'; n = 'cmdLoad'; exp = 'uEnumDecl.TCmd.cmdLoad' }
   N1 = @{ f = $fUse;  l = (LineOf $fUse  '{ N1 write: must NOT bind }');      k = 'write';         n = 'cmdShadow'; exp = $null }
-  N2 = @{ f = $fUse;  l = (LineOf $fUse  '{ N2 read of a LOCAL: R3a }');      k = 'read';          n = 'cmdShadow'; exp = $null }
-  N3 = @{ f = $fUse;  l = (LineOf $fUse  '{ N3 read of a unit CONST: R3c }'); k = 'read';          n = 'cmdClash';  exp = $null }
-  N4 = @{ f = $fBoth; l = (LineOf $fBoth '{ N4 two visible candidates: R2 }'); k = 'read';         n = 'cmdDelta';  exp = $null }
+  N2 = @{ f = $fUse;  l = (LineOf $fUse  '{ N2 read of a LOCAL: R3a }');      k = 'read';          n = 'cmdShadow'; exp = $null; why = 'shadowed'  }
+  N3 = @{ f = $fUse;  l = (LineOf $fUse  '{ N3 read of a unit CONST: R3c }'); k = 'read';          n = 'cmdClash';  exp = $null; why = 'shadowed'  }
+  N4 = @{ f = $fBoth; l = (LineOf $fBoth '{ N4 two visible candidates: R2 }'); k = 'read';         n = 'cmdDelta';  exp = $null; why = 'ambiguous' }
   PV = @{ f = $fDecl; l = (LineOf $fDecl 'Ord(pvHidden)');                    k = 'read';          n = 'pvHidden';  exp = 'uEnumDecl.TPriv.pvHidden' }
 }
 
@@ -543,6 +571,76 @@ foreach ($k in @('N1','N2','N3','N4')) {
 }
 $wBound = Sql $dbA "SELECT COUNT(*) AS n FROM refs WHERE kind = 'write' AND symbol_id IS NOT NULL"
 CheckN 6 'no write ref anywhere carries a symbol_id (spec N1: write is never a candidate)' (@($wBound).Count -eq 1 -and [int]$wBound[0].n -eq 0) ($wBound | ConvertTo-Json -Compress)
+
+# ---------------------------------------------------------------------------
+# CHECK 14 -- THE DECLINE COUNTERS, PINNED BY REASON.
+#
+# WHY IT EXISTS. ResolveEnumValueRead is certain-or-nothing: a DECLINE writes
+# nothing, to refs.symbol_id or anywhere else. Checks 3/4/5/6 can therefore
+# only ever assert that a site is NULL or not NULL -- they cannot tell "NULL
+# because R2 found two candidates" from "NULL because R3 found a shadow" from
+# "NULL because the ref never reached the rules at all". That last case is not
+# hypothetical: at task 5 this branch found 8 qualified refs that did not bind
+# while all three counters read 0, precisely because they never entered the
+# stream. The `enum-values:` counters are the ONLY observable of the reason,
+# and until now nothing asserted them -- so re-ordering R2 ahead of R3, or
+# incrementing the wrong counter, left every check in this file green.
+#
+# WHERE THE EXPECTED NUMBERS COME FROM. From the fixture, via the `why` keys
+# on the site table above and its `exp`/`k` keys -- never from reading a run
+# and writing down what it printed. See the commentary on `why`.
+# The counters are read from $idxOut, the FIRST (unmutated) index of fixture A
+# captured by check 1; check 12 mutates the fixture and runs last.
+#
+# WHAT REDDENS IT. Swapping the Inc(FEnumStats.Ambiguous) and
+# Inc(FEnumStats.Shadowed) calls (2 / 1 instead of 1 / 2); labelling the
+# zero-candidate decline `ambiguous` (not-visible 0 -> 1, ambiguous 1 -> 0);
+# R3(a) or R3(c) ceasing to fire, which both binds an N site and drops
+# `shadowed`; a Shape-B hit the store fails to persist (the reconciliation
+# line flips to WARNING); and renaming any counter label, which makes EvNum
+# return -1 rather than silently matching a neighbouring number.
+# ---------------------------------------------------------------------------
+function EvNum([string]$text, [string]$pattern) {
+  # -1, never 0, when the LABEL is absent: a renamed or dropped counter must
+  # redden the assertion instead of passing as "none of those happened".
+  if ($text -match $pattern) { return [int]$Matches[1] }
+  return -1
+}
+Write-Host ''
+Write-Host '== check 14: DECLINE COUNTERS pinned BY REASON (R2 ambiguous / R3 shadowed) ==' -ForegroundColor Cyan
+Write-Host '   (a decline writes nothing anywhere, so these counters are its only trace)' -ForegroundColor DarkGray
+$expAmbiguous = @($L.Keys | Where-Object { $L[$_].why -eq 'ambiguous'   }).Count
+$expShadowed  = @($L.Keys | Where-Object { $L[$_].why -eq 'shadowed'    }).Count
+$expNotVis    = @($L.Keys | Where-Object { $L[$_].why -eq 'not-visible' }).Count
+$expBareBound = @($L.Keys | Where-Object { $L[$_].k -eq 'read'          -and $null -ne $L[$_].exp }).Count
+$expQualBound = @($L.Keys | Where-Object { $L[$_].k -eq 'member-access' -and $null -ne $L[$_].exp }).Count
+# Every candidate either binds or takes exactly one of the three decline rungs,
+# so the fixture's own totals must close. Stated as a SUM, not as a literal.
+$expCands     = $expBareBound + $expNotVis + $expAmbiguous + $expShadowed
+Write-Host ("   derived from the fixture: candidates={0} bare-bound={1} qualified-bound={2} not-visible={3} ambiguous={4} shadowed={5}" -f `
+             $expCands, $expBareBound, $expQualBound, $expNotVis, $expAmbiguous, $expShadowed) -ForegroundColor DarkGray
+$evA = @(($idxOut -split "`r?`n") | Where-Object { $_ -match 'enum-values:' -and $_ -match 'bare read' })
+CheckN 14 'the UNMUTATED fixture-A index printed exactly one "enum-values:" counter line' ($evA.Count -eq 1) (($idxOut -split "`r?`n" | Where-Object { $_ -match 'enum-values:' }) -join ' | ')
+$evTxt   = ($evA -join ' ')
+$gotBare = EvNum $evTxt '(\d+) of \d+ bare read'
+$gotCand = EvNum $evTxt '\d+ of (\d+) bare read'
+$gotQual = EvNum $evTxt '(\d+) qualified bound'
+$gotNV   = EvNum $evTxt 'not-visible (\d+)'
+$gotAmb  = EvNum $evTxt 'ambiguous (\d+)'
+$gotShad = EvNum $evTxt 'shadowed (\d+)'
+CheckN 14 ("Shape A: {0} of {1} bare reads bound (A1-A5 + pvHidden; N2/N3/N4 decline)" -f $expBareBound, $expCands) ($gotBare -eq $expBareBound -and $gotCand -eq $expCands) ("bound=$gotBare candidates=$gotCand line=$evTxt")
+CheckN 14 ("Shape B: {0} qualified bound (B1, B2)" -f $expQualBound) ($gotQual -eq $expQualBound) ("qualified=$gotQual line=$evTxt")
+CheckN 14 ("R1: not-visible = {0} -- every candidate name in fixture A has a reachable declaration" -f $expNotVis) ($gotNV -eq $expNotVis) ("not-visible=$gotNV line=$evTxt")
+CheckN 14 ("R2: ambiguous = {0} -- N4 only (uEnumBoth sees TCmd.cmdDelta and TOther.cmdDelta)" -f $expAmbiguous) ($gotAmb -eq $expAmbiguous) ("ambiguous=$gotAmb line=$evTxt")
+CheckN 14 ("R3: shadowed = {0} -- N2 (local, R3a) and N3 (unit const, R3c)" -f $expShadowed) ($gotShad -eq $expShadowed) ("shadowed=$gotShad line=$evTxt")
+# The printed numbers must also close among THEMSELVES. This is what catches a
+# counter that is incremented on a path the candidate loop never counted, or a
+# candidate that falls out of the resolver taking no rung at all.
+CheckN 14 'the printed counters reconcile: bound + not-visible + ambiguous + shadowed = candidates' (($gotBare -ge 0) -and ($gotBare + $gotNV + $gotAmb + $gotShad) -eq $gotCand) ("$gotBare + $gotNV + $gotAmb + $gotShad vs $gotCand")
+# The store/resolver reconciliation the stage prints on its own line: a Shape-B
+# binding the write path dropped shows up HERE and nowhere else.
+$evRec = @(($idxOut -split "`r?`n") | Where-Object { $_ -match 'enum-values:' -and $_ -match 'total bound' })
+CheckN 14 'the resolver/store reconciliation line is present and is NOT the WARNING form' ($evRec.Count -eq 1 -and ($evRec -join ' ') -notmatch 'WARNING') (($evRec -join ' | '))
 
 Write-Host ''
 Write-Host '== check 9: R-A -- find-callers --resolved reports an enum-value READ as a caller ==' -ForegroundColor Cyan
@@ -713,7 +811,9 @@ $passed = @($script:checkOrder | Where-Object { $script:checkState[$_] } | Sort-
 $failed = @($script:checkOrder | Where-Object { -not $script:checkState[$_] } | Sort-Object)
 Write-Host ("  PASS: " + ($passed -join ', ')) -ForegroundColor Green
 Write-Host ("  FAIL: " + ($failed -join ', ')) -ForegroundColor Red
-Write-Host '  On resolver 1.5.1-alpha the EXPECTED result is PASS 1,2,6,7,8,10 / FAIL 3,4,5,9,11,12,13.' -ForegroundColor DarkGray
+Write-Host '  On resolver 1.5.1-alpha the EXPECTED result is PASS 1,2,6,7,8,10 / FAIL 3,4,5,9,11,12,13,14.' -ForegroundColor DarkGray
+Write-Host '  (14 was added after the branch was reviewed; its FAIL there is DERIVED -- the' -ForegroundColor DarkGray
+Write-Host '   "enum-values:" line it reads does not exist on 1.5.1-alpha. See the header.)' -ForegroundColor DarkGray
 Write-Host '  Any other pattern there means the FIXTURE is broken, not the engine.' -ForegroundColor DarkGray
 
 Write-Host ''
