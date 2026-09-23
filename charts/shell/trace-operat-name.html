@@ -1,0 +1,779 @@
+<title>OPERAT.NAME Round Trip</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#F6F7F9; --panel:#FFFFFF; --ink:#131820; --muted:#5B6674;
+    --line:#DDE2E8; --line-soft:#EAEEF2;
+    --accent:#0F766E; --accent-soft:#E2F1EF;
+    --guard:#9A5408; --guard-soft:#FBF0E0;
+    --t-client:#2B5FB0; --t-pipe:#0F766E; --t-server:#9A3412; --t-db:#6B21A8;
+    --t-client-bg:#E6EDF8; --t-pipe-bg:#E1F0EE; --t-server-bg:#FAEBE3; --t-db-bg:#F1E8FA;
+    --code-bg:#FBFCFD;
+    --band:#1B2430; --band-ink:#EAF0F6; --band-accent:#5EC8B8;
+    --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0E1319; --panel:#151C24; --ink:#E6EBF1; --muted:#96A2B1;
+      --line:#293441; --line-soft:#1E2833;
+      --accent:#4FD1C0; --accent-soft:#12312D;
+      --guard:#E0A458; --guard-soft:#33260F;
+      --t-client:#7FA9EA; --t-pipe:#4FD1C0; --t-server:#E8A17C; --t-db:#C4A2ED;
+      --t-client-bg:#17253A; --t-pipe-bg:#12312D; --t-server-bg:#33211A; --t-db-bg:#241A33;
+      --code-bg:#111821;
+      --band:#05090E; --band-ink:#EAF0F6; --band-accent:#4FD1C0;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0E1319; --panel:#151C24; --ink:#E6EBF1; --muted:#96A2B1;
+    --line:#293441; --line-soft:#1E2833;
+    --accent:#4FD1C0; --accent-soft:#12312D;
+    --guard:#E0A458; --guard-soft:#33260F;
+    --t-client:#7FA9EA; --t-pipe:#4FD1C0; --t-server:#E8A17C; --t-db:#C4A2ED;
+    --t-client-bg:#17253A; --t-pipe-bg:#12312D; --t-server-bg:#33211A; --t-db-bg:#241A33;
+    --code-bg:#111821;
+    --band:#05090E; --band-ink:#EAF0F6; --band-accent:#4FD1C0;
+  }
+
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:16px;line-height:1.62;padding-inline:16px;padding-block:0;}
+  .wrap{max-width:1000px;margin:0 auto;}
+
+  header.top{padding-block:40px 28px;border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;
+           text-transform:uppercase;color:var(--accent);margin:0 0 12px;}
+  h1{font-size:clamp(28px,5vw,42px);line-height:1.08;margin:0 0 14px;
+     font-weight:700;letter-spacing:-.02em;text-wrap:balance;}
+  .dek{font-size:18px;color:var(--muted);margin:0;max-width:62ch;}
+  .facts{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px;
+         font-family:var(--mono);font-size:13px;color:var(--muted);}
+  .facts b{color:var(--ink);font-weight:600;}
+
+  section{padding-block:40px;border-bottom:1px solid var(--line-soft);}
+  section:last-of-type{border-bottom:0;}
+  h2{font-size:24px;font-weight:650;letter-spacing:-.01em;margin:0 0 6px;}
+  h3{font-size:16px;font-weight:600;margin:30px 0 10px;}
+  .sub{color:var(--muted);margin:0 0 22px;max-width:68ch;font-size:16px;}
+  p{max-width:68ch;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;}
+  .chip{font-family:var(--mono);font-size:12px;font-weight:500;padding:4px 10px;
+        border-radius:999px;letter-spacing:.03em;}
+  .c-client{background:var(--t-client-bg);color:var(--t-client);}
+  .c-pipe{background:var(--t-pipe-bg);color:var(--t-pipe);}
+  .c-server{background:var(--t-server-bg);color:var(--t-server);}
+  .c-db{background:var(--t-db-bg);color:var(--t-db);}
+  .c-guard{background:var(--guard-soft);color:var(--guard);}
+
+  /* ---- the script ---- */
+  .doc{border:1px solid var(--line);border-radius:12px;overflow:hidden;
+       background:var(--code-bg);}
+  .lane{border-left:5px solid var(--line);}
+  .lane-client{border-left-color:var(--t-client);}
+  .lane-server{border-left-color:var(--t-server);}
+  .lane-db{border-left-color:var(--t-db);}
+  .lane-hdr{font-family:var(--mono);font-size:12px;letter-spacing:.12em;
+       text-transform:uppercase;font-weight:600;padding:12px 20px 0;}
+  .lane-client .lane-hdr{color:var(--t-client);}
+  .lane-server .lane-hdr{color:var(--t-server);}
+  .lane-db .lane-hdr{color:var(--t-db);}
+  pre.script{padding:10px 20px 20px;overflow-x:auto;margin:0;
+       font-family:var(--mono);font-size:15px;line-height:1.85;
+       font-weight:450;letter-spacing:-.1px;}
+  @media (max-width:640px){ pre.script{font-size:12.5px;line-height:1.75;} }
+  pre.script b.kw{font-weight:700;color:var(--ink);}
+  pre.script b.guard{color:var(--guard);font-weight:700;}
+  pre.script .step{display:inline-block;min-width:2.6em;font-weight:700;
+       color:var(--accent);}
+  pre.script .prov{color:var(--accent);text-decoration:none;
+       border-bottom:1px dotted currentColor;white-space:nowrap;}
+  pre.script .prov:hover{background:var(--accent-soft);}
+  pre.script .str{color:var(--t-server);}
+  pre.script .cm{color:var(--muted);font-style:italic;}
+  pre.script .xing{display:inline-block;background:var(--band);
+       color:var(--band-accent);padding:2px 12px;border-radius:5px;
+       font-weight:700;letter-spacing:.09em;font-size:.9em;
+       border:1px dashed var(--band-accent);}
+
+  /* ---- the dramatic bit ---- */
+  .boundary{background:var(--band);color:var(--band-ink);padding:22px 20px;
+       position:relative;}
+  .boundary::before,.boundary::after{content:"";position:absolute;left:0;right:0;
+       height:0;border-top:3px dashed var(--band-accent);opacity:.75;}
+  .boundary::before{top:0;} .boundary::after{bottom:0;}
+  .b-title{font-family:var(--mono);font-size:13px;font-weight:700;
+       letter-spacing:.18em;text-transform:uppercase;color:var(--band-accent);
+       text-align:center;margin:0 0 16px;}
+  .b-grid{display:flex;align-items:center;justify-content:center;gap:18px;
+       flex-wrap:wrap;}
+  .proc{border:2px solid rgba(255,255,255,.28);border-radius:10px;
+       padding:12px 18px;min-width:210px;text-align:center;
+       background:rgba(255,255,255,.05);}
+  .proc .pn{font-family:var(--mono);font-size:15px;font-weight:700;
+       color:var(--band-ink);}
+  .proc .pm{font-family:var(--mono);font-size:12px;color:#93A6B8;margin-top:3px;}
+  .hop{text-align:center;min-width:190px;}
+  .hop .arrow{font-family:var(--mono);font-size:22px;color:var(--band-accent);
+       letter-spacing:-2px;line-height:1;}
+  .hop .tr{font-family:var(--mono);font-size:13px;font-weight:700;
+       color:var(--band-accent);margin-top:6px;letter-spacing:.06em;}
+  .hop .alt{font-family:var(--mono);font-size:11.5px;color:#7F94A8;margin-top:4px;}
+  .b-payload{font-family:var(--mono);font-size:13px;color:#B9C8D6;
+       text-align:center;margin:16px 0 0;}
+  .b-payload code{color:var(--band-accent);font-weight:600;}
+
+  .note{border-left:4px solid var(--guard);background:var(--guard-soft);
+        padding:16px 20px;border-radius:0 8px 8px 0;margin:22px 0;
+        font-size:15.5px;}
+  .note b{color:var(--guard);}
+  .note p{margin:0;max-width:none;}
+
+  /* ---- mermaid ---- */
+  .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:20px;}
+  @media (max-width:820px){ .two{grid-template-columns:1fr;} }
+  pre.src{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;
+       padding:16px;overflow-x:auto;font-family:var(--mono);font-size:13px;
+       line-height:1.65;margin:0;color:var(--ink);}
+  .render{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+       padding:16px;overflow-x:auto;display:flex;align-items:center;
+       justify-content:center;min-height:200px;}
+  .render svg{max-width:100%;height:auto;}
+  .cap{font-family:var(--mono);font-size:12.5px;color:var(--muted);
+       margin:10px 0 0;text-align:center;}
+
+  .arch{background:#0C1017;border:1px solid #1E2733;border-radius:12px;padding:18px;
+        overflow-x:auto;}
+  .arch-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+        margin:0 0 14px;font-family:var(--mono);font-size:11.5px;}
+  .arch-bar .ttl{color:#E8EEF5;font-weight:700;font-size:13px;margin-right:auto;}
+  .arch-bar .pset{color:#E5B650;border:1px solid #3A3323;
+        padding:3px 9px;border-radius:999px;}
+  .arch-bar .key{color:#6E7F92;border:1px solid #232E3B;padding:3px 9px;
+        border-radius:999px;}
+  .arch svg{min-width:720px;}
+
+  table{width:100%;border-collapse:collapse;font-size:15px;margin:18px 0 0;}
+  th,td{text-align:left;padding:12px;border-bottom:1px solid var(--line-soft);
+        vertical-align:top;}
+  th{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;
+     text-transform:uppercase;color:var(--muted);font-weight:500;
+     border-bottom:1px solid var(--line);}
+  td code{font-family:var(--mono);font-size:13px;}
+  td.yes{color:var(--accent);font-weight:600;}
+  td.no{color:var(--guard);font-weight:600;}
+  .tbl-scroll{overflow-x:auto;}
+
+  .verdict{background:var(--panel);border:1px solid var(--line);
+       border-radius:12px;padding:26px;}
+  .verdict h2{margin-top:0;}
+  .verdict ol{margin:0;padding-left:22px;}
+  .verdict li{margin-bottom:12px;max-width:66ch;}
+
+  footer{padding-block:28px 48px;color:var(--muted);font-size:13px;
+         font-family:var(--mono);}
+  a{color:var(--accent);}
+  @media (prefers-reduced-motion:reduce){ .flow{animation:none !important;} }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">drag-lint &middot; protocol trace &middot; golden fixture</p>
+  <h1>How an edited operation name reaches Firebird &mdash; and comes back</h1>
+  <p class="dek">One field, <code>OPERAT.NAME</code>, followed across two processes in
+  both directions. Every node was resolved from a drag-lint index. No source file was
+  opened to write this.</p>
+  <div class="facts">
+    <span><b>33</b> steps</span>
+    <span><b>12</b> guards</span>
+    <span><b>4</b> process crossings</span>
+    <span><b>3</b> indexes queried</span>
+    <span><b>0</b> steps without a line</span>
+  </div>
+</header>
+
+<section>
+  <h2>Ours &mdash; the formal script</h2>
+  <p class="sub">The candidate authority: the only thing stored in the
+  <code>.dlgraph</code> bundle. Step numbers are part of the grammar, not decoration
+  &mdash; they are what <code>compare</code> diffs on and what a click resolves to.
+  The colouring is applied by a regex tokenizer in this page: if a regex can classify
+  it, a parser can compile it.</p>
+
+  <div class="legend">
+    <span class="chip c-client">client process</span>
+    <span class="chip c-pipe">transport</span>
+    <span class="chip c-server">server process</span>
+    <span class="chip c-db">database</span>
+    <span class="chip c-guard">guard &mdash; what a naive emitter drops</span>
+  </div>
+
+  <div class="doc">
+
+    <div class="lane lane-client">
+      <div class="lane-hdr">Client process &mdash; Micronite2027.exe</div>
+<pre class="script">TRACE OPERAT.NAME
+  TITLE "How an edited operation name reaches Firebird and comes back"
+  INDEX Micronite2027 + MicroniteMW1Service + SQL   AS OF 2026-09-22
+
+WRITE
+[01] USER EDITS grid cell "Operation Name"
+       BOUND VIA FDsrOperation : TDataSource  @Blueprint4.ViewModel.pas:99
+       ONTO      FMTOperation  : TFDMemTable  @Blueprint4.ViewModel.pas:78
+[02] FMTOperation.Post FIRES AfterPost        @Blueprint4.ViewModel.pas:639
+[03] CALLS DoAfterPostOperation               @Blueprint4.ViewModel.pas:277
+       GUARD FSuppressEvents IS False         OTHERWISE SILENT
+[04] CALLS SendDeltaOperation("AfterPost")    @Blueprint4.ViewModel.pas:279
+       GUARD FMTOperation.ChangeCount > 0     OTHERWISE RETURNS True
+       GUARD FConn.Connected                  OTHERWISE RETURNS False
+[05] SERIALIZES FMTOperation TO sfBinary stream
+[06] PREFIXES "TABLE=OPERAT|" AS UTF-8</pre>
+    </div>
+
+    <div class="boundary">
+      <p class="b-title">[07] &nbsp;Cross process boundary</p>
+      <div class="b-grid">
+        <div class="proc">
+          <div class="pn">Micronite2027.exe</div>
+          <div class="pm">client &middot; Win32</div>
+        </div>
+        <div class="hop">
+          <div class="arrow">&#9654;&#9654;&#9654;&#9654;&#9654;</div>
+          <div class="tr">NAMED PIPE</div>
+          <div class="alt">or TCP/IP &middot; serial &middot; HTTP API</div>
+        </div>
+        <div class="proc">
+          <div class="pn">MicroniteMW1Service.exe</div>
+          <div class="pm">server &middot; Win64</div>
+        </div>
+      </div>
+      <p class="b-payload">CARRIES <code>cmdDelta</code> &nbsp;&middot;&nbsp;
+        <code>"TABLE=OPERAT|"</code> + sfBinary stream &nbsp;&middot;&nbsp;
+        contract at <code>Pipes.Protocol.pas:389</code></p>
+    </div>
+
+    <div class="lane lane-server">
+      <div class="lane-hdr">Server process &mdash; MicroniteMW1Service.exe</div>
+<pre class="script">SERVER
+[08] RECEIVES cmdDelta
+       AT     TPipeSessionBuilder.HandleDelta @uPipeSessionBuilder.pas:63
+       ROUTES TGenericTableRoute.HandleDelta  @uGenericTableRoute.pas:75
+[09] SPLITS payload AT first "|"
+[10] EXTRACTS table name -> "OPERAT"
+       GUARD table name IS NOT empty          OTHERWISE rspError "TABLE= prefix missing"
+       GUARD delta stream IS NOT empty        OTHERWISE rspError "empty delta stream"
+[11] LOADS dataset definition
+       VIA  TDatasetsDef.GetTable             @uDatasetsDef.pas:59
+       FROM FIB$DATASETS_INFO                 @uDatasetsDef.pas:130
+       GUARD definition EXISTS                OTHERWISE rspError "no FIB$DATASETS_INFO entry"
+[12] DESERIALIZES Mem.LoadFromStream sfBinary
+       GUARD deserialization SUCCEEDS         OTHERWISE rspError "LoadFromStream failed"
+[13] ATTACHES OnUpdateRecord                  @uGenericTableRoute.pas:479
+[14] OPENS write transaction
+[15] APPLIES TGenericApplyContext.HandleUpdateRecord
+                                              @uGenericTableRoute.pas:63
+       SELECTS arUpdate -> Def.UpdateSQL
+       GUARD SQL IS NOT empty                 OTHERWISE eaFail "No SQL for arUpdate"
+[16] BINDS Field.OldValue AND Field.Value TO params
+[17] RUNS TFDCommand.Execute</pre>
+    </div>
+
+    <div class="lane lane-db">
+      <div class="lane-hdr">Database &mdash; Firebird</div>
+<pre class="script">DATABASE
+[18] WRITES OPERAT.NAME                       @MS1.SQL:2808
+[19] COUNTS FAppliedUpd
+       RECORDS ID and OPERID INTO log         CAPPED AT 900 chars</pre>
+    </div>
+
+    <div class="boundary">
+      <p class="b-title">[20] &nbsp;Cross process boundary &mdash; return</p>
+      <div class="b-grid">
+        <div class="proc">
+          <div class="pn">MicroniteMW1Service.exe</div>
+          <div class="pm">server &middot; Win64</div>
+        </div>
+        <div class="hop">
+          <div class="arrow">&#9664;&#9664;&#9664;&#9664;&#9664;</div>
+          <div class="tr">NAMED PIPE</div>
+          <div class="alt">response frame</div>
+        </div>
+        <div class="proc">
+          <div class="pn">Micronite2027.exe</div>
+          <div class="pm">client &middot; Win32</div>
+        </div>
+      </div>
+      <p class="b-payload">CARRIES <code>rspOK</code> or <code>rspError</code> + UTF-8
+        reason</p>
+    </div>
+
+    <div class="lane lane-client">
+      <div class="lane-hdr">Client process &mdash; outcome</div>
+<pre class="script">RESPONSE
+[21] ON rspOK
+       FMTOperation.CommitUpdates             @Blueprint4.ViewModel.pas:279
+       BROADCASTS TableChanged TO other clients @uBroadcastServer.pas:120
+[22] ON FAILURE
+       SETS  FLastPersistError FROM response payload
+       CALLS FMTOperation.CancelUpdates       -- the edit is REVERTED on screen
+       LOGS  PersistLog AND CodeSite
+
+READ
+[23] LoadAllForFolder                         @Blueprint4.ViewModel.pas:321
+[24] CALLS LoadOneTable                       @Blueprint4.ViewModel.pas:266
+       GUARD FConn.Connected                  @Blueprint4.ViewModel.pas:1133
+             OTHERWISE logs "pipe not connected"
+[25] BUILDS "TABLE=OPERAT|BLOBS=0|WHERE=FLDRID=N"
+                                              @Blueprint4.ViewModel.pas:1134
+[26] SENDS cmdTableLoad                       @Blueprint4.ViewModel.pas:1136
+       CONTRACT                               @Pipes.Protocol.pas:57
+       CROSSES process boundary               -- client -> server, same pipe
+
+[27] SERVER RECEIVES AT HandleTableLoad       @uPipeSessionBuilder.pas:59
+       GUARD definition EXISTS                OTHERWISE rspError
+[28] READS BLOBS key                          @uPipeSessionBuilder.pas:533
+     READS WHERE key                          @uPipeSessionBuilder.pas:534
+[29] BUILDS column list FROM Def.NonBlobCols  @uPipeSessionBuilder.pas:538
+       ADDS Def.BlobCols ONLY WHEN BLOBS=1    -- keeps lookup grids fast
+[30] VALIDATES WHERE VIA TryBuildSafeWhere    @uPipeSessionBuilder.pas:549
+       GUARD WHERE MATCHES "col = int [AND col = int]"
+             OTHERWISE rspError               -- SQL injection defence
+[31] OPENS read transaction                   @uPipeSessionBuilder.pas:590
+     RUNS  Qry.Open                           @uPipeSessionBuilder.pas:594
+[32] SERIALIZES Qry.SaveToStream sfBinary     @uPipeSessionBuilder.pas:597
+       CROSSES process boundary               -- server -> client, rows return
+
+[33] CLIENT LOADS stream INTO FMTOperation
+       GUARD response IS rspData              @Blueprint4.ViewModel.pas:1137
+             OTHERWISE logs failure           -- rspData, NOT rspOK
+       NOTIFIES FDsrOperation -> grid repaints
+
+END TRACE  33 steps, 12 guards, 4 crossings, 0 unresolved.</pre>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <p><b>Every step carries its own line, and that is a rule, not a nicety.</b>
+    Steps 28 to 32 all live inside one method body &mdash; <code>HandleTableLoad</code>,
+    lines 533 to 597 of <code>uPipeSessionBuilder.pas</code>. They are close together,
+    which is exactly why per-method provenance would have been wrong: five different
+    actions would all have resolved to the same method header, and clicking any of them
+    would have taken you to the same place. Provenance granularity is the STEP, never
+    the enclosing routine. Steps 28 and 31 carry two lines each because they are two
+    statements; the grammar allows that rather than forcing a false single anchor.</p>
+  </div>
+
+  <div class="note">
+    <p><b>Why the guards are the product.</b> Three of the nine mean an edit can fail to
+    persist and tell you nothing: <code>FSuppressEvents</code> skips the send entirely,
+    <code>ChangeCount = 0</code> <em>returns True</em>, and on any server rejection
+    <code>CancelUpdates</code> quietly reverts what you typed. A trace that draws the
+    boxes but drops the guards is prettier and answers none of the questions people
+    actually ask.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What Mermaid is</h2>
+  <p class="sub">Mermaid is a small text format for diagrams and a JavaScript library
+  that draws it. That is the whole idea: you write the lines on the left, the library
+  renders the picture on the right. Nothing else is involved &mdash; no design tool, no
+  image file. It is the cheapest renderer we could borrow, and it is what the page is
+  running right now.</p>
+
+  <div class="two">
+    <div>
+      <h3 style="margin-top:0">The text you write</h3>
+<pre class="src">sequenceDiagram
+  autonumber
+  box rgb(43,95,176) CLIENT process
+    participant M as FMTOperation
+    participant VM as ViewModel
+  end
+  box rgb(154,52,18) SERVER process
+    participant S as TableRoute
+    participant DB as Firebird
+  end
+
+  M-&gt;&gt;VM: AfterPost
+  Note over VM: guard ChangeCount &gt; 0
+  VM-&gt;&gt;S: cmdDelta TABLE=OPERAT
+  S-&gt;&gt;DB: UPDATE OPERAT SET NAME
+  DB--&gt;&gt;S: applied
+  S--&gt;&gt;VM: rspOK
+  VM-&gt;&gt;M: CommitUpdates</pre>
+    </div>
+    <div>
+      <h3 style="margin-top:0">The picture it draws</h3>
+      <div class="render" id="mmd-small"></div>
+    </div>
+  </div>
+  <p class="cap">Left produces right. That is Mermaid.</p>
+
+  <h3>The full trace, as Mermaid</h3>
+  <p class="sub" style="margin-bottom:14px">Same 26 steps. The two
+  <code>box</code> groups are how Mermaid shows a process boundary &mdash; notice it is
+  a tinted rectangle behind the lifelines, and considerably less emphatic than the bands
+  in our script above.</p>
+  <div class="render" id="mmd-full" style="min-height:420px"></div>
+  <p class="cap">Rendered by mermaid 10.9.1 from 30 lines of text.</p>
+
+  <div class="note">
+    <p><b>What the lowering loses.</b> Every <code>OTHERWISE</code> clause. The guards
+    survive only as detached <code>Note over</code> blocks that say a condition exists
+    but not what happens when it fails. Our script says
+    <code>OTHERWISE RETURNS True</code> &mdash; the single most surprising fact in the
+    whole trace. The chart has nowhere to put it.</p>
+  </div>
+</section>
+
+<section>
+  <h2>How an Archify chart would look</h2>
+  <p class="sub">Reconstruction, drawn from Archify's published
+  <code>architecture.schema.json</code> and its documented presets &mdash; boundaries as
+  trust zones, typed components, connection variants, a legend, and
+  <code>animation: "trace"</code> on the routes. I have not run Archify; this is its
+  described look, not its output.</p>
+
+  <div class="arch">
+    <div class="arch-bar">
+      <span class="ttl">OPERAT.NAME persistence path</span>
+      <span class="pset">Signal Flow</span>
+      <span class="key">S &mdash; style</span>
+      <span class="key">T &mdash; theme</span>
+      <span class="key">? &mdash; guide</span>
+    </div>
+    <svg viewBox="0 0 880 400" role="img" aria-label="Archify-style architecture diagram of the OPERAT.NAME path">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7"
+                markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#E5B650"/>
+        </marker>
+        <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7"
+                markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#4C6275"/>
+        </marker>
+        <style>
+          .bz{fill:none;stroke:#2B3947;stroke-width:1.5;stroke-dasharray:7 6;}
+          .bzl{fill:#6E8299;font:600 12px 'IBM Plex Mono',monospace;
+               letter-spacing:.1em;}
+          .nd{fill:#151E29;stroke:#2E3D4D;stroke-width:1.5;}
+          .nl{fill:#E8EEF5;font:600 15px 'IBM Plex Sans',sans-serif;}
+          .nt{fill:#7E93A8;font:500 11.5px 'IBM Plex Mono',monospace;}
+          .ed{stroke:#4C6275;stroke-width:1.8;fill:none;}
+          .em{stroke:#E5B650;stroke-width:3;fill:none;}
+          .el{fill:#9FB2C4;font:500 12px 'IBM Plex Mono',monospace;}
+          .eml{fill:#E5B650;font:700 12px 'IBM Plex Mono',monospace;}
+          .flow{stroke-dasharray:9 7;animation:dash 1.4s linear infinite;}
+          @keyframes dash{to{stroke-dashoffset:-32;}}
+        </style>
+      </defs>
+
+      <rect class="bz" x="16" y="42" width="330" height="330" rx="14"/>
+      <text class="bzl" x="34" y="34">CLIENT &middot; TRUST BOUNDARY</text>
+
+      <rect class="bz" x="520" y="42" width="344" height="330" rx="14"/>
+      <text class="bzl" x="538" y="34">SERVER &middot; TRUST BOUNDARY</text>
+
+      <rect class="nd" x="48" y="66" width="266" height="62" rx="10"/>
+      <text class="nl" x="68" y="94">Blueprint4 form</text>
+      <text class="nt" x="68" y="114">frontend &middot; VCL</text>
+
+      <rect class="nd" x="48" y="168" width="266" height="62" rx="10"/>
+      <text class="nl" x="68" y="196">Blueprint_ViewModel</text>
+      <text class="nt" x="68" y="216">frontend &middot; MVVM</text>
+
+      <rect class="nd" x="48" y="270" width="266" height="62" rx="10"/>
+      <text class="nl" x="68" y="298">FMTOperation</text>
+      <text class="nt" x="68" y="318">frontend &middot; TFDMemTable</text>
+
+      <rect class="nd" x="552" y="120" width="282" height="62" rx="10"/>
+      <text class="nl" x="572" y="148">TGenericTableRoute</text>
+      <text class="nt" x="572" y="168">backend &middot; cmdDelta</text>
+
+      <rect class="nd" x="552" y="256" width="282" height="62" rx="10"/>
+      <text class="nl" x="572" y="284">Firebird OPERAT</text>
+      <text class="nt" x="572" y="304">database &middot; NAME</text>
+
+      <path class="ed" d="M181,128 L181,168" marker-end="url(#ah2)"/>
+      <path class="ed" d="M181,230 L181,270" marker-end="url(#ah2)"/>
+
+      <path class="em flow" d="M314,296 C420,296 430,151 552,151" marker-end="url(#ah)"/>
+      <text class="eml" x="372" y="238">cmdDelta</text>
+
+      <path class="ed" d="M693,182 L693,256" marker-end="url(#ah2)"/>
+      <text class="el" x="703" y="224">UPDATE</text>
+
+      <path class="ed" d="M552,166 C436,182 430,318 314,312" marker-end="url(#ah2)"
+            stroke-dasharray="6 5"/>
+      <text class="el" x="386" y="342">rspOK</text>
+
+      <g transform="translate(16,382)">
+        <rect x="0" y="-12" width="12" height="3" fill="#E5B650"/>
+        <text class="el" x="20" y="-8">emphasis route</text>
+        <rect x="150" y="-12" width="12" height="3" fill="#4C6275"/>
+        <text class="el" x="170" y="-8">default</text>
+        <rect x="250" y="-12" width="12" height="3" fill="#4C6275"/>
+        <text class="el" x="270" y="-8">dashed / return</text>
+      </g>
+    </svg>
+  </div>
+
+  <h3>What is worth borrowing</h3>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>Archify feature</th><th>take it?</th><th>why</th></tr>
+    <tr>
+      <td><b>Boundaries as dashed trust zones</b>, labelled and containing components</td>
+      <td class="yes">Yes</td>
+      <td>Exactly the process-boundary problem. Cleaner than our band for a static
+          picture, though it cannot express direction of crossing.</td>
+    </tr>
+    <tr>
+      <td><b>Connection <code>variant</code></b> &mdash; emphasis, security, dashed,
+          return</td>
+      <td class="yes">Yes</td>
+      <td>Cheap, and the gold emphasis route genuinely draws the eye to the hop that
+          matters.</td>
+    </tr>
+    <tr>
+      <td><b><code>animation: "trace"</code></b> on routes, with
+          <code>prefers-reduced-motion</code> honoured</td>
+      <td class="yes">Yes</td>
+      <td>One CSS dash animation. It shows direction without an extra label, which is
+          exactly what a crossing needs.</td>
+    </tr>
+    <tr>
+      <td><b>Visual presets</b> (Signal Flow / Blueprint / Classic) and a theme toggle
+          on keys <kbd>S</kbd> / <kbd>T</kbd></td>
+      <td class="yes">Later</td>
+      <td>Nice, not load-bearing. One good preset beats three mediocre ones.</td>
+    </tr>
+    <tr>
+      <td><b>Typed component kinds</b> &mdash; frontend, backend, database, cloud,
+          security, messagebus, external</td>
+      <td class="yes">Adapt</td>
+      <td>Ours are Delphi kinds: form, viewmodel, memtable, route, table, column.
+          The idea transfers; the vocabulary does not.</td>
+    </tr>
+    <tr>
+      <td><b>Author-placed <code>x</code>, <code>y</code></b></td>
+      <td class="no">No</td>
+      <td>Nobody hand-places a 200-node call graph. Graphviz computes it.</td>
+    </tr>
+    <tr>
+      <td><b>Optional <code>sources</code></b> (paths + line ranges), architecture only</td>
+      <td class="no">Invert</td>
+      <td>Mandatory for us, on every node <i>and</i> every edge. Their footnote is our
+          entire claim.</td>
+    </tr>
+    <tr>
+      <td><b>Prose authoring</b> &mdash; <code>guide "&lt;description&gt;"</code></td>
+      <td class="no">Never</td>
+      <td>An invented edge is the exact artifact drag-lint exists to replace.</td>
+    </tr>
+    <tr>
+      <td><b>Validate before deliver</b> &mdash; schema, layout, route and
+          label clearance must all pass; failures return machine-readable repair
+          guidance, not a stack trace</td>
+      <td class="yes">Yes</td>
+      <td>Best idea in the project. Add one check they cannot: every node resolves to a
+          file and line that still exists.</td>
+    </tr>
+    <tr>
+      <td><b>No slot for a guard</b> &mdash; <code>variant</code> is styling, not
+          semantics</td>
+      <td class="no">Gap</td>
+      <td>Nine guards in this one trace, carrying most of the explanatory value. There
+          is nowhere in their IR to say <code>OTHERWISE RETURNS True</code>.</td>
+    </tr>
+  </table>
+  </div>
+</section>
+
+<section class="verdict">
+  <h2>Where this leaves the design</h2>
+  <ol>
+    <li><b>The script is the product; the chart is an illustration.</b> Everything in
+    both charts above is derivable from the script. The reverse is false &mdash; both
+    lost every <code>OTHERWISE</code> clause on the way down.</li>
+    <li><b>Process crossing deserves to be a grammar construct</b>, not a styling hint.
+    <code>CROSS</code> carries from-process, to-process, transport and payload, so the
+    renderer can be dramatic about it and a reader of the plain text still sees it.
+    Named pipe today; TCP/IP, serial or an HTTP API slot into the same statement.</li>
+    <li><b>Borrow Archify's aesthetics, not its model</b> &mdash; trust-zone boundaries,
+    route variants, trace animation, and above all its validate-before-deliver
+    discipline.</li>
+    <li><b>Unverified, hours to settle:</b> whether one <code>dot</code> run emits
+    <code>-Tsvg</code> and <code>-Tplain</code> together, and whether Skia can hit-test
+    an SVG by point.</li>
+    <li><b>The <code>@file:line</code> chips are inert here.</b> Making them open the IDE
+    is the named pipe the viewer already speaks and the plugin does not yet answer.</li>
+  </ol>
+</section>
+
+<footer>
+  Traced from Micronite2027, MicroniteMW1Service and the SQL index &middot;
+  drag-lint 1.16.0-alpha &middot;
+  fixture: charts\fixtures\golden-operat-name-roundtrip.md
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var TIERS = ['TRACE','WRITE','SERVER','DATABASE','RESPONSE','READ','END TRACE'];
+  var KW = ['TITLE','INDEX','AS OF','USER EDITS','BOUND VIA','ONTO','FIRES','CALLS',
+            'SERIALIZES','DESERIALIZES','PREFIXES','SENDS','RECEIVES','AT','ROUTES',
+            'SPLITS','EXTRACTS','LOADS','ATTACHES','OPENS','APPLIES','SELECTS','BINDS',
+            'RUNS','COUNTS','RECORDS','WRITES','ON','SETS','LOGS','BROADCASTS','READS',
+            'BUILDS','ADDS','VALIDATES','RETURNS','NOTIFIES','CLIENT','SERVER','CONTRACT',
+            'IS NOT','IS','AND','OVER','TO','FROM','BY','VIA','WHEN','ONLY WHEN',
+            'MATCHES','CAPPED AT','EXISTS','SUCCEEDS','INTO','SILENT'];
+  KW.sort(function (a, b) { return b.length - a.length; });
+
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  Array.prototype.forEach.call(document.querySelectorAll('pre.script'), function (el) {
+    var out = esc(el.textContent);
+
+    // ORDER MATTERS. Strings and comments run FIRST, while the text is still plain:
+    // run them later and they match inside the markup the earlier passes inserted,
+    // wrapping half of a title="..." attribute and corrupting the element.
+    out = out.replace(/"[^"\n]*"/g, function (m) { return '<span class="str">' + m + '</span>'; });
+    out = out.replace(/--[^\n<]*/g, function (m) { return '<span class="cm">' + m + '</span>'; });
+
+    // step numbers
+    out = out.replace(/^\[(\d\d)\]/gm, function (m) { return '<span class="step">' + m + '</span>'; });
+
+    // inline process crossings -- loud even when they get no band of their own
+    out = out.replace(/CROSSES process boundary/g,
+      '<span class="xing">&#9656;&#9656; CROSSES PROCESS BOUNDARY</span>');
+
+    // provenance. Deliberately inert: making these open the IDE is the named pipe
+    // the viewer already speaks and the plugin does not yet answer.
+    out = out.replace(/@[A-Za-z0-9_$\\\/.-]+:\d+/g, function (m) {
+      return '<a class="prov" href="#" title="not clickable here; needs the IDE pipe server">' + m + '</a>';
+    });
+
+    out = out.replace(/\bGUARD\b/g, '<b class="guard">GUARD</b>');
+    out = out.replace(/\bOTHERWISE\b/g, '<b class="guard">OTHERWISE</b>');
+
+    TIERS.forEach(function (t) {
+      out = out.replace(new RegExp('^' + t + '\\b', 'gm'),
+        '<b class="kw">' + t + '</b>');
+    });
+
+    KW.forEach(function (k) {
+      out = out.replace(new RegExp('(^|[\\s(])' + k + '(?=[\\s(]|$)', 'gm'),
+        function (m, p1) { return p1 + '<b class="kw">' + k + '</b>'; });
+    });
+
+    el.innerHTML = out;
+  });
+})();
+
+(function () {
+  if (typeof mermaid === 'undefined') return;
+  var dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  var stamped = document.documentElement.getAttribute('data-theme');
+  if (stamped === 'dark') dark = true;
+  if (stamped === 'light') dark = false;
+
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+    themeVariables: {
+      fontSize: '17px',
+      primaryColor:     dark ? '#1B2430' : '#FFFFFF',
+      primaryTextColor: dark ? '#E6EBF1' : '#131820',
+      primaryBorderColor: dark ? '#3A4A5C' : '#C6CFDA',
+      lineColor:        dark ? '#8FA3B6' : '#5B6674',
+      textColor:        dark ? '#E6EBF1' : '#131820',
+      noteBkgColor:     dark ? '#33260F' : '#FBF0E0',
+      noteTextColor:    dark ? '#E0A458' : '#9A5408',
+      noteBorderColor:  dark ? '#E0A458' : '#D8A75E',
+      actorBkg:         dark ? '#1B2430' : '#FFFFFF',
+      actorBorder:      dark ? '#3A4A5C' : '#C6CFDA',
+      actorTextColor:   dark ? '#E6EBF1' : '#131820',
+      signalColor:      dark ? '#8FA3B6' : '#3D4753',
+      signalTextColor:  dark ? '#E6EBF1' : '#131820',
+      sequenceNumberColor: '#FFFFFF'
+    }
+  });
+
+  var SMALL = [
+    'sequenceDiagram',
+    '  autonumber',
+    '  box rgb(43,95,176) CLIENT process',
+    '    participant M as FMTOperation',
+    '    participant VM as ViewModel',
+    '  end',
+    '  box rgb(154,52,18) SERVER process',
+    '    participant S as TableRoute',
+    '    participant DB as Firebird',
+    '  end',
+    '  M->>VM: AfterPost',
+    '  Note over VM: guard ChangeCount > 0',
+    '  VM->>S: cmdDelta TABLE=OPERAT',
+    '  S->>DB: UPDATE OPERAT SET NAME',
+    '  DB-->>S: applied',
+    '  S-->>VM: rspOK',
+    '  VM->>M: CommitUpdates'
+  ].join('\n');
+
+  var FULL = [
+    'sequenceDiagram',
+    '  autonumber',
+    '  box rgb(43,95,176) CLIENT process - Micronite2027.exe',
+    '    actor U as User',
+    '    participant G as Grid / FDsrOperation',
+    '    participant M as FMTOperation',
+    '    participant VM as Blueprint_ViewModel',
+    '  end',
+    '  box rgb(154,52,18) SERVER process - MicroniteMW1Service.exe',
+    '    participant S as TGenericTableRoute',
+    '    participant DB as Firebird OPERAT',
+    '  end',
+    '  U->>G: type new operation name',
+    '  G->>M: Post',
+    '  M->>VM: AfterPost',
+    '  Note over VM: guard FSuppressEvents<br/>guard ChangeCount > 0<br/>guard FConn.Connected',
+    '  VM->>S: cmdDelta "TABLE=OPERAT|" + sfBinary',
+    '  Note over S: guard TABLE= prefix<br/>guard non-empty stream<br/>guard FIB$DATASETS_INFO entry',
+    '  S->>S: GetTable -> UpdateSQL',
+    '  S->>DB: UPDATE OPERAT SET NAME = :p',
+    '  DB-->>S: applied',
+    '  S-->>VM: rspOK',
+    '  VM->>M: CommitUpdates',
+    '  S->>S: broadcast TableChanged',
+    '  U->>VM: reopen folder',
+    '  VM->>S: cmdTableLoad TABLE=OPERAT|WHERE=FLDRID=N',
+    '  Note over S: guard TryBuildSafeWhere<br/>rejects anything but col = int',
+    '  S->>DB: SELECT cols FROM OPERAT WHERE FLDRID = :p0',
+    '  DB-->>S: rows',
+    '  S-->>M: FDMemTable sfBinary stream',
+    '  M-->>G: grid repaints'
+  ].join('\n');
+
+  function draw(id, src, key) {
+    var host = document.getElementById(id);
+    if (!host) return;
+    mermaid.render(key, src).then(function (r) {
+      host.innerHTML = r.svg;
+      var svg = host.querySelector('svg');
+      if (svg) { svg.removeAttribute('height'); svg.style.maxWidth = '100%'; }
+    }).catch(function (e) {
+      host.innerHTML = '<p style="font-family:var(--mono);font-size:13px;color:var(--muted)">'
+        + 'Mermaid could not render this diagram: ' + String(e && e.message || e) + '</p>';
+    });
+  }
+
+  draw('mmd-small', SMALL, 'mmdSmall');
+  draw('mmd-full', FULL, 'mmdFull');
+})();
+</script>

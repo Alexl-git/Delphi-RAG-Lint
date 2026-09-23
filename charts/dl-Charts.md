@@ -1,0 +1,42 @@
+<!-- dl:backlog status=open last-measured=2026-09-22 -->
+# dl-Charts
+
+## Summary
+Create the staged charting and diagram pipeline for the Archify-parity work, keeping the code isolated under `charts\` until it is proven and ready to move into the main `src\report\` and CLI flow.
+
+## Goal
+Deliver a typed diagram IR, deterministic emitters, and a browser-renderable Mermaid/Graphviz pipeline that can show architecture and call-flow diagrams with file/line provenance for every node and edge.
+
+## Scope
+- Typed diagram IR with validation
+- Architecture emitter
+- Sequence emitter driven from callgraph data
+- Dot emission for Graphviz and JSON backfeed
+- Mermaid rendering inside the HTML shell
+- Compare / before-delta-after flow
+
+## Non-goals
+- Prose-to-diagram authoring
+- A `guide` verb
+- Unverifiable nodes or edges without file/line fact data
+
+## Definition of done
+- The typed IR accepts valid architecture and sequence facts only.
+- Every emitted node/edge includes file and line provenance.
+- The diagram pipeline can emit Dot and read back Graphviz JSON layout.
+- The HTML/Mermaid shell displays the diagram in a browser.
+- The compare workflow can show delta output in a reproducible way.
+
+## Notes
+This work lives in the staging tree described in `charts\README.md` and follows the order already recorded in `docs\PLAN-archify-ir-workstream.md`.
+
+The current tracked sequence is:
+1. HTML shell around the existing `graph --format mermaid`
+2. Typed diagram IR + validator
+3. Architecture emitter
+4. Sequence emitter from `callgraph --direction callees`
+5. Renderer: Mermaid in the HTML shell
+6. Compare (before / delta / after)
+
+## Status
+Open
