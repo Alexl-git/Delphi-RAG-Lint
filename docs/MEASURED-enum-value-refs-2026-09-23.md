@@ -1444,3 +1444,337 @@ reindexing that one unit would plausibly return it to 0.
    share one vendored dependency.
 4. **The library sections are still at 1.5.1-alpha** and must be run once from the main
    tree after merge + redeploy.
+
+## Task 9 -- whole-branch review
+
+**Engine:** the worktree build at `C:\Projects\Delphi-RAG-lint-wt\enum-refs\third_party\dll-win64\drag-lint.exe`,
+rebuilt at the head of this task (product 1.16.0-alpha, resolver 1.6.0-alpha, `BUILD_EXITCODE` 0,
+zero `[dcc64 Error]`). All paths absolute; PowerShell only.
+
+### Two defects fixed in code
+
+1. **A false lint message this branch newly made reachable.** Task 8 admitted `enum_value` to
+   `LintTree.IsRoutineKind`, which routed enum values through the single message both verbs
+   shared: *"the edited unit %s %s; this reference will not compile until it is updated"*. For a
+   REMOVED declaration that is true of every kind. For a CHANGED one on an enum value it is
+   false -- dropping an earlier member shifts every later member's ordinal, the baseline reports
+   a changed declaration for each, and `if C = cmdDelta then DoWork;` compiles exactly as before.
+   Every ordinal shift was emitting a warning whose stated consequence does not happen, while the
+   real hazard went unsaid. `StaleRefMessage` now picks the tail by verb AND kind; the
+   changed-enum tail reads *"this reference still compiles, but the member ordinal has moved --
+   any ordinal already persisted or transmitted now means a different member"*. Every other kind
+   and both removal paths keep the original wording, because for a routine, property or field a
+   changed declaration IS the compile-time case the sentence describes.
+   **Checked before editing, not assumed:** `will not compile` is pinned by no runner under
+   `tests\autotest\run_lint_tree*.ps1` or `tests\callresolve\`. Check 11 matches on
+   `has changed the declaration`, which is the verb and is unchanged.
+2. **A guard banner advertising the opposite of its own assertion.** `run_enum_value_refs_bind.ps1`
+   still printed `== check 13: rule 0 -- two identical uEnumDecl copies collapse to ONE candidate ==`
+   four lines above the assertion that pins `collapsed = 0` / INERT under ruling R12. Retitled to
+   `== check 13: rule 0 -- duplicate uEnumDecl copies (pinned INERT, R12) ==`. In the same file the
+   header block and CHECK -> TASK MAP now record that check 11 was AMENDED at Task 8 -- four
+   sub-assertions rather than two, because the ordinal-shift finding is a real fifth row and not
+   leakage. A reader reads the header first; the amendment had lived only five hundred lines below it.
+
+### `lint-all` -- run ONCE, after the final incremental reindex
+
+```
+<engine> index --project <wt>\src\cli\drag-lint.dproj --db <wt>\src\cli\_D-RAG\drag-lint.sqlite
+<engine> lint-all --db <wt>\src\cli\_D-RAG\drag-lint.sqlite --enable multiple-statements-per-line,magic-literal,commented-out-code --json
+```
+
+The reindex was SCOPED over the one changed file and its enum stream ran:
+`enum-values: 10 of 10 bare read(s) bound (Shape A); 0 qualified bound (Shape B); declined
+(both streams) not-visible 0, ambiguous 0, shadowed 0; duplicate groups collapsed 0 (decisive 0);
+unit-level shadow decls 452`, with `total bound 10 = 10 + 0 (resolver and store agree)`.
+
+| run | total findings |
+|---|---|
+| `main` baseline stated in the plan | 1246 |
+| Task 1, this worktree, on `4ccd1779` | 1246 |
+| Task 9, this worktree, at HEAD | 1246 |
+
+**Delta: zero, so there is no rule to explain.** Two facts qualify how much that proves, and
+both belong in the record rather than in a footnote:
+
+* `lint-all` here scans **4** `.pas` files. The run reports `lint-all: scanning 4 .pas file(s)`,
+  `3 file(s) skipped by exclude_paths` and `123 file(s) outside the project's own roots skipped`.
+  There is no `_D-RAG\drag-lint-project.json`, so `ownRoots` defaults to the project's own folder,
+  `src\cli`. Of the seven `.pas` this branch changed, `lint-all` sees exactly one
+  (`DRagLint.CLI.pas`); the other six are outside its scope and are covered by the whole-file
+  sweep below instead. Task 1's baseline ran identically, so the 1246-vs-1246 comparison is
+  apples to apples -- it is just a narrower apple than the number suggests.
+* **The expected `doc-drift` churn on enum-value blocks is 0 here.** All 6 `doc-drift` findings
+  sit in `DRagLint.Hover.Renderer.pas` (4) and `DRagLint.Hover.Returns.pas` (2) -- routine facts
+  blocks, in two files this branch never touched. No enum-value block drifts inside `src\cli`,
+  which is consistent with Task 6's channel-1 finding (cosmetic re-windowing only fires on lists
+  over the 5-caller cap) and says nothing about the corpus. The regeneration owed to the owner is
+  sized by Tasks 6 and 7, not by this number.
+
+### Branch-wide lint: whole FILE, HEAD against the merge base
+
+Not filtered by diff hunk -- Task 6 proved on this branch that a hunk filter reports
+"0 findings on changed lines" truthfully while a `dl:ok` hash goes stale 130 lines away.
+Each of the seven changed `.pas` was linted whole at HEAD and at `4ccd1779` with the same
+`--enable` set.
+
+**A path control was required before the numbers meant anything.** A base revision extracted to
+a scratch directory lints differently from a file in the project tree: `unused-unit-in-uses`,
+`god-class`, `high-response`, `unused-private-member` and `type-name-prefix` all need project
+context and report nothing outside it. Linting the HEAD file from that same scratch directory
+reproduced the base totals exactly, which identified the whole apparent delta as a location
+artefact rather than this branch's work.
+
+| unit | HEAD (in tree) | HEAD (control dir) | BASE (control dir) | per-rule verdict |
+|---|---|---|---|---|
+| `DRagLint.CLI.pas` | 1192 | 1185 | 1185 | identical |
+| `DRagLint.Storage.SQLite.pas` | 191 | 186 | 186 | identical |
+| `DRagLint.Index.CallResolver.pas` | 36 | 35 | 35 | identical |
+| `DRagLint.Analysis.LintTree.pas` | 1 | 1 | 2 | `boolean-expression-complexity` -1 |
+| `DRagLint.Core.Model.pas` | 18 | -- | 18 | identical |
+| `DRagLint.Core.Interfaces.pas` | 2 | -- | 2 | identical |
+| `DRagLint.Core.ForwardStub.pas` | 0 | -- | 0 | identical |
+
+**The branch's only file-level lint delta is a REDUCTION.** `boolean-expression-complexity` fired
+at base on `IsRoutineKind`'s or-chain; Task 8 widened that chain to 7 operators and annotated it
+(`dl:ok boolean-expression-complexity@2af0`), so it no longer fires. The one live finding left in
+`LintTree.pas` is a pre-existing `deep-nesting` on `CompileDependents` (base `:1194`, HEAD `:1243`).
+
+### Marker sweep -- `review-marker-stale` and `review-marker-unused`, with the same `--enable` set
+
+Run over the branch's changed units, not on bare defaults: a marker for a rule that is OFF reads
+as stale because the finding it suppresses cannot fire.
+
+| rule | hits on changed units | verdict |
+|---|---|---|
+| `review-marker-stale` | 0 | clean |
+| `review-marker-unused` | 2 | both PRE-EXISTING, verified at `4ccd1779` |
+
+The two `unused` hits are `DRagLint.Core.Model.pas:157` (`dl:ok duplicate-global-decl`) and
+`DRagLint.Storage.SQLite.pas:7604` (`dl:ok duplicate-code`). Both were confirmed present on the
+base revision at the same rules and shifted lines (`:146` and `:7326`), so neither is this
+branch's. Neither can be adjudicated by `lint-all` either: `src\core` and `src\storage` are
+outside `ownRoots`, so `duplicate-global-decl` -- a project-wide rule -- has no scope in which it
+can fire here. Task 5 expected `lint-all` to settle `Model.pas:157`; it cannot, and that is
+recorded rather than quietly dropped.
+
+All **six** `dl:ok` markers this branch adds are live: `review-marker-stale` is 0 and
+`review-marker-unused` names none of them.
+
+### Guards
+
+| guard | result |
+|---|---|
+| `run_enum_value_refs_bind.ps1` | **PASS 1-13, FAIL none** |
+| `run_encoding_guard.ps1` | PASS |
+| `run_docs_sync_guard.ps1` | PASS |
+| `run_schema.ps1` | PASS (23) |
+| `run_resolver_version_guard.ps1` | PASS -- `resolve surface unchanged -- version=1.6.0-alpha` |
+| `run_extractor_version_guard.ps1` | **FAIL -- known, pre-existing, see below** |
+
+**`run_extractor_version_guard.ps1` is RED and must STAY RED. Do not bump
+`DRAGLINT_EXTRACTOR_VERSION`.** Two independent reasons, both verified rather than inherited:
+
+1. It was already red at the branch point, for a filed and owner-pending defect --
+   `docs\INBOX-symbolfacts-stale-since-e71abafb.md` records that `e71abafb` changed what the
+   SymbolFacts extractor emits and shipped without a bump. That commit is on `main`.
+2. Its surface is `$roots = @('src\parser', 'src\preprocess', 'src\index')`, recursed -- and
+   `src\index\DRagLint.Index.CallResolver.pas` is where the RESOLVER lives. **Any resolver-only
+   change reddens this guard by construction.**
+
+**This branch changes no extraction**, checked in source at Task 3 and re-checked here: nothing
+under `src\parser`, `src\preprocess`, `DRagLint.Core.Indexer.pas` or `DRagLint.Doc.SymbolFacts.pas`
+references `TCallEdge`, `TEnumValueDecl`, `GetEnumValueSymbols` or `GetUnitLevelValueDecls`;
+`TCallEdge` is constructed only by the resolver. A bump would force a **~3h17m full re-parse of
+every database** for a change that alters no parse. The remedy for a derived-row change is
+`--resolve-only`, which Task 7 has already run on the project sections.
+
+### Pre-existing, recorded for the owner, deliberately NOT fixed here
+
+1. **`ScopedResolveIsSound` is dead code.** Build hint `H2219`. Declared at
+   `DRagLint.Storage.SQLite.pas:291`, implemented at `:5154`, listed on the resolver surface
+   manifest (`tests\resolver-surface.txt:38`), and named by roughly ten COMMENTS that treat its
+   soundness argument as the rationale for the whole scoped-resolve design. `git log -S` over
+   `4ccd1779..HEAD` returns nothing, so this branch did not introduce it. Removing a symbol that
+   ten comments point at -- and that sits on a version-hashed manifest -- is the owner's call.
+2. **An annotation that changes nothing, with no detector.**
+   `DRagLint.Analysis.LintTree.pas:1235` carries `dl:ok deep-nesting@0000` inside a `{ }` block
+   comment rather than on the finding's own line. It suppresses nothing (the `deep-nesting`
+   finding on `CompileDependents` fires live at `:1243`), and because it is not on a finding line
+   it is invisible to BOTH `review-marker-stale` and `review-marker-unused`. A marker with a
+   `@0000` hash that no detector can see is the shape the owner's lint standard exists to
+   prevent; a rule that flags a `dl:ok` whose hash is all zeros would catch the class.
+3. **`README.md` has no trailing newline**, and did not have one at `4ccd1779` either -- the
+   branch's only edit to it is a single table row in the middle of the file. Not this branch's,
+   and not policed by the encoding guard.
+
+### Full battery
+
+```
+pwsh -File tests\run_battery.ps1 -LogDir <scratch>\battery-enum-refs-2
+```
+
+Denominator line, verbatim:
+
+```
+  562 pass / 6 fail / 0 timeout out of 568 executed  (of 569 found)
+  counted in: C:\Projects\Delphi-RAG-lint-wt\enum-refs  @ 03bd4355 (DIRTY (1 entr(ies)))
+  wall clock: 41.0 min
+```
+
+The one dirty entry is this file, which carries the run's own result and so cannot be
+committed before it.
+
+**A FIRST FULL BATTERY WAS RUN AND THEN DISCARDED, and saying so is the point.** It reported
+`559 pass / 9 fail`, but three of those nine were mine: I edited source files WHILE it was
+running, so the deployed exe went stale against the tree mid-run and
+`run_exe_freshness.ps1`, `run_lsp_proxy_lifecycle_guard.ps1` and `run_mcp_protocol_guard.ps1`
+all reddened behind it -- every one of them green again on an isolated re-run after the
+rebuild. A run whose fixtures moved underneath it is one broken measurement, not a result to
+interpret, so it was thrown away and the battery was re-run on the committed tree with
+nothing touching it. The number above is that second run.
+
+| red | this branch's? | evidence |
+|---|---|---|
+| `run_extractor_version_guard.ps1` | **NO -- known, ruling R10** | red at the branch point for a filed, owner-pending defect (`docs\INBOX-symbolfacts-stale-since-e71abafb.md`, on `main`), AND its surface `@('src\parser','src\preprocess','src\index')` contains the RESOLVER, so any resolver-only change reddens it by construction. No bump: it would force a ~3h17m full re-parse of every database for a change that alters no parse |
+| `run_lsp_switch_guard.ps1` | no -- missing prerequisite | `FATAL: drag-lint-switch.exe not found ... build it with build\build_lsp_switch.bat` |
+| `run_lsp_switch_params_guard.ps1` | no -- missing prerequisite | `SKIP-FATAL: drag-lint-switch.exe not found at ...\src\tools\lsp-switch\Win64\Debug\` |
+| `tests\run_doctests_v021.ps1` | no -- missing prerequisite | the chain includes the six plugin fixtures below |
+| `tests\run_legacy_cli_fixtures.ps1` | no -- missing prerequisite | `T28_notifier`, `T29_settings`, `T32_completionform`, `T34_save_setting`, `T51_structure`, `T54_settings_scan_libraries` all print `FAIL: build failed`. Root cause read from the compiler output, not guessed: `tests\fixtures\t28_build.txt` says **`F2613 Unit 'DRagLint.Core.Model' not found`** -- `T28_notifier.bat` passes `dcc64 -U...\src\delphi-plugin` and never puts `src\core` on the unit path. Independent of this branch, and it would fail identically at `4ccd1779` |
+| `run_lint_dependent_project_not_recompiled.ps1` | no -- **FLAKE** | green in isolation on this exact tree and binary (8 of 8 assertions), and green in the discarded first battery on a binary that already carried this branch's LintTree change. It compares a fixture's DISK mtime against a compile stamp, so under battery load the edit and the stamp can land in one filesystem tick and the rule correctly finds nothing. Nothing this branch touches is on its path |
+
+**Better than the known set at `4ccd1779`, not worse.** `run_flag_verb_map.ps1` and
+`run_lsp_reader_guard.ps1` were both listed as historically red and are **PASS** here. And
+one red that WAS this branch's has been fixed rather than explained: see below.
+
+**`run_backlog_index_guard.ps1` was this branch's red, and it is fixed.** The first battery
+caught it: Task 7 filed `docs\INBOX-enum-binding-inside-with.md` and
+`docs\INBOX-resolve-only-clears-stale-file-edges.md` without the `<!-- dl:backlog status=...
+last-measured=... -->` header the guard requires in a note's first three lines. Both are now
+stamped (`parked-owner` and `open` respectively) and the guard is PASS -- `enumerated 2
+note(s): open=1 parked-owner=1`. The notes are gitignored, so they are not in any commit;
+they exist in this worktree only, and a reader who copies them elsewhere should carry the
+header with them.
+
+Guards named individually, all PASS in this run: `run_enum_value_refs_bind.ps1`
+(**1-13, FAIL none**), `run_encoding_guard.ps1`, `run_docs_sync_guard.ps1`, `run_schema.ps1`
+(23), `run_resolver_version_guard.ps1` (`resolve surface unchanged -- version=1.6.0-alpha`),
+`run_lint_tree.ps1`, `run_property_refs_resolve.ps1`, `run_exe_freshness.ps1`.
+## Hand-over to the owner
+
+### 1. Library re-resolve -- PENDING, owner-gated, and it runs AFTER merge + redeploy
+
+The owner ruled *"projects now, libraries after merge"*. The 33 non-`Library` sections were
+re-resolved by Task 7 and read `r=1.6.0-alpha;schema=23`. `library-Win64.sqlite` and
+`library-Win32.sqlite` are still at 1.5.1-alpha and hold no enum-value bindings.
+
+Run these from the MAIN tree, after the merge and the redeploy in item 3:
+
+```
+C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe index --all --resolve-only --jobs 2 --only Library --platform win64
+C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe index --all --resolve-only --jobs 2 --only Library --platform win32
+```
+
+Measured cost at Task 7: roughly 70 minutes per platform. **Sequencing them after the redeploy is
+what removes the mismatch window entirely for these two databases** -- they are never written by a
+1.6.0 engine while the main tree still carries 1.5.1, so unlike the project DBs (item 3) there is
+no interval in which a main-tree `index` would silently re-resolve the bindings away.
+
+### 2. The owed doc regeneration -- ONE pass, and this plan deliberately did not run it
+
+**No task in this plan ran `document --apply`, and Task 9 did not either.** The R-B churn the
+owner accepted is real but it is two DIFFERENT channels with different bounds, and conflating
+them is what the Task 6 review had to correct:
+
+* **Channel 1 -- re-windowing of a capped caller list.** Bound sites now enter the `Used by:`
+  list from the resolved bucket first, so `AMaxCallers` keeps a different 5 of an over-cap list.
+  Cosmetic re-ordering; no fact added, removed or re-qualified. **Bounded at 44 of 270 blocks on
+  the self-index**, and the 208 blocks at 5 or fewer callers are provably identical.
+* **Channel 2 -- a ` ?` marker APPEARING, 0 -> N.** `FindUnresolvedNameCallers` does not exclude
+  refs the new binder just bound and hard-codes `unverified`, so one surviving name-bucket row
+  flips `Mixed := AnyCertain and AnyUncertain` to True and the whole list gains ` ?`. **44 does
+  NOT bound this channel** -- a channel-2 block changes even at 5 or fewer callers. Measured 0 on
+  the self-index and **3 of 18 on ORM3 CLIENT**, all three traceable to the single WITHHELD file
+  `uPipeClientConnection.pas`; reindexing that unit (item 5) would plausibly return CLIENT to 0.
+
+So a total above 44 is **not by itself a regression**. Confirm which channel produced the excess
+before reading it as one.
+
+Fold the regeneration into the one already owed by the purity-v2 migration
+(`docs\MEASURED-purity-v2-2026-09-21.md`, Phase 2 runbook) so every corpus is regenerated exactly
+once, and run it **after** the library pass in item 1:
+
+```
+drag-lint document --project C:\Projects\Delphi-RAG-lint\src\cli\drag-lint.dproj --db C:\Projects\Delphi-RAG-lint\src\cli\_D-RAG\drag-lint.sqlite --apply --reindex
+drag-lint document --project C:\Projects\DataCopy\DataCopy.dproj --db C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite --apply --reindex
+drag-lint document --project C:\Projects\YADF\YADF.dproj --db C:\Projects\YADF\_D-RAG\YADF.sqlite --apply --reindex
+```
+
+DataCopy and YADF are Mercurial working copies: `hg status` clean first, review with `hg diff`
+before committing.
+
+### 3. Merge, main-tree redeploy, and the live mismatch caveat
+
+The owner integrates from the main tree; this worktree is left in place and nothing was pushed
+or merged here. After the merge, rebuild and redeploy from `main`:
+
+```
+C:\Projects\Delphi-RAG-lint\build\build_draglint_win64.bat
+```
+
+**THE CAVEAT IS LIVE FROM NOW UNTIL THAT REDEPLOY.** The 33 project DBs already carry
+1.6.0-alpha bindings while the main tree's deployed engine is still 1.5.1-alpha. Any `index` run
+issued from the main tree in this window sees a resolver-version mismatch, re-derives every edge
+with the OLD resolver, and DROPS every enum-value binding. It is recoverable -- re-run the
+re-resolve -- but it looks exactly like the feature not working. The charts workstream measures
+against those same DBs continuously and has a standing STOP on `index` / `fb-snapshot` /
+`autodoc`; they should be released only after the redeploy.
+
+### 4. C2.3 and `IsStub` now target `1.7.0-alpha`
+
+The resolver bump to 1.6.0-alpha consumed the version C2.3 and `IsStub` had reserved. Task 5
+moved all four forward references, and a repo-wide sweep at review found no surviving 1.6.0
+reservation:
+
+| where | what moved |
+|---|---|
+| `src\core\DRagLint.Core.Model.pas:129` | reservation comment |
+| `src\core\DRagLint.Core.ForwardStub.pas:20` | reservation comment |
+| `CHANGELOG.md:12` | `Known` entry, 1.6.0 -> 1.7.0 |
+| `docs\BACKLOG-SESSION-100-TRIAGE.md` (gitignored, MAIN checkout) | three rows, identically annotated |
+
+### 5. ORM3 CLIENT is left DEGRADED -- recover it before trusting that database
+
+Task 7's `--resolve-only` pass over a database carrying a stale (WITHHELD) file cleared rows it
+does not re-derive. `ClearCallEdges` NULLs `refs.symbol_id` unconditionally while the enum stream
+is narrowed by the stale predicate, and the loss is wider than the enum arm:
+
+| lost on CLIENT | count |
+|---|---|
+| `call_edges` | 66 |
+| `member_accesses` | 30 |
+| routines moved `proven` -> `not_proven` | 4 |
+
+The cause is the single file `C:\Projects\DB\ORM3\CLIENT\uPipeClientConnection.pas`, which now
+owns zero edges and zero accesses despite 161 call refs. The restoring command -- a normal
+incremental project index, which re-parses the drifted unit and re-derives its edges:
+
+```
+<engine> index --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --db C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite
+```
+
+**Which `<engine>` matters.** Run it with a 1.6.0-alpha engine (this worktree's, or the main tree's
+after the redeploy in item 3) and CLIENT keeps its bindings; run it with the main tree's current
+1.5.1-alpha engine and it re-resolves the enum bindings away as well. Add `--dry-run` first. The
+same command with each section's own `.dproj` / `.sqlite` restores the other ten withheld-bearing
+sections.
+
+The engine defect behind it is filed as `docs\INBOX-resolve-only-clears-stale-file-edges.md`
+(untracked, MAIN checkout). Two further open concerns from Task 7 travel with it: the withheld
+predicate is mtime-only and missed 2 of 3 content-drifted files on CLIENT, and R2/R3 remain
+thinly exercised on real code (3 + 3 declines on two sections sharing one vendored dependency).
+
+### 6. Retirement
+
+`docs\INBOX-enum-value-refs-never-bound.md` has been moved to `docs\INBOX-Done\` with a retirement
+line prepended, and the spec's status line now reads `status=shipped-branch`.
