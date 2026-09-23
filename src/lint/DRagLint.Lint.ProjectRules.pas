@@ -3142,6 +3142,241 @@ begin
   end;
 end; // function
 
+/// <summary>INBOX 2026-09-23 rule 4: a resolved call inside the arguments of
+/// <c>Assert(Cond[, Msg])</c> to a routine with a PROVEN effect --
+/// <c>effect_free = 0</c> and a stored summary carrying <c>g</c>, <c>h</c>,
+/// <c>s</c> or <c>p&lt;k&gt;</c>. Release builds compile Assert out (the
+/// <c>C-</c> switch), so that effect happens in Debug only.</summary>
+/// <param name="AStore">The project index; must carry the purity columns.</param>
+/// <returns>One finding per (call line, callee), anchored at the call line; the
+/// message names the callee, its effect summary and its effect witness. Empty
+/// on an index whose <c>purity</c> stage has not run.</returns>
+/// <remarks>ABSENCE OVER A WRONG FINDING. A summary that is only <c>?</c> (a
+/// binding gap), an unbound callee (no call_edges row), an <c>ambiguous</c> edge
+/// and a bound-usage row (no call edge at all) never fire. Only the direct call
+/// is judged; the stored summary is already interprocedural. A call edge carries
+/// a LINE, not a column, so the line is scanned (comment- and string-aware,
+/// balanced across a wrapped Assert of up to 20 lines above it) and the call
+/// fires only when EVERY code occurrence of the callee's name on that line lies
+/// inside an open <c>Assert(</c> -- a same-line call outside the Assert
+/// silences it. A bare or <c>System.</c>-qualified <c>Assert</c> counts, a
+/// <c>Rcv.Assert</c> does not, and a project that declares its own routine named
+/// <c>Assert</c> gets no findings at all, because its bare call may bind there
+/// and is not compiled out. Never raises; an unreadable file yields no finding
+/// for its call sites.</remarks>
+function CollectAssertWithSideEffect(const AStore: ISymbolStore): TArray<TLintFinding>;
+const
+  CEffectFreeNotProven = 0;
+  CConfidenceCertain   = 'certain';
+  CAssertName          = 'Assert';
+  CSystemName          = 'System';
+  { How far above the call line an Assert( may open (a wrapped argument list). }
+  CWindowLines         = 20;
+  CWordStart: TSysCharSet = ['A'..'Z', 'a'..'z', '_'];
+  CWordChars: TSysCharSet = ['A'..'Z', 'a'..'z', '0'..'9', '_'];
+var
+  Findings : TList<TLintFinding>;
+  Facts    : TDictionary<Int64, TSymbolFacts>;
+  LineCache: TDictionary<string, TArray<string>>;
+  FileIdOf : TDictionary<string, Int64>;
+  Seen     : TDictionary<string, Boolean>;
+
+  function LinesOf(const APath: string): TArray<string>;
+  begin
+    if not LineCache.TryGetValue(APath, Result) then
+    begin
+      try
+        Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+      except  // dl:ok bare-except@8ac3 -- deliberately bare, as in CollectDiscardedEffectFreeResult: one unreadable file must cost its own findings, never abort the lint run
+        Result:= nil;
+      end;
+      LineCache.Add(APath, Result);
+    end;
+  end;
+
+  { True when AName occurs as a whole identifier in the CODE of line ALineNo at
+    least once, and every such occurrence sits inside an open Assert( argument
+    list. The scan starts CWindowLines above so a wrapped Assert is seen open;
+    brace and (* *) comments carry across lines, '//' and strings do not. }
+  function OnlyInsideAssert(const ALines: TArray<string>; ALineNo: Integer;
+    const AName: string): Boolean;
+  var
+    Frames      : TList<Boolean>;
+    AssertOpen  : Integer;
+    InBrace     : Boolean;
+    InStar      : Boolean;
+    NextIsAssert: Boolean;
+    LastWord    : string;
+    LastSig     : Char;
+    Inside      : Integer;
+    Outside     : Integer;
+
+    { Consumes comment text at S[I]: the rest of an open brace or (* *)
+      comment, or a new opener. True when I was advanced past non-code. }
+    function SkipComment(const S: string; var I: Integer): Boolean;
+    begin
+      Result:= True;
+      if InBrace then
+        InBrace:= S[I] <> '}'
+      else if InStar then
+      begin
+        if (S[I] = '*') and (I < Length(S)) and (S[I + 1] = ')') then
+        begin
+          InStar:= False;
+          Inc(I);
+        end;
+      end
+      else if S[I] = '{' then
+        InBrace:= True
+      else if (I < Length(S)) and (S[I] = '/') and (S[I + 1] = '/') then
+        I:= Length(S)
+      else if (I < Length(S)) and (S[I] = '(') and (S[I + 1] = '*') then
+      begin
+        InStar:= True;
+        Inc(I);
+      end
+      else
+        Exit(False);
+      Inc(I);
+    end;
+
+    { Reads the identifier at S[I], leaving I just past it. A qualified Assert
+      is System.Assert or somebody else's method. }
+    procedure TakeWord(const S: string; var I: Integer; AOnCallLine: Boolean);
+    begin
+      var W: Integer:= I;
+      while (I <= Length(S)) and CharInSet(S[I], CWordChars) do Inc(I);
+      var Word: string:= Copy(S, W, I - W);
+      NextIsAssert:= SameText(Word, CAssertName) and
+        ((LastSig <> '.') or SameText(LastWord, CSystemName));
+      if AOnCallLine and SameText(Word, AName) then
+        if AssertOpen > 0 then Inc(Inside) else Inc(Outside);
+      LastWord:= Word;
+      LastSig := 'a';
+    end;
+
+    procedure TakeParen(ACh: Char);
+    begin
+      if ACh = '(' then
+      begin
+        Frames.Add(NextIsAssert);
+        if NextIsAssert then Inc(AssertOpen);
+      end
+      else if Frames.Count > 0 then
+      begin
+        if Frames.Last then Dec(AssertOpen);
+        Frames.Delete(Frames.Count - 1);
+      end;
+      NextIsAssert:= False;
+      LastSig:= ACh;
+    end;
+
+  begin
+    Frames:= TList<Boolean>.Create;
+    try
+      AssertOpen  := 0;
+      InBrace     := False;
+      InStar      := False;
+      NextIsAssert:= False;
+      LastWord    := '';
+      LastSig     := ' ';
+      Inside      := 0;
+      Outside     := 0;
+      for var Ln:= (if ALineNo > CWindowLines then ALineNo - CWindowLines else 1) to ALineNo do
+      begin
+        var S: string:= ALines[Ln - 1];
+        var I: Integer:= 1;
+        while I <= Length(S) do
+        begin
+          if SkipComment(S, I) then Continue;
+          var Ch: Char:= S[I];
+          if CharInSet(Ch, CWordStart) then
+          begin
+            TakeWord(S, I, Ln = ALineNo);
+            Continue;
+          end;
+          if Ch = '''' then
+          begin
+            Inc(I);
+            while (I <= Length(S)) and (S[I] <> '''') do Inc(I);
+          end;
+          if CharInSet(Ch, ['(', ')']) then
+            TakeParen(Ch)
+          else if not CharInSet(Ch, [' ', #9]) then
+          begin
+            NextIsAssert:= False;
+            LastSig:= Ch;
+          end;
+          Inc(I);
+        end;
+      end;
+      Result:= (Inside > 0) and (Outside = 0);
+    finally
+      Frames.Free;
+    end;
+  end;
+
+begin
+  Findings := TList<TLintFinding>.Create;
+  Facts    := TDictionary<Int64, TSymbolFacts>.Create;
+  LineCache:= TDictionary<string, TArray<string>>.Create;
+  FileIdOf := TDictionary<string, Int64>.Create(TIStringComparer.Ordinal);
+  Seen     := TDictionary<string, Boolean>.Create;
+  try
+    for var Fi in AStore.GetAllFileIds do
+      FileIdOf.AddOrSetValue(AStore.GetFilePath(Fi), Fi);
+    for var F in AStore.GetAllSymbolFacts do Facts.AddOrSetValue(F.SymbolId, F);
+    var Routines: TArray<TSymbol>:= AStore.FindSymbolsWithFacts;
+    { A project routine of its own named Assert (it has a body, so it has facts)
+      may be what a bare Assert( binds to, and it is not compiled out. }
+    for var R in Routines do
+      if SameText(R.Name, CAssertName) then Exit(nil);
+    for var Sym in Routines do
+    begin
+      var SF: TSymbolFacts;
+      if not Facts.TryGetValue(Sym.Id, SF) or (SF.EffectFree <> CEffectFreeNotProven) then Continue;
+      var Sum: TEffectSummary:= TEffectSummary.Decode(SF.EffectSummary);
+      { A PROVEN effect: '?' alone is a gap in the proof, not an effect. }
+      if (Sum.Flags * [efGlobal, efHeap, efSelfFields] = []) and (Length(Sum.Params) = 0) then Continue;
+      for var C in AStore.FindResolvedCallers(Sym.Id) do
+      begin
+        { Resolved CALL edges only: Mode is '' for a call_edges row and
+          'read'/'write' for a member or bound-usage row. }
+        if (C.Mode <> '') or (C.Confidence <> CConfidenceCertain) then Continue;
+        if (C.FullPath = '') or (C.CallSiteLine <= 0) then Continue;
+        var L: TArray<string>:= LinesOf(C.FullPath);
+        if (L = nil) or (C.CallSiteLine > Length(L)) then Continue;
+        var Key: string:= Format('%s|%d|%d', [C.FullPath, C.CallSiteLine, Sym.Id]);
+        if Seen.ContainsKey(Key) then Continue;
+        Seen.Add(Key, True);
+        if not OnlyInsideAssert(L, C.CallSiteLine, Sym.Name) then Continue;
+        var Fd: TLintFinding:= Default(TLintFinding);
+        Fd.RuleId    := 'assert-with-side-effect';
+        Fd.FilePath  := C.FullPath;
+        if not FileIdOf.TryGetValue(C.FullPath, Fd.FileId) then Fd.FileId:= 0;
+        Fd.StartLine := C.CallSiteLine;
+        Fd.EndLine   := C.CallSiteLine;
+        Fd.StartCol  := 1;
+        Fd.EndCol    := Fd.StartCol + Length(Sym.Name);
+        Fd.Severity  := 'warning';
+        Fd.SymbolName:= Sym.Name;
+        Fd.Message   := Format(
+          '%s is called inside Assert and has an effect (effect_summary ''%s'': %s) ' +
+          '-- release builds compile Assert out, so the effect happens in Debug only',
+          [Sym.QualifiedName, SF.EffectSummary, SF.EffectWitness]);
+        Findings.Add(Fd);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Seen.Free;
+    FileIdOf.Free;
+    LineCache.Free;
+    Facts.Free;
+    Findings.Free;
+  end;
+end; // function
+
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>): TArray<TLintFinding>;
@@ -3534,6 +3769,9 @@ begin
       for var Pf1 in CollectDiscardedEffectFreeResult(AStore) do Findings.Add(Pf1);
     if WantRule('query-name-with-effect') and OptedIn('query-name-with-effect') then
       for var Pf2 in CollectQueryNameWithEffect(AStore) do Findings.Add(Pf2);
+    { assert-with-side-effect (INBOX 2026-09-23 rule 4): same gate, same reason. }
+    if WantRule('assert-with-side-effect') and OptedIn('assert-with-side-effect') then
+      for var Pf3 in CollectAssertWithSideEffect(AStore) do Findings.Add(Pf3);
     Inc(TPurity, Tick - T0);
     T0:= Tick;
 

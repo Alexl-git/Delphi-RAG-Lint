@@ -524,6 +524,13 @@ begin
       leave them unreachable rather than merely off. }
     B('discarded-effect-free-result', 'project-wide', 'info', 'A proven effect-free value-returning routine is called in statement position and its result discarded -- the call does nothing', False);
     B('query-name-with-effect',       'project-wide', 'info', 'A Get*/Is*/Has*/Find*/Can*/Should* routine has a PROVEN escaping effect (writes a field, global state or frees storage) -- a question that also changes something', False);
+    { assert-with-side-effect (INBOX 2026-09-23 rule 4) ships OFF for the same
+      reason as the two above: it reads the STORED purity verdict and the resolved
+      call edges, so on an index without the purity stage it is silent rather
+      than clean, and its corpus count has not been audited yet. 'warning', not
+      'info': a Debug-only effect is a real behavioural difference between the
+      two builds, not a style point. }
+    B('assert-with-side-effect',      'project-wide', 'warning', 'A routine with a PROVEN effect (writes a field, a global, a parameter or frees storage) is called inside Assert -- release builds compile Assert out, so the effect happens in Debug only', False);
 
     { --- documentation (ADF milestone) --- }
     B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment', False); // OFF by default -- fires 1302x on drag-lint's own first-run wave; opt in via "enabled"

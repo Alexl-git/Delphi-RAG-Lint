@@ -144,6 +144,9 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # 2026-09-23: 130 -> 131, from `enum-read-inside-with` (bug-patterns, warning,
 #             ON by default: it needs a same-named with-target member AND the
 #             index's enum_value binding at that position, so it cannot flood).
+# 2026-09-23: 131 -> 132. assert-with-side-effect (INBOX 2026-09-23 rule 4):
+#   BUILT-IN, project-wide, default_enabled=False -- a routine with a PROVEN
+#   effect is called inside Assert, which release builds compile out.
 # 2026-09-22: 128 -> 130. Interprocedural purity v2 (plan C6.1 Task 7), spec
 #   section 14. Both BUILT-IN, both project-wide, both default_enabled=False:
 #   discarded-effect-free-result -- a PROVEN effect-free value-returning routine
@@ -195,7 +198,7 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # pinned deliberately -- a builtin appearing or vanishing unnoticed is exactly
 # what this line exists to catch -- so it is UPDATED with the change that moves
 # it, never relaxed to a range.
-Assert ("built-in rule count = 131 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with); got {0}" -f $builtins.Count) ($builtins.Count -eq 131)
+Assert ("built-in rule count = 132 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect); got {0}" -f $builtins.Count) ($builtins.Count -eq 132)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)

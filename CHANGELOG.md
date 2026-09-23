@@ -16,6 +16,13 @@ breaking changes** until v1.0.
   already cover it (measured: silent on the positive fixture). Emitted from the same walk as
   `with-hides-outer-symbol`, sharing its with-target surfaces. Guard:
   `tests\autotest\run_enum_read_inside_with.ps1` (17 checks). 183 -> 184 rules.
+- **`assert-with-side-effect`** (project-wide, warning, OFF by default) -- a resolved call inside
+  `Assert(Cond[, Msg])` to a routine with a PROVEN effect (`symbol_facts.effect_free = 0` and a stored
+  `effect_summary` carrying `g`, `h`, `s` or `p<k>`). Release builds compile `Assert` out, so the effect
+  happens in Debug only. A summary that is only `?`, an unbound or ambiguous callee, and a same-line call
+  outside the Assert never fire; the message carries the callee's summary and witness. OFF for the same
+  reason as the two purity v2 rules: it needs a resolved index with the `purity` stage. Rule count
+  184 -> 185 (132 built-in). Guard: `tests\lint-project\assert-side-effect\run_assert_side_effect.ps1`.
 
 ### Fixed
 
