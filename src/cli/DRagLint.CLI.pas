@@ -11424,6 +11424,58 @@ begin
   Result:= 0;
 end; // begin
 
+const
+  { THE RULE IDS EACH HEAVY `lint <file>` CHECKER CAN EMIT (D3, INBOX
+    defects-found-2026-09-23-rule-work). `lint <file> --rule X` used to run
+    every one of these for any X and filter the result, so a one-rule question
+    about ArrayHelper.pas -- whose index is the 2 GB platform library -- ran the
+    whole-store project pass over ~7,000 library files for 20+ CPU-minutes.
+
+    A checker whose list is SHORT of an id it emits makes `--rule <that id>`
+    silently answer 0 -- exactly how D2 hid with-hides-outer-symbol -- so these
+    lists are pinned against the emit sites by
+    tests\autotest\run_lint_rule_narrows_checkers.ps1. Add the id here in the
+    same change that adds its emit site. }
+  LINT_GATE_TYPE_AWARE: array[0..11] of string = (
+    'exhaustive-enum-case', 'float-equality-comparison', 'string-equality-comparison',
+    'length-zero-compare', 'freeandnil-on-interface', 'win64-pointer-cast',
+    'nativeint-truncation', 'redundant-cast', 'unsafe-typecast-without-is', 'lossy-cast',
+    'abstract-method-instantiation', 'interface-object-mixing');
+  LINT_GATE_FLOW: array[0..9] of string = (
+    'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
+    'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
+    'loop-var-after-loop', 'object-leak');
+  LINT_GATE_PROJECT_RULES: array[0..14] of string = (
+    'unused-public-symbol', 'unused-private-member', 'circular-uses', 'global-only-uses-edge',
+    'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
+    'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
+    'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
+    'unused-unit-in-uses', 'god-class');
+  LINT_GATE_CLASS_METRICS: array[0..9] of string = (
+    'too-many-children', 'deep-inheritance', 'high-response', 'high-coupling', 'low-cohesion',
+    'middle-man', 'fan-out', 'fan-in', 'instability', 'feature-envy');
+
+{ True when a lint run with --rule ARule needs a checker that emits AIds: always
+  for a run with no --rule, otherwise only when ARule is one of them. }
+function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
+begin
+  if ARule = '' then Exit(True);
+  for var Id: string in AIds do
+    if SameText(Id, ARule) then Exit(True);
+  Result:= False;
+end;
+
+{ DRAGLINT_DEBUG trace of which heavy checker a `lint <file>` run entered. The
+  only observable for D3: a skipped checker and a checker that found nothing
+  print the same findings, so without this a regression back to "run everything
+  for any --rule" is invisible except as time. stderr, so it cannot corrupt
+  --format json|sarif. }
+procedure TraceLintChecker(const AName: string);
+begin
+  if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
+    Writeln(ErrOutput, '[lint-checker] ' + AName);
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -11883,13 +11935,18 @@ begin
         side effect of linting would take a write lock on someone else's 2.2 GB.
         A failure degrades to project-only rather than failing the run. }
       var FlowLibStore: ISymbolStore := nil;
-      if FlowStore <> nil then
+      { ...and only for a run that asks a checker which READS it (D3): the
+        with-hiding walk, the flow checker and the project pass. }
+      if (FlowStore <> nil) and
+         (LintRuleWants(AArgs.Rule, ['with-hides-outer-symbol', 'enum-read-inside-with'])
+          or LintRuleWants(AArgs.Rule, LINT_GATE_FLOW) or LintRuleWants(AArgs.Rule, LINT_GATE_PROJECT_RULES)) then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
         { A STALE library index degrades to project-only exactly like an
           unopenable one -- see OpenLibraryStoreIfCurrent for why a bare Create
           here was an access violation waiting for the next schema bump. }
         var FlowLibWhy: string;
+        TraceLintChecker('library-store');
         FlowLibStore:= OpenLibraryStoreIfCurrent(FlowLibDb, FlowLibWhy);
         if FlowLibWhy <> '' then EmitStatusLine(AArgs, 'WARNING: ' + FlowLibWhy);
       end;
@@ -11943,13 +12000,19 @@ begin
         with-hides-outer-symbol, so `--rule with-hides-outer-symbol` never ran it
         (INBOX-defects-found-2026-09-23-rule-work.md, D2). Its own gate now. }
       if (AArgs.Rule = '') or (AArgs.Rule = 'with-hides-outer-symbol') or (AArgs.Rule = 'enum-read-inside-with') then
+      begin
+        TraceLintChecker('with-hiding');
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(EffPath, FlowStore, FlowLibStore, FlowFid) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      end;
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map.
-        UNGATED, as it always was in behaviour: only the indentation used to
-        suggest otherwise. }
-      for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
-        if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+        Gated on LINT_GATE_TYPE_AWARE (D3); before that it ran for every --rule. }
+      if LintRuleWants(AArgs.Rule, LINT_GATE_TYPE_AWARE) then
+      begin
+        TraceLintChecker('type-aware');
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
+          if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      end;
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
       if (AArgs.Rule = '') or (AArgs.Rule = 'firedac-open-execsql-mismatch') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(EffPath);
       { v0.50: object created + freed without try-finally (leak on exception) }
@@ -12030,8 +12093,12 @@ begin
         store-free 4.29 s vs 4.07 s with the store -- the open disappears next
         to process start and parse. Opened QUIETLY because OpenReadOnlyStore's
         schema-behind line goes to stdout and would corrupt --format sarif. }
-      for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, FlowLibStore) do
-        if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      if LintRuleWants(AArgs.Rule, LINT_GATE_FLOW) then
+      begin
+        TraceLintChecker('flow');
+        for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, FlowLibStore) do
+          if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      end;
       { v0.68: naming-convention prefix rules (config-driven). The store enables
         the exception-ancestry sub-check of type-name-prefix -- without it
         EFoo = class(Exception) is reported as needing a 'T' prefix. }
@@ -12103,16 +12170,33 @@ begin
         var SibKeep : TList<ISymbolStore>  := TList<ISymbolStore>.Create;
         var SibOwned: TObjectList<TObject> := TObjectList<TObject>.Create(True);
         try
-          for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-                     FlowStore, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore) do
-            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
-              Findings:= Findings + [F];
-          for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, LintLibraryDb(AArgs)) do
-            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
-              Findings:= Findings + [F];
-          for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, '') do
-            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
-              Findings:= Findings + [F];
+          { Each whole-store pass is entered only when --rule can be one of its
+            ids (D3), and is HANDED the rule so it narrows inside as well. That
+            second half is also what makes an OFF-by-default project rule
+            reachable here: TProjectLintRules.OptedIn treats the requested rule
+            as opted in, the same contract lint-project and lint-all honour. }
+          if LintRuleWants(AArgs.Rule, LINT_GATE_PROJECT_RULES) then
+          begin
+            TraceLintChecker('project-rules');
+            for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
+                       FlowStore, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore) do
+              if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+                Findings:= Findings + [F];
+          end;
+          if LintRuleWants(AArgs.Rule, ['used-unit-not-resolvable']) then
+          begin
+            TraceLintChecker('used-unit-resolvable');
+            for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, LintLibraryDb(AArgs)) do
+              if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+                Findings:= Findings + [F];
+          end;
+          if LintRuleWants(AArgs.Rule, LINT_GATE_CLASS_METRICS) then
+          begin
+            TraceLintChecker('class-metrics');
+            for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, AArgs.Rule) do
+              if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+                Findings:= Findings + [F];
+          end;
         finally
           SibKeep .Free;
           SibOwned.Free;

@@ -32,6 +32,20 @@ breaking changes** until v1.0.
   so the named rule always answered 0. The with-hiding walk now has its own gate (both of its ids); the
   type-aware checker keeps running as before, and its indentation no longer suggests a gate it never
   had. Guard: `tests\autotest\run_with_hiding_rule.ps1` (four new D2 checks).
+- **`lint <file> --rule X` runs only the checkers that can emit X (D3).** The type-aware map, the
+  flow analysis, the whole-store project pass, used-unit resolvability, class metrics and the
+  platform-library open all ran for ANY `--rule` and were filtered afterwards; the project pass walks
+  the whole store, so a one-rule question about a unit indexed in the 2 GB library ran for 20+
+  CPU-minutes. Each is now entered only when `--rule` names one of its ids (`LINT_GATE_*` in
+  `DRagLint.CLI.pas`), and the project pass and class metrics are handed the rule so they narrow
+  inside too -- which also makes an OFF-by-default project rule (`global-only-uses-edge`,
+  `assert-with-side-effect`, ...) answer `lint <file> --rule <id>` instead of silently reporting 0,
+  the contract `lint-project` already honoured. Measured on this repo's self-index (best of 2, no
+  library): `DRagLint.CLI.pas --rule unused-local` 55.3 s -> 12.4 s, `--rule
+  float-equality-comparison` 57.6 s -> 14.3 s; `DRagLint.Lint.ProjectRules.pas --rule unused-local`
+  18.0 s -> 2.5 s; identical findings. `DRAGLINT_DEBUG` now traces each heavy checker entered
+  (`[lint-checker] <name>`, stderr). Guard: `tests\autotest\run_lint_rule_narrows_checkers.ps1`,
+  which also pins every gate list against its checker's emit sites both ways.
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
   every `index` preprocess, and every project closure) used to union only the `.dproj`'s `Base` group
   and the selected config's `Cfg_N` group. MSBuild also applies `Base_<Platform>` and
