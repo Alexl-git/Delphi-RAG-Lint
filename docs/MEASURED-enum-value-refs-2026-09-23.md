@@ -888,6 +888,13 @@ channel-2 block can legitimately push the total above it. A count above 44 is
 therefore NOT by itself a regression; confirm which channel produced the excess
 (a ` ?` count that moved 0 -> N is channel 2) before reading it as one.
 
+**Read this together with Task 7's channel-2 measurement below (section "R-B autodoc churn,
+re-measured on CLIENT").** Task 7 measured channel 2 at 3 of 18 on CLIENT and traced ALL
+THREE to the single WITHHELD file `uPipeClientConnection.pas`. So this guidance inverts if
+that unit is reindexed before Task 9 runs: with the file fresh, CLIENT's channel-2 count
+plausibly returns to 0 and a channel-2 excess would no longer be the available explanation
+for a total above 44. Task 9 should record whether the reindex happened first.
+
 ## Task 7 -- corpus re-resolved under 1.6.0-alpha; projects only (libraries owner-gated)
 
 **Engine:** `C:\Projects\Delphi-RAG-lint-wt\enum-refs\third_party\dll-win64\drag-lint.exe`
@@ -910,6 +917,14 @@ not copied, and 33 is the number passed to `--only`.
 | B (attribution re-run) | ORM3-Micronite2027 | `--jobs 1`, merged stdout+stderr | 0 | 155 s |
 | C (attribution re-run) | ORM3-MicroniteMW1Service | `--jobs 1`, merged | 0 | 111 s |
 | D (attribution re-run) | the other 31 | `--jobs 1`, merged | 0 | 278 s |
+
+**Where the evidence lives.** Every number in this section is reproducible from the SQL
+quoted inline below against the databases named above -- the logs are corroboration, not the
+only record. The raw run logs were moved out of the session-scoped scratchpad to
+`C:\TEMP\claude\enum-refs-task7\`: `resolve-projects.log` (run A, stdout),
+`resolve-combined.log` (run A, stdout+stderr concatenated), `resolve-orm3.log` (run B,
+CLIENT, merged), `resolve-server.log` (run C), `resolve-rest.log` (run D, the other 31),
+`resolve1.bat` (the wrapper), and the four `doc-before-*` / `doc-after-*` churn captures.
 
 Runs B-D exist because `--jobs 2` writes the stage lines to **stderr** and the section
 banners to **stdout**, so with two workers no `enum-values:` line can be attributed to a
@@ -987,11 +1002,23 @@ collapsed (decisive). `SD` = unit-level shadow decls. `W` = files WITHHELD.
 | DragLint-ConvRulesEditor | 196 | 196 | 0 | 0 | 0 | 0 | 0 (0) | 61 | 3 |
 | DragLint-ConvRulesTests | 187 | 187 | 0 | 0 | 0 | 0 | 0 (0) | 27 | 3 |
 
-Counts derived from that table only: 33 rows; the `W` column is non-zero on **10** rows
-and sums to **41** withheld files; the `C(D)` column is `0 (0)` on all 33 rows; `AM` and
+Counts derived from that table only, by parsing the table's own pipe-delimited cells rather
+than by eye (this sentence is the one place on the branch where a prose count beside a table
+has been wrong twice, and the first revision of it got the row count wrong a third time):
+33 rows; the `W` column is non-zero on **11** rows -- ORM3-Micronite2027 (1),
+ORM3-TEST_uSetupDefaultsFrm (1), DragLint-Cli (14), DragLint-Wizard (5), DragLint-Tests (3),
+YADFOT (1), YADFSetup (1), YADF-GuardTest (1), DataCopy-Tests (8), DragLint-ConvRulesEditor (3),
+DragLint-ConvRulesTests (3) -- and sums to **41** withheld files; the `C(D)` column is `0 (0)` on all 33 rows; `AM` and
 `SH` are non-zero on exactly **2** rows (ORM3-MicroniteTests and ORM3-PdfOcrImportTests,
 3 and 3 each); `B` is non-zero on the same 2 rows (67 each); `NV` is non-zero on exactly
 **2** rows (CLIENT 53, SERVER 1484).
+
+Two further sums taken from the same parse, offered as internal cross-checks rather than as
+new facts: `A cand` totals **14992** and `A bound` totals **13443**, and
+14992 - 13443 = 1549 = 1537 (`NV`) + 6 (`AM`) + 6 (`SH`), so every bare-read candidate the
+stage saw is either bound or carried by one of the three decline counters. `A bound`'s 13443
+is also, independently, the "bare reads bound to an unscoped value" figure in the R5 table
+below -- the same population counted by a different query.
 
 **`DragLint-Cli` is the MAIN tree's self-index** (`C:\Projects\Delphi-RAG-lint\src\cli\
 _D-RAG\drag-lint.sqlite`), not the worktree self-index Tasks 1/4/5 measured
@@ -1024,8 +1051,41 @@ above. On CLIENT the effect is exactly measurable:
 
 The withheld file is `C:\Projects\DB\ORM3\CLIENT\uPipeClientConnection.pas`.
 
+**ORM3 CLIENT is a SHARED database and this run left it degraded. The command that restores
+it:** a normal incremental project index re-parses the drifted unit and re-derives its edges
+(`index --project` is the documented form; verified against `--help` and
+`resolve-dbs --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj`, which returns the DB
+path below; NOT run by this task, which was scoped to `--resolve-only`):
+
+```
+<engine> index --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --db C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite
+```
+
+Add `--dry-run` first to preview. **Which `<engine>` matters**: run it with the WORKTREE
+engine and CLIENT keeps `r=1.6.0-alpha`; run it with the main tree's 1.5.1-alpha engine
+before merge + redeploy and it also re-resolves the enum bindings away (the trap at the top
+of this section). The same command with each section's own `.dproj`/`.sqlite` restores the
+other 10 withheld-bearing sections in the `W` column above.
+
+**And the loss is WIDER than the enum arm.** `ClearCallEdges`' own comment already documents
+that it NULLs `refs.symbol_id` for stale files' refs, which is the enum-stream half. What the
+CLIENT M4 table further down shows is that the file's `call_edges` and `member_accesses` rows
+go too, and that `symbol_facts.effect_free` moves with them -- 4 routines fell from `proven`
+to `not_proven`. So a whole-DB resolve over ANY index carrying stale files degrades the
+purity result for EVERY consumer of that database, not just the enum arm and not just this
+branch. That is why it is filed as an engine defect
+(`docs\INBOX-resolve-only-clears-stale-file-edges.md`) and not only as a note here.
+
 **The withheld predicate is mtime-based and misses content-only drift.** A SHA256 sweep of
-every indexed file against `files.sha256`:
+every indexed file against `files.sha256`. The row list comes from the index (note
+`--limit`: the default cap is 200 rows and the tool DOES announce it with
+`-- ROW CAP REACHED at 200 rows; there are more. Pass --limit N.`, so a sweep written
+without it silently covers only the first 200 files -- an operator error, not a tool defect):
+
+```powershell
+& $exe sql --db $db --limit 5000 --format json --query "SELECT id, path, sha256, mtime_unix FROM files"
+# then, per row:  (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() -ne $sha256
+```
 
 | DB | files rows | SHA mismatches | reported WITHHELD |
 |---|---|---|---|
@@ -1040,6 +1100,11 @@ second of mtime and was not withheld either. 622 of CLIENT's 625 files hash-matc
 stored `sha256` is the plain file SHA256 and the mismatches are real content drift.
 
 ### M1 -- `cmdDelta` / `cmdTableLoad` (the reproducing query)
+
+```sql
+SELECT name_text, kind, (symbol_id IS NOT NULL) AS bound, COUNT(*) FROM refs
+WHERE name_text IN ('cmdDelta','cmdTableLoad') GROUP BY name_text, kind, bound
+```
 
 CLIENT:
 
@@ -1073,7 +1138,35 @@ with `bound = 0`; only the `bound` column moved.
 CLIENT has no bound `member-access` row and SERVER has none either: **neither CLIENT nor
 SERVER binds a single qualified (Shape B) reference.**
 
-### Every `bound = 0` read explained, by rule
+### Every `bound = 0` row explained, by rule
+
+The previous revision of this heading said "every `bound = 0` **read**", which quietly
+scoped out the 12 unbound `member-access` rows in the table above and attached no rule to
+any of them. They are explained here.
+
+**The 12 unbound qualified rows (CLIENT 8, SERVER 4) are all one construct.** Read back with
+their `receiver_text`, every one of the 12 is `TStringSplitOptions.None`, in
+`BASICSF.pas` (4 sites, in both DBs) and `GAGEFRM2.PAS` (4 sites, CLIENT only), e.g.
+`Tokens := tstr.Split([';'], '"', '"', TStringSplitOptions.None);`.
+
+**Checked, not assumed, and it is NOT the same shape Task 5 found.** Task 5's 8 unbound
+qualified refs on the self-index were type-ALIAS receivers. These are not aliases: the
+receiver type is simply **absent from the project database**. `SELECT ... FROM symbols WHERE
+name COLLATE NOCASE = 'TStringSplitOptions'` returns **0 rows** on CLIENT and 3 rows on
+`library-Win64` (`System.SysUtils.TStringSplitOptions` is the relevant one). The only
+project-side `enum_value` named `None` is `MSCTYPES.TImportFileState.None`, an unrelated
+enum in an unrelated unit -- which is exactly what a bind here would have attached an RTL
+`TStringSplitOptions.None` to.
+
+**So the decline is correct and necessary, and its rule is rung 3c, not R1/R2/R3.** The
+qualified stream resolves the receiver first; a receiver that resolves to nothing in this
+database ends the candidate there, before visibility, ambiguity or shadowing is consulted.
+That is why the decline counters read `ambiguous 0, shadowed 0` on CLIENT and SERVER and why
+CLIENT's `not-visible 53` equals its bare-read shortfall exactly, with no qualified decline
+folded in: these 12 are counted by no counter. The same "never reaches R1-R3" outcome as
+Task 5's 8, reached by a different cause (cross-index receiver, not alias receiver).
+
+The rest of this section covers the unbound `read` rows.
 
 **CLIENT -- 81 unbound reads.** 28 are in the WITHHELD file and were never offered to the
 resolver (not a decline). The remaining 53 are the stage's `not-visible` count, and all 53
@@ -1112,7 +1205,10 @@ genuinely see `TCommandID` -- and 1596 did not. R1 prevented ~1463 wrong binding
 also sweeps in `LotStatusCodes`, `LotStatusColors`, `LOTSTATUSCODE`,
 `LotStatusCodeDescription`, which are not enum values).
 
-| name_text | uJobList.ViewModel.pas (bound) | iFOLDERS.PAS (bound) |
+The two data columns are `occurrences (bound flag)` -- the parenthesised value is the
+`bound` column of the group-by, 0 or 1, **not a count**, so it must not be summed.
+
+| name_text | uJobList.ViewModel.pas: occurrences (bound flag) | iFOLDERS.PAS: occurrences (bound flag) |
 |---|---|---|
 | LotStatus_CustAcWithCond | 2 (0) | 3 (1) |
 | LotStatus_CustAccept | 2 (0) | 3 (1) |
@@ -1232,8 +1328,14 @@ added -- R7 is a stated non-goal of this branch.**
 
 ### Rule 0 -- duplicate `enum_value` groups (owner ruling 4, the audit)
 
+```sql
+SELECT COUNT(*) AS dup_groups, IFNULL(SUM(c),0) AS dup_rows FROM (
+  SELECT lower(qualified_name) q, start_line, end_line, COUNT(*) c
+  FROM symbols WHERE kind='enum_value' GROUP BY q, start_line, end_line HAVING c > 1)
+```
+
 `collapsed 0 (decisive 0)` on **all 33** sections (the `C(D)` column above). Independently,
-the duplicate-group query returns `dup_groups = 0` on **all 33** project DBs, so there was
+the duplicate-group query above returns `dup_groups = 0` on **all 33** project DBs, so there was
 nothing for rule 0 to collapse and the counters could not have been anything but zero.
 **The collapse was decisive nowhere. That is the recorded answer, not a disappointment** --
 it matches the prior finding that rule 0 is structurally inert, and the only DBs that ever
@@ -1270,7 +1372,21 @@ itself is collateral-free.
 
 ### Invariants and the `write` negative control -- all 33 DBs
 
-Swept over every project DB:
+Swept over every project DB, as one query per DB over the list from
+`drag-lint resolve-dbs --platform Win64` with `Library` excluded:
+
+```sql
+SELECT (SELECT COUNT(*) FROM call_edges ce JOIN symbols s ON s.id=ce.target_symbol_id
+          WHERE s.kind='enum_value') AS bad_edges,
+       (SELECT COUNT(*) FROM member_accesses ma JOIN symbols s ON s.id=ma.member_symbol_id
+          WHERE s.kind='enum_value') AS bad_acc,
+       (SELECT COUNT(*) FROM refs WHERE kind='write'
+          AND name_text COLLATE NOCASE IN (SELECT name FROM symbols WHERE kind='enum_value')) AS wr_total,
+       (SELECT IFNULL(SUM(symbol_id IS NOT NULL),0) FROM refs WHERE kind='write'
+          AND name_text COLLATE NOCASE IN (SELECT name FROM symbols WHERE kind='enum_value')) AS wr_bound,
+       (SELECT COUNT(*) FROM (SELECT lower(qualified_name) q, start_line, end_line, COUNT(*) c
+          FROM symbols WHERE kind='enum_value' GROUP BY q, start_line, end_line HAVING c>1)) AS dup_groups
+```
 
 | check | result |
 |---|---|
@@ -1317,6 +1433,11 @@ reindexing that one unit would plausibly return it to 0.
 
 1. **Withheld files clear edges they do not re-derive** (CLIENT M4 delta, and all 3
    channel-2 instances). The log line's wording ("left alone") is wrong about what happens.
+   The damage is not confined to the enum arm -- `symbol_facts.effect_free` moved too, so it
+   degrades purity for every consumer of the database. **CLIENT is a shared DB and is left
+   degraded by this task**; the restoring command is written out under "WITHHELD files"
+   above, and the engine defect is filed as
+   `docs\INBOX-resolve-only-clears-stale-file-edges.md`.
 2. **The withheld predicate is mtime-only** and missed 2 of 3 content-drifted files on
    CLIENT and 1 of 2 on SERVER.
 3. **R2/R3 remain thinly exercised on real code** -- 3 + 3 declines on two sections that
