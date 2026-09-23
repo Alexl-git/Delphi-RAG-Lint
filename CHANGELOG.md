@@ -24,6 +24,25 @@ breaking changes** until v1.0.
   reason as the two purity v2 rules: it needs a resolved index with the `purity` stage. Rule count
   184 -> 185 (132 built-in). Guard: `tests\lint-project\assert-side-effect\run_assert_side_effect.ps1`.
 - **New rule `ifdef-undefined-symbol` (project-wide, warning, OFF by default).** Flags `{$IFDEF X}`, `{$IFNDEF X}` and `defined(X)` in `{$IF}`/`{$ELSEIF}` where `X` is defined nowhere: not a compiler-predefined conditional for any platform (`VER<nnn>`, `CPU*`, `MSWINDOWS`, `WIN32`, `CONSOLE`, ...; `DEBUG`/`RELEASE` are NOT predefined), not in any `DCC_Define` of any PropertyGroup of the `.dproj` (the union over every config and platform, including `Base_<P>` and `Cfg_N_<P>`), not `{$DEFINE}`d anywhere in the unit or its `{$I}` includes, and not in the new `drag-lint-lint.json` top-level `"ifdef_allow": [...]` list. A `$DEFINE` in another unit or the `.dpr` does not count -- the compiler scopes it to its own module. Runs only with a project (`--project`, or the project that owns `--db`); a bare `lint <file>` reports nothing, and a file whose `{$I}` cannot be resolved is skipped. The message suggests the nearest defined symbol within edit distance 2. Measured on ORM3 CLIENT (151 of 152 `.dproj` members): 175 findings over 6 symbols (`TRACE_BP`, `TRACE_BP3`, `TRACE_BP6`, `TRACE_CODESITE`, `M2022_REFERENCE`, `NOABLAS`), all deliberate trace switches, none a typo; the `.dpr`'s `{$IFDEF EurekaLog}` (defined only in `Base_Win32`/`Base_Win64`) is silent. Hence OFF by default: opt in with `--rule ifdef-undefined-symbol` or `"enabled"`. New unit `src\lint\DRagLint.Lint.IfdefUndefined.pas`, outside the extractor surface (no extractor bump). Guard: `tests\autotest\run_ifdef_undefined_symbol.ps1`. Rule count 185 -> 186.
+- **New rule `review-marker-placeholder-hash` (review-markers, hint, ON by default).** A `dl:ok` whose
+  `@hash` was never computed -- `@0000` or non-hex (`@xxxx`) on a `//` marker, or an `@0000` marker
+  stranded in a `{ }` / `(* *)` / `///` comment, where no marker is ever read. It suppressed nothing and
+  was reported by nothing (a block-comment marker) or misreported as `review-marker-stale` /
+  `-unused` (a `//` one). A hash that matches the line is still honoured, so a genuine `@0000` (1 in
+  65536) verifies. In block comments only a KNOWN rule id with an ALL-ZERO hash counts, so prose quoting
+  the grammar stays silent: 1 finding on this repo (`DRagLint.Analysis.LintTree.pas`, now a live
+  marker), 0 across the 282 `dl:ok` lines in DataCopy/YADF/ORM3. INBOX B1.
+  Guard: `tests\autotest\run_review_marker_placeholder_hash.ps1`.
+- **New rule `review-marker-reason-unreviewed` (review-markers, hint, OFF by default) and the optional
+  `REVIEWED <yyyy-mm-dd>` stamp** (owner ruling OWN-7). Write `REVIEWED 2026-09-23` anywhere in a
+  marker's reason (uppercase, case-sensitive, whole word) to record when it was last re-read; it is a
+  comment, so it never changes the `@hash` or makes the marker stale (pinned). The rule flags a missing
+  stamp, an invalid or future date, or one older than `max_age_days` (threshold key
+  `review-marker-reason-unreviewed`, default 180, `0` = presence only). OFF because every older
+  marker would report (50 on this repo). The "older than the last change to the line" check was NOT
+  built -- it needs VCS history the linter does not read; the `@hash` already covers code change.
+  INBOX B2. Guard: `tests\autotest\run_review_marker_reason_unreviewed.ps1`. 186 -> 188 rules
+  (135 built-in, 158 on by default).
 
 ### Fixed
 
@@ -71,6 +90,17 @@ breaking changes** until v1.0.
   downgrade itself). No version constant moves. Guard:
   `tests\autotest\run_index_never_downgrades_resolver.ps1`.
 - **`deps-report` credits a unit only to the units that NAME it.** The BFS continuation in `WalkBfs` (`src\report\DRagLint.Report.Deps.pas`) credited every transitively reached external to the BFS ROOT, so on ORM3 CLIENT the program `micronite2027` was listed in `used_by` of `ETypes`/`EEvents`/`ECompatibility`, which only `EExtraExceptionInfo.pas` names (implementation uses). It also appended one edge per sighting, so the edge list held duplicates. Edges from an expanded unit are now credited to that unit, and each (importer, external) pair yields one edge. ORM3 CLIENT: `external_edge_count` 30,716 -> 6,880 (= the 6,880 distinct unresolved (file, unit) `unit_uses` pairs), `used_by_count` sum 20,151 -> 6,880; per-group `project_unit_count` falls with it (FireDAC 516 -> 192, DevExpress 98 -> 65); the external set (293) and every `shortest_path` are identical. The EurekaLog `{$IFDEF}` going live now moves edges, the `used_by` sum and unresolved rows by the same +12 (was +14/+13/+12). A reader: no extractor or resolver bump. Guard: `tests\autotest\run_deps_report.ps1` (program -> two mids -> external fixture).
+- **RAD Studio options frame: `ifdef_allow` is now editable (D9).** The frame already rendered a text box for
+  `ifdef-undefined-symbol`'s list parameter, but loaded it from the catalogue default and silently skipped it
+  on save. It now loads and saves `IfdefAllow` (comma-separated). `TLintConfigWriter` OWNS the top-level
+  `ifdef_allow` key: verified first that `SaveToFile` already PRESERVED it through unrelated edits, but a
+  preserved key cannot be edited -- the on-disk value won over `ACfg`. It is written from `ACfg` when
+  non-empty and removed when cleared. Guard: `tests\lintconfig\LintConfigTests.dpr` TestIfdefAllow.
+- **`used-before-assignment` and `out` parameters (ENG-7): re-measured, NOT reproduced, now guarded.** The
+  DataCopy report (an `out` argument in `if not F(...)`, callee in another unit with a wrapped signature)
+  does not reproduce on this build -- not on a copy of its shape, not on DataCopy's own rev-339 sources.
+  `out` has been modelled since 2026-08-28. `tests\autotest\run_uba_out_param_datacopy_shape.ps1` pins the
+  exact reported shape, with a by-value positive control that must still fire. No engine change.
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
   every `index` preprocess, and every project closure) used to union only the `.dproj`'s `Base` group
   and the selected config's `Cfg_N` group. MSBuild also applies `Base_<Platform>` and

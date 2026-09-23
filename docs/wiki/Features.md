@@ -64,8 +64,8 @@ The foundation. Everything below that says *(index)* reads what this produces.
 
 ## Linting
 
-**186 rules. 23 have an auto-fix. 157 are on by default.**
-133 are built-in checks; 53 are external tree-sitter `.scm` rules you can read
+**188 rules. 23 have an auto-fix. 158 are on by default.**
+135 are built-in checks; 53 are external tree-sitter `.scm` rules you can read
 and extend in `rules\`.
 
 Run `drag-lint rules` for the always-current catalogue, or
@@ -88,8 +88,8 @@ Run `drag-lint rules` for the always-current catalogue, or
 | other | 6 | - |
 | documentation | 5 | 2 |
 | firedac | 3 | - |
-| review-markers | 3 | - |
-| **Total** | **186** | **23** |
+| review-markers | 5 | - |
+| **Total** | **188** | **23** |
 
 **Newest -- the coupling rules.** `global-only-uses-edge` (a global variable is
 the only reason unit A depends on unit B, so relocating it deletes the `uses`
@@ -128,7 +128,13 @@ Suppression:
   hash of the line's code tokens and **re-reports itself if the code changes**,
   so a review cannot outlive the code it reviewed. Reindentation and case
   changes do not invalidate it.
-
+* `REVIEWED <yyyy-mm-dd>` anywhere in a marker's reason records when a human last
+  re-read it (`-- REVIEWED 2026-09-23 the loop is bounded`). It is a comment, so it
+  never changes the hash. `review-marker-reason-unreviewed` (OFF by default)
+  reports a missing, invalid, future or too-old stamp (`max_age_days`, default 180).
+* `review-marker-placeholder-hash` (ON) reports a marker whose `@hash` was never
+  computed (`@0000`, `@xxxx`), including an `@0000` one written in a block
+  comment, where no marker is read -- it suppresses nothing.
 ## Documentation
 
 DocInsight (`///` XML) comments, generated from the index rather than from

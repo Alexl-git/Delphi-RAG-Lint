@@ -196,12 +196,53 @@ begin
   end;
 end;
 
+{ D9: `ifdef_allow` is a top-level key the RAD Studio options frame now edits.
+  Part 1 VERIFIES the old claim that SaveToFile preserves it; part 2 is the
+  new behaviour -- an edited IfdefAllow must reach the file, and clearing it
+  must remove the key rather than resurrect the on-disk value. }
+procedure TestIfdefAllow;
+var
+  Cfg : TLintConfig;
+  Path: string;
+begin
+  Path:= TPath.Combine(TPath.GetTempPath, 'dl-ifdef-allow-test.json');
+  TFile.WriteAllText(Path,
+    '{ "ifdef_allow": ["TRACE_BP", "NOABLAS"], "exclude_paths": ["vendor"] }', TEncoding.ASCII);
+  try
+    // 1. preservation through an unrelated edit
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    Check('I1 ifdef_allow loaded', Length(Cfg.IfdefAllow) = 2);
+    TLintConfigWriter.SetThreshold(Cfg, 'deep-nesting', 7);
+    TLintConfigWriter.SaveToFile(Path, Cfg);
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    Check('I1 ifdef_allow survives an unrelated save', Length(Cfg.IfdefAllow) = 2);
+    Check('I1b a key the writer does not own survives too',
+      Pos('exclude_paths', TFile.ReadAllText(Path)) > 0);
+
+    // 2. an edit is written
+    Cfg.IfdefAllow:= ['TRACE_CODESITE'];
+    TLintConfigWriter.SaveToFile(Path, Cfg);
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    Check('I2 edited ifdef_allow is written',
+      (Length(Cfg.IfdefAllow) = 1) and (Cfg.IfdefAllow[0] = 'TRACE_CODESITE'));
+
+    // 3. clearing removes it
+    Cfg.IfdefAllow:= nil;
+    TLintConfigWriter.SaveToFile(Path, Cfg);
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    Check('I3 cleared ifdef_allow stays cleared', Length(Cfg.IfdefAllow) = 0);
+  finally
+    if TFile.Exists(Path) then TFile.Delete(Path);
+  end;
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
     TestConfig;
     TestNaming;
     TestAutoFix;
+    TestIfdefAllow;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

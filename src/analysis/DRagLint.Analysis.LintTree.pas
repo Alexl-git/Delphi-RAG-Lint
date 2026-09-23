@@ -1232,7 +1232,7 @@ begin
     SB.Free;
   end;
 end;
-{ REVIEWED 2026-09-11, dl:ok deep-nesting@0000 -- six levels, and they stay for
+{ REVIEWED 2026-09-11 (deep-nesting, recorded on the header below): six levels, they stay for
   now. The shape is irreducible without splitting state across routines: an outer
   resource try/finally, the re-run WHILE, the per-pass try/finally that owns the
   name list, the findings FOR, and the per-finding branch. The probe-text writer
@@ -1240,7 +1240,7 @@ end;
   Splitting further would thread ShadowDir, Ordered, Excluded and Acc through
   another signature to satisfy a counter -- more surface, not less complexity.
   Re-examine if the re-run grows a third exit condition. }
-function CompileDependents(const pOptions   : TLintTreeOptions;
+function CompileDependents(const pOptions   : TLintTreeOptions;  // dl:ok deep-nesting@fcb1 -- REVIEWED 2026-09-11 see the note above
                            const pPlatform  : string;
                            const pCompile   : TUnitCompiler;
                            const pClosure   : TArray<TDependentFile>;

@@ -35,6 +35,8 @@ unit DragLint.Plugin.LintOptionsFrame;
     naming bool param (TEdit "true"/"false"):
       short_identifier_check -> Naming.ShortIdentifierCheck
     any other int param -> thresholds block via SetThreshold (e.g. complexity rules)
+    top-level list param (TEdit, joined/split on comma):
+      ifdef_allow          -> IfdefAllow (ifdef-undefined-symbol; top-level key)
 
   Naming preset combo (Task 7): a "Naming preset" TComboBox sits at the top
   of the "naming" category group box (Embarcadero (A...) / House (p...) /
@@ -886,6 +888,8 @@ begin
     Result:= JoinStrArr(ACfg.Naming.ConstCase)
   else if SameText(AParam.Name, 'hungarian_prefixes') then
     Result:= JoinStrArr(ACfg.Naming.HungarianPrefixes)
+  else if SameText(AParam.Name, 'ifdef_allow') then
+    Result:= JoinStrArr(ACfg.IfdefAllow)   { top-level key, not a naming field }
   else if SameText(AParam.Name, 'short_identifier_check') then
   begin
     if ACfg.Naming.ShortIdentifierCheck then Result:= 'true'
@@ -1423,6 +1427,8 @@ begin
             Cfg.Naming.ConstCase:= SplitCommaTrimmed(StrEdt.Text)
           else if SameText(PE.ParamName, 'hungarian_prefixes') then
             Cfg.Naming.HungarianPrefixes:= SplitCommaTrimmed(StrEdt.Text)
+          else if SameText(PE.ParamName, 'ifdef_allow') then
+            Cfg.IfdefAllow:= SplitCommaTrimmed(StrEdt.Text)   { ConfigWriter owns this key }
           else if SameText(PE.ParamName, 'short_identifier_check') then
             Cfg.Naming.ShortIdentifierCheck:= SameText(Trim(StrEdt.Text), 'true');
           { unrecognised params are silently skipped; Task 5 human gate validates }

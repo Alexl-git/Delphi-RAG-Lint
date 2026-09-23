@@ -9288,9 +9288,16 @@ end; // function
   holds files that still PRODUCE findings, so a marker whose finding is gone --
   precisely the case the rule exists to catch -- would be invisible without it.
   Callers that cannot supply it get the degraded behaviour, documented, not a
-  silently empty result. }
+  silently empty result. The same holds for the two rules added 2026-09-23 that
+  also walk the scanned set: `review-marker-placeholder-hash` (a marker whose
+  @hash was never computed -- all-zero or malformed, or an all-zero one stranded
+  in a block comment where no marker is ever read) and
+  `review-marker-reason-unreviewed` (a reason with no current `REVIEWED
+  <yyyy-mm-dd>` stamp; OFF by default). AReviewMaxAgeDays is the latter's age
+  limit, the rule's threshold in drag-lint-lint.json. }
 function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
-  const AScannedFiles: TArray<string> = nil): TArray<TLintFinding>;
+  const AScannedFiles: TArray<string> = nil;
+  AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS): TArray<TLintFinding>;
 const
   MARK = 'drag-lint:ignore';
   { Rules that count a comment as content, so the marker itself stops them
@@ -9479,6 +9486,18 @@ begin
               end
               else if SameText(M.Hash, Want) then
                 Suppressed:= True
+              else if TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash) then
+                { A HASH THAT WAS NEVER COMPUTED. Checked only after the real hash
+                  failed to match, so a genuine @0000 (1 in 65536) still verifies.
+                  Not suppressed -- a placeholder suppresses nothing -- and NOT
+                  reported stale: the stale message names two causes, the code
+                  changing or the hashing scheme changing, and this is neither.
+                  Keyed to the MARKER'S line so the scanned-file walk below, which
+                  also sees this marker, dedups against it in EmitHint. }
+                EmitHint(F.FilePath, ML, 'review-marker-placeholder-hash',
+                  Format('dl:ok marker for "%s" carries @%s, which is a placeholder, not a computed hash -- ' +
+                         'it suppresses NOTHING. Re-review, then record it with: allow --fix-line %d --fix-rule %s',
+                         [M.RuleId, M.Hash, F.StartLine, M.RuleId]))
               else
               begin
                 { The load-bearing case. Report the finding AND say why the marker
@@ -9603,11 +9622,34 @@ begin
           lines and rejects `///`; see its remarks for why this gate is applied to
           the REPORTER only and never to suppression. }
         var CanBear: TArray<Boolean>:= TReviewMarkers.MarkerBearingLines(Lines);
+        var InBlock: TArray<Boolean>:= TReviewMarkers.BlockOpenAtLineStart(Lines);
         for var LN: Integer:= 1 to Length(Lines) do
         begin
           if Pos(REVIEW_MARK, LowerCase(Lines[LN - 1])) = 0 then Continue; { cheap reject }
-          if (LN <= Length(CanBear)) and (not CanBear[LN - 1]) then Continue;
-          for M in TReviewMarkers.Parse(Lines[LN - 1]) do
+          var Live: TArray<TReviewMarker>:= nil;
+          if (LN > Length(CanBear)) or CanBear[LN - 1] then Live:= TReviewMarkers.Parse(Lines[LN - 1]);
+          if Length(Live) = 0 then
+          begin
+            { A dl:ok THE PARSER NEVER READS. Only a `//` line comment carries a
+              marker, so one written in a brace or paren-star block, or in a
+              `///` doc comment, suppresses nothing and -- until review-marker-
+              placeholder-hash -- was reported by nothing: the LintTree.pas
+              shape, a brace comment reading `REVIEWED 2026-09-11, dl:ok
+              deep-nesting@0000 -- ...` (INBOX B1).
+              Those same comments are where PROSE about markers lives, which is
+              why the unused/malformed reporters skip them. So this reports only
+              the unambiguous case: a KNOWN rule id with an ALL-ZERO hash. Prose
+              quotes a realistic hash (`bare-except@7f3a`) or a placeholder id
+              (`<rule-id>`), and neither passes both tests. }
+            for M in TReviewMarkers.EmbeddedMarkers(Lines[LN - 1], (LN <= Length(InBlock)) and InBlock[LN - 1]) do
+              if Known.ContainsKey(LowerCase(M.RuleId)) and TReviewMarkers.IsPlaceholderHash(M.Hash) then
+                EmitHint(SF, LN, 'review-marker-placeholder-hash',
+                  Format('dl:ok for "%s" sits in a block or doc comment and carries the placeholder @%s -- only a ' +
+                         '`//` line comment is read as a marker, so this suppresses NOTHING. Re-review, then ' +
+                         'record it on the finding''s line with `drag-lint allow`.', [M.RuleId, M.Hash]));
+            Continue;
+          end;
+          for M in Live do
           begin
             { AN UNPARSEABLE MARKER USED TO `Continue` HERE, AND THAT SILENCE WAS
               THE DEFECT. Reported by DataCopy 2026-08-31 with unusually clean
@@ -9652,7 +9694,45 @@ begin
                      + 'or `dl:ok <rule-id>: <reason>`, or run `drag-lint allow` to format it.', [M.RuleId]));
               Continue;
             end;
+            { review-marker-reason-unreviewed (OFF by default; owner ruling OWN-7).
+              Every well-formed marker, used or not: the question is whether a
+              human has re-read the REASON lately, which the @hash cannot answer
+              -- it covers code only. The reason is shared by every entry on the
+              line, so EmitHint's per-line key reports it once. }
+            var StampDate: TDate;
+            var StampMsg: string:= '';
+            case TReviewMarkers.ReviewStamp(M.Reason, Date, AReviewMaxAgeDays, StampDate) of
+              rssMissing  : StampMsg:= Format('dl:ok reason for "%s" carries no REVIEWED <yyyy-mm-dd> stamp -- ' +
+                              're-read the reason against the code, then add one, e.g. `-- REVIEWED %s <reason>`.',
+                              [M.RuleId, FormatDateTime('yyyy-mm-dd', Date)]);
+              rssMalformed: StampMsg:= Format('dl:ok reason for "%s" has a REVIEWED keyword with no valid ' +
+                              'yyyy-mm-dd date after it -- write it as `REVIEWED %s`.',
+                              [M.RuleId, FormatDateTime('yyyy-mm-dd', Date)]);
+              rssFuture   : StampMsg:= Format('dl:ok reason for "%s" is stamped REVIEWED %s, a date in the future -- ' +
+                              'a stamp records a review that happened; date it the day it was done.',
+                              [M.RuleId, FormatDateTime('yyyy-mm-dd', StampDate)]);
+              rssExpired  : StampMsg:= Format('dl:ok reason for "%s" was last REVIEWED %s, %d days ago (limit %d) -- ' +
+                              're-read the reason against the code and re-stamp it.',
+                              [M.RuleId, FormatDateTime('yyyy-mm-dd', StampDate), Trunc(Date) - Trunc(StampDate),
+                               AReviewMaxAgeDays]);
+              rssCurrent  : { a current stamp is the goal -- nothing to report } ;
+            end;
+            if StampMsg <> '' then EmitHint(SF, LN, 'review-marker-reason-unreviewed', StampMsg);
             if MatchStr(LowerCase(M.RuleId), COMMENT_SENSITIVE) then Continue;
+            { A placeholder @hash that no finding claimed. With a finding on the
+              line the suppression path above has already said so (and Accounted
+              the marker); without one this would otherwise read as
+              review-marker-unused -- "remove it" -- when the real cause is that
+              the hash was never computed. }
+            if (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash))
+               and not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
+            begin
+              EmitHint(SF, LN, 'review-marker-placeholder-hash',
+                Format('dl:ok marker for "%s" carries @%s, which is a placeholder, not a computed hash, and no ' +
+                       '"%s" finding is on this line -- it suppresses NOTHING. Record it on the finding''s own line ' +
+                       'with `drag-lint allow`, or remove it.', [M.RuleId, M.Hash, M.RuleId]));
+              Continue;
+            end;
             if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
               EmitHint(SF, LN, 'review-marker-unused',
                 Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));
@@ -11011,7 +11091,11 @@ begin
       ScanClosure.Free;
     end;
   end;
-  AFindings:= ApplyLineMarkers(AFindings, ScopedScan);
+  { Config is loaded BEFORE the marker pass only for review-marker-reason-
+    unreviewed's age limit; the filter that USES the config stays at step 1. }
+  Cfg:= LoadLintConfig(AArgs);
+  AFindings:= ApplyLineMarkers(AFindings, ScopedScan,
+    Cfg.ThresholdFor('review-marker-reason-unreviewed', REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS));
 
   { 1: config -- severity remap + enable/disable filter.
 
@@ -11027,7 +11111,6 @@ begin
     names its marker's rule as `"<id>"` (ApplyLineMarkers' messages), and a
     stale dl:ok for the rule being asked about is part of that rule's answer --
     run_marker_metric_scope.ps1 check 6 prints its remedy from exactly that line. }
-  Cfg:= LoadLintConfig(AArgs);
   Survivors:= nil;
   for F in AFindings do
   begin
