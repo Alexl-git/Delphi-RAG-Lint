@@ -9,9 +9,11 @@
   SORTED (so we can grep for membership).
 
   The resolver = PlatformBuiltins(APlatform) UNION the DCC_Define values from the
-  .dproj's Base PropertyGroup AND the selected config's PropertyGroup (Cfg_2 for
-  Release, Cfg_1 for Debug), split on ';', dropping the $(DCC_Define) MSBuild
-  recursion token, all lowercased + deduped.
+  .dproj's Base PropertyGroup, the Base_<Platform> group, the selected config's
+  PropertyGroup (Cfg_2 for Release, Cfg_1 for Debug) AND that config's
+  Cfg_N_<Platform> group, split on ';', dropping the $(DCC_Define) MSBuild
+  recursion token, all lowercased + deduped. (The two platform groups were added
+  2026-09-23; fixtures/platform_groups.dproj covers them.)
 
   Fixture fixtures/sample.dproj mirrors src/cli/drag-lint.dproj's structure:
     Base  PropertyGroup DCC_Define = CUSTOM_BASE;$(DCC_Define)
@@ -73,6 +75,31 @@ try {
   Check 'Win32/Release CONTAINS cpux86 (platform builtin)'             ($rel32 -contains 'cpux86')
   Check 'Win32/Release NOT win64 (wrong-platform builtin absent)'      (-not ($rel32 -contains 'win64'))
   Check 'Win32/Release NOT cpu64bits (wrong-platform builtin absent)'  (-not ($rel32 -contains 'cpu64bits'))
+
+  # --- PLATFORM PropertyGroups (Base_<P>, Cfg_N_<P>) -- 2026-09-23 ---
+  # MSBuild applies Base, Base_<Platform>, Cfg_N, Cfg_N_<Platform> for the
+  # active platform. The resolver read only Base + Cfg_N, so a define that lives
+  # ONLY in a platform group (Micronite2027: EUREKALOG in Base_Win64/Base_Win32)
+  # was missing, its {$IFDEF} branch was blanked, and index --project evicted
+  # EExtraExceptionInfo.pas. The fixture mirrors that .dproj's layout, including
+  # the selector groups whose Condition names BOTH $(Base) and $(Base_Win64) but
+  # carry no DCC_Define. See docs\INBOX-pp-profile-ignores-platform-propertygroups.md.
+  $plat = Join-Path $fixDir 'platform_groups.dproj'
+  $p64d = Profile $plat 'Win64' 'Debug'
+  Check 'plat Win64/Debug CONTAINS all_base (Base)'                    ($p64d -contains 'all_base')
+  Check 'plat Win64/Debug CONTAINS plat64_only (Base_Win64)'           ($p64d -contains 'plat64_only')
+  Check 'plat Win64/Debug CONTAINS debug (Cfg_1)'                      ($p64d -contains 'debug')
+  Check 'plat Win64/Debug CONTAINS cfg1_w64 (Cfg_1_Win64)'             ($p64d -contains 'cfg1_w64')
+  Check 'plat Win64/Debug NOT plat32_only (Base_Win32 is other platform)' (-not ($p64d -contains 'plat32_only'))
+  Check 'plat Win64/Debug NOT cfg2_w32 (Cfg_2_Win32 not selected)'     (-not ($p64d -contains 'cfg2_w32'))
+  $p32r = Profile $plat 'Win32' 'Release'
+  Check 'plat Win32/Release CONTAINS plat32_only (Base_Win32)'         ($p32r -contains 'plat32_only')
+  Check 'plat Win32/Release CONTAINS cfg2_w32 (Cfg_2_Win32)'           ($p32r -contains 'cfg2_w32')
+  Check 'plat Win32/Release NOT plat64_only (Base_Win64 is other platform)' (-not ($p32r -contains 'plat64_only'))
+  Check 'plat Win32/Release NOT cfg1_w64 (Cfg_1_Win64 not selected)'   (-not ($p32r -contains 'cfg1_w64'))
+  $p64r = Profile $plat 'Win64' 'Release'
+  Check 'plat Win64/Release NOT cfg1_w64 (Debug platform group not selected)' (-not ($p64r -contains 'cfg1_w64'))
+  Check 'plat Win64/Release CONTAINS plat64_only (Base_Win64 is config-independent)' ($p64r -contains 'plat64_only')
 
   # --- nonexistent .dproj -> Win64 builtins only, no crash ---
   $none = Profile $missing 'Win64' 'Release'

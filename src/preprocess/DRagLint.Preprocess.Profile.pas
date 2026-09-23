@@ -10,8 +10,9 @@ unit DRagLint.Preprocess.Profile;
 // cli.js:38-43) extended per platform. All symbols are lowercased.
 //
 // ProfileFromDproj parses the .dproj MSBuild XML: it collects the DCC_Define of
-// the Base PropertyGroup plus the selected config's PropertyGroup (Release ->
-// Cfg_2, Debug -> Cfg_1 -- the RAD Studio indirection), splits each on ';',
+// the Base PropertyGroup, the Base_<Platform> group, the selected config's
+// PropertyGroup (Release -> Cfg_2, Debug -> Cfg_1 -- the RAD Studio
+// indirection) and its Cfg_N_<Platform> group, splits each on ';',
 // drops the $(DCC_Define) MSBuild recursion token, lowercases, and unions with
 // the platform built-ins (deduped). A missing / unparseable .dproj yields just
 // the platform built-ins for APlatform (never raises).
@@ -48,8 +49,10 @@ function PlatformBuiltins(const APlatform: string): TArray<string>;
 
 /// <summary>Resolves the active TDefineProfile for a specific project + config:
 /// PlatformBuiltins(APlatform) UNION the DCC_Define values from the .dproj's
-/// Base PropertyGroup AND the selected AConfig PropertyGroup (Release -> Cfg_2,
-/// Debug -> Cfg_1). Each DCC_Define is split on ';', the $(DCC_Define) recursion
+/// Base PropertyGroup, its Base_&lt;Platform&gt; group, the selected AConfig
+/// PropertyGroup (Release -> Cfg_2, Debug -> Cfg_1) AND that config's
+/// Cfg_N_&lt;Platform&gt; group -- the four groups MSBuild applies for one
+/// platform + config. Each DCC_Define is split on ';', the $(DCC_Define) recursion
 /// token dropped, the rest lowercased; the union is deduped. A missing or
 /// unparseable .dproj returns just PlatformBuiltins(APlatform) -- it never
 /// raises. NumericDefines is left empty (Task 7 scope is Defines only).</summary>
@@ -112,6 +115,17 @@ begin
     Result := 'Cfg_1'
   else
     Result := 'Cfg_2';
+end;
+
+// The platform suffix RAD Studio uses in its per-platform group aliases
+// (Base_Win32, Cfg_1_Win64). Mirrors PlatformBuiltins: Win32 is Win32, and
+// anything else -- including empty/unknown -- is the Win64 default.
+function PlatformGroupSuffix(const APlatform: string): string;
+begin
+  if SameText(APlatform, 'Win32') then
+    Result := 'Win32'
+  else
+    Result := 'Win64';
 end;
 
 // Extract the DCC_Define value from the PropertyGroup whose Condition matches
@@ -207,12 +221,21 @@ begin
       end;
       if Content <> '' then
       begin
-        // Base PropertyGroup: Condition mentions '$(Base)'.
+        // MSBuild applies four groups for one platform + config, in this
+        // order: Base, Base_<Platform>, Cfg_N, Cfg_N_<Platform>. The two
+        // platform groups were missed until 2026-09-23, which dropped
+        // Micronite2027's EUREKALOG (defined only in Base_Win64/Base_Win32)
+        // and blanked its {$IFDEF EurekaLog} uses. A needle never matches
+        // the wrong group: '$(Base_Win64)' does not contain '$(Base)'.
         BaseDef := DccDefineInGroup(Content, '$(Base)');
         AddDccDefines(BaseDef, Seen, Order);
-        // Selected config PropertyGroup: Condition mentions '$(Cfg_N)'.
+        AddDccDefines(DccDefineInGroup(Content,
+          '$(Base_' + PlatformGroupSuffix(APlatform) + ')'), Seen, Order);
         CfgDef := DccDefineInGroup(Content, '$(' + CfgAliasFor(AConfig) + ')');
         AddDccDefines(CfgDef, Seen, Order);
+        AddDccDefines(DccDefineInGroup(Content,
+          '$(' + CfgAliasFor(AConfig) + '_' + PlatformGroupSuffix(APlatform) + ')'),
+          Seen, Order);
       end;
     end;
 
