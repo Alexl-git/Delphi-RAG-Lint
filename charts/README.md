@@ -205,7 +205,7 @@ and returns a confident, nearly-empty answer.
 `FindResolvedCallers` + `FindUnresolvedNameCallers` AT EVERY HOP** -- the same
 two-bucket union `Called from:` uses. Copy that shape.
 
-**This applies beyond `tested-by`.** Before shipping `who-calls`, VERIFY whether
+**UPDATE 2026-09-23: the verification was run and `reverse-calltree` PASSED -- see the WITHDRAWN section at the end of this file. The original text is kept below for the record.** Before shipping `who-calls`, VERIFY whether
 `reverse-calltree` does the two-bucket union or resolved-only. If resolved-only,
 `who-calls` has the same silent-undercount defect and must union too. Do not
 assume; measure it against a known test caller.
@@ -215,3 +215,41 @@ project-only index, covered-by finds only callers INSIDE that index. A productio
 project DB cannot hold a test caller, because its closure is the compile closure.
 Cross-project coverage needs the test project's own index and the same
 absence-tolerant join GAP 1 needs.
+## WITHDRAWN: `reverse-calltree` does NOT silently drop callers
+
+Earlier on 2026-09-23 this README carried a "trap" saying a resolved-only
+reverse walk returns an empty caller wing for unit-level routines. **That was
+wrong and is withdrawn.** It is recorded rather than deleted because the way it
+happened is the lesson.
+
+What went wrong, in order:
+
+1. `--format json` splices a human staleness note INTO the JSON document, so
+   `ConvertFrom-Json` failed and my helper returned `-1`.
+2. I reported those `-1`s as `0`.
+3. I inspected the RAW output for ONE of three symbols, saw a genuinely empty
+   `callers: []`, and generalised to all three without checking the other two.
+4. For that one genuine zero I counted name matches instead of READING them.
+
+Re-measured with the note stripped: `Pipes.Protocol.WriteString` = **13**,
+`MStreams.ReverseBytes` = **9**. Both correct. And `BASICSF.ProcessMessages` =
+**0, which is also correct** -- its 63 "callers" are every
+`Application.ProcessMessages;` in the codebase, i.e.
+`Vcl.Forms.TApplication.ProcessMessages`, a different symbol sharing a name.
+Nobody calls `BASICSF.ProcessMessages`.
+
+**COUNT, THEN READ.** A name-bucket count is a hypothesis, not evidence. My own
+filing contained the caveat "some of those could be same-named symbols
+elsewhere" and I did not act on it. Reading three source lines would have caught
+it in under a minute.
+
+**`refs.symbol_id IS NULL` mostly means OUT OF CLOSURE, not "missed".** A call
+to `Application.ProcessMessages`, `Ini.WriteString`, `Sleep` or `Format` cannot
+bind: the closure is the project's own units and there is no cross-store
+binding. Do not read an unbound-ref ratio as a defect rate.
+
+The bare-call concern itself is real and documented -- `TypeReceiver` types a
+bare call to the calling routine's own enclosing class, which is why
+`ComputeCoveredBy` unions both buckets. It is simply NOT demonstrated by any
+measurement here. The fixture that would demonstrate it: a routine in unit A
+called BARE from a method of a class in unit B, with a name UNIQUE in the index.

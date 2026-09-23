@@ -86,25 +86,18 @@ Flatten $bf.callees.root 'callers' $callees 1
 
 Write-Host ("  callers={0}  callees={1}" -f $callers.Count, $callees.Count)
 
-# DISCLOSE the known undercount rather than drawing a confident, empty wing.
-# Measured 2026-09-23: `reverse-calltree` is RESOLVED-ONLY
-# (DRagLint.Report.RCallTree.pas:149 uses FindResolvedCallers and nothing else),
-# and TCallResolver.TypeReceiver types a BARE call to the CALLING routine's own
-# enclosing class. A routine with NO enclosing class therefore never earns a
-# call_edges row, so its caller wing comes back EMPTY, not merely short:
-# BASICSF.ProcessMessages 0 vs 63 name-matched sites; Pipes.Protocol.WriteString
-# 0 vs 88. A METHOD target is unaffected. Filed as
-# docs\INBOX-reverse-calltree-resolved-only-and-json-note.md.
-$leaf = ($Qname -split '\.')[-1]
-$isUnitLevelRoutine = ($Qname -split '\.').Count -le 2 -or
-                      (($Qname -split '\.') | Where-Object { $_ -cmatch '^T[A-Z]' }).Count -eq 0
-if ($isUnitLevelRoutine -and $callers.Count -eq 0) {
-  Write-Warning ("caller wing is EMPTY for '$leaf', which looks like a unit-level routine. " +
-    "reverse-calltree is resolved-only and cannot see bare calls to a routine with no " +
-    "enclosing class -- this is an engine defect, not an absence of callers. Cross-check " +
-    "with: drag-lint query find-callers --name $leaf --db <db>")
-}
-
+# NO DISCLOSURE HERE, and that absence is deliberate.
+# On 2026-09-23 I added a warning claiming reverse-calltree silently drops
+# callers of unit-level routines. It was WRONG and is removed. What actually
+# happened: `--format json` splices a human staleness note INTO the JSON, my
+# parser returned -1, and I reported those -1s as zeros. Re-measured with the
+# note stripped: Pipes.Protocol.WriteString = 13 callers, MStreams.ReverseBytes
+# = 9. Both resolve correctly. The one real zero, BASICSF.ProcessMessages, is
+# also CORRECT -- its 63 "name-matched callers" are every `Application.ProcessMessages;`
+# in the codebase, i.e. Vcl.Forms.TApplication.ProcessMessages, a different
+# symbol that shares a name. Nobody calls BASICSF.ProcessMessages.
+# A caveat printed on every unit-level target for a defect that is not there
+# would be its own kind of wrong answer.
 $focusFile = [string]$bf.callers.root.file
 if ([string]::IsNullOrWhiteSpace($focusFile)) { $focusFile = [string]$bf.callees.root.file }
 $focusUnit = Get-UnitName $focusFile
