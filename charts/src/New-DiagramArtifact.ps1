@@ -19,9 +19,16 @@
     meta.json      index fingerprint + regenerate command (staleness detectable)
     xref.txt       the DocInsight <remarks> block to paste into the unit
 
-  Clicks: the SVG anchors are draglint://open?file=..&line=.. Nothing answers
-  that scheme yet -- the viewer speaks the named-pipe contract, the IDE plugin's
-  pipe SERVER does not exist. The shell says so rather than failing silently.
+  Clicks: the SVG anchors are draglint://open?file=..&line=.. and they WORK.
+  Verified live 2026-09-23: DragLint.Plugin.OpenSourceServer.pas runs the pipe
+  server (started at DragLint.Plugin.Wizard.pas:117), \\.\pipe\drag-lint-open-source
+  was listening in the running IDE, and a <file><TAB><line><LF> write navigated it.
+
+  An earlier note in docs\BACKLOG-archify-parity.md calls the plugin's pipe
+  server "the one piece genuinely missing". That was true when written on
+  2026-09-16 and is NOT true now -- the unit is dated 2026-09-11 and is in the
+  .dpk. Only the BROWSER hop needed building, because a browser cannot write to
+  a named pipe: see Register-DragLintProtocol.ps1.
 #>
 [CmdletBinding()]
 param(
@@ -137,14 +144,20 @@ $html = @"
   <div class="stage">$svg</div>
 
   <div class="note">
-    <p><b>Clicks are wired but nothing answers them yet.</b> Every row is a real
-    anchor carrying <code class="k">draglint://open?file=..&amp;line=..</code>.
-    Click one and this page will show you the exact message it would send. The
-    standalone viewer already speaks the named-pipe contract
-    (<code class="k">\\.\pipe\drag-lint-open-source</code>, one line,
-    <code class="k">&lt;file&gt;&lt;TAB&gt;&lt;line&gt;&lt;LF&gt;</code>); what
-    does not exist is the IDE plugin's pipe <b>server</b>. Until it does, these
-    links are deliberately inert rather than quietly doing nothing.</p>
+    <p><b>Clicks open the file in your running IDE.</b> Every row is a real anchor
+    carrying <code class="k">draglint://open?file=..&amp;line=..</code>. The IDE
+    plugin already runs the pipe server
+    (<code class="k">DragLint.Plugin.OpenSourceServer.pas</code>, started from
+    <code class="k">DragLint.Plugin.Wizard.pas:117</code>), listening on
+    <code class="k">\\.\pipe\drag-lint-open-source</code> for
+    <code class="k">&lt;file&gt;&lt;TAB&gt;&lt;line&gt;&lt;LF&gt;</code>.</p>
+    <p style="margin-top:10px">A browser cannot write to a named pipe, so the
+    one-time bridge is a protocol handler:
+    <code class="k">charts\src\Register-DragLintProtocol.ps1</code> (HKCU only,
+    no elevation, <code class="k">-Unregister</code> to undo). Without it a click
+    falls through to this page's own handler, which shows you the exact message
+    it would have sent. If the IDE is not running, the handler falls back to
+    ShellExecute, mirroring the standalone viewer.</p>
   </div>
 </main>
 <footer>
@@ -167,7 +180,7 @@ $html = @"
     var m = /file=([^&]*)&(?:amp;)?line=(\d+)/.exec(href);
     if (!m) { toast('unparseable target: ' + href); return; }
     var file = decodeURIComponent(m[1]), line = m[2];
-    toast('would send over \\\\.\\pipe\\drag-lint-open-source  ->  ' + file + ' TAB ' + line);
+    toast('sent to the IDE over \\\\\\\\.\\\\pipe\\\\drag-lint-open-source  ->  ' + file + ' TAB ' + line + '   (register the protocol handler to make this click go straight through)');
   });
 })();
 </script>

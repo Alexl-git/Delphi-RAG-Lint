@@ -106,3 +106,28 @@ FAIL on five mutations of the golden.
 
 `scratch\` and `artifacts\` are gitignored -- both are regenerable, and each
 bundle's `meta.json` carries the command that regenerates it.
+## Click-to-source WORKS (verified live 2026-09-23)
+
+`docs\BACKLOG-archify-parity.md` calls the IDE plugin's pipe server "the one
+piece genuinely missing". **That was true when written on 2026-09-16 and is not
+true now.** Measured:
+
+* `src\delphi-plugin\DragLint.Plugin.OpenSourceServer.pas` (dated 2026-09-11) is
+  in the `.dpk`, started at `DragLint.Plugin.Wizard.pas:117`, torn down at `:75`.
+* `\\.\pipe\drag-lint-open-source` was LISTENING in the running IDE:
+  `PIPE_ACCESS_INBOUND`, byte mode, `PIPE_UNLIMITED_INSTANCES`, `SEP=#9`,
+  `TERM=#10` -- exactly the contract in
+  `docs\INBOX-graph-viewer-open-source-pipe-contract.md`.
+* It implements `DoOpenInIDE(AFile, ALine, ACol)`, i.e. the v2 three-field form,
+  which answers open question Q3 of that contract.
+* A live write of `<file><TAB><line><LF>` navigated the IDE.
+
+So the viewer -> IDE path has been ready since 2026-09-11. What was missing is
+only the BROWSER hop, because a browser cannot write to a named pipe:
+
+* `src\Open-DragLintUri.ps1` -- parses `draglint://open?file=..&line=..[&col=..]`
+  and writes the contract payload. Degrades a garbled line number to 1 rather
+  than rejecting (as the contract asks), and falls back to ShellExecute when no
+  server answers, mirroring the standalone viewer.
+* `src\Register-DragLintProtocol.ps1` -- one HKCU key, no elevation,
+  `-Unregister` to undo. Nothing else on the machine is touched.
