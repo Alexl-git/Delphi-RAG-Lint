@@ -167,3 +167,51 @@ Documented on the declaration in `src\analysis\DRagLint.Analysis.Purity.pas`
 
 Stored values are comma-joined in that order, e.g. `g,p0,p3,?`. Most common on
 ORM3 CLIENT: `?` (3,128), `s` (2,500), `s,?` (871), `g,?` (238).
+## `covered_by` is deliberately unwritten -- and `tested-by` is still SHIPPABLE
+
+Engine session, 2026-09-23. I filed `symbol_facts.covered_by` being empty as a
+gap in the same bucket as `orm_links`. **It is not, and the answer is better.**
+
+`covered_by` is **RESERVED and never written, permanently, by design**
+(`src\doc\DRagLint.Doc.SymbolFacts.pas`, the "TASK 5 OVERRIDE (CoveredBy)" block
+at :57-71). Covered-by is a REVERSE edge -- a TEST calls the target -- so
+index-time population would be ORDER-DEPENDENT: index `Foo.pas` before
+`FooTests.pas` (the usual alphabetical order) and the test->code edge is not yet
+in `call_edges` when Foo's row is written, so the fact comes out empty; index the
+other order and it is populated. That breaks the "same DB -> same facts" mandate,
+so the column is left unwritten ON PURPOSE.
+
+Instead `ComputeCoveredBy` computes it **LAZILY AT RENDER TIME**, exactly as
+`Called from:` already does. **No live test run is needed** -- it is a static
+scan. So `tested-by` is answerable from the index alone, just not from that
+column, and it is back on the SHIP list.
+
+### THE TRAP: a resolved-only reverse walk is confidently almost-empty
+
+This is the part that will silently ruin a naive implementation, and the engine
+team proved it with a live RED/GREEN cycle:
+
+> `TCallResolver.TypeReceiver` types every BARE (non-dotted) call site to the
+> CALLING routine's own enclosing class/unit and never considers a target in a
+> different unit.
+
+A DUnitX `[Test]` method calling a free function, or another class's method under
+test, is **exactly that shape** -- so it never earns a `call_edges` row and
+surfaces only through the NAME-based bucket. A reverse walk built on
+`FindResolvedCallers` alone therefore misses essentially every real test caller
+and returns a confident, nearly-empty answer.
+
+**`ComputeCoveredBy` hand-rolls a bounded BFS that UNIONS
+`FindResolvedCallers` + `FindUnresolvedNameCallers` AT EVERY HOP** -- the same
+two-bucket union `Called from:` uses. Copy that shape.
+
+**This applies beyond `tested-by`.** Before shipping `who-calls`, VERIFY whether
+`reverse-calltree` does the two-bucket union or resolved-only. If resolved-only,
+`who-calls` has the same silent-undercount defect and must union too. Do not
+assume; measure it against a known test caller.
+
+**Cross-project caveat**, which bites in exactly the ORM3 shape: computed from a
+project-only index, covered-by finds only callers INSIDE that index. A production
+project DB cannot hold a test caller, because its closure is the compile closure.
+Cross-project coverage needs the test project's own index and the same
+absence-tolerant join GAP 1 needs.

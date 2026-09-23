@@ -43,7 +43,7 @@ dispatches on the resolved kind.
 | `butterfly` | method | callers above + callees below in one chart | `butterfly` verb (dot+mermaid) | SHIP |
 | `change-impact` | method / type | everything a change here could break | `impact` verb | SHIP |
 | `touches-tables` | method | which DB tables it reads and writes | `symbol_facts.sql_reads` / `sql_writes` -- **SERVER ONLY** (client has no FireDAC connection; 0/0 is correct) | SHIP* |
-| `tested-by` | any symbol | which tests cover this | `symbol_facts.covered_by` -- **0 rows in every index** | NO DATA |
+| `tested-by` | any symbol | which tests cover this | COMPUTED, not stored -- see the covered_by note below | SHIP |
 | `effects` | method | what it mutates, owns, and whether it is pure | `effect_summary`, `effect_free`, `mutates_params`, `returns_owner` | SHIP |
 | `class-surface` | type | members, visibility, inheritance | `surface` verb | SHIP |
 | `hierarchy` | type | ancestors and descendants | `query descendants` / ancestors | SHIP |
