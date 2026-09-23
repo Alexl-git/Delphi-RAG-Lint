@@ -345,4 +345,71 @@
 #
 #   Superseded: 1.5.0-alpha|5ec79c8c501a536a2f202355a5148f3dd87cae9d8c524f5d0fe609f50edb9509
 
-1.5.1-alpha|92cfb2a2e060dcf3261caaa542c8b1d74ff2919a952b76c6383f97f547551bef
+# 2026-09-22 (whole-branch fix wave, review IMPORTANT 1; controller ruling T-FW1):
+#   hash re-pinned WITHIN 1.5.1-alpha -- the "genuinely cannot affect what is
+#   derived" case, same discipline as the 2026-09-06 (C1b), 2026-09-07,
+#   2026-09-19 and T6-R2 comment-only entries above.
+#
+#   WHAT MOVED THE HASH: a `dl:ok` review marker was RELOCATED onto the class
+#   declaration line inside src\analysis\DRagLint.Analysis.PurityStage.pas,
+#   which is on the resolve surface as
+#   `src/analysis/DRagLint.Analysis.PurityStage.pas::*` and is therefore hashed
+#   WHOLE -- comment text included, so a marker living in a comment is inside
+#   the hashed span. The branch's marker had been placed ABOVE the declaration
+#   and carried @e3b0, the SHA-256 prefix of the EMPTY STRING, i.e. a hash never
+#   computed from the annotated text; the engine matches a marker only within
+#   the finding's own StartLine..EndLine, so god-class and high-response both
+#   REPORTED and review-marker-unused reported on the marker line. `drag-lint
+#   allow ... --fix-rule god-class/high-response --apply` rewrote it on the
+#   finding's own line with real hashes (@13c7) and the dead line above was
+#   deleted; the human reason text moved into the marker's own Reason field.
+#
+#   PROVEN comment-only, not asserted. `git diff -U0 4a23e034 e19f7e14 --
+#   src\analysis\DRagLint.Analysis.PurityStage.pas`, classifying every changed
+#   line by the code text to the LEFT of its `//`:
+#
+#       raw diff lines                        : -2 / +1
+#       pure-comment lines removed            :  1  (the dead marker line)
+#       lines whose CODE TEXT is unchanged    :  1 removed / 1 added, identical
+#                                                (`  TPurityRun = class`, with a
+#                                                 trailing `//` comment appended)
+#       NON-comment (code-text) lines changed :  0
+#
+#   Zero. That zero is the load-bearing number: a `dl:ok` marker is a LINT
+#   annotation that lives in a comment. It cannot change which call_edges,
+#   type_ancestors, type_helpers or unit_uses rows the resolve pass derives, and
+#   it cannot change a single symbol_facts.effect_free, effect_summary or
+#   effect_witness value. No routine body, signature or literal moved, so NO
+#   INDEX OWES A RE-RESOLVE.
+#
+#   ATTRIBUTION MEASURED, NOT INFERRED. The same fix wave also normalised a
+#   stray double space inside SYMBOL_FACTS_BASE_COLS in
+#   src\storage\DRagLint.Storage.SQLite.pas. That file is on the surface per
+#   named ROUTINE, and the const is inside none of them -- checked by running
+#   this guard twice with one edit reverted at a time:
+#
+#       SQLite edit reverted, PurityStage fixed -> guard exit 1 (FAIL)
+#       PurityStage reverted, SQLite fixed      -> guard exit 0 (PASS)
+#
+#   So the whole-file `::*` entry is the SOLE cause of the move; the store edit
+#   does not touch the hashed surface at all.
+#
+#   CONTRAST WITH TODAY'S OTHER CALL, recorded so a future reader sees both side
+#   by side. The entry immediately above (Task 7 fix round 1) BUMPED 1.5.0 ->
+#   1.5.1 for a change inside this same file, and that was right: it altered the
+#   WITNESS TEXT written into symbol_facts.effect_witness, which is a DERIVED
+#   row, and a database already filled under 1.5.0 would have kept the old text
+#   forever because TPurityStage recomputes only while PurityNeedsRun is True.
+#   A re-pin there would have carried a false justification. Here nothing
+#   derived changes, so a bump would bill every database a re-resolve for a
+#   comment -- and, worse, would consume a version number for a lint annotation.
+#   The distinction is DERIVED-ROW CHANGE vs COMMENT TEXT, not which file moved.
+#
+#   1.6.0 remains reserved by the engine backlog for C2.3 + the IsStub
+#   unification (see the T6-R2 entry above); nothing here touches that.
+#
+#   Same warning as every entry above: the failure mode of getting this wrong is
+#   SILENT.
+#
+#   Superseded: 1.5.1-alpha|92cfb2a2e060dcf3261caaa542c8b1d74ff2919a952b76c6383f97f547551bef
+1.5.1-alpha|8d1034e88ce8debb8a6e1d8e11c67c6905ff8c0fa65d50f11893eb4c6ffb4c16
