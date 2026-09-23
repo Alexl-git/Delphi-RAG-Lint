@@ -59,14 +59,14 @@ New-DiagramArtifact.ps1 -Question <id> -Target <Unit.TType.Member | Unit | proje
 | [`crosses-boundary`](ask-crosses-boundary) | method | whether and where the work leaves the process |
 | [`shown-where`](ask-shown-where) | database column | which forms and controls display it |
 | [`exception-paths`](ask-exception-paths) | method | what it raises, what it handles, and where each exception is caught up the caller chain |
+| [`consumers`](ask-consumers) | table / column | the routines that read and write it, plus its triggers, procedures and indexes |
 
-Three more questions are **shipping with the charts release**. What each one
+Two more questions are **shipping with the charts release**. What each one
 answers is fixed; their parameters are still settling, so they are described
 here without syntax:
 
 | Question | Answers |
 |---|---|
-| [`consumers`](ask-consumers) | every unit that reads or writes a database table or column |
 | [`feeds-from`](ask-feeds-from) | the chain behind a data-aware control: control -> datasource -> dataset -> table |
 | [`lands-where`](ask-lands-where) | where a field's value ends up: field -> dataset -> table.column |
 

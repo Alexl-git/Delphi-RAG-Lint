@@ -357,7 +357,7 @@ declaration.</p>
 </ul>
 
 <h2>12. Diagrams and charts <span class="st st-ship">READY</span></h2>
-<p>Twenty-one questions about a codebase can now be answered with a <b class="f">picture</b>
+<p>Twenty-two questions about a codebase can now be answered with a <b class="f">picture</b>
 rather than a list: who calls this, who writes this field, what does this form wire,
 where does this protocol command go. Every box and every arrow in a chart is a fact
 from the index with a file and a line behind it -- nothing is drawn from prose or
@@ -428,6 +428,7 @@ index, quoted from the charts status board of 23 September 2026.</p>
 <tr><td><code>touches-tables</code></td><td>method</td><td>which database tables it reads and writes (server-side code; a client with no connection says so)</td><td>SQL read/write facts</td><td>5 read / 5 written / 2 both</td></tr>
 <tr><td><code>shown-where</code></td><td>database column</td><td>which forms and controls display this column</td><td>DFM data bindings</td><td>4 bindings on 2 forms, of 903 over 459 columns</td></tr>
 <tr><td><code>exception-paths</code></td><td>method</td><td>which exception types it raises (anchored raise sites), which it handles in its own body, and where each raised type is caught up the caller chain -- solid only when the call site is verified inside the handler's <code>try</code>, otherwise dashed <code>[inferred]</code>; it never says "unhandled", it says where the walk ended</td><td>raise / handler sites, resolved <code>call_edges</code>, type ancestry</td><td>shipped 23 September (charts commits f77a58ba..ae645b2a)</td></tr>
+<tr><td><code>consumers</code></td><td>table / column</td><td>the routines that read and write it, plus the triggers FOR the table (bodies scanned, <code>NEW.</code>/<code>OLD.</code> column use), procedures naming it and indexes ON it; the column form adds the form bindings whose data-source chain reaches it. Schema is SCRIPT-derived (the <code>MS*.SQL</code> migrations, newest wins), not the live database; writers <code>[certain]</code> from <code>sql_writes</code>, readers mostly <code>[inferred]</code> because <code>sql_reads</code> misses multi-line <code>SQL.Add</code></td><td>SQL-script index, <code>sql_reads</code>/<code>sql_writes</code>, SQL literals, DFM bindings</td><td>shipped 23 September (charts commit 410e9247)</td></tr>
 <tr><td colspan="5"><b class="f">Across the process boundary</b></td></tr>
 <tr><td><code>protocol-trace</code></td><td>command constant / wire field</td><td>the round trip of a value: UI, memtable, boundary, server, database and back</td><td>enum-value binding (resolver 1.6.0)</td><td><code>cmdDelta</code> 38 references in 2 zones</td></tr>
 <tr><td><code>protocol-trace</code></td><td>method</td><td>the call tree pruned to branches that still carry the payload, ranked, capped, and never silently dropped</td><td>enum-value binding + call graph</td><td>a dispatcher speaking all 42 command members</td></tr>
@@ -449,8 +450,8 @@ index, quoted from the charts status board of 23 September 2026.</p>
 legacy code that uses <code>with</code> heavily, because <code>with</code> scope is not modelled
 (the same caveat as enum values, chapter "What is new"). <code>wiring</code> on a client
 project sees few registrations (4 on ORM3 CLIENT against 535 on SERVER) and is being
-checked. Three more questions ship with the charts release -- <code>lands-where</code>,
-<code>feeds-from</code> and <code>consumers</code>. Their parameters are being
+checked. Two more questions ship with the charts release -- <code>lands-where</code> and
+<code>feeds-from</code>. Their parameters are being
 finalised, so this edition says what each answers and leaves the syntax to the charts
 release notes (Appendix A.6).</p>
 </div>
@@ -618,7 +619,6 @@ today's <code>--help</code>.</p>
 <tr><th>Question</th><th>What it would show</th><th>Status</th></tr>
 <tr><td><code>lands-where</code></td><td>Field to dataset to table column.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised; richer with a live-Firebird <code>fb-snapshot</code></td></tr>
 <tr><td><code>feeds-from</code></td><td>Control to data source to memtable to table.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised</td></tr>
-<tr><td><code>consumers</code></td><td>Every unit that reads or writes a table or column.</td><td><span class="st st-prog">SHIPPING WITH THE CHARTS RELEASE</span> -- parameters being finalised</td></tr>
 <tr><td>Charts into the main tree</td><td>The chart tool-set lives on its own branch; it moves into the engine as the <code>ask</code> verb (A.3) once proven.</td><td><span class="st st-prog">IN PROGRESS</span></td></tr>
 <tr><td>Visual code map (standalone viewer)</td><td>Professional layout and export for the existing standalone viewer; the chart pipeline now supplies Graphviz layout and click-to-source.</td><td><span class="st st-prog">IN PROGRESS</span></td></tr>
 </table>

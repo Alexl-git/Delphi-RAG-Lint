@@ -104,12 +104,12 @@ findings (here: clean).
 ## Diagrams and charts
 
 **Ask the index a question about one symbol, get a clickable chart back.** The
-`drag-lint ask` family (shipping in the charts release) answers twenty-one formal
+`drag-lint ask` family (shipping in the charts release) answers twenty-two formal
 diagram questions -- `butterfly`, `who-calls`, `what-it-calls`, `who-writes`,
 `who-reads`, `change-impact`, `tested-by`, `effects`, `touches-tables`,
 `class-surface`, `hierarchy`, `deps`, `cycles`, `wiring`, `lifecycle`,
 `event-wiring`, `architecture`, `protocol-trace`, `crosses-boundary` and
-`shown-where` and `exception-paths` -- with `consumers`, `feeds-from` and
+`shown-where`, `exception-paths` and `consumers` -- with `feeds-from` and
 `lands-where` shipping in the same release. You name the question and put the
 caret on the selection (a method, unit, type, field, form class or the project);
 `ask` can also list which questions are valid for what is under the caret.
