@@ -89,12 +89,19 @@ function Invoke-EngineJson([string[]] $ArgList) {
 # schema sql/1 returns `columns` (name/type) and `rows` as POSITIONAL ARRAYS --
 # zip them so callers can use property names. Hard row cap 200; the caller is
 # expected to assert .Truncated where the plan says to.
-function Invoke-IndexQuery([string] $sql) {
+function Invoke-IndexQuery([string] $sql, [string] $FailOnTruncate) {
   $txt = Get-EngineText @('sql', '--db', $DbPath, '--query', $sql, '--format', 'json')
   if ([string]::IsNullOrWhiteSpace($txt)) { return , @() }
   try { $o = $txt | ConvertFrom-Json } catch { throw "index query returned non-JSON: $txt" }
-  $script:LastQueryTruncated = [bool]$o.truncated
-  if ($o.truncated) { Write-Host "  NOTE: result truncated at row_cap $($o.row_cap)" }
+  if ($o.truncated) {
+    # The 200-row cap is SILENT in the row list -- a truncated answer looks like
+    # a small one. Callers that would render a short chart as if it were whole
+    # pass -FailOnTruncate and get a hard stop instead.
+    if ($FailOnTruncate) {
+      throw "$FailOnTruncate hit the sql row cap ($($o.row_cap)); the answer would be silently short -- narrow the query"
+    }
+    Write-Host "  NOTE: result truncated at row_cap $($o.row_cap)"
+  }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = New-Object System.Collections.ArrayList
   foreach ($row in @($o.rows)) {
@@ -105,21 +112,35 @@ function Invoke-IndexQuery([string] $sql) {
     }
     [void]$out.Add([pscustomobject]$h)
   }
+  # CONTRACT: the unary comma keeps a 0- or 1-row result an ARRAY through the
+  # pipeline. It also means callers must assign the result DIRECTLY --
+  #     $rows = Invoke-IndexQuery $sql          correct
+  #     $rows = @(Invoke-IndexQuery $sql)       WRONG: nests it one level deep
+  # The wrong form is quiet rather than fatal: Count reads 1, and member access
+  # on the single wrapper element enumerates to the right value whenever there
+  # is exactly one row, so it only misbehaves once a query returns two.
   , $out.ToArray()
 }
 
 function ConvertTo-SqlText([string] $s) { $s.Replace("'", "''") }
 
+# "'a','b','c'" for an IN-list. Callers use this to BOUND a query that would
+# otherwise run past the 200-row cap -- Blueprint4.dfm alone has 516 dfm-type
+# rows, so an unbounded component query there returns a silently short answer.
+function ConvertTo-SqlInList([string[]] $Values) {
+  ($Values | ForEach-Object { "'" + (ConvertTo-SqlText $_) + "'" }) -join ','
+}
+
 # Callers want the BODY, so prefer impl_start_line over the interface decl line.
 function Get-SymbolLocation([string] $Qname) {
   $q = ConvertTo-SqlText $Qname
-  $rows = @(Invoke-IndexQuery @"
+  $rows = Invoke-IndexQuery @"
 SELECT s.id AS id, s.kind AS kind, s.start_line AS start_line,
        s.impl_start_line AS impl_start_line, s.impl_end_line AS impl_end_line,
        f.path AS path
   FROM symbols s JOIN files f ON f.id = s.file_id
  WHERE s.qualified_name = '$q'
-"@)
+"@
   if ($rows.Count -eq 0) { throw "$Qname is not in this index" }
   if ($rows.Count -gt 1) {
     Write-Host "  NOTE: $Qname resolves to $($rows.Count) symbols; using the first (id $($rows[0].id))"
