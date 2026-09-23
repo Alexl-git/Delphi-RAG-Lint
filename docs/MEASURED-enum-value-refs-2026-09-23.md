@@ -751,14 +751,19 @@ re-resolved at resolver 1.6.0-alpha). Same DB, same product version
 
 | Property | BEFORE | AFTER | Verdict |
 |---|---|---|---|
-| ` ?` suffixes on the `Used by:` line | 0 | 0 | **unchanged** |
+| ` ?` suffixes on the `Used by:` line | 0 | 0 | unchanged **for these four** -- see the CORRECTION below: a PARTIALLY bound value gains them |
 | `CalledFromTotal` (the `(+N more)` count) | e.g. 13 / 9 / 62 | 13 / 9 / 62 | **unchanged** |
 | the DISTINCT caller SET | -- | -- | **unchanged** (proved below) |
 | WHICH 5 entries are rendered | first-5 by name-bucket insertion | first-5 by resolved-bucket insertion | **CHANGES** |
 
-So the answer is none of the four offered outcomes. Entries do not lose ` ?`,
-none appear, none are removed, and it is not "no change at all". **The churn is a
-re-WINDOWING: the same N callers, the same total, a different 5 of them shown.**
+So for these four, the answer is none of the four offered outcomes: entries do not
+lose ` ?`, none are removed, and it is not "no change at all". **The churn on a
+FULLY BOUND value is a re-WINDOWING: the same N callers, the same total, a
+different 5 of them shown.**
+
+**This does not generalise to a partially bound value, and the CORRECTION section
+below is the qualification** -- there, ` ?` markers APPEAR (0 -> N). These four
+sampled values happen to have no unfoldable unverified reader.
 
 ### Why -- the mechanism, read out of the code rather than guessed
 
@@ -819,16 +824,66 @@ ORM3 CLIENT/SERVER could NOT be measured: those indexes are read-only to this
 task and are still resolved at 1.5.1-alpha, so they have no enum bindings to
 render until `index --all --resolve-only` runs.
 
+### CORRECTION (fix round 1): there is a SECOND channel, and 44 does not bound it
+
+The paragraph that stood here said the churn "cannot change a ` ?` marker". **That
+was wrong, and it was wrong by over-generalising the four sampled values into a
+modal claim.** The sample stands (4 values, 0 -> 0 observed); the generalisation
+does not.
+
+`FindUnresolvedNameCallers` (`SQLite.pas:5956-5968`) matches on bare
+`r.name_text = :n COLLATE NOCASE` and excludes only refs that own a `call_edges`
+row -- **it does not exclude refs this binder just bound** -- then hard-codes
+`R.Confidence := 'unverified'` (`:5995`). `AddDistinct` folds only on
+`(Display, Location)`. So any name-bucket row whose `(encl_qname, file)` pair the
+resolved bucket does NOT also produce SURVIVES as unverified.
+
+One survivor is enough: `AnyCertain` becomes True where the list was uniformly
+unverified, `Mixed := AnyCertain and AnyUncertain` flips **False -> True**, and
+` ?` is appended to every unverified entry. **The markers do not disappear -- they
+APPEAR, 0 -> N.** This is the same `Mixed` argument used above, carried one step
+further than the original text carried it.
+
+Two ordinary shapes guarantee survivors:
+
+* a read of a **different same-named enum value** in another enum type -- the
+  name bucket matches it, the resolver can never bind it to this symbol;
+* a read of THIS value the resolver **declined** (R1 visibility, R2 two
+  candidates, R3 shadowing), in a routine with no other bound read of it.
+
+**So the two channels are independent and differently bounded:**
+
+| Channel | What changes | Bound |
+|---|---|---|
+| 1. re-windowing | which 5 of N render; set, total and markers unchanged | **<= 44 of 270** here |
+| 2. marker appearance | ` ?` count 0 -> N on a PARTIALLY bound value | **NOT bounded by 44** |
+
+Channel 2 fires at ANY caller count, including at or below the cap, so an
+affected block is outside the 44 AND outside the "208 render provably identical"
+set. And a ` ?` IS a re-qualification of a fact, so "no fact added, removed or
+re-qualified" is true of channel 1 only.
+
+**Measured for channel 2 on this index: 0 occurrences.** Over-approximating the
+name bucket (no reach filter, no self-reference filter, so survivors can only be
+over-counted) still yields zero enum values with an unfoldable unverified reader
+-- every enum value in drag-lint's own source is fully bound. **That is a property
+of this corpus, not a bound on the channel.** A corpus carrying declined reads or
+same-named values in sibling enums -- ORM3 is the obvious candidate, and it could
+not be measured here -- will show a non-zero count.
+
 ### Consequence for the owner
 
-The churn is real but COSMETIC and bounded: no fact is added, removed, or
-re-qualified in any documented block -- only which subset of an over-cap caller
-list is displayed. It cannot change a ` ?` marker and cannot change a `(+N more)`
-total.
+Channel 1 is cosmetic and bounded at 44 for this index. Channel 2 changes what a
+block CLAIMS about its own certainty and is unbounded by this measurement, though
+it measures 0 here.
 
 Recommended fold, unchanged from the plan: run the one owed `document --apply`
 together with the `Pure` -> `Effect-free (proven)` regeneration
 (`docs\MEASURED-purity-v2-2026-09-21.md`, Phase 2 runbook), **after** the library
-re-resolve, so every corpus is regenerated exactly once. Task 9 should count it as
-`doc-drift` findings on enum-value blocks and should expect a number at or below
-44 for this repo's own index.
+re-resolve, so every corpus is regenerated exactly once.
+
+**Task 9 expectation -- corrected.** Count `doc-drift` findings on enum-value
+blocks, but do NOT treat 44 as a ceiling: 44 bounds channel 1 only, and a
+channel-2 block can legitimately push the total above it. A count above 44 is
+therefore NOT by itself a regression; confirm which channel produced the excess
+(a ` ?` count that moved 0 -> N is channel 2) before reading it as one.
