@@ -79,6 +79,15 @@ const
       split-variable              a refactoring hint, not a bug.
       separate-query-from-modifier CQS is inherently noisy (lazy getters, fluent
                                   mutators).
+      ifdef-undefined-symbol      measured 2026-09-23 on ORM3 CLIENT (151 of its
+                                  152 .dproj members): 175 findings, but only 6
+                                  distinct symbols -- TRACE_BP (and BP3/BP6),
+                                  TRACE_CODESITE, M2022_REFERENCE, NOABLAS --
+                                  all deliberate OFF switches for trace code,
+                                  none a typo. Dead in every build is true;
+                                  worth a warning per site is not. Opt in to
+                                  hunt typos, or list the switches in
+                                  ifdef_allow.
 
     Every one of them is opt-in, unchanged: `--rule <id>` on the CLI, or
     "enabled":["<id>"] in drag-lint-lint.json, which ShouldKeep honours. }
@@ -88,7 +97,7 @@ const
     'boolean-flag-parameter', 'commented-out-code', 'string-equality-comparison',
     'nil-comparison', 'public-writable-field', 'loop-control-flag',
     'mutable-global-variable', 'default-encoding-io', 'split-variable',
-    'separate-query-from-modifier'];
+    'separate-query-from-modifier', 'ifdef-undefined-symbol'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -493,6 +502,13 @@ begin
     { --- project-wide --- }
     B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
     B('used-unit-not-resolvable', 'project-wide', 'warning', 'Used unit resolves to no known unit (project/library/alias)');
+    { Needs a .dproj: without one the build's defines are unknown, so the rule
+      runs only when --project names it or the --db's project is known, and a
+      bare `lint <file>` reports nothing. ifdef_allow is the drag-lint-lint.json
+      top-level key of the same name. OFF by default -- the measurement is at
+      BUILTIN_RULES_OFF_BY_DEFAULT above. }
+    B('ifdef-undefined-symbol', 'project-wide', 'warning', 'IFDEF/IFNDEF/defined() tests a symbol no build of the project defines -- dead branch, usually a typo', False,
+      [MkParam('ifdef_allow', 'stringlist', '')]);
     { info, not warning -- INTERIM. Measured wrong ~13% of the time in the
       direction of breaking the build or the product (type-helper calls, DFM-
       registered classes, initialization-only units are all invisible to it).

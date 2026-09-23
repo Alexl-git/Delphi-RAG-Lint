@@ -29,7 +29,7 @@ right-clicked. Without `--apply` the command is a DRY RUN: it reports what
 it would fix and writes nothing.
 
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
-reports a `fixable` field per rule; 23 of the 185 rules are fixable.
+reports a `fixable` field per rule; 23 of the 186 rules are fixable.
 
 ## What it needs
 

@@ -140,6 +140,7 @@ uses
   , DRagLint.Lint   .Linter
   , DRagLint.Lint   .QueryRules { QueryRuleTimings -- the per-rule .scm breakdown }
   , DRagLint.Lint   .ProjectChecks
+  , DRagLint.Lint   .IfdefUndefined // dl:unit DRagLint.Lint.IfdefUndefined accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .ProjectRules
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .DocRules
@@ -999,6 +1000,9 @@ function DetectPlatformFromDproj(const AManifest: TIndexManifest; const ACwd: st
 { Forward: DoLint needs the project's scoped closure for unit-not-in-dpr's third
   direction, and BuildProjectFileScope is defined some 3,000 lines below it. }
 function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>; forward;
+{ Forward: DoLint and DoLintAll both ask which .dproj owns the run for
+  ifdef-undefined-symbol; it sits beside ManifestProjectFileForDb, far below. }
+function IfdefProjectFile(const AArgs: TArgs; const ADbPath: string): string; forward;
 function ResolveLibraryDb  (const AArgs: TArgs): string        ; forward;
 function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
@@ -11616,6 +11620,20 @@ begin
       Findings:= Findings + ProjFindings;
     end;
   end;
+  { ifdef-undefined-symbol: one file, and only with a project. The snapshot of a
+    stand-in lives in a temp folder, so the REAL file's folder is passed for its
+    includes; the output seam below rewrites the path back. }
+  if ((AArgs.Rule = '') or SameText(AArgs.Rule, IFDEF_UNDEFINED_RULE_ID)) and TFile.Exists(EffPath) then
+  begin
+    var IfdefProj: string:= IfdefProjectFile(AArgs, AArgs.DbPath);
+    if IfdefProj <> '' then
+    begin
+      var IfdefIncDirs: TArray<string>:= nil;
+      if StandInLogical <> '' then IfdefIncDirs:= [ExtractFilePath(ExpandFileName(StandInLogical))];
+      Findings:= Findings + TIfdefUndefinedCheck.CheckFiles([EffPath], IfdefProj,
+        LoadLintConfig(AArgs).IfdefAllow, IfdefIncDirs);
+    end;
+  end;
   if EffPath <> '' then
   begin
     Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
@@ -16315,6 +16333,34 @@ begin
   end;
 end; // function ManifestProjectFileForDb
 
+{ The .dproj ifdef-undefined-symbol reads its DCC_Defines from, or '' when the
+  run has no project -- and '' is the rule's OFF switch, because without the
+  build's defines every project define would read as undefined.
+
+  Precedence: --project (a .dpr/.dpk is mapped to its sibling .dproj); else the
+  manifest section that owns the --db; else the _D-RAG convention, where
+  <dir>\_D-RAG\<base>.sqlite belongs to <dir>\<base>.dproj. There is NO default
+  database, so a bare `lint <file>` never reaches a project here. }
+function IfdefProjectFile(const AArgs: TArgs; const ADbPath: string): string;
+var
+  AnchorDir: string;
+begin
+  Result:= AArgs.ProjectPath;
+  if (Result = '') and (ADbPath <> '') then
+  begin
+    Result:= ManifestProjectFileForDb(ADbPath);
+    if Result = '' then
+    begin
+      AnchorDir:= AnchorDirForDb(ADbPath);
+      if AnchorDir <> '' then
+        Result:= TPath.Combine(AnchorDir, ChangeFileExt(ExtractFileName(ADbPath), '.dproj'));
+    end;
+  end;
+  if Result = '' then Exit;
+  if not SameText(ExtractFileExt(Result), '.dproj') then Result:= ChangeFileExt(Result, '.dproj');
+  if TFile.Exists(Result) then Result:= ExpandFileName(Result) else Result:= '';
+end;
+
 { The project folder a lint run is anchored to: --project when given, else the
   index's own _D-RAG parent, else the manifest section that claims this DB.
   The manifest step is not dead weight after the migration -- a section may pin
@@ -17465,6 +17511,24 @@ begin
     var InferredProj: string:= ManifestProjectFileForDb(ProjectDb);
     if (InferredProj <> '') and TFile.Exists(InferredProj) then
       Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths);
+  end;
+  { ifdef-undefined-symbol over every scanned unit PLUS the program file, which
+    the closure drops by design and which is where a project's own conditional
+    tests often sit (Micronite2027.dpr's EurekaLog block). No project -> no run:
+    IfdefProjectFile returns '' and the rule reports nothing. }
+  LintPhase(IFDEF_UNDEFINED_RULE_ID);
+  if (AArgs.Rule = '') or SameText(AArgs.Rule, IFDEF_UNDEFINED_RULE_ID) then
+  begin
+    var IfdefProj: string:= IfdefProjectFile(AArgs, ProjectDb);
+    if IfdefProj <> '' then
+    begin
+      var IfdefFiles: TArray<string>:= FilePaths;
+      for var IfdefSib: string in ['.dpr', '.dpk'] do
+        if TFile.Exists(ChangeFileExt(IfdefProj, IfdefSib)) then
+          IfdefFiles:= IfdefFiles + [ChangeFileExt(IfdefProj, IfdefSib)];
+      Findings:= Findings + TIfdefUndefinedCheck.CheckFiles(IfdefFiles, IfdefProj,
+        LoadLintConfig(AArgs).IfdefAllow);
+    end;
   end;
   { Used-unit resolvability (used-unit-not-resolvable) }
   LintPhase('used-unit-resolvable');
