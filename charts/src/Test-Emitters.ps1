@@ -904,7 +904,10 @@ Step 'E-EP' {
   Chk 'A-EP1-CALLERS'   $ep1.Callers 2
   Chk 'A-EP1-CHAIN'     $ep1.CallerNames 'd1:AutoScanIfNeeded,d2:ForceRescan'
   Chk 'A-EP1-CAUGHT'    $ep1.Caught 0
-  Chk 'A-EP1-WALK'      $ep1.WalkSentence 'no handler found within 3 caller levels (2 callers walked)'
+  # per-node walk (R12): AutoScanIfNeeded -> ForceRescan, which has no resolved
+  # caller of its own -- counted, not left implicit
+  Chk 'A-EP1-WALK'      $ep1.WalkSentence 'no handler found within 3 caller levels (2 callers walked); reaches 1 caller with no resolved caller of its own'
+  Chk 'A-EP1-PATHS'     $ep1.TypePaths 'Exception:0/0/1/2'
   Chk 'A-EP1-FRESH'     $ep1.StaleFiles 0
   Chk 'A-EP1-CLICK'     "$($ep1.ClickTargets)/$($ep1.Expected)" '9/9'
   $t1 = Dot $ep1
@@ -965,6 +968,14 @@ Step 'E-EP' {
   Chk 'A-EP6-EVENTS'    $ep6.Events 'caught:LoadAllAsync:632'
   Chk 'A-EP6-NOTGUARD'  $ep6.NotGuarding 3
   Chk 'A-EP6-CAUGHT'    "$($ep6.Caught):$($ep6.ReRaised):$($ep6.Unverified):$($ep6.MayCatch)" '1:0:0:0'
+  # R12, fix round 2: the catch at LoadAllAsync stops EDatabaseError through
+  # LoadAllAsync ONLY. The LoadAll path goes on to btnRefreshClick,
+  # btnRefreshGridClick and RefreshFolders, none of which catches and none of which
+  # has a resolved caller (DFM event handlers) -- 3 path ends, counted. 6 of the 7
+  # callers are walked: DoInitLoad is reached only through LoadAllAsync, which caught.
+  # catchers / escapes past the depth bound / no-caller ends / callers walked:
+  Chk 'A-EP6-PATHS'     $ep6.TypePaths 'EDatabaseError:1/0/3/6'
+  Chk 'A-EP6-WALK'      $ep6.WalkSentence 'caught at 1 caller (LoadAllAsync:632) within 3 caller levels (6 callers walked); reaches 3 callers with no resolved caller of their own'
   $t6 = Dot $ep6
   foreach ($ln in 532, 579, 627) { if (HasLine $t6 $ln) { Fail 'A-EP6-NOTCONTAINED' "the handler at :$ln guards another statement but was drawn" } }
   if ($t6 -notmatch 'caught \(catch-all\) at LoadAllAsync:632') { Fail 'A-EP6-EDGE' 'the verified catch at LoadAllAsync:632 is not drawn' }
@@ -980,6 +991,15 @@ Step 'E-EP' {
   Chk 'A-EP7-EVENTS'    $ep7.Events 'caught:AutoTestSetupDefaults:466'
   Chk 'A-EP7-CAUGHT'    "$($ep7.RaiseTypeNames):$($ep7.Caught):$($ep7.SolidEdges)" 'EReadError:1:1'
   Chk 'A-EP7-CALLERS'   "$($ep7.Callers)/$($ep7.NotGuarding)" '140/1'
+  # THE SIBLING-PATH ROW (R12). ReadBuffer has 134 direct callers; ONE catches.
+  # Per node, EReadError still walks the other 133 and everything above them:
+  # 139 callers walked (AutoTestSetupDefaults' own caller is reached only through
+  # it), 133 path ends with no resolved caller (mostly interface-dispatched
+  # Save methods), 2 past the depth bound (SaveDefaults, AutoTestSetupBools at
+  # depth 3). Round 1 stopped the TYPE after depth 1 and reported none of these.
+  Chk 'A-EP7-PATHS'     $ep7.TypePaths 'EReadError:1/2/133/139'
+  Chk 'A-EP7-WALK'      $ep7.WalkSentence 'caught at 1 caller (AutoTestSetupDefaults:466) within 3 caller levels (139 callers walked); escapes the walk on 2 path ends after 3 levels; reaches 133 callers with no resolved caller of their own'
+  if ((Dot $ep7) -notmatch 'escapes the walk on 2 path ends after 3 levels') { Fail 'A-EP7-DISCLOSE' 'the escaping paths are not on the chart' }
   if ((Dot $ep7) -notmatch 'caught \(catch-all\) at AutoTestSetupDefaults:466') { Fail 'A-EP7-EDGE' 'the verified catch is not drawn' }
   NoUnhandled 'A-EP7-WORDS' $ep7
 
@@ -995,7 +1015,10 @@ Step 'E-EP' {
   $script:ep9 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'MStreams.TABZMemoryStream.ReadBuffer' -DbPath $DbCli -OutDir $stDir9 `
                   -SourceOverride @{ $atp = (Join-Path $stDir9 'uAutoTest.pas') }
   Chk 'A-EP9-STALE'     "$($ep9.StaleCallers):$($ep9.Caught):$($ep9.Events)" '3:0:'
-  Chk 'A-EP9-WALK'      $ep9.WalkSentence 'no handler found within 3 caller levels (140 callers walked); 3 callers not read: source changed since indexing'
+  # the stale catcher passes EReadError on, so all 140 are walked and one more
+  # node ends without a caller (134, not 133)
+  Chk 'A-EP9-WALK'      $ep9.WalkSentence 'no handler found within 3 caller levels (140 callers walked); escapes the walk on 2 path ends after 3 levels; reaches 134 callers with no resolved caller of their own; 3 callers not read: source changed since indexing'
+  Chk 'A-EP9-PATHS'     $ep9.TypePaths 'EReadError:0/2/134/140'
   if ((Dot $ep9) -notmatch '3 callers not read: source changed since indexing') { Fail 'A-EP9-DISCLOSE' 'the unread callers are not on the chart' }
 
   # the SOURCE-ONLY rows inside every indexed impl span, index-wide
@@ -1025,6 +1048,10 @@ Step 'E-EP' {
   # LoadAll:532 and ApplyRawPayload:579 re-raise; LoadAllAsync:632 and
   # AutoTestSetupDefaults:466 do not. No CLIENT re-raising try guards a call into a
   # raising path (measured: 0 within 2 levels), so no chart row can pin 'reraised'.
+  # the column base: refs.start_col and the nesting scan are both 1-based --
+  # ref col / scan col of the same name / try col / call inside -- on
+  # LoadAllAsync:632, where the call and its try/except share one line
+  Chk 'A-EP-R12-COLBASE' $ex0.ColumnBase '40/40/25/True'
   if (@($ex0.ReraiseFailures).Count)    { Fail 'A-EP-R10-RERAISE' (@($ex0.ReraiseFailures) -join '; ') }
 }
 

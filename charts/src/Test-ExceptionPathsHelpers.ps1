@@ -192,4 +192,21 @@ foreach ($k in $real.Keys) {
 }
 $res.ReraiseFailures = $bad.ToArray()
 
+# ---- 6. column base: refs.start_col vs the nesting scan (fix round 2) ---------------
+# Both are 1-based: the scan's position is m.Index + 1 over the stripped line
+# (Latin-1, one byte one column), refs.start_col is 1-based (P10). It matters
+# only when a call and its try/except share a line -- LoadAllAsync:632 is exactly
+# that: `procedure begin try if Ok then ApplyRawPayload(RspPayload); except ...`.
+# Returns "<ref col>/<scan col of the name>/<try col>/<inside>".
+$la = Invoke-IndexQuery @"
+SELECT r.start_line AS l, r.start_col AS c, f.path AS path, s.impl_start_line AS a, s.impl_end_line AS b
+  FROM refs r JOIN call_edges ce ON ce.ref_id = r.id JOIN symbols t ON t.id = ce.target_symbol_id
+  JOIN symbols s ON s.id = r.enclosing_symbol_id JOIN files f ON f.id = r.file_id
+ WHERE s.qualified_name = 'uJobList.ViewModel.TJobListViewModel.LoadAllAsync' AND t.name = 'ApplyRawPayload'
+"@
+$L = Get-StrippedSourceLines ([string]$la[0].path)
+$tb = Get-TryBlocks $L ([int]$la[0].a) ([int]$la[0].b)
+$site = [int]$la[0].l * 100000 + [int]$la[0].c
+$blk = @($tb.Blocks | Where-Object { $_.Except -and $site -gt $_.Try -and $site -lt $_.Except })[0]
+$res.ColumnBase = "$($la[0].c)/$($L[[int]$la[0].l - 1].IndexOf('ApplyRawPayload') + 1)/$(if ($blk) { $blk.Try % 100000 } else { 'none' })/$([bool]$blk)"
 [pscustomobject]$res
