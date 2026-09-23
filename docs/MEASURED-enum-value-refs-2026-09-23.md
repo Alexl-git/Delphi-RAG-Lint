@@ -194,43 +194,74 @@ plan did not state an expected `total`; recorded as measured).
 
 ### 7. `LotStatus_*` accounting (CLIENT)
 
-Query (verbatim from the plan):
+Re-run 2026-09-23 (fix round 1) directly against CLIENT for this rewrite --
+narrative below is generated from these two result sets, not from memory.
+
+**Query A -- verbatim from the plan** (bare `_`, a SQLite single-character
+wildcard, so it is NOT a literal underscore):
 ```sql
 SELECT r.name_text, f.path, (r.symbol_id IS NOT NULL) AS bound, COUNT(*)
 FROM refs r JOIN files f ON f.id=r.file_id
 WHERE r.kind='read' AND r.name_text LIKE 'LotStatus_%'
 GROUP BY r.name_text, f.path, bound ORDER BY 1,2
 ```
+Result: 29 rows, all `bound = 0`, over **three files**:
+`C:\Projects\DB\ORM3\CLIENT\uJobList.ViewModel.pas`,
+`C:\Projects\DB\ORM3\COMMON\OBJECTS\iFOLDERS.PAS`, and
+`C:\Projects\DB\ORM3\CLIENT\uJobList.pas` (a THIRD, distinct file from
+`uJobList.ViewModel.pas` -- do not conflate the two). Per-name breakdown of
+the wildcard-incidental (non-`LotStatus_<Suffix>`) matches, all `bound = 0`:
 
-Result: 29 rows, all `bound = 0`, across two files
-(`C:\Projects\DB\ORM3\CLIENT\uJobList.ViewModel.pas` and
-`C:\Projects\DB\ORM3\COMMON\OBJECTS\iFOLDERS.PAS`), plus one hit each in
-`uFOLDERS.PAS` and `iFOLDERS.PAS` for names not ending in an underscore
-segment.
+| name_text | file | count |
+|---|---|---|
+| LOTSTATUSCODE | uFOLDERS.PAS | 1 |
+| LotStatusCodeDescription | iFOLDERS.PAS | 1 |
+| LotStatusCodes | uJobList.pas | 3 |
+| LotStatusCodes | iFOLDERS.PAS | 2 |
+| LotStatusColors | uJobList.pas | 1 |
+| LotStatusColors | iFOLDERS.PAS | 1 |
 
-**DISAGREES with the plan's "11 names" statement, and the match set is
-wider than "LotStatus_* names" reads in English.** Two things to flag:
+4 extra names, 6 rows, 9 occurrences total (3+2+1+1+1+1), spread across
+`uFOLDERS.PAS`, `iFOLDERS.PAS` and `uJobList.pas` -- not "one hit each in
+uFOLDERS.PAS and iFOLDERS.PAS" as the previous revision of this section
+said; that sentence undercounted both the file set and the per-name totals
+and is replaced by this table.
 
-1. **Real `LotStatus_<Suffix>` enum-value names present: 12, not 11** --
-   `LotStatus_CustAcWithCond`, `LotStatus_CustAccept`, `LotStatus_CustReject`,
-   `LotStatus_InspAccept`, `LotStatus_InspDone`, `LotStatus_InspInProgress`,
-   `LotStatus_InspNotStarted`, `LotStatus_InspReject`,
-   `LotStatus_MRBAcNotify`, `LotStatus_MRBAcSortRework`,
-   `LotStatus_MRBReject`, `LotStatus_Other`.
-2. **SQL `LIKE 'LotStatus_%'` also matches names with no underscore in that
-   position**, because a bare `_` in SQLite `LIKE` is a single-character
-   wildcard, not a literal underscore -- it matched the `C` in
-   `LOTSTATUSCODE`/`LotStatusCodes`/`LotStatusCodeDescription` and the `C`
-   in `LotStatusColors` too. Four extra name/file groups came back this way:
-   `LOTSTATUSCODE` (uFOLDERS.PAS, 1), `LotStatusCodeDescription`
-   (iFOLDERS.PAS, 1), `LotStatusCodes` (uJobList.pas 3 + iFOLDERS.PAS 2),
-   `LotStatusColors` (uJobList.pas 1 + iFOLDERS.PAS 1).
+**Query B -- escaped underscore (Ruling R4)**, the form Task 7 compares
+against, restricted to the real `LotStatus_<Suffix>` enum-value names:
+```sql
+SELECT r.name_text, f.path, (r.symbol_id IS NOT NULL) AS bound, COUNT(*)
+FROM refs r JOIN files f ON f.id=r.file_id
+WHERE r.kind='read' AND r.name_text LIKE 'LotStatus\_%' ESCAPE '\'
+GROUP BY r.name_text, f.path, bound ORDER BY 1,2
+```
+Result: 23 rows, all `bound = 0`, **12 distinct names** (not the plan's
+stated 11), over exactly two files
+(`uJobList.ViewModel.pas`, `iFOLDERS.PAS`):
 
-Run exactly as the plan's SQL states, per instruction not to adjust the
-query to match the fixture -- the query itself is what the plan will re-run
-in Task 9, so this doc records what it actually returns today. All rows,
-real and wildcard-incidental alike, are `bound = 0` at 4ccd1779, which is
-the fact this step exists to pin.
+| name_text | uJobList.ViewModel.pas | iFOLDERS.PAS | total |
+|---|---|---|---|
+| LotStatus_CustAcWithCond | 2 | 3 | 5 |
+| LotStatus_CustAccept | 2 | 3 | 5 |
+| LotStatus_CustReject | 2 | 3 | 5 |
+| LotStatus_InspAccept | 1 | 3 | 4 |
+| LotStatus_InspDone | 1 | 3 | 4 |
+| LotStatus_InspInProgress | 1 | 3 | 4 |
+| LotStatus_InspNotStarted | 1 | 6 | 7 |
+| LotStatus_InspReject | 1 | 3 | 4 |
+| LotStatus_MRBAcNotify | 2 | 3 | 5 |
+| LotStatus_MRBAcSortRework | 2 | 3 | 5 |
+| LotStatus_MRBReject | 2 | 3 | 5 |
+| LotStatus_Other | 0 | 2 | 2 |
+
+12 names, 23 rows, 55 occurrences total, all `bound = 0` at 4ccd1779 --
+this is the exact set and count Task 7 must reproduce (or explain the
+delta from) after the binding lands, and it corrects the plan's "11 names"
+statement to 12, confirmed by direct count rather than by re-asserting the
+plan's number.
+
+Both queries were run against CLIENT only (read-only `sql --query`); no
+other DB was touched for this section.
 
 ### 8. `SELECT DISTINCT kind FROM symbols` (self-index) -- load-bearing for Task 3
 
@@ -265,6 +296,21 @@ these exact literal strings.
 | Candidate universe CLIENT (read/member-access) | 6064 / 8 | member-access exact; read +20 vs plan's 6,044 |
 | Duplicate `enum_value` groups (self/CLIENT/lib64/lib32) | 0 / 0 / 6 / 6 | not stated by plan as an expected number; recorded |
 | `write` negative control (CLIENT) | bound 0 of 12 | YES (bound=0 as required) |
-| `LotStatus_*` accounting (CLIENT) | 29 rows, all bound=0; 12 real names not 11 | disagrees on name count; bound=0 confirmed |
+| `LotStatus_*` accounting (CLIENT), verbatim query | 29 rows, all bound=0, 3 files (incl. 4 wildcard-incidental names) | plan's "11 names" not applicable to this query's raw output |
+| `LotStatus_*` accounting (CLIENT), escaped query (Ruling R4) | 23 rows, 12 names, 55 occurrences, all bound=0, 2 files | disagrees on name count (12 not 11); bound=0 confirmed; this is Task 7's comparison set |
 
 All commands, DBs and raw outputs are reproducible from this file alone.
+
+## Fix round 1 (review finding on Section 7)
+
+Reviewer finding: the Section 7 intro sentence contradicted its own
+itemised list (named 2 files, list showed 3; said "one hit each", list
+showed up to 5 occurrences per extra name). Fix: re-ran both the plan's
+verbatim query and, per Ruling R4, the escaped-underscore query directly
+against CLIENT and rewrote Section 7 from those two result sets (not from
+memory or from the review text). The itemised list from the prior revision
+was in fact correct on a per-row basis; only the summarizing prose was
+wrong, and it has been replaced with per-name tables generated from the
+re-run bytes. Section 7 now carries both the verbatim-plan query/result and
+the escaped query/result (12 names, 23 rows, 55 occurrences, all bound=0),
+labelled as such, per Ruling R4. No other section was touched.
