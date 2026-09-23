@@ -4,11 +4,11 @@
 The live scoreboard for `charts\question-catalogue.md`. **26 catalogue rows**
 (`protocol-trace` appears twice -- field and method are different questions).
 
-Updated 2026-09-23. Branch `feat/archify-ir`, 21 commits, NOTHING PUSHED.
+Updated 2026-09-23. Branch `feat/archify-ir`, 24 commits, NOTHING PUSHED.
 
 ```
-SHIPPED                      5   emitters exist, tested, clickable
-PLANNED (ready to build)     5   PLAN-next-five-questions.md, all measured
+SHIPPED                     10   emitters exist, tested, clickable
+PLANNED (ready to build)     0   the five-question batch is DONE
 UNPLANNED, unblocked         9   implementable today, nobody has planned them
 BLOCKED on data              3   need a live Firebird via fb-snapshot
 BLOCKED on the engine        4   waiting on enum-value binding / raise-handle
@@ -16,38 +16,36 @@ BLOCKED on the engine        4   waiting on enum-value binding / raise-handle
                             26
 ```
 
-**21 of 26 are not resolved.** Five of those are planned and need no new
-engine work.
+**16 of 26 are not resolved**, down from 21. Nothing is planned-but-unbuilt any
+more: the next person picks from the nine unplanned ones and measures first.
+
+**Selection-kind coverage is now method / unit / form-class / field / property /
+type** -- the batch's actual purpose. It was three kinds this morning.
 
 ---
 
-## SHIPPED (5)
+## SHIPPED (10)
 
 | question | selects | emitter | measured |
 |---|---|---|---|
 | `butterfly` | method | `Emit-Butterfly.ps1` | 9 callers / 8 callees, 18 anchors |
 | `deps` | unit | `Emit-Deps.ps1` | 3 used-by / 18 uses |
 | `who-calls` | method | `Emit-WhoCalls.ps1` | 10 sites + 1 cycle @d3 |
+| `what-it-calls` | method | `Emit-WhoCalls.ps1 -Direction callees` | 2/8/16 rows @d1/d2/d3, 5 cycles |
+| `who-writes` | field / property | `Emit-MemberAccess.ps1 -Mode write` | R: 7 writes over 3 routines |
+| `who-reads` | field / property | `Emit-MemberAccess.ps1 -Mode read` | Connected: 602 reads / 598 routines |
+| `hierarchy` | type | `Emit-Hierarchy.ps1` | 145 descendants, 2 ancestors (1 RTL) |
+| `class-surface` | type | `Emit-ClassSurface.ps1` | 392 members over 2 visibility clusters |
 | `event-wiring` | form class | `Emit-EventWiring.ps1` | 41 events / 41 handlers / 40 controls |
 | `touches-tables` | method | `Emit-TouchesTables.ps1` | 5 read / 5 written / 2 both |
 
-Gate: `charts\src\Test-Emitters.ps1` (exit 0 = green; proven to fail correctly).
+**Ten questions, EIGHT emitters** -- `what-it-calls` is a `-Direction` switch and
+`who-writes`/`who-reads` are one `-Mode` switch. Say it that way: counting
+emitters as questions understates the result, counting questions as emitters
+overstates the work.
 
-## PLANNED -- build these next (5)
-
-`charts\PLAN-next-five-questions.md`. Every number in it is measured; five
-catalogue questions delivered by FOUR emitters.
-
-| question | selects | effort | note |
-|---|---|---|---|
-| `what-it-calls` | method | **S** | `-Direction callees` on the existing who-calls emitter |
-| `who-reads` | field / property | **S** | `-Mode read` on the who-writes emitter |
-| `hierarchy` | type | **M** | NEW selection kind; DAG, bare names, unresolved RTL parents |
-| `class-surface` | type | **M** | structured `symbols.parent_id` query, NOT the `surface` verb |
-| `who-writes` | field / property | **L** | NEW selection kind; `find-callers --resolved` + site anchors |
-
-Completing these takes selection-kind coverage from
-method/unit/form-class to **method/unit/form-class/field/property/type**.
+Gate: `charts\src\Test-Emitters.ps1` (exit 0 = green). Proven to fail correctly
+on every batch -- see each commit for the mutation it was checked against.
 
 ## UNPLANNED but IMPLEMENTABLE TODAY (9)
 
@@ -138,13 +136,24 @@ GAP 2 (raise/handle) is NOT touched by this change and they declined to guess.
 
 ## Resume point
 
-1. Read `charts\PLAN-next-five-questions.md`.
-2. Do its **Task 0 measurements first** -- they change design decisions:
-   `with`-block attribution, the shape of `symbols.modifiers`, and whether an
-   ambiguous member selection should refuse rather than pick the first match.
-3. Then Task 1 (`what-it-calls`) -- smallest, and it proves the
-   `-Direction` refactor before the harder ones land on it.
-4. `charts\src\Test-Emitters.ps1` must stay green throughout.
+The five-question batch is DONE (commits `94c6f634`, `d99e283a`, `769d47c4`).
+`charts\PLAN-next-five-questions.md` records what was built and where reality
+differed from the plan.
+
+**Next:** pick from the nine unplanned-but-unblocked questions above and
+MEASURE FIRST, exactly as the shipped ten did. `lifecycle` (S) and `cycles`
+(S-M) are the cheapest; `effects` (M) is deferred but NOT blocked -- the
+`effect_summary` encoder is in this repo and can simply be read.
+
+**Still owed, and not ours to do yet:** the `with`-block attribution
+measurement from Task 0 remains ON HOLD pending the engine team's Task 7,
+which measures a DIFFERENT population (enum-value reads inside `with`, not
+member accesses generally). Reuse their method when the note lands, then
+decide whether our half needs its own pass. Until then `who-writes` /
+`who-reads` may UNDERCOUNT on legacy code that uses `with` heavily, and that
+is not yet disclosed on the chart.
+
+`charts\src\Test-Emitters.ps1` must stay green throughout.
 
 ## Gotchas that will bite a cold start
 
@@ -160,3 +169,15 @@ GAP 2 (raise/handle) is NOT touched by this change and they declined to guess.
 * **`member_accesses.accessor_symbol_id` looks broken and is NOT** -- it names
   the property backing, by owner ruling. Do not file it. Twice now a review has
   called it a defect.
+* **`$pal` and `$PAL` are the same variable**, like `$E` and `$e`. PowerShell
+  names are case-insensitive; a loop-local `$pal` wiped a palette and dot
+  warned `'' is not a known color`.
+* **`$x = if (...) { @() }` assigns `$null`** -- an empty array enumerates to
+  nothing -- and `@($null)` is a ONE-element array holding `$null`.
+* **Ask the SCHEMA before writing SQL**, not just the verb. The plan's
+  containment subquery for the enclosing routine recomputed
+  `refs.enclosing_symbol_id`, which agrees on 9,311/9,311 CLIENT and
+  14,836/14,836 SERVER rows.
+* **Forward declarations are not alternatives.** Collapse on
+  (`qualified_name`, `generic_params`) -- the pair, because a generic and a
+  non-generic type legitimately share a name (`IDataService`).

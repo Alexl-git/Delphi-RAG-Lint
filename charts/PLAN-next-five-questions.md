@@ -1,5 +1,62 @@
-<!-- dl:backlog status=open last-measured=2026-09-23 -->
-# PLAN: the next five diagram questions
+<!-- dl:backlog status=done last-measured=2026-09-23 -->
+# PLAN: the next five diagram questions -- DONE 2026-09-23
+
+**All five shipped** in `94c6f634` (Task 0 + 1), `d99e283a` (Tasks 2-3) and
+`769d47c4` (Tasks 4-5). Every VERIFY number below reproduced exactly and is now
+asserted in `Test-Emitters.ps1` (ten questions, eight emitters, exit 0).
+
+## Where reality differed from this plan
+
+Six deviations, each MEASURED rather than argued. They are listed here because
+the plan is otherwise accurate and a future reader should not re-derive them.
+
+1. **Finding 2's containment subquery was unnecessary.**
+   `refs.enclosing_symbol_id` already holds the innermost enclosing routine:
+   compared row by row, CLIENT 9,311 and SERVER 14,836, zero NULLs either side,
+   **zero disagreements**. The plan's totals were right; its method recomputed a
+   stored column. `Get-EnclosingRoutineSql` returns the join instead.
+   *Same lesson as finding 1, one layer down: ask what the index already STORES,
+   not only what the verbs ANSWER.*
+
+2. **`symbols.prop_access` does not name the backing field** (Task 2's
+   DECISION assumed it did). It is an access mode -- `ro`, `rw`, NULL for
+   fields. The backing is `member_accesses.accessor_symbol_id` +
+   `accessor_kind`: `Connected` -> `FConnected` (field), `VERDICT` ->
+   `Get/SetVERDICT` (methods). The note row is built from that.
+
+3. **The verb and `member_accesses` attribute a property access to DIFFERENT
+   symbols.** `member_accesses` has 602 rows for `Connected` (accessor
+   `FConnected`) and **zero** for `FConnected`, while `find-callers --name
+   FConnected --resolved` returns 602 against `FConnected`. Selecting a backing
+   field therefore left every row unanchored until the site query matched the
+   accessor too. The plan's own cross-check requirement is what caught it.
+
+4. **Ambiguity is worse than Task 0 guessed, which settles the refusal.**
+   Qualified field/property names are NEVER ambiguous (0 of 13,131 CLIENT, 0 of
+   9,095 SERVER); bare ones usually are (40% / 59%, worst `ID` at 154
+   kind-filtered). `FConnected` resolving uniquely was luck.
+
+5. **Task 4's own VERIFY case cannot resolve its focus.** `TInterfacedObject` is
+   RTL, so no CLIENT unit declares it -- yet 145 types inherit from it. That is
+   an answer, not a refusal, so `Resolve-MemberSelection` grew `-AllowMissing`
+   and the focus renders un-anchored. Related: `ancestors --name IDataService`
+   returns **itself**, because a bare name matched another declaration.
+
+6. **Forward declarations were being counted as separate types.**
+   `IuMicObject.pas` declares `IDataService` AND `IDataService<I: IMicObject>`,
+   each with a forward declaration -- four rows, two real types. Collapse on
+   (`qualified_name`, `generic_params`); the pair is load-bearing, because
+   collapsing on the name alone would merge a generic and a non-generic type.
+   Measured: 857 such groups on CLIENT, **zero** spanning more than one file.
+
+**Task 0 measurement 1 (`with`-block attribution) was NOT done and is still
+owed** -- it stayed ON HOLD pending the engine team's Task 7, as the plan
+instructed. See `STATUS-questions.md`.
+
+Measurement 2 came back clean: `modifiers` carries visibility reliably for
+every member kind `class-surface` draws, so the kind fallback was not needed.
+
+---
 
 For a COLD session. Work ONLY under `charts\`. Five questions already ship
 (`butterfly`, `deps`, `who-calls`, `event-wiring`, `touches-tables`) and are the
