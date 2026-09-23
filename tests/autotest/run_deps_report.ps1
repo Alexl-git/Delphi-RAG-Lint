@@ -103,9 +103,37 @@ implementation
 end.
 '@
 
+# D5 (2026-09-23) -- ATTRIBUTION. A program that uses two project units whose
+# IMPLEMENTATIONs use one external unit. Only projmid/projmid2 name
+# TransOnlyLib, so its used_by must be exactly [projmid, projmid2] -- never
+# projprog, which merely reaches it through the BFS. Two mids also force the
+# old duplicate: the BFS noted TransOnlyLib once per mid before it was
+# dequeued, so projprog->TransOnlyLib appeared twice in the edge list. On
+# ORM3 CLIENT the old code credited the program (micronite2027) with
+# ETypes/EEvents/ECompatibility, which only EExtraExceptionInfo.pas names.
+$ProjProgBody = @'
+program projprog;
+uses
+  projmid, projmid2;
+begin
+end.
+'@
+
+$ProjMidBody = @'
+unit projmid;
+interface
+implementation
+uses
+  TransOnlyLib;
+end.
+'@
+
 Write-Ascii (Join-Path $work 'projmain.pas')   $ProjMainBody
 Write-Ascii (Join-Path $work 'projhelper.pas') $ProjHelperBody
 Write-Ascii (Join-Path $dccDir 'libunit.pas')  $LibUnitBody
+Write-Ascii (Join-Path $work 'projprog.dpr')   $ProjProgBody
+Write-Ascii (Join-Path $work 'projmid.pas')    $ProjMidBody
+Write-Ascii (Join-Path $work 'projmid2.pas')   ($ProjMidBody -replace 'unit projmid;', 'unit projmid2;')
 
 $db = Join-Path $WorkDir 'deps.sqlite'
 
@@ -185,6 +213,19 @@ if ($null -ne $rep) {
   Check 'ProjHelper is NOT in externals (resolved, non-library project unit)' `
     (-not $byUnit.ContainsKey('ProjHelper')) ($externals.unit -join ', ')
 
+  # -- D5: TransOnlyLib is named ONLY by projmid's implementation uses. The
+  #    program projprog reaches it transitively and must not be credited.
+  #    Positive control: projmid itself IS credited (the rule is alive).
+  Check 'TransOnlyLib is in externals' ($byUnit.ContainsKey('TransOnlyLib')) ($externals.unit -join ', ')
+  if ($byUnit.ContainsKey('TransOnlyLib')) {
+    $tol = $byUnit['TransOnlyLib']
+    Check 'TransOnlyLib used_by is exactly [projmid, projmid2] (not the program)' `
+      ((@($tol.used_by) -join ',') -eq 'projmid,projmid2') "used_by=$(@($tol.used_by) -join ',')"
+    Check 'TransOnlyLib used_by_count = 2' ($tol.used_by_count -eq 2) "used_by_count=$($tol.used_by_count)"
+    Check 'TransOnlyLib sections = [implementation]' `
+      ((@($tol.sections) -join ',') -eq 'implementation') "sections=$(@($tol.sections) -join ',')"
+  }
+
   Check 'summary.external_unit_count == externals.Length' `
     ($rep.summary.external_unit_count -eq $externals.Count) "summary=$($rep.summary.external_unit_count) actual=$($externals.Count)"
   Check 'summary.external_unit_count >= 3' ($rep.summary.external_unit_count -ge 3) "external_unit_count=$($rep.summary.external_unit_count)"
@@ -205,6 +246,15 @@ if ($null -ne $edgesRep) {
   $edges = @($edgesRep.edges)
   $hasEdge = @($edges | Where-Object { $_.source_unit -eq 'projmain' -and $_.external_unit -eq 'NotIndexedLib' }).Count -gt 0
   Check 'edges contains projmain -> NotIndexedLib' $hasEdge ($edges | ForEach-Object { "$($_.source_unit)->$($_.external_unit)" }) -join ', '
+
+  # -- D5: the edge list carries only real uses-clause edges, each once.
+  $tolEdges = @($edges | Where-Object { $_.external_unit -eq 'TransOnlyLib' } | ForEach-Object { $_.source_unit })
+  Check 'edges for TransOnlyLib are exactly [projmid, projmid2]' ((($tolEdges | Sort-Object) -join ',') -eq 'projmid,projmid2') "sources=$($tolEdges -join ',')"
+  $edgeKeys = @($edges | ForEach-Object { "$($_.source_unit)|$($_.external_unit)".ToLowerInvariant() })
+  $dupKeys  = @($edgeKeys | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+  Check 'edges are distinct (source, external) pairs' ($dupKeys.Count -eq 0) "duplicates=$($dupKeys -join ', ')"
+  Check 'summary.external_edge_count == edges.Length' `
+    ($edgesRep.summary.external_edge_count -eq $edges.Count) "summary=$($edgesRep.summary.external_edge_count) actual=$($edges.Count)"
 }
 
 Write-Host ''
