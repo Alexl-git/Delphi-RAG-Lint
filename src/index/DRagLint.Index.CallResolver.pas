@@ -569,7 +569,11 @@ type
     /// This rule feeds a visibility test built on FILE-ID uses edges rather than
     /// textual uses names, so a lowest-id twin that is not the uses target would
     /// be carried forward and then wrongly declined.
-    /// Increments FEnumStats.DupGroupsCollapsed once per collapsed group.</remarks>
+    /// Increments FEnumStats.DupGroupsCollapsed once per collapsed group, and
+    /// FEnumStats.CollapseDecisive once per CALL in which the fold turned more
+    /// than one candidate into exactly one. Decisive is counted here rather than
+    /// at a call site so that every caller -- the bare-read path and rung 3c's
+    /// `Unit.value` path alike -- contributes to it; see the body.</remarks>
     function CollapseIdenticalEnumCopies(const AVisible: TArray<TEnumValueDecl>;
       ARefFileId: Int64): TArray<TEnumValueDecl>;
   public
@@ -1949,6 +1953,17 @@ begin
       Keep.Add(Rep);
       Inc(FEnumStats.DupGroupsCollapsed);
     end;
+    { DECISIVE IS COUNTED HERE, NOT AT A CALL SITE, and that is a fix rather than
+      a preference. It was incremented only on the bare-read path while THIS
+      routine -- which rung 3c also calls for a `Unit.value` receiver --
+      incremented DupGroupsCollapsed for both. A 3c fold that turned two
+      identical copies into one and produced a binding therefore counted as
+      collapsed but not as decisive, which made TEnumResolveStats' documented
+      meaning ("the folds that turned >1 candidate into exactly 1") untrue for
+      that path. Owner ruling 4 made these counters the AUDIT of a decision taken
+      WITHOUT measuring first, so a counter that is wrong across shapes defeats
+      the ruling. One site, every caller, cannot drift apart again. }
+    if (Length(AVisible) > 1) and (Keep.Count = 1) then Inc(FEnumStats.CollapseDecisive);
     { Restore the caller's original ordering. Nothing downstream settles a tie by
       order, but a stable output keeps the counters and logs comparable run to
       run. }
@@ -1999,7 +2014,6 @@ var
   ClassId     : Int64                  ;
   ClassShadows: Boolean                ;
   OwnerOk     : Boolean                ;
-  Before      : Integer                ;
 begin
   Result := 0;
   AReason:= '';
@@ -2042,9 +2056,7 @@ begin
     twice is not an ambiguity, and declining it would lose a real edge for an
     artefact of indexing. Counted rather than silent so the ruling -- taken
     without a prior measurement, by the owner's own note -- stays auditable. }
-  Before := Length(Visible);
   Visible:= CollapseIdenticalEnumCopies(Visible, ARef.FileId);
-  if (Before > 1) and (Length(Visible) = 1) then Inc(FEnumStats.CollapseDecisive);
 
   { --- R2 uniqueness. Zero and many are both declines, counted APART: an
     over-strict visibility rule and a genuine name clash are different defects

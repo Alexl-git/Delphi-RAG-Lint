@@ -357,3 +357,191 @@ Result of the sweep: **nothing else found.** The only wrong prose in
 Section 7 / the Summary table was the Query A file-count sentence and its
 mirror in the Summary table row, both already fixed above; every other
 prose count checked against its table matched exactly.
+
+## Task 4 -- the store stream, the NULL-own-universe, the write branch
+
+Engine built from this worktree at Task 4 (`drag-lint info`: version
+1.16.0-alpha, extractor 1.17.0-alpha, resolver 1.5.1-alpha -- the resolver
+number moves in Task 5, not here). All commands via
+`C:\Projects\Delphi-RAG-lint-wt\enum-refs\third_party\dll-win64\drag-lint.exe`.
+
+### A note on the Task 1 baseline, which this task could NOT reuse verbatim
+
+M4 is a "no collateral" check, and it is only valid when the two sides differ
+by ONE thing. Task 1's self-index numbers (edges 11592, accesses 11021,
+proven 194 / not_proven 2740 / not_computed 0) were taken from a full index of
+the tree as it stood at `4ccd1779`. Tasks 2 and 3 then ADDED source to that
+same tree, and the self-index indexes this repository's own code -- so those
+five numbers had already moved before Task 4 changed anything (measured
+immediately before this task's first edit: 11620 / 11095 / 194 / 2750 / 0).
+Comparing Task 4's result against Task 1's would therefore have measured
+"Tasks 2+3 wrote code", not "the enum stream had no collateral".
+
+The A/B actually run is the one that isolates the engine:
+
+| step | engine | command | stored parses |
+|---|---|---|---|
+| M4_A | pre-change copy kept in the scratchpad (resolver 1.5.1-alpha, no enum stream) | `index --project src\cli\drag-lint.dproj --db src\cli\_D-RAG\drag-lint.sqlite --resolve-only` | unchanged |
+| M4_B | this task's build | the SAME command | the SAME parses (`--resolve-only` skips the walk) |
+
+Both runs exited 0 and both reported `2 file(s) WITHHELD` (the two units this
+task edits, whose source no longer matched the index at that moment).
+
+### M4 -- no collateral (self-index)
+
+| run | edges | accesses | proven | not_proven | not_computed |
+|---|---|---|---|---|---|
+| M4_A (old engine) | 11137 | 10366 | 187 | 2757 | 0 |
+| M4_B (new engine) | 11137 | 10366 | 187 | 2757 | 0 |
+
+Every column is equal across the two rows, and both runs reported the same
+`21493 edge(s) from 65719 call-site ref(s)` on the calls line. M4 is
+IDENTICAL under the comparison that isolates this change.
+
+### Invariants and the negative control (self-index, after M4_B)
+
+```sql
+SELECT (SELECT COUNT(*) FROM call_edges ce JOIN symbols s ON s.id=ce.target_symbol_id WHERE s.kind='enum_value') AS bad_edges,
+       (SELECT COUNT(*) FROM member_accesses ma JOIN symbols s ON s.id=ma.member_symbol_id WHERE s.kind='enum_value') AS bad_accesses
+```
+
+| bad_edges | bad_accesses |
+|---|---|
+| 0 | 0 |
+
+`write` negative control on the self-index: `total = 0, bound = 0` (the
+self-index has no `write` ref whose name is an enum-value name at all, so the
+control is vacuous here and CLIENT's `total = 12, bound = 0` from Task 1
+remains the load-bearing instance; Task 7 re-measures it).
+
+### M3 preliminary -- the `enum-values:` line (self-index)
+
+Whole-database run (M4_B), verbatim:
+
+```
+resolve: calls      enum-values: 1232 bound of 1232 bare read(s) + 9 qualified; declined not-visible 0, ambiguous 0, shadowed 0; duplicate groups collapsed 0 (decisive 0); unit-level shadow decls 450
+```
+
+Bound state of the candidate universe immediately after that run:
+
+| kind | bound | count |
+|---|---|---|
+| read | 1 | 1232 |
+| read | 0 | 93 |
+| member-access | 1 | 9 |
+| member-access | 0 | 8 |
+
+The 93 unbound `read` rows are the ones inside the two WITHHELD files, which
+the stream is excluded from by `AStaleWhere`; the subsequent incremental
+reindex (which reparsed exactly those two files) bound them, reporting
+`enum-values: 93 bound of 93 bare read(s) + 0 qualified; declined not-visible
+0, ambiguous 0, shadowed 0; duplicate groups collapsed 0 (decisive 0);
+unit-level shadow decls 450`. 1232 + 93 = 1325, which is the whole `read`
+candidate count on this database.
+
+`unit-level shadow decls 450` is the R3(c) fail-open assertion required by the
+task brief, and it agrees with the direct count of the set:
+
+| kind | parent kind | count |
+|---|---|---|
+| const | unit | 311 |
+| var | unit | 139 |
+| const | class | 6 (correctly excluded) |
+| var | class | 22 (correctly excluded) |
+
+311 + 139 = 450.
+
+### EXPLAIN QUERY PLAN for the enum stream's SELECT (self-index)
+
+```
+drag-lint sql --db src\cli\_D-RAG\drag-lint.sqlite --query "EXPLAIN QUERY PLAN SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, refs.start_line, refs.start_col FROM refs WHERE refs.kind = 'read' AND refs.name_text COLLATE NOCASE IN (SELECT name FROM symbols WHERE kind = 'enum_value')"
+```
+
+| id | parent | detail |
+|---|---|---|
+| 3 | 0 | `SEARCH refs USING INDEX idx_refs_name_nocase (name_text=?)` |
+| 7 | 0 | `LIST SUBQUERY 1` |
+| 9 | 7 | `SCAN symbols` |
+
+`idx_refs_name_nocase` carries the name test, as the plan-pin note predicted.
+
+### Guard state after Task 4
+
+```
+PASS: 1, 2, 3, 4, 5, 6, 7, 8, 10, 12
+FAIL: 9, 11, 13
+```
+
+9 and 11 are RED by the plan's own ordering (Tasks 6 and 8). 13 is RED for a
+reason this task found and did NOT work around -- see below.
+
+### Check 13's MECHANISM assertion cannot be satisfied by this fixture
+
+Check 13's OUTCOME half is GREEN (A1 in fixture B binds to
+`uEnumDecl.TCmd.cmdLoad` despite the duplicate). Its MECHANISM half asserts
+that the `enum-values:` line reports `collapsed >= 1`, and it reports 0.
+
+The cause is in the fixture's own data, not in the store stream. Measured
+directly against the fixture DB `C:\TEMP\draglint_enum_value_refs_bind\b.sqlite`:
+
+| table | row |
+|---|---|
+| `files` | 1 = `B\uEnumDecl.pas`, 2 = `B\uEnumUse.pas`, 3 = `B\dup\uEnumDecl.pas` |
+| `unit_uses` | one row: file_id 2, unit_name `uEnumDecl`, **target_file_id 1** |
+| `symbols` (enum_value `cmdLoad`) | id 3 in file 1; id 21 in file 3 |
+
+`TCallResolver.CandInScope` is built from `GetUnitScopeEdges`, which reads
+`unit_uses` by RESOLVED `target_file_id`. The single uses row binds to file 1
+only, so R1 makes exactly ONE of the two twins visible from file 2,
+`Visible` has length 1, and `CollapseIdenticalEnumCopies` returns at its
+`if Length(AVisible) < 2 then Exit` guard without ever forming a group.
+
+Rule 0 is therefore unreachable on this fixture through the bare-read path,
+and no change confined to the store could make it reachable. The guard's own
+header anticipated the converse risk ("the OUTCOME assertion would be green
+even with rule 0 absent, if `unit_uses` happened to resolve to exactly one
+copy") -- that is precisely what the fixture does. The guard was NOT weakened
+and the resolver's R1 was NOT widened to force it green; it is handed on as a
+finding.
+
+### CollapseDecisive -- carried finding from Task 3's review, resolved
+
+The fix chosen is the FIRST of the two offered: `CollapseDecisive` is now
+counted on EVERY path, so `TEnumResolveStats`' documented meaning stays true;
+the alternative (narrowing the documented meaning to "Shape A only") was not
+taken. It is incremented inside `CollapseIdenticalEnumCopies` itself --
+`if (Length(AVisible) > 1) and (Keep.Count = 1)` -- rather than at a call
+site, so the bare-read path and rung 3c's `Unit.value` path both contribute
+and the two counters cannot drift apart again. The call-site increment in
+`ResolveEnumValueRead` and its now-unused `Before` local were removed.
+
+### Lint (self-index reindexed incrementally first)
+
+```
+drag-lint lint --file <abs path> --db src\cli\_D-RAG\drag-lint.sqlite --enable multiple-statements-per-line,magic-literal,commented-out-code --json
+```
+
+| file | findings on lines this task added |
+|---|---|
+| `src\storage\DRagLint.Storage.SQLite.pas` | 0 |
+| `src\index\DRagLint.Index.CallResolver.pas` | 0 |
+
+Two were found and resolved before that state was reached:
+
+1. `field-by-name-in-loop` on the new stream -- FIXED by binding the six
+   `TField` references once outside the loop.
+2. `local-field-prefix` x6 on those cached locals (`FId`...) -- FIXED by
+   renaming them `FldId`...`FldCol`.
+3. `sql-injection-concat` on the NULL-own-universe `ExecSQL` -- ANNOTATED
+   `// dl:ok sql-injection-concat@dd1f` (hash produced by `drag-lint allow
+   --fix-line --fix-rule`, not hand-written), with the reason that `Where` is
+   SQL this pass built and cannot be parameterised: the scope predicate names
+   a temp table and the stale predicate an IN-list of file ids.
+
+CAUTION for later tasks, recorded because it cost a measurement here: a
+RELATIVE `--file` path is resolved against the process's working directory,
+and this session's default working directory is a DIFFERENT worktree. A first
+before/after comparison run that way silently linted `purity-v2`'s copy of the
+same unit and reported "identical counts, zero new findings" -- which was true
+of a file this task never touched. Every lint figure above was taken with an
+ABSOLUTE path.

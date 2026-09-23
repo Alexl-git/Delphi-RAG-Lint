@@ -16,6 +16,14 @@ uses
   , FireDAC.DApt
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  { 2026-09-23 (enum-value-ref-binding): PROMOTED from the implementation uses,
+    where it had sat since v14. ResolveEnumValueRefs takes a TCallResolver, and
+    a strict-private member of this class can only be reached from a method of
+    it -- so the routine has to be declared in the class, i.e. in the INTERFACE
+    section, which is where the type must therefore be visible. Cycle-free:
+    DRagLint.Index.CallResolver's own interface uses only Core.Model and
+    Core.Interfaces and never reaches back here. }
+  , DRagLint.Index.CallResolver
   ;
 
 type
@@ -390,6 +398,58 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function MaterializeResolveScope: string;
+      /// <summary>2026-09-23 (enum-value-ref-binding): the enum-value stream of
+      /// the calls stage -- spec section 2, Shape A. Binds every BARE `read` ref
+      /// whose name is an enum-value name to that value's symbol id and writes
+      /// nothing else: no call_edges row, no member_accesses row, just
+      /// refs.symbol_id.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller; this routine neither creates nor frees it.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// no indexed file has drifted from the source it was parsed from.</param>
+      /// <param name="ACandidates">Out: rows examined.</param>
+      /// <param name="ABound">Out: rows that acquired a symbol_id.</param>
+      /// <param name="AShadowDecls">Out: how many unit-level const/var
+      /// declarations the resolver's R3(c) shadow set holds -- see the
+      /// remarks.</param>
+      /// <remarks>
+      /// Runs INSIDE ResolveCallTargets' transaction, after the call/member
+      /// stream and before the commit, so an interrupted pass rolls back to the
+      /// bindings it started with -- the same lifetime as call_edges and
+      /// member_accesses.
+      ///
+      /// WHY IT NULLS ITS OWN UNIVERSE FIRST, and why a later reader must not
+      /// delete that statement as redundant. On a WHOLE-DATABASE run it IS
+      /// redundant: ClearCallEdges has already NULLed every refs.symbol_id. On a
+      /// SCOPED run it is the ONLY thing that lets a ref which now DECLINES lose
+      /// its previous binding. The scoped path deletes the call_edges and
+      /// member_accesses rows of the refs in scope, but it never NULLs a
+      /// symbol_id belonging to a ref that resolves to NOTHING -- and a decline
+      /// writes nothing, by design. Without this statement an edit that
+      /// introduces a shadowing const would leave the old, now-wrong binding in
+      /// place, and the index would go on answering confidently with a fact this
+      /// engine no longer derives. That is the failure the guard's check 12
+      /// reproduces.
+      ///
+      /// It is narrowed by the SAME scope and stale predicates as the stream,
+      /// deliberately: a NULL wider than the universe this run is about to
+      /// rewrite would erase bindings the run was never going to replace.
+      ///
+      /// It cannot touch another writer's fact. `read` refs are bound by nothing
+      /// else -- measured 0 of 95,875 on ORM3 CLIENT before this change -- so the
+      /// universe this statement clears is exactly the universe it rebuilds.
+      ///
+      /// AShadowDecls is reported because an EMPTY shadow set is a FAIL-OPEN,
+      /// not a quiet no-op: R3(c) would stop shadowing, the pass would
+      /// OVER-BIND, and the run would report clean. Measured on the self-index
+      /// when this was written: 311 unit-level `const` + 139 `var` (6 const /
+      /// 22 var parented to a class are correctly excluded by the reader).
+      /// </remarks>
+      procedure ResolveEnumValueRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound, AShadowDecls: Int64);
       /// <summary>Record the names a file is about to lose, before OpenFileTx
       /// deletes its symbols.</summary>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
@@ -3129,7 +3189,9 @@ uses
   , DRagLint.Storage.Schema
   , DRagLint.Storage.FileMembership { HeaderSaysWal: the read-only Connect names the journal mode the file already has }
   , DRagLint.Query  .Fuzzy
-  , DRagLint.Index.CallResolver // v14 (D5): receiver-typing engine for ResolveCallTargets
+  { DRagLint.Index.CallResolver (v14, D5: the receiver-typing engine for
+    ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
+    note there. Listing it in both sections is a duplicate-uses error. }
   , DRagLint.Core.ForwardStub   { C2.5: FoldForwardStubs -- a forward stub is not a class }
   ;
 
@@ -4969,10 +5031,18 @@ begin
     the column would leave a ref pointing at a declaration this run has decided
     it can no longer vouch for -- stale identity is worse than none, because a
     non-NULL symbol_id is read as "this IS the declaration".
-    Unconditional rather than scoped to the deleted edges: call refs are the
-    only writers of this column today, so "clear it all" and "clear what the
-    edges wrote" are the same set, and the cheaper statement cannot drift out
-    of step with the delete above. }
+    Unconditional rather than scoped to the deleted edges -- and the reason has
+    CHANGED, so do not read the statement as narrow. refs.symbol_id now has
+    THREE writers: call refs through UpsertCallEdge (2026-08-31), property and
+    field member-accesses (2026-09-16), and enum-value reads plus their
+    qualified member-accesses (2026-09-23). "Clear it all" is therefore WIDER
+    than "clear what the edges wrote", and deliberately so: every one of those
+    writers rebuilds its own rows in the same pass, so clearing the column
+    wholesale cannot lose a fact this run will not re-derive, while a statement
+    scoped to the edges would leave the other two writers' stale identities
+    behind. The enum stream's own NULL-over-its-universe
+    (ResolveEnumValueRefs) is redundant with THIS on a whole-database run; it
+    exists for the SCOPED run, which never reaches here. }
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL');
   { and the member accesses the same pass wrote -- same lifetime as the edges }
   if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');
@@ -11710,6 +11780,90 @@ begin
   end; // try
 end; // procedure
 
+{ The enum-value stream of the calls stage. The contract, the NULL-own-universe
+  argument and the fail-open note live on the DECLARATION -- see the DocInsight
+  block on TSQLiteSymbolStore.ResolveEnumValueRefs. }
+procedure TSQLiteSymbolStore.ResolveEnumValueRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string;
+  out ACandidates, ABound, AShadowDecls: Int64);
+const
+  { The candidate universe, verbatim in both statements below so the NULL and
+    the rebuild can never select different sets. idx_refs_name_nocase carries
+    the name test (EXPLAIN QUERY PLAN on the self-index:
+    `SEARCH refs USING INDEX idx_refs_name_nocase (name_text=?)`). }
+  ENUM_UNIVERSE = 'refs.kind = ''read'' AND refs.name_text COLLATE NOCASE IN ' +
+                  '(SELECT name FROM symbols WHERE kind = ''enum_value'')';
+var
+  Where : string    ;
+  Q     : TFDQuery  ;
+  Ref   : TReference;
+  Reason: string    ;
+  Id    : Int64     ;
+  { Bound ONCE, outside the loop. FieldByName is a linear scan of the field list
+    per call, and this loop runs once per candidate ref -- 1,316 on the
+    self-index, 6,064 on ORM3 CLIENT, and far more on a platform library. }
+  FldId   : TField    ;
+  FldFile : TField    ;
+  FldName : TField    ;
+  FldEncl : TField    ;
+  FldLine : TField    ;
+  FldCol  : TField    ;
+begin
+  ACandidates := 0;
+  ABound      := 0;
+  { The SAME reader the resolver built FNameToUnitValues from, so the number
+    reported cannot drift from the set actually consulted. One query per pass. }
+  AShadowDecls:= Length(GetUnitLevelValueDecls);
+  Where:= ENUM_UNIVERSE;
+  if AScopeWhere <> '' then Where:= Where + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Where:= Where + ' AND (' + AStaleWhere + ')';
+  { E5 -- see the remarks above. Do not remove this as redundant with
+    ClearCallEdges; it is redundant only on the shape that never runs scoped. }
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + Where);  // dl:ok sql-injection-concat@dd1f -- REVIEWED 2026-09-23: Where is SQL this pass BUILT -- a literal kind/name predicate plus MaterializeResolveScope's and the stale prescan's own refs predicates -- never user text, and it is the identical construction the main stream uses two screens below. It cannot be parameterised: the scope predicate names a temp table and the stale one an IN-list of file ids.
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + Where;
+    Q.Open;
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      { Constant rather than read from the row: the universe above admits one
+        kind, so reading it back would only invite the two to diverge. }
+      Ref.Kind     := 'read';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      { Answers an id or 0. Every decline is counted by reason inside the
+        resolver (AResolver.EnumStats) and printed on the stage's log line --
+        a decline writes nothing, so the counters are its only trace. }
+      Id:= AResolver.ResolveEnumValueRead(Ref, Reason);
+      if Id > 0 then
+      begin
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+        FQSetRefSymbol.ExecSQL;
+        Inc(ABound);
+      end;
+      Inc(ACandidates);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
 procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
@@ -11735,6 +11889,14 @@ var
   StaleFileCount: Integer   ;
   DummyTok  : TFileTxToken  ;
   Written   : Int64         ;
+  { 2026-09-23 (enum-value-ref-binding). Counted APART from Written, which is
+    reported as "edge(s)": a ValueOnly write produces refs.symbol_id and NO
+    call_edges row, so folding it into Written would inflate the edge count that
+    existing guards and the M4 no-collateral check both read. }
+  WrittenValues : Int64     ; { Shape B -- qualified enum values bound by the main stream }
+  EnumCandidates: Int64     ; { Shape A -- bare `read` rows examined by the enum stream   }
+  EnumBound     : Int64     ; { Shape A -- of those, the rows that bound                  }
+  EnumShadowDecls: Int64    ; { size of the R3(c) unit-level const/var shadow set         }
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
   T0        : Int64         ;
   TMaps     : Double        ; { seconds spent building TCallResolver's maps }
@@ -11804,6 +11966,10 @@ begin
   TClear  := ResolveSecs(T0);
   DummyTok:= Default(TFileTxToken);
   Written := 0;
+  WrittenValues  := 0;
+  EnumCandidates := 0;
+  EnumBound      := 0;
+  EnumShadowDecls:= 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
   { Split out because it is O(symbols) and independent of how many refs this run
@@ -12096,6 +12262,22 @@ begin
           end;
           Inc(Written);
         end
+        { 2026-09-23 (enum-value-ref-binding): a QUALIFIED enum value --
+          `TCmd.cmdLoad` or `SomeUnit.cmdLoad`, resolver rung 3c. The identity
+          and nothing else: no call_edges row (CanBeCallTarget stays
+          routine-only) and no member_accesses row (an enum value carries no
+          mode and no accessor to record). Placed AHEAD of the routine branch
+          because that branch's QIsRoutine correctly refuses an enum-value
+          target and then writes NOTHING -- refs.symbol_id is set only inside
+          UpsertCallEdge -- which is precisely why these refs have always come
+          out NULL. }
+        else if Edge.ValueOnly and (Edge.TargetSymbolId > 0) then
+        begin
+          FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
+          FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+          FQSetRefSymbol.ExecSQL;
+          Inc(WrittenValues);
+        end
         else if Edge.TargetSymbolId > 0 then
         begin
           KeepEdge:= True;
@@ -12141,6 +12323,11 @@ begin
         Q.Next;
       end;
       Q.Close;
+      { 2026-09-23 (enum-value-ref-binding): the SECOND stream, Shape A. Inside
+        this transaction and before the commit, so the bindings share the
+        lifetime of the edges above and an interrupted pass rolls back whole. }
+      ResolveEnumValueRefs(Resolver, ScopeWhere, StaleWhere,
+                           EnumCandidates, EnumBound, EnumShadowDecls);
       FConn.Commit;
     except
       on E: Exception do
@@ -12210,6 +12397,29 @@ begin
     else
       ResolveLog(Format('calls      %d edge(s) from %d call-site ref(s), WHOLE DB  [%.1fs, clear %.1fs, maps %.1fs]',
         [Written, Streamed, ResolveSecs(T0), TClear, TMaps]));
+    { 2026-09-23 (enum-value-ref-binding). EVERY DECLINE IS PRINTED BY REASON,
+      and that is the point of the line rather than a nicety: the pass answers
+      `certain` or nothing, so a ref that does not bind leaves no trace anywhere
+      else in the database. Without these numbers an over-strict rule and a
+      correctly-empty corpus are indistinguishable from outside.
+      The collapse pair audits owner ruling 4, which took the rule-0 fold
+      WITHOUT a prior measurement and required the counts be recorded so the
+      decision stays checkable after the fact. }
+    ResolveLog(Format('calls      enum-values: %d bound of %d bare read(s) + %d qualified; ' +
+      'declined not-visible %d, ambiguous %d, shadowed %d; ' +
+      'duplicate groups collapsed %d (decisive %d); unit-level shadow decls %d',
+      [EnumBound, EnumCandidates, WrittenValues,
+       Resolver.EnumStats.NotVisible, Resolver.EnumStats.Ambiguous, Resolver.EnumStats.Shadowed,
+       Resolver.EnumStats.DupGroupsCollapsed, Resolver.EnumStats.CollapseDecisive,
+       EnumShadowDecls]));
+    { A SILENTLY EMPTY SHADOW SET IS A FAIL-OPEN, the failure mode this
+      repository has been bitten by before: R3(c) would stop shadowing, the pass
+      would OVER-BIND, and the run would report a clean result. Loud, and on its
+      own line, so it cannot be read as part of the numbers above. }
+    if EnumShadowDecls = 0 then
+      ResolveLog('calls      enum-shadow-set: WARNING -- the unit-level const/var shadow set is EMPTY, ' +
+        'so R3(c) shadowing is INERT and any bindings above may be OVER-BOUND. This is a fail-open: ' +
+        'treat them as unverified and reindex before trusting them.');
     { Make the staleness VISIBLE. Silence here is what let a stale index degrade
       unnoticed: counts only went down and nothing errored. If this line ever
       appears, the fix is to REINDEX the named tree, not to re-run the resolve. }
