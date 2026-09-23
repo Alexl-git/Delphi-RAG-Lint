@@ -27,6 +27,11 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`lint <file> --rule with-hides-outer-symbol` runs the check (D2).** `CheckWithHiding` sat under the
+  type-aware rule gate, whose id list names `enum-read-inside-with` but not `with-hides-outer-symbol`,
+  so the named rule always answered 0. The with-hiding walk now has its own gate (both of its ids); the
+  type-aware checker keeps running as before, and its indentation no longer suggests a gate it never
+  had. Guard: `tests\autotest\run_with_hiding_rule.ps1` (four new D2 checks).
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,
   every `index` preprocess, and every project closure) used to union only the `.dproj`'s `Base` group
   and the selected config's `Cfg_N` group. MSBuild also applies `Base_<Platform>` and

@@ -11938,15 +11938,18 @@ begin
           EffPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG),
           Cfg.ThresholdFor('deep-nesting', 5)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
-      { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast')
-        or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'exhaustive-enum-case') or (AArgs.Rule = 'lossy-cast')
-        or (AArgs.Rule = 'nativeint-truncation') or (AArgs.Rule = 'abstract-method-instantiation') or (AArgs.Rule = 'length-zero-compare')
-        or (AArgs.Rule = 'interface-object-mixing') or (AArgs.Rule = 'enum-read-inside-with') then
+      { with-scope hiding: ONE walk emits both ids. It used to sit under the
+        type-aware gate below, whose id list names enum-read-inside-with but not
+        with-hides-outer-symbol, so `--rule with-hides-outer-symbol` never ran it
+        (INBOX-defects-found-2026-09-23-rule-work.md, D2). Its own gate now. }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'with-hides-outer-symbol') or (AArgs.Rule = 'enum-read-inside-with') then
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(EffPath, FlowStore, FlowLibStore, FlowFid) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
-          if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map.
+        UNGATED, as it always was in behaviour: only the indentation used to
+        suggest otherwise. }
+      for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
+        if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
       if (AArgs.Rule = '') or (AArgs.Rule = 'firedac-open-execsql-mismatch') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(EffPath);
       { v0.50: object created + freed without try-finally (leak on exception) }
