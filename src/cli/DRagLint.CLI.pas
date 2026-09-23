@@ -588,7 +588,7 @@ type
     // field, not three. A second field for a flag that already exists is how two
     // switches with the same name end up meaning different things.
     AddProjectName: string ; // shared-unit: --add-project <ProjectName>
-    // glyph-vacuum: --append merges this run into an existing --out (rows keyed
+    // glyph-vacuum: --append merges this run into an existing --output (rows keyed
     // on dfm_path+object_path+property, images keyed on sha) instead of replacing it.
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
@@ -764,7 +764,9 @@ begin
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]');
-  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('                               --rule <id>: report ONLY that rule; naming an OFF-by-default rule opts it in');
+  Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
@@ -798,9 +800,12 @@ begin
   Writeln('                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.');
   Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --');
   Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
+  Writeln('                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured');
+  Writeln('                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under');
+  Writeln('                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)');
   Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
-  Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const]');
+  Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
   Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
@@ -888,7 +893,7 @@ begin
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
-  Writeln('  drag-lint check-ast <file> [--db PATH] [--format text|json]');
+  Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
@@ -899,10 +904,10 @@ begin
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
-  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--out <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
+  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count)');
-  Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --out|--output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --out; --append merges into an existing --out; --db only qualifies class_unit / declared count default / runtime_refs)');
+  Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
@@ -919,7 +924,7 @@ begin
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
-  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--out <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
+  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
   Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
@@ -1427,7 +1432,7 @@ begin
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
-    else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --out
+    else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --output
     else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)  // dl:ok duplicate-code@f979 -- pre-existing ParseArgs shape shared by every single-string-value flag branch; swept into this hunk by the unrelated --append line added just above
     begin
       Inc(i);
@@ -1784,6 +1789,31 @@ const
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
 
+{ The version limb of a stored fingerprint whose FIRST limb is `<APrefix><ver>`
+  (`v=` for the indexer, `r=` for the resolver), or '' when the stamp is absent
+  or not in that form. }
+function FingerprintVersionLimb(const AFingerprint, APrefix: string): string;
+var
+  Rest   : string ;
+  SemiPos: Integer;
+begin
+  Result:= '';
+  if Pos(APrefix, AFingerprint) <> 1 then Exit;
+  Rest   := Copy(AFingerprint, Length(APrefix) + 1, MaxInt);
+  SemiPos:= Pos(';', Rest);
+  Result := if SemiPos > 0 then Copy(Rest, 1, SemiPos - 1) else Rest;
+end;
+
+{ The `r=` limb of a stored resolver fingerprint (`r=<ver>;schema=N`), or ''.
+  Read by the never-downgrade refusal and by the freshness note, which must
+  both know the DIRECTION of a difference, not only that there is one. }
+function ResolverVersionOfFingerprint(const AFingerprint: string): string;
+const
+  RESOLVER_LIMB_PREFIX = 'r=';
+begin
+  Result:= FingerprintVersionLimb(AFingerprint, RESOLVER_LIMB_PREFIX);
+end;
+
 var GFreshnessNoted: Boolean = False;
 
 procedure NoteIndexFreshnessOnce(const AStore: ISymbolStore; const ADbPath: string);
@@ -1881,8 +1911,17 @@ begin
     guard is scoped by function too. }
   var Prev: string:= AStore.GetMetaValue(RESOLVER_FP_KEY);
   var Cur : string:= ResolverFingerprint(AStore);
+  { THE DIRECTION IS THE ADVICE. "Edges are stale, re-derive" is right when the
+    index is OLDER than this build and is exactly the downgrade when it is NEWER
+    -- and the old `Prev <> Cur` gave that advice for both (ENG-2). An index
+    newer than this build is refused by RefuseIfEngineOlderThanDb anyway, so
+    the note says so rather than advising a command that would fail. }
+  var PrevVer: string:= ResolverVersionOfFingerprint(Prev);
   if Prev = '' then
     Writeln(ErrOutput, Format('  resolver: this index carries NO resolver stamp (current %s) -- its edges will be re-derived on the next index run.', [Cur]))
+  else if (PrevVer <> '') and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, PrevVer) < 0) then
+    Writeln(ErrOutput, Format('  resolver: edges were derived by a NEWER resolver (%s) than this build (%s) -- reads are fine; ' +
+      'an index run with this engine is refused. Use the engine that resolved it.', [Prev, Cur]))
   else if Prev <> Cur then
     Writeln(ErrOutput, Format('  resolver: edges were derived by %s, this build is %s -- re-derive with `index <dir> --db <db> --resolve-only` (minutes, not a re-parse).', [Prev, Cur]));
 end;
@@ -4329,15 +4368,8 @@ end;
 function ExtractorVersionOfFingerprint(const AFingerprint: string): string;
 const
   VERSION_LIMB_PREFIX = 'v=';
-var
-  Rest   : string ;
-  SemiPos: Integer;
 begin
-  Result:= '';
-  if Pos(VERSION_LIMB_PREFIX, AFingerprint) <> 1 then Exit;
-  Rest   := Copy(AFingerprint, Length(VERSION_LIMB_PREFIX) + 1, MaxInt);
-  SemiPos:= Pos(';', Rest);
-  Result := if SemiPos > 0 then Copy(Rest, 1, SemiPos - 1) else Rest;
+  Result:= FingerprintVersionLimb(AFingerprint, VERSION_LIMB_PREFIX);
 end;
 
 { NEVER DOWNGRADE -- the owner's ruling 1 of 2026-09-14
@@ -4364,7 +4396,10 @@ end;
   integer, because Migrate would write it down too. No flag overrides this --
   not --rebuild, not --force-reparse: both would still produce a downgraded
   database. The way back is the engine that built the index, or a delete.
-  Pinned by tests\autotest\run_index_never_downgrades.ps1. }
+  Pinned by tests\autotest\run_index_never_downgrades.ps1.
+
+  THREE AXES since 2026-09-23: extractor, RESOLVER (resolver_fingerprint's r=
+  limb vs DRAGLINT_RESOLVER_VERSION -- see the check below), and schema. }
 function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean;
 var
   Stamp, DbVer   : string ;
@@ -4381,6 +4416,27 @@ begin
     Writeln(ErrOutput, '  A writer never downgrades an index: re-parsing with an older extractor would throw away');
     Writeln(ErrOutput, '  the newer parse and stamp the database down, silently. Run the engine that built it,');
     Writeln(ErrOutput, '  or delete the index and rebuild it with this one. No flag overrides this.');
+    Exit(True);
+  end;
+  { THE RESOLVER AXIS (ENG-2, docs\INBOX-URGENT-resolver-downgrade-not-refused.md).
+    The resolver fingerprint is compared for INEQUALITY too: any difference
+    clears every call edge, re-derives them with THIS engine's resolver and
+    stamps ITS version. So an engine on resolver 1.5.1 re-resolving an index
+    stamped 1.6.0 undid the newer resolve silently -- and --resolve-only, the
+    one write that touches nothing BUT the resolver's output, was the purest
+    form of it. Same semantics as the extractor check above: older refuses,
+    equal or newer proceeds, an absent stamp is stale (never newer), compared
+    semantically, and no flag -- --resolve-only included -- overrides it.
+    Pinned by tests\autotest\run_index_never_downgrades_resolver.ps1. }
+  DbVer:= ResolverVersionOfFingerprint(AStore.GetMetaValue(RESOLVER_FP_KEY));
+  if (DbVer <> '') and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, DbVer) < 0) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: refusing to write %s', [ADbPath]));
+    Writeln(ErrOutput, Format('  the index was resolved by resolver %s; this engine is resolver %s (drag-lint %s) -- OLDER.',
+                              [DbVer, DRAGLINT_RESOLVER_VERSION, DRAGLINT_VERSION]));
+    Writeln(ErrOutput, '  A writer never downgrades an index: re-deriving with an older resolver would throw away');
+    Writeln(ErrOutput, '  the newer call edges and stamp the database down, silently. Run the engine that resolved it,');
+    Writeln(ErrOutput, '  or delete the index and rebuild it with this one. No flag overrides this, --resolve-only included.');
     Exit(True);
   end;
   AStore.IsSchemaCurrent(Found, Expected);
@@ -10957,11 +11013,26 @@ begin
   end;
   AFindings:= ApplyLineMarkers(AFindings, ScopedScan);
 
-  { 1: config -- severity remap + enable/disable filter. }
+  { 1: config -- severity remap + enable/disable filter.
+
+    --rule NARROWS HERE, after the markers and before the config filter (D4).
+    lint and lint-project already emit only the requested rule; lint-all never
+    read --rule at all and printed every OTHER rule instead. Filtering at this
+    one seam is what makes the verbs agree, and doing it after ApplyLineMarkers
+    also drops the review-marker-* findings a --rule run manufactures: a dl:ok
+    for another rule has no finding to suppress in a narrowed run, so it would
+    otherwise read as unused.
+
+    A review-marker-* finding ABOUT the requested rule stays: every one of them
+    names its marker's rule as `"<id>"` (ApplyLineMarkers' messages), and a
+    stale dl:ok for the rule being asked about is part of that rule's answer --
+    run_marker_metric_scope.ps1 check 6 prints its remedy from exactly that line. }
   Cfg:= LoadLintConfig(AArgs);
   Survivors:= nil;
   for F in AFindings do
   begin
+    if (AArgs.Rule <> '') and not SameText(F.RuleId, AArgs.Rule)
+       and not (StartsText('review-marker-', F.RuleId) and ContainsText(F.Message, '"' + AArgs.Rule + '"')) then Continue;
     IsDefDis:= False;
     for DId in ADefaultDisabled do
       if SameText(DId, F.RuleId) then begin IsDefDis:= True; Break; end;
@@ -11424,6 +11495,58 @@ begin
   Result:= 0;
 end; // begin
 
+const
+  { THE RULE IDS EACH HEAVY `lint <file>` CHECKER CAN EMIT (D3, INBOX
+    defects-found-2026-09-23-rule-work). `lint <file> --rule X` used to run
+    every one of these for any X and filter the result, so a one-rule question
+    about ArrayHelper.pas -- whose index is the 2 GB platform library -- ran the
+    whole-store project pass over ~7,000 library files for 20+ CPU-minutes.
+
+    A checker whose list is SHORT of an id it emits makes `--rule <that id>`
+    silently answer 0 -- exactly how D2 hid with-hides-outer-symbol -- so these
+    lists are pinned against the emit sites by
+    tests\autotest\run_lint_rule_narrows_checkers.ps1. Add the id here in the
+    same change that adds its emit site. }
+  LINT_GATE_TYPE_AWARE: array[0..11] of string = (
+    'exhaustive-enum-case', 'float-equality-comparison', 'string-equality-comparison',
+    'length-zero-compare', 'freeandnil-on-interface', 'win64-pointer-cast',
+    'nativeint-truncation', 'redundant-cast', 'unsafe-typecast-without-is', 'lossy-cast',
+    'abstract-method-instantiation', 'interface-object-mixing');
+  LINT_GATE_FLOW: array[0..9] of string = (
+    'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
+    'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
+    'loop-var-after-loop', 'object-leak');
+  LINT_GATE_PROJECT_RULES: array[0..14] of string = (
+    'unused-public-symbol', 'unused-private-member', 'circular-uses', 'global-only-uses-edge',
+    'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
+    'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
+    'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
+    'unused-unit-in-uses', 'god-class');
+  LINT_GATE_CLASS_METRICS: array[0..9] of string = (
+    'too-many-children', 'deep-inheritance', 'high-response', 'high-coupling', 'low-cohesion',
+    'middle-man', 'fan-out', 'fan-in', 'instability', 'feature-envy');
+
+{ True when a lint run with --rule ARule needs a checker that emits AIds: always
+  for a run with no --rule, otherwise only when ARule is one of them. }
+function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
+begin
+  if ARule = '' then Exit(True);
+  for var Id: string in AIds do
+    if SameText(Id, ARule) then Exit(True);
+  Result:= False;
+end;
+
+{ DRAGLINT_DEBUG trace of which heavy checker a `lint <file>` run entered. The
+  only observable for D3: a skipped checker and a checker that found nothing
+  print the same findings, so without this a regression back to "run everything
+  for any --rule" is invisible except as time. stderr, so it cannot corrupt
+  --format json|sarif. }
+procedure TraceLintChecker(const AName: string);
+begin
+  if GetEnvironmentVariable('DRAGLINT_DEBUG') <> '' then
+    Writeln(ErrOutput, '[lint-checker] ' + AName);
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -11883,13 +12006,18 @@ begin
         side effect of linting would take a write lock on someone else's 2.2 GB.
         A failure degrades to project-only rather than failing the run. }
       var FlowLibStore: ISymbolStore := nil;
-      if FlowStore <> nil then
+      { ...and only for a run that asks a checker which READS it (D3): the
+        with-hiding walk, the flow checker and the project pass. }
+      if (FlowStore <> nil) and
+         (LintRuleWants(AArgs.Rule, ['with-hides-outer-symbol', 'enum-read-inside-with'])
+          or LintRuleWants(AArgs.Rule, LINT_GATE_FLOW) or LintRuleWants(AArgs.Rule, LINT_GATE_PROJECT_RULES)) then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
         { A STALE library index degrades to project-only exactly like an
           unopenable one -- see OpenLibraryStoreIfCurrent for why a bare Create
           here was an access violation waiting for the next schema bump. }
         var FlowLibWhy: string;
+        TraceLintChecker('library-store');
         FlowLibStore:= OpenLibraryStoreIfCurrent(FlowLibDb, FlowLibWhy);
         if FlowLibWhy <> '' then EmitStatusLine(AArgs, 'WARNING: ' + FlowLibWhy);
       end;
@@ -11938,15 +12066,24 @@ begin
           EffPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG),
           Cfg.ThresholdFor('deep-nesting', 5)) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
-      { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map }
-      if (AArgs.Rule = '') or (AArgs.Rule = 'float-equality-comparison') or (AArgs.Rule = 'freeandnil-on-interface') or (AArgs.Rule = 'win64-pointer-cast')
-        or (AArgs.Rule = 'redundant-cast') or (AArgs.Rule = 'unsafe-typecast-without-is') or (AArgs.Rule = 'exhaustive-enum-case') or (AArgs.Rule = 'lossy-cast')
-        or (AArgs.Rule = 'nativeint-truncation') or (AArgs.Rule = 'abstract-method-instantiation') or (AArgs.Rule = 'length-zero-compare')
-        or (AArgs.Rule = 'interface-object-mixing') or (AArgs.Rule = 'enum-read-inside-with') then
+      { with-scope hiding: ONE walk emits both ids. It used to sit under the
+        type-aware gate below, whose id list names enum-read-inside-with but not
+        with-hides-outer-symbol, so `--rule with-hides-outer-symbol` never ran it
+        (INBOX-defects-found-2026-09-23-rule-work.md, D2). Its own gate now. }
+      if (AArgs.Rule = '') or (AArgs.Rule = 'with-hides-outer-symbol') or (AArgs.Rule = 'enum-read-inside-with') then
+      begin
+        TraceLintChecker('with-hiding');
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(EffPath, FlowStore, FlowLibStore, FlowFid) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      end;
+      { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map.
+        Gated on LINT_GATE_TYPE_AWARE (D3); before that it ran for every --rule. }
+      if LintRuleWants(AArgs.Rule, LINT_GATE_TYPE_AWARE) then
+      begin
+        TraceLintChecker('type-aware');
         for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
           if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      end;
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
       if (AArgs.Rule = '') or (AArgs.Rule = 'firedac-open-execsql-mismatch') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckFireDacSqlMismatch(EffPath);
       { v0.50: object created + freed without try-finally (leak on exception) }
@@ -12027,8 +12164,12 @@ begin
         store-free 4.29 s vs 4.07 s with the store -- the open disappears next
         to process start and parse. Opened QUIETLY because OpenReadOnlyStore's
         schema-behind line goes to stdout and would corrupt --format sarif. }
-      for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, FlowLibStore) do
-        if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      if LintRuleWants(AArgs.Rule, LINT_GATE_FLOW) then
+      begin
+        TraceLintChecker('flow');
+        for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, FlowLibStore) do
+          if (AArgs.Rule = '') or (AArgs.Rule = F.RuleId) then Findings:= Findings + [F];
+      end;
       { v0.68: naming-convention prefix rules (config-driven). The store enables
         the exception-ancestry sub-check of type-name-prefix -- without it
         EFoo = class(Exception) is reported as needing a 'T' prefix. }
@@ -12100,16 +12241,33 @@ begin
         var SibKeep : TList<ISymbolStore>  := TList<ISymbolStore>.Create;
         var SibOwned: TObjectList<TObject> := TObjectList<TObject>.Create(True);
         try
-          for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-                     FlowStore, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore) do
-            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
-              Findings:= Findings + [F];
-          for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, LintLibraryDb(AArgs)) do
-            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
-              Findings:= Findings + [F];
-          for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, '') do
-            if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
-              Findings:= Findings + [F];
+          { Each whole-store pass is entered only when --rule can be one of its
+            ids (D3), and is HANDED the rule so it narrows inside as well. That
+            second half is also what makes an OFF-by-default project rule
+            reachable here: TProjectLintRules.OptedIn treats the requested rule
+            as opted in, the same contract lint-project and lint-all honour. }
+          if LintRuleWants(AArgs.Rule, LINT_GATE_PROJECT_RULES) then
+          begin
+            TraceLintChecker('project-rules');
+            for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
+                       FlowStore, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore) do
+              if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+                Findings:= Findings + [F];
+          end;
+          if LintRuleWants(AArgs.Rule, ['used-unit-not-resolvable']) then
+          begin
+            TraceLintChecker('used-unit-resolvable');
+            for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, LintLibraryDb(AArgs)) do
+              if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+                Findings:= Findings + [F];
+          end;
+          if LintRuleWants(AArgs.Rule, LINT_GATE_CLASS_METRICS) then
+          begin
+            TraceLintChecker('class-metrics');
+            for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, AArgs.Rule) do
+              if SameText(F.FilePath, MyPath) and ((AArgs.Rule = '') or (AArgs.Rule = F.RuleId)) then
+                Findings:= Findings + [F];
+          end;
         finally
           SibKeep .Free;
           SibOwned.Free;
@@ -16896,6 +17054,15 @@ begin
   end;
 end;
 
+{ AIds without ARule (case-insensitive); AIds unchanged when ARule is ''. The
+  default-disabled list a --rule run hands FinalizeAndOutput. }
+function ExceptRuleId(const AIds: TArray<string>; const ARule: string): TArray<string>;
+begin
+  Result:= nil;
+  for var Id: string in AIds do
+    if (ARule = '') or not SameText(Id, ARule) then Result:= Result + [Id];
+end;
+
 const
   { The per-file scan is only PART of a lint-all run, so it only gets part of
     the bar. Everything between the scan and the report is the tail, and it is
@@ -17454,6 +17621,8 @@ begin
       OptIn:= OptIn + ['query-name-with-effect'];
     if Cfg.ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
       OptIn:= OptIn + ['assert-with-side-effect'];
+    { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
+    if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, '', MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
     { LibStore is the platform library index, already open above for the
@@ -17669,7 +17838,9 @@ begin
     stays ON -- do NOT add it. }
   LintPhase('finalize+output');
   Result:= FinalizeAndOutput(
-    AArgs, Findings, ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT,
+    { ...less the --rule id: naming a rule opts it back in for this run, the
+      contract `lint` states at its own DefDisabled build-up (D4). }
+    AArgs, Findings, ExceptRuleId(ScmDefOff + PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT, AArgs.Rule),
     { The roll-up counts EVERY severity, not just error-vs-everything-else. It
       used to be `if error then Inc(EC) else Inc(WC)`, so a run of 62 hint + 138
       info + 79 warning reported "0 error(s), 279 warning(s)" -- the one number a
@@ -17713,6 +17884,10 @@ begin
         OL.AppendLine('--------------------------');
         if not LoadLintConfig(AArgs).ShouldKeep('circular-uses', False) then
           OL.AppendLine('  NOT CHECKED -- circular-uses is disabled by config. This is NOT "none found".')
+        { A --rule run narrows ASurv to one rule (D4), so an empty CycF there
+          means "not asked", and "none detected" would be the same lie. }
+        else if (AArgs.Rule <> '') and not SameText(AArgs.Rule, 'circular-uses') then
+          OL.AppendLine(Format('  NOT REPORTED -- this run was narrowed to --rule %s. This is NOT "none found".', [AArgs.Rule]))
         else if Length(CycF) = 0 then
           OL.AppendLine(Format('  none detected across %d file(s) scanned.', [Length(FilePaths)]))
         else
@@ -20877,7 +21052,11 @@ var
   Findings: TArray<TLintFinding>;
 begin
   if not ExplicitDbsExist(AArgs, 'check-ast') then Exit(2);
-  if AArgs.Target = '' then begin Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--format text|json]'); Exit (2 ); end;
+  if AArgs.Target = '' then
+  begin
+    Writeln('Usage: drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]');
+    Exit(2);
+  end;
   if not TFile.Exists(AArgs.Target) then begin Writeln('ERROR: file not found: ', AArgs.Target); Exit(2); end;
   if NoDbResolved(AArgs.DbPath, 'check-ast') then Exit(2);
   if TFile.Exists(AArgs.DbPath) then
@@ -22304,13 +22483,13 @@ begin
   if Res.Ok then Exit(0) else Exit(1);
 end; // function
 
-/// <summary>drag-lint convert-scaffold --from FromType --to ToType [--out FILE]
+/// <summary>drag-lint convert-scaffold --from FromType --to ToType [--output FILE]
 /// [--surface dfm|pas] --db PATH [--db ...] -- Track 3 Batch 1: auto-generate a
 /// VALID reFind-superset conversion-rules file from the REAL deep-property trees
 /// of the From and To types (Task 1's BuildPropTree over BOTH), pre-filling the
 /// assignments it can safely infer and leaving only genuine ambiguities as '???'
 /// for the user to resolve. --from (reuses CallFrom) and --to (reuses RenameTo)
-/// are BOTH required (missing -&gt; usage + exit 2). --out (reuses Output) writes
+/// are BOTH required (missing -&gt; usage + exit 2). --output (reuses Output) writes
 /// an ASCII/CRLF file; omitted -&gt; stdout. Multiple --db are tried in order; the
 /// FIRST db that resolves BOTH types is used (ids are per-DB). If either type is
 /// unresolved the verb names it and exits 1.
@@ -22343,7 +22522,7 @@ end; // function
 /// is a filtered-out To leaf is correctly reported DROPPED rather than silently
 /// neither linked nor noted.</summary>
 /// <param name="AArgs">CallFrom=--from (FromType qname), RenameTo=--to (ToType
-/// qname), Output=--out (file; empty=stdout), Surface=--surface dfm|pas ('' =
+/// qname), Output=--output (file; empty=stdout), Surface=--surface dfm|pas ('' =
 /// default 'dfm'), DbPath/DbPaths=index(es).</param>
 /// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
 /// --from/--to, invalid --surface value) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
@@ -22528,7 +22707,10 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'convert-scaffold') then Exit(2);
   if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
-  begin Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--out FILE] [--surface dfm|pas] --db PATH [--db ...]'); Exit(2); end;
+  begin
+    Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--output FILE] [--surface dfm|pas] --db PATH [--db ...]');
+    Exit(2);
+  end;
 
   // proptree assignability engine (Task 5): --surface dfm|pas picks the
   // TARGET-side visibility bar (see IsValidTarget above); unset defaults to
@@ -23203,10 +23385,10 @@ begin
   Result:= 0;
 end; // function
 
-// drag-lint glyph-vacuum --root DIR [--root DIR ...] --out DIR [--append] [--db PATH ...]
+// drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]
 // Walk every .dfm/.fmx under the roots, extract and decode every streamed graphic,
 // pair it with its count property, write instances.tsv / classes.tsv / skipped.tsv /
-// gallery.html / images\ into --out. --db only QUALIFIES (class_unit, declared count
+// gallery.html / images\ into --output. --db only QUALIFIES (class_unit, declared count
 // default, runtime_refs); without one those columns are empty, never guessed.
 // Exit 0 on a completed walk (0 graphics is an answer); 2 on bad args or a missing root.
 function DoGlyphVacuum(const AArgs: TArgs): Integer;
@@ -23221,7 +23403,7 @@ var
 begin
   if (Length(AArgs.Roots) = 0) or (AArgs.Output = '') then
   begin
-    Writeln('Usage: drag-lint glyph-vacuum --root DIR [--root DIR ...] --out DIR [--append] [--db PATH ...]');
+    Writeln('Usage: drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]');
     Exit(2);
   end;
   if not ExplicitDbsExist(AArgs, 'glyph-vacuum') then Exit(2);
@@ -24378,7 +24560,7 @@ begin
 end; // begin
 
 /// <summary>Implements the forms-csv CLI command: generates a navigation-map CSV
-/// for a project index and writes it to --out or stdout. Multi-DB: when the
+/// for a project index and writes it to --output or stdout. Multi-DB: when the
 /// caller supplies no --db, falls back through ResolveConsumerDbs (manifest /
 /// platform resolution) so forms-csv sees the same DB set as query/lsp/serve;
 /// the first resolved path is primary (drives enumeration), the rest widen the

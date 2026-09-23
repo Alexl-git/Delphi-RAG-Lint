@@ -1139,6 +1139,15 @@ $FlagUndocumentedOnPurpose = [ordered]@{
   '--use-ignore'      = '(b) no-op alias of the DEFAULT; --no-use-ignore is the documented switch'
   '--dir'             = '(b) alias of the positional <path> every verb documents'
   '--target'          = '(b) alias of the positional <target> on compile-check/ghost-check/check-unit'
+  '--out'             = '(b) alias of --output, silent by owner ruling 2026-09-22 (docs\INBOX-output-flag-canonicalisation.md)'
+}
+# The ONE exempt flag a prose doc may name, and the doc that may name it. The
+# ruling above asked for docs\AI-USAGE.md to record that the alias exists, and
+# F3 below would otherwise read that record as prose running ahead of the
+# banner. Two-way asserted (F3x): each entry must still be exempt AND still be
+# named in its doc, so this cannot quietly become a suppression list.
+$ProseMayNameExemptAlias = [ordered]@{
+  '--out' = 'docs\AI-USAGE.md'
 }
 # Not parsed through the `A = '...'` chain, so the scan cannot see them; listed
 # by name WITH the handler that must still exist, so deleting the handler makes
@@ -1239,9 +1248,17 @@ foreach ($name in $proseDocs.Keys) {
   $set = Get-FlagSet (Get-Content -LiteralPath $p -Raw) $ProseRx
   $proseSets[$name] = $set
   Check "check 9: $name flag list parsed" ($set.Count -gt 50) "($($set.Count) flag(s))"
-  $bad = @($set | Where-Object { -not $helpSet.Contains($_) }) | Sort-Object
+  $bad = @($set | Where-Object {
+             -not $helpSet.Contains($_) -and -not ($ProseMayNameExemptAlias[$_] -eq $name)
+           }) | Sort-Object
   Check "F3 every flag $name names is in --help" ($bad.Count -eq 0) `
     ("$($bad.Count) named in prose but not in the banner: " + ($bad -join ' '))
+}
+foreach ($k in $ProseMayNameExemptAlias.Keys) {
+  $doc = $ProseMayNameExemptAlias[$k]
+  Check "F3x $k is still an exempt alias" ($FlagUndocumentedOnPurpose.Contains($k)) 'delete the prose allowance with the exemption'
+  Check "F3x $k is still named in $doc" ($proseSets.ContainsKey($doc) -and $proseSets[$doc].Contains($k)) `
+    'the record the ruling asked for is gone -- restore it or delete this allowance'
 }
 
 # --- F4: the PROMOTED set must be in both prose docs ------------------------

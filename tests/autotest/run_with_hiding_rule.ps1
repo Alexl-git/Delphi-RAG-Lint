@@ -283,6 +283,13 @@ try {
   $bridgeSrc  = Join-Path $srcDir 'uWhBridge.pas'
   $bridgeWith = & $Exe lint $bridgeSrc --db $db --library-db $libDb --quiet 2>&1 | Out-String
   $bridgeNone = & $Exe lint $bridgeSrc --db $db --quiet 2>&1 | Out-String
+  # D2 (docs\INBOX-defects-found-2026-09-23-rule-work.md): `lint --rule
+  # with-hides-outer-symbol` never reached CheckWithHiding, because its call sat
+  # under the TYPE-AWARE rule gate, whose id list does not carry this rule.
+  $localSrc  = Join-Path $srcDir 'uWhLocal.pas'
+  $ruleLocal = & $Exe lint $localSrc --db $db --rule with-hides-outer-symbol --quiet 2>&1 | Out-String
+  $ruleBridge = & $Exe lint $bridgeSrc --db $db --library-db $libDb --rule with-hides-outer-symbol --quiet 2>&1 | Out-String
+  $ruleOther = & $Exe lint $localSrc --db $db --rule unused-local --quiet 2>&1 | Out-String
 } finally { Pop-Location }
 
 $lines = @($onOut -split "`r?`n" | Where-Object { $_ -match 'with-hides-outer-symbol' })
@@ -371,6 +378,20 @@ Check 'WITHOUT it: the same file, same index, degrades to SILENT' `
 Check 'POSITIVE CONTROL: the no-library run still linted the file' `
   ($bridgeNone -match 'uWhBridge') `
   'a run that produced NO output at all would satisfy the silence check for the wrong reason'
+
+Write-Host ''
+Write-Host 'lint <file> --rule with-hides-outer-symbol (D2)' -ForegroundColor Cyan
+Check 'D2 --rule with-hides-outer-symbol reports the LOCAL finding' `
+  ($ruleLocal -match 'with-hides-outer-symbol') `
+  'RED means CheckWithHiding is still gated on the type-aware id list, which does not name this rule'
+Check 'D2 --rule with-hides-outer-symbol reaches the cross-store BRIDGE finding' `
+  ($ruleBridge -match 'with-hides-outer-symbol') ''
+Check 'D2 --rule narrows: only the named rule is reported' `
+  (@($ruleLocal -split "`r?`n" | Where-Object { $_ -match ':\d+:\d+' -and $_ -notmatch 'with-hides-outer-symbol' }).Count -eq 0) `
+  'another rule id leaked into a --rule run'
+Check 'D2 a DIFFERENT --rule does not report it' `
+  (-not ($ruleOther -match 'with-hides-outer-symbol')) `
+  'the with-hiding checker must stay behind its own gate'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
