@@ -134,7 +134,8 @@ const
   /// <para>1.5.1-alpha -&gt; 1.6.0-alpha (2026-09-23, enum-value-ref-binding): the
   /// calls stage binds refs.symbol_id for a `read` ref that names an ENUM VALUE
   /// (by name + scope, certain or NULL: R1 visibility, R2 uniqueness, R3
-  /// shadowing, rule-0 duplicate collapse) and for a `member-access` ref
+  /// shadowing, R4 no enclosing symbol, rule-0 duplicate collapse) and for a
+  /// `member-access` ref
   /// qualified by the enum type or its unit. No call_edges row, no
   /// member_accesses row, no new table. DERIVED rows only, no parse change:
   /// remedy is `index --all --resolve-only`. A MINOR, not a patch: a new class
@@ -681,12 +682,13 @@ type
   /// OwnerTypeId is the class/record/interface that DECLARES the enum when the
   /// enum is nested inside a type, and 0 for a unit-level enum.</summary>
   /// <remarks>
-  /// Deliberately NOT a TSymbol. The enum-value pass keys on exactly six facts --
-  /// identity, declaring file, the parent enum, the declaring type (for the
-  /// nested-enum visibility rule), the name pair rule 0 groups on, and the span
-  /// rule 0 compares -- and carrying a full TSymbol would invite a later rung to
-  /// consult a field (Signature, Heritage, Modifiers) that the bulk SQL does not
-  /// select and which would therefore read back empty rather than absent.
+  /// Deliberately NOT a TSymbol. The enum-value pass keys on the facts this
+  /// record carries and no others -- identity, declaring file, the parent enum,
+  /// the declaring type (for the nested-enum visibility rule), the value's own
+  /// section (R1), the name pair rule 0 groups on, and the span rule 0 compares.
+  /// Carrying a full TSymbol would invite a later rung to consult a field
+  /// (Signature, Heritage, Modifiers) that the bulk SQL does not select and
+  /// which would therefore read back empty rather than absent.
   ///
   /// Section is the VALUE's own section, measured identical to its parent enum's
   /// on both reference corpora; R1 uses it directly rather than re-deriving it

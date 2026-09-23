@@ -64,7 +64,7 @@
     check  9  R-A: find-callers --resolved reports reads ... task 6
     check 10  doc: "Used by:" lists UseIt ONCE (REGRESSION) . green already
     check 11  lint-tree: stale-interface-reference ......... **task 8 (LAST)**
-              (4 sub-assertions; AMENDED at task 8, see below)
+              (AMENDED at task 8, see below)
     check 12  E5: scoped pass NULLs its own universe ....... task 4
     check 13  rule 0: pinned INERT (collapsed = 0, R12) .... task 4
 
@@ -79,11 +79,12 @@
   admitted it read `n=5 expected=4`, and the fifth finding was real, not
   leakage: dropping `cmdLoad` shifts every LATER member's ordinal, so
   `cmdDelta` goes 1 -> 0 and its one bound site (A2) reports a CHANGED
-  declaration alongside the four REMOVED ones. The check now carries four
-  sub-assertions instead of two -- removals counted AND named `cmdLoad`; the
-  ordinal-shift finding present exactly once and naming `cmdDelta`; nothing
-  else leaked in (total == removed + changed, every finding
-  `stale-interface-reference`); and `enum_value` gone from `not_reportable`.
+  declaration alongside the four REMOVED ones. The check now asserts, in
+  addition to what it always did: that the removals are counted AND each names
+  `cmdLoad`; that the ordinal-shift finding is present exactly once and names
+  `cmdDelta`; that nothing else leaked in (total == removed + changed, every
+  finding `stale-interface-reference`); that the JSON still HAS a
+  `not_reportable` key; and that `enum_value` is gone from it.
   It was made MORE discriminating, never relaxed to absorb the fifth row.
   (2026-09-23, task 9: the ordinal-shift finding's MESSAGE was corrected --
   a changed enum declaration does not stop the reference compiling, so it no
@@ -455,7 +456,13 @@ Write-Host '== check 1: fixture A indexes clean ==' -ForegroundColor Cyan
 $idxOut = & $exePath index $dirA --db $dbA 2>&1 | Out-String
 $idxExit = $LASTEXITCODE
 CheckN 1 'index exits 0' ($idxExit -eq 0) "exit=$idxExit"
-CheckN 1 'index reported no parse errors' ($idxOut -match '0 errors') ''
+# '0 errors' as a bare -match ALSO matches "10 errors" and "20 errors" -- the
+# assertion would read a flood of parse errors as a clean index. The digit
+# boundary is what makes it an assertion. Inherited from the template this file
+# was cloned from; fixed here rather than carried (task 9).
+# The failure detail is $idxOut, not '': a failure with no payload cannot
+# localise itself, and every other check in this file passes something real.
+CheckN 1 'index reported no parse errors' ($idxOut -match '(?<!\d)0 errors') $idxOut
 
 Write-Host ''
 Write-Host '== check 2: ROUTINE CONTROL -- green today and in EVERY later task ==' -ForegroundColor Cyan
@@ -608,6 +615,12 @@ if ($null -ne $lj) {
   CheckN 11 ("removing cmdLoad reports {0} stale references, one per BOUND site (A1, A3, B2, A5)" -f $cmdLoadSites.Count) ($stale.Count -eq $cmdLoadSites.Count -and @($stale | Where-Object { $_.message -match 'cmdLoad' }).Count -eq $cmdLoadSites.Count) ("n=$($stale.Count) expected=$($cmdLoadSites.Count) " + ($lj.findings | ConvertTo-Json -Compress -Depth 4))
   CheckN 11 'the ORDINAL SHIFT is reported too: cmdDelta (1 -> 0) at its one bound site A2' ($changed.Count -eq 1 -and $changed[0].message -match 'cmdDelta') ("n=$($changed.Count) " + ($changed | ConvertTo-Json -Compress -Depth 4))
   CheckN 11 'nothing else leaked in: every finding is rule stale-interface-reference and is one of those two classes' ((@($lj.findings).Count -eq ($stale.Count + $changed.Count)) -and (@($lj.findings | Where-Object { $_.rule -ne 'stale-interface-reference' }).Count -eq 0)) ("total=$(@($lj.findings).Count) removed=$($stale.Count) changed=$($changed.Count)")
+  # VACUITY FENCE, added task 9. `-contains` on a MISSING key is False, so a
+  # renamed or dropped `not_reportable` would make the assertion below pass for
+  # a reason that has nothing to do with enum_value -- the guard would go green
+  # on a schema change that removed the very evidence it reads. Assert the key
+  # is present first; only then does its content mean anything.
+  CheckN 11 'the lint-tree JSON still HAS a not_reportable key (the fence that stops the next assertion passing vacuously)' (@($lj.PSObject.Properties.Name) -contains 'not_reportable') (@($lj.PSObject.Properties.Name) -join ',')
   CheckN 11 'enum_value is no longer in not_reportable' (-not (@($lj.not_reportable) -contains 'enum_value')) (@($lj.not_reportable) -join ',')
 }
 
@@ -623,7 +636,7 @@ Copy-Item $fDecl (Join-Path $dirB 'dup\uEnumDecl.pas')
 Copy-Item $fUse  (Join-Path $dirB 'uEnumUse.pas')
 $dbB = Join-Path $scratch 'b.sqlite'
 $idxB = & $exePath index $dirB --db $dbB 2>&1 | Out-String
-CheckN 13 'fixture B indexes clean' (($LASTEXITCODE -eq 0) -and ($idxB -match '0 errors')) "exit=$LASTEXITCODE"
+CheckN 13 'fixture B indexes clean' (($LASTEXITCODE -eq 0) -and ($idxB -match '(?<!\d)0 errors')) "exit=$LASTEXITCODE"
 # FIXTURE HEALTH FIRST: without two identical twins, rule 0 has nothing to
 # collapse and the outcome assertion below would be vacuous.
 $twins = Sql $dbB "SELECT s.id, s.qualified_name AS qn, s.start_line AS sl, s.end_line AS el, f.path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.kind = 'enum_value' AND s.name = 'cmdLoad' ORDER BY f.path"
