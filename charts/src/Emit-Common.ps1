@@ -1264,8 +1264,11 @@ SELECT DISTINCT sl.text AS t FROM string_literals sl
 # raised TYPE is not a fact of the index.
 #
 # A qualifier between the keyword and the name (`raise SysUtils.Exception.Create`)
-# is skipped. When nothing precedes the ref on its line the clause began on the
-# previous line (R12: measured 0 times on CLIENT; Delphi permits it).
+# is skipped. When nothing precedes the ref on its line -- or only the handler
+# variable, `E:` -- the clause began on the previous line, and that line's tail is
+# read in front of it: `except on` / `E: EFoo do` is a handler (R12, and fix round 1
+# finding 4: the earlier fallback fired only on an EMPTY prefix, so the split
+# `on` / `E: T` form was missed). Measured 0 multi-line clauses on CLIENT.
 #
 # $Ctx is a Get-SourceContext result; a stale one returns 'stale' and is never
 # classified (R11).
@@ -1273,7 +1276,7 @@ function Get-ExceptionRefClass($Ctx, [string] $Kind) {
   if ($Ctx.Stale) { return 'stale' }
   if ([string]::IsNullOrWhiteSpace([string]$Ctx.Token)) { return 'other' }
   $b = [regex]::Replace([string]$Ctx.Before, '(?:[A-Za-z_]\w*\s*\.\s*)+$', '')
-  if (-not $b.Trim()) { $b = [string]$Ctx.PrevLine }
+  if ($b.Trim() -eq '' -or $b.Trim() -match '^[A-Za-z_]\w*\s*:$') { $b = [string]$Ctx.PrevLine + ' ' + $b.Trim() }
   if ($Kind -eq 'read' -and $b -match '\braise\s*$' -and [string]$Ctx.After -match '^\s*\.\s*Create\w*\b') {
     return 'raise'
   }
@@ -1308,6 +1311,12 @@ function Get-ExceptionSourceRows([string] $Path, [int] $From, [int] $To,
     return [pscustomobject]@{ Path = $Path; Stale = $true; Rows = @() }
   }
   $lines = Get-StrippedSourceLines (Resolve-SourceReadPath $Path $SourceOverride)
+  [pscustomobject]@{ Path = $Path; Stale = $false; Rows = (Get-ExceptionSourceRowsIn $lines $From $To $Skip) }
+}
+
+# The scan itself, over already-STRIPPED lines -- so a check can hand it a
+# synthetic body. Get-ExceptionSourceRows is the fresh-file wrapper.
+function Get-ExceptionSourceRowsIn([string[]] $lines, [int] $From, [int] $To, $Skip) {
   $rows = New-Object System.Collections.ArrayList
   $hi = [Math]::Min($To, $lines.Count)
   for ($ln = [Math]::Max($From, 1); $ln -le $hi; $ln++) {
@@ -1339,7 +1348,7 @@ function Get-ExceptionSourceRows([string] $Path, [int] $From, [int] $To,
       [void]$rows.Add([pscustomobject]@{ Kind = $kind; Line = $ln; Col = $m.Index + 1; Text = $what })
     }
   }
-  [pscustomobject]@{ Path = $Path; Stale = $false; Rows = $rows.ToArray() }
+  , $rows.ToArray()
 }
 
 # THE EXCEPTION-TYPE NAME FILTER, in one place. It decides only what is COUNTED
@@ -1375,6 +1384,114 @@ SELECT name AS name FROM symbols
     $script:DlExcNonClass[$DbPath] = $set
   }
   -not $script:DlExcNonClass[$DbPath].Contains($Name)
+}
+
+# The try-blocks of one routine span, from a NESTING scan of the comment-stripped
+# lines (controller ruling R10, fix round 1). A caller's handler catches an
+# exception from a call only when the call sits between that block's `try` and
+# its `except` -- a handler elsewhere in the body guards something else. Measured
+# 2026-09-23: both `on E: EDatabaseError` handlers above BuildSchema guard only
+# LoadFromStream, and BuildSchema is called outside their try.
+#
+# $Lines are STRIPPED lines (Get-StrippedSourceLines), so a keyword inside a
+# comment or a string is already blank. Tokens: begin / case / record / asm /
+# try push; end pops; except / finally mark the innermost open `try`; `on`
+# directly in an except part is a handler clause. A `case` inside a `record` is
+# the variant part and has no `end` of its own. Inside `asm` only `end` counts.
+# A token after `.` or `&` is an identifier, not a keyword.
+#
+# NOT DECIDED is a result, not an error: an `end` with nothing open, an
+# `except`/`finally` whose innermost open block is not a `try`, or anything left
+# open at the end of the span (a local `class` type -- its `end` has no opener
+# here -- does exactly that). The caller then may not claim containment either
+# way, and draws the handler as unverified.
+#
+# Positions are line * 100000 + column, so one integer compares both.
+# Returns Decided, Reason, Blocks[] { Try, Except (0 = none), Finally (0), End,
+# On[] (positions of the `on` clauses in the except part) }.
+function Get-TryBlocks([string[]] $Lines, [int] $From, [int] $To) {
+  $rx = [regex]'(?i)(?<![\w&\.])(begin|end|case|record|asm|try|except|finally|on)\b'
+  $stack = New-Object System.Collections.ArrayList
+  $blocks = New-Object System.Collections.ArrayList
+  $hi = [Math]::Min($To, $Lines.Count)
+  $fail = $null
+  for ($ln = [Math]::Max($From, 1); $ln -le $hi -and -not $fail; $ln++) {
+    foreach ($m in $rx.Matches($Lines[$ln - 1])) {
+      $w = $m.Groups[1].Value.ToLowerInvariant()
+      $pos = $ln * 100000 + $m.Index + 1
+      $top = $(if ($stack.Count) { $stack[$stack.Count - 1] } else { $null })
+      if ($top -and $top.Kind -eq 'asm' -and $w -ne 'end') { continue }
+      switch ($w) {
+        'end' {
+          if (-not $top) { $fail = "an ``end`` at line $ln closes nothing"; break }
+          $stack.RemoveAt($stack.Count - 1)
+          if ($top.Kind -eq 'try') {
+            [void]$blocks.Add([pscustomobject]@{
+              Try = $top.Pos; Except = $top.Except; Finally = $top.Finally; End = $pos; On = $top.On.ToArray() })
+          }
+        }
+        { $_ -in 'except', 'finally' } {
+          if (-not $top -or $top.Kind -ne 'try' -or $top.Except -or $top.Finally) {
+            $fail = "``$w`` at line $ln has no open try"; break
+          }
+          if ($w -eq 'except') { $top.Except = $pos } else { $top.Finally = $pos }
+        }
+        'on' {
+          if ($top -and $top.Kind -eq 'try' -and $top.Except) { [void]$top.On.Add($pos) }
+        }
+        'case' {
+          if (-not ($top -and $top.Kind -eq 'record')) {
+            [void]$stack.Add([pscustomobject]@{ Kind = 'case'; Pos = $pos })
+          }
+        }
+        default {
+          [void]$stack.Add([pscustomobject]@{
+            Kind = $w; Pos = $pos; Except = 0; Finally = 0; On = (New-Object System.Collections.ArrayList) })
+        }
+      }
+      if ($fail) { break }
+    }
+  }
+  if (-not $fail -and $stack.Count) { $fail = "$($stack.Count) block(s) still open at the end of the span" }
+  [pscustomobject]@{ Decided = (-not $fail); Reason = $fail; Blocks = $(if ($fail) { @() } else { $blocks.ToArray() }) }
+}
+
+# The innermost try-block whose EXCEPT part holds position $Pos.
+function Find-HandlerBlock($Tb, [int] $Pos) {
+  $best = $null
+  foreach ($b in $Tb.Blocks) {
+    if ($b.Except -and $b.Except -le $Pos -and $Pos -lt $b.End) {
+      if (-not $best -or $b.Except -gt $best.Except) { $best = $b }
+    }
+  }
+  $best
+}
+
+# Does the handler at $Pos re-raise what it caught (ruling R10)? $Blk is the
+# Get-TryBlocks block whose except part holds it; $Bare means $Pos is that
+# block's bare `except`. The handler body runs from its `on` to the next `on` of
+# the same except part (or the block's `end`); a bare except's is the whole
+# except part. Re-raise = `raise;` (or `raise` before else/end), or `raise V`
+# where V is the handler's own variable (`on V: T do`). Raising a NEW exception
+# is not a re-raise: the caught one stopped there. Line-granular: two `on`
+# clauses sharing one line share one body.
+function Test-HandlerReraises([string[]] $Lines, $Blk, [int] $Pos, [bool] $Bare) {
+  $var = $null
+  if ($Bare) {
+    $a = [int][Math]::Floor($Blk.Except / 100000); $b = [int][Math]::Floor($Blk.End / 100000)
+  } else {
+    $on = @($Blk.On | Where-Object { $_ -le $Pos } | Sort-Object)
+    if (-not $on.Count) { return $false }
+    $on = $on[-1]
+    $nx = @($Blk.On | Where-Object { $_ -gt $Pos } | Sort-Object)
+    $a = [int][Math]::Floor($on / 100000)
+    $b = $(if ($nx.Count) { [int][Math]::Max($a, [Math]::Floor($nx[0] / 100000) - 1) } else { [int][Math]::Floor($Blk.End / 100000) })
+    $txt = $Lines[$a - 1].Substring(($on % 100000) - 1)
+    if ($txt -match '(?i)^on\s+([A-Za-z_]\w*)\s*:') { $var = $Matches[1] }
+  }
+  $rows = Get-ExceptionSourceRowsIn $Lines $a $b $null
+  @($rows | Where-Object {
+      $_.Kind -eq 'reraise' -or ($var -and $_.Kind -eq 'raise-var' -and $_.Text -ieq "raise $var") }).Count -gt 0
 }
 
 # The INDEX-WIDE exception candidates of $DbPath, classified -- the pre-check and

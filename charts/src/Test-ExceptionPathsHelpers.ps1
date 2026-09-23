@@ -57,6 +57,7 @@ $count = @{}
 foreach ($k in 'bare-except', 'on-except', 'reraise', 'raise-var', 'raise-create', 'raise-other') { $count[$k] = 0 }
 $bareRoutines = @{}
 $spanTotal = 0; $staleFiles = 0
+$tryDecided = 0; $tryUndecided = New-Object System.Collections.ArrayList
 foreach ($f in $spans) {
   $spanTotal += [int]$f.n
   $list = @(([string]$f.spans -split ',') | ForEach-Object {
@@ -72,6 +73,12 @@ foreach ($f in $spans) {
   }
   $scan = Get-ExceptionSourceRows ([string]$f.path) $lo $hi
   if ($scan.Stale) { $staleFiles++; continue }
+  # the try-block nesting scan (R10), on every span of every fresh file
+  $stripped = Get-StrippedSourceLines ([string]$f.path)
+  foreach ($s in $list) {
+    $tb = Get-TryBlocks $stripped $s.From $s.To
+    if ($tb.Decided) { $tryDecided++ } else { [void]$tryUndecided.Add("$([IO.Path]::GetFileName([string]$f.path)):$($s.From)") }
+  }
   foreach ($r in $scan.Rows) {
     if ($owner[$r.Line] -eq 0) { continue }
     $count[$r.Kind]++
@@ -88,5 +95,101 @@ $res.RaiseVar       = $count['raise-var']
 $res.RaiseCreate    = $count['raise-create']
 $res.RaiseOther     = $count['raise-other']
 $res.BareRoutines   = $bareRoutines.Count
+$res.TryDecided     = $tryDecided
+$res.TryUndecided   = (@($tryUndecided) | Sort-Object) -join ','
+
+# ---- 3. focused checks: the classifier's multi-line fallback (fix round 1, finding 4)
+# Synthetic Get-SourceContext results, so each case isolates ONE rule.
+function Ctx($before, $prev, $after = ' do') {
+  [pscustomobject]@{ Stale = $false; Token = 'EFoo'; Before = $before; After = $after; PrevLine = $prev }
+}
+$cls = [ordered]@{
+  'on E: split'        = @((Ctx '        E: ' 'except on'), 'type_use', 'handle')   # `on` / `E: EFoo do`
+  'on split, no var'   = @((Ctx '        ' 'except on'), 'type_use', 'handle')      # `on` / `EFoo do`
+  'on E: whole prev'   = @((Ctx '   ' 'except on E:'), 'type_use', 'handle')       # `on E:` / `EFoo do`
+  'same line'          = @((Ctx '  on E: ' 'except'), 'type_use', 'handle')
+  'label is not on'    = @((Ctx '  X: ' 'Foo;'), 'type_use', 'other')              # `X:` after a statement
+  'is-test'            = @((Ctx '  if E is ' 'begin'), 'type_use', 'other')
+  'var decl'           = @((Ctx '  X: ' 'var'), 'type_use', 'other')
+  'raise split'        = @((Ctx '    ' '  raise' '.Create(''x'')'), 'read', 'raise')
+  'raise of a var'     = @((Ctx '  raise ' 'begin' ';'), 'read', 'other')
+}
+$bad = New-Object System.Collections.ArrayList
+foreach ($k in $cls.Keys) {
+  $got = Get-ExceptionRefClass $cls[$k][0] $cls[$k][1]
+  if ($got -ne $cls[$k][2]) { [void]$bad.Add("[$k] expected $($cls[$k][2]) got $got") }
+}
+$res.ClassifierFailures = $bad.ToArray()
+
+# ---- 4. focused checks: the try-block nesting scan (R10) ------------------------------
+function Blk($tb) {
+  (@($tb.Blocks | Sort-Object Try | ForEach-Object {
+    "$([Math]::Floor($_.Try / 100000))/$(if ($_.Except) { [Math]::Floor($_.Except / 100000) } else { '-' })/$(if ($_.Finally) { [Math]::Floor($_.Finally / 100000) } else { '-' })/$([Math]::Floor($_.End / 100000)):$(@($_.On).Count)"
+  })) -join ' '
+}
+$scans = [ordered]@{
+  'nested try in try' = @(@('procedure X;', 'begin', '  try', '    try', '      A;', '    except', '      on E: EFoo do B;', '      on E: Exception do C;', '    end;', '  finally', '    D;', '  end;', 'end;'),
+                          'True|3/-/10/12:0 4/6/-/9:2')
+  'case and record'   = @(@('procedure X;', 'type TR = record case Integer of 0: (A: Integer); end;', 'begin', '  case Y of 1: Z; end;', '  try A; except B; end;', 'end;'),
+                          'True|5/5/-/5:0')
+  'asm body'          = @(@('procedure X;', 'asm', '  MOV EAX, 1 { try }', 'end;'), 'True|')
+  'unbalanced end'    = @(@('procedure X;', 'begin', 'end;', 'end;'), 'False|')
+  'finally w/o try'   = @(@('procedure X;', 'begin', '  finally', 'end;'), 'False|')
+  'dotted end'        = @(@('procedure X;', 'begin', '  try R.End := 1; except end;', 'end;'), 'True|3/3/-/3:0')
+}
+$bad = New-Object System.Collections.ArrayList
+foreach ($k in $scans.Keys) {
+  $lines = [string[]]$scans[$k][0]
+  $tb = Get-TryBlocks $lines 1 $lines.Count
+  $got = "$($tb.Decided)|$(Blk $tb)"
+  if ($got -ne $scans[$k][1]) { [void]$bad.Add("[$k] expected '$($scans[$k][1])' got '$got'") }
+}
+$res.TryScanFailures = $bad.ToArray()
+
+# ---- 5. focused checks: does a handler re-raise? (R10) ------------------------------
+# Synthetic first -- each case one rule -- then the REAL handlers the gate's
+# A-EP6/A-EP7 rows depend on, read from the clone's own (fresh) source.
+function PosOf([string[]] $L, [int] $Line, [string] $Tok) { $Line * 100000 + $L[$Line - 1].IndexOf($Tok) + 1 }
+$syn = [string[]]@('procedure X;', 'begin', '  try', '    A;', '  except',
+                   '    on E: EFoo do begin Log; raise; end;',
+                   '    on F: EBar do raise F;',
+                   '    on G: EBaz do raise EQux.Create(1);',
+                   '    on H: EQuux do raise G;',
+                   '  end;', '  try B; except Log; raise; end;', '  try C; except Log; end;', 'end;')
+$stb = Get-TryBlocks $syn 1 $syn.Count
+$cases = [ordered]@{
+  'raise; in begin..end'   = @(6, 'EFoo', $false, $true)
+  'raise of own variable'  = @(7, 'EBar', $false, $true)
+  'raise of a NEW object'  = @(8, 'EBaz', $false, $false)
+  'raise of ANOTHER var'   = @(9, 'EQuux', $false, $false)
+  'bare except, raise;'    = @(11, 'except', $true, $true)
+  'bare except, swallows'  = @(12, 'except', $true, $false)
+}
+$bad = New-Object System.Collections.ArrayList
+foreach ($k in $cases.Keys) {
+  $c = $cases[$k]
+  $pos = PosOf $syn $c[0] $c[1]
+  $blk = Find-HandlerBlock $stb $pos
+  $got = $(if ($blk) { Test-HandlerReraises $syn $blk $pos $c[2] } else { 'no block' })
+  if ("$got" -ne "$($c[3])") { [void]$bad.Add("[$k] expected $($c[3]) got $got") }
+}
+$real = [ordered]@{
+  'LoadAll:532'               = @('uJobList.ViewModel.TJobListViewModel.LoadAll', 532, 'EDatabaseError', $true)
+  'ApplyRawPayload:579'       = @('uJobList.ViewModel.TJobListViewModel.ApplyRawPayload', 579, 'EDatabaseError', $true)
+  'LoadAllAsync:632'          = @('uJobList.ViewModel.TJobListViewModel.LoadAllAsync', 632, 'Exception', $false)
+  'AutoTestSetupDefaults:466' = @('uAutoTest.AutoTestSetupDefaults', 466, 'Exception', $false)
+}
+foreach ($k in $real.Keys) {
+  $c = $real[$k]
+  $s = Invoke-IndexQuery "SELECT s.impl_start_line AS a, s.impl_end_line AS b, f.path AS path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.qualified_name = '$($c[0])'"
+  $L = Get-StrippedSourceLines ([string]$s[0].path)
+  if (-not (Test-SourceFresh ([string]$s[0].path))) { [void]$bad.Add("[$k] source is stale"); continue }
+  $tb = Get-TryBlocks $L ([int]$s[0].a) ([int]$s[0].b)
+  $pos = PosOf $L $c[1] $c[2]
+  $blk = $(if ($tb.Decided) { Find-HandlerBlock $tb $pos } else { $null })
+  $got = $(if ($blk) { Test-HandlerReraises $L $blk $pos $false } else { 'no block' })
+  if ("$got" -ne "$($c[3])") { [void]$bad.Add("[$k] expected $($c[3]) got $got") }
+}
+$res.ReraiseFailures = $bad.ToArray()
 
 [pscustomobject]$res

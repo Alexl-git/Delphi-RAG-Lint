@@ -948,16 +948,55 @@ Step 'E-EP' {
   Chk 'A-EP5-FRESH'     $ep5.StaleFiles 0
   NoUnhandled 'A-EP5-WORDS' $ep5
 
-  # NOT in the plan: none of its five focuses reaches a handler, so the SOLID
-  # catch edge was otherwise untested. BuildSchema raises EDatabaseError at :289;
-  # both depth-1 callers (ApplyRawPayload, LoadAll) hold on E: EDatabaseError,
-  # so the first (by name) is drawn and the second disclosed as "+1 more".
+  # A-EP6 RE-PINNED in fix round 1 (controller ruling R10). The first version
+  # matched a caller's handler ANYWHERE in its body and pinned `caught (exact)`
+  # at depth 1 -- FALSE in source: LoadAll (:525) and ApplyRawPayload (:569)
+  # call BuildSchema inside a try..FINALLY; their `on E: EDatabaseError`
+  # handlers (:532 / :579) guard only LoadFromStream (:530 / :574), and both
+  # re-raise (`raise;` :540 / :585). Those two handlers, and LoadAllAsync's
+  # :627 handler (its try covers the pipe call, not the queued apply), guard
+  # other statements: NotGuarding 3, and none of the three lines is drawn.
+  # The real catch is one level up: LoadAllAsync :632 is `try if Ok then
+  # ApplyRawPayload(RspPayload); except on E: Exception do ...` -- call at col
+  # 40, between the try (col 25) and the except, and the handler does not
+  # re-raise. Verified by a targeted read of uJobList.ViewModel.pas 602-636.
   $script:ep6 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'uJobList.ViewModel.TJobListViewModel.BuildSchema' -DbPath $DbCli -OutDir $OutDir
-  Chk 'A-EP6-CAUGHT'    "$($ep6.Raises):$($ep6.RaiseTypeNames):$($ep6.Caught):$($ep6.MayCatch)" '1:EDatabaseError:1:0'
   Chk 'A-EP6-CALLERS'   "$($ep6.Callers)/$($ep6.CallerLevels)" '7/3'
-  Chk 'A-EP6-WALK'      "$($ep6.WalkSentence)" ''
-  if ((Dot $ep6) -notmatch 'caught \(exact\) \+1 more at depth 1') { Fail 'A-EP6-EDGE' 'the solid exact-catch edge is not drawn' }
+  Chk 'A-EP6-EVENTS'    $ep6.Events 'caught:LoadAllAsync:632'
+  Chk 'A-EP6-NOTGUARD'  $ep6.NotGuarding 3
+  Chk 'A-EP6-CAUGHT'    "$($ep6.Caught):$($ep6.ReRaised):$($ep6.Unverified):$($ep6.MayCatch)" '1:0:0:0'
+  $t6 = Dot $ep6
+  foreach ($ln in 532, 579, 627) { if (HasLine $t6 $ln) { Fail 'A-EP6-NOTCONTAINED' "the handler at :$ln guards another statement but was drawn" } }
+  if ($t6 -notmatch 'caught \(catch-all\) at LoadAllAsync:632') { Fail 'A-EP6-EDGE' 'the verified catch at LoadAllAsync:632 is not drawn' }
+  if ($t6 -notmatch '3 matching handler\(s\) in callers guard other statements') { Fail 'A-EP6-DISCLOSE' 'the not-guarding handlers are not disclosed' }
   NoUnhandled 'A-EP6-WORDS' $ep6
+
+  # A GENUINE solid catch at depth 1, verified by a targeted read of uAutoTest.pas
+  # 363-569: AutoTestSetupDefaults calls ReadBuffer at :433 inside the try opened
+  # at :411, whose except (:465) holds `on E: Exception do Check(...)` at :466 --
+  # no re-raise. The other handler in that body (:402) closes its try at :403,
+  # before the call.
+  $script:ep7 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'MStreams.TABZMemoryStream.ReadBuffer' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-EP7-EVENTS'    $ep7.Events 'caught:AutoTestSetupDefaults:466'
+  Chk 'A-EP7-CAUGHT'    "$($ep7.RaiseTypeNames):$($ep7.Caught):$($ep7.SolidEdges)" 'EReadError:1:1'
+  Chk 'A-EP7-CALLERS'   "$($ep7.Callers)/$($ep7.NotGuarding)" '140/1'
+  if ((Dot $ep7) -notmatch 'caught \(catch-all\) at AutoTestSetupDefaults:466') { Fail 'A-EP7-EDGE' 'the verified catch is not drawn' }
+  NoUnhandled 'A-EP7-WORDS' $ep7
+
+  # Finding 3: a STALE caller is not read, and the sentence says so instead of
+  # letting "no handler found" cover it. uAutoTest.pas is manufactured stale
+  # (one trailing blank, -SourceOverride): its 3 callers are not read, so the
+  # verified catch above disappears and the sentence counts them.
+  $stDir9 = Join-Path $OutDir 'ep-stale-caller'
+  New-Item -ItemType Directory -Force $stDir9 | Out-Null
+  $atp = 'C:\Projects\DB\ORM3\CLIENT\uAutoTest.pas'
+  $al = [IO.File]::ReadAllLines($atp); $al[0] = $al[0] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir9 'uAutoTest.pas'), (($al -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $script:ep9 = & "$SRC\Emit-ExceptionPaths.ps1" -Qname 'MStreams.TABZMemoryStream.ReadBuffer' -DbPath $DbCli -OutDir $stDir9 `
+                  -SourceOverride @{ $atp = (Join-Path $stDir9 'uAutoTest.pas') }
+  Chk 'A-EP9-STALE'     "$($ep9.StaleCallers):$($ep9.Caught):$($ep9.Events)" '3:0:'
+  Chk 'A-EP9-WALK'      $ep9.WalkSentence 'no handler found within 3 caller levels (140 callers walked); 3 callers not read: source changed since indexing'
+  if ((Dot $ep9) -notmatch '3 callers not read: source changed since indexing') { Fail 'A-EP9-DISCLOSE' 'the unread callers are not on the chart' }
 
   # the SOURCE-ONLY rows inside every indexed impl span, index-wide
   $script:ex0 = & "$SRC\Test-ExceptionPathsHelpers.ps1" -DbCli $DbCli
@@ -972,6 +1011,21 @@ Step 'E-EP' {
   # stripped count is 177; the other 8 are the uJobList.pas {$IFDEF
   # M2022_REFERENCE} lines, where the index has no routine span (P6).
   Chk 'A-EP0-CREATE'    "$($ex0.RaiseCreate)/$($ex0.RaiseOther)" '169/0'
+  # R10's nesting scan over EVERY indexed span: 2 of 10,995 fresh spans are not
+  # decided, both correctly -- MStreams.pas:917 is an `asm` body split by
+  # {$IF}/{$ELSE} (its Pascal `begin` sits in a blanked branch), and
+  # uJobList.pas:971 starts on a line that closes the PREVIOUS routine
+  # (`end; procedure ...`). A not-decided span can only draw dashed edges.
+  Chk 'A-EP0-TRYSCAN'   "$($ex0.TryDecided)|$($ex0.TryUndecided)" '10993|MStreams.pas:917,uJobList.pas:971'
+  # focused checks: finding 4's split handler (`on` / `E: T do`), and the
+  # nesting scan on synthetic bodies (nested try, record case, asm, unbalanced)
+  if (@($ex0.ClassifierFailures).Count) { Fail 'A-EP-F4-CLASSIFY' (@($ex0.ClassifierFailures) -join '; ') }
+  if (@($ex0.TryScanFailures).Count)    { Fail 'A-EP-R10-SCAN'    (@($ex0.TryScanFailures) -join '; ') }
+  # re-raise detection (R10): synthetic handlers, then the REAL ones A-EP6/A-EP7 rest on --
+  # LoadAll:532 and ApplyRawPayload:579 re-raise; LoadAllAsync:632 and
+  # AutoTestSetupDefaults:466 do not. No CLIENT re-raising try guards a call into a
+  # raising path (measured: 0 within 2 levels), so no chart row can pin 'reraised'.
+  if (@($ex0.ReraiseFailures).Count)    { Fail 'A-EP-R10-RERAISE' (@($ex0.ReraiseFailures) -join '; ') }
 }
 
 Note 'exception-paths negatives and stale source ...'
