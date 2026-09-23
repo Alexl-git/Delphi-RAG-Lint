@@ -64,12 +64,31 @@
     check  9  R-A: find-callers --resolved reports reads ... task 6
     check 10  doc: "Used by:" lists UseIt ONCE (REGRESSION) . green already
     check 11  lint-tree: stale-interface-reference ......... **task 8 (LAST)**
+              (4 sub-assertions; AMENDED at task 8, see below)
     check 12  E5: scoped pass NULLs its own universe ....... task 4
     check 13  rule 0: pinned INERT (collapsed = 0, R12) .... task 4
 
   **Task 8 is the last check to go green** -- it wires `enum_value` into
   LintTree.IsRoutineKind, which the prior art (INBOX-property-refs-never-
   resolve) requires be done LAST, after the resolver binding is proven.
+
+  **CHECK 11 WAS AMENDED WHEN THE GATE WAS WIDENED (task 8, 2026-09-23).**
+  Recorded here because the header and the map are what a reader reads first,
+  and the amendment happened five hundred lines below them.
+  As committed, check 11 counted ONE class of finding. With `enum_value`
+  admitted it read `n=5 expected=4`, and the fifth finding was real, not
+  leakage: dropping `cmdLoad` shifts every LATER member's ordinal, so
+  `cmdDelta` goes 1 -> 0 and its one bound site (A2) reports a CHANGED
+  declaration alongside the four REMOVED ones. The check now carries four
+  sub-assertions instead of two -- removals counted AND named `cmdLoad`; the
+  ordinal-shift finding present exactly once and naming `cmdDelta`; nothing
+  else leaked in (total == removed + changed, every finding
+  `stale-interface-reference`); and `enum_value` gone from `not_reportable`.
+  It was made MORE discriminating, never relaxed to absorb the fifth row.
+  (2026-09-23, task 9: the ordinal-shift finding's MESSAGE was corrected --
+  a changed enum declaration does not stop the reference compiling, so it no
+  longer says it does. The check matches on `has changed the declaration`,
+  which is the verb and is unchanged.)
 
   THE POSITIVE CONTROLS -- do not weaken these, they are what makes the rest
   of the guard mean anything:
@@ -598,7 +617,7 @@ if ($null -ne $lj) {
 # fixture-A mutation that check 12 is about to make, and may run here.
 # ===========================================================================
 Write-Host ''
-Write-Host '== check 13: rule 0 -- two identical uEnumDecl copies collapse to ONE candidate ==' -ForegroundColor Cyan
+Write-Host '== check 13: rule 0 -- duplicate uEnumDecl copies (pinned INERT, R12) ==' -ForegroundColor Cyan
 Copy-Item $fDecl (Join-Path $dirB 'uEnumDecl.pas')
 Copy-Item $fDecl (Join-Path $dirB 'dup\uEnumDecl.pas')
 Copy-Item $fUse  (Join-Path $dirB 'uEnumUse.pas')

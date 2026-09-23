@@ -553,6 +553,43 @@ begin
   end;
 end;
 
+{ The two verbs, named rather than repeated as literals at four call sites, so
+  that StaleRefMessage below can COMPARE against them instead of sniffing the
+  string it was handed. }
+const
+  VERB_REMOVED = 'no longer declares';
+  VERB_CHANGED = 'has changed the declaration of';
+
+{ THE CONSEQUENCE IS NOT THE SAME FOR EVERY KIND, and stating one consequence
+  for both verbs produces a warning whose stated outcome does not happen.
+
+  A REMOVED declaration breaks every reference to it: the dependent will not
+  compile until it is updated. True for every kind, and the wording this
+  message has always carried.
+
+  A CHANGED declaration on an ENUM VALUE is different, and it became reachable
+  only on 2026-09-23, when IsRoutineKind admitted enum_value. Dropping an
+  earlier member shifts every later member's ordinal, so the baseline reports a
+  changed declaration for each of them -- yet `if C = cmdDelta then DoWork;`
+  compiles exactly as it did before. Nothing breaks at the reference. What
+  changes is the VALUE: an ordinal already persisted to a database, written to
+  a file or sent over a wire now denotes a DIFFERENT member, silently. That is
+  the hazard worth reporting, and it is not "will not compile".
+
+  Every other kind keeps the original wording on the changed path: a changed
+  routine, property or field declaration is a signature change, which is the
+  compile-time case the sentence describes. }
+function StaleRefMessage(const pVerb, pQName, pKind: string): string;
+begin
+  if SameText(pVerb, VERB_CHANGED) and SameText(pKind, 'enum_value') then
+    Result:= Format('the edited unit %s %s; this reference still compiles, but ' +
+      'the member ordinal has moved -- any ordinal already persisted or ' +
+      'transmitted now means a different member', [pVerb, pQName])
+  else
+    Result:= Format('the edited unit %s %s; this reference will not compile ' +
+      'until it is updated', [pVerb, pQName]);
+end;
+
 { One pass over one list. Called twice so the VERB is decided by which list the
   symbol came from rather than re-derived inside the loop -- the first draft
   computed it from the symbol itself and got it wrong for every entry. }
@@ -600,8 +637,7 @@ begin
       F.Severity:= 'warning';
       F.RefKind := Ref.Kind;
       F.Unchecked:= pCtx.Unchecked.ContainsKey(Ref.FileId);
-      F.Message := Format('the edited unit %s %s; this reference will not ' +
-        'compile until it is updated', [pVerb, O.QName]);
+      F.Message := StaleRefMessage(pVerb, O.QName, O.Kind);
       pCtx.Acc.Add(F);
     end;
   end;
@@ -742,8 +778,7 @@ begin
         F.Severity := 'warning';
         F.RefKind  := Ref.Kind;
         F.Unchecked:= pCtx.Unchecked.ContainsKey(Dep.FileId);
-        F.Message  := Format('the edited unit %s %s; this reference will not ' +
-          'compile until it is updated', [pVerb, O.QName]);
+        F.Message  := StaleRefMessage(pVerb, O.QName, O.Kind);
         pCtx.Acc.Add(F);
       end;
     end;
@@ -780,14 +815,11 @@ begin
     { Routines first: they carry a resolved symbol_id, so their findings are
       exact. The name-join path below is the best available answer for kinds
       the resolver does not bind, and it is gated. }
-    CollectRoutineFindings(Ctx, pDelta.Removed, 'no longer declares');
-    CollectRoutineFindings(Ctx, pDelta.Changed,
-      'has changed the declaration of');
+    CollectRoutineFindings(Ctx, pDelta.Removed, VERB_REMOVED);
+    CollectRoutineFindings(Ctx, pDelta.Changed, VERB_CHANGED);
 
-    CollectNameJoinFindings(Ctx, pDelta.Removed, 'no longer declares',
-      ASuppressed);
-    CollectNameJoinFindings(Ctx, pDelta.Changed,
-      'has changed the declaration of', ASuppressed);
+    CollectNameJoinFindings(Ctx, pDelta.Removed, VERB_REMOVED, ASuppressed);
+    CollectNameJoinFindings(Ctx, pDelta.Changed, VERB_CHANGED, ASuppressed);
 
     Result:= Acc.ToArray;
   finally
