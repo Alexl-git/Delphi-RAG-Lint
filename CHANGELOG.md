@@ -5,6 +5,18 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Added
+
+- **New rule `enum-read-inside-with` (bug-patterns, warning, ON by default).** A bare name inside a
+  `with` body that is BOTH a member of a with-target (class with ancestry, or record) AND a read the
+  index binds to an enum value. The compiler binds the member; the resolver records the enum value
+  (risk R7, `docs\MEASURED-enum-value-refs-2026-09-23.md`). The message names both. It needs the
+  same-named member and the index's own enum_value binding at that exact position, so the bare
+  "enum read in a with-bearing routine" population stays silent. `with-hides-outer-symbol` did not
+  already cover it (measured: silent on the positive fixture). Emitted from the same walk as
+  `with-hides-outer-symbol`, sharing its with-target surfaces. Guard:
+  `tests\autotest\run_enum_read_inside_with.ps1` (17 checks). 183 -> 184 rules.
+
 ### Fixed
 
 - **The define profile reads the PLATFORM PropertyGroups.** `ProfileFromDproj` (and so `pp-profile`,

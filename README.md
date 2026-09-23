@@ -667,7 +667,7 @@ Win64 build.
 
 #### Lint
 
-**183 rules across 16 categories -- 130 built-in + 53 external `.scm`, 156
+**184 rules across 16 categories -- 131 built-in + 53 external `.scm`, 157
 enabled by default, 23 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -838,11 +838,11 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (183 rules)
+### Lint rule pack (184 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.16.0-alpha: **183 rules across 16 categories -- 130
-built-in and 53 external `.scm`, 156 enabled by default, and 23 with an
+external `.scm`). As of v1.16.0-alpha: **184 rules across 16 categories -- 131
+built-in and 53 external `.scm`, 157 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |
@@ -875,6 +875,7 @@ documented subset that never reaches them.
 | `uses-global-census` | info | How many of a used unit's globals and consts this unit actually draws, **against how many that unit declares** -- 7 of 9 is a unit that travels with you, 7 of 206 is one you are dragging in for almost nothing. Acknowledge a travels-together pair with `// dl:unit <unit> accepted` |
 | `duplicate-global-decl` | warning | The same name declared at interface level in two or more units -- const, var, type, record, class, interface, enum or routine -- so which one compiles depends on `uses` order. **Library tier** (2026-09-16): a project global that also exists in a library unit the declaring file USES (interface or implementation `uses`) is reported too -- masking an RTL name is almost always a naming error; 2+ project units AND the library is the stronger 3-declaration message. No autofix on purpose: only you know which one is meant |
 | `with-hides-outer-symbol` | warning | A bare name inside a `with` body binds to the with-target while an outer scope declares the same name -- the compiler never warns |
+| `enum-read-inside-with` | warning | A bare name inside a `with` body names both an enum value and a with-target member -- the compiler binds the member, the index records the enum value |
 | `stat-gated-destructive` | warning | Destructive act gated on a file-existence check (a failed stat answers False) |
 
 `global-only-uses-edge` and `uses-global-census` are ON by default but each

@@ -472,19 +472,29 @@ type
       /// </remarks>
       /// <summary>Flags a bare identifier inside a `with` body that binds to a
       /// member of the with-target while an OUTER scope declares the same name --
-      /// the silent misbinding the compiler never warns about.</summary>
+      /// the silent misbinding the compiler never warns about. The same walk
+      /// also flags a bare read inside a `with` body that the INDEX binds to an
+      /// enum value while a with-target declares a member of that name
+      /// ('enum-read-inside-with').</summary>
       /// <param name="AFile">Source file to parse; must exist.</param>
       /// <param name="AStore">Project symbol store; nil yields no findings (the
       /// rule cannot prove either side without it).</param>
       /// <param name="ALibStore">Platform library store, or nil. Without it the
       /// VCL half of an ancestry walk is invisible, so the rule reports FEWER
       /// findings -- never wrong ones.</param>
-      /// <param name="AFileId">The file's id in AStore; 0 is tolerated.</param>
-      /// <returns>'with-hides-outer-symbol' findings, one per identifier per
-      /// with-body, at the first use site; empty when nothing is provable.</returns>
+      /// <param name="AFileId">The file's id in AStore; 0 is tolerated, and
+      /// silences 'enum-read-inside-with' (its evidence is this file's refs).</param>
+      /// <returns>'with-hides-outer-symbol' and 'enum-read-inside-with'
+      /// findings, each at most one per identifier per with-body, at the first
+      /// use site; empty when nothing is provable.</returns>
       /// <remarks>
       /// Never raises. Silence is the answer to every doubt -- see the
       /// implementation's own header for the four things that buy silence.
+      /// 'enum-read-inside-with' needs BOTH halves: a same-named member on a
+      /// with-target (classes with ancestry, and records by their own members)
+      /// AND a ref at the exact identifier position whose symbol is an
+      /// enum_value. An enum read with no shadowing member is never reported,
+      /// and a stale ref that no longer sits on that name is ignored.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
       /// <para>Calls: AddMembersFrom, BareTypeName, CharInSet, CheckProc, CollectDecls, Consider, ContainsText, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding.SurfaceOf, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding.VisitProcs (+12 more)</para>
@@ -4486,6 +4496,10 @@ type
     EntityText: string     ; // the entity as written -- 'FPanel', 'X as TFoo'
     TypeName  : string     ; // its resolved type, '' when it did not resolve
     Surface   : TStringList; // member names of that type; nil when unresolved
+    { A RECORD target's own member names, set only when Surface is nil. Kept
+      apart so with-hides-outer-symbol sees exactly the class-only surfaces it
+      always did; only enum-read-inside-with reads it. }
+    RecSurface: TStringList;
   end;
 
 { with-hides-outer-symbol (owner request 2026-08-30). Inside `with`, a bare
@@ -4517,7 +4531,18 @@ type
   methods all count, on both sides.
 
   Resolution is INNERMOST-FIRST, matching Delphi: `with A, B do` makes B inner,
-  and a nested `with` stacks on top. }
+  and a nested `with` stacks on top.
+
+  enum-read-inside-with (2026-09-23, INBOX-lint-rules-from-new-facts section 1)
+  rides the SAME walk and the same layer surfaces, because its first half is
+  exactly "which with-target member does this bare name bind to". Its second
+  half is not an outer declaration but the index's own verdict: a ref at this
+  identifier's position bound to an enum_value symbol. That is risk R7 (the
+  resolver does not model `with` scope) made visible, and requiring the ref --
+  rather than any same-named enum value anywhere -- keeps scoped-enum values
+  (FMX `Left`, `Top`) and invisible library enums from ever firing. It also
+  admits RECORD targets (RecSurface), which the older rule does not: the spec's
+  own control is a record, and `with Rec do` is where the collision lives. }
 class function TAstChecker.CheckWithHiding(const AFile: string; const AStore: ISymbolStore;
   const ALibStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 const
@@ -4538,6 +4563,7 @@ var
   Findings   : TList<TLintFinding>;
   SurfaceMemo: TObjectDictionary<string, TStringList>;
   Floor      : TStringList        ;
+  EnumRefs   : TDictionary<string, TReference>; { 'line:col' -> ref; nil until first needed }
 
   function NodeStr(const ANode: TTSNode): string;
   var B: TBytes;
@@ -4611,6 +4637,57 @@ var
     end;
     SurfaceMemo.AddOrSetValue(Key, L);
     Result:= L;
+  end;
+
+  { The own members of a RECORD named ARecName in the project store, or nil
+    when there is none. No ancestry (records have none) and no library climb:
+    enum-read-inside-with only ever reports a ref the PROJECT index bound, so a
+    record it cannot see here cannot be its with-target anyway. }
+  function RecordSurfaceOf(const ARecName: string): TStringList;
+  var
+    Key: string     ;
+    L  : TStringList;
+  begin
+    Result:= nil;
+    Key:= 'record:' + LowerCase(Trim(ARecName));
+    if (Key = 'record:') or (AStore = nil) then Exit;
+    if SurfaceMemo.TryGetValue(Key, L) then Exit(L);
+    L:= nil;
+    for var Sy: TSymbol in AStore.FindSymbolsByExactName(Trim(ARecName)) do
+    begin
+      if Sy.Kind <> skRecord then Continue;
+      if L = nil then
+      begin
+        L:= TStringList.Create;
+        L.CaseSensitive:= False;
+      end;
+      for var M: TSymbol in AStore.FindAllChildSymbols(Sy.Id) do
+        if (M.Name <> '') and (M.Kind in [skMethod, skProcedure, skFunction,
+            skConstructor, skProperty, skField]) and (L.IndexOf(M.Name) < 0) then
+          L.Add(M.Name);
+    end;
+    SurfaceMemo.AddOrSetValue(Key, L);
+    Result:= L;
+  end;
+
+  { The ref the index recorded at this identifier, keyed by its 1-based
+    position, when it is bound to a symbol. False when there is none -- which
+    includes AFileId = 0 and an index that never saw this file. }
+  function RefAt(const ANode: TTSNode; out ARef: TReference): Boolean;
+  var P: TTSPoint;
+  begin
+    ARef:= Default(TReference);
+    if AFileId <= 0 then Exit(False);
+    if EnumRefs = nil then
+    begin
+      EnumRefs:= TDictionary<string, TReference>.Create;
+      for var R: TReference in AStore.GetReferencesFromFile(AFileId) do
+        if R.SymbolId > 0 then
+          EnumRefs.AddOrSetValue(IntToStr(R.StartLine) + ':' + IntToStr(R.StartCol), R);
+    end;
+    P:= ANode.StartPoint;
+    Result:= EnumRefs.TryGetValue(IntToStr(Integer(P.Row) + 1) + ':' +
+                                  IntToStr(Integer(P.Column) + 1), ARef);
   end;
 
   { A bare type name, or '' when the text is anything else -- an array, a
@@ -4709,6 +4786,57 @@ var
         Exit(EntityType(E.ChildByField('entity')));
     end;
 
+    { enum-read-inside-with. The winner is the innermost layer whose class OR
+      record surface has the name -- records count here, unlike below. Then the
+      index must have bound THIS identifier to an enum_value of the same name;
+      anything less is silence. }
+    procedure ConsiderEnumRead(const N: TTSNode; const Nm: string);
+    var
+      Win : Integer   ;
+      Surf: TStringList;
+      Ref : TReference;
+      Val : TSymbol   ;
+      Enm : TSymbol   ;
+    begin
+      Win:= -1;
+      for var I: Integer:= Layers.Count - 1 downto 0 do         { innermost first }
+      begin
+        Surf:= if Layers[I].Surface <> nil then Layers[I].Surface else Layers[I].RecSurface;
+        if (Surf <> nil) and (Surf.IndexOf(Nm) >= 0) then
+        begin
+          Win:= I;
+          Break;
+        end;
+      end;
+      if Win < 0 then Exit;
+      if not RefAt(N, Ref) then Exit;
+      if not SameText(Ref.NameText, Nm) then Exit;              { stale ref }
+      Val:= AStore.GetSymbolById(Ref.SymbolId);
+      if Val.Kind <> skEnumValue then Exit;
+      Enm:= AStore.GetSymbolById(Val.ParentId);
+
+      var K: string:= 'enum:' + LowerCase(Nm) + '@' + IntToStr(Layers.Count);
+      if Reported.ContainsKey(K) then Exit;
+      Reported.AddOrSetValue(K, True);
+
+      var P: TTSPoint:= N.StartPoint;
+      var F: TLintFinding:= Default(TLintFinding);
+      F.RuleId   := 'enum-read-inside-with';
+      F.Severity := 'warning';
+      F.FilePath := AFile;
+      F.StartLine:= Integer(P.Row   ) + 1;
+      F.StartCol := Integer(P.Column) + 1;
+      F.EndLine  := F.StartLine;
+      F.EndCol   := F.StartCol + Length(Nm);
+      F.Message  := Format(
+        '''%s'' binds to the with-target member %s.%s via ''with %s do'', not to the enum value ' +
+        '%s.%s -- the compiler picks the member, drag-lint''s index records the enum value. ' +
+        'Qualify it -- through the with-target for the member, or as %s.%s for the enum value.',
+        [Nm, Layers[Win].TypeName, Nm, Layers[Win].EntityText, Enm.Name, Val.Name,
+         Enm.Name, Val.Name]);
+      Findings.Add(F);
+    end;
+
     procedure Consider(const N: TTSNode);
     var
       Nm : string ;
@@ -4720,6 +4848,8 @@ var
       Nm:= Trim(NodeStr(N));
       if Nm = '' then Exit;
       if Floor.IndexOf(Nm) >= 0 then Exit;                      { silencer 4 }
+
+      ConsiderEnumRead(N, Nm);
 
       Win:= -1;
       for I:= Layers.Count - 1 downto 0 do                      { innermost first }
@@ -4812,6 +4942,9 @@ var
           Lay.TypeName  := EntityType(C);
           if Lay.TypeName = '' then Lay.Surface:= nil
           else Lay.Surface:= SurfaceOf(Lay.TypeName);
+          Lay.RecSurface:= nil;
+          if (Lay.Surface = nil) and (Lay.TypeName <> '') then
+            Lay.RecSurface:= RecordSurfaceOf(Lay.TypeName);
           Layers.Add(Lay);
           Inc(Added);
         end;
@@ -4887,6 +5020,7 @@ begin
   Findings   := TList<TLintFinding>.Create;
   SurfaceMemo:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
   Floor      := TStringList.Create;
+  EnumRefs   := nil;
   try
     Floor.CaseSensitive:= False;
     for var S: string in CObjectMembers do Floor.Add(S);
@@ -4898,6 +5032,7 @@ begin
     VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
+    EnumRefs   .Free;
     Floor      .Free;
     SurfaceMemo.Free;
     Findings   .Free;
