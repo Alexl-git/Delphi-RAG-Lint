@@ -8,7 +8,7 @@ call edges in SQLite, and answers questions about them: *where is this declared*
 wrong with it*. It ships as a command-line tool, a RAD Studio IDE plugin, and a
 language server.
 
-**Status: alpha.** Expect breaking changes. The index format is stable within a
+**Status: alpha** (current release v1.17.0-alpha; extractor 1.18.0-alpha, resolver 1.6.0-alpha, index schema 23). Expect breaking changes. The index format is stable within a
 schema version; the CLI surface is not yet frozen.
 
 ## Start here
@@ -17,6 +17,7 @@ schema version; the CLI surface is not yet frozen.
 |---|---|
 | **[Features](Features)** | Everything it does, grouped |
 | **[Feature Index](Feature-Index)** | Every feature as its own page, by the surface it is reached from |
+| **[Diagrams and Charts](Diagrams-and-Charts)** | Ask a question about a symbol, get a clickable chart -- the `ask` family |
 | **[Installation](Installation)** | Getting the CLI, the IDE plugin, or the LSP running |
 | **[Maintenance](Maintenance)** | Indexes, the manifest, reindexing, and what to do when something looks wrong |
 | **[IDE Menu Reference](IDE-Menu-Reference)** | What every item in the `drag-lint` menu does |

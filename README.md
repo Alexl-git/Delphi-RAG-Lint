@@ -3,19 +3,19 @@
 [![Release](https://img.shields.io/github/v/release/Alexl-git/Delphi-RAG-Lint?include_prereleases)](https://github.com/Alexl-git/Delphi-RAG-Lint/releases)
 [![License](https://img.shields.io/github/license/Alexl-git/Delphi-RAG-Lint)](LICENSE)
 
-> **?? Alpha / work in progress.** This is an early alpha under active, daily
-> development ? expect rough edges, unfinished corners, and breaking changes
+> **Alpha / work in progress.** This is an early alpha under active, daily
+> development -- expect rough edges, unfinished corners, and breaking changes
 > between versions. It is shared early so the Delphi community can try it and
-> shape it. **Feedback and suggestions are very welcome** ? please open an
+> shape it. **Feedback and suggestions are very welcome** -- please open an
 > [Issue](https://github.com/Alexl-git/Delphi-RAG-Lint/issues) with ideas, bugs,
-> or "I wish it could?". Not yet recommended for unattended/production use.
+> or "I wish it could...". Not yet recommended for unattended/production use.
 
 A symbol-aware retrieval + lint + refactoring + IDE-integration tool for Delphi.
 Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 
 **Use it as:** CLI tool &middot; LSP server (Zed / VS Code) &middot; MCP server (Claude / Cursor) &middot; RAD Studio 13 plugin.
 
-**? Driving it from an AI agent? See [docs/AI-USAGE.md](docs/AI-USAGE.md)** ? copy-paste instructions so your AI uses drag-lint over CLI or MCP (and reads ~10-60x fewer tokens than opening whole units).
+**Driving it from an AI agent? See [docs/AI-USAGE.md](docs/AI-USAGE.md)** -- copy-paste instructions so your AI uses drag-lint over CLI or MCP (and reads ~10-60x fewer tokens than opening whole units).
 
 > **What it does today, and what is coming -- the feature list.**
 > A single readable document covering every capability by area (indexing, search,
@@ -41,7 +41,7 @@ Built on [`tree-sitter-delphi13`](https://github.com/Alexl-git/tree-sitter-delph
 > -- and Word, [`docs/PARSING-LAYERS.docx`](docs/PARSING-LAYERS.docx).
 
 **Companion:** [`Delphi-RAG-Lint-Graph`](https://github.com/Alexl-git/Delphi-RAG-Lint-Graph)
-? a standalone VCL viewer (Win64) that turns this index into an interactive symbol
+-- a standalone VCL viewer (Win64) that turns this index into an interactive symbol
 graph: UML class boxes, a **Code Flow View** that renders your DocInsight comments,
 a **Where-Used** caller list, search with Back/Forward history, and **editor-sync**
 (the graph follows the active unit in RAD Studio). Click-to-jump back into the IDE.
@@ -51,8 +51,8 @@ a **Where-Used** caller list, search with Back/Forward history, and **editor-syn
 ## Screenshots
 
 ### Out-of-process compiler intelligence, inside the IDE
-Live diagnostics come from compiling your buffer in a **spawned** process ? even
-unsaved code ? so the IDE never freezes. The Structure panel and a dockable code
+Live diagnostics come from compiling your buffer in a **spawned** process -- even
+unsaved code -- so the IDE never freezes. The Structure panel and a dockable code
 graph sit beside the editor.
 
 ![drag-lint live diagnostics in RAD Studio with a docked code graph](docs/Images/IDE_Out_of_process_compilation.png)
@@ -63,7 +63,7 @@ graph sit beside the editor.
 ![A DocInsight doc-comment shown in the IDE Help Insight tooltip](docs/Images/IDE_DOCInsight.png)
 
 ### Code Flow View
-Trace a routine's calls as a flowchart ? each box carries its DocInsight summary
+Trace a routine's calls as a flowchart -- each box carries its DocInsight summary
 (here `TCompileChecker.Run`).
 
 ![Code Flow View of TCompileChecker.Run with DocInsight summaries on each box](docs/Images/Graph_Calls_out.png)
@@ -75,14 +75,14 @@ member for its DocInsight doc.
 ![UML class box for TCompileChecker with a member doc tooltip](docs/Images/Graph_Find.png)
 
 ### Where Used
-A precise, clickable list of a symbol's callers ? 7 callers of
-`ResolveActiveIndexDbs` ? beside its unit's call graph.
+A precise, clickable list of a symbol's callers -- 7 callers of
+`ResolveActiveIndexDbs` -- beside its unit's call graph.
 
 ![Where-Used caller list for ResolveActiveIndexDbs in the graph viewer](docs/Images/Graph_Who_uses.png)
 
 ### AST-exact symbol query (CLI)
 `drag-lint query --name TCompileChecker --json` returns every match with kind,
-qualified name, section, file and precise line/impl ranges ? no comment or
+qualified name, section, file and precise line/impl ranges -- no comment or
 string-literal noise.
 
 ![drag-lint query --json output for TCompileChecker](docs/Images/DRAG-Lint.exe_query_example1.png)
@@ -98,6 +98,68 @@ source lines.
 findings (here: clean).
 
 ![drag-lint check-unit clean result](docs/Images/DRAG-Lint.exe_query_example2.png)
+
+---
+
+## Diagrams and charts
+
+**Ask the index a question about one symbol, get a clickable chart back.** The
+`drag-lint ask` family (shipping in the charts release) answers twenty formal
+diagram questions -- `butterfly`, `who-calls`, `what-it-calls`, `who-writes`,
+`who-reads`, `change-impact`, `tested-by`, `effects`, `touches-tables`,
+`class-surface`, `hierarchy`, `deps`, `cycles`, `wiring`, `lifecycle`,
+`event-wiring`, `architecture`, `protocol-trace`, `crosses-boundary` and
+`shown-where` -- with `exception-paths`, `consumers`, `feeds-from` and
+`lands-where` shipping in the same release. You name the question and put the
+caret on the selection (a method, unit, type, field, form class or the project);
+`ask` can also list which questions are valid for what is under the caret.
+
+drag-lint is not a model: every chart comes from a formal call, and every row in
+it is a fact from the index with a file and a line. Each answer is a bundle --
+`graph.svg` whose rows link back to the source (`draglint://open`, handled by the
+IDE plugin), PNG and PDF exports of the same layout, a browser shell, a
+`meta.json` that fingerprints the index and records the command that regenerates
+the chart, and a ready-to-paste DocInsight `<remarks>` reference. Full reference,
+one page per question: **[Diagrams and Charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Diagrams-and-Charts)**.
+
+The three charts below are drag-lint's own code, produced by the chart pipeline
+(`New-DiagramArtifact.ps1`) against a copy of its self-index at v1.17.0-alpha.
+
+### change-impact -- one function feeds closure, parse and lint
+
+![change-impact of DRagLint.Preprocess.Profile.ProfileFromDproj: 15 routines in src/cli reach it within 3 caller hops](docs/Images/charts/change-impact-ProfileFromDproj.svg)
+
+Question `change-impact`, target `DRagLint.Preprocess.Profile.ProfileFromDproj`,
+depth 3. **15 routines** reach it: `pp-profile` and the index-profile resolver
+directly, then the project closure (`BuildProjectFileScope`), `index`, `lint`,
+`lint-all`, `reconcile-project` and `document` for a project. This is why reading
+the platform PropertyGroups in that one function moved the extractor version.
+Produced by `Emit-ChangeImpact.ps1 -Target DRagLint.Preprocess.Profile.ProfileFromDproj -Depth 3 -Cap 16`
+(the question's emitter, with every row shown).
+
+### deps -- where the linter sits in the layering
+
+![deps of DRagLint.Lint.Linter: 6 units use it, it uses 9, grouped by src folder](docs/Images/charts/deps-Lint-Linter.svg)
+
+Question `deps`, target `DRagLint.Lint.Linter`. **6 units use it** (the CLI and
+its program file, two LSP units, the MCP server, one lint unit); **it uses 9**
+(core, parser, diagnostics, tree-sitter and three lint units). Boxes are `src\`
+folders; a dashed edge is an implementation-section `uses`. Produced by
+`New-DiagramArtifact.ps1 -Question deps -Target DRagLint.Lint.Linter`. The
+whole-project `architecture` question on the same index draws 129 units in 23
+zones with 598 internal edges -- correct, and too dense for a page, which is why
+the one-unit view is shown here.
+
+### butterfly -- the enum-value binding entry point
+
+![butterfly of TCallResolver.ResolveEnumValueRead: 2 callers, 14 callees](docs/Images/charts/butterfly-ResolveEnumValueRead.svg)
+
+Question `butterfly`, target
+`DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead`, depth 2.
+**2 callers** (the store's enum-value and call-target resolve passes) and
+**14 callee rows** (scope checks, the identical-copy collapse, the symbol-store
+lookups). Produced by
+`New-DiagramArtifact.ps1 -Question butterfly -Target DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead -Depth 2`.
 
 ---
 
@@ -315,7 +377,7 @@ Each cycle lists its `A uses B [interface|implementation]` edges, marks the
 **interface** edges as move-to-implementation candidates, and flags layering
 inversions (e.g. a COMMON unit reaching into CLIENT). Add **`--causes`** to
 pinpoint the *specific symbols* in `A`'s interface that force the dependency on
-`B` (the types/vars/methods to move or extract) ? with the line numbers, and an
+`B` (the types/vars/methods to move or extract) -- with the line numbers, and an
 honest note where the index couldn't resolve a reference.
 
 Or generate a full **followable refactoring playbook** that a junior dev (or a
@@ -347,7 +409,7 @@ drag-lint uses-fix MyUnit.pas --project MyApp.dproj --db myapp.sqlite --apply   
 ```
 
 > **Caveat (important):** `uses-fix`'s per-unit verify is **best-effort, not a
-> faithful full-build check** ? a single-unit `dcc` compile can reuse a stale
+> faithful full-build check** -- a single-unit `dcc` compile can reuse a stale
 > `.dcu` (masking a real error) or abort on an RTL dependency. Treat
 > `cycles`/`uses-audit` as **advisory** (they pinpoint candidates, and the index
 > can miss refs like `set` types), and **always do a full project build** after
@@ -388,7 +450,7 @@ Longer walkthrough: [wiki -- Circular Dependency Report](https://github.com/Alex
 
 ### Third-party dependency report
 
-See which external/library units the project leans on ? RTL, DevExpress,
+See which external/library units the project leans on -- RTL, DevExpress,
 Spring4D, and anything not in your own tree:
 
 ```
@@ -398,7 +460,7 @@ drag-lint deps-report --db myapp.sqlite --edges --format csv
 
 Per external unit it reports which project units import it, how many, the
 shortest uses-path, and a library grouping; `--edges` gives the flat
-project-unit ? external-unit list. A unit is "external" when it isn't indexed
+project-unit -> external-unit list. A unit is "external" when it isn't indexed
 or resolves to a library path (RTL / installed packages).
 
 ### Component conversion
@@ -436,7 +498,7 @@ rule language: [docs/converter/convrules-dsl.md](docs/converter/convrules-dsl.md
 ### Consuming the index from another tool
 
 The SQLite index is documented for external consumers in
-[docs/INDEX-SCHEMA.md](docs/INDEX-SCHEMA.md) ? every table, the
+[docs/INDEX-SCHEMA.md](docs/INDEX-SCHEMA.md) -- every table, the
 project-vs-external boundary, and the stability contract. Introspect any index
 live with:
 
@@ -604,8 +666,8 @@ for more detail and IDE-menu context. (Wiki links point at
 https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 
 > **Offline manual.** The whole wiki is also published as a single ordered
-> document -- **[docs/drag-lint-manual.pdf](docs/drag-lint-manual.pdf)** (~178
-> pages, bookmarked) and **[docs/drag-lint-manual.docx](docs/drag-lint-manual.docx)**.
+> document -- **[docs/drag-lint-manual.pdf](docs/drag-lint-manual.pdf)** (~250
+> pages, bookmarked; a chapter per part, including Diagrams and charts) and **[docs/drag-lint-manual.docx](docs/drag-lint-manual.docx)**.
 > Regenerate with `pwsh -File tools\build-manual.ps1`;
 > `tests\autotest\run_manual_freshness_guard.ps1` fails the battery if it falls
 > behind the wiki.
@@ -743,10 +805,16 @@ the live number. An unrelated body edit that leaves the metric where it was does
 *not* invalidate the review. The marker grammar is unchanged; `allow` refuses a
 line that produces no metric finding rather than writing a hash that could never
 verify, and `lint --json` carries a `metric` field on these findings.
+
+#### Component conversion
+
+| Command | What it does | Notable flags |
+|---|---|---|
 | [`proptree`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/proptree) `--qname <T>` | Recursive deep-property enumerator (foundation for component conversion) | `--depth N`, `--no-to-persistent` (climb past the `TPersistent`/`TObject` stop), `--refs-as-leaves`, `--no-write-back` (read-only: types the ancestry-bridge recovers are otherwise memoised back into the index), `--min-visibility published\|public`, `--format text\|json` |
 | [`convert-scaffold`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-scaffold) `--from F --to T` | Auto-draft a valid conversion-rules file from the real F/T property trees | `--out <f>`, `--surface dfm\|pas` |
 | [`convert-validate`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-validate) `--rules <f>` | Validate a conversion-rules file against the real property trees | `--print-parsed` |
 | [`convert-apply`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-apply) `--unit F.pas --rules <f> --db <db>` | Rewrite all 5 conversion surfaces (dry-run unless `--apply`) | `--only Name1,Name2`, `--no-backup`, `--castlib <f>`, `--no-warn-unlinked` (keep the json unlinked count, drop the per-(source type, property) warnings), `--format json` (schema `apply/1`) |
+| `glyph-vacuum --root <dir> --out <dir>` | Measure every streamed graphic (Picture.Data / Glyph.Data) under the roots before writing a glyph rule: decodes each blob (binary `.dfm` converted in memory), pairs it with its count property, and writes `instances.tsv`, `classes.tsv`, `skipped.tsv`, the images and a `gallery.html` | `--root` (repeatable), `--append` (merge a rescan; idempotent), `--db` (qualify class units and runtime refs) |
 
 #### Graphs
 
@@ -766,6 +834,7 @@ verify, and `lint --json` carries a `metric` field on these findings.
 | `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const` |
 | `export obsidian --db <db> --output-dir <dir>` | Export the index into an Obsidian vault | `--open` |
 | [`diff`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) `--db <old> --db <new>` | Diff two index snapshots | `--json` |
+| [`ask`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Diagrams-and-Charts) (charts release) | Render one of the diagram questions for the symbol under a caret position as a clickable SVG/PNG/PDF bundle -- see [Diagrams and charts](#diagrams-and-charts) | question id, caret position, depth |
 
 #### Compiler
 
@@ -841,7 +910,7 @@ CLI-only verbs).
 ### Lint rule pack (183 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.16.0-alpha: **183 rules across 16 categories -- 130
+external `.scm`). As of v1.17.0-alpha: **183 rules across 16 categories -- 130
 built-in and 53 external `.scm`, 156 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
@@ -1029,6 +1098,10 @@ drag-lint.exe
   |
   +-- CLI context bundler (DRagLint.Context.Bundler)
 
+Source layout (src\): core, parser, preprocess, index, storage, resolver,
+analysis, lint, diagnostics, doc, refactor, report, query, context, cli, lsp,
+mcp, ... -- the deps chart above shows how the linter sits between them.
+
 dclDragLintWizard.bpl  (Delphi IDE plugin)
   +-- Wizard / menu / keystrokes / EditViewNotifier
   +-- LSP client -> drag-lint.exe lsp
@@ -1049,12 +1122,16 @@ plus direct CLI calls for features the LSP protocol doesn't cover.
 
 Prerequisites:
 - RAD Studio 13 Florence (37.0) with Win64 target
-- `tree-sitter-delphi13` DLLs in `third_party/dll/`
+- `tree-sitter-delphi13` DLLs in `third_party/dll-win64/` (Win64) / `third_party/dll-win32/` (Win32)
 
-Build the CLI:
+Build the CLI (Win64 Debug -- the configuration that is deployed): run
+`build\build_draglint_win64.bat`. It loads `rsvars.bat`, builds
+`src\cli\drag-lint.dproj`, stages the tree-sitter companions beside the linked
+exe, syncs `rules\` and deploys to `third_party\dll-win64\`. By hand:
 ```
 call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"
-msbuild drag-lint.dproj /p:Config=Release /p:Platform=Win64
+cd src\cli
+msbuild drag-lint.dproj /p:Config=Debug /p:Platform=Win64
 ```
 
 Build the IDE plugin:
@@ -1062,7 +1139,7 @@ Build the IDE plugin:
 msbuild src/delphi-plugin/dclDragLintWizard.dproj /p:Config=Debug /p:Platform=Win64
 ```
 
-Run the test battery ? **every** `run_*.ps1` under `tests/`, enumerated recursively
+Run the test battery -- **every** `run_*.ps1` under `tests/`, enumerated recursively
 (~10 min). The driver prints the number it found; that printed denominator is the
 count, not any figure written in a document. See [tests/README.md](tests/README.md) for
 the definition and the rules that go with it:
@@ -1078,7 +1155,7 @@ pwsh -File tests/autotest/run_smoke.ps1       # CLI + LSP server smoke
 pwsh -File tests/autotest/run_formsmap.ps1    # forms-csv navigation-map smoke (fixture project)
 ```
 
-Older batch harnesses in `tests/fixtures/` (`T61_hovertracker.bat`, ?) are not part of
+Older batch harnesses in `tests/fixtures/` (`T61_hovertracker.bat`, ...) are not part of
 the PowerShell battery.
 
 ---

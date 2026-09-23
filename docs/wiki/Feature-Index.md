@@ -118,6 +118,7 @@ See also [Features](Features) for the grouped overview and
 * [info](info) -- `info`
 * [link-orm](link-orm) -- `link-orm`
 * [lint-project](lint-project) -- `lint-project`
+* [lint-tree](lint-tree) -- `lint-tree`
 * [lsp](lsp) -- `lsp`
 * [migrate-dbs](migrate-dbs) -- `migrate-dbs`
 * [outline](outline) -- `outline`
@@ -139,8 +140,41 @@ See also [Features](Features) for the grouped overview and
 * [serve](serve) -- `serve`
 * [shared-unit](shared-unit) -- `shared-unit`
 * [usages](usages) -- `usages`
+* [wiki](wiki) -- `wiki`
 * [workspace add](workspace-add) -- `workspace add`
 * [workspace index](workspace-index) -- `workspace index`
 * [workspace status](workspace-status) -- `workspace status`
 
+Verbs with no page of their own are described on [Features](Features):
+`exceptions-sync` (Linting), `glyph-vacuum` (Component conversion),
+`register-project` (Indexing) and `shutdown` (Maintenance and diagnostics).
+`drag-lint --help` is the complete flag reference for every verb.
 
+## Diagrams and charts
+
+The `ask` question family -- see [Diagrams and Charts](Diagrams-and-Charts).
+
+* [architecture](ask-architecture) -- `ask --question architecture`
+* [butterfly](ask-butterfly) -- `ask --question butterfly`
+* [change-impact](ask-change-impact) -- `ask --question change-impact`
+* [class-surface](ask-class-surface) -- `ask --question class-surface`
+* [crosses-boundary](ask-crosses-boundary) -- `ask --question crosses-boundary`
+* [cycles](ask-cycles) -- `ask --question cycles`
+* [deps](ask-deps) -- `ask --question deps`
+* [effects](ask-effects) -- `ask --question effects`
+* [event-wiring](ask-event-wiring) -- `ask --question event-wiring`
+* [hierarchy](ask-hierarchy) -- `ask --question hierarchy`
+* [lifecycle](ask-lifecycle) -- `ask --question lifecycle`
+* [protocol-trace](ask-protocol-trace) -- `ask --question protocol-trace`
+* [shown-where](ask-shown-where) -- `ask --question shown-where`
+* [tested-by](ask-tested-by) -- `ask --question tested-by`
+* [touches-tables](ask-touches-tables) -- `ask --question touches-tables`
+* [what-it-calls](ask-what-it-calls) -- `ask --question what-it-calls`
+* [who-calls](ask-who-calls) -- `ask --question who-calls`
+* [who-reads](ask-who-reads) -- `ask --question who-reads`
+* [who-writes](ask-who-writes) -- `ask --question who-writes`
+* [wiring](ask-wiring) -- `ask --question wiring`
+
+Shipping with the charts release:
+[consumers](ask-consumers), [exception-paths](ask-exception-paths),
+[feeds-from](ask-feeds-from), [lands-where](ask-lands-where).

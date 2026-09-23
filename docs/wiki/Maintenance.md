@@ -81,13 +81,26 @@ the tree after every build.
 
 ### After an upgrade
 
-The index records an **indexer fingerprint** -- engine version, schema, whether
-preprocessing was on, and the effective platform. When it changes, every file in
-scope is re-parsed, because a newer engine may extract symbols the stored parse
-missed. This is deliberate: the alternative is silently stale parses.
+An index records TWO fingerprints, and they owe different remedies.
+`drag-lint info --db <index>` prints both and a verdict (`current`,
+`resolve-owed`, `reparse-owed`) with the command to run.
 
-Consequence: **a release upgrade re-parses every index once.** For a large
-library index that is a long walk. Two things make it survivable:
+* **Indexer fingerprint** -- EXTRACTOR version (not the product version),
+  schema, whether preprocessing was on, and the effective platform, e.g.
+  `v=1.18.0-alpha;schema=23;pp=1;plat=win64`. When it changes, every file in
+  scope is re-parsed, because a newer extractor may emit symbols the stored parse
+  missed. This is deliberate: the alternative is silently stale parses.
+* **Resolver fingerprint** -- e.g. `r=1.6.0-alpha;schema=23`. When only this
+  moves, no parse is wrong; only DERIVED data is (call edges, ancestry,
+  enum-value bindings, purity verdicts). The remedy is
+  `index --all --resolve-only` -- minutes for project sections, about an hour
+  per platform library -- not a re-parse.
+
+Consequence: **a release whose extractor version moved re-parses every index
+once** (v1.17.0-alpha did: extractor 1.18.0-alpha, for the platform define
+groups). A release that moves only the product or resolver version does not.
+For a large library index a re-parse is a long walk. Two things make it
+survivable:
 
 * **Per-file resume** -- an interrupted re-parse continues where it stopped
   instead of restarting.
