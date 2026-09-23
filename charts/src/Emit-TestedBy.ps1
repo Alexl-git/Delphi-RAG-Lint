@@ -195,8 +195,11 @@ $anchored++
 Add-DisclosureRow $ftbl "$($tests.Count) covering test(s) in $($fixtures.Count) fixture(s)" $PAL.lineInk
 Add-DisclosureRow $ftbl "walked callers up to $Depth hop(s); this index has $($testIds.Count) test method(s)" $PAL.lineInk
 Add-DisclosureRow $ftbl 'coverage is COMPUTED from call edges -- symbol_facts.covered_by is empty by design' $PAL.lineInk
+$edgeless = Get-EdgelessFiles
+$edgelessNote = Get-EdgelessDisclosure $edgeless
+if ($edgelessNote) { Add-DisclosureRow $ftbl $edgelessNote $PAL.lineInk }
 if ($tests.Count -eq 0) {
-  Add-DisclosureRow $ftbl 'this is NOT "untested": a test reaching it via an interface is not a resolved edge here' $PAL.lineInk
+  Add-DisclosureRow $ftbl 'this is NOT "untested": a test reaching it through an unresolved edge is invisible here' $PAL.lineInk
 }
 [void]$ftbl.Append('</TABLE>')
 [void]$sb.AppendLine("  subgraph cluster_focus_$nodeId {")
@@ -210,7 +213,7 @@ if ($tests.Count -eq 0) {
   [void](Add-RowCluster -Sb $sb -Cid "cluster_none_$nodeId" -Nid "n$nodeId" `
            -Title 'no covering test' -Subtitle 'in this index' `
            -Rows @((New-NoteRow "none of this index's $($testIds.Count) test methods reaches it"),
-                   (New-NoteRow 'absence is not proof: interface-dispatch call edges are incomplete')) `
+                   (New-NoteRow 'absence is not proof: an unresolved or cleared edge looks the same as no call')) `
            -Border $PAL.noneBorder -Fill $PAL.noneFill -Hdr $PAL.noneHdr `
            -RowInk $PAL.rowInk -LineInk $PAL.lineInk -FontSans $FontSans -Style 'rounded,filled,dashed')
   [void]$sb.AppendLine("  ${fnid}:p1 -> n$nodeId [style=dashed];")

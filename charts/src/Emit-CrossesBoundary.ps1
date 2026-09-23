@@ -5,13 +5,23 @@
   WHAT COUNTS AS EVIDENCE HERE, AND WHY IT IS NOT CALL EDGES ALONE
   -----------------------------------------------------------------
   The obvious implementation -- "walk what this method calls until you hit the
-  pipe" -- is the one thing that cannot be trusted on this corpus. Measured
-  2026-09-23: the 1.6.0 resolver produced FEWER outgoing call edges, and the
-  population it lost is exactly interface-dispatch calls. `SendDeltaOperation`
-  has 32 `kind='call'` refs in its body and only 2 with a `call_edges` row; the
-  30 without include `Send`, `SaveToStream`, `ReadBuffer`, `CommitUpdates`.
-  A transitive callee walk would therefore report "does not cross" for methods
-  that plainly do.
+  pipe" -- is the one thing that cannot be trusted on this corpus, and the reason
+  is sharper than it first looked.
+
+  An earlier version of this comment blamed the 1.6.0 resolver for losing
+  interface-dispatch edges wholesale. That was WRONG. The engine team gave the
+  real mechanism on 2026-09-23 and we verified it on our own clone: a whole-DB
+  resolve clears call_edges UNCONDITIONALLY but re-derives only non-stale files,
+  so a WITHHELD file's edges are cleared and never rebuilt. On CLIENT exactly one
+  file was withheld -- `uPipeClientConnection.pas`, 161 call refs and ZERO call
+  edges -- and `TPipeClientConnection.ExecuteCommand` lives in it with no
+  outgoing edges at all.
+
+  That file is the transport layer. So on THIS index a callee walk stops dead at
+  precisely the boundary this chart is about, and would report "does not cross"
+  for methods that plainly do. It is recoverable by one reindex, and
+  Get-EdgelessFiles detects it rather than this comment asserting it -- when the
+  index is healthy the disclosure disappears by itself.
 
   So this chart rests on THREE independent pieces of evidence, and says which
   ones it found:
@@ -22,10 +32,11 @@
                         from `refs`, which is complete and unaffected by the call
                         edge loss, and it is the strongest signal available.
     3. PIPE CALLS    -- call edges from this method into a routine declared in a
-                        pipe unit. Well populated where it exists
-                        (`ExecuteCommand` has 586 distinct callers) but it is the
-                        one input exposed to the edge loss, so its ABSENCE is
-                        never reported as proof of anything.
+                        pipe unit. Edges INTO the transport survive (they are
+                        owned by the caller's file, so `ExecuteCommand` still has
+                        586 distinct callers); it is edges OUT of the withheld
+                        file that are gone. Its ABSENCE is never reported as
+                        proof of anything.
 
   A chart that found (2) and not (3) still says "crosses". A chart that found
   neither says "no evidence in this index" -- NOT "does not cross". The
@@ -192,12 +203,15 @@ Add-DisclosureRow $ftbl "zone $myZone  &#183;  VERDICT: $verdict" $PAL.lineInk
 if ($selfIsPipe) { Add-DisclosureRow $ftbl 'declared inside the transport layer itself' $PAL.lineInk }
 Add-DisclosureRow $ftbl "$($cmdRows.Count) protocol command(s)  &#183;  $($pipeCalls.Count) call(s) into a transport routine" $PAL.lineInk
 if ($verdict -eq 'no evidence in this index') {
-  Add-DisclosureRow $ftbl 'this is NOT "does not cross": the 1.6.0 resolver lost interface-dispatch call edges' $PAL.lineInk
+  Add-DisclosureRow $ftbl 'this is NOT "does not cross" -- absence of an edge is not absence of a call' $PAL.lineInk
 }
 if ($pipeCalls.Count -eq 0 -and $cmdRows.Count -gt 0) {
-  Add-DisclosureRow $ftbl 'commands found but no transport call: the call may be an interface dispatch' $PAL.lineInk
+  Add-DisclosureRow $ftbl 'commands found but no transport call: the call may be an interface dispatch, or its edge may be missing' $PAL.lineInk
 }
 Add-DisclosureRow $ftbl "transport units matched by naming convention ($BoundaryPattern)" $PAL.lineInk
+$edgeless = Get-EdgelessFiles
+$edgelessNote = Get-EdgelessDisclosure $edgeless
+if ($edgelessNote) { Add-DisclosureRow $ftbl $edgelessNote $PAL.lineInk }
 if (-not $CounterpartDb) {
   Add-DisclosureRow $ftbl 'no counterpart index given -- the far side is not shown' $PAL.lineInk
 }
@@ -277,7 +291,7 @@ if ($verdict -eq 'no evidence in this index') {
   [void](Add-RowCluster -Sb $sb -Cid "cluster_none_$nodeId" -Nid $nid `
            -Title 'no boundary evidence' -Subtitle 'in this index' `
            -Rows @((New-NoteRow 'no protocol command referenced, no call into a transport unit'),
-                   (New-NoteRow 'absence is NOT proof: interface-dispatch call edges are incomplete')) `
+                   (New-NoteRow 'absence is NOT proof: an unresolved or cleared edge looks the same as no call')) `
            -Border $PAL.lineInk -Fill '#F3F4F6' -Hdr '#6B7280' `
            -RowInk $PAL.rowInk -LineInk $PAL.lineInk -FontSans $FontSans -Style 'rounded,filled,dashed')
   [void]$sb.AppendLine("  ${fnid}:p1 -> $nid [style=dashed];")

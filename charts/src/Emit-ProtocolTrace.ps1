@@ -36,6 +36,24 @@
   because "used at unit level" is a real answer and dropping it would silently
   shrink the trace.
 
+  A BARE READ INSIDE A `with` BLOCK IS AN UNVERIFIED BINDING (risk R7)
+  ---------------------------------------------------------------------
+  The engine team flagged this as the enum binding's ONLY known non-zero
+  wrong-bind channel, and it lands squarely on this corpus: **178 bound bare
+  reads on CLIENT sit inside `with`-bearing routines**, each of which could be
+  naming a `with` receiver's member rather than the enum value. A stated
+  non-goal of their change, not a defect to file.
+
+  QUALIFIED reads (`TCommandID.cmdDelta`) are unaffected -- BUT THIS INDEX
+  CANNOT TELL THEM APART. Measured: all 5,983 enum-value refs on CLIENT carry a
+  BARE `name_text` (`cmdDelta`), because the ref records the last segment
+  whichever form the source used. There is also no `with` fact in the schema.
+
+  So the affected rows cannot be isolated here, and the chart does NOT pretend
+  otherwise: it carries a flat disclosure naming the engine's measured figure
+  and stops. Marking a specific row as unverified would require source access
+  this emitter does not have, and marking none would be worse.
+
   ZONES, NOT DATABASES (the double-count hazard)
   -----------------------------------------------
   Every TCommandID member has at least one ref in COMMON -- `CommandIDToStr`
@@ -211,6 +229,14 @@ if ($unattributed -gt 0) {
 }
 Add-DisclosureRow $ftbl 'rows are zoned by FILE PATH: a shared unit is in both project indexes' $PAL.lineInk
 Add-DisclosureRow $ftbl 'read from refs by SQL -- find-callers --resolved cannot see enum values on this build' $PAL.lineInk
+# R7, from the engine team: a bare-name enum binding inside a `with`-bearing
+# routine may be naming the receiver's member instead. 178 such reads on CLIENT.
+# This index stores every enum ref with a bare name_text and carries no `with`
+# fact, so the affected rows cannot be singled out -- the note is flat by
+# necessity, not by choice.
+if ($mode -ne 'field') {
+  Add-DisclosureRow $ftbl 'a bare-name binding inside a `with` block is unverified (engine risk R7; 178 such reads on CLIENT)' $PAL.lineInk
+}
 [void]$ftbl.Append('</TABLE>')
 [void]$sb.AppendLine("  subgraph cluster_focus_$nodeId {")
 [void]$sb.AppendLine("    style=`"rounded,filled`"; color=`"$($PAL.focusBorder)`"; fillcolor=`"$($PAL.focusFill)`"; penwidth=2;")

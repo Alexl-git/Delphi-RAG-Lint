@@ -208,21 +208,57 @@ from 9 nodes to 4. Callers unaffected.
 question the index can answer now ships; the five that do not are blocked on
 facts that do not exist, each measured and each filed.
 
-**Next, when the engine lands:** re-run the suite and re-baseline the 7
-callee-direction assertions WITH a note -- they are now known to be a DATA
-change, not a misread (see below). Expect the 2 property-accessor ones to
-persist. Then re-clone and re-measure before trusting anything here.
+**Next: a REINDEX, not a re-baseline.** All 9 red assertions are one recoverable
+data defect in a single withheld file (finding 1 below), so:
+
+1. **Do NOT re-baseline any of the 9.** Editing them would bake the defect into
+   the fixtures. An earlier version of this section said to re-baseline the 7
+   and to expect the 2 property ones to persist -- both were wrong, and rested
+   on a mechanism we had inferred rather than measured.
+2. The recovery is `index --project ...\Micronite2027.dproj --db ...` run with a
+   **1.6.0-alpha** engine. We must not run it: ours is 1.5.1 and would downgrade
+   the corpus. The engine team has it ready and is holding off until we say.
+3. It does **not** clear when the engine is redeployed -- it is data, not skew.
+4. After the reindex: **re-clone**, then re-run. The suite should go green.
 
 ### Batch 3 findings (2026-09-23)
 
-1. **The callee-direction mystery is SOLVED, and it was not our engine.** Raw
-   SQL over `call_edges` returns the SAME 2 direct callees for
-   `SendDeltaOperation` that the verb does, against a frozen assertion of 8. So
-   the engine reads the data correctly and the 1.6.0 resolver produced FEWER
-   edges. The lost population looks like interface dispatch: that method's body
-   has 32 `kind='call'` refs and only 2 with a `call_edges` row, the missing ones
-   being `Send`, `SaveToStream`, `CommitUpdates` and friends. Filed as
-   `INBOX-resolver-1.6.0-gained-enums-lost-callee-edges.md`.
+1. **The callee-direction mystery is SOLVED -- and our first answer was WRONG.**
+   We concluded "the 1.6.0 resolver binds strictly less, and what it lost is
+   interface dispatch". The engine team corrected it the same day and we then
+   verified their mechanism independently on our own clone:
+
+   > a whole-DB resolve calls `ClearCallEdges`, which clears UNCONDITIONALLY --
+   > including rows of files the stale prescan then WITHHOLDS -- while
+   > re-derivation is narrowed to skip stale files. A withheld file's
+   > `call_edges` and `member_accesses` are cleared and never rebuilt.
+
+   **On CLIENT exactly ONE file was withheld**, and all 9 red assertions trace
+   to it. Verified by us, not taken on trust:
+
+   | file | `kind='call'` refs | `call_edges` |
+   |---|---|---|
+   | `uPipeClientConnection.pas` | **161** | **0** |
+   | `Blueprint4.ViewModel.pas` | 1,847 | 656 |
+   | `uMain.pas` | 255 | 41 |
+
+   `ExecuteCommand` lives in it with 0 outgoing edges, so 9 nodes -> 4 is the
+   SUBTREE below it, not the root -- `SendDeltaOperation`'s two direct edges are
+   intact and `certain`, exactly as our raw SQL found. `Connected` is in the same
+   file, which is why its 602 rows lost `accessor_symbol_id`.
+
+   **DO NOT re-baseline the 9 assertions.** They are a recoverable data defect,
+   not a version skew, and they do NOT clear when the engine is redeployed --
+   they need one incremental reindex of CLIENT with a 1.6.0-alpha engine (which
+   we must not run: ours is 1.5.1). After that reindex, RE-CLONE and the suite
+   should go green.
+
+   The unsafe step on our side was concluding a CAUSE from two correlated
+   symptoms without a mechanism. `Get-EdgelessFiles` in `Emit-Common.ps1` now
+   DETECTS the signature instead of any chart asserting a story about it -- and
+   it deliberately does not guess the cause, because on SERVER the same
+   signature is produced innocently by `uContainerConfig.pas`, whose 137 call
+   refs are all external Spring4D registrations.
 2. **Which is why `change-impact` and `tested-by` shipped anyway.** Both walk
    CALLERS -- from a symbol up to its dependents, and from code under test up to
    the tests -- and the caller direction is intact (9 callers, matching the

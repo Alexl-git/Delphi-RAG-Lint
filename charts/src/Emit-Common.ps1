@@ -387,6 +387,76 @@ function Get-PathZone([string] $Path, [int] $RootLen) {
   ($parts[$RootLen..($parts.Count - 1)]) -join '/'
 }
 
+# ---- index health ---------------------------------------------------------------
+
+# Files that hold plenty of CALL references and NO call edges at all.
+#
+# WHY THIS EXISTS, AND WHY IT IS NOT A VERSION STORY
+# ---------------------------------------------------
+# For a day this project believed the 1.6.0 resolver "bound strictly less" and
+# that interface-dispatch edges had been lost wholesale. That was WRONG, and the
+# engine team corrected it on 2026-09-23 with a mechanism we then verified
+# independently on our own clone:
+#
+#   a whole-DB resolve calls ClearCallEdges, which clears UNCONDITIONALLY --
+#   including rows belonging to files the stale prescan then WITHHOLDS -- while
+#   the re-derivation is narrowed to SKIP stale files. A withheld file's
+#   call_edges and member_accesses are cleared and never rebuilt.
+#
+# Measured on the CLIENT clone, and this is the whole of it:
+#
+#   uPipeClientConnection.pas   161 call refs   0 call_edges   0 member_accesses
+#   Blueprint4.ViewModel.pas  1,847 call refs 656 call_edges
+#   uMain.pas                   255 call refs  41 call_edges
+#
+# Every one of the suite's 9 red assertions traces to that ONE file:
+# ExecuteCommand owns no outgoing edges, so the callee subtree below it is gone
+# (9 nodes -> 4 is the SUBTREE, not the root -- SendDeltaOperation's two direct
+# edges are intact and `certain`), and TPipeClientConnection.Connected lives in
+# the same file, which is why its 602 rows lost accessor_symbol_id.
+#
+# So a chart that says "edges may be missing" should say WHICH FILES and let the
+# reader judge, rather than blaming a version. This is detection, not a constant:
+# after the recovering reindex it returns nothing and the disclosure disappears
+# on its own.
+#
+# The threshold is deliberately conservative. A small unit whose calls all go to
+# the RTL legitimately has zero edges -- on CLIENT, 22 files have some call refs
+# and no edges, but only ONE has more than 35, and the next largest is 35. At 50
+# the detector fires on exactly the file the engine team named and on nothing
+# else. It is a heuristic and is described as one wherever it is printed.
+function Get-EdgelessFiles([int] $MinCallRefs = 50) {
+  $rows = Invoke-IndexQuery @"
+SELECT p, n FROM (
+  SELECT f.path AS p,
+         (SELECT COUNT(*) FROM refs r WHERE r.file_id = f.id AND r.kind = 'call') AS n,
+         (SELECT COUNT(*) FROM call_edges ce JOIN refs r2 ON r2.id = ce.ref_id
+           WHERE r2.file_id = f.id) AS e
+    FROM files f)
+ WHERE n >= $MinCallRefs AND e = 0
+ ORDER BY n DESC
+"@
+  , $rows
+}
+
+# The one sentence every chart uses for it, so two charts cannot describe the
+# same index defect differently. Returns '' when the index is healthy.
+# STATES THE OBSERVATION, NOT THE CAUSE -- which is the whole lesson of the note
+# above. On CLIENT the single hit is a genuinely withheld file. On SERVER the
+# single hit is `uContainerConfig.pas`, whose 137 call refs are Spring4D fluent
+# registrations (`AsSingletonPerThread` x134) targeting code OUTSIDE the index,
+# where zero edges is entirely correct. Two different causes, one signature, and
+# this detector cannot tell them apart -- so it does not try.
+#
+# The practical consequence is the same either way, and that is the part worth
+# printing: edges out of symbols in those files are not available here.
+function Get-EdgelessDisclosure($Rows) {
+  if ($null -eq $Rows -or $Rows.Count -eq 0) { return '' }
+  $names = @($Rows | Select-Object -First 3 | ForEach-Object { [IO.Path]::GetFileName([string]$_.p) })
+  $more = $(if ($Rows.Count -gt 3) { " +$($Rows.Count - 3) more" } else { '' })
+  "$($Rows.Count) file(s) here have call references but NO call edges ($($names -join ', ')$more) -- either their calls all target code outside this index, or a partial resolve cleared them; either way, edges out of symbols in those files are missing"
+}
+
 # ---- ranking and disclosure -------------------------------------------------
 
 # Maps a `refs` row to its enclosing routine, as the SQL fragments to splice in.

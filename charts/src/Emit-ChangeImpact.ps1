@@ -205,8 +205,11 @@ $anchored++
 Add-DisclosureRow $ftbl "BLAST RADIUS: $($items.Count) routine(s), $($units.Count) unit(s), $($zones.Count) zone(s)" $PAL.lineInk
 Add-DisclosureRow $ftbl "walked $Depth level(s) of CALLERS$(if ($isType) { " from the type and its $memberCount member(s)" })" $PAL.lineInk
 if ($capped) { Add-DisclosureRow $ftbl "frontier CAPPED at $MaxNodes -- the real radius is larger" $PAL.lineInk }
-Add-DisclosureRow $ftbl 'the CALLER direction is intact on this build; the callee direction is not' $PAL.lineInk
-Add-DisclosureRow $ftbl 'interface-dispatch callers may still be missing -- a small radius is a floor, not a ceiling' $PAL.lineInk
+Add-DisclosureRow $ftbl 'impact fans out over CALLERS: edges INTO a symbol are owned by the calling file' $PAL.lineInk
+Add-DisclosureRow $ftbl 'an unresolved caller is invisible here -- a small radius is a floor, not a ceiling' $PAL.lineInk
+$edgeless = Get-EdgelessFiles
+$edgelessNote = Get-EdgelessDisclosure $edgeless
+if ($edgelessNote) { Add-DisclosureRow $ftbl $edgelessNote $PAL.lineInk }
 [void]$ftbl.Append('</TABLE>')
 [void]$sb.AppendLine("  subgraph cluster_focus_$nodeId {")
 [void]$sb.AppendLine("    style=`"rounded,filled`"; color=`"$($PAL.focusBorder)`"; fillcolor=`"$($PAL.focusFill)`"; penwidth=2;")
