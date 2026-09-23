@@ -96,6 +96,7 @@ uses
   DRagLint.Lint.ExceptionNaming in '..\lint\DRagLint.Lint.ExceptionNaming.pas',
   DRagLint.Lint.ExceptionUnitWriter in '..\lint\DRagLint.Lint.ExceptionUnitWriter.pas',
   DRagLint.Lint.ProjectChecks in '..\lint\DRagLint.Lint.ProjectChecks.pas',
+  DRagLint.Lint.IfdefUndefined in '..\lint\DRagLint.Lint.IfdefUndefined.pas',
   DRagLint.Lint.ProjectChecks.Parse in '..\lint\DRagLint.Lint.ProjectChecks.Parse.pas',
   DRagLint.Lint.ProjectRules in '..\lint\DRagLint.Lint.ProjectRules.pas',
   DRagLint.Lint.ClassMetrics in '..\lint\DRagLint.Lint.ClassMetrics.pas',

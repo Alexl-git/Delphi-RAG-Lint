@@ -174,6 +174,13 @@ type
     /// works without the user editing the generated file -- which they must
     /// never have to do, because the block is rewritten on every run.</remarks>
     ExceptionsRoot: string;
+    /// <summary>Conditional symbols the ifdef-undefined-symbol rule treats as
+    /// defined, from the top-level "ifdef_allow" string array. For defines set
+    /// in third-party .inc files the project never includes directly (a
+    /// library version symbol, for example). Compared case-insensitively.</summary>
+    /// <remarks>Empty when the key is absent. A profile that names the key
+    /// replaces the list; the top level appends.</remarks>
+    IfdefAllow: TArray<string>;  // dl:ok public-field@3596 -- TLintConfig is a value-type settings record; its sibling public fields (Naming, ExceptionsUnit, ExceptionsRoot) follow the same shape
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
     /// "profiles", the profile is merged over the top-level values: list fields
@@ -593,6 +600,11 @@ begin
   begin
     if AReplace then FExcludePaths:= nil;
     for V in (AObj.GetValue('exclude_paths') as TJSONArray) do FExcludePaths:= FExcludePaths + [V.Value];
+  end;
+  if AObj.GetValue('ifdef_allow') is TJSONArray then
+  begin
+    if AReplace then IfdefAllow:= nil;
+    for V in (AObj.GetValue('ifdef_allow') as TJSONArray) do IfdefAllow:= IfdefAllow + [V.Value];
   end;
   if AObj.GetValue('severity') is TJSONObject then
   begin

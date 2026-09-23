@@ -59,8 +59,8 @@ The foundation. Everything below that says *(index)* reads what this produces.
 
 ## Linting
 
-**183 rules. 23 have an auto-fix. 156 are on by default.**
-130 are built-in checks; 53 are external tree-sitter `.scm` rules you can read
+**184 rules. 23 have an auto-fix. 156 are on by default.**
+131 are built-in checks; 53 are external tree-sitter `.scm` rules you can read
 and extend in `rules\`.
 
 Run `drag-lint rules` for the always-current catalogue, or
@@ -74,7 +74,7 @@ Run `drag-lint rules` for the always-current catalogue, or
 | refactoring | 11 | - |
 | naming | 10 | 8 |
 | platform | 10 | - |
-| project-wide | 17 | - |
+| project-wide | 18 | - |
 | security | 10 | - |
 | data-flow | 9 | - |
 | metrics | 8 | - |
@@ -84,7 +84,7 @@ Run `drag-lint rules` for the always-current catalogue, or
 | documentation | 5 | 2 |
 | firedac | 3 | - |
 | review-markers | 3 | - |
-| **Total** | **183** | **23** |
+| **Total** | **184** | **23** |
 
 **Newest -- the coupling rules.** `global-only-uses-edge` (a global variable is
 the only reason unit A depends on unit B, so relocating it deletes the `uses`
