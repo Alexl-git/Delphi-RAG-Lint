@@ -13,6 +13,16 @@ drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [-
 name the source and target types (optional). `--print-parsed` prints the
 parsed rules. `--db PATH ...` is optional and may be repeated.
 
+A `#link` may carry a glyph expression after its FromPath --
+`#link OptionsImage.Glyph <- Picture G[*/4], G[1/5]G[2/5]G[3/5]G[4/5] : AssignGraphic`
+(`G[I/N]` slot I of N, `G[I]`, `G[*/N]`, `G[count]`; terms side by side stitch,
+commas separate per-N alternatives). It is checked even without `--from`/`--to`:
+malformed terms, I or N out of range, two alternatives for one N, and a
+`G[count]` without exactly one image link are errors that name the column inside
+the expression. `line N: warning: ...` lines (a straight `NumGlyphs` carry beside
+a G-link) never change the exit code. `convert-apply` refuses a G-linked book
+until the extraction build lands. Full grammar: `docs\CONVERSION-RULES.md`.
+
 ## Reaching it in the IDE
 No IDE surface -- this is a CLI-only feature.
 

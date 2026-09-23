@@ -470,7 +470,8 @@ Plan AND APPLY a component/type migration (`TDBEdit` -> `TcxDBEdit`, or any
 `proptree` enumerates a type's deep property tree; `convert-scaffold`
 auto-drafts a validated reFind-superset rules file from both trees;
 `convert-validate` checks a rules file's paths against those trees -- catching
-typos that reFind's blind PCRE cannot; and `convert-apply` rewrites the real
+typos that reFind's blind PCRE cannot -- and checks any `G[I/N]` glyph expression on a
+`#link` (syntax, ranges, one alternative per N; see `docs\CONVERSION-RULES.md`); and `convert-apply` rewrites the real
 `.pas` + `.dfm` files (dry-run by default, `--apply` to write for real, with
 automatic `.BCK<n>` backups + a `recovery.txt` unless `--no-backup`). The usual
 workflow: `convert-scaffold` -> `convert-validate` -> `convert-apply` (dry-run,

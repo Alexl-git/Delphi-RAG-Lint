@@ -903,7 +903,7 @@ begin
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
-  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees)');
+  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees, and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count)');
@@ -22231,8 +22231,11 @@ end; // function
 /// directive parse errors are reported, path checks are skipped. --print-parsed
 /// dumps 'parsed N rule(s)' plus one 'line L: kind ...' summary per rule (so a test
 /// can assert the parse result with no trees). A literal '???' path is an explicit
-/// STUB marker (the scaffolder emits these) and is NOT a path error. Prints 'OK' on
-/// success or a list of 'line N: message' on errors.</summary>
+/// STUB marker (the scaffolder emits these) and is NOT a path error. A #link
+/// glyph expression (G[I/N] grammar) is checked in either mode, and a problem
+/// names the column inside the expression. Prints 'line N: message' per error,
+/// then 'line N: warning: message' per warning (ConversionRuleWarnings), then
+/// 'OK' when there were no errors; warnings never change the exit code.</summary>
 /// <param name="AArgs">RulesFile=--rules; CallFrom=--from (FromType qname),
 /// RenameTo=--to (ToType qname); PrintParsed=--print-parsed; DbPath/DbPaths=index(es)
 /// used to build the from/to trees.</param>
@@ -22307,7 +22310,8 @@ var
         Round`, which reads exactly like a captured cast and is why the parser
         defect survived a review of this very output. A reader must be able to
         tell "the cast was captured" from "the path swallowed it". }
-      rkLink   : Result:= Format('link %s <- %s%s', [R.ToPath, R.FromPath,
+      rkLink   : Result:= Format('link %s <- %s%s%s', [R.ToPath, R.FromPath,
+                            IfThen(R.GlyphExpr <> '', ' [glyph ' + R.GlyphExpr + ']', ''),
                             IfThen(R.Cast <> '', ' [cast ' + R.Cast + ']', '')]);
       rkDefault: Result:= Format('default %s = %s', [R.ToPath, R.Value]);
       rkNote   : Result:= Format('note %s', [R.Text]);
@@ -22403,15 +22407,15 @@ begin
 
   Errors:= ValidateConversionRules(RuleSet, FromTree, ToTree);
 
-  if Length(Errors) = 0 then
-  begin
-    if not AArgs.PrintParsed then Writeln('OK');
-    Exit(0);
-  end;
-
   for E in Errors do
     Writeln(Format('line %d: %s', [E.LineNo, E.Message]));
-  Result:= 1;
+  { Warnings never change the exit code: the book is valid, just suspicious. }
+  for E in ConversionRuleWarnings(RuleSet) do
+    Writeln(Format('line %d: warning: %s', [E.LineNo, E.Message]));
+
+  if Length(Errors) > 0 then Exit(1);
+  if not AArgs.PrintParsed then Writeln('OK');
+  Result:= 0;
 end; // function
 
 /// <summary>drag-lint convert-reemit --from-block FILE --rules FILE --from FromType
@@ -22497,6 +22501,14 @@ begin
   end;
 
   Rules:= ParseConversionRules(RulesText);
+  { Same refusal as convert-apply: a G-link is not realised yet (CV-2), and
+    re-emitting without it would carry the source image whole. }
+  var Unrealised: TArray<TRuleError>:= UnrealisedGlyphLinks(Rules);
+  if Length(Unrealised) > 0 then
+  begin
+    for var U in Unrealised do Writeln(Format('ERROR: line %d: %s', [U.LineNo, U.Message]));
+    Exit(1);
+  end;
 
   // Build F/T trees from the first DB that resolves each qname (mirrors
   // DoConvertValidate's store-open + multi-db loop verbatim).
@@ -23219,7 +23231,9 @@ end; // procedure
 /// instance-scoped lookups use whichever store actually has --unit/the .dfm indexed -- the
 /// From type, To type, and the form's own instances may each live in a DIFFERENT --db. On
 /// dry-run a stale/unindexed type only WARNS (the preview still renders), on --apply it
-/// REFUSES (exit 1) before any write is attempted.</remarks>
+/// REFUSES (exit 1) before any write is attempted. A book whose #link carries a glyph
+/// expression validates but is REFUSED here (exit 1, through the rule-error path) until
+/// CV-2 realises G-links (UnrealisedGlyphLinks) -- never carried whole.</remarks>
 function DoConvertApply(const AArgs: TArgs): Integer;
 var
   UnitPas   : string            ;
@@ -23376,7 +23390,9 @@ begin
   FromTree:= TreeFor(FromType);
   ToTree  := TreeFor(ToType);
 
-  RuleErrors:= ValidateConversionRules(Rules, FromTree, ToTree);
+  { A valid G-expression passes validation, but nothing realises it yet (CV-2):
+    refuse through the same path rather than carry the source image whole. }
+  RuleErrors:= ValidateConversionRules(Rules, FromTree, ToTree) + UnrealisedGlyphLinks(Rules);
   if Length(RuleErrors) > 0 then
   begin
     { A JSON consumer gets a parseable ok=false document naming every rule

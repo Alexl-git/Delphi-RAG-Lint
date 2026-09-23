@@ -122,6 +122,7 @@ uses
   System.Generics.Defaults,
   DRagLint.Core.Model,
   DRagLint.Convert.DfmReemit,
+  DRagLint.Convert.GlyphExpr,
   DRagLint.Convert.GlyphStrip,
   DRagLint.Convert.PropTree;
 
@@ -222,27 +223,10 @@ type
   end;
 
 const
-  CountPropNames: array[0..3] of string = ('NumGlyphs', 'GlyphCount', 'NumStates', 'ImageCount');
   // Matches DRagLint.Convert.Apply.pas's own PropTreeOptions.Depth for the
   // same tree -- deep enough to recurse into a DevExpress-style Options:
   // TFooOptions sub-object and find a dotted default like 'Options.NumGlyphs'.
   PropTreeDepthForCountFallback = 6;
-
-// AName may be a bare scalar name ('NumGlyphs') or a dotted one streamed flat
-// by a DevExpress-style .dfm ('OptionsImage.NumGlyphs' -- no nested object
-// block, the dot lives in the scalar's own Name). Match on the LAST segment so
-// both forms qualify; the caller keeps AName's full text as count_prop.
-function IsCountPropName(const AName: string): Boolean;
-var
-  S, Tail: string;
-  P: Integer;
-begin
-  Result:= False;
-  P:= LastDelimiter('.', AName);
-  if P > 0 then Tail:= Copy(AName, P + 1, MaxInt) else Tail:= AName;
-  for S in CountPropNames do
-    if SameText(S, Tail) then Exit(True);
-end;
 
 // The first scalar sibling on the same object whose name is a known count
 // property. Empty when there is none -- the caller must not invent a value.
@@ -252,7 +236,7 @@ begin
   AName := '';
   AValue:= '';
   for C in AObject.Children do
-    if (C.Kind = dnkScalar) and IsCountPropName(C.Name) then
+    if (C.Kind = dnkScalar) and IsGlyphCountPropName(C.Name) then
     begin
       AName := C.Name;
       AValue:= Trim(C.ValueText);
@@ -423,11 +407,11 @@ begin
       // so the .dfm omits it) -- the class may still declare one, possibly
       // through a nested (dotted) path such as 'Options.NumGlyphs' -- the
       // first tree node whose LAST segment is a known count name and that
-      // itself carries a default stands in for it. IsCountPropName already
+      // itself carries a default stands in for it. IsGlyphCountPropName already
       // matches on the last dotted segment, so this composes with a
       // dotted path exactly the way FindCountProp's own scan does.
       for N in Facts.Tree.Nodes do
-        if IsCountPropName(N.Path) and N.HasDefault then
+        if IsGlyphCountPropName(N.Path) and N.HasDefault then
         begin
           R.CountProp   := N.Path;
           R.CountDefault:= N.DefaultValue;
