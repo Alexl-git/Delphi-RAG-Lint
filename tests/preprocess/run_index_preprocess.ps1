@@ -36,6 +36,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -45,7 +46,7 @@ $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\platform_heavy.pas')
 
 # Fresh scratch dirs: one for the DEFAULT (preprocess-on) index, one for the
 # --no-preprocess index. Each gets its own copy of the raw fixture + its own DB.
-$scratchRoot = Join-Path C:\TEMP 'draglint_indexpp'
+$scratchRoot = Join-Path C:\TEMP "draglint_indexpp_$PID"
 if (Test-Path $scratchRoot) { Remove-Item $scratchRoot -Recurse -Force }
 $ppDir  = Join-Path $scratchRoot 'pp'
 $rawDir = Join-Path $scratchRoot 'raw'
@@ -101,3 +102,7 @@ try {
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_indexpp_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

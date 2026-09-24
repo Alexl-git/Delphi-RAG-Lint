@@ -42,9 +42,10 @@ param(
   # engine printed. The guard then matched its own directory name and reported
   # RED against a CORRECT build -- and, worse, against the broken one too, so
   # its first RED-check proved nothing. Keep this name free of "skip".
-  [string]$WorkDir = "$env:TEMP\draglint_dir_preparse_scope",
+  [string]$WorkDir = "$env:TEMP\draglint_dir_preparse_scope_$PID",
   [switch]$Quiet
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d = '') {
@@ -176,3 +177,7 @@ Write-Host ''
 if ($script:fail) { Write-Host 'DIR-PREPARSE-SKIP GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DIR-PREPARSE-SKIP GUARD: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint_dir_preparse_scope_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

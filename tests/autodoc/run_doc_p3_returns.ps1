@@ -165,6 +165,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -295,7 +296,7 @@ try {
 Write-Host ''
 Write-Host '=== returns.pas, document --unit --apply ===' -ForegroundColor Cyan
 
-$sc = Join-Path C:\TEMP 'draglint_docp3_returns'
+$sc = Join-Path C:\TEMP "draglint_docp3_returns_$PID"
 if (Test-Path $sc) { Remove-Item $sc -Recurse -Force }
 New-Item -ItemType Directory -Path $sc | Out-Null
 $tgt = Join-Path $sc 'returns.pas'
@@ -745,7 +746,7 @@ Check 'every emitted /// line is 7-bit ASCII' ($bad.Count -eq 0) ($bad -join ' |
 Write-Host ''
 Write-Host '=== returns.pas, index span shifted one line early ===' -ForegroundColor Cyan
 
-$sc2 = Join-Path C:\TEMP 'draglint_docp3_returns_lag'
+$sc2 = Join-Path C:\TEMP "draglint_docp3_returns_lag_$PID"
 if (Test-Path $sc2) { Remove-Item $sc2 -Recurse -Force }
 New-Item -ItemType Directory -Path $sc2 | Out-Null
 $tgt2 = Join-Path $sc2 'returns.pas'
@@ -852,7 +853,7 @@ foreach ($p in @(
 Write-Host ''
 Write-Host '=== returns.pas, index span shifted INTO ANOTHER ROUTINE ===' -ForegroundColor Cyan
 
-$sc3 = Join-Path C:\TEMP 'draglint_docp3_returns_foreign'
+$sc3 = Join-Path C:\TEMP "draglint_docp3_returns_foreign_$PID"
 if (Test-Path $sc3) { Remove-Item $sc3 -Recurse -Force }
 New-Item -ItemType Directory -Path $sc3 | Out-Null
 $tgt3 = Join-Path $sc3 'returns.pas'
@@ -956,7 +957,7 @@ Check 'FOREIGN: exactly ONE ///-prefixed "Observed:" line in the file names "A *
 Write-Host ''
 Write-Host '=== returns.pas, index span shifted INTO A SAME-NAMED SIBLING ===' -ForegroundColor Cyan
 
-$sc4 = Join-Path C:\TEMP 'draglint_docp3_returns_samename'
+$sc4 = Join-Path C:\TEMP "draglint_docp3_returns_samename_$PID"
 if (Test-Path $sc4) { Remove-Item $sc4 -Recurse -Force }
 New-Item -ItemType Directory -Path $sc4 | Out-Null
 $tgt4 = Join-Path $sc4 'returns.pas'
@@ -1041,3 +1042,7 @@ finally { Pop-Location }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3_returns_$PID"), (Join-Path C:\TEMP "draglint_docp3_returns_lag_$PID"), (Join-Path C:\TEMP "draglint_docp3_returns_foreign_$PID"), (Join-Path C:\TEMP "draglint_docp3_returns_samename_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

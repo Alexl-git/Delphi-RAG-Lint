@@ -57,9 +57,10 @@
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$Dir     = "$PSScriptRoot\..\..\src\delphi-plugin",
-  [string]$WorkDir = "$env:TEMP\draglint_about_freshness",
+  [string]$WorkDir = "$env:TEMP\draglint_about_freshness_$PID",
   [switch]$Quiet
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d = '') {
@@ -219,3 +220,7 @@ Write-Host ''
 if ($script:fail) { Write-Host 'ABOUT-FRESHNESS GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'ABOUT-FRESHNESS GUARD: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint_about_freshness_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

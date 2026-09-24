@@ -56,9 +56,10 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$Unit    = "$PSScriptRoot\..\..\src\core\DRagLint.Core.ControlChannel.pas",
   [string]$CliPas  = "$PSScriptRoot\..\..\src\cli\DRagLint.CLI.pas",
-  [string]$WorkDir = "$env:TEMP\drag-lint-control-channel-guard",
+  [string]$WorkDir = "$env:TEMP\drag-lint-control-channel-guard-$PID",
   [int]$BusyProcs  = 9000
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Engines = @()
@@ -432,3 +433,7 @@ Check 'F2-5 the escalation was AFTER a graceful attempt (BUSY reported first in 
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-control-channel-guard-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

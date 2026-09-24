@@ -45,6 +45,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
@@ -87,7 +88,7 @@ end.
 # when the original file had one, which this fixture does).
 $ExpectedAfter = (($ExpectedAfter -replace "`r`n", "`n") -replace "`n", "`r`n") + "`r`n"
 
-$scratch = Join-Path C:\TEMP 'draglint_docp3decay'
+$scratch = Join-Path C:\TEMP "draglint_docp3decay_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $target = Join-Path $scratch 'decay.pas'
@@ -135,3 +136,7 @@ try {
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3decay_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

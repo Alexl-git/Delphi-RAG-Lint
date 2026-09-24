@@ -39,8 +39,9 @@
 
 [CmdletBinding()]
 param(
-  [string]$WorkDir = "$env:TEMP\draglint_ghosttext_guard"
+  [string]$WorkDir = "$env:TEMP\draglint_ghosttext_guard_$PID"
 )
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -291,3 +292,7 @@ finally {
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint_ghosttext_guard_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

@@ -37,6 +37,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
@@ -54,7 +55,7 @@ try {
 Write-Host ''
 Write-Host '=== PART A: CRITICAL 1 -- consecutive-line overloads sharing one doc region ===' -ForegroundColor Cyan
 
-$scratchA = Join-Path C:\TEMP 'draglint_docp3stripcollision_a'
+$scratchA = Join-Path C:\TEMP "draglint_docp3stripcollision_a_$PID"
 if (Test-Path $scratchA) { Remove-Item $scratchA -Recurse -Force }
 New-Item -ItemType Directory -Path $scratchA | Out-Null
 $targetA = Join-Path $scratchA 'strip_collision.pas'
@@ -176,7 +177,7 @@ Check 'A IDEMPOTENT: a second strip --apply is byte-identical (no further change
 Write-Host ''
 Write-Host '=== PART B: IMPORTANT 2 -- a qname that resolves across two files ===' -ForegroundColor Cyan
 
-$scratchB = Join-Path C:\TEMP 'draglint_docp3stripcollision_b'
+$scratchB = Join-Path C:\TEMP "draglint_docp3stripcollision_b_$PID"
 if (Test-Path $scratchB) { Remove-Item $scratchB -Recurse -Force }
 $dirX = Join-Path $scratchB 'projX'
 $dirY = Join-Path $scratchB 'projY'
@@ -328,3 +329,7 @@ finally { Pop-Location }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3stripcollision_a_$PID"), (Join-Path C:\TEMP "draglint_docp3stripcollision_b_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

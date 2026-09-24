@@ -52,6 +52,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
@@ -64,7 +65,7 @@ function Write-Ansi([string]$Path, [string]$Body) {
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
 
-$scratch = Join-Path C:\TEMP 'draglint_docp3factsdecay'
+$scratch = Join-Path C:\TEMP "draglint_docp3factsdecay_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $target = Join-Path $scratch 'factsdecay.pas'
@@ -155,7 +156,7 @@ try {
   # asserting one proves nothing about the other -- D1 named BOTH. Replayed on a
   # fresh scratch dir so it cannot perturb steps 1-5, which have already reached
   # their comment-less fixed point above.
-  $scratch6 = Join-Path C:\TEMP 'draglint_docp3factsdecay_text'
+  $scratch6 = Join-Path C:\TEMP "draglint_docp3factsdecay_text_$PID"
   if (Test-Path $scratch6) { Remove-Item $scratch6 -Recurse -Force }
   New-Item -ItemType Directory -Path $scratch6 | Out-Null
   $target6 = Join-Path $scratch6 'factsdecay.pas'
@@ -180,3 +181,7 @@ try {
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3factsdecay_$PID"), (Join-Path C:\TEMP "draglint_docp3factsdecay_text_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

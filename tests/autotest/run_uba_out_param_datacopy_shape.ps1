@@ -25,8 +25,9 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-uba-out-datacopy"
+  [string]$WorkDir = "$env:TEMP\drag-lint-uba-out-datacopy-$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -163,3 +164,7 @@ Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL: uba-out-param-datacopy-shape' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS: uba-out-param-datacopy-shape' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-uba-out-datacopy-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

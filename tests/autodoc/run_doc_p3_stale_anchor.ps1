@@ -52,6 +52,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -109,7 +110,7 @@ Write-Host '=== staleanchor.pas: two --qname applies with no reindex between ===
 # ===========================================================================
 # CONTROL -- one --unit pass, the path that was never affected.
 # ===========================================================================
-$ctl = New-Case 'C:\TEMP\draglint_docp3_staleanchor_ctl'
+$ctl = New-Case "C:\TEMP\draglint_docp3_staleanchor_ctl_$PID"
 & $exePath index $ctl.Dir --db $ctl.Db 2>$null | Out-Null
 & $exePath document --unit $ctl.Pas --db $ctl.Db --apply --no-backup 2>$null | Out-Null
 $ctlLines = [IO.File]::ReadAllLines($ctl.Pas)
@@ -124,7 +125,7 @@ Check 'CONTROL: ... and neither block is nested' `
 # ===========================================================================
 # THE CASE -- two --qname applies, no reindex between them.
 # ===========================================================================
-$c = New-Case 'C:\TEMP\draglint_docp3_staleanchor'
+$c = New-Case "C:\TEMP\draglint_docp3_staleanchor_$PID"
 & $exePath index $c.Dir --db $c.Db 2>$null | Out-Null
 
 $out1 = & $exePath document --qname staleanchor.TZeiss.Create --db $c.Db --apply --no-backup 2>&1
@@ -197,3 +198,7 @@ finally { Pop-Location }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("C:\TEMP\draglint_docp3_staleanchor_ctl_$PID", "C:\TEMP\draglint_docp3_staleanchor_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

@@ -33,8 +33,9 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\draglint_b7_stage2"
+  [string]$WorkDir = "$env:TEMP\draglint_b7_stage2_$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$n, [bool]$ok, [string]$d = '') {
@@ -251,3 +252,7 @@ Write-Host ''
 if ($script:Failed) { Write-Host 'B7 STAGE 2 GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'B7 STAGE 2 GUARD: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint_b7_stage2_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

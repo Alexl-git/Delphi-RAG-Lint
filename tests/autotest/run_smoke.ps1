@@ -48,10 +48,11 @@ param(
     # 1.2.1-alpha), so the check reported a release bump as a smoke failure.
     [string] $ExpectedVersion = '',
     [string] $FixtureDir = "$PSScriptRoot\fixtures",
-    [string] $WorkDir = "$env:TEMP\drag-lint-autotest",
+    [string] $WorkDir = "$env:TEMP\drag-lint-autotest-$PID",
     [int]    $InitTimeoutMs = 3000,
     [int]    $ShutdownTimeoutMs = 2000
 )
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -395,3 +396,7 @@ $color = if ($script:Failed) { 'Red' } else { 'Green' }
 Write-Host $summary -ForegroundColor $color
 Write-Host "Detailed results: $jsonPath"
 if ($script:Failed) { exit 1 } else { exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-autotest-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

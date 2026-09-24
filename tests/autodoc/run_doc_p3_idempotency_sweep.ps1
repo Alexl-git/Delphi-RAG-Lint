@@ -52,6 +52,7 @@ param(
   [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$Py  = 'C:\Python314\python.exe'
 )
+try {
 
 $ErrorActionPreference = 'Continue'
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
@@ -302,7 +303,7 @@ Check 'SWEEP B: EVERY symbol block is a fixed point from cycle 1 (nothing settle
 Write-Host ''
 Write-Host '=== SWEEP C: idempotency_shapes.pas, document --qname --apply, isolated per symbol ===' -ForegroundColor Cyan
 
-$cRoot = Join-Path C:\TEMP 'draglint_docp3sweep_qname'
+$cRoot = Join-Path C:\TEMP "draglint_docp3sweep_qname_$PID"
 if (Test-Path $cRoot) { Remove-Item $cRoot -Recurse -Force }
 New-Item -ItemType Directory -Path $cRoot | Out-Null
 
@@ -498,7 +499,7 @@ Write-Host '    DeprecatedWithNestedReturns / ExampleWithNestedRemarks: the unke
 Write-Host '    defect (register N2), closed by T3h. Each must now settle on cycle 1 and round-trip'
 Write-Host '    through --strip back to the pristine bytes.'
 
-$dRoot = Join-Path C:\TEMP 'draglint_docp3sweep_known'
+$dRoot = Join-Path C:\TEMP "draglint_docp3sweep_known_$PID"
 if (Test-Path $dRoot) { Remove-Item $dRoot -Recurse -Force }
 New-Item -ItemType Directory -Path $dRoot | Out-Null
 
@@ -535,3 +536,7 @@ finally { Pop-Location }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3sweep_qname_$PID"), (Join-Path C:\TEMP "draglint_docp3sweep_known_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

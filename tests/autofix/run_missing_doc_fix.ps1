@@ -38,6 +38,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -51,7 +52,7 @@ $L       = 25   # the Undocumented decl line in the fixture
 # together -- A0 fails loudly if they ever drift apart.
 
 # ---- Part A + B: single-fix (own scratch) ---------------------------------
-$scratch = Join-Path C:\TEMP 'draglint_missdocfix_single'
+$scratch = Join-Path C:\TEMP "draglint_missdocfix_single_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $target  = Join-Path $scratch 'missfix.pas'
@@ -142,7 +143,7 @@ try {
   Check 'B2 2nd single-fix is byte-identical (no-op)' ($before2 -eq $after2)
 
   # ---- Part C: blanket batch EXCLUDES missing-doc ------------------------
-  $scratchB = Join-Path C:\TEMP 'draglint_missdocfix_batch'
+  $scratchB = Join-Path C:\TEMP "draglint_missdocfix_batch_$PID"
   if (Test-Path $scratchB) { Remove-Item $scratchB -Recurse -Force }
   New-Item -ItemType Directory -Path $scratchB | Out-Null
   $targetB = Join-Path $scratchB 'missfix.pas'
@@ -182,3 +183,7 @@ try {
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_missdocfix_single_$PID"), (Join-Path C:\TEMP "draglint_missdocfix_batch_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

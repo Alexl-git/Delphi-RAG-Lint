@@ -28,6 +28,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
@@ -36,7 +37,7 @@ $script:Failed = $false
 $exePath = (Resolve-Path $Exe).Path
 $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docp3\emptytags.pas')).Path
 
-$scratch = Join-Path C:\TEMP 'draglint_docp3emptytags'
+$scratch = Join-Path C:\TEMP "draglint_docp3emptytags_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $target = Join-Path $scratch 'emptytags.pas'
@@ -142,3 +143,7 @@ try {
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3emptytags_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

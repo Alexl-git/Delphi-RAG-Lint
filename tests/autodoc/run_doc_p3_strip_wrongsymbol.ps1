@@ -119,8 +119,10 @@ function Get-LineNo([string[]]$lines, [string]$pattern) {
 
 # Fresh scratch dir holding its own copy of the fixture plus its own index, so
 # no scenario can observe another's writes.
+$script:caseDirs = @()
 function New-Case([string]$name) {
-  $dir = Join-Path C:\TEMP "draglint_docp3stripwrong_$name"
+  $dir = Join-Path C:\TEMP "draglint_docp3stripwrong_${name}_$PID"
+  $script:caseDirs += $dir
   if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
   New-Item -ItemType Directory -Path $dir | Out-Null
   $target = Join-Path $dir 'strip_wrongsymbol.pas'
@@ -495,7 +497,11 @@ foreach ($case in @($A, $B, $C, $D, $E, $F)) {
 }
 
 }
-finally { Pop-Location }
+finally {
+  Pop-Location
+  # D23: each case dir is $PID-suffixed; remove them so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @($script:caseDirs)) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green

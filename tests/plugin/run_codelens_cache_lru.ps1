@@ -22,8 +22,9 @@
 [CmdletBinding()]
 param(
   [string]$Dpr     = "$PSScriptRoot\..\CodeLensCacheLruTests.dpr",
-  [string]$WorkDir = "$env:TEMP\drag-lint-codelens-lru"
+  [string]$WorkDir = "$env:TEMP\drag-lint-codelens-lru-$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 
 if (-not (Test-Path $Dpr)) { Write-Host "FATAL: dpr not found: $Dpr" -ForegroundColor Red; exit 2 }
@@ -76,3 +77,7 @@ if ($out -notmatch '(\d+) passed, 0 failed') {
 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-codelens-lru-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

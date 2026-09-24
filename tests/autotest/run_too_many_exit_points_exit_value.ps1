@@ -27,8 +27,9 @@
 param(
   [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$RulesDir = "$PSScriptRoot\..\..\rules",
-  [string]$WorkDir  = "C:\TEMP\draglint_tmep_exitvalue"
+  [string]$WorkDir  = "C:\TEMP\draglint_tmep_exitvalue_$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
 function Write-Ascii($p,$t){ [System.IO.File]::WriteAllText($p, (($t -replace "`r`n","`n") -replace "`n","`r`n"), [System.Text.Encoding]::ASCII) }
@@ -178,3 +179,7 @@ finally { Pop-Location }
 Write-Host ''
 if ($fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("C:\TEMP\draglint_tmep_exitvalue_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

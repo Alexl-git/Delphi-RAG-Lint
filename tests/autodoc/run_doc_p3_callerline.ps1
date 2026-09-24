@@ -111,6 +111,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -226,7 +227,7 @@ try {
 Write-Host ''
 Write-Host '=== SCENARIO A: callerline.pas, document --unit --apply ===' -ForegroundColor Cyan
 
-$sa = Join-Path C:\TEMP 'draglint_docp3_callerline_a'
+$sa = Join-Path C:\TEMP "draglint_docp3_callerline_a_$PID"
 if (Test-Path $sa) { Remove-Item $sa -Recurse -Force }
 New-Item -ItemType Directory -Path $sa | Out-Null
 $tgtA = Join-Path $sa 'callerline.pas'
@@ -362,7 +363,7 @@ Check 'A: every emitted /// line is 7-bit ASCII' ($badA.Count -eq 0) ($badA -joi
 Write-Host ''
 Write-Host '=== SCENARIO B: callerline_mixed.pas + callerline_mixedcross.pas ===' -ForegroundColor Cyan
 
-$sb = Join-Path C:\TEMP 'draglint_docp3_callerline_b'
+$sb = Join-Path C:\TEMP "draglint_docp3_callerline_b_$PID"
 if (Test-Path $sb) { Remove-Item $sb -Recurse -Force }
 New-Item -ItemType Directory -Path $sb | Out-Null
 Copy-Item $fxB1 (Join-Path $sb 'callerline_mixed.pas') -Force
@@ -418,3 +419,7 @@ finally { Pop-Location }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3_callerline_a_$PID"), (Join-Path C:\TEMP "draglint_docp3_callerline_b_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

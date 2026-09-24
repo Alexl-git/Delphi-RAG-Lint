@@ -1,3 +1,4 @@
+try {
 $Exe = . "$PSScriptRoot\_manifest_common.ps1"
 $fx  = "$PSScriptRoot\..\fixtures\manifest"
 # STDOUT ONLY for every JSON-SHAPE assertion below (the ones that look at the
@@ -34,12 +35,12 @@ Check 'ignore-files selftest' ($ig -match 'IGNORE-OK')
 # hard wall-clock timeout so a regression fails the suite instead of hanging it.
 Write-Host ''
 $stress = "$PSScriptRoot\..\fixtures\ignore-stress"
-$sdb    = Join-Path $env:TEMP 'draglint_ignore_stress.sqlite'
+$sdb    = Join-Path $env:TEMP "draglint_ignore_stress_$PID.sqlite"
 if (Test-Path $sdb) { Remove-Item -Force $sdb }
 $proc = Start-Process -FilePath $Exe `
     -ArgumentList @('index', $stress, '--db', $sdb, '--use-ignore') `
-    -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\draglint_stress.out" `
-    -RedirectStandardError "$env:TEMP\draglint_stress.err"
+    -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\draglint_stress_$PID.out" `
+    -RedirectStandardError "$env:TEMP\draglint_stress_$PID.err"
 $done = $proc.WaitForExit(30000)   # 30s hard cap; pathological behaviour would blow this
 if (-not $done) {
     try { $proc.Kill() } catch {}
@@ -134,7 +135,7 @@ Check 'resolve-dbs --json is array' ($rdj.TrimStart().StartsWith('['))
 Write-Host ''
 Write-Host 'v0.46: file-size guard (--max-file-kb 1 skips Huge.inc)...'
 $bigDir = "$PSScriptRoot\..\fixtures\manifest\big"
-$bigDb  = Join-Path $env:TEMP 'draglint_sizetest.sqlite'
+$bigDb  = Join-Path $env:TEMP "draglint_sizetest_$PID.sqlite"
 if (Test-Path $bigDb) { Remove-Item -Force $bigDb }
 $bigOut = & $Exe index $bigDir --db $bigDb --max-file-kb 1 2>&1 | Out-String
 Check 'size-guard index exits 0'          ($LASTEXITCODE -eq 0)
@@ -142,3 +143,7 @@ Check 'size-guard prints SKIP for Huge.inc' ($bigOut -match 'SKIP.*Huge\.inc')
 $bgf = & $Exe selftest files --db $bigDb 2>&1 | Out-String
 Check 'size-guard: Huge.inc NOT in index' (-not ($bgf -match 'Huge\.inc'))
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path $env:TEMP "draglint_ignore_stress_$PID.sqlite"), "$env:TEMP\draglint_stress_$PID.out", "$env:TEMP\draglint_stress_$PID.err", (Join-Path $env:TEMP "draglint_sizetest_$PID.sqlite"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

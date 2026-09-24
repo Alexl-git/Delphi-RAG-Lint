@@ -30,6 +30,7 @@
   fixture, not the feature, is broken.
 #>
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check([string]$n, [bool]$ok, [string]$d = '') {
@@ -39,7 +40,7 @@ function Check([string]$n, [bool]$ok, [string]$d = '') {
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: engine not found: $Exe" -ForegroundColor Red; exit 2 }
 $exePath = (Resolve-Path $Exe).Path
-$scratch = Join-Path C:\TEMP 'draglint_property_refs_resolve'
+$scratch = Join-Path C:\TEMP "draglint_property_refs_resolve_$PID"
 if (Test-Path $scratch) { Remove-Item -Recurse -Force $scratch }
 New-Item -ItemType Directory $scratch | Out-Null
 function W([string]$name, [string]$body) {
@@ -295,3 +296,7 @@ Write-Host ''
 if ($script:fail) { Write-Host 'PROPERTY-REFS-RESOLVE: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PROPERTY-REFS-RESOLVE: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_property_refs_resolve_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

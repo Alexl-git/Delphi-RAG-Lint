@@ -28,8 +28,9 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\draglint_dpr_search_paths"
+  [string]$WorkDir = "$env:TEMP\draglint_dpr_search_paths_$PID"
 )
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -113,3 +114,7 @@ Write-Host ''
 if ($script:Failed) { Write-Host 'DPR SEARCH PATHS GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'DPR SEARCH PATHS GUARD: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint_dpr_search_paths_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

@@ -31,6 +31,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -45,7 +46,7 @@ function WritePas([string]$Path, [string]$Text) {
 }
 
 $exePath = (Resolve-Path $Exe).Path
-$scratch = Join-Path C:\TEMP 'draglint_doc_exception_message'
+$scratch = Join-Path C:\TEMP "draglint_doc_exception_message_$PID"
 if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $target = Join-Path $scratch 'excmsg.pas'
@@ -299,3 +300,7 @@ finally { Pop-Location }
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_doc_exception_message_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}
