@@ -57,5 +57,9 @@ them, and each carries its caveat on the chart:
 * `lands-where` (`-Target <Tmc/Imc property | field | Form.Control> -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>`)
   -- TABLE.COLUMN by naming convention, `[inferred]`, coverage printed.
 
-Engine defects disclosed by the charts: D1 (parenless calls, every call walk),
-D12 (effects), D13 (who-writes); D6 (butterfly duplicate rows) is fixed.
+Engine defects the charts disclosed -- D1 (parenless calls), D12 (effects), D13
+(who-writes), D18 (multi-line SQL.Add reads), D19 (quoted identifiers) -- are FIXED
+in extractor 1.19 / resolver 1.8 (re-baselined 2026-09-24); the detectors stay as
+guards. who-writes still lists writes BOUND to the member that find-callers does
+not report (the D13 fix gave them no member-access row). D6 (butterfly duplicate
+rows) is fixed in the emitter.

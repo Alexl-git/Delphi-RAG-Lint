@@ -33,10 +33,10 @@ interface / project / command constant / wire field / db column / any symbol.**
 
 | question | selects | emitter | measured |
 |---|---|---|---|
-| `butterfly` | method | `Emit-Butterfly.ps1` | 9 callers / 8 callees, 18 anchors |
+| `butterfly` | method | `Emit-Butterfly.ps1` | 9 callers / 9 callees, 19 anchors |
 | `deps` | unit | `Emit-Deps.ps1` | 3 used-by / 18 uses |
 | `who-calls` | method | `Emit-WhoCalls.ps1` | 10 sites + 1 cycle @d3 |
-| `what-it-calls` | method | `Emit-WhoCalls.ps1 -Direction callees` | 2/8/16 rows @d1/d2/d3, 5 cycles |
+| `what-it-calls` | method | `Emit-WhoCalls.ps1 -Direction callees` | 2/9/18 rows @d1/d2/d3, 5 cycles |
 | `who-writes` | field / property | `Emit-MemberAccess.ps1 -Mode write` | R: 7 writes over 3 routines |
 | `who-reads` | field / property | `Emit-MemberAccess.ps1 -Mode read` | Connected: 602 reads / 598 routines |
 | `hierarchy` | type | `Emit-Hierarchy.ps1` | 145 descendants, 2 ancestors (1 RTL) |
@@ -44,7 +44,7 @@ interface / project / command constant / wire field / db column / any symbol.**
 | `event-wiring` | form class | `Emit-EventWiring.ps1` | 41 events / 41 handlers / 40 controls |
 | `touches-tables` | method | `Emit-TouchesTables.ps1` | 5 read / 5 written / 2 both |
 | `lifecycle` | form class | `Emit-Lifecycle.ps1` | uMain: 2 wired / 1 implemented-not-wired / 4 absent |
-| `cycles` | unit / project | `Emit-Cycles.ps1` | CLIENT 2 groups / 5 edges; DL's SCC 5 edges; DataCopy 0 |
+| `cycles` | unit / project | `Emit-Cycles.ps1` | CLIENT 2 groups / 5 edges; DL's SCC 7 edges; DataCopy 0 |
 | `wiring` | interface | `Emit-Wiring.ps1` | SERVER 2 regs / 4 sites of 535; CLIENT 1 of 4 |
 | `effects` | method | `Emit-Effects.ps1` | pure / not-analysed / `g,p0,p3,?` over 6 params |
 | `architecture` | project | `Emit-Architecture.ps1` | 563 units / 3 zones / 2,858 edges / 3 back-edges |
@@ -57,9 +57,9 @@ interface / project / command constant / wire field / db column / any symbol.**
 | `tested-by` | any symbol | `Emit-TestedBy.ps1` | 11 / 8 / 13 covering tests, computed from 71 test methods |
 
 | `exception-paths` | method | `Emit-ExceptionPaths.ps1` | BuildSchema: EDatabaseError caught at LoadAllAsync:632 (call inside the try); ReadBuffer: caught on 2 edges, escapes on 3 path ends; 140 callers walked, 139 evaluated for EReadError |
-| `consumers` | table / column | `Emit-Consumers.ps1` | CAUSFAIL (SERVER): 1 certain writer, 1 inferred reader, 3 triggers; FOLDERS 2 declarations, newest 79 columns |
+| `consumers` | table / column | `Emit-Consumers.ps1` | CAUSFAIL (SERVER): 1 certain reader, 1 certain writer, 3 triggers; FOLDERS 3 inferred readers; FOLDERS 2 declarations, newest 79 columns |
 | `feeds-from` | control | `Emit-FeedsFrom.ps1` | colREASON: 5 graded hops to CAUSFAIL.REASON; 267 of 808 field-bound CLIENT controls reach one table |
-| `lands-where` | ORM property / field / control | `Emit-LandsWhere.ps1` | TmcCAUSFAIL.REASON: 4 server rows, 1 trigger, 1 client binding; convention 1,991 of 1,997 |
+| `lands-where` | ORM property / field / control | `Emit-LandsWhere.ps1` | TmcCAUSFAIL.REASON: 4 server rows, 1 trigger, 1 client binding; convention 1,992 of 1,997 |
 
 **The caveat each of the last four ships with** -- say it whenever the chart is
 quoted:
@@ -69,14 +69,16 @@ quoted:
   file whose sha256 still matches the index; source-only rows (bare `except`,
   `raise;`) are `[inferred]` with directive state not evaluated. A solid catch
   needs the call site inside the handler's `try`. The caller walk is over
-  resolved call edges, so engine D1 (parenless calls) and interface/event
-  dispatch thin it; a walk that ends says "no resolved caller", never
-  "unhandled".
+  resolved call edges only, so a call the resolver cannot bind (interface /
+  event dispatch; parenless calls until engine D1 was fixed in resolver 1.7/1.8)
+  thins it; a walk that ends says "no resolved caller", never "unhandled".
 * `consumers` -- derived, path A (`orm_links` / `fb_*` are 0 rows): SQL facts
   `[certain]`, upper-case SQL-verb literals `[inferred]`, because `sql_reads`
-  misses SQL split over several `SQL.Add` lines (engine D18). The schema is the
-  SQL SCRIPTS, collapsed on name with the newest file winning -- 5 live `PDF_*`
-  tables are absent and quoted identifiers are not extracted. `[by name]`
+  misses SQL passed through a variable (`SQL.Add(sTmp)`: 38 of the 40 SERVER
+  DataService loads still without a read fact; the multi-line `SQL.Add` gap,
+  engine D18, is fixed in extractor 1.19). The schema is the SQL SCRIPTS,
+  collapsed on name with the newest file winning -- 5 live `PDF_*` tables are
+  absent. `[by name]`
   literals (equal to the table name, exact case) are MENTIONS, drawn in a
   neutral cluster with no read arrow (R15); case-only matches are counted and
   named, not drawn. The header counts reading / writing ROUTINES; unit-level
@@ -90,7 +92,7 @@ quoted:
   per datasource: 267 of 808 reach one table, 426 sit under a dangling module.
 * `lands-where` -- the TABLE.COLUMN hop is a naming CONVENTION
   (`Tmc<T>.P` -> `T.P`), drawn `[inferred]` with its coverage measured and
-  printed on every chart (1,991 of 1,997). Reads THREE clones (CLIENT, SERVER,
+  printed on every chart (1,992 of 1,997). Reads THREE clones (CLIENT, SERVER,
   SQL).
 
 **Column states** `consumers`, `feeds-from` and `lands-where` can show for a named
@@ -100,7 +102,7 @@ cannot disagree, in this precedence order:
 | state | means |
 |---|---|
 | `column` | extracted as a column of the newest script declaration of the table |
-| `quoted` | a QUOTED identifier in the newest declaration (`"TABLE"`, MS1.SQL:3848; `"ACTION"`, MS1.SQL:2243) -- the SQL index drops quoted identifiers (`INBOX-sql-index-drops-quoted-identifiers.md`), so it is found by a source scan, `[inferred]` |
+| `quoted` | a QUOTED identifier in the newest declaration that the SQL index does not extract, found by a source scan, `[inferred]`. Engine D19 (`INBOX-sql-index-drops-quoted-identifiers.md`) is FIXED in extractor 1.19: `"TABLE"` (FOLDERCOUNT, MS1.SQL:3848) and `"ACTION"` (IPCHART, :2243) are now `column`, so no real column reaches this state; it is kept as a guard and driven synthetically by the gate (`A-COLSTATE-QUOTED`) |
 | `older-only` | extracted only from an OLDER declaration of the table; not extracted from, nor quoted in, the newest |
 | `server-sql` | not extracted, not quoted, but SQL in the Delphi index names it (`STATIONS.GRIDS`; lands-where searches the server DataService, consumers every routine of `-DbPath` that names the table) -- the scripts lag the schema |
 | `[stale source]` | the newest declaration's script differs from the indexed copy, so it was NOT scanned for a quoted identifier -- whether it is a column is NOT known; never rendered as an absence |
@@ -115,17 +117,21 @@ questions as emitters overstates the work.
 Gate: `charts\src\Test-Emitters.ps1` (exit 0 = green). Proven to fail correctly
 on every batch -- see each commit for the mutation it was checked against.
 
-## Engine defects the shipped charts disclose (2026-09-23)
+## Engine defects the shipped charts disclose (2026-09-23; re-baselined 2026-09-24)
 
 From `C:\Projects\Delphi-RAG-lint\docs\INBOX-defects-found-2026-09-23-rule-work.md`.
-Each was MEASURED on the clones; none is worked around silently.
+Each was MEASURED on the clones; none is worked around silently. Extractor 1.19 /
+resolver 1.8 FIXED D1, D12, D13, D18 and D19: a fixed limit is no longer claimed
+on a chart, and each detector stays as a guard (R25).
 
 | defect | affects | what the chart does |
 |---|---|---|
-| D1 parenless free-function calls are never bound (`N := NextId;`) | every caller/callee walk: `butterfly`, `who-calls`, `what-it-calls`, `change-impact`, `exception-paths` | documented only -- such callers are absent; a short list is a lower bound |
+| D1 parenless free-function calls were never bound (`N := NextId;`) -- FIXED, resolver 1.7/1.8 (CLIENT call edges 20,409 -> 23,790; e.g. `NextSeq`, `ResolveLogDir` now appear) | every caller/callee walk: `butterfly`, `who-calls`, `what-it-calls`, `change-impact`, `exception-paths` | walks follow resolved edges only; a call the resolver cannot bind is still absent, so a short list is a lower bound |
 | D6 butterfly listed duplicate callee rows | `butterfly` | **FIXED here** -- rows are distinct symbols, arrows follow the engine's tree (a hop-2 callee is no longer drawn as called by the focus); gate `A-BF6-*` fails on any duplicate |
-| D12 own-name result assignment scored as a GLOBAL write (31 CLIENT functions, e.g. `Ap.AP_FP_Greater_Eq`) | `effects` | when the witness is "writes <own name> (non-local)" the `g` moves to a dashed "engine D12" disclosure; when an earlier witness hides it, `g` is still drawn |
-| D13 `write` refs never get a symbol_id (32,909 of 32,909 on CLIENT) | `who-writes` | bare in-class writes are invisible to the verb (`FConnected`: 4 at uPipeClientConnection.pas:164/320/455/543); the chart says "no RESOLVED write sites" and lists same-name unbound writes by name |
+| D12 own-name result assignment scored as a GLOBAL write (31 CLIENT functions on 1.18, e.g. `Ap.AP_FP_Greater_Eq`) -- FIXED, extractor 1.19 (0 on every clone; `AP_FP_Greater_Eq` is now pure) | `effects` | guard kept: when the witness is "writes <own name> (non-local)" the `g` moves to a dashed "engine D12" disclosure (driven synthetically, `A-FX12-DETECT`) |
+| D13 `write` refs never got a symbol_id (32,909 of 32,909 on CLIENT at 1.18) -- FIXED, extractor 1.19 (21,916 bound) | `who-writes` | the fix gives a bound write NO member-access row (0 of 21,916), so `find-callers` still does not report a bare in-class write: the chart says "no write sites reported by find-callers" and lists the writes BOUND to the member by line (`FConnected`: 4 at uPipeClientConnection.pas:164/320/455/543); what 1.19 leaves unbound (a write in a `with` body, `fLOTSIZE` at uPLANLIST.PAS:2547) is still listed by name |
+| D18 `sql_reads` misses SQL split over `SQL.Add` lines -- FIXED, extractor 1.19 (SERVER read facts 19 -> 112) | `consumers`, `touches-tables`, `lands-where` | `PrepareLoadQuery` on CAUSFAIL is now a `[certain]` reader; literals stay `[inferred]` beside the facts for SQL passed through a variable (FOLDERS: 3 inferred readers) |
+| D19 quoted identifiers not extracted -- FIXED, extractor 1.19 | `consumers`, `feeds-from`, `lands-where` | `FOLDERCOUNT.TABLE` / `IPCHART.ACTION` are ordinary columns; the `quoted` state is a guard |
 
 ## NOT SHIPPED (1)
 

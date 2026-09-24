@@ -6,7 +6,9 @@
   Every expected number here was MEASURED against the named indexes on
   2026-09-23 and is asserted, not recomputed. If one of them moves, that is a
   FINDING -- the index changed, or an emitter did -- and the right response is
-  to investigate before editing the number.
+  to investigate before editing the number. Re-baselined 2026-09-24 against the
+  extractor 1.19 / resolver 1.8 clones: every moved pin says RE-BASELINED or
+  "was N at 1.18" beside it, with the mechanism traced against *.pre-1.19.
 
   The negative cases matter as much as the positive ones, and they assert two
   things each: that the failure message says the RIGHT thing, and that NO .svg
@@ -88,22 +90,27 @@ Note 'butterfly (regression) ...'
 Step 'E-BF' {
   $script:b = & "$SRC\Emit-Butterfly.ps1" -Qname $Q_SEND -DbPath $DbCli -Depth 2 -OutDir $OutDir
   Chk 'A-BF-CALLERS' $b.Callers 9
-  Chk 'A-BF-CALLEES' $b.Callees 8
-  Chk 'A-BF-CLICKS'  $b.ClickTargets 18
+  # 9 callees / 19 clicks / 18 arrows, was 8 / 18 / 17 on the 1.18 clone. Traced
+  # (1.19 re-baseline, engine D1/ENG-16 parenless calls now bound): hop 2 gains
+  # TPipeClientConnection.NextSeq, called bare -- `BuildHeader(ACmd, NextSeq, ...)`
+  # at uPipeClientConnection.pas:470 in ExecuteCommand. No other row moved.
+  Chk 'A-BF-CALLEES' $b.Callees 9
+  Chk 'A-BF-CLICKS'  $b.ClickTargets 19
   if (-not $b.AllClickable) { Fail 'A-BF-CLICKABLE' 'butterfly rows are not all anchored' }
-  # D6 fix: arrows follow the tree. All 9 callers are depth 1; of the 8 callees
-  # only 2 are called BY SendDeltaOperation (what-it-calls d1 = 2), the other 6
-  # are hop 2. The old flatten drew all 8 as direct calls.
+  # D6 fix: arrows follow the tree. All 9 callers are depth 1; of the 9 callees
+  # only 2 are called BY SendDeltaOperation (what-it-calls d1 = 2), the other 7
+  # are hop 2. The old flatten drew all of them as direct calls.
   Chk 'A-BF-FOCUSIN'  $b.FocusIn 9
   Chk 'A-BF-FOCUSOUT' $b.FocusOut 2
-  Chk 'A-BF-EDGES'    $b.Edges 17
+  Chk 'A-BF-EDGES'    $b.Edges 18
 }
 
 # D6 (engine INBOX, 2026-09-23): the butterfly listed duplicate callee rows. The
 # engine's tree repeats a symbol reached through a second parent (the repeat is
 # marked cycle and not expanded); the emitter flattened the tree and appended
-# every node. On this target the tree has 14 callee nodes for 11 symbols:
-# GetTransitiveAncestors, GetSymbolById and VisibleHere each appeared twice.
+# every node. On this target the 1.18 tree had 14 callee nodes for 11 symbols:
+# GetTransitiveAncestors, GetSymbolById and VisibleHere each appeared twice
+# (1.19: 19 for 16 -- see A-BF6-SIDEPARSE).
 Note 'butterfly D6 (duplicate rows) ...'
 Step 'E-BF-D6' {
   $script:b6 = & "$SRC\Emit-Butterfly.ps1" -Qname 'DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead' `
@@ -120,19 +127,31 @@ Step 'E-BF-D6' {
       [void]$sideTitles.Add("$($cm.Groups[2].Value)|$($tm.Groups[1].Value)")
     }
   }
-  if ($sideTitles.Count -ne 13) { Fail 'A-BF6-SIDEPARSE' "expected 13 side rows (2 in + 11 out), parsed $($sideTitles.Count)" }
+  # RE-BASELINED at 1.19 (2026-09-24). The DL clone is a self-index of the
+  # engine's OWN source, re-taken at 1.19 (130 -> 134 files), and the focus body
+  # itself was rewritten (CallResolver.pas 1979-2106 -> 2667-2810): it now calls
+  # AncestorsOf where it called ISymbolStore.GetTransitiveAncestors, and adds
+  # WithScopeAt (the D14 with-body work), whose 4 children are new hop-2 rows
+  # (WithStatementsOf, FileIsStale, PosAtOrBefore, LayerVerdict); and two hop-1
+  # bodies swapped FStore.GetSymbolById / GetTransitiveAncestors for the local
+  # SymbolById / AncestorsOf. So +7 callee symbols, -2 (GetTransitiveAncestors,
+  # GetSymbolById): 11 -> 16. The 2 callers only moved lines.
+  # A SOURCE change, not a binding change -- diffed row by row against the
+  # pre-1.19 clone. The D6 shape survives: 19 callee tree nodes for 16 symbols,
+  # the 3 repeats now VisibleHere, AncestorsOf and SymbolById.
+  if ($sideTitles.Count -ne 18) { Fail 'A-BF6-SIDEPARSE' "expected 18 side rows (2 in + 16 out), parsed $($sideTitles.Count)" }
   $dupRows  = @($sideTitles | Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
   $dupEdges = @([regex]::Matches($t6, '(?m)^\s+(\S+ -> \S+) \[') | ForEach-Object { $_.Groups[1].Value } |
                 Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
   if ($dupRows.Count)  { Fail 'A-BF6-DUPROWS'  ("duplicate rows: " + ($dupRows -join '; ')) }
   if ($dupEdges.Count) { Fail 'A-BF6-DUPEDGES' ("duplicate edges: " + ($dupEdges -join '; ')) }
   Chk 'A-BF6-CALLERS'  $b6.Callers 2
-  Chk 'A-BF6-CALLEES'  $b6.Callees 11      # 14 tree nodes, 3 repeats
-  # 16 = one arrow per tree node (2 + 14): the 3 repeats are REAL calls from a
+  Chk 'A-BF6-CALLEES'  $b6.Callees 16      # 19 tree nodes, 3 repeats
+  # 21 = one arrow per tree node (2 + 19): the 3 repeats are REAL calls from a
   # second parent, so they keep their arrow and lose only their row.
-  Chk 'A-BF6-EDGES'    $b6.Edges 16
-  Chk 'A-BF6-FOCUSOUT' $b6.FocusOut 6      # the engine's depth-1 children
-  Chk 'A-BF6-CLICKS'   $b6.ClickTargets 14 # 2 + 11 + focus
+  Chk 'A-BF6-EDGES'    $b6.Edges 21
+  Chk 'A-BF6-FOCUSOUT' $b6.FocusOut 7      # the engine's depth-1 children (6 - GetTransitiveAncestors + AncestorsOf + WithScopeAt)
+  Chk 'A-BF6-CLICKS'   $b6.ClickTargets 19 # 2 + 16 + focus
 }
 
 Note 'deps (regression) ...'
@@ -193,7 +212,7 @@ Step 'E-WC4' {
 
 # what-it-calls is who-calls walked the other way, so it is tested at THREE
 # depths: the rows+1 == node_count invariant was challenged for the callee
-# direction and then verified, cycles present and all (2/3, 8/9, 16/17). The
+# direction and then verified, cycles present and all (2/3, 9/10, 18/19). The
 # depth-2 row count is also the regression that ties this emitter to butterfly's
 # Callees -- if those two ever disagree, one of them is reading the tree wrong.
 Note 'what-it-calls SendDeltaOperation d1/d2/d3 ...'
@@ -204,8 +223,9 @@ Step 'E-WIC' {
   Chk 'A-WIC1-TRUNC' $c1.Truncated $true
 
   $script:c2 = & "$SRC\Emit-WhoCalls.ps1" -Qname $Q_SEND -DbPath $DbCli -Direction callees -Depth 2 -OutDir $OutDir
-  Chk 'A-WIC2-ROWS'    $c2.Rows 8
-  Chk 'A-WIC2-NODES'   $c2.NodeCount 9
+  # 9 / 10, was 8 / 9 at 1.18: + NextSeq (engine D1 parenless call, see A-BF-CALLEES)
+  Chk 'A-WIC2-ROWS'    $c2.Rows 9
+  Chk 'A-WIC2-NODES'   $c2.NodeCount 10
   Chk 'A-WIC2-CYCLES'  $c2.Cycles 0
   Chk 'A-WIC2-CALLERS' $c2.Callers 0        # the callers counter must stay empty
   # the tie to butterfly: same method, same depth, same callee count
@@ -216,8 +236,12 @@ Step 'E-WIC' {
   if ($null -ne $c2.NameMatches) { Fail 'A-WIC2-NAMENULL' "NameMatches must be null walking callees, got $($c2.NameMatches)" }
 
   $script:c3 = & "$SRC\Emit-WhoCalls.ps1" -Qname $Q_SEND -DbPath $DbCli -Direction callees -Depth 3 -OutDir $OutDir
-  Chk 'A-WIC3-ROWS'   $c3.Rows 16
-  Chk 'A-WIC3-NODES'  $c3.NodeCount 17
+  # 18 / 19, was 16 / 17 at 1.18 -- both engine D1 (parenless calls bound):
+  # + NextSeq (hop 2) and + uLogPaths.ResolveLogDir (hop 3), a parenless FREE
+  # function called as `IncludeTrailingPathDelimiter(ResolveLogDir)` at
+  # uLogPaths.pas:91 in LogFilePath. Cycles unchanged.
+  Chk 'A-WIC3-ROWS'   $c3.Rows 18
+  Chk 'A-WIC3-NODES'  $c3.NodeCount 19
   Chk 'A-WIC3-CYCLES' $c3.Cycles 5
   # the arrow means "calls", so walking callees it must leave the FOCUS, never
   # arrive at it. An edge INTO focus here would assert the relationship backwards.
@@ -312,27 +336,61 @@ Step 'E-MA2' {
   Chk 'A-MA2-XCHECK'   $m2.CrossCheck 'agree'
   # backed by METHODS, so the note offers who-calls, not who-writes
   Chk 'A-MA2-BACKING'  (($m2.Backing | Sort-Object) -join ',') 'GetVERDICT,SetVERDICT'
-  # D13 by-name counts (unbound write refs of the NAME): 0 in the declaring file,
-  # 2 elsewhere for VERDICT; 0 / 35 for the record field R (a one-letter name).
-  Chk 'A-MA2-D13'      "$($m2.D13SameFile)/$($m2.D13Elsewhere)" '0/2'
+  # D13 by-name counts (unbound write refs of the NAME). RE-BASELINED at 1.19
+  # (engine D13 fixed, 21,916 of 32,909 CLIENT write refs now bound):
+  #   VERDICT 0/2 -> 0/0: both "elsewhere" writes (uINSPRSLT.PAS:2138, :2685) are
+  #     now bound to uINSPRSLT.TmcINSPRSLT.VERDICT -- a DIFFERENT symbol, exactly
+  #     the "may be other symbols" the disclosure warned of. Now silent.
+  #   R 0/35 -> 0/1: 34 now bound -- 26 locals, 4 params, 4 fields, NONE to
+  #     RChartSampleData.R; the one left is `R:= ClipRect` at uStyles.pas:452,
+  #     inside `with img do with img.Canvas do` (1.19 binds with-body READS, D14).
+  # Neither member has a write bound to ITSELF, so BoundUnreported is 0 on both.
+  Chk 'A-MA2-D13'      "$($m2.D13SameFile)/$($m2.D13Elsewhere)/$($m2.BoundUnreported)" '0/0/0'
+  if ((Dot $m2) -match 'engine D13') { Fail 'A-MA2-D13' 'the D13 disclosure still fires on VERDICT, where every write it named is now bound elsewhere' }
   # a missing precondition FAILS (final wave, item 9): `if ($m1) { ... }` used to
   # skip this row silently whenever E-MA1 had thrown, and the run still passed
   if (-not $m1) { Fail 'A-MA1-D13' 'precondition: E-MA1 produced no result, so the D13 count of R was never checked' }
-  else { Chk 'A-MA1-D13' "$($m1.D13SameFile)/$($m1.D13Elsewhere)" '0/35' }
+  else { Chk 'A-MA1-D13' "$($m1.D13SameFile)/$($m1.D13Elsewhere)/$($m1.BoundUnreported)" '0/1/0' }
 }
 
-# ENGINE D13: write refs are never bound on CLIENT, so the verb sees only
-# member-access writes. FConnected is assigned bare inside its own class four
-# times; the old chart said "no write sites". It now says "no RESOLVED write
-# sites" and lists the four unbound lines by name.
-Note 'who-writes FConnected (engine D13 disclosure) ...'
+# ENGINE D13: up to 1.18 write refs were never bound on CLIENT, so the verb saw
+# only member-access writes. FConnected is assigned bare inside its own class
+# four times; the chart said "no RESOLVED write sites" and listed the four
+# unbound lines by name.
+# RE-BASELINED at 1.19 (D13 fixed): the four are now BOUND to FConnected, so the
+# by-name check is silent (4/0 -> 0/0) -- but find-callers still reports none of
+# them (no bound write ref has a member_accesses row: 0 of 21,916), and the chart
+# said "no write sites (602 reads)", a FALSE absence. Emit-MemberAccess now
+# counts writes BOUND to the member that the verb does not report, and says so.
+Note 'who-writes FConnected (bound writes the verb does not report) ...'
 Step 'E-MA-D13' {
   $script:m14 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'uPipeClientConnection.TPipeClientConnection.FConnected' -Mode write -DbPath $DbCli -OutDir $OutDir
   Chk 'A-MA14-WRITES' $m14.Writes 0
-  Chk 'A-MA14-D13'    "$($m14.D13SameFile)/$($m14.D13Elsewhere)" '4/0'
+  Chk 'A-MA14-D13'    "$($m14.D13SameFile)/$($m14.D13Elsewhere)" '0/0'
+  Chk 'A-MA14-BOUND'  "$($m14.BoundUnreported) $($m14.BoundLines)" '4 :164,:320,:455,:543'
   $t14 = Dot $m14
-  if ($t14 -notmatch 'no resolved write sites \(602 reads\)') { Fail 'A-MA14-ZERO' 'the zero note does not say RESOLVED' }
-  if ($t14 -notmatch 'at :164, :320, :455, :543 -- by name') { Fail 'A-MA14-LINES' 'the four unbound write lines are not listed' }
+  if ($t14 -notmatch 'no write sites reported by find-callers \(602 reads\)') { Fail 'A-MA14-ZERO' 'the zero note does not say it is only what find-callers REPORTS' }
+  if ($t14 -notmatch '4 bare write\(s\) BOUND to FConnected in the index at :164, :320, :455, :543 -- find-callers does not report them') { Fail 'A-MA14-LINES' 'the four bound write lines are not listed' }
+  if ($t14 -match 'engine D13') { Fail 'A-MA14-SILENT' 'the by-name D13 disclosure still fires on FConnected, whose writes are all bound now' }
+}
+
+# The by-name D13 path on REAL data after the fix (R25): 1.19 still leaves a
+# field written inside a `with` body unbound. uPLANLIST.PAS:2547
+# `fLOTSIZE := StrToIntA(...)` sits in `with Z14slctFrm do` (TANSIZ14Plan.EditForm).
+# The same chart carries 5 in-class writes BOUND to fLOTSIZE -- both disclosures at once.
+Note 'who-writes fLOTSIZE (engine D13 residue: a write in a with body) ...'
+Step 'E-MA-D13B' {
+  $script:m15 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'uPLANLIST.TmcPLANLIST.fLOTSIZE' -Mode write -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-MA15-D13'   "$($m15.Writes)/$($m15.D13SameFile)/$($m15.D13Elsewhere)" '0/1/0'
+  Chk 'A-MA15-BOUND' "$($m15.BoundUnreported) $($m15.BoundLines)" '5 :1315,:1453,:1517,:1580,:2055'
+  $t15 = Dot $m15
+  if ($t15 -notmatch 'engine D13: 1 UNBOUND write\(s\) named fLOTSIZE in uPLANLIST\.PAS at :2547 -- by name, NOT counted above') { Fail 'A-MA15-D13' 'the unbound with-body write is not listed by name' }
+  # ... and the "RESOLVED" zero wording, which needs unbound writes and NO bound
+  # one: TTabSwitchMessage.Result (7 `Result :=` lines in its own unit, by name --
+  # 10,481 of the 10,993 writes 1.19 leaves unbound are `Result`)
+  $script:m16 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'INSPFLDR.Messages.TTabSwitchMessage.Result' -Mode write -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-MA16-D13'   "$($m16.Writes)/$($m16.D13SameFile)/$($m16.D13Elsewhere)/$($m16.BoundUnreported)" '0/7/10474/0'
+  if ((Dot $m16) -notmatch 'no resolved write sites \(0 reads\)') { Fail 'A-MA16-ZERO' 'the zero note does not say RESOLVED' }
 }
 
 Note 'who-reads Connected at scale (602 sites, 598 routines, cap 25) ...'
@@ -435,7 +493,10 @@ Step 'E-TT1' {
   Chk 'A-TT1-BOTH'       $s1.Both 2
   Chk 'A-TT1-DISTINCT'   $s1.Distinct 8
   Chk 'A-TT1-UNRESOLVED' $s1.Unresolved 0
-  Chk 'A-TT1-INDEXSQL'   $s1.IndexSqlSymbols 157
+  # 250, was 157 at 1.18: engine D18 (SQL assembled across SQL.Add lines) gave
+  # sql_reads to 93 routines that had no SQL fact at all -- every one a
+  # TDataService_<T>_SERVER.PrepareLoadQuery. No existing fact changed.
+  Chk 'A-TT1-INDEXSQL'   $s1.IndexSqlSymbols 250
   Chk 'A-TT1-EXP'        $s1.Expected 11
   $ts = Dot $s1
   foreach ($ln in 1654, 1681, 1381) {                    # DRA1, TOOLFLDR, the focus
@@ -582,11 +643,15 @@ Step 'E-CY' {
   # The array order would have drawn blueprint4 -> controlplan2, which does not exist.
   if ($t -match 'Blueprint4</FONT>[^<]*</TD></TR>[^!]*uses controlplan2') { Fail 'A-CY1-FAKE-EDGE' 'drew the array-order edge' }
 
-  # DL is a strongly-connected component with NO Hamiltonian ring: five edges,
-  # four members, two loops sharing `regions`. All five must still be drawn.
+  # DL is a strongly-connected component with NO Hamiltonian ring: loops sharing
+  # `regions`, every edge must still be drawn. 7 edges / 5 members, was 5 / 4 at
+  # 1.18: the DL clone re-indexes the engine's own source, and 1.19 added the unit
+  # DRagLint.Doc.ProjectTags, which joins the SCC -- ProjectTags uses Regions
+  # (:267) and SharedFacts uses ProjectTags (:431). A SOURCE change, diffed
+  # against the pre-1.19 clone; the other 5 are the 1.18 edges (2 at new lines).
   $script:cy2 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDl -OutDir $OutDir
   Chk 'A-CY2-GROUPS' $cy2.Cycles 1
-  Chk 'A-CY2-EDGES'  $cy2.Edges 5
+  Chk 'A-CY2-EDGES'  $cy2.Edges 7
   Chk 'A-CY2-GAPS'   $cy2.Unwalkable 0
 
   # N18: no cycles is an ANSWER -- it renders and exits 0.
@@ -628,7 +693,7 @@ Step 'E-WI' {
 Note 'effects ...'
 Step 'E-FX' {
   # N17: NULL summary + effect_free=1 is PURE. The naive reading calls this
-  # "not analysed" and is wrong for 2,892 CLIENT methods.
+  # "not analysed" and is wrong for 2,918 CLIENT methods (1.19; 2,895 at 1.18).
   $script:fx1 = & "$SRC\Emit-Effects.ps1" -Qname 'uMain.TfrmMAIN.GetConnection' -DbPath $DbCli -OutDir $OutDir
   Chk 'A-FX1-OUTCOME' $fx1.Outcome 'pure'
   Chk 'A-FX1-FREE'    $fx1.EffectFree '1'
@@ -669,17 +734,32 @@ Step 'E-FX' {
   # its witness is "calls Assert (unbound)", not its own name: g stays drawn
   Chk 'A-FX6-D12'     $fx6.D12Suspect $false
 
-  # ENGINE D12: AP_FP_Greater_Eq := X >= Y is scored as a GLOBAL write (summary
-  # `g`, witness "writes AP_FP_Greater_Eq (non-local)"). One of the 31 measured
-  # functions on the CLIENT clone. The chart must NOT draw "writes global state";
-  # it draws the dashed D12 disclosure and no effects cluster.
+  # ENGINE D12: AP_FP_Greater_Eq := X >= Y was scored as a GLOBAL write (summary
+  # `g`, witness "writes AP_FP_Greater_Eq (non-local)") -- one of 31 such CLIENT
+  # functions on the 1.18 clone, drawn as the dashed D12 disclosure.
+  # RE-BASELINED at 1.19 (D12 fixed; R25): it is now PURE (effect_free 1, empty
+  # summary, no witness), and 0 functions on any clone carry an own-name witness
+  # (CLIENT 31 -> 0: 20 turned pure, 11 keep a genuine effect). So the chart must
+  # say pure, with NO D12 cluster and no global write.
   $script:fx7 = & "$SRC\Emit-Effects.ps1" -Qname 'Ap.AP_FP_Greater_Eq' -DbPath $DbCli -OutDir $OutDir
-  Chk 'A-FX7-D12'     $fx7.D12Suspect $true
+  Chk 'A-FX7-D12'     "$($fx7.Outcome):$($fx7.D12Suspect)" 'pure:False'
   Chk 'A-FX7-EFFECTS' $fx7.Effects 0
-  Chk 'A-FX7-SUMMARY' $fx7.Summary 'g'
+  Chk 'A-FX7-SUMMARY' $fx7.Summary ''
   $t7 = Dot $fx7
-  if ($t7 -match 'writes global state') { Fail 'A-FX7-NOG' 'the D12 own-name write was drawn as a global write' }
-  if ($t7 -notmatch 'engine D12')       { Fail 'A-FX7-NOTE' 'no D12 disclosure on the chart' }
+  if ($t7 -match 'writes global state') { Fail 'A-FX7-NOG' 'a global write is drawn on a routine the engine now scores pure' }
+  if ($t7 -match 'engine D12')          { Fail 'A-FX7-NOTE' 'the D12 disclosure still fires where its premise is gone' }
+  # ... and the detector itself stays covered on SYNTHETIC rows (R25): no real
+  # row reaches it any more. Own-name witness + g -> suspect; another name, a
+  # missing g, or no witness -> not.
+  $script:fx12 = & {
+    . "$SRC\Emit-Common.ps1"
+    $g = @([pscustomobject]@{ Kind = 'g' }, [pscustomobject]@{ Kind = '?' })
+    $s = @([pscustomobject]@{ Kind = 's' })
+    "$(Test-D12OwnNameWrite 'F' 'writes F (non-local)' $g)/$(Test-D12OwnNameWrite 'F' 'WRITES f (NON-LOCAL)' $g)/" +
+    "$(Test-D12OwnNameWrite 'F' 'writes G (non-local)' $g)/$(Test-D12OwnNameWrite 'F' 'writes F (non-local)' $s)/" +
+    "$(Test-D12OwnNameWrite 'F' '' $g)"
+  }
+  Chk 'A-FX12-DETECT' $fx12 'True/True/False/False/False'
 }
 
 Note 'architecture ...'
@@ -1351,13 +1431,16 @@ Step 'E-CO' {
   $script:co1 = & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO1-CERT-W'    $co1.CertainWriters 1
   Chk 'A-CO1-CERT-WN'   $co1.CertainWriterNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery'
-  Chk 'A-CO1-CERT-R'    $co1.CertainReaders 0
-  # EXACT, measured (R5): the plan said ">= 1 (PrepareLoadQuery)". It is exactly
-  # that one routine: `SQL.Add('FROM CAUSFAIL')` at uCAUSFAIL_SERVER.PAS:110 with
-  # no sql_reads fact (P22). PrepareSaveQuery's `UPDATE OR INSERT INTO CAUSFAIL`
-  # is a WRITE literal and is already certain, so it adds no inferred writer.
-  Chk 'A-CO1-INF-R'     $co1.InferredReaders 1
-  Chk 'A-CO1-INF-RN'    $co1.InferredReaderNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery'
+  # RE-BASELINED at 1.19 (engine D18 fixed; R25). On 1.18 PrepareLoadQuery was the
+  # one INFERRED reader: `SQL.Add('FROM CAUSFAIL')` at uCAUSFAIL_SERVER.PAS:110
+  # with no sql_reads fact (P22). 1.19 assembles SQL across SQL.Add lines, so its
+  # fact now reads `CAUSFAIL` and it is a [certain] reader: 0/1 -> 1/0. The
+  # inferred-reader path stays covered on REAL data by FOLDERS (A-CO4-ROWS,
+  # A-CO4-DASHED), which D18 does not reach. PrepareSaveQuery's `UPDATE OR INSERT
+  # INTO CAUSFAIL` is a WRITE literal and is already certain: no inferred writer.
+  Chk 'A-CO1-CERT-R'    $co1.CertainReaders 1
+  Chk 'A-CO1-INF-R'     $co1.InferredReaders 0
+  Chk 'A-CO1-INF-RN'    $co1.InferredReaderNames ''
   Chk 'A-CO1-INF-W'     $co1.InferredWriters 0
   Chk 'A-CO1-TRIG'      $co1.TriggerNames 'CAUSFAIL_BIU0@MS6.SQL:34,CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44'
   # the procedure scanner (R2) converged: 168/168 bodies; two of them name CAUSFAIL
@@ -1382,21 +1465,27 @@ Step 'E-CO' {
     if ($tc1 -notmatch "rank=same; focus;[^}]*\b$bn\b") { Fail 'A-CO1-R15' 'the mentions cluster is not in the focus rank (neither readers nor writers side)' }
   }
   if ($tc1 -notmatch 'declared 2 times in the scripts; showing the newest \(MS1\.SQL:1408') { Fail 'A-CO1-DECL' 'the collapse sentence is missing' }
-  if ($tc1 -notmatch '\[certain\] by fact: 0 reader\(s\) / 1 writer\(s\); \[inferred\] by SQL literal: 1 reader\(s\) / 0 writer\(s\)') { Fail 'A-CO1-R7' 'both grades are not on the focus box (R7)' }
-  if ($tc1 -notmatch 'cluster_infreads_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-CO1-DASHED' 'the inferred readers are not dashed' }
+  if ($tc1 -notmatch '\[certain\] by fact: 1 reader\(s\) / 1 writer\(s\); \[inferred\] by SQL literal: 0 reader\(s\) / 0 writer\(s\)') { Fail 'A-CO1-R7' 'both grades are not on the focus box (R7)' }
+  # silent where the premise is gone: no inferred-readers cluster on CAUSFAIL now
+  if ($tc1 -match 'cluster_infreads_\d+') { Fail 'A-CO1-DASHED' 'an inferred-readers cluster is drawn on CAUSFAIL, whose one literal reader is now certain' }
   if ($tc1 -notmatch 'script-derived schema: 135 tables; 5 live tables are not in the scripts') { Fail 'A-CO1-SCHEMA' 'the script-derived disclosure is missing' }
+  # 1.19 re-baseline (D19 fixed): the table form no longer claims the engine gap
+  if ($tc1 -match 'quoted column name is not extracted') { Fail 'A-CO1-D19' 'the table form still claims a quoted column name is not extracted' }
   if (-not (HasLine $tc1 110)) { Fail 'A-CO1-HREF' 'PrepareLoadQuery is not anchored on its FROM CAUSFAIL literal (:110)' }
   if (-not (HasLine $tc1 123)) { Fail 'A-CO1-HREF' 'PrepareSaveQuery is not anchored on its INSERT INTO literal (:123)' }
 
-  # index-wide (P21/P22): 19 / 148 / 157 facts; 14 tables read by fact. 791, NOT
-  # the plan's 782: the count here is every literal/format string holding an
-  # upper-case SELECT/INSERT/UPDATE/DELETE/FROM/JOIN/INTO/EXECUTE as a word. The
+  # index-wide (P21/P22): 112 / 148 / 250 facts; 104 tables read by fact. Was
+  # 19 / 148 / 157 and 14 on the 1.18 clone: engine D18 gave sql_reads to 93
+  # routines with no fact before (all DataService PrepareLoadQuery); no existing
+  # read or write fact changed. The literal side (791 / 133) did not move.
+  # 791, NOT the plan's 782: the count here is every literal/format string holding
+  # an upper-case SELECT/INSERT/UPDATE/DELETE/FROM/JOIN/INTO/EXECUTE as a word. The
   # plan recorded no query; no variant tried (statement verbs only 603, verb +
   # following token 643, case-insensitive 952, verb+name 614) gives 782, and the
-  # 133 FROM/JOIN tables and 14 fact tables DO reproduce -- so the population
-  # definition, not the data, differs.
-  Chk 'A-CO-IDX'        "$($co1.IndexReadFacts)/$($co1.IndexWriteFacts)/$($co1.IndexFactSymbols)" '19/148/157'
-  Chk 'A-CO-LITS'       "$($co1.IndexVerbLiterals)/$($co1.IndexFromJoinTables)/$($co1.IndexFactReadTables)" '791/133/14'
+  # 133 FROM/JOIN tables and (1.18's) 14 fact tables DO reproduce -- so the
+  # population definition, not the data, differs.
+  Chk 'A-CO-IDX'        "$($co1.IndexReadFacts)/$($co1.IndexWriteFacts)/$($co1.IndexFactSymbols)" '112/148/250'
+  Chk 'A-CO-LITS'       "$($co1.IndexVerbLiterals)/$($co1.IndexFromJoinTables)/$($co1.IndexFactReadTables)" '791/133/104'
 
   $script:co2 = & "$SRC\Emit-Consumers.ps1" -Column 'CAUSFAIL.REASON' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO2-SRV'       $co2.ServerRoutineNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery,uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery'
@@ -1416,6 +1505,13 @@ Step 'E-CO' {
   Chk 'A-CO4-DECL'      "$($co4.Declarations)/$($co4.Columns)" '2/79'
   Chk 'A-CO4-ROWS'      "$($co4.CertainReaders)/$($co4.CertainWriters)/$($co4.InferredReaders)/$($co4.InferredWriters)/$($co4.Triggers)/$($co4.Procedures)/$($co4.Indexes)" '1/2/3/0/3/1/2'
   if ((Dot $co4) -notmatch 'declared 2 times in the scripts; showing the newest') { Fail 'A-CO4-DECL' 'the collapse sentence is missing' }
+  # The inferred-reader path on REAL data after D18 (R25; moved here from A-CO1):
+  # FOLDERS' 3 literal-only readers are TDataService_FOLDERS_SERVER.PrepareLoadQuery
+  # (its column list goes through `SQL.Add(sTmp)`, a VARIABLE, which D18's fix
+  # does not assemble -- 38 of the 40 DataService PrepareLoadQuery still without
+  # a read fact have that shape), HandleCreateFolder and HandlePrePlanPreset.
+  Chk 'A-CO4-INF-RN'    $co4.InferredReaderNames 'uFOLDERS_SERVER.TDataService_FOLDERS_SERVER.PrepareLoadQuery,uPipeSessionBuilder.TPipeSessionBuilder.HandleCreateFolder,uPipeSessionBuilder.TPipeSessionBuilder.HandlePrePlanPreset'
+  if ((Dot $co4) -notmatch 'cluster_infreads_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-CO4-DASHED' 'the inferred readers are not dashed' }
 
   # THE KNOWN GAP (Get-SqlTableSet): IPCHART.ACTION is live and EXTRACTED only
   # from the older MScript2.SQL declaration. RE-PINNED in the final wave (items
@@ -1424,18 +1520,64 @@ Step 'E-CO' {
   # old label "the newest has 136 columns without it" was false. The shared
   # Get-SqlColumnState tries quoted BEFORE older, so the column is anchored on
   # the newest declaration and the older extraction is named beside it.
+  # RE-BASELINED at 1.19 (engine D19 fixed; R25): MS1.SQL's "ACTION" is now
+  # EXTRACTED (newest IPCHART 136 -> 137 columns, matching live Firebird), so the
+  # state is `yes`, [certain], and no quoted / older wording may appear. The line
+  # is the engine's sql_column start, 2242 -- ONE LINE EARLY, as for every
+  # extracted column (A-LW1-HREF pins REASON at 1410; it is declared on 1411):
+  # the node starts after the previous token. Pre-existing and identical on the
+  # 1.18 clone; a FINDING of the 1.19 re-baseline, not fixed here.
   $script:co5 = & "$SRC\Emit-Consumers.ps1" -Column 'IPCHART.ACTION' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
-  Chk 'A-CO5-OLDER'     "$($co5.ColumnState):$($co5.ColumnLine):$($co5.ColumnOlderOnly)" 'quoted:MS1.SQL:2243:False'
+  Chk 'A-CO5-OLDER'     "$($co5.ColumnState):$($co5.ColumnLine):$($co5.ColumnOlderOnly)" 'yes:MS1.SQL:2242:False'
   $tc5 = Dot $co5
-  if ($tc5 -notmatch 'a QUOTED identifier in the newest declaration \(MS1\.SQL:2243\); the SQL index does not extract a quoted name; an older declaration \(MScript2\.SQL:1902\) extracts it unquoted') {
-    Fail 'A-CO5-OLDER' 'the quoted-plus-older label is missing' }
+  if ($tc5 -notmatch '\[certain\] a column of the newest of 2 declaration\(s\), MS1\.SQL') { Fail 'A-CO5-OLDER' 'the [certain] column label is missing' }
+  if ($tc5 -match 'QUOTED|extracts it unquoted') { Fail 'A-CO5-OLDER' 'the quoted / older-copy wording still fires on an extracted column' }
   if ($tc5 -match 'columns without it') { Fail 'A-CO5-OLDER' 'the false "the newest has N columns without it" is back' }
 
   # item 1: a QUOTED column consumers used to REFUSE ("no column TABLE in
-  # FOLDERCOUNT") while lands-where anchored it -- now the same state, same line
+  # FOLDERCOUNT") while lands-where anchored it -- now the same state, same line.
+  # RE-BASELINED at 1.19 (D19 fixed): an ordinary extracted column, `yes`, at the
+  # engine's sql_column line 3847 (one early, see A-CO5-OLDER; declared on 3848).
   $script:coq = & "$SRC\Emit-Consumers.ps1" -Column 'FOLDERCOUNT.TABLE' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
-  Chk 'A-CO-QUOTED'     "$($coq.ColumnState):$($coq.ColumnLine):$($coq.ServerRoutines)" 'quoted:MS1.SQL:3848:2'
-  if (-not (HasLine (Dot $coq) 3848)) { Fail 'A-CO-QUOTED' 'the focus is not anchored on MS1.SQL:3848' }
+  Chk 'A-CO-QUOTED'     "$($coq.ColumnState):$($coq.ColumnLine):$($coq.ServerRoutines)" 'yes:MS1.SQL:3847:2'
+  if (-not (HasLine (Dot $coq) 3847)) { Fail 'A-CO-QUOTED' 'the focus is not anchored on the extracted column (MS1.SQL:3847)' }
+  if ((Dot $coq) -match 'QUOTED') { Fail 'A-CO-QUOTED' 'the quoted wording still fires on an extracted column' }
+
+  # R25: the QUOTED state has no real input left, so it is driven on a HAND-MADE
+  # table set -- the real one with the column taken back out of the newest
+  # declaration's extracted names. The source is the real, FRESH MS1.SQL, so the
+  # scan runs and must find `"TABLE"` on :3848 and `"ACTION"` on :2243; ACTION
+  # also gets its old MScript2 extraction back as an older-only column, which is
+  # exactly the 1.18 shape (quoted is tried BEFORE older).
+  $script:cqs = & {
+    $Engine = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe'
+    . "$SRC\Emit-Common.ps1"
+    $real = Get-SqlTableSet $DbSql
+    function Copy-Without($Tbl, [string] $Col, $Older) {
+      $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+      foreach ($c in $Tbl.Columns) { if ($c -ne $Col) { [void]$set.Add($c) } }
+      $old = [ordered]@{}; foreach ($k in $Tbl.OlderOnlyColumns.Keys) { $old[$k] = $Tbl.OlderOnlyColumns[$k] }
+      if ($Older) { $old[$Col.ToUpperInvariant()] = $Older }
+      [pscustomobject]@{ Name = $Tbl.Name; Id = $Tbl.Id; File = $Tbl.File; Line = $Tbl.Line; DeclCount = $Tbl.DeclCount
+                         Declarations = $Tbl.Declarations; Columns = $set
+                         ColumnNames = [string[]]@($Tbl.ColumnNames | Where-Object { $_ -ne $Col })
+                         OlderOnlyColumns = $old }
+    }
+    $ip = $real.Tables['IPCHART']
+    $ipOld = @($ip.Declarations | Where-Object { $_.File -notlike '*MS1.SQL' })[0]
+    $fake = [pscustomobject]@{ Db = $real.Db; Tables = @{
+      FOLDERCOUNT = (Copy-Without $real.Tables['FOLDERCOUNT'] 'TABLE' $null)
+      IPCHART     = (Copy-Without $ip 'ACTION' ([pscustomobject]@{ Column = 'ACTION'; File = $ipOld.File; Line = $ipOld.Line })) } }
+    $q1 = Get-SqlColumnState $fake 'FOLDERCOUNT' 'TABLE' $null $null ''
+    $q2 = Get-SqlColumnState $fake 'IPCHART' 'ACTION' $null $null ''
+    [pscustomobject]@{ Q1 = "$($q1.State):$([IO.Path]::GetFileName($q1.File)):$($q1.Line):$($q1.QuotedScan)"; L1 = $q1.Label
+                       Q2 = "$($q2.State):$([IO.Path]::GetFileName($q2.File)):$($q2.Line)"; L2 = $q2.Label }
+  }
+  Chk 'A-COLSTATE-QUOTED' "$($cqs.Q1) $($cqs.Q2)" 'quoted:MS1.SQL:3848:hit quoted:MS1.SQL:2243'
+  if ($cqs.L1 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:3848); the SQL index does not extract a quoted name') {
+    Fail 'A-COLSTATE-QUOTED' "the quoted label moved: $($cqs.L1)" }
+  if ($cqs.L2 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:2243); the SQL index does not extract a quoted name; an older declaration (MScript2.SQL:1902) extracts it unquoted') {
+    Fail 'A-COLSTATE-QUOTED' "the quoted-plus-older label moved: $($cqs.L2)" }
   # ... and a column in NO script declaration that this index's own SQL names
   # (STATIONS.GRIDS: uSTATIONS_SERVER.PAS:110 reads it, :129 writes it)
   $script:cog = & "$SRC\Emit-Consumers.ps1" -Column 'STATIONS.GRIDS' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
@@ -1667,22 +1809,27 @@ Step 'E-LW' {
   Chk 'A-OL-ROWS'       $ol '0/0'
 
   $script:lw1 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
-  # P35, measured on this run and printed on the chart (R10). 1,991 = 1,990 in the
-  # newest declaration + IPCHART.ACTION, which only the older MScript2.SQL copy
-  # carries (the R8 known gap; MS1.SQL:2243 declares it QUOTED, "ACTION").
-  Chk 'A-LW0-CONV'      "$($lw1.ConvProps)/$($lw1.ConvOnTable)/$($lw1.ConvColumn)" '2063/1997/1991'
-  # FINDING vs the plan's list: the 6 are TmcFOLDERCOUNT.TABLE (not TmcFOLDERS),
-  # INSPRSLT x3 and STATIONS x2 -- and FOLDERCOUNT.TABLE is a QUOTED column,
-  # MS1.SQL:3848 `"TABLE"`, which the SQL index does not extract
-  # (+ stale=: none of the 6 was left unscanned -- a stale scan is named, never dropped; item 5)
-  Chk 'A-LW0-NONCOL'    "$($lw1.ConvNonColumn) quoted=$($lw1.ConvQuoted) stale=$($lw1.ConvStale)" 'FOLDERCOUNT.TABLE,INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS quoted=FOLDERCOUNT.TABLE stale='
+  # P35, measured on this run and printed on the chart (R10). 1,992 (was 1,991 at
+  # 1.18) = 1,992 extracted from the newest declarations: engine D19 (extractor
+  # 1.19) now extracts the quoted MS1.SQL `"TABLE"` (FOLDERCOUNT) and `"ACTION"`
+  # (IPCHART). ACTION already counted through the older MScript2.SQL copy (the R8
+  # known gap), so only TABLE is new: +1.
+  Chk 'A-LW0-CONV'      "$($lw1.ConvProps)/$($lw1.ConvOnTable)/$($lw1.ConvColumn)" '2063/1997/1992'
+  # FINDING vs the plan's list: the non-columns were TmcFOLDERCOUNT.TABLE (not
+  # TmcFOLDERS), INSPRSLT x3 and STATIONS x2. At 1.19 FOLDERCOUNT.TABLE is an
+  # extracted column (D19), so 5 remain and none is quoted (R25: the quoted path
+  # is driven synthetically by A-COLSTATE-QUOTED)
+  # (+ stale=: none of the 5 was left unscanned -- a stale scan is named, never dropped; item 5)
+  Chk 'A-LW0-NONCOL'    "$($lw1.ConvNonColumn) quoted=$($lw1.ConvQuoted) stale=$($lw1.ConvStale)" 'INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS quoted= stale='
   Chk 'A-LW0-DS'        $lw1.DsClasses 133
   # P37: 189 / 182 reproduce. The plan's 390 index-wide is 383 on the SERVER
   # clone (the index join and a raw regex over every indexed .pas agree: 383 in
   # 135 files); not reconciled with the plan, which recorded no query. All 189 in
   # a DataService routine are in Load (188) or FindOperatorName (1): Save binds
   # Params[i] positionally, so there is no "Save ParamByName" row.
-  Chk 'A-LW-PARAM'      "$($lw1.ParamByNameDs)/$($lw1.ParamByNameCol) of $($lw1.ParamByNameAll)" '189/182 of 383'
+  # 183 a column, was 182 at 1.18: ParamByName('TABLE') at uFOLDERCOUNT_SERVER.PAS:155
+  # names FOLDERCOUNT.TABLE, now extracted (engine D19).
+  Chk 'A-LW-PARAM'      "$($lw1.ParamByNameDs)/$($lw1.ParamByNameCol) of $($lw1.ParamByNameAll)" '189/183 of 383'
   Chk 'A-LW-OL-CHART'   "$($lw1.OrmLinksCli)/$($lw1.OrmLinksSrv)" '0/0'
   Chk 'A-LW1-COL'       "$($lw1.TableColumn):$($lw1.ColumnState)" 'CAUSFAIL.REASON:yes'
   # 4 server rows as the plan says, but the Save row is the member access
@@ -1697,10 +1844,12 @@ Step 'E-LW' {
   Chk 'A-LW1-CLICK'     "$($lw1.ClickTargets)/$($lw1.Expected)" '9/9'
   $tl1 = Dot $lw1
   foreach ($ln in 81, 124, 109, 229, 159, 1410, 15, 60) { if (-not (HasLine $tl1 $ln)) { Fail 'A-LW1-HREF' "no row anchored on line $ln" } }
-  # RE-WORDED in the final wave (item 2): 1,991 is what the SQL index EXTRACTS; the
-  # quoted FOLDERCOUNT.TABLE is a column too, so "are a column" was one short -- said now
-  if ($tl1 -notmatch 'inferred -- naming convention, 1,991 of 1,997 properties on table-named classes are extracted as a column of that table \(\+1 a QUOTED column the index does not extract\)') { Fail 'A-LW1-GRADE' 'the convention grade with its measured count is missing' }
-  if ($tl1 -notmatch '6 are not extracted as a column by the SQL index; of those, FOLDERCOUNT\.TABLE is a QUOTED column the index does not extract') { Fail 'A-LW1-GRADE' 'the coverage line claims more than was read' }
+  # RE-WORDED in the final wave (item 2): the count is what the SQL index EXTRACTS.
+  # At 1.19 (D19 fixed) the quoted FOLDERCOUNT.TABLE is extracted, so the grade is
+  # 1,992 with NO "+1 a QUOTED column" and the coverage line names no quoted column.
+  if ($tl1 -notmatch 'inferred -- naming convention, 1,992 of 1,997 properties on table-named classes are extracted as a column of that table ') { Fail 'A-LW1-GRADE' 'the convention grade with its measured count is missing' }
+  if ($tl1 -notmatch '\(1,997 sit on a table-named class; 5 are not extracted as a column by the SQL index\)') { Fail 'A-LW1-GRADE' 'the coverage line claims more than was read' }
+  if ($tl1 -match 'QUOTED') { Fail 'A-LW1-GRADE' 'the quoted-column wording still fires, with no quoted column left' }
   if ($tl1 -match 'not a column in the scripts') { Fail 'A-LW1-GRADE' 'the self-contradicting "not a column in the scripts" is back' }
   if ($tl1 -notmatch 'cluster_db_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-LW1-DASHED' 'the convention hop (TABLE.COLUMN) is not dashed' }
   if ($tl1 -notmatch 'orm_links rows: 0 on CLIENT-Micronite2027\.sqlite, 0 on SERVER-MicroniteMW1Service\.sqlite') { Fail 'A-LW1-ROUTE' 'the path-A route is not printed' }
@@ -1751,11 +1900,16 @@ Step 'LW-N31-SRVSQL' {
   if (-not $cog) { Fail 'A-COLSTATE-AGREE' 'precondition: the consumers STATIONS.GRIDS run (E-CO) produced no result' }
   elseif ($cog.ColumnLabel -ne $lw31g.ColumnLabel) { Fail 'A-COLSTATE-AGREE' "consumers and lands-where label STATIONS.GRIDS differently: '$($cog.ColumnLabel)' vs '$($lw31g.ColumnLabel)'" }
 }
-# FINDING: FOLDERCOUNT."TABLE" is a QUOTED column (MS1.SQL:3848) the SQL index drops
+# FINDING (1.18): FOLDERCOUNT."TABLE" was a QUOTED column (MS1.SQL:3848) the SQL
+# index dropped. RE-BASELINED at 1.19 (engine D19 fixed; R25): it is EXTRACTED,
+# so lands-where draws an ordinary [certain] column anchored on the engine's
+# sql_column line 3847 (one early -- see A-CO5-OLDER) and says nothing quoted.
+# The quoted state itself is driven synthetically by A-COLSTATE-QUOTED.
 Step 'LW-N31-QUOTED' {
   $script:lw31q = & "$SRC\Emit-LandsWhere.ps1" -Field 'uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
-  Chk 'A-LW-N31-QUOTED' "$($lw31q.ColumnState):$($lw31q.TableColumn)" 'quoted:FOLDERCOUNT.TABLE'
-  if (-not (HasLine (Dot $lw31q) 3848)) { Fail 'A-LW-N31-QUOTED' 'the quoted column is not anchored on MS1.SQL:3848' }
+  Chk 'A-LW-N31-QUOTED' "$($lw31q.ColumnState):$($lw31q.TableColumn)" 'yes:FOLDERCOUNT.TABLE'
+  if (-not (HasLine (Dot $lw31q) 3847)) { Fail 'A-LW-N31-QUOTED' 'the extracted column is not anchored on its sql_column line MS1.SQL:3847' }
+  if ((Dot $lw31q) -match 'QUOTED') { Fail 'A-LW-N31-QUOTED' 'the quoted wording still fires on an extracted column' }
   if (-not $coq) { Fail 'A-COLSTATE-AGREE' 'precondition: the consumers FOLDERCOUNT.TABLE run (E-CO) produced no result' }
   elseif ($coq.ColumnLabel -ne $lw31q.ColumnLabel) { Fail 'A-COLSTATE-AGREE' "consumers and lands-where label FOLDERCOUNT.TABLE differently: '$($coq.ColumnLabel)' vs '$($lw31q.ColumnLabel)'" }
 }
@@ -1801,8 +1955,10 @@ Step 'LW-STALE' {
 # item 5 (R11): a MANUFACTURED stale MS1.SQL -- the script every newest table
 # declaration here lives in. DistHist (state `no` on fresh source, A-LW-N31) must
 # now read [stale source] and "NOT known", never "computed or UI-only"; and the
-# convention coverage must NAME the 6 properties it could not scan for a quoted
-# identifier instead of silently dropping FOLDERCOUNT.TABLE from the quoted list.
+# convention coverage must NAME the properties it could not scan for a quoted
+# identifier instead of silently dropping them. 5 at 1.19, was 6: FOLDERCOUNT.TABLE
+# is extracted now (engine D19), so it is never scanned -- the stale path is
+# unchanged and still exercised on the other 5.
 Step 'LW-STALE-Q' {
   $stDir = Join-Path $OutDir 'lw-stale-q'
   New-Item -ItemType Directory -Force $stDir | Out-Null
@@ -1811,13 +1967,13 @@ Step 'LW-STALE-Q' {
   [IO.File]::WriteAllText((Join-Path $stDir 'MS1.SQL'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
   $script:lwsq = & "$SRC\Emit-LandsWhere.ps1" -Field 'uINSPRSLT.TmcINSPRSLT.DistHist' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir `
                    -SourceOverride @{ $ms1 = (Join-Path $stDir 'MS1.SQL') }
-  Chk 'A-LW-STALE-Q'    "$($lwsq.ColumnState)|quoted=$($lwsq.ConvQuoted)|stale=$($lwsq.ConvStale)" 'stale|quoted=|stale=FOLDERCOUNT.TABLE,INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS'
+  Chk 'A-LW-STALE-Q'    "$($lwsq.ColumnState)|quoted=$($lwsq.ConvQuoted)|stale=$($lwsq.ConvStale)" 'stale|quoted=|stale=INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS'
   $tq = Dot $lwsq
   if ($tq -match 'computed or UI-only') { Fail 'A-LW-STALE-Q' 'a stale quoted scan reads as an absence ("computed or UI-only")' }
   if ($tq -notmatch 'MS1\.SQL differs from the indexed copy, so it was not scanned for a quoted identifier -- whether DISTHIST is a column of INSPRSLT is NOT known') {
     Fail 'A-LW-STALE-Q' 'the [stale source] column state is not said' }
   if ($tq -notmatch 'INSPRSLT\.DISTHIST \[stale source\]') { Fail 'A-LW-STALE-Q' 'the column box title does not carry [stale source]' }
-  if ($tq -notmatch 'not scanned for a quoted identifier \[stale source\]: FOLDERCOUNT\.TABLE,') { Fail 'A-LW-STALE-Q' 'the coverage line drops the unscanned properties' }
+  if ($tq -notmatch 'not scanned for a quoted identifier \[stale source\]: INSPRSLT\.DistHist,INSPRSLT\.DistHistLim,INSPRSLT\.f_tb,STATIONS\.GRIDS,STATIONS\.MENUS\)') { Fail 'A-LW-STALE-Q' 'the coverage line drops the unscanned properties' }
 }
 # the verb through the bundler: dispatch, -ServerDbPath and -SqlDbPath carried into meta.json
 Step 'LW-ART' {
@@ -1835,7 +1991,7 @@ if (-not $Quiet) {
   Write-Host 'Emitter verification -- fifteen questions, thirteen emitters, four indexes'
   Write-Host ("  bytes          : {0} non-ascii, {1} bare LF" -f $nonAscii, $bareLf)
   Write-Host ("  butterfly      : {0} callers / {1} callees, {2} clicks" -f (V $b 'Callers'), (V $b 'Callees'), (V $b 'ClickTargets'))
-  Write-Host ("  butterfly D6   : {0} callees from 14 tree nodes, {1} arrows, {2} leave the focus; D12 {3}; D13 {4}" -f (V $b6 'Callees'), (V $b6 'Edges'), (V $b6 'FocusOut'), (V $fx7 'D12Suspect'), (V $m14 'D13SameFile'))
+  Write-Host ("  butterfly D6   : {0} callees from 19 tree nodes, {1} arrows, {2} leave the focus; D12 {3} (synthetic {4}); FConnected bound-unreported {5}, fLOTSIZE D13 {6}" -f (V $b6 'Callees'), (V $b6 'Edges'), (V $b6 'FocusOut'), (V $fx7 'D12Suspect'), $fx12, (V $m14 'BoundUnreported'), (V $m15 'D13SameFile'))
   Write-Host ("  deps           : {0} used by / {1} uses" -f (V $d 'UsedBy'), (V $d 'Uses'))
   Write-Host ("  who-calls      : {0} sites d2, {1} sites + {2} cycle d3, {3} name-only NOT merged" -f (V $w1 'Callers'), (V $w2 'Callers'), (V $w2 'Cycles'), (V $w2 'NameOnly'))
   Write-Host ("  what-it-calls  : {0}/{1}/{2} rows at d1/d2/d3, {3} cycles, ties butterfly's {4}" -f (V $c1 'Rows'), (V $c2 'Rows'), (V $c3 'Rows'), (V $c3 'Cycles'), (V $b 'Callees'))

@@ -61,8 +61,8 @@ function New-RowHref([string] $File, [int] $Line) {
 # 1.16.0-alpha with resolver 1.5.1-alpha -- OLDER on two axes -- and
 # RefuseIfEngineOlderThanDb does not cover the resolver axis, so nothing
 # refuses. The skew yields SMALLER CONFIDENT ANSWERS, never an error. The clones
-# under scratch\db were re-taken at ~10:00 the same day and carry
-# v=1.18.0-alpha / r=1.6.0-alpha (schema_meta, checked in the final wave).
+# under scratch\db were re-taken on 2026-09-24 02:53 and carry
+# v=1.19.0-alpha / r=1.8.0-alpha (schema_meta, checked at the 1.19 re-baseline).
 #
 # This guard is NOT about corruption. Reads are proven safe: only `index`
 # re-resolves, and a full day of reads left both DBs still on r=1.6.0-alpha.
@@ -87,7 +87,7 @@ function New-RowHref([string] $File, [int] $Line) {
 # by habit, and "by habit" is precisely what is being guarded against.
 #
 # THE SUFFIX RULE (N35, controller ruling R3, 2026-09-23). The clone root also
-# holds HISTORY: `*.sqlite.pre-1.18` and `*.sqlite.pre-reindex-0530` are
+# holds HISTORY: `*.sqlite.pre-1.19`, `*.sqlite.pre-1.18` and `*.sqlite.pre-reindex-0530` are
 # byte-for-byte older clones kept for comparison. They sit under the root, so the
 # whitelist alone ACCEPTS them -- and a 562-file pre-1.18 CLIENT answers every
 # query confidently with the older parse. The file name must END in `.sqlite`.
@@ -105,7 +105,7 @@ function Get-CloneDb([string] $Path) {
 
   if (-not $full.EndsWith('.sqlite', [StringComparison]::OrdinalIgnoreCase)) {
     throw ("refusing a database whose name does not end in .sqlite: $full -- the clone root keeps " +
-           'history copies (*.sqlite.pre-1.18, *.sqlite.pre-reindex-0530) beside the live clones, and ' +
+           'history copies (*.sqlite.pre-1.19, *.sqlite.pre-1.18, *.sqlite.pre-reindex-0530) beside the live clones, and ' +
            'they answer with an OLDER parse. Point at the *.sqlite clone itself.')
   }
 
@@ -120,7 +120,7 @@ function Get-CloneDb([string] $Path) {
 
   throw ("refusing a non-clone database: $full -- charts run against the clones in $root. " +
          'The deployed engine (1.16.0-alpha / resolver 1.5.1-alpha) is OLDER than the indexed ' +
-         'clones (v=1.18.0-alpha / r=1.6.0-alpha), and a live DB can be re-indexed mid-run, so ' +
+         'clones (v=1.19.0-alpha / r=1.8.0-alpha), and a live DB can be re-indexed mid-run, so ' +
          'an asserted count would not be reproducible. Set DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 to ' +
          'override deliberately once the engine has been redeployed.')
 }
@@ -803,6 +803,10 @@ function Get-SourceContext([string] $Path, [int] $Line, [int] $Col, [int] $Len,
 # not in it at all. So "not extracted from the winning declaration" does NOT
 # mean "not in the database". Each table carries them in .OlderOnlyColumns, and
 # Get-SqlColumnState below decides what a chart says about such a column.
+# ENGINE D19 FIXED (extractor 1.19, re-baseline 2026-09-24): the extractor now
+# emits a sql_column for a quoted name -- IPCHART.ACTION and FOLDERCOUNT.TABLE
+# are extracted from MS1.SQL, so the newest IPCHART has 137 columns, matching
+# live Firebird, and 11 older-only names remain (none quoted in the newest).
 function Get-SqlTableSet([string] $SqlDb) {
   $SqlDb = Get-CloneDb $SqlDb
   if (-not $script:DlSqlSets) { $script:DlSqlSets = @{} }
@@ -882,9 +886,18 @@ SELECT c.parent_id AS tid, GROUP_CONCAT(c.name, ',') AS cols
 # FOLDERCOUNT.TABLE while lands-where anchored it). What the SQL INDEX extracts
 # is not everything the scripts declare: MS1.SQL declares FOLDERCOUNT."TABLE"
 # (:3848) and IPCHART."ACTION" (:2243) as QUOTED identifiers, and the extractor
-# emits no sql_column for a quoted name (engine D19). So a chart never says "not
+# emitted no sql_column for a quoted name (engine D19, FIXED in extractor 1.19:
+# both are now extracted, so both are state `yes`). So a chart never says "not
 # in the scripts": it says what was read -- "not extracted as a column by the
-# SQL index" -- after the newest declaration's own source was scanned.
+# SQL index" -- after the newest declaration's own source was scanned. The
+# `quoted` state stays as a guard (R25): no real column reaches it on the 1.19
+# clones, and the gate drives it with a hand-made table set (A-COLSTATE-QUOTED).
+#
+# THE `yes` ANCHOR IS THE ENGINE'S sql_column start_line, which is ONE LINE
+# EARLY for a column on its own line: the extracted node starts right after the
+# previous token (CAUSFAIL.REASON at 1410:45 is declared on :1411;
+# FOLDERCOUNT.TABLE at 3847:27 on :3848). Pre-existing, identical on the 1.18
+# and 1.19 clones -- reported as a finding at the 1.19 re-baseline, not fixed here.
 #
 # States, in precedence order:
 #   yes         extracted as a column of the NEWEST declaration   [certain]
@@ -1008,6 +1021,17 @@ function Measure-ConsumerKeys($CertKeys, $LitKeys) {
     Routines = @($all | Where-Object { $_ -gt 0 }).Count
     Units    = @($all | Where-Object { $_ -lt 0 }).Count
   }
+}
+
+# ENGINE D12 detector for effects (see Emit-Effects.ps1): true when the stored
+# `g` rests on a witness that names the routine ITSELF -- "writes <Name>
+# (non-local)", a Result assignment through the function's own name. Pure over
+# its inputs ($Effects: decoded rows with a .Kind), so the gate drives it on
+# synthetic rows: engine 1.19 fixed D12 and no real row reaches it any more.
+function Test-D12OwnNameWrite([string] $Name, [string] $Witness, $Effects) {
+  [bool]($Name -and $Witness -and
+         [string]::Equals($Witness, "writes $Name (non-local)", [StringComparison]::OrdinalIgnoreCase) -and
+         @($Effects | Where-Object { $_.Kind -eq 'g' }).Count)
 }
 
 # The P23 scan, in ONE place: a table (or procedure) named IMMEDIATELY after an

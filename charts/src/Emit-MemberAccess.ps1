@@ -279,20 +279,46 @@ $ftbl  = New-Object System.Text.StringBuilder
 [void]$ftbl.Append("<TABLE BORDER=`"0`" CELLBORDER=`"0`" CELLSPACING=`"3`" CELLPADDING=`"7`">$fhdr")
 [void]$ftbl.Append("<TR><TD HREF=`"$fhref`" TITLE=`"$ftip`"><FONT COLOR=`"$($PAL.focusInk)`" POINT-SIZE=`"18`"><B>$(ConvertTo-XmlText (Get-ShortName $sel.Qname $unit))</B></FONT></TD></TR>")
 
-# ENGINE D13 (INBOX-defects-found-2026-09-23-rule-work.md): `write` refs never
-# get a symbol_id on CLIENT (32,909 of 32,909 on the clone, 2026-09-23). The
-# verb above sees a write only when it is a MEMBER ACCESS (`Obj.FConnected :=`);
-# a bare in-class assignment (`FConnected := True`) is an unbound `write` ref
-# and is invisible to it. Measured: who-writes FConnected said "no write sites"
-# while uPipeClientConnection.pas holds four -- :164, :320, :455, :543.
+# ENGINE D13 (INBOX-defects-found-2026-09-23-rule-work.md): up to extractor 1.18
+# `write` refs never got a symbol_id on CLIENT (32,909 of 32,909 on the 1.18
+# clone). The verb above sees a write only when it is a MEMBER ACCESS
+# (`Obj.FConnected :=`); a bare in-class assignment (`FConnected := True`) was an
+# unbound `write` ref and invisible to it. Measured: who-writes FConnected said
+# "no write sites" while uPipeClientConnection.pas holds four -- :164, :320,
+# :455, :543.
 #
 # The disclosure is BY NAME, so it is never added to the writers wing or the
 # totals: a same-name write in the DECLARING file is very probably this member,
 # one elsewhere may be anything that shares the name. Both counts are printed.
-$d13Same = 0; $d13Else = 0; $d13Lines = @()
+#
+# AFTER THE ENGINE FIX (extractor 1.19 / resolver 1.8, measured on the CLIENT
+# clone 2026-09-24): 21,916 of 32,909 write refs are now BOUND -- and not one of
+# them has a member_accesses row (0 of 21,916), which is what find-callers
+# reports. So FConnected's four writes are now bound to FConnected itself, the
+# by-name check below no longer sees them, and the verb still does not: the
+# chart said "no write sites (602 reads)" -- a false absence. Those are counted
+# as BOUND UNREPORTED: exact (the index binds them to THIS symbol), disclosed on
+# the focus, never merged into the verb's totals or the writers wing. The
+# by-name check stays for what 1.19 still leaves unbound (10,993 on CLIENT),
+# e.g. a field written inside a `with` body (uPLANLIST.PAS:2544-2550).
+$d13Same = 0; $d13Else = 0; $d13Lines = @(); $bound = 0; $boundLines = @()
 if ($showWrite) {
   $nm = ConvertTo-SqlText $sel.Name
   $pth = ConvertTo-SqlText $sel.Path
+  $boundWhere = "r.kind = 'write' AND r.symbol_id = $($sel.Id) AND NOT EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id)"
+  $bc = Invoke-IndexQuery "SELECT COUNT(*) AS c FROM refs r WHERE $boundWhere"
+  $bound = [int]$bc[0].c
+  if ($bound) {
+    # Assigned FIRST, for the same reason as $lnRows below.
+    $blRows = Invoke-IndexQuery @"
+SELECT f.path AS path, r.start_line AS ln FROM refs r JOIN files f ON f.id = r.file_id
+ WHERE $boundWhere
+ ORDER BY (f.path <> '$pth'), f.path, r.start_line LIMIT 12
+"@
+    $boundLines = @($blRows | ForEach-Object {
+      if ([string]::Equals([string]$_.path, $sel.Path, [StringComparison]::OrdinalIgnoreCase)) { ":$($_.ln)" }
+      else { "$([IO.Path]::GetFileName([string]$_.path)):$($_.ln)" } })
+  }
   $cnt = Invoke-IndexQuery @"
 SELECT (f.path = '$pth') AS same, COUNT(*) AS c
   FROM refs r JOIN files f ON f.id = r.file_id
@@ -315,10 +341,17 @@ SELECT r.start_line AS ln FROM refs r JOIN files f ON f.id = r.file_id
 
 # A zero in the RENDERED direction is a real answer, so say it with the other
 # direction's number beside it -- a bare "0 writes" reads as "nothing uses this".
-# Under D13 it is only a zero of RESOLVED writes, and says so.
+# Under D13 it is only a zero of RESOLVED writes, and says so; with bound writes
+# the verb does not report, it is only a zero of what find-callers REPORTS.
 if ($showWrite -and $totalWrites -eq 0) {
-  $resolvedWord = $(if ($d13Same -or $d13Else) { 'resolved ' } else { '' })
-  Add-DisclosureRow $ftbl "no ${resolvedWord}write sites ($totalReads read$(if ($totalReads -ne 1) { 's' }))" $PAL.lineInk
+  $zeroWhat = $(if ($bound) { 'no write sites reported by find-callers' }
+                elseif ($d13Same -or $d13Else) { 'no resolved write sites' } else { 'no write sites' })
+  Add-DisclosureRow $ftbl "$zeroWhat ($totalReads read$(if ($totalReads -ne 1) { 's' }))" $PAL.lineInk
+}
+if ($bound) {
+  $more = $(if ($bound -gt $boundLines.Count) { " (+$($bound - $boundLines.Count) more)" } else { '' })
+  Add-DisclosureRow $ftbl ("$bound bare write(s) BOUND to $($sel.Name) in the index at $($boundLines -join ', ')$more -- " +
+                           'find-callers does not report them (no member-access row), NOT counted above') $PAL.lineInk
 }
 if ($d13Same) {
   $more = $(if ($d13Same -gt $d13Lines.Count) { " (+$($d13Same - $d13Lines.Count) more)" } else { '' })
@@ -423,6 +456,8 @@ $expected = $anchoredRows + 1
   CrossCheck      = $crossCheck
   D13SameFile     = $d13Same              # unbound same-name writes, declaring file
   D13Elsewhere    = $d13Else              # ... in every other file (weaker)
+  BoundUnreported = $bound                # write refs BOUND to this symbol the verb does not report
+  BoundLines      = ($boundLines -join ',')
   ClickTargets    = $lay.Anchors
   Expected        = $expected
   AllClickable    = ($lay.Anchors -ge $expected)

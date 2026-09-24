@@ -16,8 +16,9 @@
       declarations were collapsed. Whether a selected COLUMN exists is decided
       by Get-SqlColumnState (Emit-Common) -- the ONE column test lands-where and
       feeds-from use too: extracted from the newest declaration; a QUOTED
-      identifier the index does not extract (FOLDERCOUNT."TABLE" MS1.SQL:3848,
-      IPCHART."ACTION" :2243); extracted only from an OLDER declaration; or
+      identifier the index does not extract (none since extractor 1.19 fixed
+      engine D19 -- FOLDERCOUNT."TABLE" and IPCHART."ACTION" are extracted now;
+      the state stays as a guard); extracted only from an OLDER declaration; or
       named by this index's own SQL for T (server-sql). Only when none holds
       is it refused, worded "not extracted as a column by the SQL index" -- and
       a stale script refuses as "not known", never as an absence.
@@ -30,12 +31,15 @@
 
   THE FACT IS [certain], THE LITERAL IS [inferred] -- AND BOTH COUNTS SHOW (R7)
   ----------------------------------------------------------------------------
-  symbol_facts.sql_reads / sql_writes are the engine's table facts: 19 read and
-  148 write rows on SERVER. The read side is 14 tables wide where the literals
-  name 133 (P22): `SQL.Add('SELECT ...'); SQL.Add('FROM CAUSFAIL')` produces no
-  fact at all (engine INBOX note INBOX-sql-reads-misses-multiline-sql-add.md).
-  A reads chart built on the fact alone would be the "smaller confident answer"
-  this project exists to prevent, so:
+  symbol_facts.sql_reads / sql_writes are the engine's table facts. On the 1.18
+  clone they were 19 read and 148 write rows on SERVER, and the read side was 14
+  tables wide where the literals name 133 (P22): `SQL.Add('SELECT ...');
+  SQL.Add('FROM CAUSFAIL')` produced no fact at all (engine D18,
+  INBOX-sql-reads-misses-multiline-sql-add.md). Extractor 1.19 fixed D18: 112
+  read rows (+93, every one a DataService PrepareLoadQuery), 104 tables. The
+  fact is still not the whole story -- 3 routines read FOLDERS by literal only
+  -- and a reads chart built on the fact alone would be the "smaller confident
+  answer" this project exists to prevent, so:
 
     [certain]   a routine whose fact names T, anchored on the first literal in
                 its body that names T (touches-tables' provenance rule), or on
@@ -648,7 +652,10 @@ if ($colName) {
   # the SHARED label (Get-SqlColumnState): the same words lands-where and feeds-from print
   Add-DisclosureRow $ftbl "column state $($cs.State): $($cs.Label)" $PAL.lineInk
 } else {
-  Add-DisclosureRow $ftbl "$($tbl.ColumnNames.Count) columns extracted from the newest declaration$(if ($tbl.OlderOnlyColumns.Count) { "; $($tbl.OlderOnlyColumns.Count) more extracted only from an older one ($(@($tbl.OlderOnlyColumns.Keys) -join ', '))" }); a quoted column name is not extracted" $PAL.lineInk
+  # "; a quoted column name is not extracted" used to close this row (engine
+  # D19). Extractor 1.19 extracts quoted names, so the clause was dropped at the
+  # 1.19 re-baseline: a limit the engine has fixed is not claimed.
+  Add-DisclosureRow $ftbl "$($tbl.ColumnNames.Count) columns extracted from the newest declaration$(if ($tbl.OlderOnlyColumns.Count) { "; $($tbl.OlderOnlyColumns.Count) more extracted only from an older one ($(@($tbl.OlderOnlyColumns.Keys) -join ', '))" })" $PAL.lineInk
 }
 if ($nFactSyms -eq 0) {
   Add-DisclosureRow $ftbl "this index has no SQL facts (0 sql_reads / 0 sql_writes)" $PAL.lineInk

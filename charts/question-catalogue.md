@@ -94,16 +94,17 @@ New-DiagramArtifact.ps1 -Question lands-where -Target <Tmc/Imc property | field 
 
 | question | answers | caveat |
 |---|---|---|
-| `exception-paths` | which exception types this routine raises (and re-raises), which handlers in its body catch what, and where each type is caught or escapes up to N caller levels | no raise/handle fact exists: refs are CLASSIFIED by the source token before them, on sha256-fresh files only; bare `except` / `raise;` are `[inferred]`. A solid catch requires the call inside the handler's `try`. The walk follows resolved call edges -- engine D1 (parenless calls) and dispatch thin it -- and a walk that ends is "no resolved caller", never "unhandled" |
-| `consumers` | who reads and writes a table or column: routines (fact `[certain]`, literal `[inferred]`), `[by name]` mentions, triggers, procedures, indexes | `sql_reads` misses multi-line `SQL.Add` SQL (engine D18), so inferred readers are drawn beside certain ones and both counts are printed. Schema = SQL scripts, newest declaration wins; 5 live `PDF_*` tables absent; quoted identifiers not extracted |
+| `exception-paths` | which exception types this routine raises (and re-raises), which handlers in its body catch what, and where each type is caught or escapes up to N caller levels | no raise/handle fact exists: refs are CLASSIFIED by the source token before them, on sha256-fresh files only; bare `except` / `raise;` are `[inferred]`. A solid catch requires the call inside the handler's `try`. The walk follows resolved call edges only -- a call the resolver cannot bind (dispatch; parenless calls until engine D1 was fixed in resolver 1.7/1.8) thins it -- and a walk that ends is "no resolved caller", never "unhandled" |
+| `consumers` | who reads and writes a table or column: routines (fact `[certain]`, literal `[inferred]`), `[by name]` mentions, triggers, procedures, indexes | `sql_reads` misses SQL passed through a variable (`SQL.Add(sTmp)`; the multi-line `SQL.Add` gap, engine D18, is fixed in extractor 1.19), so inferred readers are drawn beside certain ones and both counts are printed. Schema = SQL scripts, newest declaration wins; 5 live `PDF_*` tables absent |
 | `feeds-from` | where a data-aware control's value comes from, hop by hop, to TABLE.COLUMN, plus code that re-points or re-binds it | stops rather than guess on a dangling module, an interface-typed view model or several candidate tables; per-control coverage printed (267 of 808 reach one table on CLIENT) |
-| `lands-where` | where an ORM property (or DFM-bound field) lands: the server's write and read path, TABLE.COLUMN, the triggers touching it, and the client bindings | TABLE.COLUMN is a naming convention, `[inferred]`, with measured coverage printed (1,991 of 1,997); positional `Params[i]` / `Fields[i]` are not visible |
+| `lands-where` | where an ORM property (or DFM-bound field) lands: the server's write and read path, TABLE.COLUMN, the triggers touching it, and the client bindings | TABLE.COLUMN is a naming convention, `[inferred]`, with measured coverage printed (1,992 of 1,997); positional `Params[i]` / `Fields[i]` are not visible |
 
 Column states (`consumers` column form, `feeds-from`, `lands-where` -- one
 function, `Get-SqlColumnState`): **column** (extracted from the newest
-declaration), **quoted** (a quoted identifier in the newest declaration, which the
-SQL index drops -- `INBOX-sql-index-drops-quoted-identifiers.md`; found by source
-scan, `[inferred]`), **older-only** (extracted only from an older declaration),
+declaration), **quoted** (a quoted identifier in the newest declaration that the
+SQL index does not extract; found by source scan, `[inferred]` -- engine D19,
+`INBOX-sql-index-drops-quoted-identifiers.md`, is fixed in extractor 1.19, so no
+real column reaches it; kept as a guard), **older-only** (extracted only from an older declaration),
 **server-sql** (not extracted, not quoted, but SQL in the Delphi index names it),
 **[stale source]** (the script differs from the index: not scanned, NOT known --
 never shown as an absence), **not-a-column** (named by none of it: lands-where says

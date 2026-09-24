@@ -150,7 +150,7 @@ $EX = @(
   @{ Q='exception-paths';  T='MStreams.TABZMemoryStream.ReadBuffer';            D=$CLI; A=@{}; Why='fan-in: 140 callers walked, 139 evaluated for EReadError. It is caught on 2 call edges in AutoTestSetupDefaults, which ALSO lets it escape on a third -- one caller, both answers' }
   @{ Q='exception-paths';  T='BASICSF.CopyRecords';                             D=$CLI; A=@{}; Why='the source-only rows: bare except, raise; and raise E, drawn dashed [inferred] because directive state is not evaluated' }
 
-  @{ Q='consumers';        T='CAUSFAIL';         D=$SRV; A=@{SqlDbPath=$SQL}; Why='table form: 1 certain writer, 1 INFERRED reader (sql_reads misses SQL split over SQL.Add lines, so both counts are printed), 3 triggers' }
+  @{ Q='consumers';        T='CAUSFAIL';         D=$SRV; A=@{SqlDbPath=$SQL}; Why='table form: 1 certain reader and 1 certain writer by fact (engine D18, fixed in extractor 1.19, assembles SQL across SQL.Add lines -- PrepareLoadQuery was an INFERRED reader before), 3 triggers' }
   @{ Q='consumers';        T='CAUSFAIL.REASON';  D=$SRV; A=@{SqlDbPath=$SQL}; Why='column form: 2 server routines, trigger CAUSFAIL_BIU5, and 1 of 7 REASON grid bindings -- the other 6 resolve to other tables' }
   @{ Q='consumers';        T='FOLDERS';          D=$SRV; A=@{SqlDbPath=$SQL}; Why='declared TWICE in the scripts; the newest file wins (79 columns, the live count), and the collapse is printed' }
 
@@ -160,7 +160,7 @@ $EX = @(
 
   @{ Q='lands-where';      T='uCAUSFAIL.TmcCAUSFAIL.REASON';       D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='ORM property &rarr; the SERVER write and read path (2 certain member accesses, 2 inferred SQL literals) &rarr; CAUSFAIL.REASON by naming convention &rarr; trigger CAUSFAIL_BIU5' }
   @{ Q='lands-where';      T='uSTATIONS.TmcSTATIONS.GRIDS';        D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state server-sql: in NO script declaration, yet the server''s SQL writes it -- the scripts lag the schema, so "computed or UI-only" would be false' }
-  @{ Q='lands-where';      T='uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE';  D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state quoted: declared as the quoted identifier "TABLE" in MS1.SQL:3848, which the SQL index does not extract' }
+  @{ Q='lands-where';      T='uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE';  D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='declared as the quoted identifier "TABLE" in MS1.SQL:3848 -- extracted since extractor 1.19 (engine D19), so an ordinary column; before that it was the one real column in the quoted state' }
   @{ Q='lands-where';      T='uINSPRSLT.TmcINSPRSLT.DistHist';     D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state not-a-column: named by no script and no server SQL -- computed or UI-only, and the DB side stays unanchored' }
 )
 
@@ -201,14 +201,14 @@ foreach ($e in $EX) {
 # step: this list is the page's own copy and nothing checks it against that doc.
 $CATALOGUE = @(
   @{ Q='butterfly';       Sel='method';          St='shipped'
-     Note='Caller and callee walks follow resolved <code>call_edges</code>, and this engine never binds a PARENLESS free-function call (<code>N := NextId;</code>, engine D1), so such callers are missing -- a short list is a lower bound.' }
+     Note='Caller and callee walks follow resolved <code>call_edges</code>, and only RESOLVED calls are walked. Engine D1 (a parenless call such as <code>N := NextId;</code> never bound) was FIXED in resolver 1.7/1.8 -- CLIENT call edges 20,409 &rarr; 23,790 -- but a call the resolver still cannot bind is missing, so a short list remains a lower bound.' }
   @{ Q='deps';            Sel='unit';            St='shipped' }
   @{ Q='who-calls';       Sel='method';          St='shipped'
-     Note='Caller and callee walks follow resolved <code>call_edges</code>, and this engine never binds a PARENLESS free-function call (<code>N := NextId;</code>, engine D1), so such callers are missing -- a short list is a lower bound.' }
+     Note='Caller and callee walks follow resolved <code>call_edges</code>, and only RESOLVED calls are walked. Engine D1 (a parenless call such as <code>N := NextId;</code> never bound) was FIXED in resolver 1.7/1.8 -- CLIENT call edges 20,409 &rarr; 23,790 -- but a call the resolver still cannot bind is missing, so a short list remains a lower bound.' }
   @{ Q='what-it-calls';   Sel='method';          St='shipped'
-     Note='Caller and callee walks follow resolved <code>call_edges</code>, and this engine never binds a PARENLESS free-function call (<code>N := NextId;</code>, engine D1), so such callers are missing -- a short list is a lower bound.' }
+     Note='Caller and callee walks follow resolved <code>call_edges</code>, and only RESOLVED calls are walked. Engine D1 (a parenless call such as <code>N := NextId;</code> never bound) was FIXED in resolver 1.7/1.8 -- CLIENT call edges 20,409 &rarr; 23,790 -- but a call the resolver still cannot bind is missing, so a short list remains a lower bound.' }
   @{ Q='who-writes';      Sel='field/property';  St='shipped'
-     Note='This engine never binds a <code>write</code> ref to a symbol (engine D13: 32,909 of 32,909 on CLIENT), so a BARE in-class assignment (<code>FConnected := True</code>) is invisible to the writers wing. The chart lists same-name unbound writes by name and says &ldquo;no RESOLVED write sites&rdquo;.' }
+     Note='The writers wing is what <code>find-callers</code> reports: member-access writes. Extractor 1.19 binds a BARE in-class assignment (<code>FConnected := True</code>; engine D13, fixed) but gives it no member-access row, so the verb still does not report it: the chart lists such writes BOUND to the member by line, and any write still unbound (e.g. inside a <code>with</code> body) by name, and neither is counted in the wing.' }
   @{ Q='who-reads';       Sel='field/property';  St='shipped' }
   @{ Q='hierarchy';       Sel='type';            St='shipped' }
   @{ Q='class-surface';   Sel='type';            St='shipped' }
@@ -218,25 +218,25 @@ $CATALOGUE = @(
   @{ Q='cycles';          Sel='unit/project';    St='shipped' }
   @{ Q='wiring';          Sel='interface';       St='shipped' }
   @{ Q='effects';         Sel='method';          St='shipped'
-     Note='Engine D12 scores a function''s own-name result assignment (<code>F := X</code>) as a GLOBAL write (31 CLIENT functions). When the witness names the routine itself, the chart moves that <code>g</code> to a dashed D12 disclosure; when an earlier witness hides it, the <code>g</code> is still drawn.' }
+     Note='Engine D12 (a function''s own-name result assignment <code>F := X</code> scored as a GLOBAL write; 31 CLIENT functions on the 1.18 clone) is FIXED in extractor 1.19: 0 such witnesses on any clone. The chart keeps the guard -- a <code>g</code> whose witness names the routine itself is moved to a dashed D12 disclosure -- and it no longer fires.' }
   @{ Q='architecture';    Sel='project';         St='shipped' }
 
   @{ Q='protocol-trace';  Sel='command / wire field'; St='shipped' }
   @{ Q='protocol-trace';  Sel='method';          St='shipped' }
   @{ Q='crosses-boundary';Sel='method';          St='shipped' }
   @{ Q='change-impact';   Sel='method/type';     St='shipped'
-     Note='Caller and callee walks follow resolved <code>call_edges</code>, and this engine never binds a PARENLESS free-function call (<code>N := NextId;</code>, engine D1), so such callers are missing -- a short list is a lower bound.' }
+     Note='Caller and callee walks follow resolved <code>call_edges</code>, and only RESOLVED calls are walked. Engine D1 (a parenless call such as <code>N := NextId;</code> never bound) was FIXED in resolver 1.7/1.8 -- CLIENT call edges 20,409 &rarr; 23,790 -- but a call the resolver still cannot bind is missing, so a short list remains a lower bound.' }
   @{ Q='tested-by';       Sel='any symbol';      St='shipped' }
   @{ Q='shown-where';     Sel='db column';       St='shipped' }
 
   @{ Q='exception-paths'; Sel='method';          St='shipped'
-     Note='The index has no raise/handle ref kind, so each exception ref is CLASSIFIED from the source token before it (<code>raise</code> / <code>on E:</code>), on a freshness-checked file. A solid catch needs the call site inside the handler''s try. The caller walk is over resolved call edges (engine D1 applies), and a walk that ends says &ldquo;no resolved caller&rdquo;, never &ldquo;unhandled&rdquo;.' }
+     Note='The index has no raise/handle ref kind, so each exception ref is CLASSIFIED from the source token before it (<code>raise</code> / <code>on E:</code>), on a freshness-checked file. A solid catch needs the call site inside the handler''s try. The caller walk is over resolved call edges only (engine D1 fixed in resolver 1.7/1.8; an unbindable call is still missing), and a walk that ends says &ldquo;no resolved caller&rdquo;, never &ldquo;unhandled&rdquo;.' }
   @{ Q='consumers';       Sel='table/column';    St='shipped'
-     Note='Derived (path A; <code>orm_links</code> and <code>fb_*</code> are 0 rows): SQL facts are [certain], upper-case SQL-verb literals [inferred], because <code>sql_reads</code> misses SQL split over several <code>SQL.Add</code> lines. The schema is the SQL SCRIPTS, not the live database: 5 live <code>PDF_*</code> tables are absent and quoted identifiers are not extracted.' }
+     Note='Derived (path A; <code>orm_links</code> and <code>fb_*</code> are 0 rows): SQL facts are [certain], upper-case SQL-verb literals [inferred], because <code>sql_reads</code> misses SQL passed through a VARIABLE (<code>SQL.Add(sTmp)</code>: 38 of the 40 SERVER DataService loads still without a read fact) -- the SQL.Add-across-lines case, engine D18, is fixed in extractor 1.19. The schema is the SQL SCRIPTS, not the live database: 5 live <code>PDF_*</code> tables are absent.' }
   @{ Q='feeds-from';      Sel='control';         St='shipped'
      Note='DFM DataSource &rarr; dataset &rarr; view model &rarr; TABLE.COLUMN, every hop graded. It stops rather than guess on a dangling module, an interface-typed view model or several candidate tables; 267 of 808 field-bound CLIENT controls reach one table, and each chart prints that coverage.' }
   @{ Q='lands-where';     Sel='ORM property / field'; St='shipped'
-     Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,991 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
+     Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,992 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
 
   @{ Q='compare';         Sel='two index runs';  St='parked'
      Note='Parked by owner decision, and genuinely dependent on the IR: there is no <code>ir</code> or <code>compare</code> verb in the deployed engine, confirmed against a deliberate fake control.' }
@@ -364,7 +364,7 @@ foreach ($c in ($CATALOGUE | Where-Object { $_.St -ne 'shipped' })) {
 
 [void]$sb.AppendLine('<div class="note"><p><b>These charts were generated against frozen clones, not the live corpus.</b> ' +
   'The engine deployed in this worktree is older than the indexes it is reading ' +
-  '(engine 1.16.0-alpha / resolver 1.5.1-alpha against clones at v=1.18.0-alpha / r=1.6.0-alpha), ' +
+  '(engine 1.16.0-alpha / resolver 1.5.1-alpha against clones at v=1.19.0-alpha / r=1.8.0-alpha), ' +
   'which yields smaller confident answers rather than errors. The callee direction is ' +
   'affected; callers, uses-edges, DFM events, DI bindings, purity facts and the ' +
   'dependency report are not. Anything on this page reached through <code>call_edges</code> ' +

@@ -97,7 +97,9 @@ New-DiagramArtifact.ps1 -Question lands-where -Target <Tmc/Imc property | field 
   says "no resolved caller", never "unhandled".
 * `consumers` -- readers, writers, triggers, procedures and indexes of a table
   or column. Facts `[certain]`, SQL-verb literals `[inferred]` (`sql_reads`
-  misses multi-line `SQL.Add`); the schema is the SQL SCRIPTS, not the live DB.
+  misses SQL passed through a variable, `SQL.Add(sTmp)`; engine D18, the
+  multi-line `SQL.Add` gap, is fixed in extractor 1.19); the schema is the SQL
+  SCRIPTS, not the live DB.
 * `feeds-from` -- a control's value, hop by hop, to TABLE.COLUMN. It stops
   rather than guess, and prints its per-control coverage.
 * `lands-where` -- an ORM property's server write/read path, TABLE.COLUMN and
@@ -105,18 +107,26 @@ New-DiagramArtifact.ps1 -Question lands-where -Target <Tmc/Imc property | field 
   measured coverage printed.
 
 Column states they can show (one function, `Get-SqlColumnState`, decides for
-`consumers`, `feeds-from` and `lands-where`): `column`, `quoted` (the SQL index
-drops quoted identifiers), `older-only`, `server-sql`, `[stale source]` (not
+`consumers`, `feeds-from` and `lands-where`): `column`, `quoted` (a quoted
+identifier the SQL index does not extract -- none since extractor 1.19 fixed
+engine D19; kept as a guard), `older-only`, `server-sql`, `[stale source]` (not
 scanned -- not known, never an absence), `not-a-column`.
 
 ### Engine defects the charts disclose
 
+Re-baselined 2026-09-24 against the extractor 1.19 / resolver 1.8 clones, which
+FIXED D1, D12, D13, D18 and D19. A fixed limit is no longer claimed; each
+detector stays as a guard and is exercised by the gate (synthetically where no
+real row reaches it any more).
+
 | | affects | handling |
 |---|---|---|
-| D1 parenless calls never bound | every caller/callee walk (butterfly, who-calls, what-it-calls, change-impact, exception-paths) | documented; a short list is a lower bound |
+| D1 parenless calls never bound -- FIXED (resolver 1.7/1.8; CLIENT call edges 20,409 -> 23,790) | every caller/callee walk | walks follow RESOLVED edges only, so a call the resolver cannot bind is still missing: a short list is a lower bound |
 | D6 butterfly duplicate rows | butterfly | fixed in the emitter; gate `A-BF6-*` fails on a duplicate |
-| D12 own-name result write scored global | effects | `g` moved to a dashed D12 disclosure when the witness names the routine |
-| D13 `write` refs unbound | who-writes | "no RESOLVED write sites" plus same-name unbound writes listed by name |
+| D12 own-name result write scored global -- FIXED (0 witnesses on every clone) | effects | guard kept: a `g` whose witness names the routine moves to a dashed D12 disclosure (`A-FX12-DETECT`, synthetic) |
+| D13 `write` refs unbound -- FIXED (21,916 of 32,909 CLIENT writes bound) | who-writes | the fix gives a bound write NO member-access row, so `find-callers` still does not report it: the chart lists writes BOUND to the member by line ("no write sites reported by find-callers"), and what is still unbound (a `with` body) by name |
+| D18 `sql_reads` misses multi-line `SQL.Add` -- FIXED (SERVER read facts 19 -> 112) | consumers, touches-tables, lands-where | literals stay `[inferred]` beside the facts: 38 of 40 DataService loads still without a read fact pass their SQL through a variable |
+| D19 quoted identifiers not extracted -- FIXED (`FOLDERCOUNT.TABLE`, `IPCHART.ACTION`) | consumers, feeds-from, lands-where | the `quoted` column state is kept as a guard (`A-COLSTATE-QUOTED`, synthetic) |
 
 ### dot.exe and MAX_PATH
 
@@ -184,18 +194,18 @@ only the BROWSER hop, because a browser cannot write to a named pipe:
   server answers, mirroring the standalone viewer.
 * `src\Register-DragLintProtocol.ps1` -- one HKCU key, no elevation,
   `-Unregister` to undo. Nothing else on the machine is touched.
-## Fact POPULATION, measured 2026-09-23 -- check this before planning a question
+## Fact POPULATION, measured 2026-09-23, re-measured 2026-09-24 (1.19 clones) -- check this before planning a question
 
 A column EXISTING in schema 23 does not mean it holds rows. We made that mistake
 twice (orm_links, then covered_by). Measured on ORM3:
 
 | fact | CLIENT | SERVER | usable? |
 |---|---|---|---|
-| `call_edges` | 20,409 | - | yes |
-| `effect_summary` | 7,254 | 5,284 | yes -- the richest fact available |
-| `dfm_event` | 762 | 37 | yes, CLIENT-side (UI tier) |
-| `ui_affinity` | 230 | 37 | partial |
-| `sql_writes` / `sql_reads` | **0 / 0** | 148 / 19 | **SERVER ONLY** |
+| `call_edges` | 23,790 | 28,693 | yes |
+| `effect_summary` | 7,234 | 5,264 | yes -- the richest fact available |
+| `dfm_event` | 764 | 37 | yes, CLIENT-side (UI tier) |
+| `ui_affinity` | 240 | 38 | partial |
+| `sql_writes` / `sql_reads` | **0 / 0** | 148 / 112 | **SERVER ONLY** |
 | `covered_by` | **0** | **0** | **no -- never populated** |
 | `orm_links`, `fb_*` | **0** | **0** | **no -- needs a live Firebird** |
 

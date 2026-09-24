@@ -29,9 +29,9 @@
 
   THE TABLE IS A NAMING CONVENTION, AND IS DRAWN AS ONE (plan R10)
   -----------------------------------------------------------------
-  Tmc<T>.PROP = T.PROP holds for 1,991 of the 1,997 properties that sit on a
-  table-named class by what the SQL index extracts, plus FOLDERCOUNT.TABLE,
-  which is quoted (measured 2026-09-23). That is a convention, not a fact: the
+  Tmc<T>.PROP = T.PROP holds for 1,992 of the 1,997 properties that sit on a
+  table-named class by what the SQL index extracts (extractor 1.19, 2026-09-24;
+  1,991 + the quoted FOLDERCOUNT.TABLE on 1.18). That is a convention, not a fact: the
   table hop is dashed and graded [inferred -- naming convention, N of M ...] with
   the numbers MEASURED on this run and printed, never quoted from the plan. The
   exceptions are the interesting rows: a property that is not a column of T
@@ -51,6 +51,9 @@
   label it prints, is Get-SqlColumnState in Emit-Common -- the ONE column test
   consumers and feeds-from use too. A script that differs from the indexed copy
   is not scanned, and the chart then says [stale source], never "not a column".
+  ENGINE D19 FIXED (extractor 1.19): both quoted names are now extracted, so
+  both are ordinary columns and no real property reaches the quoted state; it
+  stays as a guard (R25) and the gate drives it on a hand-made table set.
 
   THE SERVER SIDE: facts first, literals graded
   ----------------------------------------------

@@ -18,6 +18,11 @@
   methods were unanalysed -- the exact inversion of the fact. So `effect_free`
   decides the outcome and the summary only fills in the detail.
 
+  Re-measured on the extractor 1.19 clone (2026-09-24): 7,234 / 2,918 / 855
+  (1.18 clone: 7,257 / 2,895 / 855). The +23 pure are engine D12's fix: 20 functions whose only `g` was their own
+  Result assignment, and 3 BASICSF callers (Magnitude, EqualZero, IsSampleof1)
+  whose `g` was inherited from one of them.
+
   THE LEGEND, READ FROM THE ENGINE, NOT INFERRED FROM THE DATA
   -------------------------------------------------------------
   From TEffectFlag / Encode / Decode (Purity.pas:25, 317, 332):
@@ -207,12 +212,16 @@ if ($outcome -eq 'pure' -and $effects.Count -gt 0) {
 # Detectable only when the WITNESS names the routine. The witness is the FIRST
 # blocker only, so a D12 write recorded after a genuine one (witness names the
 # genuine one) cannot be told apart and is still drawn as `g` -- the docs say so.
-$d12 = $false
+#
+# ENGINE FIX (extractor 1.19, re-baseline 2026-09-24): purity now scores the
+# own-name assignment as a local. 0 functions carry that witness on any clone
+# (CLIENT 31 -> 0, SERVER 30 -> 0, TestMicroniteObjects 30 -> 0), and
+# AP_FP_Greater_Eq is now pure. The detector stays (R25) as a guard against a
+# regression, and Test-D12OwnNameWrite (Emit-Common) is driven on synthetic
+# rows by the gate, since no real row can reach it any more.
 $ownName = [string]$sel.Name
-if ($ownName -and $ew -and
-    [string]::Equals($ew, "writes $ownName (non-local)", [StringComparison]::OrdinalIgnoreCase) -and
-    @($effects | Where-Object { $_.Kind -eq 'g' }).Count) {
-  $d12 = $true
+$d12 = Test-D12OwnNameWrite $ownName $ew $effects
+if ($d12) {
   $effects = [System.Collections.ArrayList]@($effects | Where-Object { $_.Kind -ne 'g' })
 }
 
