@@ -15,10 +15,13 @@ breaking changes** until v1.0.
   `CollectDependentProjectNotRecompiled`, `RegenerationDropsUnvouchable`) treated them as shared
   (uncapped inbound lists, staleness rule, tag regime). The marker must now be the FIRST TOKEN of
   its comment (`// dl:shared A, B`, `{ dl:shared A, B }`, `(* dl:shared A *)`, blanks and line
-  breaks before it allowed). A `//` inside a line comment re-arms that position, so the writer's
-  `   // dl:shared P` appended to a unit line that already ends in a comment still parses back.
+  breaks before it allowed); a `//` inside a line comment is comment text, not a new comment, so
+  `// see // dl:shared below` is prose. The writer changed to match: when the unit line already ends in
+  a `// note`, the marker LEADS that comment (`// dl:shared P // note`) and the project list ends at the
+  next `//`. The pre-D26 writer's `// note // dl:shared A` shape now reads as NOT shared (0 of the 8
+  real markers across all 35 configured DBs has it).
   Only those two units in this repo change answer; `TSharedUnit`'s own facts block re-capped its
-  inbound list accordingly. Guard: `tests\autotest\run_shared_unit_marker.ps1` (31 checks).
+  inbound list accordingly. Guard: `tests\autotest\run_shared_unit_marker.ps1` (36 checks).
 - **D29 -- `allow`'s re-hash takes the REVIEWED stamp's separator with it.** Stripping the stale
   stamp consumed `;` `,` `.` after the date only, so `-- REVIEWED 2026-09-23: reason` re-hashed to
   `-- : reason` (seen live on `CLI.pas:612`). It now takes ONE adjacent separator: after the stamp

@@ -225,9 +225,52 @@ implementation
 end.
 '@
 
-# D26 writer lock-step: the unit line already ends in a line comment, so the
-# writer's appended `   // dl:shared P` lands INSIDE that comment. It must
-# still parse back, or shared-unit --add-project refuses a unit it used to mark.
+# D26 fix round 1 (ruling R12): a `//` INSIDE a line comment does not open a
+# new comment, so the tag after it is prose, not a first token. Both shapes
+# were read as markers by the first D26 fix, which re-armed on any `//`.
+$reArm1 = Join-Path $WorkDir 'ReArm1.pas'
+Write-Ascii $reArm1 @'
+unit ReArm1;   // see // dl:shared below
+
+interface
+
+implementation
+
+end.
+'@
+
+$reArm2 = Join-Path $WorkDir 'ReArm2.pas'
+Write-Ascii $reArm2 @'
+// note: // dl:shared is explained in the wiki
+unit ReArm2;
+
+interface
+
+implementation
+
+end.
+'@
+
+# The shape the PRE-D26 writer produced when the unit line already carried a
+# `// note`: its marker is not a first token, so the strict reader cannot tell
+# it from the prose in ReArm1 (syntactically identical). It reads as NOT
+# shared. Measured 2026-09-24: 0 of the 8 real markers across all 35
+# configured DBs has this shape -- every one is `unit X;   // dl:shared ...`.
+$oldShape = Join-Path $WorkDir 'OldShapeUnit.pas'
+Write-Ascii $oldShape @'
+unit OldShapeUnit;   // keep in sync // dl:shared YADF
+
+interface
+
+implementation
+
+end.
+'@
+
+# D26 writer lock-step: the unit line already ends in a line comment. The
+# writer must emit a marker that is a FIRST TOKEN -- it leads the existing
+# comment (`// dl:shared P // note`) -- or shared-unit --add-project refuses a
+# unit it could mark before, because the marker would not parse back.
 $trailing = Join-Path $WorkDir 'TrailingCommentUnit.pas'
 Write-Ascii $trailing @'
 unit TrailingCommentUnit;   // keep in sync with the server copy
@@ -283,6 +326,18 @@ $r = Invoke-SharedUnit -Path $proseParen
 Check 'D26: dl:shared in star-paren comment prose is not a marker' ($null -ne $r -and -not $r.is_shared) `
   "got is_shared=$($r.is_shared) projects='$($r.projects -join '|')'"
 
+$r = Invoke-SharedUnit -Path $reArm1
+Check 'D26: dl:shared after a second // in a line comment is not a marker' ($null -ne $r -and -not $r.is_shared) `
+  "got is_shared=$($r.is_shared) projects='$($r.projects -join '|')'"
+
+$r = Invoke-SharedUnit -Path $reArm2
+Check 'D26: // note: // dl:shared prose above the unit line is not a marker' ($null -ne $r -and -not $r.is_shared) `
+  "got is_shared=$($r.is_shared) projects='$($r.projects -join '|')'"
+
+$r = Invoke-SharedUnit -Path $oldShape
+Check 'D26: the pre-D26 writer shape (// note // dl:shared A) reads as NOT shared' ($null -ne $r -and -not $r.is_shared) `
+  "got is_shared=$($r.is_shared) projects='$($r.projects -join '|')'"
+
 # ------------------------------------------------------------------ writing --
 $before = [System.IO.File]::ReadAllText($two)
 $r = Invoke-SharedUnit -Path $two -AddProject 'YADF' -Apply
@@ -330,11 +385,23 @@ Check 'the appended project parses back' (($r.projects -join ',') -eq 'Alpha,Bet
 
 $r = Invoke-SharedUnit -Path $trailing -AddProject 'YADF' -Apply
 $after = [System.IO.File]::ReadAllText($trailing)
-Check 'D26: a marker appended after an existing unit-line comment parses back' `
+$first = ($after -split "`r`n")[0]
+Check 'D26: a marker added to a unit line that already has a comment parses back' `
   ($r.was_added -eq $true -and $r.applied -eq $true -and ($r.projects -join ',') -eq 'YADF') `
   "got was_added=$($r.was_added) applied=$($r.applied) projects='$($r.projects -join ',')'"
 Check 'D26: ...and the file now reads as shared' ((Invoke-SharedUnit -Path $trailing).is_shared) `
-  "first line is now: $((($after -split "`r`n")[0]))"
+  "first line is now: $first"
+Check 'D26: ...the marker LEADS the existing comment, whose text is preserved' `
+  ($first -ceq 'unit TrailingCommentUnit;   // dl:shared YADF // keep in sync with the server copy') `
+  "first line is now: $first"
+
+# The list ends at the next `//`: a second project goes before the note.
+$r = Invoke-SharedUnit -Path $trailing -AddProject 'YADFOT' -Apply
+$first = (([System.IO.File]::ReadAllText($trailing)) -split "`r`n")[0]
+Check 'D26: a second project lands before the note and parses back' `
+  (($r.projects -join ',') -eq 'YADF,YADFOT' -and
+   $first -ceq 'unit TrailingCommentUnit;   // dl:shared YADF, YADFOT // keep in sync with the server copy') `
+  "got '$($r.projects -join ',')'; first line is now: $first"
 
 # ------------------------------------------------------------------- errors --
 $out = & $Exe shared-unit --in (Join-Path $WorkDir 'NoSuchUnit.pas') --json 2>&1
