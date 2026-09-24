@@ -58,6 +58,19 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`allow` refuses every rule that is not a finding about code (L4).** Only `review-marker-stale` and
+  `review-marker-unused` were refused, by id, so the three review-marker rules added since
+  (`-malformed`, `-placeholder-hash`, `-reason-unreviewed`) and `parser-error` were written as live
+  markers. The refusal is now the whole `review-markers` CATEGORY plus `parser-error` (exit 2, with the
+  cure), so a future meta rule is refused without an edit here. Guard:
+  `tests\reviewmarker\run_allow_command.ps1`.
+- **Re-hashing a stale `dl:ok` marker drops its `REVIEWED` stamp (L3).** `allow` on a stale marker
+  re-hashes it to the changed code and used to carry the reason over verbatim, so an old
+  `REVIEWED yyyy-mm-dd` vouched for code nobody is recorded as having re-read, and kept
+  `review-marker-reason-unreviewed` quiet. A re-hash is not a re-review: `TReviewMarkers.InsertInto`
+  now drops the stamp (keeping the rest of the reason) whenever it re-hashes, and `allow` prints a
+  `note:` saying so. A marker whose hash still matches is untouched. Guards: `ReviewMarkerTests`
+  `TestRehashDropsStamp` (L3a-e), `run_allow_command.ps1` (L3 block).
 - **`overwrite-before-read` no longer reports nil-inits separated from their `try` by an unrelated
   statement (D15).** `ProtectedByFollowingTry` walked from the store to the `try` over sibling
   ASSIGNMENTS only, so `A := nil; B := nil; for G := ... do X[G] := nil; try ... finally A.Free; B.Free;

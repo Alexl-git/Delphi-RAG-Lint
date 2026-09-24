@@ -448,6 +448,12 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RemoveFrom(const ALineText, ARuleId: string): string; static;
+    /// <summary>ALineText with a `dl:ok` entry for ARuleId recorded at the
+    /// current hash: appended as a new marker, merged into the line's existing
+    /// one, or -- when that entry's hash is stale -- re-hashed. A re-hash DROPS
+    /// any `REVIEWED yyyy-mm-dd` stamp from the kept reason (a re-hash is not a
+    /// re-review; see ReviewMarkerTests TestRehashDropsStamp). An entry whose
+    /// hash still matches returns ALineText byte-identical.</summary>
     /// <param name="ALineText"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AReason"><!-- drag-lint:auto type -->const string</param>
@@ -485,6 +491,9 @@ const
   REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS = 180;
 
 implementation
+
+uses
+  System.RegularExpressions;
 
 { ---------------------------------------------------------------------------
   Normalisation
@@ -1063,6 +1072,18 @@ begin
   if Trim(AReason) <> '' then Result:= Result + ' ' + REVIEW_REASON_SEP + ' ' + Trim(AReason);
 end;
 
+{ AReason without its `REVIEWED <yyyy-mm-dd>` stamp (the form ReviewStamp
+  reads, case-sensitive and whole-word), with the brackets or separator that
+  held it and any doubled whitespace tidied away. A reason with no well-formed
+  stamp comes back trimmed and otherwise unchanged. }
+function StripReviewStamp(const AReason: string): string;
+const
+  STAMP_RX = '\(?\bREVIEWED\s+\d{4}-\d{2}-\d{2}\b\)?[;,.]?';
+begin
+  Result:= TRegEx.Replace(AReason, STAMP_RX, ' ');
+  Result:= Trim(TRegEx.Replace(Result, '\s{2,}', ' '));
+end;
+
 class function TReviewMarkers.InsertInto(const ALineText, ARuleId, AReason: string;
   const AHashOverride: string): string;
 var
@@ -1132,6 +1153,16 @@ begin
       Body:= Body + RuleToken(Existing[K].RuleId, Existing[K].Hash);
   end;
   if not Refreshed then Body:= Body + ', ' + RuleToken(ARuleId, Hash);
+  { A RE-HASH IS NOT A RE-REVIEW (L3, 2026-09-23). Refreshed means this entry's
+    hash no longer matched: the code changed after the review. A `REVIEWED
+    <date>` stamp carried over verbatim would then vouch, with an old date, for
+    code nobody is recorded as having re-read -- and would keep
+    review-marker-reason-unreviewed quiet about it. So the stamp is DROPPED and
+    the rest of the reason kept: the rule then asks for a fresh stamp, and a
+    human who did re-read the code writes one. Dropping rather than keeping is
+    the loud direction. The stamp belongs to the whole marker, so a neighbour
+    entry on the same line loses it too; that is also the loud direction. }
+  if Refreshed then Reason:= StripReviewStamp(Reason);
   if Trim(Reason) <> '' then Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Reason);
 
   CStart := LineCommentStart(ALineText);

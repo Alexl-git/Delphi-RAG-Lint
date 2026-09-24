@@ -24307,21 +24307,32 @@ begin
     the built-ins alone would refuse to allow findings the linter reports every
     day. }
   Known:= False;
+  var Category: string:= '';
   for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(AArgs.RulesDir, '') do
-    if SameText(RI.Id, AArgs.FixRule) then begin Known:= True; Break; end;
+    if SameText(RI.Id, AArgs.FixRule) then
+    begin
+      Known   := True;
+      Category:= RI.Category;
+      Break;
+    end;
   if not Known then
   begin
     Writeln(Format('Unknown rule id: %s', [AArgs.FixRule]));
     Exit(2);
   end;
 
-  { The marker bookkeeping rules are not themselves allowable. Allowing a stale
+  { ONLY A FINDING ABOUT CODE IS ALLOWABLE (L4, widened 2026-09-23). The
+    review-markers category is bookkeeping ABOUT markers: allowing a stale
     marker would let a review outlive the code it reviewed -- the one thing the
-    hash exists to stop -- and the cure for a stale marker is to allow the REAL
-    finding again, which re-hashes it. An unused marker is cured by deleting it. }
-  if SameText(AArgs.FixRule, 'review-marker-stale') or SameText(AArgs.FixRule, 'review-marker-unused') then
+    hash exists to stop -- and each has its own cure (re-allow the real finding,
+    delete the marker, fix its hash or its REVIEWED stamp). parser-error is the
+    parser failing, not a finding a human can accept. Only -stale and -unused
+    used to be refused, by id, so the three review-marker rules added since were
+    written as live markers; the category test cannot fall behind again. }
+  if SameText(Category, 'review-markers') or SameText(AArgs.FixRule, 'parser-error') then
   begin
-    Writeln(Format('Rule "%s" cannot be allowed: re-allow the finding it reports, or remove the marker.', [AArgs.FixRule]));
+    Writeln(Format('Rule "%s" cannot be allowed: it is not a finding about code. ' +
+      'Re-allow the finding it reports, fix or remove the marker, or fix the syntax.', [AArgs.FixRule]));
     Exit(2);
   end;
 
@@ -24480,6 +24491,14 @@ begin
       [AArgs.Target, AArgs.FixLine, AArgs.FixRule]));
     Exit(1);
   end;
+
+  { L3: InsertInto drops a `REVIEWED <date>` stamp when it RE-HASHES a stale
+    marker, because a re-hash is not a re-review. Say so, or the operator never
+    learns the stamp has to be re-written after actually re-reading the code. }
+  if (Pos('REVIEWED', OldLine) > 0) and (Pos('REVIEWED', NewLine) = 0) then
+    Writeln(Format('note: %s:%d -- the marker was re-hashed to changed code, so its REVIEWED stamp was dropped ' +
+      '(a re-hash is not a re-review). Re-stamp the reason once you have re-read the code.',
+      [AArgs.Target, AArgs.FixLine]));
 
   if not AArgs.Apply then
   begin
