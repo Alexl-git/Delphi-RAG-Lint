@@ -811,30 +811,9 @@
 #   and the new code only READS refs; it writes call_edges and refs.symbol_id. A bump here would bill a ~3h17m re-parse of every
 #   database to alter not one stored parse.
 #   Superseded: 1.18.0-alpha|63488fb2a2232af20a67a2c64226c87ccc33ba17de1943a54d11762563216ec6
-# 2026-09-23: hash updated WITHOUT a version bump, per the rule above (the
-#   2026-09-16 and 2026-09-23 parenless CallResolver entries are the precedent).
-#   The only surface file that moved is src\index\DRagLint.Index.CallResolver.pas:
-#   the `with` scope (D14), the bare member-read pass (D14 + D16a) and the
-#   parenless procedure-value fixes (D16b/c). All of it is the RESOLVE pass --
-#   rows derived from stored parses -- governed by DRAGLINT_RESOLVER_VERSION,
-#   which moves 1.7.0-alpha -> 1.8.0-alpha in the same commit. The with scope
-#   PARSES the source inside the resolver to find with spans, but that parse is
-#   never stored: no symbol, ref or facts row changes, and no file under
-#   src\parser or src\preprocess changed, nor Core.Indexer or Doc.SymbolFacts. A
-#   bump here would bill a ~3h17m re-parse of every database to alter not one
-#   stored parse.
-#   Superseded: 1.18.0-alpha|6b35e559660b226b5a98468c03c49e657ef3e5846a90f83e8171f4fb5027d140
-#   Superseded: 1.18.0-alpha|310b7e3893783b1c0aafe8c18b2ad8c87962b9449904826987a51cb632e732a3
-# 2026-09-23: hash updated WITHOUT a version bump again (merge of
-#   feat/fix-resolver-a into feat/integrate-resolvers), same rule and same
-#   precedent as the entries above. The only surface file that moved is
-#   src\index\DRagLint.Index.CallResolver.pas: resolver batch A (D13 write-ref
-#   binding -- ResolveWriteRef and its scope helpers, now consulting the with
-#   scope; ENG-16 unit-qualified routine calls -- LookupUnitQualifiedRoutine,
-#   rung 4b of ResolveOne), pinned on that branch alone as
-#   1.18.0-alpha|0f7b966c05f1c77167e28ce45a4a6c75970386585cba160c9265d61a50efe723. The RESOLVE pass only, billed
-#   by DRAGLINT_RESOLVER_VERSION 1.8.0-alpha. Nothing under src\parser or
-#   src\preprocess changed, nor Core.Indexer or Doc.SymbolFacts; no stored
-#   parse differs. The 1.19.0 extractor bump arrives with
-#   feat/fix-extractor-batch, not here.
-1.18.0-alpha|7e5871d800aa3e9e4bde5597c0f784b8935af8c3910212e725777759afc89aab
+# 2026-09-23 (evening): hash re-pinned WITHIN 1.19.0-alpha at the sweep merge. The extractor batch
+#   pinned 1.19.0 on its own branch; the resolver branches (1.8.0) and the read-only-open fix
+#   also changed Storage.SQLite.pas, which this guard hashes. No database was ever built at
+#   1.19.0 before this merge (it is first deployed WITH it), so no stored parse differs.
+#   Superseded: 1.19.0-alpha|171224b0f3f9b1260dcd32f20ceb89a011a09caf04dcedc8fe0286c1c8c734e8
+1.19.0-alpha|54daa201bccc7aa0a3036fe088c7ff16bb2b15d2c83bf0c28c22b1868b99b0c5

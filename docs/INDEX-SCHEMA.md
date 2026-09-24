@@ -287,6 +287,19 @@ separate `kind_text` column -- `kind` IS the text form):
 `sql_view`, `sql_exception`, `sql_domain`, `sql_constraint`,
 `initialization`, `finalization`, `local_var` (v14+), `param` (v14+).
 
+**SQL identifier storage (`sql_table` / `sql_column`, extractor 1.19.0+).** A
+QUOTED Firebird identifier is stored the way Firebird stores it in its own
+metadata: quotes stripped, an embedded `""` unescaped to `"`, case kept
+VERBATIM -- `"ACTION"` -> `ACTION`, `"Mixed Case"` -> `Mixed Case`. A quoted
+name is case-SENSITIVE in Firebird, so `name` is not folded; an UNQUOTED name
+is stored as written in the script (also not upper-cased, although Firebird
+folds it), so compare case-insensitively unless the script is known to quote.
+There is no column recording that a name was quoted. Before 1.19 a quoted
+column was not stored at all (the reserved-word columns, e.g. MS1.SQL
+`IPCHART."ACTION"`, `FOLDERCOUNT."TABLE"`), and a column whose name merely
+STARTED with `UNIQUE`/`CHECK`/`CONSTRAINT` (e.g. `UNIQUE_FLAG`,
+`CONSTRAINT_NAME`) was dropped as if it were a table constraint.
+
 There is **no `visibility` column.** Access-modifier / visibility
 information, where captured, lives in the free-form `modifiers` text; there
 is no normalized public/private/protected enum column at v15.
@@ -750,7 +763,7 @@ popup (a single shared formatter renders both, so they cannot drift).
 | `cyclomatic` | INTEGER (nullable) | Cyclomatic complexity = 1 + count of decision points (`if` / `while` / `for` / `repeat` / `case` arms / `and` / `or`). Shared with the complexity lint rule. |
 | `body_loc` | INTEGER (nullable) | Implementation body line count (`impl_end_line - impl_start_line`, clamped >= 0). |
 | `dfm_event` | TEXT (nullable) | For a published method wired to a component event in the routine's PAIRED `.dfm`: `'ObjectName.EventProp'` (e.g. `Button1.OnClick`). NULL when not wired / no sibling `.dfm`. |
-| `sql_reads` | TEXT (nullable) | CSV of SQL tables the routine READS (`FROM`/`JOIN`), best-effort from concatenated SQL string literals in the body; capped at 8. Dynamic / sub-query / CTE SQL is skipped (absence over a wrong table). NULL when none. |
+| `sql_reads` | TEXT (nullable) | CSV of SQL tables the routine READS (`FROM`/`JOIN`), best-effort from concatenated SQL string literals in the body; capped at 8. Dynamic / sub-query / CTE SQL is skipped (absence over a wrong table). NULL when none. **Extractor 1.19.0+:** SQL built line by line through consecutive `<ds>.SQL.Add('...')` statements (also `CommandText`, `SelectSQL`, `InsertSQL`, `ModifySQL`, `DeleteSQL`, `RefreshSQL`) is assembled per receiver before extraction; any other statement between two Adds ends the run, and one non-literal Add argument drops that run. Before 1.19 such readers were missing (ORM3 SERVER: 19 routines with `sql_reads` at 1.18, 112 at 1.19). |
 | `sql_writes` | TEXT (nullable) | CSV of SQL tables WRITTEN (`INSERT INTO` / `UPDATE` / `DELETE FROM`), same best-effort/format. NULL when none. |
 | `mutates_params` | TEXT (nullable) | **v19.** CSV of the `var`/`out` PARAMETERS the routine writes through, display-ready with each mode in parentheses -- `'pList (var), pReason (out)'`. Same cap/format as `reads_fields` (8 entries, then ` (+N more)`). Closes the gap named in `writes_fields` above. Claimed write shapes: a bare-identifier assignment LHS, an indexed LHS (`AList[0] := X`), and `Inc`/`Dec`. NOT claimed, by design: an ordinary call's var argument (`SetLength(AList, N)`) and a dot LHS (`AObj.F := X`). NULL when none. |
 | `ui_affinity` | TEXT (nullable) | **v19.** CSV of the UI controls/globals the routine touches -- `'cxGrid1, Application'`. A field/local/parameter whose declared type is, or descends from, a curated VCL/DevExpress base type, plus bare `Application`/`Screen`. **POSITIVE FINDINGS ONLY:** NULL means "no UI touch was detected", NEVER "this routine is thread-safe" -- the curated list under-reports by construction. |

@@ -5,6 +5,31 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
+
+- **D18 -- `symbol_facts.sql_reads` now sees SQL built line by line.** Consecutive
+  `<ds>.SQL.Add('...')` / `.CommandText.Add` (and `SelectSQL`/`InsertSQL`/`ModifySQL`/`DeleteSQL`/
+  `RefreshSQL`) statements of one statement list are assembled per receiver, in order, and run through
+  the same classify/extract pipeline as a single literal. Any other statement ends the run; a
+  comment or directive between two Adds does not; a non-literal argument drops the run. Measured on
+  ORM3 SERVER: routines with `sql_reads` 19 -> 112 (distinct tables 14 -> 104), `sql_writes`
+  unchanged at 148, purity unchanged. Guard: `tests\autotest\run_sql_reads_multiline_add.ps1`.
+- **D19 -- the SQL-script extractor keeps QUOTED identifiers.** `"ACTION"` / `"TABLE"` columns (and
+  `CREATE TABLE "Name"`) are stored the Firebird way: quotes stripped, `""` unescaped, case verbatim
+  (`docs\INDEX-SCHEMA.md`). Same routine: the table-constraint skip is now whole-word, so columns
+  `UNIQUE_FLAG` / `CONSTRAINT_NAME` are no longer dropped. Measured on the 12 scripts of
+  `drag-lint-sql.sqlite`: `sql_column` rows 3820 -> 3826 (MS1.SQL `IPCHART.ACTION`,
+  `FOLDERCOUNT.TABLE`, 2x `UNIQUE_FLAG`, 2x `CONSTRAINT_NAME`). Guard:
+  `tests\autotest\run_sql_quoted_identifiers.ps1`.
+- **P1 -- Delphi 12+ multi-line string literals no longer break the parse.** The grammar's
+  triple-quote token loses to its single-quote token when the body holds an odd number of
+  apostrophes (and has no 5-quote form), failing the whole unit at 1:1; the directive lexer read a
+  body line as code, so an IFDEF written in the text became live. `Preprocess` now runs
+  `NeutralizeMultilineStrings` first (unconditionally): in the literal's body apostrophes,
+  open-braces and the `(` of `(*` become spaces, a 5+-quote delimiter becomes `'''`. Byte length and
+  every LF preserved. Not applied under `--no-preprocess`. The grammar fix proper belongs to
+  tree-sitter-delphi13. Guard: `tests\preprocess\run_multiline_string.ps1`.
+
 ### Added
 
 - **Resolver 1.8.0-alpha -- bare WRITES bind (D13).** A fifth calls-stage stream

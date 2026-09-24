@@ -2299,6 +2299,144 @@ begin
     WalkSqlLiterals(N.Child(I), ASrc, AReads, AWrites);
 end;
 
+// D18 (extractor 1.19.0-alpha): SQL ASSEMBLED ACROSS STATEMENTS. The
+// FireDAC/DB-RAD pattern that dominates ORM3 SERVER (938 calls in 134 units)
+// puts one clause per statement -- an Add of 'SELECT ', an Add of the column
+// list, an Add of 'FROM CAUSFAIL' (uCAUSFAIL_SERVER.PAS:108-110).
+// WalkSqlLiterals sees three unrelated runs: 'SELECT ' fails the FROM gate and
+// 'FROM CAUSFAIL' starts with no verb, so the READER was lost (measured on the
+// SERVER index at 1.18.0-alpha: 19 routines with sql_reads vs 148 with
+// sql_writes -- writers survived only because 'UPDATE OR INSERT INTO T' names
+// its table on the first line).
+//
+// The rule, all of it deliberately narrow:
+//   * a candidate statement is `<recv>.Add(<one argument>)` whose receiver's
+//     LAST segment is a dataset SQL-text property (IsSqlTextPropertyName);
+//     the receiver's whole source text (whitespace dropped, upper-cased) keys
+//     the run, so `A.SQL` and `B.SQL` assemble separately even interleaved;
+//   * runs are built only from CONSECUTIVE siblings of ONE statement list; a
+//     comment or compiler directive between two Adds is transparent, and ANY
+//     other statement (Clear, Open, ExecSQL, an if, ...) ends every open run,
+//     so two statements sent one after the other never merge;
+//   * a non-literal argument (CollectConcatRun's IsDynamic) POISONS its run --
+//     'FROM ' + FTable must not let the next word be scanned as a table;
+//   * a run of ONE Add is left to WalkSqlLiterals, which already classified it;
+//   * the assembled text (fragments joined by a space, standing in for the
+//     line break TStrings.Add inserts) goes through the SAME ClassifySqlText +
+//     ExtractSqlTables pipeline, so every prose/stopword/paren-depth guard of
+//     the single-literal path applies unchanged.
+// A nested routine is skipped exactly as in WalkSqlLiterals.
+
+// True when AName (one identifier) is a dataset property that holds SQL text
+// and is filled line by line through TStrings.Add: FireDAC/BDE/ADO `SQL`,
+// FireDAC `TFDCommand.CommandText`, and the IBX/FIBPlus update-SQL family.
+function IsSqlTextPropertyName(const AName: string): Boolean;
+const
+  PROPS: array[0..6] of string = (
+    'SQL', 'CommandText', 'SelectSQL', 'InsertSQL', 'ModifySQL', 'DeleteSQL', 'RefreshSQL');
+begin
+  Result:= False;
+  for var P in PROPS do
+    if SameText(AName, P) then Exit(True);
+end;
+
+// When AStmt (one named child of a statement list) is `<recv>.Add(<arg>)`
+// with a SQL-text-property receiver, returns the run key (the receiver's source
+// text, whitespace dropped, upper-cased) and sets AArg to the single argument;
+// otherwise returns '' and leaves AArg untouched. Accepts the call either
+// wrapped in a 'statement' node or bare (a last statement with no ';').
+function SqlAddRunKey(const AStmt: TTSNode; const ASrc: TBytes; var AArg: TTSNode): string;
+var
+  Call, Ent, Recv, Args: TTSNode;
+  RecvLast             : string ;
+begin
+  Result:= '';
+  Call:= AStmt;
+  if (Call.NodeType = 'statement') and (Call.NamedChildCount = 1) then Call:= Call.NamedChild(0);
+  if Call.NodeType <> 'exprCall' then Exit;
+  Ent:= Call.ChildByField('entity');
+  if Ent.IsNull or (Ent.NodeType <> 'exprDot')
+     or not SameText(Trim(FieldNodeStr(Ent.ChildByField('rhs'), ASrc)), 'Add') then Exit;
+  Recv:= Ent.ChildByField('lhs');
+  if Recv.IsNull then RecvLast:= ''
+  else if Recv.NodeType = 'identifier' then RecvLast:= FieldNodeStr(Recv, ASrc)
+  else if Recv.NodeType = 'exprDot' then RecvLast:= FieldNodeStr(Recv.ChildByField('rhs'), ASrc)
+  else RecvLast:= '';
+  Args:= Call.ChildByField('args');
+  if IsSqlTextPropertyName(Trim(RecvLast)) and (not Args.IsNull) and (Args.NamedChildCount = 1) then
+  begin
+    AArg:= Args.NamedChild(0);
+    Result:= UpperCase(StringReplace(StringReplace(StringReplace(FieldNodeStr(Recv, ASrc),
+      ' ', '', [rfReplaceAll]), #13, '', [rfReplaceAll]), #10, '', [rfReplaceAll]));
+  end;
+end;
+
+type
+  // One receiver's open SQL.Add run (see the D18 banner above WalkSqlAddRuns).
+  TSqlAddRun = record
+    Text     : string ;
+    Count    : Integer;
+    IsDynamic: Boolean;
+  end;
+
+// Classifies and extracts every open run of ARuns that holds 2+ literal-only
+// fragments, then empties ARuns. A nil ARuns is a no-op.
+procedure FlushSqlAddRuns(ARuns: TDictionary<string, TSqlAddRun>; AReads, AWrites: TStringList);
+begin
+  if ARuns = nil then Exit;
+  for var Run in ARuns.Values do
+    if (Run.Count >= 2) and (not Run.IsDynamic) and ClassifySqlText(Run.Text) then
+      ExtractSqlTables(Run.Text, AReads, AWrites);
+  ARuns.Clear;
+end;
+
+// D18: walks ABody's statement lists (any node's named children, in source
+// order) assembling consecutive SQL.Add runs per receiver -- see the banner
+// above IsSqlTextPropertyName for the full rule. The run dictionary is created
+// only when a candidate statement is actually met, so the walk over ordinary
+// expression nodes allocates nothing.
+procedure WalkSqlAddRuns(const N: TTSNode; const ASrc: TBytes; AReads, AWrites: TStringList);
+var
+  Runs     : TDictionary<string, TSqlAddRun>;
+  Run      : TSqlAddRun;
+  C, Arg   : TTSNode;
+  Key, Text: string ;
+  IsDynamic: Boolean;
+  I        : Integer;
+begin
+  if N.IsNull then Exit;
+  if N.NodeType = 'defProc' then Exit; // nested routine -- analyzed separately, on its own
+  Runs:= nil;
+  try
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      C:= N.NamedChild(I);
+      if (C.NodeType = 'comment') or StartsText('pp', C.NodeType) then Continue; // transparent
+      Arg:= C;
+      Key:= SqlAddRunKey(C, ASrc, Arg);
+      if Key = '' then
+      begin
+        FlushSqlAddRuns(Runs, AReads, AWrites); // any other statement ends every open run
+        Continue;
+      end;
+      if Runs = nil then Runs:= TDictionary<string, TSqlAddRun>.Create;
+      if not Runs.TryGetValue(Key, Run) then Run:= Default(TSqlAddRun);
+      Text     := '';
+      IsDynamic:= False;
+      CollectConcatRun(Arg, ASrc, Text, IsDynamic);
+      Run.Text     := Run.Text + Text + ' ';
+      Run.IsDynamic:= Run.IsDynamic or IsDynamic;
+      Inc(Run.Count);
+      Runs.AddOrSetValue(Key, Run);
+    end;
+    FlushSqlAddRuns(Runs, AReads, AWrites);
+  finally
+    Runs.Free;
+  end;
+  for I:= 0 to N.NamedChildCount - 1 do
+    WalkSqlAddRuns(N.NamedChild(I), ASrc, AReads, AWrites);
+end;
+
 // ADP2 T7: fills ASqlReadsCsv/ASqlWritesCsv (capped, display-ready CSV
 // strings -- the SAME JoinCappedDisplay format ReadsFields/WritesFields/
 // CoveredBy already use) for one routine: table names mined from SQL
@@ -2330,6 +2468,7 @@ begin
     WriteSet.Sorted:= True; WriteSet.Duplicates:= dupIgnore; WriteSet.CaseSensitive:= False;
 
     WalkSqlLiterals(ABody, ASrc, ReadSet, WriteSet);
+    WalkSqlAddRuns(ABody, ASrc, ReadSet, WriteSet); // D18: SQL.Add lines assembled per receiver
 
     if (ReadSet.Count = 0) and (WriteSet.Count = 0) then Exit;
 

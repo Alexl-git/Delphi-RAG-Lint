@@ -77,7 +77,17 @@ const
     which IFDEF branches are parsed and which units the project closure
     admits -- the "preprocessor changes which branches are parsed" case.
     Re-parses every index. docs\INBOX-pp-profile-ignores-platform-propertygroups.md }
-  DRAGLINT_EXTRACTOR_VERSION = '1.18.0-alpha';
+  { 1.18.0 -> 1.19.0 (2026-09-23, extractor batch 2, ONE bump for three fixes):
+    D18 symbol_facts.sql_reads/sql_writes assemble consecutive `<ds>.SQL.Add`
+    / `.CommandText.Add` literal lines per receiver before table extraction
+    (readers built line by line were lost); D19 the SQL-script extractor keeps
+    QUOTED table/column identifiers ("ACTION", "TABLE"), stored the Firebird
+    way -- quotes stripped, "" unescaped, case verbatim; P1 the preprocessor
+    neutralises Delphi 12+ multi-line string literals before the directive
+    lexer and the grammar see them (a body with an apostrophe, or a 5-quote
+    delimiter, made the whole unit unparseable). Schema unchanged. Re-parses
+    every index. docs\INBOX-defects-found-2026-09-23-rule-work.md D18/D19 }
+  DRAGLINT_EXTRACTOR_VERSION = '1.19.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
