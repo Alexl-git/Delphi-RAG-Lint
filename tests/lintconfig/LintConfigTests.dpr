@@ -236,6 +236,50 @@ begin
   end;
 end;
 
+{ L5:WriteAnsiCrlf wrote Ord(Ch) into a BYTE, so every character above #255
+  was silently TRUNCATED to its low byte and #128..#255 went out as raw
+  non-ASCII bytes -- a data change and an encoding-policy breach, with no
+  error. It now escapes every non-ASCII UTF-16 unit as a JSON \uXXXX escape:
+  the file stays strict 7-bit ASCII and the value round-trips exactly. }
+procedure TestNonAsciiEscaped;
+const
+  // e-acute (Latin-1), a CJK ideograph, and a surrogate PAIR (U+1F600).
+  VAL_LATIN1 = 'CAF'#$00C9;
+  VAL_CJK    = 'X'#$4E2D;
+  VAL_ASTRAL = 'S'#$D83D#$DE00;
+var
+  Cfg  : TLintConfig;
+  Path : string;
+  Bytes: TBytes;
+  B    : Byte;
+  AllAscii: Boolean;
+begin
+  Path:= TPath.Combine(TPath.GetTempPath, 'dl-nonascii-test.json');
+  if TFile.Exists(Path) then TFile.Delete(Path);
+  try
+    Cfg:= TLintConfigWriter.LoadOrDefault('');
+    Cfg.IfdefAllow:= [VAL_LATIN1, VAL_CJK, VAL_ASTRAL];
+    TLintConfigWriter.SaveToFile(Path, Cfg);
+    Bytes:= TFile.ReadAllBytes(Path);
+    AllAscii:= True;
+    for B in Bytes do
+      if B > 127 then AllAscii:= False;
+    Check('L5a written file is strict 7-bit ASCII', AllAscii);
+    Check('L5b non-ASCII written as \u escape',
+      Pos('\U00C9', UpperCase(TEncoding.ASCII.GetString(Bytes))) > 0);
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    Check('L5c three values round-trip', Length(Cfg.IfdefAllow) = 3);
+    if Length(Cfg.IfdefAllow) = 3 then
+    begin
+      Check('L5d Latin-1 value round-trips exactly', Cfg.IfdefAllow[0] = VAL_LATIN1);
+      Check('L5e CJK value round-trips exactly',     Cfg.IfdefAllow[1] = VAL_CJK);
+      Check('L5f surrogate pair round-trips exactly', Cfg.IfdefAllow[2] = VAL_ASTRAL);
+    end;
+  finally
+    if TFile.Exists(Path) then TFile.Delete(Path);
+  end;
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -243,6 +287,7 @@ begin
     TestNaming;
     TestAutoFix;
     TestIfdefAllow;
+    TestNonAsciiEscaped;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

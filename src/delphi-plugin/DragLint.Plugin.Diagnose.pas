@@ -691,6 +691,14 @@ begin
     Result:= Line('  freshness', AVerdict + ' -- re-resolve needed (minutes)', dsWarn)
   else if SameText(AVerdict, 'reparse-owed') then
     Result:= Line('  freshness', AVerdict + ' -- FULL REPARSE needed (hours); answers are STALE', dsBad)
+  { index-newer (C2): a NEWER engine built or resolved this index. Not owed
+    anything -- reads are fine -- but an index run with this engine is refused
+    (a writer never downgrades), so the remedy is a newer engine, and advising
+    a re-index here would name a command that fails. It used to fall through to
+    the bare catch-all below and show as an unexplained warning. }
+  else if SameText(AVerdict, 'index-newer') then
+    Result:= Line('  freshness', AVerdict + ' -- built by a NEWER engine; reads are fine, ' +
+      're-indexing with this one is refused -- deploy the newer engine', dsWarn)
   else
     Result:= Line('  freshness', AVerdict, dsWarn);
 end;

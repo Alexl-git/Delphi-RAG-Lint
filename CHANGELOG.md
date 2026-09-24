@@ -58,6 +58,94 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`lint-all --rule X` runs only what can emit X (D17).** Every per-file checker, the whole `.scm`
+  catalogue and every project-wide phase (project rules, class metrics, doc-drift, missing-doc,
+  duplicate-code, interface cycles, layering, unit-not-in-dpr, used-unit-resolvable) ran for any `--rule`
+  and only the REPORT was filtered. Each is now gated on the same `LINT_GATE_*` lists `lint` uses, the
+  project pass and class metrics are handed the rule, and the `.scm` pass runs only X's query
+  (`TLinter.OnlyRuleId`, which also skips parsing a file nothing wants). `lint` gets the `.scm` narrowing
+  too. Measured on this repo's self index (129 files): `--rule unused-local` 357.8 s -> 4.9 s,
+  `--rule overwrite-before-read` ~420 s -> 99 s (the flow checker is the cost itself), `--rule
+  concat-in-loop` 4.0 s, `--rule doc-drift` 188 s, against 447 s for a full run; for all six rules
+  measured the findings are IDENTICAL to the full run's with the same engine. Two defects
+  fixed on the way: the inline `lint` gates were SHORT of `local-field-prefix` and `doc-orphan-block`
+  (`lint --rule` answered 0) and of the doc-drift family's `doc-param-*` ids -- all multi-id gates are now
+  shared constants pinned against the checkers' sources; and `lint --rule review-marker-unused`
+  narrowed away the checkers the marker rule is computed from, so it reported a LIVE marker as unused
+  ("remove it") -- a `review-marker-*` rule now runs everything and is narrowed at report time
+  (`LintNarrowRule`). Guard: `tests\autotest\run_lint_rule_narrows_checkers.ps1` (sections L, R, G and
+  the two new gate-list drift checks).
+- **A `"rule"` key in `.drag-lint.json` no longer narrows a whole-project run (L1).** It was copied into
+  `--rule` for EVERY verb, silently, so a stray key above the CWD turned every `lint-all` into a one-rule
+  run. It is now a default for `lint` only (the file or folder the user named), announced on stderr;
+  every other verb ignores it and says so; an explicit `--rule` wins with no note. Guard:
+  `tests\autotest\run_config_rule_key_scope.ps1`.
+- **`lint-all` says which ownRoots it defaulted to (L2, and the cause of L8).**
+  `_D-RAG\drag-lint-project.json` is gitignored, so a fresh clone or a git worktree lacks it and ownRoots
+  defaults (per the house rule) to the project file's folder -- for a `.dproj` in a subfolder that skips
+  most of the codebase, and the short run read as a small project. With no declaration the run now
+  prints the defaulted root, and when that skipped files a loud NOTE naming the missing file, the
+  skipped count and the fix. This is also why per-file `lint` "reported" `unused-unit-in-uses` in
+  `DRagLint.Query.Callers.pas` while `lint-all` did not (L8): in a worktree lint-all had skipped the
+  file as third-party; with the file in scope both verbs report both imports (measured on this worktree
+  and a copy of the main index), and the two imports were genuinely dead -- removed. Guard:
+  `tests\autotest\run_ownroots_default_note.ps1`.
+- **JSON output on a stale index: the staleness is in the envelope, and stdout always parses (ENG-3).**
+  The note was already on stderr (since 2026-09-14); the reported splice was stderr merged into stdout
+  by the consumer. The audit found no json verb writing it to stdout. The object envelopes of
+  `reverse-calltree`, `butterfly`, `callgraph`, `sql`, `schema` and `deps-report` now carry `"stale"`
+  and `"stale_files"` (as `sql/1` carries `truncated`), so staleness can be surfaced without stderr.
+  Guard: `tests\autotest\run_json_stdout_parses_on_stale_index.ps1` -- 23 json verbs, stdout parsed alone
+  on a fresh and on a deliberately stale index, envelope asserted false then true.
+- **`allow` refuses every rule that is not a finding about code (L4).** Only `review-marker-stale` and
+  `review-marker-unused` were refused, by id, so the three review-marker rules added since
+  (`-malformed`, `-placeholder-hash`, `-reason-unreviewed`) and `parser-error` were written as live
+  markers. The refusal is now the whole `review-markers` CATEGORY plus `parser-error` (exit 2, with the
+  cure), so a future meta rule is refused without an edit here. Guard:
+  `tests\reviewmarker\run_allow_command.ps1`.
+- **Re-hashing a stale `dl:ok` marker drops its `REVIEWED` stamp (L3).** `allow` on a stale marker
+  re-hashes it to the changed code and used to carry the reason over verbatim, so an old
+  `REVIEWED yyyy-mm-dd` vouched for code nobody is recorded as having re-read, and kept
+  `review-marker-reason-unreviewed` quiet. A re-hash is not a re-review: `TReviewMarkers.InsertInto`
+  now drops the stamp (keeping the rest of the reason) whenever it re-hashes, and `allow` prints a
+  `note:` saying so. A marker whose hash still matches is untouched. Guards: `ReviewMarkerTests`
+  `TestRehashDropsStamp` (L3a-e), `run_allow_command.ps1` (L3 block).
+- **`overwrite-before-read` no longer reports nil-inits separated from their `try` by an unrelated
+  statement (D15).** `ProtectedByFollowingTry` walked from the store to the `try` over sibling
+  ASSIGNMENTS only, so `A := nil; B := nil; for G := ... do X[G] := nil; try ... finally A.Free; B.Free;
+  end;` (`Report.Deps.pas:686-693`) stopped at the `for` and reported three stores the `finally` depends
+  on. The walk now also skips any statement that never MENTIONS the name (it can neither read nor
+  overwrite it); a statement that does name it still ends the walk, and a handler that ignores the name
+  still reports. Measured on this repo (`lint-all --rule overwrite-before-read`, self index): 28 -> 23,
+  the three Deps stores, `ProjectRules.pas:4203` (a comment line between `Root := nil` and the try whose
+  handler frees Root) and `Storage.SQLite.pas:12546` (handler-assigned, the pre-existing "handler
+  mentions it" semantics). Guard: `tests\autotest\run_overwrite_before_read_pretry.ps1`
+  (`ProtectedAcrossLoop`, control `LoopThenUnrelatedTry`).
+- **`concat-in-loop` no longer fires on a string REBUILT every iteration (L6).** `T := 'row '; T := T +
+  IntToStr(J);` in a loop body never accumulates, so there is nothing quadratic to report. New `.scm`
+  predicate `#not-reset-in-loop?` (`DRagLint.Lint.QueryRules`, `ResetInSameIteration`) drops the match
+  when the same variable is also assigned, from an expression that does not read it, by a sibling
+  statement on the path up to the NEAREST loop -- i.e. unconditionally in the same pass, before or after
+  the concatenation. `S := S + X` with no reset still fires, and so do a reset inside an `if`, a "reset"
+  that reads the variable (`T := Trim(T)`) and an inner loop whose outer loop resets. Guard:
+  `tests\autotest\run_concat_in_loop_precision.ps1` (7 new checks).
+- **The IDE About window names the `index-newer` freshness verdict.** `info --json` has reported
+  `index-newer` (the index was built or resolved by a NEWER engine) since C2, but the plugin's
+  `VerdictLine` had no case for it, so it showed as a bare, unexplained warning. It is now its own
+  `dsWarn` line: reads are fine, re-indexing with this engine is refused, deploy the newer engine.
+  Guard: `tests\plugin\run_about_freshness_states.ps1` (engine half ages the resolver stamp FORWARD and
+  requires `index-newer`, outranking `reparse-owed`; plugin half requires the case and its remedy text).
+- **`TLintConfigWriter.WriteAnsiCrlf` no longer truncates non-ASCII characters (L5).** It stored
+  `Ord(Ch)` into a byte, so a character above #255 silently lost its high byte and #128..#255 went out
+  as raw non-ASCII bytes -- a changed value and a breach of the 7-bit ASCII rule, with no error (the
+  file then failed to load). Every non-ASCII UTF-16 unit is now written as a JSON `\uXXXX` escape: the
+  file stays strict ASCII and the value round-trips exactly (escape chosen over refusing, because
+  refusing would lose the user's edit). Guard: `tests\lintconfig\LintConfigTests.dpr`
+  `TestNonAsciiEscaped` (L5a-f, Latin-1, CJK and a surrogate pair).
+- **`tests\ergonomics\run_threshold_test.ps1` runs from any directory (DOC-9).** It resolved
+  `third_party\...` and `tests\ergonomics\...` against the CURRENT directory, so it died in
+  `Resolve-Path` unless launched from the repo root. Every path is now anchored on `$PSScriptRoot`,
+  and `-Exe` overrides the engine.
 - **`query find-callers --resolved`: `line` is the CALL SITE on every row (C1).** The rows built from
   `call_edges` -- routine call, property/field access, enum-value read, parenless call -- put the
   caller ROUTINE's declaration line in JSON `line`, while callback rows put the site there: one key,

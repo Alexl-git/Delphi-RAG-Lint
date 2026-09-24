@@ -691,6 +691,103 @@ begin
   end;
 end;
 
+{ True when ANode's subtree contains an `identifier` whose text is AName
+  (case-insensitive -- Delphi identifiers are). }
+function SubtreeHasIdentifier(const ANode: TTSNode; const ASource: TBytes; const AName: string): Boolean;
+var
+  I: Integer;
+begin
+  if ANode.IsNull then Exit(False);
+  if (ANode.NodeType = 'identifier') and SameText(NodeText(ANode, ASource), AName) then Exit(True);
+  for I:= 0 to Integer(ANode.NamedChildCount) - 1 do
+    if SubtreeHasIdentifier(ANode.NamedChild(I), ASource, AName) then Exit(True);
+  Result:= False;
+end;
+
+{ True when AStmt is `AName := <expr>` and <expr> does not read AName -- a
+  statement that throws the old value away. Named children of an assignment
+  are [identifier, kAssign, rhs] (keywords are named nodes in this grammar),
+  so the right side is the LAST named child. }
+function IsResetOf(const AStmt: TTSNode; const ASource: TBytes; const AName: string): Boolean;
+const
+  MIN_ASSIGN_CHILDREN = 3; // lhs, kAssign, rhs
+var
+  Lhs: TTSNode;
+begin
+  if AStmt.IsNull or (AStmt.NodeType <> 'assignment') then Exit(False);
+  if Integer(AStmt.NamedChildCount) < MIN_ASSIGN_CHILDREN then Exit(False);
+  Lhs:= AStmt.NamedChild(0);
+  if (Lhs.NodeType <> 'identifier') or not SameText(NodeText(Lhs, ASource), AName) then Exit(False);
+  Result:= not SubtreeHasIdentifier(AStmt.NamedChild(AStmt.NamedChildCount - 1), ASource, AName);
+end;
+
+{ (#reset-in-loop? @assign) / (#not-reset-in-loop? @assign) -- 2026-09-23, L6.
+
+  True when the variable assigned by @assign (`S := S + X`) is ALSO reset --
+  `S := <expr not reading S>` -- unconditionally in the same pass of the
+  NEAREST enclosing loop. Then S does not accumulate across iterations: each
+  pass rebuilds it, the concatenation is O(1) per pass, and concat-in-loop's
+  "O(n^2), use TStringList" is false. `T := 'row '; T := T + IntToStr(J);` in
+  a loop body is the reported shape.
+
+  UNCONDITIONAL is the whole test. The reset must be a SIBLING statement in a
+  statement list (`block`, or the `statements` of a repeat/try/case arm) that
+  lies on the path from @assign up to the nearest loop: every statement of such
+  a list runs whenever @assign's own statement does. A reset inside an `if`
+  that is not on that path is conditional and does not count, so the finding
+  stands. Siblings AFTER the concatenation count as well as siblings before it
+  -- `S := S + X; Emit(S); S := ''` empties S before the next pass. The walk
+  STOPS at the nearest loop (for / foreach / while / repeat, dumped not
+  guessed), so an outer loop's reset never excuses an inner loop that really
+  does accumulate. Early exits (Continue/Break/Exit between the two) are not
+  modelled; they can only turn a real accumulation into a missed one. }
+function ResetInSameIteration(const AAssign: TTSNode; const ASource: TBytes): Boolean;
+const
+  LOOP_KINDS: array[0..3] of string = ('for', 'foreach', 'while', 'repeat');
+var
+  Name  : string ;
+  Cur   : TTSNode;
+  Parent: TTSNode;
+  Sib   : TTSNode;
+  I     : Integer;
+  Kind  : string ;
+begin
+  Result:= False;
+  if AAssign.IsNull or (AAssign.NamedChildCount = 0) then Exit;
+  Name:= NodeText(AAssign.NamedChild(0), ASource);
+  if Name = '' then Exit;
+  Cur:= AAssign;
+  while True do
+  begin
+    Parent:= Cur.Parent;
+    if Parent.IsNull then Exit;
+    for Kind in LOOP_KINDS do
+      if Parent.NodeType = Kind then Exit; { reached the nearest loop }
+    if (Parent.NodeType = 'block') or (Parent.NodeType = 'statements') then
+      for I:= 0 to Integer(Parent.NamedChildCount) - 1 do
+      begin
+        Sib:= Parent.NamedChild(I);
+        if (Sib.StartByte = Cur.StartByte) and (Sib.EndByte = Cur.EndByte) then Continue;
+        if IsResetOf(Sib, ASource, Name) then Exit(True);
+      end;
+    Cur:= Parent;
+  end;
+end;
+
+{ (#reset-in-loop? @assign) / (#not-reset-in-loop? @assign) -- see
+  ResetInSameIteration. Malformed arguments pass, like every predicate here:
+  a directive we cannot read must not silently suppress matches. }
+function EvalResetInLoop(const AMatch: TTSQueryMatch; const ASource: TBytes;
+  const AArgs: TArray<TPredicateArg>; ANegated: Boolean): Boolean;
+const
+  OP_AND_CAPTURE = 2; // the operator + one capture
+  CAP_ARG        = 1;
+begin
+  if (Length(AArgs) <> OP_AND_CAPTURE) or not AArgs[CAP_ARG].IsCapture then Exit(True);
+  Result:= ResetInSameIteration(ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex), ASource);
+  if ANegated then Result:= not Result;
+end;
+
 // Evaluate one predicate. Returns True if it passes.
 function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>): Boolean;
 const
@@ -779,6 +876,9 @@ begin
     if Op = 'not-in?' then Result:= not Result;
     Exit;
   end;
+
+  if (Op = 'reset-in-loop?') or (Op = 'not-reset-in-loop?') then
+    Exit(EvalResetInLoop(AMatch, ASource, AArgs, Op = 'not-reset-in-loop?'));
 
   // Unknown predicate - treat as pass (don't suppress matches just because
   // we don't recognise a directive).

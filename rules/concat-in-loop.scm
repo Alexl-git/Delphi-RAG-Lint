@@ -48,6 +48,18 @@
 ; present -- exactly what was done for string-equality-comparison (see
 ; DRagLint.CLI.pas, where the .scm findings are dropped when a store exists).
 ; Tracked in docs\INBOX-concat-in-loop-is-type-blind.md.
+;
+; FOURTH CONSTRAINT ADDED 2026-09-23 (L6):
+;
+;   #not-reset-in-loop? -- `T := 'row '; T := T + IntToStr(J);` in a loop body
+;                         REBUILDS T every pass; it never accumulates, so there
+;                         is nothing quadratic to report. The predicate (in
+;                         DRagLint.Lint.QueryRules, ResetInSameIteration) drops
+;                         the match when the SAME variable is also assigned,
+;                         from an expression that does not read it, by a sibling
+;                         statement on the path up to the NEAREST loop -- i.e.
+;                         unconditionally, before or after, in the same pass. A
+;                         reset inside an `if` is conditional and does not count.
 ((assignment
   lhs: (identifier) @id
   rhs: (exprBinary
@@ -56,4 +68,5 @@
     rhs: (_) @rhs_operand)) @warn
  (#eq? @id @lhs_id)
  (#not-match? @rhs_operand "^[0-9$]")
- (#not-match? @rhs_operand "^\\["))
+ (#not-match? @rhs_operand "^\\[")
+ (#not-reset-in-loop? @warn))

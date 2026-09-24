@@ -414,6 +414,41 @@ begin
     TReviewMarkers.HashWindow(['  except // dl:ok bare-except@1a2b -- REVIEWED 2026-09-23 rethrown', '    raise;', '  end;'], 0));
 end;
 
+{ ---- L3: a RE-HASH is not a RE-REVIEW ------------------------------------------
+
+  `allow` on a stale marker re-hashes it to the code as it now stands, and it
+  used to carry the reason over verbatim -- `REVIEWED <date>` included. The
+  stamp then vouched, with an old date, for code that changed AFTER that date
+  and that nobody is recorded as having re-read. The choice (documented on
+  InsertInto): the re-hash DROPS the stamp and keeps the rest of the reason, so
+  review-marker-reason-unreviewed asks for a fresh stamp instead of the stale
+  one reading as current. A human who did re-read the code re-stamps the
+  reason by hand. The byte no-op path (hash still matches) keeps the stamp. }
+procedure TestRehashDropsStamp;
+var
+  Marked, Stale, Fresh, Same: string;
+  M: TArray<TReviewMarker>;
+begin
+  Marked:= TReviewMarkers.InsertInto('  x := 1;', 'magic-number', 'REVIEWED 2026-01-05 small and clear');
+  Same  := TReviewMarkers.InsertInto(Marked, 'magic-number', '');
+  Check('L3a matching re-allow keeps the stamp (byte no-op)', Same = Marked);
+
+  Stale:= StringReplace(Marked, 'x := 1;', 'x := 2;', []);
+  Fresh:= TReviewMarkers.InsertInto(Stale, 'magic-number', '');
+  M    := TReviewMarkers.Parse(Fresh);
+  Check('L3b re-hash refreshes the hash',
+    (Length(M) = 1) and (M[0].Hash = TReviewMarkers.HashLine(Fresh)));
+  if Length(M) = 1 then
+  begin
+    Check('L3c re-hash DROPS the old REVIEWED stamp', Pos('REVIEWED', M[0].Reason) = 0);
+    Check('L3d re-hash keeps the rest of the reason', M[0].Reason = 'small and clear');
+  end;
+  Check('L3e stamp dropped mid-reason leaves no double space',
+    Pos('  ', Copy(TReviewMarkers.InsertInto(
+      StringReplace(TReviewMarkers.InsertInto('  x := 1;', 'magic-number', 'bounded (REVIEWED 2026-01-05) ok'),
+        'x := 1;', 'x := 3;', []), 'magic-number', ''), 12, MaxInt)) = 0);
+end;
+
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -423,6 +458,7 @@ begin
     TestRefresh;
     TestPlaceholderHash;
     TestReviewStamp;
+    TestRehashDropsStamp;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

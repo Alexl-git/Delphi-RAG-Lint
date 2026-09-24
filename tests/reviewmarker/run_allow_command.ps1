@@ -79,6 +79,15 @@ $guard = [IO.File]::ReadAllBytes($src)
 Check 'unknown rule id exits 2' ($LASTEXITCODE -eq 2)
 & $exe allow $src --fix-line 13 --fix-rule review-marker-stale --apply 2>&1 | Out-Null
 Check 'review-marker-stale cannot be allowed' ($LASTEXITCODE -eq 2)
+# L4 (2026-09-23): EVERY review-marker-* meta rule is bookkeeping about markers,
+# not a finding about code, and parser-error is the parser failing -- none of
+# them is a finding a human can review. Only -stale and -unused used to be
+# refused; the other three (and parser-error) were written as live markers.
+foreach ($meta in 'review-marker-unused','review-marker-malformed','review-marker-placeholder-hash',
+                  'review-marker-reason-unreviewed','parser-error') {
+  $o = & $exe allow $src --fix-line 13 --fix-rule $meta --apply 2>&1 | Out-String
+  Check "$meta cannot be allowed (exit 2, says why)" (($LASTEXITCODE -eq 2) -and ($o -match 'cannot be allowed'))
+}
 & $exe allow $src --fix-line 999 --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
 Check 'line past EOF exits 2' ($LASTEXITCODE -eq 2)
 & $exe allow $src --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
@@ -110,6 +119,18 @@ Check 'stale re-allow keeps both rules'    (($after -split ',').Count -eq 2)
 $oldNeighbour = ($staleBefore -split ',\s*' | Where-Object { $_ -like 'empty-except@*' })
 $newNeighbour = ($after       -split ',\s*' | Where-Object { $_ -like 'empty-except@*' })
 Check 'neighbour keeps its stale hash' ($oldNeighbour -eq $newNeighbour)
+
+# --- L3: a re-hash is not a re-review ---------------------------------------
+# A stamped review whose code then changes. Re-allowing it re-hashes the marker;
+# the old `REVIEWED <date>` must NOT ride along, and the command must SAY it
+# dropped it, so the operator knows to re-stamp after actually re-reading.
+Write-Fixture '  except  // dl:ok try-except-swallowed@0bad -- REVIEWED 2026-01-05 logged upstream'
+$o = & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | Out-String
+$l13 = (Get-Content $src)[12]
+Check 'L3 stale stamped re-allow exits 0' ($LASTEXITCODE -eq 0)
+Check 'L3 re-hash drops the old REVIEWED stamp' ($l13 -notmatch 'REVIEWED')
+Check 'L3 re-hash keeps the rest of the reason' ($l13 -match '-- logged upstream$')
+Check 'L3 the command says the stamp was dropped' ($o -match 'REVIEWED stamp')
 
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 Write-Output ''

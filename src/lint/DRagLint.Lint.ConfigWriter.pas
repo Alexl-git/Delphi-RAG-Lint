@@ -18,7 +18,7 @@ type
     class function ContainsId(const AArr: TArray<string>; const AId: string): Boolean; static;
     // builds the owned TJSONObject from ACfg (caller frees)
     class function BuildOwnedObject(const ACfg: TLintConfig): TJSONObject; static;
-    // normalise CRLF, encode as ANSI bytes, write to APath
+    // normalise CRLF, escape every non-ASCII char as \uXXXX, write ASCII bytes
     class procedure WriteAnsiCrlf(const APath, AJson: string); static;
   public
     /// <summary>Serialises ACfg to a pretty-printed JSON string matching the
@@ -50,7 +50,10 @@ type
     /// file is absent or APath is empty.</summary>
     class function LoadOrDefault(const APath: string): TLintConfig; static;
 
-    /// <summary>Writes ToJson to APath as strict ANSI bytes, CRLF, no BOM.</summary>
+    /// <summary>Writes ToJson to APath as strict 7-bit ASCII bytes, CRLF, no BOM.
+    /// A non-ASCII character in any value is written as a JSON \uXXXX escape
+    /// (one per UTF-16 unit), so it round-trips exactly instead of being
+    /// truncated.</summary>
     /// <param name="APath">The drag-lint-lint.json to write; created when absent.</param>
     /// <param name="ACfg">The configuration whose writer-owned keys are written.</param>
     /// <remarks>
@@ -174,19 +177,34 @@ begin
 end;
 
 class procedure TLintConfigWriter.WriteAnsiCrlf(const APath, AJson: string);
+{ ESCAPE, never truncate (L5). This used to store Ord(Ch) into a BYTE, so a
+  character above #255 lost its high byte and #128..#255 went out as raw
+  non-ASCII bytes -- silently, both a data change and a breach of the repo's
+  7-bit ASCII rule. AJson is JSON, where a non-ASCII character can only occur
+  inside a string literal, and there a \uXXXX escape per UTF-16 unit (a
+  surrogate pair becomes two escapes, which is valid JSON) is exactly the same
+  value. So escaping keeps the file ASCII AND loses nothing; refusing the save
+  would lose the user's edit instead. }
+const
+  ASCII_LAST      = #127;
+  UNIT_HEX_DIGITS = 4; // one UTF-16 unit = four hex digits in a \uXXXX escape
 var
   Normalized: string;
-  Bytes: TBytes;
-  i: Integer;
+  Escaped   : TStringBuilder;
+  Ch        : Char;
 begin
   // normalise to CRLF
   Normalized:= StringReplace(AJson, #13#10, #10, [rfReplaceAll]);
   Normalized:= StringReplace(Normalized, #10, #13#10, [rfReplaceAll]);
-  // encode as ANSI bytes (7-bit ASCII; content must be ASCII-safe)
-  SetLength(Bytes, Length(Normalized));
-  for i:= 1 to Length(Normalized) do
-    Bytes[i - 1]:= Ord(Normalized[i]);
-  TFile.WriteAllBytes(APath, Bytes);
+  Escaped:= TStringBuilder.Create(Length(Normalized));
+  try
+    for Ch in Normalized do
+      if Ch > ASCII_LAST then Escaped.Append('\u').Append(IntToHex(Ord(Ch), UNIT_HEX_DIGITS))
+      else Escaped.Append(Ch);
+    TFile.WriteAllBytes(APath, TEncoding.ASCII.GetBytes(Escaped.ToString));
+  finally
+    Escaped.Free;
+  end;
 end;
 
 class function TLintConfigWriter.ToJson(const ACfg: TLintConfig): string;

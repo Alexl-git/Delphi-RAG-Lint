@@ -82,6 +82,44 @@ begin
   Writeln(S, i, k, Length(Arr));
 end;
 
+procedure Q;
+var
+  T, U, V, W, Acc: string;
+  j, k2: Integer;
+begin
+  Acc := ''; U := ''; V := ''; W := '';
+  for j := 1 to 10 do
+  begin
+    T := 'row ';
+    T := T + IntToStr(j);
+    U := U + 'a';
+    Writeln(T, U);
+  end;
+  for j := 1 to 10 do
+  begin
+    W := W + 'c';
+    Writeln(W);
+    W := '';
+  end;
+  for j := 1 to 10 do
+  begin
+    Acc := Acc + 'd';
+    if j = 5 then Acc := '';
+  end;
+  for j := 1 to 10 do
+  begin
+    T := T + 'e';
+    T := Trim(T);
+  end;
+  for j := 1 to 10 do
+  begin
+    for k2 := 1 to 3 do V := V + 'f';
+    Writeln(V);
+    V := '';
+  end;
+  Writeln(Acc, T);
+end;
+
 end.
 "@
 $norm = $body -replace "`r`n", "`n" -replace "`n", "`r`n"
@@ -133,6 +171,35 @@ Write-Host 'Dynamic-array append in a loop MUST NOT fire' -ForegroundColor Cyan
 Check "Arr := Arr + [i] (line $lnArrAppend) -- array constructor operand" `
   (-not ($fired -contains $lnArrAppend)) `
   'the message advises TStringList/string.Join, which is nonsense for an array'
+
+Write-Host ''
+Write-Host 'A string REASSIGNED every iteration is not accumulated (L6)' -ForegroundColor Cyan
+# 2026-09-23. `T := 'row '; T := T + IntToStr(j);` inside a loop rebuilds T from
+# scratch each iteration: the concatenation is O(1) per pass, not O(n^2) over the
+# loop, and the TStringList advice is nonsense for it. The exemption needs an
+# UNCONDITIONAL reset -- a sibling statement in a block on the path from the
+# concatenation up to the NEAREST loop -- whose right side does not read the
+# variable. Each case below pins one edge of that.
+$lnResetBefore = LineOf 'T := T + IntToStr(j);'
+$lnSameLoopAcc = LineOf "U := U + 'a';"
+$lnResetAfter  = LineOf "W := W + 'c';"
+$lnCondReset   = LineOf "Acc := Acc + 'd';"
+$lnReadsSelf   = LineOf "T := T + 'e';"
+$lnInnerLoop   = LineOf "for k2 := 1 to 3 do V := V + 'f';"
+Check 'all six L6 fixture statements located' (
+  @($lnResetBefore,$lnSameLoopAcc,$lnResetAfter,$lnCondReset,$lnReadsSelf,$lnInnerLoop) -notcontains -1)
+Check "T := 'row '; T := T + IntToStr(j) (line $lnResetBefore) -- reset BEFORE, MUST NOT fire" `
+  (-not ($fired -contains $lnResetBefore))
+Check "W := W + 'c' ... W := '' (line $lnResetAfter) -- reset AFTER in the same pass, MUST NOT fire" `
+  (-not ($fired -contains $lnResetAfter))
+Check "U := U + 'a' (line $lnSameLoopAcc) -- same loop, never reset, MUST fire (positive control)" `
+  ($fired -contains $lnSameLoopAcc)
+Check "Acc := Acc + 'd' (line $lnCondReset) -- reset only CONDITIONALLY, MUST fire" `
+  ($fired -contains $lnCondReset)
+Check "T := T + 'e'; T := Trim(T) (line $lnReadsSelf) -- a 'reset' that READS T is not one, MUST fire" `
+  ($fired -contains $lnReadsSelf)
+Check "V := V + 'f' in the INNER loop (line $lnInnerLoop) -- the outer reset does not cover it, MUST fire" `
+  ($fired -contains $lnInnerLoop)
 
 Write-Host ''
 Write-Host 'KNOWN LIMITATION, asserted so a future fix is visible' -ForegroundColor Cyan

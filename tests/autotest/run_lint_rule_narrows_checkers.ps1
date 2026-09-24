@@ -86,6 +86,32 @@ end;
 end.
 '@
 
+# D17 additions: a LIVE, correctly hashed dl:ok marker (written by `allow` below)
+# for the review-marker narrowing case, and a local wearing the field prefix
+# (local-field-prefix) -- an id the inline `lint` gate used to be SHORT of.
+Emit 'uMarked.pas' @'
+unit uMarked;
+interface
+procedure Swallow;
+procedure Prefixed;
+implementation
+procedure Swallow;
+begin
+  try
+    Writeln('x');
+  except
+  end;
+end;
+procedure Prefixed;
+var
+  FCount: Integer;
+begin
+  FCount:= 1;
+  Writeln(FCount);
+end;
+end.
+'@
+
 $manifest = Join-Path $WorkDir 'manifest.drag-lint.json'
 $mtext = '{' + [char]10 +
   '  "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 },' + [char]10 +
@@ -156,6 +182,68 @@ try {
         ($o -match [regex]::Escape($c.rule)) 'a gate that drops the checker it needs'
     }
   }
+
+  # ---------------------------------------------------------------------------
+  # D17 -- the same narrowing on `lint-all`, which ran EVERY per-file checker
+  # (and the whole .scm catalogue) for any --rule and filtered only the report.
+  # ---------------------------------------------------------------------------
+  $marked = Join-Path $srcDir 'uMarked.pas'
+  $mLines = [IO.File]::ReadAllLines($marked)
+  $exceptLine = 0
+  for ($i = 0; $i -lt $mLines.Count; $i++) { if ($mLines[$i].Trim() -eq 'except') { $exceptLine = $i + 1 } }
+  & $Exe allow $marked --fix-line $exceptLine --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+  Check 'M0 FIXTURE: allow wrote a live marker' ((Get-Content $marked)[$exceptLine - 1] -match 'dl:ok try-except-swallowed@[0-9a-f]{4}') ''
+  & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | Out-Null
+
+  # A second, EXISTING index in the library slot, so no run here opens the
+  # machine's real platform library (an explicit second --db is the library).
+  $libDummy = Join-Path $WorkDir 'lib-dummy.sqlite'
+  Copy-Item $db $libDummy -Force
+  function LintAllRun([string[]]$Extra, [string]$EnvName) {
+    $old = [Environment]::GetEnvironmentVariable($EnvName)
+    [Environment]::SetEnvironmentVariable($EnvName, '1')
+    try {
+      $argv = @('lint-all', '--db', $db, '--db', $libDummy, '--output', (Join-Path $WorkDir 'rep.txt')) + $Extra
+      return (& $Exe @argv 2>&1 | Out-String)
+    } finally { [Environment]::SetEnvironmentVariable($EnvName, $old) }
+  }
+  function ScmRulesRun([string]$Out) {
+    $m = [regex]::Match($Out, 'PER-RULE \.scm BREAKDOWN \((\d+) rule\(s\)')
+    if ($m.Success) { return [int]$m.Groups[1].Value } else { return 0 }
+  }
+
+  Write-Host ''
+  Write-Host 'L: lint-all --rule narrows EXECUTION, not only the report (D17)' -ForegroundColor Cyan
+  $aAll = LintAllRun @() 'DRAGLINT_PROFILE'
+  Check 'L0 CONTROL: a bare lint-all enters the project pass' ($aAll -match 'PROJECT-RULES BREAKDOWN') 'if this fails, L1 proves nothing'
+  $scmAll = ScmRulesRun $aAll
+  Check 'L0 CONTROL: a bare lint-all runs many .scm rules' ($scmAll -gt 5) "($scmAll rule(s))"
+  $aOne = LintAllRun @('--rule', 'unused-local') 'DRAGLINT_PROFILE'
+  Check 'L1 lint-all --rule unused-local does NOT enter the project pass' (-not ($aOne -match 'PROJECT-RULES BREAKDOWN')) 'RED = every --rule still pays for the whole run'
+  Check 'L2 and runs NO .scm query' ((ScmRulesRun $aOne) -eq 0) ("ran {0}" -f (ScmRulesRun $aOne))
+  Check 'L3 and still reports unused-local' ($aOne -match 'unused-local') ''
+  $aScm = LintAllRun @('--rule', 'concat-in-loop') 'DRAGLINT_PROFILE'
+  Check 'L4 lint-all --rule <an .scm rule> runs exactly that one query' ((ScmRulesRun $aScm) -eq 1) ("ran {0}" -f (ScmRulesRun $aScm))
+  $aPrj = LintAllRun @('--rule', 'unused-public-symbol') 'DRAGLINT_PROFILE'
+  Check 'L5 lint-all --rule unused-public-symbol DOES enter the project pass' ($aPrj -match 'PROJECT-RULES BREAKDOWN') ''
+  Check 'L6 and reports its finding' ($aPrj -match 'unused-public-symbol') ''
+
+  Write-Host ''
+  Write-Host 'R: a review-marker rule is computed FROM every other rule -- never narrowed' -ForegroundColor Cyan
+  # The marker on uMarked's `except` is live and correctly hashed. Narrowing the
+  # checkers to review-marker-unused skipped try-except-swallowed and reported
+  # that live marker as "remove it" (it was pre-existing on `lint` since D3).
+  $rAll = & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') 2>&1 | Out-String
+  Check 'R0 CONTROL: a bare lint is silent about the live marker' (-not ($rAll -match 'review-marker-unused')) ''
+  $rOne = & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') --rule review-marker-unused 2>&1 | Out-String
+  Check 'R1 lint --rule review-marker-unused does NOT call the live marker unused' (-not ($rOne -match 'review-marker-unused:')) ''
+  $raOne = LintAllRun @('--rule', 'review-marker-unused') 'DRAGLINT_DEBUG'
+  Check 'R2 lint-all --rule review-marker-unused does NOT call the live marker unused' (-not ($raOne -match 'uMarked\.pas:\d+:\d+\s+\[\w+\]\s+review-marker-unused')) ''
+
+  Write-Host ''
+  Write-Host 'G: ids the inline `lint` gates were SHORT of now reach their checker' -ForegroundColor Cyan
+  $g1 = & $Exe lint $marked --rule local-field-prefix 2>&1 | Out-String
+  Check 'G1 lint --rule local-field-prefix reports FCount' ($g1 -match 'local-field-prefix') 'was 0: missing from the inline naming gate'
 } finally { Pop-Location }
 
 Write-Host ''
@@ -180,6 +268,11 @@ $emitted = [ordered]@{
   'LINT_GATE_FLOW'          = IdsIn 'src\diagnostics\DRagLint.Diagnostics.FlowChecks.pas' "\bEmit\('([a-z0-9-]+)'"
   'LINT_GATE_PROJECT_RULES' = IdsIn 'src\lint\DRagLint.Lint.ProjectRules.pas' "\bWantRule\('([a-z0-9-]+)'\)"
   'LINT_GATE_CLASS_METRICS' = IdsIn 'src\lint\DRagLint.Lint.ClassMetrics.pas' "\bWantRule\('([a-z0-9-]+)'\)"
+  # D17: the multi-id walks `lint` and `lint-all` now share. Every catalogue id
+  # the checker's own unit names -- local-field-prefix and doc-orphan-block were
+  # the two the old inline lists missed.
+  'LINT_GATE_NAMING'        = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.NamingChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
+  'LINT_GATE_DEAD_CODE'     = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.DeadCodeChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
 }
 foreach ($k in $emitted.Keys) {
   $gate = GateList $k
