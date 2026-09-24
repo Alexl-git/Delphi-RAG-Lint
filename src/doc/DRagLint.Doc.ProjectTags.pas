@@ -45,16 +45,26 @@ const
     belongs in the feature. It is the reason YADF still drifted by 7 while it sat
     outside.
 
-    ONE ASYMMETRY REMAINS, and it is why the entries here are bare names: this
+    ONE ASYMMETRY REMAINS, and it is why the 'Used in units:' entries are bare names: this
     label renders through JoinEsc, not JoinRefs, so it carries no ' ?' marker at
     all. IsUncertainEntry is therefore always False for it. That is now sound --
     the unverifiable producer is gone -- but if a future change re-introduces any
     unverified contributor to this list, this is the line that stops screening
     it. (Moved here from DRagLint.Doc.SharedFacts with the tag grammar,
-    2026-09-23: `doc-forget` rewrites exactly these lines.) }
+    2026-09-23: `doc-forget` rewrites exactly these lines.)
+
+    'Covered by:' JOINED ON 2026-09-24 (D28). It names the TESTS that reach a
+    routine, which is the most project-dependent fact there is: a production
+    closure holds no test unit, so only the test project's index can render it.
+    It used to live outside this list, preserved WHOLE by SharedFacts'
+    UNVOUCHABLE_LABELS carry-over -- which kept every line for ever, so a
+    deleted test was never reaped and no line said which project wrote it. Its
+    entries are bare qualified names with no `(file.pas)` part, optionally
+    suffixed ` (unverified)`; SharedFacts keys them on the name without the
+    suffix, and UnitVouchable resolves their unit through the dotted prefix. }
   /// <summary>The fact labels whose entries depend on which project is looking,
   /// and so carry project tags.</summary>
-  INBOUND_LABELS: array[0..2] of string = ('Called from:', 'Used by:', 'Used in units:');
+  INBOUND_LABELS: array[0..3] of string = ('Called from:', 'Used by:', 'Used in units:', 'Covered by:');
 
 type
   /// <summary>What one `doc-forget` pass does to the project tags on inbound

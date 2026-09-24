@@ -5,6 +5,7 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+
 ### Fixed (follow-ups D26, D29 -- no version constant moves)
 
 - **D26 -- the `dl:shared` reader no longer mistakes PROSE for the marker.** The header scanner
@@ -29,6 +30,96 @@ breaking changes** until v1.0.
   `reason, REVIEWED 2026-09-23` comes back `reason`. A reason without a stamp is untouched.
   Guard: `tests\reviewmarker\run_allow_command.ps1` L3b, which also gained a `-Exe` parameter
   (it hard-coded the deployed engine, so a branch build could not be measured before a deploy).
+
+### Changed (batch C of the D20-D30 follow-ups; no version constant moves)
+
+- **D25 -- readers now open SQLITE_OPEN_READONLY; the "WAL cannot be opened read-only" claim was
+  measured and is false.** Three comments (`TSQLiteSymbolStore.Connect`, `DbContainsFile`, the
+  library open in `Lint.ProjectChecks`) said a read-only open of a WAL index fails "disk I/O error"
+  for want of write access to the `-shm`. A throwaway FireDAC probe (SQLite `sqlite_version()` =
+  **3.45.3**) against a copy of the self index, `SELECT COUNT(*) FROM symbols`, header bytes 18/19
+  read before and after:
+
+  | case | A: `OpenMode=ReadOnly` only (FireDAC defaults) | D: + `LockingMode=Normal` | E: + header `JournalMode` | B: ReadOnly + Normal + header mode + busy + `query_only` (NEW) | C: old `ConnectReadOnly` (read-write open + `query_only`) |
+  |---|---|---|---|---|---|
+  | 1 WAL, cleanly closed, no `-wal`/`-shm` | disk I/O error | disk I/O error | OK | OK, hdr 2 -> 2 | OK, hdr 2 -> 2 |
+  | 2 WAL, other connection holds `BEGIN IMMEDIATE` + uncommitted write | disk I/O error | disk I/O error | OK | OK, hdr 2 -> 2 | OK, hdr 2 -> 2 |
+  | 3 WAL, `-shm` marked read-only beside a live writer | disk I/O error | disk I/O error | OK | OK, hdr 2 -> 2 | OK, hdr 2 -> 2 |
+  | 4 rollback journal (byte 18 = 1) | OK, hdr 1 -> 1 | OK | OK | OK, hdr 1 -> 1 | OK, hdr 1 -> 1 |
+
+  The error is FireDAC's connect-time `PRAGMA journal_mode = DELETE` (its default) on a read-only
+  WAL handle -- E (naming WAL) passes where D (Normal locking alone) fails. Every write attempt
+  after connect was refused under B and C. Decision: cases 1, 2 and 4 pass under B, so
+  `ConnectReadOnly` now sets `OpenMode=ReadOnly` and keeps `query_only`, the header-derived journal
+  mode and the pre-connect busy timeout. Known cost: a read-only handle cannot delete the `-wal`/`-shm`
+  it creates, so reading a cleanly closed index leaves an empty (0-byte) `-wal` and a `-shm` beside
+  it (the main file is untouched). Case 3 passes on Windows with a writer holding the `-shm`; the
+  no-writer read-only-`-shm` case was not measured and is the documented limit. The two probe
+  connections used `SharedCache=False`: FireDAC's default shared cache made same-process
+  connections share one pager and gave "database schema is locked" / a header rewrite that no
+  cross-process reader would see. That shared cache is also live in drag-lint itself (FireDAC's static
+  SQLite enables it process-wide), so `ConnectReadOnly` and `ConnectWriter` both set
+  `SharedCache=False`: without it a writer opened while a read-only connection to the same file was
+  alive joined its read-only cache, and `document --project --apply --reindex` died "attempt to write
+  a readonly database" (exit 3) after writing the source. Guard:
+  `tests\autotest\run_readonly_then_writer_same_process.ps1`.
+- **D24 -- one writer open, and five read verbs stop writing the index.** New
+  `DRagLint.Storage.FileMembership.ConnectWriter` (Normal locking, synchronous NORMAL, journal mode
+  WAL, a private cache, and the busy timeout armed before the connect) is now the only way an index is opened for writing: `TSQLiteSymbolStore.Connect`'s write
+  path, `import-log`, and `migrate-dbs`'s checkpoint probe. `import-log` and `migrate-dbs --apply`
+  used FireDAC's defaults (`LockingMode=Exclusive`, `journal_mode = DELETE`) and turned a WAL index
+  into a rollback journal (header byte 18: 2 -> 1, measured on a copy of the self index and on the
+  migrate fixture); both now keep it WAL. `migrate-dbs`'s post-move row count and its
+  `DbLooksHealthy` reconcile probe open with `ConnectReadOnly`. `lint-all`, `lint-project`,
+  `rename --kind symbol` (and the legacy `--qname` form), `safe-delete` and `exceptions-sync` opened
+  the store writable and ran `Migrate`, whose stamp rewrote pages 2-3 of a copy of the self index on
+  every `lint-all` (md5 moved; every table hashed identical); they now use `OpenReadOnlyStore`, so a
+  stale schema gets the actionable message and exit 2 instead of a silent migration.
+  `reconcile-project` and the genuine writers (`index`, `refresh-findings`, `compile-check`,
+  `fb-snapshot`, `purge-locals`) stay writable. The writer REQUESTS WAL (ruling R16), so an index an
+  older engine flipped to a rollback journal is converted back by its next write (an incremental
+  `index` included); readers keep naming the header's own mode, because a reader must never convert.
+  Guard: `tests\autotest\run_readonly_verbs.ps1`
+  (md5 + trigger count + byte 18 per verb, `import-log` and `migrate-dbs` stay WAL, a real `index`
+  run as the positive control); `run_migrate_site_guard.ps1`'s exemption list loses the five verbs.
+- **D27 -- the `[Project]` doc tag is a stored fact of the index, not its file name.** `index
+  --project` and `index --all` (single-root closure sections) now stamp `schema_meta.project_tag`
+  with the project file's sanitized base name, beside `scan_type`. New `ProjectTagFor` resolves the
+  tag -- explicit `--project` base name, else the stored `project_tag`, else the DB base name
+  (today's behaviour, so an index built before this is unchanged until its next project index run);
+  `''` with more than one `--db`. `document` (all forms), `document-all`, `doc-drift`, `lint` (its
+  doc rules), `lint-all` and `lint-project` apply it once their primary store is open. Measured: a
+  copy of ProjA's index named `not-the-project-name.sqlite` used to report doc-drift on every
+  `[ProjA]` entry and rewrite them `[not-the-project-name,ProjA]`; it now sees no drift and writes
+  nothing. `--help` and `docs\AI-USAGE.md` say "the project's name, recorded in the index".
+- **D28 -- `Covered by:` joins the tagged regime.** It is the fourth `INBOUND_LABELS` entry
+  (`Doc.ProjectTags`), so its entries are `[Proj]`-tagged, a project reaps only its own, and an
+  untagged legacy entry is kept while this index cannot see its unit. The whole-label special case
+  (`UNVOUCHABLE_LABELS`, the writer's carry-over, `LabelContent`, `WithoutParaLabel`) is deleted.
+  An entry has no `(file.pas)` part and may end ` (unverified)`: `EntryKey`, `EntryUnitKey` and
+  `UnitVouchable` strip that marker (new `WithoutConfidence`) so it is neither identity nor a unit.
+  Two consequential fixes: a label re-inserted because the fresh render lacks it goes back after its
+  surviving stored predecessor, wrapped in `<para>` (it used to go to the top, unwrapped -- with
+  `Covered by:` rendered below the other facts, two projects rewrote the block on alternate runs);
+  and a block with a duplicated inbound label that this project renders nothing for and that holds
+  foreign entries gets the empty-render forgiveness before the byte-compare fallback. Known limits:
+  a `Covered by:` over 5 tests still renders a capped `(+N more)` window (the cap lives in
+  `Doc.SymbolFacts`, on the extractor surface), which is not merged; a stored `Covered by:` window
+  now reports drift once and is rewritten on its visible entries, like the other labels. Guard:
+  `tests\autodoc\run_doc_project_tags.ps1` sections 5 (D28) and 6 (D27).
+- **D30 -- a `dl:ok duplicate-code` marker on EITHER end of a clone pair reviews it.** `lint
+  <file>` pairs a clone's tokens with a copy inside that file; `lint-all` with the longest copy in
+  the corpus, anchored at the greater (file, line) -- so the same tokens could be the anchor in one
+  scope and the partner in the other, and a line-bound marker was "unused" in one of them (measured
+  on the self index: `AstChecks.pas:6021` reviewed per file, `review-marker-unused` in `lint-all`,
+  with the finding back at `Parser.Delphi13.pas:98`). `TLintFinding` gains `RelatedFile` /
+  `RelatedLine` (the partner; filled by `EmitPair`, zero elsewhere, not in `--json`/LSP), and
+  `ApplyLineMarkers` honours a marker on the partner line too: verified against the partner's own
+  hash window, accounted whichever end suppresses, a stale partner hash reported as
+  `review-marker-stale` on that line. On the self index the 6021 marker is now used in both scopes
+  and the `Parser.Delphi13.pas:98` / `AstChecks.pas:6021` finding is suppressed. Guard:
+  `tests\autotest\run_duplicate_code_marker_either_end.ps1`.
+
 
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
 

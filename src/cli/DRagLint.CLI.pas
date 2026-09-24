@@ -609,7 +609,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@348c -- REVIEWED 2026-09-24: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@1927 -- REVIEWED 2026-09-24: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -888,8 +888,9 @@ begin
   Writeln('     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent');
   Writeln('     @deprecated is auto-detected from the Pascal ''deprecated'' directive on the decl -- no flag needed');
   Writeln('     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees');
-  Writeln('     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) inbound entries carry the projects that rendered them --');
-  Writeln('       Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the --db base name); an entry goes when its set empties; untagged legacy entries keep the old rules');
+  Writeln('     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) the inbound entries -- Called from:, Used by:, Used in units:, Covered by: --');
+  Writeln('       carry the projects that rendered them: Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the project''s name, recorded in the index;');
+  Writeln('       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules');
   Writeln('  drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup]   - reap project tags on inbound doc facts');
   Writeln('     --project removes that tag (entries whose set empties go); --rename renames it; --untagged drops untagged entries in blocks that carry tags; --list-tags counts every tag in scope. Dry run unless --apply');
   Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH]  - generate a Byte-family record helper for an enum');
@@ -1846,6 +1847,18 @@ const
     note's own remedy cannot work and only --rebuild can. Absent/'' means
     "unknown" (a DB written before this existed), which reads as zero. }
   OUT_OF_CLOSURE_KEY = 'out_of_closure_count';
+  { The PROJECT TAG this index writes into inbound doc facts (D27, 2026-09-24):
+    the sanitized base name of the project file a closure scan indexed. Stamped
+    beside SCAN_TYPE_KEY by both index paths and read by ProjectTagFor, so the
+    tag is a stored fact of the index and not a property of whatever the .sqlite
+    file happens to be called. Absent on an index built before 1.18.0 --
+    ProjectTagFor then falls back to the DB base name, today's behaviour. }
+  PROJECT_TAG_KEY = 'project_tag';
+
+{ Forward: the index paths stamp PROJECT_TAG_KEY and the doc/lint verbs read it
+  long before the tag helpers' home next to doc-forget. }
+function SanitizeProjectTag(const AName: string): string; forward;
+function ProjectTagFor(const AStore: ISymbolStore; const ADbPath: string; const AArgs: TArgs): string; forward;
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
 
@@ -3611,6 +3624,11 @@ begin
       smLibrary both walk folders, which is the library model. }
     Store.SetMetaValue(SCAN_TYPE_KEY,
       IfThen(AItem.Mode = smClosure, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
+    { D27: the project tag, from the ONE project file a closure section roots at.
+      A multi-root section names no single project, so it records none and its
+      readers fall back to the DB base name, as before. }
+    if (AItem.Mode = smClosure) and (Length(AItem.Roots) = 1) then
+      Store.SetMetaValue(PROJECT_TAG_KEY, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(AItem.Roots[0])));
     { Item 1a: everything above -- the fingerprints and the scan_type stamp
       especially -- can still be sitting in the -wal at this point. Fold it in
       so the section's database is self-contained the moment the section
@@ -5394,6 +5412,11 @@ begin
        (IsProjectScopedTarget or TDirectory.Exists(AArgs.Path)) then
       Store.SetMetaValue(SCAN_TYPE_KEY,
         IfThen(IsProjectScopedTarget, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
+    { D27: a project scan also records WHICH project, the tag its doc facts
+      carry -- same guard as the scope stamp above (a scope-establishing run). }
+    if (not AArgs.ResolveOnly) and IsProjectScopedTarget then
+      Store.SetMetaValue(PROJECT_TAG_KEY, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(
+        if AArgs.ProjectPath <> '' then AArgs.ProjectPath else AArgs.Path)));
     { Item 1a: UNCONDITIONAL, unlike the stamp above. The stamp is a claim about
       SCOPE and only a run that established one may write it; a checkpoint
       claims nothing, it just makes whatever this run DID write durable in the
@@ -8050,10 +8073,9 @@ begin
   Q    := TFDQuery     .Create(nil);
   FileQ:= TFDQuery     .Create(nil);
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= AArgs.DbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    { A writer, so ConnectWriter: never FireDAC's Exclusive/Delete defaults,
+      which turned a WAL index into a rollback journal (byte 18: 2 -> 1). }
+    ConnectWriter(Conn, AArgs.DbPath);
     Q   .Connection := Conn;
     Q.Sql.Text:= 'INSERT INTO compiler_findings(file_id, raw_path, code, severity, ' + '  line_no, col_no, message, imported_at) ' +
     'VALUES (:fid, :rp, :code, :sev, :ln, :cn, :msg, :t)';
@@ -9660,6 +9682,40 @@ begin
           end;
         end;
       end; // if
+      { THE OTHER END OF A PAIR (D30, 2026-09-24). A duplicate-code finding has
+        two sites, and WHICH one is the anchor depends on the scope: `lint
+        <file>` pairs the tokens with a copy inside that file, `lint-all` with
+        the longest copy anywhere, and EmitPair anchors at the greater (file,
+        line). So a marker written from one view sat on the partner in the
+        other -- measured on the self index: AstChecks.pas:6021 was the anchor
+        per file and the partner of Parser.Delphi13.pas:98 corpus-wide, and was
+        reported unused there. A marker on EITHER site now reviews the pair:
+        it is accounted whichever end suppresses (so neither end's marker is
+        called unused), and it is verified against the line it was hashed on
+        -- the partner's own window, not the anchor's. }
+      if (F.RelatedLine > 0) and (F.RelatedFile <> '') then
+      begin
+        var RLines: TArray<string>:= LinesOf(F.RelatedFile);
+        if F.RelatedLine <= Length(RLines) then
+          for M in TReviewMarkers.Parse(RLines[F.RelatedLine - 1]) do
+          begin
+            if not SameText(M.RuleId, F.RuleId) then Continue;
+            Accounted.AddOrSetValue(MarkerKey(F.RelatedFile, F.RelatedLine, M.RuleId), True);
+            if not Suppressed then
+            begin
+              Want:= TReviewMarkers.HashWindow(RLines, F.RelatedLine - 1);
+              if (M.Hash = '') or SameText(M.Hash, Want) then Suppressed:= True
+              { a placeholder hash suppresses nothing and is reported by the
+                scanned-file walk below; only a real, mismatching hash is stale }
+              else if not (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash)) then
+                EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
+                  Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
+                         'Re-review, then: allow --fix-line %d --fix-rule %s',
+                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]));
+            end;
+            Break;
+          end;
+      end;
       if not Suppressed then Kept.Add(F);
     end; // for
 
@@ -12190,6 +12246,8 @@ begin
           FlowFid:= FlowStore.FindFileIdByPath(FlowIdent);
           if FlowFid <= 0 then FlowFid:= FlowStore.FindFileIdByPath(ExpandFileName(FlowIdent));
           if FlowFid <= 0 then begin FlowStore:= nil; FlowFid:= 0; end;
+          { D27: this store runs the doc rules, so its recorded project names the tag. }
+          if FlowStore <> nil then TSharedFacts.ProjectTag:= ProjectTagFor(FlowStore, FlowDb, AArgs);
         end;
       end;
       { Say which index answered. Both traps above are INVISIBLE from the output
@@ -15590,6 +15648,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
+  TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   Opts:= Default(TDocBatchOptions);
   { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
@@ -15787,6 +15846,7 @@ begin
   begin
     Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
     if not Ok then Exit(2);
+    TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
   end;
 
   Opts:= Default(TDocBatchOptions);
@@ -15843,6 +15903,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
+  TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   Opts:= Default(TDocBatchOptions);
   { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
@@ -16141,6 +16202,39 @@ begin
   Result:= SanitizeProjectTag(TPath.GetFileNameWithoutExtension(Trim(ADbPath)));
 end; // function
 
+/// <summary>The project tag a run writes into, and reaps from, inbound doc-fact
+/// entries -- resolved once the run's primary index is open.</summary>
+/// <param name="AStore">The run's primary store, already open; nil allowed.</param>
+/// <param name="ADbPath">That store's database path.</param>
+/// <param name="AArgs">Reads DbPaths and ProjectPath.</param>
+/// <returns>'' with more than one --db (facts from several indexes are not one
+/// project's to claim); otherwise, first match wins: the explicit --project
+/// file's base name, the index's stored `project_tag` (PROJECT_TAG_KEY), the
+/// database's base name (ProjectTagOfDb). Always sanitized.</returns>
+/// <remarks>
+/// WHY THE STORED FACT BEATS THE FILE NAME (D27, 2026-09-24). The tag used to
+/// be ProjectTagOfDb alone, which is right only while a DB is named after its
+/// project. A scratch copy (`self.sqlite`), a renamed or test DB tagged every
+/// reconciled entry with ITS name, and ReconcileContent then read the entries
+/// the real project had tagged as another project's -- false doc-drift on
+/// every tagged block. Both index paths now stamp the project file's name into
+/// schema_meta, so the tag travels with the index. An index built before that
+/// has no stamp and keeps the old answer until its next project index run.
+/// The dispatcher still sets the DB-name default before any store is open; the
+/// doc and lint verbs override it with this once theirs is.
+/// </remarks>
+function ProjectTagFor(const AStore: ISymbolStore; const ADbPath: string; const AArgs: TArgs): string;
+var
+  Stored: string;
+begin
+  if Length(AArgs.DbPaths) > 1 then Exit('');
+  if AArgs.ProjectPath <> '' then Exit(SanitizeProjectTag(TPath.GetFileNameWithoutExtension(AArgs.ProjectPath)));
+  Stored:= '';
+  if AStore <> nil then Stored:= Trim(AStore.GetMetaValue(PROJECT_TAG_KEY));
+  if Stored <> '' then Exit(SanitizeProjectTag(Stored));
+  Result:= ProjectTagOfDb(ADbPath);
+end; // function
+
 /// <summary>The `.pas`/`.dpr` files `doc-forget --scope` names: the file
 /// itself, or every such file under the folder (`__history`/`__recovery`
 /// skipped), sorted.</summary>
@@ -16308,6 +16402,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
+  TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   if AArgs.DocStrip then Exit(DoDocumentStripQName(AArgs, Store)); // v(ADP3 T2)
 
@@ -16693,7 +16788,18 @@ var
 begin
   if AArgs.Name   = '' then begin Writeln('ERROR: safe-delete needs --name <QualifiedName>'); Exit(2); end;
   if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'                           ); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
+  { A read-only open does not CREATE a missing file, so without this the verb
+    died "FATAL: unable to open database file" (exit 3) -- fix round 1. }
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
+  { READ-ONLY (D24): safe-delete edits SOURCE, never the index; a writable open
+    plus Migrate rewrote the index's stamp pages on every dry run. }
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(2);
   Edits:= TSafeDeleteRefactoring.Build(Store, AArgs.Name, Reason);
   if Reason <> '' then begin Writeln('REFUSED: ' + Reason); Exit(2); end;
   if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
@@ -17213,9 +17319,12 @@ begin
     Exit(0);
   end;
 
-  Store:= TSQLiteSymbolStore.Create(ProjectDb);
-  Store.Migrate;
-  NoteIndexFreshnessOnce(Store, ProjectDb);
+  { READ-ONLY (D24): exceptions-sync writes the exceptions UNIT, never the
+    index. OpenReadOnlyStore notes freshness itself and replaces the silent
+    Migrate with the actionable stale-schema message. }
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(ProjectDb, RoOk);
+  if not RoOk then Exit(2);
   var LibDb: string:= ResolveLibraryDb(AArgs);
   var LibWhy: string;
   LibStore:= OpenLibraryStoreIfCurrent(LibDb, LibWhy); { nil on a stale schema -- see the helper }
@@ -17635,10 +17744,14 @@ begin
 
   { Open project store }
   Prof.Init('lint-all ' + ExtractFileName(ProjectDb));
-  Prof.Phase('open+migrate store');
-  Store:= TSQLiteSymbolStore.Create(ProjectDb);
-  Store.Migrate;
-  NoteIndexFreshnessOnce(Store, ProjectDb);
+  Prof.Phase('open store');
+  { READ-ONLY (D24): lint-all reads the index and writes source only (--fix).
+    The writable open plus Migrate rewrote the stamp pages on every run --
+    measured on a copy of the self index: md5 moved, zero logical change. }
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(ProjectDb, RoOk);
+  if not RoOk then Exit(2);
+  TSharedFacts.ProjectTag:= ProjectTagFor(Store, ProjectDb, AArgs); { D27: the index's recorded project, not its file name }
   { The library store, opened ONCE per run (it is ~2.2 GB) and consulted for
     symbols a project index cannot contain -- today, whether a constructed type
     descends from TComponent, which is how object-leak tells an owned VCL
@@ -18480,9 +18593,11 @@ var
   DefDisabled: TArray<string>       ;
 begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath])); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
-  NoteIndexFreshnessOnce(Store, AArgs.DbPath);
+  { READ-ONLY (D24), for the reason on lint-all's open. }
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(2);
+  TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
   { The project-level rules that ship OFF by default -- repeated-type-switch
     (v0.80 review fix: medium name-based FP, see
     .superpowers/sdd/v080-task-4-report.md) and missing-doc (ADF Task 13: a
@@ -18656,8 +18771,15 @@ begin
       begin Writeln('ERROR: --to required'); Exit(2); end;
       if AArgs.DbPath = '' then
       begin Writeln('ERROR: --db required for --kind symbol'); Exit(2); end;
-      var KStore: ISymbolStore:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-      KStore.Migrate;
+      if not FileExists(AArgs.DbPath) then
+      begin
+        Writeln(Format('Database not found: %s', [AArgs.DbPath])); { a read-only open would die FATAL, exit 3 }
+        Exit(2);
+      end;
+      { READ-ONLY (D24): rename edits source, never the index. }
+      var KOk: Boolean;
+      var KStore: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, KOk);
+      if not KOk then Exit(2);
       var Reason: string:= TRenameRefactoring.ConflictReason(KStore, QN, AArgs.RenameTo);
       if Reason <> '' then
       begin Writeln('ERROR: cannot rename -- ' + Reason); Exit(2); end;
@@ -18703,8 +18825,9 @@ begin
     Exit(2);
   end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(1); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk); { READ-ONLY (D24): edits source, never the index }
+  if not RoOk then Exit(2);
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
   if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
 
@@ -21431,6 +21554,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if not RoOk then Exit(1);
+  TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   Doc:= DRagLint.Doc.Document.TDocumenter.ExistingDocFor(Store, AArgs.QName, Sym, Found, HasDoc);
   if not Found then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
@@ -27282,10 +27406,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   try
     try
-      Conn.DriverName:= 'SQLite';
-      Conn.Params.Values['Database']:= APath;
-      Conn.LoginPrompt:= False;
-      Conn.Open;
+      ConnectReadOnly(Conn, APath); { a reader: never FireDAC's Exclusive/Delete defaults }
       Check:= Conn.ExecSQLScalar('PRAGMA quick_check');
       Rows := Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
       Result:= SameText(Check, 'ok') and (Rows > 0);
@@ -27497,10 +27618,9 @@ begin
           longer gate whether the manifest gets fixed at all. }
         Conn:= TFDConnection.Create(nil);
         try
-          Conn.DriverName:= 'SQLite';
-          Conn.Params.Values['Database']:= Src;
-          Conn.LoginPrompt:= False;
-          Conn.Open;
+          { A writer (the checkpoint), so ConnectWriter: FireDAC's defaults
+            converted the index to a rollback journal before it was moved. }
+          ConnectWriter(Conn, Src);
           Conn.ExecSQL('PRAGMA wal_checkpoint(TRUNCATE)');
           RowsBefore:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
         finally
@@ -27531,10 +27651,7 @@ begin
           what stops a retry from treating this failure as fine. }
         Conn:= TFDConnection.Create(nil);
         try
-          Conn.DriverName:= 'SQLite';
-          Conn.Params.Values['Database']:= Dst;
-          Conn.LoginPrompt:= False;
-          Conn.Open;
+          ConnectReadOnly(Conn, Dst); { a reader: never FireDAC's Exclusive/Delete defaults }
           RowsAfter:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
         finally
           Conn.Close; Conn.Free;
@@ -27702,7 +27819,11 @@ begin
       from, inbound fact entries on a reconciled block -- the primary DB's base
       name, which under the _D-RAG layout IS the project file's base name. Left
       empty with more than one --db: facts from several indexes are not one
-      project's to claim, and an empty tag writes none and removes none. }
+      project's to claim, and an empty tag writes none and removes none.
+      Only the DEFAULT since D27 (2026-09-24): no store is open yet here, so the
+      doc and lint verbs replace it with ProjectTagFor -- the project the index
+      RECORDS -- once theirs is, and a DB not named after its project stops
+      tagging entries with its own file name. }
     TSharedFacts.ProjectTag:= if Length(Args.DbPaths) > 1 then '' else ProjectTagOfDb(Args.DbPath);
     if Args.Command = 'index' then
     begin

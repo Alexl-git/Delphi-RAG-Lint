@@ -48,27 +48,59 @@ const
 /// the connect-time pragmas included; statements inherit it from the
 /// connection. Pinned by tests\autotest\run_readonly_concurrency_guard.ps1.
 /// Thread-safe: touches only AConn.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.FileMembership.ConnectReadOnly (DRagLint.Storage.FileMembership.pas), DRagLint.Storage.FileMembership.ConnectWriter (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
 
-/// <summary>Connects AConn to the existing SQLite file ADbPath as a READER: the
-/// busy timeout armed before the connect, the journal mode the file already has,
-/// normal (not exclusive) locking, and `PRAGMA query_only = ON`.</summary>
+/// <summary>Connects AConn to the existing SQLite file ADbPath as a READER:
+/// SQLITE_OPEN_READONLY with a PRIVATE cache, the busy timeout armed before the
+/// connect, the journal mode the file already has, normal (not exclusive)
+/// locking, and `PRAGMA query_only = ON`.</summary>
 /// <param name="AConn">An unconnected FireDAC connection; the caller owns it and
 /// frees it. Its DriverName, Params and UpdateOptions.LockWait are overwritten.</param>
 /// <param name="ADbPath">Full path to the .sqlite file. The caller checks that
-/// it exists: FireDAC's default open mode CREATES a missing file.</param>
+/// it exists: a read-only open of a missing file raises (it no longer CREATES
+/// one, as FireDAC's default open mode did before 2026-09-24).</param>
 /// <param name="ABusyTimeoutMs">Lock wait for every statement, see ArmBusyTimeout.</param>
 /// <remarks>
 /// RAISES nothing of its own; FireDAC's ESQLiteNativeException PROPAGATES when
 /// the file cannot be opened or a lock outlasts ABusyTimeoutMs, and the verb
 /// reports it on stderr with a non-zero exit.
-/// The ONE way a drag-lint reader opens an index. Not OpenMode=ReadOnly (a true
-/// SQLITE_OPEN_READONLY): see DbContainsFile for why that fails on a WAL index.
-/// Instead nothing this routine executes writes: the journal_mode pragma FireDAC
-/// always runs names the mode the header already has (HeaderSaysWal), so it is a
-/// no-op; locking_mode is Normal, so a reader never holds the file exclusively;
-/// and query_only makes every later write on the handle fail SQLITE_READONLY.
+/// The ONE way a drag-lint reader opens an index. OpenMode=ReadOnly (a true
+/// SQLITE_OPEN_READONLY) since 2026-09-24 (D25), and MEASURED safe on a WAL
+/// index, which the old comment here said it was not. SQLite 3.45.3 (FireDAC's
+/// static build) opens a WAL file read-only and reads it -- cleanly closed with
+/// no -wal/-shm, while another process holds BEGIN IMMEDIATE with an
+/// uncommitted write, and with a read-only -shm beside a live writer -- as long
+/// as the journal_mode pragma FireDAC always runs names the mode the header
+/// already has. The "disk I/O error" the old comments blamed on the -shm is
+/// that pragma: FireDAC's default `journal_mode = DELETE` on a read-only WAL
+/// handle fails in all three cases; naming WAL passes all three
+/// (probe table: CHANGELOG, 2026-09-24). Those cases are CROSS-PROCESS.
+/// IN-PROCESS IT IS SAFE ONLY WITH A PRIVATE CACHE, hence SharedCache=False.
+/// FireDAC's static SQLite switches shared-cache mode on for the whole process
+/// (FireDAC.Phys.SQLiteWrapper.Stat, InternalAfterLoad), and a connection with
+/// no SharedCache param joins the shared cache of any other connection to the
+/// same file. A WRITER opened while a read-only connection was alive then
+/// shared that read-only cache and failed "attempt to write a readonly
+/// database": `document --project --apply --reindex` holds its read-only store
+/// across the post-edit reindex and died with exit 3 after writing the source
+/// (fix round 1, pinned by run_readonly_then_writer_same_process.ps1). The
+/// probe saw the other direction too: with the cache shared, a read-only
+/// connection beside a live writer was ALLOWED to write and rewrote the
+/// header. ConnectWriter sets the same param, so no drag-lint connection ever
+/// shares a cache with another.
+/// Belt and braces on top: the journal_mode pragma names the header's mode
+/// (HeaderSaysWal), so it is a no-op; locking_mode is Normal, so a reader never
+/// holds the file exclusively; and query_only makes every later write on the
+/// handle fail SQLITE_READONLY even if the open mode were ever dropped.
+/// KNOWN COST: a read-only connection cannot delete the -wal/-shm it creates, so
+/// opening a cleanly closed WAL index leaves an empty (0-byte) -wal and a -shm
+/// beside it. Harmless -- the next writer or clean close reuses and removes them
+/// -- and the main file's bytes are untouched.
 /// A raw TFDConnection opened with FireDAC's DEFAULT params does the opposite on
 /// both counts -- LockingMode=Exclusive and JournalMode=Delete, which converted
 /// a WAL index to a rollback journal (header byte 18: 2 -> 1) under `top`,
@@ -76,8 +108,54 @@ procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT
 /// Does not check the schema version: a caller that needs the current schema
 /// asks for it (TSQLiteSymbolStore.IsSchemaCurrent) and refuses a stale one.
 /// Thread-safe: touches only AConn.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas) (+8 more)</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout, DRagLint.Storage.FileMembership.HeaderSaysWal</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
+  ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
+
+/// <summary>Connects AConn to the SQLite file ADbPath as a WRITER: a private
+/// cache, the busy timeout armed before the connect, normal (not exclusive)
+/// locking, synchronous NORMAL, and journal mode WAL.</summary>
+/// <param name="AConn">An unconnected FireDAC connection; the caller owns it and
+/// frees it. Its DriverName, Params and UpdateOptions.LockWait are overwritten.</param>
+/// <param name="ADbPath">Full path to the .sqlite file. A missing file is
+/// CREATED (FireDAC's default open mode), in WAL mode.</param>
+/// <param name="ABusyTimeoutMs">Lock wait for every statement, see ArmBusyTimeout.</param>
+/// <remarks>
+/// RAISES nothing of its own; FireDAC's ESQLiteNativeException PROPAGATES when
+/// the file cannot be opened or a lock outlasts ABusyTimeoutMs.
+/// The ONE way drag-lint opens an index for writing (2026-09-24, D24):
+/// TSQLiteSymbolStore.Connect's write path, `import-log` and `migrate-dbs`'s
+/// checkpoint probe all come through here. Before it, the last two opened a raw
+/// TFDConnection with FireDAC's DEFAULT params -- LockingMode=Exclusive and
+/// `journal_mode = DELETE` -- which converted a WAL index to a rollback journal
+/// (header byte 18: 2 -> 1) and held it exclusively for the whole run. Pinned
+/// by tests\autotest\run_readonly_verbs.ps1.
+/// WHY A FIXED 'WAL' (controller ruling R16, fix round 1): every drag-lint
+/// index is WAL, and a WRITER requesting WAL is what restores one. The D24
+/// defect was a writer flipping WAL -> rollback; requesting WAL never does
+/// that. The first cut of this routine kept the header's own mode, which left
+/// an index already flipped by the old import-log / migrate-dbs bug a
+/// rollback journal for ever -- not power-loss safe under synchronous=NORMAL,
+/// and a long-lived LSP reader blocks the indexer's commit. Now any write
+/// (an incremental index included) converts it back, as the store's writer
+/// did before D24. Readers are different: ConnectReadOnly names the header's
+/// mode, because a reader must never convert anything.
+/// PRIVATE CACHE (SharedCache=False) for the reason on ConnectReadOnly: a
+/// writer joining a read-only connection's shared cache cannot write.
+/// Thread-safe: touches only AConn.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string;
   ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
 
 /// <summary>True when ADbPath is a readable index whose files table holds
@@ -213,6 +291,8 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string; ABusyTime
 begin
   AConn.DriverName:= 'SQLite';
   AConn.Params.Values['Database'   ]:= ADbPath;
+  AConn.Params.Values['OpenMode'   ]:= 'ReadOnly'; { SQLITE_OPEN_READONLY, measured safe on WAL: see the interface doc }
+  AConn.Params.Values['SharedCache']:= 'False';    { private cache: an in-process writer must never share it }
   AConn.Params.Values['LockingMode']:= 'Normal';
   AConn.Params.Values['JournalMode']:= if HeaderSaysWal(ADbPath) then 'WAL' else 'Delete';
   AConn.Params.Values['Synchronous']:= 'Normal';
@@ -220,6 +300,19 @@ begin
   AConn.LoginPrompt:= False;
   AConn.Connected  := True;
   AConn.ExecSQL('PRAGMA query_only = ON'); { reject every write on this handle }
+end; // procedure
+
+procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string; ABusyTimeoutMs: Integer);
+begin
+  AConn.DriverName:= 'SQLite';
+  AConn.Params.Values['Database'   ]:= ADbPath;
+  AConn.Params.Values['SharedCache']:= 'False'; { private cache: see ConnectReadOnly }
+  AConn.Params.Values['LockingMode']:= 'Normal';
+  AConn.Params.Values['JournalMode']:= 'WAL';   { R16: a writer restores WAL, never leaves it }
+  AConn.Params.Values['Synchronous']:= 'Normal';
+  ArmBusyTimeout(AConn, ABusyTimeoutMs);
+  AConn.LoginPrompt:= False;
+  AConn.Connected  := True;
 end; // procedure
 
 const
@@ -241,22 +334,18 @@ begin
   try
     Conn:= TFDConnection.Create(nil);
     try
-      { NOT OpenMode=ReadOnly. A WAL-mode database cannot be opened that way
-        without write access to its -shm wal-index (SQLite wal.html), and every
-        index here is WAL -- the open fails with "disk I/O error", which this
-        function would then report as a truthful-looking "file not in this DB".
-        Same reasoning and same PRAGMA as TSQLiteSymbolStore.Connect's read-only
-        path: open normally, then forbid writes per-connection. query_only does
-        not disturb a concurrent LSP/indexer.
-
-        NOT the same JournalMode, though. Connect still asks for WAL on its
-        read-only path too, and its comment claims the journal mode is left
-        untouched -- it is not, for the reason on HeaderSaysWal. Here the mode
-        is whatever the file already has, so the pragma FireDAC runs at connect
-        changes nothing. query_only comes AFTER the connect, so it cannot be
-        what protects the header; only naming the current mode can.
-        ConnectReadOnly does all of that, and arms the busy timeout BEFORE the
-        connect (see ArmBusyTimeout for why after is too late). }
+      { A failed open here would be reported as a truthful-looking "file not in
+        this DB", so the open mode matters. MEASURED 2026-09-24 (D25, SQLite
+        3.45.3): a SQLITE_OPEN_READONLY open of a WAL index succeeds -- cleanly
+        closed, under another process's BEGIN IMMEDIATE, and with a read-only
+        -shm -- PROVIDED the journal_mode pragma FireDAC runs at connect names
+        WAL. With FireDAC's default (Delete) all three fail "disk I/O error",
+        which is what the pre-2026-09-24 comment here misattributed to missing
+        write access on the -shm. ConnectReadOnly names the mode the header
+        already has (HeaderSaysWal), so the pragma is a no-op and neither a WAL
+        nor a rollback-journal file is rewritten; query_only on top forbids
+        writes per-connection without disturbing a concurrent LSP/indexer; and
+        the busy timeout is armed BEFORE the connect (see ArmBusyTimeout). }
       ConnectReadOnly(Conn, ADbPath, MEMBERSHIP_BUSY_TIMEOUT_MS);
 
       Q:= TFDQuery.Create(nil);

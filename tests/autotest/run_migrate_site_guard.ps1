@@ -62,13 +62,13 @@ $exempt = [ordered]@{
   'DoIndex'               = 'writes: index'
   'IndexDictionary'       = 'writes: index --dictionary'
   'DoFbSnapshot'          = 'writes: snapshots Firebird metadata INTO --db'
-  'DoSafeDelete'          = 'writes: same read-write path as index/rename'
-  'DoRename'              = 'writes: rename'
   'DoPurgeLocals'         = 'writes: purge MUTATES (its own comment)'
-  'DoLintAll'             = 'writes: findings into the project db (lint family)'
-  'DoLintProject'         = 'writes: findings into the project db (lint family)'
-  'DoExceptionsSync'      = 'writes: findings into the project db (lint family)'
   'DoRefreshFindings'     = 'writes: findings into the project db (lint family)'
+  # -- 2026-09-24 (D24): DoSafeDelete, DoRename, DoLintAll, DoLintProject and   --
+  # -- DoExceptionsSync LEFT this list. Their "writes" reasons were never true: --
+  # -- none writes the index (a copy of the self index hashed identical, table  --
+  # -- by table, across lint-all), so each is OpenReadOnlyStore now. Pinned by  --
+  # -- run_readonly_verbs.ps1 (md5 + triggers + WAL header per verb).           --
   'DoCompileCheck'        = 'writes: TCompileChecker.InsertFindings'
   'DoReconcileProject'    = 'writes: reconcile-project --apply'
   'DoSelfTestRecreate'    = 'writes: self-test over its own fixture db'

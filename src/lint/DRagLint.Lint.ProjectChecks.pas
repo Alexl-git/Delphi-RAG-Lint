@@ -383,13 +383,15 @@ begin
     if (ALibDbPath <> '') and TFile.Exists(ALibDbPath) then
     begin
       LibConn := TFDConnection.Create(nil);
-      { Do NOT use OpenMode=ReadOnly (SQLITE_OPEN_READONLY): every drag-lint index
-        is WAL-mode, and a WAL DB cannot be opened read-only without write access
-        to its -shm wal-index, which fails with "disk I/O error" -- that aborted
-        the whole lint-all run the moment a library DB was passed. The shared
-        reader open (same as TSQLiteSymbolStore.Connect) enforces no-writes with
-        PRAGMA query_only, keeps the journal mode the file already has, and arms
-        the busy timeout before the connect. }
+      { The shared reader open (same as TSQLiteSymbolStore.Connect). A bare
+        OpenMode=ReadOnly connection aborted the whole lint-all run the moment a
+        library DB was passed, with "disk I/O error". MEASURED 2026-09-24 (D25,
+        SQLite 3.45.3): the cause was FireDAC's default connect-time
+        `journal_mode = DELETE` on a read-only WAL handle, not missing write
+        access to the -shm as this comment used to say. ConnectReadOnly opens
+        SQLITE_OPEN_READONLY, names the journal mode the file already has (so the
+        pragma is a no-op and the open succeeds), adds PRAGMA query_only, and
+        arms the busy timeout before the connect. }
       ConnectReadOnly(LibConn, ALibDbPath);
       { The old lookup was 'SELECT 1 FROM symbols WHERE unit_name_norm = :N'.
         symbols has no unit_name_norm column in ANY schema version -- that column

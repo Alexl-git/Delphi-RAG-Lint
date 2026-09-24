@@ -299,6 +299,10 @@ var
     F.EndCol    := 1;
     F.Message   := Format('Duplicated code block (%d tokens) -- also at %s:%d',
                           [Len, AFiles[other.FileI], other.Line]);
+    { The partner site, so a dl:ok marker on EITHER end can review the pair
+      (D30): which end is the anchor depends on which partner the scope found. }
+    F.RelatedFile:= AFiles[other.FileI];
+    F.RelatedLine:= other.Line;
     Findings.Add(F);
   end;
 
