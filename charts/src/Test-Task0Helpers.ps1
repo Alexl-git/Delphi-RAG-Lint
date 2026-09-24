@@ -63,7 +63,9 @@ $cases = [ordered]@{
   'SELECT A FROM CAUSFAIL C JOIN FOLDERS F ON 1=1' = 'FROM CAUSFAIL|JOIN FOLDERS'
 }
 $bad = New-Object System.Collections.ArrayList
+$ran = 0
 foreach ($k in $cases.Keys) {
+  $ran++
   # assigned DIRECTLY: @(Get-SqlVerbTables ...) nests the `, $array` return and
   # turns an empty answer into one blank row -- which is how this check first failed.
   $v = Get-SqlVerbTables $k $S
@@ -72,7 +74,7 @@ foreach ($k in $cases.Keys) {
 }
 # VerbCases is RETURNED so the gate can pin how many cases ran: a failure list
 # that is empty because nothing ran must not read as nine passes.
-$res.VerbCases        = $cases.Count
+$res.VerbCases        = $ran        # counted in the loop: cases EXECUTED, not table size
 $res.VerbCaseFailures = $bad.ToArray()
 
 # ---- 4. Get-SourceContext on the exception candidates (P2) ------------------------

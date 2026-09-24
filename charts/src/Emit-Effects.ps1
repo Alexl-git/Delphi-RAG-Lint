@@ -300,9 +300,10 @@ if ($known.Count -gt 0) {
 if ($d12) {
   $nodeId++; $clusters++
   $nid = "n$nodeId"
-  $alone = $(if ($known.Count -eq 0 -and $unk.Count -eq 0) {
-      'it is the ONLY recorded effect: effect_free = 0 rests on it alone' } else {
-      'no other global write is proven -- the witness records only the first' })
+  # Claims only what the data shows: `g` is ONE token however many global
+  # writes there are, and the witness names only the first blocker -- so the
+  # chart cannot say whether a genuine global write also exists.
+  $alone = 'no other global write is visible in the witness (it names only the first blocker)'
   [void](Add-RowCluster -Sb $sb -Cid "cluster_d12_$nodeId" -Nid $nid `
            -Title 'engine D12' -Subtitle 'global write NOT shown' `
            -Rows @((New-NoteRow "the stored g's witness is this routine's OWN NAME: '$ew'"),

@@ -162,13 +162,12 @@ if (-not $nameProbed) {
     Write-Host '  NOTE: -WithNameMatches ignored in the callee direction'
   }
 }
-try {
-  if ($nameProbed) {
-    $nm = Get-EngineText @('query', 'find-callers', '--name', $bare, '--db', $DbPath, '--json')
-    if ($nm) { $nameRows = @($nm | ConvertFrom-Json) }
-  }
-} catch {
-  Write-Host "  NOTE: name-match probe failed ($($_.Exception.Message)); reporting resolved bucket only"
+# No try/catch: a failed probe used to print a NOTE and draw "0 name matches",
+# which is a confident claim from a failure (R19). No match exits 1 with empty
+# stdout (measured) and is accepted; anything else throws.
+if ($nameProbed) {
+  $nm = Get-EngineText @('query', 'find-callers', '--name', $bare, '--db', $DbPath, '--json') -AllowNoMatch
+  if ($nm) { $nameRows = @($nm | ConvertFrom-Json) }
 }
 if ($nameRows.Count) {
   # subtract by CALL SITE (file+line), not by name -- a resolved caller and its

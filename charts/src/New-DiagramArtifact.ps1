@@ -53,9 +53,9 @@ param(
   # protocol command can be named. Optional -- without it the chart shows one side
   # and says so.
   [string] $CounterpartDb,
-  # consumers and feeds-from: the SQL-SCRIPT index clone (tables, triggers,
-  # procedures). -DbPath stays the Delphi project index; -Target is TABLE or
-  # TABLE.COLUMN for consumers, <Form>.<Control> for feeds-from.
+  # consumers, feeds-from and lands-where: the SQL-SCRIPT index clone (tables,
+  # triggers, procedures). -DbPath stays the Delphi project index; -Target is
+  # TABLE or TABLE.COLUMN for consumers, <Form>.<Control> for feeds-from.
   [string] $SqlDbPath,
   # lands-where only: the SERVER clone (TDataService_<T>_SERVER, the write/read path).
   # -DbPath stays the CLIENT clone there (ORM classes + DFM bindings), so the verb

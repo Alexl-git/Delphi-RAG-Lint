@@ -66,25 +66,9 @@ function Get-DirLeaf([string] $path) {
   Split-Path $d -Leaf
 }
 
-# schema sql/1 returns `columns` (name/type) and `rows` as POSITIONAL ARRAYS,
-# not objects -- zip them here so callers can use property names.
-function Invoke-IndexQuery([string] $sql) {
-  $raw = & $Engine sql --db $DbPath --query $sql --format json 2>&1 |
-         Where-Object { $_ -notmatch 'loaded defaults' -and $_ -notmatch '^drag-lint: ' -and $_ -notmatch '^\s+may be stale' -and $_ -notmatch '^\s+drag-lint index ' }
-  $txt = ($raw -join "`n")
-  if ([string]::IsNullOrWhiteSpace($txt)) { return @() }
-  try { $o = $txt | ConvertFrom-Json } catch { throw "index query returned non-JSON: $txt" }
-  if ($o.truncated) { Write-Host "  NOTE: result truncated at row_cap $($o.row_cap)" }
-  $names = @($o.columns | ForEach-Object { $_.name })
-  $out = New-Object System.Collections.ArrayList
-  foreach ($row in @($o.rows)) {
-    $vals = @($row)
-    $h = [ordered]@{}
-    for ($i = 0; $i -lt $names.Count; $i++) { $h[$names[$i]] = $(if ($i -lt $vals.Count) { $vals[$i] } else { $null }) }
-    [void]$out.Add([pscustomobject]$h)
-  }
-  , $out.ToArray()
-}
+# Invoke-IndexQuery is the SHARED one from Emit-Common. This emitter used to
+# carry a private copy that returned @() on an empty stdout, so a failed query
+# (locked DB, time cap, bad SQL) drew an empty chart; the shared one throws (R19).
 
 Write-Host "deps: $Unit"
 

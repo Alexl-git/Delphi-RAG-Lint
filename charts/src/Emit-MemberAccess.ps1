@@ -79,7 +79,8 @@ Write-Host "  selection: $($sel.Qname) ($($sel.Kind)) $([IO.Path]::GetFileName($
 
 # ---- 2. step 1: the routines and the TOTALS, from the verb, UNCAPPED ---------
 $verbRows = @()
-$txt = Get-EngineText @('query', 'find-callers', '--name', $sel.Name, '--db', $DbPath, '--resolved', '--json')
+# no match exits 1 with `[]` (measured) -- accepted; any other failure throws (R19)
+$txt = Get-EngineText @('query', 'find-callers', '--name', $sel.Name, '--db', $DbPath, '--resolved', '--json') -AllowNoMatch
 if ($txt) { $verbRows = @($txt | ConvertFrom-Json) }
 
 # A bare --name can match members of SEVERAL classes, so filter to the one that

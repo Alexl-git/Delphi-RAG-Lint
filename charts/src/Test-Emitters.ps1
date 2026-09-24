@@ -111,8 +111,17 @@ Step 'E-BF-D6' {
   $t6 = Dot $b6
   # FAILS ON ANY DUPLICATE: every row TITLE is "<qname>  --  <file>:<line>", so a
   # repeated title is a repeated row, and a repeated edge line a repeated arrow.
-  $dupRows  = @([regex]::Matches($t6, 'TITLE="([^"]+)"') | ForEach-Object { $_.Groups[1].Value } |
-                Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
+  # Scoped PER SIDE: a symbol that is both a caller and a callee legitimately
+  # has one row on each side. The side is the cluster id (cluster_in_ /
+  # cluster_out_); each cluster's table is the node line inside it.
+  $sideTitles = New-Object System.Collections.ArrayList
+  foreach ($cm in [regex]::Matches($t6, '(?s)subgraph (cluster_(in|out)_\d+) \{.*?\n  \}')) {
+    foreach ($tm in [regex]::Matches($cm.Value, 'TITLE="([^"]+)"')) {
+      [void]$sideTitles.Add("$($cm.Groups[2].Value)|$($tm.Groups[1].Value)")
+    }
+  }
+  if ($sideTitles.Count -ne 13) { Fail 'A-BF6-SIDEPARSE' "expected 13 side rows (2 in + 11 out), parsed $($sideTitles.Count)" }
+  $dupRows  = @($sideTitles | Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
   $dupEdges = @([regex]::Matches($t6, '(?m)^\s+(\S+ -> \S+) \[') | ForEach-Object { $_.Groups[1].Value } |
                 Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
   if ($dupRows.Count)  { Fail 'A-BF6-DUPROWS'  ("duplicate rows: " + ($dupRows -join '; ')) }
@@ -951,6 +960,61 @@ elseif ($m -notlike '*that dot.exe can open*') { Fail 'N-MAXPATH' "message did n
 if (@(Get-ChildItem -LiteralPath $longDir -Filter '*.svg' -ErrorAction SilentlyContinue).Count) {
   Fail 'N-MAXPATH' 'left an .svg behind'
 }
+# R19 (Task 5 fix round 1): the engine wrappers FAIL LOUDLY. A failed query used
+# to come back as zero rows -- a time cap, a bad table or a locked database all
+# read as "nothing found". Each case below is a real engine call on the clone,
+# except the lock, which uses a fake engine so the retry path is deterministic.
+Note 'negatives W-* (engine wrappers fail loudly, R19) ...'
+Step 'E-W' {
+  & {
+    . "$SRC\Emit-Common.ps1"
+    $Engine = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe'
+    $DbPath = Get-CloneDb $DbCli
+    function Throws([string] $code, [string] $phrase, [scriptblock] $b) {
+      $threw = $false
+      try { & $b | Out-Null } catch {
+        $threw = $true
+        if ($_.Exception.Message -notlike "*$phrase*") { Fail $code "message lacks '$phrase': $($_.Exception.Message)" }
+      }
+      if (-not $threw) { Fail $code 'did not throw' }
+    }
+    # a zero-row answer is still an answer
+    $z = Invoke-IndexQuery "SELECT id FROM symbols WHERE name = 'ZzNoSuchName'"
+    Chk 'W-EMPTY' $z.Count 0
+    # the time cap (10,000 ms) -- exit 1, `ERROR: stopped -- ... time cap`, empty stdout
+    Throws 'W-TIMECAP' 'time cap' {
+      Invoke-IndexQuery 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT COUNT(*) FROM c' }
+    Throws 'W-BADTABLE' 'no such table' { Invoke-IndexQuery 'SELECT id FROM no_such_table' }
+    # the paged reader inherits it: a failing page is not the end of the data
+    Throws 'W-PAGED' 'no such table' { Get-AllIndexRows 'SELECT id FROM no_such_table' 'id' }
+    # no match: exit 1, nothing on stderr but notes -- accepted ONLY when asked
+    $nm = Get-EngineText @('query', 'find-callers', '--name', 'ZzNoSuchName', '--db', $DbPath, '--json') -AllowNoMatch
+    Chk 'W-NOMATCH' "[$nm]/$script:LastEngineExit/$script:LastEngineNoMatch" '[]/1/True'
+    Throws 'W-NOMATCH-STRICT' '(exit 1)' {
+      Get-EngineText @('query', 'find-callers', '--name', 'ZzNoSuchName', '--db', $DbPath, '--json') }
+    # -AllowNoMatch never excuses a real error on stderr
+    Throws 'W-NOMATCH-ERR' 'no such table' {
+      Get-EngineText @('sql', '--db', $DbPath, '--query', 'SELECT 1 FROM no_such_table', '--format', 'json') -AllowNoMatch }
+
+    # `database is locked`: bounded retry (3 attempts), then throw. Fake engines:
+    # locked.cmd always fails and counts its calls; once.cmd fails on the FIRST
+    # call only (it creates once.txt) and then answers.
+    $fk = Join-Path $OutDir 'fake-engine'
+    New-Item -ItemType Directory -Force $fk | Out-Null
+    $A = New-Object Text.ASCIIEncoding
+    [IO.File]::WriteAllText((Join-Path $fk 'locked.cmd'),
+      "@echo off`r`necho x>>`"%~dp0calls.txt`"`r`necho FATAL: ESQLiteNativeException: database is locked 1>&2`r`nexit /b 3`r`n", $A)
+    [IO.File]::WriteAllText((Join-Path $fk 'once.cmd'),
+      ("@echo off`r`nif not exist `"%~dp0once.txt`" (echo x>`"%~dp0once.txt`" & echo FATAL: database is locked 1>&2 & exit /b 3)`r`n" +
+       'echo {"schema":"sql/1","columns":[{"name":"x","type":"Integer"}],"rows":[[7]],"row_count":1,"truncated":false,"row_cap":200}' + "`r`n"), $A)
+    $Engine = Join-Path $fk 'locked.cmd'
+    Throws 'W-LOCK' 'database is locked' { Invoke-IndexQuery 'SELECT 1' }
+    Chk 'W-LOCK-TRIES' @(Get-Content (Join-Path $fk 'calls.txt')).Count 3
+    $Engine = Join-Path $fk 'once.cmd'
+    $one = Invoke-IndexQuery 'SELECT 1'
+    Chk 'W-LOCK-RECOVER' "$($one.Count)/$($one[0].x)" '1/7'
+  }
+}
 Note 'negatives N33, N35 (database refusals for the new helpers) ...'
 # N33: the SQL index is reached through Get-CloneDb like every other DB, so a
 # -SqlDbPath habit cannot open the live one. Get-CloneDb only resolves the path;
@@ -1658,7 +1722,7 @@ if (-not $Quiet) {
   Write-Host ("  consumers      : CAUSFAIL cert/inf readers {0}/{1}, writers {2}/{3}, {4} triggers; REASON bindings {5}/{6}; facts {7}/{8}/{9}; literals {10}/{11}/{12}; proc bodies {13}" -f (V $co1 'CertainReaders'), (V $co1 'InferredReaders'), (V $co1 'CertainWriters'), (V $co1 'InferredWriters'), (V $co1 'Triggers'), (V $co2c 'IndexBindings'), (V $co2c 'DrawnBindings'), (V $co1 'IndexReadFacts'), (V $co1 'IndexWriteFacts'), (V $co1 'IndexFactSymbols'), (V $co1 'IndexVerbLiterals'), (V $co1 'IndexFromJoinTables'), (V $co1 'IndexFactReadTables'), (V $co1 'ProcBodies'))
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE draw")
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

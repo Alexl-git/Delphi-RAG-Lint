@@ -125,27 +125,74 @@ function Get-CloneDb([string] $Path) {
 
 # ---- engine -----------------------------------------------------------------
 
-# Runs the engine and returns ONLY the JSON document, or '' when there is none.
-# Records the exit code in $script:LastEngineExit for the caller's message.
-function Get-EngineText([string[]] $ArgList) {
-  $raw = & $Engine @ArgList 2>&1 |
-         Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } |
-         Where-Object {
-           $s = [string]$_
-           $s -notmatch '^\(?loaded defaults' -and
-           $s -notmatch '^drag-lint:'         -and
-           $s -notmatch '^\s+may be stale'    -and
-           $s -notmatch '^\s+drag-lint index ' -and
-           # The resolver-mismatch note, emitted when the index was resolved by a
-           # NEWER build than this engine. It goes to stderr, so the ErrorRecord
-           # filter above already catches it -- this line is belt and braces for
-           # a host that merges the streams, because when it does reach the
-           # document the failure is an opaque ConvertFrom-Json error a long way
-           # from its cause.
-           $s -notmatch '^\s*resolver:'
-         }
-  $script:LastEngineExit = $LASTEXITCODE
-  $txt = ($raw -join "`n")
+# ---- FAIL LOUDLY (controller ruling R19, 2026-09-23) ------------------------
+# These wrappers used to merge stderr, DROP it, record $LASTEXITCODE and never
+# check it, and return '' on an empty stdout -- which Invoke-IndexQuery turned
+# into ZERO ROWS. So a failed query read as an empty answer. Reproduced: under
+# 12 concurrent readers one sql call exited 3 with `FATAL: ... database is
+# locked`; a time-cap hit exits 1 with `ERROR: stopped -- the query hit the
+# 10000 ms time cap`; a bad table name exits 1 with `ERROR: ... no such table`.
+# All three came back as rows=0. That is what graded one datasource
+# `no-assignment` in a battery run that overlapped the gallery (48 vs 49).
+#
+# Now: stderr is KEPT; any non-zero exit THROWS, quoting the exit code and the
+# engine's own messages. The one exception is a verb's documented NO-MATCH
+# result (-AllowNoMatch): `query find-callers|ancestors|descendants` exit 1
+# when nothing matches, with empty stdout or an empty JSON document. Measured
+# 2026-09-23 on this engine: the no-match case writes NOTHING to stderr beyond
+# the informational notes, while every failure writes an `ERROR:` / `FATAL:`
+# line. So no-match is recognised by its stderr TEXT (only notes), never by the
+# exit code alone.
+#
+# `database is locked` is retried, bounded: 3 attempts, 250/750 ms backoff, only
+# for that exact text; the last failure still throws.
+
+# stderr lines that are information, not failure
+$script:EngineNoteRx = '^\(?loaded defaults|^drag-lint:|^\s+may be stale|^\s+drag-lint index |^\s*resolver:'
+
+# Runs the engine; returns its stdout TEXT with the informational lines removed.
+# Throws on any non-zero exit unless -AllowNoMatch and the exit is a no-match.
+# $script:LastEngineExit keeps the exit code; $script:LastEngineNoMatch is set
+# when the result was accepted as a no-match.
+function Invoke-EngineRaw([string[]] $ArgList, [switch] $AllowNoMatch) {
+  $delays = @(250, 750)
+  for ($try = 1; ; $try++) {
+    $out = New-Object System.Collections.ArrayList
+    $err = New-Object System.Collections.ArrayList
+    foreach ($item in (& $Engine @ArgList 2>&1)) {
+      if ($item -is [System.Management.Automation.ErrorRecord]) { [void]$err.Add([string]$item.Exception.Message) }
+      else { [void]$out.Add([string]$item) }
+    }
+    $exit = $LASTEXITCODE
+    $script:LastEngineExit = $exit
+    $script:LastEngineNoMatch = $false
+    # the same notes can reach stdout when a host merges the streams
+    $stdout = @($out | Where-Object { $_ -notmatch $script:EngineNoteRx })
+    $stderr = @($err | Where-Object { $_.Trim() -ne '' -and $_ -notmatch $script:EngineNoteRx })
+    if ($exit -eq 0) { return ($stdout -join "`n") }
+
+    if ($AllowNoMatch -and $exit -eq 1 -and $stderr.Count -eq 0 -and
+        -not (@($stdout) -match '^\s*(ERROR|FATAL)\b')) {
+      $script:LastEngineNoMatch = $true
+      return ($stdout -join "`n")
+    }
+    $msg = (@($stderr) + @($stdout | Where-Object { $_ -match '^\s*(ERROR|FATAL)\b' })) -join ' | '
+    if ($msg -match 'database is locked' -and $try -le $delays.Count) {
+      Write-Host "  NOTE: engine reported 'database is locked' (attempt $try of $($delays.Count + 1)); retrying"
+      Start-Sleep -Milliseconds $delays[$try - 1]
+      continue
+    }
+    # The phrase "engine returned nothing for" is kept when there is no document
+    # at all: the N1 negative asserts it, and it is still true.
+    $doc  = ($stdout -join ''); $what = if ($doc.IndexOf('{') -lt 0 -and $doc.IndexOf('[') -lt 0) { 'engine returned nothing for' } else { 'engine failed for' }
+    throw "$what drag-lint $($ArgList -join ' ') (exit $exit): $(if ($msg) { $msg } else { '(no message)' })"
+  }
+}
+
+# Runs the engine and returns ONLY the JSON document, or '' when there is none
+# (a no-match under -AllowNoMatch, or a verb that printed no document).
+function Get-EngineText([string[]] $ArgList, [switch] $AllowNoMatch) {
+  $txt = Invoke-EngineRaw $ArgList -AllowNoMatch:$AllowNoMatch
   if ([string]::IsNullOrWhiteSpace($txt)) { return '' }
 
   # bracket on whichever opener comes first -- see header note 2
@@ -165,14 +212,19 @@ function Invoke-EngineJson([string[]] $ArgList) {
   }
   $txt | ConvertFrom-Json
 }
-
 # schema sql/1 returns `columns` (name/type) and `rows` as POSITIONAL ARRAYS --
 # zip them so callers can use property names. Hard row cap 200; the caller is
 # expected to assert .Truncated where the plan says to.
 function Invoke-IndexQuery([string] $sql, [string] $FailOnTruncate) {
   $txt = Get-EngineText @('sql', '--db', $DbPath, '--query', $sql, '--format', 'json')
-  if ([string]::IsNullOrWhiteSpace($txt)) { return , @() }
+  # R19: an EMPTY answer is never zero rows. A real zero-row result is a whole
+  # sql/1 document with row_count 0; anything else is a failure, and says so.
+  if ([string]::IsNullOrWhiteSpace($txt)) { throw "index query returned no document (exit $script:LastEngineExit): $sql" }
   try { $o = $txt | ConvertFrom-Json } catch { throw "index query returned non-JSON: $txt" }
+  if ([string]$o.schema -ne 'sql/1') { throw "index query returned schema '$($o.schema)', expected sql/1: $sql" }
+  if (@($o.rows).Count -ne [int]$o.row_count) {
+    throw "index query returned $(@($o.rows).Count) row(s) but row_count $($o.row_count) -- a partial document: $sql"
+  }
   if ($o.truncated) {
     # The 200-row cap is SILENT in the row list -- a truncated answer looks like
     # a small one. Callers that would render a short chart as if it were whole
@@ -2022,11 +2074,13 @@ function Invoke-DotRun([string] $DotFile, [string] $Svg, [string] $Plain, [strin
   $msgs = @(& $Dot -Tsvg -o $Svg -Tplain -o $Plain -Tpng -Gdpi=110 -o $Png -Tpdf -o $Pdf $DotFile 2>&1 |
             Where-Object { $_ -notmatch 'Pango-WARNING' -and ([string]$_).Trim() -ne '' } |
             ForEach-Object { [string]$_ })
+  $dotExit = $LASTEXITCODE
   foreach ($m in $msgs) { Write-Host "  dot: $m" }
-  if (-not (Test-Path -LiteralPath $Svg)) {
-    $why = if ($msgs.Count) { ' dot said: ' + ($msgs -join ' | ') } else { ' dot printed nothing.' }
-    throw "dot produced no SVG at $Svg (exit $LASTEXITCODE).$why"
-  }
+  $why = if ($msgs.Count) { ' dot said: ' + ($msgs -join ' | ') } else { ' dot printed nothing.' }
+  if (-not (Test-Path -LiteralPath $Svg)) { throw "dot produced no SVG at $Svg (exit $dotExit).$why" }
+  # An SVG can exist and still be half a run (the PNG or PDF failed, or dot
+  # wrote a partial SVG before erroring), so a non-zero exit fails on its own.
+  if ($dotExit -ne 0) { throw "dot exited $dotExit for $DotFile.$why" }
 }
 # ONE layout run, four outputs -- so the geometry in .plain can never drift from
 # the picture in .svg. Verified 2026-09-22.

@@ -94,9 +94,11 @@ if ($sel) {
 # ---- 2. the two verbs --------------------------------------------------------
 $anc = @()
 $desc = @()
-$txt = Get-EngineText @('query', 'ancestors', '--name', $bare, '--db', $DbPath, '--json')
+# Both verbs exit 1 on NO MATCH with an empty list (measured); -AllowNoMatch
+# accepts exactly that and nothing else -- any other failure throws (R19).
+$txt = Get-EngineText @('query', 'ancestors', '--name', $bare, '--db', $DbPath, '--json') -AllowNoMatch
 if ($txt) { $anc = @(($txt | ConvertFrom-Json).ancestors) }
-$txt = Get-EngineText @('query', 'descendants', '--of', $bare, '--db', $DbPath, '--json')
+$txt = Get-EngineText @('query', 'descendants', '--of', $bare, '--db', $DbPath, '--json') -AllowNoMatch
 if ($txt) { $desc = @(($txt | ConvertFrom-Json).descendants) }
 
 # Drop any row that names the focus. See the header: a colliding bare name makes

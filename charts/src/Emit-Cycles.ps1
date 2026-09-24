@@ -100,9 +100,11 @@ $PAL = @{
 Write-Host "cycles: $(if ($Unit) { $Unit } else { '(whole project)' })"
 
 # ---- 1. the cycles themselves --------------------------------------------------
+# `cycles` exits 0 and prints `[]` when there are none (measured on DataCopy),
+# so an EMPTY answer is a failure, not "no cycles" (R19).
 $cyclesTxt = Get-EngineText @('cycles', '--db', $DbPath, '--format', 'json')
-$cycles = @()
-if (-not [string]::IsNullOrWhiteSpace($cyclesTxt)) { $cycles = @($cyclesTxt | ConvertFrom-Json) }
+if ([string]::IsNullOrWhiteSpace($cyclesTxt)) { throw "cycles returned no document (exit $script:LastEngineExit)" }
+$cycles = @($cyclesTxt | ConvertFrom-Json)
 
 # ---- 2. the engine's own verdict line, per cycle --------------------------------
 # Parsed from `cycles --plan` rather than re-derived, so the chart says exactly
@@ -112,8 +114,9 @@ if (-not [string]::IsNullOrWhiteSpace($cyclesTxt)) { $cycles = @($cyclesTxt | Co
 $verdicts = @{}
 if ($Playbook -and $cycles.Count -gt 0) {
   Write-Host '  fetching cycles --plan (measured ~46s on CLIENT) ...'
-  $planTxt = (& $Engine cycles --db $DbPath --plan 2>&1 |
-              Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) -join "`n"
+  # through the shared wrapper: a failed --plan run throws instead of reading
+  # as "no Status lines" (R19)
+  $planTxt = Invoke-EngineRaw @('cycles', '--db', $DbPath, '--plan')
   foreach ($m in [regex]::Matches($planTxt, '(?m)^##\s+Cycle\s+(\d+):[^\r\n]*\r?\n+Status:\s*(.+?)\r?$')) {
     $verdicts[[int]$m.Groups[1].Value] = ($m.Groups[2].Value -replace '\*\*', '').Trim()
   }
