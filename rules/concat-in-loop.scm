@@ -9,6 +9,10 @@
 ; therefore quadratic in nothing -- while its id, this comment and its message
 ; all said "in a loop".
 ;
+; The sidecar lists FOUR loop node kinds: for, foreach, while, repeat. `foreach`
+; is the grammar's node for `for X in Y do`; it was missing until 2026-09-24
+; (D20), so a for-in accumulation never fired. Matching is by EXACT node kind.
+;
 ; TWO CONSTRAINTS ADDED 2026-08-13, both from sampled false positives on YADF:
 ;
 ;   operator: (kAdd)   -- the pattern used to accept ANY exprBinary, so

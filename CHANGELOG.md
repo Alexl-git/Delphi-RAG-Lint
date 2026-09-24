@@ -121,6 +121,10 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **D20 -- `concat-in-loop` fires inside `for X in Y do`.** The sidecar's `require_ancestor` listed
+  `for`, `while`, `repeat` but not `foreach`, the grammar's for-in node, so a for-in accumulation
+  never reported. Rules-only change (`rules\concat-in-loop.json`); the L6 reset predicate already
+  knew `foreach`. Guard: `tests\autotest\run_concat_in_loop_for_in.ps1`.
 - **`lint-all --rule X` runs only what can emit X (D17).** Every per-file checker, the whole `.scm`
   catalogue and every project-wide phase (project rules, class metrics, doc-drift, missing-doc,
   duplicate-code, interface cycles, layering, unit-not-in-dpr, used-unit-resolvable) ran for any `--rule`
