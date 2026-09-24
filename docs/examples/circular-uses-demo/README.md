@@ -45,34 +45,29 @@ The full, verbatim output for all three report levels is in
 1 circular unit group(s) found:
   [2 units] customers <-> orders   (has interface coupling -- widest recompile blast radius)
       * customers's INTERFACE needs orders via:
-          line 16: TOrder  [class]  -> move/extract this
+          line 13: TOrder  [class]  -> move/extract this
 ```
 
-### `cycles --plan` -- a followable refactoring playbook
+### `cycles --plan` -- a mechanical refactoring playbook
+
+An excerpt (the full output is in [REPORT.md](REPORT.md)):
 
 ```
-# Cycle refactoring playbook
+### Step 1: what moves where
+1. `TOrder` -- **class with methods**, declared at `Orders.pas` lines 6-19; method bodies at `Orders.pas` lines 30-35, 37-44.
+   - Recipe: **extract a base class** and keep `TOrder` where it is. Why: its method bodies use `TCustomer`, which live in units of this cycle; moving the class would mean moving those bodies (lines 30-35, 37-44) AND everything they use.
+   - New class `TOrderBase` in `Orders.Contracts` carries exactly what the units below use: nothing (an empty base).
+   - `TOrder` stays in `Orders.pas` and becomes `TOrder = class(TOrderBase)`; the members above are deleted from it.
+   - Units that switch to `TOrderBase` (the name is replaced on these lines): `Customers.pas` lines 13, 16, 30.
 
-## Cycle 1: customers <-> orders
-
-Files:
-- `customers` -> ...\Customers.pas
-- `orders`    -> ...\Orders.pas
-
-### Why it cycles
-- `customers` interface uses `TOrder` (class) at `Customers.pas:16`; declared in `Orders.pas:10`.
-
-### Recommended fix
-**Extract the shared contract** into a new leaf unit both can depend on (it must use NEITHER unit in this cycle).
-
-Steps:
-1. For each symbol under "Why it cycles", create/reuse a leaf unit (e.g. `<Unit>.Contracts.pas`) holding ONLY that declaration.
-2. Move the declaration there; add the new unit to the declaring unit's uses.
-3. In each consumer, replace the cycle-partner in the **interface** uses with the new contracts unit.
-4. Register the new unit in the .dpr/.dproj.
-5. Build.
-6. **Verify:** `drag-lint cycles --db <db>` -- cycle 1 should be gone.
+### Step 2: uses clauses -- keep, move or remove the old unit
+- `Customers.pas` / `Orders`: nothing from it is used there any more -> **remove** it from the interface uses.
 ```
 
-The report is best-effort (the index can miss some references, e.g. `set` types),
-so build after applying the fix and re-run `cycles` to confirm the group is gone.
+It goes on with the full text of the new unit, every edit with its current and
+new text (bottom-up), and a checklist that ends in the exact output `cycles`
+must print afterwards -- here `No circular unit dependencies found.`
+
+The index can miss some references (e.g. `set` types), so the checklist compiles
+the project and re-runs `cycles`; it lists what to do for each compile error the
+edits can produce.

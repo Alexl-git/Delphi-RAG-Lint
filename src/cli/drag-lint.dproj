@@ -214,6 +214,7 @@
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Profile.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.Deps.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.RCallTree.pas"/>
+        <DCCReference Include="..\report\DRagLint.Report.CyclePlan.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.PropTree.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.Rules.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.CastLib.pas"/>
