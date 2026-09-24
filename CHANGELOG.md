@@ -58,6 +58,14 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`concat-in-loop` no longer fires on a string REBUILT every iteration (L6).** `T := 'row '; T := T +
+  IntToStr(J);` in a loop body never accumulates, so there is nothing quadratic to report. New `.scm`
+  predicate `#not-reset-in-loop?` (`DRagLint.Lint.QueryRules`, `ResetInSameIteration`) drops the match
+  when the same variable is also assigned, from an expression that does not read it, by a sibling
+  statement on the path up to the NEAREST loop -- i.e. unconditionally in the same pass, before or after
+  the concatenation. `S := S + X` with no reset still fires, and so do a reset inside an `if`, a "reset"
+  that reads the variable (`T := Trim(T)`) and an inner loop whose outer loop resets. Guard:
+  `tests\autotest\run_concat_in_loop_precision.ps1` (7 new checks).
 - **The IDE About window names the `index-newer` freshness verdict.** `info --json` has reported
   `index-newer` (the index was built or resolved by a NEWER engine) since C2, but the plugin's
   `VerdictLine` had no case for it, so it showed as a bare, unexplained warning. It is now its own
