@@ -275,6 +275,25 @@ Check 'the merged block gains this project''s caller' ($merged -match 'BOnly') `
 
 Check 'B sees no drift on the merged block' ((DriftCount $dbB 'Marked') -eq 0) `
   'the assertion that would have caught all four incidents on this seam'
+
+# PROJECT TAGS (2026-09-23, docs\INBOX-document-apply-drops-facts-outside-the-db.md).
+# B's write changed this line, so it was written in the TAGGED form: B's own
+# entry carries [B]; A's entry, which B cannot see, is kept exactly as it was --
+# untagged legacy. A must now ADOPT it, once: write [A] onto it. Without the
+# adoption A could never reap that entry later (an untagged entry naming a unit
+# outside the reaping project's closure is preserved for ever). So convergence
+# is one write per project per line, not one write in total -- and the checker
+# says so, because it compares against exactly what the writer will write.
+Check 'A sees its one-time ADOPTION as drift' ((DriftCount $dbA 'Marked') -gt 0) `
+  'the line entered the tagged regime under B; A has not tagged its entry yet'
+DocApply $dbA 'Marked' | Out-Null
+Reindex $dbA @($shDir)
+Reindex $dbB @($shDir)
+$adopted = BlockLine 'Marked' 'Called from'
+Check 'the adoption only TAGS: both callers kept, each under its own project' `
+  (($adopted -match '\[A\]AOnly\.CallFromA') -and ($adopted -match '\[B\]BOnly\.CallFromB')) "block says: $adopted"
+Check 'B still sees no drift after A''s adoption' ((DriftCount $dbB 'Marked') -eq 0) `
+  'A''s write must not provoke B'
 Check 'A sees no drift on the merged block' ((DriftCount $dbA 'Marked') -eq 0) `
   'A must not call the union stale just because it cannot see BOnly'
 
@@ -429,8 +448,14 @@ Check '--fix keeps the other project''s caller' ($fixed -match 'AOnly') `
 Check '--fix gains this project''s caller' ($fixed -match 'BOnly') `
   "block says: $fixed"
 Check '--fix converges under B' ((DriftCount $dbB 'MarkFix') -eq 0)
+# A's one-time adoption, through the --fix path this time (see the convergence
+# section above): it must be offered as fixable, and once applied BOTH converge.
+& $Exe lint-all --db $dbA --fix --apply --no-backup 2>$null | Out-Null
+Reindex $dbA @($shDir)
+Reindex $dbB @($shDir)
 Check '--fix converges under A too' ((DriftCount $dbA 'MarkFix') -eq 0) `
   'the repairer must not write what the checker then calls stale -- incident five'
+Check '--fix: A''s adoption does not provoke B' ((DriftCount $dbB 'MarkFix') -eq 0)
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'run_shared_unit_staleness: FAILED' -ForegroundColor Red; exit 1 }

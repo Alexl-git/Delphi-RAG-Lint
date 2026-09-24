@@ -157,6 +157,7 @@ uses
   DRagLint.Doc.Harvest in '..\doc\DRagLint.Doc.Harvest.pas',
   DRagLint.Doc.Regions in '..\doc\DRagLint.Doc.Regions.pas',
   DRagLint.Doc.SharedFacts in '..\doc\DRagLint.Doc.SharedFacts.pas',
+  DRagLint.Doc.ProjectTags in '..\doc\DRagLint.Doc.ProjectTags.pas',
   DRagLint.Doc.Strip in '..\doc\DRagLint.Doc.Strip.pas',
   DRagLint.Doc.SymbolFacts in '..\doc\DRagLint.Doc.SymbolFacts.pas',
   DRagLint.Doc.Wiki in '..\doc\DRagLint.Doc.Wiki.pas',

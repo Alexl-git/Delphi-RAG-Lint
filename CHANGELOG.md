@@ -7,6 +7,17 @@ breaking changes** until v1.0.
 
 ### Added
 
+- **Project tags on shared doc facts, and `doc-forget` to reap them (ENG-4).** On a block reconciled
+  across projects (a `dl:shared` unit, or one holding facts the current index cannot see) each inbound
+  entry carries the projects whose index rendered it: `Called from: [DataCopy,DataCopyTests]uX.Foo
+  (uX.pas)`. The tag is the `--db` base name; a run adds/removes only its own tag and an entry goes
+  when its set empties, so a caller deleted in project P now disappears on P's next run (the untagged
+  union could never reap it). Untagged legacy entries keep the old rules; a wholly untagged line that
+  has not changed is left byte-identical; once a line is tagged the other projects adopt their entries
+  on their next run. New verb `doc-forget --scope <file|dir> (--project <Tag> [--rename <Tag>=<New>] |
+  --untagged | --list-tags) [--apply|--no-backup]`, text-only. Guard:
+  `tests\autodoc\run_doc_project_tags.ps1` (two fixture projects sharing one unit, 45 checks).
+- **`document --migrate-pure`.** The explicit switch for the deferred purity-v1 migration (see Fixed).
 - **`convert-validate` checks `G[I/N]` glyph expressions on `#link` (CV-4, the validate half of
   the glyph grammar).** `#link <ToPath> <- <FromPath> G[..] [: <Cast>]`: the expression is split off
   at the first ` G[` and kept verbatim (`TConversionRule.GlyphExpr`), so FromPath is the bare source
@@ -58,6 +69,24 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`document --apply` no longer deletes `Called from:` entries the chosen DB cannot see
+  (docs\INBOX-document-apply-drops-facts-outside-the-db.md).** A stored line carrying `(+N more)` was
+  never merged, so the whole line was replaced by the project's own capped render and every visible
+  foreign entry went with it. A reconciled block is now rendered with WHOLE inbound lists (writer and
+  checker both ask `TSharedFacts.WantsWholeInboundLists`) and a stored window is merged on its visible
+  entries. The `(+N more)` marker is also no longer split in as an entry, which had made every
+  truncated block read as "foreign". `doc-drift` offers the repair as fixable on such a block when the
+  merge drops nothing it cannot vouch for.
+- **A stored legacy `<para>Pure</para>` line is no longer churn.** Purity v2 relabelled or retracted it
+  on EVERY `document` run over untouched code (measured: 2 blocks, 4 edits on a two-routine fixture),
+  and `doc-drift` called those blocks stale. A block whose only difference is that line is now left
+  byte-identical and is not drift; a block that differs in anything else is regenerated as before.
+  `document --migrate-pure` restores the rewrite for the owner's one-time migration. Guard:
+  `tests\autodoc\run_doc_legacy_pure_untouched.ps1`.
+- **Misplaced DocInsight comment on `TReviewMarkers.InsertInto` (L7).** f4132d1b inserted `RemoveFrom`
+  between `InsertInto`'s comment and its declaration, stacking two comments into one region
+  (`doc-orphan-block`) and leaving `InsertInto` with an auto-generated stub. Hand edit, not autodoc:
+  the documenter correctly refused to attach a region separated by another declaration.
 - **`query find-callers --resolved`: `line` is the CALL SITE on every row (C1).** The rows built from
   `call_edges` -- routine call, property/field access, enum-value read, parenless call -- put the
   caller ROUTINE's declaration line in JSON `line`, while callback rows put the site there: one key,
@@ -146,6 +175,12 @@ breaking changes** until v1.0.
   `docs\INBOX-pp-profile-ignores-platform-propertygroups.md`.
 
 ### Changed
+- **`run_shared_unit_staleness.ps1` asserts one ADOPTION round.** With project tags, a line written in
+  tagged form by one project is adopted by each other project once (it tags its own entries), so
+  convergence is one write per project per line; the suite now asserts that round and the fixed point
+  after it.
+- `TSharedFacts.HoldsForeignInboundEntries` lost its unused `AUnitPath` parameter;
+  `TDocFactsBuilder.Build` gained a trailing `AWholeInboundLists` (default False).
 - **Parenless calls bind (resolver 1.7.0-alpha, defect D1).** A value-returning routine with no required parameters called WITHOUT parentheses in an EXPRESSION -- `Assert(NextId > 0)`, `N := NextId`, `Consume(NextId)`, a bare `Tick` or `Self.Tick` inside its class -- is recorded by the parser as a `read` ref, and the `calls` stage never streamed `read` refs, so none of those sites owned a `call_edges` row: `assert-with-side-effect`, the purity callee walk, `find-callers --resolved` and the who-calls charts all missed them. A third calls-stage stream now decides, per read, whether it IS a call: the NEAREST declaration of the name wins (lexical scopes, the enclosing class and its ancestors, the own unit, the interfaces of used units); a shadowing value (local, parameter, field, property, const, var, type, enum value) declines, as does a routine set with any member that needs an argument or returns nothing, a procedure-VALUE site (`@F`, or `F` as the whole right side of an assignment / a whole argument whose declared type is procedural), and any `with` earlier in the enclosing routine. Every decline is counted on a new `calls      parenless:` log line. Measured on a copy of ORM3 CLIENT (resolver 1.6.0 -> 1.7.0, `--resolve-only`): **2,205 candidate reads, 1,237 bound** (1,222 certain, 15 ambiguous), declined shadowed 725, not-callable 174, with-scope 57, not-found 12, proc-value 0; `call_edges` 20,409 -> 21,646, exactly +1,237, no other edge moved. Before the fix 1,715 of those reads named a parameterless value-returning routine and all were unbound. `find-callers --resolved` no longer ALSO lists such a site as a `callback` row. Known blind spot: a procedural target whose type the index cannot see (an RTL `TFunc<T>` behind an alias it does not hold, a property of a class outside the index) is not detected, and the read binds. No re-parse: remedy is `index --all --resolve-only`. Guard: `tests\callresolve\run_parenless_call_bind.ps1` (7 checks, 11 negative controls); `assert-with-side-effect` fixture gained a parenless trigger and control.
 - **`--resolve-only` no longer promises cross-store edges (ENG-5, owner ruling 2026-09-22).** `--help`,
   README and AI-USAGE now say what was measured: the pass writes edges INSIDE the one index it is run

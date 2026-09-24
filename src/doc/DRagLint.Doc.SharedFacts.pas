@@ -108,8 +108,8 @@ type
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
   /// is cached in class state, keyed on the store it was built from.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
-  /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Regions, DRagLint.Doc.SharedFacts</para>
+  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
+  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedFacts = class
@@ -139,15 +139,14 @@ type
     /// it; on an unmarked unit it is a stale entry and still drift.</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutParaLabel, LowerCase</para>
-    /// <para>Returns: CollapseWs(AStored) &lt;&gt; CollapseWs(AFresh); False</para>
-    /// <para>Complexity: 27 (cyclomatic, outer body), 161 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconciledDrift, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutLegacyPure, DRagLint.Doc.SharedFacts.WithoutParaLabel, LowerCase</para>
+    /// <para>Returns: CollapseWs(StoredCmp) &lt;&gt; CollapseWs(FreshCmp); False</para>
+    /// <para>Complexity: 30 (cyclomatic, outer body), 185 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.ParaLabelCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BlockDrifted(const AStored, AFresh: string;
@@ -171,10 +170,9 @@ type
     /// Order changes only on marked units.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.ForgivenOf, DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin (+9 more)</para>
+    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileContent, DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody, EndsText, Pos, Trim, TrimRight</para>
     /// <para>Returns: ADocText; Lines.Text</para>
-    /// <para>Complexity: 28 (cyclomatic, outer body), 200 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Complexity: 26 (cyclomatic, outer body), 154 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.FenceBounds"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
@@ -189,13 +187,14 @@ type
     /// cannot see, so deleting or replacing it would destroy another project's
     /// contribution.</summary>
     /// <param name="AStoredBody"><!-- drag-lint:auto type -->const string</param>
-    /// <param name="AStore">The current project's index. Not owned.</param>
-    /// <param name="AUnitPath">Absolute path of the declaring unit.</param>
-    /// <param name="AStoredRemarks">The existing parsed remarks.</param> <!-- drag-lint: param no longer exists -->
-    /// <returns>False on an unmarked unit, on an unparseable block, and
-    /// whenever every stored entry is either inside this closure or flagged
-    /// uncertain -- i.e. it answers True only when there is something here that
-    /// ONLY another project could have written.</returns>
+    /// <param name="AStore">The current project's index. Not owned. Nil
+    /// answers False.</param>
+    /// <returns>True when an inbound line is a truncated `(+N more)` window, when
+    /// an entry carries a project tag other than ProjectTag, or when an UNTAGGED
+    /// entry names a unit this index cannot vouch for and is not flagged
+    /// uncertain -- i.e. only when there is something here that ANOTHER project
+    /// wrote. An entry tagged with this project alone is not foreign: it is this
+    /// project's to reap.</returns>
     /// <remarks>
     /// Exists because a narrow project that compiles a shared unit but
     /// CALLS nothing in it renders an empty block, and both halves of this unit
@@ -209,18 +208,18 @@ type
     /// drift. Caught by run_doc_drift_unseen_units (CASE-A) and run_doc_drift_extra_stores (#3).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas)</para>
-    /// <para>Calls: DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitVouchable</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.ProjectTags.SplitTagged, DRagLint.Doc.ProjectTags.WithoutTag, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.UnitVouchable</para>
     /// <para>Returns: False</para>
-    /// <para>Pure</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 52 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
+    /// <seealso cref="DRagLint.Doc.ProjectTags.SplitTagged"/>
+    /// <seealso cref="DRagLint.Doc.ProjectTags.WithoutTag"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HoldsForeignInboundEntries(const AStoredBody: string;
-      const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+      const AStore: ISymbolStore): Boolean;
 
     /// <summary>True when regenerating this block would DELETE stored fact
     /// content that this index cannot vouch for -- which makes the drift
@@ -259,15 +258,14 @@ type
     /// degenerating into "never fixable".</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.SplitEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
-    /// <para>Returns: False; True</para>
-    /// <para>Complexity: 12 (cyclomatic, outer body), 88 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
+    /// <para>Returns: False; ReconcileDropsUnvouchable(AStore, AStored, AFresh); True</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 93 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.SplitEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitVouchable"/>
-    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsShared"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RegenerationDropsUnvouchable(const AStored, AFresh: string;
@@ -285,16 +283,15 @@ type
     /// non-determinism. Two comparators is the mirrored-predicate trap; there
     /// is deliberately only one, and both callers route through it.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
-    /// <para>Calls: CompareText</para>
-    /// <para>Returns: CompareText(X, Y)</para>
-    /// <para>Pure</para>
+    /// <para>Called from: [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Calls: CompareText, DRagLint.Doc.ProjectTags.BareEntry</para>
+    /// <para>Returns: CompareText(BareEntry(X), BareEntry(Y)); CompareText(X, Y)</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Doc.ProjectTags.BareEntry"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.LegacyPureViews"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function CompareInboundEntries(const X, Y: string): Integer; static;
@@ -309,18 +306,116 @@ type
     /// Returning '' for unfenced text is the point, not an edge case: it is what
     /// stops a human's prose from being parsed as facts.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
     /// <para>Returns: DRagLint.Doc.SharedFacts.StoredBlockBody(AText)</para>
-    /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.LegacyPureViews"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StoredBlockBody(const AText: string): string; static;
+
+    /// <summary>True when a declaration's inbound lists (`Called from:`,
+    /// `Used by:`, `Used in units:`) must be rendered WHOLE -- no
+    /// `docs.max_callers` cap, no `(+N more)` window -- because its stored block
+    /// takes part in cross-project reconciliation.</summary>
+    /// <param name="AStoredBody">The stored managed block body (see
+    /// StoredBlockBody); '' for a declaration with no block.</param>
+    /// <param name="AStore">The current project's index. Not owned. Nil answers
+    /// False.</param>
+    /// <param name="AUnitPath">Absolute path of the declaring unit.</param>
+    /// <returns>True for a unit marked `dl:shared`, a block that already carries
+    /// project tags, or a block holding facts this index cannot vouch for.</returns>
+    /// <remarks>
+    /// THE WRITER AND THE CHECKER MUST BOTH ASK THIS, before building facts:
+    /// reconciliation is a set operation and a window onto a list is not the
+    /// list, so a capped render would make every merge unsound. Asking it in one
+    /// place and not the other is the drift channel this unit exists to close.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.Participates</para>
+    /// <para>Returns: Participates(AStore, AUnitPath, AStoredBody)</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function WantsWholeInboundLists(const AStoredBody: string;
+      const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+
+    /// <summary>The stored and fresh comment texts with the purity line taken
+    /// out, for the writer's "is anything else different" test.</summary>
+    /// <param name="AStored">The comment as it stands in the source.</param>
+    /// <param name="AFresh">The comment the writer would put there.</param>
+    /// <param name="AStoredView">AStored without its legacy `Pure` fact line.</param>
+    /// <param name="AFreshView">AFresh without its `Effect-free (proven)` fact
+    /// line.</param>
+    /// <returns>False -- views undefined -- when MigrateLegacyPure is set or
+    /// AStored carries no legacy `Pure` fact line inside its managed fence.</returns>
+    /// <remarks>
+    /// Purity v2 stopped emitting `Pure` and the owner deferred migrating
+    /// the stored lines (they are to be regenerated ONCE, later). So a block
+    /// whose only difference from a fresh render is that line -- relabelled or
+    /// retracted -- is left byte-identical, and doc-drift agrees (BlockDrifted
+    /// applies the same exemption). A block that differs in anything else is
+    /// regenerated in full, and loses the legacy line with it.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas)</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.WithoutFenceLine</para>
+    /// <para>Returns: True</para>
+    /// <para>Mutates: AStoredView (out), AFreshView (out)</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.WithoutFenceLine"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function LegacyPureViews(const AStored, AFresh: string;
+      out AStoredView, AFreshView: string): Boolean;
+
+    /// <summary>True when a stored managed block body says nothing but the
+    /// legacy `Pure` fact.</summary>
+    /// <param name="AStoredBody">The stored managed block body.</param>
+    /// <returns>False when MigrateLegacyPure is set.</returns>
+    /// <remarks>
+    /// The writer's empty-render branch asks this before it deletes a block:
+    /// with the legacy line exempt, such a block is unchanged, not decayed.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.CollapseWs</para>
+    /// <para>Returns: (not MigrateLegacyPure) and (CollapseWs(AStoredBody) = LEGACY_PURE_PARA)</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.LegacyPureViews"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function IsLegacyPureOnlyBody(const AStoredBody: string): Boolean;
+
+    /// <summary>The project name this run writes into inbound fact tags --
+    /// `DataCopy` in `Called from: [DataCopy]uFoo.Bar (uFoo.pas)`.</summary>
+    /// <remarks>
+    /// Set once per process by the CLI from the primary database's base name
+    /// (`_D-RAG\DataCopy.sqlite` gives `DataCopy`), and left EMPTY when more
+    /// than one database is in play or no CLI ran (LSP, MCP): an empty name
+    /// writes no new tag and removes none. Tags only ever appear in a block that
+    /// takes part in reconciliation (see WantsWholeInboundLists); a private
+    /// unit's blocks are unchanged. Process-wide and not thread-safe, like the
+    /// closure cache.
+    /// </remarks>
+    class var ProjectTag: string;
+
+    /// <summary>True lets `document --migrate-pure` regenerate a stored legacy
+    /// `Pure` fact; False (the default) keeps such a block byte-identical when
+    /// that line is its only difference.</summary>
+    class var MigrateLegacyPure: Boolean;
   end;
 
 implementation
@@ -333,42 +428,14 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   , DRagLint.Doc.Regions
+  , DRagLint.Doc.ProjectTags { SplitEntries, the [A,B]entry tag grammar, INBOUND_LABELS }
   , DRagLint.Lint.SharedUnit
   ;
 
 const
-  { The inbound labels -- the only facts whose contents depend on WHICH project
-    is looking. Everything else in the block is computed from this unit's own
-    code and is identical under every index.
-
-    'Used in units:' IS here, but it was EXCLUDED for several hours and the
-    reason is worth keeping. Documenting YADF.Tokens under YADFOT rendered
-
-        Used in units: dxXMLWriter, FireDAC.Comp.QBE, Spring.Data.ExpressionParser,
-                       System.Bindings.Evaluator, System.JSON, XPTestedUnitParser, ...
-
-    where the project itself renders four real units -- and none of those names
-    exist in YADFOT's own index. They arrived through the facts builder's
-    NAME-BASED extra-store fan-out, which `document --project` was feeding with
-    every database in the manifest, library index included (CLI.OpenExtraStores;
-    its 'Used in units:' bucket at Doc.Facts.pas:1947 has NO ambiguity gate at
-    all, unlike the CalledFrom sibling at :1669). Forgiving those entries would
-    have welded library noise permanently into every shared unit's source -- the
-    accumulate-only cost, spent on entries that were never trustworthy.
-
-    That was fixed at the source rather than worked around here: the fan-out is
-    now explicit-`--db` only. With it gone, every entry on this line comes from
-    the project's own index, so the label is as trustworthy as the other two and
-    belongs in the feature. It is the reason YADF still drifted by 7 while it sat
-    outside.
-
-    ONE ASYMMETRY REMAINS, and it is why the entries here are bare names: this
-    label renders through JoinEsc, not JoinRefs, so it carries no ' ?' marker at
-    all. IsUncertainEntry is therefore always False for it. That is now sound --
-    the unverifiable producer is gone -- but if a future change re-introduces any
-    unverified contributor to this list, this is the line that stops screening
-    it. }
-  INBOUND_LABELS: array[0..2] of string = ('Called from:', 'Used by:', 'Used in units:');
+  { INBOUND_LABELS -- the three labels whose entries depend on WHICH project is
+    looking -- moved to DRagLint.Doc.ProjectTags with the tag grammar (2026-09-23),
+    together with the history of why 'Used in units:' belongs in it. }
 
   { THE CONTRACT, stated exactly (review-task-1 I1, 2026-09-22): every PREFIXED
     label RenderFactsBlock and FormatPhase2FactLines can emit -- a label ending
@@ -465,6 +532,14 @@ const
 
   MORE_MARK = '(+';
   UNCERTAIN_SUFFIX = ' ?';
+  { A project tag set opens and closes an entry: `[A,B]X.Y (X.pas)`. }
+  TAG_OPEN  = '[';
+  { The purity fact purity v1 wrote and v2 no longer does, and the one v2 writes
+    in its slot. Whole elements, because the renderer wraps every fact (P8). }
+  LEGACY_PURE_PARA = '<para>Pure</para>';
+  EFFECT_FREE_PARA = '<para>Effect-free (proven)</para>';
+  { The doc-comment line prefix, stripped before a fence line is compared. }
+  DOC_SLASHES = '///';
   { The per-fact wrapper the renderer has emitted since P8 (2026-08-24). }
   PARA_OPEN  = '<para>';
   PARA_CLOSE = '</para>';
@@ -496,6 +571,7 @@ var
     project. Single-threaded by assumption, like the rest of the lint pass. }
   FClosureKey  : Pointer                   = nil;
   FClosureNames: TDictionary<string, Byte> = nil;
+
 
 { ---------------------------------------------------------------------------
   Small text helpers
@@ -593,7 +669,7 @@ var
   P: Integer;
 begin
   Result:= False;
-  S:= Trim(AEntry);
+  S:= BareEntry(AEntry);
   if EndsText(UNCERTAIN_SUFFIX, S) then
     S:= TrimRight(Copy(S, 1, Length(S) - Length(UNCERTAIN_SUFFIX)));
 
@@ -641,22 +717,42 @@ begin
   Result:= EndsText(UNCERTAIN_SUFFIX, TrimRight(AEntry));
 end;
 
-{ Splits an inbound fact's content into entries. Entry text never contains a
-  comma -- a qualified name cannot, and the parenthesised location is a file
-  name -- so a plain comma split is exact. }
-function SplitEntries(const AContent: string): TArray<string>;
-var
-  L  : TList<string>;
-  Tok: string;
+{ The identity of an entry for set purposes: its bare text without the ' ?'
+  marker, lower-cased. Two spellings of one caller -- tagged or not, certain or
+  not -- are one entry; the TEXT the writer keeps is decided separately. }
+function EntryKey(const AEntry: string): string;
 begin
-  L:= TList<string>.Create;
-  try
-    for Tok in CollapseWs(AContent).Split([',']) do
-      if Trim(Tok) <> '' then L.Add(Trim(Tok));
-    Result:= L.ToArray;
-  finally
-    L.Free;
-  end;
+  Result:= Trim(BareEntry(AEntry));
+  if EndsText(UNCERTAIN_SUFFIX, Result) then
+    Result:= TrimRight(Copy(Result, 1, Length(Result) - Length(UNCERTAIN_SUFFIX)));
+  Result:= LowerCase(Result);
+end;
+
+{ Normalised full text, for multiset comparison: canonical tag order, lower-case. }
+function EntryNorm(const AEntry: string): string;
+var
+  Tags: TArray<string>;
+  Bare: string;
+begin
+  SplitTagged(AEntry, Tags, Bare);
+  Result:= LowerCase(FormatTagged(Tags, Bare));
+end;
+
+function SameEntryMultiset(const A, B: TArray<string>): Boolean;
+var
+  NA, NB: TArray<string>;
+  I     : Integer;
+begin
+  if Length(A) <> Length(B) then Exit(False);
+  SetLength(NA, Length(A));
+  SetLength(NB, Length(B));
+  for I:= 0 to High(A) do NA[I]:= EntryNorm(A[I]);
+  for I:= 0 to High(B) do NB[I]:= EntryNorm(B[I]);
+  TArray.Sort<string>(NA);
+  TArray.Sort<string>(NB);
+  for I:= 0 to High(NA) do
+    if NA[I] <> NB[I] then Exit(False);
+  Result:= True;
 end;
 
 { The unit an entry names. 'AOnly.CallFromA (AOnly.pas)' -> 'aonly';
@@ -667,7 +763,7 @@ function EntryUnitKey(const AEntry: string): string;
 var
   P, Q: Integer;
 begin
-  Result:= Trim(AEntry);
+  Result:= BareEntry(AEntry);
   if EndsText(UNCERTAIN_SUFFIX, Result) then
     Result:= TrimRight(Copy(Result, 1, Length(Result) - Length(UNCERTAIN_SUFFIX)));
   P:= LastDelimiter('(', Result);
@@ -930,12 +1026,193 @@ begin
     begin
       Lab:= INBOUND_LABELS[I];
       if not SIn.TryGetValue(Lab, SC) then Continue;
-      for E in SplitEntries(SC) do
+      { The window marker is not an entry. Split in as one, `X (+3 more)` read
+        as naming a unit called '+3 more' that no index holds -- so every
+        truncated block counted as evidence, and (since participation now
+        renders lists whole) would have been rewritten uncapped for nothing. }
+      for E in SplitEntries(WithoutMoreSuffix(SC)) do
         if (not UnitVouchable(AStore, E)) and (not IsUncertainEntry(E)) then Exit(True);
     end;
   finally
     SIn.Free;
   end;
+end;
+
+{ Does the stored block carry any project tag on an inbound entry? A tag is
+  written only into a block that took part in reconciliation, so its presence
+  IS the evidence -- the "shared" property derived from the block's own content,
+  with nothing for anyone to remember to mark. }
+function BlockCarriesTags(const ABlock: string): Boolean;
+var
+  SIn : TFactMap;
+  SRes: string;
+  SC  : string;
+begin
+  Result:= False;
+  if Pos(TAG_OPEN, ABlock) = 0 then Exit;
+  ParseBlock(ABlock, SIn, SRes);
+  try
+    for SC in SIn.Values do
+      if AnyTagged(SplitEntries(SC)) then Exit(True);
+  finally
+    SIn.Free;
+  end;
+end;
+
+{ ONE inbound label's content as the writer will leave it, given what is stored
+  and what this project rendered. The checker compares the stored content with
+  this; the writer writes it. One function, so the two cannot disagree.
+
+  The rules, per entry (identity = EntryKey: bare text, no ' ?', any case):
+
+    RENDERED by this project -> kept, with this project's tag added to whatever
+      set the stored entry carried. The rendered text wins for the bare part.
+    STORED ONLY, tagged      -> this project's tag removed if present; the entry
+      goes when its set empties, and is otherwise kept as it stands. Another
+      project's entry is never judged here.
+    STORED ONLY, untagged    -> the legacy rule, unchanged: kept when it names a
+      unit this index cannot vouch for (and is plausible and certain), dropped
+      when this index CAN vouch for its absence.
+
+  LAZY ADOPTION. An untagged stored entry this project renders is NOT tagged
+  merely because tagging is possible: while the line carries no tag at all and
+  nothing ELSE about it changes, the line is left as it stands. Only a line that changes for a real reason --
+  an entry gained or lost, a tag set changed, a truncated window replaced --
+  is written in full with this project's tags. Otherwise every shared block in
+  every corpus would be rewritten, and doc-drift would flag it, on the first run
+  of an engine that knows about tags: churn in untouched code, which the owner
+  ruled against for the purity migration and which applies here for the same
+  reason.
+
+  A STORED `(+N more)` WINDOW is reconciled on its VISIBLE entries and the marker
+  dropped. The entries it hid are not in the source anywhere, so nothing is lost
+  that was recorded; before this, the whole line was replaced by the fresh
+  render and the visible foreign entries went with it -- the `Called from:` loss
+  measured on DataCopy (docs\INBOX-document-apply-drops-facts-outside-the-db.md).
+  AFresh must be WHOLE (see TSharedFacts.WantsWholeInboundLists); the caller
+  checks. }
+function ReconcileContent(const AStore: ISymbolStore; const AStored, AFresh: string): string;
+var
+  Own       : string;
+  StoredTags: TDictionary<string, TArray<string>>;
+  StoredBare: TDictionary<string, string>;
+  Order     : TList<string>;
+  FreshKeys : TDictionary<string, Byte>;
+  Lazy      : TList<string>;
+  Eager     : TList<string>;
+  SE        : TArray<string>;
+  E, K, Bare: string;
+  Tags, Old : TArray<string>;
+  X         : string;
+  Legacy    : Boolean;
+
+  function SortedJoin(const L: TList<string>): string;
+  var
+    A: TArray<string>;
+  begin
+    A:= L.ToArray;
+    TArray.Sort<string>(A, TComparer<string>.Construct(
+      function(const P, Q: string): Integer
+      begin
+        Result:= TSharedFacts.CompareInboundEntries(P, Q);
+      end));
+    Result:= string.Join(', ', A);
+  end;
+
+begin
+  Own       := TSharedFacts.ProjectTag;
+  StoredTags:= TDictionary<string, TArray<string>>.Create;
+  StoredBare:= TDictionary<string, string>.Create;
+  Order     := TList<string>.Create;
+  FreshKeys := TDictionary<string, Byte>.Create;
+  Lazy      := TList<string>.Create;
+  Eager     := TList<string>.Create;
+  try
+    SE:= SplitEntries(WithoutMoreSuffix(AStored));
+    for E in SE do
+    begin
+      SplitTagged(E, Tags, Bare);
+      K:= EntryKey(Bare);
+      if StoredTags.TryGetValue(K, Old) then StoredTags[K]:= Old + Tags
+      else
+      begin
+        StoredTags.Add(K, Tags);
+        StoredBare.Add(K, Bare);
+        Order.Add(K);
+      end;
+    end;
+
+    for E in SplitEntries(AFresh) do
+    begin
+      Bare:= BareEntry(E);
+      K   := EntryKey(Bare);
+      if FreshKeys.ContainsKey(K) then Continue;
+      FreshKeys.Add(K, 1);
+      if not StoredTags.TryGetValue(K, Tags) then Tags:= nil;
+      { An untagged stored entry keeps its untagged spelling in the lazy view. }
+      Legacy:= StoredTags.ContainsKey(K) and (Length(Tags) = 0);
+      if Own <> '' then Tags:= Tags + [Own];
+      X:= FormatTagged(Tags, Bare);
+      Eager.Add(X);
+      if Legacy then Lazy.Add(Bare) else Lazy.Add(X);
+    end;
+
+    for K in Order do
+    begin
+      if FreshKeys.ContainsKey(K) then Continue;
+      Tags:= StoredTags[K];
+      Bare:= StoredBare[K];
+      if Length(Tags) > 0 then
+      begin
+        if Own <> '' then Tags:= WithoutTag(Tags, Own);
+        if Length(Tags) = 0 then Continue;
+        X:= FormatTagged(Tags, Bare);
+      end
+      else if PlausibleEntry(Bare) and (not UnitVouchable(AStore, Bare)) and
+              (not IsUncertainEntry(Bare)) then X:= Bare
+      else Continue;
+      Lazy.Add(X);
+      Eager.Add(X);
+    end;
+
+    { Lazy only while the line is still wholly LEGACY. Once any project has
+      tagged it the line is in the tagged regime, adopting costs no churn that
+      has not already happened, and an entry left untagged there could never be
+      reaped by the project that rendered it (run_doc_project_tags REAP). }
+    if (not IsTruncated(AStored)) and (not AnyTagged(SE)) and
+       SameEntryMultiset(Lazy.ToArray, SE) then
+      Result:= SortedJoin(Lazy)
+    else
+      Result:= SortedJoin(Eager);
+  finally
+    Eager.Free;
+    Lazy.Free;
+    FreshKeys.Free;
+    Order.Free;
+    StoredBare.Free;
+    StoredTags.Free;
+  end;
+end;
+
+{ The pair with the legacy purity element taken out of the stored side and the
+  v2 one out of the fresh side -- a no-op when MigrateLegacyPure is set or the
+  stored text carries no legacy line. See BlockDrifted for the ruling. }
+procedure WithoutLegacyPure(var AStored, AFresh: string);
+begin
+  if TSharedFacts.MigrateLegacyPure or (Pos(LEGACY_PURE_PARA, AStored) = 0) then Exit;
+  AStored:= StringReplace(AStored, LEGACY_PURE_PARA, '', [rfReplaceAll]);
+  AFresh := StringReplace(AFresh,  EFFECT_FREE_PARA, '', [rfReplaceAll]);
+end;
+
+{ Would the writer change this participating label? A stored window always
+  changes (it is replaced by the reconciled whole list); otherwise compare the
+  stored entries with ReconcileContent's, as a multiset -- order is not drift
+  (owner ruling 2026-09-06), a tag set is. }
+function ReconciledDrift(const AStore: ISymbolStore; const AStored, AFresh: string): Boolean;
+begin
+  Result:= IsTruncated(AStored) or
+           not SameEntryMultiset(SplitEntries(ReconcileContent(AStore, AStored, AFresh)),
+                                 SplitEntries(AStored));
 end;
 
 { Does this unit take part in fact reconciliation at all?
@@ -963,8 +1240,12 @@ end;
   accumulate-only contract described at the top of this unit. }
 function Participates(const AStore: ISymbolStore; const AUnitPath, ABlock: string): Boolean;
 begin
+  { v(2026-09-23, project tags): a block that already carries a tag took part
+    before, and must keep doing so -- otherwise the first run after every entry
+    became vouchable would fall back to the plain render and strip the tags. }
   Result:= (AStore <> nil) and
-           (TSharedUnit.IsShared(AUnitPath) or BlockHoldsUnvouchable(AStore, ABlock));
+           (TSharedUnit.IsShared(AUnitPath) or BlockHoldsUnvouchable(AStore, ABlock) or
+            BlockCarriesTags(ABlock));
 end;
 
 { ---------------------------------------------------------------------------
@@ -984,6 +1265,7 @@ var
   E             : string;
   I             : Integer;
   StoredCmp     : string;
+  FreshCmp      : string;
   IsShared      : Boolean;
 begin
   { OWNER RULING 2026-09-06: "Order is not important. We should compare parts.
@@ -1019,6 +1301,17 @@ begin
         graded it before. }
   IsShared:= Participates(AStore, AUnitPath, AStored);
 
+  { THE LEGACY PURITY LINE IS NOT DRIFT ON ITS OWN (2026-09-23). Purity v2
+    stopped emitting `Pure`; the owner deferred migrating the stored lines and
+    will regenerate them ONCE. So the stored `Pure` element and the fresh
+    `Effect-free (proven)` element are both taken out before any compare, and a
+    block differing in nothing else is current. TDocumenter.BuildForSymbol makes
+    the same exemption through LegacyPureViews, so the writer leaves exactly the
+    blocks this calls current. `document --migrate-pure` turns both off. }
+  StoredCmp:= AStored;
+  FreshCmp := AFresh;
+  WithoutLegacyPure(StoredCmp, FreshCmp);
+
   { A DUPLICATED INBOUND LABEL CANNOT BE SET-COMPARED, so it keeps the byte
     compare -- the fail-safe direction this unit's header requires ("if a block
     cannot be parsed confidently ... the answer is the byte compare").
@@ -1034,9 +1327,9 @@ begin
     exists because the surrounding forgiveness rules are easy to widen into
     "reports nothing", and it caught this on the first battery. }
   for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
-    if (ParaLabelCount(AStored, INBOUND_LABELS[I]) > 1) or
-       (ParaLabelCount(AFresh,  INBOUND_LABELS[I]) > 1) then
-      Exit(CollapseWs(AStored) <> CollapseWs(AFresh));
+    if (ParaLabelCount(StoredCmp, INBOUND_LABELS[I]) > 1) or
+       (ParaLabelCount(FreshCmp,  INBOUND_LABELS[I]) > 1) then
+      Exit(CollapseWs(StoredCmp) <> CollapseWs(FreshCmp));
 
   { TAKE OUT ANY LABEL THIS INDEX CANNOT PRODUCE, BEFORE THE PARSE.
 
@@ -1051,16 +1344,15 @@ begin
     Its absence from the fresh render is not evidence about the source; it is
     the same blind spot as an unseen caller. A label BOTH sides render is still
     compared normally, and every other residual fact is untouched. }
-  StoredCmp:= AStored;
   if IsShared then
   for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
-    if (LabelContent(AStored, UNVOUCHABLE_LABELS[I]) <> '') and
-       (LabelContent(AFresh,  UNVOUCHABLE_LABELS[I]) =  '') then
+    if (LabelContent(StoredCmp, UNVOUCHABLE_LABELS[I]) <> '') and
+       (LabelContent(FreshCmp,  UNVOUCHABLE_LABELS[I]) =  '') then
       StoredCmp:= WithoutParaLabel(StoredCmp, UNVOUCHABLE_LABELS[I]);
 
   ParseBlock(StoredCmp, SIn, SRes);
   try
-    ParseBlock(AFresh, FIn, FRes);
+    ParseBlock(FreshCmp, FIn, FRes);
     try
       { v(2026-08-14): the fresh render produced NO managed block AT ALL -- this
         project compiles the unit but calls nothing in it. The residual compare
@@ -1070,7 +1362,7 @@ begin
         the stored block carries entries that ONLY another project could have
         written; a block with nothing foreign in it is still graded normally. }
       if IsShared and (FRes = '') and (FIn.Count = 0) and (SIn.Count > 0)
-         and HoldsForeignInboundEntries(AStored, AStore, AUnitPath) then Exit(False);
+         and HoldsForeignInboundEntries(AStored, AStore) then Exit(False);
 
       { Everything that is not an inbound fact keeps byte-compare semantics --
         nothing about sharing makes a wrong Calls: or Complexity: line right. }
@@ -1082,6 +1374,19 @@ begin
         if not SIn.TryGetValue(Lab, SC) then SC:= '';
         if not FIn.TryGetValue(Lab, FC) then FC:= '';
         if (SC = '') and (FC = '') then Continue;
+
+        { v(2026-09-23): a PARTICIPATING block is compared against exactly what
+          the writer will write -- ReconcileContent, the one function both use.
+          The fresh render is whole here (WantsWholeInboundLists), so the
+          window rule below no longer applies to it; a STORED window is drift
+          because the writer replaces it with the reconciled whole list. A
+          capped fresh line can still reach this point from a caller that did
+          not ask for whole lists, and keeps the old rule. }
+        if IsShared and not IsTruncated(FC) then
+        begin
+          if ReconciledDrift(AStore, SC, FC) then Exit(True);
+          Continue;
+        end;
 
         { A window onto the list is not the list. }
         if IsTruncated(SC) or IsTruncated(FC) then
@@ -1143,7 +1448,7 @@ end;
   a unit the index cannot see starts reporting drift. Caught by
   run_doc_drift_unseen_units (CASE-A) and run_doc_drift_extra_stores (#3). }
 class function TSharedFacts.HoldsForeignInboundEntries(const AStoredBody: string;
-  const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+  const AStore: ISymbolStore): Boolean;
 var
   SIn : TFactMap;
   SRes: string  ;
@@ -1151,9 +1456,18 @@ var
   SC  : string  ;
   E   : string  ;
   I   : Integer ;
+  Tags: TArray<string>;
+  Bare: string  ;
 begin
   Result:= False;
-  if not Participates(AStore, AUnitPath, AStoredBody) then Exit;
+  { NO PARTICIPATION GATE, deliberately (2026-09-23). The gate used to be
+    Participates, and an unmarked block with a truncated line passed it only
+    because the `(+N more)` marker read as an unvouchable ENTRY. That marker is
+    no longer an entry (WithoutMoreSuffix), so the gate would now shut out the
+    truncated block this routine exists to protect. Without the gate the answer
+    is unchanged everywhere else: a non-participating block by definition holds
+    no tag and no certain unvouchable entry, so the loop answers False for it. }
+  if AStore = nil then Exit;
 
   ParseBlock(AStoredBody, SIn, SRes);
   try
@@ -1169,7 +1483,18 @@ begin
         reason: both fail toward PRESERVING the source. }
       if IsTruncated(SC) then Exit(True);
       for E in SplitEntries(SC) do
+      begin
+        { A tagged entry is foreign when ANOTHER project claims it. One carrying
+          only this project's tag is this project's to reap -- that is the
+          whole point of the tag. With no project name, every tag is foreign. }
+        SplitTagged(E, Tags, Bare);
+        if Length(Tags) > 0 then
+        begin
+          if Length(WithoutTag(Tags, ProjectTag)) > 0 then Exit(True);
+          Continue;
+        end;
         if (not UnitVouchable(AStore, E)) and (not IsUncertainEntry(E)) then Exit(True);
+      end;
     end;
   finally
     SIn.Free;
@@ -1186,7 +1511,6 @@ var
   I, J, P   : Integer;
   Line, Body: string;
   Lab, SC   : string;
-  Preserved : TArray<string>;
   Prefix    : string;
   Suffix    : string;   { the fact line's closing </para>, if P8 wrapped it }
   Changed   : Boolean;
@@ -1195,54 +1519,9 @@ var
   LastAt    : Integer;
   FirstAt   : Integer;
 
-  { The entries STORED holds that this project cannot see -- exactly the set
-    BlockDrifted forgives. If the two ever disagree, the writer rewrites a block
-    the checker just called current, which is incident five on this seam. }
-  function ForgivenOf(const AStoredContent: string; const AAlready: TArray<string>): TArray<string>;
-  var
-    Seen: TDictionary<string, Byte>;
-    L   : TList<string>;
-    E   : string;
-  begin
-    L   := TList<string>.Create;
-    Seen:= TDictionary<string, Byte>.Create;
-    try
-      for E in AAlready do Seen.AddOrSetValue(LowerCase(E), 1);
-      for E in SplitEntries(AStoredContent) do
-        if (not Seen.ContainsKey(LowerCase(E))) and
-           PlausibleEntry(E) and
-           (not UnitVouchable(AStore, E)) and
-           (not IsUncertainEntry(E)) then
-        begin
-          Seen.AddOrSetValue(LowerCase(E), 1);
-          L.Add(E);
-        end;
-      Result:= L.ToArray;
-    finally
-      Seen.Free;
-      L.Free;
-    end;
-  end;
-
-  function SortedJoin(const A, B: TArray<string>): string;
-  var
-    L: TList<string>;
-    E: string;
-  begin
-    L:= TList<string>.Create;
-    try
-      for E in A do L.Add(E);
-      for E in B do L.Add(E);
-      L.Sort(TComparer<string>.Construct(
-        function(const X, Y: string): Integer
-        begin
-          Result:= TSharedFacts.CompareInboundEntries(X, Y);
-        end));
-      Result:= string.Join(', ', L.ToArray);
-    finally
-      L.Free;
-    end;
-  end;
+  { The per-label merge is ReconcileContent -- the SAME function BlockDrifted
+    compares against, so the writer cannot rewrite a block the checker just
+    called current (incident five on this seam). }
 
 begin
   Result:= ADocText;
@@ -1317,11 +1596,12 @@ begin
             Body  := TrimRight(Copy(Body, 1, Length(Body) - Length(Suffix)));
           end;
 
-          { Never merge across a truncated window, in either direction. }
-          if IsTruncated(Body) or IsTruncated(SC) then Break;
+          { Never merge INTO a truncated fresh window. A STORED window is merged
+            on its visible entries since 2026-09-23 -- see ReconcileContent; the
+            caller renders whole lists for every block that gets this far. }
+          if IsTruncated(Body) then Break;
 
-          Preserved:= ForgivenOf(SC, SplitEntries(Body));
-          Lines[I] := Prefix + ' ' + SortedJoin(SplitEntries(Body), Preserved) + Suffix;
+          Lines[I]:= Prefix + ' ' + ReconcileContent(AStore, SC, Body) + Suffix;
           if Lines[I] <> Line then Changed:= True;
           Break;
         end;
@@ -1338,11 +1618,10 @@ begin
           Lab:= INBOUND_LABELS[J];
           if Handled.ContainsKey(Lab) then Continue;
           if not SIn.TryGetValue(Lab, SC) then Continue;
-          if IsTruncated(SC) then Continue;
-          Preserved:= ForgivenOf(SC, nil);
-          if Length(Preserved) = 0 then Continue;
+          Body:= ReconcileContent(AStore, SC, '');
+          if Body = '' then Continue;
           Prefix:= Copy(Lines[BeginAt], 1, Pos(AUTO_BEGIN, Lines[BeginAt]) - 1);
-          Lines.Insert(BeginAt + 1, Prefix + Lab + ' ' + SortedJoin(Preserved, nil));
+          Lines.Insert(BeginAt + 1, Prefix + Lab + ' ' + Body);
           Changed:= True;
         end;
 
@@ -1403,7 +1682,7 @@ var
 begin
   if UnitInClosure(AStore, AEntry) then Exit(True);
 
-  S:= Trim(AEntry);
+  S:= BareEntry(AEntry);
   P:= Pos('(', S);
 
   { A '(file.pas)' part is BETTER EVIDENCE than any prefix guess, so when one is
@@ -1475,9 +1754,118 @@ begin
   Result:= DRagLint.Doc.SharedFacts.StoredBlockBody(AText);
 end;
 
+class function TSharedFacts.WantsWholeInboundLists(const AStoredBody: string;
+  const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+begin
+  Result:= Participates(AStore, AUnitPath, AStoredBody);
+end;
+
+{ AText with every line inside a managed fence whose content -- after the `///`
+  and surrounding blanks -- is exactly AElement removed. AFound says whether one
+  was. Lines outside a fence are never touched: the fence is the scope. }
+function WithoutFenceLine(const AText, AElement: string; out AFound: Boolean): string;
+var
+  Kept   : TList<string>;
+  S, C   : string;
+  InFence: Boolean;
+begin
+  AFound := False;
+  InFence:= False;
+  Kept   := TList<string>.Create;
+  try
+    for S in AText.Replace(#13#10, #10).Split([#10]) do
+    begin
+      if Pos(AUTO_BEGIN, S) > 0 then InFence:= True
+      else if Pos(AUTO_END, S) > 0 then InFence:= False
+      else if InFence then
+      begin
+        C:= Trim(S);
+        if C.StartsWith(DOC_SLASHES) then C:= Trim(Copy(C, Length(DOC_SLASHES) + 1, MaxInt));
+        if C = AElement then
+        begin
+          AFound:= True;
+          Continue;
+        end;
+      end;
+      Kept.Add(S);
+    end;
+    Result:= string.Join(#13#10, Kept.ToArray);
+  finally
+    Kept.Free;
+  end;
+end;
+
+class function TSharedFacts.LegacyPureViews(const AStored, AFresh: string;
+  out AStoredView, AFreshView: string): Boolean;
+var
+  Found, Ignored: Boolean;
+begin
+  AStoredView:= AStored;
+  AFreshView := AFresh;
+  if MigrateLegacyPure then Exit(False);
+  AStoredView:= WithoutFenceLine(AStored, LEGACY_PURE_PARA, Found);
+  if not Found then Exit(False);
+  AFreshView:= WithoutFenceLine(AFresh, EFFECT_FREE_PARA, Ignored);
+  Result:= True;
+end;
+
+class function TSharedFacts.IsLegacyPureOnlyBody(const AStoredBody: string): Boolean;
+begin
+  Result:= (not MigrateLegacyPure) and (CollapseWs(AStoredBody) = LEGACY_PURE_PARA);
+end;
+
 class function TSharedFacts.CompareInboundEntries(const X, Y: string): Integer;
 begin
-  Result:= CompareText(X, Y);
+  { By the BARE entry first, so a tag never decides where a caller sits: the
+    list reads alphabetically by name whoever claims each entry. For two
+    untagged entries this is exactly the CompareText it always was. }
+  Result:= CompareText(BareEntry(X), BareEntry(Y));
+  if Result = 0 then Result:= CompareText(X, Y);
+end;
+
+{ For a block the writer MERGES: does the merge drop an UNTAGGED entry naming a
+  unit this index cannot vouch for? That is the one deletion a merge can still
+  make without evidence -- ReconcileContent does not keep an uncertain ' ?'
+  entry it cannot see. A tagged entry dropped because this project removed its
+  own tag is not counted: the tag is the vouching. A capped fresh line cannot be
+  merged at all, so it answers True, the conservative direction. }
+function ReconcileDropsUnvouchable(const AStore: ISymbolStore; const AStored, AFresh: string): Boolean;
+var
+  StoredIn, FreshIn: TFactMap;
+  StoredRes, FreshRes: string;
+  Lab       : string;
+  SC, Fresh, E: string;
+  Kept      : TDictionary<string, Byte>;
+  Tags      : TArray<string>;
+  Bare      : string;
+begin
+  Result:= False;
+  ParseBlock(AStored, StoredIn, StoredRes);
+  try
+    ParseBlock(AFresh, FreshIn, FreshRes);
+    Kept:= TDictionary<string, Byte>.Create;
+    try
+      for Lab in INBOUND_LABELS do
+      begin
+        if not StoredIn.TryGetValue(Lab, SC) then Continue;
+        if not FreshIn.TryGetValue(Lab, Fresh) then Fresh:= '';
+        if IsTruncated(Fresh) then Exit(True);
+        Kept.Clear;
+        for E in SplitEntries(ReconcileContent(AStore, SC, Fresh)) do Kept.AddOrSetValue(EntryKey(E), 1);
+        for E in SplitEntries(WithoutMoreSuffix(SC)) do
+        begin
+          SplitTagged(E, Tags, Bare);
+          if (Length(Tags) > 0) or Kept.ContainsKey(EntryKey(Bare)) then Continue;
+          if not UnitVouchable(AStore, Bare) then Exit(True);
+        end;
+      end;
+    finally
+      Kept.Free;
+      FreshIn.Free;
+    end;
+  finally
+    StoredIn.Free;
+  end;
 end;
 
 class function TSharedFacts.RegenerationDropsUnvouchable(const AStored, AFresh: string;
@@ -1508,6 +1896,11 @@ begin
 
     The unmarked case is the defect; the marked case is the cure. }
   if TSharedUnit.IsShared(AUnitPath) then Exit(False);
+
+  { AN UNMARKED BLOCK THAT PARTICIPATES IS MERGED TOO (2026-09-23), so the
+    question is what the MERGE drops, not what the fresh render lacks. }
+  if Participates(AStore, AUnitPath, AStored) then
+    Exit(ReconcileDropsUnvouchable(AStore, AStored, AFresh));
 
   { 1. A WHOLE LABEL this index cannot reproduce, present then gone. }
   for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
