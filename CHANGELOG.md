@@ -5,6 +5,21 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed (follow-ups D26, D29 -- no version constant moves)
+
+- **D26 -- the `dl:shared` reader no longer mistakes PROSE for the marker.** The header scanner
+  accepted the tag anywhere inside a header comment, so a brace header that merely described the
+  marker ("the unit is marked `dl:shared`, the entry ...") made `Doc.SharedFacts.pas` and
+  `Lint.SharedUnit.pas` itself read as shared -- with sentence fragments as the "projects" -- and
+  every consumer (`Doc.Facts.UnitIsShared`, `SharedFacts.Participates`,
+  `CollectDependentProjectNotRecompiled`, `RegenerationDropsUnvouchable`) treated them as shared
+  (uncapped inbound lists, staleness rule, tag regime). The marker must now be the FIRST TOKEN of
+  its comment (`// dl:shared A, B`, `{ dl:shared A, B }`, `(* dl:shared A *)`, blanks and line
+  breaks before it allowed). A `//` inside a line comment re-arms that position, so the writer's
+  `   // dl:shared P` appended to a unit line that already ends in a comment still parses back.
+  Only those two units in this repo change answer; `TSharedUnit`'s own facts block re-capped its
+  inbound list accordingly. Guard: `tests\autotest\run_shared_unit_marker.ps1` (31 checks).
+
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
 
 - **D18 -- `symbol_facts.sql_reads` now sees SQL built line by line.** Consecutive

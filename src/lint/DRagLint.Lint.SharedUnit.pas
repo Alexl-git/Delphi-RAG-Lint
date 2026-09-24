@@ -44,7 +44,7 @@ type
   /// is 7-bit ASCII and the file's original line endings are preserved -- only
   /// the single marker line is ever rewritten.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.Participates (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.Participates (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.SharedFacts, DRagLint.Lint.ProjectRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -193,6 +193,7 @@ uses
 const
   IDENT_CHARS = ['A'..'Z', 'a'..'z', '0'..'9', '_'];
   EOL_CHARS   = [#13, #10];
+  BLANK_CHARS = [' ', #9, #13, #10];
 
 type
   { What one pass of the header scanner is looking for. Both questions need the
@@ -205,14 +206,20 @@ type
 
 /// <summary>Scans the header region and returns the 1-based position of what
 /// AWant asks for, or 0.</summary>
-/// <remarks>swMarkInComment matches SHARED_MARK only while inside a comment;
-/// swUnitKeyword matches the `unit` keyword only while in code. The region ends
-/// with the line carrying the `interface` keyword -- scanning continues to that
-/// line's end, so a marker parked after the keyword is still seen.</remarks>
+/// <remarks>swMarkInComment matches SHARED_MARK only while inside a comment
+/// AND only as that comment's FIRST TOKEN (blanks and line breaks before it are
+/// allowed): prose that merely mentions the tag -- "the unit is marked
+/// dl:shared" -- is not a marker (D26, 2026-09-24). A `//` inside a line
+/// comment re-arms the first-token position, because the writer appends
+/// `   // dl:shared P` to a unit line that may already end in a line comment,
+/// and what it writes must read back. swUnitKeyword matches the `unit` keyword
+/// only while in code. The region ends with the line carrying the `interface`
+/// keyword -- scanning continues to that line's end, so a marker parked after
+/// the keyword is still seen.</remarks>
 function ScanHeader(const AText: string; AWant: TScanWant): Integer;
 var
-  N, I, StopAt: Integer;
-  InBrace, InParen, InLineCmt, InStr: Boolean;
+  N, I, StopAt, Skip: Integer;
+  InBrace, InParen, InLineCmt, InStr, AtCmtStart: Boolean;
   Ch: Char;
 
   function AtText(const AWhat: string): Boolean;
@@ -232,45 +239,74 @@ var
     Result:= True;
   end;
 
+  { In code state: opens a comment at I when one starts there, arming the
+    first-token position. Returns the characters the opener consumes, or 0. }
+  function OpenComment: Integer;
+  begin
+    Result:= 0;
+    if Ch = '{' then
+    begin
+      InBrace:= True;
+      Result := 1;
+    end
+    else if AtText('(*') then
+    begin
+      InParen:= True;
+      Result := 2;
+    end
+    else if AtText('//') then
+    begin
+      InLineCmt:= True;
+      Result   := 2;
+    end;
+    if Result > 0 then AtCmtStart:= True;
+  end;
+
+  { In comment state: advances the comment/first-token state over the
+    character at I. Returns the characters consumed (1, or 2 for a closer or
+    a re-arming slash-slash). }
+  function CommentStep: Integer;
+  begin
+    Result:= 1;
+    if not CharInSet(Ch, BLANK_CHARS) then AtCmtStart:= False;
+    if InLineCmt then
+    begin
+      if CharInSet(Ch, EOL_CHARS) then
+        InLineCmt:= False
+      else if AtText('//') then
+      begin
+        AtCmtStart:= True;
+        Result    := 2;
+      end;
+    end
+    else if InBrace then
+      InBrace:= Ch <> '}'
+    else if AtText('*)') then
+    begin
+      InParen:= False;
+      Result := 2;
+    end;
+  end;
+
 begin
-  Result   := 0;
-  N        := Length(AText);
-  StopAt   := N;
-  InBrace  := False;
-  InParen  := False;
-  InLineCmt:= False;
-  InStr    := False;
-  I        := 1;
+  Result    := 0;
+  N         := Length(AText);
+  StopAt    := N;
+  InBrace   := False;
+  InParen   := False;
+  InLineCmt := False;
+  InStr     := False;
+  AtCmtStart:= False;
+  I         := 1;
 
   while (I <= N) and (I <= StopAt) do
   begin
     Ch:= AText[I];
 
-    if InLineCmt then
+    if InLineCmt or InBrace or InParen then
     begin
-      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
-      if CharInSet(Ch, EOL_CHARS) then InLineCmt:= False;
-      Inc(I);
-      Continue;
-    end;
-
-    if InBrace then
-    begin
-      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
-      if Ch = '}' then InBrace:= False;
-      Inc(I);
-      Continue;
-    end;
-
-    if InParen then
-    begin
-      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
-      if (Ch = '*') and (I < N) and (AText[I + 1] = ')') then
-      begin
-        InParen:= False;
-        Inc(I);
-      end;
-      Inc(I);
+      if (AWant = swMarkInComment) and AtCmtStart and AtText(SHARED_MARK) then Exit(I);
+      Inc(I, CommentStep);
       Continue;
     end;
 
@@ -284,10 +320,18 @@ begin
     end;
 
     { code }
-    if Ch = '''' then begin InStr    := True; Inc(I);    Continue; end;
-    if Ch = '{'  then begin InBrace  := True; Inc(I);    Continue; end;
-    if (Ch = '(') and (I < N) and (AText[I + 1] = '*') then begin InParen  := True; Inc(I, 2); Continue; end;
-    if (Ch = '/') and (I < N) and (AText[I + 1] = '/') then begin InLineCmt:= True; Inc(I, 2); Continue; end;
+    if Ch = '''' then
+    begin
+      InStr:= True;
+      Inc(I);
+      Continue;
+    end;
+    Skip:= OpenComment;
+    if Skip > 0 then
+    begin
+      Inc(I, Skip);
+      Continue;
+    end;
 
     if (AWant = swUnitKeyword) and AtWord('unit') then Exit(I);
 

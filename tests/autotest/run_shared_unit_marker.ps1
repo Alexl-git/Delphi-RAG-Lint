@@ -34,11 +34,18 @@
 
   * `dl:shared` IN A STRING LITERAL is not a marker. The whole reason the reader
     is a comment-state scanner rather than a text match.
+
+  * `dl:shared` IN PROSE is not a marker (D26, 2026-09-24). The scanner used to
+    accept the tag ANYWHERE inside a header comment, so a brace header that
+    merely DESCRIBED the marker ("the unit is marked `dl:shared`") made
+    Doc.SharedFacts.pas -- and SharedUnit.pas itself -- read as shared, with
+    the "projects" being fragments of the sentence. The marker must be the
+    FIRST TOKEN of its comment, which is the form the writer emits.
 #>
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-shared-unit-marker"
+  [string]$WorkDir = "$env:TEMP\drag-lint-shared-unit-marker-$PID"
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -63,6 +70,7 @@ if (Test-Path $dllSrc) {
 
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
+try {
 
 function Write-Ascii([string]$Path, [string]$Text) {
   $norm = $Text -replace "`r`n", "`n" -replace "`n", "`r`n"
@@ -176,6 +184,61 @@ implementation
 end.
 '@
 
+# D26: a header brace comment that DESCRIBES the marker, on a unit with none.
+# Shape copied from Doc.SharedFacts.pas, which read as shared because of it.
+$prose = Join-Path $WorkDir 'ProseUnit.pas'
+Write-Ascii $prose @'
+unit ProseUnit;
+
+{ Facts about shared units. When the unit is marked `dl:shared`, the entry
+  names a unit outside this closure, and the staleness rule applies. }
+
+interface
+
+implementation
+
+end.
+'@
+
+# D26: a line comment that MENTIONS the tag after the unit line.
+$proseLine = Join-Path $WorkDir 'ProseLineUnit.pas'
+Write-Ascii $proseLine @'
+unit ProseLineUnit;   // see dl:shared below
+
+interface
+
+implementation
+
+end.
+'@
+
+# D26: the same prose in a star-paren comment -- the third comment kind.
+$proseParen = Join-Path $WorkDir 'ProseParenUnit.pas'
+Write-Ascii $proseParen @'
+(* The dl:shared marker is described here, not declared. *)
+unit ProseParenUnit;
+
+interface
+
+implementation
+
+end.
+'@
+
+# D26 writer lock-step: the unit line already ends in a line comment, so the
+# writer's appended `   // dl:shared P` lands INSIDE that comment. It must
+# still parse back, or shared-unit --add-project refuses a unit it used to mark.
+$trailing = Join-Path $WorkDir 'TrailingCommentUnit.pas'
+Write-Ascii $trailing @'
+unit TrailingCommentUnit;   // keep in sync with the server copy
+
+interface
+
+implementation
+
+end.
+'@
+
 Write-Host "shared-unit marker" -ForegroundColor Cyan
 
 # ------------------------------------------------------------------ reading --
@@ -207,6 +270,18 @@ Check 'dl:shared in a string literal is not a marker' (-not $r.is_shared) `
 $r = Invoke-SharedUnit -Path $late
 Check 'a marker below the interface line is out of scope' (-not $r.is_shared) `
   'the marker is a unit-level declaration, not a statement'
+
+$r = Invoke-SharedUnit -Path $prose
+Check 'D26: dl:shared in header brace-comment PROSE is not a marker' ($null -ne $r -and -not $r.is_shared) `
+  "got is_shared=$($r.is_shared) projects='$($r.projects -join '|')'"
+
+$r = Invoke-SharedUnit -Path $proseLine
+Check 'D26: dl:shared mid-way through a line comment is not a marker' ($null -ne $r -and -not $r.is_shared) `
+  "got is_shared=$($r.is_shared) projects='$($r.projects -join '|')'"
+
+$r = Invoke-SharedUnit -Path $proseParen
+Check 'D26: dl:shared in star-paren comment prose is not a marker' ($null -ne $r -and -not $r.is_shared) `
+  "got is_shared=$($r.is_shared) projects='$($r.projects -join '|')'"
 
 # ------------------------------------------------------------------ writing --
 $before = [System.IO.File]::ReadAllText($two)
@@ -253,6 +328,14 @@ Check 'appending inside a block comment keeps the terminator' ($after -match '\{
 Check 'the appended project parses back' (($r.projects -join ',') -eq 'Alpha,Beta,Gamma') `
   "got '$($r.projects -join ',')'"
 
+$r = Invoke-SharedUnit -Path $trailing -AddProject 'YADF' -Apply
+$after = [System.IO.File]::ReadAllText($trailing)
+Check 'D26: a marker appended after an existing unit-line comment parses back' `
+  ($r.was_added -eq $true -and $r.applied -eq $true -and ($r.projects -join ',') -eq 'YADF') `
+  "got was_added=$($r.was_added) applied=$($r.applied) projects='$($r.projects -join ',')'"
+Check 'D26: ...and the file now reads as shared' ((Invoke-SharedUnit -Path $trailing).is_shared) `
+  "first line is now: $((($after -split "`r`n")[0]))"
+
 # ------------------------------------------------------------------- errors --
 $out = & $Exe shared-unit --in (Join-Path $WorkDir 'NoSuchUnit.pas') --json 2>&1
 Check 'a missing file is a non-zero exit, not a crash' ($LASTEXITCODE -ne 0) `
@@ -266,3 +349,7 @@ Write-Host ''
 if ($script:Failed) { Write-Host 'run_shared_unit_marker: FAILED' -ForegroundColor Red; exit 1 }
 Write-Host 'run_shared_unit_marker: OK' -ForegroundColor Green
 exit 0
+}
+finally {
+  if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue }
+}
