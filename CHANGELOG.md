@@ -68,8 +68,9 @@ v23 are UNCHANGED -- no index needs a re-parse. No new rules (188).
   `tests\autotest\run_readonly_then_writer_same_process.ps1`.
 - **D24 -- one writer open, and five read verbs stop writing the index.** New
   `DRagLint.Storage.FileMembership.ConnectWriter` (Normal locking, synchronous NORMAL, journal mode
-  WAL, a private cache, and the busy timeout armed before the connect) is now the only way an index is opened for writing: `TSQLiteSymbolStore.Connect`'s write
-  path, `import-log`, and `migrate-dbs`'s checkpoint probe. `import-log` and `migrate-dbs --apply`
+  WAL, a private cache, and the busy timeout armed before the connect) is now the only way an index
+  is opened for writing: `TSQLiteSymbolStore.Connect`'s write path, `import-log`, and
+  `migrate-dbs`'s checkpoint probe. `import-log` and `migrate-dbs --apply`
   used FireDAC's defaults (`LockingMode=Exclusive`, `journal_mode = DELETE`) and turned a WAL index
   into a rollback journal (header byte 18: 2 -> 1, measured on a copy of the self index and on the
   migrate fixture); both now keep it WAL. `migrate-dbs`'s post-move row count and its
@@ -153,7 +154,8 @@ v23 are UNCHANGED -- no index needs a re-parse. No new rules (188).
   unbound sites -> 0 (`uStyles.SkipRefresh`, `uAutoTest.AutoTest_ExtraScenarios`,
   `uPLANLIST.PlanEditFormHook` x2), `member_accesses` 13,630 -> 13,634 (4 `write`), effect-free
   routines unchanged (2,918; the purity stage now reads a bound unit-qualified READ as a plain global
-  read, not an unbound member, and still flags a WRITE -- as `receiver not classified`). In `Storage.SQLite.pas` `ResolveCallTargets`: a new calls log line
+  read, not an unbound member, and still flags a WRITE -- as `receiver not classified`). In
+  `Storage.SQLite.pas` `ResolveCallTargets`: a new calls log line
   `unit-values: N unit-qualified var/const ref(s) bound (resolver and store agree)`, and these
   bindings are counted neither into `enum-values:` "qualified bound (Shape B)" (whose reconciliation
   would otherwise print a false WARNING) nor into the `edge(s)` total. The same gate now guards rung
@@ -190,8 +192,9 @@ v23 are UNCHANGED -- no index needs a re-parse. No new rules (188).
   `-$PID` / `_$PID` (471 sites: 468 scripted, three by hand) and remove it in a `finally` on every exit
   path. New static guard `tests\autotest\run_scratch_dirs_are_per_run.ps1` fails on any
   draglint/drag-lint path under a temp root with no per-run component (positive control planted in
-  its own scratch). Five runners owned by parallel batches still hold a fixed path and keep the guard
-  RED until they are converted (no allow-list, by design).
+  its own scratch). The five runners held back because parallel batches owned them were converted
+  before release (the last, `run_concat_in_loop_precision.ps1`, in a follow-up commit), so every
+  runner is per run and the guard passes on the released tree (no allow-list, by design).
 
 ## v1.17.0-alpha -- 2026-09-23
 
@@ -581,7 +584,7 @@ v23 are UNCHANGED -- no index needs a re-parse. No new rules (188).
 - **A forward declaration is not a class (C2.5).** `TFoo = class;` completed later in the same unit is folded into the real declaration by every by-name reader: `query --name/--qname` returns ONE row (the real one) with `forward at line N` / `forward_line`; `hover --qname` renders the real declaration; the LSP hover on the stub's line renders the real one led by `forward declaration -> line N`; ClassMetrics measures the real class once (it used to parent every descendant to the stub and anchor `too-many-children` on the stub's line); `outline` keeps both rows and tags the stub `[forward -> line N]` / `forward_target_line`; LSP completion (`FindSymbolsByPrefix`) offers the type once instead of twice. Interface stubs follow the same rule. A lone stub (`TOnlyStub = class;` with no completion in the unit) and an empty class (`TEmpty = class end;`) still count as classes. Resolution-side join -- no schema or extractor change; no re-index needed. The call resolver's cross-store receiver lookup (`CallResolver` declines when a name matches more than one row) now resolves receivers whose RTL type is forward-declared (`TComponent`, `TReader`, `TWriter`, ...) -- an index resolved before this change lacks those edges until `index --all --resolve-only` is run (or the next resolver bump re-resolves everything). `DRAGLINT_RESOLVER_VERSION` was deliberately NOT bumped (spec S8; owner decision pending). New `DRagLint.Core.ForwardStub`; guards `run_forward_stub_pairing.ps1`, `run_forward_stub_is_not_a_class.ps1` (CASE E drives `textDocument/completion`). Spec: `docs\superpowers\specs\2026-09-17-forward-stub-is-not-a-class-design.md`.
 
 ### Known
-- `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.10.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the resolver batch -- the `with` scope above, D12 own-name result writes, D13 bare write binding and ENG-16 unit-qualified calls -- then 1.9.0 until 1.9.0-alpha went to D22, unit-qualified var/const binding, on 2026-09-24).
+- `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.9.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the resolver batch -- the `with` scope above, D12 own-name result writes, D13 bare write binding and ENG-16 unit-qualified calls).
 
 ## v1.16.0-alpha -- 2026-09-22
 
