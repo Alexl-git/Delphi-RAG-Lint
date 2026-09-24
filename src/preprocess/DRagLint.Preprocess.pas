@@ -515,8 +515,14 @@ begin
     for P in AOptions.Profile.NumericDefines do
       Numeric.AddOrSetValue(LowerCase(P.Key), P.Value);
 
+    { P1 (extractor 1.19.0-alpha): a Delphi 12+ multi-line string literal is
+      neutralised BEFORE the directive lexer sees it -- unconditionally, unlike
+      the opt-in tolerance pass below, because it is valid source both layers
+      mis-read (see NeutralizeMultilineStrings). Same length, every LF kept, so
+      the offset-identity invariant is untouched; a file without such a literal
+      is passed through as the very same array. }
     PreprocessInto(
-      AUtf8, Defines, Numeric, AOptions.IncludeMode, AOptions.BaseDir,
+      NeutralizeMultilineStrings(AUtf8), Defines, Numeric, AOptions.IncludeMode, AOptions.BaseDir,
       AOptions.NearSearch, 0, Result, OutPos);
   finally
     Numeric.Free;

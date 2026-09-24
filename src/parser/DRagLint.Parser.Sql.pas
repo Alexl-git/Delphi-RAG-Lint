@@ -26,6 +26,11 @@ unit DRagLint.Parser.Sql;
      - INSERT/UPDATE INTO FIB$* metadata tables are NOT parsed in v0.40.5
        (deferred -- user-deferred decision).
      - Column data-types stored verbatim in symbols.signature.
+     - Identifiers (1.19.0-alpha, D19): a QUOTED table or column name
+       ("ACTION", "Mixed Case") is stored the way Firebird stores it --
+       quotes stripped, "" unescaped, case kept verbatim. A bare name is
+       stored as written in the script (not upper-cased). Other CREATE
+       kinds (trigger, view, procedure, ...) still accept bare names only.
 
    Robustness:
      - Tolerates extra whitespace, comments (-- and /* */), and SET TERM
@@ -277,6 +282,62 @@ begin
   end;
 end;
 
+// D19 (1.19.0-alpha): reads the Firebird QUOTED identifier that starts at
+// AText[APos] (which must be '"') and returns it the way Firebird stores it in
+// its metadata: quotes stripped, each doubled "" unescaped to one '"', case kept
+// VERBATIM (a quoted identifier is case-sensitive; only an unquoted one is
+// folded to upper case by the server -- which this extractor does NOT do for
+// unquoted names either; they are stored as written). On return APos is just
+// past the closing quote. An unterminated identifier returns everything after
+// the opening quote and leaves APos past the end.
+function ReadQuotedIdent(const AText: string; var APos: Integer): string;
+var
+  N, Start: Integer;
+begin
+  N:= Length(AText);
+  Inc(APos); // past the opening quote
+  Start:= APos;
+  while APos <= N do
+  begin
+    if AText[APos] = '"' then
+    begin
+      if (APos < N) and (AText[APos + 1] = '"') then
+      begin
+        Inc(APos, 2); // an escaped quote, part of the name
+        Continue;
+      end;
+      Break;
+    end;
+    Inc(APos);
+  end;
+  Result:= StringReplace(Copy(AText, Start, APos - Start), '""', '"', [rfReplaceAll]);
+  if APos <= N then Inc(APos); // past the closing quote
+end;
+
+// D19: an identifier as matched by the CREATE-statement regexes -- quoted or
+// bare -- in its stored form (see ReadQuotedIdent). A bare identifier is
+// returned unchanged.
+function StoredIdent(const AMatched: string): string;
+var
+  P: Integer;
+begin
+  if (AMatched <> '') and (AMatched[1] = '"') then
+  begin
+    P:= 1;
+    Result:= ReadQuotedIdent(AMatched, P);
+  end
+  else Result:= AMatched;
+end;
+
+// True when AText starts (case-insensitively) with AWord as a WHOLE word:
+// the character after it, if any, cannot continue an identifier.
+function StartsWithSqlWord(const AText, AWord: string): Boolean;
+begin
+  Result:= AnsiStartsText(AWord, AText)
+    and ((Length(AText) = Length(AWord))
+         or not CharInSet(AText[Length(AWord) + 1], ['A'..'Z','a'..'z','0'..'9','_','$']));
+end;
+
 procedure ParseColumnList(const AText: string; ATableIdx: Integer; const ATableName: string; AStartPos, AEndPos: Integer; AState: TSqlState);
 { Splits a comma-separated column-def list at the top level (respecting
   nested parens used in NUMERIC(10,2) etc.) and emits a sql_column per item.
@@ -299,17 +360,32 @@ var
     Item:= Copy(AText, AItemStart, AItemEnd - AItemStart + 1);
     Trimmed:= Trim(Item);
     if Trimmed = '' then Exit;
-    { Skip table-level constraint clauses. }
-    if AnsiStartsText('PRIMARY KEY', Trimmed) then Exit;
-    if AnsiStartsText('FOREIGN KEY', Trimmed) then Exit;
-    if AnsiStartsText('UNIQUE'     , Trimmed) then Exit;
-    if AnsiStartsText('CHECK'      , Trimmed) then Exit;
-    if AnsiStartsText('CONSTRAINT' , Trimmed) then Exit;
-    { Pull the first word as the column name; rest is the type/signature. }
-    J:= 1;
-    while (J <= Length(Trimmed)) and (CharInSet(Trimmed[J], ['A'..'Z','a'..'z','0'..'9','_','$'])) do Inc(J);
-    Name:= Trim(Copy(Trimmed, 1, J - 1));
-    TypeText:= Trim(Copy(Trimmed, J + 1, MaxInt));
+    { Skip table-level constraint clauses -- as WHOLE words (1.19.0-alpha):
+      a bare prefix test dropped real columns named UNIQUE_FLAG and
+      CONSTRAINT_NAME (MS1.SQL:3880, :1796). }
+    if StartsWithSqlWord(Trimmed, 'PRIMARY KEY') then Exit;
+    if StartsWithSqlWord(Trimmed, 'FOREIGN KEY') then Exit;
+    if StartsWithSqlWord(Trimmed, 'UNIQUE'     ) then Exit;
+    if StartsWithSqlWord(Trimmed, 'CHECK'      ) then Exit;
+    if StartsWithSqlWord(Trimmed, 'CONSTRAINT' ) then Exit;
+    { Pull the first word as the column name; rest is the type/signature.
+      D19 (1.19.0-alpha): a QUOTED name ("ACTION", "TABLE" -- the reserved
+      words Firebird requires to be quoted) used to yield an empty word and
+      the column was dropped. It is now read by ReadQuotedIdent and stored the
+      Firebird way: quotes stripped, "" unescaped, case kept verbatim. }
+    if (Trimmed <> '') and (Trimmed[1] = '"') then
+    begin
+      J:= 1;
+      Name:= ReadQuotedIdent(Trimmed, J);
+      TypeText:= Trim(Copy(Trimmed, J, MaxInt)); // J is just past the closing quote
+    end
+    else
+    begin
+      J:= 1;
+      while (J <= Length(Trimmed)) and (CharInSet(Trimmed[J], ['A'..'Z','a'..'z','0'..'9','_','$'])) do Inc(J);
+      Name:= Trim(Copy(Trimmed, 1, J - 1));
+      TypeText:= Trim(Copy(Trimmed, J + 1, MaxInt));
+    end;
     if Name = '' then Exit;
     ComputeLineCol(AText, AItemStart, ColLine, ColCol);
     AState.AddSymbol(skSqlColumn, Name, ATableName + '.' + Name, ATableIdx, ColLine, ColCol, ColLine, ColCol + Length(Name), TypeText);
@@ -415,7 +491,9 @@ begin
 
   State:= TSqlState.Create(Raw);
   try
-    RxTable:= TRegEx.Create( '\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\(', [roIgnoreCase]);
+    { D19: the table name may be a QUOTED identifier ("Name", "" escaping a
+      quote); StoredIdent strips it to the Firebird stored form below. }
+    RxTable:= TRegEx.Create( '\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?("(?:[^"]|"")+"|[A-Za-z_$][A-Za-z0-9_$]*)\s*\(', [roIgnoreCase]);
     RxGen:= TRegEx.Create( '\bCREATE\s+(?:GENERATOR|SEQUENCE)\s+([A-Za-z_$][A-Za-z0-9_$]*)', [roIgnoreCase]);
     RxTrig:= TRegEx.Create( '\bCREATE\s+(?:OR\s+ALTER\s+)?TRIGGER\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+(?:FOR|ON)\s+([A-Za-z_$][A-Za-z0-9_$]*)', [roIgnoreCase]);
     RxView:= TRegEx.Create( '\bCREATE\s+(?:OR\s+ALTER\s+)?VIEW\s+([A-Za-z_$][A-Za-z0-9_$]*)', [roIgnoreCase]);
@@ -428,7 +506,7 @@ begin
     M:= RxTable.Match(Cleaned);
     while M.Success do
     begin
-      Name:= M.Groups[1].Value;
+      Name:= StoredIdent(M.Groups[1].Value);
       ComputeLineCol(Raw, M.Index, Line, Col);
       { Find paren of the column list (the regex anchors at the '(' that ends
         the match -- we need its position in the cleaned text). }

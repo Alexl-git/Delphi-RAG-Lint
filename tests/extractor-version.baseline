@@ -811,4 +811,4 @@
 #   and the new code only READS refs; it writes call_edges and refs.symbol_id. A bump here would bill a ~3h17m re-parse of every
 #   database to alter not one stored parse.
 #   Superseded: 1.18.0-alpha|63488fb2a2232af20a67a2c64226c87ccc33ba17de1943a54d11762563216ec6
-1.18.0-alpha|6b35e559660b226b5a98468c03c49e657ef3e5846a90f83e8171f4fb5027d140
+1.19.0-alpha|171224b0f3f9b1260dcd32f20ceb89a011a09caf04dcedc8fe0286c1c8c734e8

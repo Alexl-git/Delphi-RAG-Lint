@@ -76,6 +76,36 @@ uses
 /// </remarks>
 function ApplyTolerances(var ABytes: TBytes): Integer;
 
+/// <summary>P1 (extractor 1.19.0-alpha): neutralises every Delphi 12+
+/// MULTI-LINE string literal in AUtf8 so that neither the directive lexer nor
+/// the tree-sitter grammar mis-reads its body. A literal is an odd run of 3 or
+/// more apostrophes (in code, not inside a comment or an ordinary string)
+/// followed only by blanks up to the end of its line, closed by a line whose
+/// first non-blank bytes are exactly the same number of apostrophes. Inside
+/// it: every apostrophe, every open-brace, and the '(' of a '(*' in the BODY
+/// become a space; a delimiter longer than three quotes keeps three quotes and
+/// the rest become spaces. An opener with no matching closing line is left
+/// alone.</summary>
+/// <param name="AUtf8">The source file as UTF-8 bytes. Never modified.</param>
+/// <returns>AUtf8 itself (the same array) when no multi-line literal was
+/// found; otherwise a NEW array of the same length holding the rewritten
+/// bytes. LF and CR bytes are never touched, so the offset-identity invariant
+/// (same length, every line at the same byte offset) holds either way.</returns>
+/// <remarks>
+/// WHY BOTH LAYERS NEED IT. The grammar's own triple-quote token
+/// /'''[\s\S]*?'''/ loses to its single-quote token /'([^']|'')*'/ (which
+/// admits newlines) as soon as the body holds an odd number of apostrophes, and
+/// it has no 5-quote form at all -- so the unit fails to parse at 1:1. The
+/// directive lexer (DRagLint.Preprocess.Lexer) bounds a '-string at end of line,
+/// so a body line is lexed as CODE and an IFDEF directive written in the text
+/// becomes a live directive. Blanking those bytes before either layer runs lets the
+/// grammar's triple-quote token match and leaves the lexer nothing to
+/// misinterpret. The grammar fix proper belongs to tree-sitter-delphi13; this
+/// is the in-repo neutralisation until it lands. The harvested literal text
+/// loses exactly the blanked characters. Thread-safe (no shared state).
+/// </remarks>
+function NeutralizeMultilineStrings(const AUtf8: TBytes): TBytes;
+
 implementation
 
 uses
@@ -272,6 +302,170 @@ begin
     begin
       ABytes[EditPos]:= 59;
       Inc(Result);
+    end;
+  end;
+end;
+
+const
+  // P1 byte vocabulary (the scanners above spell these as bare numbers; the
+  // multi-line pass below names them).
+  B_TAB    = 9;
+  B_LF     = 10;
+  B_CR     = 13;
+  B_SPACE  = 32;
+  B_DQUOTE = 34;
+  B_QUOTE  = 39;
+  B_LPAREN = 40;
+  B_RPAREN = 41;
+  B_STAR   = 42;
+  B_SLASH  = 47;
+  B_LBRACE = 123;
+  B_RBRACE = 125;
+  // A multi-line delimiter is an ODD run of at least this many apostrophes;
+  // the grammar's own token recognises exactly this many.
+  ML_DELIM = 3;
+
+// Number of consecutive apostrophes starting at APos.
+function QuoteRunAt(const ABytes: TBytes; APos: Integer): Integer;
+begin
+  Result:= 0;
+  while (APos + Result < Length(ABytes)) and (ABytes[APos + Result] = B_QUOTE) do Inc(Result);
+end;
+
+// True when only spaces/tabs (and a CR) stand between APos and the next LF or
+// the end of the buffer.
+function RestOfLineBlank(const ABytes: TBytes; APos: Integer): Boolean;
+begin
+  while (APos < Length(ABytes)) and (ABytes[APos] <> B_LF) do
+  begin
+    if not (ABytes[APos] in [B_TAB, B_CR, B_SPACE]) then Exit(False);
+    Inc(APos);
+  end;
+  Result:= True;
+end;
+
+// Byte offset of the closing delimiter of a multi-line literal whose opener
+// line ends at the LF found from AFrom on: the first later line whose first
+// non-blank bytes are EXACTLY ARun apostrophes. -1 when there is none.
+function FindMultilineClose(const ABytes: TBytes; AFrom, ARun: Integer): Integer;
+var
+  N, P: Integer;
+begin
+  Result:= -1;
+  N:= Length(ABytes);
+  P:= AFrom;
+  while (P < N) and (ABytes[P] <> B_LF) do Inc(P);
+  while P < N do
+  begin
+    Inc(P); // past the LF: P is a line start
+    while (P < N) and ((ABytes[P] = B_SPACE) or (ABytes[P] = B_TAB)) do Inc(P);
+    if (P < N) and (QuoteRunAt(ABytes, P) = ARun) then Exit(P);
+    while (P < N) and (ABytes[P] <> B_LF) do Inc(P);
+  end;
+end;
+
+// When ABytes[AI] opens a comment, a directive or a double-quoted assembler
+// operand, returns the offset just past it (the brace/paren-star forms may
+// span lines; // and "..." stop at the LF, as the directive lexer does).
+// Otherwise returns AI unchanged.
+function SkipNonCode(const ABytes: TBytes; AI: Integer): Integer;
+var
+  N: Integer;
+  B: Byte   ;
+begin
+  N:= Length(ABytes);
+  B:= ABytes[AI];
+  Result:= AI;
+  if B = B_LBRACE then
+  begin
+    while (Result < N) and (ABytes[Result] <> B_RBRACE) do Inc(Result);
+    Inc(Result);
+  end
+  else if (B = B_LPAREN) and (AI + 1 < N) and (ABytes[AI + 1] = B_STAR) then
+  begin
+    Inc(Result, 2);
+    while (Result < N - 1) and not ((ABytes[Result] = B_STAR) and (ABytes[Result + 1] = B_RPAREN)) do Inc(Result);
+    Inc(Result, 2);
+  end
+  else if (B = B_SLASH) and (AI + 1 < N) and (ABytes[AI + 1] = B_SLASH) then
+  begin
+    while (Result < N) and (ABytes[Result] <> B_LF) do Inc(Result);
+  end
+  else if B = B_DQUOTE then
+  begin
+    Inc(Result);
+    while (Result < N) and (ABytes[Result] <> B_DQUOTE) and (ABytes[Result] <> B_LF) do Inc(Result);
+    if (Result < N) and (ABytes[Result] = B_DQUOTE) then Inc(Result);
+  end;
+end;
+
+// ABytes[AI] is an apostrophe opening an ORDINARY string: returns the offset
+// just past it -- line-bounded and doubled-quote aware, mirroring the lexer.
+function SkipOrdinaryString(const ABytes: TBytes; AI: Integer): Integer;
+var
+  N: Integer;
+begin
+  N:= Length(ABytes);
+  Result:= AI + 1;
+  while (Result < N) and (ABytes[Result] <> B_LF)
+        and not ((ABytes[Result] = B_QUOTE) and ((Result + 1 >= N) or (ABytes[Result + 1] <> B_QUOTE))) do
+  begin
+    if (ABytes[Result] = B_QUOTE) and (Result + 1 < N) and (ABytes[Result + 1] = B_QUOTE) then Inc(Result);
+    Inc(Result);
+  end;
+  if (Result < N) and (ABytes[Result] = B_QUOTE) then Inc(Result);
+end;
+
+// Rewrites ONE recognised literal in place: opener [AOpen, AOpen+ARun) keeps
+// three quotes, the body blanks apostrophes, open-braces and the '(' of a
+// '(*', the closer [AClose, AClose+ARun) keeps its LAST three quotes.
+procedure BlankMultiline(var ABytes: TBytes; AOpen, AClose, ARun: Integer);
+var
+  K: Integer;
+begin
+  for K:= AOpen + ML_DELIM to AOpen + ARun - 1 do ABytes[K]:= B_SPACE;
+  for K:= AOpen + ARun to AClose - 1 do
+    if (ABytes[K] = B_QUOTE) or (ABytes[K] = B_LBRACE)
+       or ((ABytes[K] = B_LPAREN) and (K + 1 < AClose) and (ABytes[K + 1] = B_STAR)) then
+      ABytes[K]:= B_SPACE;
+  for K:= AClose to AClose + ARun - ML_DELIM - 1 do ABytes[K]:= B_SPACE;
+end;
+
+function NeutralizeMultilineStrings(const AUtf8: TBytes): TBytes;
+var
+  N, I, Skipped, Run, CloseAt: Integer;
+  Copied                     : Boolean;
+begin
+  Result:= AUtf8;
+  Copied:= False;
+  N:= Length(AUtf8);
+  I:= 0;
+  while I < N do
+  begin
+    Skipped:= SkipNonCode(AUtf8, I);
+    if Skipped <> I then
+      I:= Skipped
+    else if AUtf8[I] <> B_QUOTE then
+      Inc(I)
+    else
+    begin
+      // An apostrophe in code: a multi-line opener, or an ordinary string.
+      Run:= QuoteRunAt(AUtf8, I);
+      CloseAt:= -1;
+      if (Run >= ML_DELIM) and Odd(Run) and RestOfLineBlank(AUtf8, I + Run) then
+        CloseAt:= FindMultilineClose(AUtf8, I + Run, Run);
+      if CloseAt < 0 then
+        I:= SkipOrdinaryString(AUtf8, I)
+      else
+      begin
+        if not Copied then
+        begin
+          Result:= Copy(AUtf8);
+          Copied:= True;
+        end;
+        BlankMultiline(Result, I, CloseAt, Run);
+        I:= CloseAt + Run;
+      end;
     end;
   end;
 end;
