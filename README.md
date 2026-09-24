@@ -380,17 +380,40 @@ pinpoint the *specific symbols* in `A`'s interface that force the dependency on
 `B` (the types/vars/methods to move or extract) -- with the line numbers, and an
 honest note where the index couldn't resolve a reference.
 
-Or generate a full **followable refactoring playbook** that a junior dev (or a
-small model) can execute:
+Or generate a **mechanical refactoring playbook** -- written so that a model with
+no project context (or a junior dev) can follow it literally to a compiling tree:
 
 ```
 drag-lint cycles --db myapp.sqlite --plan > cycle-plan.md
 ```
 
-Per cycle it gives the files, the load-bearing symbols (use site **and**
-declaration site, with line numbers), an auto-classified fix (*extract the shared
-contract*, or *invert the dependency* for layering inversions), numbered steps,
-and a verify command. Build after each cycle and re-run `cycles` to confirm.
+Per cycle it gives:
+
+* **what moves where** -- each load-bearing symbol with its kind and a recipe for
+  that kind: an enum / record / constant / variable moves unchanged (exact
+  `file` lines, doc comment included); a class whose method bodies use the cycle
+  is NOT moved -- a base class carrying just the members its consumers use is
+  extracted into the leaf unit instead, and the reason is given. Every unit that
+  uses a moved symbol is listed with its section and first-use line;
+* **uses decisions** -- per unit, whether the old cycle partner is kept, moved
+  from the interface to the implementation uses, or removed (only when nothing
+  else from it is used in that section);
+* **the new units** (`<Declaring>.Contracts.pas`) with their full text, and the
+  rule for their uses clause (never a unit of the cycle);
+* **every edit** to every file, `.dpr` and `.dproj` included, as current text +
+  new text, listed bottom-up so line numbers stay valid;
+* **DONE** and a **checklist** that ends with the re-index command and the exact
+  output `drag-lint cycles` must print afterwards -- predicted by replaying the
+  plan on the uses graph -- plus what to do for each compile error the edits can
+  produce.
+
+An interface-coupled cycle is cut to a legal implementation-only one (Part A); an
+**optional Part B** names the edge whose globals can move next, and re-running
+`--plan` on the edited tree prints it as the same kind of steps. On the
+`circular-demo` project, applying Part A and then Part B literally compiles,
+prints exactly the predicted output at each stage (the last being `No circular
+unit dependencies found.`), and the program's output is byte-identical to the
+original's.
 
 > **Worked example:** [docs/examples/circular-uses-demo/](docs/examples/circular-uses-demo/)
 > is a tiny compiling two-unit cycle, with the exact `--edges` / `--causes` /
@@ -441,10 +464,18 @@ An excerpt of the real output:
 - `demologger` interface uses `TDemoSession` (class) at `DemoLogger.pas:40`; declared in `DemoSession.pas:20`.
 - `democonfig` interface uses `TDemoLogLevel` (enum) at `DemoConfig.pas:23`; declared in `DemoLogger.pas:15`.
 - `demosession` interface uses `TDemoAuditKind` (enum) at `DemoSession.pas:35`; declared in `DemoAudit.pas:24`.
-
-### Recommended fix
-**Extract the shared contract** into a new leaf unit both can depend on (it must use NEITHER unit in this cycle).
+...
+### Step 1: what moves where
+1. `TDemoSession` -- **class with methods**, declared at `DemoSession.pas` lines 14-47; method bodies at `DemoSession.pas` lines 64-73, 75-80, 82-86, 88-95, 97-100.
+   - Recipe: **extract a base class** and keep `TDemoSession` where it is. Why: its method bodies use `GDemoSessionCount`, `GDemoAuditCount`, `GDemoAuditTrail`, which live in units of this cycle; ...
+...
+12. [ ] Run `drag-lint cycles --db "...\CircularDemo.sqlite"`. It must print exactly:
+    1 circular unit group(s) found:
+      [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
 ```
+
+(`circular-demo/CYCLE-REPORT.md` holds the output of an earlier version of the
+playbook; regenerate it with the two commands above.)
 
 Longer walkthrough: [wiki -- Circular Dependency Report](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report).
 
