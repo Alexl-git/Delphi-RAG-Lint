@@ -139,7 +139,7 @@ begin
     if (Path <> '') and TFile.Exists(Path) then
       try
         Result:= TFile.ReadAllLines(Path, TEncoding.ANSI);
-      except // dl:ok try-except-swallowed@d7c1 -- a pure query with no report channel; '' already means "unknown" to every caller
+      except // a pure query with no report channel; '' already means "unknown" to every caller
         on E: Exception do
           { A source file that exists but cannot be READ -- locked by the IDE,
             permissions, a bad encoding -- must degrade the symbols in THAT

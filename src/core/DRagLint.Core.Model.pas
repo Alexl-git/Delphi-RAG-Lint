@@ -211,7 +211,7 @@ type
   /// <para>Used by: declaration (DRagLint.Core.Model.pas), declaration (DRagLint.Doc.Facts.pas), declaration (DRagLint.Index.CallResolver.pas), DRagLint.CLI.DoSchema.ColumnSemantics (DRagLint.CLI.pas), DRagLint.Core.Model.TSymbolKindHelper.FromText (DRagLint.Core.Model.pas) (+19 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TSymbolKind = (  // dl:ok duplicate-global-decl@b16d -- DragLint.Plugin.StructureCache deliberately re-declares this; it is a design-time BPL that shells out to the CLI and uses only System.* units, so depending on Core.Model would link the whole engine into the IDE package
+  TSymbolKind = (  // NOTE: DragLint.Plugin.StructureCache deliberately re-declares this; it is a design-time BPL that shells out to the CLI and uses only System.* units, so depending on Core.Model would link the whole engine into the IDE package
     skUnit, skProgram, skPackage, skClass, skInterface, skRecord, skEnum, skEnumValue, skProcedure, skFunction, skMethod, skConstructor, skDestructor,
     skProperty, skField, skVarDecl, skConstDecl, skTypeAlias, skForm, skComponent,
     // v0.40.5 Tier 1: SQL DDL symbols extracted from MS*.SQL files.

@@ -7710,7 +7710,7 @@ begin
     folding both into one helper is a refactor outside the v23 wave. }
   var LastBare, InParams: string;
   var BareName: string:= StripGenericSegments(AQName);
-  var HadList: Boolean:= SplitGenericName(LastTopLevelSegment(AQName), LastBare, InParams);  // dl:ok duplicate-code@31e2
+  var HadList: Boolean:= SplitGenericName(LastTopLevelSegment(AQName), LastBare, InParams);
   List:= TList<TSymbol>.Create;
   try
     if FQFindByQName.Active then FQFindByQName.Close;
