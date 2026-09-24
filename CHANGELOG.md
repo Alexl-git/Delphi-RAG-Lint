@@ -146,6 +146,24 @@ breaking changes** until v1.0.
   `third_party\...` and `tests\ergonomics\...` against the CURRENT directory, so it died in
   `Resolve-Path` unless launched from the repo root. Every path is now anchored on `$PSScriptRoot`,
   and `-Exe` overrides the engine.
+- **Read verbs no longer fail "database is locked" under concurrent readers, and no longer convert a
+  WAL index to a rollback journal.** 12 parallel `sql` processes x 25 calls, no writer: 1 of 300
+  exited 3 with `database is locked` and no stdout (INBOX-readonly-sql-verb-hits-database-locked).
+  Cause: `PRAGMA busy_timeout = 5000` ran AFTER `Connected := True`, but FireDAC runs its own
+  pragmas INSIDE the connect (cache_size reads the schema) with busy timeout 0 unless
+  `UpdateOptions.LockWait` is set -- so an opener that landed while the last WAL connection held
+  the file EXCLUSIVE to checkpoint on close failed at once. Now every open arms the timeout BEFORE
+  the connect (`ArmBusyTimeout`, `ConnectReadOnly` in `DRagLint.Storage.FileMembership`): the
+  store's read AND write paths, the lint-all library probe, the membership probe. Separately,
+  `top`, `graph`, `diff`, `query hints`, `export obsidian`, `workspace status`, the enum export and
+  `--selftest-schema` opened raw connections with FireDAC's DEFAULT params (LockingMode=Exclusive,
+  JournalMode=Delete): each run rewrote a WAL index's header 2 -> 1 and held it exclusively. They
+  now use the shared reader open (query_only, the file's own journal mode, normal locking).
+  Not SQLITE_OPEN_READONLY: that still fails on a WAL index without -shm write access (see
+  `DbContainsFile`). `sql` on a pre-migration DB still reads it as-is (it is the raw passthrough);
+  it does not migrate. Guard: `tests\autotest\run_readonly_concurrency_guard.ps1` (45 checks; a
+  held byte-range lock makes the race deterministic -- RED 23 fails on the old exe, GREEN on the
+  new). No extractor/resolver bump.
 - **`query find-callers --resolved`: `line` is the CALL SITE on every row (C1).** The rows built from
   `call_edges` -- routine call, property/field access, enum-value read, parenless call -- put the
   caller ROUTINE's declaration line in JSON `line`, while callback rows put the site there: one key,

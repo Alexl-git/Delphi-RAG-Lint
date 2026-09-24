@@ -72,9 +72,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-      /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems, ExtractFileName, Format, LowerCase, StartsText</para>
+      /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems, DRagLint.Storage.FileMembership.ConnectReadOnly, ExtractFileName, Format, LowerCase, StartsText</para>
       /// <para>Returns: nil; Findings.ToArray</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 163 lines (full implementation)</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 156 lines (full implementation)</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>SQL: reads FILES</para>
       /// <para>Touches: file system</para>
@@ -93,6 +93,7 @@ implementation
 
 uses
   FireDAC.Comp.Client
+  , DRagLint.Storage.FileMembership { ConnectReadOnly: the shared reader open }
   ;
 
 { The scoped closure list arrives LOWERCASED, so a unit reported from it read as
@@ -382,21 +383,14 @@ begin
     if (ALibDbPath <> '') and TFile.Exists(ALibDbPath) then
     begin
       LibConn := TFDConnection.Create(nil);
-      LibConn.DriverName := 'SQLite';
-      LibConn.Params.Values['Database'] := ALibDbPath;
       { Do NOT use OpenMode=ReadOnly (SQLITE_OPEN_READONLY): every drag-lint index
         is WAL-mode, and a WAL DB cannot be opened read-only without write access
         to its -shm wal-index, which fails with "disk I/O error" -- that aborted
-        the whole lint-all run the moment a library DB was passed. Mirror the
-        read path in TSQLiteSymbolStore.Connect: open with the normal params and
-        enforce no-writes with PRAGMA query_only. }
-      LibConn.Params.Values['LockingMode'] := 'Normal';
-      LibConn.Params.Values['JournalMode'] := 'WAL';
-      LibConn.Params.Values['Synchronous'] := 'Normal';
-      LibConn.LoginPrompt := False;
-      LibConn.Connected := True;
-      LibConn.ExecSQL('PRAGMA query_only = ON');
-      LibConn.ExecSQL('PRAGMA busy_timeout = 5000');
+        the whole lint-all run the moment a library DB was passed. The shared
+        reader open (same as TSQLiteSymbolStore.Connect) enforces no-writes with
+        PRAGMA query_only, keeps the journal mode the file already has, and arms
+        the busy timeout before the connect. }
+      ConnectReadOnly(LibConn, ALibDbPath);
       { The old lookup was 'SELECT 1 FROM symbols WHERE unit_name_norm = :N'.
         symbols has no unit_name_norm column in ANY schema version -- that column
         lives on unit_uses, which records what a file USES, not what the library
