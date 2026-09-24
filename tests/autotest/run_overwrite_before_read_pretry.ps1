@@ -103,6 +103,8 @@ procedure ProtectedMulti(const F: string);
 procedure GenuineDead(const F: string);
 procedure UnrelatedTry(const F: string);
 procedure OverwrittenInBodyNowSilent(const F: string);
+procedure ProtectedAcrossLoop(const F: string);
+procedure LoopThenUnrelatedTry(const F: string);
 implementation
 uses System.SysUtils, System.Classes;
 
@@ -203,6 +205,49 @@ begin
   Writeln(Val);
 end;
 
+{ D15 (2026-09-23) -- the nil-inits and their shared try are separated by a
+  statement that never MENTIONS them (DRagLint.Report.Deps.pas:686-693 has a
+  `for G := ... do ProjUnitsPerGroup[G] := nil;` there). The finally still
+  frees each one when the try body raises before its own assignment, so each
+  init is still what makes that path safe. It used to fire, because the walk
+  to the try skipped only ASSIGNMENT siblings and stopped at the `for`. }
+procedure ProtectedAcrossLoop(const F: string);
+var
+  A, B: TStringList;
+  Arr : array[0..1] of TObject;
+  G   : Integer;
+begin
+  A := nil;
+  B := nil;
+  for G := 0 to 1 do Arr[G] := nil;
+  try
+    A := TStringList.Create;
+    B := TStringList.Create;
+    A.Add(F);
+  finally
+    A.Free;
+    B.Free;
+  end;
+end;
+
+{ POSITIVE CONTROL 3 for D15 -- the same intervening statement, but the
+  handler never mentions N and it is try..FINALLY (so shape F cannot apply).
+  N := 0 is genuinely dead and MUST still fire: skipping a statement that does
+  not mention the name must not degrade into "some try follows". }
+procedure LoopThenUnrelatedTry(const F: string);
+var
+  N, G: Integer;
+begin
+  N := 0;
+  for G := 0 to 1 do Writeln(G);
+  try
+    N := Length(F);
+  finally
+    Writeln('done');
+  end;
+  Writeln(N);
+end;
+
 end.
 '@
 $file = Join-Path $WorkDir 'uObrPretry.pas'
@@ -217,8 +262,8 @@ function Impl-Row([string]$Name) {
   ($src | Select-String -Pattern ("procedure {0}(const F: string);" -f $Name) -SimpleMatch | Select-Object -Last 1).LineNumber
 }
 $rows = [ordered]@{}
-foreach ($n in @('ProtectedSingle','ProtectedMulti','GenuineDead','UnrelatedTry','OverwrittenInBodyNowSilent')) { $rows[$n] = Impl-Row $n }
-if (@($rows.Values | Sort-Object -Unique).Count -ne 5) {
+foreach ($n in @('ProtectedSingle','ProtectedMulti','GenuineDead','UnrelatedTry','OverwrittenInBodyNowSilent','ProtectedAcrossLoop','LoopThenUnrelatedTry')) { $rows[$n] = Impl-Row $n }
+if (@($rows.Values | Sort-Object -Unique).Count -ne 7) {
   Write-Host "FATAL: anchors collapsed: $($rows.Values -join ',')" -ForegroundColor Red; exit 2
 }
 Write-Host ("  anchors: " + (($rows.Keys | ForEach-Object { "$_=$($rows[$_])" }) -join ' ')) -ForegroundColor DarkGray
@@ -245,6 +290,8 @@ Check 'ProtectedMulti: NONE of the five inits before one shared try is reported'
   ((Rows-In 'ProtectedMulti') -eq '') "rows=$(Rows-In 'ProtectedMulti')"
 Check 'OverwrittenInBodyNowSilent: shape F, silent since the 2026-08-29 reversal' `
   ((Rows-In 'OverwrittenInBodyNowSilent') -eq '') "rows=$(Rows-In 'OverwrittenInBodyNowSilent')"
+Check 'ProtectedAcrossLoop: inits separated from their try by an unrelated statement are NOT reported (D15)' `
+  ((Rows-In 'ProtectedAcrossLoop') -eq '') "rows=$(Rows-In 'ProtectedAcrossLoop')"
 
 Write-Host ''
 Write-Host 'POSITIVE CONTROLS -- the rule must still work' -ForegroundColor Cyan
@@ -252,6 +299,8 @@ Check 'GenuineDead: an ordinary dead store STILL fires' `
   ((Rows-In 'GenuineDead') -ne '') "rows=$(Rows-In 'GenuineDead')"
 Check 'UnrelatedTry: a store before a try that ignores it STILL fires' `
   ((Rows-In 'UnrelatedTry') -ne '') "rows=$(Rows-In 'UnrelatedTry')"
+Check 'LoopThenUnrelatedTry: an intervening statement does not excuse a handler that ignores the name (D15 control)' `
+  ((Rows-In 'LoopThenUnrelatedTry') -ne '') "rows=$(Rows-In 'LoopThenUnrelatedTry')"
 
 if ((Rows-In 'GenuineDead') -eq '' -or (Rows-In 'UnrelatedTry') -eq '') {
   Write-Host '  !! A control failed. The two assertions above prove NOTHING -- they' -ForegroundColor Yellow

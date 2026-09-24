@@ -58,6 +58,17 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`overwrite-before-read` no longer reports nil-inits separated from their `try` by an unrelated
+  statement (D15).** `ProtectedByFollowingTry` walked from the store to the `try` over sibling
+  ASSIGNMENTS only, so `A := nil; B := nil; for G := ... do X[G] := nil; try ... finally A.Free; B.Free;
+  end;` (`Report.Deps.pas:686-693`) stopped at the `for` and reported three stores the `finally` depends
+  on. The walk now also skips any statement that never MENTIONS the name (it can neither read nor
+  overwrite it); a statement that does name it still ends the walk, and a handler that ignores the name
+  still reports. Measured on this repo (`lint-all --rule overwrite-before-read`, self index): 28 -> 23,
+  the three Deps stores, `ProjectRules.pas:4203` (a comment line between `Root := nil` and the try whose
+  handler frees Root) and `Storage.SQLite.pas:12546` (handler-assigned, the pre-existing "handler
+  mentions it" semantics). Guard: `tests\autotest\run_overwrite_before_read_pretry.ps1`
+  (`ProtectedAcrossLoop`, control `LoopThenUnrelatedTry`).
 - **`concat-in-loop` no longer fires on a string REBUILT every iteration (L6).** `T := 'row '; T := T +
   IntToStr(J);` in a loop body never accumulates, so there is nothing quadratic to report. New `.scm`
   predicate `#not-reset-in-loop?` (`DRagLint.Lint.QueryRules`, `ResetInSameIteration`) drops the match

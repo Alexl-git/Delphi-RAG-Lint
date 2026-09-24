@@ -1946,9 +1946,22 @@ begin
   Nm := LowerCase(Trim(AName));
   if Nm = '' then Exit;
 
+  { THE RUN TO THE TRY. Skipped: sibling ASSIGNMENTS (the several-inits-then-
+    one-try form, as before) and -- D15, 2026-09-23 -- any other statement that
+    never MENTIONS the name. Report.Deps.pas:686-693 has
+    `for G := ... do ProjUnitsPerGroup[G] := nil;` between its nil-inits and
+    the try..finally that frees them; the walk stopped at the `for`, never saw
+    the try, and reported three stores the finally depends on. A statement that
+    does not name the variable can neither read nor overwrite it, so it cannot
+    change whether the handler observes this store. A statement that DOES name
+    it still ends the run: the store is then read or overwritten before the
+    try, and the handler is not what keeps it live. The handler test below is
+    unchanged, so a try whose handler ignores the name still reports
+    (run_overwrite_before_read_pretry.ps1, LoopThenUnrelatedTry). }
   Cur   := Unwrap(AAsg.NextNamedSibling);
   Guard := 0;
-  while (not Cur.IsNull) and (Cur.NodeType = 'assignment') and (Guard < 64) do
+  while (not Cur.IsNull) and (Guard < 64) and ((Cur.NodeType = 'assignment')
+    or ((Cur.NodeType <> 'try') and not ContainsWholeIdent(LowerCase(NodeStr(Cur, ASrc)), Nm))) do
   begin
     Cur := Unwrap(Cur.NextNamedSibling);
     Inc(Guard);
