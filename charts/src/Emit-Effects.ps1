@@ -196,6 +196,26 @@ if ($outcome -eq 'pure' -and $effects.Count -gt 0) {
   Write-Host "  NOTE: effect_free=1 yet the summary carries tokens ('$es') -- reporting BOTH, this shape is not in the measured crosstab"
 }
 
+# ENGINE D12 (INBOX-defects-found-2026-09-23-rule-work.md). A function that sets
+# its result through its OWN NAME (`AP_FP_Greater_Eq := X >= Y`) is scored as a
+# GLOBAL write: the witness reads "writes AP_FP_Greater_Eq (non-local)". Measured
+# on the CLIENT clone 2026-09-23: 31 functions carry exactly that witness, 20 of
+# them with summary `g` alone -- effect-free routines the stored fact calls
+# impure. Drawing that `g` as "writes global state" would repeat the engine's
+# false claim, so it is moved to a dashed disclosure instead.
+#
+# Detectable only when the WITNESS names the routine. The witness is the FIRST
+# blocker only, so a D12 write recorded after a genuine one (witness names the
+# genuine one) cannot be told apart and is still drawn as `g` -- the docs say so.
+$d12 = $false
+$ownName = [string]$sel.Name
+if ($ownName -and $ew -and
+    [string]::Equals($ew, "writes $ownName (non-local)", [StringComparison]::OrdinalIgnoreCase) -and
+    @($effects | Where-Object { $_.Kind -eq 'g' }).Count) {
+  $d12 = $true
+  $effects = [System.Collections.ArrayList]@($effects | Where-Object { $_.Kind -ne 'g' })
+}
+
 $known = @($effects | Where-Object { -not $_.Unknown })
 $unk   = @($effects | Where-Object { $_.Unknown })
 
@@ -276,6 +296,23 @@ if ($known.Count -gt 0) {
   [void]$linkTo.Add(@($nid, $PAL.fxBorder))
 }
 
+# D12: the suspect global write, dashed, never in the effects cluster
+if ($d12) {
+  $nodeId++; $clusters++
+  $nid = "n$nodeId"
+  $alone = $(if ($known.Count -eq 0 -and $unk.Count -eq 0) {
+      'it is the ONLY recorded effect: effect_free = 0 rests on it alone' } else {
+      'no other global write is proven -- the witness records only the first' })
+  [void](Add-RowCluster -Sb $sb -Cid "cluster_d12_$nodeId" -Nid $nid `
+           -Title 'engine D12' -Subtitle 'global write NOT shown' `
+           -Rows @((New-NoteRow "the stored g's witness is this routine's OWN NAME: '$ew'"),
+                   (New-NoteRow "that is a Result assignment ($ownName := ...), which this engine build scores as a global write"),
+                   (New-NoteRow $alone)) `
+           -Border $PAL.unkBorder -Fill $PAL.unkFill -Hdr $PAL.unkHdr `
+           -RowInk $PAL.rowInk -LineInk $PAL.lineInk -FontSans $FontSans -Style 'rounded,filled,dashed')
+  [void]$linkTo.Add(@($nid, $PAL.unkBorder, $true))
+}
+
 # THE ADMISSION, always its own dashed cluster so it cannot read as an effect
 if ($unk.Count -gt 0) {
   $nodeId++; $clusters++
@@ -291,7 +328,7 @@ if ($unk.Count -gt 0) {
 
 [void]$sb.AppendLine('')
 foreach ($t in $linkTo) {
-  $style = $(if ($t[0] -match 'unk|na') { ', style=dashed' } else { '' })
+  $style = $(if ($t.Count -gt 2 -or $t[0] -match 'unk|na') { ', style=dashed' } else { '' })
   [void]$sb.AppendLine("  ${fnid}:p1 -> $($t[0]) [color=`"$($t[1])`"$style];")
 }
 [void]$sb.AppendLine('}')
@@ -314,6 +351,7 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir $base
   Effects      = $known.Count
   Unknown      = $unk.Count
   Unnamed      = $unnamed
+  D12Suspect   = $d12
   ParamCount   = $paramNames.Count
   Witness      = $ew
   Clusters     = $clusters

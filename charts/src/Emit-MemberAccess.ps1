@@ -278,10 +278,54 @@ $ftbl  = New-Object System.Text.StringBuilder
 [void]$ftbl.Append("<TABLE BORDER=`"0`" CELLBORDER=`"0`" CELLSPACING=`"3`" CELLPADDING=`"7`">$fhdr")
 [void]$ftbl.Append("<TR><TD HREF=`"$fhref`" TITLE=`"$ftip`"><FONT COLOR=`"$($PAL.focusInk)`" POINT-SIZE=`"18`"><B>$(ConvertTo-XmlText (Get-ShortName $sel.Qname $unit))</B></FONT></TD></TR>")
 
+# ENGINE D13 (INBOX-defects-found-2026-09-23-rule-work.md): `write` refs never
+# get a symbol_id on CLIENT (32,909 of 32,909 on the clone, 2026-09-23). The
+# verb above sees a write only when it is a MEMBER ACCESS (`Obj.FConnected :=`);
+# a bare in-class assignment (`FConnected := True`) is an unbound `write` ref
+# and is invisible to it. Measured: who-writes FConnected said "no write sites"
+# while uPipeClientConnection.pas holds four -- :164, :320, :455, :543.
+#
+# The disclosure is BY NAME, so it is never added to the writers wing or the
+# totals: a same-name write in the DECLARING file is very probably this member,
+# one elsewhere may be anything that shares the name. Both counts are printed.
+$d13Same = 0; $d13Else = 0; $d13Lines = @()
+if ($showWrite) {
+  $nm = ConvertTo-SqlText $sel.Name
+  $pth = ConvertTo-SqlText $sel.Path
+  $cnt = Invoke-IndexQuery @"
+SELECT (f.path = '$pth') AS same, COUNT(*) AS c
+  FROM refs r JOIN files f ON f.id = r.file_id
+ WHERE r.kind = 'write' AND r.symbol_id IS NULL AND lower(r.name_text) = lower('$nm')
+ GROUP BY (f.path = '$pth')
+"@
+  foreach ($c in $cnt) { if ([int]$c.same -eq 1) { $d13Same = [int]$c.c } else { $d13Else = [int]$c.c } }
+  if ($d13Same) {
+    # Assigned FIRST: piping Invoke-IndexQuery's `, $array` hands ForEach-Object
+    # ONE item, the whole array, and `$_.ln` member-enumerates into one string.
+    $lnRows = Invoke-IndexQuery @"
+SELECT r.start_line AS ln FROM refs r JOIN files f ON f.id = r.file_id
+ WHERE r.kind = 'write' AND r.symbol_id IS NULL AND lower(r.name_text) = lower('$nm')
+   AND f.path = '$pth'
+ ORDER BY r.start_line LIMIT 12
+"@
+    $d13Lines = @($lnRows | ForEach-Object { ":$($_.ln)" })
+  }
+}
+
 # A zero in the RENDERED direction is a real answer, so say it with the other
 # direction's number beside it -- a bare "0 writes" reads as "nothing uses this".
+# Under D13 it is only a zero of RESOLVED writes, and says so.
 if ($showWrite -and $totalWrites -eq 0) {
-  Add-DisclosureRow $ftbl "no write sites ($totalReads read$(if ($totalReads -ne 1) { 's' }))" $PAL.lineInk
+  $resolvedWord = $(if ($d13Same -or $d13Else) { 'resolved ' } else { '' })
+  Add-DisclosureRow $ftbl "no ${resolvedWord}write sites ($totalReads read$(if ($totalReads -ne 1) { 's' }))" $PAL.lineInk
+}
+if ($d13Same) {
+  $more = $(if ($d13Same -gt $d13Lines.Count) { " (+$($d13Same - $d13Lines.Count) more)" } else { '' })
+  Add-DisclosureRow $ftbl ("engine D13: $d13Same UNBOUND write(s) named $($sel.Name) in $([IO.Path]::GetFileName($sel.Path)) " +
+                           "at $($d13Lines -join ', ')$more -- by name, NOT counted above") $PAL.lineInk
+}
+if ($d13Else) {
+  Add-DisclosureRow $ftbl "engine D13: $d13Else more unbound write(s) of the name $($sel.Name) in other files -- may be other symbols" $PAL.lineInk
 }
 if ($showRead -and $totalReads -eq 0) {
   Add-DisclosureRow $ftbl "no read sites ($totalWrites write$(if ($totalWrites -ne 1) { 's' }))" $PAL.lineInk
@@ -376,6 +420,8 @@ $expected = $anchoredRows + 1
   Unanchored      = $unanchored
   Backing         = @($backing | ForEach-Object { [string]$_.nm })
   CrossCheck      = $crossCheck
+  D13SameFile     = $d13Same              # unbound same-name writes, declaring file
+  D13Elsewhere    = $d13Else              # ... in every other file (weaker)
   ClickTargets    = $lay.Anchors
   Expected        = $expected
   AllClickable    = ($lay.Anchors -ge $expected)

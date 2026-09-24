@@ -303,6 +303,24 @@ Step 'E-MA2' {
   Chk 'A-MA2-XCHECK'   $m2.CrossCheck 'agree'
   # backed by METHODS, so the note offers who-calls, not who-writes
   Chk 'A-MA2-BACKING'  (($m2.Backing | Sort-Object) -join ',') 'GetVERDICT,SetVERDICT'
+  # D13 by-name counts (unbound write refs of the NAME): 0 in the declaring file,
+  # 2 elsewhere for VERDICT; 0 / 35 for the record field R (a one-letter name).
+  Chk 'A-MA2-D13'      "$($m2.D13SameFile)/$($m2.D13Elsewhere)" '0/2'
+  if ($m1) { Chk 'A-MA1-D13' "$($m1.D13SameFile)/$($m1.D13Elsewhere)" '0/35' }
+}
+
+# ENGINE D13: write refs are never bound on CLIENT, so the verb sees only
+# member-access writes. FConnected is assigned bare inside its own class four
+# times; the old chart said "no write sites". It now says "no RESOLVED write
+# sites" and lists the four unbound lines by name.
+Note 'who-writes FConnected (engine D13 disclosure) ...'
+Step 'E-MA-D13' {
+  $script:m14 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'uPipeClientConnection.TPipeClientConnection.FConnected' -Mode write -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-MA14-WRITES' $m14.Writes 0
+  Chk 'A-MA14-D13'    "$($m14.D13SameFile)/$($m14.D13Elsewhere)" '4/0'
+  $t14 = Dot $m14
+  if ($t14 -notmatch 'no resolved write sites \(602 reads\)') { Fail 'A-MA14-ZERO' 'the zero note does not say RESOLVED' }
+  if ($t14 -notmatch 'at :164, :320, :455, :543 -- by name') { Fail 'A-MA14-LINES' 'the four unbound write lines are not listed' }
 }
 
 Note 'who-reads Connected at scale (602 sites, 598 routines, cap 25) ...'
@@ -636,6 +654,20 @@ Step 'E-FX' {
   $t6 = Dot $fx6
   if ($t6 -notmatch 'parameter #0 \(V1\)') { Fail 'A-FX6-P0' 'p0 did not resolve to V1' }
   if ($t6 -notmatch 'parameter #3 \(V2\)') { Fail 'A-FX6-P3' 'p3 did not resolve to V2 across grouped parameters' }
+  # its witness is "calls Assert (unbound)", not its own name: g stays drawn
+  Chk 'A-FX6-D12'     $fx6.D12Suspect $false
+
+  # ENGINE D12: AP_FP_Greater_Eq := X >= Y is scored as a GLOBAL write (summary
+  # `g`, witness "writes AP_FP_Greater_Eq (non-local)"). One of the 31 measured
+  # functions on the CLIENT clone. The chart must NOT draw "writes global state";
+  # it draws the dashed D12 disclosure and no effects cluster.
+  $script:fx7 = & "$SRC\Emit-Effects.ps1" -Qname 'Ap.AP_FP_Greater_Eq' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-FX7-D12'     $fx7.D12Suspect $true
+  Chk 'A-FX7-EFFECTS' $fx7.Effects 0
+  Chk 'A-FX7-SUMMARY' $fx7.Summary 'g'
+  $t7 = Dot $fx7
+  if ($t7 -match 'writes global state') { Fail 'A-FX7-NOG' 'the D12 own-name write was drawn as a global write' }
+  if ($t7 -notmatch 'engine D12')       { Fail 'A-FX7-NOTE' 'no D12 disclosure on the chart' }
 }
 
 Note 'architecture ...'
@@ -1600,6 +1632,7 @@ if (-not $Quiet) {
   Write-Host 'Emitter verification -- fifteen questions, thirteen emitters, four indexes'
   Write-Host ("  bytes          : {0} non-ascii, {1} bare LF" -f $nonAscii, $bareLf)
   Write-Host ("  butterfly      : {0} callers / {1} callees, {2} clicks" -f (V $b 'Callers'), (V $b 'Callees'), (V $b 'ClickTargets'))
+  Write-Host ("  butterfly D6   : {0} callees from 14 tree nodes, {1} arrows, {2} leave the focus; D12 {3}; D13 {4}" -f (V $b6 'Callees'), (V $b6 'Edges'), (V $b6 'FocusOut'), (V $fx7 'D12Suspect'), (V $m14 'D13SameFile'))
   Write-Host ("  deps           : {0} used by / {1} uses" -f (V $d 'UsedBy'), (V $d 'Uses'))
   Write-Host ("  who-calls      : {0} sites d2, {1} sites + {2} cycle d3, {3} name-only NOT merged" -f (V $w1 'Callers'), (V $w2 'Callers'), (V $w2 'Cycles'), (V $w2 'NameOnly'))
   Write-Host ("  what-it-calls  : {0}/{1}/{2} rows at d1/d2/d3, {3} cycles, ties butterfly's {4}" -f (V $c1 'Rows'), (V $c2 'Rows'), (V $c3 'Rows'), (V $c3 'Cycles'), (V $b 'Callees'))
