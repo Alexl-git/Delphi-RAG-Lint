@@ -388,38 +388,6 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatMarker(const ARuleId, ALineText, AReason: string): string; static;
-    /// <summary>ALineText with ARuleId recorded as reviewed: merged into the
-    /// existing `dl:ok` comment when the line already has one, otherwise appended
-    /// as a new end-of-line comment.</summary>
-    /// <param name="ALineText">One source line, without its line terminator.</param>
-    /// <param name="ARuleId">Rule id being accepted.</param>
-    /// <param name="AReason">Optional free text. An existing reason is preserved.</param>
-    /// <param name="AHashOverride"><!-- drag-lint:auto type -->const string = ''</param>
-    /// <returns>The whole new line: 7-bit ASCII, no trailing whitespace, original
-    /// indentation and code untouched.</returns>
-    /// <remarks>
-    /// Idempotent only when the review is still valid: a rule already
-    /// recorded with a hash matching the current line returns ALineText
-    /// byte-identical. A rule recorded with a STALE hash -- or with none at all --
-    /// has that one entry re-hashed to the line as it now stands, which is how a
-    /// human re-accepts a review after the code moved on. Neighbouring markers
-    /// keep their own hashes, stale ones included: re-validating a review of code
-    /// nobody re-examined is the failure this design exists to prevent. The marker
-    /// is a comment, so the hash it stores is unaffected by its own
-    /// insertion.
-    /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, LowerCase, Pos, SameText, Trim, TrimRight</para>
-    /// <para>Returns: TrimRight(Result); TrimRight(Prefix + Body)</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 77 lines (full implementation)</para>
-    /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
-    /// <!-- drag-lint:auto END -->
-    /// </remarks>
     /// <summary>ALineText with the `dl:ok` entry for ARuleId removed. The
     /// inverse of InsertInto, for superseding a review rather than adding a
     /// second one beside it.</summary>
@@ -448,24 +416,36 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RemoveFrom(const ALineText, ARuleId: string): string; static;
-    /// <param name="ALineText"><!-- drag-lint:auto type -->const string</param>
-    /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
-    /// <param name="AReason"><!-- drag-lint:auto type -->const string</param>
+    /// <summary>ALineText with ARuleId recorded as reviewed: merged into the
+    /// existing `dl:ok` comment when the line already has one, otherwise appended
+    /// as a new end-of-line comment.</summary>
+    /// <param name="ALineText">One source line, without its line terminator.</param>
+    /// <param name="ARuleId">Rule id being accepted.</param>
+    /// <param name="AReason">Optional free text. An existing reason is preserved.</param>
     /// <param name="AHashOverride"><!-- drag-lint:auto type -->const string = ''</param>
-    /// <returns><!-- drag-lint:auto -->string -- Observed: TrimRight(Result);
-    /// TrimRight(Prefix + Body).</returns>
+    /// <returns>The whole new line: 7-bit ASCII, no trailing whitespace, original
+    /// indentation and code untouched.</returns>
     /// <remarks>
+    /// Idempotent only when the review is still valid: a rule already
+    /// recorded with a hash matching the current line returns ALineText
+    /// byte-identical. A rule recorded with a STALE hash -- or with none at all --
+    /// has that one entry re-hashed to the line as it now stands, which is how a
+    /// human re-accepts a review after the code moved on. Neighbouring markers
+    /// keep their own hashes, stale ones included: re-validating a review of code
+    /// nobody re-examined is the failure this design exists to prevent. The marker
+    /// is a comment, so the hash it stores is unaffected by its own
+    /// insertion.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
     /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, LowerCase, Pos, SameText, Trim, TrimRight</para>
+    /// <para>Returns: TrimRight(Result); TrimRight(Prefix + Body)</para>
     /// <para>Complexity: 13 (cyclomatic, outer body), 77 lines (full implementation)</para>
-    /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
     /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken"/>
-    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.FormatMarker"/>
+    /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.BlockOpenAtLineStart"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function InsertInto(const ALineText, ARuleId, AReason: string;
