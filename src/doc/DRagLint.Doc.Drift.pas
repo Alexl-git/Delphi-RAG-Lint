@@ -148,11 +148,10 @@ type
     /// That is what TDocFactsRenderOptions is for.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+24 more)</para>
+    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+26 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 57 (cyclomatic, outer body), 547 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Complexity: 57 (cyclomatic, outer body), 555 lines (full implementation)</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
@@ -640,9 +639,17 @@ begin
     // AIncludeSince/ABaseDir stay off: <since> is a documenter opt-in that the
     // checker never compares, and ABaseDir is only read when it is on.
     var Opts: TDocFactsRenderOptions:= AOpts.Normalized;
+    // v(2026-09-23): AWholeInboundLists is threaded for the same reason, and
+    // asked of the SAME stored block the writer asks it of (see
+    // TSharedFacts.WantsWholeInboundLists): a reconciled block compared against
+    // a capped render would drift for ever over the window alone.
     Facts:= TDocFactsBuilder.Build(AStore, ASym, Opts.Handles, Opts.IncludeSeeAlso, {AIncludeSince=}False,
                                    {ABaseDir=}'', Opts.ExtraStores,
-                                   Opts.MaxReturnCases, Opts.MaxCallers);
+                                   Opts.MaxReturnCases, Opts.MaxCallers,
+                                   {AIncludeCalleeRaises=}False,
+                                   TSharedFacts.WantsWholeInboundLists(
+                                     TSharedFacts.StoredBlockBody(ADoc.Remarks), AStore,
+                                     AStore.GetFilePath(ASym.FileId)));
     Inc(GFactsBuildTicks, TStopwatch.GetTimeStamp - TFacts0);
 
     // Findings 1-6 are param/return drift and make sense ONLY for a routine.

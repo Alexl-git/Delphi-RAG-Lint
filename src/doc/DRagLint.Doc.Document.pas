@@ -179,9 +179,9 @@ type
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+17 more)</para>
+    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+20 more)</para>
     /// <para>Returns: Default(TDocumentResult)</para>
-    /// <para>Complexity: 27 (cyclomatic, outer body), 483 lines (full implementation)</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 504 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -889,6 +889,19 @@ begin
     AExtraStores, AMaxReturnCases, AMaxCallers, AComplexityMin);
 end;
 
+{ v(2026-09-23): the repair branch's no-change test with the legacy `Pure` line
+  taken out of the stored comment and the `Effect-free (proven)` line out of
+  the fresh one -- the SAME body-and-indent equality the branch applies to the
+  whole comments. False when there is no legacy line or `--migrate-pure` is
+  set, so the ordinary test alone decides. See BuildForSymbol's call site. }
+function SameButForLegacyPure(const ACur, AMerged: string): Boolean;
+var
+  PureStored, PureFresh: string;
+begin
+  Result:= TSharedFacts.LegacyPureViews(ACur, AMerged, PureStored, PureFresh)
+           and CommentLinesEqual(NormalizeCommentLines(PureStored), NormalizeCommentLines(PureFresh))
+           and CommentLinesIndentEqual(RawCommentLines(PureStored), RawCommentLines(PureFresh));
+end;
 class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
@@ -960,8 +973,13 @@ begin
     since session 47. Hover and doc-drift pass False and keep the behaviour they
     already had -- see TDocFacts.CalleeRaises for why that is not merely
     caution. }
+  { v(2026-09-23): a block reconciled across projects is built from WHOLE
+    inbound lists -- TDocDrift.Analyze asks the same question for the same
+    block, so the checker and the writer never compare a window with a list. }
   Facts := TDocFactsBuilder.Build(AStore, ASym, AHandles, AIncludeSeeAlso, AIncludeSince, ABaseDir, AExtraStores, AMaxReturnCases, AMaxCallers,
-                                  {AIncludeCalleeRaises=}True);
+                                  {AIncludeCalleeRaises=}True,
+                                  TSharedFacts.WantsWholeInboundLists(
+                                    TSharedFacts.StoredBlockBody(Existing.Remarks), AStore, Path));
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class
@@ -1163,9 +1181,12 @@ begin
 
       Reported as daUnchanged, not daRemoved: nothing was removed, and D1's
       whole point is that a deletion must stay distinguishable from a repair. }
+    { v(2026-09-23): nor is a block whose ONLY fact is the legacy `Pure` line
+      decayed -- that line is exempt until the owner's one-time migration
+      (`--migrate-pure`), and doc-drift calls such a block current. }
     if Existing.HasContent and RegionFullyEngineOwned(Region.RawText)
-       and TSharedFacts.HoldsForeignInboundEntries(
-             TSharedFacts.StoredBlockBody(Existing.Remarks), AStore, Path) then
+       and (TSharedFacts.HoldsForeignInboundEntries(TSharedFacts.StoredBlockBody(Existing.Remarks), AStore)
+            or TSharedFacts.IsLegacyPureOnlyBody(TSharedFacts.StoredBlockBody(Existing.Remarks))) then
     begin
       Result.Action:= daUnchanged;
       Exit;
@@ -1260,6 +1281,19 @@ begin
     CurBlock:= ExtractSourceSpan(Src, Existing.StartLine, Existing.EndLine);
     if CommentLinesEqual(NormalizeCommentLines(CurBlock), NormalizeCommentLines(Merged))
        and CommentLinesIndentEqual(RawCommentLines(CurBlock), RawCommentLines(Merged)) then
+    begin
+      Result.Action:= daUnchanged;
+      Exit;
+    end;
+    { v(2026-09-23): THE LEGACY `Pure` LINE ALONE IS NOT A CHANGE. Purity v2
+      relabels it `Effect-free (proven)` or retracts it, and the owner deferred
+      that migration to one explicit regeneration (`document --migrate-pure`).
+      Without this, every stored `Pure` block was rewritten by any `document`
+      run over untouched code -- measured on a two-routine fixture: 2 blocks,
+      4 edits, Pure -> Effect-free, while nothing else in either block moved.
+      The same equality, with the one line taken out of each side; anything
+      else different and the block is regenerated in full as before. }
+    if SameButForLegacyPure(CurBlock, Merged) then
     begin
       Result.Action:= daUnchanged;
       Exit;

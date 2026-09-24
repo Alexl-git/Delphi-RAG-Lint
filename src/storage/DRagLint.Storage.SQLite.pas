@@ -579,9 +579,10 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: DRagLint.Storage.FileMembership.HeaderSaysWal</para>
+      /// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout, DRagLint.Storage.FileMembership.ConnectReadOnly</para>
       /// <para>Reads: FConn   Writes: FConn</para>
-      /// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
+      /// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
+      /// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths"/>
@@ -3686,14 +3687,14 @@ begin
       opened by a read verb or by the LSP server had its header rewritten
       (byte 18: 1 -> 2) by a connection that then wrote nothing else. Pinned by
       run_lsp_reader_guard.ps1 (C2) and, for the membership probe that found
-      it, run_project_db_resolve.ps1 (6d). }
-    FConn.Params.Values['LockingMode']:= 'Normal';
-    FConn.Params.Values['JournalMode']:= if HeaderSaysWal(ADbPath) then 'WAL' else 'Delete';
-    FConn.Params.Values['Synchronous']:= 'Normal';
-    FConn.LoginPrompt:= False;
-    FConn.Connected  := True;
-    FConn.ExecSQL('PRAGMA query_only = ON'); { reject every write on this handle }
-    FConn.ExecSQL('PRAGMA busy_timeout = 5000');
+      it, run_project_db_resolve.ps1 (6d).
+
+      THE BUSY TIMEOUT IS ARMED BEFORE THE CONNECT (2026-09-23). A
+      `PRAGMA busy_timeout` issued after `Connected := True` left FireDAC's own
+      connect-time pragmas with no busy handler, so a reader opening while the
+      last WAL connection was closing failed "database is locked" -- see
+      ArmBusyTimeout. ConnectReadOnly is the shared reader open. }
+    ConnectReadOnly(FConn, ADbPath);
     FConn.ExecSQL('PRAGMA cache_size = -262144'  ); { 256 MB page cache }
     FConn.ExecSQL('PRAGMA mmap_size = 1073741824'); { 1 GB read mmap }
     FConn.ExecSQL('PRAGMA temp_store = MEMORY'   );
@@ -3702,13 +3703,15 @@ begin
   FConn.Params.Values['LockingMode']:= 'Normal';
   FConn.Params.Values['JournalMode']:= 'WAL';
   FConn.Params.Values['Synchronous']:= 'Normal';
+  { Give DDL ops (e.g. DROP TRIGGER) up to 5 s to acquire the exclusive WAL
+    lock when a concurrent LSP reader holds the DB. Without this, any schema
+    change races against the LSP server and silently fails (SQLITE_BUSY).
+    Armed BEFORE the connect so FireDAC's connect-time pragmas wait too; a
+    `PRAGMA busy_timeout` after it came too late for them (see ArmBusyTimeout). }
+  ArmBusyTimeout(FConn);
   FConn.LoginPrompt:= False;
   FConn.Connected  := True;
   FConn.ExecSQL('PRAGMA foreign_keys = ON');
-  { Give DDL ops (e.g. DROP TRIGGER) up to 5 s to acquire the exclusive WAL
-    lock when a concurrent LSP reader holds the DB. Without this, any schema
-    change races against the LSP server and silently fails (SQLITE_BUSY). }
-  FConn.ExecSQL('PRAGMA busy_timeout = 5000');
   { v0.42 perf: per-file insert throughput collapses as the DB grows past ~1 GB
     (full C:\Projects scan ran at 0.55 s/file vs ~0.04 s/file historically). The
     cause is index B-tree maintenance (symbol_trigrams especially) thrashing

@@ -71,11 +71,11 @@ const
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 2; DoIndexAll(Args);
 /// DoIndex(Args); DoQuery (Args); DoRules (Args); DoLint (Args).</returns>
 /// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
-/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing</exception>
+/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing; via DRagLint.CLI.ParseArgs: Unknown argument: %s</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+96 more)</para>
-/// <para>Complexity: 111 (cyclomatic, outer body), 287 lines (full implementation)</para>
+/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+101 more)</para>
+/// <para>Complexity: 113 (cyclomatic, outer body), 295 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
@@ -125,7 +125,7 @@ uses
   , DRagLint.Analysis.LintTree
   , DRagLint.Analysis.PurityStage { Purity v2: TPurityStage.Run after the `calls` stage at every index site }
   , DRagLint.Storage.SQLite
-  , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in }
+  , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in; ConnectReadOnly: the raw reader open }
   , DRagLint.Parser .Delphi13
   , DRagLint.Parser .DFM
   , DRagLint.Parser .Sql
@@ -172,6 +172,8 @@ uses
   , DRagLint.Doc        .Strip
   , DRagLint.Doc        .Harvest
   , DRagLint.Doc        .SymbolFacts
+  , DRagLint.Doc        .SharedFacts { TSharedFacts.ProjectTag / MigrateLegacyPure }
+  , DRagLint.Doc        .ProjectTags { ForgetTags / ListTags -- doc-forget }
   , DRagLint.Doc        .Wiki   { TWikiParser -- the dl:wiki concept blocks behind `wiki` }
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
@@ -497,6 +499,19 @@ type
     // TDocBatchOptions.IncludeSince / BaseDir (and BuildFor's AIncludeSince / ABaseDir).
     DocSince   : Boolean; // document [...] --since
     DocBaseDir : string ; // document [...] --base-dir <repoRoot>
+    // 2026-09-23: --migrate-pure lets `document` regenerate a stored legacy
+    // `Pure` fact line (purity v1). Off by default: a block whose ONLY
+    // difference from a fresh render is that line is left byte-identical, per
+    // the owner's deferral of the purity migration to one explicit run.
+    // Consumed by DoDocument / DoDocumentAll via TSharedFacts.MigrateLegacyPure.
+    DocMigratePure: Boolean; // document [...] --migrate-pure
+    // doc-forget (2026-09-23): the project-tag reaping command. --project <Name>
+    // is shared with the other verbs' ProjectPath field (the verb reads it as a
+    // TAG name, not a path); these four are its own.
+    DocForgetScope   : string ; // doc-forget --scope <file.pas|dir>
+    DocForgetRename  : string ; // doc-forget --rename OLD=NEW
+    DocForgetList    : Boolean; // doc-forget --list-tags
+    DocForgetUntagged: Boolean; // doc-forget --untagged
     // ADP1 T2: --include-accessors disables the batch modes' trivial-property-
     // accessor skip filter for this run (document --unit/--project/-all only;
     // document --qname is never filtered). Off by default (filter ON).
@@ -594,7 +609,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@cda3 -- REVIEWED 2026-09-23: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@05a7 -- REVIEWED 2026-09-23: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -851,12 +866,12 @@ begin
   Writeln('  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
-  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PATH]   - generate/repair a managed DocInsight comment');
-  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors] [--db PATH]         - document every public decl in the unit (facts-only)');
-  Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
+  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
+  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)');
+  Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
   Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
   Writeln('                                 Vendored roots are named and skipped; --document-third-party writes to them too.');
-  Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
+  Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
   // v(ADP3 T15): this line used to read "summary/param left as TODO ... add
   // --stubs to also create all-TODO stub comments". Both halves went stale in
   // v(ADP3 T3), which deleted the TODO placeholders outright: an empty tag is
@@ -872,6 +887,11 @@ begin
   Writeln('     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)');
   Writeln('     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent');
   Writeln('     @deprecated is auto-detected from the Pascal ''deprecated'' directive on the decl -- no flag needed');
+  Writeln('     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees');
+  Writeln('     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) inbound entries carry the projects that rendered them --');
+  Writeln('       Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the --db base name); an entry goes when its set empties; untagged legacy entries keep the old rules');
+  Writeln('  drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup]   - reap project tags on inbound doc facts');
+  Writeln('     --project removes that tag (entries whose set empties go); --rename renames it; --untagged drops untagged entries in blocks that carry tags; --list-tags counts every tag in scope. Dry run unless --apply');
   Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH]  - generate a Byte-family record helper for an enum');
   Writeln('     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)');
   Writeln('     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit');
@@ -1460,7 +1480,7 @@ begin
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
     else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --output
-    else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)  // dl:ok duplicate-code@f979 -- pre-existing ParseArgs shape shared by every single-string-value flag branch; swept into this hunk by the unrelated --append line added just above
+    else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)
     begin
       Inc(i);
       Result.CastLibFile:= ParamStr(i);
@@ -1597,10 +1617,23 @@ begin
     else if A = '--reindex' then Result.DocReindex:= True
     // AutoDocument (ADF T4): --seealso opts in the <seealso> doc-source.
     else if A = '--seealso' then Result.DocSeeAlso:= True // now the default; kept so existing scripts do not break
-    else if A = '--no-seealso' then Result.DocSeeAlso:= False
+    else if A = '--no-seealso' then Result.DocSeeAlso:= False  // dl:ok duplicate-code@b5e0 -- REVIEWED 2026-09-23: the ParseArgs shape every flag branch shares (a flag parser is a chain of these by design); the duplicate window moved here when the doc-forget flags were added below
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
     // sets the repo root for the git lookup (defaults to the file's own dir).
     else if A = '--since' then Result.DocSince:= True
+    else if A = '--migrate-pure' then Result.DocMigratePure:= True  // dl:ok duplicate-code@1caf -- REVIEWED 2026-09-23: the ParseArgs flag-chain shape, as on --no-seealso above; the doc-forget flags extend the chain
+    else if (A = '--scope') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.DocForgetScope:= ParamStr(i);
+    end
+    else if (A = '--rename') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.DocForgetRename:= ParamStr(i);
+    end
+    else if A = '--list-tags' then Result.DocForgetList:= True
+    else if A = '--untagged' then Result.DocForgetUntagged:= True
     // Task 5: create-enum-helper --methods <csv> / --tostring rtti|case.
     // Kept as raw strings here; DoCreateEnumHelper parses/validates them (usage
     // errors need access to Writeln/Exit, which the arg parser does not use).
@@ -7428,10 +7461,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   Q   := TFDQuery     .Create(nil);
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= ADbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    ConnectReadOnly(Conn, ADbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Q   .Connection := Conn;
     Q.Sql.Text:= 'SELECT enum.qualified_name AS enum_qname, enum.name AS enum_name, ' + '       val.name AS value_name, val.start_line AS line_no ' + 'FROM symbols enum ' +
     'JOIN symbols val ON val.parent_id = enum.id ' + 'WHERE enum.kind = ''enum'' AND val.kind = ''enum_value'' ' + 'ORDER BY enum.qualified_name, val.start_line, val.id';
@@ -7763,10 +7793,7 @@ begin
   if not TDirectory.Exists(AArgs.OutputDir) then TDirectory.CreateDirectory(AArgs.OutputDir);
 
   Conn:= TFDConnection.Create(nil);
-  Conn.DriverName:= 'SQLite';
-  Conn.Params.Values['Database']:= AArgs.DbPath;
-  Conn.LoginPrompt:= False;
-  Conn.Connected  := True;
+  ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
   WrittenCount:= 0;
   try
     // First pass: build a name -> md-filename map so cross-links resolve.
@@ -7925,10 +7952,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   Q   := TFDQuery     .Create(nil);
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= AArgs.DbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Q   .Connection := Conn;
     // Default sort: fan-in count (refs whose name_text matches the symbol).
     // Limits to the symbol kinds that callers typically reach for.
@@ -8120,10 +8144,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   Q   := TFDQuery     .Create(nil);
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= AArgs.DbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Where:= '';
     if AArgs.Name <> '' then Where:= 'WHERE UPPER(code) = ''' + UpperCase(AArgs.Name) + '''';
     if AArgs.Rule <> '' then // reuse --rule arg as --severity filter
@@ -8210,10 +8231,7 @@ begin
   Q   := TFDQuery     .Create(nil);
   Buf:= TStringBuilder.Create;
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= AArgs.DbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Q   .Connection := Conn;
 
     // Resolve refs by name_text -> symbols.name (the indexer leaves
@@ -8307,14 +8325,8 @@ begin
   SetA:= TDictionary<string, string>.Create;
   SetB:= TDictionary<string, string>.Create;
   try
-    ConnA.DriverName:= 'SQLite';
-    ConnA.Params.Values['Database']:= DbA;
-    ConnA.LoginPrompt:= False;
-    ConnA.Connected  := True;
-    ConnB.DriverName := 'SQLite';
-    ConnB.Params.Values['Database']:= DbB;
-    ConnB.LoginPrompt:= False;
-    ConnB.Connected  := True;
+    ConnectReadOnly(ConnA, DbA); { readers: never FireDAC's Exclusive/Delete defaults }
+    ConnectReadOnly(ConnB, DbB);
     QA   .Connection := ConnA;
     QB   .Connection := ConnB;
     QA.Sql.Text:= 'SELECT qualified_name, kind, COALESCE(signature, '''') AS sig ' + 'FROM symbols WHERE qualified_name <> '''' ';
@@ -15846,6 +15858,7 @@ begin
   Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
   Opts.Handles:= LoadDocHandlesOptions; // gap 3: manifest docs.dialog_routines / docs.max_handles for the 'Catches:' line.
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
+  TSharedFacts.MigrateLegacyPure:= AArgs.DocMigratePure; // 2026-09-23: --migrate-pure regenerates a stored legacy `Pure` line.
   Res:= TDocBatch.DocumentAll(Store, Opts);
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
@@ -16098,6 +16111,185 @@ end;
 // below plus the --qname strip path at the bottom) via
 // CheckDocStripStubsConflict; document-all has its own call (separate dispatch
 // entry, never routed through this function).
+/// <summary>AName with every character the tag grammar reserves -- `[`, `]`,
+/// `,`, blank, tab -- replaced by '_'.</summary>
+/// <param name="AName">A project name as typed or derived.</param>
+/// <returns>A name safe inside `[A,B]entry`.</returns>
+function SanitizeProjectTag(const AName: string): string;
+const
+  RESERVED = '[], ' + #9;
+var
+  I: Integer;
+begin
+  Result:= Trim(AName);
+  for I:= 1 to Length(Result) do
+    if Pos(Result[I], RESERVED) > 0 then Result[I]:= '_';
+end; // function
+/// <summary>The project tag for a database path: its file base name, with every
+/// character the tag grammar reserves replaced by '_'.</summary>
+/// <param name="ADbPath">The primary index, e.g.
+/// `C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite`; '' allowed.</param>
+/// <returns>`DataCopy` for the example; '' for ''.</returns>
+/// <remarks>
+/// Under the _D-RAG layout a project DB is named after the project FILE,
+/// so this is the owner's ruled tag ("the .dproj base name") without having to
+/// know which .dproj opened it. `[`, `]`, `,` and blanks delimit a tag set
+/// (`[A,B]entry`) and cannot appear inside one.
+/// </remarks>
+function ProjectTagOfDb(const ADbPath: string): string;
+begin
+  Result:= SanitizeProjectTag(TPath.GetFileNameWithoutExtension(Trim(ADbPath)));
+end; // function
+
+/// <summary>The `.pas`/`.dpr` files `doc-forget --scope` names: the file
+/// itself, or every such file under the folder (`__history`/`__recovery`
+/// skipped), sorted.</summary>
+/// <param name="AScope">A file or a directory.</param>
+/// <param name="AFiles">The files, or nil when the scope does not exist.</param>
+/// <returns>False when AScope is neither a file nor a directory.</returns>
+function DocForgetFiles(const AScope: string; out AFiles: TArray<string>): Boolean;
+begin
+  AFiles:= nil;
+  if FileExists(AScope) then AFiles:= [AScope]
+  else if DirectoryExists(AScope) then
+    AFiles:= TDirectory.GetFiles(AScope, '*.*', TSearchOption.soAllDirectories,
+      function(const APath: string; const ASearchRec: TSearchRec): Boolean
+      begin
+        Result:= (SameText(ExtractFileExt(ASearchRec.Name), '.pas') or SameText(ExtractFileExt(ASearchRec.Name), '.dpr'))
+                 and (not ContainsText(APath, '\__history')) and (not ContainsText(APath, '\__recovery'));
+      end)
+  else Exit(False);
+  TArray.Sort<string>(AFiles);
+  Result:= True;
+end; // function
+
+/// <summary>Prints `doc-forget --list-tags`: every tag in AFiles with its
+/// entry count, plus the untagged entries sitting in tagged blocks.</summary>
+/// <param name="AFiles">The files in scope.</param>
+procedure DocForgetListTags(const AFiles: TArray<string>);
+var
+  Counts: TDictionary<string, Integer>;
+  F     : string;
+  Tag   : string;
+  Keys  : TArray<string>;
+  Seen  : Integer;
+begin
+  Counts:= TDictionary<string, Integer>.Create;
+  try
+    for F in AFiles do
+      for Tag in DRagLint.Doc.ProjectTags.ListTags(TEncoding.ANSI.GetString(TFile.ReadAllBytes(F))) do
+      begin
+        if not Counts.TryGetValue(Tag, Seen) then Seen:= 0;
+        Counts.AddOrSetValue(Tag, Seen + 1);
+      end;
+    Keys:= Counts.Keys.ToArray;
+    TArray.Sort<string>(Keys);
+    for Tag in Keys do
+      Writeln(Format('%6d  %s', [Counts[Tag], if Tag = '' then '(untagged, in tagged blocks)' else Tag]));
+    Writeln(Format('doc-forget: %d tag name(s) in %d file(s) scanned', [Length(Keys), Length(AFiles)]));
+  finally
+    Counts.Free;
+  end;
+end; // procedure
+
+/// <summary>The TDocForgetOptions a `doc-forget` command line asks for.</summary>
+/// <param name="AArgs">Reads ProjectPath (as a TAG name), DocForgetRename,
+/// DocForgetUntagged.</param>
+/// <param name="AOpts">The options; meaningful only when the result is ''.</param>
+/// <returns>'' when valid; otherwise the error to print.</returns>
+function DocForgetOptions(const AArgs: TArgs; out AOpts: TDocForgetOptions): string;
+var
+  EqAt: Integer;
+begin
+  Result  := '';
+  AOpts   := Default(TDocForgetOptions);
+  AOpts.Project := AArgs.ProjectPath;
+  AOpts.Untagged:= AArgs.DocForgetUntagged;
+  if AArgs.DocForgetRename <> '' then
+  begin
+    EqAt:= Pos('=', AArgs.DocForgetRename);
+    if (EqAt < 2) or (EqAt = Length(AArgs.DocForgetRename)) then Exit('ERROR: --rename takes <Tag>=<New>');
+    if (AOpts.Project <> '') and not SameText(AOpts.Project, Copy(AArgs.DocForgetRename, 1, EqAt - 1)) then
+      Exit('ERROR: --project and the left side of --rename name different tags');
+    AOpts.Project := Copy(AArgs.DocForgetRename, 1, EqAt - 1);
+    AOpts.RenameTo:= SanitizeProjectTag(Copy(AArgs.DocForgetRename, EqAt + 1, MaxInt));
+  end;
+  if (AOpts.Project = '') and not AOpts.Untagged then
+    Result:= 'ERROR: doc-forget needs --project <Tag>, --rename <Tag>=<New>, --untagged or --list-tags';
+end; // function
+
+/// <summary>drag-lint doc-forget --scope &lt;file|dir&gt; (--project &lt;Tag&gt;
+/// [--rename &lt;Tag&gt;=&lt;New&gt;] | --untagged | --list-tags) [--apply|--no-backup].
+/// The reaping command for inbound-fact project tags.</summary>
+/// <param name="AArgs">Consumes DocForgetScope, ProjectPath (read as a TAG
+/// name), DocForgetRename, DocForgetUntagged, DocForgetList, Apply, NoBackup.</param>
+/// <returns>0 on success (dry run or applied); 2 on a usage error or a missing
+/// scope.</returns>
+/// <remarks>
+/// Text-only: no index is opened, because a tag names a project that may no
+/// longer HAVE an index -- a retired or renamed project is exactly when this is
+/// needed. Rewrites only lines inside managed fences via
+/// DRagLint.Doc.ProjectTags.ForgetTags, and writes a `.bak` beside each changed file unless
+/// --no-backup. ANSI in, ANSI out, line endings preserved byte for byte.
+/// </remarks>
+function DoDocForget(const AArgs: TArgs): Integer;
+var
+  Opts   : TDocForgetOptions;
+  Files  : TArray<string>;
+  F      : string;
+  Raw    : TBytes;
+  Text   : string;
+  NewText: string;
+  Err    : string;
+  Stats  : TDocForgetStats;
+  Totals : TDocForgetStats;
+  Changed: Integer;
+begin
+  if (AArgs.DocForgetScope = '') or not DocForgetFiles(AArgs.DocForgetScope, Files) then
+  begin
+    Writeln(ErrOutput, 'Usage: drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup]');
+    if AArgs.DocForgetScope <> '' then Writeln(ErrOutput, Format('ERROR: --scope not found: %s', [AArgs.DocForgetScope]));
+    Exit(2);
+  end;
+  if AArgs.DocForgetList then
+  begin
+    DocForgetListTags(Files);
+    Exit(0);
+  end;
+  Err:= DocForgetOptions(AArgs, Opts);
+  if Err <> '' then
+  begin
+    Writeln(ErrOutput, Err);
+    Exit(2);
+  end;
+
+  Totals := Default(TDocForgetStats);
+  Changed:= 0;
+  for F in Files do
+  begin
+    Raw    := TFile.ReadAllBytes(F);
+    Text   := TEncoding.ANSI.GetString(Raw);
+    NewText:= DRagLint.Doc.ProjectTags.ForgetTags(Text, Opts, Stats);
+    if NewText = Text then Continue;
+    Inc(Changed);
+    Inc(Totals.TagsRemoved   , Stats.TagsRemoved   );
+    Inc(Totals.TagsRenamed   , Stats.TagsRenamed   );
+    Inc(Totals.EntriesDropped, Stats.EntriesDropped);
+    Inc(Totals.LinesDropped  , Stats.LinesDropped  );
+    Writeln(Format('%s: %d tag(s) removed, %d renamed, %d entr(y/ies) dropped, %d line(s) dropped',
+      [F, Stats.TagsRemoved, Stats.TagsRenamed, Stats.EntriesDropped, Stats.LinesDropped]));
+    if AArgs.Apply then
+    begin
+      if not AArgs.NoBackup then TFile.WriteAllBytes(F + '.bak', Raw);
+      TFile.WriteAllBytes(F, TEncoding.ANSI.GetBytes(NewText));
+    end;
+  end;
+  Writeln(Format('doc-forget: %d of %d file(s) %s; %d tag(s) removed, %d renamed, %d entr(y/ies) dropped, %d line(s) dropped',
+    [Changed, Length(Files), if AArgs.Apply then 'rewritten' else 'would change -- pass --apply to write',
+     Totals.TagsRemoved, Totals.TagsRenamed, Totals.EntriesDropped, Totals.LinesDropped]));
+  Result:= 0;
+end; // function
+
 function DoDocument(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore                         ;
@@ -16108,6 +16300,7 @@ var
 begin
   Result:= CheckDocStripStubsConflict(AArgs);
   if Result <> 0 then Exit;
+  TSharedFacts.MigrateLegacyPure:= AArgs.DocMigratePure; { all three forms route through here }
 
   if AArgs.ProjectPath <> '' then Exit(DoDocumentProject(AArgs));
   if AArgs.DocUnit <> '' then Exit(DoDocumentUnit(AArgs));
@@ -24606,10 +24799,7 @@ begin
     Conn:= TFDConnection.Create(nil);
     Q   := TFDQuery     .Create(nil);
     try
-      Conn.DriverName:= 'SQLite';
-      Conn.Params.Values['Database']:= SharedDbPath;
-      Conn.LoginPrompt:= False;
-      Conn.Connected  := True;
+      ConnectReadOnly(Conn, SharedDbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
       Q   .Connection := Conn;
       for P in Cfg.Projects do
       begin
@@ -25973,9 +26163,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   try
     try
-      Conn.DriverName:= 'SQLite';
-      Conn.Params.Values['Database']:= ADbPath;
-      Conn.Connected:= True;
+      ConnectReadOnly(Conn, ADbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
       Q:= TFDQuery.Create(nil);
       try
         Q.Connection:= Conn;
@@ -27504,11 +27692,18 @@ begin
       already promotes the project's own DB to the front and leaves the list
       alone when the project cannot be resolved unambiguously, so taking [0] here
       inherits that caution rather than re-deciding it. }
-    if (Args.ProjectPath <> '') and (Length(Args.DbPaths) = 0) then
+    { doc-forget reads --project as a TAG NAME, never a project file. }
+    if (Args.ProjectPath <> '') and (Length(Args.DbPaths) = 0) and (Args.Command <> 'doc-forget') then
     begin
       var ProjDbs: TArray<string>:= ResolveConsumerDbs(Args);
       if (Length(ProjDbs) > 0) and (ProjDbs[0] <> '') and TFile.Exists(ProjDbs[0]) then Args.DbPath:= ProjDbs[0];
     end;
+    { THE PROJECT TAG (2026-09-23): the name this run writes into, and reaps
+      from, inbound fact entries on a reconciled block -- the primary DB's base
+      name, which under the _D-RAG layout IS the project file's base name. Left
+      empty with more than one --db: facts from several indexes are not one
+      project's to claim, and an empty tag writes none and removes none. }
+    TSharedFacts.ProjectTag:= if Length(Args.DbPaths) > 1 then '' else ProjectTagOfDb(Args.DbPath);
     if Args.Command = 'index' then
     begin
       { The MODE flags name opposite intents, so passing both is a usage error
@@ -27559,6 +27754,7 @@ begin
     else if Args.Command = 'generate-docs'     then Result:= DoGenerateDocs    (Args)
     else if Args.Command = 'document'          then Result:= DoDocument        (Args)
     else if Args.Command = 'document-all'      then Result:= DoDocumentAll     (Args)
+    else if Args.Command = 'doc-forget'        then Result:= DoDocForget       (Args)
     else if Args.Command = 'create-enum-helper' then Result:= DoCreateEnumHelper(Args)
     else if Args.Command = 'helpers-of'         then Result:= DoHelpersOf       (Args)
     else if Args.Command = 'find-unit'         then Result:= DoFindUnit        (Args)

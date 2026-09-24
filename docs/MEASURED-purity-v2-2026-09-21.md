@@ -606,15 +606,20 @@ any of the three commands below:**
 3. Confirm the engine deployed for the real run reports resolver `1.5.1-alpha`
    or later (`drag-lint --version`), matching this record's measured binary.
 
+**UPDATE 2026-09-23 -- `--migrate-pure` is now REQUIRED for this migration.** `document`
+now leaves a block byte-identical when the legacy `<para>Pure</para>` line is its ONLY
+difference from a fresh render, and `doc-drift` does not report it, so without the flag the
+commands below would relabel nothing. The flag was added to each command.
+
 **The three commands, exactly as the owner would paste them** (unchanged from
 the brief, now cross-checked against `document --help` -- `--project` accepts
 `--apply` and `--reindex` together: "self-freshens so hover/LSP are correct
 immediately after"):
 
 ```
-drag-lint document --project C:\Projects\Delphi-RAG-lint\src\cli\drag-lint.dproj --db C:\Projects\Delphi-RAG-lint\src\cli\_D-RAG\drag-lint.sqlite --apply --reindex
-drag-lint document --project C:\Projects\DataCopy\DataCopy.dproj --db C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite --apply --reindex
-drag-lint document --project C:\Projects\YADF\YADF.dproj --db C:\Projects\YADF\_D-RAG\YADF.sqlite --apply --reindex
+drag-lint document --project C:\Projects\Delphi-RAG-lint\src\cli\drag-lint.dproj --db C:\Projects\Delphi-RAG-lint\src\cli\_D-RAG\drag-lint.sqlite --apply --reindex --migrate-pure
+drag-lint document --project C:\Projects\DataCopy\DataCopy.dproj --db C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite --apply --reindex --migrate-pure
+drag-lint document --project C:\Projects\YADF\YADF.dproj --db C:\Projects\YADF\_D-RAG\YADF.sqlite --apply --reindex --migrate-pure
 ```
 
 Expected duration: each is a `document --project` pass over one project's own
