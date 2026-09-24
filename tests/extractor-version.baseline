@@ -811,4 +811,14 @@
 #   and the new code only READS refs; it writes call_edges and refs.symbol_id. A bump here would bill a ~3h17m re-parse of every
 #   database to alter not one stored parse.
 #   Superseded: 1.18.0-alpha|63488fb2a2232af20a67a2c64226c87ccc33ba17de1943a54d11762563216ec6
-1.18.0-alpha|6b35e559660b226b5a98468c03c49e657ef3e5846a90f83e8171f4fb5027d140
+# 2026-09-23: hash updated WITHOUT a version bump again, same rule and same
+#   precedent as the entry above. The only surface file that moved is
+#   src\index\DRagLint.Index.CallResolver.pas: resolver batch A (D13 write-ref
+#   binding -- ResolveWriteRef and its scope helpers; ENG-16 unit-qualified
+#   routine calls -- LookupUnitQualifiedRoutine, rung 4b of ResolveOne). Both
+#   READ stored refs/symbols and write refs.symbol_id / call_edges only: the
+#   RESOLVE pass, billed by DRAGLINT_RESOLVER_VERSION 1.7.0-alpha -> 1.8.0-alpha
+#   in the same commit. Nothing under src\parser or src\preprocess changed, nor
+#   Core.Indexer or Doc.SymbolFacts; no stored parse differs.
+#   Superseded: 1.18.0-alpha|6b35e559660b226b5a98468c03c49e657ef3e5846a90f83e8171f4fb5027d140
+1.18.0-alpha|0f7b966c05f1c77167e28ce45a4a6c75970386585cba160c9265d61a50efe723

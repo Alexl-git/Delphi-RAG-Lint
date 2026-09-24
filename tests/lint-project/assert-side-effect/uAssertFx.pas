@@ -28,6 +28,7 @@ type
 
 function Pop(var AList: Integer): Integer;
 function NextId: Integer;
+function IsBig(X: Integer): Boolean;
 procedure Driver;
 
 var
@@ -65,6 +66,12 @@ begin
   Result:= GNext;
 end;
 
+{ Assigns its result through its OWN NAME -- effect-free (defect D12). }
+function IsBig(X: Integer): Boolean;
+begin
+  IsBig:= X > 10;
+end;
+
 procedure Driver;
 var
   N: Integer;
@@ -86,6 +93,7 @@ begin
   if S.Bump > 0 then Assert(N > -100);   { CONTROL-6: same line, outside the Assert }
   N:= NextId(); // Assert(NextId() > 0)   CONTROL-7: the Assert is a comment
   N:= NextId;                            { CONTROL-8: parenless effect outside any Assert }
+  Assert(IsBig(N) or (N < 0));           { CONTROL-9: result assigned through the function's own name (D12) }
   S.Free;
 end;
 

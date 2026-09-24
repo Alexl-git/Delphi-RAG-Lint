@@ -68,7 +68,7 @@
     check  3  A1-A5 bare reads bind ........................ task 4
     check  4  B1/B2 qualified (Shape B) bind ............... task 4
     check  5  pvHidden: own-file implementation enum ....... task 4
-    check  6  N1-N4 stay NULL (POSITIVE CONTROL) ........... green already
+    check  6  N2-N4 stay NULL, N1 never binds the enum (POSITIVE CONTROL)
     check  7  invariants: no enum in call_edges/member_accesses . green already
     check  8  E1 fence: complement universe untouched ...... green already
     check  9  R-A: find-callers --resolved reports reads ... task 6
@@ -110,7 +110,9 @@
       `name_text` alone, then N2 (a LOCAL spelled like an enum value), N3 (a
       unit CONST spelled like one) and N4 (TWO visible candidates) all bind
       wrongly and check 6 turns red. That is the entire reason those four
-      sites exist in the fixture.
+      sites exist in the fixture. (Since resolver 1.8.0-alpha, D13, the N1
+      WRITE binds to the local it assigns; the check now pins that it binds to
+      the local and never to the enum value.)
     * **Check 2 is the control on the FIXTURE.** The routine `DoWork` resolves
       today and must resolve in every later task. If check 2 ever reddens, the
       fixture broke, not the engine -- stop and fix the fixture.
@@ -567,10 +569,17 @@ foreach ($k in @('N1','N2','N3','N4')) {
   $s = $L[$k]
   $r = RefRow $dbA $s.f $s.l $s.k $s.n
   CheckN 6 ("{0} ({1}:{2}) is one {3} ref of '{4}'" -f $k, (Split-Path $s.f -Leaf), $s.l, $s.k, $s.n) (@($r).Count -eq 1) ($r | ConvertTo-Json -Compress)
-  CheckN 6 ("{0} symbol_id IS NULL" -f $k) (IsNull $r) ($r | ConvertTo-Json -Compress)
+  if ($k -eq 'N1') {
+    # Resolver 1.8.0-alpha (D13) binds bare WRITES, and N1 writes a LOCAL that
+    # shadows the enum value -- so its symbol_id is now that local, not NULL.
+    # What N1 guards is unchanged: a write never binds to the ENUM VALUE.
+    CheckN 6 ("{0} binds to the shadowing LOCAL, never the enum value (D13)" -f $k) (@($r).Count -eq 1 -and $r[0].qn -eq 'uEnumUse.UseIt.cmdShadow') ($r | ConvertTo-Json -Compress)
+  } else {
+    CheckN 6 ("{0} symbol_id IS NULL" -f $k) (IsNull $r) ($r | ConvertTo-Json -Compress)
+  }
 }
-$wBound = Sql $dbA "SELECT COUNT(*) AS n FROM refs WHERE kind = 'write' AND symbol_id IS NOT NULL"
-CheckN 6 'no write ref anywhere carries a symbol_id (spec N1: write is never a candidate)' (@($wBound).Count -eq 1 -and [int]$wBound[0].n -eq 0) ($wBound | ConvertTo-Json -Compress)
+$wBound = Sql $dbA "SELECT COUNT(*) AS n FROM refs r JOIN symbols s ON s.id = r.symbol_id WHERE r.kind = 'write' AND s.kind = 'enum_value'"
+CheckN 6 'no write ref anywhere is bound to an enum value (spec N1: write is never an enum candidate)' (@($wBound).Count -eq 1 -and [int]$wBound[0].n -eq 0) ($wBound | ConvertTo-Json -Compress)
 
 # ---------------------------------------------------------------------------
 # CHECK 14 -- THE DECLINE COUNTERS, PINNED BY REASON.

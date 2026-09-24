@@ -91,6 +91,16 @@ $v = Verdict 'uEffects.TThing.GrowField';   Check '5. SetLength(FBuffer): s'    
 $v = Verdict 'uEffects.AddUp';              Check '6. locals+Result only: empty summary, proven' (($v.ef -eq 1) -and ($v.es -eq '') -and ($v.ew -eq '')) "$($v.es)"
 $v = Verdict 'uEffects.TThing.SetCount';    Check 'field setter = s'                        (($v.ef -eq 0) -and ($v.es -eq 's') -and ($v.ew -eq 'writes field FCount')) "$($v.es) | $($v.ew)"
 
+Write-Host 'RESULT THROUGH THE FUNCTION''S OWN NAME (defect D12, resolver 1.8.0-alpha)' -ForegroundColor Cyan
+# `Greater:= X > Y;` is `Result:= X > Y;`. Before the fix each of these was 'g'
+# with the witness 'writes <OwnName> (non-local)'.
+$v = Verdict 'uSelfName.Greater';           Check 'D12. free function assigning its own name: proven'           (($v.ef -eq 1) -and ($v.es -eq '')) "$($v.es) | $($v.ew)"
+$v = Verdict 'uSelfName.TCmp.IsBig';        Check 'D12. method assigning its own name: proven'                  (($v.ef -eq 1) -and ($v.es -eq '')) "$($v.es) | $($v.ew)"
+$v = Verdict 'uSelfName.OuterResult.Fill';  Check 'D12. nested routine assigning the OUTER function''s name: proven' (($v.ef -eq 1) -and ($v.es -eq '')) "$($v.es) | $($v.ew)"
+$v = Verdict 'uSelfName.OuterResult';       Check 'D12. the outer function, judged through Fill: proven'        (($v.ef -eq 1) -and ($v.es -eq '')) "$($v.es) | $($v.ew)"
+# POSITIVE CONTROL: the own-name write is ignored, a real global write is not.
+$v = Verdict 'uSelfName.WritesGlobalToo';   Check 'D12-control. own-name write plus a global write: g, witness names GLast' (($v.ef -eq 0) -and ($v.es -eq 'g') -and ($v.ew -eq 'writes GLast (non-local)')) "$($v.es) | $($v.ew)"
+
 Write-Host 'FIXPOINT (spec 4)' -ForegroundColor Cyan
 $v = Verdict 'uCycle.IsEven'; $w = Verdict 'uCycle.IsOdd'
 Check '8. mutually recursive pair with no effect: both proven' (($v.ef -eq 1) -and ($w.ef -eq 1)) "$($v.ew) | $($w.ew)"

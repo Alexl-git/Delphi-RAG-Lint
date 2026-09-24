@@ -17,10 +17,11 @@ unit DRagLint.Core.ForwardStub;
   DRagLint.Storage.SQLite.pas keeps its narrower pre-existing filter (heritage
   empty AND end_line <= start_line; no children / same-file test) because it is
   on the resolver surface (tests\resolver-surface.txt); unifying the two is a
-  resolver-surface change deferred to DRAGLINT_RESOLVER_VERSION 1.8.0 (it was
+  resolver-surface change deferred to DRAGLINT_RESOLVER_VERSION 1.9.0 (it was
   1.6.0 until 2026-09-23, when the owner gave 1.6.0-alpha to the enum-value ref
-  binding -- docs\superpowers\specs\2026-09-23-enum-value-ref-binding.md -- and
-  then 1.7.0 until 1.7.0-alpha went to the parenless-call binding the same day).
+  binding -- docs\superpowers\specs\2026-09-23-enum-value-ref-binding.md -- then
+  1.7.0 until 1.7.0-alpha went to the parenless-call binding, and 1.8.0 until
+  1.8.0-alpha went to the resolver batch of D12/D13/ENG-16, all the same day).
 
   Design: docs\superpowers\specs\2026-09-17-forward-stub-is-not-a-class-design.md }
 

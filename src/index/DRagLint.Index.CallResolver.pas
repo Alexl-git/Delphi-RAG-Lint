@@ -69,6 +69,38 @@ type
     Unreadable : Int64;
   end;
 
+  /// <summary>D13 (resolver 1.8.0-alpha): per-run counters of the write-ref
+  /// pass, printed on the calls stage's `writes:` ResolveLog line.</summary>
+  /// <remarks>
+  /// Every DECLINE is counted by reason, for the reason the parenless counters
+  /// give: a declined write stores nothing, so these numbers are its only
+  /// trace. Bound + the seven declines = the write refs the pass was asked about.
+  /// </remarks>
+  TWriteResolveStats = record
+    /// <summary>Writes whose refs.symbol_id was set.</summary>
+    Bound     : Int64;
+    /// <summary>Declined: `Result:=` -- an implicit variable with no symbol row.</summary>
+    ResultVar : Int64;
+    /// <summary>Declined: the name of the enclosing function, or of a function
+    /// around it -- a result assignment, which has no symbol row either.</summary>
+    OwnName   : Int64;
+    /// <summary>Declined: a `with` earlier in the enclosing routine may supply
+    /// the name.</summary>
+    WithScope : Int64;
+    /// <summary>Declined: two or more declarations are equally near (two used
+    /// units, or a value and a routine/type of one name in one scope).</summary>
+    Ambiguous : Int64;
+    /// <summary>Declined: nothing of the name is visible in this index -- an
+    /// RTL/VCL global, or a unit the project index does not hold.</summary>
+    NotFound  : Int64;
+    /// <summary>Declined: the nearest declaration is a routine, type or enum
+    /// value, never a variable.</summary>
+    Routine   : Int64;
+    /// <summary>Declined: the source line could not be read, or the file no
+    /// longer matches the index.</summary>
+    Unreadable: Int64;
+  end;
+
   /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare
   /// once (Create builds the name-candidate + file-scope maps from the whole DB),
   /// then call ResolveOne per call-site ref.</summary>
@@ -76,11 +108,26 @@ type
   /// Not thread-safe; single owning thread only. Holds the ISymbolStore
   /// for the resolver's lifetime -- the store must outlive the resolver.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveEnumValueRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveParenlessCallRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveWriteRefs (DRagLint.Storage.SQLite.pas)</para>
   /// <para>Used in units: DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCallResolver = class
+  strict private type
+    /// <summary>D13: the scope facts of ONE enclosing routine that the write
+    /// pass consults for every write inside it, computed once per pass.</summary>
+    /// <remarks>Chain is the routine and the routines around it, innermost
+    /// first; FnNames the lowercased names of the functions/methods on it as
+    /// '|a|b|'; ClassChain the owning type then its resolved ancestors, nearest
+    /// first; FromLine the first line of the routine's text (0 = unknown).
+    /// Cached because building it costs a store round-trip per lexical level
+    /// and a type_ancestors walk, and a routine holds many writes.</remarks>
+    TWriteScope = record
+      Chain     : TArray<Int64>;
+      FnNames   : string;
+      ClassChain: TArray<Int64>;
+      FromLine  : Integer;
+    end;
   strict private
     FStore      : ISymbolStore;
     { v21: consulted ONLY on primary-store miss; see the constructor's param doc. }
@@ -109,6 +156,8 @@ type
     FEnumStats       : TEnumResolveStats;
     // 2026-09-23: per-run counters of the parenless-call pass, same reason.
     FParenlessStats  : TParenlessResolveStats;
+    // 2026-09-23 (D13): per-run counters of the write-ref pass, same reason.
+    FWriteStats      : TWriteResolveStats;
     // Declaring file id -> the resolved target file ids it can see (uses graph).
     FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
@@ -122,6 +171,11 @@ type
     // (or which could not be read at all). Populated by LinesOf, one probe per
     // file per run. See LinesOf for why this exists.
     FStaleFiles : TDictionary<Int64, Boolean>;
+    // ENG-16: lowercased receiver text -> UnitNameToFileId's answer, so rung 4b
+    // asks the store once per distinct receiver rather than once per call site.
+    FUnitFileOf : TDictionary<string, Int64>;
+    // D13: enclosing routine id -> its TWriteScope, built on first use.
+    FWriteScopes: TDictionary<Int64, TWriteScope>;
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -712,6 +766,70 @@ type
     /// <summary>Counts one outcome of ResolveParenlessRead into FParenlessStats.</summary>
     /// <param name="AReason">'' for a binding, else the decline reason.</param>
     procedure TallyParenless(const AReason: string);
+
+    { ---- 2026-09-23: ENG-16 and D13 (resolver 1.8.0-alpha). ---- }
+
+    /// <summary>Rung 4b (ENG-16): the routine a UNIT-QUALIFIED call names --
+    /// `Pipes.Commands.DispatchCommand(...)`, `uHelp.DoIt`.</summary>
+    /// <param name="ACallRef">The call or member-access ref; FileId, NameText
+    /// and EnclosingSymbolId are consulted.</param>
+    /// <param name="AReceiver">The receiver text verbatim, dotted unit names
+    /// included; '' answers 0.</param>
+    /// <param name="AReceiverTypeId">What receiver typing answered for it; any
+    /// value but 0 answers 0 -- a receiver that typed is a value, not a unit.</param>
+    /// <param name="AArgCount">Arguments counted at the site.</param>
+    /// <param name="AArgsKnown">False when the count could not be taken.</param>
+    /// <param name="AConfidence">OUT: 'certain' or 'ambiguous', as PickFromMatches.</param>
+    /// <returns>The routine id, or 0 when the receiver's first segment names a
+    /// nearer value (a local, parameter or class member spelled like the unit),
+    /// the receiver names no unit or two, or that unit declares no visible
+    /// routine of the name.</returns>
+    /// <remarks>Visible means the unit's INTERFACE, or either section when the
+    /// unit is the calling file itself -- the rule rung 3c applies to `Unit.value`.
+    /// An overload set is narrowed by arity exactly as the bare-call rung does.</remarks>
+    function LookupUnitQualifiedRoutine(const ACallRef: TReference; const AReceiver: string;
+      AReceiverTypeId: Int64; AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
+    /// <summary>The TWriteScope of AEnclosingSymbolId, built on first use and
+    /// cached for the rest of the pass.</summary>
+    /// <param name="AEnclosingSymbolId">A ref's enclosing symbol; 0 gives an
+    /// empty scope.</param>
+    /// <returns>The routine chain, the enclosing functions' names, the class
+    /// chain and the routine's first line.</returns>
+    function WriteScopeOf(AEnclosingSymbolId: Int64): TWriteScope;
+    /// <summary>True when the text from line AFrom up to ARef's column
+    /// contains the keyword `with` outside comments and strings.</summary>
+    /// <param name="AFrom">First line to scan; 0, or a line past the ref,
+    /// scans a bounded window above the ref instead.</param>
+    /// <param name="ARef">The ref; its line is read only up to its column.</param>
+    /// <param name="ALines">The ref's source file.</param>
+    /// <returns>True when a `with` may supply the ref's name.</returns>
+    function WithAboveRef(AFrom: Integer; const ARef: TReference; ALines: TStringList): Boolean;
+    /// <summary>The routine and class rungs of a bare write: the nearest
+    /// lexical level, then the enclosing function names, then the class chain
+    /// nearest first.</summary>
+    /// <param name="AScope">The write's enclosing scope.</param>
+    /// <param name="AName">The identifier as written.</param>
+    /// <param name="AReason">OUT: '' when bound or when nothing here declares
+    /// the name (the unit rung decides then); 'routine' or 'own-name' for a
+    /// decline.</param>
+    /// <returns>The local / parameter / const / var / field / property id, or 0.</returns>
+    function ScopeWriteTarget(const AScope: TWriteScope; const AName: string;
+      out AReason: string): Int64;
+    /// <summary>The unit rung of a bare write: the unit-level var/const named
+    /// ALc declared in ARefFileId itself or, when it declares nothing of that
+    /// name, in the interface of a unit it uses.</summary>
+    /// <param name="ARefFileId">The writing file.</param>
+    /// <param name="ALc">The lowercased identifier.</param>
+    /// <param name="AReason">OUT: '' on a binding, else 'ambiguous' |
+    /// 'routine' | 'not-found'.</param>
+    /// <returns>The declaration's id, or 0.</returns>
+    /// <remarks>A rung ANSWERS when anything of the name lives there: exactly one
+    /// value and nothing else binds; two values, or a value beside a routine /
+    /// type / enum value, is 'ambiguous'; only non-values is 'routine'.</remarks>
+    function UnitScopeWriteTarget(ARefFileId: Int64; const ALc: string; out AReason: string): Int64;
+    /// <summary>Counts one outcome of ResolveWriteRef into FWriteStats.</summary>
+    /// <param name="AReason">'' for a binding, else the decline reason.</param>
+    procedure TallyWrite(const AReason: string);
   public
     { Probes AFileId (reading + caching it if not already read) and reports
       whether its on-disk content still matches what the index recorded. Called
@@ -868,6 +986,39 @@ type
     /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
     /// pass.</remarks>
     property ParenlessStats: TParenlessResolveStats read FParenlessStats;
+
+    /// <summary>D13 (2026-09-23, resolver 1.8.0-alpha): the declaration a bare
+    /// `write` ref (`X:= ...`) assigns, by name and scope -- certain or nothing.</summary>
+    /// <param name="ARef">The write ref. FileId, NameText, StartLine, StartCol
+    /// and EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; otherwise 'unreadable' |
+    /// 'result' | 'with-scope' | 'own-name' | 'routine' | 'ambiguous' |
+    /// 'not-found'.</param>
+    /// <returns>The local / parameter / field / property / class var / unit-level
+    /// var or const id, or 0 for every decline.</returns>
+    /// <remarks>
+    /// Delphi's own lookup order, nearest first: the lexical scopes (locals,
+    /// parameters, consts and vars of the routine and of the routines around
+    /// it), then the enclosing class and its resolved ancestors (fields,
+    /// properties, class vars), then the own unit (both sections), then the
+    /// interfaces of the units it uses. The first scope that declares the name
+    /// ANSWERS -- a nearer declaration always shadows a farther one -- and it
+    /// must answer with exactly one variable-like declaration.
+    ///
+    /// A `with` anywhere earlier in the enclosing routine declines, because its
+    /// subject may supply the name ahead of every scope above. `Result` and the
+    /// name of an enclosing function are result assignments with no symbol row
+    /// to bind. Delphi settles a clash between two used units by uses-clause
+    /// ORDER, which this engine does not model, so that is 'ambiguous'.
+    /// Counted into WriteStats, one outcome per call.
+    /// </remarks>
+    function ResolveWriteRef(const ARef: TReference; out AReason: string): Int64;
+
+    /// <summary>Per-run counters of the write-ref pass. Read by the calls stage
+    /// for its ResolveLog line.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
+    /// pass.</remarks>
+    property WriteStats: TWriteResolveStats read FWriteStats;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -1444,12 +1595,17 @@ begin
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
+  FUnitFileOf := TDictionary<string, Int64>.Create;
+  FWriteScopes:= TDictionary<Int64, TWriteScope>.Create;
+  FWriteStats := Default(TWriteResolveStats);
   BuildMaps;
 end;
 
 destructor TCallResolver.Destroy;
 begin
   FLineCache .Free;
+  FUnitFileOf.Free;
+  FWriteScopes.Free;
   FStaleFiles.Free;
   FChildCache.Free;
   FFileScope .Free;
@@ -2712,12 +2868,21 @@ begin
 end;
 
 function TCallResolver.EnclosingBodyUsesWith(const ARef: TReference; ALines: TStringList): Boolean;
+var
+  Encl: TSymbol;
+begin
+  Result:= False;
+  if ARef.EnclosingSymbolId <= 0 then Exit;
+  Encl  := FStore.GetSymbolById(ARef.EnclosingSymbolId);
+  Result:= WithAboveRef((if Encl.ImplStartLine > 0 then Encl.ImplStartLine else Encl.StartLine), ARef, ALines);
+end;
+
+function TCallResolver.WithAboveRef(AFrom: Integer; const ARef: TReference; ALines: TStringList): Boolean;
 const
   { When the routine's own first line is unknown, scan this far back instead --
     a bound, not a model: a longer routine can only produce a false decline. }
   FALLBACK_SCAN_LINES = 400;
 var
-  Encl   : TSymbol;
   From   : Integer;
   Ln     : Integer;
   S      : string ;
@@ -2725,9 +2890,7 @@ var
   InStar : Boolean;
 begin
   Result:= False;
-  if ARef.EnclosingSymbolId <= 0 then Exit;
-  Encl:= FStore.GetSymbolById(ARef.EnclosingSymbolId);
-  From:= (if Encl.ImplStartLine > 0 then Encl.ImplStartLine else Encl.StartLine);
+  From  := AFrom;
   if (From <= 0) or (From > ARef.StartLine) then From:= Max(1, ARef.StartLine - FALLBACK_SCAN_LINES);
   InBrace:= False;
   InStar := False;
@@ -3309,6 +3472,244 @@ begin
     end;
 end;
 
+{ 2026-09-23 (resolver 1.8.0-alpha) -- ENG-16's rung 4b and D13's write pass.
+
+  Both follow the posture of the enum and parenless passes above: an answer the
+  compiler would give, or NOTHING, with every refusal counted by reason. }
+
+function TCallResolver.LookupUnitQualifiedRoutine(const ACallRef: TReference;
+  const AReceiver: string; AReceiverTypeId: Int64; AArgCount: Integer; AArgsKnown: Boolean;
+  out AConfidence: string): Int64;
+var
+  Cands   : TList<TSymbol>;
+  Matches : TList<TSymbol>;
+  S       : TSymbol       ;
+  First   : string        ;
+  Key     : string        ;
+  UnitFile: Int64         ;
+  ClassId : Int64         ;
+begin
+  Result     := 0;
+  AConfidence:= '';
+  { A receiver that TYPED is a value; cheapest test next: no free routine of
+    the name anywhere, no answer. }
+  if (AReceiverTypeId <> 0) or (AReceiver = '')
+     or not FNameToRoutines.TryGetValue(LowerCase(ACallRef.NameText), Cands) then Exit;
+  { A nearer VALUE spelled like the unit's first segment is what the compiler
+    reads -- a local of an unindexed type reaches here with TypeId = 0 all the
+    same, and binding its call to the unit's routine would be a wrong fact. }
+  First:= AReceiver;
+  if Pos('.', First) > 0 then First:= Copy(First, 1, Pos('.', First) - 1);
+  if LexicalScopeDeclaresValue(ACallRef.EnclosingSymbolId, First)
+     or EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, First, ClassId) then Exit;
+  Key:= LowerCase(AReceiver);
+  if not FUnitFileOf.TryGetValue(Key, UnitFile) then
+  begin
+    UnitFile:= UnitNameToFileId(AReceiver);
+    FUnitFileOf.Add(Key, UnitFile);
+  end;
+  if UnitFile <= 0 then Exit;
+  Matches:= TList<TSymbol>.Create;
+  try
+    for S in Cands do
+      if (S.FileId = UnitFile)
+         and (SameText(S.Section, 'interface') or (UnitFile = ACallRef.FileId)) then Matches.Add(S);
+    Result:= PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence);
+  finally
+    Matches.Free;
+  end;
+end;
+
+function TCallResolver.WriteScopeOf(AEnclosingSymbolId: Int64): TWriteScope;
+var
+  S    : TSymbol      ;
+  A    : TTypeAncestor;
+  Depth: Integer      ;
+begin
+  if FWriteScopes.TryGetValue(AEnclosingSymbolId, Result) then Exit;
+  Result:= Default(TWriteScope);
+  if AEnclosingSymbolId > 0 then
+  begin
+    S:= FStore.GetSymbolById(AEnclosingSymbolId);
+    Result.FromLine:= (if S.ImplStartLine > 0 then S.ImplStartLine else S.StartLine);
+    { The routine and the routines around it -- the levels LexicalParenlessLookup
+      climbs, and the function names whose RESULT a write may assign. The walk ends at
+      the first non-routine parent, which is the owning type when there is one
+      (EnclosingClassChainDeclares' outermost-routine rule). }
+    Depth:= 0;
+    while (S.Id > 0) and (S.Kind in METHOD_KINDS) and (Depth < MAX_LEXICAL_DEPTH) do
+    begin
+      Inc(Depth);
+      Result.Chain:= Result.Chain + [S.Id];
+      if S.Kind in [skFunction, skMethod] then Result.FnNames:= Result.FnNames + '|' + LowerCase(S.Name);
+      if S.ParentId <= 0 then S:= Default(TSymbol)
+      else S:= FStore.GetSymbolById(S.ParentId);
+    end;
+    Result.FnNames:= Result.FnNames + '|';
+    if (S.Id > 0) and (S.Kind in TYPE_KINDS) then
+    begin
+      Result.ClassChain:= [S.Id];
+      for A in FStore.GetTransitiveAncestors(S.Id) do
+        if A.Resolved and (A.SymbolId > 0) then Result.ClassChain:= Result.ClassChain + [A.SymbolId];
+    end;
+  end;
+  FWriteScopes.Add(AEnclosingSymbolId, Result);
+end;
+
+function TCallResolver.ScopeWriteTarget(const AScope: TWriteScope; const AName: string;
+  out AReason: string): Int64;
+var
+  Kids   : TList<TSymbol>;
+  S      : TSymbol       ;
+  Id     : Int64         ;
+  Routine: Boolean       ;
+begin
+  Result := 0;
+  AReason:= '';
+  { 1. Lexical levels, innermost first; the first level that declares the name
+    answers. A routine there is a nested routine's name -- not a variable. }
+  for Id in AScope.Chain do
+  begin
+    Kids:= ChildrenOf(Id);
+    if Kids = nil then Continue;
+    Routine:= False;
+    for S in Kids do
+      if SameText(S.Name, AName) then
+      begin
+        if S.Kind in [skLocalVar, skParam, skConstDecl, skVarDecl] then Exit(S.Id);
+        Routine:= Routine or (S.Kind in METHOD_KINDS);
+      end;
+    if Routine then
+    begin
+      AReason:= 'routine';
+      Exit;
+    end;
+  end;
+  { 2. The name of the enclosing function or of one around it: its RESULT. }
+  if Pos('|' + LowerCase(AName) + '|', AScope.FnNames) > 0 then
+  begin
+    AReason:= 'own-name';
+    Exit;
+  end;
+  { 3. The owning type, then its ancestors, NEAREST FIRST whatever the member
+    kind: a field of the class hides a property of the same name further up. }
+  for Id in AScope.ClassChain do
+  begin
+    S:= FindChildOfKind(Id, AName, [skProperty, skField, skVarDecl, skConstDecl], False);
+    if S.Id > 0 then Exit(S.Id);
+    if FindChildOfKind(Id, AName, METHOD_KINDS, False).Id > 0 then
+    begin
+      AReason:= 'routine';
+      Exit;
+    end;
+  end;
+end;
+
+function TCallResolver.UnitScopeWriteTarget(ARefFileId: Int64; const ALc: string;
+  out AReason: string): Int64;
+
+  { Whether a declaration in AFileId / ASection belongs to rung ARung: 1 is the
+    writing file itself (both sections), 2 the interface of a unit it uses. }
+  function OnRung(ARung: Integer; AFileId: Int64; const ASection: string): Boolean;
+  begin
+    if ARung = 1 then Result:= AFileId = ARefFileId
+    else Result:= (AFileId <> ARefFileId) and SameText(ASection, 'interface')
+                  and CandInScope(ARefFileId, AFileId);
+  end;
+
+  { Non-value declarations of the name on rung ARung: routines, types, enum values. }
+  function OthersOnRung(ARung: Integer): Integer;
+  var
+    L: TList<TSymbol>       ;
+    E: TList<TEnumValueDecl>;
+    S: TSymbol              ;
+    V: TEnumValueDecl       ;
+  begin
+    Result:= 0;
+    if FNameToRoutines.TryGetValue(ALc, L) then
+      for S in L do
+        if OnRung(ARung, S.FileId, S.Section) then Inc(Result);
+    if FNameToCands.TryGetValue(ALc, L) then
+      for S in L do
+        if OnRung(ARung, S.FileId, S.Section) then Inc(Result);
+    if FNameToEnumValues.TryGetValue(ALc, E) then
+      for V in E do
+        if OnRung(ARung, V.FileId, V.Section) then Inc(Result);
+  end;
+
+var
+  Rung   : Integer       ;
+  L      : TList<TSymbol>;
+  S      : TSymbol       ;
+  Values : Integer       ;
+  Others : Integer       ;
+  Found  : Int64         ;
+begin
+  Result := 0;
+  AReason:= 'not-found';
+  for Rung:= 1 to 2 do
+  begin
+    Values:= 0;
+    Found := 0;
+    if FNameToUnitValues.TryGetValue(ALc, L) then
+      for S in L do
+        if OnRung(Rung, S.FileId, S.Section) then
+        begin
+          Inc(Values);
+          Found:= S.Id;
+        end;
+    Others:= OthersOnRung(Rung);
+    if Values + Others = 0 then Continue;       { nothing here: look farther out }
+    if (Values = 1) and (Others = 0) then
+    begin
+      AReason:= '';
+      Exit(Found);
+    end;
+    if Values = 0 then AReason:= 'routine' else AReason:= 'ambiguous';
+    Exit;                                         { the nearest rung ANSWERS }
+  end;
+end;
+
+procedure TCallResolver.TallyWrite(const AReason: string);
+begin
+  if AReason = '' then Inc(FWriteStats.Bound)
+  else if AReason = 'result' then Inc(FWriteStats.ResultVar)
+  else if AReason = 'own-name' then Inc(FWriteStats.OwnName)
+  else if AReason = 'with-scope' then Inc(FWriteStats.WithScope)
+  else if AReason = 'ambiguous' then Inc(FWriteStats.Ambiguous)
+  else if AReason = 'not-found' then Inc(FWriteStats.NotFound)
+  else if AReason = 'routine' then Inc(FWriteStats.Routine)
+  else Inc(FWriteStats.Unreadable);
+end;
+
+function TCallResolver.ResolveWriteRef(const ARef: TReference; out AReason: string): Int64;
+var
+  Lines: TStringList;
+  Scope: TWriteScope;
+begin
+  Result := 0;
+  AReason:= '';
+  Lines  := LinesOf(ARef.FileId);
+  Scope  := WriteScopeOf(ARef.EnclosingSymbolId);
+  { The `with` test reads the routine's text, so a line that no longer matches
+    the index is a decline, never a guess -- the rule every rung here follows. }
+  if (Lines = nil) or FileIsStale(ARef.FileId) or (ARef.NameText = '')
+     or (ARef.StartLine < 1) or (ARef.StartLine > Lines.Count) then
+    AReason:= 'unreadable'
+  else if SameText(ARef.NameText, 'Result') then
+    AReason:= 'result'
+  else if (ARef.EnclosingSymbolId > 0) and WithAboveRef(Scope.FromLine, ARef, Lines) then
+    AReason:= 'with-scope'
+  else
+  begin
+    Result:= ScopeWriteTarget(Scope, ARef.NameText, AReason);
+    { Nothing nearer declares the name: the unit, then the units it uses. }
+    if (Result = 0) and (AReason = '') then
+      Result:= UnitScopeWriteTarget(ARef.FileId, LowerCase(ARef.NameText), AReason);
+  end;
+  TallyWrite(AReason);
+end;
+
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
 var
   Lines   : TStringList;
@@ -3491,21 +3892,31 @@ begin
   // nothing at all (TypeId = 0) -- previously an early Exit. A free routine
   // calling another free routine in a unit it uses has no receiver to type, and
   // that shape was the larger half of what this rung recovers.
+  //
+  // 4b. UNIT-QUALIFIED FREE ROUTINE (2026-09-23, ENG-16, resolver 1.8.0-alpha),
+  // the one dotted shape this rung does take. `Pipes.Commands.DispatchCommand(...)`
+  // names a routine THROUGH ITS UNIT: the receiver is a unit, not a value, so it
+  // never types, rung 3c is for enum values only, and until now these sites fell
+  // out unbound -- 6 sites on ORM3 CLIENT at 1.7.0. The routine twin of 3c's
+  // `Unit.value` half; LookupUnitQualifiedRoutine declines unless receiver
+  // typing answered 0 (a receiver that TYPED is a value, and a routine missing
+  // from its type must not be looked up in a unit instead) and unless the
+  // receiver resolves to exactly one unit that nothing nearer shadows.
   if Rcv = '' then
+    Target:= LookupUnitLevelRoutine(ACallRef.FileId, ACallRef.NameText, ArgCount, ArgsKnown, Conf)
+  else
+    Target:= LookupUnitQualifiedRoutine(ACallRef, Rcv, TypeId, ArgCount, ArgsKnown, Conf);
+  if Target > 0 then
   begin
-    Target:= LookupUnitLevelRoutine(ACallRef.FileId, ACallRef.NameText, ArgCount, ArgsKnown, Conf);
-    if Target > 0 then
-    begin
-      // ReceiverTypeSymbolId is CLEARED, matching the lexical rung above. For a
-      // bare call inside a method, TypeReceiver returns the enclosing class --
-      // the implicit Self, not a receiver the source wrote. Leaving it set would
-      // record "this call went through a TFoo receiver" for a call that has no
-      // receiver at all, and the two bare-call rungs would disagree about the
-      // same field.
-      Result.ReceiverTypeSymbolId:= 0;
-      Result.TargetSymbolId:= Target;
-      Result.Confidence    := Conf;
-    end;
+    // ReceiverTypeSymbolId is CLEARED, matching the lexical rung above. For a
+    // bare call inside a method, TypeReceiver returns the enclosing class --
+    // the implicit Self, not a receiver the source wrote. Leaving it set would
+    // record "this call went through a TFoo receiver" for a call that has no
+    // receiver at all, and the two bare-call rungs would disagree about the
+    // same field. A unit receiver has no type either.
+    Result.ReceiverTypeSymbolId:= 0;
+    Result.TargetSymbolId:= Target;
+    Result.Confidence    := Conf;
   end;
 
   // 5. v21 CROSS-DB, and it runs LAST for a reason: only a call this index could

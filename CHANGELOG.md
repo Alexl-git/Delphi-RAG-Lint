@@ -7,6 +7,21 @@ breaking changes** until v1.0.
 
 ### Added
 
+- **Resolver 1.8.0-alpha -- bare WRITES bind (D13).** A fourth calls-stage stream
+  (`ResolveWriteRefs` -> `TCallResolver.ResolveWriteRef`) sets `refs.symbol_id` for a `write` ref
+  (`X:= ...`) to the local, parameter, field, property, class var or unit-level var/const it
+  assigns -- Delphi's scope order, certain or nothing, identity only (no call_edges /
+  member_accesses row). Declines counted on a new `writes:` log line: `Result`, the function's own
+  name, a `with` above the site, two equally near candidates, not found. ORM3 CLIENT: 0 -> 17,720 of
+  32,909 write refs bound (10,481 `Result`, 4,417 `with`, 240 not found, 49 own-name, 2 ambiguous);
+  the stream costs 30.5 s of a 331 s whole-DB calls stage there. Guard:
+  `tests\callresolve\run_write_refs_bind.ps1` (12 positives, 5 negatives, log line, scoped unbind).
+- **Resolver 1.8.0-alpha -- unit-qualified free-routine calls bind (ENG-16).** Rung 4b of
+  `ResolveOne`: `Pipes.Commands.DispatchCommand(...)`, `uHelp.DoIt` -- the receiver resolves to ONE
+  unit and the routine is picked by arity among that unit's visible routines; a local/member spelled
+  like the unit shadows it. ORM3 CLIENT: 6 unbound sites (5 calls + 1 parenless) -> 0. Guard:
+  `tests\callresolve\run_unit_qualified_call_bind.ps1`.
+
 - **`convert-validate` checks `G[I/N]` glyph expressions on `#link` (CV-4, the validate half of
   the glyph grammar).** `#link <ToPath> <- <FromPath> G[..] [: <Cast>]`: the expression is split off
   at the first ` G[` and kept verbatim (`TConversionRule.GlyphExpr`), so FromPath is the bare source
@@ -57,6 +72,15 @@ breaking changes** until v1.0.
   (135 built-in, 158 on by default).
 
 ### Fixed
+
+- **Purity: a result assigned through the function's OWN NAME is not a global write (D12).**
+  `Greater:= X > Y;` (and a nested routine assigning the outer function's name) was scored `g`.
+  ORM3 CLIENT: effect-free routines 2,895 -> 2,918; the 34 own-name routines go from 0 to 20
+  effect-free (the other 14 have real effects); `assert-with-side-effect` 4 findings -> 0 (all 4 were
+  this). Guards: `run_purity_stage.ps1` (D12 block + positive control), `run_assert_side_effect.ps1`
+  (CONTROL-9). `DRAGLINT_RESOLVER_VERSION` 1.7.0-alpha -> 1.8.0-alpha for all three (derived rows
+  only: remedy `index --all --resolve-only`); the C2.3 + IsStub reservation moves to 1.9.0-alpha. No
+  extractor bump (extractor baseline hash re-recorded, CallResolver.pas only).
 
 - **`query find-callers --resolved`: `line` is the CALL SITE on every row (C1).** The rows built from
   `call_edges` -- routine call, property/field access, enum-value read, parenless call -- put the

@@ -160,7 +160,20 @@ const
   /// 1.6.0. DERIVED rows only, no parse change: remedy is `index --all
   /// --resolve-only`. A MINOR: a new class of derived edge. The reservation for
   /// C2.3 + the IsStub unification MOVES from 1.7.0 to 1.8.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.7.0-alpha';
+  /// <para>1.7.0-alpha -&gt; 1.8.0-alpha (2026-09-23, resolver batch A): three
+  /// DERIVED-row changes, no parse change -- remedy `index --all --resolve-only`.
+  /// (D12) the purity stage treats a write to the enclosing function's OWN NAME
+  /// (`Greater:= X &gt; Y`) as a result assignment, not a global write: 34
+  /// routines on ORM3 CLIENT, and all 4 assert-with-side-effect findings there.
+  /// (D13) a FOURTH calls-stage stream (ResolveWriteRefs -&gt;
+  /// TCallResolver.ResolveWriteRef) binds refs.symbol_id for a bare `write`
+  /// ref -- local, parameter, field, property, class var, unit-level var --
+  /// certain or nothing; 32,909 write rows on CLIENT had none. (ENG-16) rung 4b
+  /// of ResolveOne binds a UNIT-QUALIFIED free-routine call
+  /// (`Pipes.Commands.DispatchCommand(...)`). A MINOR: new classes of derived
+  /// row. The reservation for C2.3 + the IsStub unification MOVES from 1.8.0 to
+  /// 1.9.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.8.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

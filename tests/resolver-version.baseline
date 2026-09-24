@@ -556,4 +556,19 @@
 #   change to name 1.8.0 as the C2.3 + IsStub reservation; comment text only.
 #
 #   Superseded: 1.6.0-alpha|95080b86976b780299f60f1f3e4c5fec372170db4b3fb980b23feca790aadec6
-1.7.0-alpha|a1732971a9b5624931b52c79578b9d0bfbf53ac0d6f70085d0e554472193f945
+# 2026-09-23: 1.7.0-alpha -> 1.8.0-alpha (resolver batch A: D12, D13, ENG-16).
+#   (D12) the purity stage scores a write to the enclosing function's OWN NAME
+#   as a result assignment, not a global write -- ORM3 CLIENT effect_free
+#   2,895 -> 2,918; the 4 assert-with-side-effect findings there -> 0.
+#   (D13) a FOURTH calls-stage stream, ResolveWriteRefs ->
+#   TCallResolver.ResolveWriteRef, binds refs.symbol_id for bare write refs,
+#   certain or nothing: CLIENT 0 -> 17,720 of 32,909 bound. The manifest gains
+#   ResolveWriteRefs. (ENG-16) rung 4b of ResolveOne binds a UNIT-QUALIFIED
+#   free-routine call: CLIENT 6 unbound sites -> 0. Rows that did not exist
+#   begin to exist, so this BUMPS. No parse change: remedy is
+#   index --all --resolve-only. The reservation for C2.3 + the IsStub
+#   unification moves from 1.8.0 to 1.9.0-alpha (ForwardStub.pas header comment
+#   updated to match; comment text only).
+#
+#   Superseded: 1.7.0-alpha|a1732971a9b5624931b52c79578b9d0bfbf53ac0d6f70085d0e554472193f945
+1.8.0-alpha|83acf977e5b9be46c5f279412348c9943898a270d1394778c7d179adadd35446

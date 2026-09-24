@@ -126,6 +126,7 @@ src/storage/DRagLint.Storage.SQLite.pas::GetUnitLevelValueDecls
 # guard never asked. Added by the closure rule: what they return decides which
 # edge this stream (and ResolveOne's unit rung) writes.
 src/storage/DRagLint.Storage.SQLite.pas::ResolveParenlessCallRefs
+src/storage/DRagLint.Storage.SQLite.pas::ResolveWriteRefs
 src/storage/DRagLint.Storage.SQLite.pas::GetUnitLevelRoutines
 src/storage/DRagLint.Storage.SQLite.pas::GetUnitScopeEdges
 
