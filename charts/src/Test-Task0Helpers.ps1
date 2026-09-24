@@ -70,6 +70,9 @@ foreach ($k in $cases.Keys) {
   $got = ($v | ForEach-Object { "$($_.Verb) $($_.Name)" }) -join '|'
   if ($got -ne $cases[$k]) { [void]$bad.Add("[$k] expected '$($cases[$k])' got '$got'") }
 }
+# VerbCases is RETURNED so the gate can pin how many cases ran: a failure list
+# that is empty because nothing ran must not read as nine passes.
+$res.VerbCases        = $cases.Count
 $res.VerbCaseFailures = $bad.ToArray()
 
 # ---- 4. Get-SourceContext on the exception candidates (P2) ------------------------

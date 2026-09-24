@@ -66,19 +66,48 @@ function Get-ShortName([string] $qname, [string] $unit) {
 }
 
 # ---- flatten the tree the engine returns ------------------------------------
-function Flatten($node, [string] $childKey, [System.Collections.ArrayList] $acc, [int] $lvl) {
+# D6 (2026-09-23, reported by the engine session): this used to append EVERY
+# tree node as a row. The engine's tree repeats a symbol whenever a second
+# parent reaches it -- the repeat carries `cycle: true` and is not expanded --
+# so ResolveEnumValueRead at depth 2 drew GetTransitiveAncestors, GetSymbolById
+# and VisibleHere TWICE each, and the edge loop drew the same arrow twice onto
+# the one port the last duplicate had overwritten. The same flatten also threw
+# the PARENT away and drew every row as a direct call of the focus, so a
+# depth-2 callee was pictured as called BY the focus -- on the reference
+# SendDeltaOperation chart, 6 of its 8 callees.
+#
+# Both are one mistake: the tree was flattened into a list. So a node records
+# its PARENT (''= the focus); a ROW is one SYMBOL (first occurrence, i.e. the
+# shallowest hop); an EDGE is one distinct (parent, child) pair. A repeat adds
+# its edge -- that call is real -- and never a second row.
+function Flatten($node, [string] $parentQ, [System.Collections.ArrayList] $acc, [int] $lvl) {
   if ($null -eq $node) { return }
-  $kids = $node.$childKey
+  $kids = $node.callers
   if ($null -eq $kids) { return }
-  foreach ($k in $kids) {
+  foreach ($k in @($kids)) {
     [void]$acc.Add([pscustomobject]@{
-      Qname = [string]$k.qname
-      File  = [string]$k.file
-      Line  = [int]$k.line
-      Level = $lvl
+      Qname  = [string]$k.qname
+      File   = [string]$k.file
+      Line   = [int]$k.line
+      Level  = $lvl
+      Parent = $parentQ
     })
-    Flatten $k $childKey $acc ($lvl + 1)
+    if (-not [bool]$k.cycle) { Flatten $k ([string]$k.qname) $acc ($lvl + 1) }
   }
+}
+
+# One row per symbol, at its SHALLOWEST hop. The focus itself never becomes a
+# row: a path back to it is an edge into the focus box.
+function Get-DistinctRows([System.Collections.ArrayList] $nodes, [string] $focusQ) {
+  $seen = @{}
+  $out  = New-Object System.Collections.ArrayList
+  # -Stable: rows keep the engine's order within a hop, so the chart is deterministic
+  foreach ($n in ($nodes | Sort-Object Level -Stable)) {
+    if ($n.Qname -eq $focusQ -or $seen.ContainsKey($n.Qname)) { continue }
+    $seen[$n.Qname] = $true
+    [void]$out.Add($n)
+  }
+  , $out
 }
 
 # ---- 1. ask the engine -------------------------------------------------------
@@ -96,14 +125,18 @@ Write-Host "butterfly: $Qname (depth $Depth)"
 $bf = Invoke-EngineJson @('butterfly', '--qname', $Qname, '--depth', "$Depth",
                           '--format', 'json', '--db', $DbPath)
 
-$callers = New-Object System.Collections.ArrayList
-$callees = New-Object System.Collections.ArrayList
+$callerNodes = New-Object System.Collections.ArrayList
+$calleeNodes = New-Object System.Collections.ArrayList
 # NOTE: schema reverse-calltree/1 nests children under "callers" on BOTH sides --
-# the callees tree reuses the field name. Passing 'callees' silently yields 0.
-Flatten $bf.callers.root 'callers' $callers 1
-Flatten $bf.callees.root 'callers' $callees 1
+# the callees tree reuses the field name. Reading 'callees' silently yields 0.
+$focusQ = [string]$bf.qname
+Flatten $bf.callers.root '' $callerNodes 1
+Flatten $bf.callees.root '' $calleeNodes 1
+$callers = Get-DistinctRows $callerNodes $focusQ
+$callees = Get-DistinctRows $calleeNodes $focusQ
 
-Write-Host ("  callers={0}  callees={1}" -f $callers.Count, $callees.Count)
+Write-Host ("  callers={0}  callees={1}  (tree nodes {2} / {3})" -f `
+            $callers.Count, $callees.Count, $callerNodes.Count, $calleeNodes.Count)
 
 # NO DISCLOSURE HERE, and that absence is deliberate.
 # On 2026-09-23 I added a warning claiming reverse-calltree silently drops
@@ -124,10 +157,10 @@ $focusUnit = Get-UnitName $focusFile
 # ---- 2. build the dot --------------------------------------------------------
 $sb = New-Object System.Text.StringBuilder
 $nodeId = 0
-$portMap = @{}   # qname -> "nodeN:pM"
+$portMap = @{}   # "<side>|<qname>" -> "nodeN:pM" (a symbol can be on BOTH sides)
 
 function Add-UnitCluster {
-  param([string] $Side, [string] $Unit, $Rows, [string] $Border, [string] $Fill, [string] $Hdr)
+  param([string] $Side, [string] $Unit, [int] $Level, $Rows, [string] $Border, [string] $Fill, [string] $Hdr)
 
   $script:nodeId++
   $nid = "n$script:nodeId"
@@ -143,7 +176,10 @@ function Add-UnitCluster {
 
   $tbl = New-Object System.Text.StringBuilder
   [void]$tbl.Append('<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="3" CELLPADDING="5">')
-  [void]$tbl.Append("<TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$Hdr`"><FONT COLOR=`"#FFFFFF`" FACE=`"$FontSans`" POINT-SIZE=`"14`"><B> $(ConvertTo-XmlText $Unit) </B></FONT></TD></TR>")
+  # Clusters are (hop, unit), as in who-calls: a unit reached at two hops gets
+  # two boxes, and the second says so -- otherwise it reads as a duplicate unit.
+  $hop = if ($Level -gt 1) { " &#183; hop $Level" } else { '' }
+  [void]$tbl.Append("<TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$Hdr`"><FONT COLOR=`"#FFFFFF`" FACE=`"$FontSans`" POINT-SIZE=`"14`"><B> $(ConvertTo-XmlText $Unit)$hop </B></FONT></TD></TR>")
   $p = 0
   foreach ($r in $Rows) {
     $p++
@@ -154,7 +190,7 @@ function Add-UnitCluster {
     [void]$tbl.Append("<FONT COLOR=`"$($PAL.rowInk)`">$short</FONT>")
     [void]$tbl.Append("  <FONT COLOR=`"$($PAL.lineInk)`" POINT-SIZE=`"12`">:$($r.Line)</FONT>")
     [void]$tbl.Append('</TD></TR>')
-    $portMap[$r.Qname] = "${nid}:p$p"
+    $portMap["$Side|$($r.Qname)"] = "${nid}:p$p"
   }
   [void]$tbl.Append('</TABLE>')
 
@@ -170,8 +206,9 @@ function Add-UnitCluster {
 [void]$sb.AppendLine("  edge  [fontname=`"$FontMono`", fontsize=11, color=`"$($PAL.lineInk)`", penwidth=1.5, arrowsize=0.8];")
 [void]$sb.AppendLine('')
 
-foreach ($g in ($callers | Group-Object { Get-UnitName $_.File } | Sort-Object Name)) {
-  Add-UnitCluster 'in' $g.Name $g.Group $PAL.callerBorder $PAL.callerFill $PAL.callerHdr
+foreach ($g in ($callers | Group-Object { "$($_.Level)|$(Get-UnitName $_.File)" } | Sort-Object Name)) {
+  $lu = @($g.Name -split '\|', 2)
+  Add-UnitCluster 'in' $lu[1] ([int]$lu[0]) $g.Group $PAL.callerBorder $PAL.callerFill $PAL.callerHdr
 }
 
 $focusShort = ConvertTo-XmlText (Get-ShortName ([string]$bf.qname) $focusUnit)
@@ -183,20 +220,34 @@ $fhdr  = "<TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$($PAL.focusHdr)`"><FONT COLOR=`"#FFF
 [void]$sb.AppendLine("    focus [label=<<TABLE BORDER=`"0`" CELLBORDER=`"0`" CELLSPACING=`"3`" CELLPADDING=`"7`">$fhdr<TR><TD HREF=`"$fhref`" TITLE=`"$(ConvertTo-XmlText ([string]$bf.qname))`"><FONT COLOR=`"$($PAL.focusInk)`" POINT-SIZE=`"18`"><B>$focusShort</B></FONT></TD></TR></TABLE>>];")
 [void]$sb.AppendLine('  }')
 
-foreach ($g in ($callees | Group-Object { Get-UnitName $_.File } | Sort-Object Name)) {
-  Add-UnitCluster 'out' $g.Name $g.Group $PAL.calleeBorder $PAL.calleeFill $PAL.calleeHdr
+foreach ($g in ($callees | Group-Object { "$($_.Level)|$(Get-UnitName $_.File)" } | Sort-Object Name)) {
+  $lu = @($g.Name -split '\|', 2)
+  Add-UnitCluster 'out' $lu[1] ([int]$lu[0]) $g.Group $PAL.calleeBorder $PAL.calleeFill $PAL.calleeHdr
 }
 
 [void]$sb.AppendLine('')
-foreach ($c in $callers) {
-  if ($portMap.ContainsKey($c.Qname)) {
-    [void]$sb.AppendLine("  $($portMap[$c.Qname]) -> focus [color=`"$($PAL.callerBorder)`"];")
-  }
+# One arrow per distinct (parent, child) pair, drawn from the PARENT the engine
+# reached it through. The arrow means "calls": a caller calls its parent, and
+# walking callees the parent calls the child.
+function Get-Port([string] $side, [string] $q) {
+  if ([string]::IsNullOrEmpty($q) -or $q -eq $focusQ) { return 'focus' }
+  $portMap["$side|$q"]
 }
-foreach ($c in $callees) {
-  if ($portMap.ContainsKey($c.Qname)) {
-    [void]$sb.AppendLine("  focus -> $($portMap[$c.Qname]) [color=`"$($PAL.calleeBorder)`"];")
-  }
+$edgeSeen = @{}
+$focusIn = 0; $focusOut = 0
+foreach ($n in $callerNodes) {
+  $from = Get-Port 'in' $n.Qname; $to = Get-Port 'in' $n.Parent
+  if (-not $from -or -not $to -or $edgeSeen.ContainsKey("$from>$to")) { continue }
+  $edgeSeen["$from>$to"] = $true
+  if ($to -eq 'focus') { $focusIn++ }
+  [void]$sb.AppendLine("  $from -> $to [color=`"$($PAL.callerBorder)`"];")
+}
+foreach ($n in $calleeNodes) {
+  $from = Get-Port 'out' $n.Parent; $to = Get-Port 'out' $n.Qname
+  if (-not $from -or -not $to -or $edgeSeen.ContainsKey("$from>$to")) { continue }
+  $edgeSeen["$from>$to"] = $true
+  if ($from -eq 'focus') { $focusOut++ }
+  [void]$sb.AppendLine("  $from -> $to [color=`"$($PAL.calleeBorder)`"];")
 }
 [void]$sb.AppendLine('}')
 
@@ -215,11 +266,9 @@ $pdfOut = Join-Path $OutDir "$base.pdf"
 
 # ONE layout run, four outputs. Verified 2026-09-22: the picture and the geometry
 # come from the SAME layout, so hit-test rectangles can never drift from the SVG.
-& $Dot -Tsvg -o $svgOut -Tplain -o $plnOut -Tpng -Gdpi=110 -o $pngOut -Tpdf -o $pdfOut $dotOut 2>&1 |
-  Where-Object { $_ -notmatch 'Pango-WARNING' -and $_.ToString().Trim() -ne '' } |
-  ForEach-Object { Write-Host "  dot: $_" }
+# Emit-Common: path-length check, stale-output clear, loud failure.
+Invoke-DotRun $dotOut $svgOut $plnOut $pngOut $pdfOut
 
-if (-not (Test-Path $svgOut)) { throw "dot produced no SVG" }
 
 $svg     = [IO.File]::ReadAllText($svgOut)
 $anchors = ([regex]::Matches($svg, '<a[\s>]')).Count
@@ -236,6 +285,11 @@ function Get-FileSize([string] $f) { if (Test-Path $f) { (Get-Item $f).Length } 
   Pdf          = $pdfOut
   Callers      = $callers.Count
   Callees      = $callees.Count
+  # D6 pins: rows are distinct symbols, arrows distinct pairs, and only the
+  # engine's depth-1 children touch the focus box.
+  Edges        = $edgeSeen.Count
+  FocusIn      = $focusIn
+  FocusOut     = $focusOut
   ClickTargets = $anchors
   Expected     = $rows
   AllClickable = ($anchors -ge $rows)

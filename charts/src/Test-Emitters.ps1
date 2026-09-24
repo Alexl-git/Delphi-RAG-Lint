@@ -91,6 +91,39 @@ Step 'E-BF' {
   Chk 'A-BF-CALLEES' $b.Callees 8
   Chk 'A-BF-CLICKS'  $b.ClickTargets 18
   if (-not $b.AllClickable) { Fail 'A-BF-CLICKABLE' 'butterfly rows are not all anchored' }
+  # D6 fix: arrows follow the tree. All 9 callers are depth 1; of the 8 callees
+  # only 2 are called BY SendDeltaOperation (what-it-calls d1 = 2), the other 6
+  # are hop 2. The old flatten drew all 8 as direct calls.
+  Chk 'A-BF-FOCUSIN'  $b.FocusIn 9
+  Chk 'A-BF-FOCUSOUT' $b.FocusOut 2
+  Chk 'A-BF-EDGES'    $b.Edges 17
+}
+
+# D6 (engine INBOX, 2026-09-23): the butterfly listed duplicate callee rows. The
+# engine's tree repeats a symbol reached through a second parent (the repeat is
+# marked cycle and not expanded); the emitter flattened the tree and appended
+# every node. On this target the tree has 14 callee nodes for 11 symbols:
+# GetTransitiveAncestors, GetSymbolById and VisibleHere each appeared twice.
+Note 'butterfly D6 (duplicate rows) ...'
+Step 'E-BF-D6' {
+  $script:b6 = & "$SRC\Emit-Butterfly.ps1" -Qname 'DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead' `
+                 -DbPath $DbDl -Depth 2 -OutDir $OutDir
+  $t6 = Dot $b6
+  # FAILS ON ANY DUPLICATE: every row TITLE is "<qname>  --  <file>:<line>", so a
+  # repeated title is a repeated row, and a repeated edge line a repeated arrow.
+  $dupRows  = @([regex]::Matches($t6, 'TITLE="([^"]+)"') | ForEach-Object { $_.Groups[1].Value } |
+                Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
+  $dupEdges = @([regex]::Matches($t6, '(?m)^\s+(\S+ -> \S+) \[') | ForEach-Object { $_.Groups[1].Value } |
+                Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
+  if ($dupRows.Count)  { Fail 'A-BF6-DUPROWS'  ("duplicate rows: " + ($dupRows -join '; ')) }
+  if ($dupEdges.Count) { Fail 'A-BF6-DUPEDGES' ("duplicate edges: " + ($dupEdges -join '; ')) }
+  Chk 'A-BF6-CALLERS'  $b6.Callers 2
+  Chk 'A-BF6-CALLEES'  $b6.Callees 11      # 14 tree nodes, 3 repeats
+  # 16 = one arrow per tree node (2 + 14): the 3 repeats are REAL calls from a
+  # second parent, so they keep their arrow and lose only their row.
+  Chk 'A-BF6-EDGES'    $b6.Edges 16
+  Chk 'A-BF6-FOCUSOUT' $b6.FocusOut 6      # the engine's depth-1 children
+  Chk 'A-BF6-CLICKS'   $b6.ClickTargets 14 # 2 + 11 + focus
 }
 
 Note 'deps (regression) ...'
@@ -646,15 +679,18 @@ NegTest 'N15' 'is a class, not a interface' 'wiring_TABZLoggingSys' {
 NegTest 'N18b' 'is in no cycle in this index' 'cycles_uMain' {
   & "$SRC\Emit-Cycles.ps1" -Unit 'uMain' -DbPath $DbCli -OutDir $negDir }
 
-# N19: no emitter may be pointed at a live corpus DB by habit. Skipped rather
-# than failed where the live corpus is not present on this machine -- a guard
-# that cannot be exercised is not the same as a guard that failed.
+# N19: no emitter may be pointed at a live corpus DB by habit.
+# A MISSING precondition FAILS (Task 0 review, 2026-09-23). This used to print
+# "skipped" and pass, so a moved or renamed live DB would have switched the
+# guard off in silence and the battery would still read green. Get-CloneDb
+# checks existence BEFORE the refusal rules, so the refusal cannot be exercised
+# without the file; the honest outcome when it is absent is a named failure.
 $liveDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite'
 if (Test-Path $liveDb) {
   NegTest 'N19' 'refusing a non-clone database' 'lifecycle_uMain_TfrmMAIN' {
     & "$SRC\Emit-Lifecycle.ps1" -Form 'uMain.TfrmMAIN' -DbPath $liveDb -OutDir $negDir }
 } else {
-  Note '  N19 skipped: the live corpus DB is not on this machine'
+  Fail 'N19-PRE' "precondition missing: $liveDb -- the live-DB refusal cannot be exercised"
 }
 
 # ---- the third batch: protocol-trace / crosses-boundary / shown-where /
@@ -806,7 +842,12 @@ Step 'E-T0' {
   Chk 'A-CO0-OTHER'     $t0.TriggerOther 'HEATBOOK_AIU5>FOLHEAT,MACHINES_AI10>MACHINESTAT,MACHINES_AU10>MACHINESTAT,TOOLS_AI0>TOOLGR12'
   # P39's CAUSFAIL rows
   Chk 'A-CO0-CAUSTRIG'  $t0.CausfailTriggers 'CAUSFAIL_BIU0=ID,CAUSFAIL_BIU5=REASON+SEVERITY+SYSTID,CAUSFAIL_BUD0=SYSTID'
-  if (@($t0.VerbCaseFailures).Count) { Fail 'A-CO0-VERB' (@($t0.VerbCaseFailures) -join '; ') }
+  # Pinned at 9 (the P23 cases in Test-Task0Helpers.ps1). The failure list is
+  # checked for PRESENCE first: a $null list is "the check never ran", which the
+  # old `@($null).Count` test could not tell apart from nine clean passes.
+  Chk 'A-CO0-VERBCASES' $t0.VerbCases 9
+  if ($null -eq $t0.VerbCaseFailures) { Fail 'A-CO0-VERB' 'VerbCaseFailures is null -- the verb-case check did not run' }
+  elseif (@($t0.VerbCaseFailures).Count) { Fail 'A-CO0-VERB' (@($t0.VerbCaseFailures) -join '; ') }
 
   # P2 through Get-SourceContext: of 430 candidate refs, 168 reads sit after
   # `raise` and 185 type_uses after `on [E:]` -- with 0 stale files among them
@@ -862,25 +903,43 @@ Step 'E-T0' {
   Chk 'A-T0-SQLSCAN'    $t0.SqlStaleScanned 0
 }
 
+# N-MAXPATH (Task 1 report, 2026-09-23): dot.exe cannot open an output path over
+# 259 characters and used to leave only "dot produced no SVG". Invoke-DotRun now
+# refuses BEFORE dot runs, naming the length and the path. The FOLDER is sized
+# to 200 characters -- under every tool's limit, so it stays deletable -- and the
+# qname slug (67 characters for the .plain) carries the FILE path over 259.
+Note 'negative N-MAXPATH (dot output path over MAX_PATH) ...'
+$longDir = [IO.Path]::GetFullPath($negDir)
+$longDir = Join-Path $longDir ('p' * (199 - $longDir.Length))
+$threw = $false
+try { & "$SRC\Emit-Butterfly.ps1" -Qname $Q_SEND -DbPath $DbCli -Depth 1 -OutDir $longDir | Out-Null }
+catch { $threw = $true; $m = $_.Exception.Message }
+if (-not $threw) { Fail 'N-MAXPATH' 'did not throw' }
+elseif ($m -notlike '*that dot.exe can open*') { Fail 'N-MAXPATH' "message did not name the path limit -- got: $m" }
+if (@(Get-ChildItem -LiteralPath $longDir -Filter '*.svg' -ErrorAction SilentlyContinue).Count) {
+  Fail 'N-MAXPATH' 'left an .svg behind'
+}
 Note 'negatives N33, N35 (database refusals for the new helpers) ...'
 # N33: the SQL index is reached through Get-CloneDb like every other DB, so a
 # -SqlDbPath habit cannot open the live one. Get-CloneDb only resolves the path;
 # it never opens the file.
 $liveSql = 'C:\Projects\DB\SQL\drag-lint-sql.sqlite'
+# A missing file FAILS, as for N19.
 if (Test-Path $liveSql) {
   NegTest 'N33' 'refusing a non-clone database' 't0_n33' {
     & { . "$SRC\Emit-Common.ps1"; Get-SqlTableSet $liveSql } }
 } else {
-  Note '  N33 skipped: the live SQL index is not on this machine'
+  Fail 'N33-PRE' "precondition missing: $liveSql -- the SQL-index refusal cannot be exercised"
 }
 # N35 (ruling R3): a history copy sits UNDER the clone root, so the whitelist
 # alone accepts it and it answers with the older parse. The suffix rule refuses.
 $preCli = Join-Path $PSScriptRoot '..\scratch\db\CLIENT-Micronite2027.sqlite.pre-1.18'
+# A missing history copy FAILS, as for N19: without it the suffix rule is untested.
 if (Test-Path $preCli) {
   NegTest 'N35' 'does not end in .sqlite' 'shownwhere_FTRNAMESTR' {
     & "$SRC\Emit-ShownWhere.ps1" -Column 'FTRNAMESTR' -DbPath $preCli -OutDir $negDir }
 } else {
-  Note '  N35 skipped: no pre-1.18 history copy beside the clones'
+  Fail 'N35-PRE' "precondition missing: $preCli -- the .sqlite suffix refusal cannot be exercised"
 }
 
 # ---- PLAN-last-four-verbs, Task 1: exception-paths ------------------------------
@@ -1566,7 +1625,7 @@ if (-not $Quiet) {
   Write-Host ("  consumers      : CAUSFAIL cert/inf readers {0}/{1}, writers {2}/{3}, {4} triggers; REASON bindings {5}/{6}; facts {7}/{8}/{9}; literals {10}/{11}/{12}; proc bodies {13}" -f (V $co1 'CertainReaders'), (V $co1 'InferredReaders'), (V $co1 'CertainWriters'), (V $co1 'InferredWriters'), (V $co1 'Triggers'), (V $co2c 'IndexBindings'), (V $co2c 'DrawnBindings'), (V $co1 'IndexReadFacts'), (V $co1 'IndexWriteFacts'), (V $co1 'IndexFactSymbols'), (V $co1 'IndexVerbLiterals'), (V $co1 'IndexFromJoinTables'), (V $co1 'IndexFactReadTables'), (V $co1 'ProcBodies'))
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE draw")
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

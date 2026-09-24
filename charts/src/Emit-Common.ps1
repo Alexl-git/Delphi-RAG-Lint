@@ -1997,6 +1997,37 @@ SELECT r.id AS id, r.kind AS kind, r.name_text AS name, r.start_line AS line,
 
 # ---- dot --------------------------------------------------------------------
 
+# The ONE place dot.exe runs (Invoke-DotLayout, Emit-Butterfly, Emit-Deps).
+#
+# MAX_PATH (Task 1, 2026-09-23): dot.exe is not long-path aware. .NET is (the
+# machine sets LongPathsEnabled), so the .dot file WRITES fine under a deep
+# OutRoot, and then dot cannot open its outputs and writes no SVG. The old check
+# said only "dot produced no SVG", which names neither the cause nor the path.
+# So the lengths are checked BEFORE dot runs, and a missing SVG afterwards
+# throws with dot's own messages attached.
+#
+# Stale outputs are REMOVED first: Emit-Butterfly and Emit-Deps used to test
+# for the SVG without clearing it, so a failed re-run over an earlier run's
+# folder found the OLD picture and reported success.
+$script:DotMaxPath = 259   # MAX_PATH less the NUL; measured 2026-09-23 on dot 16.1: 259 writes, 260 "Could not open"
+function Invoke-DotRun([string] $DotFile, [string] $Svg, [string] $Plain, [string] $Png, [string] $Pdf) {
+  foreach ($p in @($DotFile, $Svg, $Plain, $Png, $Pdf)) {
+    $full = [IO.Path]::GetFullPath($p)
+    if ($full.Length -gt $script:DotMaxPath) {
+      throw ("output path is $($full.Length) characters, over the $($script:DotMaxPath) that dot.exe can open " +
+             "(it is not long-path aware, so it would write NO SVG): $full -- use a shorter -OutDir/-OutRoot.")
+    }
+  }
+  foreach ($p in @($Svg, $Plain, $Png, $Pdf)) { if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force } }
+  $msgs = @(& $Dot -Tsvg -o $Svg -Tplain -o $Plain -Tpng -Gdpi=110 -o $Png -Tpdf -o $Pdf $DotFile 2>&1 |
+            Where-Object { $_ -notmatch 'Pango-WARNING' -and ([string]$_).Trim() -ne '' } |
+            ForEach-Object { [string]$_ })
+  foreach ($m in $msgs) { Write-Host "  dot: $m" }
+  if (-not (Test-Path -LiteralPath $Svg)) {
+    $why = if ($msgs.Count) { ' dot said: ' + ($msgs -join ' | ') } else { ' dot printed nothing.' }
+    throw "dot produced no SVG at $Svg (exit $LASTEXITCODE).$why"
+  }
+}
 # ONE layout run, four outputs -- so the geometry in .plain can never drift from
 # the picture in .svg. Verified 2026-09-22.
 function Invoke-DotLayout([string] $DotText, [string] $OutDir, [string] $Base) {
@@ -2011,11 +2042,7 @@ function Invoke-DotLayout([string] $DotText, [string] $OutDir, [string] $Base) {
   [IO.File]::WriteAllText($dotO, ($DotText -replace "`r`n", "`n" -replace "`n", "`r`n"),
                           (New-Object Text.UTF8Encoding($false)))
 
-  & $Dot -Tsvg -o $svgO -Tplain -o $plnO -Tpng -Gdpi=110 -o $pngO -Tpdf -o $pdfO $dotO 2>&1 |
-    Where-Object { $_ -notmatch 'Pango-WARNING' -and ([string]$_).Trim() -ne '' } |
-    ForEach-Object { Write-Host "  dot: $_" }
-
-  if (-not (Test-Path $svgO)) { throw 'dot produced no SVG' }
+  Invoke-DotRun $dotO $svgO $plnO $pngO $pdfO
   $svg = [IO.File]::ReadAllText($svgO)
 
   [pscustomobject]@{

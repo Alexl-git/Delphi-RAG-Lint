@@ -221,10 +221,8 @@ $pdfO = Join-Path $OutDir "$base.pdf"
 
 [IO.File]::WriteAllText($dotO, ($sb.ToString() -replace "`r`n", "`n" -replace "`n", "`r`n"),
                         (New-Object Text.UTF8Encoding($false)))
-& $Dot -Tsvg -o $svgO -Tplain -o $plnO -Tpng -Gdpi=110 -o $pngO -Tpdf -o $pdfO $dotO 2>&1 |
-  Where-Object { $_ -notmatch 'Pango-WARNING' -and $_.ToString().Trim() -ne '' } |
-  ForEach-Object { Write-Host "  dot: $_" }
-if (-not (Test-Path $svgO)) { throw 'dot produced no SVG' }
+Invoke-DotRun $dotO $svgO $plnO $pngO $pdfO   # Emit-Common: path-length check, stale-output clear, loud failure
+
 
 $svg = [IO.File]::ReadAllText($svgO)
 $anchors = ([regex]::Matches($svg, '<a[\s>]')).Count
