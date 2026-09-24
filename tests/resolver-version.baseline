@@ -556,4 +556,28 @@
 #   change to name 1.8.0 as the C2.3 + IsStub reservation; comment text only.
 #
 #   Superseded: 1.6.0-alpha|95080b86976b780299f60f1f3e4c5fec372170db4b3fb980b23feca790aadec6
-1.7.0-alpha|a1732971a9b5624931b52c79578b9d0bfbf53ac0d6f70085d0e554472193f945
+# 2026-09-23: 1.7.0-alpha -> 1.8.0-alpha (`with` scope, D14 + D16).
+#   The resolver models `with A, B do`: a bare name binds to the innermost
+#   target's member first (last-listed entity first) for bare calls, for a
+#   receiver's leading identifier, and in the enum-value and parenless passes
+#   (replacing 1.7.0's "any `with` in the routine declines"); an untypable
+#   target, or one whose ancestry leaves the index, binds nothing (the enum pass
+#   alone keeps its pre-1.8 binding there, counted). A FOURTH calls-stage stream,
+#   ResolveMemberReadRefs -> TCallResolver.ResolveBareMemberRead, binds bare
+#   `read` refs of a with target's property/field, of the enclosing class's
+#   PROPERTY (D16a), and `Self.X` of either kind (controller addition), writing
+#   refs.symbol_id + member_accesses + a getter call edge through the new shared
+#   WriteMemberAccess. The parenless procedure-value test reads split argument
+#   lists across lines (D16c) and recognises a qualified TFunc<T> / Spring
+#   Func<T> (D16b). Rows appear, disappear and MOVE, so this BUMPS. No parse
+#   change: the remedy is `index --all --resolve-only`, never a re-parse.
+#   Measured on a copy of ORM3 CLIENT: the 1.8.0-alpha bullet in CHANGELOG.md.
+#   The manifest gained ResolveMemberReadRefs, WriteMemberAccess, and the two
+#   byte-transform readers the with scope's own parse depends on
+#   (EnsureUtf8Bytes, NormalizeLoneCR); their hash rides on this bump.
+#   The reservation for C2.3 + the IsStub unification moves from 1.8.0 to
+#   1.9.0-alpha (the ForwardStub.pas header comment says so too; comment text
+#   only, whole-file surface).
+#
+#   Superseded: 1.7.0-alpha|a1732971a9b5624931b52c79578b9d0bfbf53ac0d6f70085d0e554472193f945
+1.8.0-alpha|61949c8b6b3a3a00ea3da63fc1ea3ee2417c1d947feacdc0ae6cd37ab056295e

@@ -4537,8 +4537,13 @@ type
   rides the SAME walk and the same layer surfaces, because its first half is
   exactly "which with-target member does this bare name bind to". Its second
   half is not an outer declaration but the index's own verdict: a ref at this
-  identifier's position bound to an enum_value symbol. That is risk R7 (the
-  resolver does not model `with` scope) made visible, and requiring the ref --
+  identifier's position bound to an enum_value symbol. That was risk R7 (the
+  resolver did not model `with` scope) made visible. Since resolver 1.8.0 it
+  does, and binds such a read to the MEMBER whenever it can type the target
+  and see its whole surface; the enum binding survives only under a target the
+  resolver cannot type, so this now reports exactly that residual -- targets
+  this walk types by NAME (across the library index too) and the resolver
+  could not. Requiring the ref --
   rather than any same-named enum value anywhere -- keeps scoped-enum values
   (FMX `Left`, `Top`) and invisible library enums from ever firing. It also
   admits RECORD targets (RecSurface), which the older rule does not: the spec's

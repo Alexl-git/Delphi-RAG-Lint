@@ -440,6 +440,10 @@ type
       /// It cannot touch another writer's fact. `read` refs are bound by nothing
       /// else -- measured 0 of 95,875 on ORM3 CLIENT before this change -- so the
       /// universe this statement clears is exactly the universe it rebuilds.
+      /// Since 1.8.0 the member-read stream also binds `read` refs, and a name
+      /// can be both an enum value and a property/field; this NULL then clears
+      /// that stream's binding too, which is safe because that stream runs
+      /// AFTER this one and re-derives it in the same transaction.
       ///
       /// AShadowDecls is reported because an EMPTY shadow set is a FAIL-OPEN,
       /// not a quiet no-op: R3(c) would stop shadowing, the pass would
@@ -489,6 +493,43 @@ type
       procedure ResolveParenlessCallRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>2026-09-23 (resolver 1.8.0-alpha, D14 + D16a): the calls
+      /// stage's FOURTH stream. Offers every still-unbound `read` ref named like
+      /// a property or field to TCallResolver.ResolveBareMemberRead and records
+      /// each one it binds exactly as a member-access to that member is recorded:
+      /// refs.symbol_id, a member_accesses row (mode read), and a call_edges row
+      /// to a METHOD getter.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: rows offered to the resolver.</param>
+      /// <param name="ABound">Out: rows bound to a property or field.</param>
+      /// <remarks>
+      /// Runs LAST, after the enum-value and parenless streams, and offers only
+      /// refs they left with symbol_id NULL: a `read` is bound by at most one
+      /// stream. Before rebuilding it NULLs the `read` refs it bound earlier
+      /// (those pointing at a property or field -- no other writer binds a read
+      /// to one; measured 0 on ORM3 CLIENT at 1.7.0) under the same scope and
+      /// stale predicates, for the reason ResolveEnumValueRefs gives. Their
+      /// member_accesses and getter call_edges rows need no such step: the
+      /// scoped and whole-database deletes above cover every ref in scope.
+      /// </remarks>
+      procedure ResolveMemberReadRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
+      /// <summary>Records one resolved PROPERTY / FIELD access: refs.symbol_id
+      /// on the member, its member_accesses row, and -- when the accessor is a
+      /// METHOD -- a certain call_edges row to it.</summary>
+      /// <param name="ARefId">The accessing ref.</param>
+      /// <param name="AEdge">The resolver's answer; TargetSymbolId is the member,
+      /// MemberMode its mode.</param>
+      /// <remarks>Shared by the main stream's member-access rung and the bare
+      /// member-read stream, so both write the identical three facts. A FIELD
+      /// accessor earns no edge: the member_accesses row IS that use.</remarks>
+      procedure WriteMemberAccess(ARefId: Int64; const AEdge: TCallEdge);
       /// <summary>Record the names a file is about to lose, before OpenFileTx
       /// deletes its symbols.</summary>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
@@ -12041,6 +12082,106 @@ begin
   end;
 end;
 
+procedure TSQLiteSymbolStore.WriteMemberAccess(ARefId: Int64; const AEdge: TCallEdge);
+begin
+  FQSetRefSymbol.ParamByName('sid').AsLargeInt:= AEdge.TargetSymbolId;
+  FQSetRefSymbol.ParamByName('rid').AsLargeInt:= ARefId;
+  FQSetRefSymbol.ExecSQL;
+  FQInsertMemberAccess.ParamByName('rid' ).AsLargeInt:= ARefId;
+  FQInsertMemberAccess.ParamByName('mid' ).AsLargeInt:= AEdge.TargetSymbolId;
+  FQInsertMemberAccess.ParamByName('mode').AsString  := AEdge.MemberMode;
+  FQInsertMemberAccess.ParamByName('aid' ).DataType:= ftLargeint;
+  if AEdge.AccessorSymbolId > 0 then FQInsertMemberAccess.ParamByName('aid').AsLargeInt:= AEdge.AccessorSymbolId
+  else FQInsertMemberAccess.ParamByName('aid').Clear;
+  FQInsertMemberAccess.ParamByName('akind').DataType:= ftString;
+  if AEdge.AccessorKind <> '' then FQInsertMemberAccess.ParamByName('akind').AsString:= AEdge.AccessorKind
+  else FQInsertMemberAccess.ParamByName('akind').Clear;
+  FQInsertMemberAccess.ParamByName('rtid').DataType:= ftLargeint;
+  if AEdge.ReceiverTypeSymbolId > 0 then FQInsertMemberAccess.ParamByName('rtid').AsLargeInt:= AEdge.ReceiverTypeSymbolId
+  else FQInsertMemberAccess.ParamByName('rtid').Clear;
+  FQInsertMemberAccess.ExecSQL;
+  if (AEdge.AccessorSymbolId > 0) and SameText(AEdge.AccessorKind, 'method') then
+  begin
+    FQInsertCallEdge.ParamByName('rid' ).AsLargeInt:= ARefId;
+    FQInsertCallEdge.ParamByName('tid' ).AsLargeInt:= AEdge.AccessorSymbolId;
+    FQInsertCallEdge.ParamByName('conf').AsString  := 'certain';
+    FQInsertCallEdge.ParamByName('rtid').DataType:= ftLargeint;
+    if AEdge.ReceiverTypeSymbolId > 0 then FQInsertCallEdge.ParamByName('rtid').AsLargeInt:= AEdge.ReceiverTypeSymbolId
+    else FQInsertCallEdge.ParamByName('rtid').Clear;
+    FQInsertCallEdge.ExecSQL;
+  end;
+end;
+
+{ The bare member-read stream of the calls stage. The contract and the ordering
+  against the other two `read` streams live on the DECLARATION -- see the
+  DocInsight block on ResolveMemberReadRefs. }
+procedure TSQLiteSymbolStore.ResolveMemberReadRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  { The candidates: a still-unbound `read` spelled like any property or field. }
+  MEMBER_UNIVERSE = 'refs.kind = ''read'' AND refs.symbol_id IS NULL AND refs.name_text COLLATE NOCASE IN ' +
+                    '(SELECT name FROM symbols WHERE kind IN (''property'', ''field''))';
+  { What this stream wrote on an earlier pass: a `read` bound to a property or
+    field. No other writer binds a `read` to one. }
+  MEMBER_WRITTEN  = 'refs.kind = ''read'' AND refs.symbol_id IN ' +
+                    '(SELECT id FROM symbols WHERE kind IN (''property'', ''field''))';
+var
+  Suffix : string    ;
+  Q      : TFDQuery  ;
+  Ref    : TReference;
+  Edge   : TCallEdge ;
+  Reason : string    ;
+  FldId  : TField    ;
+  FldFile: TField    ;
+  FldName: TField    ;
+  FldEncl: TField    ;
+  FldLine: TField    ;
+  FldCol : TField    ;
+begin
+  ACandidates:= 0;
+  ABound     := 0;
+  Suffix     := '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + MEMBER_WRITTEN + Suffix);  // dl:ok sql-injection-concat@2cfc -- REVIEWED 2026-09-23: Suffix is SQL this pass BUILT -- MaterializeResolveScope's and the stale prescan's own refs predicates -- never user text, the identical construction ResolveParenlessCallRefs uses. It cannot be parameterised: the scope predicate names a temp table and the stale one an IN-list of file ids.
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + MEMBER_UNIVERSE + Suffix;
+    Q.Open;
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      Ref.Kind     := 'read';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      { Every decline is counted by reason inside the resolver (MemberReadStats). }
+      Edge:= AResolver.ResolveBareMemberRead(Ref, Reason);
+      if Edge.TargetSymbolId > 0 then
+      begin
+        WriteMemberAccess(Ref.Id, Edge);
+        Inc(ABound);
+      end;
+      Inc(ACandidates);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
 procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
@@ -12076,6 +12217,8 @@ var
   EnumShadowDecls: Int64    ; { size of the R3(c) unit-level const/var shadow set         }
   ParenCandidates: Int64    ; { parenless stream -- read rows offered to the resolver       }
   ParenBound     : Int64    ; { of those, the rows that earned a call edge                 }
+  MemberCandidates: Int64   ; { member-read stream -- read rows offered to the resolver     }
+  MemberBound     : Int64   ; { of those, the rows bound to a property or field            }
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
   T0        : Int64         ;
   TMaps     : Double        ; { seconds spent building TCallResolver's maps }
@@ -12151,6 +12294,8 @@ begin
   EnumShadowDecls:= 0;
   ParenCandidates:= 0;
   ParenBound     := 0;
+  MemberCandidates:= 0;
+  MemberBound     := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
   { Split out because it is O(symbols) and independent of how many refs this run
@@ -12415,32 +12560,7 @@ begin
           the source wrote is the property. }
         if (Edge.TargetSymbolId > 0) and (Edge.MemberMode <> '') then
         begin
-          FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
-          FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
-          FQSetRefSymbol.ExecSQL;
-          FQInsertMemberAccess.ParamByName('rid' ).AsLargeInt:= Ref.Id;
-          FQInsertMemberAccess.ParamByName('mid' ).AsLargeInt:= Edge.TargetSymbolId;
-          FQInsertMemberAccess.ParamByName('mode').AsString  := Edge.MemberMode;
-          FQInsertMemberAccess.ParamByName('aid' ).DataType:= ftLargeint;
-          if Edge.AccessorSymbolId > 0 then FQInsertMemberAccess.ParamByName('aid').AsLargeInt:= Edge.AccessorSymbolId
-          else FQInsertMemberAccess.ParamByName('aid').Clear;
-          FQInsertMemberAccess.ParamByName('akind').DataType:= ftString;
-          if Edge.AccessorKind <> '' then FQInsertMemberAccess.ParamByName('akind').AsString:= Edge.AccessorKind
-          else FQInsertMemberAccess.ParamByName('akind').Clear;
-          FQInsertMemberAccess.ParamByName('rtid').DataType:= ftLargeint;
-          if Edge.ReceiverTypeSymbolId > 0 then FQInsertMemberAccess.ParamByName('rtid').AsLargeInt:= Edge.ReceiverTypeSymbolId
-          else FQInsertMemberAccess.ParamByName('rtid').Clear;
-          FQInsertMemberAccess.ExecSQL;
-          if (Edge.AccessorSymbolId > 0) and SameText(Edge.AccessorKind, 'method') then
-          begin
-            FQInsertCallEdge.ParamByName('rid' ).AsLargeInt:= Ref.Id;
-            FQInsertCallEdge.ParamByName('tid' ).AsLargeInt:= Edge.AccessorSymbolId;
-            FQInsertCallEdge.ParamByName('conf').AsString  := 'certain';
-            FQInsertCallEdge.ParamByName('rtid').DataType:= ftLargeint;
-            if Edge.ReceiverTypeSymbolId > 0 then FQInsertCallEdge.ParamByName('rtid').AsLargeInt:= Edge.ReceiverTypeSymbolId
-            else FQInsertCallEdge.ParamByName('rtid').Clear;
-            FQInsertCallEdge.ExecSQL;
-          end;
+          WriteMemberAccess(Ref.Id, Edge);
           Inc(Written);
         end
         { 2026-09-23 (enum-value-ref-binding): a QUALIFIED enum value --
@@ -12513,6 +12633,9 @@ begin
         stream on purpose -- see ResolveParenlessCallRefs' remarks. Same
         transaction, so its edges share the pass's all-or-nothing lifetime. }
       ResolveParenlessCallRefs(Resolver, ScopeWhere, StaleWhere, ParenCandidates, ParenBound);
+      { 1.8.0 (D14 + D16a): the FOURTH stream, LAST, over the `read` refs the two
+        streams above left unbound -- see ResolveMemberReadRefs' remarks. }
+      ResolveMemberReadRefs(Resolver, ScopeWhere, StaleWhere, MemberCandidates, MemberBound);
       FConn.Commit;
     except
       on E: Exception do
@@ -12606,11 +12729,12 @@ begin
     ResolveLog(Format('calls      enum-values: %d of %d bare read(s) bound (Shape A); ' +
       '%d qualified bound (Shape B); declined (both streams) ' +
       'not-visible %d, ambiguous %d, shadowed %d; ' +
-      'duplicate groups collapsed %d (decisive %d); unit-level shadow decls %d',
+      'duplicate groups collapsed %d (decisive %d); unit-level shadow decls %d; ' +
+      'with scope: declined as a with member %d, bound under an undecidable with target %d',
       [EnumBound, EnumCandidates, WrittenValues,
        Resolver.EnumStats.NotVisible, Resolver.EnumStats.Ambiguous, Resolver.EnumStats.Shadowed,
        Resolver.EnumStats.DupGroupsCollapsed, Resolver.EnumStats.CollapseDecisive,
-       EnumShadowDecls]));
+       EnumShadowDecls, Resolver.EnumStats.WithMember, Resolver.EnumStats.WithUndecided]));
     { THE RECONCILIATION, printed rather than left implicit. The resolver counts
       its own successes on BOTH paths -- ResolveEnumValueRead's final
       Inc(FEnumStats.Bound) for Shape A, and rung 3c's for Shape B -- while the
@@ -12636,6 +12760,21 @@ begin
        Resolver.ParenlessStats.NotFound, Resolver.ParenlessStats.Shadowed, Resolver.ParenlessStats.NotCallable,
        Resolver.ParenlessStats.ProcValue, Resolver.ParenlessStats.WithScope, Resolver.ParenlessStats.Qualified,
        Resolver.ParenlessStats.Unreadable]));
+    { 1.8.0 (D14 + D16a). The member-read stream, by reason, for the same reason
+      as the two lines above; then the with scope itself, whose declines are the
+      bindings the pre-1.8 rungs WOULD have written and now do not. }
+    ResolveLog(Format('calls      member-reads: %d of %d bare read(s) bound (with member %d, enclosing class %d); ' +
+      'declined with-scope %d, not-member %d, shadowed %d, field %d, not-found %d, qualified %d, unreadable %d',
+      [MemberBound, MemberCandidates,
+       Resolver.MemberReadStats.BoundWith, Resolver.MemberReadStats.BoundOwn,
+       Resolver.MemberReadStats.WithScope, Resolver.MemberReadStats.NotMember, Resolver.MemberReadStats.Shadowed,
+       Resolver.MemberReadStats.Field, Resolver.MemberReadStats.NotFound, Resolver.MemberReadStats.Qualified,
+       Resolver.MemberReadStats.Unreadable]));
+    ResolveLog(Format('calls      with-scope: %d statement(s) in %d file(s); bare calls bound to a with member %d, ' +
+      'declined %d; receivers typed through one %d, left untyped %d',
+      [Resolver.WithStats.Statements, Resolver.WithStats.Files,
+       Resolver.WithStats.CallBound, Resolver.WithStats.CallDeclined,
+       Resolver.WithStats.ReceiverTyped, Resolver.WithStats.ReceiverDeclined]));
     { A SILENTLY EMPTY SHADOW SET IS A FAIL-OPEN, the failure mode this
       repository has been bitten by before: R3(c) would stop shadowing, the pass
       would OVER-BIND, and the run would report a clean result. Loud, and on its

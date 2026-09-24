@@ -160,7 +160,24 @@ const
   /// 1.6.0. DERIVED rows only, no parse change: remedy is `index --all
   /// --resolve-only`. A MINOR: a new class of derived edge. The reservation for
   /// C2.3 + the IsStub unification MOVES from 1.7.0 to 1.8.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.7.0-alpha';
+  /// <para>1.7.0-alpha -&gt; 1.8.0-alpha (2026-09-23, `with` scope, D14 + D16):
+  /// the resolver models `with A, B do` -- a bare name binds to the innermost
+  /// target's member first (last-listed entity first), for bare calls, for the
+  /// leading identifier of a receiver, and for the enum-value and parenless
+  /// passes, which replace 1.7.0's "any `with` in the routine declines" rule.
+  /// An untypable target, or one whose ancestry leaves the index, binds
+  /// nothing (the enum pass alone keeps its pre-1.8 binding there, counted).
+  /// A FOURTH calls-stage stream binds bare `read` refs of a with target's
+  /// property/field and of the enclosing class's PROPERTY (D16a:
+  /// refs.symbol_id + member_accesses + getter edge). The parenless
+  /// procedure-value test reads split argument lists across lines (D16c) and
+  /// recognises qualified `TFunc&lt;T&gt;` / Spring `Func&lt;T&gt;` (D16b). The
+  /// with spans come from parsing the source in the resolver; no stored parse
+  /// changes. DERIVED rows only: remedy is `index --all --resolve-only`. A
+  /// MINOR: new classes of derived row, and bindings that MOVE. The
+  /// reservation for C2.3 + the IsStub unification MOVES from 1.8.0 to
+  /// 1.9.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.8.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
@@ -763,6 +780,13 @@ type
     DupGroupsCollapsed: Int64;
     /// <summary>Of those, the folds that turned &gt;1 candidate into exactly 1.</summary>
     CollapseDecisive  : Int64;
+    /// <summary>1.8.0: declined because an enclosing `with` target declares the
+    /// name -- the read names that member (R7), not the enum value.</summary>
+    WithMember        : Int64;
+    /// <summary>1.8.0: NOT a decline. Bound although an enclosing `with` target
+    /// could not be typed and so might declare the name; the residual that
+    /// enum-read-inside-with reports.</summary>
+    WithUndecided     : Int64;
   end;
 
   /// <summary>v8: one Spring4D DI registration (interface implemented by impl,

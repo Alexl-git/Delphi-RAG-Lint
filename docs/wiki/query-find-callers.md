@@ -43,8 +43,9 @@ caller_line, mode`. Before 2026-09-23 the JSON `line` on every row except a
 callback was the caller's DECLARATION line, and the text form printed no line
 for those rows.
 
-**Two known wrong-bind risks, both on BARE enum reads only.** Inside a routine
-that contains a `with` block (`with` scope is not modelled), and inside a
+**Two known wrong-bind risks, both on BARE enum reads only.** Inside a `with`
+whose target the index cannot type (since resolver 1.8.0-alpha the `with` scope
+is modelled, and wherever the target types a with member wins), and inside a
 `{$SCOPEDENUMS ON}` unit, a bare name can bind to an enum value the compiler
 would not have chosen. Verify such a binding against the declaration.
 Qualified reads (`TEnum.Value`) are unaffected.
