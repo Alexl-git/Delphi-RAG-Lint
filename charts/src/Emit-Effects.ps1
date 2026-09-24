@@ -362,6 +362,7 @@ $base = 'effects_' + ($sel.Qname -replace '[^A-Za-z0-9]', '_')
 $lay = Invoke-DotLayout $sb.ToString() $OutDir $base
 
 [pscustomobject]@{
+  TestChart    = [bool]$FactOverride     # stamped, not only drawn (fix round 2)
   Dot          = $lay.Dot
   Svg          = $lay.Svg
   Plain        = $lay.Plain

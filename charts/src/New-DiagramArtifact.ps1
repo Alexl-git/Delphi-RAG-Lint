@@ -239,6 +239,9 @@ $fp = [pscustomobject]@{
   leftCount   = $leftCount
   rightLabel  = $rightLabel
   rightCount  = $rightCount
+  # a chart drawn through a test hook says so here too (fix round 2); none of the
+  # bundler's own calls passes one, so this is $false for every real bundle
+  testChart   = [bool]$r.TestChart
   clickTargets= $r.ClickTargets
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +

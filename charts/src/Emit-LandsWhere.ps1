@@ -675,6 +675,12 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir ('landswhere_' + ($sel -replace '
 
 function Get-RowAnchors($List) { (@($List | Where-Object { $_.Href } | ForEach-Object { "$($_.Label):$($_.Line)" }) -join ',') }
 [pscustomobject]@{
+  # TEST CHART (fix round 2): stamped in the result -- and so in meta.json -- not only drawn
+  TestChart      = [bool]$TestHideColumn
+  # the bound rows' chain outcomes, and the index-wide count that reach a column:
+  # the DFM side of a -TestHideColumn run must reflect the hide (A-LW-CACHE)
+  ClientOutcomes = (@($bindSame | Sort-Object Dfm, Line | ForEach-Object { [string]$_.Outcome }) -join ',')
+  IndexBindColumn = @($ix.Bindings | Where-Object { $_.Outcome -eq 'column' }).Count
   Dot            = $lay.Dot
   Svg            = $lay.Svg
   Plain          = $lay.Plain

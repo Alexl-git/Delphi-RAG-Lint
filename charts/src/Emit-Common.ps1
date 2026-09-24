@@ -959,6 +959,10 @@ function Hide-ExtractedColumns($SqlSet, [string[]] $TableColumns) {
     $tabs[$p[0]] = Copy-SqlTableWithout $tabs[$p[0]] $p[1] $null
   }
   $o.Tables = $tabs
+  # DOCTORED (fix round 2): the copy keeps .Db, so a cache keyed on .Db would file
+  # this set's answers under the REAL database -- Get-FieldBindingChains neither
+  # reads nor writes its process-wide cache for a doctored set.
+  $o | Add-Member -NotePropertyName Doctored -NotePropertyValue $true -Force
   $o
 }
 
@@ -1817,11 +1821,14 @@ function Get-ChainKey([string] $Dfm, [string] $Ds) { "$Dfm|$Ds".ToUpperInvariant
 # result is cached in $global:DlFeedChains for the life of the PowerShell
 # process, keyed on both databases' size + mtime and this file's mtime, so the
 # gate pays once. A -SourceOverride run is never cached (its answer is about a
-# manufactured file). The cache does not see a source file edited mid-process
+# manufactured file), nor is a DOCTORED set's (-TestHideColumn). The cache does not see a source file edited mid-process
 # -- start a new process after editing the corpus.
 function Get-FieldBindingChains($SqlSet, [hashtable] $SourceOverride) {
   $key = $null
-  if (-not $SourceOverride) {
+  # never cached for a -SourceOverride run (a manufactured file) or a DOCTORED set
+  # (Hide-ExtractedColumns: same .Db, different columns) -- either would poison the
+  # real key for every later chart in this process, and read it would hide the test
+  if (-not $SourceOverride -and -not $SqlSet.Doctored) {
     $di = Get-Item -LiteralPath $DbPath; $si = Get-Item -LiteralPath $SqlSet.Db
     $ci = Get-Item -LiteralPath (Join-Path $PSScriptRoot 'Emit-Common.ps1')
     $key = "$($di.FullName)|$($di.Length)|$($di.LastWriteTimeUtc.Ticks)|$($si.FullName)|$($si.Length)|$($si.LastWriteTimeUtc.Ticks)|$($ci.LastWriteTimeUtc.Ticks)"

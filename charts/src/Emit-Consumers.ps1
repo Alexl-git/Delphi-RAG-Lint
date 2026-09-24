@@ -748,6 +748,7 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir ('consumers_' + ($fLabel -replace
 function Get-ClusterCount([string] $Id) { $c = @($clusters | Where-Object { $_.Id -eq $Id }); $(if ($c.Count) { $c[0].Count } else { 0 }) }
 
 [pscustomobject]@{
+  TestChart        = [bool]$TestHideColumn     # stamped, not only drawn (fix round 2)
   Dot              = $lay.Dot
   Svg              = $lay.Svg
   Plain            = $lay.Plain

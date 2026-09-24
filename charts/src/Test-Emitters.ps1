@@ -428,6 +428,8 @@ Step 'E-MA-R26' {
   $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
   Chk 'A-MA-R26-HDR' "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '0 member-access write sites reported by find-callers + 4 bound write(s) find-callers does not report / 0 routines reported by find-callers'
   $script:r26html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
+  # a real bundle says it is not a test chart (fix round 2: meta.testChart)
+  Chk 'A-MA-R26-META' $meta.testChart 'False'
   if ($r26html -notmatch [regex]::Escape('<span><b>0</b> member-access write sites reported by find-callers + 4 bound write(s) find-callers does not report</span>')) { Fail 'A-MA-R26-HDR' 'the rendered bundle header does not name the bound writes' }
 }
 
@@ -625,10 +627,29 @@ Step 'N13' {
   if ($t13 -match 'cluster_writers') { Fail 'A-N13-EMPTY' 'an empty writers cluster was drawn' }
 }
 
-# R26 SWEEP (fix round 1): EVERY who-writes / who-reads text this run rendered.
-# A zero claim in a direction whose unreported population (bound + unbound) is
-# above zero FAILS -- whichever chart, whichever mode. "10 writes" is not "0
-# writes": the zero must not follow a digit or a thousands comma.
+# R26 SWEEP (fix round 1; hardened in fix round 2): EVERY who-writes / who-reads
+# text this run rendered. A zero claim in a direction whose unreported population
+# (bound + unbound) is above zero FAILS -- whichever chart, whichever mode. "10
+# writes" is not "0 writes": the zero must not follow a digit or a thousands
+# comma. The SAME pattern shape for both directions ("0 write(s)" and "0 read(s)"
+# alike). A result object WITHOUT the two population counts FAILS rather than
+# passing: on the pre-fix code `$null -gt 0` was false, so the sweep would have
+# passed every chart silently -- proven below on a synthetic pre-fix object.
+function Get-R26Problems([string] $Name, [string] $Text, $Counts) {
+  $p = New-Object System.Collections.ArrayList
+  foreach ($prop in 'WritesUnreported', 'ReadsUnreported') {
+    if (-not $Counts -or -not $Counts.PSObject.Properties[$prop] -or $null -eq $Counts.$prop) {
+      [void]$p.Add("${Name}: the result carries no $prop -- the sweep cannot judge it")
+    }
+  }
+  # NO unary comma: callers wrap in @() and count, and @(, $arr) nests -- Count 1 always
+  if ($p.Count) { return $p.ToArray() }
+  if ([int]$Counts.WritesUnreported -gt 0 -and $Text -match '(?<![\d,])0 writes?\b|no write sites|(?<![\d,])0 write sites') {
+    [void]$p.Add("${Name}: claims zero writes beside $($Counts.WritesUnreported) unreported write(s)") }
+  if ([int]$Counts.ReadsUnreported -gt 0 -and $Text -match '(?<![\d,])0 reads?\b|no read sites|(?<![\d,])0 read sites') {
+    [void]$p.Add("${Name}: claims zero reads beside $($Counts.ReadsUnreported) unreported read(s)") }
+  $p.ToArray()
+}
 Note 'R26 sweep (no zero claim beside an unreported population) ...'
 Step 'A-MA-R26-SWEEP' {
   $seen = 0
@@ -636,17 +657,27 @@ Step 'A-MA-R26-SWEEP' {
                    @('m15', $m15), @('m16', $m16), @('mfb', $mfb), @('mfr', $mfr), @('r26-bundle', $r26html))) {
     $o = $p[1]
     if (-not $o) { Fail 'A-MA-R26-SWEEP' "precondition: $($p[0]) produced no result, so it was never swept"; continue }
-    if ($o -is [string]) { $txt = $o; $wu = $m14.WritesUnreported; $ru = $m14.ReadsUnreported }
-    else { $txt = Dot $o; $wu = $o.WritesUnreported; $ru = $o.ReadsUnreported }
+    # the bundle html is judged with the counts of the chart it wraps (m14, FConnected)
+    if ($o -is [string]) { $txt = $o; $cnt = $m14 } else { $txt = Dot $o; $cnt = $o }
     $seen++
-    if ($wu -gt 0 -and $txt -match '(?<![\d,])0 writes?\b|no write sites|(?<![\d,])0 write sites') {
-      Fail 'A-MA-R26-SWEEP' "$($p[0]): claims zero writes beside $wu unreported write(s)" }
-    if ($ru -gt 0 -and $txt -match '\(0 reads?\)|no read sites|(?<![\d,])0 read sites') {
-      Fail 'A-MA-R26-SWEEP' "$($p[0]): claims zero reads beside $ru unreported read(s)" }
+    foreach ($msg in (Get-R26Problems $p[0] $txt $cnt)) { Fail 'A-MA-R26-SWEEP' $msg }
   }
   Chk 'A-MA-R26-SWEPT' $seen 11
+  # THE SWEEP ITSELF MUST BE ABLE TO FAIL (fix round 2). Synthetic inputs:
+  #   pre-fix  the old FNoRecursion text on an old-shape object (no counts)  -> 2 problems
+  #   old      the old text with the counts present                           -> 2 (both)
+  #   writes   "no write sites (602 reads)" beside 4 bound writes (FConnected) -> 1
+  #   reads    "(0 read(s))" beside unreported reads (the old regex missed it) -> 1 (reads)
+  #   clean    the fixed text                                                 -> 0
+  $old   = '48 bare write(s) BOUND to FNoRecursion ... no read sites (0 writes)'
+  $preFx = [pscustomobject]@{ Writes = 0; Reads = 0; BoundUnreported = 48 }
+  $cnts  = [pscustomobject]@{ WritesUnreported = 48; ReadsUnreported = 9 }
+  $syn = "$(@(Get-R26Problems 'pre' $old $preFx).Count)/$(@(Get-R26Problems 'w' $old $cnts).Count)/" +
+         "$(@(Get-R26Problems 'w1' 'no write sites (602 reads)' ([pscustomobject]@{ WritesUnreported = 4; ReadsUnreported = 0 })).Count)/" +
+         "$(@(Get-R26Problems 'r' 'x (0 read(s))' $cnts).Count)/" +
+         "$(@(Get-R26Problems 'ok' '0 member-access write(s) reported by find-callers + 48 bound write(s) find-callers does not report (0 member-access read(s) reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas)' $cnts).Count)"
+  Chk 'A-MA-R26-SWEEP-CANFAIL' $syn '2/2/1/1/0'
 }
-
 # N7 is the BUNDLER's contract, not an emitter's: the refusal must propagate AND
 # leave no directory for someone to find later and mistake for an answer.
 Note 'negative N7 (bundle cleanup) ...'
@@ -828,6 +859,8 @@ Step 'E-FX' {
   $script:fx13 = & "$SRC\Emit-Effects.ps1" -Qname 'Ap.AP_FP_Greater_Eq' -DbPath $DbCli -OutDir (Join-Path $OutDir 'fx-d12') `
                    -FactOverride @{ ef = 0; es = 'g'; ew = 'writes AP_FP_Greater_Eq (non-local)' }
   Chk 'A-FX13-WIRED'  "$($fx13.Outcome):$($fx13.D12Suspect):$($fx13.Effects):$($fx13.Summary)" 'effects:True:0:g'
+  # stamped in the RESULT, not only drawn (fix round 2); a real chart is not
+  Chk 'A-FX13-STAMP'  "$($fx13.TestChart)/$($fx7.TestChart)" 'True/False'
   $t13fx = Dot $fx13
   if ($t13fx -notmatch 'cluster_d12_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-FX13-WIRED' 'the injected D12 case does not draw the dashed D12 cluster' }
   if ($t13fx -match 'writes global state') { Fail 'A-FX13-WIRED' 'the injected own-name g was drawn as a global write' }
@@ -1659,6 +1692,7 @@ Step 'E-CO' {
   # out of the extracted set and the REAL, fresh MS1.SQL is scanned.
   $script:coqh = & "$SRC\Emit-Consumers.ps1" -Column 'FOLDERCOUNT.TABLE' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir (Join-Path $OutDir 'co-quoted') -TestHideColumn 'FOLDERCOUNT.TABLE'
   Chk 'A-CO-QUOTED-RENDER' "$($coqh.ColumnState):$($coqh.ColumnLine):$($coqh.ServerRoutines)" 'quoted:MS1.SQL:3848:2'
+  Chk 'A-CO-QUOTED-STAMP'  "$($coqh.TestChart)/$($coq.TestChart)" 'True/False'
   $tqh = Dot $coqh
   if (-not (HasLine $tqh 3848)) { Fail 'A-CO-QUOTED-RENDER' 'the quoted column is not anchored on its scanned line MS1.SQL:3848' }
   if ($tqh -notmatch [regex]::Escape('column state quoted: [inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:3848) that the SQL index did not extract as a column')) {
@@ -1677,6 +1711,8 @@ Step 'E-CO' {
   $art = & "$SRC\New-DiagramArtifact.ps1" -Question consumers -Target 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbSql -OutRoot $artRoot
   $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
   Chk 'A-CO-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '1 reading routines / 1 writing routines'
+  # the TestChart stamp reaches meta.json both ways (fix round 2): top-level and in the emitter's counts
+  Chk 'A-CO-ART-STAMP'  "$($meta.testChart)/$($meta.emitter.TestChart)" 'False/False'
 }
 
 Note 'consumers negatives and draws ...'
@@ -2007,6 +2043,7 @@ Step 'LW-N31-QUOTED' {
   $script:lwqh = & "$SRC\Emit-LandsWhere.ps1" -Field 'uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql `
                    -OutDir (Join-Path $OutDir 'lw-quoted') -TestHideColumn 'FOLDERCOUNT.TABLE'
   Chk 'A-LW-QUOTED-RENDER' "$($lwqh.ColumnState):$($lwqh.TableColumn):$($lwqh.ConvColumn):$($lwqh.ConvQuoted)" 'quoted:FOLDERCOUNT.TABLE:1991:FOLDERCOUNT.TABLE'
+  Chk 'A-LW-QUOTED-STAMP'  "$($lwqh.TestChart)/$($lw31q.TestChart)" 'True/False'
   $tlq = Dot $lwqh
   if (-not (HasLine $tlq 3848)) { Fail 'A-LW-QUOTED-RENDER' 'the quoted column is not anchored on its scanned line MS1.SQL:3848' }
   if ($tlq -notmatch '1,991 of 1,997 properties on table-named classes are extracted as a column of that table \(\+1 a QUOTED column the index does not extract\)') { Fail 'A-LW-QUOTED-RENDER' 'the convention grade does not add the quoted column' }
@@ -2084,6 +2121,47 @@ Step 'LW-ART' {
   $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
   Chk 'A-LW-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '4 server DataService rows / 1 triggers touching the column'
   if ($meta.regenerate -notmatch '-SqlDbPath ' -or $meta.regenerate -notmatch '-ServerDbPath ') { Fail 'A-LW-ART' "the regenerate command drops a DB: $($meta.regenerate)" }
+}
+# FIX ROUND 2: a -TestHideColumn run must not POISON the process-wide chains cache
+# ($global:DlFeedChains, keyed on the SQL set's .Db, which the doctored copy
+# keeps). Run in a CLEAN child process so the doctored run is the FIRST to touch
+# the cache -- the only order in which the leak shows: hide CAUSFAIL.REASON
+# (a column colREASON binds), then draw the NORMAL lands-where and feeds-from in
+# the same process. Measured on the pre-fix code: Cache 1 after the hidden run
+# and feeds-from's coverage 267/253 instead of 267/254 -- a doctored answer
+# served to a real chart. Fixed: a Doctored set neither reads nor writes the
+# cache, and the hidden run's OWN DFM side reflects the hide (not-column, 253).
+Step 'LW-CACHE' {
+  $cDir = Join-Path $OutDir 'lw-cache'
+  New-Item -ItemType Directory -Force $cDir | Out-Null
+  $childPs = Join-Path $cDir 'child.ps1'
+  [IO.File]::WriteAllText($childPs, (@'
+param([string] $SRC, [string] $DbCli, [string] $DbSrv, [string] $DbSql, [string] $Out)
+$ErrorActionPreference = 'Stop'
+# 1. the doctored run FIRST, in a process whose chains cache is empty
+$h = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir (Join-Path $Out 'h') -TestHideColumn 'CAUSFAIL.REASON'
+$cachedAfterHide = @($(if ($global:DlFeedChains) { $global:DlFeedChains.Keys })).Count
+# 2. then the NORMAL charts in the same process
+$n = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir (Join-Path $Out 'n')
+$f = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmCausFail.colREASON' -DbPath $DbCli -SqlDbPath $DbSql -OutDir (Join-Path $Out 'f')
+$o = [pscustomobject]@{
+  Hid   = "$($h.ColumnState):$($h.ClientBindings) $($h.ClientOutcomes) +$($h.ClientOther):$($h.IndexBindColumn):$($h.TestChart)"
+  Cache = $cachedAfterHide
+  Norm  = "$($n.ColumnState):$($n.ClientBindings) $($n.ClientOutcomes) +$($n.ClientOther):$($n.IndexBindColumn):$($n.TestChart)"
+  Feeds = "$($f.TableColumn):$($f.CtlTable)/$($f.CtlColumn)"
+}
+'R26CHILD:' + ($o | ConvertTo-Json -Compress)
+'@ -replace "`r?`n", "`r`n"), (New-Object Text.ASCIIEncoding))
+  $raw = @(& pwsh -NoProfile -File $childPs -SRC $SRC -DbCli $DbCli -DbSrv $DbSrv -DbSql $DbSql -Out $cDir 2>&1)
+  $line = @($raw | ForEach-Object { [string]$_ } | Where-Object { $_ -like 'R26CHILD:*' })
+  if ($line.Count -ne 1) { Fail 'A-LW-CACHE' "the child process returned no result (exit $LASTEXITCODE): $(($raw | Select-Object -Last 3) -join ' | ')" }
+  else {
+    $c = $line[0].Substring(9) | ConvertFrom-Json
+    Chk 'A-LW-CACHE-HID'   $c.Hid   'server-sql:1 not-column +6:253:True'
+    Chk 'A-LW-CACHE-KEPT'  $c.Cache 0
+    Chk 'A-LW-CACHE-NORM'  $c.Norm  'yes:1 column +6:254:False'
+    Chk 'A-LW-CACHE-FEEDS' $c.Feeds 'CAUSFAIL.REASON:267/254'
+  }
 }
 NegTest 'LW-ART-N' 'lands-where needs -ServerDbPath' 'never' {
   & "$SRC\New-DiagramArtifact.ps1" -Question lands-where -Target 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -SqlDbPath $DbSql -OutRoot (Join-Path $OutDir 'bundle-lw-n') }
