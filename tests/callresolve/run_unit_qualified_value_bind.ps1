@@ -15,8 +15,10 @@
   member-access ref whose receiver did not type, resolve the receiver to ONE
   unit's file that nothing nearer shadows, take the unit-level var / const
   declarations of that name in that file (interface section, or either section
-  when the unit IS the referencing file), and bind ValueOnly when exactly one
-  survives.
+  when the unit IS the referencing file), and bind when exactly one survives:
+  refs.symbol_id plus a member_accesses row carrying the read/write mode, no
+  call edge (ruling R15 -- NOT ValueOnly, which recorded identity only and made
+  every write read as a read).
 
   WHAT THIS GUARD PINS
     check 1  MARK-*: a var read, a const read, a var write and a single-segment
@@ -33,10 +35,11 @@
              `find-callers --resolved` reports MARK-WRITE / MARK-SIMPLE-UNIT as
              `write`, MARK-READ / MARK-CONST as `read`
     check 4  THE CALLS LOG counts what it claims to (ruling R13). Rung 3d's
-             bindings are ValueOnly writes like rung 3c's enum values, and the
-             store used to count EVERY ValueOnly write as an enum "qualified
-             bound (Shape B)" -- so a unit var inflated the enum count and the
-             enum reconciliation printed a false WARNING. Pinned: the enum line
+             bindings were first written ValueOnly like rung 3c's enum values
+             (since R15 they take the member_accesses path), and the store
+             counted EVERY ValueOnly write as an enum "qualified bound (Shape
+             B)" -- so a unit var inflated the enum count and the enum
+             reconciliation printed a false WARNING. Pinned: the enum line
              reports 0 qualified (this fixture has no enum), its reconciliation
              line is NOT the WARNING form, and a separate `unit-values:` line
              reports the MARK-* count with resolver and store agreeing.

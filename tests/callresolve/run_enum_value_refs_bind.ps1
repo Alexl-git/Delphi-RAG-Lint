@@ -271,7 +271,6 @@
   here reads or writes the worktree self-index or any corpus database.
 #>
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
-try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check([string]$n, [bool]$ok, [string]$d = '') {
