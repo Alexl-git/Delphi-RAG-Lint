@@ -3704,17 +3704,18 @@ begin
     FConn.ExecSQL('PRAGMA temp_store = MEMORY'   );
     Exit;
   end;
-  FConn.Params.Values['LockingMode']:= 'Normal';
-  FConn.Params.Values['JournalMode']:= 'WAL';
-  FConn.Params.Values['Synchronous']:= 'Normal';
-  { Give DDL ops (e.g. DROP TRIGGER) up to 5 s to acquire the exclusive WAL
-    lock when a concurrent LSP reader holds the DB. Without this, any schema
-    change races against the LSP server and silently fails (SQLITE_BUSY).
-    Armed BEFORE the connect so FireDAC's connect-time pragmas wait too; a
-    `PRAGMA busy_timeout` after it came too late for them (see ArmBusyTimeout). }
-  ArmBusyTimeout(FConn);
-  FConn.LoginPrompt:= False;
-  FConn.Connected  := True;
+  { THE ONE WRITER OPEN (2026-09-24, D24): ConnectWriter, shared with
+    `import-log` and `migrate-dbs`, which used to open with FireDAC's defaults
+    and convert a WAL index to a rollback journal. Normal locking, synchronous
+    NORMAL, and the journal mode the file already has -- WAL for a new file.
+    That last part is a change: this path used to ask for WAL unconditionally,
+    so it converted an existing rollback-journal index; see ConnectWriter.
+    The busy timeout gives DDL ops (e.g. DROP TRIGGER) time to acquire the
+    exclusive WAL lock when a concurrent LSP reader holds the DB -- without it
+    a schema change races the LSP server and fails SQLITE_BUSY -- and it is
+    armed BEFORE the connect so FireDAC's connect-time pragmas wait too (see
+    ArmBusyTimeout). }
+  ConnectWriter(FConn, ADbPath);
   FConn.ExecSQL('PRAGMA foreign_keys = ON');
   { v0.42 perf: per-file insert throughput collapses as the DB grows past ~1 GB
     (full C:\Projects scan ran at 0.55 s/file vs ~0.04 s/file historically). The

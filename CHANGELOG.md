@@ -32,6 +32,25 @@ breaking changes** until v1.0.
   connections used `SharedCache=False`: FireDAC's default shared cache made same-process
   connections share one pager and gave "database schema is locked" / a header rewrite that no
   cross-process reader would see.
+- **D24 -- one writer open, and five read verbs stop writing the index.** New
+  `DRagLint.Storage.FileMembership.ConnectWriter` (Normal locking, synchronous NORMAL, the journal
+  mode the header already has -- WAL for a new file -- and the busy timeout armed before the
+  connect) is now the only way an index is opened for writing: `TSQLiteSymbolStore.Connect`'s write
+  path, `import-log`, and `migrate-dbs`'s checkpoint probe. `import-log` and `migrate-dbs --apply`
+  used FireDAC's defaults (`LockingMode=Exclusive`, `journal_mode = DELETE`) and turned a WAL index
+  into a rollback journal (header byte 18: 2 -> 1, measured on a copy of the self index and on the
+  migrate fixture); both now keep it WAL. `migrate-dbs`'s post-move row count and its
+  `DbLooksHealthy` reconcile probe open with `ConnectReadOnly`. `lint-all`, `lint-project`,
+  `rename --kind symbol` (and the legacy `--qname` form), `safe-delete` and `exceptions-sync` opened
+  the store writable and ran `Migrate`, whose stamp rewrote pages 2-3 of a copy of the self index on
+  every `lint-all` (md5 moved; every table hashed identical); they now use `OpenReadOnlyStore`, so a
+  stale schema gets the actionable message and exit 2 instead of a silent migration.
+  `reconcile-project` and the genuine writers (`index`, `refresh-findings`, `compile-check`,
+  `fb-snapshot`, `purge-locals`) stay writable. BEHAVIOUR CHANGE: because the writer names the
+  header's mode, an existing rollback-journal index now STAYS a rollback journal when indexed; before
+  this the store's writer converted it to WAL. Guard: `tests\autotest\run_readonly_verbs.ps1`
+  (md5 + trigger count + byte 18 per verb, `import-log` and `migrate-dbs` stay WAL, a real `index`
+  run as the positive control); `run_migrate_site_guard.ps1`'s exemption list loses the five verbs.
 
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
 

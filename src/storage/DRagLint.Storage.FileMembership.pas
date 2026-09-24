@@ -48,6 +48,10 @@ const
 /// the connect-time pragmas included; statements inherit it from the
 /// connection. Pinned by tests\autotest\run_readonly_concurrency_guard.ps1.
 /// Thread-safe: touches only AConn.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.FileMembership.ConnectReadOnly (DRagLint.Storage.FileMembership.pas), DRagLint.Storage.FileMembership.ConnectWriter (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
 
@@ -91,8 +95,53 @@ procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT
 /// Does not check the schema version: a caller that needs the current schema
 /// asks for it (TSQLiteSymbolStore.IsSchemaCurrent) and refuses a stale one.
 /// Thread-safe: touches only AConn.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas) (+8 more)</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout, DRagLint.Storage.FileMembership.HeaderSaysWal</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
+  ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
+
+/// <summary>Connects AConn to the SQLite file ADbPath as a WRITER: the busy
+/// timeout armed before the connect, normal (not exclusive) locking,
+/// synchronous NORMAL, and the journal mode the file already has -- WAL for a
+/// file that does not exist yet or has no SQLite header.</summary>
+/// <param name="AConn">An unconnected FireDAC connection; the caller owns it and
+/// frees it. Its DriverName, Params and UpdateOptions.LockWait are overwritten.</param>
+/// <param name="ADbPath">Full path to the .sqlite file. A missing file is
+/// CREATED (FireDAC's default open mode), in WAL mode.</param>
+/// <param name="ABusyTimeoutMs">Lock wait for every statement, see ArmBusyTimeout.</param>
+/// <remarks>
+/// RAISES nothing of its own; FireDAC's ESQLiteNativeException PROPAGATES when
+/// the file cannot be opened or a lock outlasts ABusyTimeoutMs.
+/// The ONE way drag-lint opens an index for writing (2026-09-24, D24):
+/// TSQLiteSymbolStore.Connect's write path, `import-log` and `migrate-dbs`'s
+/// checkpoint probe all come through here. Before it, the last two opened a raw
+/// TFDConnection with FireDAC's DEFAULT params -- LockingMode=Exclusive and
+/// `journal_mode = DELETE` -- which converted a WAL index to a rollback journal
+/// (header byte 18: 2 -> 1) and held it exclusively for the whole run. Pinned
+/// by tests\autotest\run_readonly_verbs.ps1.
+/// WHY THE HEADER'S MODE AND NOT A FIXED 'WAL'. FireDAC runs `PRAGMA
+/// journal_mode = &lt;param&gt;` on every connect; naming the mode the file
+/// already has makes that a no-op, so a writer never converts a database it
+/// was only asked to write rows into, and never needs the exclusive access a
+/// mode change takes (a conversion under a live reader fails SQLITE_BUSY). A
+/// NEW file has no header yet, so it gets WAL, the mode every drag-lint index
+/// is created in. The consequence to know: a rollback-journal index stays one
+/// under writes too; before 2026-09-24 the store's writer converted it to WAL.
+/// Thread-safe: touches only AConn.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout, DRagLint.Storage.FileMembership.HeaderSaysWal</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string;
   ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
 
 /// <summary>True when ADbPath is a readable index whose files table holds
@@ -160,7 +209,7 @@ function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
 /// LSP server use THIS reading of the header rather than a second copy of it.
 /// Thread-safe: no shared state.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Storage.FileMembership.ConnectReadOnly (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Called from: DRagLint.Storage.FileMembership.ConnectReadOnly (DRagLint.Storage.FileMembership.pas), DRagLint.Storage.FileMembership.ConnectWriter (DRagLint.Storage.FileMembership.pas)</para>
 /// <para>Returns: False; (F.Read(Hdr, SizeOf(Hdr)) = SizeOf(Hdr))</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <!-- drag-lint:auto END -->
@@ -236,6 +285,23 @@ begin
   AConn.LoginPrompt:= False;
   AConn.Connected  := True;
   AConn.ExecSQL('PRAGMA query_only = ON'); { reject every write on this handle }
+end; // procedure
+
+procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string; ABusyTimeoutMs: Integer);
+var
+  HasHeader: Boolean;
+begin
+  { A file that is missing, or too short to carry the write-version byte, is
+    about to be CREATED by this connect: it gets WAL. Otherwise the header rules. }
+  HasHeader:= TFile.Exists(ADbPath) and (TFile.GetSize(ADbPath) > SQLITE_HDR_WRITE_VERSION_OFFSET);
+  AConn.DriverName:= 'SQLite';
+  AConn.Params.Values['Database'   ]:= ADbPath;
+  AConn.Params.Values['LockingMode']:= 'Normal';
+  AConn.Params.Values['JournalMode']:= if (not HasHeader) or HeaderSaysWal(ADbPath) then 'WAL' else 'Delete';
+  AConn.Params.Values['Synchronous']:= 'Normal';
+  ArmBusyTimeout(AConn, ABusyTimeoutMs);
+  AConn.LoginPrompt:= False;
+  AConn.Connected  := True;
 end; // procedure
 
 const

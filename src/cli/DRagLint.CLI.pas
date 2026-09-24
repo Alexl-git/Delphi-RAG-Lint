@@ -8050,10 +8050,9 @@ begin
   Q    := TFDQuery     .Create(nil);
   FileQ:= TFDQuery     .Create(nil);
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= AArgs.DbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    { A writer, so ConnectWriter: never FireDAC's Exclusive/Delete defaults,
+      which turned a WAL index into a rollback journal (byte 18: 2 -> 1). }
+    ConnectWriter(Conn, AArgs.DbPath);
     Q   .Connection := Conn;
     Q.Sql.Text:= 'INSERT INTO compiler_findings(file_id, raw_path, code, severity, ' + '  line_no, col_no, message, imported_at) ' +
     'VALUES (:fid, :rp, :code, :sev, :ln, :cn, :msg, :t)';
@@ -16693,7 +16692,11 @@ var
 begin
   if AArgs.Name   = '' then begin Writeln('ERROR: safe-delete needs --name <QualifiedName>'); Exit(2); end;
   if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'                           ); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
+  { READ-ONLY (D24): safe-delete edits SOURCE, never the index; a writable open
+    plus Migrate rewrote the index's stamp pages on every dry run. }
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(2);
   Edits:= TSafeDeleteRefactoring.Build(Store, AArgs.Name, Reason);
   if Reason <> '' then begin Writeln('REFUSED: ' + Reason); Exit(2); end;
   if Length(Edits) = 0 then begin Writeln('No edit computed.'); Exit(1); end;
@@ -17213,9 +17216,12 @@ begin
     Exit(0);
   end;
 
-  Store:= TSQLiteSymbolStore.Create(ProjectDb);
-  Store.Migrate;
-  NoteIndexFreshnessOnce(Store, ProjectDb);
+  { READ-ONLY (D24): exceptions-sync writes the exceptions UNIT, never the
+    index. OpenReadOnlyStore notes freshness itself and replaces the silent
+    Migrate with the actionable stale-schema message. }
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(ProjectDb, RoOk);
+  if not RoOk then Exit(2);
   var LibDb: string:= ResolveLibraryDb(AArgs);
   var LibWhy: string;
   LibStore:= OpenLibraryStoreIfCurrent(LibDb, LibWhy); { nil on a stale schema -- see the helper }
@@ -17635,10 +17641,13 @@ begin
 
   { Open project store }
   Prof.Init('lint-all ' + ExtractFileName(ProjectDb));
-  Prof.Phase('open+migrate store');
-  Store:= TSQLiteSymbolStore.Create(ProjectDb);
-  Store.Migrate;
-  NoteIndexFreshnessOnce(Store, ProjectDb);
+  Prof.Phase('open store');
+  { READ-ONLY (D24): lint-all reads the index and writes source only (--fix).
+    The writable open plus Migrate rewrote the stamp pages on every run --
+    measured on a copy of the self index: md5 moved, zero logical change. }
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(ProjectDb, RoOk);
+  if not RoOk then Exit(2);
   { The library store, opened ONCE per run (it is ~2.2 GB) and consulted for
     symbols a project index cannot contain -- today, whether a constructed type
     descends from TComponent, which is how object-leak tells an owned VCL
@@ -18480,9 +18489,10 @@ var
   DefDisabled: TArray<string>       ;
 begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath])); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
-  NoteIndexFreshnessOnce(Store, AArgs.DbPath);
+  { READ-ONLY (D24), for the reason on lint-all's open. }
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then Exit(2);
   { The project-level rules that ship OFF by default -- repeated-type-switch
     (v0.80 review fix: medium name-based FP, see
     .superpowers/sdd/v080-task-4-report.md) and missing-doc (ADF Task 13: a
@@ -18656,8 +18666,10 @@ begin
       begin Writeln('ERROR: --to required'); Exit(2); end;
       if AArgs.DbPath = '' then
       begin Writeln('ERROR: --db required for --kind symbol'); Exit(2); end;
-      var KStore: ISymbolStore:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-      KStore.Migrate;
+      { READ-ONLY (D24): rename edits source, never the index. }
+      var KOk: Boolean;
+      var KStore: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, KOk);
+      if not KOk then Exit(2);
       var Reason: string:= TRenameRefactoring.ConflictReason(KStore, QN, AArgs.RenameTo);
       if Reason <> '' then
       begin Writeln('ERROR: cannot rename -- ' + Reason); Exit(2); end;
@@ -18703,8 +18715,9 @@ begin
     Exit(2);
   end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(1); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
-  Store.Migrate;
+  var RoOk: Boolean;
+  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk); { READ-ONLY (D24): edits source, never the index }
+  if not RoOk then Exit(2);
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
   if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
 
@@ -27282,10 +27295,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   try
     try
-      Conn.DriverName:= 'SQLite';
-      Conn.Params.Values['Database']:= APath;
-      Conn.LoginPrompt:= False;
-      Conn.Open;
+      ConnectReadOnly(Conn, APath); { a reader: never FireDAC's Exclusive/Delete defaults }
       Check:= Conn.ExecSQLScalar('PRAGMA quick_check');
       Rows := Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
       Result:= SameText(Check, 'ok') and (Rows > 0);
@@ -27497,10 +27507,9 @@ begin
           longer gate whether the manifest gets fixed at all. }
         Conn:= TFDConnection.Create(nil);
         try
-          Conn.DriverName:= 'SQLite';
-          Conn.Params.Values['Database']:= Src;
-          Conn.LoginPrompt:= False;
-          Conn.Open;
+          { A writer (the checkpoint), so ConnectWriter: FireDAC's defaults
+            converted the index to a rollback journal before it was moved. }
+          ConnectWriter(Conn, Src);
           Conn.ExecSQL('PRAGMA wal_checkpoint(TRUNCATE)');
           RowsBefore:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
         finally
@@ -27531,10 +27540,7 @@ begin
           what stops a retry from treating this failure as fine. }
         Conn:= TFDConnection.Create(nil);
         try
-          Conn.DriverName:= 'SQLite';
-          Conn.Params.Values['Database']:= Dst;
-          Conn.LoginPrompt:= False;
-          Conn.Open;
+          ConnectReadOnly(Conn, Dst); { a reader: never FireDAC's Exclusive/Delete defaults }
           RowsAfter:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
         finally
           Conn.Close; Conn.Free;
