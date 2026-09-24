@@ -15,6 +15,8 @@ function NextKey(A: Integer): Integer;
 function Pick: Integer; overload;
 function Pick(A: Integer): Integer; overload;
 procedure RegisterGen(AGen: TIdFunc);
+procedure RegisterQ(AGen: System.SysUtils.TFunc<Integer>);
+procedure RegisterS(AGen: Func<Integer>);
 
 var
   GNext: Integer;
@@ -43,6 +45,20 @@ begin
 end;
 
 procedure RegisterGen(AGen: TIdFunc);
+begin
+  if Assigned(AGen) then
+    GNext := 0;
+end;
+
+{ D16b: the zero-argument function types the project index never holds --
+  a UNIT-QUALIFIED System.SysUtils.TFunc<T> and Spring4D's Func<T>. }
+procedure RegisterQ(AGen: System.SysUtils.TFunc<Integer>);
+begin
+  if Assigned(AGen) then
+    GNext := 0;
+end;
+
+procedure RegisterS(AGen: Func<Integer>);
 begin
   if Assigned(AGen) then
     GNext := 0;

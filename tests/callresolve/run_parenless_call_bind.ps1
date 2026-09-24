@@ -20,7 +20,10 @@
     check 2  POS-*: six expression-position parenless calls each own exactly
              ONE certain call_edges row to the right routine, and refs.symbol_id
     check 3  POS-STMT: still exactly one edge (no twin from the new stream)
-    check 4  NEG-*: eleven look-alikes stay unbound -- no edge, symbol_id NULL
+    check 4  NEG-*: fourteen look-alikes are not bound as a CALL of the name
+             (1.8.0: three of them now bind to the member they name, 4b;
+             D16b/c added a split argument list and two library spellings
+             of the zero-argument function type)
     check 5  the calls-stage `parenless:` log line, every counter pinned
     check 6  SCOPED re-index: a new shadowing local UNBINDS the Driver sites
              (edges gone, symbol_id NULL) and leaves the class sites alone
@@ -71,14 +74,16 @@ function Sql([string]$Query) {
   return ,@($out)
 }
 function LineOf([string]$Marker) {
-  $m = @(Select-String -LiteralPath $use -SimpleMatch -Pattern "// $Marker")
+  # Anchored at end of line: POS-ARG is a prefix of POS-ARG-SPLIT.
+  $m = @(Select-String -LiteralPath $use -Pattern ("// " + [regex]::Escape($Marker) + "\s*$"))
   if ($m.Count -ne 1) { throw "marker '$Marker' found $($m.Count) times in the fixture" }
   return [int]$m[0].LineNumber
 }
 # Every ref named ANAME on line ALINE of the use unit, with its edge (if any).
 function RefsAt([int]$Line, [string]$Name) {
-  return Sql ("SELECT r.id, r.kind, r.symbol_id, ce.target_symbol_id AS tid, ce.confidence AS conf, " +
+  return Sql ("SELECT r.id, r.kind, r.symbol_id, s.kind AS sk, s.qualified_name AS sq, ce.target_symbol_id AS tid, ce.confidence AS conf, " +
               "t.name AS tname, t.qualified_name AS tq FROM refs r JOIN files f ON f.id = r.file_id " +
+              "LEFT JOIN symbols s ON s.id = r.symbol_id " +
               "LEFT JOIN call_edges ce ON ce.ref_id = r.id LEFT JOIN symbols t ON t.id = ce.target_symbol_id " +
               "WHERE f.path LIKE '%uParenlessUse.pas' AND r.start_line = $Line AND r.name_text = '$Name'")
 }
@@ -98,6 +103,7 @@ try {
     @{ M = 'POS-ASSERT'; N = 'NextId'; Q = 'uParenlessLib.NextId' },
     @{ M = 'POS-ASSIGN'; N = 'NextId'; Q = 'uParenlessLib.NextId' },
     @{ M = 'POS-ARG';    N = 'NextId'; Q = 'uParenlessLib.NextId' },
+    @{ M = 'POS-ARG-SPLIT'; N = 'NextId'; Q = 'uParenlessLib.NextId' },
     @{ M = 'POS-NESTED'; N = 'Local';  Q = 'Local' },
     @{ M = 'POS-METHOD'; N = 'Tick';   Q = 'TCounter.Tick' },
     @{ M = 'POS-SELF';   N = 'Tick';   Q = 'TCounter.Tick' })
@@ -121,28 +127,52 @@ try {
     @{ M = 'NEG-PROCVAR';       N = 'NextId' },
     @{ M = 'NEG-ADDR';          N = 'NextId' },
     @{ M = 'NEG-PROCARG';       N = 'NextId' },
+    @{ M = 'NEG-PROCARG-SPLIT'; N = 'NextId' },
+    @{ M = 'NEG-PROCARG-QUAL';  N = 'NextId' },
+    @{ M = 'NEG-PROCARG-FUNC';  N = 'NextId' },
     @{ M = 'NEG-PARAMS';        N = 'NextKey' },
     @{ M = 'NEG-OVERLOAD';      N = 'Pick' },
     @{ M = 'NEG-WITH';          N = 'NextId' },
     @{ M = 'NEG-FIELD';         N = 'NextId' },
     @{ M = 'NEG-PROPGETTER';    N = 'NextId' },
     @{ M = 'NEG-PROPERTY';      N = 'Total' })
+  # "Not a call of N": no edge TO a routine named N, and refs.symbol_id not on a
+  # routine. Since 1.8.0 three of these reads DO bind -- to the member they
+  # name (check 4b) -- so "no binding at all" is no longer the negative.
   foreach ($n in $neg) {
     $rows = @(RefsAt (LineOf $n.M) $n.N)
-    $bound = @($rows | Where-Object { ($null -ne $_.tid) -or ($null -ne $_.symbol_id) })
-    Check ("check 4  {0}: {1} stays unbound" -f $n.M, $n.N) (($rows.Count -ge 1) -and ($bound.Count -eq 0)) "refs=$($rows.Count) bound=$($bound.Count)"
+    $bad = @($rows | Where-Object { ($_.tname -eq $n.N) -or (($_.sk -eq 'function' -or $_.sk -eq 'method') -and ([string]$_.sq).EndsWith('.' + $n.N)) })
+    Check ("check 4  {0}: {1} is not bound as a call of {1}" -f $n.M, $n.N) (($rows.Count -ge 1) -and ($bad.Count -eq 0)) "refs=$($rows.Count) boundAsCall=$($bad.Count)"
   }
 
+  # --- check 4b: the member these reads DO name (resolver 1.8.0) -------------------
+  # NEG-WITH reads the with target's FIELD, NEG-PROPERTY / NEG-PROPGETTER the
+  # enclosing class's PROPERTY (D14, D16a). NEG-FIELD is an own-class FIELD,
+  # left unbound by design.
+  $mem = @(
+    @{ M = 'NEG-WITH';       N = 'NextId'; Q = 'uParenlessUse.THolder.NextId' },
+    @{ M = 'NEG-PROPERTY';   N = 'Total';  Q = 'uParenlessUse.TCounter.Total' },
+    @{ M = 'NEG-PROPGETTER'; N = 'NextId'; Q = 'uParenlessUse.TPropHolder.NextId' })
+  foreach ($x in $mem) {
+    $rows = @(RefsAt (LineOf $x.M) $x.N | Where-Object { $_.kind -eq 'read' })
+    Check ("check 4b {0}: {1} binds the member {2}" -f $x.M, $x.N, $x.Q) (($rows.Count -eq 1) -and ($rows[0].sq -eq $x.Q)) "sq=$($rows[0].sq)"
+  }
+  $fld = @(RefsAt (LineOf 'NEG-FIELD') 'NextId' | Where-Object { $_.kind -eq 'read' -and $null -ne $_.symbol_id })
+  Check 'check 4b NEG-FIELD: an own-class FIELD read stays unbound' ($fld.Count -eq 0) "bound=$($fld.Count)"
+
   # --- check 5: the counters ------------------------------------------------------
-  # 6 bound; declines: shadowed 4 (local, proc-typed local, field, property),
-  # proc-value 3 (procedural var, @, procedural parameter), not-callable 2
-  # (a function needing an argument, an overload set with such a member),
-  # with-scope 1. 16 candidates in all.
+  # 7 bound; declines: shadowed 5 (local, proc-typed local, field, property, and
+  # -- since 1.8.0 -- the with target's FIELD NextId, which the with scope now
+  # identifies instead of declining on any `with`), proc-value 6 (procedural
+  # var, @, procedural parameter, and the D16b/D16c three: a split argument
+  # list, a qualified System.SysUtils.TFunc<T>, a Spring Func<T>), not-callable
+  # 2 (a function needing an argument, an overload set with such a member),
+  # with-scope 0. 20 candidates in all.
   $m = [regex]::Match($log1, 'parenless: (\d+) of (\d+) bare read\(s\) bound as call\(s\); declined not-found (\d+), shadowed (\d+), not-callable (\d+), proc-value (\d+), with-scope (\d+), qualified (\d+), unreadable (\d+)')
   if ($m.Success) {
     $v = @(1..9 | ForEach-Object { [int]$m.Groups[$_].Value })
-    Check 'check 5  parenless log line: bound 6 of 16; not-found 0, shadowed 4, not-callable 2, proc-value 3, with-scope 1, qualified 0, unreadable 0' `
-      (($v[0] -eq 6) -and ($v[1] -eq 16) -and ($v[2] -eq 0) -and ($v[3] -eq 4) -and ($v[4] -eq 2) -and ($v[5] -eq 3) -and ($v[6] -eq 1) -and ($v[7] -eq 0) -and ($v[8] -eq 0)) `
+    Check 'check 5  parenless log line: bound 7 of 20; not-found 0, shadowed 5, not-callable 2, proc-value 6, with-scope 0, qualified 0, unreadable 0' `
+      (($v[0] -eq 7) -and ($v[1] -eq 20) -and ($v[2] -eq 0) -and ($v[3] -eq 5) -and ($v[4] -eq 2) -and ($v[5] -eq 6) -and ($v[6] -eq 0) -and ($v[7] -eq 0) -and ($v[8] -eq 0)) `
       ($m.Value)
   } else {
     Check 'check 5  parenless log line present' $false 'no `parenless:` line in the index output'

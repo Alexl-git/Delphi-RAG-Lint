@@ -69,8 +69,150 @@ type
     Unreadable : Int64;
   end;
 
-  /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare
-  /// once (Create builds the name-candidate + file-scope maps from the whole DB),
+  /// <summary>2026-09-23 (with scope, resolver 1.8.0-alpha): how a `with`
+  /// entity expression names its target, as far as the resolver types it.</summary>
+  /// <remarks>whName is a bare identifier followed by zero or more member
+  /// steps (`A`, `A.B.C`); whSelf is `Self`; whTypeCast is `X as T` or `T(X)`;
+  /// whCreate is `T.Create(...)`; whUnknown is anything else, and a whUnknown
+  /// target can never be typed, so every bare name under it is undecided.</remarks>
+  TWithHeadKind = (whUnknown, whName, whSelf, whTypeCast, whCreate);
+
+  /// <summary>One entity of a `with` statement: its source span and the parsed
+  /// shape its type is derived from, plus the lazily computed type.</summary>
+  /// <remarks>Positions are 1-based line/column in the same coordinates the
+  /// index stores refs in (UTF-8 bytes, lone CR normalised). State is 0 while
+  /// untyped, 1 while being typed (a cycle guard) and 2 once TypeId is final;
+  /// TypeId 0 means the target could not be typed.</remarks>
+  TWithEntity = record
+    /// <summary>First line of the entity expression.</summary>
+    Line    : Integer;
+    /// <summary>First column of the entity expression.</summary>
+    Col     : Integer;
+    /// <summary>Line just past the entity expression's end.</summary>
+    EndLine : Integer;
+    /// <summary>Column just past the entity expression's end (exclusive).</summary>
+    EndCol  : Integer;
+    /// <summary>The shape of the expression.</summary>
+    HeadKind: TWithHeadKind;
+    /// <summary>The head identifier, or the type name of a cast / Create.</summary>
+    Head    : string;
+    /// <summary>Member names applied after the head, in source order.</summary>
+    Steps   : TArray<string>;
+    /// <summary>0 untyped, 1 typing in progress, 2 typed.</summary>
+    State   : Integer;
+    /// <summary>The target's class/record/interface symbol id, 0 when unknown.</summary>
+    TypeId  : Int64;
+  end;
+
+  /// <summary>One `with` statement of a source file: the span its body covers
+  /// and its entities in source order (`with A, B do` is A then B).</summary>
+  TWithStatement = record
+    /// <summary>First line of the body statement.</summary>
+    BodyLine   : Integer;
+    /// <summary>First column of the body statement.</summary>
+    BodyCol    : Integer;
+    /// <summary>Line just past the body's end.</summary>
+    BodyEndLine: Integer;
+    /// <summary>Column just past the body's end (exclusive).</summary>
+    BodyEndCol : Integer;
+    /// <summary>The entities, in source order.</summary>
+    Entities   : TArray<TWithEntity>;
+  end;
+
+  /// <summary>What the `with` scope says about a bare name at one position.</summary>
+  /// <remarks>wvNone: no enclosing with target can supply the name -- ordinary
+  /// scoping applies. wvMember: the innermost target that declares it is known.
+  /// wvUndecided: a target at or inside the winning one could not be typed, or
+  /// its surface is incomplete, so the name may be its member; bind nothing.</remarks>
+  TWithVerdict = (wvNone, wvMember, wvUndecided);
+
+  /// <summary>What a with target's type declares under one name.</summary>
+  /// <remarks>wmValue: a property or field. wmRoutine: a method (own, inherited
+  /// or from a helper). wmOther: a class const/var or nested type -- a value no
+  /// stream binds. wmUnknown: the answer is not knowable (a TObject/IInterface
+  /// member the index does not hold, a member invisible from the ref's unit, or
+  /// a value and a routine on one level).</remarks>
+  TWithMemberKind = (wmNone, wmValue, wmRoutine, wmOther, wmUnknown);
+
+  /// <summary>2026-09-23 (resolver 1.8.0-alpha): per-run counters of the
+  /// with scope, printed on the calls stage's `with-scope:` ResolveLog line.</summary>
+  /// <remarks>The scope only ever REMOVES or RETARGETS a binding the ordinary
+  /// rungs would have made, so its declines are as important to see as its
+  /// bindings. Files counts the sources parsed for their with statements.</remarks>
+  TWithScopeStats = record
+    /// <summary>Bare call refs bound to a with target's method.</summary>
+    CallBound       : Int64;
+    /// <summary>Bare call refs left unbound because the with scope was undecided
+    /// or named a non-routine / ambiguous member.</summary>
+    CallDeclined    : Int64;
+    /// <summary>Receivers typed through a with target's member.</summary>
+    ReceiverTyped   : Int64;
+    /// <summary>Receivers left untyped because the with scope was undecided.</summary>
+    ReceiverDeclined: Int64;
+    /// <summary>Source files parsed for their with statements.</summary>
+    Files           : Int64;
+    /// <summary>With statements found in them.</summary>
+    Statements      : Int64;
+  end;
+
+  /// <summary>2026-09-23 (resolver 1.8.0-alpha, D14 + D16a): per-run counters of
+  /// the bare member-read pass, printed on the `member-reads:` ResolveLog line.</summary>
+  /// <remarks>Bound + every decline = the refs the pass was asked about.</remarks>
+  TMemberReadStats = record
+    /// <summary>Bound to a with target's property or field.</summary>
+    BoundWith : Int64;
+    /// <summary>Bound to a member of the enclosing class: a property read bare
+    /// (D16a), or a property or field read as `Self.X`.</summary>
+    BoundOwn  : Int64;
+    /// <summary>Declined: the with scope was undecided.</summary>
+    WithScope : Int64;
+    /// <summary>Declined: the with member is a routine or a const, not a property/field.</summary>
+    NotMember : Int64;
+    /// <summary>Declined: a local, parameter or nested routine shadows the name.</summary>
+    Shadowed  : Int64;
+    /// <summary>Declined: the name is a FIELD of the enclosing class -- left unbound by design.</summary>
+    Field     : Int64;
+    /// <summary>Declined: no property of the name in scope.</summary>
+    NotFound  : Int64;
+    /// <summary>Declined: a receiver other than Self qualifies the name.</summary>
+    Qualified : Int64;
+    /// <summary>Declined: the source line could not be read, or the file is stale.</summary>
+    Unreadable: Int64;
+  end;
+
+  /// <summary>2026-09-23 (resolver 1.8.0-alpha): the with scope's state for one
+  /// resolver run, grouped so the resolver's own field list stays readable.</summary>
+  /// <remarks>Owned by TCallResolver: created in its constructor, freed in its
+  /// destructor. Not thread-safe, like the resolver.</remarks>
+  TWithScopeState = record
+    /// <summary>Source file id -> its `with` statements, parsed once per file
+    /// per run. A file whose text holds no `with` keyword maps to an empty
+    /// array and is never parsed. The arrays are shared references, so an
+    /// entity's lazily computed type is cached in place.</summary>
+    Statements     : TDictionary<Int64, TArray<TWithStatement>>;
+    /// <summary>Type symbol id -> True when every ancestor of it is in this
+    /// index (or is TObject / IInterface), so a name missing from its surface
+    /// is really missing. The same target is asked about many names.</summary>
+    SurfaceComplete: TDictionary<Int64, Boolean>;
+    /// <summary>The run's counters.</summary>
+    Stats          : TWithScopeStats;
+  end;
+
+  /// <summary>2026-09-23 (resolver 1.8.0-alpha): symbol rows and transitive
+  /// ancestor lists, read from the store once per run.</summary>
+  /// <remarks>Sound because the calls stage writes call_edges, refs.symbol_id
+  /// and member_accesses and never a symbol or an ancestry row, so neither can
+  /// change under the pass. The with scope and the member-read stream consult
+  /// both per ref; uncached, they took the stage on ORM3 CLIENT from 276 s to
+  /// 474 s -- cached, it runs in 69 s. Owned by TCallResolver.</remarks>
+  TResolverRowCache = record
+    /// <summary>Symbol id -> its row (Default(TSymbol) when absent).</summary>
+    Symbols  : TDictionary<Int64, TSymbol>;
+    /// <summary>Type symbol id -> GetTransitiveAncestors' answer.</summary>
+    Ancestors: TDictionary<Int64, TArray<TTypeAncestor>>;
+  end;
+
+  /// <summary>v14 (D5): receiver-typing + method-chain call resolver. Prepare  /// once (Create builds the name-candidate + file-scope maps from the whole DB),
   /// then call ResolveOne per call-site ref.</summary>
   /// <remarks>
   /// Not thread-safe; single owning thread only. Holds the ISymbolStore
@@ -122,6 +264,14 @@ type
     // (or which could not be read at all). Populated by LinesOf, one probe per
     // file per run. See LinesOf for why this exists.
     FStaleFiles : TDictionary<Int64, Boolean>;
+    // 2026-09-23 (resolver 1.8.0-alpha): the with scope's per-run state -- see
+    // TWithScopeState.
+    FWith           : TWithScopeState;
+    // Per-run counters of the bare member-read pass.
+    FMemberReadStats: TMemberReadStats;
+    // 1.8.0: symbol rows and ancestor lists, read once per run -- see
+    // TResolverRowCache.
+    FRows           : TResolverRowCache;
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -664,15 +814,125 @@ type
     /// 'shadowed' or 'not-found'.</returns>
     function FindParenlessCandidates(const ARef: TReference; const AReceiver: string;
       AMatches: TList<TSymbol>): string;
-    /// <summary>True when the enclosing routine's text, from its first line up
-    /// to the ref, contains the keyword `with` outside comments and strings.</summary>
-    /// <param name="ARef">The candidate read ref.</param>
-    /// <param name="ALines">The ref's source file.</param>
-    /// <returns>True when a `with` may supply the name.</returns>
-    /// <remarks>Deliberately coarse: any `with` earlier in the routine declines,
-    /// whether or not its statement encloses the ref. A false decline loses an
-    /// edge; a missed `with` would write a wrong one.</remarks>
-    function EnclosingBodyUsesWith(const ARef: TReference; ALines: TStringList): Boolean;
+    /// <summary>The symbol row AId, read from the store once per run.</summary>
+    /// <param name="AId">A symbols.id of the primary store.</param>
+    /// <returns>The row; Default(TSymbol) when there is none.</returns>
+    function SymbolById(AId: Int64): TSymbol;
+    /// <summary>The transitive ancestors of ATypeId, read from the store once per run.</summary>
+    /// <param name="ATypeId">A type symbol id of the primary store.</param>
+    /// <returns>The store's GetTransitiveAncestors answer, unchanged.</returns>
+    function AncestorsOf(ATypeId: Int64): TArray<TTypeAncestor>;
+
+    { ---- 2026-09-23: the `with` scope (resolver 1.8.0-alpha, D14). ---- }
+
+    /// <summary>The `with` statements of AFileId, parsed once and cached.</summary>
+    /// <param name="AFileId">A files.id of the primary store.</param>
+    /// <returns>The statements in pre-order (an outer with before the withs
+    /// nested in it); empty when the file's text holds no `with` keyword.</returns>
+    /// <remarks>A file that names `with` but cannot be read or parsed yields one
+    /// statement spanning the whole file with an untypable entity, so every
+    /// bare name in it is UNDECIDED -- a missing with table must never read as
+    /// "no with here", which would bind names a target may own.</remarks>
+    function WithStatementsOf(AFileId: Int64): TArray<TWithStatement>;
+    /// <summary>The target type of entity AEnt of statement AStmt, typed on
+    /// first use and cached in the shared array.</summary>
+    /// <param name="ARef">Supplies the file and the enclosing routine the
+    /// entity expression is typed in.</param>
+    /// <param name="AStmts">The file's statements, from WithStatementsOf.</param>
+    /// <param name="AStmt">Index of the statement.</param>
+    /// <param name="AEnt">Index of the entity.</param>
+    /// <returns>A class/record/interface symbol id, or 0 when untypable.</returns>
+    function WithEntityType(const ARef: TReference; const AStmts: TArray<TWithStatement>;
+      AStmt, AEnt: Integer): Int64;
+    /// <summary>The type of the member AName of ATypeId: a property's or field's
+    /// declared type, or a certain zero-argument function's return type.</summary>
+    /// <param name="ATypeId">The owning type.</param>
+    /// <param name="AName">The member name.</param>
+    /// <returns>The member's type symbol id, or 0.</returns>
+    function TypeOfMember(ATypeId: Int64; const AName: string): Int64;
+    /// <summary>The type of a bare identifier written at ALine/ACol inside
+    /// ARef's enclosing routine: a with member, a local or parameter, a member of
+    /// the enclosing class, a visible unit-level var, or a type name.</summary>
+    /// <param name="ARef">Supplies the file and the enclosing routine.</param>
+    /// <param name="ALine">The identifier's line.</param>
+    /// <param name="ACol">The identifier's column.</param>
+    /// <param name="AName">The identifier.</param>
+    /// <returns>A type symbol id, or 0 when unknown or undecided.</returns>
+    function TypeOfBareName(const ARef: TReference; ALine, ACol: Integer; const AName: string): Int64;
+    /// <summary>TypeOfBareName's ordinary rungs, once no with target claims the
+    /// name: a local or parameter, a member of the enclosing class, a visible
+    /// unit-level var, then the name as a type.</summary>
+    /// <param name="ARef">Supplies the file and the enclosing routine.</param>
+    /// <param name="AName">The identifier.</param>
+    /// <returns>A type symbol id, or 0.</returns>
+    function TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64;
+    /// <summary>What ATypeId declares under AName, nearest declaring level first.</summary>
+    /// <param name="ATypeId">A with target's type.</param>
+    /// <param name="AName">The bare name.</param>
+    /// <param name="ARefFileId">The referencing file, for member visibility.</param>
+    /// <returns>See TWithMemberKind.</returns>
+    function WithMemberKind(ATypeId: Int64; const AName: string; ARefFileId: Int64): TWithMemberKind;
+    /// <summary>What ONE declaring level -- a type or one of its ancestors --
+    /// declares under AName, visibility from ARefFileId included.</summary>
+    /// <param name="ALevelId">The type symbol whose direct children are read.</param>
+    /// <param name="AName">The bare name.</param>
+    /// <param name="ARefFileId">The referencing file.</param>
+    /// <returns>wmNone when the level does not declare the name.</returns>
+    function LevelMemberKind(ALevelId: Int64; const AName: string; ARefFileId: Int64): TWithMemberKind;
+    /// <summary>True when every ancestor of ATypeId is resolved in this index,
+    /// TObject / IInterface excepted, so a name missing from it is missing.</summary>
+    /// <param name="ATypeId">A with target's type.</param>
+    /// <returns>True for a complete surface.</returns>
+    function SurfaceComplete(ATypeId: Int64): Boolean;
+    /// <summary>The with scope's verdict on the bare name AName written at
+    /// ALine/ACol of ARef's file: targets innermost first, and within one
+    /// statement the LAST-listed entity first, exactly as Delphi binds.</summary>
+    /// <param name="ARef">Supplies the file and the enclosing routine.</param>
+    /// <param name="ALine">The name's line.</param>
+    /// <param name="ACol">The name's column.</param>
+    /// <param name="AName">The bare name.</param>
+    /// <param name="ALayerType">Out: the winning target's type for wvMember.</param>
+    /// <param name="AKind">Out: what that target declares under AName.</param>
+    /// <returns>See TWithVerdict.</returns>
+    function WithScopeAt(const ARef: TReference; ALine, ACol: Integer; const AName: string;
+      out ALayerType: Int64; out AKind: TWithMemberKind): TWithVerdict;
+    /// <summary>One with layer's verdict on AName: its target untypable or the
+    /// answer unknowable (undecided), the name its member (member), or absent
+    /// from a COMPLETE surface (none -- the next layer out is asked).</summary>
+    /// <param name="ARef">Supplies the file and the enclosing routine.</param>
+    /// <param name="AStmts">The file's statements.</param>
+    /// <param name="AStmt">The statement.</param>
+    /// <param name="AEnt">The entity -- the layer.</param>
+    /// <param name="AName">The bare name.</param>
+    /// <param name="ALayerType">Out: the layer's type for wvMember, else 0.</param>
+    /// <param name="AKind">Out: what the layer declares under AName.</param>
+    /// <returns>See TWithVerdict.</returns>
+    function LayerVerdict(const ARef: TReference; const AStmts: TArray<TWithStatement>;
+      AStmt, AEnt: Integer; const AName: string; out ALayerType: Int64;
+      out AKind: TWithMemberKind): TWithVerdict;
+    /// <summary>TypeReceiver's with rung: a receiver whose LEADING identifier a
+    /// with target supplies is typed through that target's members.</summary>
+    /// <param name="ACallRef">The call or member-access ref.</param>
+    /// <param name="AReceiverExpr">The receiver text, e.g. 'Inner' or 'A.B'.</param>
+    /// <param name="AHandled">Out: True when the with scope decided the
+    /// receiver (typed or undecided) and the ordinary rungs must not run.</param>
+    /// <returns>The receiver type, or 0.</returns>
+    function TypeReceiverThroughWith(const ACallRef: TReference; const AReceiverExpr: string;
+      out AHandled: Boolean): Int64;
+    /// <summary>ResolveOne's two NEAREST rungs for a BARE call: the with scope
+    /// (a routine member of the innermost target that declares the name,
+    /// certain only), then the lexical chain of nested routines.</summary>
+    /// <param name="ACallRef">The bare call ref.</param>
+    /// <param name="AArgCount">The call site's argument count.</param>
+    /// <param name="AArgsKnown">False when the site could not be read.</param>
+    /// <param name="AEdge">Receives target, confidence and receiver type on a
+    /// binding; untouched otherwise.</param>
+    /// <returns>True when either rung DECIDED the call -- bound, or (the with
+    /// scope only) declined for an undecided target, a non-routine member or
+    /// an overload tie -- so no farther rung may run for it; False when neither
+    /// claims the name.</returns>
+    function BareCallInNearScopes(const ACallRef: TReference; AArgCount: Integer;
+      AArgsKnown: Boolean; var AEdge: TCallEdge): Boolean;
     /// <summary>True when ATypeText names a PROCEDURAL type: written inline
     /// (`function: Integer`, `reference to ...`, `TFunc&lt;...&gt;`), or a type
     /// alias in this index whose declaration is one.</summary>
@@ -684,14 +944,16 @@ type
     /// local, parameter, `Result`, class member, unit-level var, or a member of a
     /// typed receiver. '' when it cannot be typed.</summary>
     /// <param name="ARef">The read ref on the assignment's right side.</param>
-    /// <param name="ALine">The ref's source line.</param>
+    /// <param name="ALine">The site's text up to the ref -- since 1.8.0 possibly several
+    /// source lines joined (D16c); ALhs is a prefix of it.</param>
     /// <param name="ALhs">ALine up to (not including) the `:=`.</param>
     /// <returns>The type text, or ''.</returns>
     function AssignedTypeText(const ARef: TReference; const ALine, ALhs: string): string;
     /// <summary>True when the routine called at AOpenCol's `(` declares a
     /// procedural parameter at AArgIndex, in ANY of its visible candidates.</summary>
     /// <param name="ARef">The read ref standing as that whole argument.</param>
-    /// <param name="ALine">The ref's source line.</param>
+    /// <param name="ALine">The site's text up to the ref (several lines joined since
+    /// 1.8.0, D16c); AOpenCol is a column in it.</param>
     /// <param name="AOpenCol">1-based column of the argument list's `(`.</param>
     /// <param name="AArgIndex">0-based argument position of the ref.</param>
     /// <param name="AResultType">The parenless target's return type; a
@@ -703,12 +965,25 @@ type
     /// calling it: `@Name`, or Name as the whole right side of an assignment /
     /// a whole argument whose declared type is procedural.</summary>
     /// <param name="ARef">The candidate read ref.</param>
-    /// <param name="ALine">Its source line.</param>
+    /// <param name="ALines">Its source file. The text before and after the name
+    /// is read ACROSS lines (D16c): an argument list or an assignment split over
+    /// several lines is one site, and reading only the ref's own line made
+    /// `RegisterGen(` + newline + `NextId)` look like no argument at all.</param>
     /// <param name="AReceiver">'' or 'Self'.</param>
     /// <param name="AResultType">The target's return type text.</param>
     /// <returns>True when the read is (or may be) a procedure value.</returns>
-    function ParenlessIsProcValue(const ARef: TReference; const ALine, AReceiver,
+    function ParenlessIsProcValue(const ARef: TReference; ALines: TStringList; const AReceiver,
       AResultType: string): Boolean;
+    /// <summary>The shared first step of the two `read` passes that read the
+    /// site's text: the ref's source lines and the receiver written before it.</summary>
+    /// <param name="ARef">The candidate read ref.</param>
+    /// <param name="ALines">Out: the ref's file lines (nil when unreadable).</param>
+    /// <param name="AReceiver">Out: the receiver text, '' for a bare name.</param>
+    /// <returns>'' when the site can be judged; 'unreadable' for a missing or
+    /// STALE line (a guess, not a fact); 'qualified' for a receiver other
+    /// than Self (a member-access the main stream owns).</returns>
+    function BareReadSite(const ARef: TReference; out ALines: TStringList;
+      out AReceiver: string): string;
     /// <summary>Counts one outcome of ResolveParenlessRead into FParenlessStats.</summary>
     /// <param name="AReason">'' for a binding, else the decline reason.</param>
     procedure TallyParenless(const AReason: string);
@@ -803,18 +1078,22 @@ type
     /// `read` ref that names an enum value, by NAME and SCOPE only -- rules
     /// R1-R4 of the spec. Answers `certain` or nothing; there is no ambiguous
     /// value binding.</summary>
-    /// <param name="ARef">The candidate read ref. FileId, NameText and
-    /// EnclosingSymbolId are the only fields consulted.</param>
+    /// <param name="ARef">The candidate read ref. FileId, NameText, StartLine,
+    /// StartCol and EnclosingSymbolId are consulted.</param>
     /// <param name="AReason">OUT: '' when the ref bound OR when its name is not
     /// an enum-value name at all; otherwise the decline reason --
-    /// 'not-visible' | 'ambiguous' | 'shadowed'.</param>
+    /// 'with-member' | 'not-visible' | 'ambiguous' | 'shadowed'.</param>
     /// <returns>The enum_value symbol id, or 0 for every decline.</returns>
     /// <remarks>
-    /// READS NO SOURCE LINE, deliberately. Every other rung of this resolver
-    /// starts by reading the ref's line to recover a receiver, which is why they
-    /// need the stale-file withholding in ResolveOne; with no line read there is
-    /// nothing here for staleness to withhold, and the answer is a pure function
-    /// of the symbol table.
+    /// READS NO SOURCE LINE for the value rules themselves: R1-R4 are a pure
+    /// function of the symbol table. Since 1.8.0 the `with` scope is consulted
+    /// FIRST (R7): when an enclosing with target declares the name, the read
+    /// names that member and this pass declines ('with-member', counted in
+    /// EnumStats.WithMember) -- the member-read pass binds it instead. When a
+    /// target cannot be typed the pass keeps its pre-1.8 answer and counts it
+    /// in EnumStats.WithUndecided: an enum value almost never collides with a
+    /// library object's member, and enum-read-inside-with -- which reads the
+    /// library index too -- reports the collisions that do exist.
     ///
     /// Not counted as a decline when the name matches no enum value: the store's
     /// candidate SQL already filtered the stream to enum-value names, so such a
@@ -856,9 +1135,13 @@ type
     /// index) is not detected, and the read binds -- recorded as the pass's known
     /// blind spot.
     ///
-    /// Any `with` earlier in the enclosing routine declines ('with-scope'); a
-    /// receiver other than Self declines ('qualified' -- a qualified parenless
-    /// call is a `member-access` ref and the main stream owns it).
+    /// Since 1.8.0 the `with` scope decides a bare name first: a with target's
+    /// ROUTINE member is the candidate set (and binds with the target as the
+    /// receiver type, certain only); a property/field member is a value and
+    /// declines ('shadowed'); a target that cannot be typed, or whose surface
+    /// leaves the index, declines ('with-scope'). A receiver other than Self
+    /// declines ('qualified' -- a qualified parenless call is a `member-access`
+    /// ref and the main stream owns it).
     /// Counted into ParenlessStats, one outcome per call.
     /// </remarks>
     function ResolveParenlessRead(const ARef: TReference; out AReason: string): TCallEdge;
@@ -868,6 +1151,44 @@ type
     /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
     /// pass.</remarks>
     property ParenlessStats: TParenlessResolveStats read FParenlessStats;
+
+    /// <summary>D14 + D16a (2026-09-23, resolver 1.8.0-alpha): decide whether a
+    /// bare `read` ref names a PROPERTY or FIELD, and if so which -- a member of
+    /// an enclosing `with` target, or a property of the enclosing class.</summary>
+    /// <param name="ARef">The candidate read ref. FileId, NameText, StartLine,
+    /// StartCol and EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; otherwise the decline
+    /// reason -- 'unreadable' | 'qualified' | 'with-scope' | 'not-member' |
+    /// 'shadowed' | 'field' | 'not-found'.</param>
+    /// <returns>An edge whose TargetSymbolId is the property/field, MemberMode
+    /// 'read', the accessor when the property names one, and
+    /// ReceiverTypeSymbolId the with target's (or the class's) type; or
+    /// TargetSymbolId = 0 for every decline.</returns>
+    /// <remarks>
+    /// Order is Delphi's: the with scope first (a member it names wins over
+    /// every local), then a local/parameter/nested routine of the name (a
+    /// shadow), then the enclosing class and its ancestors. A with target that
+    /// cannot be typed, or whose surface is incomplete, declines.
+    ///
+    /// A FIELD of the enclosing class read BARE is NOT bound ('field'),
+    /// deliberately: that population is every bare field read in a codebase,
+    /// and D16a asked for properties. A field of a WITH target is bound,
+    /// because the with scope is exactly where the enum-value collision (R7)
+    /// lives. An explicit `Self.X` (a `read` ref whose receiver is Self -- the
+    /// extractor's shape for it) binds a property OR a field, exactly as
+    /// `Obj.X` does, and is never declined for a same-named local: the local
+    /// cannot be what `Self.X` names.
+    /// Counted into MemberReadStats, one outcome per call.
+    /// </remarks>
+    function ResolveBareMemberRead(const ARef: TReference; out AReason: string): TCallEdge;
+
+    /// <summary>Per-run counters of the bare member-read pass.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property MemberReadStats: TMemberReadStats read FMemberReadStats;
+
+    /// <summary>Per-run counters of the `with` scope, across every stream.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property WithStats: TWithScopeStats read FWith.Stats;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -959,7 +1280,17 @@ implementation
 
 uses
   System.Math,     // Min -- ResolveAccessor's declaring-line range
-  System.StrUtils; // B1: StartsText / SplitString, used by SignatureArityRange
+  System.StrUtils, // B1: StartsText / SplitString, used by SignatureArityRange
+  TreeSitter,      // 1.8.0: the with scope parses a file's `with` statements
+  TreeSitterLib,
+  DRagLint.Core.Encoding,    // EnsureUtf8Bytes -- the indexer's own transcoding
+  DRagLint.Preprocess.Types; // NormalizeLoneCR -- the indexer's own row counting
+
+{ Declared HERE, in the implementation, for the reason DRagLint.Diagnostics.
+  ParseCache gives: DRagLint.Parser.Delphi13 exports the same import from its
+  interface, and a second interface export would make any unit using both pick
+  whichever came last in its uses clause. }
+function TreeSitterDelphi13: PTSLanguage; cdecl; external 'tree-sitter-delphi13' name 'tree_sitter_delphi13';
 
 const
   // The set of type-defining kinds a receiver can be typed to.
@@ -1444,11 +1775,21 @@ begin
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
+  FWith.Statements     := TDictionary<Int64, TArray<TWithStatement>>.Create;
+  FWith.SurfaceComplete:= TDictionary<Int64, Boolean>.Create;
+  FRows.Symbols        := TDictionary<Int64, TSymbol>.Create;
+  FRows.Ancestors      := TDictionary<Int64, TArray<TTypeAncestor>>.Create;
+  FWith.Stats          := Default(TWithScopeStats);
+  FMemberReadStats:= Default(TMemberReadStats);
   BuildMaps;
 end;
 
 destructor TCallResolver.Destroy;
 begin
+  FRows.Ancestors     .Free;
+  FRows.Symbols       .Free;
+  FWith.SurfaceComplete.Free;
+  FWith.Statements    .Free;
   FLineCache .Free;
   FStaleFiles.Free;
   FChildCache.Free;
@@ -1572,6 +1913,20 @@ begin
   Arr   := FStore.FindAllChildSymbols(AParentId);
   for S in Arr do Result.Add(S);
   FChildCache.Add(AParentId, Result);
+end;
+
+function TCallResolver.SymbolById(AId: Int64): TSymbol;
+begin
+  if FRows.Symbols.TryGetValue(AId, Result) then Exit;
+  Result:= FStore.GetSymbolById(AId);
+  FRows.Symbols.Add(AId, Result);
+end;
+
+function TCallResolver.AncestorsOf(ATypeId: Int64): TArray<TTypeAncestor>;
+begin
+  if FRows.Ancestors.TryGetValue(ATypeId, Result) then Exit;
+  Result:= FStore.GetTransitiveAncestors(ATypeId);
+  FRows.Ancestors.Add(ATypeId, Result);
 end;
 
 function TCallResolver.LinesOf(AFileId: Int64): TStringList;
@@ -1767,7 +2122,7 @@ begin
     // on an ancestor counts too; overrides on the type itself already counted in
     // step 1 (so a class + its base each declaring M yields 2 matches ->
     // ambiguous, correctly flagging that the concrete target is uncertain).
-    for A in FStore.GetTransitiveAncestors(ATypeSymbolId) do
+    for A in AncestorsOf(ATypeSymbolId) do
     begin
       if not A.Resolved or (A.SymbolId <= 0) then Continue;
       Kids:= ChildrenOf(A.SymbolId);
@@ -1807,7 +2162,7 @@ begin
         precisely because the aliases people call methods through are
         helper-backed. }
       if Matches.Count = 0 then
-        for A in FStore.GetTransitiveAncestors(ATypeSymbolId) do
+        for A in AncestorsOf(ATypeSymbolId) do
           if A.Resolved and (A.SymbolId > 0) then AddHelperMethods(A.SymbolId);
     end;
 
@@ -1869,9 +2224,9 @@ begin
 
       // Climb one lexical level, but only while the enclosing scope is itself a
       // ROUTINE. A class / record / unit parent ends the chain.
-      Scope:= FStore.GetSymbolById(ScopeId);
+      Scope:= SymbolById(ScopeId);
       if (Scope.Id <= 0) or (Scope.ParentId <= 0) then Exit;
-      Parent:= FStore.GetSymbolById(Scope.ParentId);
+      Parent:= SymbolById(Scope.ParentId);
       if (Parent.Id <= 0) or not (Parent.Kind in METHOD_KINDS) then Exit;
       ScopeId:= Parent.Id;
     end;
@@ -1965,9 +2320,9 @@ begin
       ROUTINE. A class / record / unit parent ends the chain -- the same stop
       condition LookupInLexicalScopes uses, and for the same reason: beyond it
       the scope is no longer nearer than the unit. }
-    Scope:= FStore.GetSymbolById(ScopeId);
+    Scope:= SymbolById(ScopeId);
     if (Scope.Id <= 0) or (Scope.ParentId <= 0) then Exit;
-    Parent:= FStore.GetSymbolById(Scope.ParentId);
+    Parent:= SymbolById(Scope.ParentId);
     if (Parent.Id <= 0) or not (Parent.Kind in METHOD_KINDS) then Exit;
     ScopeId:= Parent.Id;
   end;
@@ -1996,9 +2351,9 @@ begin
   while Depth < MAX_LEXICAL_DEPTH do
   begin
     Inc(Depth);
-    Scope:= FStore.GetSymbolById(ScopeId);
+    Scope:= SymbolById(ScopeId);
     if (Scope.Id <= 0) or (Scope.ParentId <= 0) then Exit;
-    Parent:= FStore.GetSymbolById(Scope.ParentId);
+    Parent:= SymbolById(Scope.ParentId);
     if Parent.Id <= 0 then Exit;
     if not (Parent.Kind in METHOD_KINDS) then
     begin
@@ -2016,7 +2371,7 @@ begin
   // Class constants, class vars and methods, which LookupMemberOnType excludes.
   Kinds:= METHOD_KINDS + [skConstDecl, skVarDecl];
   if FindChildOfKind(AClassId, AName, Kinds, False).Id > 0 then Exit(True);
-  for A in FStore.GetTransitiveAncestors(AClassId) do
+  for A in AncestorsOf(AClassId) do
     if A.Resolved and (A.SymbolId > 0)
        and (FindChildOfKind(A.SymbolId, AName, Kinds, False).Id > 0) then Exit(True);
 end;
@@ -2154,7 +2509,7 @@ begin
   end;
 end;
 
-function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@5ca2 -- REVIEWED 2026-09-23: each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
+function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@d157 -- REVIEWED 2026-09-23: each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
 
   { R1: a value declared in AFileId / ASection is visible from ARef's file when
     it is the SAME file (both sections of one's own unit are in scope), or it is
@@ -2202,6 +2557,21 @@ begin
     caller asked about a ref that was never a candidate. }
   if not FNameToEnumValues.TryGetValue(Lc, Cands) then Exit;
 
+  { --- R7 (1.8.0): the `with` scope is nearer than anything below. A target that
+    declares the name makes the read a read of THAT member -- decline, and the
+    member-read pass binds the member. An untypable target keeps the pre-1.8
+    answer (counted, see ResolveEnumValueRead's remarks). }
+  var WithType: Int64;
+  var WithKind: TWithMemberKind;
+  var Verdict : TWithVerdict:= WithScopeAt(ARef, ARef.StartLine, ARef.StartCol,
+                                            ARef.NameText, WithType, WithKind);
+  if Verdict = wvMember then
+  begin
+    AReason:= 'with-member';
+    Inc(FEnumStats.WithMember);
+    Exit;
+  end;
+
   { The enclosing class is needed TWICE -- by the nested-enum visibility test
     below and by R3(b) -- and finding it costs two GetSymbolById per lexical
     level, so it is walked once here and both answers kept. }
@@ -2219,7 +2589,7 @@ begin
     begin
       OwnerOk:= (ClassId > 0) and (ClassId = C.OwnerTypeId);
       if not OwnerOk and (ClassId > 0) then
-        for A in FStore.GetTransitiveAncestors(ClassId) do
+        for A in AncestorsOf(ClassId) do
           if A.Resolved and (A.SymbolId = C.OwnerTypeId) then
           begin
             OwnerOk:= True;
@@ -2281,6 +2651,7 @@ begin
 
   Result:= E.Id;
   Inc(FEnumStats.Bound);
+  if Verdict = wvUndecided then Inc(FEnumStats.WithUndecided);
 end;
 
 { 2026-09-23 (parenless-call binding, resolver 1.7.0-alpha) -- defect D1.
@@ -2440,24 +2811,59 @@ begin
 end;
 
 { True when AAfter -- the rest of a line after an identifier -- ends the
-  statement there: nothing, `;`, a comment, or `end` / `else`. }
+  statement there: nothing, `;`, a comment, or a keyword that closes a block. }
 function EndsStatement(const AAfter: string): Boolean;
+const
+  BLOCK_CLOSERS: array[0..4] of string = ('end', 'else', 'until', 'except', 'finally');
 var
   L: string;
 begin
   L     := LowerCase(AAfter);
   Result:= (L = '') or StartsStr(';', L) or StartsStr('//', L) or StartsStr('{', L) or StartsStr('(*', L);
-  Result:= Result or StartsWithWord(L, 'end') or StartsWithWord(L, 'else');
+  { 1.8.0: the text after a name can now come from the NEXT line (D16c), where a
+    statement left without its `;` is closed by any block keyword. }
+  for var W: string in BLOCK_CLOSERS do
+    Result:= Result or StartsWithWord(L, W);
 end;
 
-{ True when a declaration's type text is itself a procedural type. }
+{ ALine without a trailing `//` comment -- one outside a string literal. }
+function StripLineComment(const ALine: string): string;
+var
+  K    : Integer;
+  InStr: Boolean;
+begin
+  Result:= ALine;
+  InStr := False;
+  for K:= 1 to Length(ALine) - 1 do
+    if ALine[K] = '''' then InStr:= not InStr
+    else if not InStr and (ALine[K] = '/') and (ALine[K + 1] = '/') then Exit(Copy(ALine, 1, K - 1));
+end;
+
+{ True when a declaration's type text is itself a procedural type.
+
+  D16b (1.8.0): the generic zero-argument function types the PROJECT index
+  never holds -- System.SysUtils' `TFunc<T>` and Spring4D's `Func<T>` -- are
+  recognised by NAME, and a UNIT-QUALIFIED spelling (`System.SysUtils.TFunc<T>`)
+  by its last segment. Before, the qualified spelling fell through to
+  ResolveTypeNameToSymbol, found nothing, and the parenless read BOUND as a call
+  where the source passed the routine as a value. A library ALIAS of such a type
+  (`TIntFunc = TFunc<Integer>` declared in a library unit) is still not seen:
+  that stays the pass's documented blind spot. }
 function IsProceduralText(const AText: string): Boolean;
 var
-  L: string;
+  L   : string ;
+  Lt  : Integer;
+  Base: string ;
 begin
   L:= LowerCase(Trim(AText));
   Result:= StartsWithWord(L, 'procedure') or StartsWithWord(L, 'function')
-           or StartsStr('reference to', L) or StartsStr('tfunc<', L);
+           or StartsStr('reference to', L);
+  if Result then Exit;
+  Lt:= Pos('<', L);
+  if Lt = 0 then Exit;
+  Base:= Trim(Copy(L, 1, Lt - 1));
+  if LastDelimiter('.', Base) > 0 then Base:= Copy(Base, LastDelimiter('.', Base) + 1, MaxInt);
+  Result:= (Base = 'tfunc') or (Base = 'func');
 end;
 
 // One line of a `with` scan. AInBrace / AInStar carry an open brace or
@@ -2580,10 +2986,10 @@ begin
           else if SameText(S.Name, AName) and (S.Kind in METHOD_KINDS) then Found.Add(S);
       { Climb only while the enclosing scope is itself a routine -- the stop
         condition LookupInLexicalScopes uses. }
-      Scope:= FStore.GetSymbolById(ScopeId);
+      Scope:= SymbolById(ScopeId);
       ScopeId:= 0;
       if (Scope.Id > 0) and (Scope.ParentId > 0)
-         and (FStore.GetSymbolById(Scope.ParentId).Kind in METHOD_KINDS) then ScopeId:= Scope.ParentId;
+         and (SymbolById(Scope.ParentId).Kind in METHOD_KINDS) then ScopeId:= Scope.ParentId;
     end;
     { A level declaring BOTH a value and a routine of one name is not legal
       Delphi; should the index say so anyway, the value wins and nothing is
@@ -2614,7 +3020,7 @@ var
 begin
   if ATypeId <= 0 then Exit;
   AddFrom(ATypeId);
-  for A in FStore.GetTransitiveAncestors(ATypeId) do
+  for A in AncestorsOf(ATypeId) do
     if A.Resolved and (A.SymbolId > 0) then AddFrom(A.SymbolId);
 end;
 
@@ -2630,7 +3036,7 @@ begin
   Result:= (LookupMemberOnType(AClassId, AName).Id > 0)
            or (FindChildOfKind(AClassId, AName, Kinds, False).Id > 0);
   if not Result then
-    for A in FStore.GetTransitiveAncestors(AClassId) do
+    for A in AncestorsOf(AClassId) do
       if A.Resolved and (A.SymbolId > 0)
          and (FindChildOfKind(A.SymbolId, AName, Kinds, False).Id > 0) then Result:= True;
   if not Result then AddMethodsOnTypeChain(AClassId, AName, AMatches);
@@ -2711,36 +3117,537 @@ begin
   if (Result = '') and (AMatches.Count = 0) then Result:= 'not-found';
 end;
 
-function TCallResolver.EnclosingBodyUsesWith(const ARef: TReference; ALines: TStringList): Boolean;
-const
-  { When the routine's own first line is unknown, scan this far back instead --
-    a bound, not a model: a longer routine can only produce a false decline. }
-  FALLBACK_SCAN_LINES = 400;
-var
-  Encl   : TSymbol;
-  From   : Integer;
-  Ln     : Integer;
-  S      : string ;
-  InBrace: Boolean;
-  InStar : Boolean;
+{ ---- 2026-09-23: the `with` scope (resolver 1.8.0-alpha, defect D14). ----
+
+  Delphi resolves a bare identifier inside `with A, B do S` against the members
+  of B's type, then A's, then the targets of every enclosing with (innermost
+  first) -- and only THEN against the ordinary scope, locals included. The
+  resolver had no with scope, so a bare call in a with body bound to the
+  enclosing class's same-named method (the declaration the compiler does not
+  pick), a member access whose receiver was a with member never typed (0 of 283
+  on ORM3 CLIENT), and a bare read naming a with member bound to an enum value
+  of that name (R7).
+
+  THE TABLE COMES FROM THE SOURCE, NOT THE INDEX. The index stores neither with
+  spans nor with targets, and storing them would be an EXTRACTOR change -- a
+  re-parse of every database. So the file is parsed here, with the grammar and
+  the byte transform the indexer itself applies (EnsureUtf8Bytes, then
+  NormalizeLoneCR), which puts a with body's line/column in exactly the
+  coordinates refs are stored in. The indexer's IFDEF preprocessing blanks
+  bytes without moving them, so positions agree; the grammar keeps the FIRST
+  branch of an IFDEF on its own, which is the one residual (a with that exists
+  only in a taken ELSE branch is not in this table). Only files whose text
+  holds the keyword are parsed at all.
+
+  THE POSTURE is the unit's: bind the member the compiler binds, or NOTHING. A
+  target whose type cannot be resolved, or whose ancestry leaves the index, may
+  declare any name, so every bare name under it is UNDECIDED and binds nothing
+  -- the one documented exception being the enum-value pass (see
+  ResolveEnumValueRead). }
+
+{ True when line/column (AL1, AC1) is at or before (AL2, AC2). }
+function PosAtOrBefore(AL1, AC1, AL2, AC2: Integer): Boolean;
 begin
-  Result:= False;
-  if ARef.EnclosingSymbolId <= 0 then Exit;
-  Encl:= FStore.GetSymbolById(ARef.EnclosingSymbolId);
-  From:= (if Encl.ImplStartLine > 0 then Encl.ImplStartLine else Encl.StartLine);
-  if (From <= 0) or (From > ARef.StartLine) then From:= Max(1, ARef.StartLine - FALLBACK_SCAN_LINES);
-  InBrace:= False;
-  InStar := False;
-  Ln     := From;
-  while (Ln <= ARef.StartLine) and (Ln <= ALines.Count) and not Result do
+  Result:= (AL1 < AL2) or ((AL1 = AL2) and (AC1 <= AC2));
+end;
+
+{ The UTF-8 text of ANode in ASrc; '' for a null or out-of-range node. }
+function WithNodeText(const ANode: TTSNode; const ASrc: TBytes): string;
+begin
+  Result:= '';
+  if ANode.IsNull or (ANode.EndByte <= ANode.StartByte)
+     or (Integer(ANode.EndByte) > Length(ASrc)) then Exit;
+  Result:= Trim(TEncoding.UTF8.GetString(ASrc, Integer(ANode.StartByte),
+                                         Integer(ANode.EndByte - ANode.StartByte)));
+end;
+
+{ Fills AEnt's shape from one with ENTITY expression. Anything not recognised
+  leaves HeadKind = whUnknown, which types to 0 and so makes every bare name
+  under the target undecided. Node names are the grammar's own, as
+  TAstChecker.CheckWithHiding already reads them. }
+procedure ReadWithEntity(const ANode: TTSNode; const ASrc: TBytes; var AEnt: TWithEntity);
+var
+  N     : TTSNode;
+  Callee: TTSNode;
+  Args  : TTSNode;
+  Rhs   : string ;
+begin
+  N:= ANode;
+  while (not N.IsNull) and (N.NodeType = 'exprParens') and (N.NamedChildCount = 1) do N:= N.NamedChild(0);
+  if N.IsNull then Exit;
+  if N.NodeType = 'identifier' then
   begin
-    S:= ALines[Ln - 1];
-    if Ln = ARef.StartLine then S:= Copy(S, 1, ARef.StartCol - 1);
-    Result:= LineHasWithKeyword(S, InBrace, InStar);
-    Inc(Ln);
+    AEnt.Head    := WithNodeText(N, ASrc);
+    AEnt.HeadKind:= (if SameText(AEnt.Head, 'Self') then whSelf else whName);
+  end
+  else if N.NodeType = 'exprBinary' then
+  begin
+    { `X as T` -- the target is T whatever X is. }
+    if SameText(WithNodeText(N.ChildByField('operator'), ASrc), 'as') then
+    begin
+      AEnt.HeadKind:= whTypeCast;
+      AEnt.Head    := WithNodeText(N.ChildByField('rhs'), ASrc);
+    end;
+  end
+  else if N.NodeType = 'exprDot' then
+  begin
+    Rhs:= WithNodeText(N.ChildByField('rhs'), ASrc);
+    if (Rhs = '') or (N.ChildByField('rhs').NodeType <> 'identifier') then Exit;
+    if SameText(Rhs, 'Create') then
+    begin
+      AEnt.HeadKind:= whCreate;
+      AEnt.Head    := WithNodeText(N.ChildByField('lhs'), ASrc);
+      Exit;
+    end;
+    ReadWithEntity(N.ChildByField('lhs'), ASrc, AEnt);
+    if AEnt.HeadKind <> whUnknown then AEnt.Steps:= AEnt.Steps + [Rhs];
+  end
+  else if N.NodeType = 'exprCall' then
+  begin
+    Callee:= N.ChildByField('entity');
+    Args  := N.ChildByField('args');
+    if Callee.IsNull then Exit;
+    if (Callee.NodeType = 'exprDot')
+       and SameText(WithNodeText(Callee.ChildByField('rhs'), ASrc), 'Create') then
+    begin
+      AEnt.HeadKind:= whCreate;
+      AEnt.Head    := WithNodeText(Callee.ChildByField('lhs'), ASrc);
+    end
+    else if (Callee.NodeType = 'identifier') and (not Args.IsNull) and (Args.NamedChildCount = 1) then
+    begin
+      { `T(X)` -- a hard cast when T names a type. Typing decides; a function
+        call of the same shape names no type and so types to 0. }
+      AEnt.HeadKind:= whTypeCast;
+      AEnt.Head    := WithNodeText(Callee, ASrc);
+    end;
   end;
 end;
 
+{ Appends every `with` statement under ANode to AList, in PRE-ORDER: an outer
+  with lands before the withs nested in its body, which is what lets
+  WithScopeAt read the array backwards as innermost-first. }
+procedure CollectWithStatements(const ANode: TTSNode; const ASrc: TBytes;
+  AList: TList<TWithStatement>);
+var
+  I   : Integer       ;
+  C   : TTSNode       ;
+  Body: TTSNode       ;
+  St  : TWithStatement;
+  E   : TWithEntity   ;
+  T   : string        ;
+begin
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'with' then
+  begin
+    St  := Default(TWithStatement);
+    Body:= ANode.ChildByField('body');
+    if not Body.IsNull then
+    begin
+      St.BodyLine   := Integer(Body.StartPoint.row) + 1;
+      St.BodyCol    := Integer(Body.StartPoint.column) + 1;
+      St.BodyEndLine:= Integer(Body.EndPoint.row) + 1;
+      St.BodyEndCol := Integer(Body.EndPoint.column) + 1;
+    end;
+    { The entities are the named children that are neither the body nor a
+      keyword/comment -- `with A, B do` is ONE node with REPEATED entity
+      fields, and kWith / kDo are named children of it. }
+    for I:= 0 to ANode.NamedChildCount - 1 do
+    begin
+      C:= ANode.NamedChild(I);
+      if (not Body.IsNull) and (C.StartByte = Body.StartByte) and (C.EndByte = Body.EndByte) then Continue;
+      T:= C.NodeType;
+      if (T = 'comment') or ((Length(T) > 1) and (T[1] = 'k') and CharInSet(T[2], ['A'..'Z'])) then Continue;
+      E        := Default(TWithEntity);
+      E.Line   := Integer(C.StartPoint.row) + 1;
+      E.Col    := Integer(C.StartPoint.column) + 1;
+      E.EndLine:= Integer(C.EndPoint.row) + 1;
+      E.EndCol := Integer(C.EndPoint.column) + 1;
+      ReadWithEntity(C, ASrc, E);
+      St.Entities:= St.Entities + [E];
+    end;
+    AList.Add(St);
+  end;
+  for I:= 0 to ANode.NamedChildCount - 1 do
+    CollectWithStatements(ANode.NamedChild(I), ASrc, AList);
+end;
+
+function TCallResolver.WithStatementsOf(AFileId: Int64): TArray<TWithStatement>;
+var
+  Lines  : TStringList;
+  InBrace: Boolean    ;
+  InStar : Boolean    ;
+  Found  : Boolean    ;
+  I      : Integer    ;
+  Src    : TBytes     ;
+  Parser : TTSParser  ;
+  Tree   : TTSTree    ;
+  List   : TList<TWithStatement>;
+  Whole  : TWithStatement;
+begin
+  if FWith.Statements.TryGetValue(AFileId, Result) then Exit;
+  Result := nil;
+  Lines  := LinesOf(AFileId);
+  Found  := False;
+  InBrace:= False;
+  InStar := False;
+  if Lines <> nil then
+    for I:= 0 to Lines.Count - 1 do
+      if LineHasWithKeyword(Lines[I], InBrace, InStar) then
+      begin
+        Found:= True;
+        Break;
+      end;
+  if Found then
+  begin
+    List:= TList<TWithStatement>.Create;
+    try
+      try
+        Src   := NormalizeLoneCR(EnsureUtf8Bytes(TFile.ReadAllBytes(FStore.GetFilePath(AFileId))));
+        Parser:= TTSParser.Create;
+        try
+          Parser.Language:= TreeSitterDelphi13;
+          Tree:= Parser.Parse(
+            function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+            var Remaining: Integer;
+            begin
+              Remaining:= Max(0, Length(Src) - Integer(AByteIndex));
+              SetLength(Result, Remaining);
+              if Remaining > 0 then Move(Src[AByteIndex], Result[0], Remaining);
+              ABytesRead:= Remaining;
+            end, TTSInputEncoding.TSInputEncodingUTF8);
+        finally
+          Parser.Free;
+        end;
+        if Tree = nil then raise EInOutError.Create('with scope: the parse produced no tree');
+        try
+          CollectWithStatements(Tree.RootNode, Src, List);
+        finally
+          Tree.Free;
+        end;
+        Result:= List.ToArray;
+        Inc(FWith.Stats.Files);
+        Inc(FWith.Stats.Statements, List.Count);
+      except
+        on Exception do
+        begin
+          { The keyword is there and the statements could not be read: one
+            whole-file statement with an untypable target makes every bare name
+            in the file UNDECIDED. Never "no with here". }
+          Whole            := Default(TWithStatement);
+          Whole.BodyLine   := 1;
+          Whole.BodyCol    := 1;
+          Whole.BodyEndLine:= MaxInt;
+          Whole.BodyEndCol := MaxInt;
+          SetLength(Whole.Entities, 1);
+          Whole.Entities[0].State:= 2;
+          Result:= [Whole];
+        end;
+      end;
+    finally
+      List.Free;
+    end;
+  end;
+  FWith.Statements.Add(AFileId, Result);
+end;
+
+function TCallResolver.TypeOfMember(ATypeId: Int64; const AName: string): Int64;
+var
+  M     : TSymbol;
+  R     : TSymbol;
+  Conf  : string ;
+  Target: Int64  ;
+begin
+  Result:= 0;
+  if ATypeId <= 0 then Exit;
+  M:= LookupMemberOnType(ATypeId, AName);
+  if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, M.FileId));
+  { A zero-argument function member stands for its result: `with Obj.Current do`. }
+  Target:= LookupMethodOnType(ATypeId, AName, 0, True, Conf);
+  if (Target <= 0) or (Conf <> 'certain') then Exit;
+  R:= SymbolById(Target);
+  if IsParenlessCallable(R) then Result:= ResolveTypeNameToSymbol(SignatureReturnType(R.Signature), R.FileId);
+end;
+
+function TCallResolver.TypeOfBareName(const ARef: TReference; ALine, ACol: Integer;
+  const AName: string): Int64;
+var
+  LT     : Int64          ;
+  K      : TWithMemberKind;
+  ClassId: Int64          ;
+begin
+  Result:= 0;
+  { An outer with target is nearer than any local -- the name is typed through
+    it, or not at all when it is undecided. }
+  case WithScopeAt(ARef, ALine, ACol, AName, LT, K) of
+    wvMember: if K in [wmValue, wmRoutine] then Result:= TypeOfMember(LT, AName);
+    wvNone:
+      if SameText(AName, 'Self') then
+      begin
+        EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
+        Result:= ClassId;
+      end
+      else
+        Result:= TypeOfOrdinaryName(ARef, AName);
+  end;
+end;
+
+function TCallResolver.TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64;
+var
+  M      : TSymbol       ;
+  ClassId: Int64         ;
+  L      : TList<TSymbol>;
+  S      : TSymbol       ;
+  Hits   : Integer       ;
+begin
+  { A local or parameter. Same-named locals of DIFFERENT types (sibling
+    for-var loops) type to nothing, and still shadow everything below. }
+  M:= FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam], True);
+  if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, ARef.FileId));
+  if FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam]).Id > 0 then Exit(0);
+  EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
+  M:= LookupMemberOnType(ClassId, AName);
+  if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, M.FileId));
+  { A unit-level var visible from here: exactly one, or nothing. }
+  Hits:= 0;
+  if FNameToUnitValues.TryGetValue(LowerCase(AName), L) then
+    for S in L do
+      if (S.Kind = skVarDecl) and ((S.FileId = ARef.FileId)
+         or (SameText(S.Section, 'interface') and CandInScope(ARef.FileId, S.FileId))) then
+      begin
+        Inc(Hits);
+        M:= S;
+      end;
+  { Last: the name IS a type -- `with TFoo do` reaches its class members. }
+  if Hits = 0 then Result:= ResolveTypeNameToSymbol(AName, ARef.FileId)
+  else if Hits = 1 then Result:= ResolveTypeNameToSymbol(M.Signature, M.FileId)
+  else Result:= 0;
+end;
+function TCallResolver.WithEntityType(const ARef: TReference; const AStmts: TArray<TWithStatement>;
+  AStmt, AEnt: Integer): Int64;
+var
+  E: TWithEntity;
+  T: Int64      ;
+  K: Integer    ;
+begin
+  E:= AStmts[AStmt].Entities[AEnt];
+  if E.State = 2 then Exit(E.TypeId);
+  if E.State = 1 then Exit(0); { a cycle -- cannot happen for well-formed nesting }
+  AStmts[AStmt].Entities[AEnt].State:= 1;
+  T:= 0;
+  case E.HeadKind of
+    whSelf               : EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', T);
+    whTypeCast, whCreate : T:= ResolveTypeNameToSymbol(E.Head, ARef.FileId);
+    whName               : T:= TypeOfBareName(ARef, E.Line, E.Col, E.Head);
+  end;
+  for K:= 0 to High(E.Steps) do
+    if T > 0 then T:= TypeOfMember(T, E.Steps[K]);
+  if (T > 0) and not (SymbolById(T).Kind in TYPE_KINDS) then T:= 0;
+  AStmts[AStmt].Entities[AEnt].TypeId:= T;
+  AStmts[AStmt].Entities[AEnt].State := 2;
+  Result:= T;
+end;
+
+{ True when AName is a member every class (TObject) or every interface
+  (IInterface) has, which the PROJECT index never holds. A with target always
+  has them, so a bare `Free` under one names the target's Free -- which cannot
+  be bound here, and must not fall through to a same-named routine outside.
+  The class list is TAstChecker.CheckWithHiding's floor. }
+function IsFloorMember(AOwnerKind: TSymbolKind; const AName: string): Boolean;
+const
+  OBJECT_FLOOR: array[0..24] of string = (
+    'Free', 'Create', 'Destroy', 'ClassName', 'ClassType', 'ClassParent',
+    'ClassInfo', 'InstanceSize', 'InheritsFrom', 'ToString', 'Equals',
+    'GetHashCode', 'DisposeOf', 'FieldAddress', 'GetInterface',
+    'GetInterfaceEntry', 'GetInterfaceTable', 'UnitName', 'QualifiedClassName',
+    'SafeCallException', 'AfterConstruction', 'BeforeDestruction', 'Dispatch',
+    'DefaultHandler', 'NewInstance');
+  INTF_FLOOR: array[0..2] of string = ('QueryInterface', '_AddRef', '_Release');
+begin
+  Result:= False;
+  if AOwnerKind = skClass then
+  begin
+    for var F: string in OBJECT_FLOOR do
+      Result:= Result or SameText(F, AName);
+  end
+  else if AOwnerKind = skInterface then
+    for var F: string in INTF_FLOOR do
+      Result:= Result or SameText(F, AName);
+end;
+
+function TCallResolver.LevelMemberKind(ALevelId: Int64; const AName: string;
+  ARefFileId: Int64): TWithMemberKind;
+var
+  Kids      : TList<TSymbol>;
+  S         : TSymbol       ;
+  HasValue  : Boolean       ;
+  HasRoutine: Boolean       ;
+  HasOther  : Boolean       ;
+  Hidden    : Boolean       ;
+begin
+  HasValue  := False;
+  HasRoutine:= False;
+  HasOther  := False;
+  Hidden    := False;
+  Kids      := ChildrenOf(ALevelId);
+  if Kids <> nil then
+    for S in Kids do
+      if SameText(S.Name, AName) and not (S.Kind in [skLocalVar, skParam]) then
+      begin
+        { A private or protected member of a type declared in ANOTHER unit is
+          not in scope from here, so the name would fall through to an outer
+          scope -- which this cannot confirm. Undecided, not "absent". }
+        if (S.FileId <> ARefFileId)
+           and (ContainsText(S.Modifiers, 'private') or ContainsText(S.Modifiers, 'protected')) then
+          Hidden:= True
+        else if S.Kind in [skProperty, skField] then HasValue:= True
+        else if S.Kind in METHOD_KINDS then HasRoutine:= True
+        else HasOther:= True;
+      end;
+  if Hidden or (HasValue and HasRoutine) then Result:= wmUnknown
+  else if HasValue then Result:= wmValue
+  else if HasRoutine then Result:= wmRoutine
+  else if HasOther then Result:= wmOther
+  else Result:= wmNone;
+end;
+
+function TCallResolver.WithMemberKind(ATypeId: Int64; const AName: string;
+  ARefFileId: Int64): TWithMemberKind;
+var
+  A   : TTypeAncestor;
+  Conf: string       ;
+begin
+  { The NEAREST declaring level decides, as in Delphi's own member lookup: the
+    type itself, then each resolved ancestor in order. }
+  Result:= LevelMemberKind(ATypeId, AName, ARefFileId);
+  if Result = wmNone then
+    for A in AncestorsOf(ATypeId) do
+      if (Result = wmNone) and A.Resolved and (A.SymbolId > 0) then
+        Result:= LevelMemberKind(A.SymbolId, AName, ARefFileId);
+  { A class or record HELPER's method is in the with scope too. }
+  if (Result = wmNone) and (LookupMethodOnType(ATypeId, AName, 0, False, Conf) > 0) then Result:= wmRoutine;
+  if (Result = wmNone) and IsFloorMember(SymbolById(ATypeId).Kind, AName) then Result:= wmUnknown;
+end;
+function TCallResolver.SurfaceComplete(ATypeId: Int64): Boolean;
+var
+  A: TTypeAncestor;
+  N: string       ;
+begin
+  if FWith.SurfaceComplete.TryGetValue(ATypeId, Result) then Exit;
+  Result:= True;
+  for A in AncestorsOf(ATypeId) do
+    if not A.Resolved or (A.SymbolId <= 0) then
+    begin
+      N:= LowerCase(A.Name);
+      if LastDelimiter('.', N) > 0 then N:= Copy(N, LastDelimiter('.', N) + 1, MaxInt);
+      { TObject / IInterface are the floor WithMemberKind already answers for;
+        any other ancestor outside this index may declare anything. }
+      if (N <> 'tobject') and (N <> 'iinterface') and (N <> 'iunknown') then Result:= False;
+    end;
+  FWith.SurfaceComplete.Add(ATypeId, Result);
+end;
+
+function TCallResolver.LayerVerdict(const ARef: TReference; const AStmts: TArray<TWithStatement>;
+  AStmt, AEnt: Integer; const AName: string; out ALayerType: Int64;
+  out AKind: TWithMemberKind): TWithVerdict;
+var
+  LT: Int64;
+begin
+  ALayerType:= 0;
+  AKind     := wmNone;
+  LT        := WithEntityType(ARef, AStmts, AStmt, AEnt);
+  if LT > 0 then AKind:= WithMemberKind(LT, AName, ARef.FileId);
+  if (LT <= 0) or (AKind = wmUnknown) then Result:= wvUndecided
+  else if AKind <> wmNone then
+  begin
+    Result    := wvMember;
+    ALayerType:= LT;
+  end
+  { Absent from a surface that leaves the index is not absent. }
+  else if SurfaceComplete(LT) then Result:= wvNone
+  else Result:= wvUndecided;
+end;
+
+function TCallResolver.WithScopeAt(const ARef: TReference; ALine, ACol: Integer;
+  const AName: string; out ALayerType: Int64; out AKind: TWithMemberKind): TWithVerdict;
+var
+  Stmts: TArray<TWithStatement>;
+  I, J : Integer;
+  Hi   : Integer;
+begin
+  Result    := wvNone;
+  ALayerType:= 0;
+  AKind     := wmNone;
+  Stmts     := nil;
+  if (AName <> '') and (ALine >= 1) and (ARef.FileId > 0) then Stmts:= WithStatementsOf(ARef.FileId);
+  { A file edited since it was indexed: its with spans no longer line up with
+    the stored positions, so nothing here can be decided. }
+  if (Length(Stmts) > 0) and FileIsStale(ARef.FileId) then Exit(wvUndecided);
+  I:= High(Stmts);
+  while (I >= 0) and (Result = wvNone) do
+  begin
+    { Inside the BODY every entity is a layer. Inside entity J (J >= 1) only
+      the entities BEFORE it are: `with A, B do` is `with A do with B do`. }
+    Hi:= -1;
+    if PosAtOrBefore(Stmts[I].BodyLine, Stmts[I].BodyCol, ALine, ACol)
+       and not PosAtOrBefore(Stmts[I].BodyEndLine, Stmts[I].BodyEndCol, ALine, ACol) then
+      Hi:= High(Stmts[I].Entities)
+    else
+      for J:= High(Stmts[I].Entities) downto 1 do
+        if (Hi < 0) and PosAtOrBefore(Stmts[I].Entities[J].Line, Stmts[I].Entities[J].Col, ALine, ACol)
+           and not PosAtOrBefore(Stmts[I].Entities[J].EndLine, Stmts[I].Entities[J].EndCol, ALine, ACol) then
+          Hi:= J - 1;
+    { LAST-listed entity first; the first layer with an answer decides. }
+    J:= Hi;
+    while (J >= 0) and (Result = wvNone) do
+    begin
+      Result:= LayerVerdict(ARef, Stmts, I, J, AName, ALayerType, AKind);
+      Dec(J);
+    end;
+    Dec(I);
+  end;
+end;
+{ True when ASegs is a non-empty chain of plain identifiers -- `A`, `A.B.C`. }
+function IsIdentChain(const ASegs: TArray<string>): Boolean;
+var
+  Seg: string ;
+  J  : Integer;
+begin
+  Result:= Length(ASegs) > 0;
+  for Seg in ASegs do
+  begin
+    Result:= Result and (Seg <> '') and IsIdentStart(Seg[1]);
+    for J:= 2 to Length(Seg) do
+      Result:= Result and IsIdentPart(Seg[J]);
+  end;
+end;
+
+function TCallResolver.TypeReceiverThroughWith(const ACallRef: TReference;
+  const AReceiverExpr: string; out AHandled: Boolean): Int64;
+var
+  Segs   : TArray<string> ;
+  J      : Integer        ;
+  LT     : Int64          ;
+  MK     : TWithMemberKind;
+  Verdict: TWithVerdict   ;
+begin
+  Result  := 0;
+  AHandled:= False;
+  { Only a plain identifier chain has a LEADING identifier the with scope can
+    supply; a cast, a call or an indexer is typed by the ordinary rungs, and an
+    explicit Self is never a with member. }
+  Segs:= AReceiverExpr.Split(['.']);
+  if not IsIdentChain(Segs) or SameText(Segs[0], 'Self') then Exit;
+  Verdict := WithScopeAt(ACallRef, ACallRef.StartLine, ACallRef.StartCol, Segs[0], LT, MK);
+  AHandled:= Verdict <> wvNone;
+  if (Verdict = wvMember) and (MK in [wmValue, wmRoutine]) then
+  begin
+    Result:= TypeOfMember(LT, Segs[0]);
+    for J:= 1 to High(Segs) do
+      if Result > 0 then Result:= TypeOfMember(Result, Segs[J]);
+  end;
+  if Result > 0 then Inc(FWith.Stats.ReceiverTyped)
+  else if AHandled then Inc(FWith.Stats.ReceiverDeclined);
+end;
 function TCallResolver.IsProceduralTypeText(const ATypeText: string; AFileId: Int64): Boolean;
 var
   Id: Int64;
@@ -2750,7 +3657,7 @@ begin
   if Result or (Trim(ATypeText) = '') then Exit;
   Id:= ResolveTypeNameToSymbol(ATypeText, AFileId);
   if Id <= 0 then Exit;
-  S     := FStore.GetSymbolById(Id);
+  S     := SymbolById(Id);
   Result:= (S.Kind = skTypeAlias) and IsProceduralText(S.Signature);
 end;
 
@@ -2776,7 +3683,7 @@ begin
   if Rcv <> '' then
     Result:= LookupMemberOnType(TypeReceiver(ARef, Rcv), Leaf).Signature
   else if SameText(Leaf, 'Result') then
-    Result:= SignatureReturnType(FStore.GetSymbolById(ARef.EnclosingSymbolId).Signature)
+    Result:= SignatureReturnType(SymbolById(ARef.EnclosingSymbolId).Signature)
   else
   begin
     Scratch:= TList<TSymbol>.Create;
@@ -2846,24 +3753,50 @@ begin
   end;
 end;
 
-function TCallResolver.ParenlessIsProcValue(const ARef: TReference; const ALine, AReceiver,
+function TCallResolver.ParenlessIsProcValue(const ARef: TReference; ALines: TStringList; const AReceiver,
   AResultType: string): Boolean;
 var
+  Line    : string ;
+  Prev    : string ;
   Before  : string ;
   After   : string ;
   LhsType : string ;
   OpenCol : Integer;
   ArgIndex: Integer;
   WholeArg: Boolean;
+  Ln      : Integer;
 begin
-  Before:= TrimRight(Copy(ALine, 1, ARef.StartCol - 1));
+  Line  := ALines[ARef.StartLine - 1];
+  Before:= TrimRight(Copy(Line, 1, ARef.StartCol - 1));
   if AReceiver <> '' then
   begin
     { `Self.Name`: the expression starts at the receiver. }
     if EndsStr('.', Before) then Before:= TrimRight(Copy(Before, 1, Length(Before) - 1));
     if EndsText(AReceiver, Before) then Before:= TrimRight(Copy(Before, 1, Length(Before) - Length(AReceiver)));
   end;
-  After:= TrimLeft(Copy(ALine, ARef.StartCol + Length(ARef.NameText), MaxInt));
+  { D16c (1.8.0): the site's text is read ACROSS LINES. `RegisterGen(` on one
+    line and `NextId);` on the next is one argument, and reading only the ref's
+    own line saw no argument list at all, so the read BOUND as a call where the
+    source passed the routine as a value. The lines above are prepended until a
+    completed statement (`;` at the end) -- an argument list or an assignment
+    never spans one -- within the argument scan's own budget. Line comments are
+    dropped so a `(` in one cannot pose as the list's opening bracket. }
+  Ln:= ARef.StartLine - 1;
+  while (Ln >= 1) and (ARef.StartLine - Ln <= ARGSCAN_MAX_LINES) do
+  begin
+    Prev:= Trim(StripLineComment(ALines[Ln - 1]));
+    if EndsStr(';', Prev) then Break;
+    Before:= TrimRight(Prev + ' ' + Before);
+    Dec(Ln);
+  end;
+  { ...and the text AFTER the name continues on the next non-empty line. }
+  After:= TrimLeft(StripLineComment(Copy(Line, ARef.StartCol + Length(ARef.NameText), MaxInt)));
+  Ln   := ARef.StartLine + 1;
+  while (After = '') and (Ln <= ALines.Count) and (Ln - ARef.StartLine <= ARGSCAN_MAX_LINES) do
+  begin
+    After:= TrimLeft(StripLineComment(ALines[Ln - 1]));
+    Inc(Ln);
+  end;
 
   if EndsStr('@', Before) then
     Result:= True { the ADDRESS of the routine }
@@ -2873,7 +3806,7 @@ begin
       value, the routine's address when the target is procedural. A target of
       exactly the routine's return type takes the result, even when that type
       is itself procedural. }
-    LhsType:= AssignedTypeText(ARef, ALine, Copy(Before, 1, Length(Before) - 2));
+    LhsType:= AssignedTypeText(ARef, Before, Copy(Before, 1, Length(Before) - 2));
     Result := (LhsType <> '') and not SameText(LhsType, AResultType)
               and IsProceduralTypeText(LhsType, ARef.FileId);
   end
@@ -2883,7 +3816,7 @@ begin
     WholeArg:= (EndsStr('(', Before) or EndsStr(',', Before))
                and (StartsStr(')', After) or StartsStr(',', After));
     Result  := WholeArg and FindArgumentListOpen(Before, OpenCol, ArgIndex)
-               and CalleeTakesProcedural(ARef, ALine, OpenCol, ArgIndex, AResultType);
+               and CalleeTakesProcedural(ARef, Before, OpenCol, ArgIndex, AResultType);
   end;
 end;
 
@@ -2899,39 +3832,62 @@ begin
   else Inc(FParenlessStats.Unreadable);
 end;
 
+function TCallResolver.BareReadSite(const ARef: TReference; out ALines: TStringList;
+  out AReceiver: string): string;
+begin
+  Result   := '';
+  AReceiver:= '';
+  ALines   := LinesOf(ARef.FileId);
+  if (ALines = nil) or FileIsStale(ARef.FileId) or (ARef.NameText = '')
+     or (ARef.StartLine < 1) or (ARef.StartLine > ALines.Count) then
+    Result:= 'unreadable'
+  else
+  begin
+    AReceiver:= ExtractReceiverExpr(ALines[ARef.StartLine - 1], ARef.StartCol);
+    if (AReceiver <> '') and not SameText(AReceiver, 'Self') then Result:= 'qualified';
+  end;
+end;
+
 function TCallResolver.ResolveParenlessRead(const ARef: TReference; out AReason: string): TCallEdge;
 var
   Lines  : TStringList   ;
-  Line   : string        ;
   Rcv    : string        ;
   Matches: TList<TSymbol>;
   S      : TSymbol       ;
   Conf   : string        ;
   Target : Int64         ;
   RetType: string        ;
+  WithType: Int64          ;
+  WithKind: TWithMemberKind;
+  ByWith  : Boolean        ;
 begin
   Result      := Default(TCallEdge);
   Result.RefId:= ARef.Id;
-  AReason     := '';
-  Line        := '';
-  Rcv         := '';
-  Lines       := LinesOf(ARef.FileId);
   { The site's own text decides three of the rules, so a line that does not
     match the index is a decline, not a guess -- the stale-file rule every other
     rung of this unit follows. }
-  if (Lines = nil) or FileIsStale(ARef.FileId) or (ARef.NameText = '')
-     or (ARef.StartLine < 1) or (ARef.StartLine > Lines.Count) then
-    AReason:= 'unreadable'
-  else
-  begin
-    Line:= Lines[ARef.StartLine - 1];
-    Rcv := ExtractReceiverExpr(Line, ARef.StartCol);
-    if (Rcv <> '') and not SameText(Rcv, 'Self') then AReason:= 'qualified'
-    else if (Rcv = '') and EnclosingBodyUsesWith(ARef, Lines) then AReason:= 'with-scope';
-  end;
-  Matches:= TList<TSymbol>.Create;
+  AReason := BareReadSite(ARef, Lines, Rcv);
+  WithType:= 0;
+  ByWith  := False;
+  Matches := TList<TSymbol>.Create;
   try
-    if AReason = '' then AReason:= FindParenlessCandidates(ARef, Rcv, Matches);
+    { 1.8.0 (D14): the with scope first, and its answer is final. A target that
+      declares a ROUTINE of the name supplies the candidate set; one that
+      declares a value shadows; an undecided target declines. This replaced the
+      1.7.0 rule "any `with` earlier in the routine declines". }
+    if (AReason = '') and (Rcv = '') then
+      case WithScopeAt(ARef, ARef.StartLine, ARef.StartCol, ARef.NameText, WithType, WithKind) of
+        wvUndecided: AReason:= 'with-scope';
+        wvMember:
+          begin
+            ByWith:= True;
+            if WithKind = wmRoutine then AddMethodsOnTypeChain(WithType, ARef.NameText, Matches)
+            else AReason:= 'shadowed';
+            { a helper-only method is a routine AddMethodsOnTypeChain cannot list }
+            if (AReason = '') and (Matches.Count = 0) then AReason:= 'with-scope';
+          end;
+      end;
+    if (AReason = '') and not ByWith then AReason:= FindParenlessCandidates(ARef, Rcv, Matches);
     { EVERY member of the answering set must be callable bare. One that needs
       an argument means the name may stand for a procedure value here. }
     if AReason = '' then
@@ -2943,19 +3899,110 @@ begin
       RetType:= '';
       for S in Matches do
         if S.Id = Target then RetType:= SignatureReturnType(S.Signature);
-      if ParenlessIsProcValue(ARef, Line, Rcv, RetType) then AReason:= 'proc-value'
+      if ByWith and (Conf <> 'certain') then AReason:= 'with-scope'
+      else if ParenlessIsProcValue(ARef, Lines, Rcv, RetType) then AReason:= 'proc-value'
       else
       begin
         { ReceiverTypeSymbolId stays 0, as on the lexical and unit rungs of
-          ResolveOne: a bare call has no receiver the source wrote. }
-        Result.TargetSymbolId:= Target;
-        Result.Confidence    := Conf;
+          ResolveOne: a bare call has no receiver the source wrote -- except
+          under a with, whose header DID write it. }
+        Result.TargetSymbolId      := Target;
+        Result.Confidence          := Conf;
+        Result.ReceiverTypeSymbolId:= WithType;
       end;
     end;
   finally
     Matches.Free;
   end;
   TallyParenless(AReason);
+end;
+
+{ D14 + D16a (2026-09-23, resolver 1.8.0-alpha): the bare member-read pass.
+  A `read` ref that names a property or field had no binder at all unless a
+  receiver qualified it (the main stream's member-access rung). Two shapes are
+  bound here: a member of an enclosing `with` target -- the with body is where
+  0 of 283 accesses bound on ORM3 CLIENT, and where R7's enum collision lives --
+  and a PROPERTY of the enclosing class (`N := Total`, D16a). The contract is on
+  the declaration. }
+function TCallResolver.ResolveBareMemberRead(const ARef: TReference; out AReason: string): TCallEdge;
+var
+  Lines  : TStringList    ;
+  Rcv    : string         ;
+  WType  : Int64          ;
+  WKind  : TWithMemberKind;
+  ClassId: Int64          ;
+  M      : TSymbol        ;
+  V      : TSymbol        ;
+  Acc    : TSymbol        ;
+  Scratch: TList<TSymbol> ;
+  ByWith : Boolean        ;
+begin
+  Result      := Default(TCallEdge);
+  Result.RefId:= ARef.Id;
+  WType       := 0;
+  ByWith      := False;
+  M           := Default(TSymbol);
+  AReason     := BareReadSite(ARef, Lines, Rcv);
+  { 1. The with scope, nearer than every local. }
+  if (AReason = '') and (Rcv = '') then
+    case WithScopeAt(ARef, ARef.StartLine, ARef.StartCol, ARef.NameText, WType, WKind) of
+      wvUndecided: AReason:= 'with-scope';
+      wvMember:
+        begin
+          ByWith:= True;
+          if WKind = wmValue then M:= LookupMemberOnType(WType, ARef.NameText)
+          else AReason:= 'not-member';
+          if (AReason = '') and (M.Id <= 0) then AReason:= 'with-scope';
+        end;
+    end;
+  { 2. A local, parameter, const/var or nested routine of the name is nearer
+    than the class. `Self.Name` names the member whatever is local. }
+  if (AReason = '') and not ByWith and (Rcv = '') then
+  begin
+    Scratch:= TList<TSymbol>.Create;
+    try
+      if LexicalParenlessLookup(ARef.EnclosingSymbolId, ARef.NameText, Scratch, V)
+         or (Scratch.Count > 0) then AReason:= 'shadowed';
+    finally
+      Scratch.Free;
+    end;
+  end;
+  { 3. The enclosing class and its ancestors: a PROPERTY binds (D16a); a BARE
+    field read is left alone by design -- see the declaration. An explicit
+    `Self.X` names the member exactly as `Obj.X` does, so it binds a field too,
+    and step 2 never ran for it: a local of the name cannot be what it names. }
+  if (AReason = '') and not ByWith then
+  begin
+    EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
+    M:= LookupMemberOnType(ClassId, ARef.NameText);
+    if M.Id <= 0 then AReason:= 'not-found'
+    else if (M.Kind <> skProperty) and (Rcv = '') then AReason:= 'field'
+    else WType:= ClassId;
+  end;
+  if AReason = '' then
+  begin
+    Result.TargetSymbolId      := M.Id;
+    Result.Confidence          := 'certain';
+    Result.MemberMode          := 'read';
+    Result.ReceiverTypeSymbolId:= WType;
+    if M.Kind = skProperty then
+    begin
+      Acc:= ResolveAccessor(M, 'read');
+      if Acc.Id > 0 then
+      begin
+        Result.AccessorSymbolId:= Acc.Id;
+        Result.AccessorKind    := (if Acc.Kind = skField then 'field' else 'method');
+      end;
+    end;
+    if ByWith then Inc(FMemberReadStats.BoundWith) else Inc(FMemberReadStats.BoundOwn);
+  end
+  else if AReason = 'with-scope' then Inc(FMemberReadStats.WithScope)
+  else if AReason = 'not-member' then Inc(FMemberReadStats.NotMember)
+  else if AReason = 'shadowed' then Inc(FMemberReadStats.Shadowed)
+  else if AReason = 'field' then Inc(FMemberReadStats.Field)
+  else if AReason = 'not-found' then Inc(FMemberReadStats.NotFound)
+  else if AReason = 'qualified' then Inc(FMemberReadStats.Qualified)
+  else Inc(FMemberReadStats.Unreadable);
 end;
 
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
@@ -2967,7 +4014,7 @@ var
 begin
   Result:= 0;
   if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
-  Encl:= FStore.GetSymbolById(ACallRef.EnclosingSymbolId);
+  Encl:= SymbolById(ACallRef.EnclosingSymbolId);
 
   // --- Kind 1: bare M / Self.M -> the enclosing routine's owning class.
   // NOTE on `inherited M`: it never arrives here at all. MEASURED, because the
@@ -2979,8 +4026,19 @@ begin
   // reached only through `inherited`), so no guard is needed on either path.
   // An earlier version of this comment claimed `inherited M` reached here as a
   // bare kind-1 call and resolved on the ancestor chain. It does not.
-  if (AReceiverExpr = '') or SameText(AReceiverExpr, 'Self') then
-    Exit(Encl.ParentId);
+  //
+  // --- Kind 0 (1.8.0, D14): a receiver whose LEADING identifier a `with` target
+  //     supplies -- `with AObj do Inner.Ping` -- is typed through that target,
+  //     and an undecided with scope leaves it untyped. Ahead of every identifier
+  //     rung because a with member is nearer than any local, field or type. It
+  //     never handles '' or Self, so kind 1 keeps its answer.
+  var WithHandled: Boolean;
+  Result:= TypeReceiverThroughWith(ACallRef, AReceiverExpr, WithHandled);
+  if WithHandled or (AReceiverExpr = '') or SameText(AReceiverExpr, 'Self') then
+  begin
+    if not WithHandled then Result:= Encl.ParentId;
+    Exit;
+  end;
 
   ClassId:= Encl.ParentId; // the enclosing routine's owning class (for kinds 2/3)
 
@@ -3004,21 +4062,10 @@ begin
   //     cannot silently bind. Only fires when EVERY segment is a plain
   //     identifier -- a real expression ('Arr[i].Foo', a cast) still falls
   //     through to the guard below, which is where it belongs.
-  if Pos('.', AReceiverExpr) > 0 then
+  if (Pos('.', AReceiverExpr) > 0) and IsIdentChain(AReceiverExpr.Split(['.'])) then
   begin
-    var AllIdent: Boolean:= True;
-    for var Seg in AReceiverExpr.Split(['.']) do
-    begin
-      if (Seg = '') or (not IsIdentStart(Seg[1])) then begin AllIdent:= False; Break; end;
-      for var j:= 1 to Length(Seg) do
-        if not IsIdentPart(Seg[j]) then begin AllIdent:= False; Break; end;
-      if not AllIdent then Break;
-    end;
-    if AllIdent then
-    begin
-      var Segs: TArray<string>:= AReceiverExpr.Split(['.']);
-      Exit(ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId));
-    end;
+    var Segs: TArray<string>:= AReceiverExpr.Split(['.']);
+    Exit(ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId));
   end;
 
   // The remaining handled kinds require a simple identifier receiver.
@@ -3087,7 +4134,7 @@ begin
   if ATypeSymbolId <= 0 then Exit;
   Result:= FindChildOfKind(ATypeSymbolId, AMemberName, MEMBER_KINDS);
   if Result.Id > 0 then Exit;
-  for A in FStore.GetTransitiveAncestors(ATypeSymbolId) do
+  for A in AncestorsOf(ATypeSymbolId) do
   begin
     if not A.Resolved or (A.SymbolId <= 0) then Continue;
     Result:= FindChildOfKind(A.SymbolId, AMemberName, MEMBER_KINDS);
@@ -3301,7 +4348,7 @@ begin
     seen even when the answer is 0. }
   Result:= PickAccessor(AProp.ParentId, Ident, WantArity, ACCESSOR_KINDS, Found);
   if not Found then
-    for A in FStore.GetTransitiveAncestors(AProp.ParentId) do
+    for A in AncestorsOf(AProp.ParentId) do
     begin
       if not A.Resolved or (A.SymbolId <= 0) then Continue;
       Result:= PickAccessor(A.SymbolId, Ident, WantArity, ACCESSOR_KINDS, Found);
@@ -3309,6 +4356,49 @@ begin
     end;
 end;
 
+function TCallResolver.BareCallInNearScopes(const ACallRef: TReference; AArgCount: Integer;
+  AArgsKnown: Boolean; var AEdge: TCallEdge): Boolean;
+var
+  WType : Int64          ;
+  WKind : TWithMemberKind;
+  Target: Int64          ;
+  Conf  : string         ;
+begin
+  Result:= True;
+  case WithScopeAt(ACallRef, ACallRef.StartLine, ACallRef.StartCol, ACallRef.NameText, WType, WKind) of
+    wvNone: Result:= False;
+    wvMember:
+      begin
+        Target:= 0;
+        if WKind = wmRoutine then
+          Target:= LookupMethodOnType(WType, ACallRef.NameText, AArgCount, AArgsKnown, Conf);
+        { Certain only: an overload tie or a non-routine member writes nothing. }
+        if (Target > 0) and (Conf = 'certain') then
+        begin
+          AEdge.TargetSymbolId      := Target;
+          AEdge.Confidence          := Conf;
+          AEdge.ReceiverTypeSymbolId:= WType; { the target the with header names }
+          Inc(FWith.Stats.CallBound);
+        end
+        else
+          Inc(FWith.Stats.CallDeclined);
+      end;
+  else
+    Inc(FWith.Stats.CallDeclined); { undecided: the target may own the name }
+  end;
+  if Result then Exit;
+  { Then Delphi's lexical chain. ReceiverTypeSymbolId stays 0: a lexical hit has
+    no receiver TYPE. The field means "the type the receiver was typed to", and
+    inventing the enclosing routine's class here would be a false claim about a
+    call that has no receiver at all. }
+  Target:= LookupInLexicalScopes(ACallRef.EnclosingSymbolId, ACallRef.NameText, Conf);
+  Result:= Target > 0;
+  if Result then
+  begin
+    AEdge.TargetSymbolId:= Target;
+    AEdge.Confidence    := Conf;
+  end;
+end;
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
 var
   Lines   : TStringList;
@@ -3364,17 +4454,13 @@ begin
   // is the common case (an intrinsic, an RTL call, a unit-level routine).
   if Rcv = '' then
   begin
-    Target:= LookupInLexicalScopes(ACallRef.EnclosingSymbolId, ACallRef.NameText, Conf);
-    if Target > 0 then
-    begin
-      // ReceiverTypeSymbolId stays 0: a lexical hit has no receiver TYPE. The
-      // field means "the type the receiver was typed to", and inventing the
-      // enclosing routine's class here would be a false claim about a call that
-      // has no receiver at all.
-      Result.TargetSymbolId:= Target;
-      Result.Confidence    := Conf;
-      Exit;
-    end;
+    { 1b'. THE WITH SCOPE (1.8.0, D14) is nearer still: inside `with A do`, a
+      bare M that A's type declares IS A.M, whatever the lexical chain, the
+      class or the unit say. Before this rung a bare call in a with body bound
+      to the ENCLOSING class's same-named method -- the one the compiler does
+      not pick. When the with scope decides (bound, or declined), nothing below
+      may run for the call. }
+    if BareCallInNearScopes(ACallRef, ArgCount, ArgsKnown, Result) then Exit;
   end;
 
   // 2. type the receiver -> a class/interface/record symbol id.
@@ -3446,7 +4532,7 @@ begin
      and FNameToEnumValues.ContainsKey(LowerCase(ACallRef.NameText)) then
   begin
     var V: Int64:= 0;
-    if (TypeId > 0) and (FStore.GetSymbolById(TypeId).Kind = skEnum) then
+    if (TypeId > 0) and (SymbolById(TypeId).Kind = skEnum) then
       V:= FindChildOfKind(TypeId, ACallRef.NameText, [skEnumValue], False).Id
     else if TypeId = 0 then
     begin

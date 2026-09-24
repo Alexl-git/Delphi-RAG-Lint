@@ -10,7 +10,9 @@ unit uParenlessUse;
   NEG-* : a `read` ref spelled like a parameterless routine that is NOT a call
           to it -- a nearer declaration shadows it, the source takes its
           address, the target is procedural, the candidate needs arguments, or
-          a `with` may supply the name. Each must stay unbound. }
+          a `with` target supplies the name. None may bind as a call of it;
+          since resolver 1.8.0 a with member or an own-class property the name
+          denotes IS bound, as that member. }
 
 interface
 
@@ -48,6 +50,7 @@ procedure ShadowByProcVar;
 procedure ProcValues;
 procedure Overloads;
 procedure WithScope(AHolder: THolder);
+procedure SplitArgs;
 function Nested: Integer;
 
 implementation
@@ -113,6 +116,18 @@ procedure WithScope(AHolder: THolder);
 begin
   with AHolder do
     Consume(NextId); // NEG-WITH
+end;
+
+{ D16c: an argument list split across lines is ONE site. D16b: qualified /
+  Spring spellings of the zero-argument function type. }
+procedure SplitArgs;
+begin
+  Consume(
+    NextId); // POS-ARG-SPLIT
+  RegisterGen(
+    NextId); // NEG-PROCARG-SPLIT
+  RegisterQ(NextId); // NEG-PROCARG-QUAL
+  RegisterS(NextId); // NEG-PROCARG-FUNC
 end;
 
 function Nested: Integer;

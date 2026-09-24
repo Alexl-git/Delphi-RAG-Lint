@@ -811,4 +811,17 @@
 #   and the new code only READS refs; it writes call_edges and refs.symbol_id. A bump here would bill a ~3h17m re-parse of every
 #   database to alter not one stored parse.
 #   Superseded: 1.18.0-alpha|63488fb2a2232af20a67a2c64226c87ccc33ba17de1943a54d11762563216ec6
-1.18.0-alpha|6b35e559660b226b5a98468c03c49e657ef3e5846a90f83e8171f4fb5027d140
+# 2026-09-23: hash updated WITHOUT a version bump, per the rule above (the
+#   2026-09-16 and 2026-09-23 parenless CallResolver entries are the precedent).
+#   The only surface file that moved is src\index\DRagLint.Index.CallResolver.pas:
+#   the `with` scope (D14), the bare member-read pass (D14 + D16a) and the
+#   parenless procedure-value fixes (D16b/c). All of it is the RESOLVE pass --
+#   rows derived from stored parses -- governed by DRAGLINT_RESOLVER_VERSION,
+#   which moves 1.7.0-alpha -> 1.8.0-alpha in the same commit. The with scope
+#   PARSES the source inside the resolver to find with spans, but that parse is
+#   never stored: no symbol, ref or facts row changes, and no file under
+#   src\parser or src\preprocess changed, nor Core.Indexer or Doc.SymbolFacts. A
+#   bump here would bill a ~3h17m re-parse of every database to alter not one
+#   stored parse.
+#   Superseded: 1.18.0-alpha|6b35e559660b226b5a98468c03c49e657ef3e5846a90f83e8171f4fb5027d140
+1.18.0-alpha|310b7e3893783b1c0aafe8c18b2ad8c87962b9449904826987a51cb632e732a3
