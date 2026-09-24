@@ -7,9 +7,11 @@ $exePath = (Resolve-Path $Exe).Path
 
 # Apply the single fix (rule R at line L) to a fresh copy of $fixtureName and
 # assert the resulting 1-based line $L, trimmed, equals $expect.
+$script:newrulesDirs = @()
 function Assert-Fix($fixtureName, $L, $R, $expect, $tag) {
   $fixture = (Resolve-Path (Join-Path $PSScriptRoot "fixtures\$fixtureName")).Path
-  $scratch = Join-Path C:\TEMP ('draglint_newrules_' + [IO.Path]::GetFileNameWithoutExtension($fixtureName))
+  $scratch = Join-Path C:\TEMP ('draglint_newrules_' + [IO.Path]::GetFileNameWithoutExtension($fixtureName) + "_$PID")
+  $script:newrulesDirs += $scratch
   if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
   New-Item -ItemType Directory -Path $scratch | Out-Null
   $target = Join-Path $scratch $fixtureName
@@ -51,5 +53,5 @@ if (Test-Path $t18) {
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
   # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
-  foreach ($d23 in @((Join-Path C:\TEMP "draglint_newrules_redundant_assigned_free_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+  foreach ($d23 in @($script:newrulesDirs)) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
 }

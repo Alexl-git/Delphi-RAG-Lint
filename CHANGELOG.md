@@ -396,8 +396,8 @@ breaking changes** until v1.0.
   (`C:\TEMP\draglint_<x>`, `Join-Path C:\TEMP 'draglint_<x>'`, `"$env:TEMP\drag-lint-<x>"`) and most
   wiped it at start, so two copies of one suite (two worktrees, or a battery beside a hand run)
   destroyed each other's fixtures -- measured: two `run_unit_qualified_call_bind.ps1` 1.5 s apart,
-  the first died with "sql returned no JSON". 440 runners now suffix every such default with
-  `-$PID` / `_$PID` (469 sites: 468 scripted, one by hand) and remove it in a `finally` on every exit
+  the first died with "sql returned no JSON". 441 runners now suffix every such default with
+  `-$PID` / `_$PID` (471 sites: 468 scripted, three by hand) and remove it in a `finally` on every exit
   path. New static guard `tests\autotest\run_scratch_dirs_are_per_run.ps1` fails on any
   draglint/drag-lint path under a temp root with no per-run component (positive control planted in
   its own scratch). Five runners owned by parallel batches still hold a fixed path and keep the guard

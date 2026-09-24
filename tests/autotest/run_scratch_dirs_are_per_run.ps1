@@ -28,6 +28,8 @@
   temp root (C:\TEMP, $env:TEMP, $env:TMP), in either spelling:
     * a literal path   C:\TEMP\draglint_x   "$env:TEMP\drag-lint-x"
     * a Join-Path      Join-Path C:\TEMP 'draglint_x'
+    * a built name     Join-Path C:\TEMP ('draglint_x_' + $name)  -- one
+      folder per fixture is still the SAME folder on every run
   unless the same line carries a per-run component ($PID, a GUID,
   GetRandomFileName, Get-Random). A line that is unique per run by
   construction is skipped, so the guard cannot nag about the safe idiom.
@@ -62,8 +64,12 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 $tempRoot  = '(?:C:\\TEMP|\$env:TEMP|\$env:TMP)'
 $nameStart = '(?:draglint|drag-lint)[_-]'
 $literalRe = $tempRoot + '\\' + $nameStart
-$joinRe    = 'Join-Path\s+' + $tempRoot + '\s+[''"]' + $nameStart
-$perRunRe  = '\$PID\b|\$\{PID\}|Guid|GetRandomFileName|Get-Random'
+# The optional '(' admits a name BUILT per fixture -- Join-Path C:\TEMP
+# ('draglint_x_' + $name) -- which is still the same folder on every run.
+$joinRe    = 'Join-Path\s+' + $tempRoot + '\s+\(?\s*[''"]' + $nameStart
+# A to-the-second timestamp (run_battery.ps1's own draglint_battery_<stamp>)
+# also counts as per run; a date alone would not.
+$perRunRe  = '\$PID\b|\$\{PID\}|Guid|GetRandomFileName|Get-Random|Get-Date -Format ''[^'']*HHmmss'
 
 <#
   Returns 'file:line: text' for every flagged line of every run_*.ps1 under
@@ -104,13 +110,16 @@ try {
     ('$s = Join-Path C:\TEMP ''' + 'draglint_' + 'planted_join'''),
     ('[string]$WorkDir = "' + $et + 'planted-env"'),
     ('$w = "' + '$env:TEMP\' + 'draglint_' + 'planted_underscore"'),
-    ('$w = Join-Path $env:TEMP ''' + 'drag-lint-' + 'planted-envjoin''')
+    ('$w = Join-Path $env:TEMP ''' + 'drag-lint-' + 'planted-envjoin'''),
+    ('$d = Join-Path C:\TEMP (''' + 'draglint_' + 'planted_built_'' + $name)')
   )
   $good = @(
     ('[string]$WorkDir = "' + $ct + 'planted_ok_$PID"'),
     ('[string]$WorkDir = "' + $et + 'planted-ok-$PID"'),
     ('$s = Join-Path C:\TEMP "' + 'draglint_' + 'planted_ok_$PID"'),
     ('$s = Join-Path C:\TEMP ([guid]::NewGuid().ToString())'),
+    ('$d = Join-Path C:\TEMP (''' + 'draglint_' + 'planted_built_'' + $name + "_$PID")'),
+    ('$d = Join-Path $env:TEMP (''' + 'draglint_' + 'planted_stamp_'' + (Get-Date -Format ''yyyyMMdd-HHmmss''))'),
     ('# $w = "' + $ct + 'planted_in_comment"'),
     '<#',
     ('  ' + $ct + 'planted_in_block'),
