@@ -13,9 +13,14 @@
     * The SQL index is HISTORY (P15/R6). 252 table declarations are 135 names;
       117 names are declared twice. Get-SqlTableSet collapses them onto the
       declaration in the NEWEST script (ruling R8) and the chart prints how many
-      declarations were collapsed. A column that only an OLDER declaration
-      carries (IPCHART.ACTION -- live) is accepted and labelled with the
-      declaration it came from; it is never refused as "not a column".
+      declarations were collapsed. Whether a selected COLUMN exists is decided
+      by Get-SqlColumnState (Emit-Common) -- the ONE column test lands-where and
+      feeds-from use too: extracted from the newest declaration; a QUOTED
+      identifier the index does not extract (FOLDERCOUNT."TABLE" MS1.SQL:3848,
+      IPCHART."ACTION" :2243); extracted only from an OLDER declaration; or
+      named by this index's own SQL for T (server-sql). Only when none holds
+      is it refused, worded "not extracted as a column by the SQL index" -- and
+      a stale script refuses as "not known", never as an absence.
     * 5 live tables (PDF_SCAN, PDF_SCAN_CHUNK, PDF_SCAN_ITEM, PDF_BALLOON,
       PDF_SCAN_REGION) were never scripted, and OPERATION is scripted but
       dropped live (P16, measured 2026-09-23 against the live DB for
@@ -46,8 +51,10 @@
   ---------------------
   A literal EQUAL to the table name ('CAUSFAIL') is a pipe command on CLIENT
   (P25) and a log context or generator key on SERVER. Those units are drawn in
-  their own dashed cluster labelled [by name], and a literal inside a routine
-  already drawn as a SQL consumer is not drawn twice.
+  their own dashed "mentions (not SQL)" cluster labelled [by name], in the
+  focus's rank with a dotted line and NO arrow (R15: a mention is not a read),
+  and a literal inside a routine already drawn as a SQL consumer is not drawn
+  twice. The match is exact; case-only matches are counted and named.
 
   THE COLUMN FORM
   ----------------
@@ -180,36 +187,20 @@ $declText = $(if ($tbl.DeclCount -gt 1) { "declared $($tbl.DeclCount) times in t
               else { "declared 1 time in the scripts ($declFile`:$($tbl.Line))" })
 Write-Host "  $tName -- $declText; $($tbl.ColumnNames.Count) column(s)"
 
-# a column's own declaration line, from the SQL index
-function Get-SqlColumnLine([int] $TableId, [string] $Name) {
-  $DbPath = $SqlDbPath
-  $r = Invoke-IndexQuery "SELECT start_line AS line FROM symbols WHERE kind = 'sql_column' AND parent_id = $TableId AND UPPER(name) = UPPER('$(ConvertTo-SqlText $Name)')"
-  $(if ($r.Count) { [int]$r[0].line } else { 0 })
+# THE column state (final wave, item 1): the SHARED Get-SqlColumnState. A
+# column the SQL index does not extract (not yes / quoted / older) is not refused
+# YET: this index's own SQL for T may name it (server-sql), which needs the
+# routine set of step 3 -- decided right after it.
+$colName = $null; $colFile = $tbl.File; $colLine = $tbl.Line; $colOlder = $false; $cs = $null
+function Set-ColumnFromState {
+  $script:colOlder = ($cs.State -eq 'older'); $script:colFile = $cs.File; $script:colLine = $cs.Line
+  $decl = @($tbl.ColumnNames | Where-Object { [string]::Equals($_, $selCol, [StringComparison]::OrdinalIgnoreCase) })
+  $script:colName = $(if ($decl.Count) { [string]$decl[0] } else { $cs.Column })
+  Write-Host "  column $tName.$($script:colName) ($($cs.State))"
 }
-
-$colName = $null; $colFile = $tbl.File; $colLine = $tbl.Line; $colOlder = $false
 if ($selCol) {
-  $hit = @($tbl.ColumnNames | Where-Object { [string]::Equals($_, $selCol, [StringComparison]::OrdinalIgnoreCase) })
-  if ($hit.Count) {
-    $colName = [string]$hit[0]
-    $ln = Get-SqlColumnLine $tbl.Id $colName
-    if ($ln -gt 0) { $colLine = $ln }
-  } elseif ($tbl.OlderOnlyColumns.Contains($selCol.ToUpperInvariant())) {
-    # THE KNOWN GAP (Get-SqlTableSet): only an older declaration carries it, and
-    # at least one such column (IPCHART.ACTION) is live. Accept it and say where.
-    $oc = $tbl.OlderOnlyColumns[$selCol.ToUpperInvariant()]
-    $colName = $oc.Column; $colOlder = $true; $colFile = $oc.File
-    $older = @($tbl.Declarations | Where-Object { [string]::Equals($_.File, $oc.File, [StringComparison]::OrdinalIgnoreCase) -and $_.Line -eq $oc.Line })
-    $ln = $(if ($older.Count) { Get-SqlColumnLine $older[0].Id $colName } else { 0 })
-    $colLine = $(if ($ln -gt 0) { $ln } else { $oc.Line })
-  } else {
-    $all = @($tbl.ColumnNames) + @($tbl.OlderOnlyColumns.Keys)
-    $near = Get-NearestName $selCol $all
-    throw ("consumers: no column $selCol in $tName ($($tbl.ColumnNames.Count) columns in the newest " +
-           "declaration, $declFile`:$($tbl.Line)$(if ($tbl.OlderOnlyColumns.Count) { "; $($tbl.OlderOnlyColumns.Count) more only in an older one" })) " +
-           "-- nearest: $near. Script-derived; the scripts may lag the live schema.")
-  }
-  Write-Host "  column $tName.$colName$(if ($colOlder) { ' (ONLY in an older declaration)' })"
+  $cs = Get-SqlColumnState $sqlSet $tName $selCol $SourceOverride
+  if ($cs.IsColumn) { Set-ColumnFromState }
 }
 
 # ---- 2. index-wide pre-check on the Delphi index -----------------------------------------
@@ -255,11 +246,13 @@ $noSql = ($nFactSyms -eq 0 -and $verbLits.Count -eq 0)
 $routineCache = @{}   # file id -> routine rows with an impl span
 function Get-FileRoutines([int] $Fid) {
   if (-not $routineCache.ContainsKey($Fid)) {
-    $routineCache[$Fid] = Invoke-IndexQuery @"
+    # PAGED (final wave): uJobList.pas holds more than 200 routines, and the
+    # unpaged query stopped `consumers -Table FOLDERS` on CLIENT at the row cap
+    $routineCache[$Fid] = Get-AllIndexRows @"
 SELECT s.id AS id, s.qualified_name AS q, s.impl_start_line AS a, s.impl_end_line AS b
   FROM symbols s
  WHERE s.file_id = $Fid AND s.impl_start_line > 0 AND s.kind IN ($(ConvertTo-SqlInList $ROUTINE_KINDS))
-"@ 'consumers (routine spans)'
+"@ 's.id'
   }
   , $routineCache[$Fid]
 }
@@ -318,7 +311,8 @@ function Get-ShortList($Items, [int] $Max) {
   $all = @($Items)
   if ($all.Count -le $Max) { return ($all -join ', ') }
   (@($all[0..($Max - 1)]) -join ', ') + " +$($all.Count - $Max) more"
-}function Get-WordRx([string] $Name) { "(?<![A-Za-z0-9_$])$([regex]::Escape($Name))(?![A-Za-z0-9_$])" }
+}
+function Get-WordRx([string] $Name) { "(?<![A-Za-z0-9_$])$([regex]::Escape($Name))(?![A-Za-z0-9_$])" }
 
 # ---- 3. the table's SQL consumers on the Delphi side ----------------------------------------
 $certR = @{}; $certW = @{}             # routine id -> $true
@@ -330,10 +324,9 @@ foreach ($f in $facts) {
 # plain hashtables, NOT [ordered]: an OrderedDictionary indexed with an [int]
 # key reads it as a POSITION, and these keys are routine ids
 $litR = @{}; $litW = @{}
-$unitLevel = 0
 foreach ($h in @($verbHits | Where-Object { $_.Kind -eq 'table' -and $_.Name -eq $tName })) {
   $rt = Find-Routine $h.Fid $h.Line
-  $key = $(if ($rt) { [int]$rt.id } else { $unitLevel++; - $h.Fid })
+  $key = $(if ($rt) { [int]$rt.id } else { - $h.Fid })
   $bag = $(if ($h.Verb -in 'FROM', 'JOIN') { $litR } else { $litW })
   if (-not $bag.ContainsKey($key)) {
     $bag[$key] = [pscustomobject]@{ Key = $key; Fid = $h.Fid; Path = $h.Path; Line = $h.Line; Verbs = New-Object System.Collections.ArrayList; Text = $h.Text }
@@ -344,8 +337,40 @@ $infR = @($litR.Keys | Where-Object { -not $certR.ContainsKey($_) })
 $infW = @($litW.Keys | Where-Object { -not $certW.ContainsKey($_) })
 $rtIds = @(@($certR.Keys) + @($certW.Keys) + @($litR.Keys) + @($litW.Keys) | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
 $rtInfo = $(if ($rtIds.Count) { Get-RoutineRows $rtIds } else { @{} })
-Write-Host ("  {0}: certain readers {1} / writers {2}; inferred readers {3} / writers {4}" -f `
-            $tName, $certR.Count, $certW.Count, $infR.Count, $infW.Count)
+# ROUTINES and UNIT-LEVEL rows counted apart (final wave, item 6): a unit-level
+# row is one per UNIT (key = -file id), not one per literal, and it is not a routine
+$mR = Measure-ConsumerKeys @($certR.Keys) @($litR.Keys)
+$mW = Measure-ConsumerKeys @($certW.Keys) @($litW.Keys)
+$unitLevel = (Measure-ConsumerKeys @() (@($litR.Keys) + @($litW.Keys))).Units
+Write-Host ("  {0}: certain readers {1} / writers {2}; inferred readers {3} / writers {4}; reading routines {5} / writing routines {6}; units with a unit-level literal {7}" -f `
+            $tName, $certR.Count, $certW.Count, $infR.Count, $infW.Count, $mR.Routines, $mW.Routines, $unitLevel)
+
+# ---- 3b. a column the SQL index does not extract: this index's own SQL (server-sql)
+# A routine above (fact or verb literal names T) whose span holds a literal that
+# word-matches the column: the same evidence the column form draws, and the rule
+# lands-where applies to its DataService. The first by file and line anchors it.
+if ($selCol -and -not $cs.IsColumn) {
+  $scRx = Get-WordRx $selCol.ToUpperInvariant()
+  $scHits = New-Object System.Collections.ArrayList
+  foreach ($id in $rtIds) {
+    $rt = $rtInfo[$id]
+    if (-not $rt) { continue }
+    $h1 = @((Get-SpanLiterals $rt) | Where-Object { [regex]::IsMatch([string]$_.text, $scRx) } | Select-Object -First 1)
+    if ($h1.Count) { [void]$scHits.Add([pscustomobject]@{ File = $rt.Path; Line = [int]$h1[0].line; Routine = (Get-ShortName $rt.Q (Get-UnitName $rt.Path)) }) }
+  }
+  $scFirst = @($scHits | Sort-Object File, Line | Select-Object -First 1)
+  $cs = Get-SqlColumnState $sqlSet $tName $selCol $SourceOverride -ServerSqlHit $(if ($scFirst.Count) { $scFirst[0] } else { $null }) `
+          -SqlSearched ([IO.Path]::GetFileName($DbPath))
+  if ($cs.State -eq 'stale') {
+    throw "consumers: cannot tell whether $tName.$($selCol.ToUpperInvariant()) is a column -- $($cs.Label). Script-derived; the scripts may lag the live schema."
+  }
+  if (-not $cs.IsColumn) {
+    $near = Get-NearestName $selCol (@($tbl.ColumnNames) + @($tbl.OlderOnlyColumns.Keys))
+    throw ("consumers: no column $selCol in ${tName}: $($cs.Label) -- nearest: $near. " +
+           'Script-derived; the scripts may lag the live schema.')
+  }
+  Set-ColumnFromState
+}
 
 # ---- 4. [by name]: literals EQUAL to the table name ------------------------------------------
 $tq = ConvertTo-SqlText $tName
@@ -367,6 +392,17 @@ foreach ($n in @($named | Sort-Object { [string]$_.path }, { [int]$_.line })) {
 }
 $byNameLits = @($byNameFiles.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
 if (-not $byNameLits) { $byNameLits = 0 }
+# The match above is EXACT (final wave, item 8). Literals equal to T only
+# case-insensitively are COUNTED and named, not drawn: measured on CLIENT, the
+# one for FOLDERS is 'Folders', a ribbon tab caption (uJobList.pas:552) -- the
+# pipe-command and log-context literals this cluster exists for are upper case.
+$caseOnly = Invoke-IndexQuery @"
+SELECT sl.text AS text, sl.start_line AS line, f.path AS path
+  FROM string_literals sl JOIN files f ON f.id = sl.file_id
+ WHERE sl.source = 'pas' AND sl.kind IN ('literal','const','format') AND UPPER(sl.text) = UPPER('$tq') AND sl.text <> '$tq'
+ ORDER BY f.path, sl.start_line
+"@ 'consumers (case-only name literals)'
+$caseOnlyText = (@($caseOnly | ForEach-Object { "'$($_.text)' $([IO.Path]::GetFileName([string]$_.path)):$($_.line)" }) -join ', ')
 
 # ---- 5. the database side (SQL index) --------------------------------------------------------
 $trigSet = Get-SqlTriggerSet $SqlDbPath $SourceOverride
@@ -414,7 +450,7 @@ function Get-SqlLineText([string] $Path, [int] $Line) {
 $colRx = $null
 $srvCol = @{}          # routine id -> first literal naming C: Line, Text
 $srvColSilent = 0      # routines that touch T but name no C in a literal
-$trigCol = @(); $procCol = @(); $idxCol = @()
+$trigCol = @(); $procCol = @(); $idxCol = @(); $trigColStale = @(); $trigColNoBody = @()
 $bindAll = 0; $bindDrawn = New-Object System.Collections.ArrayList
 $bindElsewhere = @{}; $bindUnresolved = @{}; $bindStale = 0
 if ($colName) {
@@ -429,6 +465,10 @@ if ($colName) {
     else { $srvColSilent++ }
   }
   $trigCol = @($trigFor | Where-Object { $_.Columns -contains $colName.ToUpperInvariant() })
+  # a trigger FOR T whose body was NOT read has no Columns -- it must not vanish
+  # from the column form (final wave, item 4): counted, named and said
+  $trigColStale  = @($trigFor | Where-Object { $_.Stale })
+  $trigColNoBody = @($trigFor | Where-Object { -not $_.Stale -and -not $_.Found })
   $procCol = @($procRows | Where-Object { [regex]::IsMatch([string]$_.Decl.Text, $colRx) })
   $idxCol  = @($idxRows | Where-Object { $lt = Get-SqlLineText ([string]$_.path) ([int]$_.line); $lt -and [regex]::IsMatch($lt.ToUpperInvariant(), $colRx) })
 
@@ -537,10 +577,24 @@ if ($colName) {
         New-Row $_.Control $_.Dfm $_.Line "$($_.Control).$($_.Prop) = '$colName' via $($_.Ds) -> $tName ($($_.Grade)) -- $([IO.Path]::GetFileName($_.Dfm)):$($_.Line)" "$(Get-UnitName $_.Dfm); $($_.Ds)" }) `
       'bind' $true (@("$bindAll binding(s) of $colName in this index; only chains resolving to $tName are drawn") + @($bextra) -join "`n")
   }
+  $tx = New-Object System.Collections.ArrayList
+  if ($trigColStale.Count) {
+    [void]$tx.Add("$($trigColStale.Count) trigger(s) FOR $tName in a script that differs from the index [stale source] -- not scanned for ${colName}: " +
+                  (@($trigColStale | ForEach-Object { "$($_.Name)@$([IO.Path]::GetFileName($_.File)):$($_.Line)" }) -join ', '))
+  }
+  if ($trigColNoBody.Count) {
+    [void]$tx.Add("$($trigColNoBody.Count) trigger(s) FOR $tName whose body was not found -- not scanned for ${colName}: " +
+                  (@($trigColNoBody | ForEach-Object { "$($_.Name)@$([IO.Path]::GetFileName($_.File)):$($_.Line)" }) -join ', '))
+  }
   Add-Cluster 'db' 'coltriggers' "triggers FOR $tName using $colName" @($trigCol | ForEach-Object {
-      New-Row $_.Name $_.File $_.Line "$($_.Name) FOR ${tName}: NEW./OLD.$colName in its body -- $([IO.Path]::GetFileName($_.File)):$($_.Line)" "NEW/OLD.$colName" }) 'db' $false ''
+      New-Row $_.Name $_.File $_.Line "$($_.Name) FOR ${tName}: NEW./OLD.$colName in its body -- $([IO.Path]::GetFileName($_.File)):$($_.Line)" "NEW/OLD.$colName" }) 'db' $false ($tx -join "`n")
+  # procedure bodies not scanned (stale / no terminator) cannot name the column
+  # either -- the same disclosure the table form carries, plus the name-only rows
+  $cpx = New-Object System.Collections.ArrayList
+  if ($procNotScanned) { [void]$cpx.Add("$procNotScanned of $($procSet.Count) procedure bodies not scanned") }
+  foreach ($u in $procUnscanned) { [void]$cpx.Add("$($u.Decl.Name): name contains $tName, body not scanned $(if ($u.Stale) { '[stale source]' } else { '[body not scanned]' })") }
   Add-Cluster 'db' 'colprocs' "procedures naming $tName and $colName" @($procCol | ForEach-Object {
-      New-Row $_.Decl.Name $_.Decl.File $_.Decl.Line "$($_.Decl.Name): body names $tName and $colName -- $([IO.Path]::GetFileName($_.Decl.File)):$($_.Decl.Line)" 'body scan' }) 'db' $true ''
+      New-Row $_.Decl.Name $_.Decl.File $_.Decl.Line "$($_.Decl.Name): body names $tName and $colName -- $([IO.Path]::GetFileName($_.Decl.File)):$($_.Decl.Line)" 'body scan' }) 'db' $true ($cpx -join "`n")
   Add-Cluster 'db' 'colindexes' "indexes on $tName over $colName" @($idxCol | ForEach-Object {
       New-Row ([string]$_.name) ([string]$_.path) ([int]$_.line) "$($_.name) ON $tName (...$colName...) -- $([IO.Path]::GetFileName([string]$_.path)):$($_.line)" '' }) 'db' $false ''
 } else {
@@ -550,7 +604,9 @@ if ($colName) {
   $lb = @{}; foreach ($k in $litW.Keys) { $lb[$k] = $litW[$k] }
   Add-Cluster 'right' 'certwrites' 'writes [certain]' @((Sort-Keys @($certW.Keys)) | ForEach-Object { New-RoutineRow $_ 'write' $lb $true }) 'write' $false ''
   Add-Cluster 'right' 'infwrites'  'writes, by SQL literal' @((Sort-Keys $infW) | ForEach-Object { New-RoutineRow $_ 'write' $lb $false }) 'write' $true ''
-  Add-Cluster 'left' 'byname' "[by name] -- a literal equal to $tName, not SQL" @($byNameFiles.Keys | ForEach-Object {
+  # R15 (final wave, item 7): NOT on the readers side and no arrow into the
+  # focus -- a literal equal to the name proves a mention, not a read
+  Add-Cluster 'mention' 'byname' "mentions (not SQL) [by name] -- a literal equal to $tName" @($byNameFiles.Keys | ForEach-Object {
       $ls = $byNameFiles[$_]
       New-Row (Get-UnitName $_) $_ $ls[0].Line "$([IO.Path]::GetFileName($_)): '$tName' at $(@($ls | ForEach-Object { "$($_.Kind) :$($_.Line)" }) -join ', ')" `
         "$($ls.Count) literal$(if ($ls.Count -ne 1) { 's' }): $(@($ls | ForEach-Object { ":$($_.Line)" }) -join ' ')" }) 'name' $true ''
@@ -589,10 +645,10 @@ $anchored++
 [void]$ftbl.Append("<TR><TD ALIGN=`"LEFT`" HREF=`"$(New-RowHref $fFile $fLine)`" TITLE=`"$(ConvertTo-XmlText "$fLabel -- $([IO.Path]::GetFileName($fFile)):$fLine")`"><FONT COLOR=`"$($PAL.focusInk)`" POINT-SIZE=`"18`"><B>$(ConvertTo-XmlText $fLabel)</B></FONT></TD></TR>")
 Add-DisclosureRow $ftbl $declText $PAL.lineInk
 if ($colName) {
-  if ($colOlder) { Add-DisclosureRow $ftbl "column ONLY in an older declaration ($([IO.Path]::GetFileName($colFile))); the newest has $($tbl.ColumnNames.Count) columns without it" $PAL.lineInk }
-  else { Add-DisclosureRow $ftbl "1 of $($tbl.ColumnNames.Count) columns in the newest declaration" $PAL.lineInk }
+  # the SHARED label (Get-SqlColumnState): the same words lands-where and feeds-from print
+  Add-DisclosureRow $ftbl "column state $($cs.State): $($cs.Label)" $PAL.lineInk
 } else {
-  Add-DisclosureRow $ftbl "$($tbl.ColumnNames.Count) columns in the newest declaration$(if ($tbl.OlderOnlyColumns.Count) { "; $($tbl.OlderOnlyColumns.Count) more only in an older one ($(@($tbl.OlderOnlyColumns.Keys) -join ', '))" })" $PAL.lineInk
+  Add-DisclosureRow $ftbl "$($tbl.ColumnNames.Count) columns extracted from the newest declaration$(if ($tbl.OlderOnlyColumns.Count) { "; $($tbl.OlderOnlyColumns.Count) more extracted only from an older one ($(@($tbl.OlderOnlyColumns.Keys) -join ', '))" }); a quoted column name is not extracted" $PAL.lineInk
 }
 if ($nFactSyms -eq 0) {
   Add-DisclosureRow $ftbl "this index has no SQL facts (0 sql_reads / 0 sql_writes)" $PAL.lineInk
@@ -603,12 +659,20 @@ if ($noSql) {
 # R7: BOTH grades, so the gap between fact and literal is visible
 Add-DisclosureRow $ftbl ("[certain] by fact: $($certR.Count) reader(s) / $($certW.Count) writer(s); " +
                          "[inferred] by SQL literal: $($infR.Count) reader(s) / $($infW.Count) writer(s)") $PAL.focusInk 12
+# item 6: the header counts ROUTINES; a unit-level row is a unit, said apart
+if ($unitLevel) {
+  Add-DisclosureRow $ftbl ("routines: $($mR.Routines) reading / $($mW.Routines) writing; plus $unitLevel unit(s) with an SQL literal naming $tName " +
+                           "outside any routine ($($mR.Units) read / $($mW.Units) write) -- drawn as (unit level) rows, not counted as routines") $PAL.lineInk
+}
 if ($colName -and $rtIds.Count) {
   Add-DisclosureRow $ftbl ("$($srvCol.Count) of those routines name $colName in a literal; $srvColSilent touch $tName without naming it " +
                            '(SELECT *, positional or built-up SQL) -- every column row is [inferred]') $PAL.lineInk
 }
 if ($byNameLits -gt 0 -and -not $colName) {
-  Add-DisclosureRow $ftbl "[by name]: $byNameLits literal(s) equal to $tName in $($byNameFiles.Count) unit(s)$(if ($byNameSkipped) { " (+$byNameSkipped inside a routine already drawn)" })" $PAL.lineInk
+  Add-DisclosureRow $ftbl "[by name]: $byNameLits literal(s) equal to $tName in $($byNameFiles.Count) unit(s)$(if ($byNameSkipped) { " (+$byNameSkipped inside a routine already drawn)" }) -- mentions, not reads" $PAL.lineInk
+}
+if ($caseOnly.Count -and -not $colName) {
+  Add-DisclosureRow $ftbl "$($caseOnly.Count) literal(s) equal $tName only case-insensitively, not drawn: $caseOnlyText" $PAL.lineInk
 }
 Add-DisclosureRow $ftbl ("index-wide: $nReadFacts read / $nWriteFacts write facts over $nFactSyms routines ($($factReadTables.Count) tables read by fact); " +
                          "$($verbLits.Count) upper-case SQL-verb literals name $($fromJoinTables.Count) tables after FROM/JOIN") $PAL.lineInk
@@ -624,6 +688,7 @@ $sbDb = New-Object System.Text.StringBuilder
 $sbRest = New-Object System.Text.StringBuilder
 $sbEdges = New-Object System.Text.StringBuilder
 $dbNodes = New-Object System.Collections.ArrayList
+$mentionNodes = New-Object System.Collections.ArrayList
 $ni = 0
 $dbC = @($clusters | Where-Object { $_.Side -eq 'db' })
 [array]::Reverse($dbC)
@@ -640,6 +705,10 @@ foreach ($c in $ordered) {
     'left'  { for ($i = 0; $i -lt $ports.Count; $i++) { if ($c.Rows[$i].Href) { [void]$sbEdges.AppendLine("  $($ports[$i]) -> focus [color=`"$($c.Border)`"$style];") } } }
     'right' { for ($i = 0; $i -lt $ports.Count; $i++) { if ($c.Rows[$i].Href) { [void]$sbEdges.AppendLine("  focus -> $($ports[$i]) [color=`"$($c.Border)`", penwidth=2.2$style];") } } }
     'db'    { [void]$dbNodes.Add($nid); [void]$sbEdges.AppendLine("  focus -> $nid [color=`"$($c.Border)`", arrowhead=none$style];") }
+    # a neutral dotted line, no arrowhead: the literal MENTIONS the table; it is
+    # emitted after the focus in the same rank, so it sits ABOVE it (the DB side
+    # is below), on neither the readers' nor the writers' side
+    'mention' { [void]$mentionNodes.Add($nid); [void]$sbEdges.AppendLine("  focus -> $nid [color=`"$($c.Border)`", style=`"dotted`", arrowhead=none, label=`" mentions `"];") }
   }
 }
 [void]$sb.Append($sbDb.ToString())
@@ -652,15 +721,14 @@ foreach ($c in $ordered) {
 [void]$sb.AppendLine('')
 [void]$sb.Append($sbEdges.ToString())
 # BOTTOM = the database side: the same rank as the focus stacks it under it
-if ($dbNodes.Count) { [void]$sb.AppendLine("  { rank=same; focus; $($dbNodes -join '; '); }") }
+$sameNodes = @($dbNodes) + @($mentionNodes)
+if ($sameNodes.Count) { [void]$sb.AppendLine("  { rank=same; focus; $($sameNodes -join '; '); }") }
 [void]$sb.AppendLine('}')
 
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $PSScriptRoot '..\scratch' }
 $lay = Invoke-DotLayout $sb.ToString() $OutDir ('consumers_' + ($fLabel -replace '[^A-Za-z0-9]', '_'))
 
 function Get-ClusterCount([string] $Id) { $c = @($clusters | Where-Object { $_.Id -eq $Id }); $(if ($c.Count) { $c[0].Count } else { 0 }) }
-$readers = @(@($certR.Keys) + @($litR.Keys) | Sort-Object -Unique).Count
-$writers = @(@($certW.Keys) + @($litW.Keys) | Sort-Object -Unique).Count
 
 [pscustomobject]@{
   Dot              = $lay.Dot
@@ -671,19 +739,27 @@ $writers = @(@($certW.Keys) + @($litW.Keys) | Sort-Object -Unique).Count
   Table            = $tName
   Column           = $colName
   ColumnOlderOnly  = $colOlder
+  ColumnState      = $(if ($cs) { $cs.State } else { '' })
+  ColumnLabel      = $(if ($cs) { $cs.Label } else { '' })
+  ColumnLine       = $(if ($colName) { "$([IO.Path]::GetFileName($colFile)):$colLine" } else { '' })
   Declarations     = $tbl.DeclCount
   Columns          = $tbl.ColumnNames.Count
-  Readers          = $readers
-  Writers          = $writers
+  # the bundle header's "reading / writing routines": ROUTINES only (item 6);
+  # unit-level rows are counted per UNIT in ReaderUnits / WriterUnits
+  Readers          = $mR.Routines
+  Writers          = $mW.Routines
+  ReaderUnits      = $mR.Units
+  WriterUnits      = $mW.Units
   CertainReaders   = $certR.Count
   CertainWriters   = $certW.Count
   InferredReaders  = $infR.Count
   InferredWriters  = $infW.Count
   InferredReaderNames = (@($infR | Where-Object { $_ -gt 0 } | ForEach-Object { $rtInfo[[int]$_].Q } | Sort-Object) -join ',')
   CertainWriterNames  = (@($certW.Keys | ForEach-Object { $rtInfo[[int]$_].Q } | Sort-Object) -join ',')
-  UnitLevelLiterals = $unitLevel
+  UnitLevelUnits   = $unitLevel
   ByNameUnits      = $byNameFiles.Count
   ByNameLiterals   = $byNameLits
+  ByNameCaseOnly   = $caseOnlyText
   ByNameLines      = (@($byNameFiles.Keys | ForEach-Object { "$(Get-UnitName $_):$(@($byNameFiles[$_] | ForEach-Object { $_.Line }) -join '+')" }) -join ',')
   Triggers         = $trigFor.Count
   TriggerNames     = (@($trigFor | ForEach-Object { "$($_.Name)@$([IO.Path]::GetFileName($_.File)):$($_.Line)" }) -join ',')
@@ -698,6 +774,8 @@ $writers = @(@($certW.Keys) + @($litW.Keys) | Sort-Object -Unique).Count
   SilentRoutines   = $srvColSilent
   ColumnTriggers   = $trigCol.Count
   ColumnTriggerNames = (@($trigCol | ForEach-Object { $_.Name }) -join ',')
+  ColumnTriggersStale = $trigColStale.Count
+  ColumnTriggersNoBody = $trigColNoBody.Count
   ColumnProcedures = $procCol.Count
   ColumnIndexes    = $idxCol.Count
   IndexBindings    = $bindAll

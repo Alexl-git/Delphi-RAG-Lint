@@ -30,7 +30,8 @@
   THE TABLE IS A NAMING CONVENTION, AND IS DRAWN AS ONE (plan R10)
   -----------------------------------------------------------------
   Tmc<T>.PROP = T.PROP holds for 1,991 of the 1,997 properties that sit on a
-  table-named class (measured 2026-09-23). That is a convention, not a fact: the
+  table-named class by what the SQL index extracts, plus FOLDERCOUNT.TABLE,
+  which is quoted (measured 2026-09-23). That is a convention, not a fact: the
   table hop is dashed and graded [inferred -- naming convention, N of M ...] with
   the numbers MEASURED on this run and printed, never quoted from the plan. The
   exceptions are the interesting rows: a property that is not a column of T
@@ -46,7 +47,10 @@
   MScript2.SQL copy (unquoted there -- the R8 known gap); FOLDERCOUNT.TABLE has no
   other copy. So before saying "not a column", the table's declaration is read
   from fresh source for a quoted identifier of that name, and a hit renders as
-  such, [inferred -- source scan], anchored on its line.
+  such, [inferred -- source scan], anchored on its line. That test, and every
+  label it prints, is Get-SqlColumnState in Emit-Common -- the ONE column test
+  consumers and feeds-from use too. A script that differs from the indexed copy
+  is not scanned, and the chart then says [stale source], never "not a column".
 
   THE SERVER SIDE: facts first, literals graded
   ----------------------------------------------
@@ -225,28 +229,10 @@ SELECT owner_name AS prop, text AS col, start_line AS line FROM string_literals
 
 # ---- 2. index-wide numbers, measured on this run (R10: never quoted) --------------------
 $ix = Get-FieldBindingChains $sqlSet $SourceOverride
-function Test-IsColumn($Tbl, [string] $Col) {
-  # the SAME test Get-FieldBindingChains applies: the newest declaration, or an
-  # older one (THE KNOWN GAP in Get-SqlTableSet)
-  $Tbl.Columns.Contains($Col) -or $Tbl.OlderOnlyColumns.Contains($Col.ToUpperInvariant())
-}
-# a QUOTED identifier in the table's declaration (see the header FINDING);
-# $null when absent, Stale when the script differs from the indexed copy
-function Find-QuotedColumn($Tbl, [string] $Col) {
-  $DbPath = $SqlDbPath
-  if (-not (Test-SourceFresh $Tbl.File $SourceOverride)) { return [pscustomobject]@{ Stale = $true; Line = 0; Text = '' } }
-  $lines = Get-StrippedSqlLines (Resolve-SourceReadPath $Tbl.File $SourceOverride)
-  $end = Find-SqlBodyEnd $lines $Tbl.Line ';'
-  $last = $(if ($end.Found) { $end.EndLine } else { [Math]::Min($lines.Count, $Tbl.Line + 400) })
-  $rx = '^\s*"' + [regex]::Escape($Col) + '"\s'
-  for ($i = $Tbl.Line + 1; $i -le $last; $i++) {
-    $m = [regex]::Match($lines[$i - 1], $rx, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    if ($m.Success) { return [pscustomobject]@{ Stale = $false; Line = $i; Text = $lines[$i - 1].Trim() } }
-  }
-  $null
-}
+# Test-IsColumn / Get-SqlColumnState live in Emit-Common: ONE column test for
+# consumers, feeds-from and lands-where (final wave, item 1).
 
-# P35: Tmc properties / on a table-named class / a column of that table
+# P35: Tmc properties / on a table-named class / extracted as a column of that table
 $tmcProps = Get-AllIndexRows @"
 SELECT p.id AS id, p.name AS pn, c.name AS cn
   FROM symbols p JOIN symbols c ON c.id = p.parent_id
@@ -255,15 +241,23 @@ SELECT p.id AS id, p.name AS pn, c.name AS cn
 $convTable = @($tmcProps | Where-Object { $sqlSet.Tables.ContainsKey(([string]$_.cn).Substring(3)) })
 $convCol = @($convTable | Where-Object { Test-IsColumn $sqlSet.Tables[([string]$_.cn).Substring(3)] ([string]$_.pn) })
 $convNon = @($convTable | Where-Object { -not (Test-IsColumn $sqlSet.Tables[([string]$_.cn).Substring(3)] ([string]$_.pn)) })
-$convQuoted = @($convNon | Where-Object { $q = Find-QuotedColumn $sqlSet.Tables[([string]$_.cn).Substring(3)] ([string]$_.pn); $q -and -not $q.Stale })
+# each non-extracted one through the SHARED state: quoted, or not scanned
+# because its script is stale -- a stale scan is COUNTED and named, never
+# dropped into "not a column" (final wave, item 5)
+$convStates = @($convNon | ForEach-Object {
+  $tn = ([string]$_.cn).Substring(3)
+  [pscustomobject]@{ Name = "$tn.$($_.pn)"; State = (Get-SqlColumnState $sqlSet $tn ([string]$_.pn) $SourceOverride).State } })
 $conv = [pscustomobject]@{
   Props = $tmcProps.Count; OnTable = $convTable.Count; Column = $convCol.Count
   NonColumn = (@($convNon | ForEach-Object { "$(([string]$_.cn).Substring(3)).$($_.pn)" } | Sort-Object) -join ',')
-  Quoted = (@($convQuoted | ForEach-Object { "$(([string]$_.cn).Substring(3)).$($_.pn)" } | Sort-Object) -join ',')
+  Quoted = (@($convStates | Where-Object { $_.State -eq 'quoted' } | ForEach-Object { $_.Name } | Sort-Object) -join ',')
+  Stale  = (@($convStates | Where-Object { $_.State -eq 'stale' }  | ForEach-Object { $_.Name } | Sort-Object) -join ',')
 }
-$CONV_GRADE = "inferred -- naming convention, $(Format-N $conv.Column) of $(Format-N $conv.OnTable) properties on table-named classes are a column of that table"
-Write-Host ("  convention: {0} Tmc properties, {1} on a table-named class, {2} a column of it; not: {3}; quoted in the script: {4}" -f `
-            $conv.Props, $conv.OnTable, $conv.Column, $conv.NonColumn, $(if ($conv.Quoted) { $conv.Quoted } else { 'none' }))
+$nConvQuoted = @($convStates | Where-Object { $_.State -eq 'quoted' }).Count
+$CONV_GRADE = "inferred -- naming convention, $(Format-N $conv.Column) of $(Format-N $conv.OnTable) properties on table-named classes are extracted as a column of that table" +
+              $(if ($nConvQuoted) { " (+$nConvQuoted a QUOTED column the index does not extract)" } else { '' })
+Write-Host ("  convention: {0} Tmc properties, {1} on a table-named class, {2} extracted as a column of it; not: {3}; quoted in the script: {4}; not scanned (stale): {5}" -f `
+            $conv.Props, $conv.OnTable, $conv.Column, $conv.NonColumn, $(if ($conv.Quoted) { $conv.Quoted } else { 'none' }), $(if ($conv.Stale) { $conv.Stale } else { 'none' }))
 
 # P36/P37 on the SERVER: DataService classes, and ParamByName literals inside them
 function Get-ParamByNameStats {
@@ -339,39 +333,27 @@ if ($kind -eq 'orm') {
     'not-column' { $TName = $bindRow.Table; $Prop = $bindRow.Column }
     'no-ds'      { $stop = "no DataSource on $($ctl.name) or its two enclosing components in the DFM -- the chain cannot start" }
     'dangling'   { $stop = "the designer datasource $($bindRow.Ds) is dangling ($($chain.StopReason)) -- no table" }
-    'stale'      { $stop = "[stale source] $($chain.StopReason)" }
+    # stale with a table: the chain resolved, but the table's script is stale, so
+    # the column's state is unknown -- step 4 says so ([stale source])
+    'stale'      { if ($bindRow.Table) { $TName = $bindRow.Table; $Prop = $bindRow.Column } else { $stop = "[stale source] $($chain.StopReason)" } }
     default      { $stop = "the chain stops before a table ($($chain.Grade)): $($chain.StopReason)" }
   }
   if ($TName) { $ormSym = Find-OrmProperty "Tmc$TName" $Prop }
 }
 
 # ---- 4. the table and the column --------------------------------------------------------
-$tbl = $null; $colState = 'n/a'; $colRow = $null; $quoted = $null
+$tbl = $null; $colState = 'n/a'; $colRow = $null; $cs = $null
 if ($TName) {
   # (an ORM selection was checked in step 1; a DFM chain only resolves to a table of the set)
   $tbl = $sqlSet.Tables[$TName]
   $TName = $tbl.Name
-  if ($tbl.Columns.Contains($Prop)) {
-    $colState = 'yes'
-   $cl = & { $DbPath = $SqlDbPath; Invoke-IndexQuery "SELECT start_line AS line FROM symbols WHERE kind = 'sql_column' AND parent_id = $($tbl.Id) AND UPPER(name) = UPPER('$(ConvertTo-SqlText $Prop)')" }
-    $cline = $(if ($cl.Count) { [int]$cl[0].line } else { $tbl.Line })
-    $colRow = New-Row "$TName.$($Prop.ToUpperInvariant())" $tbl.File $cline "$TName.$($Prop.ToUpperInvariant()) -- $([IO.Path]::GetFileName($tbl.File)):$cline" "[certain] a column of the newest of $($tbl.DeclCount) declaration(s)"
-  } elseif ($tbl.OlderOnlyColumns.Contains($Prop.ToUpperInvariant())) {
-    $colState = 'older'
-    $oc = $tbl.OlderOnlyColumns[$Prop.ToUpperInvariant()]
-    $colRow = New-Row "$TName.$($Prop.ToUpperInvariant())" $oc.File $oc.Line "$TName.$($Prop.ToUpperInvariant()) -- $([IO.Path]::GetFileName($oc.File)):$($oc.Line)" "column ONLY in an older declaration ($([IO.Path]::GetFileName($oc.File)))"
-  } else {
-    $quoted = Find-QuotedColumn $tbl $Prop
-    if ($quoted -and -not $quoted.Stale) {
-      $colState = 'quoted'
-      $colRow = New-Row "$TName.`"$($Prop.ToUpperInvariant())`"" $tbl.File $quoted.Line "$($quoted.Text) -- $([IO.Path]::GetFileName($tbl.File)):$($quoted.Line)" '[inferred -- source scan] a QUOTED identifier in the script; the SQL index does not extract it'
-    } else {
-      $colState = 'no'
-    }
-  }
+  # the SHARED state (Emit-Common); `no` / `stale` are looked at again after the
+  # server step, whose own SQL for T may name the column (server-sql)
+  $cs = Get-SqlColumnState $sqlSet $TName $Prop $SourceOverride
+  $colState = $cs.State
 }
 Write-Host ("  selection: {0} ({1}); table {2}; column {3}" -f $sel, $kind, $(if ($TName) { $TName } else { '(none)' }), $colState)
-$hasColumn = ($colState -in 'yes', 'older', 'quoted')
+$hasColumn = [bool]($cs -and $cs.IsColumn)
 $COL = $(if ($Prop) { $Prop.ToUpperInvariant() } else { '' })
 
 # ---- 5. the server write / read path -------------------------------------------------------
@@ -465,12 +447,24 @@ $srvCount = $srvRows.write.Count + $srvRows.read.Count + $srvRows.other.Count
 # writes them (`UPDATE OR INSERT INTO STATIONS (... GRIDS ... MENUS ...)`) and
 # :110-111 read them -- the scripts lag the live schema. So "computed or UI-only"
 # is said ONLY when the server's own SQL for T does not name the column either;
-# otherwise the column row anchors on that SQL literal, [inferred].
-if ($colState -eq 'no' -and $srvSqlHit) {
-  $colState = 'server-sql'
-  $hasColumn = $true
-  $colRow = New-Row "$TName.$COL" $srvFile $srvSqlHit.Line "$($srvSqlHit.Routine) names $COL in its SQL for $TName -- $([IO.Path]::GetFileName($srvFile)):$($srvSqlHit.Line)" `
-    "[inferred] NOT in the SQL scripts ($($tbl.ColumnNames.Count) columns in the newest declaration), but the server's SQL for $TName names it -- the scripts lag the schema"
+# otherwise the column row anchors on that SQL literal, [inferred]. The decision
+# and its label are the SHARED Get-SqlColumnState's (consumers makes the same one).
+if ($colState -in 'no', 'stale') {
+  # the routine named as consumers names it (unit-less short name), so the
+  # shared label reads the same in both verbs
+  $hit = $(if ($srvSqlHit) { [pscustomobject]@{ File = $srvFile; Line = $srvSqlHit.Line; Routine = (Get-ShortName $srvSqlHit.Routine (Get-UnitName $srvFile)) } } else { $null })
+  $cs = Get-SqlColumnState $sqlSet $TName $Prop $SourceOverride -ServerSqlHit $hit `
+          -SqlSearched $(if ($srvClass) { "the server's $srvClass" } else { '' })
+  $colState = $cs.State
+  $hasColumn = $cs.IsColumn
+}
+if ($cs -and $cs.IsColumn) {
+  $cLabel = $(if ($colState -eq 'quoted') { "$TName.`"$COL`"" } else { "$TName.$COL" })
+  $cTip = $(switch ($colState) {
+      'quoted'     { $cs.Text }
+      'server-sql' { "$($srvSqlHit.Routine) names $COL in its SQL for $TName" }
+      default      { "$TName.$COL" } })
+  $colRow = New-Row $cLabel $cs.File $cs.Line "$cTip -- $([IO.Path]::GetFileName($cs.File)):$($cs.Line)" $cs.Label
 }
 
 Write-Host ("  server: {0}; {1} write / {2} read / {3} other routine row(s); {4} access(es) to {5} outside it" -f `
@@ -480,7 +474,9 @@ Write-Host ("  server: {0}; {1} write / {2} read / {3} other routine row(s); {4}
 # ---- 6. the database side: triggers and procedures -------------------------------------------
 $trigRows = New-Object System.Collections.ArrayList; $procRows = New-Object System.Collections.ArrayList
 $trigNames = @(); $procNames = @(); $trigStale = 0; $procUnscanned = 0
-if ($TName -and $hasColumn) {
+# a column whose state is unknown ([stale source]) is still looked up by name on
+# the database side: a trigger naming NEW.<COL> is evidence either way
+if ($TName -and ($hasColumn -or $colState -eq 'stale')) {
   $trigSet = Get-SqlTriggerSet $SqlDbPath $SourceOverride
   $forT = @($trigSet.Triggers | Where-Object { $_.Table -eq $TName } | Sort-Object Name)
   $trigStale = @($forT | Where-Object { $_.Stale }).Count
@@ -510,7 +506,7 @@ if ($COL) {
   $bindOther = @($bindAll | Where-Object { -not ($_.Table -and [string]::Equals([string]$_.Table, [string]$TName, [StringComparison]::OrdinalIgnoreCase)) })
 }
 $bindRowsOut = @($bindSame | Sort-Object Dfm, Line | ForEach-Object {
-  New-Row "$(Get-UnitName $_.Dfm).$($_.Control)" $_.Dfm $_.Line "$($_.Control).$($_.Prop) = '$($_.Column)' via $($_.Ds) -> $TName -- $([IO.Path]::GetFileName($_.Dfm)):$($_.Line)" "$($_.Ds)$(if ($_.Outcome -eq 'not-column') { '; not a column' })" })
+  New-Row "$(Get-UnitName $_.Dfm).$($_.Control)" $_.Dfm $_.Line "$($_.Control).$($_.Prop) = '$($_.Column)' via $($_.Ds) -> $TName -- $([IO.Path]::GetFileName($_.Dfm)):$($_.Line)" "$($_.Ds)$(if ($_.Outcome -eq 'not-column') { '; not extracted as a column' } elseif ($_.Outcome -eq 'stale') { '; [stale source]' })" })
 Write-Host ("  client: {0} field-bound control(s) resolve to {1} with {2}; {3} other binding(s) of {2} counted" -f $bindSame.Count, $TName, $COL, $bindOther.Count)
 
 # ---- 8. dot ------------------------------------------------------------------------------------
@@ -567,8 +563,10 @@ if ($TName) {
   $cRows = New-Object System.Collections.ArrayList
   [void]$cRows.Add((New-Row "table $TName" $tbl.File $tbl.Line "$TName -- $([IO.Path]::GetFileName($tbl.File)):$($tbl.Line)" "$(if ($kind -eq 'orm') { "from $($ormSym.pname) by the naming convention" } else { 'where the chain resolved' }); newest of $($tbl.DeclCount) declaration(s)"))
   if ($colRow) { [void]$cRows.Add($colRow) }
-  else { [void]$cRows.Add((New-NoteRow "$Prop is not a column of $TName -- computed or UI-only ($($tbl.ColumnNames.Count) columns in the newest declaration, $([IO.Path]::GetFileName($tbl.File)):$($tbl.Line)); the database side is empty")) }
-  $cTitle = $(if ($hasColumn) { "$TName.$COL" } else { "$TName (no column $Prop)" })
+  # R11: a stale scan is NOT an absence -- never "computed or UI-only" (final wave, item 5)
+  elseif ($colState -eq 'stale') { [void]$cRows.Add((New-NoteRow "${Prop}: $($cs.Label)")) }
+  else { [void]$cRows.Add((New-NoteRow "$Prop is not a column of $TName -- computed or UI-only: $($cs.Label); the database side is empty")) }
+  $cTitle = $(if ($hasColumn) { "$TName.$COL" } elseif ($colState -eq 'stale') { "$TName.$COL [stale source]" } else { "$TName (no column $Prop)" })
   $nCol = Add-Box $cTitle $CONV_GRADE $cRows.ToArray() 'db' $true
 } elseif ($stop) {
   $nCol = Add-Box 'chain stops here' '' @((New-NoteRow $stop)) 'stop' $false
@@ -631,7 +629,9 @@ $ftbl = New-Object System.Text.StringBuilder
 [void]$ftbl.Append('<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="3" CELLPADDING="5">')
 [void]$ftbl.Append("<TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$($PAL.focusHdr)`"><FONT COLOR=`"#FFFFFF`" FACE=`"$FontSans`" POINT-SIZE=`"14`"><B> lands-where &#183; $(ConvertTo-XmlText $sel) </B></FONT></TD></TR>")
 Add-DisclosureRow $ftbl "table by naming convention (Tmc<T>): $(Format-N $conv.Column) of $(Format-N $conv.Props) Tmc properties in this index are a column of their class's table" $PAL.lineInk
-Add-DisclosureRow $ftbl ("($(Format-N $conv.OnTable) sit on a table-named class; $($conv.OnTable - $conv.Column) are not a column in the scripts$(if ($conv.Quoted) { "; of those, $($conv.Quoted) is a QUOTED column the SQL index does not extract" }))") $PAL.lineInk
+Add-DisclosureRow $ftbl ("($(Format-N $conv.OnTable) sit on a table-named class; $($conv.OnTable - $conv.Column) are not extracted as a column by the SQL index" +
+                         "$(if ($conv.Quoted) { "; of those, $($conv.Quoted) is a QUOTED column the index does not extract" })" +
+                         "$(if ($conv.Stale) { "; not scanned for a quoted identifier [stale source]: $($conv.Stale)" }))") $PAL.lineInk
 if ($kind -eq 'dfm') {
   $oc2 = @{}; foreach ($b in $ix.Bindings) { $oc2[$b.Outcome] = 1 + [int]$oc2[$b.Outcome] }
   Add-DisclosureRow $ftbl ("DFM-field selection: the feeds-from chain ($([int]$oc2['column']) of $($ix.Bindings.Count) field-bound controls reach a column of one table; " +
@@ -694,6 +694,8 @@ function Get-RowAnchors($List) { (@($List | Where-Object { $_.Href } | ForEach-O
   ConvColumn     = $conv.Column
   ConvNonColumn  = $conv.NonColumn
   ConvQuoted     = $conv.Quoted
+  ConvStale      = $conv.Stale
+  ColumnLabel    = $(if ($cs) { $cs.Label } else { '' })
   DsClasses      = $nDsClasses
   ParamByNameAll = $pbn.All
   ParamByNameDs  = $pbn.InDataService

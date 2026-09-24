@@ -227,13 +227,6 @@ function Add-Hop([string] $Title, [string] $Grade, $Rows, [string] $Border, [str
   if (-not $Side) { [void]$chainNodes.Add([pscustomobject]@{ Nid = $nid; Grade = $Grade; Title = $Title }) }
   $nid
 }
-# the column's own line in the winning declaration; $DbPath is SHADOWED in the
-# function scope, so the caller's Delphi index is untouched (consumers' pattern)
-function Get-SqlColumnLine([int] $TableId, [string] $Col, [int] $Fallback) {
-  $DbPath = $SqlDbPath
-  $cl = Invoke-IndexQuery "SELECT start_line AS line FROM symbols WHERE kind = 'sql_column' AND parent_id = $TableId AND UPPER(name) = UPPER('$(ConvertTo-SqlText $Col)')"
-  $(if ($cl.Count) { [int]$cl[0].line } else { $Fallback })
-}
 function Get-RoutineShort([string] $Routine, [string] $File) {
   $s = Get-ShortName $Routine (Get-UnitName $File)
   $(if ($s) { $s } else { '(unit level)' })
@@ -321,7 +314,6 @@ if (-not $ch) {
       }
       'table' {
         if ($ch.ResolvedTable) {
-          $T = $sqlSet.Tables[$ch.ResolvedTable]
           $rows = New-Object System.Collections.ArrayList
           [void]$rows.Add((New-Row "table $($ch.ResolvedTable)" $h.File ([int]$h.Line) "'$($ch.ResolvedTable)' literal -- $([IO.Path]::GetFileName($h.File)):$($h.Line)" "[inferred] $($h.Reason)"))
           if ($ch.Grade -eq 'by-columns') {
@@ -330,20 +322,20 @@ if (-not $ch) {
           if ($field.Count) {
             $col = [string]$field[0].col
             $tableCol = "$($ch.ResolvedTable).$($col.ToUpperInvariant())"
-            if ($T.Columns.Contains($col)) {
-              $columnState = 'yes'
-              $cline = Get-SqlColumnLine $T.Id $col $T.Line
-              [void]$rows.Add((New-Row "column $($col.ToUpperInvariant())" $T.File $cline "$tableCol -- $([IO.Path]::GetFileName($T.File)):$cline" "[certain] a column of the newest of $($T.DeclCount) declaration(s), $([IO.Path]::GetFileName($T.File))"))
-            } elseif ($T.OlderOnlyColumns.Contains($col.ToUpperInvariant())) {
-              $columnState = 'older'
-              $oc2 = $T.OlderOnlyColumns[$col.ToUpperInvariant()]
-              [void]$rows.Add((New-Row "column $($col.ToUpperInvariant())" $oc2.File $oc2.Line "$tableCol -- $([IO.Path]::GetFileName($oc2.File)):$($oc2.Line)" "column ONLY in an older declaration ($([IO.Path]::GetFileName($oc2.File)))"))
+            # the SHARED column state (Emit-Common): the label says what was read --
+            # "not extracted as a column by the SQL index", never "not in the scripts"
+            $cs = Get-SqlColumnState $sqlSet $ch.ResolvedTable $col $SourceOverride
+            $columnState = $cs.State
+            if ($cs.IsColumn) {
+              $cl = $(if ($columnState -eq 'quoted') { "column `"$($cs.Column)`"" } else { "column $($cs.Column)" })
+              [void]$rows.Add((New-Row $cl $cs.File $cs.Line "$tableCol -- $([IO.Path]::GetFileName($cs.File)):$($cs.Line)" $cs.Label))
+            } elseif ($columnState -eq 'stale') {
+              [void]$rows.Add((New-NoteRow "$($cs.Column): $($cs.Label)"))
             } else {
-              $columnState = 'no'
-              [void]$rows.Add((New-NoteRow "$($col.ToUpperInvariant()) is NOT a column of $($ch.ResolvedTable) in the scripts ($($T.ColumnNames.Count) columns in the newest declaration) -- computed, UI-only, or the scripts lag the schema"))
+              [void]$rows.Add((New-NoteRow "$($cs.Column) is $($cs.Label) -- computed, UI-only, or the scripts lag the schema"))
             }
             if ($script:rtNote) { [void]$rows.Add((New-NoteRow $script:rtNote)) }
-            $title = $(if ($columnState -eq 'no') { "$($ch.ResolvedTable) (column absent)" } else { $tableCol })
+            $title = $(switch ($columnState) { 'no' { "$($ch.ResolvedTable) (column not extracted)" } 'stale' { "$tableCol [stale source]" } default { $tableCol } })
           } else {
             [void]$rows.Add((New-NoteRow 'the control binds no column itself'))
             $title = $ch.ResolvedTable
@@ -399,7 +391,7 @@ Add-DisclosureRow $ftbl ("datasources in this index: $($stat.Ds) ($($stat.DsDfm)
   "chain stops before the table: $($stat.DsOther) -- measured per datasource") $PAL.lineInk
 Add-DisclosureRow $ftbl ("per control: $ctlTotal field-bound controls; $ctlTable resolve to one table ($pct%), $([int]$oc['column']) of them to a column " +
   "that table has ($pctCol%); ambiguous $([int]$oc['ambiguous']), chain stops $([int]$oc['stops']), dangling $([int]$oc['dangling']), " +
-  "no datasource in the DFM $([int]$oc['no-ds'])$(if ([int]$oc['stale']) { ", stale source $([int]$oc['stale'])" })$(if ([int]$oc['not-column']) { "; $([int]$oc['not-column']) resolve to a table without that column" })") $PAL.lineInk
+  "no datasource in the DFM $([int]$oc['no-ds'])$(if ([int]$oc['stale']) { ", stale source $([int]$oc['stale'])" })$(if ([int]$oc['not-column']) { "; $([int]$oc['not-column']) resolve to a table the SQL index extracts no such column from (not quoted there either)" })") $PAL.lineInk
 Add-DisclosureRow $ftbl 'the table comes from string literals in the view model''s unit -- [inferred], dashed; never a fact' $PAL.lineInk
 Add-DisclosureRow $ftbl "the column is checked against the SQL scripts ($($sqlSet.TableCount) tables) -- a script-derived schema, not the live one" $PAL.lineInk
 if ($ch -and $ch.Dangling) { Add-DisclosureRow $ftbl "the DFM names $($ch.Module), which is not in this project" $PAL.lineInk }

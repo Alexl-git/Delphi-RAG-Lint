@@ -315,7 +315,10 @@ Step 'E-MA2' {
   # D13 by-name counts (unbound write refs of the NAME): 0 in the declaring file,
   # 2 elsewhere for VERDICT; 0 / 35 for the record field R (a one-letter name).
   Chk 'A-MA2-D13'      "$($m2.D13SameFile)/$($m2.D13Elsewhere)" '0/2'
-  if ($m1) { Chk 'A-MA1-D13' "$($m1.D13SameFile)/$($m1.D13Elsewhere)" '0/35' }
+  # a missing precondition FAILS (final wave, item 9): `if ($m1) { ... }` used to
+  # skip this row silently whenever E-MA1 had thrown, and the run still passed
+  if (-not $m1) { Fail 'A-MA1-D13' 'precondition: E-MA1 produced no result, so the D13 count of R was never checked' }
+  else { Chk 'A-MA1-D13' "$($m1.D13SameFile)/$($m1.D13Elsewhere)" '0/35' }
 }
 
 # ENGINE D13: write refs are never bound on CLIENT, so the verb sees only
@@ -1328,9 +1331,18 @@ Step 'E-CO' {
                        'CREATE TRIGGER B FOR U', 'AS BEGIN NEW.Y = 2;', 'END^', 'SET TERM ; ^', 'CREATE TABLE Z (ID INTEGER);')
     $a = Find-SqlBodyEnd $syn 2 '^'
     $b = Find-SqlBodyEnd $syn 7 '^'
+    # item 6: a consumers key is a routine id (> 0) or -file id (< 0, one
+    # "(unit level)" row per UNIT). No clone holds a unit-level SQL literal
+    # (measured: 0 on all eight), so the split is checked on SYNTHETIC keys:
+    # routine 5 by fact AND literal is ONE routine; -3 is one unit, however many
+    # literals it holds (the old counter counted hits).
+    $mk = Measure-ConsumerKeys @(5) @(5, 7, -3, -3)
+    $mk0 = Measure-ConsumerKeys @() @()
     [pscustomobject]@{ A = "$($a.Found):$($a.EndLine)"; AReason = $a.Reason; B = "$($b.Found):$($b.EndLine)"
-                       Term = "$(Get-SqlTermAt $syn 7)$(Get-SqlTermAt $syn 11)" }
+                       Term = "$(Get-SqlTermAt $syn 7)$(Get-SqlTermAt $syn 11)"
+                       Keys = "$($mk.Routines)/$($mk.Units) $($mk0.Routines)/$($mk0.Units)" }
   }
+  Chk 'A-CO0-KEYS'      $co0.Keys '2/1 0/0'
   Chk 'A-CO0-BODYEND-A' $co0.A 'False:0'
   if ($co0.AReason -notlike '*next statement at line 7*') { Fail 'A-CO0-BODYEND-A' "reason: $($co0.AReason)" }
   Chk 'A-CO0-BODYEND-B' $co0.B 'True:9'
@@ -1355,7 +1367,20 @@ Step 'E-CO' {
   # (TLogContext.ForDB('CAUSFAIL', ...)), none inside a routine already drawn
   Chk 'A-CO1-BYNAME-SRV' $co1.ByNameLines 'uCAUSFAIL_SERVER:71+134+188+211+252+283'
   Chk 'A-CO1-CLICK'     "$($co1.ClickTargets)/$($co1.Expected)" '9/9'
+  # item 6: the header pair counts ROUTINES; unit-level rows are counted per unit, apart
+  Chk 'A-CO1-HEADER'    "$($co1.Readers)/$($co1.Writers)/$($co1.ReaderUnits)/$($co1.WriterUnits)/$($co1.UnitLevelUnits)" '1/1/0/0/0'
   $tc1 = Dot $co1
+  # R15 (item 7): [by name] is a neutral "mentions (not SQL)" cluster -- never on
+  # the readers side, and NO arrow from any of its rows into the focus
+  $bnm = [regex]::Match($tc1, 'subgraph cluster_byname_(\d+) \{')
+  if (-not $bnm.Success) { Fail 'A-CO1-R15' 'the [by name] cluster is missing' }
+  else {
+    $bn = "n$($bnm.Groups[1].Value)"
+    if ($tc1 -match "$bn`:p\d+ -> focus") { Fail 'A-CO1-R15' 'a [by name] row still has a read arrow into the focus' }
+    if ($tc1 -notmatch "focus -> $bn \[[^\]]*style=`"dotted`", arrowhead=none, label=`" mentions `"") { Fail 'A-CO1-R15' 'the neutral dotted "mentions" line is missing' }
+    if ($tc1 -notmatch 'mentions \(not SQL\) \[by name\] -- a literal equal to CAUSFAIL') { Fail 'A-CO1-R15' 'the cluster is not titled "mentions (not SQL)"' }
+    if ($tc1 -notmatch "rank=same; focus;[^}]*\b$bn\b") { Fail 'A-CO1-R15' 'the mentions cluster is not in the focus rank (neither readers nor writers side)' }
+  }
   if ($tc1 -notmatch 'declared 2 times in the scripts; showing the newest \(MS1\.SQL:1408') { Fail 'A-CO1-DECL' 'the collapse sentence is missing' }
   if ($tc1 -notmatch '\[certain\] by fact: 0 reader\(s\) / 1 writer\(s\); \[inferred\] by SQL literal: 1 reader\(s\) / 0 writer\(s\)') { Fail 'A-CO1-R7' 'both grades are not on the focus box (R7)' }
   if ($tc1 -notmatch 'cluster_infreads_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-CO1-DASHED' 'the inferred readers are not dashed' }
@@ -1392,11 +1417,38 @@ Step 'E-CO' {
   Chk 'A-CO4-ROWS'      "$($co4.CertainReaders)/$($co4.CertainWriters)/$($co4.InferredReaders)/$($co4.InferredWriters)/$($co4.Triggers)/$($co4.Procedures)/$($co4.Indexes)" '1/2/3/0/3/1/2'
   if ((Dot $co4) -notmatch 'declared 2 times in the scripts; showing the newest') { Fail 'A-CO4-DECL' 'the collapse sentence is missing' }
 
-  # THE KNOWN GAP (Get-SqlTableSet): IPCHART.ACTION is live but only the older
-  # MScript2.SQL declaration carries it -- accepted and labelled, never refused
+  # THE KNOWN GAP (Get-SqlTableSet): IPCHART.ACTION is live and EXTRACTED only
+  # from the older MScript2.SQL declaration. RE-PINNED in the final wave (items
+  # 1-2), older -> quoted: the newest MS1.SQL DOES declare it, at :2243, as the
+  # quoted identifier "ACTION", which the SQL extractor drops (engine D19). The
+  # old label "the newest has 136 columns without it" was false. The shared
+  # Get-SqlColumnState tries quoted BEFORE older, so the column is anchored on
+  # the newest declaration and the older extraction is named beside it.
   $script:co5 = & "$SRC\Emit-Consumers.ps1" -Column 'IPCHART.ACTION' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
-  Chk 'A-CO5-OLDER'     $co5.ColumnOlderOnly $true
-  if ((Dot $co5) -notmatch 'column ONLY in an older declaration \(MScript2\.SQL\)') { Fail 'A-CO5-OLDER' 'the older-declaration label is missing' }
+  Chk 'A-CO5-OLDER'     "$($co5.ColumnState):$($co5.ColumnLine):$($co5.ColumnOlderOnly)" 'quoted:MS1.SQL:2243:False'
+  $tc5 = Dot $co5
+  if ($tc5 -notmatch 'a QUOTED identifier in the newest declaration \(MS1\.SQL:2243\); the SQL index does not extract a quoted name; an older declaration \(MScript2\.SQL:1902\) extracts it unquoted') {
+    Fail 'A-CO5-OLDER' 'the quoted-plus-older label is missing' }
+  if ($tc5 -match 'columns without it') { Fail 'A-CO5-OLDER' 'the false "the newest has N columns without it" is back' }
+
+  # item 1: a QUOTED column consumers used to REFUSE ("no column TABLE in
+  # FOLDERCOUNT") while lands-where anchored it -- now the same state, same line
+  $script:coq = & "$SRC\Emit-Consumers.ps1" -Column 'FOLDERCOUNT.TABLE' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-CO-QUOTED'     "$($coq.ColumnState):$($coq.ColumnLine):$($coq.ServerRoutines)" 'quoted:MS1.SQL:3848:2'
+  if (-not (HasLine (Dot $coq) 3848)) { Fail 'A-CO-QUOTED' 'the focus is not anchored on MS1.SQL:3848' }
+  # ... and a column in NO script declaration that this index's own SQL names
+  # (STATIONS.GRIDS: uSTATIONS_SERVER.PAS:110 reads it, :129 writes it)
+  $script:cog = & "$SRC\Emit-Consumers.ps1" -Column 'STATIONS.GRIDS' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-CO-SRVSQL'     "$($cog.ColumnState):$($cog.ColumnLine):$($cog.ServerRoutines)" 'server-sql:uSTATIONS_SERVER.PAS:110:2'
+  if ((Dot $cog) -notmatch 'not extracted as a column by the SQL index \(23 columns extracted from the newest of 2 declaration\(s\), MS1\.SQL:3495\)') {
+    Fail 'A-CO-SRVSQL' 'the server-sql label does not say what was read' }
+  if ((Dot $cog) -match 'NOT in the SQL scripts') { Fail 'A-CO-SRVSQL' 'the old "NOT in the SQL scripts" absence claim is back' }
+
+  # item 6 through the bundler: the header pair is ROUTINES, and says so
+  $artRoot = Join-Path $OutDir 'bundle-co'
+  $art = & "$SRC\New-DiagramArtifact.ps1" -Question consumers -Target 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbSql -OutRoot $artRoot
+  $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
+  Chk 'A-CO-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '1 reading routines / 1 writing routines'
 }
 
 Note 'consumers negatives and draws ...'
@@ -1410,8 +1462,14 @@ Step 'CO-N24' {
 }
 NegTest 'CO-N25' 'no table PDF_SCAN in the SQL index (script-derived; the scripts may lag the live schema) -- nearest: PDF1' 'consumers_PDF_SCAN' {
   & "$SRC\Emit-Consumers.ps1" -Table 'PDF_SCAN' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
-NegTest 'CO-N26' 'no column NOPE in FOLDERS (79 columns in the newest declaration' 'consumers_FOLDERS_NOPE' {
+# RE-WORDED in the final wave (items 1-2): a refusal says what was READ -- not
+# extracted, not quoted in the newest declaration, not named by this index's SQL
+NegTest 'CO-N26' 'no column NOPE in FOLDERS: not extracted as a column by the SQL index (79 columns extracted from the newest of 2 declaration(s), MS1.SQL:1834); nor a quoted identifier in that declaration; no SQL for FOLDERS in SERVER-MicroniteMW1Service.sqlite names it' 'consumers_FOLDERS_NOPE' {
   & "$SRC\Emit-Consumers.ps1" -Column 'FOLDERS.NOPE' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
+# the same real column CLIENT cannot see: CLIENT holds no SQL for STATIONS, so it
+# refuses -- and names the index it searched, not "the scripts"
+NegTest 'CO-N26b' 'no SQL for STATIONS in CLIENT-Micronite2027.sqlite names it' 'consumers_STATIONS_GRIDS' {
+  & "$SRC\Emit-Consumers.ps1" -Column 'STATIONS.GRIDS' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $negDir }
 # N27: CLIENT has no facts but DOES have text -- the [by name] half renders
 Step 'CO-N27' {
   $script:co27 = & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbCli -SqlDbPath $DbSql -OutDir (Join-Path $OutDir 'cli')
@@ -1419,6 +1477,13 @@ Step 'CO-N27' {
   Chk 'A-CO-N27-FACTS'  $co27.NoSqlFacts $true
   if ((Dot $co27) -notmatch 'this index has no SQL facts') { Fail 'A-CO-N27' 'the fact half does not say "this index has no SQL facts"' }
   if (-not (Test-Path $co27.Svg)) { Fail 'A-CO-N27' 'no .svg for the CLIENT render' }
+  # item 8: the [by name] match is EXACT; a literal equal to the table only
+  # case-insensitively is COUNTED and named, not drawn -- FOLDERS' one is 'Folders',
+  # a ribbon tab caption (uJobList.pas:552). This run also needs the PAGED routine
+  # query: uJobList.pas holds more than 200 routines (it stopped at the row cap).
+  $script:cof = & "$SRC\Emit-Consumers.ps1" -Table 'FOLDERS' -DbPath $DbCli -SqlDbPath $DbSql -OutDir (Join-Path $OutDir 'cli')
+  Chk 'A-CO-CASE'       "$($cof.ByNameCaseOnly) | $($cof.ByNameLines)" "'Folders' uJobList.pas:552 | Blueprint4:815,Blueprint4.ViewModel:1221,uJobList:439,uJobList.ViewModel:288,uSetupDefaultsFrm:2413+2427,uFieldsInfoCache:158"
+  if ((Dot $cof) -notmatch "1 literal\(s\) equal FOLDERS only case-insensitively, not drawn: 'Folders' uJobList\.pas:552") { Fail 'A-CO-CASE' 'the case-only literal is not disclosed' }
 }
 NegTest 'CO-N34' 'is not a SQL index (0 sql_table symbols)' 'consumers_CAUSFAIL' {
   & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbCli -OutDir $negDir }
@@ -1438,6 +1503,25 @@ Step 'CO-STALE' {
   $ts = Dot $cost
   if ($ts -notmatch 'CAUSFAIL_BIU5</FONT>\s*<FONT[^>]*>:15</FONT>\s*<FONT[^>]*>&#183; \[stale source\]') { Fail 'A-CO-STALE-TRIG' 'CAUSFAIL_BIU5 (MS5.SQL) is not marked [stale source]' }
   if ($ts -notmatch '77 of 168 procedure bodies not scanned') { Fail 'A-CO-STALE-NOTE' 'the unscanned-procedure disclosure is missing' }
+}
+# item 4: the COLUMN form over the same manufactured stale MS5.SQL. CAUSFAIL_BIU5
+# (MS5.SQL:15) is the one trigger that uses REASON (A-CO2-TRIG); unread, it has no
+# Columns, and the old column form dropped it without a word. Now it is counted,
+# named and said; the unscanned procedures are said too. Own scratch path: the
+# freshness cache is keyed per read path.
+Step 'CO-STALE-COL' {
+  $stDir = Join-Path $OutDir 'co-stale-col'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $ms5 = 'C:\Projects\DB\SQL\MS5.SQL'
+  $l = [IO.File]::ReadAllLines($ms5); $l[0] = $l[0] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'MS5.SQL'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $script:costc = & "$SRC\Emit-Consumers.ps1" -Column 'CAUSFAIL.REASON' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir `
+                    -SourceOverride @{ $ms5 = (Join-Path $stDir 'MS5.SQL') }
+  Chk 'A-CO-STALE-COL'  "$($costc.ColumnTriggers)/$($costc.ColumnTriggersStale)/$($costc.ColumnTriggersNoBody)" '0/1/0'
+  $tsc = Dot $costc
+  if ($tsc -notmatch '1 trigger\(s\) FOR CAUSFAIL in a script that differs from the index \[stale source\] -- not scanned for REASON: CAUSFAIL_BIU5@MS5\.SQL:15') {
+    Fail 'A-CO-STALE-COL' 'the stale trigger is dropped from the column form without a word' }
+  if ($tsc -notmatch '77 of 168 procedure bodies not scanned') { Fail 'A-CO-STALE-COL' 'the column form does not say which procedure bodies were not scanned' }
 }
 # ---- PLAN-last-four-verbs, Task 3: feeds-from --------------------------------------
 # CLIENT (-DbPath) + the SQL-SCRIPT clone (-SqlDbPath). Every number measured
@@ -1590,7 +1674,8 @@ Step 'E-LW' {
   # FINDING vs the plan's list: the 6 are TmcFOLDERCOUNT.TABLE (not TmcFOLDERS),
   # INSPRSLT x3 and STATIONS x2 -- and FOLDERCOUNT.TABLE is a QUOTED column,
   # MS1.SQL:3848 `"TABLE"`, which the SQL index does not extract
-  Chk 'A-LW0-NONCOL'    "$($lw1.ConvNonColumn) quoted=$($lw1.ConvQuoted)" 'FOLDERCOUNT.TABLE,INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS quoted=FOLDERCOUNT.TABLE'
+  # (+ stale=: none of the 6 was left unscanned -- a stale scan is named, never dropped; item 5)
+  Chk 'A-LW0-NONCOL'    "$($lw1.ConvNonColumn) quoted=$($lw1.ConvQuoted) stale=$($lw1.ConvStale)" 'FOLDERCOUNT.TABLE,INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS quoted=FOLDERCOUNT.TABLE stale='
   Chk 'A-LW0-DS'        $lw1.DsClasses 133
   # P37: 189 / 182 reproduce. The plan's 390 index-wide is 383 on the SERVER
   # clone (the index join and a raw regex over every indexed .pas agree: 383 in
@@ -1612,7 +1697,11 @@ Step 'E-LW' {
   Chk 'A-LW1-CLICK'     "$($lw1.ClickTargets)/$($lw1.Expected)" '9/9'
   $tl1 = Dot $lw1
   foreach ($ln in 81, 124, 109, 229, 159, 1410, 15, 60) { if (-not (HasLine $tl1 $ln)) { Fail 'A-LW1-HREF' "no row anchored on line $ln" } }
-  if ($tl1 -notmatch 'inferred -- naming convention, 1,991 of 1,997 properties on table-named classes are a column of that table') { Fail 'A-LW1-GRADE' 'the convention grade with its measured count is missing' }
+  # RE-WORDED in the final wave (item 2): 1,991 is what the SQL index EXTRACTS; the
+  # quoted FOLDERCOUNT.TABLE is a column too, so "are a column" was one short -- said now
+  if ($tl1 -notmatch 'inferred -- naming convention, 1,991 of 1,997 properties on table-named classes are extracted as a column of that table \(\+1 a QUOTED column the index does not extract\)') { Fail 'A-LW1-GRADE' 'the convention grade with its measured count is missing' }
+  if ($tl1 -notmatch '6 are not extracted as a column by the SQL index; of those, FOLDERCOUNT\.TABLE is a QUOTED column the index does not extract') { Fail 'A-LW1-GRADE' 'the coverage line claims more than was read' }
+  if ($tl1 -match 'not a column in the scripts') { Fail 'A-LW1-GRADE' 'the self-contradicting "not a column in the scripts" is back' }
   if ($tl1 -notmatch 'cluster_db_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-LW1-DASHED' 'the convention hop (TABLE.COLUMN) is not dashed' }
   if ($tl1 -notmatch 'orm_links rows: 0 on CLIENT-Micronite2027\.sqlite, 0 on SERVER-MicroniteMW1Service\.sqlite') { Fail 'A-LW1-ROUTE' 'the path-A route is not printed' }
   if ($tl1 -notmatch 'positional Fields\[i\]') { Fail 'A-LW1-DISC' 'positional-read disclosure missing' }
@@ -1656,20 +1745,31 @@ Step 'LW-N31-SRVSQL' {
   Chk 'A-LW-N31-SRVSQL' "$($lw31g.ColumnState):$($lw31g.TableColumn):W=$($lw31g.ServerWrite) R=$($lw31g.ServerRead)" 'server-sql:STATIONS.GRIDS:W=PrepareSaveQuery:129,Save:271 R=PrepareLoadQuery:110,Load:176'
   $tg = Dot $lw31g
   if ($tg -match 'computed or UI-only') { Fail 'A-LW-N31-SRVSQL' 'a server-persisted column is called computed or UI-only' }
-  if ($tg -notmatch 'NOT in the SQL scripts') { Fail 'A-LW-N31-SRVSQL' 'the scripts-lag sentence is missing' }
+  # RE-WORDED (item 2): what was read, not "NOT in the SQL scripts"; the SAME label consumers prints (A-CO-SRVSQL)
+  if ($tg -notmatch 'not extracted as a column by the SQL index \(23 columns extracted from the newest of 2 declaration\(s\), MS1\.SQL:3495\); nor a quoted identifier in that declaration -- but the SQL for STATIONS in TDataService_STATIONS_SERVER\.PrepareLoadQuery names it') { Fail 'A-LW-N31-SRVSQL' 'the scripts-lag sentence is missing' }
+  # item 1, no fork: consumers decides the same state from the same function, on the same line
+  if (-not $cog) { Fail 'A-COLSTATE-AGREE' 'precondition: the consumers STATIONS.GRIDS run (E-CO) produced no result' }
+  elseif ($cog.ColumnLabel -ne $lw31g.ColumnLabel) { Fail 'A-COLSTATE-AGREE' "consumers and lands-where label STATIONS.GRIDS differently: '$($cog.ColumnLabel)' vs '$($lw31g.ColumnLabel)'" }
 }
 # FINDING: FOLDERCOUNT."TABLE" is a QUOTED column (MS1.SQL:3848) the SQL index drops
 Step 'LW-N31-QUOTED' {
   $script:lw31q = & "$SRC\Emit-LandsWhere.ps1" -Field 'uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-LW-N31-QUOTED' "$($lw31q.ColumnState):$($lw31q.TableColumn)" 'quoted:FOLDERCOUNT.TABLE'
   if (-not (HasLine (Dot $lw31q) 3848)) { Fail 'A-LW-N31-QUOTED' 'the quoted column is not anchored on MS1.SQL:3848' }
+  if (-not $coq) { Fail 'A-COLSTATE-AGREE' 'precondition: the consumers FOLDERCOUNT.TABLE run (E-CO) produced no result' }
+  elseif ($coq.ColumnLabel -ne $lw31q.ColumnLabel) { Fail 'A-COLSTATE-AGREE' "consumers and lands-where label FOLDERCOUNT.TABLE differently: '$($coq.ColumnLabel)' vs '$($lw31q.ColumnLabel)'" }
 }
 # R17: a uJobList control on a COMPUTED FOLDERS field classifies exactly as
 # feeds-from does (A-FF0-PERCTL not-column 13) -- the SAME chain, the SAME test
 Step 'LW-R17' {
   $script:lw17 = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmJobList.cxGrid1DBTableView1DueInStr1' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-LW-R17'        "$($lw17.ChainOutcome):$($lw17.Table):$($lw17.ColumnState):$($lw17.Triggers):$($lw17.ServerRows)" 'not-column:FOLDERS:no:0:0'
-  if ((Dot $lw17) -notmatch 'DueInStr is not a column of FOLDERS -- computed or UI-only') { Fail 'A-LW-R17' 'no "not a column of FOLDERS -- computed or UI-only"' }
+  $t17 = Dot $lw17
+  if ($t17 -notmatch 'DueInStr is not a column of FOLDERS -- computed or UI-only') { Fail 'A-LW-R17' 'no "not a column of FOLDERS -- computed or UI-only"' }
+  # item 8 (R21), measured: UPPER(sl.text) would add 'DueIN' (uJobList.ViewModel.pas:301, a
+  # computed-field name) as a SECOND candidate and turn this chain -- 73 controls, one-table
+  # FOLDERS -- into "many". The match stays exact and the case-only literal is NAMED on the hop.
+  if ($t17 -notmatch "the only upper-case table-name literal in uJobList\.ViewModel\.pas; 1 literal\(s\) equal a table name only case-insensitively and are not taken as one: 'DueIN' :301") { Fail 'A-LW-R17-CASE' 'the case-only table literal is not named on the table hop' }
 }
 NegTest 'LW-N32' 'not an ORM object property (class is not Tmc<T>) and not a DFM-bound field' 'landswhere_uPipeClientConnection_TPipeClientConnection_Connected' {
   & "$SRC\Emit-LandsWhere.ps1" -Field 'uPipeClientConnection.TPipeClientConnection.Connected' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
@@ -1697,6 +1797,27 @@ Step 'LW-STALE' {
                    -SourceOverride @{ $ms5 = (Join-Path $stDir 'MS5.SQL') }
   Chk 'A-LW-STALE'      "$($lwst.Triggers)/$($lwst.TriggersStale)" '0/1'
   if ((Dot $lwst) -notmatch '1 trigger\(s\) FOR CAUSFAIL in a script that differs from the index \[stale source\]') { Fail 'A-LW-STALE' 'the stale-trigger disclosure is missing' }
+}
+# item 5 (R11): a MANUFACTURED stale MS1.SQL -- the script every newest table
+# declaration here lives in. DistHist (state `no` on fresh source, A-LW-N31) must
+# now read [stale source] and "NOT known", never "computed or UI-only"; and the
+# convention coverage must NAME the 6 properties it could not scan for a quoted
+# identifier instead of silently dropping FOLDERCOUNT.TABLE from the quoted list.
+Step 'LW-STALE-Q' {
+  $stDir = Join-Path $OutDir 'lw-stale-q'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $ms1 = 'C:\Projects\DB\SQL\MS1.SQL'
+  $l = [IO.File]::ReadAllLines($ms1); $l[0] = $l[0] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'MS1.SQL'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $script:lwsq = & "$SRC\Emit-LandsWhere.ps1" -Field 'uINSPRSLT.TmcINSPRSLT.DistHist' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir `
+                   -SourceOverride @{ $ms1 = (Join-Path $stDir 'MS1.SQL') }
+  Chk 'A-LW-STALE-Q'    "$($lwsq.ColumnState)|quoted=$($lwsq.ConvQuoted)|stale=$($lwsq.ConvStale)" 'stale|quoted=|stale=FOLDERCOUNT.TABLE,INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS'
+  $tq = Dot $lwsq
+  if ($tq -match 'computed or UI-only') { Fail 'A-LW-STALE-Q' 'a stale quoted scan reads as an absence ("computed or UI-only")' }
+  if ($tq -notmatch 'MS1\.SQL differs from the indexed copy, so it was not scanned for a quoted identifier -- whether DISTHIST is a column of INSPRSLT is NOT known') {
+    Fail 'A-LW-STALE-Q' 'the [stale source] column state is not said' }
+  if ($tq -notmatch 'INSPRSLT\.DISTHIST \[stale source\]') { Fail 'A-LW-STALE-Q' 'the column box title does not carry [stale source]' }
+  if ($tq -notmatch 'not scanned for a quoted identifier \[stale source\]: FOLDERCOUNT\.TABLE,') { Fail 'A-LW-STALE-Q' 'the coverage line drops the unscanned properties' }
 }
 # the verb through the bundler: dispatch, -ServerDbPath and -SqlDbPath carried into meta.json
 Step 'LW-ART' {
@@ -1740,7 +1861,7 @@ if (-not $Quiet) {
   Write-Host ("  consumers      : CAUSFAIL cert/inf readers {0}/{1}, writers {2}/{3}, {4} triggers; REASON bindings {5}/{6}; facts {7}/{8}/{9}; literals {10}/{11}/{12}; proc bodies {13}" -f (V $co1 'CertainReaders'), (V $co1 'InferredReaders'), (V $co1 'CertainWriters'), (V $co1 'InferredWriters'), (V $co1 'Triggers'), (V $co2c 'IndexBindings'), (V $co2c 'DrawnBindings'), (V $co1 'IndexReadFacts'), (V $co1 'IndexWriteFacts'), (V $co1 'IndexFactSymbols'), (V $co1 'IndexVerbLiterals'), (V $co1 'IndexFromJoinTables'), (V $co1 'IndexFactReadTables'), (V $co1 'ProcBodies'))
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE draw")
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

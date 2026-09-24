@@ -60,7 +60,9 @@ function New-RowHref([string] $File, [int] $Line) {
 # v=1.17.0-alpha / r=1.6.0-alpha. The engine deployed in this worktree is
 # 1.16.0-alpha with resolver 1.5.1-alpha -- OLDER on two axes -- and
 # RefuseIfEngineOlderThanDb does not cover the resolver axis, so nothing
-# refuses. The skew yields SMALLER CONFIDENT ANSWERS, never an error.
+# refuses. The skew yields SMALLER CONFIDENT ANSWERS, never an error. The clones
+# under scratch\db were re-taken at ~10:00 the same day and carry
+# v=1.18.0-alpha / r=1.6.0-alpha (schema_meta, checked in the final wave).
 #
 # This guard is NOT about corruption. Reads are proven safe: only `index`
 # re-resolves, and a full day of reads left both DBs still on r=1.6.0-alpha.
@@ -118,7 +120,7 @@ function Get-CloneDb([string] $Path) {
 
   throw ("refusing a non-clone database: $full -- charts run against the clones in $root. " +
          'The deployed engine (1.16.0-alpha / resolver 1.5.1-alpha) is OLDER than the indexed ' +
-         'corpus (v=1.17.0-alpha / r=1.6.0-alpha), and a live DB can be re-indexed mid-run, so ' +
+         'clones (v=1.18.0-alpha / r=1.6.0-alpha), and a live DB can be re-indexed mid-run, so ' +
          'an asserted count would not be reproducible. Set DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 to ' +
          'override deliberately once the engine has been redeployed.')
 }
@@ -790,13 +792,17 @@ function Get-SourceContext([string] $Path, [int] $Line, [int] $Col, [int] $Len,
 # Every declaration is still carried in .Declarations for disclosure.
 #
 # THE KNOWN GAP IN THAT RULE (Task 0 review, measured 2026-09-23): the winner is
-# not a superset. 12 column names across 10 tables exist ONLY in the older
-# MScript2.SQL copy -- OPTORID on 8 tables, GONOFF.OFF, MET1.NOTE, IPCHART.ACTION
-# and IPCHART.OPTRID -- and at least one of them is LIVE: live Firebird IPCHART
-# has 137 columns, the winner 136, and the missing one is ACTION. So "not in the
-# winning declaration" does NOT mean "not in the database". Each table carries
-# them in .OlderOnlyColumns, and a chart that selects such a column must say
-# which declaration it came from rather than refuse it.
+# not a superset. 12 column names across 10 tables are EXTRACTED only from the
+# older MScript2.SQL copy -- OPTORID on 8 tables, GONOFF.OFF, MET1.NOTE,
+# IPCHART.ACTION and IPCHART.OPTRID. At least one is LIVE: live Firebird IPCHART
+# has 137 columns, the winner 136 extracted, and the missing one is ACTION --
+# which the newest MS1.SQL DOES declare, at :2243, as the QUOTED identifier
+# "ACTION"; the SQL extractor drops quoted identifiers (engine D19,
+# INBOX-sql-index-drops-quoted-identifiers.md). Measured (final wave): of the
+# 12, only IPCHART.ACTION is quoted in the newest declaration; the other 11 are
+# not in it at all. So "not extracted from the winning declaration" does NOT
+# mean "not in the database". Each table carries them in .OlderOnlyColumns, and
+# Get-SqlColumnState below decides what a chart says about such a column.
 function Get-SqlTableSet([string] $SqlDb) {
   $SqlDb = Get-CloneDb $SqlDb
   if (-not $script:DlSqlSets) { $script:DlSqlSets = @{} }
@@ -867,6 +873,141 @@ SELECT c.parent_id AS tid, GROUP_CONCAT(c.name, ',') AS cols
   }
   $script:DlSqlSets[$SqlDb] = $o
   $o
+}
+
+# ---- THE column state: ONE function for consumers, feeds-from and lands-where ------
+#
+# Whether COL is a column of T, and on what evidence, is decided HERE so the
+# three verbs that ask it cannot disagree (final wave, item 1: consumers refused
+# FOLDERCOUNT.TABLE while lands-where anchored it). What the SQL INDEX extracts
+# is not everything the scripts declare: MS1.SQL declares FOLDERCOUNT."TABLE"
+# (:3848) and IPCHART."ACTION" (:2243) as QUOTED identifiers, and the extractor
+# emits no sql_column for a quoted name (engine D19). So a chart never says "not
+# in the scripts": it says what was read -- "not extracted as a column by the
+# SQL index" -- after the newest declaration's own source was scanned.
+#
+# States, in precedence order:
+#   yes         extracted as a column of the NEWEST declaration   [certain]
+#   quoted      a quoted identifier in the newest declaration's fresh source
+#               [inferred -- source scan]
+#   older       extracted only from an OLDER declaration (THE KNOWN GAP above)
+#   server-sql  none of those, but the caller's own SQL for T names it
+#               (-ServerSqlHit: File, Line, Routine)                [inferred]
+#   stale       none of those, and the newest declaration's script differs from
+#               the indexed copy: the quoted scan was NOT run, so the answer is
+#               UNKNOWN -- rendered [stale source], never as an absence (R11)
+#   no          not extracted, not quoted in the newest declaration, and -- when
+#               the caller names what it searched in -SqlSearched -- named by
+#               none of that SQL
+# quoted is tried BEFORE older: IPCHART.ACTION is extracted only from the older
+# MScript2.SQL, but the newest MS1.SQL declares it (quoted) -- the newest is the
+# declaration R8 trusts, so that is where the column is anchored.
+#
+# Returns Table, Column (upper case), State, IsColumn, File, Line (the anchor),
+# Text (the quoted source line), Label (the grade and evidence every verb prints,
+# so the three read the same), OlderFile / OlderLine (an older declaration that
+# extracts it, when one does), QuotedScan ('hit' | 'none' | 'stale' | '' when not
+# needed). $SqlSet is Get-SqlTableSet's object; T must be one of its tables.
+
+# The cheap test, no source read: extracted from the newest declaration, or from
+# an older one. Get-FieldBindingChains and lands-where's convention count use it
+# over thousands of names; anything it rejects goes to Get-SqlColumnState.
+function Test-IsColumn($Tbl, [string] $Col) {
+  $Tbl.Columns.Contains($Col) -or $Tbl.OlderOnlyColumns.Contains($Col.ToUpperInvariant())
+}
+
+# A QUOTED identifier `"COL"` opening a line of T's newest declaration, read from
+# fresh source; $null when there is none; Stale when the script differs from the
+# indexed copy (the scan is then NOT run).
+function Find-QuotedColumn($SqlSet, $Tbl, [string] $Col, [hashtable] $SourceOverride) {
+  $DbPath = $SqlSet.Db          # shadowed: freshness is checked against the SQL index
+  if (-not (Test-SourceFresh $Tbl.File $SourceOverride)) { return [pscustomobject]@{ Stale = $true; Line = 0; Text = '' } }
+  $lines = Get-StrippedSqlLines (Resolve-SourceReadPath $Tbl.File $SourceOverride)
+  $end = Find-SqlBodyEnd $lines $Tbl.Line ';'
+  $last = $(if ($end.Found) { $end.EndLine } else { [Math]::Min($lines.Count, $Tbl.Line + 400) })
+  $rx = '^\s*"' + [regex]::Escape($Col) + '"\s'
+  for ($i = $Tbl.Line + 1; $i -le $last; $i++) {
+    $m = [regex]::Match($lines[$i - 1], $rx, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($m.Success) { return [pscustomobject]@{ Stale = $false; Line = $i; Text = $lines[$i - 1].Trim() } }
+  }
+  $null
+}
+
+function Get-SqlColumnState($SqlSet, [string] $Table, [string] $Col, [hashtable] $SourceOverride,
+                            $ServerSqlHit, [string] $SqlSearched) {
+  $tbl = $SqlSet.Tables[$Table]
+  if (-not $tbl) { throw "Get-SqlColumnState: no table $Table in the SQL index -- the caller checks the table first" }
+  $DbPath = $SqlSet.Db          # shadowed for the sql_column line lookups
+  $cu = $Col.ToUpperInvariant()
+  $nf = [IO.Path]::GetFileName($tbl.File)
+  $newest = "$($tbl.ColumnNames.Count) columns extracted from the newest of $($tbl.DeclCount) declaration(s), ${nf}:$($tbl.Line)"
+  $o = [ordered]@{ Table = $tbl.Name; Column = $cu; State = ''; IsColumn = $false; File = $tbl.File; Line = $tbl.Line
+                   Text = ''; Label = ''; OlderFile = $null; OlderLine = 0; QuotedScan = '' }
+  if ($tbl.Columns.Contains($Col)) {
+    $cl = Invoke-IndexQuery "SELECT start_line AS line FROM symbols WHERE kind = 'sql_column' AND parent_id = $($tbl.Id) AND UPPER(name) = UPPER('$(ConvertTo-SqlText $Col)')"
+    if ($cl.Count) { $o.Line = [int]$cl[0].line }
+    $o.State = 'yes'; $o.IsColumn = $true
+    $o.Label = "[certain] a column of the newest of $($tbl.DeclCount) declaration(s), $nf"
+    return [pscustomobject]$o
+  }
+  # an older declaration that extracts it (THE KNOWN GAP), with its own column line
+  if ($tbl.OlderOnlyColumns.Contains($cu)) {
+    $oc = $tbl.OlderOnlyColumns[$cu]
+    $o.OlderFile = $oc.File; $o.OlderLine = $oc.Line
+    $od = @($tbl.Declarations | Where-Object { [string]::Equals($_.File, $oc.File, [StringComparison]::OrdinalIgnoreCase) -and $_.Line -eq $oc.Line })
+    if ($od.Count) {
+      $cl = Invoke-IndexQuery "SELECT start_line AS line FROM symbols WHERE kind = 'sql_column' AND parent_id = $($od[0].Id) AND UPPER(name) = UPPER('$(ConvertTo-SqlText $Col)')"
+      if ($cl.Count) { $o.OlderLine = [int]$cl[0].line }
+    }
+  }
+  $q = Find-QuotedColumn $SqlSet $tbl $cu $SourceOverride
+  $o.QuotedScan = $(if (-not $q) { 'none' } elseif ($q.Stale) { 'stale' } else { 'hit' })
+  $olderNote = $(if ($o.OlderFile) { "an older declaration ($([IO.Path]::GetFileName($o.OlderFile)):$($o.OlderLine)) extracts it unquoted" } else { '' })
+  if ($o.QuotedScan -eq 'hit') {
+    $o.State = 'quoted'; $o.IsColumn = $true; $o.Line = $q.Line; $o.Text = $q.Text
+    $o.Label = "[inferred -- source scan] a QUOTED identifier in the newest declaration (${nf}:$($q.Line)); " +
+               "the SQL index does not extract a quoted name$(if ($olderNote) { "; $olderNote" })"
+    return [pscustomobject]$o
+  }
+  $quotedPart = $(if ($o.QuotedScan -eq 'stale') { "$nf differs from the indexed copy, so it was not scanned for a quoted identifier [stale source]" }
+                  else { 'nor a quoted identifier in that declaration' })
+  if ($o.OlderFile) {
+    $o.State = 'older'; $o.IsColumn = $true; $o.File = $o.OlderFile; $o.Line = $o.OlderLine
+    $o.Label = "column extracted ONLY from an older declaration ($([IO.Path]::GetFileName($o.OlderFile)):$($o.OlderLine)); " +
+               "not extracted from the newest ($newest); $quotedPart"
+    return [pscustomobject]$o
+  }
+  if ($ServerSqlHit) {
+    $o.State = 'server-sql'; $o.IsColumn = $true; $o.File = $ServerSqlHit.File; $o.Line = [int]$ServerSqlHit.Line
+    $o.Label = "[inferred] not extracted as a column by the SQL index ($newest); $quotedPart -- but the SQL for $($tbl.Name) " +
+               "in $($ServerSqlHit.Routine) names it: the scripts lag the schema"
+    return [pscustomobject]$o
+  }
+  if ($o.QuotedScan -eq 'stale') {
+    $o.State = 'stale'
+    $o.Label = "[stale source] not extracted as a column by the SQL index ($newest); $nf differs from the indexed copy, so it was not " +
+               "scanned for a quoted identifier -- whether $cu is a column of $($tbl.Name) is NOT known"
+    return [pscustomobject]$o
+  }
+  $o.State = 'no'
+  $o.Label = "not extracted as a column by the SQL index ($newest); $quotedPart" +
+             $(if ($SqlSearched) { "; no SQL for $($tbl.Name) in $SqlSearched names it" } else { '' })
+  [pscustomobject]$o
+}
+
+# consumers' reader / writer COUNTS (final wave, item 6). A consumers row key is
+# a routine id (> 0) or MINUS a file id (< 0) for a verb literal outside every
+# routine -- one "(unit level)" row per unit. The header said "reading routines"
+# over both; now routines and units are counted apart. Pure over its inputs, so
+# a check can drive it: no clone holds a unit-level SQL literal today (measured
+# 2026-09-23: 0 on all eight Delphi clones).
+# Returns Routines (distinct keys > 0) and Units (distinct keys < 0).
+function Measure-ConsumerKeys($CertKeys, $LitKeys) {
+  $all = @(@($CertKeys) + @($LitKeys) | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+  [pscustomobject]@{
+    Routines = @($all | Where-Object { $_ -gt 0 }).Count
+    Units    = @($all | Where-Object { $_ -lt 0 }).Count
+  }
 }
 
 # The P23 scan, in ONE place: a table (or procedure) named IMMEDIATELY after an
@@ -1269,8 +1410,10 @@ SELECT r.receiver_text AS rt, r.name_text AS prop, r.start_line AS line, r.start
 #                   File, Line, Routine, Rhs, Stale   (Get-RePointSites)
 #   DataSetSites[]  Kind ('dfm'|'assign'|'read'|'stale'), File, Line, Routine, Rhs
 #   RhsType         $null | Rhs, Root, RootKind, TypeName, TypeKind, TypeFile, TypeLine
-#   CandidateTables[] (first-literal order), CandidateLines{table -> line},
+#   CandidateTables[] (first-literal order, EXACT upper-case match), CandidateLines{table -> line},
 #   BoundColumns[], ColumnMatch[], MissingColumns[]
+#   CaseOnlyLiterals[] "'Text' :line" -- literals equal to a table name only
+#                   case-insensitively; named on the hop, never taken (hop 4)
 #   ResolvedTable   string | $null
 #   Grade           one-table | by-columns | many | none | no-type | no-assignment
 #                   | dfm-dataset | dangling | no-datasource | stale source
@@ -1336,6 +1479,7 @@ SELECT sl.owner_name AS prop, sl.start_line AS line, c.id AS cid, c.name AS ctl,
     Controls = $controls; RePointedAt = @($repoint)
     DataSetSites = @(); RhsType = $null
     CandidateTables = @(); CandidateLines = @{}; BoundColumns = @(); ColumnMatch = @(); MissingColumns = @()
+    CaseOnlyLiterals = @()
     ResolvedTable = $null; Grade = ''; Hops = $null; StopReason = ''
   }
   function Complete([string] $grade, [string] $stop) {
@@ -1536,8 +1680,26 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
   $unit = [IO.Path]::GetFileName([string]$ts[0].path)
   $cand = $o.CandidateTables
 
+  # CASE (final wave, item 8 / R21). The match above is EXACT on purpose, and the
+  # sentences below say "upper-case" because that is what was read. R21 asked for
+  # UPPER(sl.text); measured on CLIENT 2026-09-23, every mixed-case literal equal
+  # to a table name is NOT a table reference -- 'Folders' (uJobList.pas:552, a
+  # ribbon tab caption), 'tools' (a folder name), 'memFolders' (a component
+  # name), 'DueIN' / 'Duein' (computed-field names) -- and UPPER turned the
+  # uJobList dsrFolder chain (73 controls, one-table FOLDERS) into `many`
+  # [FOLDERS, DUEIN] while changing no `none` chain. So the case-insensitive
+  # matches are NAMED on the hop instead: the chart says a literal exists that
+  # it did not take, and why, rather than taking it or staying silent.
+  $ci = Invoke-IndexQuery @"
+SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
+ WHERE sl.file_id = $([int]$ts[0].fid) AND sl.kind IN ('literal','const') AND UPPER(sl.text) IN ($inNames) AND sl.text NOT IN ($inNames)
+ GROUP BY sl.text ORDER BY MIN(sl.start_line), sl.text
+"@ 'Get-DataSourceChain (case-only table literals)'
+  $o.CaseOnlyLiterals = @($ci | ForEach-Object { "'$([string]$_.t)' :$([int]$_.line)" })
+  $caseNote = $(if ($ci.Count) { "; $($ci.Count) literal(s) equal a table name only case-insensitively and are not taken as one: $($o.CaseOnlyLiterals -join ', ')" } else { '' })
+
   if ($cand.Count -eq 0) {
-    $why = "$unit holds no string literal naming a table$(if ($o.RhsType.TypeKind -eq 'interface') { " ($typeName is an interface; its implementation is not followed)" })"
+    $why = "$unit holds no upper-case string literal naming a table$(if ($o.RhsType.TypeKind -eq 'interface') { " ($typeName is an interface; its implementation is not followed)" })$caseNote"
     Add-Hop 'table' 'unresolved' $typeName ([string]$ts[0].path) ([int]$ts[0].line) $why
     return (Complete 'none' $why)
   }
@@ -1545,17 +1707,17 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
   if ($cand.Count -eq 1) {
     $o.ResolvedTable = $cand[0]
     $o.MissingColumns = @($o.BoundColumns | Where-Object { -not $SqlSet.Tables[$cand[0]].Columns.Contains($_) })
-    Add-Hop 'table' 'inferred' $cand[0] $typeFile $o.CandidateLines[$cand[0]] "the only table-name literal in $unit"
+    Add-Hop 'table' 'inferred' $cand[0] $typeFile $o.CandidateLines[$cand[0]] "the only upper-case table-name literal in $unit$caseNote"
     return (Complete 'one-table' '')
   }
   $o.ColumnMatch = $fits
   if ($o.BoundColumns.Count -and $fits.Count -eq 1) {
     $o.ResolvedTable = $fits[0]
-    Add-Hop 'table' 'inferred' $fits[0] $typeFile $o.CandidateLines[$fits[0]] "$($cand.Count) tables named in $unit; only $($fits[0]) holds all $($o.BoundColumns.Count) bound column(s)"
+    Add-Hop 'table' 'inferred' $fits[0] $typeFile $o.CandidateLines[$fits[0]] "$($cand.Count) tables named in upper case in $unit; only $($fits[0]) holds all $($o.BoundColumns.Count) bound column(s)$caseNote"
     return (Complete 'by-columns' '')
   }
-  $why = if (-not $o.BoundColumns.Count) { "$unit names $($cand.Count) tables and no column is bound through $local to tell them apart" }
-         else { "$unit names $($cand.Count) tables; $($fits.Count) of them hold all $($o.BoundColumns.Count) bound column(s)" }
+  $why = if (-not $o.BoundColumns.Count) { "$unit names $($cand.Count) tables in upper case and no column is bound through $local to tell them apart$caseNote" }
+         else { "$unit names $($cand.Count) tables in upper case; $($fits.Count) of them hold all $($o.BoundColumns.Count) bound column(s)$caseNote" }
   Add-Hop 'table' 'unresolved' "$($cand.Count) candidates" ([string]$ts[0].path) ([int]$ts[0].line) $why
   Complete 'many' $why
 }
@@ -1575,12 +1737,16 @@ function Get-ChainKey([string] $Dfm, [string] $Ds) { "$Dfm|$Ds".ToUpperInvariant
 # TStringField`), not controls. The datasource is the control's own, else its
 # parent's, else its grandparent's (Get-ControlDataSourceSql). Outcome per row:
 #   column       chain resolves to one table, and the table has the column
-#   not-column   chain resolves to one table, which has no such column
+#                (Get-SqlColumnState: extracted, older-only, or quoted)
+#   not-column   chain resolves to one table, and the column is not extracted
+#                from it nor quoted in its newest declaration
 #   ambiguous    several candidate tables survive (grade many)
 #   dangling     the DFM datasource names a module this index does not hold
 #   stops        the chain stops before a table (none / no-type / no-assignment /
 #                dfm-dataset / no-datasource)
-#   stale        a source file on the chain differs from the indexed copy
+#   stale        a source file on the chain differs from the indexed copy -- or
+#                the chain resolved (Table set) but the table's script is stale,
+#                so whether the column is quoted there is not known
 #   no-ds        no DataSource on the control or its two enclosing components
 #
 # COST AND CACHE: about 70 chains at ~7 engine calls each, ~60 s on CLIENT. The
@@ -1630,9 +1796,15 @@ SELECT sl.id AS id, sl.start_line AS line, sl.owner_name AS prop, sl.text AS col
       $outcome = if ($ch.Grade -eq 'stale source') { 'stale' }
                  elseif ($ch.Dangling) { 'dangling' }
                  elseif ($table) {
-                   $t = $SqlSet.Tables[$table]
-                   $cu = ([string]$b.col).ToUpperInvariant()
-                   if ($t.Columns.Contains($cu) -or $t.OlderOnlyColumns.Contains($cu)) { 'column' } else { 'not-column' }
+                   # the SHARED column test: cheap first, the source scan only for a miss
+                   if (Test-IsColumn $SqlSet.Tables[$table] ([string]$b.col)) { 'column' }
+                   else {
+                     switch ((Get-SqlColumnState $SqlSet $table ([string]$b.col) $SourceOverride).State) {
+                       'quoted' { 'column' }
+                       'stale'  { 'stale' }
+                       default  { 'not-column' }
+                     }
+                   }
                  }
                  elseif ($ch.Grade -eq 'many') { 'ambiguous' }
                  else { 'stops' }

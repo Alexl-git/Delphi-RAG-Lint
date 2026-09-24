@@ -197,7 +197,9 @@ $vocab = @{
   # raises beside handlers-in-body; where they are CAUGHT is the picture itself,
   # and it is never summarised as 'unhandled' (plan R3).
   'exception-paths'= @('Raises', 'raise sites',  'Handles',  'handler clauses in body')
-  # certain + inferred together; the split is on the focus box itself (R7)
+  # certain + inferred together; the split is on the focus box itself (R7).
+  # ROUTINES only: a unit-level SQL literal is a unit, not a routine -- counted
+  # apart (ReaderUnits / WriterUnits) and said on the focus box (final wave, item 6)
   'consumers'      = @('Readers','reading routines','Writers','writing routines')
   # the hops drawn, and how many controls in the whole index resolve to one
   # table -- the per-control coverage (R9), not the per-datasource 41%
