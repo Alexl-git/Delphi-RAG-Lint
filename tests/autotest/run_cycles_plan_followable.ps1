@@ -125,6 +125,10 @@ try {
   # --- 8. checklist with exact expected output ------------------------------
   Check 'checklist is present' (Has $plan '### Checklist') $plan
   Check 'checklist has a compile step' ($plan -match '\d+\. \[ \] Compile ') $plan
+  # IDE-9 run 2: Haiku passed 4/4 but saved the NEW units with LF endings,
+  # because the plan never said how to save them.
+  Check 'checklist says to save new units as ASCII + CRLF' `
+        ($plan -match '\[ \] Create `[^`]+` with the exact text given for `[^`]+`\. Save it as plain ASCII with Windows CRLF line endings') $plan
   Check 'checklist gives the re-index command for this project' `
         (Has $plan ('index --project "' + $dproj + '" --db "' + $db + '"')) $plan
   Check 'checklist predicts the implementation-only result exactly' `

@@ -2528,8 +2528,11 @@ begin
   Emit('### Checklist');
   Emit('Tick each box in order. Do not skip the compile.');
   No:= 0;
+  { IDE-9 run 2 (2026-09-23): a cheap model followed the plan 4/4 but saved the
+    NEW units with LF endings -- the plan never said how to save them. Say it. }
   for var Stem in LeafStems do
-    Item(Format('Create `%s` with the exact text given for `%s`.', [FLeafPath[Stem], FLeafName[Stem]]));
+    Item(Format('Create `%s` with the exact text given for `%s`. Save it as plain ASCII with ' +
+      'Windows CRLF line endings, like the existing units.', [FLeafPath[Stem], FLeafName[Stem]]));
   for var Fid in EditOrder do
     if Length(EditsOf(Fid)) > 0 then
       Item(Format('Apply every edit listed for `%s`, in the order listed.', [ExtractFileName(PathOf(Fid))]));
