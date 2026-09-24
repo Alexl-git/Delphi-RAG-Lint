@@ -34,20 +34,19 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 $DcuDir = Join-Path $WorkDir 'dcu'
 New-Item -ItemType Directory $DcuDir | Out-Null
 
-# The engine units live in many folders; dcc64 needs them all on -U. Mirrors the
-# CLI .dproj's DCC_UnitSearchPath.
-$srcDirs = @('preprocess','core','context','diagnostics','doc','forms','index','lint','lsp','mcp',
-             'output','parser','project','query','refactor','report','resolver','sql','storage',
-             'workspace','analysis') | ForEach-Object { "..\src\$_" }
-$srcDirs += '..\third_party\delphi-tree-sitter'
-$U = ($srcDirs -join ';')
+# The engine units live in many folders; dcc64 needs them all on -U, plus the
+# unit scopes (TreeSitter.pas says bare `SysUtils`). Both are READ FROM the CLI
+# .dproj -- the hand-kept copy that used to live here broke when the storage
+# layer's CallResolver started using TreeSitter.
+. (Join-Path $PSScriptRoot '..\autotest\lib\CliBuildPaths.ps1')
+$cli = Get-CliDcc64Args
 
 $bat = Join-Path $WorkDir 'build.bat'
 $lines = @(
   '@echo off',
   ('call "{0}"' -f $rs),
   ('cd /d "{0}"' -f $DprDir),
-  ('dcc64 -B -U"{0}" -E"{1}" -N0"{2}" {3}' -f $U, $WorkDir, $DcuDir, $DprName),
+  ('dcc64 -B {0} -E"{1}" -N0"{2}" {3}' -f $cli.Args, $WorkDir, $DcuDir, $DprName),
   'echo BUILD_EXITCODE=%ERRORLEVEL%'
 )
 [System.IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [System.Text.Encoding]::ASCII)
@@ -65,6 +64,8 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 
 $exe = Join-Path $WorkDir ([System.IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -ForegroundColor Red; exit 2 }
+# TreeSitter's DLLs are implicit imports: without them the exe dies at load.
+Copy-TreeSitterDlls -Dest $WorkDir | Out-Null
 
 # Run from the WorkDir: the test writes its scratch DB to a relative path.
 Push-Location $WorkDir

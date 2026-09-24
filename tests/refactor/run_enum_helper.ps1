@@ -72,10 +72,16 @@ if ($LASTEXITCODE -ne 0) { Write-Host "FAIL: index MultiLineOrdinals.pas (unit-t
 
 # --- build the DUnitX-style console test ---
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$searchPath = "$repo\src\core;$repo\src\storage;$repo\src\query;$repo\src\index;$repo\src\preprocess;$repo\src\refactor"
-$buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B -NSSystem -E`"$PSScriptRoot`" -U`"$searchPath`" `"$PSScriptRoot\EnumHelperTests.dpr`"" 2>&1
+# Search path + unit scopes are READ FROM src\cli\drag-lint.dproj (the storage
+# layer pulls in CallResolver, which uses TreeSitter -- a hand-kept list here
+# broke when that edge appeared). TreeSitter's DLLs are implicit imports, so
+# they are staged beside the exe or it dies at load.
+. (Join-Path $PSScriptRoot '..\autotest\lib\CliBuildPaths.ps1')
+$cli = Get-CliDcc64Args
+$buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B $($cli.Args) -E`"$PSScriptRoot`" `"$PSScriptRoot\EnumHelperTests.dpr`"" 2>&1
 $err = $buildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($err) { Write-Host "BUILD FAILED:"; $err | Select-Object -First 12; exit 1 }
+Copy-TreeSitterDlls -Dest $PSScriptRoot | Out-Null
 
 & "$PSScriptRoot\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate $dbIfaceOnly $dbNoImpl $dbOrdinalsUnit $dbMultiLineUnit
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

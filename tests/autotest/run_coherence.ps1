@@ -38,9 +38,11 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 # and src/storage (Storage.SQLite, which pulls in FireDAC -- resolved via the
 # IDE's default Library Path, same as every other console harness in this repo).
 $rsvars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$srcDir  = "$PSScriptRoot\..\..\src"
-$searchDirs = @('core', 'storage', 'preprocess', 'query', 'index') | ForEach-Object { "$srcDir\$_" }
-$uArgs   = "-U`"$($searchDirs -join ';')`""
+# Search path + unit scopes are READ FROM src\cli\drag-lint.dproj: Storage.SQLite
+# pulls in CallResolver, which uses TreeSitter, and the hand-kept five-folder
+# list that used to live here broke when that edge appeared.
+. (Join-Path $PSScriptRoot 'lib\CliBuildPaths.ps1')
+$uArgs   = (Get-CliDcc64Args).Args
 $outDir     = "$FixtureDir\Win64\Debug"
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $batPath = "$WorkDir\build_harness.bat"
@@ -69,8 +71,10 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
     Write-Host 'FAIL' -ForegroundColor Red
     exit 1
 }
+# TreeSitter's DLLs are implicit imports: without them the exe dies at load.
+Copy-TreeSitterDlls -Dest $outDir | Out-Null
 
-$db              = "$WorkDir\coherence.sqlite"
+$db            = "$WorkDir\coherence.sqlite"
 $freshPas        = "$MembersDir\uWithForm.pas"
 $staleCompilePas = "$MembersDir\uNoForm.pas"
 $absentPas       = "$WorkDir\does-not-exist\uGhost.pas"

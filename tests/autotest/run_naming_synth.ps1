@@ -37,14 +37,10 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 # defaults don't include -- pass -NS"System" to match, or the bare `SysUtils`
 # reference fails to resolve even though the RTL itself is on the path.
 $rsvars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$srcDir  = "$PSScriptRoot\..\..\src"
-$searchDirs = @(
-    'preprocess','core','context','diagnostics','doc','forms','index','lint',
-    'lsp','mcp','output','parser','project','query','refactor','report',
-    'resolver','sql','storage','workspace','analysis'
-) | ForEach-Object { "$srcDir\$_" }
-$searchDirs += "$PSScriptRoot\..\..\third_party\delphi-tree-sitter"
-$uArgs   = "-U`"$($searchDirs -join ';')`" -NS`"System`""
+# Both are now READ FROM src\cli\drag-lint.dproj (search path + unit scopes)
+# rather than kept by hand here.
+. (Join-Path $PSScriptRoot 'lib\CliBuildPaths.ps1')
+$uArgs   = (Get-CliDcc64Args).Args
 $outDir     = "$DprojDir\Win64\Debug"
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $batPath = "$WorkDir\build_harness.bat"
@@ -76,15 +72,12 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
 
 # DRagLint.Refactor.Rename (pulled in transitively via NamingFix's
 # implementation uses) links TreeSitterLib, which loads tree-sitter*.dll at
-# runtime -- copy the matching Win64 Debug DLLs next to the harness exe (same
-# ones the real CLI build produces in src/cli/Win64/Debug) or the harness
-# fails at process load with "cannot open shared object file", not a Pascal
-# error.
-$dllSrcDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug"
-foreach ($dll in @('tree-sitter.dll','tree-sitter-delphi13.dll','tree-sitter-dfm.dll')) {
-    $src = Join-Path $dllSrcDir $dll
-    if (Test-Path $src) { Copy-Item $src -Destination $outDir -Force }
-}
+# runtime -- copy the Win64 DLLs next to the harness exe or the harness fails at
+# process load, not with a Pascal error. They come from third_party\dll-win64
+# (tracked), not src/cli/Win64/Debug: that folder exists only after a CLI build,
+# and the old copy skipped a missing DLL silently, so a fresh checkout ran the
+# harness DLL-less and every case answered ''.
+Copy-TreeSitterDlls -Dest $outDir | Out-Null
 
 function RunHarness([string]$OldName, [string]$ConfigCase) {
     (& $exe $OldName $ConfigCase 2>&1 | Out-String).Trim()
