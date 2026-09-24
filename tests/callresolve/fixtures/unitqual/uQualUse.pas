@@ -11,6 +11,12 @@ procedure Driver;
 procedure DriverShadowTyped;
 procedure DriverShadowUntyped;
 procedure DriverWithUndecided;
+procedure DriverValues;
+procedure DriverValuesTyped;
+procedure DriverValuesUntyped;
+procedure DriverValuesWith;
+procedure DriverValuesBareShadow;
+procedure DriverValuesBare;
 
 implementation
 
@@ -66,6 +72,58 @@ procedure DriverWithUndecided;
 begin
   with TNotIndexed(nil) do
     uQualHelp.DoIt(1);                              // NEG-WITH-UNDECIDED
+end;
+
+{ D22 (run_unit_qualified_value_bind.ps1, resolver 1.9.0-alpha): unit-qualified
+  VALUES. MARK-* sites must bind refs.symbol_id to the unit's var / const and own
+  no call_edges row; NEG-* sites must not bind to any unit-level GLimit. }
+procedure DriverValues;
+var
+  N: Integer;
+begin
+  N:= Qual.Lib.GLimit;                              // MARK-READ
+  N:= N + Qual.Lib.CMax;                            // MARK-CONST
+  Qual.Lib.GLimit:= 1;                              // MARK-WRITE
+  uQualHelp.GLimit:= N;                             // MARK-SIMPLE-UNIT
+end;
+
+procedure DriverValuesTyped;
+var
+  uQualHelp: TLocal;
+  N: Integer;
+begin
+  N:= uQualHelp.GLimit;                             // NEG-VALUE-TYPED
+end;
+
+procedure DriverValuesUntyped;
+var
+  uQualHelp: TNotIndexed;
+  N: Integer;
+begin
+  N:= uQualHelp.GLimit;                             // NEG-VALUE-UNTYPED
+end;
+
+procedure DriverValuesWith;
+var
+  N: Integer;
+begin
+  with TNotIndexed(nil) do
+    N:= uQualHelp.GLimit;                           // NEG-VALUE-WITH
+end;
+
+{ GSole is declared by ONE used unit (Qual.Lib), so an unshadowed bare write
+  binds to that unit var (POS-BARE-UNIT) -- which is what lets the shadowed one
+  below fail if the local is ignored. }
+procedure DriverValuesBare;
+begin
+  GSole:= 3;                                        // POS-BARE-UNIT
+end;
+
+procedure DriverValuesBareShadow;
+var
+  GSole: Integer;
+begin
+  GSole:= 2;                                        // NEG-BARE-SHADOW
 end;
 
 end.

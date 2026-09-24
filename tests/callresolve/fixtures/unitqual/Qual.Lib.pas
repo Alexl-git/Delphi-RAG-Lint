@@ -15,6 +15,15 @@ procedure Over(A, B: Integer); overload;
 var
   GFlag: Boolean;
 
+{ D22 (run_unit_qualified_value_bind.ps1, resolver 1.9.0-alpha): a unit-level
+  var and const that a UNIT-QUALIFIED read / write in uQualUse must bind to. }
+var
+  GLimit: Integer;
+  GSole: Integer;       { declared by THIS used unit only -- check 3 }
+
+const
+  CMax = 3;
+
 implementation
 
 procedure DoIt(A: Integer);

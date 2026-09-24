@@ -164,6 +164,33 @@ breaking changes** until v1.0.
 
 ### Added
 
+- **Resolver 1.9.0-alpha -- UNIT-QUALIFIED vars and consts bind (D22).** `uStyles.SkipRefresh`
+  -- a unit-level var or const named through its unit, read OR written (the extractor emits
+  `uStyles.SkipRefresh := True` as a `member-access` ref, never a `write` ref) -- now binds to the
+  declaration: rung 3d of `TCallResolver.ResolveOne`, the value twin of ENG-16's rung 4b and under
+  the same gates (the receiver did not type, names exactly one unit, and no nearer local / parameter
+  / class member / `with` target claims its first segment; interface section, or either section in
+  the unit's own file; exactly one declaration or nothing). It is recorded the way a dotted
+  field/property access is: `refs.symbol_id` AND a `member_accesses` row with its READ or WRITE
+  mode (no accessor, no call edge), so `find-callers --resolved` reports `Unit.Var := X` as `write`
+  (a const is always `read`); `call_edges` does not move. ORM3 CLIENT (resolve-only on a copy): 4
+  unbound sites -> 0 (`uStyles.SkipRefresh`, `uAutoTest.AutoTest_ExtraScenarios`,
+  `uPLANLIST.PlanEditFormHook` x2), `member_accesses` 13,630 -> 13,634 (4 `write`), effect-free
+  routines unchanged (2,918; the purity stage now reads a bound unit-qualified READ as a plain global
+  read, not an unbound member, and still flags a WRITE -- as `receiver not classified`). In `Storage.SQLite.pas` `ResolveCallTargets`: a new calls log line
+  `unit-values: N unit-qualified var/const ref(s) bound (resolver and store agree)`, and these
+  bindings are counted neither into `enum-values:` "qualified bound (Shape B)" (whose reconciliation
+  would otherwise print a false WARNING) nor into the `edge(s)` total. The same gate now guards rung
+  3c's `Unit.enumValue` branch: a local, or an undecidable `with` target, spelled like the unit no
+  longer binds `Local.Value` to the unit's enum value; such declines are counted on the
+  `enum-values:` line as `unit receiver declined (nearer value or with target) N` (CLIENT: 0 -- it
+  has no qualified enum site, so 0 enum bindings moved). `DRAGLINT_RESOLVER_VERSION` 1.8.0-alpha ->
+  1.9.0-alpha (derived rows only: remedy `index --all --resolve-only`); the C2.3 + IsStub
+  reservation moves to 1.10.0-alpha. No extractor bump: of the changed files only `CallResolver.pas`
+  is on the extractor guard's hashed surface (`Storage.SQLite.pas` is not), so its hash is re-pinned
+  within 1.19.0-alpha. Guards: `tests\callresolve\run_unit_qualified_value_bind.ps1` (positive
+  control: locals spelled like the unit -- typed, untyped, under an untypable `with` -- must not bind;
+  read/write modes in `member_accesses` and `find-callers`), `run_enum_value_refs_bind.ps1` N5/N6.
 - **Resolver 1.8.0-alpha -- bare WRITES bind (D13).** A fifth calls-stage stream
   (`ResolveWriteRefs` -> `TCallResolver.ResolveWriteRef`) sets `refs.symbol_id` for a `write` ref
   (`X:= ...`) to the local, parameter, field, property, class var or unit-level var/const it
@@ -545,7 +572,7 @@ breaking changes** until v1.0.
   RED until they are converted (no allow-list, by design).
 
 ### Known
-- `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.9.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the resolver batch -- the `with` scope above, D12 own-name result writes, D13 bare write binding and ENG-16 unit-qualified calls).
+- `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.10.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the resolver batch -- the `with` scope above, D12 own-name result writes, D13 bare write binding and ENG-16 unit-qualified calls -- then 1.9.0 until 1.9.0-alpha went to D22, unit-qualified var/const binding, on 2026-09-24).
 
 ## v1.16.0-alpha -- 2026-09-22
 

@@ -12323,6 +12323,11 @@ var
     call_edges row, so folding it into Written would inflate the edge count that
     existing guards and the M4 no-collateral check both read. }
   WrittenValues : Int64     ; { Shape B -- qualified enum values bound by the main stream }
+  { 2026-09-24 (D22, ruling R13): rung 3d's unit-qualified var/const bindings are
+    ValueOnly writes too, but NOT enum values. Counted apart, so the Shape B
+    number and its reconciliation keep meaning what their labels say. }
+  WrittenUnitValues: Int64  ; { rung 3d -- unit-qualified vars/consts bound by the main stream }
+  UnitValuesBefore : Int64  ; { Resolver.UnitValueBound before this ref's ResolveOne       }
   EnumCandidates: Int64     ; { Shape A -- bare `read` rows examined by the enum stream   }
   EnumBound     : Int64     ; { Shape A -- of those, the rows that bound                  }
   EnumShadowDecls: Int64    ; { size of the R3(c) unit-level const/var shadow set         }
@@ -12403,6 +12408,7 @@ begin
   DummyTok:= Default(TFileTxToken);
   Written := 0;
   WrittenValues  := 0;
+  WrittenUnitValues:= 0;
   EnumCandidates := 0;
   EnumBound      := 0;
   EnumShadowDecls:= 0;
@@ -12631,6 +12637,7 @@ begin
           Ref.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
 
         if Profiled then TMark:= TStopwatch.GetTimeStamp;
+        UnitValuesBefore:= Resolver.UnitValueBound;
         Edge:= Resolver.ResolveOne(Ref);
         if Profiled then Inc(AccRes, TStopwatch.GetTimeStamp - TMark);
         { v20: persist the receiver for EVERY call ref, resolved or not. The
@@ -12677,7 +12684,13 @@ begin
         if (Edge.TargetSymbolId > 0) and (Edge.MemberMode <> '') then
         begin
           WriteMemberAccess(Ref.Id, Edge);
-          Inc(Written);
+          { D22 (R13/R15): a unit-qualified var/const (rung 3d) takes this same
+            path -- refs.symbol_id plus a member_accesses row with its read or
+            write mode, no accessor, no call edge. Rung 3d is the only answer
+            that moves UnitValueBound, so it is counted on the unit-values line,
+            not into Written (reported as edge(s), which it earns none of). }
+          if Resolver.UnitValueBound > UnitValuesBefore then Inc(WrittenUnitValues)
+          else Inc(Written);
         end
         { 2026-09-23 (enum-value-ref-binding): a QUALIFIED enum value --
           `TCmd.cmdLoad` or `SomeUnit.cmdLoad`, resolver rung 3c. The identity
@@ -12851,11 +12864,13 @@ begin
       '%d qualified bound (Shape B); declined (both streams) ' +
       'not-visible %d, ambiguous %d, shadowed %d; ' +
       'duplicate groups collapsed %d (decisive %d); unit-level shadow decls %d; ' +
-      'with scope: declined as a with member %d, bound under an undecidable with target %d',
+      'with scope: declined as a with member %d, bound under an undecidable with target %d; ' +
+      'unit receiver declined (nearer value or with target) %d',
       [EnumBound, EnumCandidates, WrittenValues,
        Resolver.EnumStats.NotVisible, Resolver.EnumStats.Ambiguous, Resolver.EnumStats.Shadowed,
        Resolver.EnumStats.DupGroupsCollapsed, Resolver.EnumStats.CollapseDecisive,
-       EnumShadowDecls, Resolver.EnumStats.WithMember, Resolver.EnumStats.WithUndecided]));
+       EnumShadowDecls, Resolver.EnumStats.WithMember, Resolver.EnumStats.WithUndecided,
+       Resolver.EnumUnitGateDeclined]));
     { THE RECONCILIATION, printed rather than left implicit. The resolver counts
       its own successes on BOTH paths -- ResolveEnumValueRead's final
       Inc(FEnumStats.Bound) for Shape A, and rung 3c's for Shape B -- while the
@@ -12871,6 +12886,17 @@ begin
         'wrote %d (%d Shape A + %d Shape B). A resolved enum value did not reach refs.symbol_id; ' +
         'the bindings above are INCOMPLETE and the write path is the place to look.',
         [Resolver.EnumStats.Bound, EnumBound + WrittenValues, EnumBound, WrittenValues]));
+    { 2026-09-24 (D22, ruling R13): rung 3d's unit-qualified var/const bindings,
+      on their OWN line with their own reconciliation. Folded into Shape B they
+      made the enum count claim values that are not enums, and made the line
+      above print a false WARNING on every corpus holding one. }
+    if Resolver.UnitValueBound = WrittenUnitValues then
+      ResolveLog(Format('calls      unit-values: %d unit-qualified var/const ref(s) bound ' +
+        '(resolver and store agree)', [WrittenUnitValues]))
+    else
+      ResolveLog(Format('calls      unit-values: WARNING -- the resolver counted %d unit-qualified ' +
+        'var/const binding(s) but the store wrote %d. A resolved value did not reach refs.symbol_id; ' +
+        'the write path is the place to look.', [Resolver.UnitValueBound, WrittenUnitValues]));
     { 2026-09-23 (parenless-call binding). Every decline by reason, for the same
       reason as the enum line above: a declined read writes nothing, so these
       numbers are the only trace of what the stream refused. The edges it wrote

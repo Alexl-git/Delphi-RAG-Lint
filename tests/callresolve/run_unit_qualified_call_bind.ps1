@@ -49,7 +49,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 
 $exePath = (Resolve-Path $Exe).Path
 $fixDir  = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\unitqual')).Path
-$scratch = Join-Path C:\TEMP 'draglint_unitqual_bind'
+$scratch = Join-Path C:\TEMP "draglint_unitqual_bind_$PID"
 if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 Copy-Item (Join-Path $fixDir '*.pas') $scratch
@@ -121,6 +121,7 @@ try {
   }
 } finally {
   Pop-Location
+  if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }
 
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
