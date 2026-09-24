@@ -7,26 +7,29 @@ The live scoreboard for `charts\question-catalogue.md`. **26 catalogue rows**
 Updated 2026-09-23. Branch `feat/archify-ir`, 24 commits, NOTHING PUSHED.
 
 ```
-SHIPPED                     21   emitters exist, tested, clickable
+SHIPPED                     25   emitters exist, tested, clickable
 PLANNED (ready to build)     0
-UNPLANNED, unblocked         0   there is nothing left that the index can answer
-BLOCKED on data              3   need a live Firebird via fb-snapshot (0 rows today)
-BLOCKED on the engine        1   exception-paths -- no raise/handle fact, MEASURED
+UNPLANNED, unblocked         0
+BLOCKED on data              0   consumers / feeds-from / lands-where ship DERIVED (path A)
+BLOCKED on the engine        0   exception-paths ships on a source-token classifier
 PARKED by owner              1   compare
                             --
                             26
 ```
 
-**Every question this index can answer now ships.** The five remaining are
-blocked on facts that do not exist yet, not on work nobody has done -- and each
-one's blocker was measured, not assumed.
+**25 of 26 ship; only `compare` does not, by owner decision.** The last four
+(`exception-paths`, `consumers`, `feeds-from`, `lands-where`) shipped on
+2026-09-23 under `PLAN-last-four-verbs.md`, NOT because the missing facts
+arrived: they are built from facts that DO exist, and each chart says which of
+its hops are `[inferred]` and what it cannot see. Their caveats are in the
+table below and must travel with any claim that "the catalogue is done".
 
 **Selection kinds: method / unit / form-class / field / property / type /
 interface / project / command constant / wire field / db column / any symbol.**
 
 ---
 
-## SHIPPED (10)
+## SHIPPED (25)
 
 | question | selects | emitter | measured |
 |---|---|---|---|
@@ -53,7 +56,47 @@ interface / project / command constant / wire field / db column / any symbol.**
 | `change-impact` | method / type | `Emit-ChangeImpact.ps1` | 9 routines / 1 unit; a TYPE reaches 591 over 174 units (capped) |
 | `tested-by` | any symbol | `Emit-TestedBy.ps1` | 11 / 8 / 13 covering tests, computed from 71 test methods |
 
-**Twenty-one questions, EIGHTEEN emitters** -- `what-it-calls` is a `-Direction`
+| `exception-paths` | method | `Emit-ExceptionPaths.ps1` | BuildSchema: EDatabaseError caught at LoadAllAsync:632 (call inside the try); ReadBuffer: caught on 2 edges, escapes on 3 path ends, 139 callers walked |
+| `consumers` | table / column | `Emit-Consumers.ps1` | CAUSFAIL (SERVER): 1 certain writer, 1 inferred reader, 3 triggers; FOLDERS 2 declarations, newest 79 columns |
+| `feeds-from` | control | `Emit-FeedsFrom.ps1` | colREASON: 5 graded hops to CAUSFAIL.REASON; 267 of 808 field-bound CLIENT controls reach one table |
+| `lands-where` | ORM property / field / control | `Emit-LandsWhere.ps1` | TmcCAUSFAIL.REASON: 4 server rows, 1 trigger, 1 client binding; convention 1,991 of 1,997 |
+
+**The caveat each of the last four ships with** -- say it whenever the chart is
+quoted:
+
+* `exception-paths` -- the index has NO raise/handle ref kind. Each exception
+  ref is CLASSIFIED from the source token before it (`raise` / `on E:`) on a
+  file whose sha256 still matches the index; source-only rows (bare `except`,
+  `raise;`) are `[inferred]` with directive state not evaluated. A solid catch
+  needs the call site inside the handler's `try`. The caller walk is over
+  resolved call edges, so engine D1 (parenless calls) and interface/event
+  dispatch thin it; a walk that ends says "no resolved caller", never
+  "unhandled".
+* `consumers` -- derived, path A (`orm_links` / `fb_*` are 0 rows): SQL facts
+  `[certain]`, upper-case SQL-verb literals `[inferred]`, because `sql_reads`
+  misses SQL split over several `SQL.Add` lines (engine D18). The schema is the
+  SQL SCRIPTS, collapsed on name with the newest file winning -- 5 live `PDF_*`
+  tables are absent and quoted identifiers are not extracted.
+* `feeds-from` -- DFM DataSource -> dataset -> view model -> TABLE.COLUMN, every
+  hop graded; it STOPS (never guesses) on a dangling module, an interface-typed
+  view model or several candidate tables. Measured coverage per control, not
+  per datasource: 267 of 808 reach one table, 426 sit under a dangling module.
+* `lands-where` -- the TABLE.COLUMN hop is a naming CONVENTION
+  (`Tmc<T>.P` -> `T.P`), drawn `[inferred]` with its coverage measured and
+  printed on every chart (1,991 of 1,997). Reads THREE clones (CLIENT, SERVER,
+  SQL).
+
+**Column states** `consumers` and `lands-where` can show for a named column:
+
+| state | means |
+|---|---|
+| `column` | declared in the newest script declaration of the table |
+| `older-only` | declared only in an OLDER declaration of the table (the newest drops it) |
+| `quoted` | declared as a QUOTED identifier (`"TABLE"`, MS1.SQL:3848) -- the SQL index drops quoted identifiers (`INBOX-sql-index-drops-quoted-identifiers.md`), so it is found by a source scan, `[inferred]` |
+| `server-sql` | in NO script declaration, but the server's own SQL names it (`STATIONS.GRIDS`, uSTATIONS_SERVER.PAS:129) -- the scripts lag the schema |
+| `not-a-column` | named by no script and no server SQL -- computed or UI-only (`INSPRSLT.DistHist`) |
+
+**Twenty-five questions, TWENTY-TWO emitters** -- `what-it-calls` is a `-Direction`
 switch, `who-writes`/`who-reads` are one `-Mode` switch, and both
 `protocol-trace` rows are one emitter dispatching on the selection's kind. Say
 it that way: counting emitters as questions understates the result, counting
@@ -62,23 +105,30 @@ questions as emitters overstates the work.
 Gate: `charts\src\Test-Emitters.ps1` (exit 0 = green). Proven to fail correctly
 on every batch -- see each commit for the mutation it was checked against.
 
-## NOT SHIPPED (5), each with a MEASURED blocker
+## Engine defects the shipped charts disclose (2026-09-23)
 
-Nothing here is waiting on effort. Each row names the fact that does not exist.
+From `C:\Projects\Delphi-RAG-lint\docs\INBOX-defects-found-2026-09-23-rule-work.md`.
+Each was MEASURED on the clones; none is worked around silently.
 
-| question | selects | blocker, measured |
+| defect | affects | what the chart does |
 |---|---|---|
-| `exception-paths` | method | **No raise/handle fact.** `refs.kind` has no `raise`/`except` value (only read / type_use / call / member-access / write / event-binding / attribute / di-*), and `symbol_facts` has no exception column. 17 `E*` classes ARE referenced, but a `type_use` of `EMicroniteError` is produced identically by `raise E.Create`, `on E: T do` and a bare declaration -- so a chart would draw handlers as throwers. Asked for two ref kinds in `INBOX-no-raise-handle-fact-blocks-exception-paths.md` |
-| `lands-where` | field | `orm_links` **0 rows** |
-| `feeds-from` | control | `orm_links`, `fb_datasets` **0 rows** |
-| `consumers` | table / column | `fb_columns`, `fb_relations` **0 rows** |
+| D1 parenless free-function calls are never bound (`N := NextId;`) | every caller/callee walk: `butterfly`, `who-calls`, `what-it-calls`, `change-impact`, `exception-paths` | documented only -- such callers are absent; a short list is a lower bound |
+| D6 butterfly listed duplicate callee rows | `butterfly` | **FIXED here** -- rows are distinct symbols, arrows follow the engine's tree (a hop-2 callee is no longer drawn as called by the focus); gate `A-BF6-*` fails on any duplicate |
+| D12 own-name result assignment scored as a GLOBAL write (31 CLIENT functions, e.g. `Ap.AP_FP_Greater_Eq`) | `effects` | when the witness is "writes <own name> (non-local)" the `g` moves to a dashed "engine D12" disclosure; when an earlier witness hides it, `g` is still drawn |
+| D13 `write` refs never get a symbol_id (32,909 of 32,909 on CLIENT) | `who-writes` | bare in-class writes are invisible to the verb (`FConnected`: 4 at uPipeClientConnection.pas:164/320/455/543); the chart says "no RESOLVED write sites" and lists same-name unbound writes by name |
+
+## NOT SHIPPED (1)
+
+| question | selects | why |
+|---|---|---|
 | `compare` | two index runs | parked by owner; no `ir` or `compare` verb exists in the deployed engine |
 
-The three `fb_*` rows all need `drag-lint fb-snapshot` against a **live
-Firebird**. That is an INGEST task, not a chart task, and it is on this
-session's STOP list. Their effort is unknowable until the ingest runs.
+## HISTORY: blocked on data (resolved 2026-09-23 by deriving, path A)
 
-## BLOCKED ON DATA -- not near-term (3)
+The three rows below were blocked on `orm_links` / `fb_*`. They now ship from
+DFM bindings + Delphi SQL literals + the SQL-script index instead; `orm_links`
+stays at 0 rows and is only DETECTED (`A-OL-ROWS`), as the switch for path B.
+The original text is kept for the record.
 
 `orm_links` / `fb_*` are written by `drag-lint fb-snapshot`, which opens a
 **live TFDConnection**. Engine session confirmed 2026-09-22. They are empty by
@@ -94,7 +144,7 @@ near-term.
 **Effort is unknowable until the ingest runs.** The work is the fb-snapshot
 ingest, not the chart.
 
-## BLOCKED ON THE ENGINE (4)
+## HISTORY: blocked on the engine (all four shipped)
 
 | question | selects | waiting on |
 |---|---|---|
@@ -223,7 +273,8 @@ Every re-baseline on the way was traced to a mechanism before it was made:
   units (the .dpr's EurekaLog uses block). `EXTEDGES` +14 vs +12 raw uses rows:
   deps-report attribution, asked in the engine INBOX.
 
-Next: the last four verbs -- `charts\PLAN-last-four-verbs.md` (Fable).
+The last four verbs (`charts\PLAN-last-four-verbs.md`) shipped the same day:
+25 of 26. Only `compare` remains, parked by the owner.
 
 ### Batch 3 findings (2026-09-23)
 

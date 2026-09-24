@@ -1,4 +1,4 @@
-<!-- dl:backlog status=open last-measured=2026-09-22 -->
+<!-- dl:backlog status=open last-measured=2026-09-23 -->
 # charts\ -- staging area for the Archify-parity diagram work
 
 Everything for the typed diagram IR, the emitters and the HTML/Graphviz
@@ -73,9 +73,60 @@ and edge must be a fact with a file and a line.
 * `scratch\` is throwaway; nothing there is ever committed.
 * Commit by explicit pathspec. Never push.
 
-## What is built (2026-09-23)
+## What is built
 
-Two questions run end to end. `New-DiagramArtifact.ps1 -Question <q> -Target <t>
+**25 of the 26 catalogue questions ship** (2026-09-23); only `compare` does
+not, parked by the owner. The scoreboard is `STATUS-questions.md`, the question
+set and each question's caveat is `question-catalogue.md`, the gate is
+`src\Test-Emitters.ps1`, and `src\New-ExampleGallery.ps1` renders a worked
+example of every shipped question into `docs\examples\index.html`.
+
+### The last four (PLAN-last-four-verbs.md)
+
+```
+New-DiagramArtifact.ps1 -Question exception-paths -Target <Unit.Class.Method> -DbPath <clone> [-Depth 3] [-Cap 20]
+New-DiagramArtifact.ps1 -Question consumers  -Target TABLE|TABLE.COLUMN -DbPath <Delphi clone> -SqlDbPath <SQL clone>
+New-DiagramArtifact.ps1 -Question feeds-from -Target <Form>.<Control>    -DbPath <Delphi clone> -SqlDbPath <SQL clone>
+New-DiagramArtifact.ps1 -Question lands-where -Target <Tmc/Imc property | field | Form.Control> `
+                        -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>
+```
+
+* `exception-paths` -- raises, handlers and where each type is caught or
+  escapes up the callers. There is no raise/handle fact: refs are CLASSIFIED by
+  the source token before them, on sha256-fresh files only. A walk that ends
+  says "no resolved caller", never "unhandled".
+* `consumers` -- readers, writers, triggers, procedures and indexes of a table
+  or column. Facts `[certain]`, SQL-verb literals `[inferred]` (`sql_reads`
+  misses multi-line `SQL.Add`); the schema is the SQL SCRIPTS, not the live DB.
+* `feeds-from` -- a control's value, hop by hop, to TABLE.COLUMN. It stops
+  rather than guess, and prints its per-control coverage.
+* `lands-where` -- an ORM property's server write/read path, TABLE.COLUMN and
+  triggers. TABLE.COLUMN is a naming convention, `[inferred]`, with its
+  measured coverage printed.
+
+Column states they can show: `column`, `older-only`, `quoted` (the SQL index
+drops quoted identifiers), `server-sql`, `not-a-column`.
+
+### Engine defects the charts disclose
+
+| | affects | handling |
+|---|---|---|
+| D1 parenless calls never bound | every caller/callee walk (butterfly, who-calls, what-it-calls, change-impact, exception-paths) | documented; a short list is a lower bound |
+| D6 butterfly duplicate rows | butterfly | fixed in the emitter; gate `A-BF6-*` fails on a duplicate |
+| D12 own-name result write scored global | effects | `g` moved to a dashed D12 disclosure when the witness names the routine |
+| D13 `write` refs unbound | who-writes | "no RESOLVED write sites" plus same-name unbound writes listed by name |
+
+### dot.exe and MAX_PATH
+
+`dot.exe` is not long-path aware: an output path of 260 characters or more
+makes it write NO SVG (measured: 259 writes, 260 fails). `Invoke-DotRun` in
+`src\Emit-Common.ps1` is the one place dot runs; it refuses an over-long path
+BEFORE dot runs, naming the path, clears stale outputs first, and attaches
+dot's own messages when no SVG appears. Keep `-OutDir` / `-OutRoot` short.
+
+### The first two (2026-09-22)
+
+Two questions ran end to end first. `New-DiagramArtifact.ps1 -Question <q> -Target <t>
 -DbPath <db>` dispatches on the question exactly as `drag-lint ask --question`
 will, and writes an 8-file bundle plus the xref to paste into the unit.
 

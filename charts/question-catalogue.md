@@ -1,4 +1,4 @@
-<!-- dl:backlog status=open last-measured=2026-09-22 -->
+<!-- dl:backlog status=open last-measured=2026-09-23 -->
 # Diagram question catalogue -- the closed set `drag-lint ask` must answer
 
 drag-lint is not a model. Every diagram must come from a FORMAL CALL: a question
@@ -55,17 +55,56 @@ dispatches on the resolved kind.
 | `architecture` | project | units/packages/DI as trust-zoned rectangles | `graph` + `deps-report` + `di_bindings` | ASSEMBLE |
 | `compare` | two index runs | before / delta / after | needs the IR; no new facts | ASSEMBLE |
 | `shown-where` | field / column | which forms and controls display this | `ui_affinity` + DFM props (partial) | ASSEMBLE |
-| `lands-where` | field | field -> dataset -> table.column | `orm_links` -- **0 rows everywhere** | NO DATA |
-| `feeds-from` | control | control -> datasource -> memtable -> table | `orm_links`, `fb_datasets` -- **0 rows** | NO DATA |
-| `consumers` | table / column | every unit reading or writing it | `fb_columns`, `fb_relations` -- **0 rows** | NO DATA |
-| `protocol-trace` | field / property | the round trip UI -> memtable -> boundary -> server -> DB and back | enum-value binding (GAP 1) | BLOCKED |
-| `protocol-trace` | method | call tree pruned to payload-carrying branches, across boundaries to a sink | GAP 1 + branch ranking | BLOCKED |
-| `crosses-boundary` | method | whether and where this leaves the process | GAP 1 | BLOCKED |
-| `exception-paths` | method | what can be raised and where it is caught | raise/handle fact (GAP 2) | BLOCKED |
+| `lands-where` | ORM property / field / control | property -> server write/read path -> TABLE.COLUMN -> triggers | DFM bindings + SERVER member accesses and SQL literals + SQL-script index; TABLE.COLUMN by naming convention `[inferred]` (`orm_links` 0 rows) | SHIPPED (derived) |
+| `feeds-from` | control | control -> datasource -> dataset -> view model -> TABLE.COLUMN | DFM bindings + dataset assignments + SQL literals + SQL-script index (`orm_links`, `fb_datasets` 0 rows) | SHIPPED (derived) |
+| `consumers` | table / column | readers, writers, triggers, procedures, indexes | `sql_reads`/`sql_writes` `[certain]` + SQL-verb literals `[inferred]` + SQL-script index (`fb_*` 0 rows) | SHIPPED (derived) |
+| `protocol-trace` | field / property | the round trip UI -> memtable -> boundary -> server -> DB and back | enum-value binding (GAP 1, closed) | SHIPPED |
+| `protocol-trace` | method | call tree pruned to payload-carrying branches, across boundaries to a sink | GAP 1 + branch ranking | SHIPPED |
+| `crosses-boundary` | method | whether and where this leaves the process | GAP 1 | SHIPPED |
+| `exception-paths` | method | what can be raised and where it is caught | exception refs CLASSIFIED by source token (no raise/handle fact exists) + caller walk | SHIPPED (classified) |
 
 `SHIP*` -- `wiring` ships, but `di_bindings` reads CLIENT=4 against SERVER=535.
 Confirm local-container registrations are captured before trusting it on a
 client project.
+
+**Status as of 2026-09-23: every row except `compare` is SHIPPED** (25 of 26;
+live scoreboard `STATUS-questions.md`). The status column above keeps the
+original legend for the rows that were SHIP from the start; `shown-where` runs
+on DFM data bindings, not `ui_affinity` (a thread-affinity hint, 0 of 13,131
+fields carry one).
+
+## The last four questions -- how to ask them, what they answer, what they cannot see
+
+All four are bundled by `src\New-DiagramArtifact.ps1` (writes `graph.svg`,
+`index.html`, `meta.json` with the regenerate command, and the xref). The
+paths are the CLONES under `charts\scratch\db\`; `Get-CloneDb` refuses anything
+else.
+
+```
+New-DiagramArtifact.ps1 -Question exception-paths -Target <Unit.Class.Method> -DbPath <clone> [-Depth 3] [-Cap 20]
+New-DiagramArtifact.ps1 -Question consumers  -Target TABLE|TABLE.COLUMN -DbPath <Delphi clone> -SqlDbPath <SQL clone>
+New-DiagramArtifact.ps1 -Question feeds-from -Target <Form>.<Control>    -DbPath <Delphi clone> -SqlDbPath <SQL clone>
+New-DiagramArtifact.ps1 -Question lands-where -Target <Tmc/Imc property | field | Form.Control> `
+                        -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>
+```
+
+`exception-paths` defaults to `-Depth 3` (the shared default is 2); an explicit
+`-Depth` wins. `consumers` / `feeds-from` / `lands-where` refuse without
+`-SqlDbPath`; `lands-where` also refuses without `-ServerDbPath`.
+
+| question | answers | caveat |
+|---|---|---|
+| `exception-paths` | which exception types this routine raises (and re-raises), which handlers in its body catch what, and where each type is caught or escapes up to N caller levels | no raise/handle fact exists: refs are CLASSIFIED by the source token before them, on sha256-fresh files only; bare `except` / `raise;` are `[inferred]`. A solid catch requires the call inside the handler's `try`. The walk follows resolved call edges -- engine D1 (parenless calls) and dispatch thin it -- and a walk that ends is "no resolved caller", never "unhandled" |
+| `consumers` | who reads and writes a table or column: routines (fact `[certain]`, literal `[inferred]`), `[by name]` mentions, triggers, procedures, indexes | `sql_reads` misses multi-line `SQL.Add` SQL (engine D18), so inferred readers are drawn beside certain ones and both counts are printed. Schema = SQL scripts, newest declaration wins; 5 live `PDF_*` tables absent; quoted identifiers not extracted |
+| `feeds-from` | where a data-aware control's value comes from, hop by hop, to TABLE.COLUMN, plus code that re-points or re-binds it | stops rather than guess on a dangling module, an interface-typed view model or several candidate tables; per-control coverage printed (267 of 808 reach one table on CLIENT) |
+| `lands-where` | where an ORM property (or DFM-bound field) lands: the server's write and read path, TABLE.COLUMN, the triggers touching it, and the client bindings | TABLE.COLUMN is a naming convention, `[inferred]`, with measured coverage printed (1,991 of 1,997); positional `Params[i]` / `Fields[i]` are not visible |
+
+Column states (`consumers` column form, `lands-where`): **column** (newest
+declaration), **older-only** (only an older declaration of the table has it),
+**quoted** (a quoted identifier the SQL index drops --
+`INBOX-sql-index-drops-quoted-identifiers.md`; found by source scan,
+`[inferred]`), **server-sql** (in no script, but the server's SQL names it),
+**not-a-column** (named by nothing: computed or UI-only).
 
 ## Branch policy for the trace questions -- decided 2026-09-22
 

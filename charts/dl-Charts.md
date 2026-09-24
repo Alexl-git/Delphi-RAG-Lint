@@ -1,4 +1,4 @@
-<!-- dl:backlog status=open last-measured=2026-09-22 -->
+<!-- dl:backlog status=open last-measured=2026-09-23 -->
 # dl-Charts
 
 ## Summary
@@ -39,4 +39,23 @@ The current tracked sequence is:
 6. Compare (before / delta / after)
 
 ## Status
-Open
+Open. **25 of 26 catalogue questions ship** (2026-09-23), as PowerShell
+emitters under `charts\src\` over the frozen index clones; only `compare` is
+not built (parked by the owner, and it is the one that needs the typed IR).
+Scoreboard: `charts\STATUS-questions.md`. Syntax, answers and caveats:
+`charts\question-catalogue.md`.
+
+The last four shipped DERIVED rather than from the facts first planned for
+them, and each carries its caveat on the chart:
+
+* `exception-paths` (`-Target <Unit.Class.Method> -DbPath <clone> [-Depth 3]`)
+  -- exception refs classified by source token; no raise/handle fact exists.
+* `consumers` (`-Target TABLE|TABLE.COLUMN -DbPath <Delphi clone> -SqlDbPath <SQL clone>`)
+  -- facts `[certain]`, SQL-verb literals `[inferred]`; schema = the SQL scripts.
+* `feeds-from` (`-Target <Form>.<Control> -DbPath <Delphi clone> -SqlDbPath <SQL clone>`)
+  -- stops rather than guess; per-control coverage printed.
+* `lands-where` (`-Target <Tmc/Imc property | field | Form.Control> -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>`)
+  -- TABLE.COLUMN by naming convention, `[inferred]`, coverage printed.
+
+Engine defects disclosed by the charts: D1 (parenless calls, every call walk),
+D12 (effects), D13 (who-writes); D6 (butterfly duplicate rows) is fixed.

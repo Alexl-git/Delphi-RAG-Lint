@@ -40,7 +40,10 @@ $DL  = Join-Path $DbDir 'DL-drag-lint.sqlite'
 # compile closure already contains the code under test -- so it needs this one
 # and cannot be answered from CLIENT or SERVER at all.
 $MT  = Join-Path $DbDir 'TESTS-MicroniteTests.sqlite'
-foreach ($d in @($CLI, $SRV, $DC, $DL, $MT)) {
+# The SQL-SCRIPT index (12 Firebird .SQL files): consumers / feeds-from /
+# lands-where read tables, columns, triggers and procedures from it.
+$SQL = Join-Path $DbDir 'SQL-drag-lint-sql.sqlite'
+foreach ($d in @($CLI, $SRV, $DC, $DL, $MT, $SQL)) {
   if (-not (Test-Path $d)) { throw "clone missing: $d -- see PLAN-next-five-verbs.md for how they are made" }
 }
 
@@ -140,6 +143,25 @@ $EX = @(
   @{ Q='tested-by';        T='uCompGroupTree.TCompGroupTree.Build';     D=$MT; A=@{}; Why='11 covering tests, COMPUTED from call edges -- symbol_facts.covered_by is empty by design' }
   @{ Q='tested-by';        T='uGageLineQueue.TGageLineQueue.TryDequeue'; D=$MT; A=@{}; Why='8 covering tests on a queue primitive' }
   @{ Q='tested-by';        T='uCompGroupTree.TCompGroupTree';            D=$MT; A=@{}; Why='a TYPE: seeded with its 9 members, reached by 13 tests' }
+
+  # PLAN-last-four-verbs. Every target below is one the gate pins, so the numbers
+  # in these notes are the gate's numbers, not a second measurement.
+  @{ Q='exception-paths';  T='uJobList.ViewModel.TJobListViewModel.BuildSchema'; D=$CLI; A=@{}; Why='a SOLID catch two levels up: EDatabaseError is caught at LoadAllAsync:632, where the call sits inside the try (checked by a nesting scan); 3 handlers that do not guard the call are counted, not drawn' }
+  @{ Q='exception-paths';  T='MStreams.TABZMemoryStream.ReadBuffer';            D=$CLI; A=@{}; Why='fan-in: 139 callers walked. EReadError is caught on 2 call edges in AutoTestSetupDefaults, which ALSO lets it escape on a third -- one caller, both answers' }
+  @{ Q='exception-paths';  T='BASICSF.CopyRecords';                             D=$CLI; A=@{}; Why='the source-only rows: bare except, raise; and raise E, drawn dashed [inferred] because directive state is not evaluated' }
+
+  @{ Q='consumers';        T='CAUSFAIL';         D=$SRV; A=@{SqlDbPath=$SQL}; Why='table form: 1 certain writer, 1 INFERRED reader (sql_reads misses SQL split over SQL.Add lines, so both counts are printed), 3 triggers' }
+  @{ Q='consumers';        T='CAUSFAIL.REASON';  D=$SRV; A=@{SqlDbPath=$SQL}; Why='column form: 2 server routines, trigger CAUSFAIL_BIU5, and 1 of 7 REASON grid bindings -- the other 6 resolve to other tables' }
+  @{ Q='consumers';        T='FOLDERS';          D=$SRV; A=@{SqlDbPath=$SQL}; Why='declared TWICE in the scripts; the newest file wins (79 columns, the live count), and the collapse is printed' }
+
+  @{ Q='feeds-from';       T='frmCausFail.colREASON';                         D=$CLI; A=@{SqlDbPath=$SQL}; Why='the whole chain, 5 graded hops: grid column &rarr; dsrCausFail &rarr; dataset assignment &rarr; view model &rarr; CAUSFAIL.REASON' }
+  @{ Q='feeds-from';       T='frmBlueprint4.edtF1';                           D=$CLI; A=@{SqlDbPath=$SQL}; Why='the DFM says dmlSystem2.dsrFolder, which is not in this project [dangling]; the code re-points it at Blueprint4.pas:1015 -- both are drawn' }
+  @{ Q='feeds-from';       T='frmDefineSerialNumbers.cxGrid1DBTableView1SID1'; D=$CLI; A=@{SqlDbPath=$SQL}; Why='AMBIGUOUS: three candidate tables (SERID, SERREAD, SERPART). The chain stops and lists them rather than pick one' }
+
+  @{ Q='lands-where';      T='uCAUSFAIL.TmcCAUSFAIL.REASON';       D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='ORM property &rarr; the SERVER write and read path (2 certain member accesses, 2 inferred SQL literals) &rarr; CAUSFAIL.REASON by naming convention &rarr; trigger CAUSFAIL_BIU5' }
+  @{ Q='lands-where';      T='uSTATIONS.TmcSTATIONS.GRIDS';        D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state server-sql: in NO script declaration, yet the server''s SQL writes it -- the scripts lag the schema, so "computed or UI-only" would be false' }
+  @{ Q='lands-where';      T='uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE';  D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state quoted: declared as the quoted identifier "TABLE" in MS1.SQL:3848, which the SQL index does not extract' }
+  @{ Q='lands-where';      T='uINSPRSLT.TmcINSPRSLT.DistHist';     D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state not-a-column: named by no script and no server SQL -- computed or UI-only, and the DB side stays unanchored' }
 )
 
 if ($Only) { $EX = @($EX | Where-Object { $Only -contains $_.Q }) }
@@ -178,11 +200,15 @@ foreach ($e in $EX) {
 # The catalogue is the same 26 rows as charts\STATUS-questions.md. Keep them in
 # step: this list is the page's own copy and nothing checks it against that doc.
 $CATALOGUE = @(
-  @{ Q='butterfly';       Sel='method';          St='shipped' }
+  @{ Q='butterfly';       Sel='method';          St='shipped'
+     Note='Caller and callee walks follow resolved <code>call_edges</code>, and this engine never binds a PARENLESS free-function call (<code>N := NextId;</code>, engine D1), so such callers are missing -- a short list is a lower bound.' }
   @{ Q='deps';            Sel='unit';            St='shipped' }
-  @{ Q='who-calls';       Sel='method';          St='shipped' }
-  @{ Q='what-it-calls';   Sel='method';          St='shipped' }
-  @{ Q='who-writes';      Sel='field/property';  St='shipped' }
+  @{ Q='who-calls';       Sel='method';          St='shipped'
+     Note='Caller and callee walks follow resolved <code>call_edges</code>, and this engine never binds a PARENLESS free-function call (<code>N := NextId;</code>, engine D1), so such callers are missing -- a short list is a lower bound.' }
+  @{ Q='what-it-calls';   Sel='method';          St='shipped'
+     Note='Caller and callee walks follow resolved <code>call_edges</code>, and this engine never binds a PARENLESS free-function call (<code>N := NextId;</code>, engine D1), so such callers are missing -- a short list is a lower bound.' }
+  @{ Q='who-writes';      Sel='field/property';  St='shipped'
+     Note='This engine never binds a <code>write</code> ref to a symbol (engine D13: 32,909 of 32,909 on CLIENT), so a BARE in-class assignment (<code>FConnected := True</code>) is invisible to the writers wing. The chart lists same-name unbound writes by name and says &ldquo;no RESOLVED write sites&rdquo;.' }
   @{ Q='who-reads';       Sel='field/property';  St='shipped' }
   @{ Q='hierarchy';       Sel='type';            St='shipped' }
   @{ Q='class-surface';   Sel='type';            St='shipped' }
@@ -191,25 +217,26 @@ $CATALOGUE = @(
   @{ Q='lifecycle';       Sel='form class';      St='shipped' }
   @{ Q='cycles';          Sel='unit/project';    St='shipped' }
   @{ Q='wiring';          Sel='interface';       St='shipped' }
-  @{ Q='effects';         Sel='method';          St='shipped' }
+  @{ Q='effects';         Sel='method';          St='shipped'
+     Note='Engine D12 scores a function''s own-name result assignment (<code>F := X</code>) as a GLOBAL write (31 CLIENT functions). When the witness names the routine itself, the chart moves that <code>g</code> to a dashed D12 disclosure; when an earlier witness hides it, the <code>g</code> is still drawn.' }
   @{ Q='architecture';    Sel='project';         St='shipped' }
 
   @{ Q='protocol-trace';  Sel='command / wire field'; St='shipped' }
   @{ Q='protocol-trace';  Sel='method';          St='shipped' }
   @{ Q='crosses-boundary';Sel='method';          St='shipped' }
-  @{ Q='change-impact';   Sel='method/type';     St='shipped' }
+  @{ Q='change-impact';   Sel='method/type';     St='shipped'
+     Note='Caller and callee walks follow resolved <code>call_edges</code>, and this engine never binds a PARENLESS free-function call (<code>N := NextId;</code>, engine D1), so such callers are missing -- a short list is a lower bound.' }
   @{ Q='tested-by';       Sel='any symbol';      St='shipped' }
   @{ Q='shown-where';     Sel='db column';       St='shipped' }
 
-  @{ Q='exception-paths'; Sel='method';          St='blocked'
-     Note='Genuinely unanswerable from this index, and measured rather than assumed: <code>refs.kind</code> has no <code>raise</code> or <code>except</code> value (only read / type_use / call / member-access / write / event-binding / attribute / di-*), and <code>symbol_facts</code> has no exception column. Exception TYPES are referenced -- 17 <code>E*</code> classes, 12 descending from an Exception base -- but nothing separates <code>raise E.Create</code> from <code>on E do</code> from a bare declaration, so a chart would mislabel handlers as throwers.' }
-
-  @{ Q='lands-where';     Sel='field';           St='needs-data'
-     Note='<code>orm_links</code> is 0 rows everywhere. It is written by <code>drag-lint fb-snapshot</code>, which opens a live Firebird connection -- empty by construction in a pure Delphi index.' }
-  @{ Q='feeds-from';      Sel='control';         St='needs-data'
-     Note='Needs <code>orm_links</code> and <code>fb_datasets</code>; both 0 rows.' }
-  @{ Q='consumers';       Sel='table/column';    St='needs-data'
-     Note='Needs <code>fb_columns</code> and <code>fb_relations</code>; both 0 rows. The work here is the ingest, not the chart.' }
+  @{ Q='exception-paths'; Sel='method';          St='shipped'
+     Note='The index has no raise/handle ref kind, so each exception ref is CLASSIFIED from the source token before it (<code>raise</code> / <code>on E:</code>), on a freshness-checked file. A solid catch needs the call site inside the handler''s try. The caller walk is over resolved call edges (engine D1 applies), and a walk that ends says &ldquo;no resolved caller&rdquo;, never &ldquo;unhandled&rdquo;.' }
+  @{ Q='consumers';       Sel='table/column';    St='shipped'
+     Note='Derived (path A; <code>orm_links</code> and <code>fb_*</code> are 0 rows): SQL facts are [certain], upper-case SQL-verb literals [inferred], because <code>sql_reads</code> misses SQL split over several <code>SQL.Add</code> lines. The schema is the SQL SCRIPTS, not the live database: 5 live <code>PDF_*</code> tables are absent and quoted identifiers are not extracted.' }
+  @{ Q='feeds-from';      Sel='control';         St='shipped'
+     Note='DFM DataSource &rarr; dataset &rarr; view model &rarr; TABLE.COLUMN, every hop graded. It stops rather than guess on a dangling module, an interface-typed view model or several candidate tables; 267 of 808 field-bound CLIENT controls reach one table, and each chart prints that coverage.' }
+  @{ Q='lands-where';     Sel='ORM property / field'; St='shipped'
+     Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,991 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
 
   @{ Q='compare';         Sel='two index runs';  St='parked'
      Note='Parked by owner decision, and genuinely dependent on the IR: there is no <code>ir</code> or <code>compare</code> verb in the deployed engine, confirmed against a deliberate fake control.' }
@@ -305,6 +332,10 @@ $sb = New-Object System.Text.StringBuilder
 foreach ($c in ($CATALOGUE | Where-Object { $_.St -eq 'shipped' })) {
   $q = $c.Q
   [void]$sb.AppendLine("<h2 id=`"$q`">$q<span class=`"sel`">selects $($c.Sel)</span></h2>")
+  # A shipped question can still carry a CAVEAT -- an engine defect it discloses
+  # or a limit of the route it takes. It is printed above the cards, not hidden
+  # in a tooltip, because it changes how every card below it reads.
+  if ($c.Note) { [void]$sb.AppendLine("<div class=`"why`"><b>caveat:</b> $($c.Note)</div>") }
   if (-not $byQ.ContainsKey($q)) {
     [void]$sb.AppendLine('<div class="why">No sample generated in this run.</div>')
     continue
