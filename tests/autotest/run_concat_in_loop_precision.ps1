@@ -34,7 +34,7 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-concat-precision"
+  [string]$WorkDir = "$env:TEMP\drag-lint-concat-precision-$PID"
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -207,4 +207,6 @@ Check "i := i + Count (line $lnAddVar) still fires -- type-blind for a variable 
   ($fired -contains $lnAddVar) 'flip this when a store-backed built-in supersedes the .scm rule'
 
 Write-Host ''
+# D23: the scratch folder is per run ($PID); remove it so they do not pile up in TEMP.
+if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
