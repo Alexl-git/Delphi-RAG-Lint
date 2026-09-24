@@ -210,6 +210,37 @@ $pz = LintFile $zeta
 Check 'CONTROL c: lint uZeta.pas alone reports no CROSS-file pair (single-file scope cannot see uAlpha)' `
   (@(DupAt $pz 'uZeta.pas' | Where-Object { $_ -match 'uAlpha\.pas' }).Count -eq 0) ($pz -join ' | ')
 
+# --- NEGATIVE CONTROL (fix round 1): a partner marker is verified against the
+# PARTNER's line -- not the anchor's, and not "not at all". Rewrite the marker
+# at uAlpha:L2 to carry the hash of the ANCHOR's window (uZeta:Lz; the two
+# windows differ because the routine names differ). A check against the anchor
+# line would accept it; skipping verification would accept any hash. Correct:
+# the finding comes back, the partner line gets review-marker-stale, and the
+# marker is still not called unused (it names a live finding).
+$zText = [IO.File]::ReadAllText($zeta)
+$null = & $Exe allow $zeta --fix-line $Lz --fix-rule duplicate-code --apply 2>&1
+$anchorHash = if (([IO.File]::ReadAllLines($zeta))[$Lz - 1] -match 'dl:ok duplicate-code@([0-9a-f]{4})') { $Matches[1] } else { '' }
+[IO.File]::WriteAllText($zeta, $zText, [Text.Encoding]::ASCII)
+$partnerHash = if ($markerLine -match 'dl:ok duplicate-code@([0-9a-f]{4})') { $Matches[1] } else { '' }
+Check 'NEG setup: the anchor window hashes differently from the partner window' `
+  (($anchorHash -ne '') -and ($partnerHash -ne '') -and ($anchorHash -ne $partnerHash)) "anchor=$anchorHash partner=$partnerHash"
+$ls = [Collections.Generic.List[string]]([IO.File]::ReadAllLines($alpha))
+$ls[$L2 - 1] = $ls[$L2 - 1].Replace("duplicate-code@$partnerHash", "duplicate-code@$anchorHash")
+[IO.File]::WriteAllText($alpha, (($ls -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+Reindex
+$all2 = LintAll
+Check 'NEG: the pair is still anchored at uZeta:Lz with uAlpha:L2 as partner' `
+  (@(DupAt $all2 'uZeta.pas' | Where-Object { $_ -match ('uZeta\.pas:' + $Lz + ':.*also at .*uAlpha\.pas:' + $L2 + '$') }).Count -eq 1) `
+  ((DupAt $all2 'uZeta.pas') -join ' | ')
+Check 'NEG: a stale partner marker does NOT suppress the finding' `
+  (@(DupAt $all2 'uZeta.pas' | Where-Object { $_ -match ('uZeta\.pas:' + $Lz + ':') }).Count -eq 1) ((DupAt $all2 'uZeta.pas') -join ' | ')
+Check 'NEG: the partner line is reported review-marker-stale' `
+  (@($all2 | Where-Object { $_ -match ('uAlpha\.pas:' + $L2 + ':\d+\s+\[hint\] review-marker-stale') }).Count -eq 1) `
+  (($all2 | Where-Object { $_ -match 'review-marker' }) -join ' | ')
+Check 'NEG: and it is still NOT reported unused (it names a live finding)' `
+  (@($all2 | Where-Object { $_ -match ('uAlpha\.pas:' + $L2 + ':\d+\s+\[hint\] review-marker-unused') }).Count -eq 0) `
+  (($all2 | Where-Object { $_ -match 'review-marker' }) -join ' | ')
+
 } finally {
   if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue }
 }

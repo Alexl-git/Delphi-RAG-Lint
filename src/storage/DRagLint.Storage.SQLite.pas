@@ -3707,9 +3707,10 @@ begin
   { THE ONE WRITER OPEN (2026-09-24, D24): ConnectWriter, shared with
     `import-log` and `migrate-dbs`, which used to open with FireDAC's defaults
     and convert a WAL index to a rollback journal. Normal locking, synchronous
-    NORMAL, and the journal mode the file already has -- WAL for a new file.
-    That last part is a change: this path used to ask for WAL unconditionally,
-    so it converted an existing rollback-journal index; see ConnectWriter.
+    NORMAL, journal mode WAL (so a rollback-journal index is converted back,
+    as this path always did -- ruling R16), and a PRIVATE cache: FireDAC's
+    process-wide shared cache made a writer opened beside a live read-only
+    connection unable to write (see ConnectReadOnly).
     The busy timeout gives DDL ops (e.g. DROP TRIGGER) time to acquire the
     exclusive WAL lock when a concurrent LSP reader holds the DB -- without it
     a schema change races the LSP server and fails SQLITE_BUSY -- and it is

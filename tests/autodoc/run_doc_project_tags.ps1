@@ -385,6 +385,18 @@ $h = (Get-FileHash $uShared).Hash
 $r = Run @('document', '--unit', $uShared, '--db', $dbX, '--apply', '--no-backup')
 Check 'NAME: document --apply through that DB leaves the block byte-identical' ((Get-FileHash $uShared).Hash -eq $h) (CalledFrom (Shared))
 Check 'NAME: no entry is ever tagged with the DB file name' (([IO.File]::ReadAllText($uShared)) -notmatch 'not-the-project-name') (CalledFrom (Shared))
+
+# An index built BEFORE 1.18.0 carries no project_tag row: the tag must fall
+# back to the DB base name, today's behaviour (fix round 1). Emulated by
+# deleting the row from a scratch copy.
+$dbL = Join-Path $root 'LegacyName.sqlite'
+Copy-Item -LiteralPath $dbX -Destination $dbL
+python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(`"DELETE FROM schema_meta WHERE key='project_tag'`"); c.commit(); print(c.execute(`"SELECT COUNT(*) FROM schema_meta WHERE key='project_tag'`").fetchone()[0]); c.close()" $dbL | Out-Null
+$left = python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute(`"SELECT COUNT(*) FROM schema_meta WHERE key='project_tag'`").fetchone()[0]); c.close()" $dbL
+Check 'FALLBACK setup: the copy has no project_tag row' ("$left".Trim() -eq '0') "rows=$left"
+$r = Run @('document', '--unit', $uShared, '--db', $dbL, '--apply', '--no-backup')
+$cf = CalledFrom (Shared)
+Check 'FALLBACK: with no stored tag the DB base name tags the entries' ((@((Entries $cf) | Where-Object { $_ -like '`[LegacyName,ProjA`]*' })).Count -eq 6) $cf
 } finally {
   if (Test-Path $root) { Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue }
 }

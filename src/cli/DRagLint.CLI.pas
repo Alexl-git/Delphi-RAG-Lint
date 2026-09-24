@@ -16788,6 +16788,13 @@ var
 begin
   if AArgs.Name   = '' then begin Writeln('ERROR: safe-delete needs --name <QualifiedName>'); Exit(2); end;
   if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'                           ); Exit(2); end;
+  { A read-only open does not CREATE a missing file, so without this the verb
+    died "FATAL: unable to open database file" (exit 3) -- fix round 1. }
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
   { READ-ONLY (D24): safe-delete edits SOURCE, never the index; a writable open
     plus Migrate rewrote the index's stamp pages on every dry run. }
   var RoOk: Boolean;
@@ -18764,6 +18771,11 @@ begin
       begin Writeln('ERROR: --to required'); Exit(2); end;
       if AArgs.DbPath = '' then
       begin Writeln('ERROR: --db required for --kind symbol'); Exit(2); end;
+      if not FileExists(AArgs.DbPath) then
+      begin
+        Writeln(Format('Database not found: %s', [AArgs.DbPath])); { a read-only open would die FATAL, exit 3 }
+        Exit(2);
+      end;
       { READ-ONLY (D24): rename edits source, never the index. }
       var KOk: Boolean;
       var KStore: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, KOk);

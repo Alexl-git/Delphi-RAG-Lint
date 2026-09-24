@@ -40,6 +40,11 @@
 # Positive control: a real `index` run after a source edit DOES move the md5,
 # so the sentinel is proven able to fail.
 #
+# FIX ROUND 1 (2026-09-24): every verb's EXIT CODE is asserted (a verb dying at
+# open also leaves the md5 alone); safe-delete / rename --kind symbol with a
+# missing --db exit 2 "Database not found", not FATAL exit 3; and a WRITER
+# converts a rollback-journal index back to WAL (ruling R16) while no reader does.
+#
 # Usage: pwsh -File tests/autotest/run_readonly_verbs.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
@@ -126,10 +131,15 @@ Check 'fixture index is WAL (header byte 18 = 2)' ($b18Base -eq 2) "byte18=$b18B
 
 # Each verb is judged against the file as it was JUST BEFORE it ran, so one
 # writer cannot make every later verb fail with it (that hid which verb wrote).
-function ReadVerbUnchanged([string]$Label, [scriptblock]$Run) {
+# The EXIT CODE is asserted too (fix round 1): a verb that dies at open leaves
+# the md5 alone just as well as one that read correctly, so without it the
+# sentinel could not tell a clean read from a crash. Every case here exits 0 on
+# this fixture (measured 2026-09-24; lint-all finds nothing to report in it).
+function ReadVerbUnchanged([string]$Label, [scriptblock]$Run, [int]$ExpectExit = 0) {
     $md5Base = Md5 $db
     & $Run *> $null
     $ec = $LASTEXITCODE
+    Check "$Label exits $ExpectExit" ($ec -eq $ExpectExit) "exit=$ec"
     Start-Sleep -Milliseconds 100
     $md5  = Md5 $db
     $trig = TriggerCount $db
@@ -155,6 +165,14 @@ ReadVerbUnchanged 'rename --kind symbol (dry)' { & $Exe rename --kind symbol --n
 ReadVerbUnchanged 'safe-delete (dry)'         { & $Exe safe-delete --name Fixture.TFoo.DoWork --db $db --json }
 ReadVerbUnchanged 'exceptions-sync (dry)'     { & $Exe exceptions-sync --db $db --config $excCfg --json }
 
+# A read-only open does not create a missing file, so these two died
+# "FATAL: unable to open database file" (exit 3) until fix round 1.
+foreach ($mv in @(@('safe-delete', @('safe-delete','--name','X','--json')), @('rename --kind symbol', @('rename','--kind','symbol','--name','X.Y','--to','Z','--json')))) {
+    $mo = (& $Exe @($mv[1] + @('--db', "$WorkDir\no-such.sqlite")) 2>&1) -join "`n"
+    Check "$($mv[0]) with a missing --db exits 2 with 'Database not found'" (($LASTEXITCODE -eq 2) -and ($mo -match 'Database not found')) "exit=$LASTEXITCODE :: $mo"
+    Check "$($mv[0]) with a missing --db does not create it" (-not (Test-Path "$WorkDir\no-such.sqlite"))
+}
+
 # The dry verbs above must still ANSWER from the read-only store -- a verb that
 # failed to open would also leave the md5 alone.
 $rn = (& $Exe rename --kind symbol --name Fixture.TFoo.Greet --to Salute --db $db --json 2>&1) -join "`n"
@@ -171,6 +189,17 @@ Check 'import-log exits 0' ($LASTEXITCODE -eq 0) $impOut
 Check 'import-log imported the finding' ($impOut -match 'Imported 1 compiler finding') $impOut
 Check 'import-log keeps the index WAL (header byte 18 = 2)' ((HeaderByte18 $impDb) -eq 2) "byte18=$(HeaderByte18 $impDb)"
 Check 'import-log leaves no rollback -journal file' (-not (Test-Path "$impDb-journal"))
+
+# A WRITER REQUESTS WAL (ruling R16, fix round 1): an index an older engine
+# flipped to a rollback journal is healed by its next write -- here an
+# incremental index with nothing to re-parse. Readers never convert (above).
+$rbDb = "$WorkDir\rollback.sqlite"
+Copy-Item -LiteralPath $db -Destination $rbDb
+python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('PRAGMA journal_mode=DELETE'); c.close()" $rbDb
+Check 'rollback fixture really is a rollback journal (byte 18 = 1)' ((HeaderByte18 $rbDb) -eq 1) "byte18=$(HeaderByte18 $rbDb)"
+$rbOut = (& $Exe index $srcDir --db $rbDb 2>&1) -join "`n"
+Check 'incremental index of a rollback-journal index exits 0' ($LASTEXITCODE -eq 0) $rbOut
+Check 'the writer converts it back to WAL (byte 18 = 2)' ((HeaderByte18 $rbDb) -eq 2) "byte18=$(HeaderByte18 $rbDb)"
 
 # migrate-dbs --apply: the checkpoint probe before the move and the row count
 # after it both opened with FireDAC defaults.
