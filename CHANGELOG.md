@@ -19,6 +19,13 @@ breaking changes** until v1.0.
   `   // dl:shared P` appended to a unit line that already ends in a comment still parses back.
   Only those two units in this repo change answer; `TSharedUnit`'s own facts block re-capped its
   inbound list accordingly. Guard: `tests\autotest\run_shared_unit_marker.ps1` (31 checks).
+- **D29 -- `allow`'s re-hash takes the REVIEWED stamp's separator with it.** Stripping the stale
+  stamp consumed `;` `,` `.` after the date only, so `-- REVIEWED 2026-09-23: reason` re-hashed to
+  `-- : reason` (seen live on `CLI.pas:612`). It now takes ONE adjacent separator: after the stamp
+  (`;` `,` `.` `:` or a ` -` / ` --` token), else before it (`,` `;` `:`), so
+  `reason, REVIEWED 2026-09-23` comes back `reason`. A reason without a stamp is untouched.
+  Guard: `tests\reviewmarker\run_allow_command.ps1` L3b, which also gained a `-Exe` parameter
+  (it hard-coded the deployed engine, so a branch build could not be measured before a deploy).
 
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
 

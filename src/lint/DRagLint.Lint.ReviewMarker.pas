@@ -1051,14 +1051,22 @@ begin
 end;
 
 { AReason without its `REVIEWED <yyyy-mm-dd>` stamp (the form ReviewStamp
-  reads, case-sensitive and whole-word), with the brackets or separator that
-  held it and any doubled whitespace tidied away. A reason with no well-formed
+  reads, case-sensitive and whole-word), with the brackets and ONE adjacent
+  separator that held it, and any doubled whitespace tidied away. The separator
+  is the one AFTER the stamp (`;` `,` `.` `:`, or a ` -` / ` --` token) when
+  there is one, else the one BEFORE it (`,` `;` `:`) -- so
+  `REVIEWED 2026-09-23: reason` and `reason, REVIEWED 2026-09-23` both come back
+  `reason` (D29: the first used to leave `: reason`, re-emitted as `-- : reason`).
+  A separator is only ever taken WITH a stamp: a reason with no well-formed
   stamp comes back trimmed and otherwise unchanged. }
 function StripReviewStamp(const AReason: string): string;
 const
-  STAMP_RX = '\(?\bREVIEWED\s+\d{4}-\d{2}-\d{2}\b\)?[;,.]?';
+  STAMP_RX   = '\(?\bREVIEWED\s+\d{4}-\d{2}-\d{2}\b\)?';
+  AFTER_RX   = '(?:\s*[;,.:]|\s+--?(?=\s|$))';
+  BEFORE_RX  = '[,;:]\s*';
 begin
-  Result:= TRegEx.Replace(AReason, STAMP_RX, ' ');
+  Result:= TRegEx.Replace(AReason,
+    STAMP_RX + AFTER_RX + '|' + BEFORE_RX + STAMP_RX + '(?!' + AFTER_RX + ')|' + STAMP_RX, ' ');
   Result:= Trim(TRegEx.Replace(Result, '\s{2,}', ' '));
 end;
 
