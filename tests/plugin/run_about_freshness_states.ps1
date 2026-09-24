@@ -145,12 +145,22 @@ Check 'and it is flagged on the INDEXER' `
   (($null -ne $rowRep) -and ($rowRep.indexer_stale -eq $true)) `
   "indexer_stale=$($rowRep.indexer_stale)"
 
+# --- index-newer: an index a NEWER engine wrote -----------------------------
+# Not an owed state at all: reads work, and an index run with THIS engine is
+# refused (a writer never downgrades), so neither owed remedy is available.
+# Deliberately NOT re-indexed first: the indexer stamp is still aged, and
+# index-newer must OUTRANK reparse-owed (the engine may not write it at all).
+& python $py $db "UPDATE schema_meta SET value='r=99.0.0-future;schema=1' WHERE key='resolver_fingerprint'" | Out-Null
+$rowNew = IndexRow
+Check 'an index resolved by a NEWER engine is index-newer' `
+  (($null -ne $rowNew) -and ($rowNew.verdict -eq 'index-newer')) `
+  "got '$($rowNew.verdict)'"
 # THE ASSERTION THAT MAKES THE THREE ABOVE MEAN SOMETHING. If freshness ever
 # degrades to a constant -- which is precisely what the pre-4993460 behaviour
 # was, since [ok] meant "the file exists" -- every case above could still pass
 # individually. They must be three DISTINCT answers.
-$verdicts = @($rowOk.verdict, $rowRes.verdict, $rowRep.verdict) | Where-Object { $_ } | Sort-Object -Unique
-Check 'CONTROL: the three states are three DISTINCT verdicts' ($verdicts.Count -eq 3) `
+$verdicts = @($rowOk.verdict, $rowRes.verdict, $rowRep.verdict, $rowNew.verdict) | Where-Object { $_ } | Sort-Object -Unique
+Check 'CONTROL: the four states are four DISTINCT verdicts' ($verdicts.Count -eq 4) `
   "got: $($verdicts -join ', ') -- a freshness report that cannot vary is the [ok]-means-present bug again"
 
 # And the fixture must genuinely have been aged, or the two cases above are
@@ -175,6 +185,11 @@ function CheckMapping($src, $label) {
     if ($body -notmatch "AVerdict = ''[\s\S]{0,200}?dsWarn")                        { $ok = $false; $why += "an ABSENT verdict is not dsWarn" }
     if ($body -notmatch '(?i)minutes')                                              { $ok = $false; $why += "resolve-owed does not signal the CHEAP cost" }
     if ($body -notmatch '(?i)STALE')                                                { $ok = $false; $why += "reparse-owed does not say answers are stale" }
+    # index-newer (C2, 2026-09-23) had NO case: it fell to the bare catch-all and
+    # showed as an unexplained warning. It must be its own dsWarn case saying
+    # reads are fine and naming the remedy (a newer engine), not a re-index.
+    if ($body -notmatch "SameText\(AVerdict, 'index-newer'\)[\s\S]{0,300}?dsWarn") { $ok = $false; $why += "index-newer has no dsWarn case" }
+    if ($body -notmatch "(?i)index-newer'\)[\s\S]{0,300}?newer engine")            { $ok = $false; $why += "index-newer does not name the remedy (a newer engine)" }
   } else { $ok = $false; $why += 'VerdictLine not found' }
   return ,@($ok, ($why -join '; '))
 }

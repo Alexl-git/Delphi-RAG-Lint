@@ -58,6 +58,12 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **The IDE About window names the `index-newer` freshness verdict.** `info --json` has reported
+  `index-newer` (the index was built or resolved by a NEWER engine) since C2, but the plugin's
+  `VerdictLine` had no case for it, so it showed as a bare, unexplained warning. It is now its own
+  `dsWarn` line: reads are fine, re-indexing with this engine is refused, deploy the newer engine.
+  Guard: `tests\plugin\run_about_freshness_states.ps1` (engine half ages the resolver stamp FORWARD and
+  requires `index-newer`, outranking `reparse-owed`; plugin half requires the case and its remedy text).
 - **`TLintConfigWriter.WriteAnsiCrlf` no longer truncates non-ASCII characters (L5).** It stored
   `Ord(Ch)` into a byte, so a character above #255 silently lost its high byte and #128..#255 went out
   as raw non-ASCII bytes -- a changed value and a breach of the 7-bit ASCII rule, with no error (the
