@@ -59,10 +59,21 @@ try {
          ($idx -match 'uLeafUse\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')) $idx
 
   # Child has no resolved caller; Anchor has exactly one.
-  $rc = & $exePath query find-callers --name Child  --resolved --db $db 2>&1 | Out-String
+  # D31 (2026-09-24): find-callers --resolved now also reports BOUND WRITES,
+  # and each of the five `Child` LOCALS is written once in its own routine --
+  # so `--name Child` lists five rows, every one TARGETING a local
+  # (uLeafUse.UseX.Child, mode write). What this sanity check is about is the
+  # METHOD: it must have no resolved caller. Asserted per target, over --json,
+  # with a parse fence so an empty/garbled answer cannot pass it vacuously.
+  $rcJ = & $exePath query find-callers --name Child --resolved --json --db $db 2>$null | Out-String
   $ra = & $exePath query find-callers --name Anchor --resolved --db $db 2>&1 | Out-String
-  Check 'SANITY: Child has NO resolved caller (the dangerous shape)' `
-        ($rc -notmatch 'uLeafUse\.') $rc
+  $rcOk = $true; $rcRows = @()
+  try { $rcRows = @($rcJ | ConvertFrom-Json) } catch { $rcOk = $false }
+  Check 'SANITY: find-callers --name Child --resolved --json parsed' $rcOk $rcJ
+  Check 'SANITY: the METHOD Child has NO resolved caller (the dangerous shape)' `
+        ($rcOk -and @($rcRows | Where-Object { $_.target_qname -eq 'uLeafDecl.TWalker.Child' }).Count -eq 0) $rcJ
+  Check 'SANITY: every Child row is a WRITE of one of the five locals (D31), nothing else' `
+        ($rcOk -and @($rcRows | Where-Object { $_.target_qname -notmatch '^uLeafUse\.Use[A-E]\.Child$' -or $_.mode -ne 'write' }).Count -eq 0) $rcJ
   Check 'SANITY: Anchor HAS a resolved caller (DriveAnchor)' `
         ($ra -match 'DriveAnchor') $ra
 
