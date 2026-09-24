@@ -624,10 +624,17 @@ function Get-DisclosureText([int] $HiddenRows, [int] $HiddenSites, [string] $Nou
 # Deliberately carries no HREF: there is no line to go to, and a dead link is
 # worse than no link. touches-tables' zero case built this inline; both use it
 # now so the two cannot diverge.
+#
+# $Text is PLAIN TEXT and is escaped here, with ONE exception: the '&#183;'
+# middle-dot separator survives the escape. Nine call sites in seven emitters
+# pass it, and until 2026-09-24 every one of them printed the six literal
+# characters "&#183;" (Add-RowCluster's header comment warns of the same trap).
+# Gate: E-ENTITY sweeps every .dot a test run writes.
 function Add-DisclosureRow([System.Text.StringBuilder] $Table, [string] $Text,
                            [string] $Ink = '#8A94A6', [int] $PointSize = 12) {
   if ([string]::IsNullOrWhiteSpace($Text)) { return }
-  [void]$Table.Append("<TR><TD ALIGN=`"LEFT`"><FONT COLOR=`"$Ink`" POINT-SIZE=`"$PointSize`">$(ConvertTo-XmlText $Text)</FONT></TD></TR>")
+  $body = (ConvertTo-XmlText $Text).Replace('&amp;#183;', '&#183;')
+  [void]$Table.Append("<TR><TD ALIGN=`"LEFT`"><FONT COLOR=`"$Ink`" POINT-SIZE=`"$PointSize`">$body</FONT></TD></TR>")
 }
 
 # A row object for Add-RowCluster that carries NO Href, so the cluster renders

@@ -176,6 +176,19 @@ if ($rows.Count -eq 0) {
   throw "$($sel.Qname) has no references in this index"
 }
 
+# The method-mode row note: the distinct constants a routine reads. Up to three
+# are NAMED ('cmdDelta, rspOK'; 'cmdDelta x2' only when cmdDelta itself is read
+# twice); more are COUNTED ('42 constants'), with the read count added when it
+# differs, so a long list never pushes the row off the page.
+# Gate: A-PT3-NOTE-*, A-PT4-NOTE.
+function Format-CommandNote([object[]] $Counts, [int] $Sites) {
+  if (-not $Counts -or $Counts.Count -eq 0) { return $null }
+  if ($Counts.Count -gt 3) {
+    return "$($Counts.Count) constants" + $(if ($Sites -gt $Counts.Count) { ", $Sites reads" } else { '' })
+  }
+  ($Counts | ForEach-Object { $_.Name + $(if ($_.Count -gt 1) { " x$($_.Count)" } else { '' }) }) -join ', '
+}
+
 # ---- 4. classify every row by ZONE, and by whether it is attributed --------------
 $tally = @{}
 $unattributed = 0
@@ -259,7 +272,11 @@ foreach ($z in $zones) {
       # line you came here to read.
       Path = [string]$first.path
       Line = [int]$first.line
-      Cmd  = [string]$first.target_q
+      # every DISTINCT constant this routine reads, each with its own count. The
+      # FIRST row's constant times the site count read 'cmdUnknown x42' for
+      # CommandIDToStr, which reads 42 different constants once each.
+      Cmds = @($g.Group | Where-Object { $_.target_q } |
+               Group-Object { ([string]$_.target_q -split '\.')[-1] } | Sort-Object Name)
     }
   }
   $byRoutine = @($byRoutine | Sort-Object @{ E = { $_.Sites }; Descending = $true }, @{ E = { $_.Name } })
@@ -269,7 +286,7 @@ foreach ($z in $zones) {
   foreach ($b in $top.Shown) {
     $anchored++
     $note = $(if ($b.Sites -gt 1) { "$($b.Sites) sites" } else { $null })
-    if ($mode -eq 'method' -and $b.Cmd) { $note = (($b.Cmd -split '\.')[-1]) + $(if ($b.Sites -gt 1) { " x$($b.Sites)" } else { '' }) }
+    if ($mode -eq 'method' -and $b.Cmds.Count -gt 0) { $note = Format-CommandNote $b.Cmds $b.Sites }
     [void]$cells.Add([pscustomobject]@{
       Label = $(if ($b.HasRoutine) { Get-ShortName $b.Name (Get-UnitName $b.Path) } else { $b.Name })
       Line  = $b.Line

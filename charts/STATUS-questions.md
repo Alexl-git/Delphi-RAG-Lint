@@ -270,17 +270,34 @@ from 9 nodes to 4. Callers unaffected.
 
 ## Resume point
 
-**NEXT ACTION (owner request, 2026-09-24):** produce the `protocol-trace` chart
-for the Blueprint4 "Operation Name" grid field WITH THE ENGINE AND THE EMITTERS
-(not written by hand or by AI) and save the HTML plus the text into
-`charts\docs\examples\protocol-trace\`. Also write down how to do the same from
-the IDE and where the text and the graphics come from. Steps for a cold start:
-find the grid column's bound field (`shown-where` / `feeds-from` on the column,
-or the Blueprint4 DFM binding) and its wire field; run
-`src\New-DiagramArtifact.ps1 -Question protocol-trace -Target <field> -DbPath
-scratch\db\CLIENT-Micronite2027.sqlite`; the text is the bundle's meta/summary
-plus the emitter's disclosure rows, the graphics are the `.svg` that dot renders
-from the emitter's `.dot`. Never hand-edit either.
+**DONE 2026-09-24: the Blueprint4 "Operation Name" example**, engine-made, in
+`charts\docs\examples\protocol-trace\` (gitignored output) with
+`README-Blueprint4-Operation-Name.md` (column -> wire mapping, IDE path, where
+text and graphics come from). The column binds dataset field `Name` on
+`FMTOperation` -- not a symbol -- so protocol-trace runs in METHOD mode on the
+two wire routines, `SendDeltaOperation` (cmdDelta/rspOK) and `LoadOneTable`
+(cmdTableLoad/rspData); crosses-boundary, feeds-from and lands-where were run
+beside them.
+
+Two emitter defects found by LOOKING at the output, fixed test-first, gate
+green (1072 s):
+* method-mode row note was the FIRST ref's constant x site count --
+  `CommandIDToStr` read `cmdUnknown x42`. Now names up to 3 distinct constants,
+  counts beyond (A-PT3-NOTE-*, A-PT4-*).
+* `Add-DisclosureRow` escaped the `&#183;` separator, so 9 call sites in 7
+  emitters printed it literally (E-ENTITY sweeps every .dot a run writes).
+
+**OPEN for the owner (from this example):**
+1. **protocol-trace does not meet its own golden**
+   (`fixtures\golden-operat-name-roundtrip.md`, "the acceptance target for the
+   protocol-trace emitter"): 2 of 17 nodes, no guards, no failure edge, one DB
+   per chart. "25 of 26 ship" is true of the catalogue, not of the golden.
+2. **feeds-from / lands-where stop at a dangling designer datasource** and do
+   not follow the runtime re-point (`Blueprint4.pas:2282`,
+   `:= FBlueprint_ViewModel.pdsrOperation`) -- the one hop that would reach
+   `FMTOperation` -> `'OPERAT'`.
+3. lands-where with no table prints `TDataService__SERVER` / `Imc.` with blank
+   names (cosmetic).
 
 **Still open:** (1) owner decides the R24 wave (6 pre-existing unpaged
 population queries -- ledger `.superpowers\sdd\PLAN-last-four-verbs\progress.md`);

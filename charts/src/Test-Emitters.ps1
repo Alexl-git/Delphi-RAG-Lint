@@ -951,6 +951,18 @@ Step 'E-PT' {
   $script:pt3 = & "$SRC\Emit-ProtocolTrace.ps1" -Target 'Pipes.Protocol.CommandIDToStr' -DbPath $DbSrv -OutDir $OutDir
   Chk 'A-PT3-MODE'     $pt3.Mode 'method'
   Chk 'A-PT3-COMMANDS' $pt3.Commands 42      # every TCommandID member
+  # One routine reading 42 DIFFERENT constants. The row note was the FIRST ref's
+  # constant times the site count -- '<first> x42' -- a claim that one command is
+  # read 42 times. The note names the distinct constants, or counts them.
+  $pt3dot = Dot $pt3
+  Chk 'A-PT3-NOTE-NOX'   ([regex]::IsMatch($pt3dot, ' x42\b')) $false
+  Chk 'A-PT3-NOTE-COUNT' $pt3dot.Contains('42 constants') $true
+
+  # The Blueprint4 Operation grid's outbound wire routine: cmdDelta out, rspOK
+  # back, ONE read each. It rendered as 'cmdDelta x2'.
+  $script:pt4 = & "$SRC\Emit-ProtocolTrace.ps1" -Target $Q_SEND -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-PT4-COMMANDS' $pt4.Commands 2
+  Chk 'A-PT4-NOTE'     (Dot $pt4).Contains('cmdDelta, rspOK') $true
 }
 
 Note 'crosses-boundary ...'
@@ -2165,6 +2177,14 @@ $o = [pscustomobject]@{
 }
 NegTest 'LW-ART-N' 'lands-where needs -ServerDbPath' 'never' {
   & "$SRC\New-DiagramArtifact.ps1" -Question lands-where -Target 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -SqlDbPath $DbSql -OutRoot (Join-Path $OutDir 'bundle-lw-n') }
+# ---- output sweep: no escaped entity printed as text -------------------------
+# Add-DisclosureRow escapes its text, and nine call sites in seven emitters
+# passed a '&#183;' separator into it -- so each of those charts printed the six
+# literal characters "&#183;" instead of a middle dot. Swept over EVERY .dot this
+# run wrote, because the defect lived in a shared helper, not in one chart.
+$ent = @(Get-ChildItem $OutDir -Recurse -Filter *.dot | Where-Object { [IO.File]::ReadAllText($_.FullName).Contains('&amp;#183;') })
+if ($ent.Count) { Fail 'E-ENTITY' "$($ent.Count) .dot file(s) print a literal '&#183;': $(($ent | Select-Object -First 4 | ForEach-Object Name) -join ', ')" }
+
 # ---- report ------------------------------------------------------------------
 if (-not $Quiet) {
   Write-Host ''
