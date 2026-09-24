@@ -46,7 +46,9 @@
   The chart NEVER says "unhandled" (R3). 4 of the 5 measured focus candidates
   have ZERO resolved callers -- event handlers and interface dispatch are not in
   call_edges -- so the honest sentences are "no resolved caller in this index"
-  and "no handler found within N caller levels (M callers walked)". A reader
+  and "no handler found within N caller levels (M callers evaluated)" -- M is
+  what the type's walk judged; the focus box's "callers walked" is the whole
+  caller graph gathered to -Depth, which can be larger. A reader
   who takes "the walk ended" for "escapes to the user" is the riskiest failure
   this chart has, and the wording is the guard.
 
@@ -381,15 +383,18 @@ Write-Host ("  callers walked: {0} over {1} level(s){2}{3}" -f $callers.Count, $
 # Find-HandlerBlock / Get-TryBlocks / Test-HandlerReraises live in Emit-Common.
 
 # All handler events of caller $C for type $T over the call sites $Sites.
+# NotGuarding / No are returned as HANDLER KEYS ("<caller id>:<position>"), not
+# counts: the same handler is judged once per call edge, and a per-edge sum
+# counted uAutoTest :402 three times (final wave, item 3).
 function Get-CallerVerdict($C, [string] $T, $Sites) {
   $evs = New-Object System.Collections.ArrayList
-  $ng = 0; $no = 0
+  $ng = New-Object System.Collections.ArrayList; $no = New-Object System.Collections.ArrayList
   $cands = @(@($C.Body.Handles | ForEach-Object { [pscustomobject]@{ H = $_.Type; Line = $_.Line; Pos = $_.Line * 100000 + $_.Col; Bare = $false } }) +
              @($C.Body.Inferred | ForEach-Object { [pscustomobject]@{ H = 'except'; Line = $_.Line; Pos = $_.Line * 100000 + $_.Col; Bare = $true } }) |
              Sort-Object Pos)
   foreach ($h in $cands) {
     $v = Get-CatchVerdict $T $h.H $h.Bare
-    if ($v -eq 'no') { $no++; continue }
+    if ($v -eq 'no') { [void]$no.Add("$($C.Info.Id):$($h.Pos)"); continue }
     $blk = $(if ($C.Try -and $C.Try.Decided) { Find-HandlerBlock $C.Try $h.Pos } else { $null })
     if (-not $blk) {
       $kind = $(if ($v -eq 'may') { 'may' } else { 'unverified' })
@@ -397,14 +402,14 @@ function Get-CallerVerdict($C, [string] $T, $Sites) {
       continue
     }
     $inside = @($Sites | Where-Object { $_ -gt $blk.Try -and $_ -lt $blk.Except }).Count
-    if ($inside -eq 0) { $ng++; continue }
+    if ($inside -eq 0) { [void]$ng.Add("$($C.Info.Id):$($h.Pos)"); continue }
     if ($v -eq 'may') { $kind = 'may' }
     elseif (Test-HandlerReraises $C.Lines $blk $h.Pos $h.Bare) { $kind = 'reraised' }
     elseif ($inside -lt @($Sites).Count) { $kind = 'partial' }
     else { $kind = 'caught' }
     [void]$evs.Add([pscustomobject]@{ Type = $T; Caller = $C; Handler = $h; Kind = $kind; How = $v; Inside = $inside; Total = @($Sites).Count })
   }
-  [pscustomobject]@{ Events = $evs.ToArray(); NotGuarding = $ng; No = $no
+  [pscustomobject]@{ Events = $evs.ToArray(); NotGuarding = $ng.ToArray(); No = $no.ToArray()
                      Catches = (@($evs | Where-Object { $_.Kind -eq 'caught' }).Count -gt 0) }
 }
 
@@ -428,7 +433,7 @@ $evalEdge = {
   param($eCaller, $eCallee, $eSites, $eType)
   $ec = $callerById[[int]$eCaller]
   if (-not $ec -or -not $ec.Body.Fresh) {
-    return [pscustomobject]@{ Stopped = $false; Events = @(); NotGuarding = 0; No = 0; Stale = $true }
+    return [pscustomobject]@{ Stopped = $false; Events = @(); NotGuarding = @(); No = @(); Stale = $true }
   }
   $er = Get-CallerVerdict $ec $eType @($eSites)
   foreach ($ev in $er.Events) { $ev | Add-Member -NotePropertyName Callee -NotePropertyValue $eCallee -Force }
@@ -452,8 +457,8 @@ foreach ($t in $types) {
     CatchAndPass = $both
     Escapes = $w.Escapes; Ends = $w.Ends; Capped = $w.Capped; Walked = $w.Evaluated
     Events = $mine
-    NotGuarding = ($w.Edges | ForEach-Object { $_.Result.NotGuarding } | Measure-Object -Sum).Sum
-    No = ($w.Edges | ForEach-Object { $_.Result.No } | Measure-Object -Sum).Sum })
+    NotGuarding = @($w.Edges | ForEach-Object { $_.Result.NotGuarding } | Where-Object { $_ } | Sort-Object -Unique)
+    No = @($w.Edges | ForEach-Object { $_.Result.No } | Where-Object { $_ } | Sort-Object -Unique) })
 }
 $caughtCount = ($typeResults | ForEach-Object { $_.Catchers.Count } | Measure-Object -Sum).Sum
 $escapeCount = ($typeResults | ForEach-Object { $_.Escapes.Count } | Measure-Object -Sum).Sum
@@ -469,20 +474,37 @@ $reraisedCount   = Get-EventCount 'reraised'
 $unverifiedCount = Get-EventCount 'unverified'
 $partialCount    = Get-EventCount 'partial'
 $solidCount      = @($events | Where-Object { $_.Kind -in 'caught', 'partial', 'reraised' }).Count
-$notGuardingCount = ($typeResults | ForEach-Object { $_.NotGuarding } | Measure-Object -Sum).Sum
-$noVerdictCount   = ($typeResults | ForEach-Object { $_.No } | Measure-Object -Sum).Sum
-if (-not $notGuardingCount) { $notGuardingCount = 0 }
-if (-not $noVerdictCount) { $noVerdictCount = 0 }
+# DISTINCT handler positions (final wave, item 3): judged per call edge and per
+# raised type, the same handler recurs -- ReadBuffer summed :402 three times and
+# :466 once into "4". A not-guarding handler that IS drawn on another edge
+# (:466 catches ReadBuffer's and Save's calls, but not the escaping Save at
+# :513/:561) is not "not drawn"; the two are counted apart.
+$drawnKeys = @{}
+foreach ($ev in $events) { $drawnKeys["$($ev.Caller.Info.Id):$($ev.Handler.Pos)"] = $true }
+$ngKeys = @($typeResults | ForEach-Object { $_.NotGuarding } | Where-Object { $_ } | Sort-Object -Unique)
+$notGuardingCount   = $ngKeys.Count
+$notGuardingUndrawn = @($ngKeys | Where-Object { -not $drawnKeys.ContainsKey($_) }).Count
+$noVerdictCount     = @($typeResults | ForEach-Object { $_.No } | Where-Object { $_ } | Sort-Object -Unique).Count
 
 # The handled-where sentence, one per raised type, NEVER suppressed (R12) and
 # never "unhandled" (R3). It counts where the walk ENDED -- caught on an edge,
 # past the depth bound, at a node with no caller, or at the caller cap -- and
 # the callers it could not read. A capped node is NEVER "no resolved caller".
 $staleNote = $(if ($staleCallers) { "; $staleCallers caller$(if ($staleCallers -ne 1) { 's' }) not read: source changed since indexing" } else { '' })
+# TWO COUNTS, TWO WORDS (final wave, item 3). "callers walked" (focus box) is
+# the caller GRAPH gathered over call_edges to -Depth -- ReadBuffer: 140.
+# "callers evaluated" (this sentence) is how many of them the raised type's
+# per-edge walk actually judged -- 139. Measured: the one in the graph but not
+# evaluated is RunAutoTest (graph depth 2, as AutoTestSetupDefaults' caller).
+# AutoTestSetupDefaults CATCHES EReadError on its level-1 edge (the call to
+# ReadBuffer) and passes it only at level 3 (through Save), so for the type
+# RunAutoTest sits beyond the depth bound -- counted there as an escape. Same
+# shape on BuildSchema: 7 walked, 6 evaluated; DoInitLoad is reached only
+# through LoadAllAsync, which caught.
 function Get-WalkSentence($Tr) {
   if ($Tr.Walk.FocusNoCaller -and -not $Tr.Capped.Count) { return 'no resolved caller in this index' }
   $lv = "$Depth caller level$(if ($Depth -ne 1) { 's' })"
-  $cw = "$($Tr.Walked) caller$(if ($Tr.Walked -ne 1) { 's' }) walked"
+  $cw = "$($Tr.Walked) caller$(if ($Tr.Walked -ne 1) { 's' }) evaluated"
   $k = $Tr.Catchers.Count
   if ($k) {
     $top = Get-TopRanked @($Tr.Catchers) $Cap 'none'
@@ -591,8 +613,11 @@ Add-DisclosureRow $ftbl 'callers come from resolved call_edges only: interface d
 if ($callers.Count) {
   Add-DisclosureRow $ftbl "a caller's handler counts only when a call site lies between its try and its except (nesting scan of the stripped caller body)" $PAL.lineInk
 }
-if ($notGuardingCount) {
+if ($notGuardingCount -and $notGuardingUndrawn -eq $notGuardingCount) {
   Add-DisclosureRow $ftbl "$notGuardingCount matching handler(s) in callers guard other statements, not the call -- not drawn" $PAL.lineInk
+} elseif ($notGuardingCount) {
+  Add-DisclosureRow $ftbl ("$notGuardingCount matching handler(s) in callers guard other statements, not the call, on at least one call edge -- " +
+                           "$notGuardingUndrawn not drawn; $($notGuardingCount - $notGuardingUndrawn) drawn where they do enclose a call") $PAL.lineInk
 }
 if ($noVerdictCount) {
   Add-DisclosureRow $ftbl "$noVerdictCount typed handler(s) in callers cannot catch: declared here, and the raised type's ancestry left the project without reaching them -- not drawn" $PAL.lineInk
@@ -821,14 +846,18 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir ('excpaths_' + ($sel.Qname -repla
   NoCallerEnds   = $endCount          # T-carrying callers with no resolved caller of their own
   CappedCallers  = $cappedCount       # callers kept out of the walk by -MaxCallers (never 'no resolved caller')
   CatchAndPass   = $bothCount         # callers that catch on one call edge and pass the type on another
-  # type:caught edges/escapes past the bound/no-caller ends/callers walked/capped callers
+  # type:caught edges/escapes past the bound/no-caller ends/callers EVALUATED by the type/capped callers
   TypePaths      = (@($typeResults | ForEach-Object { "$($_.Type):$($_.Catchers.Count)/$($_.Escapes.Count)/$($_.Ends.Count)/$($_.Walked)/$($_.Capped.Count)" }) -join ',')
   SolidEdges     = $solidCount
   ReRaised       = $reraisedCount
   Partial        = $partialCount
   Unverified     = $unverifiedCount
   MayCatch       = $mayCount
-  NotGuarding    = $notGuardingCount
+  NotGuarding    = $notGuardingCount     # DISTINCT handler positions (item 3), not a per-edge sum
+  NotGuardingUndrawn = $notGuardingUndrawn
+  # callers in the walked GRAPH that no raised type's walk evaluated (walked - evaluated)
+  NotEvaluated   = (@($callers | Where-Object { $cid0 = $_.Info.Id; -not @($typeResults | Where-Object { @($_.Walk.Edges | Where-Object { $_.Caller -eq $cid0 }).Count }).Count } |
+                      ForEach-Object { "d$($_.D):$($_.Info.Name)" }) -join ',')
   NoVerdicts     = $noVerdictCount
   StaleCallers   = $staleCallers
   Events         = (@($events | ForEach-Object { "$($_.Kind):$($_.Caller.Info.Name):$($_.Handler.Line)" }) -join ',')
