@@ -3,9 +3,11 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.18.0-alpha -- 2026-09-24
 
-
+MINOR: follow-up defects D20-D31. `DRAGLINT_RESOLVER_VERSION` moves 1.8.0-alpha -> 1.9.0-alpha
+(D22; derived rows only -- remedy `index --all --resolve-only`). Extractor 1.19.0-alpha and schema
+v23 are UNCHANGED -- no index needs a re-parse. No new rules (188).
 
 ### Fixed (follow-ups D26, D29 -- no version constant moves)
 
@@ -136,32 +138,6 @@ breaking changes** until v1.0.
   now pins FCount's two bare writes as well as its two reads; `run_doc_leafname_localvar_collision.ps1`'s
   sanity check is scoped to the METHOD target (`--name Child` now also lists the five locals' writes).
 
-
-### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
-
-- **D18 -- `symbol_facts.sql_reads` now sees SQL built line by line.** Consecutive
-  `<ds>.SQL.Add('...')` / `.CommandText.Add` (and `SelectSQL`/`InsertSQL`/`ModifySQL`/`DeleteSQL`/
-  `RefreshSQL`) statements of one statement list are assembled per receiver, in order, and run through
-  the same classify/extract pipeline as a single literal. Any other statement ends the run; a
-  comment or directive between two Adds does not; a non-literal argument drops the run. Measured on
-  ORM3 SERVER: routines with `sql_reads` 19 -> 112 (distinct tables 14 -> 104), `sql_writes`
-  unchanged at 148, purity unchanged. Guard: `tests\autotest\run_sql_reads_multiline_add.ps1`.
-- **D19 -- the SQL-script extractor keeps QUOTED identifiers.** `"ACTION"` / `"TABLE"` columns (and
-  `CREATE TABLE "Name"`) are stored the Firebird way: quotes stripped, `""` unescaped, case verbatim
-  (`docs\INDEX-SCHEMA.md`). Same routine: the table-constraint skip is now whole-word, so columns
-  `UNIQUE_FLAG` / `CONSTRAINT_NAME` are no longer dropped. Measured on the 12 scripts of
-  `drag-lint-sql.sqlite`: `sql_column` rows 3820 -> 3826 (MS1.SQL `IPCHART.ACTION`,
-  `FOLDERCOUNT.TABLE`, 2x `UNIQUE_FLAG`, 2x `CONSTRAINT_NAME`). Guard:
-  `tests\autotest\run_sql_quoted_identifiers.ps1`.
-- **P1 -- Delphi 12+ multi-line string literals no longer break the parse.** The grammar's
-  triple-quote token loses to its single-quote token when the body holds an odd number of
-  apostrophes (and has no 5-quote form), failing the whole unit at 1:1; the directive lexer read a
-  body line as code, so an IFDEF written in the text became live. `Preprocess` now runs
-  `NeutralizeMultilineStrings` first (unconditionally): in the literal's body apostrophes,
-  open-braces and the `(` of `(*` become spaces, a 5+-quote delimiter becomes `'''`. Byte length and
-  every LF preserved. Not applied under `--no-preprocess`. The grammar fix proper belongs to
-  tree-sitter-delphi13. Guard: `tests\preprocess\run_multiline_string.ps1`.
-
 ### Added
 
 - **Resolver 1.9.0-alpha -- UNIT-QUALIFIED vars and consts bind (D22).** `uStyles.SkipRefresh`
@@ -191,6 +167,61 @@ breaking changes** until v1.0.
   within 1.19.0-alpha. Guards: `tests\callresolve\run_unit_qualified_value_bind.ps1` (positive
   control: locals spelled like the unit -- typed, untyped, under an untypable `with` -- must not bind;
   read/write modes in `member_accesses` and `find-callers`), `run_enum_value_refs_bind.ps1` N5/N6.
+
+### Fixed (lint rules -- no version constant moves)
+
+- **D20 -- `concat-in-loop` fires inside `for X in Y do`.** The sidecar's `require_ancestor` listed
+  `for`, `while`, `repeat` but not `foreach`, the grammar's for-in node, so a for-in accumulation
+  never reported. Rules-only change (`rules\concat-in-loop.json`); the L6 reset predicate already
+  knew `foreach`. Guard: `tests\autotest\run_concat_in_loop_for_in.ps1`.
+- **D21 -- `function-result-not-set` accepts a METHOD assigning its own name.** The flow var table
+  aliased the header's `name` text (`tfoo.bar`) to Result, so `Bar := 1` in `TFoo.Bar` was not a
+  Result write and the rule warned on a correct method. It now also aliases the bare last segment
+  with generic lists stripped (`TBox<T>.Get` -> `get`). Lint-side only. Guard:
+  `tests\autotest\run_function_result_own_name_method.ps1`.
+
+### Tests
+
+- **D23 -- runner scratch folders are per run.** Runners picked their scratch folder by a fixed name
+  (`C:\TEMP\draglint_<x>`, `Join-Path C:\TEMP 'draglint_<x>'`, `"$env:TEMP\drag-lint-<x>"`) and most
+  wiped it at start, so two copies of one suite (two worktrees, or a battery beside a hand run)
+  destroyed each other's fixtures -- measured: two `run_unit_qualified_call_bind.ps1` 1.5 s apart,
+  the first died with "sql returned no JSON". 441 runners now suffix every such default with
+  `-$PID` / `_$PID` (471 sites: 468 scripted, three by hand) and remove it in a `finally` on every exit
+  path. New static guard `tests\autotest\run_scratch_dirs_are_per_run.ps1` fails on any
+  draglint/drag-lint path under a temp root with no per-run component (positive control planted in
+  its own scratch). Five runners owned by parallel batches still hold a fixed path and keep the guard
+  RED until they are converted (no allow-list, by design).
+
+## v1.17.0-alpha -- 2026-09-23
+
+### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
+
+- **D18 -- `symbol_facts.sql_reads` now sees SQL built line by line.** Consecutive
+  `<ds>.SQL.Add('...')` / `.CommandText.Add` (and `SelectSQL`/`InsertSQL`/`ModifySQL`/`DeleteSQL`/
+  `RefreshSQL`) statements of one statement list are assembled per receiver, in order, and run through
+  the same classify/extract pipeline as a single literal. Any other statement ends the run; a
+  comment or directive between two Adds does not; a non-literal argument drops the run. Measured on
+  ORM3 SERVER: routines with `sql_reads` 19 -> 112 (distinct tables 14 -> 104), `sql_writes`
+  unchanged at 148, purity unchanged. Guard: `tests\autotest\run_sql_reads_multiline_add.ps1`.
+- **D19 -- the SQL-script extractor keeps QUOTED identifiers.** `"ACTION"` / `"TABLE"` columns (and
+  `CREATE TABLE "Name"`) are stored the Firebird way: quotes stripped, `""` unescaped, case verbatim
+  (`docs\INDEX-SCHEMA.md`). Same routine: the table-constraint skip is now whole-word, so columns
+  `UNIQUE_FLAG` / `CONSTRAINT_NAME` are no longer dropped. Measured on the 12 scripts of
+  `drag-lint-sql.sqlite`: `sql_column` rows 3820 -> 3826 (MS1.SQL `IPCHART.ACTION`,
+  `FOLDERCOUNT.TABLE`, 2x `UNIQUE_FLAG`, 2x `CONSTRAINT_NAME`). Guard:
+  `tests\autotest\run_sql_quoted_identifiers.ps1`.
+- **P1 -- Delphi 12+ multi-line string literals no longer break the parse.** The grammar's
+  triple-quote token loses to its single-quote token when the body holds an odd number of
+  apostrophes (and has no 5-quote form), failing the whole unit at 1:1; the directive lexer read a
+  body line as code, so an IFDEF written in the text became live. `Preprocess` now runs
+  `NeutralizeMultilineStrings` first (unconditionally): in the literal's body apostrophes,
+  open-braces and the `(` of `(*` become spaces, a 5+-quote delimiter becomes `'''`. Byte length and
+  every LF preserved. Not applied under `--no-preprocess`. The grammar fix proper belongs to
+  tree-sitter-delphi13. Guard: `tests\preprocess\run_multiline_string.ps1`.
+
+### Added
+
 - **Resolver 1.8.0-alpha -- bare WRITES bind (D13).** A fifth calls-stage stream
   (`ResolveWriteRefs` -> `TCallResolver.ResolveWriteRef`) sets `refs.symbol_id` for a `write` ref
   (`X:= ...`) to the local, parameter, field, property, class var or unit-level var/const it
@@ -280,15 +311,6 @@ breaking changes** until v1.0.
 
 ### Fixed
 
-- **D20 -- `concat-in-loop` fires inside `for X in Y do`.** The sidecar's `require_ancestor` listed
-  `for`, `while`, `repeat` but not `foreach`, the grammar's for-in node, so a for-in accumulation
-  never reported. Rules-only change (`rules\concat-in-loop.json`); the L6 reset predicate already
-  knew `foreach`. Guard: `tests\autotest\run_concat_in_loop_for_in.ps1`.
-- **D21 -- `function-result-not-set` accepts a METHOD assigning its own name.** The flow var table
-  aliased the header's `name` text (`tfoo.bar`) to Result, so `Bar := 1` in `TFoo.Bar` was not a
-  Result write and the rule warned on a correct method. It now also aliases the bare last segment
-  with generic lists stripped (`TBox<T>.Get` -> `get`). Lint-side only. Guard:
-  `tests\autotest\run_function_result_own_name_method.ps1`.
 - **`lint-all --rule X` runs only what can emit X (D17).** Every per-file checker, the whole `.scm`
   catalogue and every project-wide phase (project rules, class metrics, doc-drift, missing-doc,
   duplicate-code, interface cycles, layering, unit-not-in-dpr, used-unit-resolvable) ran for any `--rule`
@@ -557,19 +579,6 @@ breaking changes** until v1.0.
 - **Autodoc: what this does and does NOT do to an enum value's `Used by:` block.** MEASURED on a real corpus (drag-lint's own 270-`enum_value` self-index), not predicted. The spec's premise that bound entries "lose their ` ?` suffix" is FALSE -- an enum value's list was uniformly `unverified` before and so rendered plain already (`JoinRefs` renders ` ?` only on a MIXED list), and the ungated name bucket that supplies those entries is never gated off for a non-callable kind. **There are two independent churn channels, and they have different bounds.** (1) RE-WINDOWING: the caller cap keeps the first `AMaxCallers` (default 5) in first-seen INSERTION order, and bound sites now enter from the resolved bucket first, so a different 5 of the same N survive -- same caller set, same `(+N more)` total, no marker change. Only values with more than 5 distinct callers can move: **44 of 270 on this repo's index, an upper bound** (a 16-caller value was verified to render byte-identically). (2) MARKER APPEARANCE: for a **partially bound** value the ` ?` count goes **0 -> N, it does not go to zero**. `FindUnresolvedNameCallers` matches on bare `name_text`, excludes only refs owning a `call_edges` row -- not refs this binder just bound -- and hard-codes `unverified`; `AddDistinct` folds only on `(Display, Location)`. So any name-bucket entry the resolved bucket does not also produce survives as unverified, `Mixed` flips False -> True, and every such entry gains ` ?`. Two ordinary shapes cause it: a read of a DIFFERENT same-named value in another enum type, and a read of this value the resolver DECLINED (R1/R2/R3). **A ` ?` is a re-qualification**, so channel 2 is not cosmetic, and it can fire at ANY caller count -- including at or below the cap, so it is outside the 44 and outside the "208 render identically" set. Channel 2 measured **0 occurrences on this index** (every enum value here is fully bound with no surviving same-named reader), but that is a property of this corpus, **not a bound** -- a corpus with declined or same-named reads will show more. The one owed `document --apply` per corpus should be folded into the deferred `Pure` -> `Effect-free (proven)` regeneration, after the library re-resolve. Detail: `docs\MEASURED-enum-value-refs-2026-09-23.md`, section "Task 6 -- R-B churn shape".
 - **`lint-tree` sees a removed or renumbered ENUM MEMBER.** `enum_value` joins the kinds `LintTree.IsRoutineKind` admits -- the routine kinds plus `property` and `field`, i.e. every kind whose references the resolver binds by id -- so a member dropped from an enum in the edited unit now reports `stale-interface-reference` at every BOUND read of it across the dependent closure, and `enum_value` no longer appears in the report's `not_reportable` list. The gate was widened LAST, after the resolver binding was proven -- the same discipline the 2026-09-16 property change established, because widening the gate alone makes a kind count as "handled" and hands the caller silence. It therefore requires an index resolved at `DRAGLINT_RESOLVER_VERSION` 1.6.0-alpha or later; on an older index the reads are unbound and `lint-tree` reports nothing, exactly as before. **The two verbs now say different things, because they have different consequences.** A REMOVED member keeps the long-standing wording ("this reference will not compile until it is updated"). A CHANGED declaration on an enum value does NOT: dropping an earlier member shifts every later member's ordinal, so each of them reports a changed declaration while `if C = cmdDelta then DoWork;` goes on compiling. That finding now reads "this reference still compiles, but the member ordinal has moved -- any ordinal already persisted or transmitted now means a different member", which is the hazard that actually follows. Every other kind keeps the original wording on both verbs -- for a routine, property or field a changed declaration IS a signature change. Guard: `tests\callresolve\run_enum_value_refs_bind.ps1` check 11 pins both classes of finding, that nothing else leaks in, and that `enum_value` has left `not_reportable`.
 - **A forward declaration is not a class (C2.5).** `TFoo = class;` completed later in the same unit is folded into the real declaration by every by-name reader: `query --name/--qname` returns ONE row (the real one) with `forward at line N` / `forward_line`; `hover --qname` renders the real declaration; the LSP hover on the stub's line renders the real one led by `forward declaration -> line N`; ClassMetrics measures the real class once (it used to parent every descendant to the stub and anchor `too-many-children` on the stub's line); `outline` keeps both rows and tags the stub `[forward -> line N]` / `forward_target_line`; LSP completion (`FindSymbolsByPrefix`) offers the type once instead of twice. Interface stubs follow the same rule. A lone stub (`TOnlyStub = class;` with no completion in the unit) and an empty class (`TEmpty = class end;`) still count as classes. Resolution-side join -- no schema or extractor change; no re-index needed. The call resolver's cross-store receiver lookup (`CallResolver` declines when a name matches more than one row) now resolves receivers whose RTL type is forward-declared (`TComponent`, `TReader`, `TWriter`, ...) -- an index resolved before this change lacks those edges until `index --all --resolve-only` is run (or the next resolver bump re-resolves everything). `DRAGLINT_RESOLVER_VERSION` was deliberately NOT bumped (spec S8; owner decision pending). New `DRagLint.Core.ForwardStub`; guards `run_forward_stub_pairing.ps1`, `run_forward_stub_is_not_a_class.ps1` (CASE E drives `textDocument/completion`). Spec: `docs\superpowers\specs\2026-09-17-forward-stub-is-not-a-class-design.md`.
-
-### Tests
-
-- **D23 -- runner scratch folders are per run.** Runners picked their scratch folder by a fixed name
-  (`C:\TEMP\draglint_<x>`, `Join-Path C:\TEMP 'draglint_<x>'`, `"$env:TEMP\drag-lint-<x>"`) and most
-  wiped it at start, so two copies of one suite (two worktrees, or a battery beside a hand run)
-  destroyed each other's fixtures -- measured: two `run_unit_qualified_call_bind.ps1` 1.5 s apart,
-  the first died with "sql returned no JSON". 441 runners now suffix every such default with
-  `-$PID` / `_$PID` (471 sites: 468 scripted, three by hand) and remove it in a `finally` on every exit
-  path. New static guard `tests\autotest\run_scratch_dirs_are_per_run.ps1` fails on any
-  draglint/drag-lint path under a temp root with no per-run component (positive control planted in
-  its own scratch). Five runners owned by parallel batches still hold a fixed path and keep the guard
-  RED until they are converted (no allow-list, by design).
 
 ### Known
 - `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.10.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the resolver batch -- the `with` scope above, D12 own-name result writes, D13 bare write binding and ENG-16 unit-qualified calls -- then 1.9.0 until 1.9.0-alpha went to D22, unit-qualified var/const binding, on 2026-09-24).
