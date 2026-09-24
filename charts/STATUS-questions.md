@@ -274,7 +274,12 @@ from 9 nodes to 4. Callers unaffected.
 question the index can answer now ships; the five that do not are blocked on
 facts that do not exist, each measured and each filed.
 
-**THE SUITE IS GREEN (2026-09-23 10:31) on extractor 1.18.0 / resolver 1.6.0.**
+**THE SUITE IS GREEN (2026-09-24 03:48) on extractor 1.19.0 / resolver 1.8.0** --
+all 9 clones re-taken 02:53 (previous copies kept as `*.pre-1.19`), every moved pin
+traced against them (commit 8e17bedf: D1 parenless calls, D12, D13, D18, D19, and
+two SOURCE changes in the DL self-index). Before that:
+
+**THE SUITE WAS GREEN (2026-09-23 10:31) on extractor 1.18.0 / resolver 1.6.0.**
 All 8 project clones were re-taken after the engine's full re-parse (pre-1.18
 copies kept beside them as `*.pre-1.18`; the 05:30 CLIENT as
 `*.pre-reindex-0530`). Plus `SQL-drag-lint-sql.sqlite`, cloned at 10:01, final.
