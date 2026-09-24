@@ -1077,7 +1077,7 @@ type
 
     /// <summary>The file of the unit a qualified receiver names, provided
     /// nothing nearer than that unit claims the receiver's first segment -- the
-    /// shared gate of rungs 3d and 4b.</summary>
+    /// shared gate of rung 3c's unit branch, rung 3d and rung 4b.</summary>
     /// <param name="ARef">The ref; FileId, StartLine, StartCol and
     /// EnclosingSymbolId are consulted.</param>
     /// <param name="AReceiver">The receiver text verbatim, dotted unit names
@@ -1115,7 +1115,8 @@ type
     /// <param name="AReceiverTypeId">What receiver typing answered: an enum
     /// type for `TEnum.value`, 0 for a unit receiver.</param>
     /// <returns>The enum_value, var or const symbol id, or 0 when neither
-    /// rung binds.</returns>
+    /// rung binds -- including when a nearer value (a local spelled like the
+    /// unit, a `with` target) claims a unit receiver, for BOTH rungs.</returns>
     /// <remarks>Counts a 3c binding into FEnumStats.Bound and a 3d binding into
     /// FUnitValueBound -- never both, because a unit var is not an enum value.</remarks>
     function QualifiedValueTarget(const ACallRef: TReference; const AReceiver: string;
@@ -4726,9 +4727,12 @@ begin
     begin
       { A UNIT-name receiver: `Pipes.Protocol.cmdDelta`. Narrow the candidates to
         that unit's file -- its interface section, or either section when the
-        unit IS this file -- and bind only when exactly one survives. R3 is moot
-        here: the source qualified the name itself, so nothing shadows it. }
-      UnitFile:= UnitNameToFileId(AReceiver);
+        unit IS this file -- and bind only when exactly one survives. The
+        source qualified the NAME, so R3 does not apply to it -- but the
+        RECEIVER can still be shadowed: a local of an unindexed type spelled
+        like the unit also answers TypeId = 0, and the compiler reads the local
+        (ruling R14, 1.9.0-alpha). Hence rung 3d's gate, not a bare unit lookup. }
+      UnitFile:= UnshadowedUnitFile(ACallRef, AReceiver);
       if UnitFile > 0 then
       begin
         InUnit:= nil;

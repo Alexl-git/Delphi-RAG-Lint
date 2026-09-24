@@ -258,12 +258,14 @@
     uEnumDecl2.pas  TOther = (cmdDelta, cmdOther)       -- a SECOND cmdDelta
     uEnumUse.pas    uses uEnumDecl; const cmdClash = 5; local cmdShadow
                     A1 A2 A3 (bind) N1 N2 N3 (must not) B1 B2 (Shape B)
+                    ShadowUnit: N5, a local spelled like uEnumDecl (must not)
     uEnumBoth.pas   uses uEnumDecl, uEnumDecl2
                     N4 (two candidates, must not) A4 A5 (bind)
   FIXTURE B (second scratch project, rule 0): uEnumDecl.pas, an IDENTICAL
     copy at dup\uEnumDecl.pas, and uEnumUse.pas.
 
-  Scratch: C:\TEMP\draglint_enum_value_refs_bind (created and owned here).
+  Scratch: C:\TEMP\draglint_enum_value_refs_bind_<PID> (created and owned here,
+  removed on every exit path).
   Both fixtures are indexed into THIS GUARD'S OWN databases only. Nothing
   here reads or writes the worktree self-index or any corpus database.
 #>
@@ -291,9 +293,12 @@ function CheckN([int]$num, [string]$n, [bool]$ok, [string]$d = '') {
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: engine not found: $Exe" -ForegroundColor Red; exit 2 }
 $exePath = (Resolve-Path $Exe).Path
-$scratch = Join-Path C:\TEMP 'draglint_enum_value_refs_bind'
+$scratch = Join-Path C:\TEMP "draglint_enum_value_refs_bind_$PID"
 if (Test-Path $scratch) { Remove-Item -Recurse -Force $scratch }
 New-Item -ItemType Directory $scratch | Out-Null
+# Per-run scratch (ruling R3), removed on EVERY exit path -- the `exit` calls
+# below (a broken fixture anchor, the final verdict) all run this finally.
+try {
 $dirA = Join-Path $scratch 'A'
 $dirB = Join-Path $scratch 'B'
 New-Item -ItemType Directory $dirA | Out-Null
@@ -399,7 +404,14 @@ uses uEnumDecl;
 const
   cmdClash = 5;
 procedure UseIt;
+procedure ShadowUnit;
 implementation
+procedure ShadowUnit;
+var
+  uEnumDecl: TNotIndexed;
+begin
+  if uEnumDecl.cmdShadow = 0 then ;   { N5 local spelled like the UNIT: must NOT bind }
+end;
 procedure UseIt;
 var
   C: TCmd;
@@ -472,12 +484,21 @@ $L = @{
   N2 = @{ f = $fUse;  l = (LineOf $fUse  '{ N2 read of a LOCAL: R3a }');      k = 'read';          n = 'cmdShadow'; exp = $null; why = 'shadowed'  }
   N3 = @{ f = $fUse;  l = (LineOf $fUse  '{ N3 read of a unit CONST: R3c }'); k = 'read';          n = 'cmdClash';  exp = $null; why = 'shadowed'  }
   N4 = @{ f = $fBoth; l = (LineOf $fBoth '{ N4 two visible candidates: R2 }'); k = 'read';         n = 'cmdDelta';  exp = $null; why = 'ambiguous' }
+  # N5 (ruling R14, resolver 1.9.0-alpha): `uEnumDecl.cmdShadow` where uEnumDecl
+  # is a LOCAL of an unindexed type -- the compiler reads the local, not the
+  # unit. Receiver typing answers 0 exactly as for a unit, so rung 3c's unit
+  # branch must apply the nearer-value gate. No `why`: it is a member-access,
+  # outside the Shape A candidate stream and its decline counters. cmdShadow,
+  # not cmdLoad: an UNBOUND cmdLoad ref is listed by name as an unverified
+  # ( ?) caller in cmdLoad's "Used by:", which check 10 forbids -- correct doc
+  # behaviour for an unbound name, but not what check 10 is about.
+  N5 = @{ f = $fUse;  l = (LineOf $fUse  '{ N5 local spelled like the UNIT'); k = 'member-access'; n = 'cmdShadow'; exp = $null }
   PV = @{ f = $fDecl; l = (LineOf $fDecl 'Ord(pvHidden)');                    k = 'read';          n = 'pvHidden';  exp = 'uEnumDecl.TPriv.pvHidden' }
 }
 
 Write-Host ''
 Write-Host ('== fixture A: sites located from the fixture text (no line number is hard-coded) ==') -ForegroundColor DarkGray
-foreach ($k in @('A1','A2','A3','A4','A5','B1','B2','N1','N2','N3','N4','PV')) {
+foreach ($k in @('A1','A2','A3','A4','A5','B1','B2','N1','N2','N3','N4','N5','PV')) {
   Write-Host ("   {0,-3} {1}:{2,-3} {3,-13} {4}" -f $k, (Split-Path $L[$k].f -Leaf), $L[$k].l, $L[$k].k, $L[$k].n) -ForegroundColor DarkGray
 }
 
@@ -563,9 +584,9 @@ CheckN 5 'pvHidden: one read ref inside uEnumDecl DoWork' (@($rPV).Count -eq 1) 
 CheckN 5 'pvHidden: binds to uEnumDecl.TPriv.pvHidden' (IsBoundTo $rPV 'uEnumDecl.TPriv.pvHidden') ($rPV | ConvertTo-Json -Compress)
 
 Write-Host ''
-Write-Host '== check 6: N1-N4 stay NULL -- POSITIVE CONTROL against a hard-wired name join ==' -ForegroundColor Cyan
-Write-Host '   (a name-only binding turns N2 (local), N3 (unit const) and N4 (two candidates) RED)' -ForegroundColor DarkGray
-foreach ($k in @('N1','N2','N3','N4')) {
+Write-Host '== check 6: N1-N5 stay NULL -- POSITIVE CONTROL against a hard-wired name join ==' -ForegroundColor Cyan
+Write-Host '   (a name-only binding turns N2 (local), N3 (unit const), N4 (two candidates) and N5 (local spelled like the unit) RED)' -ForegroundColor DarkGray
+foreach ($k in @('N1','N2','N3','N4','N5')) {
   $s = $L[$k]
   $r = RefRow $dbA $s.f $s.l $s.k $s.n
   CheckN 6 ("{0} ({1}:{2}) is one {3} ref of '{4}'" -f $k, (Split-Path $s.f -Leaf), $s.l, $s.k, $s.n) (@($r).Count -eq 1) ($r | ConvertTo-Json -Compress)
@@ -829,3 +850,6 @@ Write-Host ''
 if ($script:fail) { Write-Host 'ENUM-VALUE-REFS-BIND: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'ENUM-VALUE-REFS-BIND: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
+}

@@ -45,6 +45,9 @@ breaking changes** until v1.0.
   New calls log line `unit-values: N unit-qualified var/const ref(s) bound (resolver and store
   agree)`; these bindings are NOT counted in the `enum-values:` "qualified bound (Shape B)" number,
   whose reconciliation would otherwise print a false WARNING (CLIENT: Shape B 0, unit-values 4).
+  The same gate now guards rung 3c's `Unit.enumValue` branch: a local (or undecidable `with`
+  target) spelled like the unit no longer binds `Local.Value` to the unit's enum value (CLIENT: no
+  such site, 0 enum bindings moved; guard `run_enum_value_refs_bind.ps1` N5).
   `DRAGLINT_RESOLVER_VERSION` 1.8.0-alpha -> 1.9.0-alpha (derived rows only: remedy
   `index --all --resolve-only`); the C2.3 + IsStub reservation moves to 1.10.0-alpha. No extractor
   bump (extractor baseline hash re-pinned within 1.19.0-alpha, CallResolver.pas only). Guard:

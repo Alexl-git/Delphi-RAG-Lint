@@ -629,4 +629,17 @@
 #   re-pins on the merged tree.
 #
 #   Superseded: 1.9.0-alpha|6f346f97fb61038af3ca4f703273932a4fe32a8e181b57a41e4ee3149799386c
-1.9.0-alpha|8402895fea18c623eb8dbfaae8fa1e5e0c0c4c0a16b3ac769ec613d9d1b69454
+# 2026-09-24: hash re-pinned WITHIN 1.9.0-alpha (D22 fix round 2, controller ruling
+#   R14). Rung 3c's UNIT branch (`Unit.enumValue` with a receiver that did not
+#   type) now resolves the unit through UnshadowedUnitFile -- the same gate as
+#   rungs 3d and 4b -- instead of a bare UnitNameToFileId, so a local of an
+#   unindexed type (or an undecidable `with` target) spelled like the unit no
+#   longer binds `Local.Value` to that unit's enum value. Bindings can DISAPPEAR,
+#   which is a derived-row move; it rides the 1.9.0 bump that has not shipped
+#   (every index still owes the 1.9.0 re-resolve), so it re-pins rather than
+#   bumps. ORM3 CLIENT copy: 0 member-access refs bound to an enum value before
+#   and after (CLIENT has no Shape B site), all other counts unchanged.
+#   PINNED ON THE BRANCH: the controller re-pins on the merged tree.
+#
+#   Superseded: 1.9.0-alpha|8402895fea18c623eb8dbfaae8fa1e5e0c0c4c0a16b3ac769ec613d9d1b69454
+1.9.0-alpha|ecee9808e711616bc2a1a52826d759e7e4ca639624ae837301e7808d078c8647
