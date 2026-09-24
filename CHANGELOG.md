@@ -76,6 +76,18 @@ breaking changes** until v1.0.
   `Doc.SymbolFacts`, on the extractor surface), which is not merged; a stored `Covered by:` window
   now reports drift once and is rewritten on its visible entries, like the other labels. Guard:
   `tests\autodoc\run_doc_project_tags.ps1` sections 5 (D28) and 6 (D27).
+- **D30 -- a `dl:ok duplicate-code` marker on EITHER end of a clone pair reviews it.** `lint
+  <file>` pairs a clone's tokens with a copy inside that file; `lint-all` with the longest copy in
+  the corpus, anchored at the greater (file, line) -- so the same tokens could be the anchor in one
+  scope and the partner in the other, and a line-bound marker was "unused" in one of them (measured
+  on the self index: `AstChecks.pas:6021` reviewed per file, `review-marker-unused` in `lint-all`,
+  with the finding back at `Parser.Delphi13.pas:98`). `TLintFinding` gains `RelatedFile` /
+  `RelatedLine` (the partner; filled by `EmitPair`, zero elsewhere, not in `--json`/LSP), and
+  `ApplyLineMarkers` honours a marker on the partner line too: verified against the partner's own
+  hash window, accounted whichever end suppresses, a stale partner hash reported as
+  `review-marker-stale` on that line. On the self index the 6021 marker is now used in both scopes
+  and the `Parser.Delphi13.pas:98` / `AstChecks.pas:6021` finding is suppressed. Guard:
+  `tests\autotest\run_duplicate_code_marker_either_end.ps1`.
 
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
 

@@ -609,7 +609,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@348c -- REVIEWED 2026-09-24: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@1927 -- REVIEWED 2026-09-24: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -9682,6 +9682,40 @@ begin
           end;
         end;
       end; // if
+      { THE OTHER END OF A PAIR (D30, 2026-09-24). A duplicate-code finding has
+        two sites, and WHICH one is the anchor depends on the scope: `lint
+        <file>` pairs the tokens with a copy inside that file, `lint-all` with
+        the longest copy anywhere, and EmitPair anchors at the greater (file,
+        line). So a marker written from one view sat on the partner in the
+        other -- measured on the self index: AstChecks.pas:6021 was the anchor
+        per file and the partner of Parser.Delphi13.pas:98 corpus-wide, and was
+        reported unused there. A marker on EITHER site now reviews the pair:
+        it is accounted whichever end suppresses (so neither end's marker is
+        called unused), and it is verified against the line it was hashed on
+        -- the partner's own window, not the anchor's. }
+      if (F.RelatedLine > 0) and (F.RelatedFile <> '') then
+      begin
+        var RLines: TArray<string>:= LinesOf(F.RelatedFile);
+        if F.RelatedLine <= Length(RLines) then
+          for M in TReviewMarkers.Parse(RLines[F.RelatedLine - 1]) do
+          begin
+            if not SameText(M.RuleId, F.RuleId) then Continue;
+            Accounted.AddOrSetValue(MarkerKey(F.RelatedFile, F.RelatedLine, M.RuleId), True);
+            if not Suppressed then
+            begin
+              Want:= TReviewMarkers.HashWindow(RLines, F.RelatedLine - 1);
+              if (M.Hash = '') or SameText(M.Hash, Want) then Suppressed:= True
+              { a placeholder hash suppresses nothing and is reported by the
+                scanned-file walk below; only a real, mismatching hash is stale }
+              else if not (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash)) then
+                EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
+                  Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
+                         'Re-review, then: allow --fix-line %d --fix-rule %s',
+                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]));
+            end;
+            Break;
+          end;
+      end;
       if not Suppressed then Kept.Add(F);
     end; // for
 

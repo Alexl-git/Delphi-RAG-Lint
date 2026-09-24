@@ -956,6 +956,15 @@ type
       class. The marker grammar is untouched; only what the four hex digits are
       computed from changes. }
     Metric: Integer;
+    { The OTHER site of a two-site finding -- today only duplicate-code, whose
+      pair is anchored at the lexicographically greater (file, line) and whose
+      partner is RelatedFile:RelatedLine. '' / 0 for every other rule (zeroed by
+      Default). A `dl:ok` marker on EITHER site suppresses the finding and counts
+      as used (ApplyLineMarkers, D30 2026-09-24): `lint <file>` and `lint-all`
+      pick different partners for the same tokens, so a marker bound to one
+      anchor was "unused" in the other scope. Not serialised to --json or LSP. }
+    RelatedFile: string;
+    RelatedLine: Integer;
   end;
 
   /// <remarks>
