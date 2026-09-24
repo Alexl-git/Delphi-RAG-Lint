@@ -12668,7 +12668,13 @@ begin
         if (Edge.TargetSymbolId > 0) and (Edge.MemberMode <> '') then
         begin
           WriteMemberAccess(Ref.Id, Edge);
-          Inc(Written);
+          { D22 (R13/R15): a unit-qualified var/const (rung 3d) takes this same
+            path -- refs.symbol_id plus a member_accesses row with its read or
+            write mode, no accessor, no call edge. Rung 3d is the only answer
+            that moves UnitValueBound, so it is counted on the unit-values line,
+            not into Written (reported as edge(s), which it earns none of). }
+          if Resolver.UnitValueBound > UnitValuesBefore then Inc(WrittenUnitValues)
+          else Inc(Written);
         end
         { 2026-09-23 (enum-value-ref-binding): a QUALIFIED enum value --
           `TCmd.cmdLoad` or `SomeUnit.cmdLoad`, resolver rung 3c. The identity
@@ -12684,10 +12690,7 @@ begin
           FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
           FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
           FQSetRefSymbol.ExecSQL;
-          { D22 (R13): rung 3d is the only ValueOnly answer that moves
-            UnitValueBound, so an unmoved counter means an enum value. }
-          if Resolver.UnitValueBound > UnitValuesBefore then Inc(WrittenUnitValues)
-          else Inc(WrittenValues);
+          Inc(WrittenValues);
         end
         else if Edge.TargetSymbolId > 0 then
         begin
@@ -12845,11 +12848,13 @@ begin
       '%d qualified bound (Shape B); declined (both streams) ' +
       'not-visible %d, ambiguous %d, shadowed %d; ' +
       'duplicate groups collapsed %d (decisive %d); unit-level shadow decls %d; ' +
-      'with scope: declined as a with member %d, bound under an undecidable with target %d',
+      'with scope: declined as a with member %d, bound under an undecidable with target %d; ' +
+      'unit receiver declined (nearer value or with target) %d',
       [EnumBound, EnumCandidates, WrittenValues,
        Resolver.EnumStats.NotVisible, Resolver.EnumStats.Ambiguous, Resolver.EnumStats.Shadowed,
        Resolver.EnumStats.DupGroupsCollapsed, Resolver.EnumStats.CollapseDecisive,
-       EnumShadowDecls, Resolver.EnumStats.WithMember, Resolver.EnumStats.WithUndecided]));
+       EnumShadowDecls, Resolver.EnumStats.WithMember, Resolver.EnumStats.WithUndecided,
+       Resolver.EnumUnitGateDeclined]));
     { THE RECONCILIATION, printed rather than left implicit. The resolver counts
       its own successes on BOTH paths -- ResolveEnumValueRead's final
       Inc(FEnumStats.Bound) for Shape A, and rung 3c's for Shape B -- while the

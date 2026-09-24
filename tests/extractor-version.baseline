@@ -818,8 +818,10 @@
 #   Superseded: 1.19.0-alpha|171224b0f3f9b1260dcd32f20ceb89a011a09caf04dcedc8fe0286c1c8c734e8
 # 2026-09-24: hash re-pinned WITHIN 1.19.0-alpha (D22, feat/fu-resolver-unitvar):
 #   resolver-only change to a file on the hashed surface; no parse moves.
-#   src\index\DRagLint.Index.CallResolver.pas is the only surface file that
-#   changed (rung 3d + the QualifiedValueTarget / UnshadowedUnitFile helpers);
+#   src\index\DRagLint.Index.CallResolver.pas is the only file on THIS guard's
+#   surface that changed (rung 3d + the QualifiedValueTarget / UnshadowedUnitFile
+#   helpers; the branch's Storage.SQLite.pas ResolveCallTargets edits -- R13 log
+#   split, R15 member_accesses routing -- are outside src\index and not hashed here);
 #   it runs in the resolve pass over stored parses, so no stored parse differs.
 #   Billed on DRAGLINT_RESOLVER_VERSION 1.8.0 -> 1.9.0 instead, per the
 #   1.6.0/1.7.0/1.8.0 precedent. PINNED ON THE BRANCH: the controller re-pins on
@@ -835,4 +837,11 @@
 #   CallResolver.pas rung 3c's unit branch now uses UnshadowedUnitFile. Resolve
 #   pass only; no stored parse differs.
 #   Superseded: 1.19.0-alpha|af1d6b604a163d6d0a9558ddfe27126f183d95f3b8935095f1b0a769e6fc3a03
-1.19.0-alpha|0163b9b9ba6165d1e35a7bc019fe39e9ae32877595d6babd5e5439c407e88396
+# 2026-09-24: hash re-pinned WITHIN 1.19.0-alpha again (D22 review fix round 1, R15):
+#   resolver-only change to a file on the hashed surface; no parse moves.
+#   CallResolver.pas: rung 3d answers with a MemberMode (member_accesses row)
+#   instead of identity-only, and counts rung-3c unit-gate declines. The same
+#   round edits Storage.SQLite.pas ResolveCallTargets (not on this surface).
+#   Resolve pass only; no stored parse differs.
+#   Superseded: 1.19.0-alpha|0163b9b9ba6165d1e35a7bc019fe39e9ae32877595d6babd5e5439c407e88396
+1.19.0-alpha|93bf4e4e679ab7f7d44339e4041fdb463be1437962a2ce6892fe81333edc7191

@@ -303,6 +303,9 @@ type
     // FEnumStats.Bound because a unit var/const is not an enum value -- the
     // calls stage reconciles each against what it wrote.
     FUnitValueBound  : Int64;
+    // 2026-09-24 (D22, R14 review): rung 3c `Unit.enumValue` refs the
+    // UnshadowedUnitFile gate declined although the receiver names one unit.
+    FEnumUnitGateDeclined: Int64;
     // 2026-09-23: per-run counters of the parenless-call pass, same reason.
     FParenlessStats  : TParenlessResolveStats;
     // 2026-09-23 (D13): per-run counters of the write-ref pass, same reason.
@@ -1275,12 +1278,21 @@ type
     property EnumStats: TEnumResolveStats read FEnumStats;
 
     /// <summary>Rung 3d bindings so far: unit-qualified var/const member-access
-    /// refs ResolveOne answered ValueOnly (D22).</summary>
+    /// refs ResolveOne bound, each with a MemberMode (D22, rulings R13/R15).</summary>
     /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
-    /// pass. NOT part of EnumStats.Bound -- a ValueOnly edge is an enum value
-    /// exactly when this counter did not move during its ResolveOne call, which
-    /// is how the calls stage tells the two apart.</remarks>
+    /// pass. NOT part of EnumStats.Bound. A member-access edge is a unit value
+    /// exactly when this counter moved during its ResolveOne call, which is how
+    /// the calls stage counts it apart from property/field accesses.</remarks>
     property UnitValueBound: Int64 read FUnitValueBound;
+
+    /// <summary>Rung 3c declines of a `Unit.enumValue` whose receiver names
+    /// exactly one unit but is claimed by something nearer -- a local, parameter
+    /// or class member spelled like the unit, or a `with` target that owns or
+    /// may own that name (ruling R14).</summary>
+    /// <remarks>Cumulative over the resolver's lifetime. Printed on the calls
+    /// stage's enum-values line; a decline writes nothing, so this is its only
+    /// trace.</remarks>
+    property EnumUnitGateDeclined: Int64 read FEnumUnitGateDeclined;
 
     /// <summary>D1 (2026-09-23, resolver 1.7.0-alpha): decide whether a `read`
     /// ref is a PARENLESS CALL -- a routine with no required parameters named
@@ -4742,7 +4754,10 @@ begin
             InUnit:= InUnit + [C];
         InUnit:= CollapseIdenticalEnumCopies(InUnit, ACallRef.FileId);
         if Length(InUnit) = 1 then Result:= InUnit[0].Id;
-      end;
+      end
+      { The receiver DOES name one unit, so only the gate declined it: count it,
+        because a decline writes nothing and this is its only trace. }
+      else if UnitNameToFileId(AReceiver) > 0 then Inc(FEnumUnitGateDeclined);
     end;
     if Result > 0 then
     begin
@@ -5099,16 +5114,27 @@ begin
     rest of `Unit.value` and the value twin of rung 4b: `uStyles.SkipRefresh`,
     read or written -- the extractor emits the write as a member-access too, with
     no separate `write` ref. 4 unbound sites on ORM3 CLIENT at 1.8.0, all writes.
-    ValueOnly for the same reason (a unit variable has no accessor either). Both
-    rungs live in QualifiedValueTarget, 3c first. }
+    NOT ValueOnly (ruling R15): a unit variable IS read or written, and an
+    identity-only binding made `find-callers --resolved` call every write a
+    read. It carries a MemberMode exactly as 3b's dotted field/property does, so
+    the store writes refs.symbol_id AND a member_accesses row (mode, no
+    accessor, no call edge). Both rungs live in QualifiedValueTarget, 3c first;
+    FUnitValueBound moving is how 3d's answer is told from 3c's. }
   if SameText(ACallRef.Kind, 'member-access') and (Rcv <> '') then
   begin
+    var UnitValuesBefore: Int64:= FUnitValueBound;
     Target:= QualifiedValueTarget(ACallRef, Rcv, TypeId);
     if Target > 0 then
     begin
       Result.TargetSymbolId:= Target;
       Result.Confidence    := 'certain';
-      Result.ValueOnly     := True;
+      if FUnitValueBound > UnitValuesBefore then
+      begin
+        Result.MemberMode:= MemberAccessMode(ACallRef);
+        if Result.MemberMode = '' then Result.MemberMode:= 'read';
+      end
+      else
+        Result.ValueOnly:= True;
       Exit;
     end;
   end;

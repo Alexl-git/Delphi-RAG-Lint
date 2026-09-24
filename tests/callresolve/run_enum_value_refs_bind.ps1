@@ -259,6 +259,7 @@
     uEnumUse.pas    uses uEnumDecl; const cmdClash = 5; local cmdShadow
                     A1 A2 A3 (bind) N1 N2 N3 (must not) B1 B2 (Shape B)
                     ShadowUnit: N5, a local spelled like uEnumDecl (must not)
+                    WithUnit: N6, an undecidable with target (must not)
     uEnumBoth.pas   uses uEnumDecl, uEnumDecl2
                     N4 (two candidates, must not) A4 A5 (bind)
   FIXTURE B (second scratch project, rule 0): uEnumDecl.pas, an IDENTICAL
@@ -405,7 +406,13 @@ const
   cmdClash = 5;
 procedure UseIt;
 procedure ShadowUnit;
+procedure WithUnit;
 implementation
+procedure WithUnit;
+begin
+  with TNotIndexed(nil) do
+    if uEnumDecl.cmdShadow = 0 then ; { N6 undecidable WITH target may own uEnumDecl: must NOT bind }
+end;
 procedure ShadowUnit;
 var
   uEnumDecl: TNotIndexed;
@@ -492,13 +499,18 @@ $L = @{
   # not cmdLoad: an UNBOUND cmdLoad ref is listed by name as an unverified
   # ( ?) caller in cmdLoad's "Used by:", which check 10 forbids -- correct doc
   # behaviour for an unbound name, but not what check 10 is about.
-  N5 = @{ f = $fUse;  l = (LineOf $fUse  '{ N5 local spelled like the UNIT'); k = 'member-access'; n = 'cmdShadow'; exp = $null }
+  N5 = @{ f = $fUse;  l = (LineOf $fUse  '{ N5 local spelled like the UNIT'); k = 'member-access'; n = 'cmdShadow'; exp = $null; why = 'unit-gate' }
+  # N6 (MINOR 2 of the batch-D review): the same site under `with TNotIndexed(nil)`.
+  # The with target cannot be typed, so it may declare a member named uEnumDecl;
+  # the gate declines. N5 and N6 are the two declines the enum-values line counts
+  # as `unit receiver declined (nearer value or with target)` -- check 6.
+  N6 = @{ f = $fUse;  l = (LineOf $fUse  '{ N6 undecidable WITH target');    k = 'member-access'; n = 'cmdShadow'; exp = $null; why = 'unit-gate' }
   PV = @{ f = $fDecl; l = (LineOf $fDecl 'Ord(pvHidden)');                    k = 'read';          n = 'pvHidden';  exp = 'uEnumDecl.TPriv.pvHidden' }
 }
 
 Write-Host ''
 Write-Host ('== fixture A: sites located from the fixture text (no line number is hard-coded) ==') -ForegroundColor DarkGray
-foreach ($k in @('A1','A2','A3','A4','A5','B1','B2','N1','N2','N3','N4','N5','PV')) {
+foreach ($k in @('A1','A2','A3','A4','A5','B1','B2','N1','N2','N3','N4','N5','N6','PV')) {
   Write-Host ("   {0,-3} {1}:{2,-3} {3,-13} {4}" -f $k, (Split-Path $L[$k].f -Leaf), $L[$k].l, $L[$k].k, $L[$k].n) -ForegroundColor DarkGray
 }
 
@@ -584,9 +596,9 @@ CheckN 5 'pvHidden: one read ref inside uEnumDecl DoWork' (@($rPV).Count -eq 1) 
 CheckN 5 'pvHidden: binds to uEnumDecl.TPriv.pvHidden' (IsBoundTo $rPV 'uEnumDecl.TPriv.pvHidden') ($rPV | ConvertTo-Json -Compress)
 
 Write-Host ''
-Write-Host '== check 6: N1-N5 stay NULL -- POSITIVE CONTROL against a hard-wired name join ==' -ForegroundColor Cyan
-Write-Host '   (a name-only binding turns N2 (local), N3 (unit const), N4 (two candidates) and N5 (local spelled like the unit) RED)' -ForegroundColor DarkGray
-foreach ($k in @('N1','N2','N3','N4','N5')) {
+Write-Host '== check 6: N1-N6 stay NULL -- POSITIVE CONTROL against a hard-wired name join ==' -ForegroundColor Cyan
+Write-Host '   (a name-only binding turns N2 (local), N3 (unit const), N4 (two candidates), N5 (local spelled like the unit) and N6 (undecidable with) RED)' -ForegroundColor DarkGray
+foreach ($k in @('N1','N2','N3','N4','N5','N6')) {
   $s = $L[$k]
   $r = RefRow $dbA $s.f $s.l $s.k $s.n
   CheckN 6 ("{0} ({1}:{2}) is one {3} ref of '{4}'" -f $k, (Split-Path $s.f -Leaf), $s.l, $s.k, $s.n) (@($r).Count -eq 1) ($r | ConvertTo-Json -Compress)
@@ -601,6 +613,14 @@ foreach ($k in @('N1','N2','N3','N4','N5')) {
 }
 $wBound = Sql $dbA "SELECT COUNT(*) AS n FROM refs r JOIN symbols s ON s.id = r.symbol_id WHERE r.kind = 'write' AND s.kind = 'enum_value'"
 CheckN 6 'no write ref anywhere is bound to an enum value (spec N1: write is never an enum candidate)' (@($wBound).Count -eq 1 -and [int]$wBound[0].n -eq 0) ($wBound | ConvertTo-Json -Compress)
+# The unit-receiver gate (R14) declines SILENTLY at the ref, so its count on the
+# enum-values line is the only trace -- N5 (a local) and N6 (a with target),
+# derived from the why keys. -1 when the label is absent, so a renamed or
+# dropped counter reddens instead of passing as zero.
+$expGate = @($L.Keys | Where-Object { $L[$_].why -eq 'unit-gate' }).Count
+$gateLn  = (@(($idxOut -split "`r?`n") | Where-Object { $_ -match 'enum-values:' -and $_ -match 'bare read' }) -join ' ')
+$gotGate = if ($gateLn -match 'unit receiver declined \(nearer value or with target\) (\d+)') { [int]$Matches[1] } else { -1 }
+CheckN 6 ("the enum-values line counts {0} unit-receiver decline(s) (N5 local, N6 with)" -f $expGate) ($gotGate -eq $expGate) ("got=$gotGate line=$gateLn")
 
 # ---------------------------------------------------------------------------
 # CHECK 14 -- THE DECLINE COUNTERS, PINNED BY REASON.

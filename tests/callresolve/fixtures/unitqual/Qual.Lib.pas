@@ -19,6 +19,7 @@ var
   var and const that a UNIT-QUALIFIED read / write in uQualUse must bind to. }
 var
   GLimit: Integer;
+  GSole: Integer;       { declared by THIS used unit only -- check 3 }
 
 const
   CMax = 3;

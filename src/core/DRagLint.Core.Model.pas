@@ -205,11 +205,18 @@ const
   /// as a member-access too), the value twin of ENG-16's rung 4b and under
   /// the same gates: the receiver did not type, names exactly one unit, and
   /// nothing nearer (local, parameter, class member, `with` target) claims
-  /// its first segment. ValueOnly: no call_edges row, no member_accesses row.
-  /// 4 such unbound sites on ORM3 CLIENT at 1.8.0. DERIVED rows only, no parse
-  /// change: remedy is `index --all --resolve-only`. A MINOR: a new class of
-  /// derived row. The reservation for C2.3 + the IsStub unification MOVES
-  /// from 1.9.0 to 1.10.0-alpha.</para>
+  /// its first segment. Recorded like a dotted field access (ruling R15):
+  /// refs.symbol_id plus a member_accesses row with its read/write mode, no
+  /// accessor and no call_edges row. 4 such unbound sites on ORM3 CLIENT at
+  /// 1.8.0, all writes. The same release changes Storage.SQLite.pas
+  /// ResolveCallTargets (R13: these bindings get their own `unit-values:`
+  /// log line and reconciliation instead of inflating the enum Shape B count
+  /// and its WARNING) and gates rung 3c's `Unit.enumValue` branch the same
+  /// way (R14: a local or undecidable `with` target spelled like the unit
+  /// now DECLINES, counted on the `enum-values:` line). DERIVED rows only, no
+  /// parse change: remedy is `index --all --resolve-only`. A MINOR: a new
+  /// class of derived row, and bindings that can disappear. The reservation
+  /// for C2.3 + the IsStub unification MOVES from 1.9.0 to 1.10.0-alpha.</para>
   DRAGLINT_RESOLVER_VERSION = '1.9.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for

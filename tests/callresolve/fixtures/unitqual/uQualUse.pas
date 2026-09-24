@@ -16,6 +16,7 @@ procedure DriverValuesTyped;
 procedure DriverValuesUntyped;
 procedure DriverValuesWith;
 procedure DriverValuesBareShadow;
+procedure DriverValuesBare;
 
 implementation
 
@@ -110,13 +111,19 @@ begin
     N:= uQualHelp.GLimit;                           // NEG-VALUE-WITH
 end;
 
+{ GSole is declared by ONE used unit (Qual.Lib), so an unshadowed bare write
+  binds to that unit var (POS-BARE-UNIT) -- which is what lets the shadowed one
+  below fail if the local is ignored. }
+procedure DriverValuesBare;
+begin
+  GSole:= 3;                                        // POS-BARE-UNIT
+end;
+
 procedure DriverValuesBareShadow;
 var
-  GLimit: Integer;
-  N: Integer;
+  GSole: Integer;
 begin
-  GLimit:= 2;
-  N:= GLimit;                                       // NEG-BARE-SHADOW
+  GSole:= 2;                                        // NEG-BARE-SHADOW
 end;
 
 end.
