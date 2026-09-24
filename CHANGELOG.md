@@ -5,6 +5,34 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Changed (batch C of the D20-D30 follow-ups; no version constant moves)
+
+- **D25 -- readers now open SQLITE_OPEN_READONLY; the "WAL cannot be opened read-only" claim was
+  measured and is false.** Three comments (`TSQLiteSymbolStore.Connect`, `DbContainsFile`, the
+  library open in `Lint.ProjectChecks`) said a read-only open of a WAL index fails "disk I/O error"
+  for want of write access to the `-shm`. A throwaway FireDAC probe (SQLite `sqlite_version()` =
+  **3.45.3**) against a copy of the self index, `SELECT COUNT(*) FROM symbols`, header bytes 18/19
+  read before and after:
+
+  | case | A: `OpenMode=ReadOnly` only (FireDAC defaults) | D: + `LockingMode=Normal` | E: + header `JournalMode` | B: ReadOnly + Normal + header mode + busy + `query_only` (NEW) | C: old `ConnectReadOnly` (read-write open + `query_only`) |
+  |---|---|---|---|---|---|
+  | 1 WAL, cleanly closed, no `-wal`/`-shm` | disk I/O error | disk I/O error | OK | OK, hdr 2 -> 2 | OK, hdr 2 -> 2 |
+  | 2 WAL, other connection holds `BEGIN IMMEDIATE` + uncommitted write | disk I/O error | disk I/O error | OK | OK, hdr 2 -> 2 | OK, hdr 2 -> 2 |
+  | 3 WAL, `-shm` marked read-only beside a live writer | disk I/O error | disk I/O error | OK | OK, hdr 2 -> 2 | OK, hdr 2 -> 2 |
+  | 4 rollback journal (byte 18 = 1) | OK, hdr 1 -> 1 | OK | OK | OK, hdr 1 -> 1 | OK, hdr 1 -> 1 |
+
+  The error is FireDAC's connect-time `PRAGMA journal_mode = DELETE` (its default) on a read-only
+  WAL handle -- E (naming WAL) passes where D (Normal locking alone) fails. Every write attempt
+  after connect was refused under B and C. Decision: cases 1, 2 and 4 pass under B, so
+  `ConnectReadOnly` now sets `OpenMode=ReadOnly` and keeps `query_only`, the header-derived journal
+  mode and the pre-connect busy timeout. Known cost: a read-only handle cannot delete the `-wal`/`-shm`
+  it creates, so reading a cleanly closed index leaves an empty (0-byte) `-wal` and a `-shm` beside
+  it (the main file is untouched). Case 3 passes on Windows with a writer holding the `-shm`; the
+  no-writer read-only-`-shm` case was not measured and is the documented limit. The two probe
+  connections used `SharedCache=False`: FireDAC's default shared cache made same-process
+  connections share one pager and gave "database schema is locked" / a header rewrite that no
+  cross-process reader would see.
+
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
 
 - **D18 -- `symbol_facts.sql_reads` now sees SQL built line by line.** Consecutive
