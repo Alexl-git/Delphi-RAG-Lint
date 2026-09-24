@@ -5,6 +5,31 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Fixed (follow-ups D26, D29 -- no version constant moves)
+
+- **D26 -- the `dl:shared` reader no longer mistakes PROSE for the marker.** The header scanner
+  accepted the tag anywhere inside a header comment, so a brace header that merely described the
+  marker ("the unit is marked `dl:shared`, the entry ...") made `Doc.SharedFacts.pas` and
+  `Lint.SharedUnit.pas` itself read as shared -- with sentence fragments as the "projects" -- and
+  every consumer (`Doc.Facts.UnitIsShared`, `SharedFacts.Participates`,
+  `CollectDependentProjectNotRecompiled`, `RegenerationDropsUnvouchable`) treated them as shared
+  (uncapped inbound lists, staleness rule, tag regime). The marker must now be the FIRST TOKEN of
+  its comment (`// dl:shared A, B`, `{ dl:shared A, B }`, `(* dl:shared A *)`, blanks and line
+  breaks before it allowed); a `//` inside a line comment is comment text, not a new comment, so
+  `// see // dl:shared below` is prose. The writer changed to match: when the unit line already ends in
+  a `// note`, the marker LEADS that comment (`// dl:shared P // note`) and the project list ends at the
+  next `//`. The pre-D26 writer's `// note // dl:shared A` shape now reads as NOT shared (0 of the 8
+  real markers across all 35 configured DBs has it).
+  Only those two units in this repo change answer; `TSharedUnit`'s own facts block re-capped its
+  inbound list accordingly. Guard: `tests\autotest\run_shared_unit_marker.ps1` (36 checks).
+- **D29 -- `allow`'s re-hash takes the REVIEWED stamp's separator with it.** Stripping the stale
+  stamp consumed `;` `,` `.` after the date only, so `-- REVIEWED 2026-09-23: reason` re-hashed to
+  `-- : reason` (seen live on `CLI.pas:612`). It now takes ONE adjacent separator: after the stamp
+  (`;` `,` `.` `:` or a ` -` / ` --` token), else before it (`,` `;` `:`), so
+  `reason, REVIEWED 2026-09-23` comes back `reason`. A reason without a stamp is untouched.
+  Guard: `tests\reviewmarker\run_allow_command.ps1` L3b, which also gained a `-Exe` parameter
+  (it hard-coded the deployed engine, so a branch build could not be measured before a deploy).
+
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
 
 - **D18 -- `symbol_facts.sql_reads` now sees SQL built line by line.** Consecutive

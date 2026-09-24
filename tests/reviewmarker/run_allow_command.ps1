@@ -10,12 +10,18 @@
 # leaving a neighbouring stale marker alone. That last one is the whole design:
 # re-validating a review nobody re-examined is the failure the hash exists to stop.
 
+# -Exe (2026-09-24, D29): the engine under test. It used to be hard-coded to the
+# DEPLOYED engine, so a branch build could only be seen green after a deploy --
+# and its RED could never be captured at all. PowerShell names are
+# case-insensitive, so every $exe below IS this parameter.
+param([string]$Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'))
+
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'
 if (-not (Test-Path $exe)) { Write-Output "allow-command: FATAL -- no exe at $exe"; exit 1 }
 
 $tmp = Join-Path $env:TEMP ("dl-allow-" + $PID)
 New-Item -ItemType Directory -Path $tmp -Force | Out-Null
+try {
 $src = Join-Path $tmp 'AllowDemo.pas'
 $pass = 0; $fail = 0
 
@@ -132,7 +138,49 @@ Check 'L3 re-hash drops the old REVIEWED stamp' ($l13 -notmatch 'REVIEWED')
 Check 'L3 re-hash keeps the rest of the reason' ($l13 -match '-- logged upstream$')
 Check 'L3 the command says the stamp was dropped' ($o -match 'REVIEWED stamp')
 
-Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+# --- L3b (D29): the stamp goes, and so does ITS separator -------------------
+# L3 only covered `stamp then text`. The strip consumed `;`, `,` or `.` after the
+# date but not `:` or a dash, and never a separator BEFORE the stamp, so
+# `-- REVIEWED 2026-09-23: reason` re-hashed to `-- : reason` (seen live on
+# CLI.pas:612). ReasonOn reads everything after the marker's own ` -- `.
+function ReasonOn($n) {
+  $line = (Get-Content $src)[$n - 1]
+  if ($line -match 'dl:ok\s+\S+\s+--\s(.*)$') { $Matches[1] } else { '<no reason>' }
+}
+$l3b = [ordered]@{
+  'stamp, colon, text'    = 'REVIEWED 2026-09-23: reason'
+  'stamp, dash, text'     = 'REVIEWED 2026-09-23 - reason'
+  'stamp, dashes, text'   = 'REVIEWED 2026-09-23 -- reason'
+  'text, comma, stamp'    = 'reason, REVIEWED 2026-09-23'
+  'text, semicolon, stamp'= 'reason; REVIEWED 2026-09-23'
+  # Pinned by StripReviewStamp's comment: punctuation after the date is taken
+  # even with no space after it (the pre-D29 behaviour for `;` `,` `.`).
+  'stamp;text, no space'  = 'REVIEWED 2026-09-23;reason'
+}
+foreach ($k in $l3b.Keys) {
+  Write-Fixture ('  except  // dl:ok try-except-swallowed@0bad -- ' + $l3b[$k])
+  & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+  $got = ReasonOn 13
+  Check "L3b $k -> 'reason' (got '$got')" (($LASTEXITCODE -eq 0) -and ($got -ceq 'reason'))
+}
+# Controls. The existing L3 form still loses only the stamp, and a reason with
+# NO stamp -- but full of the separators the strip now eats next to a stamp --
+# comes back byte-identical: the separator is only taken WITH a stamp.
+Write-Fixture '  except  // dl:ok try-except-swallowed@0bad -- REVIEWED 2026-01-05 logged upstream'
+& $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+$got = ReasonOn 13
+Check "L3b control: stamp then text -> 'logged upstream' (got '$got')" ($got -ceq 'logged upstream')
+$plainReason = 'logged upstream: see ticket 12 - owner agreed, not a leak; ok.'
+Write-Fixture ('  except  // dl:ok try-except-swallowed@0bad -- ' + $plainReason)
+& $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+$got = ReasonOn 13
+Check "L3b control: an unstamped reason is untouched (got '$got')" ($got -ceq $plainReason)
+Check 'L3b control: ...and its marker was re-hashed' ((MarkerOn 13) -match '^try-except-swallowed@[0-9a-f]{4}$' -and (MarkerOn 13) -notmatch '@0bad')
+
 Write-Output ''
 Write-Output "allow-command: $pass pass / $fail fail / $($pass + $fail) total"
 if ($fail -gt 0) { exit 1 } else { exit 0 }
+}
+finally {
+  Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+}

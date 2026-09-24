@@ -44,7 +44,7 @@ type
   /// is 7-bit ASCII and the file's original line endings are preserved -- only
   /// the single marker line is ever rewritten.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.Participates (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.Participates (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.SharedFacts, DRagLint.Lint.ProjectRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -167,9 +167,14 @@ type
     /// ANewText with ProjectsOfText and refuses to write anything that does not
     /// parse back. A marker that does not parse back reads as "declared shared"
     /// while behaving as unshared, which is worse than no marker at all.
+    /// A new marker goes on the `unit` line as `   // dl:shared P`; when that
+    /// line already ends in a line comment, the marker LEADS it instead
+    /// (`// dl:shared P // note`), because the reader accepts the tag only as
+    /// the first token of a comment.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProject (DRagLint.Lint.SharedUnit.pas)</para>
     /// <para>Calls: Copy, DRagLint.Lint.SharedUnit.LineRangeAt, DRagLint.Lint.SharedUnit.ScanHeader, DRagLint.Lint.SharedUnit.SplitCommentTail, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOfText, SameText, Trim, TrimLeft, TrimRight</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 66 lines (full implementation)</para>
     /// <para>Mutates: ANewText (out)</para>
     /// <seealso cref="DRagLint.Lint.SharedUnit.LineRangeAt"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.ScanHeader"/>
@@ -193,11 +198,14 @@ uses
 const
   IDENT_CHARS = ['A'..'Z', 'a'..'z', '0'..'9', '_'];
   EOL_CHARS   = [#13, #10];
+  BLANK_CHARS = [' ', #9, #13, #10];
 
 type
-  { What one pass of the header scanner is looking for. Both questions need the
-    identical comment/string state machine, and two copies of it would drift. }
-  TScanWant = (swMarkInComment, swUnitKeyword);
+  { What one pass of the header scanner is looking for. Every question needs
+    the identical comment/string state machine, and copies of it would drift.
+    swLineCommentOpen finds the `//` that OPENS a line comment in code state --
+    the writer asks it about the unit line alone. }
+  TScanWant = (swMarkInComment, swUnitKeyword, swLineCommentOpen);
 
 { ---------------------------------------------------------------------------
   The header scanner
@@ -205,14 +213,22 @@ type
 
 /// <summary>Scans the header region and returns the 1-based position of what
 /// AWant asks for, or 0.</summary>
-/// <remarks>swMarkInComment matches SHARED_MARK only while inside a comment;
-/// swUnitKeyword matches the `unit` keyword only while in code. The region ends
-/// with the line carrying the `interface` keyword -- scanning continues to that
-/// line's end, so a marker parked after the keyword is still seen.</remarks>
+/// <remarks>swMarkInComment matches SHARED_MARK only while inside a comment
+/// AND only as that comment's FIRST TOKEN (blanks and line breaks before it are
+/// allowed): prose that merely mentions the tag -- "the unit is marked
+/// dl:shared" -- is not a marker (D26, 2026-09-24). A `//` INSIDE a line
+/// comment does not open a new comment: `// see // dl:shared below` is prose,
+/// and it is syntactically identical to `// note // dl:shared A`, so no rule
+/// could accept one and refuse the other (ruling R12). The writer therefore
+/// never produces that shape -- see AddProjectToText. swUnitKeyword matches
+/// the `unit` keyword only while in code; swLineCommentOpen matches a `//` that
+/// opens a comment from code. The region ends with the line carrying the
+/// `interface` keyword -- scanning continues to that line's end, so a marker
+/// parked after the keyword is still seen.</remarks>
 function ScanHeader(const AText: string; AWant: TScanWant): Integer;
 var
-  N, I, StopAt: Integer;
-  InBrace, InParen, InLineCmt, InStr: Boolean;
+  N, I, StopAt, Skip: Integer;
+  InBrace, InParen, InLineCmt, InStr, AtCmtStart: Boolean;
   Ch: Char;
 
   function AtText(const AWhat: string): Boolean;
@@ -232,45 +248,66 @@ var
     Result:= True;
   end;
 
+  { In code state: opens a comment at I when one starts there, arming the
+    first-token position. Returns the characters the opener consumes, or 0. }
+  function OpenComment: Integer;
+  begin
+    Result:= 0;
+    if Ch = '{' then
+    begin
+      InBrace:= True;
+      Result := 1;
+    end
+    else if AtText('(*') then
+    begin
+      InParen:= True;
+      Result := 2;
+    end
+    else if AtText('//') then
+    begin
+      InLineCmt:= True;
+      Result   := 2;
+    end;
+    if Result > 0 then AtCmtStart:= True;
+  end;
+
+  { In comment state: advances the comment/first-token state over the
+    character at I. Returns the characters consumed (1, or 2 for a star-paren
+    closer). A `//` inside a line comment is ordinary comment text. }
+  function CommentStep: Integer;
+  begin
+    Result:= 1;
+    if not CharInSet(Ch, BLANK_CHARS) then AtCmtStart:= False;
+    if InLineCmt then
+      InLineCmt:= not CharInSet(Ch, EOL_CHARS)
+    else if InBrace then
+      InBrace:= Ch <> '}'
+    else if AtText('*)') then
+    begin
+      InParen:= False;
+      Result := 2;
+    end;
+  end;
+
 begin
-  Result   := 0;
-  N        := Length(AText);
-  StopAt   := N;
-  InBrace  := False;
-  InParen  := False;
-  InLineCmt:= False;
-  InStr    := False;
-  I        := 1;
+  Result    := 0;
+  N         := Length(AText);
+  StopAt    := N;
+  InBrace   := False;
+  InParen   := False;
+  InLineCmt := False;
+  InStr     := False;
+  AtCmtStart:= False;
+  I         := 1;
 
   while (I <= N) and (I <= StopAt) do
   begin
     Ch:= AText[I];
 
-    if InLineCmt then
+    if InLineCmt or InBrace or InParen then
     begin
-      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
-      if CharInSet(Ch, EOL_CHARS) then InLineCmt:= False;
-      Inc(I);
-      Continue;
-    end;
-
-    if InBrace then
-    begin
-      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
-      if Ch = '}' then InBrace:= False;
-      Inc(I);
-      Continue;
-    end;
-
-    if InParen then
-    begin
-      if (AWant = swMarkInComment) and AtText(SHARED_MARK) then Exit(I);
-      if (Ch = '*') and (I < N) and (AText[I + 1] = ')') then
-      begin
-        InParen:= False;
-        Inc(I);
-      end;
-      Inc(I);
+      if (AWant = swMarkInComment) and AtCmtStart and AtText(SHARED_MARK) then Exit(I);
+      Inc(I, CommentStep);
       Continue;
     end;
 
@@ -284,10 +321,19 @@ begin
     end;
 
     { code }
-    if Ch = '''' then begin InStr    := True; Inc(I);    Continue; end;
-    if Ch = '{'  then begin InBrace  := True; Inc(I);    Continue; end;
-    if (Ch = '(') and (I < N) and (AText[I + 1] = '*') then begin InParen  := True; Inc(I, 2); Continue; end;
-    if (Ch = '/') and (I < N) and (AText[I + 1] = '/') then begin InLineCmt:= True; Inc(I, 2); Continue; end;
+    if Ch = '''' then
+    begin
+      InStr:= True;
+      Inc(I);
+      Continue;
+    end;
+    Skip:= OpenComment;
+    if (AWant = swLineCommentOpen) and InLineCmt then Exit(I);
+    if Skip > 0 then
+    begin
+      Inc(I, Skip);
+      Continue;
+    end;
 
     if (AWant = swUnitKeyword) and AtWord('unit') then Exit(I);
 
@@ -313,7 +359,9 @@ end;
 /// <summary>Splits the text after the marker tag into the project list and the
 /// comment terminator that follows it, if any.</summary>
 /// <remarks>`{ dl:shared YADF, YADFOT }` must not parse its last project as
-/// "YADFOT }".</remarks>
+/// "YADFOT }". A `//` also ends the list: the writer leads an existing
+/// unit-line comment with the marker (`// dl:shared A, B // note`), and the
+/// note is not a project.</remarks>
 function SplitCommentTail(const ARest: string; out ATail: string): string;
 var
   I: Integer;
@@ -324,6 +372,7 @@ begin
   begin
     if ARest[I] = '}' then Break;
     if (ARest[I] = '*') and (I < Length(ARest)) and (ARest[I + 1] = ')') then Break;
+    if (ARest[I] = '/') and (I < Length(ARest)) and (ARest[I + 1] = '/') then Break;
     Inc(I);
   end;
   if I <= Length(ARest) then
@@ -395,8 +444,8 @@ end;
 class function TSharedUnit.AddProjectToText(const AText, AProject: string;
   out ANewText: string): Boolean;
 var
-  Proj, Rest, Body, Tail, NewLine: string;
-  MarkPos, UnitPos, LineStart, LineStop, I: Integer;
+  Proj, Rest, Body, Tail, NewLine, Note: string;
+  MarkPos, UnitPos, CmtPos, LineStart, LineStop, I: Integer;
   Existing: TArray<string>;
 begin
   ANewText:= AText;
@@ -439,8 +488,23 @@ begin
   if UnitPos = 0 then Exit;
 
   LineRangeAt(AText, UnitPos, LineStart, LineStop);
-  NewLine := TrimRight(Copy(AText, LineStart, LineStop - LineStart + 1)) +
-             '   // ' + SHARED_MARK + ' ' + Proj;
+  { A unit line that already ends in a line comment: appending a second `//`
+    would park the marker mid-comment, where the first-token reader cannot see
+    it (`// note // dl:shared A` is indistinguishable from prose). Lead the
+    existing comment with the marker instead; SplitCommentTail ends the
+    project list at the `//` that re-introduces the note. Scanned from the
+    `unit` keyword, which is code state by construction. }
+  CmtPos:= ScanHeader(Copy(AText, UnitPos, LineStop - UnitPos + 1), swLineCommentOpen);
+  if CmtPos > 0 then
+  begin
+    CmtPos := UnitPos + CmtPos - 1;
+    Note   := Trim(Copy(AText, CmtPos + 2, LineStop - CmtPos - 1));
+    NewLine:= Copy(AText, LineStart, CmtPos + 2 - LineStart) + ' ' + SHARED_MARK + ' ' + Proj;
+    if Note <> '' then NewLine:= NewLine + ' // ' + Note;
+  end
+  else
+    NewLine:= TrimRight(Copy(AText, LineStart, LineStop - LineStart + 1)) +
+              '   // ' + SHARED_MARK + ' ' + Proj;
   ANewText:= Copy(AText, 1, LineStart - 1) + NewLine + Copy(AText, LineStop + 1, MaxInt);
   Result  := True;
 end;
