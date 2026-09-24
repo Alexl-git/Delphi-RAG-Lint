@@ -52,7 +52,7 @@ $script:Failed = $false
 $exePath = (Resolve-Path $Exe).Path
 $fixDir  = Join-Path $PSScriptRoot 'fixtures\docp2'
 
-$scratch = Join-Path C:\TEMP 'draglint_docp2covered'
+$scratch = Join-Path C:\TEMP "draglint_docp2covered_$PID"   # per-run (R3): a sibling run never shares it
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $target = Join-Path $scratch 'covered.pas'
@@ -137,6 +137,9 @@ try {
   & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: file byte-identical after reindex + 2nd apply' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
-} finally { Pop-Location }
+} finally {
+  Pop-Location
+  if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue }
+}
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

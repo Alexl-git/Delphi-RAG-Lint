@@ -51,6 +51,31 @@ breaking changes** until v1.0.
   this the store's writer converted it to WAL. Guard: `tests\autotest\run_readonly_verbs.ps1`
   (md5 + trigger count + byte 18 per verb, `import-log` and `migrate-dbs` stay WAL, a real `index`
   run as the positive control); `run_migrate_site_guard.ps1`'s exemption list loses the five verbs.
+- **D27 -- the `[Project]` doc tag is a stored fact of the index, not its file name.** `index
+  --project` and `index --all` (single-root closure sections) now stamp `schema_meta.project_tag`
+  with the project file's sanitized base name, beside `scan_type`. New `ProjectTagFor` resolves the
+  tag -- explicit `--project` base name, else the stored `project_tag`, else the DB base name
+  (today's behaviour, so an index built before this is unchanged until its next project index run);
+  `''` with more than one `--db`. `document` (all forms), `document-all`, `doc-drift`, `lint` (its
+  doc rules), `lint-all` and `lint-project` apply it once their primary store is open. Measured: a
+  copy of ProjA's index named `not-the-project-name.sqlite` used to report doc-drift on every
+  `[ProjA]` entry and rewrite them `[not-the-project-name,ProjA]`; it now sees no drift and writes
+  nothing. `--help` and `docs\AI-USAGE.md` say "the project's name, recorded in the index".
+- **D28 -- `Covered by:` joins the tagged regime.** It is the fourth `INBOUND_LABELS` entry
+  (`Doc.ProjectTags`), so its entries are `[Proj]`-tagged, a project reaps only its own, and an
+  untagged legacy entry is kept while this index cannot see its unit. The whole-label special case
+  (`UNVOUCHABLE_LABELS`, the writer's carry-over, `LabelContent`, `WithoutParaLabel`) is deleted.
+  An entry has no `(file.pas)` part and may end ` (unverified)`: `EntryKey`, `EntryUnitKey` and
+  `UnitVouchable` strip that marker (new `WithoutConfidence`) so it is neither identity nor a unit.
+  Two consequential fixes: a label re-inserted because the fresh render lacks it goes back after its
+  surviving stored predecessor, wrapped in `<para>` (it used to go to the top, unwrapped -- with
+  `Covered by:` rendered below the other facts, two projects rewrote the block on alternate runs);
+  and a block with a duplicated inbound label that this project renders nothing for and that holds
+  foreign entries gets the empty-render forgiveness before the byte-compare fallback. Known limits:
+  a `Covered by:` over 5 tests still renders a capped `(+N more)` window (the cap lives in
+  `Doc.SymbolFacts`, on the extractor surface), which is not merged; a stored `Covered by:` window
+  now reports drift once and is rewritten on its visible entries, like the other labels. Guard:
+  `tests\autodoc\run_doc_project_tags.ps1` sections 5 (D28) and 6 (D27).
 
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)
 

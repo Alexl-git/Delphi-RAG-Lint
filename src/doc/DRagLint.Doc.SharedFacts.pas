@@ -108,7 +108,7 @@ type
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
   /// is cached in class state, keyed on the store it was built from.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
+  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLint (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
   /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -139,14 +139,14 @@ type
     /// it; on an unmarked unit it is a stale entry and still drift.</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconciledDrift, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutLegacyPure, DRagLint.Doc.SharedFacts.WithoutParaLabel, LowerCase</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconciledDrift, DRagLint.Doc.SharedFacts.StripPara, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutLegacyPure, LowerCase</para>
     /// <para>Returns: CollapseWs(StoredCmp) &lt;&gt; CollapseWs(FreshCmp); False</para>
-    /// <para>Complexity: 30 (cyclomatic, outer body), 185 lines (full implementation)</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 185 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ParaLabelCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BlockDrifted(const AStored, AFresh: string;
@@ -170,14 +170,14 @@ type
     /// Order changes only on marked units.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileContent, DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody, EndsText, Pos, Trim, TrimRight</para>
+    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileContent, DRagLint.Doc.SharedFacts.ReinsertAt, DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody, EndsText, Pos, Trim, TrimRight</para>
     /// <para>Returns: ADocText; Lines.Text</para>
-    /// <para>Complexity: 26 (cyclomatic, outer body), 154 lines (full implementation)</para>
+    /// <para>Complexity: 22 (cyclomatic, outer body), 139 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.FenceBounds"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MergeInboundFacts(const ADocText, AStoredRemarks: string;
@@ -247,9 +247,11 @@ type
     /// <para>TWO SHAPES, MEASURED, and the second is the larger loss.
     /// `Called from:` / `Used by:` / `Used in units:` are NARROWED entry by
     /// entry. `Covered by:` is DELETED WHOLE -- it names tests by definition, so
-    /// a closure index reproduces none of it, and it is not in INBOUND_LABELS,
-    /// so the entry-level forgiveness never sees it. On DataCopy one such line
-    /// named 41 tests and the regeneration proposed no line at all.</para>
+    /// a closure index reproduces none of it; on DataCopy one such line named
+    /// 41 tests and the regeneration proposed no line at all. Since D28
+    /// (2026-09-24) it is the fourth INBOUND_LABELS entry, so the same
+    /// entry-level test withholds the fix for it: every test entry naming a unit
+    /// this index cannot vouch for counts.</para>
     /// <para>DELIBERATELY CONSERVATIVE IN ONE DIRECTION ONLY. An entry whose
     /// unit IS in the closure and is genuinely gone stays fixable -- the index
     /// can vouch for that absence, and withholding it would disable the feature
@@ -258,14 +260,14 @@ type
     /// degenerating into "never fixable".</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.LabelContent, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
-    /// <para>Returns: False; ReconcileDropsUnvouchable(AStore, AStored, AFresh); True</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 93 lines (full implementation)</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
+    /// <para>Returns: False; ReconcileDropsUnvouchable(AStore, AStored, AFresh)</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 89 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.LabelContent"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitVouchable"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RegenerationDropsUnvouchable(const AStored, AFresh: string;
@@ -307,13 +309,14 @@ type
     /// stops a human's prose from being parsed as facts.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.StoredBlockBody</para>
     /// <para>Returns: DRagLint.Doc.SharedFacts.StoredBlockBody(AText)</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.StoredBlockBody"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.LegacyPureViews"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StoredBlockBody(const AText: string): string; static;
@@ -433,7 +436,7 @@ uses
   ;
 
 const
-  { INBOUND_LABELS -- the three labels whose entries depend on WHICH project is
+  { INBOUND_LABELS -- the four labels whose entries depend on WHICH project is
     looking -- moved to DRagLint.Doc.ProjectTags with the tag grammar (2026-09-23),
     together with the history of why 'Used in units:' belongs in it. }
 
@@ -544,22 +547,21 @@ const
   PARA_OPEN  = '<para>';
   PARA_CLOSE = '</para>';
 
-  { Labels whose content is derived from OTHER units and which a compile-closure
-    index therefore cannot reproduce at all -- as opposed to the inbound labels,
-    which it reproduces PARTIALLY and which are screened entry by entry.
-
-    `Covered by:` names tests. A production project index is exactly the compile
-    closure, so it holds no test unit, so it renders no `Covered by:` line for
-    any symbol, ever. The regeneration does not narrow the label; it deletes it.
-    Measured on DataCopy 2026-09-02: a line naming 41 tests against a proposed
-    text with no such line, on a finding marked [FIXABLE].
-
-    Kept SEPARATE from INBOUND_LABELS on purpose. Adding it there would put it
-    through ParseBlock's entry-level set difference, whose entries carry a
-    `(file.pas)` part this label does not have -- the keys would not resolve and
-    the screening would be nominal. Whole-label absence is the right test for a
-    whole-label loss. }
-  UNVOUCHABLE_LABELS: array[0..0] of string = ('Covered by:');
+  { UNVOUCHABLE_LABELS -- `Covered by:`, preserved WHOLE whenever a fresh render
+    lacked it -- is GONE (D28, 2026-09-24). `Covered by:` names tests, so a
+    production closure renders none of it (DataCopy 2026-09-02: a line naming
+    41 tests against a proposed text with none), and the whole-label carry-over
+    kept it; but it kept it for EVER, so a deleted test was never reaped and
+    nothing said which project had written an entry. It is now the fourth
+    INBOUND_LABELS entry: tagged per project and reaped by its own project like
+    the other three. The reason it was once kept out -- its entries have no
+    `(file.pas)` part, so the keys "would not resolve" -- is answered by keying
+    an entry on its bare qualified name (EntryKey, WithoutConfidence) and by
+    UnitVouchable's dotted-prefix walk, which already resolved `Test.Prod.X`. }
+  { The confidence suffix a `Covered by:` entry carries when the coverage path
+    was not verified (DRagLint.Doc.SymbolFacts.ComputeCoveredBy). Part of the
+    entry's TEXT, never of its identity or its unit. }
+  UNVERIFIED_SUFFIX = ' (unverified)';
 
 type
   TFactMap = TDictionary<string, string>;
@@ -707,6 +709,46 @@ begin
     else if (ABeginAt >= 0) and (AEndAt < 0) and (Pos(AUTO_END, ALines[I]) > 0) then AEndAt:= I;
 end;
 
+{ The line index at which MergeInboundFacts re-inserts ALabel, a label the stored
+  block carries and the fresh render does not: directly after the fence line
+  holding the nearest label that PRECEDED ALabel in the stored block, or directly
+  after BEGIN when none of those survives (or the stored fact is unwrapped).
+
+  WHY NOT ALWAYS AFTER BEGIN, which is what the re-insert did until D28. That is
+  right for 'Called from:'/'Used by:', the first lines RenderFactsBlock emits,
+  and wrong for any label rendered further down. `Covered by:` (an inbound label
+  since D28) sits after the other facts: the project that cannot see the tests
+  put the line on top, the project that can put it back in render order, and
+  the two rewrote the block on every alternate run -- measured by
+  run_doc_project_tags.ps1's COVERED CONVERGED check. Keeping the stored
+  neighbour order keeps both projects' writes byte-identical. }
+function ReinsertAt(const ALines: TStrings; const AStoredBody, ALabel: string): Integer;
+var
+  BeginAt, EndAt: Integer;
+  LabAt, BestAt : Integer;
+  I, P          : Integer;
+  L             : string;
+begin
+  FenceBounds(ALines, BeginAt, EndAt);
+  Result:= BeginAt + 1;
+  LabAt := Pos(PARA_OPEN + ALabel, AStoredBody);
+  if (LabAt = 0) or (BeginAt < 0) then Exit;
+  if EndAt < 0 then EndAt:= ALines.Count;
+  BestAt:= 0;
+  for I:= BeginAt + 1 to EndAt - 1 do
+    for L in ALL_LABELS do
+    begin
+      if Pos(PARA_OPEN + L, ALines[I]) = 0 then Continue;
+      P:= Pos(PARA_OPEN + L, AStoredBody);
+      if (P > BestAt) and (P < LabAt) then
+      begin
+        BestAt:= P;
+        Result:= I + 1;
+      end;
+      Break;
+    end;
+end;
+
 function IsTruncated(const AContent: string): Boolean;
 begin
   Result:= Pos(MORE_MARK, AContent) > 0;
@@ -717,15 +759,27 @@ begin
   Result:= EndsText(UNCERTAIN_SUFFIX, TrimRight(AEntry));
 end;
 
-{ The identity of an entry for set purposes: its bare text without the ' ?'
-  marker, lower-cased. Two spellings of one caller -- tagged or not, certain or
-  not -- are one entry; the TEXT the writer keeps is decided separately. }
+{ AEntry (untagged) without a trailing confidence marker -- the ' ?' of an
+  uncertain caller or the ' (unverified)' of a `Covered by:` test -- trimmed.
+  The marker describes how sure the renderer was, not which entry it is, and
+  ' (unverified)' is NOT a `(file.pas)` location either. }
+function WithoutConfidence(const AEntry: string): string;
+begin
+  Result:= Trim(AEntry);
+  if EndsText(UNCERTAIN_SUFFIX, Result) then
+    Result:= TrimRight(Copy(Result, 1, Length(Result) - Length(UNCERTAIN_SUFFIX)))
+  else if EndsText(UNVERIFIED_SUFFIX, Result) then
+    Result:= TrimRight(Copy(Result, 1, Length(Result) - Length(UNVERIFIED_SUFFIX)));
+end;
+
+{ The identity of an entry for set purposes: its bare text without a
+  confidence marker (WithoutConfidence), lower-cased. Two spellings of one
+  caller -- tagged or not, certain or not -- are one entry; the TEXT the writer
+  keeps is decided separately. A `Covered by:` entry has no `(file.pas)` part,
+  so its identity is its bare qualified name. }
 function EntryKey(const AEntry: string): string;
 begin
-  Result:= Trim(BareEntry(AEntry));
-  if EndsText(UNCERTAIN_SUFFIX, Result) then
-    Result:= TrimRight(Copy(Result, 1, Length(Result) - Length(UNCERTAIN_SUFFIX)));
-  Result:= LowerCase(Result);
+  Result:= LowerCase(WithoutConfidence(BareEntry(AEntry)));
 end;
 
 { Normalised full text, for multiset comparison: canonical tag order, lower-case. }
@@ -763,9 +817,7 @@ function EntryUnitKey(const AEntry: string): string;
 var
   P, Q: Integer;
 begin
-  Result:= BareEntry(AEntry);
-  if EndsText(UNCERTAIN_SUFFIX, Result) then
-    Result:= TrimRight(Copy(Result, 1, Length(Result) - Length(UNCERTAIN_SUFFIX)));
+  Result:= WithoutConfidence(BareEntry(AEntry));
   P:= LastDelimiter('(', Result);
   if P > 0 then
   begin
@@ -898,7 +950,7 @@ begin
   if (TagAt > 0) and (TagAt < Result) then Result:= TagAt;
 end;
 
-{ Splits a block -- flattened or multi-line, both work -- into the three inbound
+{ Splits a block -- flattened or multi-line, both work -- into the four inbound
   facts plus a RESIDUAL holding everything else, collapsed. The residual is what
   keeps intrinsic facts on byte-compare semantics. }
 procedure ParseBlock(const ABlock: string; out AInbound: TFactMap; out AResidual: string);
@@ -965,45 +1017,13 @@ begin
   end;
 end;
 
-{ Declared here rather than moved: UnitVouchable and LabelContent live further
-  down beside RegenerationDropsUnvouchable, which is where they were introduced,
-  and the reconciliation below needs both. A forward declaration keeps the
-  ordering legal without relocating working code. }
+{ Declared here rather than moved: UnitVouchable lives further down beside
+  RegenerationDropsUnvouchable, which is where it was introduced, and the
+  reconciliation below needs it. A forward declaration keeps the ordering legal
+  without relocating working code. (LabelContent and WithoutParaLabel, the
+  whole-label Covered by: helpers, went with UNVOUCHABLE_LABELS in D28.) }
 function UnitVouchable(const AStore: ISymbolStore; const AEntry: string): Boolean; forward;
-function LabelContent(const AText, ALabel: string): string; forward;
 function ParaLabelCount(const AText, ALabel: string): Integer; forward;
-
-{ The raw block text with ALabel's whole <para> element removed.
-
-  WHY THE RAW TEXT AND NOT THE COLLAPSED RESIDUAL, which is what this did first:
-  the residual has already lost its <para> boundaries, so the end of a fact has
-  to be GUESSED from the next label or the next tag -- and that guess turned out
-  to be position-dependent. Measured: a `Covered by:` sitting LAST round-tripped
-  cleanly while the identical label sitting BEFORE two <seealso> crefs did not.
-  A rule that depends on where in the block a label happens to sit is not a rule.
-
-  The raw text still carries the delimiters, so removing the element is exact,
-  and the residual is then computed from text that never held the label at all.
-
-  NO WRAPPER -> NO CHANGE, deliberately. A hand-written block with a bare
-  `Covered by:` and no <para> is left alone, so the compare still fires and the
-  finding is still reported. That is this unit's fail-safe direction: report,
-  never hide. }
-function WithoutParaLabel(const AText, ALabel: string): string;
-var
-  P, Open, Close: Integer;
-begin
-  Result:= AText;
-  P     := Pos(ALabel, Result);
-  if P = 0 then Exit;
-
-  Open:= P;
-  while (Open > 1) and (Copy(Result, Open, 6) <> '<para>') do Dec(Open);
-  Close:= PosEx('</para>', Result, P);
-
-  if (Copy(Result, Open, 6) = '<para>') and (Close > 0) then
-    Delete(Result, Open, Close + Length('</para>') - Open);
-end;
 
 { Does the stored block carry anything this index cannot vouch for -- an inbound
   entry naming a unit it does not hold, or a whole label it cannot produce? }
@@ -1017,9 +1037,8 @@ begin
   Result:= False;
   if (AStore = nil) or (ABlock = '') then Exit;
 
-  for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
-    if LabelContent(ABlock, UNVOUCHABLE_LABELS[I]) <> '' then Exit(True);
-
+  { `Covered by:` is an inbound label since D28, so a test this index cannot
+    see is found by the entry loop below -- no whole-label special case. }
   ParseBlock(ABlock, SIn, SRes);
   try
     for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
@@ -1329,27 +1348,27 @@ begin
   for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
     if (ParaLabelCount(StoredCmp, INBOUND_LABELS[I]) > 1) or
        (ParaLabelCount(FreshCmp,  INBOUND_LABELS[I]) > 1) then
+    begin
+      { EXCEPT when this project renders NOTHING for the symbol and the stored
+        block holds entries only another project could have written -- the
+        empty-render forgiveness below, taken before the byte compare because
+        with no render there is nothing to set-compare and nothing the writer
+        will touch. Needed since D28: `Covered by:` is an inbound label now, so
+        a block carrying two of them (run_doc_drift_unseen_units' CASE-A plants
+        a second beside the engine-written one) reached this byte compare and
+        reported drift on a block the writer leaves alone. }
+      if IsShared and (CollapseWs(StripPara(FreshCmp)) = '') and
+         HoldsForeignInboundEntries(AStored, AStore) then Exit(False);
       Exit(CollapseWs(StoredCmp) <> CollapseWs(FreshCmp));
+    end;
 
-  { TAKE OUT ANY LABEL THIS INDEX CANNOT PRODUCE, BEFORE THE PARSE.
-
-    `Covered by:` is not an inbound label, so ParseBlock leaves it in the
-    RESIDUAL -- and the residual is byte-compared. A compile-closure index
-    renders no such line for any symbol, so stored-has / fresh-lacks is
-    GUARANTEED, and the compare fired on every one of DataCopy's 42 blocks:
-    drift that no code change caused and no repair could ever settle. Step 2a's
-    inbound reconciliation could not reach it, because it never looked at the
-    residual.
-
-    Its absence from the fresh render is not evidence about the source; it is
-    the same blind spot as an unseen caller. A label BOTH sides render is still
-    compared normally, and every other residual fact is untouched. }
-  if IsShared then
-  for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
-    if (LabelContent(StoredCmp, UNVOUCHABLE_LABELS[I]) <> '') and
-       (LabelContent(FreshCmp,  UNVOUCHABLE_LABELS[I]) =  '') then
-      StoredCmp:= WithoutParaLabel(StoredCmp, UNVOUCHABLE_LABELS[I]);
-
+  { `Covered by:` NO LONGER NEEDS TAKING OUT BEFORE THE PARSE (D28). While it
+    sat in the RESIDUAL, which is byte-compared, a compile-closure index -- which
+    renders no such line for any symbol -- drifted on every one of DataCopy's 42
+    blocks, so a participating block had the stored line removed first. It is
+    an inbound label now: ParseBlock slices it out of the residual and the
+    per-label reconciliation below grades it entry by entry, tags included,
+    exactly like an unseen caller. }
   ParseBlock(StoredCmp, SIn, SRes);
   try
     ParseBlock(FreshCmp, FIn, FRes);
@@ -1610,8 +1629,9 @@ begin
       { A label the stored block carries and this project does not render AT ALL
         -- every caller of this symbol lives in another project. Without this the
         write drops the line outright and the other project re-adds it forever.
-        It goes directly after the BEGIN marker because 'Called from:'/'Used by:'
-        is the first line RenderFactsBlock emits. }
+        It goes back where the stored block had it, after its surviving stored
+        predecessor (ReinsertAt) -- the top of the block for 'Called from:'/
+        'Used by:', the first lines RenderFactsBlock emits. }
       if BeginAt >= 0 then
         for J:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
         begin
@@ -1621,29 +1641,13 @@ begin
           Body:= ReconcileContent(AStore, SC, '');
           if Body = '' then Continue;
           Prefix:= Copy(Lines[BeginAt], 1, Pos(AUTO_BEGIN, Lines[BeginAt]) - 1);
-          Lines.Insert(BeginAt + 1, Prefix + Lab + ' ' + Body);
-          Changed:= True;
-        end;
-
-      { CARRY OVER A LABEL THIS INDEX CANNOT PRODUCE AT ALL.
-
-        The loop above only re-inserts INBOUND labels, which is where ParseBlock
-        puts its three. `Covered by:` names TESTS, so a compile-closure index
-        renders none of it for any symbol -- and it lives in the residual, so
-        without this the write drops it outright. 23 such lines across 3 units in
-        DataCopy, one of them naming 41 tests.
-
-        Only when the fresh text does not already carry the label: a project that
-        CAN see the tests renders its own, and that one wins. }
-      if BeginAt >= 0 then
-        for J:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
-        begin
-          Lab:= UNVOUCHABLE_LABELS[J];
-          SC := LabelContent(StoredBlockBody(AStoredRemarks), Lab);
-          if SC = '' then Continue;
-          if LabelContent(ADocText, Lab) <> '' then Continue;
-          Prefix:= Copy(Lines[BeginAt], 1, Pos(AUTO_BEGIN, Lines[BeginAt]) - 1);
-          Lines.Insert(BeginAt + 1, Prefix + '<para>' + Lab + ' ' + SC + '</para>');
+          { Wrapped in its own <para>, as the renderer emits every fact since P8.
+            This loop carries `Covered by:` too since D28 -- 23 such lines in
+            DataCopy alone, written wrapped by the whole-label carry-over this
+            replaces -- and an unwrapped re-insert would rewrite each of them on
+            the first run. }
+          Lines.Insert(ReinsertAt(Lines, StoredBlockBody(AStoredRemarks), Lab),
+            Prefix + PARA_OPEN + Lab + ' ' + Body + PARA_CLOSE);
           Changed:= True;
         end;
 
@@ -1682,7 +1686,9 @@ var
 begin
   if UnitInClosure(AStore, AEntry) then Exit(True);
 
-  S:= BareEntry(AEntry);
+  { Without the confidence marker FIRST: ' (unverified)' would otherwise read as
+    a '(file.pas)' part naming a unit called "unverified" (D28). }
+  S:= WithoutConfidence(BareEntry(AEntry));
   P:= Pos('(', S);
 
   { A '(file.pas)' part is BETTER EVIDENCE than any prefix guess, so when one is
@@ -1691,9 +1697,7 @@ begin
     that merely holds `Test.pas` -- overriding an explicit, correct "not mine"
     with a coincidence, and permitting the very deletion this guards. }
   if P > 0 then Exit(False);
-  if EndsText(UNCERTAIN_SUFFIX, S) then
-    S:= TrimRight(Copy(S, 1, Length(S) - Length(UNCERTAIN_SUFFIX)));
-  S:= LowerCase(Trim(S));
+  S:= LowerCase(S);
 
   Names:= ClosureNames(AStore);
   for I:= 1 to Length(S) do
@@ -1726,27 +1730,6 @@ begin
     Inc(Result);
     P:= PosEx(ALabel, AText, P + Length(ALabel));
   end;
-end;
-
-{ The content a label carries in a flattened block, or '' when the label is
-  absent. Slices with FactContentEnd, exactly as ParseBlock does, so a label
-  sitting between two others -- or followed by crefs -- is not swallowed.
-
-  This function carried the tag-stop clause privately for a while and ParseBlock
-  did not, which is precisely how the two drifted apart. They now share it --
-  including the 2026-09-22 rule that the <para> wrapper stays in the text
-  until AFTER the slice, so the fact's own '</para>' bounds it (see ParseBlock). }
-function LabelContent(const AText, ALabel: string): string;
-var
-  P, Stop: Integer;
-  Flat   : string;
-begin
-  Result:= '';
-  Flat  := CollapseWs(AText);
-  P     := Pos(ALabel, Flat);
-  if P = 0 then Exit;
-  Stop:= FactContentEnd(Flat, P + Length(ALabel));
-  Result:= Trim(Copy(Flat, P + Length(ALabel), Stop - P - Length(ALabel)));
 end;
 
 class function TSharedFacts.StoredBlockBody(const AText: string): string;
@@ -1902,13 +1885,9 @@ begin
   if Participates(AStore, AUnitPath, AStored) then
     Exit(ReconcileDropsUnvouchable(AStore, AStored, AFresh));
 
-  { 1. A WHOLE LABEL this index cannot reproduce, present then gone. }
-  for I:= Low(UNVOUCHABLE_LABELS) to High(UNVOUCHABLE_LABELS) do
-    if (LabelContent(AStored, UNVOUCHABLE_LABELS[I]) <> '') and
-       (LabelContent(AFresh,  UNVOUCHABLE_LABELS[I]) =  '') then
-      Exit(True);
-
-  { 2. Inbound labels, entry by entry. }
+  { Inbound labels, entry by entry -- `Covered by:` among them since D28, so a
+    test this index cannot see withholds `fixable` through the same entry test
+    as an unseen caller instead of a whole-label rule. }
   ParseBlock(AStored, SIn, SRes);
   try
     ParseBlock(AFresh, FreshIn, FreshRes);

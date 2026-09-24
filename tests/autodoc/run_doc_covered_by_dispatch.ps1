@@ -48,7 +48,7 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) ("draglint-dispatch-" + [Guid]::NewGuid().ToString('N')))
+  [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) "draglint-dispatch-$PID")
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -65,6 +65,7 @@ $Exe = (Resolve-Path $Exe).Path
 $srcDir = (Resolve-Path "$PSScriptRoot\fixtures\dispatch").Path
 
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
+try {
 $fixDir = Join-Path $WorkDir 'src'
 New-Item -ItemType Directory -Force -Path $fixDir | Out-Null
 Copy-Item (Join-Path $srcDir '*.pas') $fixDir
@@ -178,7 +179,8 @@ Check 'the Covered by: lines are non-empty (the check is not vacuous)' ($before.
 Check 'and identical after reindex + a second apply' `
   (($before -join '|') -eq ($after -join '|')) `
   ("before=" + ($before -join ' // ').Trim() + "  after=" + ($after -join ' // ').Trim())
-
-Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+} finally {
+  Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
