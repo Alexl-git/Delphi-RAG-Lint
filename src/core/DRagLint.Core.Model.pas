@@ -198,7 +198,19 @@ const
   /// (`Pipes.Commands.DispatchCommand(...)`). The reservation for C2.3 + the
   /// IsStub unification MOVES from 1.8.0 to
   /// 1.9.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.8.0-alpha';
+  /// <para>1.8.0-alpha -&gt; 1.9.0-alpha (2026-09-24, D22): rung 3d of
+  /// TCallResolver.ResolveOne binds refs.symbol_id for a `member-access` ref
+  /// that names a unit-level VAR or CONST THROUGH ITS UNIT
+  /// (`uStyles.SkipRefresh`, read or written -- the extractor emits the write
+  /// as a member-access too), the value twin of ENG-16's rung 4b and under
+  /// the same gates: the receiver did not type, names exactly one unit, and
+  /// nothing nearer (local, parameter, class member, `with` target) claims
+  /// its first segment. ValueOnly: no call_edges row, no member_accesses row.
+  /// 4 such unbound sites on ORM3 CLIENT at 1.8.0. DERIVED rows only, no parse
+  /// change: remedy is `index --all --resolve-only`. A MINOR: a new class of
+  /// derived row. The reservation for C2.3 + the IsStub unification MOVES
+  /// from 1.9.0 to 1.10.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.9.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

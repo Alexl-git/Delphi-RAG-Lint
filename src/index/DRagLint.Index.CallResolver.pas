@@ -291,8 +291,9 @@ type
     // them would make every receiver lookup filter by kind.
     FNameToEnumValues: TObjectDictionary<string, TList<TEnumValueDecl>>;
     // 2026-09-23: lowercased name -> unit-level const/var declarations. The
-    // SHADOW set of rule R3(c), never a candidate set -- a hit here makes the
-    // pass DECLINE.
+    // SHADOW set of the enum-value pass's rule R3(c) -- a hit there makes that
+    // pass DECLINE -- and the CANDIDATE set of the bare write pass's unit rungs
+    // (D13, UnitScopeWriteTarget) and of rung 3d (D22, LookupUnitQualifiedValue).
     FNameToUnitValues: TObjectDictionary<string, TList<TSymbol>>;
     // 2026-09-23: per-run counters of the enum-value pass. Every decline is
     // counted by reason, because a pass that answers `certain` or nothing leaves
@@ -1067,6 +1068,54 @@ type
     /// An overload set is narrowed by arity exactly as the bare-call rung does.</remarks>
     function LookupUnitQualifiedRoutine(const ACallRef: TReference; const AReceiver: string;
       AReceiverTypeId: Int64; AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
+
+    { ---- 2026-09-24: D22 (resolver 1.9.0-alpha). ---- }
+
+    /// <summary>The file of the unit a qualified receiver names, provided
+    /// nothing nearer than that unit claims the receiver's first segment -- the
+    /// shared gate of rungs 3d and 4b.</summary>
+    /// <param name="ARef">The ref; FileId, StartLine, StartCol and
+    /// EnclosingSymbolId are consulted.</param>
+    /// <param name="AReceiver">The receiver text verbatim, dotted unit names
+    /// included.</param>
+    /// <returns>The unit's file id, or 0 when the first segment names a nearer
+    /// value (a local, parameter or class member spelled like the unit), an
+    /// enclosing `with` target owns or may own it, or the receiver names no unit
+    /// or two.</returns>
+    /// <remarks>Does NOT test receiver typing: the callers do, first, because a
+    /// receiver that typed is a value and never reaches a unit rung. Unit
+    /// lookups are cached in FUnitFileOf for the pass.</remarks>
+    function UnshadowedUnitFile(const ARef: TReference; const AReceiver: string): Int64;
+    /// <summary>Rung 3d (D22): the unit-level var or const a UNIT-QUALIFIED
+    /// member-access names -- `uStyles.SkipRefresh`, read or written.</summary>
+    /// <param name="ARef">The member-access ref.</param>
+    /// <param name="AReceiver">The receiver text verbatim; '' answers 0.</param>
+    /// <param name="AReceiverTypeId">What receiver typing answered; any value
+    /// but 0 answers 0 -- a receiver that typed is a value, not a unit.</param>
+    /// <returns>The declaration's symbol id, or 0 when UnshadowedUnitFile
+    /// declines or when not exactly ONE unit-level var/const of the name is
+    /// visible in that unit.</returns>
+    /// <remarks>Visible means the unit's INTERFACE, or either section when the
+    /// unit is the referencing file itself -- the rule of rungs 3c and 4b. The
+    /// candidates are FNameToUnitValues (GetUnitLevelValueDecls): consts and
+    /// vars parented directly by a unit, so class constants and record fields
+    /// are never candidates.</remarks>
+    function LookupUnitQualifiedValue(const ARef: TReference; const AReceiver: string;
+      AReceiverTypeId: Int64): Int64;
+    /// <summary>Rungs 3c and 3d of ResolveOne: the VALUE a qualified
+    /// member-access names -- an enum value through its enum type or unit
+    /// (3c), else a unit-level var/const through its unit (3d).</summary>
+    /// <param name="ACallRef">The member-access ref.</param>
+    /// <param name="AReceiver">The receiver text verbatim; the caller has
+    /// already refused ''.</param>
+    /// <param name="AReceiverTypeId">What receiver typing answered: an enum
+    /// type for `TEnum.value`, 0 for a unit receiver.</param>
+    /// <returns>The enum_value, var or const symbol id, or 0 when neither
+    /// rung binds.</returns>
+    /// <remarks>Counts a 3c binding into FEnumStats.Bound; a 3d binding is NOT
+    /// counted there, because it is not an enum value.</remarks>
+    function QualifiedValueTarget(const ACallRef: TReference; const AReceiver: string;
+      AReceiverTypeId: Int64): Int64;
     /// <summary>The TWriteScope of AEnclosingSymbolId, built on first use and
     /// cached for the rest of the pass.</summary>
     /// <param name="AEnclosingSymbolId">A ref's enclosing symbol; 0 gives an
@@ -4567,12 +4616,7 @@ var
   Cands   : TList<TSymbol>;
   Matches : TList<TSymbol>;
   S       : TSymbol       ;
-  First   : string        ;
-  Key     : string        ;
   UnitFile: Int64         ;
-  ClassId : Int64         ;
-  WithType: Int64         ;
-  WithKind: TWithMemberKind;
 begin
   Result     := 0;
   AConfidence:= '';
@@ -4580,24 +4624,7 @@ begin
     the name anywhere, no answer. }
   if (AReceiverTypeId <> 0) or (AReceiver = '')
      or not FNameToRoutines.TryGetValue(LowerCase(ACallRef.NameText), Cands) then Exit;
-  { A nearer VALUE spelled like the unit's first segment is what the compiler
-    reads -- a local of an unindexed type reaches here with TypeId = 0 all the
-    same, and binding its call to the unit's routine would be a wrong fact. }
-  First:= AReceiver;
-  if Pos('.', First) > 0 then First:= Copy(First, 1, Pos('.', First) - 1);
-  if LexicalScopeDeclaresValue(ACallRef.EnclosingSymbolId, First)
-     or EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, First, ClassId) then Exit;
-  { A with target is nearer still (D14). TypeReceiver answers 0 for a receiver
-    the with scope left UNDECIDED, which is exactly the TypeId this rung takes,
-    so without this test an untypable target's member spelled like a unit
-    would be bound to that unit's routine. }
-  if WithScopeAt(ACallRef, ACallRef.StartLine, ACallRef.StartCol, First, WithType, WithKind) <> wvNone then Exit;
-  Key:= LowerCase(AReceiver);
-  if not FUnitFileOf.TryGetValue(Key, UnitFile) then
-  begin
-    UnitFile:= UnitNameToFileId(AReceiver);
-    FUnitFileOf.Add(Key, UnitFile);
-  end;
+  UnitFile:= UnshadowedUnitFile(ACallRef, AReceiver);
   if UnitFile <= 0 then Exit;
   Matches:= TList<TSymbol>.Create;
   try
@@ -4608,6 +4635,107 @@ begin
   finally
     Matches.Free;
   end;
+end;
+
+function TCallResolver.UnshadowedUnitFile(const ARef: TReference; const AReceiver: string): Int64;
+var
+  First   : string         ;
+  Key     : string         ;
+  ClassId : Int64          ;
+  WithType: Int64          ;
+  WithKind: TWithMemberKind;
+begin
+  Result:= 0;
+  { A nearer VALUE spelled like the unit's first segment is what the compiler
+    reads -- a local of an unindexed type reaches here with TypeId = 0 all the
+    same, and binding its member to the unit's declaration would be a wrong fact. }
+  First:= AReceiver;
+  if Pos('.', First) > 0 then First:= Copy(First, 1, Pos('.', First) - 1);
+  if LexicalScopeDeclaresValue(ARef.EnclosingSymbolId, First)
+     or EnclosingClassChainDeclares(ARef.EnclosingSymbolId, First, ClassId) then Exit;
+  { A with target is nearer still (D14). TypeReceiver answers 0 for a receiver
+    the with scope left UNDECIDED, which is exactly the TypeId the unit rungs
+    take, so without this test an untypable target's member spelled like a unit
+    would be bound to that unit's declaration. }
+  if WithScopeAt(ARef, ARef.StartLine, ARef.StartCol, First, WithType, WithKind) <> wvNone then Exit;
+  Key:= LowerCase(AReceiver);
+  if not FUnitFileOf.TryGetValue(Key, Result) then
+  begin
+    Result:= UnitNameToFileId(AReceiver);
+    FUnitFileOf.Add(Key, Result);
+  end;
+end;
+
+function TCallResolver.LookupUnitQualifiedValue(const ARef: TReference; const AReceiver: string;
+  AReceiverTypeId: Int64): Int64;
+var
+  Cands   : TList<TSymbol>;
+  S       : TSymbol       ;
+  UnitFile: Int64         ;
+  Visible : Integer       ;
+  Found   : Int64         ;
+begin
+  Result:= 0;
+  { Same gate order as rung 4b: a receiver that TYPED is a value, then the
+    cheapest test -- no unit-level value of the name anywhere, no answer. }
+  if (AReceiverTypeId <> 0) or (AReceiver = '')
+     or not FNameToUnitValues.TryGetValue(LowerCase(ARef.NameText), Cands) then Exit;
+  UnitFile:= UnshadowedUnitFile(ARef, AReceiver);
+  if UnitFile <= 0 then Exit;
+  Visible:= 0;
+  Found  := 0;
+  for S in Cands do
+    if (S.FileId = UnitFile)
+       and (SameText(S.Section, 'interface') or (UnitFile = ARef.FileId)) then
+    begin
+      Inc(Visible);
+      Found:= S.Id;
+    end;
+  { Two declarations of one name in one unit is conditional compilation the
+    index parsed both branches of: absence beats a guess. }
+  if Visible = 1 then Result:= Found;
+end;
+
+function TCallResolver.QualifiedValueTarget(const ACallRef: TReference; const AReceiver: string;
+  AReceiverTypeId: Int64): Int64;
+var
+  Enums   : TList<TEnumValueDecl>;
+  C       : TEnumValueDecl       ;
+  InUnit  : TArray<TEnumValueDecl>;
+  UnitFile: Int64                ;
+begin
+  Result:= 0;
+  { 3c. Gated on the name map first, so the common case costs one dictionary miss. }
+  if FNameToEnumValues.TryGetValue(LowerCase(ACallRef.NameText), Enums) then
+  begin
+    if (AReceiverTypeId > 0) and (SymbolById(AReceiverTypeId).Kind = skEnum) then
+      Result:= FindChildOfKind(AReceiverTypeId, ACallRef.NameText, [skEnumValue], False).Id
+    else if AReceiverTypeId = 0 then
+    begin
+      { A UNIT-name receiver: `Pipes.Protocol.cmdDelta`. Narrow the candidates to
+        that unit's file -- its interface section, or either section when the
+        unit IS this file -- and bind only when exactly one survives. R3 is moot
+        here: the source qualified the name itself, so nothing shadows it. }
+      UnitFile:= UnitNameToFileId(AReceiver);
+      if UnitFile > 0 then
+      begin
+        InUnit:= nil;
+        for C in Enums do
+          if (C.FileId = UnitFile)
+             and (SameText(C.Section, 'interface') or (UnitFile = ACallRef.FileId)) then
+            InUnit:= InUnit + [C];
+        InUnit:= CollapseIdenticalEnumCopies(InUnit, ACallRef.FileId);
+        if Length(InUnit) = 1 then Result:= InUnit[0].Id;
+      end;
+    end;
+    if Result > 0 then
+    begin
+      Inc(FEnumStats.Bound);
+      Exit;
+    end;
+  end;
+  { 3d. Not an enum value of that receiver: a unit-level var or const. }
+  Result:= LookupUnitQualifiedValue(ACallRef, AReceiver, AReceiverTypeId);
 end;
 
 function TCallResolver.WriteScopeOf(AEnclosingSymbolId: Int64): TWriteScope;
@@ -4948,37 +5076,22 @@ begin
 
     Marks the edge ValueOnly -- refs.symbol_id and nothing else: no call_edges
     row (CanBeCallTarget stays routine-only) and no member_accesses row (an enum
-    value carries no mode and no accessor to record). }
-  if SameText(ACallRef.Kind, 'member-access') and (Rcv <> '')
-     and FNameToEnumValues.ContainsKey(LowerCase(ACallRef.NameText)) then
+    value carries no mode and no accessor to record).
+
+    3d. UNIT-QUALIFIED VAR / CONST (2026-09-24, D22, resolver 1.9.0-alpha), the
+    rest of `Unit.value` and the value twin of rung 4b: `uStyles.SkipRefresh`,
+    read or written -- the extractor emits the write as a member-access too, with
+    no separate `write` ref. 4 unbound sites on ORM3 CLIENT at 1.8.0, all writes.
+    ValueOnly for the same reason (a unit variable has no accessor either). Both
+    rungs live in QualifiedValueTarget, 3c first. }
+  if SameText(ACallRef.Kind, 'member-access') and (Rcv <> '') then
   begin
-    var V: Int64:= 0;
-    if (TypeId > 0) and (SymbolById(TypeId).Kind = skEnum) then
-      V:= FindChildOfKind(TypeId, ACallRef.NameText, [skEnumValue], False).Id
-    else if TypeId = 0 then
+    Target:= QualifiedValueTarget(ACallRef, Rcv, TypeId);
+    if Target > 0 then
     begin
-      { A UNIT-name receiver: `Pipes.Protocol.cmdDelta`. Narrow the candidates to
-        that unit's file -- its interface section, or either section when the
-        unit IS this file -- and bind only when exactly one survives. R3 is moot
-        here: the source qualified the name itself, so nothing shadows it. }
-      var UnitFile: Int64:= UnitNameToFileId(Rcv);
-      if UnitFile > 0 then
-      begin
-        var InUnit: TArray<TEnumValueDecl>:= nil;
-        for var C: TEnumValueDecl in FNameToEnumValues[LowerCase(ACallRef.NameText)] do
-          if (C.FileId = UnitFile)
-             and (SameText(C.Section, 'interface') or (UnitFile = ACallRef.FileId)) then
-            InUnit:= InUnit + [C];
-        InUnit:= CollapseIdenticalEnumCopies(InUnit, ACallRef.FileId);
-        if Length(InUnit) = 1 then V:= InUnit[0].Id;
-      end;
-    end;
-    if V > 0 then
-    begin
-      Result.TargetSymbolId:= V;
+      Result.TargetSymbolId:= Target;
       Result.Confidence    := 'certain';
       Result.ValueOnly     := True;
-      Inc(FEnumStats.Bound);
       Exit;
     end;
   end;

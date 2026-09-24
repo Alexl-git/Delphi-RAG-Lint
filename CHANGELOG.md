@@ -32,6 +32,21 @@ breaking changes** until v1.0.
 
 ### Added
 
+- **Resolver 1.9.0-alpha -- UNIT-QUALIFIED vars and consts bind (D22).** `uStyles.SkipRefresh`
+  -- a unit-level var or const named through its unit, read OR written (the extractor emits
+  `uStyles.SkipRefresh := True` as a `member-access` ref, never a `write` ref) -- now sets
+  `refs.symbol_id` to the declaration: rung 3d of `TCallResolver.ResolveOne`, the value twin of
+  ENG-16's rung 4b and under the same gates (the receiver did not type, names exactly one unit, and no
+  nearer local / parameter / class member / `with` target claims its first segment; interface
+  section, or either section in the unit's own file; exactly one declaration or nothing). Identity
+  only: no call_edges row, no member_accesses row, so `call_edges` counts do not move. ORM3 CLIENT
+  (resolve-only on a copy): 4 unbound sites -> 0 (`uStyles.SkipRefresh`,
+  `uAutoTest.AutoTest_ExtraScenarios`, `uPLANLIST.PlanEditFormHook` x2 -- all writes).
+  `DRAGLINT_RESOLVER_VERSION` 1.8.0-alpha -> 1.9.0-alpha (derived rows only: remedy
+  `index --all --resolve-only`); the C2.3 + IsStub reservation moves to 1.10.0-alpha. No extractor
+  bump (extractor baseline hash re-pinned within 1.19.0-alpha, CallResolver.pas only). Guard:
+  `tests\callresolve\run_unit_qualified_value_bind.ps1` (positive control: locals spelled like the
+  unit -- typed, untyped, under an untypable `with` -- and a shadowed bare name must not bind).
 - **Resolver 1.8.0-alpha -- bare WRITES bind (D13).** A fifth calls-stage stream
   (`ResolveWriteRefs` -> `TCallResolver.ResolveWriteRef`) sets `refs.symbol_id` for a `write` ref
   (`X:= ...`) to the local, parameter, field, property, class var or unit-level var/const it
@@ -391,7 +406,7 @@ breaking changes** until v1.0.
 - **A forward declaration is not a class (C2.5).** `TFoo = class;` completed later in the same unit is folded into the real declaration by every by-name reader: `query --name/--qname` returns ONE row (the real one) with `forward at line N` / `forward_line`; `hover --qname` renders the real declaration; the LSP hover on the stub's line renders the real one led by `forward declaration -> line N`; ClassMetrics measures the real class once (it used to parent every descendant to the stub and anchor `too-many-children` on the stub's line); `outline` keeps both rows and tags the stub `[forward -> line N]` / `forward_target_line`; LSP completion (`FindSymbolsByPrefix`) offers the type once instead of twice. Interface stubs follow the same rule. A lone stub (`TOnlyStub = class;` with no completion in the unit) and an empty class (`TEmpty = class end;`) still count as classes. Resolution-side join -- no schema or extractor change; no re-index needed. The call resolver's cross-store receiver lookup (`CallResolver` declines when a name matches more than one row) now resolves receivers whose RTL type is forward-declared (`TComponent`, `TReader`, `TWriter`, ...) -- an index resolved before this change lacks those edges until `index --all --resolve-only` is run (or the next resolver bump re-resolves everything). `DRAGLINT_RESOLVER_VERSION` was deliberately NOT bumped (spec S8; owner decision pending). New `DRagLint.Core.ForwardStub`; guards `run_forward_stub_pairing.ps1`, `run_forward_stub_is_not_a_class.ps1` (CASE E drives `textDocument/completion`). Spec: `docs\superpowers\specs\2026-09-17-forward-stub-is-not-a-class-design.md`.
 
 ### Known
-- `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.9.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the resolver batch -- the `with` scope above, D12 own-name result writes, D13 bare write binding and ENG-16 unit-qualified calls).
+- `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.10.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the resolver batch -- the `with` scope above, D12 own-name result writes, D13 bare write binding and ENG-16 unit-qualified calls -- then 1.9.0 until 1.9.0-alpha went to D22, unit-qualified var/const binding, on 2026-09-24).
 
 ## v1.16.0-alpha -- 2026-09-22
 

@@ -598,4 +598,21 @@
 #   reserved for 1.9.0-alpha.
 #
 #   Superseded: 1.8.0-alpha|61949c8b6b3a3a00ea3da63fc1ea3ee2417c1d947feacdc0ae6cd37ab056295e
-1.8.0-alpha|963c2b221031461e78192fbd8356323bdc5ea574c6732333742f510e15a1e0a3
+# 2026-09-24: 1.8.0-alpha -> 1.9.0-alpha (D22, feat/fu-resolver-unitvar). Rung 3d
+#   of TCallResolver.ResolveOne binds refs.symbol_id for a `member-access` ref
+#   that names a unit-level VAR or CONST through its unit (`uStyles.SkipRefresh`,
+#   read or written -- the extractor emits the write as a member-access too).
+#   Rungs 3c (enum value) and 3d now live in QualifiedValueTarget; the unit
+#   gate rung 4b used (first-segment shadow + `with` + one unit) moved into
+#   UnshadowedUnitFile, shared by 3d and LookupUnitQualifiedRoutine with the
+#   same order and answers. ValueOnly: no call_edges / member_accesses row.
+#   New rows appear, none move, so this BUMPS. No new store reader (reuses
+#   GetUnitLevelValueDecls), so tests\resolver-surface.txt is unchanged. No
+#   parse change: remedy is index --all --resolve-only. Measured on a copy of
+#   ORM3 CLIENT: member-access bound 10,175 -> 10,179 (the 4 unit-qualified
+#   var sites), every other kind, call_edges and member_accesses unchanged.
+#   The reservation for C2.3 + the IsStub unification moves from 1.9.0 to
+#   1.10.0-alpha. PINNED ON THE BRANCH: the controller re-pins on the merged tree.
+#
+#   Superseded: 1.8.0-alpha|963c2b221031461e78192fbd8356323bdc5ea574c6732333742f510e15a1e0a3
+1.9.0-alpha|6f346f97fb61038af3ca4f703273932a4fe32a8e181b57a41e4ee3149799386c

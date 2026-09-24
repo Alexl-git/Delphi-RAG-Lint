@@ -7,6 +7,11 @@ interface
 
 procedure DoIt(A: Integer);
 
+{ D22: a unit var spelled like Qual.Lib's, so a local named uQualHelp has a
+  wrong target to be bound to if the unit rung ignores the shadow. }
+var
+  GLimit: Integer;
+
 implementation
 
 procedure DoIt(A: Integer);

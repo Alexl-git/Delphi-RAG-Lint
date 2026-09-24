@@ -816,4 +816,13 @@
 #   also changed Storage.SQLite.pas, which this guard hashes. No database was ever built at
 #   1.19.0 before this merge (it is first deployed WITH it), so no stored parse differs.
 #   Superseded: 1.19.0-alpha|171224b0f3f9b1260dcd32f20ceb89a011a09caf04dcedc8fe0286c1c8c734e8
-1.19.0-alpha|54daa201bccc7aa0a3036fe088c7ff16bb2b15d2c83bf0c28c22b1868b99b0c5
+# 2026-09-24: hash re-pinned WITHIN 1.19.0-alpha (D22, feat/fu-resolver-unitvar):
+#   resolver-only change to a file on the hashed surface; no parse moves.
+#   src\index\DRagLint.Index.CallResolver.pas is the only surface file that
+#   changed (rung 3d + the QualifiedValueTarget / UnshadowedUnitFile helpers);
+#   it runs in the resolve pass over stored parses, so no stored parse differs.
+#   Billed on DRAGLINT_RESOLVER_VERSION 1.8.0 -> 1.9.0 instead, per the
+#   1.6.0/1.7.0/1.8.0 precedent. PINNED ON THE BRANCH: the controller re-pins on
+#   the merged tree.
+#   Superseded: 1.19.0-alpha|54daa201bccc7aa0a3036fe088c7ff16bb2b15d2c83bf0c28c22b1868b99b0c5
+1.19.0-alpha|49a3f6e695108601a4a5fc0a58bedc38bc8b3adb9c14696c0dde15b1c4613dc4
