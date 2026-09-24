@@ -656,4 +656,12 @@
 #   PINNED ON THE BRANCH: the controller re-pins on the merged tree.
 #
 #   Superseded: 1.9.0-alpha|ecee9808e711616bc2a1a52826d759e7e4ca639624ae837301e7808d078c8647
-1.9.0-alpha|b2121f749843e1d3d5df61bdd7eb41a36e4c0119c8d78062569b7a8de703d575
+# 2026-09-24: hash re-pinned WITHIN 1.9.0-alpha (final fix wave, plan 2026-09-24):
+#   comment-only edit on the hashed surface; no derivation/parse moves (final fix wave,
+#   plan 2026-09-24). CallResolver.pas: QualifiedValueTarget's <remarks> name the third
+#   counter, FEnumUnitGateDeclined. Storage.SQLite.pas ResolveCallTargets: the var-block
+#   comment on WrittenUnitValues no longer says rung 3d writes are ValueOnly (since R15 they
+#   take WriteMemberAccess). No code token changed; the engine rebuilt from this tree.
+#
+#   Superseded: 1.9.0-alpha|b2121f749843e1d3d5df61bdd7eb41a36e4c0119c8d78062569b7a8de703d575
+1.9.0-alpha|aafb3c523b3de03bb7b46665fac0b0d50bacf1282b64600e3f05e7746e22b17e

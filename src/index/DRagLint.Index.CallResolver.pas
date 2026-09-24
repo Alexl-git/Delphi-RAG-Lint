@@ -1121,7 +1121,12 @@ type
     /// rung binds -- including when a nearer value (a local spelled like the
     /// unit, a `with` target) claims a unit receiver, for BOTH rungs.</returns>
     /// <remarks>Counts a 3c binding into FEnumStats.Bound and a 3d binding into
-    /// FUnitValueBound -- never both, because a unit var is not an enum value.</remarks>
+    /// FUnitValueBound -- never both, because a unit var is not an enum value.
+    /// A third counter, FEnumUnitGateDeclined, is moved by rung 3c alone: the
+    /// name is a known enum value, the receiver names one unit, and
+    /// UnshadowedUnitFile still declined it (a nearer value or a `with` target
+    /// claims the receiver) -- the only trace such a decline leaves. Rung 3d's
+    /// own gate declines are not counted.</remarks>
     function QualifiedValueTarget(const ACallRef: TReference; const AReceiver: string;
       AReceiverTypeId: Int64): Int64;
     /// <summary>The TWriteScope of AEnclosingSymbolId, built on first use and

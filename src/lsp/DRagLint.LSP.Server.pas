@@ -917,9 +917,11 @@ begin
         then this loop opened every --db WRITABLE and ran Migrate (DDL), so each
         editor held a writable, migrated connection to the real project index
         and the 2.98 GB library index, and an editor on an OLDER engine migrated
-        the database it was only meant to read. query_only is the mechanism
-        (a true read-only open fails on WAL); the journal mode is the one the
-        file already has (HeaderSaysWal), so the header is left alone too.
+        the database it was only meant to read. Since 2026-09-24 (D25) the open
+        is a true SQLITE_OPEN_READONLY with query_only on top -- MEASURED safe on
+        a WAL index, disproving the old note here that it fails: the failure was
+        FireDAC's default journal_mode pragma, and the journal mode is now the
+        one the file already has (HeaderSaysWal), so the header is left alone too.
 
         A reader does not migrate. A database whose schema predates this engine
         is REFUSED with the same actionable line the read verbs print, and the

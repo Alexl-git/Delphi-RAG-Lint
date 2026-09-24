@@ -12323,9 +12323,11 @@ var
     call_edges row, so folding it into Written would inflate the edge count that
     existing guards and the M4 no-collateral check both read. }
   WrittenValues : Int64     ; { Shape B -- qualified enum values bound by the main stream }
-  { 2026-09-24 (D22, ruling R13): rung 3d's unit-qualified var/const bindings are
-    ValueOnly writes too, but NOT enum values. Counted apart, so the Shape B
-    number and its reconciliation keep meaning what their labels say. }
+  { 2026-09-24 (D22, rulings R13/R15): rung 3d's unit-qualified var/const bindings
+    are NOT enum values and NOT ValueOnly -- they carry a MemberMode and take the
+    WriteMemberAccess path (refs.symbol_id plus a member_accesses row). Counted
+    apart from Written and from Shape B, so the edge count, the Shape B number
+    and its reconciliation keep meaning what their labels say. }
   WrittenUnitValues: Int64  ; { rung 3d -- unit-qualified vars/consts bound by the main stream }
   UnitValuesBefore : Int64  ; { Resolver.UnitValueBound before this ref's ResolveOne       }
   EnumCandidates: Int64     ; { Shape A -- bare `read` rows examined by the enum stream   }

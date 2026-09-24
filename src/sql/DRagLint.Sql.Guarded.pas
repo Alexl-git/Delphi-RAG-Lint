@@ -21,11 +21,14 @@ unit DRagLint.Sql.Guarded;
         interrupted mid-step rather than after it finishes.
 
     The connection this guard is installed on is opened by
-    TSQLiteSymbolStore.Connect(.., AReadOnly=True), which has ALREADY set
-    `PRAGMA query_only = ON` and a busy_timeout. That is a THIRD, independent
-    layer, and the reason this unit does not repeat it. Do not "fix" that open
-    to use FireDAC OpenMode=ReadOnly -- the comment at its site records why a
-    WAL database cannot be opened that way.
+    TSQLiteSymbolStore.Connect(.., AReadOnly=True) through ConnectReadOnly,
+    which has ALREADY opened it SQLITE_OPEN_READONLY (FireDAC OpenMode=
+    ReadOnly) and set `PRAGMA query_only = ON` and a busy_timeout. Those are
+    further, independent layers, and the reason this unit does not repeat
+    them. A WAL database CAN be opened read-only: measured 2026-09-24 (D25,
+    the probe table in CHANGELOG v1.18.0-alpha), the old "disk I/O error" was
+    FireDAC's connect-time `journal_mode = DELETE`, and ConnectReadOnly names
+    the header's own journal mode instead.
 
   FAIL CLOSED, ALWAYS
     Create RAISES when the native handle cannot be reached. A guard that

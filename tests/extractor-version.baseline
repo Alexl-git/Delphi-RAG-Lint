@@ -844,4 +844,9 @@
 #   round edits Storage.SQLite.pas ResolveCallTargets (not on this surface).
 #   Resolve pass only; no stored parse differs.
 #   Superseded: 1.19.0-alpha|0163b9b9ba6165d1e35a7bc019fe39e9ae32877595d6babd5e5439c407e88396
-1.19.0-alpha|93bf4e4e679ab7f7d44339e4041fdb463be1437962a2ce6892fe81333edc7191
+# 2026-09-24: hash re-pinned WITHIN 1.19.0-alpha again (final fix wave, plan 2026-09-24):
+#   comment-only edit on the hashed surface; no derivation/parse moves (final fix wave,
+#   plan 2026-09-24). CallResolver.pas: QualifiedValueTarget's <remarks> name
+#   FEnumUnitGateDeclined. No code token changed; no stored parse differs.
+#   Superseded: 1.19.0-alpha|93bf4e4e679ab7f7d44339e4041fdb463be1437962a2ce6892fe81333edc7191
+1.19.0-alpha|376c7143274119aa23760b9d41092862c6b7d24b426d7367cf5debb6286aa8b8
