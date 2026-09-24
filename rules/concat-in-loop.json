@@ -3,5 +3,5 @@
   "severity": "info",
   "message": "S := S + X inside a loop is O(n^2) -- each '+' allocates a new string. Accumulate with TStringList or use string.Join.",
   "warn_capture": "warn",
-  "require_ancestor": ["for", "while", "repeat"]
+  "require_ancestor": ["for", "foreach", "while", "repeat"]
 }

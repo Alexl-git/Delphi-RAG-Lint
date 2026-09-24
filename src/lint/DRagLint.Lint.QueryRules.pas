@@ -577,9 +577,10 @@ begin
         for ExVal in ExArr do
           FExcludeArgOf:= FExcludeArgOf + [ExVal.Value];
       { Optional structural REQUIREMENT ("require_ancestor"): the match counts
-        only inside one of these node kinds. E.g. concat-in-loop lists the three
-        loop kinds, so `S := S + X` executed once no longer reports a quadratic
-        cost that a single execution cannot have. }
+        only inside one of these node kinds. E.g. concat-in-loop lists the four
+        loop kinds (for / foreach / while / repeat), so `S := S + X` executed
+        once no longer reports a quadratic cost that a single execution cannot
+        have. `foreach` is the for-in node; it was missing until D20. }
       ExArr:= JSON.GetValue('require_ancestor') as TJSONArray;
       if Assigned(ExArr) then
         for ExVal in ExArr do

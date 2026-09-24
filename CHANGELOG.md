@@ -146,6 +146,15 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **D20 -- `concat-in-loop` fires inside `for X in Y do`.** The sidecar's `require_ancestor` listed
+  `for`, `while`, `repeat` but not `foreach`, the grammar's for-in node, so a for-in accumulation
+  never reported. Rules-only change (`rules\concat-in-loop.json`); the L6 reset predicate already
+  knew `foreach`. Guard: `tests\autotest\run_concat_in_loop_for_in.ps1`.
+- **D21 -- `function-result-not-set` accepts a METHOD assigning its own name.** The flow var table
+  aliased the header's `name` text (`tfoo.bar`) to Result, so `Bar := 1` in `TFoo.Bar` was not a
+  Result write and the rule warned on a correct method. It now also aliases the bare last segment
+  with generic lists stripped (`TBox<T>.Get` -> `get`). Lint-side only. Guard:
+  `tests\autotest\run_function_result_own_name_method.ps1`.
 - **`lint-all --rule X` runs only what can emit X (D17).** Every per-file checker, the whole `.scm`
   catalogue and every project-wide phase (project rules, class metrics, doc-drift, missing-doc,
   duplicate-code, interface cycles, layering, unit-not-in-dpr, used-unit-resolvable) ran for any `--rule`
