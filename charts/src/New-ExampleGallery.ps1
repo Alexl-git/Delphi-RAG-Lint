@@ -147,7 +147,7 @@ $EX = @(
   # PLAN-last-four-verbs. Every target below is one the gate pins, so the numbers
   # in these notes are the gate's numbers, not a second measurement.
   @{ Q='exception-paths';  T='uJobList.ViewModel.TJobListViewModel.BuildSchema'; D=$CLI; A=@{}; Why='a SOLID catch two levels up: EDatabaseError is caught at LoadAllAsync:632, where the call sits inside the try (checked by a nesting scan); 3 handlers that do not guard the call are counted, not drawn' }
-  @{ Q='exception-paths';  T='MStreams.TABZMemoryStream.ReadBuffer';            D=$CLI; A=@{}; Why='fan-in: 139 callers walked. EReadError is caught on 2 call edges in AutoTestSetupDefaults, which ALSO lets it escape on a third -- one caller, both answers' }
+  @{ Q='exception-paths';  T='MStreams.TABZMemoryStream.ReadBuffer';            D=$CLI; A=@{}; Why='fan-in: 140 callers walked, 139 evaluated for EReadError. It is caught on 2 call edges in AutoTestSetupDefaults, which ALSO lets it escape on a third -- one caller, both answers' }
   @{ Q='exception-paths';  T='BASICSF.CopyRecords';                             D=$CLI; A=@{}; Why='the source-only rows: bare except, raise; and raise E, drawn dashed [inferred] because directive state is not evaluated' }
 
   @{ Q='consumers';        T='CAUSFAIL';         D=$SRV; A=@{SqlDbPath=$SQL}; Why='table form: 1 certain writer, 1 INFERRED reader (sql_reads misses SQL split over SQL.Add lines, so both counts are printed), 3 triggers' }
@@ -364,7 +364,7 @@ foreach ($c in ($CATALOGUE | Where-Object { $_.St -ne 'shipped' })) {
 
 [void]$sb.AppendLine('<div class="note"><p><b>These charts were generated against frozen clones, not the live corpus.</b> ' +
   'The engine deployed in this worktree is older than the indexes it is reading ' +
-  '(engine 1.16.0-alpha / resolver 1.5.1-alpha against v=1.17.0-alpha / r=1.6.0-alpha), ' +
+  '(engine 1.16.0-alpha / resolver 1.5.1-alpha against clones at v=1.18.0-alpha / r=1.6.0-alpha), ' +
   'which yields smaller confident answers rather than errors. The callee direction is ' +
   'affected; callers, uses-edges, DFM events, DI bindings, purity facts and the ' +
   'dependency report are not. Anything on this page reached through <code>call_edges</code> ' +

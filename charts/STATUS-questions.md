@@ -56,7 +56,7 @@ interface / project / command constant / wire field / db column / any symbol.**
 | `change-impact` | method / type | `Emit-ChangeImpact.ps1` | 9 routines / 1 unit; a TYPE reaches 591 over 174 units (capped) |
 | `tested-by` | any symbol | `Emit-TestedBy.ps1` | 11 / 8 / 13 covering tests, computed from 71 test methods |
 
-| `exception-paths` | method | `Emit-ExceptionPaths.ps1` | BuildSchema: EDatabaseError caught at LoadAllAsync:632 (call inside the try); ReadBuffer: caught on 2 edges, escapes on 3 path ends, 139 callers walked |
+| `exception-paths` | method | `Emit-ExceptionPaths.ps1` | BuildSchema: EDatabaseError caught at LoadAllAsync:632 (call inside the try); ReadBuffer: caught on 2 edges, escapes on 3 path ends; 140 callers walked, 139 evaluated for EReadError |
 | `consumers` | table / column | `Emit-Consumers.ps1` | CAUSFAIL (SERVER): 1 certain writer, 1 inferred reader, 3 triggers; FOLDERS 2 declarations, newest 79 columns |
 | `feeds-from` | control | `Emit-FeedsFrom.ps1` | colREASON: 5 graded hops to CAUSFAIL.REASON; 267 of 808 field-bound CLIENT controls reach one table |
 | `lands-where` | ORM property / field / control | `Emit-LandsWhere.ps1` | TmcCAUSFAIL.REASON: 4 server rows, 1 trigger, 1 client binding; convention 1,991 of 1,997 |
@@ -76,25 +76,35 @@ quoted:
   `[certain]`, upper-case SQL-verb literals `[inferred]`, because `sql_reads`
   misses SQL split over several `SQL.Add` lines (engine D18). The schema is the
   SQL SCRIPTS, collapsed on name with the newest file winning -- 5 live `PDF_*`
-  tables are absent and quoted identifiers are not extracted.
+  tables are absent and quoted identifiers are not extracted. `[by name]`
+  literals (equal to the table name, exact case) are MENTIONS, drawn in a
+  neutral cluster with no read arrow (R15); case-only matches are counted and
+  named, not drawn. The header counts reading / writing ROUTINES; unit-level
+  SQL literals are counted per unit, apart.
 * `feeds-from` -- DFM DataSource -> dataset -> view model -> TABLE.COLUMN, every
   hop graded; it STOPS (never guesses) on a dangling module, an interface-typed
-  view model or several candidate tables. Measured coverage per control, not
+  view model or several candidate tables. Table-name literals match in UPPER
+  case (the SQL convention); a literal equal to a table name only
+  case-insensitively (`'DueIN'`, a computed-field name) is named on the hop and
+  not taken -- measured, every such literal on CLIENT is not a table reference. Measured coverage per control, not
   per datasource: 267 of 808 reach one table, 426 sit under a dangling module.
 * `lands-where` -- the TABLE.COLUMN hop is a naming CONVENTION
   (`Tmc<T>.P` -> `T.P`), drawn `[inferred]` with its coverage measured and
   printed on every chart (1,991 of 1,997). Reads THREE clones (CLIENT, SERVER,
   SQL).
 
-**Column states** `consumers` and `lands-where` can show for a named column:
+**Column states** `consumers`, `feeds-from` and `lands-where` can show for a named
+column -- decided by ONE function, `Get-SqlColumnState` (Emit-Common), so the three
+cannot disagree, in this precedence order:
 
 | state | means |
 |---|---|
-| `column` | declared in the newest script declaration of the table |
-| `older-only` | declared only in an OLDER declaration of the table (the newest drops it) |
-| `quoted` | declared as a QUOTED identifier (`"TABLE"`, MS1.SQL:3848) -- the SQL index drops quoted identifiers (`INBOX-sql-index-drops-quoted-identifiers.md`), so it is found by a source scan, `[inferred]` |
-| `server-sql` | in NO script declaration, but the server's own SQL names it (`STATIONS.GRIDS`, uSTATIONS_SERVER.PAS:129) -- the scripts lag the schema |
-| `not-a-column` | named by no script and no server SQL -- computed or UI-only (`INSPRSLT.DistHist`) |
+| `column` | extracted as a column of the newest script declaration of the table |
+| `quoted` | a QUOTED identifier in the newest declaration (`"TABLE"`, MS1.SQL:3848; `"ACTION"`, MS1.SQL:2243) -- the SQL index drops quoted identifiers (`INBOX-sql-index-drops-quoted-identifiers.md`), so it is found by a source scan, `[inferred]` |
+| `older-only` | extracted only from an OLDER declaration of the table; not extracted from, nor quoted in, the newest |
+| `server-sql` | not extracted, not quoted, but SQL in the Delphi index names it (`STATIONS.GRIDS`; lands-where searches the server DataService, consumers every routine of `-DbPath` that names the table) -- the scripts lag the schema |
+| `[stale source]` | the newest declaration's script differs from the indexed copy, so it was NOT scanned for a quoted identifier -- whether it is a column is NOT known; never rendered as an absence |
+| `not-a-column` | not extracted, not quoted, named by none of the SQL searched: lands-where says computed or UI-only (`INSPRSLT.DistHist`), consumers refuses ("not extracted as a column by the SQL index ..."), feeds-from counts it `not-column` |
 
 **Twenty-five questions, TWENTY-TWO emitters** -- `what-it-calls` is a `-Direction`
 switch, `who-writes`/`who-reads` are one `-Mode` switch, and both

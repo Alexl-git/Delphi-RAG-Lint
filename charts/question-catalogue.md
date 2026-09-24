@@ -99,12 +99,16 @@ New-DiagramArtifact.ps1 -Question lands-where -Target <Tmc/Imc property | field 
 | `feeds-from` | where a data-aware control's value comes from, hop by hop, to TABLE.COLUMN, plus code that re-points or re-binds it | stops rather than guess on a dangling module, an interface-typed view model or several candidate tables; per-control coverage printed (267 of 808 reach one table on CLIENT) |
 | `lands-where` | where an ORM property (or DFM-bound field) lands: the server's write and read path, TABLE.COLUMN, the triggers touching it, and the client bindings | TABLE.COLUMN is a naming convention, `[inferred]`, with measured coverage printed (1,991 of 1,997); positional `Params[i]` / `Fields[i]` are not visible |
 
-Column states (`consumers` column form, `lands-where`): **column** (newest
-declaration), **older-only** (only an older declaration of the table has it),
-**quoted** (a quoted identifier the SQL index drops --
-`INBOX-sql-index-drops-quoted-identifiers.md`; found by source scan,
-`[inferred]`), **server-sql** (in no script, but the server's SQL names it),
-**not-a-column** (named by nothing: computed or UI-only).
+Column states (`consumers` column form, `feeds-from`, `lands-where` -- one
+function, `Get-SqlColumnState`): **column** (extracted from the newest
+declaration), **quoted** (a quoted identifier in the newest declaration, which the
+SQL index drops -- `INBOX-sql-index-drops-quoted-identifiers.md`; found by source
+scan, `[inferred]`), **older-only** (extracted only from an older declaration),
+**server-sql** (not extracted, not quoted, but SQL in the Delphi index names it),
+**[stale source]** (the script differs from the index: not scanned, NOT known --
+never shown as an absence), **not-a-column** (named by none of it: lands-where says
+computed or UI-only; consumers refuses, worded "not extracted as a column by the
+SQL index").
 
 ## Branch policy for the trace questions -- decided 2026-09-22
 

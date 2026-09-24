@@ -104,8 +104,10 @@ New-DiagramArtifact.ps1 -Question lands-where -Target <Tmc/Imc property | field 
   triggers. TABLE.COLUMN is a naming convention, `[inferred]`, with its
   measured coverage printed.
 
-Column states they can show: `column`, `older-only`, `quoted` (the SQL index
-drops quoted identifiers), `server-sql`, `not-a-column`.
+Column states they can show (one function, `Get-SqlColumnState`, decides for
+`consumers`, `feeds-from` and `lands-where`): `column`, `quoted` (the SQL index
+drops quoted identifiers), `older-only`, `server-sql`, `[stale source]` (not
+scanned -- not known, never an absence), `not-a-column`.
 
 ### Engine defects the charts disclose
 
