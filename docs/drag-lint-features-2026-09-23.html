@@ -105,7 +105,7 @@ routine -- <code>effect_free</code>, <code>effect_summary</code> and
 <div class="new">
 <h3>Three rules built on the new facts</h3>
 <p>Proposed, built and merged the same day the facts they stand on landed. The
-catalogue moves to <b class="f">186 rules</b> (133 built-in, 157 on by default).</p>
+catalogue moves to <b class="f">188 rules</b> (135 built-in, 158 on by default).</p>
 <ul>
 <li><code>enum-read-inside-with</code> (bug pattern, warning, <b class="f">on by default</b>) -- a bare name inside a <code>with</code> body names both an enum value and a member of the <code>with</code> target: the compiler binds the member, the index records the enum value. The one wrong-binding channel this release measured, now reported where it happens.</li>
 <li><code>assert-with-side-effect</code> (project-wide, warning, off by default) -- a routine with a <em>proven</em> effect is called inside <code>Assert</code>; Release builds compile <code>Assert</code> out, so the effect happens in Debug only. Needs an index resolved with the purity stage; an unknown effect never fires.</li>
@@ -211,8 +211,8 @@ Because this changes which branches are parsed, every index re-parses once (abou
 </ul>
 
 <h2>4. Linting and auto-fix</h2>
-<p><b class="f">186 rules across 16 categories</b> -- 133 built-in and 53 external
-<code>.scm</code> rules, <b class="f">157 enabled by default</b>, and <b class="f">23 with an automatic
+<p><b class="f">188 rules across 16 categories</b> -- 135 built-in and 53 external
+<code>.scm</code> rules, <b class="f">158 enabled by default</b>, and <b class="f">23 with an automatic
 fix</b>. Rules can be enabled, disabled, re-prioritised and parameterised per
 project; individual findings can be suppressed with an accountable, reviewed
 annotation rather than silently ignored. Every rule is listed in Appendix C.</p>
@@ -225,9 +225,9 @@ annotation rather than silently ignored. Every rule is listed in Appendix C.</p>
 <tr><td>Data flow, concurrency and source integrity</td><td class="n">16</td><td>Use before assignment, <code>Result</code> or <code>out</code> parameters not set on every path, values overwritten before being read, write-only locals, loop variable used after the loop, UI access from a background thread, <code>Sleep</code> on the VCL main thread, <code>with</code> silently shadowing an outer symbol, an enum value read inside <code>with</code> that the compiler binds to a same-named member <b>(new)</b>, destructive actions gated on a file-existence check, unnamed literal constants, and syntax or unbalanced <code>begin</code> / <code>end</code> errors</td></tr>
 <tr><td>Dead code and project hygiene</td><td class="n">38</td><td>Unreachable and unused code (12), project-wide checks that only a whole-project run can see, such as unused public symbols, unused units and -- new, off by default -- discarded effect-free results, query-named routines with side effects, side effects inside <code>Assert</code>, and <code>{$IFDEF}</code> symbols no build defines (<b class="f">19</b>), structural issues (7)</td></tr>
 <tr><td>Complexity and maintainability</td><td class="n">30</td><td>Complexity limits (11), size and shape metrics (8), refactoring opportunities (11)</td></tr>
-<tr><td>Conventions and documentation</td><td class="n">24</td><td>Naming conventions (10), documentation completeness and accuracy (5), review markers (3), other (6)</td></tr>
+<tr><td>Conventions and documentation</td><td class="n">26</td><td>Naming conventions (10), documentation completeness and accuracy (5), review markers (5), other (6)</td></tr>
 <tr><td>Security, platform and data access</td><td class="n">23</td><td>Security issues including injection and unsafe API use (10), platform and portability (10), FireDAC-specific data-access (3)</td></tr>
-<tr class="tot"><td>Total</td><td class="n">186</td><td>8 groups, drawn from the engine's 16 rule categories</td></tr>
+<tr class="tot"><td>Total</td><td class="n">188</td><td>8 groups, drawn from the engine's 16 rule categories</td></tr>
 </table>
 
 <ul>
@@ -513,7 +513,7 @@ chapter 12.</p>
 <p>Nine rules proposed on 23 September after the enum-value binding, purity v2 and the
 full define profile landed; none duplicated one of the 183 rules shipped at the time. Owner
 ruling: build 1, 4 and 8 now -- all three have since SHIPPED in 1.17.0-alpha (catalogue
-now 186); the other six stay proposed.</p>
+now 188 with the two review-marker rules); the other six stay proposed.</p>
 <table>
 <tr><th>Rule id</th><th>What it would catch</th><th>Fact it needs</th><th>Status</th></tr>
 <tr><td><code>enum-read-inside-with</code></td>
@@ -562,8 +562,8 @@ facts enable. Nothing designed; some overlap A.1.</p>
 <tr><td><code>enum-ordinal-persisted</code></td><td>An enum whose values are written to storage and whose declared order has changed -- saved data silently changes meaning.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
 <tr><td><code>enum-bare-read-in-with</code></td><td>Broader, off-by-default form of <code>enum-read-inside-with</code>.</td><td><span class="st st-prop">PROPOSED</span> (superseded by A.1 rule 1 if that ships)</td></tr>
 <tr><td><code>enum-bare-read-scoped</code></td><td>A bare read of a scoped-enum value. Needs the extractor to record scopedness.</td><td><span class="st st-prop">PROPOSED</span> -- blocked on a fact</td></tr>
-<tr><td><code>review-marker-placeholder-hash</code></td><td>A <code>dl:ok</code> review marker whose verification hash is a placeholder and therefore suppresses nothing.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
-<tr><td><code>review-marker-reason-unreviewed</code></td><td>Require a review date inside a <code>dl:ok</code> justification so a stale reason is detectable.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
+<tr><td><code>review-marker-placeholder-hash</code></td><td>A <code>dl:ok</code> review marker whose verification hash is a placeholder and therefore suppresses nothing.</td><td><span class="st st-ship">SHIPPED</span> 23 September, on by default</td></tr>
+<tr><td><code>review-marker-reason-unreviewed</code></td><td>Require a review date inside a <code>dl:ok</code> justification so a stale reason is detectable.</td><td><span class="st st-ship">SHIPPED</span> 23 September, off by default; stamp syntax <code>REVIEWED yyyy-mm-dd</code></td></tr>
 <tr><td><code>cycle-participant-unit</code></td><td>Per-file finding: this unit is part of a dependency cycle, with the narrowest fix from the cycle report.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
 <tr><td><code>opaque-to-analysis</code></td><td>A routine where most non-library calls cannot be resolved, so impact and dead-code answers are blind there.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
 <tr><td>Effect-free call in a loop</td><td>An effect-free call inside a loop with unchanging arguments -- a provable candidate to hoist.</td><td><span class="st st-prop">PROPOSED</span></td></tr>
@@ -824,7 +824,7 @@ are not repeated per row. Commands marked <b>(new)</b> or <b>(extended)</b> chan
 </table>
 
 
-<h2>Appendix C -- Lint rule catalogue (all 186 rules)</h2>
+<h2>Appendix C -- Lint rule catalogue (all 188 rules)</h2>
 <p class="sub">Generated from <code>drag-lint rules --json</code> (1.17.0-alpha, merged build of 23 September 2026). "On" means enabled by default; an off rule runs with <code>--enable &lt;id&gt;</code> or a profile. "Fix" marks the rules with an automatic fix. Source "scm" is an external tree-sitter query rule shipped in <code>rules\</code>; "builtin" is compiled into the engine.</p>
 <h3>C.1 By engine category</h3>
 <table><tr><th>Category</th><th>Covers</th><th class="n">Rules</th><th class="n">On</th><th class="n">Fix</th></tr>
@@ -841,10 +841,10 @@ are not repeated per row. Commands marked <b>(new)</b> or <b>(extended)</b> chan
 <tr><td><code>project-wide</code></td><td>Checks only a whole-project run can see</td><td class="n">19</td><td class="n">15</td><td class="n">0</td></tr>
 <tr><td><code>refactoring</code></td><td>Refactoring opportunities (mostly off by default)</td><td class="n">11</td><td class="n">1</td><td class="n">0</td></tr>
 <tr><td><code>resource-lifetime</code></td><td>Object and resource lifetime</td><td class="n">8</td><td class="n">7</td><td class="n">1</td></tr>
-<tr><td><code>review-markers</code></td><td>Health of dl:ok review annotations</td><td class="n">3</td><td class="n">3</td><td class="n">0</td></tr>
+<tr><td><code>review-markers</code></td><td>Health of dl:ok review annotations</td><td class="n">5</td><td class="n">4</td><td class="n">0</td></tr>
 <tr><td><code>security</code></td><td>Injection, unsafe APIs, secrets</td><td class="n">10</td><td class="n">10</td><td class="n">0</td></tr>
 <tr><td><code>structure</code></td><td>Structural issues</td><td class="n">7</td><td class="n">6</td><td class="n">0</td></tr>
-<tr class="tot"><td>Total</td><td>16 categories; 133 built-in + 53 scm</td><td class="n">186</td><td class="n">157</td><td class="n">23</td></tr></table>
+<tr class="tot"><td>Total</td><td>16 categories; 135 built-in + 53 scm</td><td class="n">188</td><td class="n">158</td><td class="n">23</td></tr></table>
 <h3>C.2 <code>bug-patterns</code> (54)</h3>
 <table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
 <tr><td><code>bare-except</code></td><td>Bare except (no 'on E: ... do') catches every exception, even EOutOfMemory -- catch a specific exception class.</td><td>info</td><td>on</td><td></td><td>scm</td></tr>
@@ -1050,8 +1050,10 @@ are not repeated per row. Commands marked <b>(new)</b> or <b>(extended)</b> chan
 <tr><td><code>unprotected-object-free</code></td><td>Object created + freed without try-finally</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
 <tr><td><code>use-after-free</code></td><td>Object used after X.Free</td><td>warning</td><td>on</td><td></td><td>builtin</td></tr>
 </table>
-<h3>C.15 <code>review-markers</code> (3)</h3>
+<h3>C.15 <code>review-markers</code> (5)</h3>
 <table class="small"><tr><th>Rule id</th><th>Title</th><th>Severity</th><th>Default</th><th>Fix</th><th>Source</th></tr>
+<tr><td><code>review-marker-placeholder-hash</code></td><td>dl:ok carries a placeholder or malformed @hash (e.g. @0000) -- it suppresses nothing; re-record it with <code>allow</code></td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
+<tr><td><code>review-marker-reason-unreviewed</code></td><td>dl:ok reason has no REVIEWED &lt;yyyy-mm-dd&gt; stamp, or it is older than max_age_days (default 180) -- re-read the reason and re-stamp it</td><td>hint</td><td>off</td><td></td><td>builtin</td></tr>
 <tr><td><code>review-marker-malformed</code></td><td>dl:ok names something that is not a rule id -- the marker suppresses nothing</td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
 <tr><td><code>review-marker-stale</code></td><td>dl:ok marker no longer matches the line it reviews -- the finding is reported again; re-review and re-mark</td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
 <tr><td><code>review-marker-unused</code></td><td>dl:ok marker records a finding that no longer occurs -- remove the marker</td><td>hint</td><td>on</td><td></td><td>builtin</td></tr>
@@ -1091,9 +1093,9 @@ all taken on 23 September 2026 against drag-lint 1.17.0-alpha (build 2026-09-23
 them, with their caveats. The roadmap in Appendix A is compiled from the project's
 open INBOX notes, backlogs, plans and design specs on that date, not a selection.<br><br>
 The eight rule groups in chapter 4 are a presentation grouping over the engine's 16
-categories; every one of the 186 rules appears in exactly one group, and the
-subtotals sum to 186. The change from the previous edition's 181 is five new rules:
-four project-wide (15 to 19) and one bug pattern (53 to 54), all listed in "What is new". Run <code>drag-lint rules</code> for the
+categories; every one of the 188 rules appears in exactly one group, and the
+subtotals sum to 188. The change from the previous edition's 181 is seven new rules:
+four project-wide (15 to 19), one bug pattern (53 to 54) and two review-marker rules (3 to 5), all listed in "What is new". Run <code>drag-lint rules</code> for the
 authoritative, always-current catalog.
 </p>
 
