@@ -30,6 +30,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -43,7 +44,7 @@ function WriteAscii([string]$Path, [string]$Text) {
 }
 
 $exePath = (Resolve-Path $Exe).Path
-$work = 'C:\TEMP\draglint_drift_order'
+$work = "C:\TEMP\draglint_drift_order_$PID"
 if (Test-Path $work) { [System.IO.Directory]::Delete($work, $true) }
 New-Item -ItemType Directory $work | Out-Null
 $src = Join-Path $work 'ordfix.pas'
@@ -189,3 +190,7 @@ finally { Pop-Location }
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("C:\TEMP\draglint_drift_order_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

@@ -48,8 +48,9 @@
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$Fixture = "$PSScriptRoot\..\lint\try-handler-reads-body-local.pas",
-  [string]$WorkDir = "$env:TEMP\draglint_obr_try_handler"
+  [string]$WorkDir = "$env:TEMP\draglint_obr_try_handler_$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$n, [bool]$ok, [string]$d = '') {
@@ -163,3 +164,7 @@ Write-Host ''
 if ($script:Failed) { Write-Host 'TRY-HANDLER GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'TRY-HANDLER GUARD: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint_obr_try_handler_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

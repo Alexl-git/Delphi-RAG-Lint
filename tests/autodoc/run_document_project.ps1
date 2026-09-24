@@ -30,6 +30,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -39,7 +40,7 @@ $fixDir    = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docproj')).Path
 
 # Copy the whole fixture set into a fresh scratch dir so --apply never mutates
 # the repo fixtures. Index the dir, then drive document --project / document-all.
-$scratch = Join-Path C:\TEMP 'draglint_docproj'
+$scratch = Join-Path C:\TEMP "draglint_docproj_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 Copy-Item (Join-Path $fixDir '*') $scratch -Force
@@ -86,7 +87,7 @@ try {
   Check 'idempotent: unitB byte-identical on 2nd run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$beforeB,[byte[]]$afterB))
 
   # --- --stubs opt-in: on a FRESH scratch, Noop NOW gets a managed summary ---
-  $sStub = Join-Path C:\TEMP 'draglint_docproj_stubs'
+  $sStub = Join-Path C:\TEMP "draglint_docproj_stubs_$PID"
   if (Test-Path $sStub) { Remove-Item $sStub -Recurse -Force }
   New-Item -ItemType Directory -Path $sStub | Out-Null
   Copy-Item (Join-Path $fixDir '*') $sStub -Force
@@ -108,7 +109,7 @@ try {
   Check 'stubs opt-in: no "TODO" text anywhere in unitA output' ($srcAS -cnotmatch 'TODO')
 
   # --- document-all (no --project) documents every indexed unit ---
-  $sAll = Join-Path C:\TEMP 'draglint_docproj_all'
+  $sAll = Join-Path C:\TEMP "draglint_docproj_all_$PID"
   if (Test-Path $sAll) { Remove-Item $sAll -Recurse -Force }
   New-Item -ItemType Directory -Path $sAll | Out-Null
   Copy-Item (Join-Path $fixDir '*') $sAll -Force
@@ -122,7 +123,7 @@ try {
   Check 'document-all: unitB documented' ([IO.File]::ReadAllText($uBA) -match '<!-- drag-lint:auto BEGIN -->')
 
   # --- --json aggregates declCount / docCount over the whole project ---
-  $sJson = Join-Path C:\TEMP 'draglint_docproj_json'
+  $sJson = Join-Path C:\TEMP "draglint_docproj_json_$PID"
   if (Test-Path $sJson) { Remove-Item $sJson -Recurse -Force }
   New-Item -ItemType Directory -Path $sJson | Out-Null
   Copy-Item (Join-Path $fixDir '*') $sJson -Force
@@ -140,3 +141,7 @@ try {
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docproj_$PID"), (Join-Path C:\TEMP "draglint_docproj_stubs_$PID"), (Join-Path C:\TEMP "draglint_docproj_all_$PID"), (Join-Path C:\TEMP "draglint_docproj_json_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

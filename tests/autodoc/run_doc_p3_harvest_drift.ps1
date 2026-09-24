@@ -37,6 +37,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -120,7 +121,7 @@ try {
 Write-Host ''
 Write-Host '=== harvest_drift.pas -- refresh / removal / hand-written / strip ===' -ForegroundColor Cyan
 
-$sc = Join-Path C:\TEMP 'draglint_docp3_harvestdrift'
+$sc = Join-Path C:\TEMP "draglint_docp3_harvestdrift_$PID"
 if (Test-Path $sc) { Remove-Item $sc -Recurse -Force }
 New-Item -ItemType Directory -Path $sc | Out-Null
 $tgt = Join-Path $sc 'harvest_drift.pas'
@@ -269,7 +270,7 @@ Check 'STEP 5: and it is still UNMARKED (ownership did not silently return to th
 # The sequence above mutates the file deliberately; the round trip has to start
 # from the state after step 1, so it gets its own copy.
 # ===========================================================================
-$sc2 = Join-Path C:\TEMP 'draglint_docp3_harvestdrift_strip'
+$sc2 = Join-Path C:\TEMP "draglint_docp3_harvestdrift_strip_$PID"
 if (Test-Path $sc2) { Remove-Item $sc2 -Recurse -Force }
 New-Item -ItemType Directory -Path $sc2 | Out-Null
 $tgt2 = Join-Path $sc2 'harvest_drift.pas'
@@ -304,3 +305,7 @@ finally { Pop-Location }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3_harvestdrift_$PID"), (Join-Path C:\TEMP "draglint_docp3_harvestdrift_strip_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

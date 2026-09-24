@@ -10,8 +10,9 @@
 [CmdletBinding()]
 param(
   [string]$Dpr     = "$PSScriptRoot\..\ForwardStubTests.dpr",
-  [string]$WorkDir = "$env:TEMP\drag-lint-forward-stub-pairing"
+  [string]$WorkDir = "$env:TEMP\drag-lint-forward-stub-pairing-$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Dpr)) { Write-Host "FATAL: dpr not found: $Dpr" -ForegroundColor Red; exit 2 }
 $Dpr     = (Resolve-Path $Dpr).Path
@@ -60,3 +61,7 @@ if (-not (Test-Path $exe)) { Write-Host "FATAL: built exe missing: $exe" -Foregr
 $rc = $LASTEXITCODE
 if ($rc -eq 0) { Write-Host 'PASS' -ForegroundColor Green } else { Write-Host 'FAIL' -ForegroundColor Red }
 exit $rc
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-forward-stub-pairing-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

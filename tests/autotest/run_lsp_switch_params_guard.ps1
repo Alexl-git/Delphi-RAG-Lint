@@ -36,6 +36,7 @@
 param(
   [string]$Exe = "$PSScriptRoot\..\..\src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -62,7 +63,7 @@ if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
 if (Test-Path $hkcu) { Remove-Item -Path $hkcu -Recurse -Force }
 
-$fakeExe = Join-Path $env:TEMP 'draglint-switch-guard-fake.exe'
+$fakeExe = Join-Path $env:TEMP "draglint-switch-guard-fake-$PID.exe"
 Set-Content -LiteralPath $fakeExe -Value 'not a real exe' -Encoding Ascii
 $wanted = 'lsp --proxy --delphilsp-exe C:\x\DelphiLSP.exe'
 
@@ -116,3 +117,7 @@ finally {
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path $env:TEMP "draglint-switch-guard-fake-$PID.exe"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

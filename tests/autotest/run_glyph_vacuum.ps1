@@ -11,8 +11,9 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "C:\TEMP\draglint_glyph_vacuum"
+  [string]$WorkDir = "C:\TEMP\draglint_glyph_vacuum_$PID"
 )
+try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
 function Check($n,$ok,$d=''){
@@ -592,3 +593,7 @@ Check 'T1 no --root -> exit 2 with usage' ($LASTEXITCODE -eq 2 -and $o4 -match '
 
 if ($script:fail) { Write-Host "RESULT: FAIL" -ForegroundColor Red; exit 1 }
 Write-Host "RESULT: PASS" -ForegroundColor Green; exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("C:\TEMP\draglint_glyph_vacuum_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

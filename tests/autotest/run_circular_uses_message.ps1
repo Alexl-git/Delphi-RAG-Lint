@@ -28,8 +28,9 @@
 [CmdletBinding()]
 param(
     [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-    [string] $WorkDir = "$env:TEMP\drag-lint-circular-msg"
+    [string] $WorkDir = "$env:TEMP\drag-lint-circular-msg-$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
@@ -243,3 +244,7 @@ Check 'interface-only cycle does NOT claim it already routes through implementat
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-circular-msg-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

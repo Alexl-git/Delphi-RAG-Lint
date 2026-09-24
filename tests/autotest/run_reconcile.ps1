@@ -1,3 +1,4 @@
+try {
 $Exe = . "$PSScriptRoot\_manifest_common.ps1"
 $fx = "$PSScriptRoot\..\fixtures\reconcile"
 $rep = & $Exe reconcile-project "$fx\App.dpr" 2>&1 | Out-String
@@ -15,7 +16,7 @@ Check 'dry-run wrote nothing'    (-not (Test-Path $fx\App.dpr.bak))
 Check 'stale uData_20240101'     ($rep -match 'STALE[\s\S]*uData_20240101')
 
 # Task 2: --apply assertions (work in a temp copy so the repo fixture stays clean)
-$work = "$env:TEMP\drag-lint-reconcile"
+$work = "$env:TEMP\drag-lint-reconcile-$PID"
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 Copy-Item -Recurse $fx $work
 & $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | Out-Null
@@ -44,7 +45,7 @@ Check 'json parses'            ([bool]($j | ConvertFrom-Json))
 # brace comment containing ';' (e.g. uMain in 'uMain.pas' {Form: TBar; note}).
 # Without the fix, Pos(';'...) hits the ';' inside the comment and the new
 # unit gets spliced INSIDE the brace text, corrupting the file.
-$work2 = "$env:TEMP\drag-lint-reconcile-brace"
+$work2 = "$env:TEMP\drag-lint-reconcile-brace-$PID"
 if (Test-Path $work2) { Remove-Item -Recurse -Force $work2 }
 New-Item -ItemType Directory -Force $work2 | Out-Null
 # Minimal .dpr: uses clause with a brace comment that contains a semicolon.
@@ -77,7 +78,7 @@ Check 'brace comment not split'       ($dprAfter -match '\{Form: TBar; note\}')
 $py = 'C:\Python314\python.exe'
 if (Test-Path $py) {
   $enc = [System.Text.Encoding]::ASCII
-  $cx  = "$env:TEMP\drag-lint-reconcile-coherence"
+  $cx  = "$env:TEMP\drag-lint-reconcile-coherence-$PID"
   if (Test-Path $cx) { Remove-Item -Recurse -Force $cx }
   New-Item -ItemType Directory -Force $cx | Out-Null
 
@@ -148,7 +149,7 @@ else {
 # <cwd>\drag-lint.sqlite), so the guard must be Length(DbPaths)>0, not
 # DbPath<>''. Run in an ISOLATED temp cwd so a stray drag-lint.sqlite created
 # by the (pre-fix) bug can't land in the repo.
-$noDbCwd = "$env:TEMP\drag-lint-reconcile-nodb"
+$noDbCwd = "$env:TEMP\drag-lint-reconcile-nodb-$PID"
 if (Test-Path $noDbCwd) { Remove-Item -Recurse -Force $noDbCwd }
 New-Item -ItemType Directory -Force $noDbCwd | Out-Null
 Push-Location $noDbCwd
@@ -165,3 +166,7 @@ finally {
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-reconcile-$PID", "$env:TEMP\drag-lint-reconcile-brace-$PID", "$env:TEMP\drag-lint-reconcile-coherence-$PID", "$env:TEMP\drag-lint-reconcile-nodb-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

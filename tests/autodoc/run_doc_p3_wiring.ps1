@@ -28,6 +28,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -65,7 +66,7 @@ try {
 Write-Host ''
 Write-Host '=== wiring.pas -- Registered as: / Dataset: ===' -ForegroundColor Cyan
 
-$sc = Join-Path C:\TEMP 'draglint_docp3_wiring'
+$sc = Join-Path C:\TEMP "draglint_docp3_wiring_$PID"
 if (Test-Path $sc) { Remove-Item $sc -Recurse -Force }
 New-Item -ItemType Directory -Path $sc | Out-Null
 $tgt = Join-Path $sc 'wiring.pas'
@@ -181,3 +182,7 @@ finally { Pop-Location }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3_wiring_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

@@ -39,6 +39,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -48,7 +49,7 @@ $srcDir  = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\closure_cond')).Path
 
 # Copy the fixture to a fresh scratch dir so the closure scan runs against a
 # clean, isolated tree (no sibling files, no drag-lint config interference).
-$scratchRoot = Join-Path C:\TEMP 'draglint_closurepp'
+$scratchRoot = Join-Path C:\TEMP "draglint_closurepp_$PID"
 if (Test-Path $scratchRoot) { Remove-Item $scratchRoot -Recurse -Force }
 New-Item -ItemType Directory -Path $scratchRoot | Out-Null
 Copy-Item (Join-Path $srcDir '*') $scratchRoot -Force
@@ -96,3 +97,7 @@ try {
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_closurepp_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

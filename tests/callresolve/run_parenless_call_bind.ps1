@@ -41,6 +41,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -52,7 +53,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 
 $exePath = (Resolve-Path $Exe).Path
 $fixDir  = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\parenless')).Path
-$scratch = Join-Path C:\TEMP 'draglint_parenless_bind'
+$scratch = Join-Path C:\TEMP "draglint_parenless_bind_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 Copy-Item (Join-Path $fixDir '*.pas') $scratch
@@ -220,3 +221,7 @@ finally {
 if ($script:fail) { Write-Host 'FAIL  run_parenless_call_bind'; exit 1 }
 Write-Host 'PASS  run_parenless_call_bind'
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_parenless_bind_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

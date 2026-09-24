@@ -76,8 +76,9 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\draglint-project-db-resolve"
+  [string]$WorkDir = "$env:TEMP\draglint-project-db-resolve-$PID"
 )
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -439,3 +440,7 @@ Write-Host ''
 if ($script:Failed) { Write-Host 'PROJECT DB RESOLVE: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PROJECT DB RESOLVE: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint-project-db-resolve-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

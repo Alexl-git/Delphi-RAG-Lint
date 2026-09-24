@@ -37,6 +37,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
@@ -54,7 +55,7 @@ Push-Location C:\TEMP
 try {
   # ==== Scenario A: whitespace normalization ================================
   Write-Host 'Scenario A: whitespace normalization (Result := AValue  +  1;)' -ForegroundColor Cyan
-  $scratchA = Join-Path C:\TEMP 'draglint_docp3idemws'
+  $scratchA = Join-Path C:\TEMP "draglint_docp3idemws_$PID"
   if (Test-Path $scratchA) { Remove-Item $scratchA -Recurse -Force }
   New-Item -ItemType Directory -Path $scratchA | Out-Null
   $targetA = Join-Path $scratchA 'ws.pas'
@@ -101,7 +102,7 @@ end.
   # ==== Scenario B: legitimate drift (a second Result:= site appears) =======
   Write-Host ''
   Write-Host 'Scenario B: legitimate drift (a second Result:= site is added)' -ForegroundColor Cyan
-  $scratchB = Join-Path C:\TEMP 'draglint_docp3idemdrift'
+  $scratchB = Join-Path C:\TEMP "draglint_docp3idemdrift_$PID"
   if (Test-Path $scratchB) { Remove-Item $scratchB -Recurse -Force }
   New-Item -ItemType Directory -Path $scratchB | Out-Null
   $targetB = Join-Path $scratchB 'dr.pas'
@@ -159,3 +160,7 @@ end.
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3idemws_$PID"), (Join-Path C:\TEMP "draglint_docp3idemdrift_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

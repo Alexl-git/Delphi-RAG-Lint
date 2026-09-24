@@ -29,9 +29,10 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint-switch.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-switch-guard",
+  [string]$WorkDir = "$env:TEMP\drag-lint-switch-guard-$PID",
   [string]$RegRoot = 'Software\DragLintSwitchTest\LSP\UserDefined'
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -182,3 +183,7 @@ Check 'scratch registry key cleaned up' (-not (Test-Path 'HKCU:\Software\DragLin
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-switch-guard-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

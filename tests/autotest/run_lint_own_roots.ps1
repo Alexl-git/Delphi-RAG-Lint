@@ -1,3 +1,4 @@
+try {
 $Exe = . "$PSScriptRoot\_manifest_common.ps1"
 $fx  = "$PSScriptRoot\..\fixtures\own-roots"
 
@@ -10,7 +11,7 @@ if (Test-Path $db) { Remove-Item -Force $db }
 & $Exe index $fx --db $db | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
-$rep = Join-Path $env:TEMP 'draglint_ownroots_report.txt'
+$rep = Join-Path $env:TEMP "draglint_ownroots_report_$PID.txt"
 
 # 1. Bare run: vendor\ is outside the declared roots, so it is skipped and named.
 $bare = & $Exe lint-all --db $db --output $rep --quiet 2>&1 | Out-String
@@ -136,3 +137,7 @@ try {
 }
 
 if ($script:Failed) { exit 1 } else { exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path $env:TEMP "draglint_ownroots_report_$PID.txt"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

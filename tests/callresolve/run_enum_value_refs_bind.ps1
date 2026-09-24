@@ -263,11 +263,12 @@
   FIXTURE B (second scratch project, rule 0): uEnumDecl.pas, an IDENTICAL
     copy at dup\uEnumDecl.pas, and uEnumUse.pas.
 
-  Scratch: C:\TEMP\draglint_enum_value_refs_bind (created and owned here).
+  Scratch: C:\TEMP\draglint_enum_value_refs_bind_<PID> (created and owned here; removed on exit).
   Both fixtures are indexed into THIS GUARD'S OWN databases only. Nothing
   here reads or writes the worktree self-index or any corpus database.
 #>
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check([string]$n, [bool]$ok, [string]$d = '') {
@@ -291,7 +292,7 @@ function CheckN([int]$num, [string]$n, [bool]$ok, [string]$d = '') {
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: engine not found: $Exe" -ForegroundColor Red; exit 2 }
 $exePath = (Resolve-Path $Exe).Path
-$scratch = Join-Path C:\TEMP 'draglint_enum_value_refs_bind'
+$scratch = Join-Path C:\TEMP "draglint_enum_value_refs_bind_$PID"
 if (Test-Path $scratch) { Remove-Item -Recurse -Force $scratch }
 New-Item -ItemType Directory $scratch | Out-Null
 $dirA = Join-Path $scratch 'A'
@@ -829,3 +830,7 @@ Write-Host ''
 if ($script:fail) { Write-Host 'ENUM-VALUE-REFS-BIND: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'ENUM-VALUE-REFS-BIND: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_enum_value_refs_bind_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

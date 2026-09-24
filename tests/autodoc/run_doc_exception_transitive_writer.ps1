@@ -63,6 +63,7 @@ param(
   [string]$Fixture = "$PSScriptRoot\fixtures\docdrift\transitive_writer.pas",
   [string]$Human   = "$PSScriptRoot\fixtures\docdrift\transitive.pas"
 )
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -79,7 +80,7 @@ $humPath = (Resolve-Path $Human).Path
 # A scratch name of this runner's own. Two runners sharing one fixed scratch
 # directory is a real defect this repo has already shipped once -- see
 # run_battery_jobs_guard.ps1's uniqueness check, which polices this name.
-$scratch = Join-Path C:\TEMP 'draglint_doc_exc_transitive_writer'
+$scratch = Join-Path C:\TEMP "draglint_doc_exc_transitive_writer_$PID"
 if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $srcDir = Join-Path $scratch 'src'
@@ -339,3 +340,7 @@ finally {
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_doc_exc_transitive_writer_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

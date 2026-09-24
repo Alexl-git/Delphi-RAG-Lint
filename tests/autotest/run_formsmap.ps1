@@ -17,8 +17,9 @@
 param(
     [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
     [string] $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap",
-    [string] $WorkDir = "$env:TEMP\drag-lint-formsmap"
+    [string] $WorkDir = "$env:TEMP\drag-lint-formsmap-$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
@@ -92,7 +93,7 @@ Check 'no duplicate frmEdit'  ((($csv -split "`r`n") | Select-String ',frmEdit,'
 # initialization (ThingHook := ShowThing4) that indirects to a launch
 # (Layer 2). Uses separate variables so it never disturbs the block above.
 $FixtureDir4 = "$PSScriptRoot\..\fixtures\formsmap-v4"
-$WorkDir4    = "$env:TEMP\drag-lint-formsmap-v4"
+$WorkDir4    = "$env:TEMP\drag-lint-formsmap-v4-$PID"
 if (Test-Path $WorkDir4) { Remove-Item -Recurse -Force $WorkDir4 }
 New-Item -ItemType Directory $WorkDir4 | Out-Null
 $db4  = "$WorkDir4\fixture4.sqlite"
@@ -113,3 +114,7 @@ Check 'v4: frmHooked4 nav via interface dispatch + hook' ($csv4 -match "uHooked4
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-formsmap-$PID", "$env:TEMP\drag-lint-formsmap-v4-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

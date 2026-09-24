@@ -27,6 +27,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -52,7 +53,7 @@ function Get-DoItBlock($file) {
 Push-Location C:\TEMP
 try {
   # === SCENARIO 1: GIT PRESENT (date emitted) ===
-  $scratch = Join-Path C:\TEMP 'draglint_docsince'
+  $scratch = Join-Path C:\TEMP "draglint_docsince_$PID"
   if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
   New-Item -ItemType Directory -Path $scratch | Out-Null
   $target = Join-Path $scratch 'since.pas'
@@ -87,7 +88,7 @@ try {
   Check 'idempotent: file byte-identical on 2nd --since run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 
   # === SCENARIO 1b: WITHOUT --since (opt-in gate) ===
-  $scratchOff = Join-Path C:\TEMP 'draglint_docsince_off'
+  $scratchOff = Join-Path C:\TEMP "draglint_docsince_off_$PID"
   if (Test-Path $scratchOff) { Remove-Item $scratchOff -Recurse -Force }
   New-Item -ItemType Directory -Path $scratchOff | Out-Null
   $targetOff = Join-Path $scratchOff 'since.pas'
@@ -110,7 +111,7 @@ try {
   Check 'DoIt (no --since) has NO <since> line' ($blkOff -notmatch '<since>')
 
   # === SCENARIO 2: GIT ABSENT (silent degradation) ===
-  $scratch2 = Join-Path C:\TEMP 'draglint_docsince_nogit'
+  $scratch2 = Join-Path C:\TEMP "draglint_docsince_nogit_$PID"
   if (Test-Path $scratch2) { Remove-Item $scratch2 -Recurse -Force }
   New-Item -ItemType Directory -Path $scratch2 | Out-Null
   $target2 = Join-Path $scratch2 'since.pas'
@@ -129,3 +130,7 @@ try {
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docsince_$PID"), (Join-Path C:\TEMP "draglint_docsince_off_$PID"), (Join-Path C:\TEMP "draglint_docsince_nogit_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

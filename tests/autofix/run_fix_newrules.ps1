@@ -1,14 +1,17 @@
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
 $exePath = (Resolve-Path $Exe).Path
 
 # Apply the single fix (rule R at line L) to a fresh copy of $fixtureName and
 # assert the resulting 1-based line $L, trimmed, equals $expect.
+$script:newrulesDirs = @()
 function Assert-Fix($fixtureName, $L, $R, $expect, $tag) {
   $fixture = (Resolve-Path (Join-Path $PSScriptRoot "fixtures\$fixtureName")).Path
-  $scratch = Join-Path C:\TEMP ('draglint_newrules_' + [IO.Path]::GetFileNameWithoutExtension($fixtureName))
+  $scratch = Join-Path C:\TEMP ('draglint_newrules_' + [IO.Path]::GetFileNameWithoutExtension($fixtureName) + "_$PID")
+  $script:newrulesDirs += $scratch
   if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
   New-Item -ItemType Directory -Path $scratch | Out-Null
   $target = Join-Path $scratch $fixtureName
@@ -40,7 +43,7 @@ Assert-Fix 'redundant_assigned_free.pas' 16 'redundant-assigned-free' 'Obj.Free;
 Assert-Fix 'off_by_one.pas' 14 'off-by-one-count' 'for I := 0 to List.Count - 1 do' '[off-by-one]'
 
 # guard: the 'Authenticated' line (contains substring 'then') must be untouched by the line-16 fix
-$scratch18 = Join-Path C:\TEMP 'draglint_newrules_redundant_assigned_free'
+$scratch18 = Join-Path C:\TEMP "draglint_newrules_redundant_assigned_free_$PID"
 $t18 = Join-Path $scratch18 'redundant_assigned_free.pas'
 if (Test-Path $t18) {
   $l18 = ([IO.File]::ReadAllLines($t18))[17].Trim()
@@ -48,3 +51,7 @@ if (Test-Path $t18) {
 }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @($script:newrulesDirs)) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

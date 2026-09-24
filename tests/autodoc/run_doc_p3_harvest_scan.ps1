@@ -60,6 +60,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -200,7 +201,7 @@ foreach ($c in @($cases | Where-Object { $_.Want -eq 'NONE' })) {
 # Built from the accepted case on purpose: the only difference between it and
 # the green row above is the byte, so a NONASCII verdict here is attributable
 # to the byte and to nothing else.
-$sc = Join-Path C:\TEMP 'draglint_docp3_harvest'
+$sc = Join-Path C:\TEMP "draglint_docp3_harvest_$PID"
 if (Test-Path $sc) { Remove-Item $sc -Recurse -Force }
 New-Item -ItemType Directory -Path $sc | Out-Null
 $tgt = Join-Path $sc 'harvest_scan_latin1.pas'
@@ -240,3 +241,7 @@ finally { Pop-Location }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docp3_harvest_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

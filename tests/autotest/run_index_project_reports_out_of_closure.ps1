@@ -61,6 +61,7 @@
 param(
   [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -84,7 +85,7 @@ function Write-Ascii([string]$path, [string]$text) {
 # `2>&1 |` merges two pipes in DRAIN order -- measured at about a 10% reorder
 # rate in run_index_all_failed_section_summary.ps1. Ordering is not asserted
 # here, but reading both streams reliably still argues for one handle.
-$work = Join-Path C:\TEMP 'draglint_outofclosure'
+$work = Join-Path C:\TEMP "draglint_outofclosure_$PID"
 if (Test-Path $work) { Get-ChildItem $work -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory $work -Force | Out-Null
 
@@ -282,3 +283,7 @@ Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_outofclosure_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

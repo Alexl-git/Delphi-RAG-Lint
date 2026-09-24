@@ -20,6 +20,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -45,7 +46,7 @@ function Get-DoABlock($file) {
 Push-Location C:\TEMP
 try {
   # === Part A: WITH --seealso ===
-  $scratch = Join-Path C:\TEMP 'draglint_docsee'
+  $scratch = Join-Path C:\TEMP "draglint_docsee_$PID"
   if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
   New-Item -ItemType Directory -Path $scratch | Out-Null
   $target = Join-Path $scratch 'see.pas'
@@ -89,7 +90,7 @@ try {
   # actually turn it off. A default with no way back is a worse deal than an
   # opt-in, and this is the only assertion that would notice the new switch
   # silently doing nothing.
-  $scratch2 = Join-Path C:\TEMP 'draglint_docsee_off'
+  $scratch2 = Join-Path C:\TEMP "draglint_docsee_off_$PID"
   if (Test-Path $scratch2) { Remove-Item $scratch2 -Recurse -Force }
   New-Item -ItemType Directory -Path $scratch2 | Out-Null
   $target2 = Join-Path $scratch2 'see.pas'
@@ -107,3 +108,7 @@ try {
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_docsee_$PID"), (Join-Path C:\TEMP "draglint_docsee_off_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

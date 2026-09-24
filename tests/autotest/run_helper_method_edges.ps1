@@ -39,8 +39,9 @@ param(
   # ONLY genuine collision among 444 distinct literal scratch names across 481
   # runners, and it was introduced on 2026-08-30, after the census that had
   # cleared the tree. run_battery_jobs_guard.ps1 now asserts uniqueness.
-  [string]$WorkDir = "$env:TEMP\drag-lint-helper-method-edges"
+  [string]$WorkDir = "$env:TEMP\drag-lint-helper-method-edges-$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -256,3 +257,7 @@ Check 'and still with confidence certain'       ($r.ordinary_conf -eq 'certain')
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-helper-method-edges-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

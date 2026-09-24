@@ -1,3 +1,4 @@
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
@@ -79,7 +80,7 @@ Ok "baseline suppresses known finding" ((FindingCount $new) -eq 0)
 # way: parse the RAW stdout, with no preamble-stripping of any kind. --quiet is
 # deliberately NOT passed -- it never covered this line, and a fix that only
 # works under --quiet is not a fix.
-$scratch6 = Join-Path C:\TEMP 'draglint_pipeline_json'
+$scratch6 = Join-Path C:\TEMP "draglint_pipeline_json_$PID"
 if (Test-Path $scratch6) { Remove-Item $scratch6 -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch6 | Out-Null
 Copy-Item $fx (Join-Path $scratch6 'pipeline_fixture.pas') -Force
@@ -105,3 +106,7 @@ Remove-Item $cfg,$cfgD,$base -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Host "pipeline-tests: $pass pass / $fail fail"
 if ($fail -gt 0) { exit 1 } else { exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_pipeline_json_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

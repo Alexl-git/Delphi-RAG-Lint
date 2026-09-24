@@ -35,9 +35,10 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\draglint_magic_date_args",
+  [string]$WorkDir = "$env:TEMP\draglint_magic_date_args_$PID",
   [switch]$Quiet
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d) {
@@ -132,3 +133,7 @@ Write-Host ''
 if ($script:fail) { Write-Host 'MAGIC-NUMBER-DATE-ARGS GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'MAGIC-NUMBER-DATE-ARGS GUARD: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint_magic_date_args_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

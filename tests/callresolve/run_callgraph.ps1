@@ -20,6 +20,7 @@
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -28,14 +29,14 @@ $exePath   = (Resolve-Path $Exe).Path
 $chainFix  = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\callchain.pas')).Path
 $cycleFix  = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\callcycle.pas')).Path
 
-$scratch = Join-Path C:\TEMP 'draglint_callgraph'
+$scratch = Join-Path C:\TEMP "draglint_callgraph_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 Copy-Item $chainFix (Join-Path $scratch 'callchain.pas') -Force
 $db = Join-Path $scratch 'cg.sqlite'
 
 # A SEPARATE dir/db for the cycle so it doesn't perturb the chain tree.
-$cycScratch = Join-Path C:\TEMP 'draglint_callgraph_cycle'
+$cycScratch = Join-Path C:\TEMP "draglint_callgraph_cycle_$PID"
 if (Test-Path $cycScratch) { Remove-Item $cycScratch -Recurse -Force }
 New-Item -ItemType Directory -Path $cycScratch | Out-Null
 Copy-Item $cycleFix (Join-Path $cycScratch 'callcycle.pas') -Force
@@ -96,3 +97,7 @@ try {
 } finally { Pop-Location }
 
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @((Join-Path C:\TEMP "draglint_callgraph_$PID"), (Join-Path C:\TEMP "draglint_callgraph_cycle_$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

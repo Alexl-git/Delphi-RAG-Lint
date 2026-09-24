@@ -72,6 +72,7 @@
 
   Usage: pwsh -File tests\autotest\run_reconcile_applied_outcome.ps1
 #>
+try {
 $Exe = . "$PSScriptRoot\_manifest_common.ps1"
 
 $fx = "$PSScriptRoot\..\fixtures\reconcile"
@@ -80,7 +81,7 @@ $fx = "$PSScriptRoot\..\fixtures\reconcile"
 # $env:TEMP\drag-lint-reconcile and run_reconcile_only_selection.ps1 owns
 # ...-only; two runners sharing one fixed scratch directory is a defect
 # run_battery_jobs_guard.ps1 polices.
-$work = "$env:TEMP\drag-lint-reconcile-applied"
+$work = "$env:TEMP\drag-lint-reconcile-applied-$PID"
 
 function FreshCopy {
   if (Test-Path $work) { Remove-Item -Recurse -Force $work }
@@ -238,3 +239,7 @@ if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 Write-Host ''
 if ($script:Failed) { Write-Host 'RECONCILE applied/backups/edited: FAIL' -ForegroundColor Red; exit 1 }
 else { Write-Host 'RECONCILE applied/backups/edited: PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-reconcile-applied-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

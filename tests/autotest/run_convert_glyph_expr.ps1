@@ -46,8 +46,9 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-convert-glyph-expr"
+  [string]$WorkDir = "$env:TEMP\drag-lint-convert-glyph-expr-$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 # convert-validate exits 1 on a rules error, which is the EXPECTED outcome for
 # most cases below; keep a native non-zero exit a value, not a terminating error.
@@ -251,3 +252,7 @@ Check '...and writes no converted instance' `
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drag-lint-convert-glyph-expr-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

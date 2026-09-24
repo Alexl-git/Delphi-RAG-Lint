@@ -41,8 +41,9 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\draglint_framework_scope_guard"
+  [string]$WorkDir = "$env:TEMP\draglint_framework_scope_guard_$PID"
 )
+try {
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -150,3 +151,7 @@ Check 'Enabled resolves to the FMX TTimer' ($c -like 'FMX.Types.TTimer.Enabled')
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\draglint_framework_scope_guard_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}
