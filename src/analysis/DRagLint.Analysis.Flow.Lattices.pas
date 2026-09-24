@@ -1223,6 +1223,34 @@ begin
   V := FVars[AIdx]; V.Captured := True; FVars[AIdx] := V;
 end;
 
+{ The bare, lower-cased routine name a body can assign to set Result, from the
+  header's `name` text: generic argument lists are dropped (at any depth) and
+  the last dotted segment kept, so `TFoo.Bar` -> `bar`, `TBox<T>.Get` -> `get`,
+  `TFoo.Map<U>` -> `map`, `F` -> `f`. declProc.name is identifier | genericDot |
+  genericTpl, and only the bare segment is what `Bar := X` writes (D21). }
+function OwnNameSegment(const AHeaderName: string): string;
+var
+  I, Depth, Len: Integer;
+  Plain: string;
+begin
+  SetLength(Plain, Length(AHeaderName));
+  Len := 0;
+  Depth := 0;
+  for I := 1 to Length(AHeaderName) do
+    case AHeaderName[I] of
+      '<': Inc(Depth);
+      '>': if Depth > 0 then Dec(Depth);
+    else
+      if Depth = 0 then
+      begin
+        Inc(Len);
+        Plain[Len] := AHeaderName[I];
+      end;
+    end;
+  SetLength(Plain, Len);
+  Result := LowerCase(Trim(Copy(Plain, Plain.LastIndexOf('.') + 2, MaxInt)));
+end;
+
 class function TRoutineVarTable.Build(const AProc: TTSNode; const ASrc: TBytes): TRoutineVarTable;
 var
   Tbl: TRoutineVarTable;
@@ -1427,8 +1455,14 @@ begin
       Tbl.Add(RV);
       ResultIdx := Tbl.IndexOf('result');
       NameN := Header.ChildByField('name');
+      { Alias BOTH the full header name and its bare last segment: a method
+        `TFoo.Bar` sets Result by `Bar := X`. No local or parameter can
+        legally share the routine's name, so the alias shadows nothing. }
       if (not NameN.IsNull) and (ResultIdx >= 0) then
+      begin
         Tbl.Alias(LowerCase(NodeStr(NameN, ASrc)), ResultIdx);
+        Tbl.Alias(OwnNameSegment(NodeStr(NameN, ASrc)), ResultIdx);
+      end;
     end;
   end;
   for I := 0 to AProc.NamedChildCount - 1 do
