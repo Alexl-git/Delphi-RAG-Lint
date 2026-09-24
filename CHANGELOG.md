@@ -58,6 +58,13 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`TLintConfigWriter.WriteAnsiCrlf` no longer truncates non-ASCII characters (L5).** It stored
+  `Ord(Ch)` into a byte, so a character above #255 silently lost its high byte and #128..#255 went out
+  as raw non-ASCII bytes -- a changed value and a breach of the 7-bit ASCII rule, with no error (the
+  file then failed to load). Every non-ASCII UTF-16 unit is now written as a JSON `\uXXXX` escape: the
+  file stays strict ASCII and the value round-trips exactly (escape chosen over refusing, because
+  refusing would lose the user's edit). Guard: `tests\lintconfig\LintConfigTests.dpr`
+  `TestNonAsciiEscaped` (L5a-f, Latin-1, CJK and a surrogate pair).
 - **`tests\ergonomics\run_threshold_test.ps1` runs from any directory (DOC-9).** It resolved
   `third_party\...` and `tests\ergonomics\...` against the CURRENT directory, so it died in
   `Resolve-Path` unless launched from the repo root. Every path is now anchored on `$PSScriptRoot`,
