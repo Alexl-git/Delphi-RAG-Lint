@@ -18,6 +18,68 @@ unit DRagLint.Storage.FileMembership;
 
 interface
 
+uses
+  FireDAC.Comp.Client
+  ;
+
+const
+  /// <summary>How long a drag-lint connection waits for a lock before a
+  /// statement fails SQLITE_BUSY ("database is locked"), in milliseconds.</summary>
+  DEFAULT_BUSY_TIMEOUT_MS = 5000;
+
+/// <summary>Makes every statement on AConn -- INCLUDING the pragmas FireDAC runs
+/// inside the connect itself -- wait up to ABusyTimeoutMs for a lock instead of
+/// failing SQLITE_BUSY at once. Call it BEFORE AConn is connected.</summary>
+/// <param name="AConn">An unconnected FireDAC SQLite connection. The caller owns
+/// it; its BusyTimeout param and UpdateOptions.LockWait are overwritten.</param>
+/// <param name="ABusyTimeoutMs">The wait, in milliseconds.</param>
+/// <remarks>
+/// WHY `PRAGMA busy_timeout` AFTER THE CONNECT IS NOT ENOUGH. FireDAC runs
+/// cache_size, locking_mode, synchronous, journal_mode and foreign_keys pragmas
+/// INSIDE `Connected := True` (FireDAC.Phys.SQLite.pas, InternalConnect), and
+/// cache_size already reads the schema. Its TSQLiteDatabase starts with a busy
+/// timeout of 0 and arms its BusyTimeout param only for statements whose
+/// UpdateOptions.LockWait is True (SetupForStmt). So those pragmas ran with NO
+/// busy handler, and a reader that opened while another connection briefly
+/// held the database EXCLUSIVE -- in WAL mode the LAST connection to close does,
+/// to checkpoint and delete the -wal -- died with "database is locked" (about 1
+/// open in 300 under 12 concurrent readers, 2026-09-23). Setting LockWait on the
+/// connection makes FireDAC call sqlite3_busy_timeout before EVERY statement,
+/// the connect-time pragmas included; statements inherit it from the
+/// connection. Pinned by tests\autotest\run_readonly_concurrency_guard.ps1.
+/// Thread-safe: touches only AConn.
+/// </remarks>
+procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
+
+/// <summary>Connects AConn to the existing SQLite file ADbPath as a READER: the
+/// busy timeout armed before the connect, the journal mode the file already has,
+/// normal (not exclusive) locking, and `PRAGMA query_only = ON`.</summary>
+/// <param name="AConn">An unconnected FireDAC connection; the caller owns it and
+/// frees it. Its DriverName, Params and UpdateOptions.LockWait are overwritten.</param>
+/// <param name="ADbPath">Full path to the .sqlite file. The caller checks that
+/// it exists: FireDAC's default open mode CREATES a missing file.</param>
+/// <param name="ABusyTimeoutMs">Lock wait for every statement, see ArmBusyTimeout.</param>
+/// <remarks>
+/// RAISES nothing of its own; FireDAC's ESQLiteNativeException PROPAGATES when
+/// the file cannot be opened or a lock outlasts ABusyTimeoutMs, and the verb
+/// reports it on stderr with a non-zero exit.
+/// The ONE way a drag-lint reader opens an index. Not OpenMode=ReadOnly (a true
+/// SQLITE_OPEN_READONLY): see DbContainsFile for why that fails on a WAL index.
+/// Instead nothing this routine executes writes: the journal_mode pragma FireDAC
+/// always runs names the mode the header already has (HeaderSaysWal), so it is a
+/// no-op; locking_mode is Normal, so a reader never holds the file exclusively;
+/// and query_only makes every later write on the handle fail SQLITE_READONLY.
+/// A raw TFDConnection opened with FireDAC's DEFAULT params does the opposite on
+/// both counts -- LockingMode=Exclusive and JournalMode=Delete, which converted
+/// a WAL index to a rollback journal (header byte 18: 2 -> 1) under `top`,
+/// `graph`, `diff`, `query hints` and `--selftest-schema` until 2026-09-23.
+/// Does not check the schema version: a caller that needs the current schema
+/// asks for it (TSQLiteSymbolStore.IsSchemaCurrent) and refuses a stale one.
+/// Thread-safe: touches only AConn.
+/// </remarks>
+procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
+  ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
+
 /// <summary>True when ADbPath is a readable index whose files table holds
 /// AFilePath.</summary>
 /// <param name="ADbPath">Full path to a .sqlite index. A missing, empty,
@@ -51,12 +113,12 @@ interface
 /// Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Storage.FileMembership.HeaderSaysWal, DRagLint.Storage.FileMembership.NormalizeForLookup</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.NormalizeForLookup</para>
 /// <para>Returns: False; not Q.Eof</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>SQL: reads FILES</para>
 /// <para>Touches: file system</para>
-/// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
 /// <seealso cref="DRagLint.Storage.FileMembership.NormalizeForLookup"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -83,10 +145,9 @@ function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
 /// LSP server use THIS reading of the header rather than a second copy of it.
 /// Thread-safe: no shared state.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Storage.FileMembership.DbContainsFile (DRagLint.Storage.FileMembership.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Called from: DRagLint.Storage.FileMembership.ConnectReadOnly (DRagLint.Storage.FileMembership.pas)</para>
 /// <para>Returns: False; (F.Read(Hdr, SizeOf(Hdr)) = SizeOf(Hdr))</para>
 /// <para>Catches: Exception (swallowed)</para>
-/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function HeaderSaysWal(const APath: string): Boolean;
@@ -97,7 +158,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.IOUtils
-  , FireDAC.Comp.Client
   , FireDAC.Stan.Def
   , FireDAC.Stan.Param
   , FireDAC.Phys.SQLite
@@ -143,12 +203,33 @@ begin
   end; // try
 end; // function
 
+procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer);
+begin
+  AConn.Params.Values['BusyTimeout']:= IntToStr(ABusyTimeoutMs);
+  AConn.UpdateOptions.LockWait     := True;
+end; // procedure
+
+procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string; ABusyTimeoutMs: Integer);
+begin
+  AConn.DriverName:= 'SQLite';
+  AConn.Params.Values['Database'   ]:= ADbPath;
+  AConn.Params.Values['LockingMode']:= 'Normal';
+  AConn.Params.Values['JournalMode']:= if HeaderSaysWal(ADbPath) then 'WAL' else 'Delete';
+  AConn.Params.Values['Synchronous']:= 'Normal';
+  ArmBusyTimeout(AConn, ABusyTimeoutMs);
+  AConn.LoginPrompt:= False;
+  AConn.Connected  := True;
+  AConn.ExecSQL('PRAGMA query_only = ON'); { reject every write on this handle }
+end; // procedure
+
+const
+  MEMBERSHIP_BUSY_TIMEOUT_MS = 2000; { a probe answers "no" sooner than a verb gives up }
+
 function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
 var
   Conn: TFDConnection;
   Q   : TFDQuery     ;
   NP  : string       ;
-  Mode: string       ;
 begin
   Result:= False;
   if (ADbPath = '') or (AFilePath = '') then Exit;
@@ -173,17 +254,10 @@ begin
         untouched -- it is not, for the reason on HeaderSaysWal. Here the mode
         is whatever the file already has, so the pragma FireDAC runs at connect
         changes nothing. query_only comes AFTER the connect, so it cannot be
-        what protects the header; only naming the current mode can. }
-      Mode:= if HeaderSaysWal(ADbPath) then 'WAL' else 'Delete';
-      Conn.DriverName:= 'SQLite';
-      Conn.Params.Values['Database'   ]:= ADbPath;
-      Conn.Params.Values['LockingMode']:= 'Normal';
-      Conn.Params.Values['JournalMode']:= Mode;
-      Conn.Params.Values['Synchronous']:= 'Normal';
-      Conn.LoginPrompt:= False;
-      Conn.Open;
-      Conn.ExecSQL('PRAGMA query_only = ON');
-      Conn.ExecSQL('PRAGMA busy_timeout = 2000');
+        what protects the header; only naming the current mode can.
+        ConnectReadOnly does all of that, and arms the busy timeout BEFORE the
+        connect (see ArmBusyTimeout for why after is too late). }
+      ConnectReadOnly(Conn, ADbPath, MEMBERSHIP_BUSY_TIMEOUT_MS);
 
       Q:= TFDQuery.Create(nil);
       try

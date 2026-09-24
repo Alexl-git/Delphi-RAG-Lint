@@ -125,7 +125,7 @@ uses
   , DRagLint.Analysis.LintTree
   , DRagLint.Analysis.PurityStage { Purity v2: TPurityStage.Run after the `calls` stage at every index site }
   , DRagLint.Storage.SQLite
-  , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in }
+  , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in; ConnectReadOnly: the raw reader open }
   , DRagLint.Parser .Delphi13
   , DRagLint.Parser .DFM
   , DRagLint.Parser .Sql
@@ -7366,10 +7366,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   Q   := TFDQuery     .Create(nil);
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= ADbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    ConnectReadOnly(Conn, ADbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Q   .Connection := Conn;
     Q.Sql.Text:= 'SELECT enum.qualified_name AS enum_qname, enum.name AS enum_name, ' + '       val.name AS value_name, val.start_line AS line_no ' + 'FROM symbols enum ' +
     'JOIN symbols val ON val.parent_id = enum.id ' + 'WHERE enum.kind = ''enum'' AND val.kind = ''enum_value'' ' + 'ORDER BY enum.qualified_name, val.start_line, val.id';
@@ -7701,10 +7698,7 @@ begin
   if not TDirectory.Exists(AArgs.OutputDir) then TDirectory.CreateDirectory(AArgs.OutputDir);
 
   Conn:= TFDConnection.Create(nil);
-  Conn.DriverName:= 'SQLite';
-  Conn.Params.Values['Database']:= AArgs.DbPath;
-  Conn.LoginPrompt:= False;
-  Conn.Connected  := True;
+  ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
   WrittenCount:= 0;
   try
     // First pass: build a name -> md-filename map so cross-links resolve.
@@ -7863,10 +7857,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   Q   := TFDQuery     .Create(nil);
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= AArgs.DbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Q   .Connection := Conn;
     // Default sort: fan-in count (refs whose name_text matches the symbol).
     // Limits to the symbol kinds that callers typically reach for.
@@ -8058,10 +8049,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   Q   := TFDQuery     .Create(nil);
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= AArgs.DbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Where:= '';
     if AArgs.Name <> '' then Where:= 'WHERE UPPER(code) = ''' + UpperCase(AArgs.Name) + '''';
     if AArgs.Rule <> '' then // reuse --rule arg as --severity filter
@@ -8148,10 +8136,7 @@ begin
   Q   := TFDQuery     .Create(nil);
   Buf:= TStringBuilder.Create;
   try
-    Conn.DriverName:= 'SQLite';
-    Conn.Params.Values['Database']:= AArgs.DbPath;
-    Conn.LoginPrompt:= False;
-    Conn.Connected  := True;
+    ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Q   .Connection := Conn;
 
     // Resolve refs by name_text -> symbols.name (the indexer leaves
@@ -8245,14 +8230,8 @@ begin
   SetA:= TDictionary<string, string>.Create;
   SetB:= TDictionary<string, string>.Create;
   try
-    ConnA.DriverName:= 'SQLite';
-    ConnA.Params.Values['Database']:= DbA;
-    ConnA.LoginPrompt:= False;
-    ConnA.Connected  := True;
-    ConnB.DriverName := 'SQLite';
-    ConnB.Params.Values['Database']:= DbB;
-    ConnB.LoginPrompt:= False;
-    ConnB.Connected  := True;
+    ConnectReadOnly(ConnA, DbA); { readers: never FireDAC's Exclusive/Delete defaults }
+    ConnectReadOnly(ConnB, DbB);
     QA   .Connection := ConnA;
     QB   .Connection := ConnB;
     QA.Sql.Text:= 'SELECT qualified_name, kind, COALESCE(signature, '''') AS sig ' + 'FROM symbols WHERE qualified_name <> '''' ';
@@ -24395,10 +24374,7 @@ begin
     Conn:= TFDConnection.Create(nil);
     Q   := TFDQuery     .Create(nil);
     try
-      Conn.DriverName:= 'SQLite';
-      Conn.Params.Values['Database']:= SharedDbPath;
-      Conn.LoginPrompt:= False;
-      Conn.Connected  := True;
+      ConnectReadOnly(Conn, SharedDbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
       Q   .Connection := Conn;
       for P in Cfg.Projects do
       begin
@@ -25762,9 +25738,7 @@ begin
   Conn:= TFDConnection.Create(nil);
   try
     try
-      Conn.DriverName:= 'SQLite';
-      Conn.Params.Values['Database']:= ADbPath;
-      Conn.Connected:= True;
+      ConnectReadOnly(Conn, ADbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
       Q:= TFDQuery.Create(nil);
       try
         Q.Connection:= Conn;
