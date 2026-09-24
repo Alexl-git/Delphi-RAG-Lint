@@ -89,6 +89,11 @@ type
       FExcUnit   : string                                                  ;
       FExcCand   : TArray<TDragExcCand>                                    ;
       FExcSites  : TArray<TDragExcSite>                                    ;
+      { See the OnlyRuleId property. '' = run every rule (every caller that
+        does not set it). }
+      FOnlyRuleId: string                                                  ;
+      { True when a run narrowed to FOnlyRuleId wants ARuleId computed. }
+      function Wants(const ARuleId: string): Boolean;
       /// <summary>The first literalString inside the argument list
       /// is taken deliberately: for `Create('Disk quota exceeded on ' + S)` that is the
       /// STATIC PREFIX, which is what a class name can be derived from. Ruling 2 (exactly
@@ -242,6 +247,19 @@ type
       /// --stand-in-for.
       /// </remarks>
       property WalkFilter: TPredicate<string> read FWalkFilter write FWalkFilter;
+      /// <summary>Narrows EXECUTION to one rule id: when non-empty, only the
+      /// .scm query rule with this id and the built-in walk that emits it run,
+      /// and a file none of them wants is not even parsed. Empty (the default)
+      /// runs everything.</summary>
+      /// <remarks>
+      /// D17, 2026-09-23. `lint --rule X` and `lint-all --rule X` used to run
+      /// every query over every file and filter the findings afterwards; the
+      /// report was right and the cost was the whole catalogue. The caller
+      /// still filters the RESULT -- this changes cost, not answers. Callers
+      /// must leave it empty for a review-marker-* rule, which is computed from
+      /// every other rule's findings (CLI LintNarrowRule).
+      /// </remarks>
+      property OnlyRuleId: string read FOnlyRuleId write FOnlyRuleId;
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: Length(FQueryRules).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -979,6 +997,11 @@ begin
   end;
 end;
 
+function TLinter.Wants(const ARuleId: string): Boolean;
+begin
+  Result:= (FOnlyRuleId = '') or SameText(FOnlyRuleId, ARuleId);
+end;
+
 function TLinter.CheckFileImpl( const AFilePath: string): TArray<TLintFinding>;
 var
   Parser  : TTSParser          ;
@@ -1006,6 +1029,21 @@ begin
       Parsing a .dfm with the Pascal grammar produced a spurious parser-error per
       set-literal/root object (see CollectDfmParseErrors). }
     IsDfm:= SameText(ExtractFileExt(AFilePath), '.dfm');
+    { D17: a run narrowed to one rule that nothing in this file can emit does
+      not pay for the parse at all. }
+    if FOnlyRuleId <> '' then
+    begin
+      var AnyWanted: Boolean;
+      if IsDfm then AnyWanted:= Wants('parser-error') or Wants('dfm-hardcoded-credential')
+      else
+      begin
+        AnyWanted:= Wants('field-by-name-in-loop') or Wants('inline-comment-in-multiline-args')
+          or ((FExcUnit <> '') and Wants('raise-bare-exception'));
+        for var QR: TQueryRule in FQueryRules do
+          if Wants(QR.Id) then AnyWanted:= True;
+      end;
+      if not AnyWanted then Exit(nil);
+    end;
     { SESSION 25 B2 follow-up: time the READ+PARSE alone, separately from
       executing the rule queries.
 
@@ -1031,16 +1069,17 @@ begin
         that don't exist in the DFM grammar (and the queries are compiled against the
         Pascal language), so the only meaningful diagnostic is a genuine grammar error. }
     begin
-      CollectDfmParseErrors(Tree.RootNode, AFilePath, Findings);
-      CheckDfmCredentials(Tree.RootNode, Source, AFilePath, Findings); // v0.76 #10
+      if Wants('parser-error') then CollectDfmParseErrors(Tree.RootNode, AFilePath, Findings);
+      if Wants('dfm-hardcoded-credential') then CheckDfmCredentials(Tree.RootNode, Source, AFilePath, Findings); // v0.76 #10
     end
     else
     begin
-      WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, Findings);
+      if Wants('field-by-name-in-loop') then WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, Findings);
       { Rides the parse above rather than adding one. Returns immediately when
-        the project has not opted in. }
-      if FExcUnit <> '' then HarvestExceptions(Tree.RootNode, Source, AFilePath);
-      CheckInlineCommentInMultilineArgs(Source, AFilePath, Findings);
+        the project has not opted in; its only consumer is the
+        raise-bare-exception enrichment. }
+      if (FExcUnit <> '') and Wants('raise-bare-exception') then HarvestExceptions(Tree.RootNode, Source, AFilePath);
+      if Wants('inline-comment-in-multiline-args') then CheckInlineCommentInMultilineArgs(Source, AFilePath, Findings);
       // External *.scm rules
       var R: TQueryRule;
       { LITERAL PRE-FILTER -- see TQueryRule.RequiredText.
@@ -1056,6 +1095,7 @@ begin
       var LowerReady: Boolean := False;
       for R in FQueryRules do
       begin
+        if not Wants(R.Id) then Continue; { D17: see OnlyRuleId }
         if R.RequiredText <> '' then
         begin
           if not LowerReady then

@@ -58,6 +58,45 @@ breaking changes** until v1.0.
 
 ### Fixed
 
+- **`lint-all --rule X` runs only what can emit X (D17).** Every per-file checker, the whole `.scm`
+  catalogue and every project-wide phase (project rules, class metrics, doc-drift, missing-doc,
+  duplicate-code, interface cycles, layering, unit-not-in-dpr, used-unit-resolvable) ran for any `--rule`
+  and only the REPORT was filtered. Each is now gated on the same `LINT_GATE_*` lists `lint` uses, the
+  project pass and class metrics are handed the rule, and the `.scm` pass runs only X's query
+  (`TLinter.OnlyRuleId`, which also skips parsing a file nothing wants). `lint` gets the `.scm` narrowing
+  too. Measured on this repo's self index (129 files): `--rule unused-local` 357.8 s -> 4.9 s,
+  `--rule overwrite-before-read` ~420 s -> 99 s (the flow checker is the cost itself), `--rule
+  concat-in-loop` 4.0 s, `--rule doc-drift` 188 s, against 447 s for a full run; for all six rules
+  measured the findings are IDENTICAL to the full run's with the same engine. Two defects
+  fixed on the way: the inline `lint` gates were SHORT of `local-field-prefix` and `doc-orphan-block`
+  (`lint --rule` answered 0) and of the doc-drift family's `doc-param-*` ids -- all multi-id gates are now
+  shared constants pinned against the checkers' sources; and `lint --rule review-marker-unused`
+  narrowed away the checkers the marker rule is computed from, so it reported a LIVE marker as unused
+  ("remove it") -- a `review-marker-*` rule now runs everything and is narrowed at report time
+  (`LintNarrowRule`). Guard: `tests\autotest\run_lint_rule_narrows_checkers.ps1` (sections L, R, G and
+  the two new gate-list drift checks).
+- **A `"rule"` key in `.drag-lint.json` no longer narrows a whole-project run (L1).** It was copied into
+  `--rule` for EVERY verb, silently, so a stray key above the CWD turned every `lint-all` into a one-rule
+  run. It is now a default for `lint` only (the file or folder the user named), announced on stderr;
+  every other verb ignores it and says so; an explicit `--rule` wins with no note. Guard:
+  `tests\autotest\run_config_rule_key_scope.ps1`.
+- **`lint-all` says which ownRoots it defaulted to (L2, and the cause of L8).**
+  `_D-RAG\drag-lint-project.json` is gitignored, so a fresh clone or a git worktree lacks it and ownRoots
+  defaults (per the house rule) to the project file's folder -- for a `.dproj` in a subfolder that skips
+  most of the codebase, and the short run read as a small project. With no declaration the run now
+  prints the defaulted root, and when that skipped files a loud NOTE naming the missing file, the
+  skipped count and the fix. This is also why per-file `lint` "reported" `unused-unit-in-uses` in
+  `DRagLint.Query.Callers.pas` while `lint-all` did not (L8): in a worktree lint-all had skipped the
+  file as third-party; with the file in scope both verbs report both imports (measured on this worktree
+  and a copy of the main index), and the two imports were genuinely dead -- removed. Guard:
+  `tests\autotest\run_ownroots_default_note.ps1`.
+- **JSON output on a stale index: the staleness is in the envelope, and stdout always parses (ENG-3).**
+  The note was already on stderr (since 2026-09-14); the reported splice was stderr merged into stdout
+  by the consumer. The audit found no json verb writing it to stdout. The object envelopes of
+  `reverse-calltree`, `butterfly`, `callgraph`, `sql`, `schema` and `deps-report` now carry `"stale"`
+  and `"stale_files"` (as `sql/1` carries `truncated`), so staleness can be surfaced without stderr.
+  Guard: `tests\autotest\run_json_stdout_parses_on_stale_index.ps1` -- 23 json verbs, stdout parsed alone
+  on a fresh and on a deliberately stale index, envelope asserted false then true.
 - **`allow` refuses every rule that is not a finding about code (L4).** Only `review-marker-stale` and
   `review-marker-unused` were refused, by id, so the three review-marker rules added since
   (`-malformed`, `-placeholder-hash`, `-reason-unreviewed`) and `parser-error` were written as live

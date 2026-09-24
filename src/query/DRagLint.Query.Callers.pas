@@ -174,10 +174,6 @@ function NameCallersForName(const AStore: ISymbolStore; const AName: string; ACo
 
 implementation
 
-uses
-  System.Classes,
-  System.StrUtils;
-
 { Pull the call site's OWN line out of the indexed context blob.
   FindCallersByNameWithContext formats each line as '%5d: %s', so after Trim the
   wanted line starts with '<StartLine>:'. Reading the file again here instead

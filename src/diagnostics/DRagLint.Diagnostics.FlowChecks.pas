@@ -1925,6 +1925,10 @@ end;
   therefore EXCEPT-ONLY, and run_dead_store_overwritten_in_try.ps1's
   TryFinallyTwin control exists to fail the moment that stops being true. }
 function ProtectedByFollowingTry(const AAsg: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+const
+  { Backstop on the walk to the try, not a tuning knob: a run of inits longer
+    than this is not the shape being protected. }
+  MAX_SIBLINGS_TO_TRY = 64;
 var
   Cur, C: TTSNode;
   Nm, S : string;
@@ -1960,7 +1964,7 @@ begin
     (run_overwrite_before_read_pretry.ps1, LoopThenUnrelatedTry). }
   Cur   := Unwrap(AAsg.NextNamedSibling);
   Guard := 0;
-  while (not Cur.IsNull) and (Guard < 64) and ((Cur.NodeType = 'assignment')
+  while (not Cur.IsNull) and (Guard < MAX_SIBLINGS_TO_TRY) and ((Cur.NodeType = 'assignment')
     or ((Cur.NodeType <> 'try') and not ContainsWholeIdent(LowerCase(NodeStr(Cur, ASrc)), Nm))) do
   begin
     Cur := Unwrap(Cur.NextNamedSibling);

@@ -89,6 +89,11 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   task is about a form's components, DFM or event wiring.
 * A `note: N of M indexed file(s) changed since this index was built` line means
   **reindex first**. The answer may be stale.
+  The note is on **stderr**, never inside a JSON document. The object envelopes of
+  `reverse-calltree`, `butterfly`, `callgraph`, `sql`, `schema` and `deps-report`
+  also carry `"stale": true|false` and `"stale_files": <n>`, so a consumer can
+  surface staleness without reading stderr (`stale` is `false` for an index too
+  old to carry the freshness stamp, exactly as the note is silent then).
 
 Add `--json` to any query for machine-readable output.
 
@@ -251,7 +256,8 @@ published while `modifiers` says `public` for both.
 >   that command for you.
 >
 >   `--json` emits the stable `sql/1` document: `columns`, `rows`,
->   `row_count`, `truncated`, `row_cap`, `timeout_ms`, `elapsed_ms`. Rows are
+>   `row_count`, `truncated`, `stale`, `stale_files`, `row_cap`, `timeout_ms`,
+>   `elapsed_ms`. Rows are
 >   **arrays positionally matching `columns`**, not objects -- a query may
 >   return two columns with the same name and an object would lose one -- and
 >   cell types are preserved, so an integer column is a JSON number. The
@@ -573,7 +579,7 @@ pure-diagnostic verbs are broken out in 2b.
 | `lint <snap> --stand-in-for <real>` | lint a temp snapshot of an unsaved buffer as though it were `<real>`: store membership, file id, unit-name check and reported path all use the real path |
 | `lint --project P.dproj` | project-level rules (e.g. `unit-not-in-dpr`). Since 2026-09-08 a plain `lint-all --db <db>` ALSO evaluates `unit-not-in-dpr`: it infers the project file from the manifest section that owns the DB, so the canonical run no longer skips the membership check. Passing `--project` explicitly additionally SCOPES the report; inference does not |
 | `lint-project --db DB` | index-wide rules (god-class, circular-uses, layering-violation, ...); `--layers <f.json>` is the architecture-layer config `layering-violation` needs (else `drag-lint-layers.json` in the CWD) |
-| `lint-all` | lint everything indexed (`--output report.txt`, `--quiet`); `--rule <id>` reports only that rule and opts an OFF-by-default rule in for the run, exactly as `lint --rule` does (no `--enable` needed); `--project <.dproj>` reports only that project's compile closure; `--lint-third-party` reports the vendored roots too instead of naming them as skipped |
+| `lint-all` | lint everything indexed (`--output report.txt`, `--quiet`); `--rule <id>` reports only that rule and opts an OFF-by-default rule in for the run, exactly as `lint --rule` does (no `--enable` needed), and RUNS only the checkers and the `.scm` query that can emit it (a `review-marker-*` rule still runs everything it is computed from); a `"rule"` key in `.drag-lint.json` is IGNORED by `lint-all` (with a stderr note) and honoured, with a note, only by `lint`; with no `_D-RAG\drag-lint-project.json` the run says which ownRoots it DEFAULTED to (the project folder) and how many files that skipped; `--project <.dproj>` reports only that project's compile closure; `--lint-third-party` reports the vendored roots too instead of naming them as skipped |
 | `lint-tree` | does an interface edit to a unit reach any dependent? `--unit B.pas --db <db>` fingerprints B's interface; `--write-baseline f.json` captures the OLD side once per edit episode, `--baseline f.json` diffs against it, `--buffer f` reads an unsaved buffer, `--with-rules` also harvests the dependents' lint findings, `--compile` also compiles the dependents in a shadow dir. Exit 0 whether or not anything was found; 2 = could not run. A baseline from a different extractor/schema is REFUSED, not diffed. |
 | `exceptions-sync` | materialise the project's derived exception classes into the exceptions unit (`--apply`; dry-run without it; `--json` emits one machine-readable document on stdout with the counts and the classes it would add, prose to stderr). Harvests every bare `raise Exception.Create('literal')` project-wide and declares ONE class per DISTINCT message inside a `drag-lint:auto` managed block. Opt in with an `"exceptions"` block in `drag-lint-lint.json` -- an empty one is enough; key `unit` names the unit (default `uExceptionDefinitions`, **created if absent**) and key `root` the ancestor (default `Exception`). **The same-line `//` comment after each declaration IS the key**, so renaming a generated class is safe and editing its comment makes the next run add a second class for the old message. It is a VERB and not a `--fix` because its input is project-wide and its output is one file |
 | `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`; `--shadow <dir>` compiles an unsaved buffer staged there instead of the file on disk) |
