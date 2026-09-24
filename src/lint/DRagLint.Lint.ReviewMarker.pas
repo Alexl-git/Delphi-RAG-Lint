@@ -1062,6 +1062,11 @@ end;
 function StripReviewStamp(const AReason: string): string;
 const
   STAMP_RX   = '\(?\bREVIEWED\s+\d{4}-\d{2}-\d{2}\b\)?';
+  { The punctuation branch has no lookahead ON PURPOSE, unlike the dash one:
+    the pre-D29 pattern took `;` `,` `.` unconditionally, so
+    `REVIEWED 2026-09-23;reason` -> `reason` must not regress, and punctuation
+    right after a date is a separator in every form written. A dash needs the
+    lookahead because it also begins words and flags (`-Exe`, `-1`). }
   AFTER_RX   = '(?:\s*[;,.:]|\s+--?(?=\s|$))';
   BEFORE_RX  = '[,;:]\s*';
 begin

@@ -153,6 +153,9 @@ $l3b = [ordered]@{
   'stamp, dashes, text'   = 'REVIEWED 2026-09-23 -- reason'
   'text, comma, stamp'    = 'reason, REVIEWED 2026-09-23'
   'text, semicolon, stamp'= 'reason; REVIEWED 2026-09-23'
+  # Pinned by StripReviewStamp's comment: punctuation after the date is taken
+  # even with no space after it (the pre-D29 behaviour for `;` `,` `.`).
+  'stamp;text, no space'  = 'REVIEWED 2026-09-23;reason'
 }
 foreach ($k in $l3b.Keys) {
   Write-Fixture ('  except  // dl:ok try-except-swallowed@0bad -- ' + $l3b[$k])
