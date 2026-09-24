@@ -270,9 +270,25 @@ from 9 nodes to 4. Callers unaffected.
 
 ## Resume point
 
-**All three batches are DONE and there is no next batch.** Every catalogue
-question the index can answer now ships; the five that do not are blocked on
-facts that do not exist, each measured and each filed.
+**NEXT ACTION (owner request, 2026-09-24):** produce the `protocol-trace` chart
+for the Blueprint4 "Operation Name" grid field WITH THE ENGINE AND THE EMITTERS
+(not written by hand or by AI) and save the HTML plus the text into
+`charts\docs\examples\protocol-trace\`. Also write down how to do the same from
+the IDE and where the text and the graphics come from. Steps for a cold start:
+find the grid column's bound field (`shown-where` / `feeds-from` on the column,
+or the Blueprint4 DFM binding) and its wire field; run
+`src\New-DiagramArtifact.ps1 -Question protocol-trace -Target <field> -DbPath
+scratch\db\CLIENT-Micronite2027.sqlite`; the text is the bundle's meta/summary
+plus the emitter's disclosure rows, the graphics are the `.svg` that dot renders
+from the emitter's `.dot`. Never hand-edit either.
+
+**Still open:** (1) owner decides the R24 wave (6 pre-existing unpaged
+population queries -- ledger `.superpowers\sdd\PLAN-last-four-verbs\progress.md`);
+(2) when the engine deploys D31, adopt the deployed engine (audit list in the
+ledger) and drop the who-writes "bound, not reported" workaround.
+
+**The earlier batches are all done.** 25 of 26 catalogue questions ship; only
+`compare` does not, parked by the owner.
 
 **THE SUITE IS GREEN (2026-09-24 03:48) on extractor 1.19.0 / resolver 1.8.0** --
 all 9 clones re-taken 02:53 (previous copies kept as `*.pre-1.19`), every moved pin
