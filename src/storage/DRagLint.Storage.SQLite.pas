@@ -5768,7 +5768,7 @@ var
   List: TList<TResolvedCaller>;
   R   : TResolvedCaller       ;
   MemberArm: string           ; { the member_accesses UNION arm, '' on a DB without the table }
-  ValueArm : string           ; { the bound-USAGE UNION arm (enum values today) }
+  ValueArm : string           ; { the bound-USAGE UNION arm (enum reads, bound bare writes) }
   NoMemberAccess: string      ; { ValueArm's member_accesses exclusion, '' without the table }
 begin
   List:= TList<TResolvedCaller>.Create;
@@ -5789,8 +5789,13 @@ begin
 
     { 2026-09-23 (enum-value-ref-binding, owner ruling R-A): a BOUND USAGE -- a
       ref whose symbol_id is this symbol and which owns neither a call_edges nor
-      a member_accesses row. Today that is exactly an enum-value read (bare or
-      qualified); a later widening to const/var reuses this arm unchanged.
+      a member_accesses row. Two shapes reach it:
+        * an enum-value read (bare 'read' or qualified 'member-access'), R-A;
+        * 2026-09-24 (D31): a bare WRITE bound by resolver 1.8.0 (D13) --
+          `FFlag := True`, `GCount := 1`. D13 binds a write IDENTITY ONLY (no
+          call_edges row, no member_accesses row; see ResolveWriteRefs), so
+          before 'write' was admitted here such a site was reported by NO arm
+          and a consumer (charts who-writes) stated a false "no write sites".
 
       THE TWO `NOT EXISTS` ARE WHAT KEEP ROUTINE AND PROPERTY ROWS BYTE-
       IDENTICAL. A resolved call already owns a call_edges row and a bound
@@ -5798,11 +5803,14 @@ begin
       EXCLUDED here rather than emitted a second time. Without them this arm
       would double every row the first two arms already produce.
 
-      MODE IS THE LITERAL 'read' FOR BOTH SHAPES (owner ruling R7), including
-      the Shape B qualified read whose ref kind is 'member-access'. The spec's
-      arm sketch said `mode = r.kind`, which would render 'member-access' to a
-      consumer that has only ever seen read/write there -- noise a chart
-      consumer would then have to explain away. An enum value can only be read.
+      MODE IS DERIVED FROM THE KIND, NOT COPIED FROM IT: 'write' for a write
+      ref, 'read' for everything else. The ELSE is owner ruling R7 -- an enum
+      value reports 'read' for both shapes, including the Shape B qualified
+      read whose ref kind is 'member-access'. The spec's arm sketch said
+      `mode = r.kind`, which would render 'member-access' to a consumer that
+      has only ever seen read/write there -- noise a chart consumer would then
+      have to explain away. A literal 'read' (the pre-D31 form) would instead
+      label every bound write a READ, which is the opposite lie.
 
       DISPLAY/LOCATION PARITY IS LOAD-BEARING, not incidental. Doc.Facts
       AddDistinct dedupes on '(Display, Location)' -- line-free -- and
@@ -5820,11 +5828,12 @@ begin
       NoMemberAccess:= '';
     ValueArm:=
       'UNION ALL ' +
-      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ''certain'' AS confidence, ''read'' AS mode ' +
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ''certain'' AS confidence, ' +
+      'CASE r.kind WHEN ''write'' THEN ''write'' ELSE ''read'' END AS mode ' +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
-      'WHERE r.symbol_id = :x AND r.kind IN (''read'', ''member-access'') ' +
+      'WHERE r.symbol_id = :x AND r.kind IN (''read'', ''member-access'', ''write'') ' +
       'AND NOT EXISTS (SELECT 1 FROM call_edges ce2 WHERE ce2.ref_id = r.id) ' +
       NoMemberAccess;
 
@@ -5844,7 +5853,8 @@ begin
         is already a call_edges row above; not repeated. Empty string in the
         first arm keeps the routine rows byte-identical. }
       MemberArm +
-      { 2026-09-23 (R-A): BOUND USAGES -- enum-value reads today. Appended AFTER
+      { 2026-09-23 (R-A): BOUND USAGES -- enum-value reads, and (D31) bound
+        bare writes. Appended AFTER
         MemberArm so the first two arms' row order is untouched; the ORDER BY
         below is what actually fixes the output order. }
       ValueArm +

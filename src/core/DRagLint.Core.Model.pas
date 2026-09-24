@@ -698,8 +698,11 @@ type
   TResolvedCaller = record
     EnclosingSymbolId: Int64 ;
     EnclosingQName   : string;
-    /// <summary>'read' | 'write' when this row is a PROPERTY or FIELD access
-    /// (2026-09-16, member_accesses); '' for a routine call. Rendered as a
+    /// <summary>How the site uses the target, by FindResolvedCallers arm:
+    /// '' for a routine call (call_edges row); 'read' | 'write' for a PROPERTY
+    /// or FIELD access (2026-09-16, member_accesses.mode); 'read' for a bound
+    /// usage read (enum value, bare or qualified -- owner ruling R7); 'write'
+    /// for a bound bare write (D13 binding, reported since D31). Rendered as a
     /// trailing mode key / bracket so routine rows are byte-identical to
     /// what they were.</summary>
     Mode             : string;

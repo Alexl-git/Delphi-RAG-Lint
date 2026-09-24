@@ -6,6 +6,7 @@ breaking changes** until v1.0.
 ## Unreleased
 
 
+
 ### Fixed (follow-ups D26, D29 -- no version constant moves)
 
 - **D26 -- the `dl:shared` reader no longer mistakes PROSE for the marker.** The header scanner
@@ -119,6 +120,21 @@ breaking changes** until v1.0.
   `review-marker-stale` on that line. On the self index the 6021 marker is now used in both scopes
   and the `Parser.Delphi13.pas:98` / `AstChecks.pas:6021` finding is suppressed. Guard:
   `tests\autotest\run_duplicate_code_marker_either_end.ps1`.
+
+
+### Fixed (read side only -- no resolver or extractor bump, no re-resolve)
+
+- **D31 -- `query find-callers --resolved` reports bound WRITE refs, with mode `write`.** Resolver
+  1.8.0 (D13) binds a bare write (`FFlag := True`) identity-only -- no `call_edges` row, no
+  `member_accesses` row -- and `FindResolvedCallers`' bound-usage arm admitted only `read` /
+  `member-access` refs, so a bound write was reported by no arm (charts `who-writes` stated a false
+  "no write sites"). The arm now admits `write` and derives `mode` from the ref kind (owner ruling
+  R7 kept: enum reads, incl. kind `member-access`, stay `read`). Measured on a copy of ORM3
+  CLIENT: `FConnected` 602 read rows -> 602 read + 4 write. Autodoc: a writer that was listed
+  `Used by: X ?` from the name bucket is now resolved and renders plain. Guard:
+  `tests\callresolve\run_find_callers_reports_bound_writes.ps1`; `run_property_refs_resolve.ps1`
+  now pins FCount's two bare writes as well as its two reads; `run_doc_leafname_localvar_collision.ps1`'s
+  sanity check is scoped to the METHOD target (`--name Child` now also lists the five locals' writes).
 
 
 ### Fixed (extractor 1.18.0-alpha -> 1.19.0-alpha: every index re-parses once)

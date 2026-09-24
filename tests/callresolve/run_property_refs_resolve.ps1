@@ -243,7 +243,17 @@ Write-Host '== E2: a FIELD accessor is USED by the access, with no call edge =='
 $ff = Of (Resolved 'FFlag') 'uProv.TProvider.FFlag'
 Check 'FFlag: used by WriteIt (the Flag WRITE), as a write' ($ff.Count -eq 1 -and $ff[0].caller_qname -match 'WriteIt$' -and $ff[0].mode -eq 'write') ($ff | ConvertTo-Json -Compress)
 $fc = Of (Resolved 'FCount') 'uProv.TProvider.FCount'
-Check 'FCount: used by CountIt and ReadCnt (the Count READs), as reads' ($fc.Count -eq 2 -and (@($fc | Where-Object { $_.mode -eq 'read' }).Count -eq 2)) ($fc | ConvertTo-Json -Compress)
+# D31 (2026-09-24): FCount is ALSO written bare inside uProv -- `FCount :=
+# AValue` in SetCount and `FCount := 0` in DoWork. Resolver 1.8.0 (D13) binds
+# those writes identity-only, and FindResolvedCallers now reports them with
+# mode 'write'. Before D31 this check pinned exactly 2 rows, which silently
+# encoded the defect (bound writes reported by no arm). It now pins BOTH sets
+# by caller, so a lost read or a lost write each turn it red.
+$fcR = @($fc | Where-Object { $_.mode -eq 'read' }  | ForEach-Object { ($_.caller_qname -split '\.')[-1] } | Sort-Object)
+$fcW = @($fc | Where-Object { $_.mode -eq 'write' } | ForEach-Object { ($_.caller_qname -split '\.')[-1] } | Sort-Object)
+Check 'FCount: used by CountIt and ReadCnt (the Count READs), as reads' (($fcR -join ',') -eq 'CountIt,ReadCnt') ($fc | ConvertTo-Json -Compress)
+Check 'FCount: written bare by DoWork and SetCount, as writes (D31)' (($fcW -join ',') -eq 'DoWork,SetCount') ($fc | ConvertTo-Json -Compress)
+Check 'FCount: nothing else (4 rows = 2 reads + 2 writes)' ($fc.Count -eq 4) ($fc | ConvertTo-Json -Compress)
 
 Write-Host ''
 Write-Host '== R1: an OVERLOADED accessor narrows by arity or declines ==' -ForegroundColor Cyan
