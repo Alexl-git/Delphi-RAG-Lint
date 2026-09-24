@@ -7,6 +7,33 @@ breaking changes** until v1.0.
 
 ### Added
 
+- **Resolver 1.8.0-alpha -- bare WRITES bind (D13).** A fourth calls-stage stream
+  (`ResolveWriteRefs` -> `TCallResolver.ResolveWriteRef`) sets `refs.symbol_id` for a `write` ref
+  (`X:= ...`) to the local, parameter, field, property, class var or unit-level var/const it
+  assigns -- Delphi's scope order, certain or nothing, identity only (no call_edges /
+  member_accesses row). Declines counted on a new `writes:` log line: `Result`, the function's own
+  name, a `with` above the site, two equally near candidates, not found. ORM3 CLIENT: 0 -> 17,720 of
+  32,909 write refs bound (10,481 `Result`, 4,417 `with`, 240 not found, 49 own-name, 2 ambiguous);
+  the stream costs 30.5 s of a 331 s whole-DB calls stage there. Guard:
+  `tests\callresolve\run_write_refs_bind.ps1` (12 positives, 5 negatives, log line, scoped unbind).
+  **Merged with the `with`-scope work (D14) into the same 1.8.0-alpha:** the write stream now asks
+  `WithScopeAt` at the write's position instead of declining every write below any `with` in the
+  routine -- a with target's property/field binds, a name the fully typed target lacks falls through
+  to the ordinary scopes, a write after a completed `with` binds normally, and only an untypable
+  target (or one whose ancestry leaves the index) declines. Rung 4b likewise declines when the with
+  scope may own the receiver's first segment (an untypable target's member spelled like a unit had
+  bound to that unit's routine). Same CLIENT copy, merged build: 17,720 -> **21,916** write refs bound
+  (with-scope declines 4,417 -> 215; +4,196 = 2,096 fields, 2,060 properties, 40 locals after a
+  closed `with`; none of the 17,720 lost or moved); `call_edges` 23,784 (with-scope build) -> 23,790
+  (+6, ENG-16); `member_accesses` 13,630 unchanged; effect-free 2,918; `assert-with-side-effect` 0.
+  Guards: `run_write_refs_bind.ps1` (15 positives incl. W-WITH-MEMBER / W-WITH-FALLTHROUGH /
+  W-AFTER-WITH, NEG-WITH-UNDECIDED), `run_unit_qualified_call_bind.ps1` (NEG-WITH-UNDECIDED).
+- **Resolver 1.8.0-alpha -- unit-qualified free-routine calls bind (ENG-16).** Rung 4b of
+  `ResolveOne`: `Pipes.Commands.DispatchCommand(...)`, `uHelp.DoIt` -- the receiver resolves to ONE
+  unit and the routine is picked by arity among that unit's visible routines; a local/member spelled
+  like the unit shadows it. ORM3 CLIENT: 6 unbound sites (5 calls + 1 parenless) -> 0. Guard:
+  `tests\callresolve\run_unit_qualified_call_bind.ps1`.
+
 - **`convert-validate` checks `G[I/N]` glyph expressions on `#link` (CV-4, the validate half of
   the glyph grammar).** `#link <ToPath> <- <FromPath> G[..] [: <Cast>]`: the expression is split off
   at the first ` G[` and kept verbatim (`TConversionRule.GlyphExpr`), so FromPath is the bare source
@@ -146,6 +173,15 @@ breaking changes** until v1.0.
   `third_party\...` and `tests\ergonomics\...` against the CURRENT directory, so it died in
   `Resolve-Path` unless launched from the repo root. Every path is now anchored on `$PSScriptRoot`,
   and `-Exe` overrides the engine.
+- **Purity: a result assigned through the function's OWN NAME is not a global write (D12).**
+  `Greater:= X > Y;` (and a nested routine assigning the outer function's name) was scored `g`.
+  ORM3 CLIENT: effect-free routines 2,895 -> 2,918; the 34 own-name routines go from 0 to 20
+  effect-free (the other 14 have real effects); `assert-with-side-effect` 4 findings -> 0 (all 4 were
+  this). Guards: `run_purity_stage.ps1` (D12 block + positive control), `run_assert_side_effect.ps1`
+  (CONTROL-9). `DRAGLINT_RESOLVER_VERSION` 1.7.0-alpha -> 1.8.0-alpha for all three (derived rows
+  only: remedy `index --all --resolve-only`); the C2.3 + IsStub reservation moves to 1.9.0-alpha. No
+  extractor bump (extractor baseline hash re-recorded, CallResolver.pas only).
+
 - **`query find-callers --resolved`: `line` is the CALL SITE on every row (C1).** The rows built from
   `call_edges` -- routine call, property/field access, enum-value read, parenless call -- put the
   caller ROUTINE's declaration line in JSON `line`, while callback rows put the site there: one key,
@@ -277,7 +313,7 @@ breaking changes** until v1.0.
 - **A forward declaration is not a class (C2.5).** `TFoo = class;` completed later in the same unit is folded into the real declaration by every by-name reader: `query --name/--qname` returns ONE row (the real one) with `forward at line N` / `forward_line`; `hover --qname` renders the real declaration; the LSP hover on the stub's line renders the real one led by `forward declaration -> line N`; ClassMetrics measures the real class once (it used to parent every descendant to the stub and anchor `too-many-children` on the stub's line); `outline` keeps both rows and tags the stub `[forward -> line N]` / `forward_target_line`; LSP completion (`FindSymbolsByPrefix`) offers the type once instead of twice. Interface stubs follow the same rule. A lone stub (`TOnlyStub = class;` with no completion in the unit) and an empty class (`TEmpty = class end;`) still count as classes. Resolution-side join -- no schema or extractor change; no re-index needed. The call resolver's cross-store receiver lookup (`CallResolver` declines when a name matches more than one row) now resolves receivers whose RTL type is forward-declared (`TComponent`, `TReader`, `TWriter`, ...) -- an index resolved before this change lacks those edges until `index --all --resolve-only` is run (or the next resolver bump re-resolves everything). `DRAGLINT_RESOLVER_VERSION` was deliberately NOT bumped (spec S8; owner decision pending). New `DRagLint.Core.ForwardStub`; guards `run_forward_stub_pairing.ps1`, `run_forward_stub_is_not_a_class.ps1` (CASE E drives `textDocument/completion`). Spec: `docs\superpowers\specs\2026-09-17-forward-stub-is-not-a-class-design.md`.
 
 ### Known
-- `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.9.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the `with` scope above).
+- `ResolveTypeNameToClass.IsStub` (resolver-side) keeps its own narrower stub filter (heritage empty AND end_line <= start_line, no children/same-file test); unifying it with `DRagLint.Core.ForwardStub` is a resolver-surface change deferred to `DRAGLINT_RESOLVER_VERSION` 1.9.0 (it was 1.6.0 until 2026-09-23, when 1.6.0-alpha was taken by the enum-value ref binding, then 1.7.0 until 1.7.0-alpha was taken the same day by the parenless-call binding, then 1.8.0 until 1.8.0-alpha went to the resolver batch -- the `with` scope above, D12 own-name result writes, D13 bare write binding and ENG-16 unit-qualified calls).
 
 ## v1.16.0-alpha -- 2026-09-22
 

@@ -21,7 +21,8 @@ unit DRagLint.Core.ForwardStub;
   1.6.0 until 2026-09-23, when the owner gave 1.6.0-alpha to the enum-value ref
   binding -- docs\superpowers\specs\2026-09-23-enum-value-ref-binding.md -- then
   1.7.0 until 1.7.0-alpha went to the parenless-call binding, and 1.8.0 until
-  1.8.0-alpha went to the `with` scope, all the same day).
+  1.8.0-alpha went to the resolver batch -- the `with` scope (D14/D16) and
+  D12/D13/ENG-16 -- all the same day).
 
   Design: docs\superpowers\specs\2026-09-17-forward-stub-is-not-a-class-design.md }
 

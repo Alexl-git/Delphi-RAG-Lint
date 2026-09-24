@@ -508,9 +508,10 @@ type
       /// <param name="ACandidates">Out: rows offered to the resolver.</param>
       /// <param name="ABound">Out: rows bound to a property or field.</param>
       /// <remarks>
-      /// Runs LAST, after the enum-value and parenless streams, and offers only
-      /// refs they left with symbol_id NULL: a `read` is bound by at most one
-      /// stream. Before rebuilding it NULLs the `read` refs it bound earlier
+      /// Runs after the enum-value and parenless streams (the last of the READ
+      /// streams; only the write stream, which never touches a `read`, follows
+      /// it), and offers only refs they left with symbol_id NULL: a `read` is
+      /// bound by at most one stream. Before rebuilding it NULLs the `read` refs it bound earlier
       /// (those pointing at a property or field -- no other writer binds a read
       /// to one; measured 0 on ORM3 CLIENT at 1.7.0) under the same scope and
       /// stale predicates, for the reason ResolveEnumValueRefs gives. Their
@@ -530,6 +531,31 @@ type
       /// member-read stream, so both write the identical three facts. A FIELD
       /// accessor earns no edge: the member_accesses row IS that use.</remarks>
       procedure WriteMemberAccess(ARefId: Int64; const AEdge: TCallEdge);
+      /// <summary>D13 (2026-09-23, resolver 1.8.0-alpha): the calls stage's
+      /// FIFTH stream. Offers every `write` ref -- a bare identifier on the left
+      /// of `:=` -- to TCallResolver.ResolveWriteRef and sets refs.symbol_id to
+      /// the declaration it assigns when that answer is certain.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: write rows offered to the resolver.</param>
+      /// <param name="ABound">Out: rows whose symbol_id was set.</param>
+      /// <remarks>
+      /// IDENTITY ONLY: no call_edges row and no member_accesses row -- a bare
+      /// write is not a call, and member_accesses stays the record of DOTTED
+      /// accesses that who-writes / find-callers already read. Runs inside
+      /// ResolveCallTargets' transaction. NULLs refs.symbol_id over the write
+      /// rows in scope before rebuilding, for the reason ResolveEnumValueRefs
+      /// gives: on a SCOPED run a write that now declines would otherwise keep a
+      /// binding this engine no longer derives. No other writer binds a `write`
+      /// ref, so the NULL can never erase another stream's answer.
+      /// </remarks>
+      procedure ResolveWriteRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       /// <summary>Record the names a file is about to lose, before OpenFileTx
       /// deletes its symbols.</summary>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
@@ -12182,6 +12208,72 @@ begin
   end;
 end;
 
+procedure TSQLiteSymbolStore.ResolveWriteRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  { The candidate universe, verbatim in both statements so the NULL and the
+    rebuild can never select different sets. }
+  WRITE_UNIVERSE = 'refs.kind = ''write''';
+var
+  Where  : string    ;
+  Q      : TFDQuery  ;
+  Ref    : TReference;
+  Reason : string    ;
+  Id     : Int64     ;
+  FldId  : TField    ;
+  FldFile: TField    ;
+  FldName: TField    ;
+  FldEncl: TField    ;
+  FldLine: TField    ;
+  FldCol : TField    ;
+begin
+  ACandidates:= 0;
+  ABound     := 0;
+  Where:= WRITE_UNIVERSE;
+  if AScopeWhere <> '' then Where:= Where + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Where:= Where + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + Where);  // dl:ok sql-injection-concat@dd1f -- REVIEWED 2026-09-23: Where is SQL this pass BUILT -- a literal kind predicate plus MaterializeResolveScope's and the stale prescan's own refs predicates -- never user text, the identical construction ResolveEnumValueRefs uses. It cannot be parameterised: the scope predicate names a temp table and the stale one an IN-list of file ids.
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + Where;
+    Q.Open;
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      Ref.Kind     := 'write';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      { Every decline is counted by reason inside the resolver (WriteStats) and
+        printed on the stage's log line -- a decline writes nothing. }
+      Id:= AResolver.ResolveWriteRef(Ref, Reason);
+      if Id > 0 then
+      begin
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+        FQSetRefSymbol.ExecSQL;
+        Inc(ABound);
+      end;
+      Inc(ACandidates);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
 procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
@@ -12219,6 +12311,9 @@ var
   ParenBound     : Int64    ; { of those, the rows that earned a call edge                 }
   MemberCandidates: Int64   ; { member-read stream -- read rows offered to the resolver     }
   MemberBound     : Int64   ; { of those, the rows bound to a property or field            }
+  WriteCandidates: Int64    ; { D13 write stream -- write rows offered to the resolver      }
+  WriteBound     : Int64    ; { of those, the rows whose symbol_id was set                  }
+  TWrites        : Double   ; { seconds the write stream took -- printed on its own line     }
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
   T0        : Int64         ;
   TMaps     : Double        ; { seconds spent building TCallResolver's maps }
@@ -12296,6 +12391,8 @@ begin
   ParenBound     := 0;
   MemberCandidates:= 0;
   MemberBound     := 0;
+  WriteCandidates:= 0;
+  WriteBound     := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
   { Split out because it is O(symbols) and independent of how many refs this run
@@ -12633,9 +12730,14 @@ begin
         stream on purpose -- see ResolveParenlessCallRefs' remarks. Same
         transaction, so its edges share the pass's all-or-nothing lifetime. }
       ResolveParenlessCallRefs(Resolver, ScopeWhere, StaleWhere, ParenCandidates, ParenBound);
-      { 1.8.0 (D14 + D16a): the FOURTH stream, LAST, over the `read` refs the two
+      { 1.8.0 (D14 + D16a): the FOURTH stream, last of the READS, over the `read` refs the two
         streams above left unbound -- see ResolveMemberReadRefs' remarks. }
       ResolveMemberReadRefs(Resolver, ScopeWhere, StaleWhere, MemberCandidates, MemberBound);
+      { 2026-09-23 (D13, resolver 1.8.0-alpha): the FIFTH stream -- bare writes,
+        identity only. Same transaction, same all-or-nothing lifetime. }
+      TMark:= TStopwatch.GetTimeStamp;
+      ResolveWriteRefs(Resolver, ScopeWhere, StaleWhere, WriteCandidates, WriteBound);
+      TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       FConn.Commit;
     except
       on E: Exception do
@@ -12775,6 +12877,14 @@ begin
       [Resolver.WithStats.Statements, Resolver.WithStats.Files,
        Resolver.WithStats.CallBound, Resolver.WithStats.CallDeclined,
        Resolver.WithStats.ReceiverTyped, Resolver.WithStats.ReceiverDeclined]));
+    { 2026-09-23 (D13). Every decline by reason, for the same reason as the two
+      lines above: a declined write stores nothing anywhere else. }
+    ResolveLog(Format('calls      writes: %d of %d write ref(s) bound; declined result %d, own-name %d, ' +
+      'with-scope %d, ambiguous %d, not-found %d, routine %d, unreadable %d  [%.1fs]',
+      [WriteBound, WriteCandidates,
+       Resolver.WriteStats.ResultVar, Resolver.WriteStats.OwnName, Resolver.WriteStats.WithScope,
+       Resolver.WriteStats.Ambiguous, Resolver.WriteStats.NotFound, Resolver.WriteStats.Routine,
+       Resolver.WriteStats.Unreadable, TWrites]));
     { A SILENTLY EMPTY SHADOW SET IS A FAIL-OPEN, the failure mode this
       repository has been bitten by before: R3(c) would stop shadowing, the pass
       would OVER-BIND, and the run would report a clean result. Loud, and on its

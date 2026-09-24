@@ -174,8 +174,19 @@ const
   /// recognises qualified `TFunc&lt;T&gt;` / Spring `Func&lt;T&gt;` (D16b). The
   /// with spans come from parsing the source in the resolver; no stored parse
   /// changes. DERIVED rows only: remedy is `index --all --resolve-only`. A
-  /// MINOR: new classes of derived row, and bindings that MOVE. The
-  /// reservation for C2.3 + the IsStub unification MOVES from 1.8.0 to
+  /// MINOR: new classes of derived row, and bindings that MOVE.
+  /// The same 1.8.0-alpha also carries resolver batch A, built in parallel
+  /// from the same base and merged into this one version: (D12) the purity
+  /// stage treats a write to the enclosing function's OWN NAME
+  /// (`Greater:= X &gt; Y`) as a result assignment, not a global write: 34
+  /// routines on ORM3 CLIENT, and all 4 assert-with-side-effect findings there.
+  /// (D13) a FIFTH calls-stage stream (ResolveWriteRefs -&gt;
+  /// TCallResolver.ResolveWriteRef) binds refs.symbol_id for a bare `write`
+  /// ref -- local, parameter, field, property, class var, unit-level var --
+  /// certain or nothing; 32,909 write rows on CLIENT had none. (ENG-16) rung 4b
+  /// of ResolveOne binds a UNIT-QUALIFIED free-routine call
+  /// (`Pipes.Commands.DispatchCommand(...)`). The reservation for C2.3 + the
+  /// IsStub unification MOVES from 1.8.0 to
   /// 1.9.0-alpha.</para>
   DRAGLINT_RESOLVER_VERSION = '1.8.0-alpha';
 

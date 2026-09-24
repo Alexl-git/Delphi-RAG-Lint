@@ -206,6 +206,7 @@ type
     procedure ApplyFacts(AIndex: Integer; const AFacts: TSymbolFacts; var ASum: TEffectSummary; var AChanged: Boolean);
     procedure AddInheritedUse(AIndex: Integer; var ASum: TEffectSummary; var AChanged: Boolean; AUses: TList<TCalleeUse>);
     procedure CollectEscapes(AIndex: Integer; const ALines: TArray<string>; ARefs: TList<TReference>);
+    function  IsResultByName(AIndex: Integer; const AKey: string): Boolean;
     procedure NonLocalWrite(AIndex: Integer; const ARef: TReference; var ASum: TEffectSummary; var AChanged: Boolean);
     procedure BoundCall(AIndex: Integer; const ARef: TReference; ATargetId: Int64; const ALines: TArray<string>;
       var ASum: TEffectSummary; var AChanged: Boolean; AUses: TList<TCalleeUse>);
@@ -952,6 +953,28 @@ begin
   end;
 end;
 
+{ D12 (resolver 1.8.0-alpha). Pascal lets a function assign its result through
+  its OWN NAME -- `Greater:= X > Y;` is `Result:= X > Y;` -- and a nested
+  routine may assign the result of the function around it the same way. Such a
+  write lands in a frame the routine owns (or, for a nested routine, in the
+  enclosing frame, exactly like an outer local), so it is not an effect. It was
+  scored `g`: 34 routines on ORM3 CLIENT, and all 4 assert-with-side-effect
+  findings there. Only a FUNCTION or METHOD name counts: a procedure's name is
+  not assignable, so a match there cannot be this shape. The caller has already
+  let a local, a parameter or a field of that name win. }
+function TPurityRun.IsResultByName(AIndex: Integer; const AKey: string): Boolean;
+var
+  S: TSymbol;
+begin
+  Result:= False;
+  S:= FRoutines[AIndex];
+  while (S.Id > 0) and (S.Kind in ROUTINE_KINDS) do
+  begin
+    if (S.Kind in [skFunction, skMethod]) and (LowerKey(S.Name) = AKey) then Exit(True);
+    S:= SymbolById(S.ParentId);
+  end;
+end;
+
 procedure TPurityRun.NonLocalWrite(AIndex: Integer; const ARef: TReference; var ASum: TEffectSummary; var AChanged: Boolean);
 var
   Key: string;
@@ -964,6 +987,7 @@ begin
   Key:= LowerKey(ARef.NameText);
   if Key = NAME_RESULT then Exit;
   if FCtx[AIndex].Locals.ContainsKey(Key) or FCtx[AIndex].Params.ContainsKey(Key) or FCtx[AIndex].Fields.ContainsKey(Key) then Exit;
+  if IsResultByName(AIndex, Key) then Exit;
   if FCtx[AIndex].Props.ContainsKey(Key) then
   begin
     ASum.AddFlag(efUnknown, 'writes property ' + ARef.NameText + ' (setter not followed)', AChanged);

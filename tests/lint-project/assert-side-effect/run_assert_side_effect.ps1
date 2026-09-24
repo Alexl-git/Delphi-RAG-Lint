@@ -47,7 +47,7 @@ Write-Host "Indexing fixture..."
 & $exePath index $dir --db $db | Out-Null
 
 $t1 = LineOf 'TRIGGER-1'; $t2 = LineOf 'TRIGGER-2'; $t3 = LineOf 'TRIGGER-3'; $t4 = LineOf 'TRIGGER-4'; $t5 = LineOf 'TRIGGER-5'
-$controls = @(1..8 | ForEach-Object { LineOf "CONTROL-$_" })
+$controls = @(1..9 | ForEach-Object { LineOf "CONTROL-$_" })
 
 Write-Host "RUN 1: bare lint-all (the rule must be OFF by default)..."
 $f0 = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
@@ -80,7 +80,7 @@ $c7  = ($hit.Count -eq 0)
 
 $pass = $c0 -and $c0b -and $c1 -and $c2 -and $c3 -and $c4 -and $c5 -and $c5b -and $c6 -and $c7
 if ($pass) {
-  Write-Host "PASS  OFF by default (run 1); 5 triggers (p0, s, g, wrapped message, parenless g) fire with witness, 8 controls silent (run 2)"
+  Write-Host "PASS  OFF by default (run 1); 5 triggers (p0, s, g, wrapped message, parenless g) fire with witness, 9 controls silent (run 2)"
   exit 0
 } else {
   Write-Host ("FAIL  off={0} run1Real={1} count5={2} p0={3} s={4} g={5} wrapped={6} parenless={10} witness={7} controlsSilent={8} (controls hit: {9})" -f `
