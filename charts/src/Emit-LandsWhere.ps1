@@ -97,6 +97,11 @@ param(
   [string]    $OutDir,
   [int]       $Cap = 12,                  # rows shown per cluster; the rest disclosed
   [hashtable] $SourceOverride,
+  # TEST HOOK (R25, fix round 1): 'TABLE.COLUMN' names taken back OUT of the SQL
+  # index's extracted columns, so the gate can drive the `quoted` state through
+  # this emitter against the real, fresh script (see Hide-ExtractedColumns). A chart
+  # drawn with it says TEST CHART on its focus box.
+  [string[]]  $TestHideColumn,
   [string] $Engine     = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe',
   [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
   [string] $FontMono   = 'Consolas',
@@ -130,6 +135,10 @@ Write-Host "lands-where: $Field"
 
 # ---- 0. roles: each clone must be what its parameter says ---------------------------
 $sqlSet = Get-SqlTableSet $SqlDbPath
+if ($TestHideColumn) {
+  $sqlSet = Hide-ExtractedColumns $sqlSet $TestHideColumn
+  Write-Host "  TEST: extracted column(s) hidden: $($TestHideColumn -join ', ')"
+}
 if ($sqlSet.TableCount -eq 0) {
   throw "lands-where: $SqlDbPath is not a SQL index (0 sql_table symbols) -- -SqlDbPath takes the SQL-script clone"
 }
@@ -644,6 +653,7 @@ Add-DisclosureRow $ftbl ("server: $(if ($srvClass) { "$srvClass (found by name; 
                          "member accesses resolved to Imc$TName.$Prop are [certain], SQL / ParamByName literals [inferred]" +
                          $(if ($srvElsewhere) { "; $srvElsewhere access(es) to it outside the DataService not drawn" } else { '' })) $PAL.lineInk
 Add-DisclosureRow $ftbl 'positional Fields[i] / Params[i] reads are not shown -- they never name the column' $PAL.lineInk
+if ($TestHideColumn) { Add-DisclosureRow $ftbl "TEST CHART: $($TestHideColumn -join ', ') taken OUT of the SQL index's extracted columns (-TestHideColumn)" $PAL.lineInk }
 Add-DisclosureRow $ftbl "script-derived schema: $($sqlSet.TableCount) tables; $SCHEMA_NOTE" $PAL.lineInk
 if ($trigStale) { Add-DisclosureRow $ftbl "$trigStale trigger(s) FOR $TName in a script that differs from the index [stale source] -- not scanned" $PAL.lineInk }
 if ($procUnscanned) { Add-DisclosureRow $ftbl "$procUnscanned procedure bodies not scanned" $PAL.lineInk }

@@ -114,7 +114,7 @@ $EX = @(
   @{ Q='wiring';       T='IMicObject';     D=$SRV; A=@{}; Why='ZERO registrations is an answer, readable only next to the index-wide total' }
 
   @{ Q='effects';      T='Ap.APVDotProduct';                              D=$CLI; A=@{}; Why='g,p0,p3,? over GROUPED parameters -- p0 is V1 and p3 is V2, named by parsing the signature because mutates_params is empty here' }
-  @{ Q='effects';      T='uMain.TfrmMAIN.GetConnection';                  D=$CLI; A=@{}; Why='PURE. The summary is NULL, which the naive reading calls "not analysed" -- and would be wrong for 2,892 CLIENT methods' }
+  @{ Q='effects';      T='uMain.TfrmMAIN.GetConnection';                  D=$CLI; A=@{}; Why='PURE. The summary is NULL, which the naive reading calls "not analysed" -- and would be wrong for 2,918 CLIENT methods' }
   @{ Q='effects';      T='uSetupDefaults.TGlobalSetupDefaults.GetDebug1'; D=$CLI; A=@{}; Why='genuinely NOT ANALYSED (effect_free IS NULL) -- only 855 on CLIENT are. The contrast with the card above is the point' }
 
   @{ Q='architecture'; T='project'; D=$CLI; A=@{}; Why='563 units in 3 source zones, 2,858 internal edges, and 3 BACK-EDGES -- 13 edges running against a 1,170-edge flow' }
@@ -208,7 +208,7 @@ $CATALOGUE = @(
   @{ Q='what-it-calls';   Sel='method';          St='shipped'
      Note='Caller and callee walks follow resolved <code>call_edges</code>, and only RESOLVED calls are walked. Engine D1 (a parenless call such as <code>N := NextId;</code> never bound) was FIXED in resolver 1.7/1.8 -- CLIENT call edges 20,409 &rarr; 23,790 -- but a call the resolver still cannot bind is missing, so a short list remains a lower bound.' }
   @{ Q='who-writes';      Sel='field/property';  St='shipped'
-     Note='The writers wing is what <code>find-callers</code> reports: member-access writes. Extractor 1.19 binds a BARE in-class assignment (<code>FConnected := True</code>; engine D13, fixed) but gives it no member-access row, so the verb still does not report it: the chart lists such writes BOUND to the member by line, and any write still unbound (e.g. inside a <code>with</code> body) by name, and neither is counted in the wing.' }
+     Note='The writers wing is what <code>find-callers</code> reports: member-access writes. Extractor 1.19 binds a BARE in-class assignment (<code>FConnected := True</code>; engine D13, fixed) but gives it no member-access row, so the verb still does not report it: the chart lists such writes BOUND to the member by line, and any write or read still unbound (e.g. inside a <code>with</code> body; bare in-class reads) by name; neither is counted in a wing, and no count reads as a bare zero beside them.' }
   @{ Q='who-reads';       Sel='field/property';  St='shipped' }
   @{ Q='hierarchy';       Sel='type';            St='shipped' }
   @{ Q='class-surface';   Sel='type';            St='shipped' }

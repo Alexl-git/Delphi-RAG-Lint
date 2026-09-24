@@ -327,7 +327,7 @@ if (-not $ch) {
             $cs = Get-SqlColumnState $sqlSet $ch.ResolvedTable $col $SourceOverride
             $columnState = $cs.State
             if ($cs.IsColumn) {
-              $cl = $(if ($columnState -eq 'quoted') { "column `"$($cs.Column)`"" } else { "column $($cs.Column)" })
+              $cl = Get-ColumnHopLabel $cs      # Emit-Common; the quoted form is gate-driven (A-FF-QUOTED)
               [void]$rows.Add((New-Row $cl $cs.File $cs.Line "$tableCol -- $([IO.Path]::GetFileName($cs.File)):$($cs.Line)" $cs.Label))
             } elseif ($columnState -eq 'stale') {
               [void]$rows.Add((New-NoteRow "$($cs.Column): $($cs.Label)"))

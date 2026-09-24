@@ -74,7 +74,12 @@ param(
   [string] $Engine     = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe',
   [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
   [string] $FontMono   = 'Consolas',
-  [string] $FontSans   = 'Segoe UI'
+  [string] $FontSans   = 'Segoe UI',
+  # TEST HOOK (R25, fix round 1): replaces the STORED effect facts -- keys ef, es,
+  # ew, mp -- so the gate can prove the D12 detector is WIRED into this emitter
+  # now that no real row reaches it. A chart drawn from injected facts says so
+  # on its focus box, so it can never pass for an index answer.
+  [hashtable] $FactOverride
 )
 
 $ErrorActionPreference = 'Stop'
@@ -113,6 +118,13 @@ $es  = [string]$fact[0].es
 $ew  = [string]$fact[0].ew
 $mp  = [string]$fact[0].mp
 $sig = [string]$fact[0].sig
+if ($FactOverride) {
+  if ($FactOverride.ContainsKey('ef')) { $ef = $FactOverride.ef }
+  if ($FactOverride.ContainsKey('es')) { $es = [string]$FactOverride.es }
+  if ($FactOverride.ContainsKey('ew')) { $ew = [string]$FactOverride.ew }
+  if ($FactOverride.ContainsKey('mp')) { $mp = [string]$FactOverride.mp }
+  Write-Host "  TEST: stored facts replaced by -FactOverride (ef=$ef es='$es' ew='$ew')"
+}
 
 # ---- 2. parameter names by ORDINAL, from the signature ----------------------------
 # Delphi groups parameters: `I11, I12: AlglibInteger` is TWO ordinals sharing one
@@ -253,6 +265,7 @@ $anchored++
 [void]$ftbl.Append("<TR><TD PORT=`"p1`" ALIGN=`"LEFT`" HREF=`"$(New-RowHref $sel.Path $sel.FocusLine)`" TITLE=`"$(ConvertTo-XmlText $sel.Qname)`">")
 [void]$ftbl.Append("<FONT COLOR=`"$($PAL.rowInk)`">$(ConvertTo-XmlText (Get-UnitName $sel.Path))</FONT>")
 [void]$ftbl.Append("  <FONT COLOR=`"$($PAL.lineInk)`" POINT-SIZE=`"12`">:$($sel.FocusLine)</FONT></TD></TR>")
+if ($FactOverride) { Add-DisclosureRow $ftbl 'TEST CHART: the effect facts below were INJECTED (-FactOverride), not read from the index' $PAL.lineInk }
 if ($sig) { Add-DisclosureRow $ftbl $sig $PAL.lineInk 11 }
 Add-DisclosureRow $ftbl "effect_free = $(if ($null -eq $ef) { 'NULL' } else { $ef })  &#183;  stored summary = $(if ($es) { $es } else { '(empty)' })" $PAL.lineInk
 if ($ew) { Add-DisclosureRow $ftbl "first recorded witness: $ew" $PAL.lineInk }

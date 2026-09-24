@@ -210,6 +210,12 @@ $vocab = @{
 $v = $vocab[$Question]
 $leftCount  = $r.($v[0]); $leftLabel  = $v[1]
 $rightCount = $r.($v[2]); $rightLabel = $v[3]
+# An emitter may NAME its own count (property "<Count>Label"): who-writes on a
+# field whose bare writes are bound but not reported by find-callers must not
+# read "0 write sites" (ruling R26) -- it reads "0 member-access write sites
+# reported by find-callers + 4 bound write(s) find-callers does not report".
+if ($r.PSObject.Properties["$($v[0])Label"] -and $r."$($v[0])Label") { $leftLabel  = [string]$r."$($v[0])Label" }
+if ($r.PSObject.Properties["$($v[2])Label"] -and $r."$($v[2])Label") { $rightLabel = [string]$r."$($v[2])Label" }
 
 # Move BY PROPERTY. The old form rebuilt "<slug>.png" by hand, which coupled the
 # bundler to each emitter's private naming; event-wiring's -Control slug broke

@@ -301,68 +301,126 @@ $ftbl  = New-Object System.Text.StringBuilder
 # the focus, never merged into the verb's totals or the writers wing. The
 # by-name check stays for what 1.19 still leaves unbound (10,993 on CLIENT),
 # e.g. a field written inside a `with` body (uPLANLIST.PAS:2544-2550).
-$d13Same = 0; $d13Else = 0; $d13Lines = @(); $bound = 0; $boundLines = @()
-if ($showWrite) {
-  $nm = ConvertTo-SqlText $sel.Name
+#
+# FIX ROUND 1 (controller ruling R26, 2026-09-24): NOTHING MAY CLAIM ZERO WRITES --
+# OR ZERO READS -- WHILE THE INDEX HOLDS BOUND OR UNBOUND ONES. The first cut
+# counted the bound population only under -Mode write and consulted it only in
+# the write-side zero note, so `-Mode both` on Blueprint4.TfrmBlueprint4.
+# FNoRecursion listed "48 bare write(s) BOUND" and, right under it, "no read
+# sites (0 writes)"; and its 9 UNBOUND bare reads were never looked for at all.
+# Now ONE function measures what find-callers does not report, for EITHER
+# direction, and it runs for BOTH directions on every chart, because every
+# chart prints both totals somewhere (zero notes, the bundle header):
+#   bound      refs of that kind BOUND to this symbol with no member_accesses
+#              row (the verb reads member_accesses; exact)            -- lines
+#   same       UNBOUND refs of that kind with this NAME in the declaring file
+#              (very probably this member; by name)                    -- lines
+#   else       ... in every other file (may be other symbols; by name) -- count
+# Measured on CLIENT 1.19: every bound field/property READ has a member_accesses
+# row (4,319 of 4,319), so bound-unreported is write-side only today; the read
+# side's gap is UNBOUND bare reads (FNoRecursion 9, FConnected 3).
+function Get-UnreportedAccess([string] $Kind) {
+  $nm  = ConvertTo-SqlText $sel.Name
   $pth = ConvertTo-SqlText $sel.Path
-  $boundWhere = "r.kind = 'write' AND r.symbol_id = $($sel.Id) AND NOT EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id)"
+  $u = [ordered]@{ Kind = $Kind; Bound = 0; BoundLines = @(); Same = 0; SameLines = @(); Else = 0; Total = 0 }
+  $boundWhere = "r.kind = '$Kind' AND r.symbol_id = $($sel.Id) AND NOT EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id)"
   $bc = Invoke-IndexQuery "SELECT COUNT(*) AS c FROM refs r WHERE $boundWhere"
-  $bound = [int]$bc[0].c
-  if ($bound) {
-    # Assigned FIRST, for the same reason as $lnRows below.
+  $u.Bound = [int]$bc[0].c
+  if ($u.Bound) {
+    # Assigned FIRST: piping Invoke-IndexQuery's `, $array` hands ForEach-Object
+    # ONE item, the whole array, and `$_.ln` member-enumerates into one string.
     $blRows = Invoke-IndexQuery @"
 SELECT f.path AS path, r.start_line AS ln FROM refs r JOIN files f ON f.id = r.file_id
  WHERE $boundWhere
  ORDER BY (f.path <> '$pth'), f.path, r.start_line LIMIT 12
 "@
-    $boundLines = @($blRows | ForEach-Object {
+    $u.BoundLines = @($blRows | ForEach-Object {
       if ([string]::Equals([string]$_.path, $sel.Path, [StringComparison]::OrdinalIgnoreCase)) { ":$($_.ln)" }
       else { "$([IO.Path]::GetFileName([string]$_.path)):$($_.ln)" } })
   }
+  $unbWhere = "r.kind = '$Kind' AND r.symbol_id IS NULL AND lower(r.name_text) = lower('$nm')"
   $cnt = Invoke-IndexQuery @"
 SELECT (f.path = '$pth') AS same, COUNT(*) AS c
   FROM refs r JOIN files f ON f.id = r.file_id
- WHERE r.kind = 'write' AND r.symbol_id IS NULL AND lower(r.name_text) = lower('$nm')
+ WHERE $unbWhere
  GROUP BY (f.path = '$pth')
 "@
-  foreach ($c in $cnt) { if ([int]$c.same -eq 1) { $d13Same = [int]$c.c } else { $d13Else = [int]$c.c } }
-  if ($d13Same) {
-    # Assigned FIRST: piping Invoke-IndexQuery's `, $array` hands ForEach-Object
-    # ONE item, the whole array, and `$_.ln` member-enumerates into one string.
+  foreach ($c in $cnt) { if ([int]$c.same -eq 1) { $u.Same = [int]$c.c } else { $u.Else = [int]$c.c } }
+  if ($u.Same) {
     $lnRows = Invoke-IndexQuery @"
 SELECT r.start_line AS ln FROM refs r JOIN files f ON f.id = r.file_id
- WHERE r.kind = 'write' AND r.symbol_id IS NULL AND lower(r.name_text) = lower('$nm')
-   AND f.path = '$pth'
+ WHERE $unbWhere AND f.path = '$pth'
  ORDER BY r.start_line LIMIT 12
 "@
-    $d13Lines = @($lnRows | ForEach-Object { ":$($_.ln)" })
+    $u.SameLines = @($lnRows | ForEach-Object { ":$($_.ln)" })
   }
+  $u.Total = $u.Bound + $u.Same + $u.Else
+  [pscustomobject]$u
 }
+$wU = Get-UnreportedAccess 'write'
+$rU = Get-UnreportedAccess 'read'
+# the names the rest of this file (and the gate) already read
+$d13Same = $wU.Same; $d13Else = $wU.Else; $d13Lines = $wU.SameLines; $bound = $wU.Bound; $boundLines = $wU.BoundLines
+
+# What find-callers does NOT report, as a " + ..." tail; '' when nothing.
+function Get-UnreportedTail($U) {
+  $k = $U.Kind
+  $t = ''
+  if ($U.Bound) { $t += " + $($U.Bound) bound $k(s) find-callers does not report" }
+  if ($U.Same)  { $t += " + $($U.Same) unbound $k(s) named $($sel.Name) in $([IO.Path]::GetFileName($sel.Path))" }
+  if ($U.Else)  { $t += " + $($U.Else) unbound same-name $k(s) in other files (may be other symbols)" }
+  $t
+}
+# "602 reads" when the verb's count is the whole story; otherwise the count is
+# named for what it is and the rest is added -- never a bare "0 writes".
+function Format-AccessCount([int] $N, $U) {
+  if ($U.Total) { "$N member-access $($U.Kind)(s) reported by find-callers$(Get-UnreportedTail $U)" }
+  else { "$N $($U.Kind)$(if ($N -ne 1) { 's' })" }
+}
+# the bundle header's label for the same count (New-DiagramArtifact); $null = its default
+$writesLabel = $(if ($wU.Total) { "member-access write sites reported by find-callers$(Get-UnreportedTail $wU)" } else { $null })
+$readsLabel  = $(if ($rU.Total) { "member-access read sites reported by find-callers$(Get-UnreportedTail $rU)" } else { $null })
+# ... and the routine count beside it counts only the routines find-callers reported
+$routinesLabel = $(if (($showWrite -and $wU.Total) -or ($showRead -and $rU.Total)) { 'routines reported by find-callers' } else { $null })
 
 # A zero in the RENDERED direction is a real answer, so say it with the other
 # direction's number beside it -- a bare "0 writes" reads as "nothing uses this".
-# Under D13 it is only a zero of RESOLVED writes, and says so; with bound writes
-# the verb does not report, it is only a zero of what find-callers REPORTS.
-if ($showWrite -and $totalWrites -eq 0) {
-  $zeroWhat = $(if ($bound) { 'no write sites reported by find-callers' }
-                elseif ($d13Same -or $d13Else) { 'no resolved write sites' } else { 'no write sites' })
-  Add-DisclosureRow $ftbl "$zeroWhat ($totalReads read$(if ($totalReads -ne 1) { 's' }))" $PAL.lineInk
+# A zero of what find-callers REPORTS, when the index holds more, says exactly that.
+function Get-ZeroNote([string] $Kind, $U, [int] $OtherN, $OtherU) {
+  $head = $(if ($U.Total) { Format-AccessCount 0 $U } else { "no $Kind sites" })
+  "$head ($(Format-AccessCount $OtherN $OtherU))"
 }
-if ($bound) {
-  $more = $(if ($bound -gt $boundLines.Count) { " (+$($bound - $boundLines.Count) more)" } else { '' })
-  Add-DisclosureRow $ftbl ("$bound bare write(s) BOUND to $($sel.Name) in the index at $($boundLines -join ', ')$more -- " +
-                           'find-callers does not report them (no member-access row), NOT counted above') $PAL.lineInk
+# one set of rows per direction: bound by line, unbound same-file by line,
+# unbound elsewhere by count -- none of them counted in a wing or a total
+function Add-UnreportedRows($U, [string] $Prefix) {
+  $k = $U.Kind
+  if ($U.Bound) {
+    $more = $(if ($U.Bound -gt $U.BoundLines.Count) { " (+$($U.Bound - $U.BoundLines.Count) more)" } else { '' })
+    Add-DisclosureRow $ftbl ("$($U.Bound) bare $k(s) BOUND to $($sel.Name) in the index at $($U.BoundLines -join ', ')$more -- " +
+                             'find-callers does not report them (no member-access row), NOT counted above') $PAL.lineInk
+  }
+  if ($U.Same) {
+    $more = $(if ($U.Same -gt $U.SameLines.Count) { " (+$($U.Same - $U.SameLines.Count) more)" } else { '' })
+    Add-DisclosureRow $ftbl ("${Prefix}: $($U.Same) UNBOUND $k(s) named $($sel.Name) in $([IO.Path]::GetFileName($sel.Path)) " +
+                             "at $($U.SameLines -join ', ')$more -- by name, NOT counted above") $PAL.lineInk
+  }
+  if ($U.Else) {
+    Add-DisclosureRow $ftbl "${Prefix}: $($U.Else) more unbound $k(s) of the name $($sel.Name) in other files -- may be other symbols" $PAL.lineInk
+  }
 }
-if ($d13Same) {
-  $more = $(if ($d13Same -gt $d13Lines.Count) { " (+$($d13Same - $d13Lines.Count) more)" } else { '' })
-  Add-DisclosureRow $ftbl ("engine D13: $d13Same UNBOUND write(s) named $($sel.Name) in $([IO.Path]::GetFileName($sel.Path)) " +
-                           "at $($d13Lines -join ', ')$more -- by name, NOT counted above") $PAL.lineInk
+if ($showWrite -and $totalWrites -eq 0) { Add-DisclosureRow $ftbl (Get-ZeroNote 'write' $wU $totalReads $rU) $PAL.lineInk }
+if ($showWrite) { Add-UnreportedRows $wU 'engine D13' }
+if ($showRead -and $totalReads -eq 0) { Add-DisclosureRow $ftbl (Get-ZeroNote 'read' $rU $totalWrites $wU) $PAL.lineInk }
+if ($showRead) { Add-UnreportedRows $rU 'engine' }
+# The OTHER direction's population is not drawn line by line on a single-wing
+# chart, but its count is: a read-only chart never says "0 writes" beside
+# writes the index holds (R26). Only when the drawn direction printed no zero
+# note -- that note already carries the other direction's full count.
+if (-not $showWrite -and $wU.Total -and $totalReads -ne 0) {
+  Add-DisclosureRow $ftbl "writes (not drawn): $(Format-AccessCount $totalWrites $wU)" $PAL.lineInk
 }
-if ($d13Else) {
-  Add-DisclosureRow $ftbl "engine D13: $d13Else more unbound write(s) of the name $($sel.Name) in other files -- may be other symbols" $PAL.lineInk
-}
-if ($showRead -and $totalReads -eq 0) {
-  Add-DisclosureRow $ftbl "no read sites ($totalWrites write$(if ($totalWrites -ne 1) { 's' }))" $PAL.lineInk
+if (-not $showRead -and $rU.Total -and $totalWrites -ne 0) {
+  Add-DisclosureRow $ftbl "reads (not drawn): $(Format-AccessCount $totalReads $rU)" $PAL.lineInk
 }
 
 # THE BACKING NOTE, and why it is a note rather than extra rows.
@@ -458,6 +516,17 @@ $expected = $anchoredRows + 1
   D13Elsewhere    = $d13Else              # ... in every other file (weaker)
   BoundUnreported = $bound                # write refs BOUND to this symbol the verb does not report
   BoundLines      = ($boundLines -join ',')
+  # the read-side twin (R26), measured on EVERY chart whatever -Mode drew
+  ReadsBound      = $rU.Bound             # read refs BOUND to this symbol the verb does not report
+  ReadsSameFile   = $rU.Same              # unbound same-name reads, declaring file
+  ReadsElsewhere  = $rU.Else
+  ReadsSameLines  = ($rU.SameLines -join ',')
+  WritesUnreported = $wU.Total            # bound + unbound (same file + elsewhere), writes
+  ReadsUnreported  = $rU.Total            # ... reads
+  # the bundle header's labels (New-DiagramArtifact); $null = its default wording
+  WritesLabel     = $writesLabel
+  ReadsLabel      = $readsLabel
+  RoutinesLabel   = $routinesLabel
   ClickTargets    = $lay.Anchors
   Expected        = $expected
   AllClickable    = ($lay.Anchors -ge $expected)

@@ -369,7 +369,13 @@ Step 'E-MA-D13' {
   Chk 'A-MA14-D13'    "$($m14.D13SameFile)/$($m14.D13Elsewhere)" '0/0'
   Chk 'A-MA14-BOUND'  "$($m14.BoundUnreported) $($m14.BoundLines)" '4 :164,:320,:455,:543'
   $t14 = Dot $m14
-  if ($t14 -notmatch 'no write sites reported by find-callers \(602 reads\)') { Fail 'A-MA14-ZERO' 'the zero note does not say it is only what find-callers REPORTS' }
+  # FIX ROUND 1 (R26): the zero note names the verb's count for what it is and adds
+  # both directions' unreported populations -- never "no write sites" / "0 writes".
+  # FConnected also has 3 UNBOUND bare reads in its own unit (the read-side twin).
+  Chk 'A-MA14-READS' "$($m14.ReadsBound)/$($m14.ReadsSameFile)/$($m14.ReadsElsewhere)" '0/3/0'
+  if ($t14 -notmatch [regex]::Escape('0 member-access write(s) reported by find-callers + 4 bound write(s) find-callers does not report (602 member-access read(s) reported by find-callers + 3 unbound read(s) named FConnected in uPipeClientConnection.pas)')) {
+    Fail 'A-MA14-ZERO' 'the zero note does not say it is only what find-callers REPORTS, with both populations' }
+  if ($t14 -match 'no write sites') { Fail 'A-MA14-ZERO' 'a "no write sites" claim sits beside 4 bound writes (R26)' }
   if ($t14 -notmatch '4 bare write\(s\) BOUND to FConnected in the index at :164, :320, :455, :543 -- find-callers does not report them') { Fail 'A-MA14-LINES' 'the four bound write lines are not listed' }
   if ($t14 -match 'engine D13') { Fail 'A-MA14-SILENT' 'the by-name D13 disclosure still fires on FConnected, whose writes are all bound now' }
 }
@@ -385,12 +391,44 @@ Step 'E-MA-D13B' {
   Chk 'A-MA15-BOUND' "$($m15.BoundUnreported) $($m15.BoundLines)" '5 :1315,:1453,:1517,:1580,:2055'
   $t15 = Dot $m15
   if ($t15 -notmatch 'engine D13: 1 UNBOUND write\(s\) named fLOTSIZE in uPLANLIST\.PAS at :2547 -- by name, NOT counted above') { Fail 'A-MA15-D13' 'the unbound with-body write is not listed by name' }
-  # ... and the "RESOLVED" zero wording, which needs unbound writes and NO bound
-  # one: TTabSwitchMessage.Result (7 `Result :=` lines in its own unit, by name --
+  # ... and the zero note with unbound writes and NO bound one (it said "no RESOLVED
+  # write sites" before fix round 1, R26): TTabSwitchMessage.Result (7 `Result :=` lines in its own unit, by name --
   # 10,481 of the 10,993 writes 1.19 leaves unbound are `Result`)
   $script:m16 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'INSPFLDR.Messages.TTabSwitchMessage.Result' -Mode write -DbPath $DbCli -OutDir $OutDir
   Chk 'A-MA16-D13'   "$($m16.Writes)/$($m16.D13SameFile)/$($m16.D13Elsewhere)/$($m16.BoundUnreported)" '0/7/10474/0'
-  if ((Dot $m16) -notmatch 'no resolved write sites \(0 reads\)') { Fail 'A-MA16-ZERO' 'the zero note does not say RESOLVED' }
+  Chk 'A-MA16-READS'  "$($m16.ReadsBound)/$($m16.ReadsSameFile)/$($m16.ReadsElsewhere)" '0/0/4888'
+  if ((Dot $m16) -notmatch [regex]::Escape('0 member-access write(s) reported by find-callers + 7 unbound write(s) named Result in INSPFLDR.Messages.pas + 10474 unbound same-name write(s) in other files (may be other symbols) (0 member-access read(s) reported by find-callers + 4888 unbound same-name read(s) in other files (may be other symbols))')) {
+    Fail 'A-MA16-ZERO' 'the zero note does not name what find-callers reports beside the unbound populations' }
+}
+
+# FIX ROUND 1 (ruling R26): nothing may claim zero writes -- or zero reads --
+# while the index holds bound or unbound ones. Blueprint4.TfrmBlueprint4.FNoRecursion
+# is the shape 1,073 CLIENT fields share: 48 bare writes BOUND (none reported by
+# find-callers) and 9 UNBOUND bare reads in its own unit, 0 of either reported.
+# The first cut printed "48 bare write(s) BOUND" and right under it "no read
+# sites (0 writes)"; -Mode read printed "(0 writes)" with no disclosure at all.
+Note 'who-writes/who-reads FNoRecursion (R26: bound writes, unbound reads, 0 reported) ...'
+Step 'E-MA-R26' {
+  $script:mfb = & "$SRC\Emit-MemberAccess.ps1" -Qname 'Blueprint4.TfrmBlueprint4.FNoRecursion' -Mode both -DbPath $DbCli -OutDir $OutDir
+  $script:mfr = & "$SRC\Emit-MemberAccess.ps1" -Qname 'Blueprint4.TfrmBlueprint4.FNoRecursion' -Mode read -DbPath $DbCli -OutDir (Join-Path $OutDir 'r26')
+  foreach ($p in @(@('A-MA-R26-BOTH', $mfb), @('A-MA-R26-READ', $mfr))) {
+    Chk $p[0] "$($p[1].Writes)/$($p[1].Reads) w=$($p[1].BoundUnreported)/$($p[1].D13SameFile)/$($p[1].D13Elsewhere) r=$($p[1].ReadsBound)/$($p[1].ReadsSameFile)/$($p[1].ReadsElsewhere)" '0/0 w=48/0/0 r=0/9/0'
+  }
+  $wPh = '0 member-access write(s) reported by find-callers + 48 bound write(s) find-callers does not report'
+  $rPh = '0 member-access read(s) reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas'
+  $tb = Dot $mfb; $tr = Dot $mfr
+  if ($tb -notmatch [regex]::Escape("$wPh ($rPh)")) { Fail 'A-MA-R26-BOTH' 'the write-side zero note does not carry both populations' }
+  if ($tb -notmatch [regex]::Escape("$rPh ($wPh)")) { Fail 'A-MA-R26-BOTH' 'the read-side zero note does not carry both populations' }
+  if ($tb -notmatch 'engine: 9 UNBOUND read\(s\) named FNoRecursion in Blueprint4\.pas at :1950, :2084, :2113, :2138, :2163, :2179, :2238, :3142, :3546 -- by name') { Fail 'A-MA-R26-BOTH' 'the 9 unbound reads are not listed' }
+  if ($tr -notmatch [regex]::Escape("$rPh ($wPh)")) { Fail 'A-MA-R26-READ' 'who-reads prints the write count without its bound population' }
+  if ($tr -match 'BOUND to FNoRecursion') { Fail 'A-MA-R26-READ' 'who-reads draws the write lines it does not render' }
+  # the bundle HEADER (New-DiagramArtifact): who-writes FConnected must not read
+  # "0 write sites / 0 routines" beside 4 listed bound writes
+  $art = & "$SRC\New-DiagramArtifact.ps1" -Question who-writes -Target 'uPipeClientConnection.TPipeClientConnection.FConnected' -DbPath $DbCli -OutRoot (Join-Path $OutDir 'bundle-r26')
+  $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
+  Chk 'A-MA-R26-HDR' "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '0 member-access write sites reported by find-callers + 4 bound write(s) find-callers does not report / 0 routines reported by find-callers'
+  $script:r26html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
+  if ($r26html -notmatch [regex]::Escape('<span><b>0</b> member-access write sites reported by find-callers + 4 bound write(s) find-callers does not report</span>')) { Fail 'A-MA-R26-HDR' 'the rendered bundle header does not name the bound writes' }
 }
 
 Note 'who-reads Connected at scale (602 sites, 598 routines, cap 25) ...'
@@ -587,6 +625,28 @@ Step 'N13' {
   if ($t13 -match 'cluster_writers') { Fail 'A-N13-EMPTY' 'an empty writers cluster was drawn' }
 }
 
+# R26 SWEEP (fix round 1): EVERY who-writes / who-reads text this run rendered.
+# A zero claim in a direction whose unreported population (bound + unbound) is
+# above zero FAILS -- whichever chart, whichever mode. "10 writes" is not "0
+# writes": the zero must not follow a digit or a thousands comma.
+Note 'R26 sweep (no zero claim beside an unreported population) ...'
+Step 'A-MA-R26-SWEEP' {
+  $seen = 0
+  foreach ($p in @(@('m1', $m1), @('m2', $m2), @('m3', $m3), @('m4', $m4), @('m13', $m13), @('m14', $m14),
+                   @('m15', $m15), @('m16', $m16), @('mfb', $mfb), @('mfr', $mfr), @('r26-bundle', $r26html))) {
+    $o = $p[1]
+    if (-not $o) { Fail 'A-MA-R26-SWEEP' "precondition: $($p[0]) produced no result, so it was never swept"; continue }
+    if ($o -is [string]) { $txt = $o; $wu = $m14.WritesUnreported; $ru = $m14.ReadsUnreported }
+    else { $txt = Dot $o; $wu = $o.WritesUnreported; $ru = $o.ReadsUnreported }
+    $seen++
+    if ($wu -gt 0 -and $txt -match '(?<![\d,])0 writes?\b|no write sites|(?<![\d,])0 write sites') {
+      Fail 'A-MA-R26-SWEEP' "$($p[0]): claims zero writes beside $wu unreported write(s)" }
+    if ($ru -gt 0 -and $txt -match '\(0 reads?\)|no read sites|(?<![\d,])0 read sites') {
+      Fail 'A-MA-R26-SWEEP' "$($p[0]): claims zero reads beside $ru unreported read(s)" }
+  }
+  Chk 'A-MA-R26-SWEPT' $seen 11
+}
+
 # N7 is the BUNDLER's contract, not an emitter's: the refusal must propagate AND
 # leave no directory for someone to find later and mistake for an answer.
 Note 'negative N7 (bundle cleanup) ...'
@@ -760,6 +820,18 @@ Step 'E-FX' {
     "$(Test-D12OwnNameWrite 'F' '' $g)"
   }
   Chk 'A-FX12-DETECT' $fx12 'True/True/False/False/False'
+  # ... and WIRED (fix round 1): the function passing is not enough -- if
+  # Emit-Effects stopped calling it, nothing above would fail. The 1.18 facts of
+  # AP_FP_Greater_Eq are injected through the emitter's -FactOverride test hook
+  # and the D12 render must come back: dashed disclosure, no global write, and
+  # the TEST CHART row that stops such a chart passing for an index answer.
+  $script:fx13 = & "$SRC\Emit-Effects.ps1" -Qname 'Ap.AP_FP_Greater_Eq' -DbPath $DbCli -OutDir (Join-Path $OutDir 'fx-d12') `
+                   -FactOverride @{ ef = 0; es = 'g'; ew = 'writes AP_FP_Greater_Eq (non-local)' }
+  Chk 'A-FX13-WIRED'  "$($fx13.Outcome):$($fx13.D12Suspect):$($fx13.Effects):$($fx13.Summary)" 'effects:True:0:g'
+  $t13fx = Dot $fx13
+  if ($t13fx -notmatch 'cluster_d12_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-FX13-WIRED' 'the injected D12 case does not draw the dashed D12 cluster' }
+  if ($t13fx -match 'writes global state') { Fail 'A-FX13-WIRED' 'the injected own-name g was drawn as a global write' }
+  if ($t13fx -notmatch 'TEST CHART: the effect facts below were INJECTED') { Fail 'A-FX13-WIRED' 'an injected-fact chart does not say so' }
 }
 
 Note 'architecture ...'
@@ -1525,8 +1597,11 @@ Step 'E-CO' {
   # state is `yes`, [certain], and no quoted / older wording may appear. The line
   # is the engine's sql_column start, 2242 -- ONE LINE EARLY, as for every
   # extracted column (A-LW1-HREF pins REASON at 1410; it is declared on 1411):
-  # the node starts after the previous token. Pre-existing and identical on the
-  # 1.18 clone; a FINDING of the 1.19 re-baseline, not fixed here.
+  # the node starts after the previous token. An ENGINE defect (SQL extractor),
+  # pre-existing and identical on the 1.18 clone, filed as
+  # C:\Projects\Delphi-RAG-lint\docs\INBOX-sql-column-start-line-one-early.md. When the engine
+  # fixes it, this pin (2242), A-CO-QUOTED / A-LW-N31-QUOTED (3847) and
+  # A-LW1-HREF (1410) each move by +1 -- that move is the fix, not a regression.
   $script:co5 = & "$SRC\Emit-Consumers.ps1" -Column 'IPCHART.ACTION' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO5-OLDER'     "$($co5.ColumnState):$($co5.ColumnLine):$($co5.ColumnOlderOnly)" 'yes:MS1.SQL:2242:False'
   $tc5 = Dot $co5
@@ -1537,7 +1612,8 @@ Step 'E-CO' {
   # item 1: a QUOTED column consumers used to REFUSE ("no column TABLE in
   # FOLDERCOUNT") while lands-where anchored it -- now the same state, same line.
   # RE-BASELINED at 1.19 (D19 fixed): an ordinary extracted column, `yes`, at the
-  # engine's sql_column line 3847 (one early, see A-CO5-OLDER; declared on 3848).
+  # engine's sql_column line 3847 -- an ENGINE defect, one line early (declared on
+  # 3848; INBOX-sql-column-start-line-one-early.md, see A-CO5-OLDER): moves to 3848 when fixed.
   $script:coq = & "$SRC\Emit-Consumers.ps1" -Column 'FOLDERCOUNT.TABLE' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO-QUOTED'     "$($coq.ColumnState):$($coq.ColumnLine):$($coq.ServerRoutines)" 'yes:MS1.SQL:3847:2'
   if (-not (HasLine (Dot $coq) 3847)) { Fail 'A-CO-QUOTED' 'the focus is not anchored on the extracted column (MS1.SQL:3847)' }
@@ -1553,31 +1629,41 @@ Step 'E-CO' {
     $Engine = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe'
     . "$SRC\Emit-Common.ps1"
     $real = Get-SqlTableSet $DbSql
-    function Copy-Without($Tbl, [string] $Col, $Older) {
-      $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-      foreach ($c in $Tbl.Columns) { if ($c -ne $Col) { [void]$set.Add($c) } }
-      $old = [ordered]@{}; foreach ($k in $Tbl.OlderOnlyColumns.Keys) { $old[$k] = $Tbl.OlderOnlyColumns[$k] }
-      if ($Older) { $old[$Col.ToUpperInvariant()] = $Older }
-      [pscustomobject]@{ Name = $Tbl.Name; Id = $Tbl.Id; File = $Tbl.File; Line = $Tbl.Line; DeclCount = $Tbl.DeclCount
-                         Declarations = $Tbl.Declarations; Columns = $set
-                         ColumnNames = [string[]]@($Tbl.ColumnNames | Where-Object { $_ -ne $Col })
-                         OlderOnlyColumns = $old }
-    }
     $ip = $real.Tables['IPCHART']
     $ipOld = @($ip.Declarations | Where-Object { $_.File -notlike '*MS1.SQL' })[0]
-    $fake = [pscustomobject]@{ Db = $real.Db; Tables = @{
-      FOLDERCOUNT = (Copy-Without $real.Tables['FOLDERCOUNT'] 'TABLE' $null)
-      IPCHART     = (Copy-Without $ip 'ACTION' ([pscustomobject]@{ Column = 'ACTION'; File = $ipOld.File; Line = $ipOld.Line })) } }
+    # the SAME helpers the emitters' -TestHideColumn hook uses (Emit-Common)
+    $fake = Hide-ExtractedColumns $real @('FOLDERCOUNT.TABLE')
+    $fake.Tables['IPCHART'] = Copy-SqlTableWithout $ip 'ACTION' ([pscustomobject]@{ Column = 'ACTION'; File = $ipOld.File; Line = $ipOld.Line })
     $q1 = Get-SqlColumnState $fake 'FOLDERCOUNT' 'TABLE' $null $null ''
     $q2 = Get-SqlColumnState $fake 'IPCHART' 'ACTION' $null $null ''
+    # the cached real set is untouched by the hide
+    $untouched = $real.Tables['FOLDERCOUNT'].Columns.Contains('TABLE') -and $real.Tables['IPCHART'].Columns.Contains('ACTION')
     [pscustomobject]@{ Q1 = "$($q1.State):$([IO.Path]::GetFileName($q1.File)):$($q1.Line):$($q1.QuotedScan)"; L1 = $q1.Label
-                       Q2 = "$($q2.State):$([IO.Path]::GetFileName($q2.File)):$($q2.Line)"; L2 = $q2.Label }
+                       Q2 = "$($q2.State):$([IO.Path]::GetFileName($q2.File)):$($q2.Line)"; L2 = $q2.Label
+                       Untouched = $untouched
+                       # feeds-from's column-hop label (no real chain can end on a quoted column)
+                       Hop = "$(Get-ColumnHopLabel $q1) / $(Get-ColumnHopLabel ([pscustomobject]@{ State = 'yes'; Column = 'REASON' }))" }
   }
-  Chk 'A-COLSTATE-QUOTED' "$($cqs.Q1) $($cqs.Q2)" 'quoted:MS1.SQL:3848:hit quoted:MS1.SQL:2243'
-  if ($cqs.L1 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:3848); the SQL index does not extract a quoted name') {
+  Chk 'A-COLSTATE-QUOTED' "$($cqs.Q1) $($cqs.Q2) $($cqs.Untouched)" 'quoted:MS1.SQL:3848:hit quoted:MS1.SQL:2243 True'
+  # FIX ROUND 1 (item 11): the label no longer says the index "does not extract a
+  # quoted name" -- false as a general statement since 1.19 -- only that THIS one
+  # was not extracted
+  if ($cqs.L1 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:3848) that the SQL index did not extract as a column') {
     Fail 'A-COLSTATE-QUOTED' "the quoted label moved: $($cqs.L1)" }
-  if ($cqs.L2 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:2243); the SQL index does not extract a quoted name; an older declaration (MScript2.SQL:1902) extracts it unquoted') {
+  if ($cqs.L2 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:2243) that the SQL index did not extract as a column; an older declaration (MScript2.SQL:1902) extracts it unquoted') {
     Fail 'A-COLSTATE-QUOTED' "the quoted-plus-older label moved: $($cqs.L2)" }
+  Chk 'A-FF-QUOTED' $cqs.Hop 'column "TABLE" / column REASON'
+  # The quoted state RENDERED through the emitters (fix round 1, item 7). A doctored
+  # scratch .SQL cannot drive it -- it is stale by construction and renders
+  # [stale source] (A-LW-STALE-Q) -- so -TestHideColumn takes FOLDERCOUNT.TABLE back
+  # out of the extracted set and the REAL, fresh MS1.SQL is scanned.
+  $script:coqh = & "$SRC\Emit-Consumers.ps1" -Column 'FOLDERCOUNT.TABLE' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir (Join-Path $OutDir 'co-quoted') -TestHideColumn 'FOLDERCOUNT.TABLE'
+  Chk 'A-CO-QUOTED-RENDER' "$($coqh.ColumnState):$($coqh.ColumnLine):$($coqh.ServerRoutines)" 'quoted:MS1.SQL:3848:2'
+  $tqh = Dot $coqh
+  if (-not (HasLine $tqh 3848)) { Fail 'A-CO-QUOTED-RENDER' 'the quoted column is not anchored on its scanned line MS1.SQL:3848' }
+  if ($tqh -notmatch [regex]::Escape('column state quoted: [inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:3848) that the SQL index did not extract as a column')) {
+    Fail 'A-CO-QUOTED-RENDER' 'the quoted column state is not rendered on the focus box' }
+  if ($tqh -notmatch 'TEST CHART: FOLDERCOUNT\.TABLE taken OUT') { Fail 'A-CO-QUOTED-RENDER' 'a hook-driven chart does not say TEST CHART' }
   # ... and a column in NO script declaration that this index's own SQL names
   # (STATIONS.GRIDS: uSTATIONS_SERVER.PAS:110 reads it, :129 writes it)
   $script:cog = & "$SRC\Emit-Consumers.ps1" -Column 'STATIONS.GRIDS' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
@@ -1843,6 +1929,9 @@ Step 'E-LW' {
   Chk 'A-LW1-PROCS'     $lw1.Procedures 0
   Chk 'A-LW1-CLICK'     "$($lw1.ClickTargets)/$($lw1.Expected)" '9/9'
   $tl1 = Dot $lw1
+  # 1410 is CAUSFAIL.REASON's column anchor: the engine's sql_column start, ONE LINE
+  # EARLY (declared on 1411) -- an ENGINE defect, INBOX-sql-column-start-line-one-early.md;
+  # it moves to 1411 when the engine fixes it (see A-CO5-OLDER).
   foreach ($ln in 81, 124, 109, 229, 159, 1410, 15, 60) { if (-not (HasLine $tl1 $ln)) { Fail 'A-LW1-HREF' "no row anchored on line $ln" } }
   # RE-WORDED in the final wave (item 2): the count is what the SQL index EXTRACTS.
   # At 1.19 (D19 fixed) the quoted FOLDERCOUNT.TABLE is extracted, so the grade is
@@ -1903,13 +1992,26 @@ Step 'LW-N31-SRVSQL' {
 # FINDING (1.18): FOLDERCOUNT."TABLE" was a QUOTED column (MS1.SQL:3848) the SQL
 # index dropped. RE-BASELINED at 1.19 (engine D19 fixed; R25): it is EXTRACTED,
 # so lands-where draws an ordinary [certain] column anchored on the engine's
-# sql_column line 3847 (one early -- see A-CO5-OLDER) and says nothing quoted.
+# sql_column line 3847 -- an ENGINE defect, one line early (INBOX-sql-column-start-line-one-early.md;
+# see A-CO5-OLDER): moves to 3848 when fixed -- and says nothing quoted.
 # The quoted state itself is driven synthetically by A-COLSTATE-QUOTED.
 Step 'LW-N31-QUOTED' {
   $script:lw31q = & "$SRC\Emit-LandsWhere.ps1" -Field 'uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-LW-N31-QUOTED' "$($lw31q.ColumnState):$($lw31q.TableColumn)" 'yes:FOLDERCOUNT.TABLE'
   if (-not (HasLine (Dot $lw31q) 3847)) { Fail 'A-LW-N31-QUOTED' 'the extracted column is not anchored on its sql_column line MS1.SQL:3847' }
   if ((Dot $lw31q) -match 'QUOTED') { Fail 'A-LW-N31-QUOTED' 'the quoted wording still fires on an extracted column' }
+  # The quoted state RENDERED through lands-where (fix round 1, item 7): the same
+  # hook as A-CO-QUOTED-RENDER. This also drives the convention wording branches
+  # the re-baseline left uncovered (Emit-LandsWhere "+N a QUOTED column" and "of
+  # those, X is a QUOTED column"): with TABLE hidden the counts are the 1.18 ones.
+  $script:lwqh = & "$SRC\Emit-LandsWhere.ps1" -Field 'uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql `
+                   -OutDir (Join-Path $OutDir 'lw-quoted') -TestHideColumn 'FOLDERCOUNT.TABLE'
+  Chk 'A-LW-QUOTED-RENDER' "$($lwqh.ColumnState):$($lwqh.TableColumn):$($lwqh.ConvColumn):$($lwqh.ConvQuoted)" 'quoted:FOLDERCOUNT.TABLE:1991:FOLDERCOUNT.TABLE'
+  $tlq = Dot $lwqh
+  if (-not (HasLine $tlq 3848)) { Fail 'A-LW-QUOTED-RENDER' 'the quoted column is not anchored on its scanned line MS1.SQL:3848' }
+  if ($tlq -notmatch '1,991 of 1,997 properties on table-named classes are extracted as a column of that table \(\+1 a QUOTED column the index does not extract\)') { Fail 'A-LW-QUOTED-RENDER' 'the convention grade does not add the quoted column' }
+  if ($tlq -notmatch '6 are not extracted as a column by the SQL index; of those, FOLDERCOUNT\.TABLE is a QUOTED column the index does not extract') { Fail 'A-LW-QUOTED-RENDER' 'the coverage line does not name the quoted column' }
+  if ($tlq -notmatch 'TEST CHART: FOLDERCOUNT\.TABLE taken OUT') { Fail 'A-LW-QUOTED-RENDER' 'a hook-driven chart does not say TEST CHART' }
   if (-not $coq) { Fail 'A-COLSTATE-AGREE' 'precondition: the consumers FOLDERCOUNT.TABLE run (E-CO) produced no result' }
   elseif ($coq.ColumnLabel -ne $lw31q.ColumnLabel) { Fail 'A-COLSTATE-AGREE' "consumers and lands-where label FOLDERCOUNT.TABLE differently: '$($coq.ColumnLabel)' vs '$($lw31q.ColumnLabel)'" }
 }

@@ -792,16 +792,16 @@ function Get-SourceContext([string] $Path, [int] $Line, [int] $Col, [int] $Len,
 # Every declaration is still carried in .Declarations for disclosure.
 #
 # THE KNOWN GAP IN THAT RULE (Task 0 review, measured 2026-09-23): the winner is
-# not a superset. 12 column names across 10 tables are EXTRACTED only from the
-# older MScript2.SQL copy -- OPTORID on 8 tables, GONOFF.OFF, MET1.NOTE,
-# IPCHART.ACTION and IPCHART.OPTRID. At least one is LIVE: live Firebird IPCHART
-# has 137 columns, the winner 136 extracted, and the missing one is ACTION --
-# which the newest MS1.SQL DOES declare, at :2243, as the QUOTED identifier
-# "ACTION"; the SQL extractor drops quoted identifiers (engine D19,
-# INBOX-sql-index-drops-quoted-identifiers.md). Measured (final wave): of the
-# 12, only IPCHART.ACTION is quoted in the newest declaration; the other 11 are
-# not in it at all. So "not extracted from the winning declaration" does NOT
-# mean "not in the database". Each table carries them in .OlderOnlyColumns, and
+# not a superset. On the 1.18 clone 12 column names across 10 tables were
+# EXTRACTED only from the older MScript2.SQL copy -- OPTORID on 8 tables,
+# GONOFF.OFF, MET1.NOTE, IPCHART.ACTION and IPCHART.OPTRID. At least one was
+# LIVE: live Firebird IPCHART has 137 columns, the 1.18 winner had 136 extracted,
+# and the missing one was ACTION -- which the newest MS1.SQL DOES declare, at
+# :2243, as the QUOTED identifier "ACTION", which the 1.18 SQL extractor dropped
+# (engine D19, INBOX-sql-index-drops-quoted-identifiers.md). Of the 12, only
+# IPCHART.ACTION was quoted in the newest declaration; the other 11 are not in
+# it at all. So "not extracted from the winning declaration" does NOT mean "not
+# in the database". Each table carries such names in .OlderOnlyColumns, and
 # Get-SqlColumnState below decides what a chart says about such a column.
 # ENGINE D19 FIXED (extractor 1.19, re-baseline 2026-09-24): the extractor now
 # emits a sql_column for a quoted name -- IPCHART.ACTION and FOLDERCOUNT.TABLE
@@ -922,6 +922,46 @@ SELECT c.parent_id AS tid, GROUP_CONCAT(c.name, ',') AS cols
 # extracts it, when one does), QuotedScan ('hit' | 'none' | 'stale' | '' when not
 # needed). $SqlSet is Get-SqlTableSet's object; T must be one of its tables.
 
+# TEST HOOKS for the `quoted` state (R25, fix round 1). Extractor 1.19 extracts
+# every quoted name, so no real column reaches `quoted` -- and a doctored copy of
+# a script cannot stand in for it: it is stale by construction (R11) and renders
+# [stale source], never quoted. So the gate takes the column back OUT of the
+# newest declaration's extracted names -- the 1.18 extractor's shape -- and lets
+# the real, FRESH script be scanned. A COPY is returned; the cached set is untouched.
+# $Older, when given, restores an older-only extraction ({Column; File; Line}).
+function Copy-SqlTableWithout($Tbl, [string] $Col, $Older) {
+  $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+  foreach ($c in $Tbl.Columns) { if ($c -ne $Col) { [void]$set.Add($c) } }
+  $old = [ordered]@{}; foreach ($k in $Tbl.OlderOnlyColumns.Keys) { $old[$k] = $Tbl.OlderOnlyColumns[$k] }
+  if ($Older) { $old[$Col.ToUpperInvariant()] = $Older }
+  [pscustomobject]@{ Name = $Tbl.Name; Id = $Tbl.Id; File = $Tbl.File; Line = $Tbl.Line; DeclCount = $Tbl.DeclCount
+                     Declarations = $Tbl.Declarations; Columns = $set
+                     ColumnNames = [string[]]@($Tbl.ColumnNames | Where-Object { $_ -ne $Col })
+                     OlderOnlyColumns = $old }
+}
+# feeds-from's column-hop label: a quoted column keeps its quotes. Moved here
+# (fix round 1) so the gate can drive the quoted branch: no field-bound control in
+# this corpus names TABLE or ACTION (0 DFM DataField/FieldName literals), so no
+# feeds-from chain can end on a quoted column, even with a column hidden.
+function Get-ColumnHopLabel($ColumnState) {
+  if ($ColumnState.State -eq 'quoted') { "column `"$($ColumnState.Column)`"" } else { "column $($ColumnState.Column)" }
+}
+
+# $TableColumns: 'TABLE.COLUMN' names to hide; throws on one the set does not extract.
+function Hide-ExtractedColumns($SqlSet, [string[]] $TableColumns) {
+  $o = $SqlSet.PSObject.Copy()
+  $tabs = @{}; foreach ($k in $SqlSet.Tables.Keys) { $tabs[$k] = $SqlSet.Tables[$k] }
+  foreach ($tc in $TableColumns) {
+    $p = $tc.Split('.')
+    if ($p.Count -ne 2 -or -not $tabs.ContainsKey($p[0]) -or -not $tabs[$p[0]].Columns.Contains($p[1])) {
+      throw "Hide-ExtractedColumns: $tc is not an extracted column of the SQL index"
+    }
+    $tabs[$p[0]] = Copy-SqlTableWithout $tabs[$p[0]] $p[1] $null
+  }
+  $o.Tables = $tabs
+  $o
+}
+
 # The cheap test, no source read: extracted from the newest declaration, or from
 # an older one. Get-FieldBindingChains and lands-where's convention count use it
 # over thousands of names; anything it rejects goes to Get-SqlColumnState.
@@ -978,8 +1018,8 @@ function Get-SqlColumnState($SqlSet, [string] $Table, [string] $Col, [hashtable]
   $olderNote = $(if ($o.OlderFile) { "an older declaration ($([IO.Path]::GetFileName($o.OlderFile)):$($o.OlderLine)) extracts it unquoted" } else { '' })
   if ($o.QuotedScan -eq 'hit') {
     $o.State = 'quoted'; $o.IsColumn = $true; $o.Line = $q.Line; $o.Text = $q.Text
-    $o.Label = "[inferred -- source scan] a QUOTED identifier in the newest declaration (${nf}:$($q.Line)); " +
-               "the SQL index does not extract a quoted name$(if ($olderNote) { "; $olderNote" })"
+    $o.Label = "[inferred -- source scan] a QUOTED identifier in the newest declaration (${nf}:$($q.Line)) " +
+               "that the SQL index did not extract as a column$(if ($olderNote) { "; $olderNote" })"
     return [pscustomobject]$o
   }
   $quotedPart = $(if ($o.QuotedScan -eq 'stale') { "$nf differs from the indexed copy, so it was not scanned for a quoted identifier [stale source]" }

@@ -90,6 +90,11 @@ param(
   [string]    $OutDir,
   [int]       $Cap = 12,                  # rows shown per cluster; the rest disclosed
   [hashtable] $SourceOverride,
+  # TEST HOOK (R25, fix round 1): 'TABLE.COLUMN' names taken back OUT of the SQL
+  # index's extracted columns, so the gate can drive the `quoted` state through
+  # this emitter against the real, fresh script (see Hide-ExtractedColumns). A chart
+  # drawn with it says TEST CHART on its focus box.
+  [string[]]  $TestHideColumn,
   [string] $Engine     = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe',
   [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
   [string] $FontMono   = 'Consolas',
@@ -178,6 +183,10 @@ function Get-NearestName([string] $Want, [string[]] $Names) {
 
 # ---- 1. resolve against the COLLAPSED script schema -----------------------------------
 $sqlSet = Get-SqlTableSet $SqlDbPath
+if ($TestHideColumn) {
+  $sqlSet = Hide-ExtractedColumns $sqlSet $TestHideColumn
+  Write-Host "  TEST: extracted column(s) hidden: $($TestHideColumn -join ', ')"
+}
 if (-not $sqlSet.Tables.ContainsKey($selTable)) {
   $near = Get-NearestName $selTable $sqlSet.Names
   throw ("consumers: no table $selTable in the SQL index (script-derived; the scripts may lag the live " +
@@ -683,6 +692,7 @@ if ($caseOnly.Count -and -not $colName) {
 }
 Add-DisclosureRow $ftbl ("index-wide: $nReadFacts read / $nWriteFacts write facts over $nFactSyms routines ($($factReadTables.Count) tables read by fact); " +
                          "$($verbLits.Count) upper-case SQL-verb literals name $($fromJoinTables.Count) tables after FROM/JOIN") $PAL.lineInk
+if ($TestHideColumn) { Add-DisclosureRow $ftbl "TEST CHART: $($TestHideColumn -join ', ') taken OUT of the SQL index's extracted columns (-TestHideColumn)" $PAL.lineInk }
 Add-DisclosureRow $ftbl "script-derived schema: $($sqlSet.TableCount) tables; $SCHEMA_NOTE" $PAL.lineInk
 Add-DisclosureRow $ftbl 'positional Fields[i] reads and SQL built from non-literal pieces are not visible' $PAL.lineInk
 [void]$ftbl.Append('</TABLE>')
