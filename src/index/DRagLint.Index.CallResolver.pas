@@ -299,6 +299,10 @@ type
     // counted by reason, because a pass that answers `certain` or nothing leaves
     // no other trace of what it refused.
     FEnumStats       : TEnumResolveStats;
+    // 2026-09-24 (D22, ruling R13): rung 3d bindings, counted APART from
+    // FEnumStats.Bound because a unit var/const is not an enum value -- the
+    // calls stage reconciles each against what it wrote.
+    FUnitValueBound  : Int64;
     // 2026-09-23: per-run counters of the parenless-call pass, same reason.
     FParenlessStats  : TParenlessResolveStats;
     // 2026-09-23 (D13): per-run counters of the write-ref pass, same reason.
@@ -1112,8 +1116,8 @@ type
     /// type for `TEnum.value`, 0 for a unit receiver.</param>
     /// <returns>The enum_value, var or const symbol id, or 0 when neither
     /// rung binds.</returns>
-    /// <remarks>Counts a 3c binding into FEnumStats.Bound; a 3d binding is NOT
-    /// counted there, because it is not an enum value.</remarks>
+    /// <remarks>Counts a 3c binding into FEnumStats.Bound and a 3d binding into
+    /// FUnitValueBound -- never both, because a unit var is not an enum value.</remarks>
     function QualifiedValueTarget(const ACallRef: TReference; const AReceiver: string;
       AReceiverTypeId: Int64): Int64;
     /// <summary>The TWriteScope of AEnclosingSymbolId, built on first use and
@@ -1268,6 +1272,14 @@ type
     /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
     /// pass, so these are that pass's totals.</remarks>
     property EnumStats: TEnumResolveStats read FEnumStats;
+
+    /// <summary>Rung 3d bindings so far: unit-qualified var/const member-access
+    /// refs ResolveOne answered ValueOnly (D22).</summary>
+    /// <remarks>Cumulative over the resolver's lifetime; one resolver serves one
+    /// pass. NOT part of EnumStats.Bound -- a ValueOnly edge is an enum value
+    /// exactly when this counter did not move during its ResolveOne call, which
+    /// is how the calls stage tells the two apart.</remarks>
+    property UnitValueBound: Int64 read FUnitValueBound;
 
     /// <summary>D1 (2026-09-23, resolver 1.7.0-alpha): decide whether a `read`
     /// ref is a PARENLESS CALL -- a routine with no required parameters named
@@ -4736,6 +4748,7 @@ begin
   end;
   { 3d. Not an enum value of that receiver: a unit-level var or const. }
   Result:= LookupUnitQualifiedValue(ACallRef, AReceiver, AReceiverTypeId);
+  if Result > 0 then Inc(FUnitValueBound);
 end;
 
 function TCallResolver.WriteScopeOf(AEnclosingSymbolId: Int64): TWriteScope;

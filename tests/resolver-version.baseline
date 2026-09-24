@@ -615,4 +615,18 @@
 #   1.10.0-alpha. PINNED ON THE BRANCH: the controller re-pins on the merged tree.
 #
 #   Superseded: 1.8.0-alpha|963c2b221031461e78192fbd8356323bdc5ea574c6732333742f510e15a1e0a3
-1.9.0-alpha|6f346f97fb61038af3ca4f703273932a4fe32a8e181b57a41e4ee3149799386c
+# 2026-09-24: hash re-pinned WITHIN 1.9.0-alpha (D22 fix round, controller ruling
+#   R13). The calls stage counted EVERY ValueOnly write as an enum "qualified
+#   bound (Shape B)", so rung 3d bindings inflated it and the enum reconciliation
+#   printed a false WARNING. TCallResolver gains UnitValueBound (incremented in
+#   QualifiedValueTarget on a 3d hit); ResolveCallTargets classifies each
+#   ValueOnly write by whether that counter moved, and prints a separate
+#   `unit-values:` line with its own reconciliation. LOG TEXT ONLY -- no
+#   derived row appears, disappears or moves (ORM3 CLIENT copy: refs, call_edges
+#   and member_accesses byte-for-byte the counts of the first 1.9.0 pin), so
+#   this re-pins rather than bumps: an index resolved by the first 1.9.0 build
+#   holds exactly the rows this one writes. PINNED ON THE BRANCH: the controller
+#   re-pins on the merged tree.
+#
+#   Superseded: 1.9.0-alpha|6f346f97fb61038af3ca4f703273932a4fe32a8e181b57a41e4ee3149799386c
+1.9.0-alpha|8402895fea18c623eb8dbfaae8fa1e5e0c0c4c0a16b3ac769ec613d9d1b69454

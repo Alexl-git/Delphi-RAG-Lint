@@ -27,6 +27,14 @@
              reads; the ref must not bind to either unit's GLimit
     check 3  NEG-BARE-SHADOW: a bare GLimit hidden by a local of that name does
              not bind to a unit var
+    check 4  THE CALLS LOG counts what it claims to (ruling R13). Rung 3d's
+             bindings are ValueOnly writes like rung 3c's enum values, and the
+             store used to count EVERY ValueOnly write as an enum "qualified
+             bound (Shape B)" -- so a unit var inflated the enum count and the
+             enum reconciliation printed a false WARNING. Pinned: the enum line
+             reports 0 qualified (this fixture has no enum), its reconciliation
+             line is NOT the WARNING form, and a separate `unit-values:` line
+             reports the MARK-* count with resolver and store agreeing.
 
   POSITIVE CONTROL. Check 2 is what makes check 1 mean anything: binding every
   `<UnitName>.<Value>` by text turns check 1 green AND check 2 red, because
@@ -92,7 +100,7 @@ function RefsAt([int]$Line, [string]$Name) {
 Push-Location C:\TEMP
 try {
   Copy-Item (Join-Path $fixDir '*.pas') $scratch
-  $null = (& $exePath index $scratch --db $db *>&1)
+  $idxOut = ((& $exePath index $scratch --db $db *>&1) | ForEach-Object { "$_" }) -join "`n"
 
   $libLimit  = SymbolId 'Qual.Lib.GLimit'
   $libMax    = SymbolId 'Qual.Lib.CMax'
@@ -126,6 +134,24 @@ try {
   $wrong = @($rows | Where-Object { ($null -ne $_.symbol_id) -and ($unitVars -contains [int64]$_.symbol_id) })
   $det   = "refs=" + (($rows | ForEach-Object { "$($_.kind):sid=$($_.symbol_id)" }) -join ',')
   Check 'check 3  NEG-BARE-SHADOW: the ref exists and does not bind through the unit' (($rows.Count -ge 1) -and ($wrong.Count -eq 0)) $det
+
+  # --- check 4: the calls log (R13) --------------------------------------------------
+  # -1, never 0, when a label is absent: a renamed counter must redden, not pass.
+  function LogNum([string]$Text, [string]$Pattern) { if ($Text -match $Pattern) { return [int]$Matches[1] }; return -1 }
+  $logLines = @($idxOut -split "`n")
+  $enumLine = (@($logLines | Where-Object { $_ -match 'enum-values:' -and $_ -match 'bare read' }) -join ' | ')
+  $enumRec  = @($logLines | Where-Object { $_ -match 'enum-values:' -and ($_ -match 'total bound' -or $_ -match 'WARNING') })
+  $uvLines  = @($logLines | Where-Object { $_ -match 'unit-values:' })
+  $expUnit  = $pos.Count
+  $gotQual  = LogNum $enumLine '(\d+) qualified bound'
+  Check 'check 4  enum-values: 0 qualified bound (Shape B) -- a unit var is not an enum value' ($gotQual -eq 0) "qualified=$gotQual line=$enumLine"
+  Check 'check 4  the enum reconciliation line is present and is NOT the WARNING form' (($enumRec.Count -eq 1) -and (($enumRec -join ' ') -notmatch 'WARNING')) ($enumRec -join ' | ')
+  $uvText   = ($uvLines -join ' ')
+  $gotUnit  = LogNum $uvText '(\d+) unit-qualified var/const ref\(s\) bound'
+  Check ("check 4  unit-values: {0} unit-qualified var/const ref(s) bound, resolver and store agree" -f $expUnit) `
+        (($uvLines.Count -eq 1) -and ($gotUnit -eq $expUnit) -and ($uvText -match 'resolver and store agree') -and ($uvText -notmatch 'WARNING')) "got=$gotUnit line=$uvText"
+  Check 'check 4  no "resolver counted ... but the store wrote" WARNING anywhere in the calls log' `
+        (@($logLines | Where-Object { $_ -match 'resolver counted .* but the store wrote' }).Count -eq 0) ''
 } finally {
   Pop-Location
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
