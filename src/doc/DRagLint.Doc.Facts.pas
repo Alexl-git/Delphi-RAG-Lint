@@ -713,12 +713,17 @@ type
     /// negative shows no callers (CalledFrom stays empty, total unaffected).
     /// Default 5.</param>
     /// <param name="AIncludeCalleeRaises"><!-- drag-lint:auto type -->Boolean = False</param>
+    /// <param name="AWholeInboundLists">True renders the INBOUND lists (CalledFrom,
+    /// UsedInUnits) whole -- neither AMaxCallers nor the Used-in-units display cap
+    /// applies -- exactly as a unit marked `dl:shared` always is. The writer and the
+    /// checker pass TSharedFacts.WantsWholeInboundLists here, so a block that is
+    /// reconciled across projects is never built from a window. Default False.</param>
     /// <returns><!-- drag-lint:auto -->TDocFacts -- Observed: Default(TDocFacts).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+39 more)</para>
-    /// <para>Complexity: 78 (cyclomatic, outer body), 1089 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+40 more)</para>
+    /// <para>Complexity: 80 (cyclomatic, outer body), 1089 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -731,7 +736,7 @@ type
       AIncludeSeeAlso: Boolean = False; AIncludeSince: Boolean = False;
       const ABaseDir: string = ''; const AExtraStores: TArray<ISymbolStore> = nil;
       AMaxReturnCases: Integer = 20; AMaxCallers: Integer = 5;
-      AIncludeCalleeRaises: Boolean = False): TDocFacts;
+      AIncludeCalleeRaises: Boolean = False; AWholeInboundLists: Boolean = False): TDocFacts;
 
     /// <summary>Mines every exception HANDLER in ASym's own body -- each `on`
     /// clause, each `else` arm (as Exception) and each bare `except` block with
@@ -3489,7 +3494,7 @@ class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TS
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
-  AIncludeCalleeRaises: Boolean): TDocFacts;
+  AIncludeCalleeRaises: Boolean; AWholeInboundLists: Boolean): TDocFacts;
 var
   ResCallers: TArray<TResolvedCaller>;
   RC        : TResolvedCaller        ;
@@ -3878,7 +3883,7 @@ begin
     // several projects call them. Attribution (WHICH project sees a caller) is a
     // separate want that no union can serve -- see the per-project attributed
     // segments item in docs\BACKLOG-shared-unit-attribution.md.
-    if UnitIsShared(AStore.GetFilePath(ASym.FileId)) then Shown:= Distinct.Count;
+    if AWholeInboundLists or UnitIsShared(AStore.GetFilePath(ASym.FileId)) then Shown:= Distinct.Count;
     if Shown < 0 then Shown:= 0;
     SetLength(Result.CalledFrom, Shown);
     for I:= 0 to Shown - 1 do Result.CalledFrom[I]:= Distinct[I];
@@ -4170,7 +4175,7 @@ begin
       // different label. `Calls:` shares DocDisplayCount and is deliberately NOT
       // exempted -- it is derived from this unit's OWN code, so every project that
       // compiles the unit computes the same set and there is nothing to reconcile.
-      if UnitIsShared(AStore.GetFilePath(ASym.FileId)) then ShownU:= UnitSet.Count;
+      if AWholeInboundLists or UnitIsShared(AStore.GetFilePath(ASym.FileId)) then ShownU:= UnitSet.Count;
       SetLength(Result.UsedInUnits, ShownU);
       for var K:= 0 to ShownU - 1 do Result.UsedInUnits[K]:= UnitSet[K];
     finally
