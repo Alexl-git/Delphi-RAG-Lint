@@ -119,6 +119,7 @@ type
       FResolver      : TDestinationResolver  ; // nil until a destination loads
       FResolverFor   : string                ; // '<DPROJ>|<platform>' FResolver was built for
       FDestNote      : string                ; // appended to harvest status lines
+      FDestWarn      : Boolean               ; // FDestNote holds a WARNING (degraded answer): report via SetError
 
       FFromPlatform: TConvPlatform; // FROM picker library platform
       FToPlatform  : TConvPlatform; // TO picker library platform
@@ -1824,6 +1825,7 @@ type
       procedure DestChanged(Sender: TObject);
       procedure HarvestOptionClick(Sender: TObject);
       function  UnitHasRule(const AUnit: string): Boolean;
+      function  IsHarvested(const AUnit: string): Boolean;
       function  VisibleHarvestRows(out AHidden: Integer): TArray<TUnitRow>;
       procedure UnitListCustomDrawItem(Sender: TCustomListView; Item: TListItem; State: TCustomDrawState; var DefaultDraw: Boolean);
       /// <summary>Adds #unuse (From type's unit) and #use (To type's unit) for
@@ -3349,14 +3351,21 @@ begin
   try
     LoadAllClasses;
     var LNote: string:= '';
+    var LWarn: Boolean:= False;
     if Length(FHarvest) > 0 then
     begin
       ReclassifyHarvest; // the resolver key carries the platform, so this rebuilds it
       // How a destination or classification failure reaches the user on this path.
       LNote:= FDestNote;
+      LWarn:= FDestWarn;
     end;
-    SetStatus(Format(
-        'Platforms: FROM=%s TO=%s -- %d source + %d target classes.%s', [PlatformToStr(FFromPlatform), PlatformToStr(FToPlatform), Length(FFromClasses), Length(FToClasses), LNote]));
+    var LMsg: string:= Format(
+        'Platforms: FROM=%s TO=%s -- %d source + %d target classes.%s', [PlatformToStr(FFromPlatform), PlatformToStr(FToPlatform), Length(FFromClasses), Length(FToClasses), LNote]);
+    // A degraded classification must not look like a clean answer (spec 7, ruling R8).
+    if LWarn then
+      SetError(LMsg)
+    else
+      SetStatus(LMsg);
   finally
     Screen.Cursor:= crDefault;
   end;
@@ -6431,7 +6440,8 @@ begin
     end; // for
 
     for Cand in FUnitCandidates do
-      if not UnitHasRule(Cand) then
+      // A harvested row of the same name wins (ruling R7): it carries the Status.
+      if not UnitHasRule(Cand) and not IsHarvested(Cand) then
       begin
         Item:= FUnitList.Items.Add;
         Item.Caption:= '(candidate)';
@@ -6480,8 +6490,22 @@ begin
   Result:= False;
 end;
 
-{ Classified harvest rows that pass the check boxes, have no rule yet, are not
-  already shown as an Examine candidate, and survive the masks; display order. }
+{ Is AUnit one of the classified harvest rows (case-insensitive)? RefreshUnitList
+  uses it to drop an Examine candidate the harvest also holds: the harvested row
+  wins, because only it carries a Status (ruling R7). }
+function TConvRulesForm.IsHarvested(const AUnit: string): Boolean;
+var
+  R: TUnitRow;
+begin
+  for R in FHarvestRows do
+    if SameText(R.Harvest.UnitName, AUnit) then
+      Exit(True);
+  Result:= False;
+end;
+
+{ Classified harvest rows that pass the check boxes, have no rule yet, and survive
+  the masks; display order. A same-named Examine candidate does NOT hide one --
+  RefreshUnitList drops the candidate instead (ruling R7). }
 function TConvRulesForm.VisibleHarvestRows(out AHidden: Integer): TArray<TUnitRow>;
 var
   R   : TUnitRow;
@@ -6490,8 +6514,7 @@ begin
   Rows:= nil;
   for R in FHarvestRows do
     if ShouldAdd(R.Status, FChkMissing.Checked, FChkUnqualified.Checked)
-      and not UnitHasRule(R.Harvest.UnitName)
-      and (IndexText(R.Harvest.UnitName, FUnitCandidates) < 0) then
+      and not UnitHasRule(R.Harvest.UnitName) then
       Rows:= Rows + [R];
   Result:= SortForDisplay(ApplyMask(Rows, Default(TUnitMask), AHidden));
 end;
@@ -6611,11 +6634,13 @@ begin
   FreeAndNil(FResolver);
   FResolverFor:= '';
   FDestNote   := '';
+  FDestWarn   := False;
   if Dproj = '' then
     Exit(False);
   if not TFile.Exists(Dproj) then
   begin
     FDestNote:= Format(' Destination %s does not exist.', [Dproj]);
+    FDestWarn:= True;
     Exit(False);
   end;
   try
@@ -6623,6 +6648,7 @@ begin
     if (Settings.MainSource = '') or not TFile.Exists(Settings.MainSource) then
     begin
       FDestNote:= Format(' Destination %s: no MainSource .dpr found.', [ExtractFileName(Dproj)]);
+      FDestWarn:= True;
       Exit(False);
     end;
     Members:= ReadDprMembers(TFile.ReadAllText(Settings.MainSource), ExtractFileDir(Settings.MainSource));
@@ -6638,7 +6664,11 @@ begin
       LibOk:= FPickW64Loaded;
     end;
     if not LibOk then
+    begin
       FDestNote:= FDestNote + ' Library list unavailable -- MISSING is over-reported.';
+      FDestWarn:= True;
+    end;
+    // Informational notes: FDestWarn stays as it is.
     if Length(Settings.Skipped) > 0 then
       FDestNote:= FDestNote + Format(' %d entr(y/ies) skipped (unexpanded macro): %s.', [Length(Settings.Skipped), string.Join('; ', Settings.Skipped)]);
     if FToPlatform = cpBoth then
@@ -6649,6 +6679,7 @@ begin
     begin
       // Reported, not raised: a bad .dproj must not take the handler down.
       FDestNote:= ' Destination could not be read: ' + E.Message;
+      FDestWarn:= True;
       FreeAndNil(FResolver);
       Exit(False);
     end;
@@ -6677,12 +6708,13 @@ begin
   try
     for i:= 0 to High(FHarvest) do
       FHarvestRows[i].Status:= FResolver.Classify(FHarvest[i].UnitName);
-  except  // dl:ok try-except-swallowed@1afc -- REVIEWED 2026-09-28 not swallowed: E.Message goes into FDestNote, which every caller (AddHarvest, DestChanged, PlatformChanged) puts on the status line; raising would take the click handler down (ruling R6)
+  except  // dl:ok try-except-swallowed@6394 -- REVIEWED 2026-09-28 (re-reviewed, fix round 1) not swallowed: E.Message goes into FDestNote with FDestWarn set, and every caller (AddHarvest, DestChanged, PlatformChanged) puts it on the status line through SetError; raising would take the click handler down (rulings R6, R8)
     on E: Exception do
     begin
       // Reported, not raised. Forget the key so the next classify rebuilds the
       // resolver (and FDestNote) instead of appending this note again.
       FDestNote   := FDestNote + ' Classification stopped: ' + E.Message;
+      FDestWarn   := True;
       FResolverFor:= '';
     end;
   end;
@@ -6704,6 +6736,8 @@ begin
   Msg:= Msg + FDestNote;
   if Length(AErrors) > 0 then
     SetError(Msg + Format(' %d problem(s): %s', [Length(AErrors), string.Join(' | ', AErrors)]))
+  else if FDestWarn then
+    SetError(Msg) // a degraded classification must not look like a clean answer (spec 7, R8)
   else
     SetStatus(Msg);
 end;
@@ -6783,7 +6817,14 @@ procedure TConvRulesForm.DestChanged(Sender: TObject);
 begin
   ReclassifyHarvest;
   if FResolver <> nil then
-    SetStatus(Format('Destination: %s (%s).%s', [ExtractFileName(Trim(FEdDest.Text)), PlatformToStr(FToPlatform), FDestNote]))
+  begin
+    var LMsg: string:= Format('Destination: %s (%s).%s', [ExtractFileName(Trim(FEdDest.Text)), PlatformToStr(FToPlatform), FDestNote]);
+    // A degraded classification must not look like a clean answer (spec 7, R8).
+    if FDestWarn then
+      SetError(LMsg)
+    else
+      SetStatus(LMsg);
+  end
   else if Trim(FEdDest.Text) <> '' then
     SetError('Destination not loaded.' + FDestNote);
 end;
