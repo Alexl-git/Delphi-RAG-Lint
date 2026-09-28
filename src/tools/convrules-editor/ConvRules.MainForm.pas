@@ -1830,6 +1830,7 @@ type
       procedure DoBrowseDest(Sender: TObject);
       procedure DestChanged(Sender: TObject);
       procedure HarvestOptionClick(Sender: TObject);
+      procedure HarvestRowResize(Sender: TObject);
       function  UnitHasRule(const AUnit: string): Boolean;
       function  IsHarvested(const AUnit: string): Boolean;
       /// <summary>The harvest rows to list, in display order.</summary>
@@ -6597,27 +6598,34 @@ end;
 
 procedure TConvRulesForm.BuildHarvestStrip(AParent: TWinControl);
 const
-  ROW_H    = 30;
-  ROWS     = 5;
-  LABEL_W  = 76;
-  BUTTON_W = 96;
-  BROWSE_W = 28;
-  CHECK_W  = 180;
+  ROW_H        = 30;  // one line of controls; a flow row grows past it when it wraps
+  LABEL_W      = 76;
+  BUTTON_W     = 96;
+  BROWSE_W     = 28;
+  CHECK_W      = 180; // 'Include unqualified names'
+  SHORT_CHECK_W= 100; // 'Find missing', 'hide library' / 'project' / 'qualified'
+  RADIO_W      = 76;  // 'Wildcard', 'Regex'
+  MASK_EDIT_W  = 140; // name mask and folder mask edits
 var
   DestRow: TPanel;
   OptRow : TFlowPanel;
+  RowTop : Integer; // next row's Top: distinct and increasing, so alTop keeps build order
 
   function NewFlowRow: TFlowPanel;
   begin
     Result:= TFlowPanel.Create(Self);
     Result.Parent    := FHarvestStrip;
-    // Below every row so far. Height, NOT ClientHeight: ClientHeight asks Windows,
-    // which creates the handle chain up to the form mid-BuildUI (CreateWnd would
-    // then run before the status label exists).
-    Result.Top       := FHarvestStrip.Height;
+    // Below every row so far. A counter, NOT FHarvestStrip.ClientHeight: that asks
+    // Windows, which creates the handle chain up to the form mid-BuildUI (CreateWnd
+    // would then run before the status label exists); and the auto-sized strip's
+    // Height no longer counts rows.
+    Result.Top       := RowTop;
+    Inc(RowTop, ROW_H);
     Result.Align     := alTop;
     Result.Height    := ROW_H;
     Result.BevelOuter:= bvNone;
+    Result.AutoSize  := True; // wraps onto more lines at a narrow tab instead of clipping
+    Result.OnResize  := HarvestRowResize; // ... and the strip follows
   end;
 
   function NewButton(AParentRow: TWinControl; const ACaption, AHint: string; AOnClick: TNotifyEvent): TButton;
@@ -6632,14 +6640,14 @@ var
     Result.OnClick         := AOnClick;
   end;
 
-  function NewCheck(const ACaption, AHint: string): TCheckBox;
+  function NewCheck(const ACaption, AHint: string; AWidth: Integer): TCheckBox;
   begin
     Result:= TCheckBox.Create(Self);
     Result.Parent          := OptRow;
     Result.Caption         := ACaption;
     Result.Hint            := AHint;
     Result.ShowHint        := True;
-    Result.Width           := CHECK_W;
+    Result.Width           := AWidth;
     Result.Checked         := True;
     Result.AlignWithMargins:= True;
     Result.OnClick         := HarvestOptionClick; // after Checked, so building does not fire it
@@ -6649,12 +6657,13 @@ begin
   FHarvestStrip:= TPanel.Create(Self);
   FHarvestStrip.Parent    := AParent;
   FHarvestStrip.Align     := alTop;
-  FHarvestStrip.Height    := ROWS * ROW_H;
-  FHarvestStrip.BevelOuter:= bvNone;
+  FHarvestStrip.BevelOuter:= bvNone; // height: set below, then kept by HarvestRowResize
+  RowTop:= 0;
 
   DestRow:= TPanel.Create(Self);
   DestRow.Parent    := FHarvestStrip;
-  DestRow.Top       := FHarvestStrip.Height;
+  DestRow.Top       := RowTop;
+  Inc(RowTop, ROW_H);
   DestRow.Align     := alTop;
   DestRow.Height    := ROW_H;
   DestRow.BevelOuter:= bvNone;
@@ -6682,8 +6691,8 @@ begin
   NewButton(FHarvestBtnRow, 'Clear list', 'Drop every harvested row; unit rules are untouched', DoClearHarvest);
 
   OptRow:= NewFlowRow;
-  FChkMissing    := NewCheck('Find missing', 'List only units the destination cannot resolve');
-  FChkUnqualified:= NewCheck('Include unqualified names', 'Also list names that compile only through a unit scope name (Forms -> Vcl.Forms)');
+  FChkMissing    := NewCheck('Find missing', 'List only units the destination cannot resolve', SHORT_CHECK_W);
+  FChkUnqualified:= NewCheck('Include unqualified names', 'Also list names that compile only through a unit scope name (Forms -> Vcl.Forms)', CHECK_W);
   FLblHarvest:= TLabel.Create(Self);
   FLblHarvest.Parent          := OptRow;
   FLblHarvest.AlignWithMargins:= True;
@@ -6696,28 +6705,30 @@ begin
   LMaskLbl.Caption         := 'Mask:';
   FEdMask:= TEdit.Create(Self);
   FEdMask.Parent          := LMaskRow;
-  FEdMask.Width           := CHECK_W;
+  FEdMask.Width           := MASK_EDIT_W;
   FEdMask.AlignWithMargins:= True;
   FEdMask.TextHint        := 'hide names like cx* or ^Db';
   FEdMask.OnChange        := MaskChanged;
   var LRbWild: TRadioButton:= TRadioButton.Create(Self);
   LRbWild.Parent          := LMaskRow;
   LRbWild.Caption         := 'Wildcard';
+  LRbWild.Width           := RADIO_W;
   LRbWild.Checked         := True;
   LRbWild.AlignWithMargins:= True;
   LRbWild.OnClick         := MaskChanged;
   FRbMaskRegex:= TRadioButton.Create(Self);
   FRbMaskRegex.Parent          := LMaskRow;
   FRbMaskRegex.Caption         := 'Regex';
+  FRbMaskRegex.Width           := RADIO_W;
   FRbMaskRegex.AlignWithMargins:= True;
   FRbMaskRegex.OnClick         := MaskChanged;
 
   var LHideRow: TFlowPanel:= NewFlowRow;
-  FChkHideLib := NewCheck('hide library', 'Hide units the library index knows as written');
+  FChkHideLib := NewCheck('hide library', 'Hide units the library index knows as written', SHORT_CHECK_W);
   FChkHideLib.Parent := LHideRow;
-  FChkHideProj:= NewCheck('hide project', 'Hide units found in the destination''s folders');
+  FChkHideProj:= NewCheck('hide project', 'Hide units found in the destination''s folders', SHORT_CHECK_W);
   FChkHideProj.Parent:= LHideRow;
-  FChkHideQual:= NewCheck('hide qualified', 'Hide dotted names (already scope-qualified)');
+  FChkHideQual:= NewCheck('hide qualified', 'Hide dotted names (already scope-qualified)', SHORT_CHECK_W);
   FChkHideQual.Parent:= LHideRow;
   for var LChk: TCheckBox in TArray<TCheckBox>.Create(FChkHideLib, FChkHideProj, FChkHideQual) do
   begin
@@ -6727,13 +6738,14 @@ begin
   end;
   FEdMaskFolder:= TEdit.Create(Self);
   FEdMaskFolder.Parent          := LHideRow;
-  FEdMaskFolder.Width           := CHECK_W;
+  FEdMaskFolder.Width           := MASK_EDIT_W;
   FEdMaskFolder.AlignWithMargins:= True;
   FEdMaskFolder.TextHint        := 'hide units under folder';
   FEdMaskFolder.Hint            := 'Hide project units under this ABSOLUTE folder; a relative path is not applied and shows grey';
   FEdMaskFolder.ShowHint        := True;
   FEdMaskFolder.OnExit          := MaskChanged;
   NewButton(LHideRow, '...', 'Choose a folder whose units to hide', DoBrowseMaskFolder).Width:= BROWSE_W;
+  FHarvestStrip.Height:= RowTop; // one line per row until the rows are laid out and resize
 end;
 
 function TConvRulesForm.EnsureResolver: Boolean;
@@ -6954,6 +6966,21 @@ end;
 procedure TConvRulesForm.HarvestOptionClick(Sender: TObject);
 begin
   RefreshUnitList;
+end;
+
+{ A flow row wrapped or unwrapped: the strip is exactly its rows' heights. Done by
+  hand because TPanel.AutoSize on the strip did not re-run after the rows grew
+  (measured: strip stayed 150 px over 167 px of rows, the list covering the last). }
+procedure TConvRulesForm.HarvestRowResize(Sender: TObject);
+var
+  H: Integer;
+  i: Integer;
+begin
+  H:= 0;
+  for i:= 0 to FHarvestStrip.ControlCount - 1 do
+    Inc(H, FHarvestStrip.Controls[i].Height);
+  if FHarvestStrip.Height <> H then
+    FHarvestStrip.Height:= H;
 end;
 
 procedure TConvRulesForm.UnitListCustomDrawItem(Sender: TCustomListView; Item: TListItem; State: TCustomDrawState; var DefaultDraw: Boolean);
