@@ -39,7 +39,12 @@
   because Pascal's '' breaks single ones): the writer never shortens, negates
   or rewrites one, and never escapes a quote inside one. A condition that
   CARRIES a double-quote therefore cannot be quoted and New-TraceCond refuses
-  it; the walk turns such a hop into a STOPS step instead.
+  it; the walk turns such a hop into a STOPS step instead. The TITLE is quoted
+  the same way and refused the same way (New-Trace and Write-FormA).
+
+  A step text also must not open with a word the checker COUNTS or the parser
+  reads as an actor/kind, nor end in ' --' (Test-TraceText -Head, fix round 1):
+  everything the writer accepts, its parser and Test-FormA.ps1 read back.
 #>
 
 $script:FormAFacets = @('VIA', 'ONTO', 'AT', 'CONTRACT', 'FROM', 'TO', 'OVER', 'WITH')
@@ -48,6 +53,7 @@ $script:FormAActors = @('USER', 'CLIENT', 'SERVER', 'DATABASE')
 $script:FormAAnchor = '^[A-Za-z0-9_$.\-]+:\d+$'
 
 function New-Trace([string] $Name, [string] $Title, [string] $From, [string] $Index, [string] $AsOf, [string] $Regenerate, [string] $Tiers) {
+  Test-TraceTitle $Title
   [pscustomobject]@{ Name = $Name; Title = $Title; From = $From; Index = $Index; AsOf = $AsOf
                      Regenerate = $Regenerate; Tiers = $Tiers; Sections = (New-Object System.Collections.ArrayList) }
 }
@@ -60,13 +66,31 @@ function Add-TraceSection($Trace, [string] $Name) {
 }
 
 # A text must not carry what the line regexes split on, nor begin with a word
-# the step regex would read back as an actor or a kind.
-function Test-TraceText([string] $Text, [string] $What) {
+# the step regex would read back as an actor or a kind. -Head adds the rules for
+# a STEP text, which stands first on a numbered line: there Test-FormA.ps1 reads
+# its first token as the line's head, so a word it COUNTS (WHEN UNLESS GUARD
+# UNRESOLVED, a section word before STOPS / CROSSES) or a lone annotation it
+# DROPS would change the END TRACE recount. Case-insensitive, as the checker is.
+# A facet text follows its head word, so none of the -Head rules can reach it.
+function Test-TraceText([string] $Text, [string] $What, [switch] $Head) {
   if ([string]::IsNullOrWhiteSpace($Text)) { throw "Form A $What is empty" }
   if ($Text -match '[\r\n]') { throw "Form A $What must not contain a line break: $Text" }
   if ($Text -match ' @| \[| -- ') { throw "Form A $What must not contain ' @', ' [' or ' -- ': $Text" }
+  # a trailing ' --' becomes ' -- ' before the anchor or note (the parser then reads the rest as a note);
+  # a leading '--' makes the checker strip the whole line as a comment
+  if ($Text -match ' --$' -or $Text -match '^--') { throw "Form A $What must not begin with '--' or end with ' --': $Text" }
   if ($Text -match '^(USER|CLIENT|SERVER|DATABASE) ') { throw "Form A $What must not begin with an actor word (pass -Actor): $Text" }
   if ($Text -match '^(CROSSES|STOPS) ') { throw "Form A $What must not begin with CROSSES or STOPS (pass -Kind): $Text" }
+  if (-not $Head) { return }
+  if ($Text -match '^(USER|CLIENT|SERVER|DATABASE|CROSSES|STOPS)(\s|$)') { throw "Form A $What must not be or begin with an actor or kind word (pass -Actor / -Kind): $Text" }
+  if ($Text -match '^(WHEN|UNLESS|GUARD|UNRESOLVED)(\s|$)') { throw "Form A $What must not begin with a counted head word (WHEN UNLESS GUARD UNRESOLVED): $Text" }
+  if ($Text -match '^(WRITE|READ|RESPONSE|ANCHOR|ALSO|USER|CLIENT|SERVER|DATABASE|PIPE)\s+(STOPS|CROSSES)(\s|$)') { throw "Form A $What must not be a section word before STOPS / CROSSES: $Text" }
+  if ($Text -match '^[\[@]') { throw "Form A $What must not begin with '[' or '@' (the checker drops an annotation token): $Text" }
+}
+
+# A quoted header or condition is written VERBATIM (P16), so it cannot carry a double-quote.
+function Test-TraceTitle([string] $Title) {
+  if ($Title.Contains('"')) { throw "Form A title carries a double-quote, so it cannot be quoted verbatim: $Title" }
 }
 
 # Kind: step | stops | crosses. Anchor is '<file leaf>:<line>' without the '@' --
@@ -77,7 +101,7 @@ function New-TraceStep([string] $Kind, [string] $Text, [string] $Anchor, [string
   if ($Anchor -notmatch $script:FormAAnchor) { throw "New-TraceStep: '$Text' has no anchor '<file>:<line>' (AC-11: every step carries one); got '$Anchor'" }
   if ($Grade -notin '', 'by name', 'inferred') { throw "New-TraceStep: grade '$Grade' is not ''/'by name'/'inferred'" }
   if ($Actor -and $Actor -cnotin $script:FormAActors) { throw "New-TraceStep: actor '$Actor' is not USER/CLIENT/SERVER/DATABASE" }
-  Test-TraceText $Text 'step text'
+  Test-TraceText $Text 'step text' -Head
   [pscustomobject]@{ Kind = $Kind; Number = 0; Actor = $Actor; Text = $Text; Grade = $Grade; Anchor = $Anchor
                      Routine = $Routine; Note = $Note; Ask = $Ask; Children = (New-Object System.Collections.ArrayList) }
 }
@@ -166,8 +190,10 @@ function Write-FormA($Trace) {
     if ([string]::IsNullOrWhiteSpace([string]$Trace.$k)) { throw "Write-FormA: header $k is empty" }
     if ([string]$Trace.$k -match '[\r\n]') { throw "Write-FormA: header $k contains a line break" }
   }
+  if ([string]$Trace.AsOf -match '\s') { throw "Write-FormA: header AsOf must be one word (the parser reads 'AS OF <word>'): $($Trace.AsOf)" }
+  Test-TraceTitle ([string]$Trace.Title)   # again here: Title is a settable property
   & $L "TRACE $($Trace.Name)"
-  & $L "  TITLE `"$(([string]$Trace.Title).Replace('"', '""'))`""
+  & $L "  TITLE `"$($Trace.Title)`""
   & $L "  FROM $($Trace.From)"
   & $L "  INDEX $($Trace.Index) AS OF $($Trace.AsOf)"
   & $L "  REGENERATE $($Trace.Regenerate)"
@@ -227,7 +253,7 @@ function Read-FormA([string] $Text) {
   foreach ($raw in $lines) {
     if ($raw -eq '') { continue }
     if ($raw -cmatch '^TRACE (.+)$')        { $T.Name = $Matches[1]; continue }
-    if ($raw -cmatch '^  TITLE "(.*)"$')    { $T.Title = $Matches[1].Replace('""', '"'); continue }
+    if ($raw -cmatch '^  TITLE "([^"]*)"$') { $T.Title = $Matches[1]; continue }
     if ($raw -cmatch '^  FROM (.+)$')       { $T.From = $Matches[1]; continue }
     if ($raw -cmatch '^  INDEX (.+) AS OF (\S+)$') { $T.Index = $Matches[1]; $T.AsOf = $Matches[2]; continue }
     if ($raw -cmatch '^  REGENERATE (.+)$') { $T.Regenerate = $Matches[1]; continue }

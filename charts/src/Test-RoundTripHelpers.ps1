@@ -193,6 +193,31 @@ $res.FormANonAscii = $(try { Write-FormA $Tn | Out-Null; 'accepted' } catch { $(
 $res.FormABadNote = $(try { $Tb = New-Trace 'X' 'x' 'x' 'A' '2026-09-27' 'x' 'client'; $sb2 = Add-TraceSection $Tb 'WRITE'; [void]$sb2.Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1' '' '' 'a; b')); Write-FormA $Tb | Out-Null; 'accepted' } catch { 'refused' })
 # P16: a condition is quoted VERBATIM, so one carrying a double-quote cannot be quoted -- the model refuses it
 $res.FormAQuote = $(try { New-TraceCond 'WHEN' 'S = "x"' 'X.pas:1' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*double-quote*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+# Fix round 1 / P16: a TITLE is quoted too, so a double-quote in it is refused (it was written raw and
+# read back un-doubled -- bytes differed); both at New-Trace and at Write-FormA (the property is mutable)
+$ttl1 = $(try { New-Trace 'X' 'a"b' 'x' 'A' '2026-09-28' 'x' 'client' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*double-quote*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+$ttl2 = $(try { $Tq = New-Trace 'X' 'ab' 'x' 'A' '2026-09-28' 'x' 'client'; $Tq.Title = 'a""b'; [void](Add-TraceSection $Tq 'WRITE').Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1')); Write-FormA $Tq | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*double-quote*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+$res.FormATitleQuote = "$ttl1/$ttl2"
+# Fix round 1: every text the writer would emit but its own parser or the checker would misread is refused
+# up front. Step heads: a bare or leading actor/kind word, a counted head (WHEN UNLESS GUARD UNRESOLVED), a
+# section word before STOPS/CROSSES, a lone annotation; any text: a leading '--' or a trailing ' --'.
+$guardCases = @(
+  @('step', 'SERVER'), @('step', 'STOPS'), @('step', 'CROSSES'), @('step', 'user'), @('step', 'CALLS x --'),
+  @('step', 'WHEN x'), @('step', 'UNLESS'), @('step', 'GUARD x'), @('step', 'UNRESOLVED x'), @('step', 'READ STOPS x'),
+  @('step', 'ALSO CROSSES x'), @('step', '-- x'), @('step', '[inferred]'), @('step', '@X.pas:1'),
+  @('facet', 'x --'), @('facet', '-- x'))
+$guardOk = @()
+foreach ($gc in $guardCases) {
+  $acc = $(try { if ($gc[0] -eq 'step') { New-TraceStep 'step' $gc[1] 'X.pas:1' | Out-Null } else { New-TraceFacet 'VIA' $gc[1] 'X.pas:1' | Out-Null }; $true } catch { $false })
+  if ($acc) { $guardOk += "$($gc[0]):'$($gc[1])'" }
+}
+# and what the guard must NOT refuse: a facet naming a tier, a step text with a '--' inside a word
+$guardFp = @()
+foreach ($ok in @(@('facet', 'SERVER'), @('step', 'CALLS a--b'), @('step', 'READS WHEN_FLAG'))) {
+  $acc = $(try { if ($ok[0] -eq 'step') { New-TraceStep 'step' $ok[1] 'X.pas:1' | Out-Null } else { New-TraceFacet 'TO' $ok[1] | Out-Null }; $true } catch { $false })
+  if (-not $acc) { $guardFp += "$($ok[0]):'$($ok[1])'" }
+}
+$res.FormATextGuard = "refused $($guardCases.Count - $guardOk.Count)/$($guardCases.Count); accepted [$($guardOk -join ',')]; wrongly refused [$($guardFp -join ',')]"
 # P7 / AC-12: a numbered STOPS is unresolved in EVERY section, with or without an actor word before it
 # (`[NN] SERVER STOPS ...`); a Pascal condition with '' is written verbatim and reads back
 $Ts = New-Trace 'X' 'x' 'x' 'A' '2026-09-28' 'x' 'client -> server'

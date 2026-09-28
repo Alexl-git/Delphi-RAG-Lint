@@ -2253,6 +2253,10 @@ Step 'E-RT0' {
   # P7: seven STOPS, one per section, five behind an actor word ([NN] SERVER STOPS twice): checker exit 0 =
   # it counted all 7 unresolved; the round trip holds; UNLESS "SQL = ''" is written verbatim
   Chk 'A-RT2-STOPSALL'  $rt0.FormAStopsAll '0/8/1/0/7/identical/2/verbatim'
+  # fix round 1: a double-quote in the TITLE is refused (New-Trace / Write-FormA); the model refuses every
+  # text its own parser or the checker would misread (16 cases), and not the three look-alikes that are safe
+  Chk 'A-RT2-TITLEQUOTE' $rt0.FormATitleQuote 'refused/refused'
+  Chk 'A-RT2-TEXTGUARD' $rt0.FormATextGuard 'refused 16/16; accepted []; wrongly refused []'
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
