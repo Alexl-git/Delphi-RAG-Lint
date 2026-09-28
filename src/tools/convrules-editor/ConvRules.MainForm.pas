@@ -146,6 +146,7 @@ type
       FTbFindInFrom  : TToolButton; // mapping: select the same-named From row
       FTbOnlyType    : TToolButton; // mapping: pool type-narrowing toggle (caption flips)
       FTbMappings    : TToolButton; // mapping: open the conditional #mapping editor
+      FTbScopeRenames: TToolButton; // unit rules: #useswap Name -> Scope.Name for "via scope" rows
       FTbExamine     : TToolButton; // examine: pick .dfm/.pas, mark used From props
       FTbClearExamine: TToolButton; // examine: drop the current examination
       FPanelTop      : TPanel     ;
@@ -1836,6 +1837,10 @@ type
       procedure HarvestRowResize(Sender: TObject);
       function  UnitHasRule(const AUnit: string): Boolean;
       function  IsHarvested(const AUnit: string): Boolean;
+      function  SelectedUnitRows: TArray<TListItem>;
+      function  CanonicalLibraryName(const AName: string): string;
+      procedure DoAcceptScopeRenames(Sender: TObject);
+      procedure UnitListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
       /// <summary>The harvest rows to list, in display order.</summary>
       /// <param name="AHidden">Receives how many rows the session masks hid.</param>
       /// <param name="AFiltered">Receives how many rows the check boxes dropped or a
@@ -2706,9 +2711,10 @@ begin
   AddBtn('+ Swap'       , 'Add #useswap Old -> New1[, New2 ...]'                      , DoAddSwap );
   AddBtn('+ Add unit'   , 'Add #use <unit> -- a unit to ADD to the uses clause'       , DoAddUse  );
   AddBtn('+ Remove unit', 'Add #unuse <unit> -- a unit to REMOVE from the uses clause', DoAddUnuse);
-  AddBtn('Delete unit rule', 'Delete the unit rule selected on the Unit Rules tab ' + '(or dismiss the Examine candidate selected there)', DoDeleteUnit);
+  AddBtn('Delete unit rule', 'Delete the unit rule selected on the Unit Rules tab ' + '(or dismiss the Examine candidate or harvested row selected there)', DoDeleteUnit);
   AddBtn('Derive units', 'Add #use/#unuse from every #convert To/From type (deduped)', DoDeriveUnits);
   AddBtn('Check units' , 'Report #use/#unuse conflicts (ADD wins)'                   , DoCheckUnits );
+  FTbScopeRenames:= AddBtn('Accept scope renames', 'Add #useswap Name -> Scope.Name for every selected "via scope" row', DoAcceptScopeRenames);
 end; // begin
 
 { Enables only what the current selection supports. Several actions were previously always
@@ -2722,6 +2728,14 @@ begin
   FTbExamine.Enabled:= (FActiveHdr >= 0);
   FTbClearExamine.Enabled:= (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
   FTbMappings.Enabled:= (FActiveHdr >= 0);
+  if (FTbScopeRenames <> nil) and (FUnitList <> nil) then
+  begin
+    var LScope: Boolean:= False;
+    for var LItem: TListItem in SelectedUnitRows do
+      if (LItem.Caption = HARVEST_CAPTION) and (LItem.SubItems.Count > 1) and (LItem.SubItems[1] <> '') then
+        LScope:= True;
+    FTbScopeRenames.Enabled:= LScope;
+  end;
 end;
 
 { FGrid.OnSelectCell -- the grid row is half of the Assign/Unassign gate, so the
@@ -3080,6 +3094,8 @@ begin
   LStatusCol.Width  := UNIT_STATUS_COL_W;
   FUnitList.OnCustomDrawItem:= UnitListCustomDrawItem;
   FUnitList.OnKeyDown       := UnitListKeyDown;
+  FUnitList.OnSelectItem    := UnitListSelectItem;
+  FUnitList.MultiSelect     := True;
 
   // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
   // than relying on "index 0 happens to be first created", which TabRules.
@@ -6541,6 +6557,73 @@ begin
   Result:= False;
 end;
 
+{ Selected rows that are NOT rules (candidates and harvested rows, Data = nil). }
+function TConvRulesForm.SelectedUnitRows: TArray<TListItem>;
+var
+  Item: TListItem;
+begin
+  Result:= nil;
+  Item:= FUnitList.Selected;
+  while Item <> nil do
+  begin
+    if Item.Data = nil then
+      Result:= Result + [Item];
+    Item:= FUnitList.GetNextItem(Item, sdAll, [isSelected]);
+  end;
+end;
+
+{ The library's own spelling of AName ('vcl.forms' -> 'Vcl.Forms'), so an accepted
+  rename writes the canonical name; AName itself when the library does not know it. }
+function TConvRulesForm.CanonicalLibraryName(const AName: string): string;
+var
+  U: string;
+begin
+  for U in FPickWin64 do
+    if SameText(U, AName) then
+      Exit(U);
+  for U in FPickWin32 do
+    if SameText(U, AName) then
+      Exit(U);
+  Result:= AName;
+end;
+
+{ FUnitList.OnSelectItem -- the selection is the whole of the Accept scope renames gate. }
+procedure TConvRulesForm.UnitListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+begin
+  UpdateToolbarEnabled;
+end;
+
+{ One #useswap Name -> Scope.Name per selected "via scope" harvested row; the rule
+  then covers the name, so the harvested row drops out of the list on refresh. }
+procedure TConvRulesForm.DoAcceptScopeRenames(Sender: TObject);
+var
+  Item : TListItem;
+  N    : TRuleNode;
+  Added: TArray<string>;
+begin
+  Added:= nil;
+  for Item in SelectedUnitRows do
+    if (Item.Caption = HARVEST_CAPTION) and (Item.SubItems.Count > 1) and (Item.SubItems[1] <> '') then
+    begin
+      N:= TRuleNode.Create;
+      N.Kind   := rnkUseSwap;
+      N.SwapOld:= Item.SubItems[0];
+      N.SwapNew:= [CanonicalLibraryName(Item.SubItems[1])];
+      N.Dirty  := True;
+      InsertUnitNode(N);
+      Added:= Added + [N.SwapOld + ' -> ' + N.SwapNew[0]];
+    end;
+  if Length(Added) = 0 then
+  begin
+    SetStatus('Select one or more "via scope" rows first.');
+    Exit;
+  end;
+  RefreshUnitList;
+  SyncRawFromModel;
+  UpdateToolbarEnabled;
+  SetStatus(Format('Added %d #useswap: %s', [Length(Added), string.Join(', ', Added)]));
+end; // procedure
+
 { Classified harvest rows that pass the check boxes, have no rule yet, and survive
   the masks; display order. A same-named Examine candidate does NOT hide one --
   RefreshUnitList drops the candidate instead (ruling R7). Every harvested row is
@@ -7085,7 +7168,11 @@ var
   NewUnits: TArray<string>;
   N       : TRuleNode     ;
 begin
-  if not PickUnit('Unit swap: the OLD unit to replace', '', psFrom, OldU) then
+  var LRows: TArray<TListItem>:= SelectedUnitRows;
+  var LInitial: string:= '';
+  if Length(LRows) = 1 then
+    LInitial:= LRows[0].SubItems[0];
+  if not PickUnit('Unit swap: the OLD unit to replace', LInitial, psFrom, OldU) then
     Exit;
   if not PickUnit(Format('Unit swap: a NEW unit replacing %s', [OldU]), '', psTo, U) then
     Exit;
@@ -7124,16 +7211,38 @@ end; // procedure
 
 procedure TConvRulesForm.DoAddUnuse(Sender: TObject);
 var
-  U: string   ;
-  N: TRuleNode;
+  U    : string           ;
+  N    : TRuleNode        ;
+  Rows : TArray<TListItem>;
+  Names: TArray<string>   ;
+  Item : TListItem        ;
 begin
-  if not PickUnit('Remove unit (#unuse)', '', psFrom, U) then
-    Exit;
-  N:= TRuleNode.Create; N.Kind:= rnkUnuse; N.UnuseUnit:= U; N.Dirty:= True;
-  InsertUnitNode(N);
+  Rows:= SelectedUnitRows;
+  if Length(Rows) = 0 then
+  begin
+    if not PickUnit('Remove unit (#unuse)', '', psFrom, U) then
+      Exit;
+    Names:= [U];
+  end
+  else
+  begin
+    Names:= nil;
+    for Item in Rows do
+      Names:= Names + [Item.SubItems[0]];
+    if MessageDlg(Format('Add #unuse for %d unit(s)? They are DELETED from the result with no replacement:' + sLineBreak + sLineBreak + '%s', [Length(Names), string.Join(', ', Names)]), mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+      Exit;
+  end;
+  for U in Names do
+  begin
+    N:= TRuleNode.Create;
+    N.Kind     := rnkUnuse;
+    N.UnuseUnit:= U;
+    N.Dirty    := True;
+    InsertUnitNode(N);
+  end;
   RefreshUnitList;
   SyncRawFromModel;
-  SetStatus('Added #unuse ' + U);
+  SetStatus(Format('Added #unuse for %s', [string.Join(', ', Names)]));
 end; // procedure
 
 procedure TConvRulesForm.DoDeleteUnit(Sender: TObject);
@@ -7150,11 +7259,20 @@ begin
   end;
   N:= TRuleNode(FUnitList.Selected.Data);
 
-  // Data = nil is an Examine CANDIDATE, not a rule: dismissing it drops it from the
-  // harvested set only. The rule book is untouched, so no SyncRawFromModel either.
+  // Data = nil is NOT a rule: an Examine CANDIDATE or a harvested '(used)' row.
+  // Dismissing drops it from its own session set only. The rule book is untouched,
+  // so no SyncRawFromModel either.
   if N = nil then
   begin
     Cand:= FUnitList.Selected.SubItems[0];
+    if FUnitList.Selected.Caption = HARVEST_CAPTION then
+    begin
+      FHarvest:= WithoutUnit(FHarvest, Cand);
+      ReclassifyHarvest; // rebuilds FHarvestRows and refreshes the list
+      UpdateToolbarEnabled;
+      SetStatus('Dismissed unit ' + Cand + ' (no rule written).');
+      Exit;
+    end; // if
     Kept:= nil;
     for U in FUnitCandidates do
       if not SameText(U, Cand) then
