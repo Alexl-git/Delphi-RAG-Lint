@@ -231,3 +231,37 @@ get its full context with `drag-lint context --task "modify <Unit.Routine>"
   times -- the `TextOut` call, then the strikethrough's `MoveTo` and `LineTo`
   -- each with its own `dl:ok magic-literal` review instead of one named
   constant.
+
+## Unit picker -- hand-over notes (feat/unit-picker, 2026-09-24)
+
+Every place the editor asks for a unit name opens `TUnitPickerForm`
+(`ConvRules.UnitPicker.pas`): **+ Add unit**, **+ Remove unit**, **+ Swap**
+(Old, then one New per open with "Add another?" between) and the From Unit
+**Pick...** button. Its decisions live in `ConvRules.UnitPick.pas`, which the
+model tests cover; the form only renders.
+
+* **The lists come from `sql`, not `query find`.** `query find --no-docs` is a
+  FILTER (undocumented symbols only) -- the From Unit combo used it and listed
+  2,103 of library-Win64's 5,646 units. `TEngineAdapter.ListUnits` now runs one
+  `sql ... WHERE kind='unit'` per DB with `--limit` (the `sql` default cap is
+  200). Engine ask filed: `docs\INBOX-2026-09-24-converter-to-engine-list-units-and-object-leak.md`.
+* **Cost, measured 2026-09-24:** ~5.5 s per library DB, ~0.9 s for the project
+  DB, once per session (cached in `FPick*`); a reopen measured 0.4 s.
+* **Side -> platform:** a To unit (#use, a swap's New) lists the TO platform's
+  library, a From unit (#unuse, a swap's Old, From Unit) the FROM one. On
+  `Both` a unit present in only one library gets a note under the lists.
+* **The platform dropdowns now write `GEditorFromPlatform` /
+  `GEditorToPlatform`** -- those globals are the session's TO/FROM platform,
+  not just the command-line defaults.
+* **Setting a conversion adds its unit rules** (`AddDerivedUnitRules`):
+  `#unuse <From type's unit>` + `#use <To type's unit>`, skipping any the book
+  already says (`MissingUnitNodes`). They are atomic; deciding whether a unit
+  is still needed, already present or must move to the interface is the
+  ENGINE's job at apply time -- not built yet (next spec).
+* **Unit inserts shift every `#convert` index.** `InsertUnitNode` re-derives
+  `FActiveHdr`; any other index a caller holds must be re-found by NODE (see the
+  set-conversion path).
+* **Driving it:** toolbar buttons are `TToolButton`s, not windows, and the
+  toolbar's class is `TToolBar` (VCL registers Delphi class names). A click is a
+  posted mouse down/up at `TB_GETITEMRECT`; a posted `WM_COMMAND` does nothing.
+  Raw DSL's memo has no window until its tab has been shown.

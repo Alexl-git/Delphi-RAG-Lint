@@ -90,6 +90,19 @@ function NormalizeUnitSets(ABook: TRuleBook): TUnitSets;
 /// </remarks>
 function DeriveUnits(const APairs: TArray<TConvPair>; const AResolve: TUnitResolver): TUnitSets;
 
+/// <summary>The part of ASets the book does not already say: each Add with no
+/// #use for it, each Remove with no #unuse for it (case-insensitive). This is
+/// what auto-derive inserts, so deriving twice adds nothing the second time.</summary>
+/// <param name="ABook">The rule book whose #use / #unuse nodes are consulted;
+/// not modified.</param>
+/// <param name="ASets">Candidate units, typically DeriveUnits' result.</param>
+/// <returns>Adds and Removes filtered to the missing ones, input order kept;
+/// Conflicts empty.</returns>
+/// <remarks>Only plain #use / #unuse count as "already said" -- a #useswap is
+/// a different rule, and the engine reconciles the overlap when it applies
+/// them.</remarks>
+function MissingUnitNodes(ABook: TRuleBook; const ASets: TUnitSets): TUnitSets;
+
 implementation
 
 { Add AUnit to AList unless blank or already present (case-insensitive). }
@@ -174,6 +187,36 @@ begin
     Result.Conflicts:= nil;
   finally
     Adds.Free; Removes.Free;
+  end; // try
+end; // function
+
+function MissingUnitNodes(ABook: TRuleBook; const ASets: TUnitSets): TUnitSets;
+var
+  Used  : TStringList;
+  Unused: TStringList;
+  N     : TRuleNode  ;
+  U     : string     ;
+begin
+  Result:= Default(TUnitSets);
+  Used:= TStringList.Create;
+  Unused:= TStringList.Create;
+  try
+    Used.CaseSensitive:= False;
+    Unused.CaseSensitive:= False;
+    for N in ABook.Nodes do
+      if N.Kind = rnkUse then
+        Used.Add(N.UseUnit)
+      else if N.Kind = rnkUnuse then
+        Unused.Add(N.UnuseUnit);
+    for U in ASets.Adds do
+      if Used.IndexOf(U) < 0 then
+        Result.Adds:= Result.Adds + [U];
+    for U in ASets.Removes do
+      if Unused.IndexOf(U) < 0 then
+        Result.Removes:= Result.Removes + [U];
+  finally
+    Used.Free;
+    Unused.Free;
   end; // try
 end; // function
 

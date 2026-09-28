@@ -45,6 +45,7 @@ uses
   , ConvRules.RuleCatalog
   , ConvRules.SkipList // TSkipList: a field's type, so this has to be INTERFACE-visible
   , ConvRules.Usage // TUsedUnitRef: a field's type, so this has to be INTERFACE-visible
+  , ConvRules.UnitPicker // TUnitPickSide: a method parameter's type, so INTERFACE-visible
   ;
 
 const
@@ -93,6 +94,16 @@ type
       FFromClasses: TArray<string>; // FROM picker: all TComponent descendants (Win32+Win64 union)
       FToClasses  : TArray<string>; // TO picker: TControl descendants (target platform)
       FUnitsLoaded: Boolean       ; // project-unit picker populated?
+
+      { The unit picker's lists, each loaded on first use and kept for the session:
+        measured 2026-09-24 at ~5.5 s per library index and ~0.9 s for the project
+        DB, so re-asking on every open would make every + Use wait. }
+      FPickProj      : TArray<string>;
+      FPickWin32     : TArray<string>;
+      FPickWin64     : TArray<string>;
+      FPickProjLoaded: Boolean       ;
+      FPickW32Loaded : Boolean       ;
+      FPickW64Loaded : Boolean       ;
 
       FFromPlatform: TConvPlatform; // FROM picker library platform
       FToPlatform  : TConvPlatform; // TO picker library platform
@@ -1774,6 +1785,29 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoDeriveUnits(Sender: TObject);
+      /// <summary>Loads (once per session) the unit lists the picker needs for
+      /// APlatform: the project DB's always, plus Win32 and/or Win64.</summary>
+      /// <param name="APlatform">The picking side's platform.</param>
+      procedure EnsurePickLists(APlatform: TConvPlatform);
+      /// <summary>Opens the unit picker for one side of the conversion.</summary>
+      /// <param name="ACaption">Window caption naming what the unit is for.</param>
+      /// <param name="AInitial">Pre-filled name ('' for none).</param>
+      /// <param name="ASide">psFrom lists the FROM platform's library, psTo the TO one.</param>
+      /// <param name="AUnit">Receives the chosen name.</param>
+      /// <returns>False when the user cancelled.</returns>
+      function PickUnit(const ACaption, AInitial: string; ASide: TUnitPickSide; out AUnit: string): Boolean;
+      /// <summary>Adds #unuse (From type's unit) and #use (To type's unit) for
+      /// the #convert blocks at AHeads, skipping any the book already says.</summary>
+      /// <param name="AHeads">Node indices of #convert headers.</param>
+      /// <returns>The directives added, e.g. '#unuse Ovcef'; empty when none.</returns>
+      /// <remarks>Inserting unit nodes shifts every #convert index; FActiveHdr is
+      /// re-derived by InsertUnitNode, but any OTHER index the caller holds is
+      /// stale afterwards and must be re-found by node.</remarks>
+      function AddDerivedUnitRules(const AHeads: TArray<Integer>): TArray<string>;
+      /// <summary>From Unit "Pick..." button: choose the unit to examine with the
+      /// unit picker instead of the drop-down.</summary>
+      /// <param name="Sender">The button.</param>
+      procedure DoPickFromUnit(Sender: TObject);
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2713,6 +2747,16 @@ begin
   BtnBrowseUnit.ShowHint:= True;
   BtnBrowseUnit.OnClick := DoBrowseFromUnit;
 
+  // The unit picker: the same list as the drop-down plus the FROM library, with
+  // a partial / wildcard / regex filter the combo's prefix auto-complete lacks.
+  var BtnPickUnit: TButton:= TButton.Create(Self);
+  BtnPickUnit.Parent:= FPanelTop;
+  BtnPickUnit.SetBounds(444, 39, 70, 23);  // dl:ok magic-literal@bc53, large-magic-number@bc53 -- REVIEWED 2026-09-24 same unnamed SetBounds coordinate idiom used by every control in BuildUI
+  BtnPickUnit.Caption:= 'Pick...';
+  BtnPickUnit.Hint:= 'Choose the From Unit with the unit picker (filter by part of the name, a mask or a regex)';
+  BtnPickUnit.ShowHint:= True;
+  BtnPickUnit.OnClick := DoPickFromUnit;
+
   // Target surface: DFM = published props only; PAS = public props + public fields.
   // Selects proptree --min-visibility for the From/To trees (engine schema v17).
   var LblSurf: TLabel:= TLabel.Create(Self);
@@ -3245,6 +3289,11 @@ procedure TConvRulesForm.PlatformChanged(Sender: TObject);
 begin
   FFromPlatform:= TConvPlatform(FCbFromPlat.ItemIndex);
   FToPlatform  := TConvPlatform(FCbToPlat  .ItemIndex);
+  // The dropdowns are the session's one source of truth for the platforms: the
+  // globals the .dpr seeded at start-up follow them, so anything that reads
+  // GEditorToPlatform sees the platform on screen, not the command line's.
+  GEditorFromPlatform:= FFromPlatform;
+  GEditorToPlatform  := FToPlatform;
   FEngine.SetDbs(EngineDbSet);
   // Force LoadAllClasses to re-query (its guard exits when both caches are set).
   FFromClasses:= [];
@@ -5956,6 +6005,16 @@ begin
     newHdrIdx:= FBook.Nodes.Count - 1;
   end; // else
 
+  // A replacement brings its unit rules with it: #unuse the From type's unit and
+  // #use the To type's, unless the book already says so. They are atomic -- the
+  // engine decides at apply time whether each unit is still needed, already
+  // present, or has to move to the interface. Done BEFORE the list refresh and
+  // selection below, so the grid still loads once; the inserts shift every
+  // #convert index, so the new header is re-found by NODE.
+  var NewHdr: TRuleNode:= FBook.Nodes[newHdrIdx];
+  var UnitRules: TArray<string>:= AddDerivedUnitRules([newHdrIdx]);
+  newHdrIdx:= FBook.Nodes.IndexOf(NewHdr);
+
   RefreshRulesList;
   // select the target rule (also fires LoadGridForBlock)
   var Sel: Integer:= -1;
@@ -5980,6 +6039,8 @@ begin
     Notes:= Notes + '  ' + FromNote;
   if ToNote <> '' then
     Notes:= Notes + '  ' + ToNote;
+  if Length(UnitRules) > 0 then
+    Notes:= Notes + '  Unit rules added: ' + string.Join(', ', UnitRules) + '.';
   SetStatus(Format('Conversion %s -> %s set and auto-matched. Review, then Save.', [fromT, toT]) + Notes);
 end; // procedure
 
@@ -6340,42 +6401,38 @@ begin
   end; // try
 end; // begin
 
+{ Old unit from the FROM side, then one or more New units from the TO side --
+  the picker returns one name per open, so each further New is offered with a
+  Yes/No between picks. Cancelling the first New abandons the swap; cancelling
+  a later one keeps what was picked so far. }
 procedure TConvRulesForm.DoAddSwap(Sender: TObject);
 var
-  oldU : string        ;
-  newU : string        ;
-  N    : TRuleNode     ;
-  Parts: TArray<string>;
-  tmp  : TList<string> ;
-  P    : string        ;
+  OldU    : string        ;
+  U       : string        ;
+  NewUnits: TArray<string>;
+  N       : TRuleNode     ;
 begin
-  oldU:= '';
-  if not InputQuery('Add unit swap', 'Old unit to replace:', oldU) then
+  if not PickUnit('Unit swap: the OLD unit to replace', '', psFrom, OldU) then
     Exit;
-  oldU:= Trim(oldU);
-  if oldU = '' then
+  if not PickUnit(Format('Unit swap: a NEW unit replacing %s', [OldU]), '', psTo, U) then
     Exit;
-  newU:= '';
-  if not InputQuery('Add unit swap', 'New unit(s), comma-separated:', newU) then
-    Exit;
+  NewUnits:= [U];
+  while MessageDlg(Format('#useswap %s -> %s' + sLineBreak + sLineBreak + 'Add another NEW unit?', [OldU, string.Join(', ', NewUnits)]), mtConfirmation, [mbYes, mbNo], 0) = mrYes do
+  begin
+    if not PickUnit(Format('Unit swap: another NEW unit replacing %s', [OldU]), '', psTo, U) then
+      Break;
+    if not MatchText(U, NewUnits) then
+      NewUnits:= NewUnits + [U];
+  end; // while
   N:= TRuleNode.Create;
   N.Kind   := rnkUseSwap;
-  N.SwapOld:= oldU;
+  N.SwapOld:= OldU;
+  N.SwapNew:= NewUnits;
   N.Dirty  := True;
-  Parts:= newU.Split([',']);
-  tmp:= TList<string>.Create;
-  try
-    for P in Parts do
-      if Trim(P) <> '' then
-        tmp.Add(Trim(P));
-    N.SwapNew:= tmp.ToArray;
-  finally
-    tmp.Free;
-  end;
   InsertUnitNode(N);
   RefreshUnitList;
   SyncRawFromModel;
-  SetStatus(Format('Added #useswap %s -> %s', [oldU, string.Join(', ', N.SwapNew)]));
+  SetStatus(Format('Added #useswap %s -> %s', [OldU, string.Join(', ', N.SwapNew)]));
 end; // procedure
 
 procedure TConvRulesForm.DoAddUse(Sender: TObject);
@@ -6383,11 +6440,7 @@ var
   U: string   ;
   N: TRuleNode;
 begin
-  U:= '';
-  if not InputQuery('Add unit', 'Unit to ADD to the uses clause:', U) then
-    Exit;
-  U:= Trim(U);
-  if U = '' then
+  if not PickUnit('Add unit (#use)', '', psTo, U) then
     Exit;
   N:= TRuleNode.Create; N.Kind:= rnkUse; N.UseUnit:= U; N.Dirty:= True;
   InsertUnitNode(N);
@@ -6401,11 +6454,7 @@ var
   U: string   ;
   N: TRuleNode;
 begin
-  U:= '';
-  if not InputQuery('Remove unit', 'Unit to REMOVE from the uses clause:', U) then
-    Exit;
-  U:= Trim(U);
-  if U = '' then
+  if not PickUnit('Remove unit (#unuse)', '', psFrom, U) then
     Exit;
   N:= TRuleNode.Create; N.Kind:= rnkUnuse; N.UnuseUnit:= U; N.Dirty:= True;
   InsertUnitNode(N);
@@ -6465,38 +6514,13 @@ begin
   SetStatus('Deleted unit rule.');
 end; // procedure
 
+{ Setting a conversion already adds its unit rules (AddDerivedUnitRules); this
+  button is for books written before that, and is idempotent -- a second press
+  adds nothing. }
 procedure TConvRulesForm.DoDeriveUnits(Sender: TObject);
 var
-  Pairs   : TArray<TConvPair>;
-  Heads   : TArray<Integer>  ;
-  S       : TUnitSets        ;
-  existing: TArray<TRuleNode>;
-  addUse  : Integer          ;
-  addUnuse: Integer          ;
-  i       : Integer          ;
-  U       : string           ;
-  N       : TRuleNode        ;
-
-  function HasUse(const uu: string): Boolean;
-  var
-    N: TRuleNode;
-  begin
-    Result:= False;
-    for N in existing do
-      if (N.Kind = rnkUse) and SameText(N.UseUnit, uu) then
-        Exit(True);
-  end;
-
-  function HasUnuse(const uu: string): Boolean;
-  var
-    N: TRuleNode;
-  begin
-    Result:= False;
-    for N in existing do
-      if (N.Kind = rnkUnuse) and SameText(N.UnuseUnit, uu) then
-        Exit(True);
-  end;
-
+  Heads: TArray<Integer>;
+  Added: TArray<string> ;
 begin
   var LGuard: IInterface:= HourGlass;
   Heads:= FBook.ConvertHeaders;
@@ -6505,32 +6529,126 @@ begin
     SetStatus('No #convert rules to derive units from.');
     Exit;
   end;
-  SetLength(Pairs, Length(Heads));
-  for i:= 0 to High(Heads) do
-  begin
-    Pairs[i].FromType:= FBook.Nodes[Heads[i]].FromType;
-    Pairs[i].ToType  := FBook.Nodes[Heads[i]].ToType;
-  end;
   SetStatus('Deriving units (resolving declaring units)...');
-  S:= DeriveUnits(Pairs, function(const T: string): string begin Result:= FEngine.DeclaringUnitOf(T); end);
-  existing:= FBook.UnitNodes;
-  addUse:= 0; addUnuse:= 0;
-  for U in S.Adds do
-    if not HasUse(U) then
-    begin
-      N:= TRuleNode.Create; N.Kind:= rnkUse; N.UseUnit:= U; N.Dirty:= True;
-      InsertUnitNode(N); Inc(addUse);
-    end;
-  for U in S.Removes do
-    if not HasUnuse(U) then
-    begin
-      N:= TRuleNode.Create; N.Kind:= rnkUnuse; N.UnuseUnit:= U; N.Dirty:= True;
-      InsertUnitNode(N); Inc(addUnuse);
-    end;
-  RefreshUnitList;
+  Added:= AddDerivedUnitRules(Heads);
   SyncRawFromModel;
-  SetStatus(Format('Derived: +%d #use, +%d #unuse (deduped against existing).', [addUse, addUnuse]));
+  if Length(Added) = 0 then
+    SetStatus('Derived: nothing to add -- every #convert''s units are already ruled.')
+  else
+    SetStatus(Format('Derived: %d unit rule(s) added: %s.', [Length(Added), string.Join(', ', Added)]));
 end; // begin
+
+function TConvRulesForm.AddDerivedUnitRules(const AHeads: TArray<Integer>): TArray<string>;
+var
+  Pairs  : TArray<TConvPair>;
+  Missing: TUnitSets        ;
+  i      : Integer          ;
+  U      : string           ;
+  N      : TRuleNode        ;
+begin
+  Result:= nil;
+  SetLength(Pairs, Length(AHeads));
+  for i:= 0 to High(AHeads) do
+  begin
+    Pairs[i].FromType:= FBook.Nodes[AHeads[i]].FromType;
+    Pairs[i].ToType  := FBook.Nodes[AHeads[i]].ToType;
+  end;
+  // An unresolved type (not indexed, or a From-only stub's empty To) resolves to
+  // '' and DeriveUnits drops it, so a partial pair still yields its known half.
+  Missing:= MissingUnitNodes(FBook, DeriveUnits(Pairs, function(const T: string): string begin Result:= FEngine.DeclaringUnitOf(T); end));
+  for U in Missing.Removes do
+  begin
+    N:= TRuleNode.Create;
+    N.Kind     := rnkUnuse;
+    N.UnuseUnit:= U;
+    N.Dirty    := True;
+    InsertUnitNode(N);
+    Result:= Result + ['#unuse ' + U];
+  end; // for
+  for U in Missing.Adds do
+  begin
+    N:= TRuleNode.Create;
+    N.Kind   := rnkUse;
+    N.UseUnit:= U;
+    N.Dirty  := True;
+    InsertUnitNode(N);
+    Result:= Result + ['#use ' + U];
+  end; // for
+  if Length(Result) > 0 then
+    RefreshUnitList;
+end; // function
+
+procedure TConvRulesForm.EnsurePickLists(APlatform: TConvPlatform);
+var
+  Failed: Boolean;
+
+  { One list, once. A failure is reported and NOT cached, so the next open
+    retries -- the usual cause (a DB mid-rebuild) is transient. }
+  procedure LoadOne(const ADbs: TArray<string>; const AWhat: string; var AList: TArray<string>; var ALoaded: Boolean);
+  var
+    Names: TArray<string>;
+    Err  : string        ;
+  begin
+    if ALoaded then
+      Exit;
+    if FEngine.ListUnits(ADbs, Names, Err) then
+    begin
+      AList  := Names;
+      ALoaded:= True;
+    end
+    else
+    begin
+      Failed:= True;
+      SetError(Format('Unit picker: %s units unavailable -- %s', [AWhat, Err]));
+    end;
+  end; // procedure
+
+begin
+  if FPickProjLoaded and (FPickW32Loaded or (APlatform = cpWin64)) and (FPickW64Loaded or (APlatform = cpWin32)) then
+    Exit;
+  var LGuard: IInterface:= HourGlass;  // dl:ok write-only-local@8f1f -- REVIEWED 2026-09-24 RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read
+  SetStatus('Loading unit lists for the unit picker (first time only)...');
+  Application.ProcessMessages;
+  Failed:= False;
+  LoadOne([GEditorProjectDb], 'project', FPickProj, FPickProjLoaded);
+  if APlatform <> cpWin64 then
+    LoadOne(LibDbsFor(cpWin32, GEditorLibDir), 'Win32 library', FPickWin32, FPickW32Loaded);
+  if APlatform <> cpWin32 then
+    LoadOne(LibDbsFor(cpWin64, GEditorLibDir), 'Win64 library', FPickWin64, FPickW64Loaded);
+  if not Failed then
+    SetStatus(Format('Unit picker: %d project, %d Win32, %d Win64 unit(s) loaded.', [Length(FPickProj), Length(FPickWin32), Length(FPickWin64)]));
+end; // procedure
+
+function TConvRulesForm.PickUnit(const ACaption, AInitial: string; ASide: TUnitPickSide; out AUnit: string): Boolean;
+var
+  Src: TUnitPickSource;
+begin
+  if ASide = psFrom then
+    EnsurePickLists(FFromPlatform)
+  else
+    EnsurePickLists(FToPlatform);
+  Src.ProjectUnits:= FPickProj;
+  Src.Win32Units  := FPickWin32;
+  Src.Win64Units  := FPickWin64;
+  Src.FromPlatform:= FFromPlatform;
+  Src.ToPlatform  := FToPlatform;
+  Result:= TUnitPickerForm.Execute(Self, ACaption, AInitial, ASide, Src, AUnit);
+end; // function
+
+procedure TConvRulesForm.DoPickFromUnit(Sender: TObject);
+var
+  Initial: string;
+  U      : string;
+begin
+  // A Browse...d full path would filter both lists down to nothing.
+  Initial:= Trim(FCbUnit.Text);
+  if TPath.IsPathRooted(Initial) then
+    Initial:= '';
+  if not PickUnit('From Unit: the unit to convert', Initial, psFrom, U) then
+    Exit;
+  FCbUnit.Text:= U;
+  CbUnitSelected(FCbUnit);
+end; // procedure
 
 procedure TConvRulesForm.DoCheckUnits(Sender: TObject);
 var
