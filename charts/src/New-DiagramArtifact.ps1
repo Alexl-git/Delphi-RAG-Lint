@@ -15,6 +15,8 @@
     graph.dot      the dot we emitted (we never parse dot; it is our output)
     graph.png      raster export
     graph.pdf      document export
+    trace.dlgraph  round-trip only, INSTEAD of the graph.* files: a TEXT
+                   question ships its Form A document, shown in the shell
     index.html     the shell: opens in a browser, clicks are explained
     meta.json      index fingerprint + regenerate command (staleness detectable)
     xref.txt       the DocInsight <remarks> block to paste into the unit
@@ -36,7 +38,8 @@ param(
   # butterfly / who-calls / touches-tables, a unit name for deps, a form CLASS
   # for event-wiring, a TABLE or TABLE.COLUMN for consumers, a <Form>.<Control>
   # (e.g. frmCausFail.colREASON) for feeds-from; an ORM property (uCAUSFAIL.TmcCAUSFAIL.REASON)
-  # or a <Form>.<Control> for lands-where.
+  # or a <Form>.<Control> for lands-where; a control, an interface field, a TField
+  # variable or TABLE.COLUMN for round-trip.
   # `cycles` and `architecture` select the PROJECT, not a symbol. Target stays
   # mandatory rather than gaining a special "omit it" mode, because a bundle with
   # no target in its name and no target in its meta.json is unidentifiable six
@@ -47,7 +50,7 @@ param(
                'hierarchy','class-surface','event-wiring','touches-tables',
                'lifecycle','cycles','wiring','effects','architecture',
                'protocol-trace','crosses-boundary','shown-where','change-impact','tested-by',
-               'exception-paths','consumers','feeds-from','lands-where')]
+               'exception-paths','consumers','feeds-from','lands-where','round-trip')]
   [string] $Question = 'butterfly',
   # crosses-boundary only: the other half of the system, so the far side of a
   # protocol command can be named. Optional -- without it the chart shows one side
@@ -57,7 +60,7 @@ param(
   # triggers, procedures). -DbPath stays the Delphi project index; -Target is
   # TABLE or TABLE.COLUMN for consumers, <Form>.<Control> for feeds-from.
   [string] $SqlDbPath,
-  # lands-where only: the SERVER clone (TDataService_<T>_SERVER, the write/read path).
+  # lands-where and round-trip: the SERVER clone (TDataService_<T>_SERVER, the write/read path).
   # -DbPath stays the CLIENT clone there (ORM classes + DFM bindings), so the verb
   # reads THREE indexes: -DbPath, -ServerDbPath, -SqlDbPath.
   [string] $ServerDbPath,
@@ -85,7 +88,12 @@ if ($Question -eq 'lands-where' -and -not $ServerDbPath) {
   throw 'lands-where needs -ServerDbPath: the SERVER clone (charts\scratch\db\SERVER-MicroniteMW1Service.sqlite); -DbPath is the CLIENT clone'
 }
 
-$EffDepth = $(if ($Question -eq 'exception-paths' -and -not $PSBoundParameters.ContainsKey('Depth')) { 3 } else { $Depth })
+if ($Question -eq 'round-trip' -and (-not $SqlDbPath -or -not $ServerDbPath)) {
+  throw 'round-trip needs -ServerDbPath (the SERVER clone) and -SqlDbPath (the SQL-script clone); -DbPath is the CLIENT clone'
+}
+
+# round-trip walks four call levels by default (the emitter's own default).
+$EffDepth = $(if ($PSBoundParameters.ContainsKey('Depth')) { $Depth } elseif ($Question -eq 'exception-paths') { 3 } elseif ($Question -eq 'round-trip') { 4 } else { $Depth })
 
 $Qname   = $Target
 $slug    = (($Target + $(if ($Control) { ".$Control" } else { '' })) -replace '[^A-Za-z0-9]', '_')
@@ -153,6 +161,8 @@ try {
       if ($CounterpartDb) { $cb.CounterpartDb = $CounterpartDb }
       & (Join-Path $PSScriptRoot 'Emit-CrossesBoundary.ps1') @cb
     }
+    # the Interface report's trace core: CLIENT + SERVER + SQL, a TEXT bundle (trace.dlgraph, no svg)
+    'round-trip'     { & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1')     -Target $Target -DbPath $DbPath -ServerDbPath $ServerDbPath -SqlDbPath $SqlDbPath -Depth $EffDepth -OutDir $dir }
   }
 } catch {
   if ($dirWasNew -and (Test-Path $dir) -and -not (Get-ChildItem $dir -Force)) {
@@ -206,6 +216,8 @@ $vocab = @{
   'feeds-from'     = @('ChainRows','chain rows','CtlTable','controls in the index that resolve to one table')
   # the server DataService routines that touch it, and the DB-side triggers on the column
   'lands-where'    = @('ServerRows','server DataService rows','Triggers','triggers touching the column')
+  # steps beside unresolved: a trace with STOPS in it says so in its header (AC-12)
+  'round-trip'     = @('Steps',  'steps',        'Unresolved', 'unresolved')
 }
 $v = $vocab[$Question]
 $leftCount  = $r.($v[0]); $leftLabel  = $v[1]
@@ -225,6 +237,8 @@ foreach ($pair in @(@($r.Svg,'graph.svg'), @($r.Plain,'graph.plain'), @($r.Dot,'
                     @($r.Png,'graph.png'), @($r.Pdf,'graph.pdf'))) {
   if ($pair[0] -and (Test-Path $pair[0])) { Move-Item $pair[0] (Join-Path $dir $pair[1]) -Force }
 }
+# a TEXT question ships its document, not a picture
+if ($r.PSObject.Properties['Trace'] -and $r.Trace -and (Test-Path $r.Trace)) { Move-Item $r.Trace (Join-Path $dir 'trace.dlgraph') -Force }
 
 # ---- 2. fingerprint the index, so staleness is DETECTABLE not merely visible -
 $dbItem = Get-Item $DbPath
@@ -246,23 +260,31 @@ $fp = [pscustomobject]@{
   clickTargets= $r.ClickTargets
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
-                $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact','exception-paths') { " -Depth $EffDepth" } else { '' }) +
+                $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact','exception-paths','round-trip') { " -Depth $EffDepth" } else { '' }) +
                 $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary','exception-paths','consumers','feeds-from','lands-where') { " -Cap $Cap" } else { '' }) +
-                $(if ($Question -in 'consumers', 'feeds-from', 'lands-where') { " -SqlDbPath `"$SqlDbPath`"" } else { '' }) +
-                $(if ($Question -eq 'lands-where') { " -ServerDbPath `"$ServerDbPath`"" } else { '' }) +
+                $(if ($Question -in 'consumers', 'feeds-from', 'lands-where', 'round-trip') { " -SqlDbPath `"$SqlDbPath`"" } else { '' }) +
+                $(if ($Question -in 'lands-where','round-trip') { " -ServerDbPath `"$ServerDbPath`"" } else { '' }) +
                 $(if ($Question -eq 'crosses-boundary' -and $CounterpartDb) { " -CounterpartDb `"$CounterpartDb`"" } else { '' }) +
                 $(if ($Question -eq 'class-surface') { " -SurfaceCap $SurfaceCap" } else { '' }) +
                 $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })
   # every count the emitter reported, not just the two the shell shows. The
   # ones the header omits are exactly the ones worth auditing later --
   # who-calls' NameOnly, event-wiring's DfmFallback, touches-tables' Unresolved.
-  emitter     = ($r | Select-Object -ExcludeProperty Dot, Svg, Plain, Png, Pdf)
+  # (round-trip's Trace is a path the move above made stale, and its Text IS trace.dlgraph)
+  emitter     = ($r | Select-Object -ExcludeProperty Dot, Svg, Plain, Png, Pdf, Trace, Text)
 }
 $fp | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $dir 'meta.json') -Encoding ascii
 
 # ---- 3. the shell ------------------------------------------------------------
-$svg = [IO.File]::ReadAllText((Join-Path $dir 'graph.svg'))
-$svg = $svg -replace '(?s)^.*?(?=<svg)', ''          # drop the XML prolog + DOCTYPE
+$svgPath = Join-Path $dir 'graph.svg'
+if (Test-Path $svgPath) {
+  $svg = [IO.File]::ReadAllText($svgPath)
+  $svg = $svg -replace '(?s)^.*?(?=<svg)', ''          # drop the XML prolog + DOCTYPE
+} else {
+  # a text question: the document itself, escaped, in a <pre>
+  $doc = [IO.File]::ReadAllText((Join-Path $dir 'trace.dlgraph'))
+  $svg = '<pre style="margin:0;font:13px/1.5 var(--mono);white-space:pre">' + $doc.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;') + '</pre>'
+}
 
 $short = $Qname
 $html = @"
@@ -334,8 +356,7 @@ $html = @"
   </div>
 </main>
 <footer>
-  graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry,
-  same layout run) &middot; meta.json (regenerate command + index fingerprint)
+  $(if (Test-Path $svgPath) { 'graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry, same layout run) &middot; ' } else { 'trace.dlgraph (Form A; paste into a DocInsight remarks block unchanged) &middot; ' })meta.json (regenerate command + index fingerprint)
 </footer>
 <div id="toast"></div>
 <script>

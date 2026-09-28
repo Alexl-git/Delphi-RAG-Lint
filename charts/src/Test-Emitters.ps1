@@ -2663,6 +2663,22 @@ Step 'RT-STALE' {
   if (Get-ChildItem $stDir -Filter *.dlgraph) { Fail 'A-RT-STALE' 'left a .dlgraph behind after refusing' }
   $script:rtStale = $(if ($threw) { 'refused' } else { 'accepted' })
 }
+# the verb through the bundler: dispatch, a TEXT bundle (no svg), -ServerDbPath / -SqlDbPath / -Depth in the regenerate command
+# 6>$null: the emitter prints the whole trace (Write-Host), and its else notes quote 'OPERAT %s FAILED'
+Step 'RT-ART' {
+  $artRoot = Join-Path $OutDir 'bundle-rt'
+  $art = & "$SRC\New-DiagramArtifact.ps1" -Question round-trip -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutRoot $artRoot 6>$null
+  $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
+  Chk 'A-RT-ART-LABELS' "$($meta.leftLabel)/$($meta.rightLabel)" 'steps/unresolved'
+  Chk 'A-RT-ART-COUNTS' "$($meta.leftCount)/$($meta.rightCount)" "$($rt0.RtCounts -split '/' | Select-Object -First 1)/$($rt0.RtCounts -split '/' | Select-Object -Last 1)"
+  Chk 'A-RT-ART-DEPTH'  $meta.depth 4
+  foreach ($flag in '-ServerDbPath ', '-SqlDbPath ', '-Depth 4') { if ($meta.regenerate -notlike "*$flag*") { Fail 'A-RT-ART' "the regenerate command drops $flag" } }
+  if (-not (Test-Path (Join-Path $art.Bundle 'trace.dlgraph'))) { Fail 'A-RT-ART' 'no trace.dlgraph in the bundle' }
+  if (Test-Path (Join-Path $art.Bundle 'graph.svg')) { Fail 'A-RT-ART' 'a graph.svg was written for a text question' }
+  $html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
+  if ($html -notmatch '<pre[^>]*>TRACE OPERAT\.NAME') { Fail 'A-RT-ART' 'index.html does not show the trace' }
+  if ((Get-Content (Join-Path $art.Bundle 'trace.dlgraph') -Raw) -cne $rt0.RtText) { Fail 'A-RT-ART' 'trace.dlgraph in the bundle differs from the emitter output' }
+}
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
 # passed a '&#183;' separator into it -- so each of those charts printed the six

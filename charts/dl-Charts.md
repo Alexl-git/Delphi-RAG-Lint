@@ -39,7 +39,7 @@ The current tracked sequence is:
 6. Compare (before / delta / after)
 
 ## Status
-Open. **25 of 26 catalogue questions ship** (2026-09-23), as PowerShell
+Open. **26 of 27 catalogue questions ship** (2026-09-23; `round-trip` 2026-09-28), as PowerShell
 emitters under `charts\src\` over the frozen index clones; only `compare` is
 not built (parked by the owner, and it is the one that needs the typed IR).
 Scoreboard: `charts\STATUS-questions.md`. Syntax, answers and caveats:
@@ -56,6 +56,12 @@ them, and each carries its caveat on the chart:
   -- stops rather than guess; per-control coverage printed.
 * `lands-where` (`-Target <Tmc/Imc property | field | Form.Control> -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>`)
   -- TABLE.COLUMN by naming convention, `[inferred]`, coverage printed.
+
+The twenty-sixth is a TEXT question (a `trace.dlgraph` bundle, no picture yet):
+
+* `round-trip` (`-Target <control | field | TABLE.COLUMN> -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>`)
+  -- the Interface report's trace core: Form A text, conditions verbatim from fresh source, STOPS where the index ends.
+  ALSO counts are pinned pending owner review.
 
 Engine defects the charts disclosed -- D1 (parenless calls), D12 (effects), D13
 (who-writes), D18 (multi-line SQL.Add reads), D19 (quoted identifiers) -- are FIXED

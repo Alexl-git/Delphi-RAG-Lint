@@ -28,6 +28,7 @@ What that means for this document:
 | Section 5 (35 EARS criteria) | **Stands as patterns.** Criteria quoting a COUNT or a LINE NUMBER must take their values from section 7: the block is lines 40..138 with 30 anchors, not 40..123 with 29. |
 | Section 6 (open questions) | **OQ-1, OQ-2, OQ-3 and OQ-4 are RESOLVED by the correction** -- counts recompute, numbering is contiguous from [01], `CROSSES` carries structured `FROM`/`TO`/`OVER`/`WITH`, and `TIERS` is present. The rest stand. |
 | Section 7 (verification walk) | **RE-RUN 2026-09-23 and PASSING.** Now executable: `charts\src\Test-FormA.ps1`, 99/99 lines classified, counts recomputed, verb set regenerated, and proven to FAIL on five mutations. |
+| Section 8 (round-trip amendments) | **Added 2026-09-28.** The GENERATED trace's additions: `ANCHOR` / `ALSO`, `FROM` / `REGENERATE`, `STOPS`, `WHEN` / `UNLESS`, `[by name]`, the section note, the stopped-trace title, `OMITS`, and its measured 18-verb set (two verbs, `EMPTIES` and `OMITS`, are not in the golden's 27). |
 
 The gate named in the original draft has been cleared: the verb set is
 regenerated and the walk has been re-run against the corrected block, by a
@@ -505,3 +506,104 @@ stays meaningful.
 
 Neither required a grammar change, which is the result this walk was looking
 for.
+
+## 8. Amendments for the round-trip question (2026-09-27, spec `2026-09-27-interface-report-trace-core-design.md`)
+
+Written 2026-09-28 (round-trip Task 8). The generated trace is emitted by
+`charts\src\Emit-RoundTrip.ps1` through `Trace.FormA.ps1`; the facts below are
+read from that code and MEASURED on the gate's trace
+(`frmBlueprint4.dxDBGrid1OperationVName`), not assumed.
+
+* Sections: `ANCHOR` and `ALSO` join `WRITE` / `READ` / `RESPONSE` and the tier names.
+  A generated trace always writes all seven, in this order: `ANCHOR`, `WRITE`,
+  `SERVER`, `DATABASE`, `RESPONSE`, `READ`, `ALSO`.
+* Header attributes: `FROM <selection>` and `REGENERATE <command>` join `TITLE` / `INDEX` / `TIERS`.
+* `STOPS <reason> @anchor` is a NUMBERED step (counted in steps) that also counts as unresolved -- the construct OQ-7 asked for.
+* `WHEN "<cond>"` / `UNLESS "<cond>"` under a step are conditions, counted where `GUARD` counts; `END TRACE` accepts `conditions` as a synonym of `guards`. The condition is written in double quotes, VERBATIM from the source (owner decision 2026-09-27: Pascal's `''` stays as it is inside them, e.g. `UNLESS "SQL = ''"`); `WHEN` continues when it is true, `UNLESS` when it is false, and the other branch is the `-- else ...` note.
+  Nothing is ever escaped: a condition that itself carries a double quote is
+  refused by `New-TraceCond`, and the walk (the shim's `unknown` form) turns
+  that hop into a `STOPS` naming E1 instead -- see the header of `Trace.FormA.ps1`.
+* Certainty gains `[by name]` (a name match) beside `[certain]` / `[inferred]`; it is two tokens and the checker drops it as a phrase.
+* Gutters may be two OR three digits.
+* The canonical emitter (`Trace.FormA.ps1`) numbers every item, anchors every step INCLUDING `CROSSES` (at the send line), and never writes an epilogue. `Read-FormA` reads only the canonical layout; the golden stays hand-aligned and is checked, not parsed.
+
+### 8.1 The SECTION NOTE (T6-R2; Task 7 fix round 1)
+
+A section with no rows carries ONE generated note line directly under its
+header, instead of any step:
+
+```
+ALSO
+  -- no other route to this anchor in the index
+```
+
+A section note is **not a step, not a `STOPS`, and not counted unresolved**; it
+has no number and no anchor, and `END TRACE` does not count it. A section may
+carry steps OR a note, never both (`Write-FormA` refuses the mix). Two uses:
+
+* an EMPTY `ALSO` -- `-- no other route to this anchor in the index` (an empty
+  ALSO is not a hop that failed);
+* every un-walked section when the trace STOPS at its anchor -- each of
+  `WRITE`, `SERVER`, `DATABASE`, `RESPONSE`, `READ`, `ALSO` carries
+  `-- not walked: the trace stopped at [NN]`, where `[NN]` is the anchor's
+  `STOPS` step (so an empty `WRITE` never reads as "no write path").
+
+### 8.2 The stopped-trace title (Task 7 fix round 1, commit 030a37b8)
+
+A trace that stops at its anchor reaches nothing, so its title claims no
+reach. `Emit-RoundTrip.ps1` writes, verbatim:
+
+```
+$title = $(if ($A.Stop) { "Why $Target cannot be traced" } else { "How $name reaches $Target and goes back" })
+```
+
+i.e. `TITLE "Why <selection> cannot be traced"` for a stopped trace, and
+`TITLE "How <TABLE.COLUMN> reaches <selection> and goes back"` otherwise.
+Measured: `TITLE "Why frmBlueprint4.cxGroupBox16 cannot be traced"` (gate
+`RT-N1`), `TITLE "Why OPERAT.NAME cannot be traced"` (`RT-N2`).
+
+### 8.3 The `OMITS` step (Task 5, rulings T5-R1 / T5-R6)
+
+`OMITS` is a NUMBERED disclosure step: it is **counted in steps** and is
+**not** unresolved (it is a `step`, not a `STOPS`). One per section at most
+(T5-R1), at the first omitted line; the `<n>` it states is the count of STEPS
+the omitted branches would have yielded (T5-R6), and its note quotes each
+branch condition verbatim with its anchor:
+
+```
+[NN] OMITS <n> step(s) in branches for other tables, innermost enclosing if only @<file>:<line> -- in <Routine>; not walked, the branch conditions: WHEN "<cond>" @<file>:<line> / ...; ask E1
+```
+
+The walk sees only the INNERMOST enclosing `if` of a line (the index holds
+tokens, not branches), which is why the text says so and the step names ask E1.
+
+### 8.4 Verb set -- MEASURED, and it is NOT a subset of the golden's
+
+Measured 2026-09-28 by `Test-FormA.ps1 -Fixture <trace.dlgraph> -Quiet
+-PassThru` on the gate's trace (148 lines, 148/148 classified, 76 steps / 31
+conditions / 4 crossings) and pinned by the gate as `A-RT7-VERBS`:
+
+```
+APPLIES  ATTACHES  BINDS  CALLS  DESERIALIZES  EMPTIES  FIRES  LOADS  OMITS
+OPENS  READS  RECEIVES  ROUTES  RUNS  SENDS  SERIALIZES  SETS  WRITES     (18)
+```
+
+Diffed against the golden's 27 (section 7), the generated trace adds TWO verbs
+the golden does not use:
+
+* `EMPTIES` -- a dataset's `EmptyDataSet` call (Task 6, ruling T6-R1), e.g.
+  `CLIENT EMPTIES AMT.EmptyDataSet` in `READ`: the rows are cleared before the
+  load. It comes from the walk's dataset-operation map beside `APPLIES`
+  (`ApplyUpdates`) and `OPENS` (`StartTransaction`).
+* `OMITS` -- the disclosure step of 8.3.
+
+(`STOPS` and `CROSSES` are step KEYWORDS, not verbs, so neither is in the set.)
+The generated trace does not use 11 of the golden's verbs: `ADDS`,
+`BROADCASTS`, `BUILDS`, `COUNTS`, `EDITS`, `EXTRACTS`, `LOGS`, `NOTIFIES`,
+`PREFIXES`, `SPLITS`, `VALIDATES`. That is a difference in WORDING, not a
+claim about coverage: whether each golden node is on the page is the golden
+matcher's job (gate `E-RT`: 17/17 nodes matched, 3 golden facts disclosed).
+`BINDS`-with-`ONTO`,
+`ROUTES`, `RECEIVES` and `LOADS`-with-`VIA` are uses of verbs already in the
+golden set. Re-run `Test-FormA.ps1` on a generated trace to regenerate this
+list; a drift fails `A-RT7-VERBS`.

@@ -1,23 +1,23 @@
 <!-- dl:backlog status=open last-measured=2026-09-23 -->
-# STATUS: the 26 diagram questions
+# STATUS: the 27 diagram questions
 
-The live scoreboard for `charts\question-catalogue.md`. **26 catalogue rows**
+The live scoreboard for `charts\question-catalogue.md`. **27 catalogue rows**
 (`protocol-trace` appears twice -- field and method are different questions).
 
 Updated 2026-09-23. Branch `feat/archify-ir`, 24 commits, NOTHING PUSHED.
 
 ```
-SHIPPED                     25   emitters exist, tested, clickable
+SHIPPED                     26   emitters exist, tested, clickable (round-trip: text, not a chart)
 PLANNED (ready to build)     0
 UNPLANNED, unblocked         0
 BLOCKED on data              0   consumers / feeds-from / lands-where ship DERIVED (path A)
 BLOCKED on the engine        0   exception-paths ships on a source-token classifier
 PARKED by owner              1   compare
                             --
-                            26
+                            27
 ```
 
-**25 of 26 ship; only `compare` does not, by owner decision.** The last four
+**26 of 27 ship; only `compare` does not, by owner decision.** The last four
 (`exception-paths`, `consumers`, `feeds-from`, `lands-where`) shipped on
 2026-09-23 under `PLAN-last-four-verbs.md`, NOT because the missing facts
 arrived: they are built from facts that DO exist, and each chart says which of
@@ -29,7 +29,7 @@ interface / project / command constant / wire field / db column / any symbol.**
 
 ---
 
-## SHIPPED (25)
+## SHIPPED (26)
 
 | question | selects | emitter | measured |
 |---|---|---|---|
@@ -60,6 +60,7 @@ interface / project / command constant / wire field / db column / any symbol.**
 | `consumers` | table / column | `Emit-Consumers.ps1` | CAUSFAIL (SERVER): 1 certain reader, 1 certain writer, 3 triggers; FOLDERS 3 inferred readers; FOLDERS 2 declarations, newest 79 columns |
 | `feeds-from` | control | `Emit-FeedsFrom.ps1` | colREASON: 5 graded hops to CAUSFAIL.REASON; 267 of 808 field-bound CLIENT controls reach one table |
 | `lands-where` | ORM property / field / control | `Emit-LandsWhere.ps1` | TmcCAUSFAIL.REASON: 4 server rows, 1 trigger, 1 client binding; convention 1,992 of 1,997 |
+| `round-trip` | control / field / TABLE.COLUMN | `Emit-RoundTrip.ps1` | OPERAT.NAME from frmBlueprint4.dxDBGrid1OperationVName: 17/17 golden nodes matched, 3 golden facts disclosed (READ [28]-[29], transport helpers at uPipeSessionBuilder.pas:533/:534/:538), 12/12 guards; 76 steps / 31 conditions / 4 crossings / 2 unresolved (the E4 UPDATE and SELECT STOPS); ALSO 9 (owner review pending). Limits: guards and OMITS see the innermost enclosing `if` only (E1); statement texts are FIB$ rows the clones do not hold (E4). TEXT bundle (`trace.dlgraph`), no chart yet |
 
 **The caveat each of the last four ships with** -- say it whenever the chart is
 quoted:
@@ -108,7 +109,7 @@ cannot disagree, in this precedence order:
 | `[stale source]` | the newest declaration's script differs from the indexed copy, so it was NOT scanned for a quoted identifier -- whether it is a column is NOT known; never rendered as an absence |
 | `not-a-column` | not extracted, not quoted, named by none of the SQL searched: lands-where says computed or UI-only (`INSPRSLT.DistHist`), consumers refuses ("not extracted as a column by the SQL index ..."), feeds-from counts it `not-column` |
 
-**Twenty-five questions, TWENTY-TWO emitters** -- `what-it-calls` is a `-Direction`
+**Twenty-six questions, TWENTY-THREE emitters** -- `what-it-calls` is a `-Direction`
 switch, `who-writes`/`who-reads` are one `-Mode` switch, and both
 `protocol-trace` rows are one emitter dispatching on the selection's kind. Say
 it that way: counting emitters as questions understates the result, counting
@@ -270,6 +271,8 @@ from 9 nodes to 4. Callers unaffected.
 
 ## Resume point
 
+**DONE 2026-09-28: the trace core shipped** (`round-trip`, plan Tasks 0-8, a TEXT bundle through `New-DiagramArtifact.ps1`); next is the holdout (Task 9, owner gate), then the chart drawn from the Form A text (spec step 3). ALSO's owner review (AC-10) is still pending.
+
 **NEXT ACTION (2026-09-27): implement the Interface report trace core,
 SUBAGENT-DRIVEN** (owner's choice). Local, gitignored (public repo):
 spec `docs\superpowers\specs\2026-09-27-interface-report-trace-core-design.md`,
@@ -336,7 +339,7 @@ population queries -- ledger `.superpowers\sdd\PLAN-last-four-verbs\progress.md`
 (2) DONE 2026-09-27 (Task 0, below): the deployed engine is adopted and the
 who-writes "bound, not reported" workaround is dropped.
 
-**The earlier batches are all done.** 25 of 26 catalogue questions ship; only
+**The earlier batches are all done.** 26 of 27 catalogue questions ship (`round-trip` 2026-09-28); only
 `compare` does not, parked by the owner.
 
 **THE SUITE IS GREEN (2026-09-28 00:13) on the SHARED engine 1.18.0-alpha /

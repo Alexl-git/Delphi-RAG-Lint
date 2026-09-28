@@ -392,6 +392,7 @@ $res.ShimStale = $(try { Get-GuardCondition $vmPas 3950 3948 @{ $vmPas = (Join-P
 # 'OPERAT %s FAILED', which must not read as a failure in the gate log
 $rt = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null
 $txt = [IO.File]::ReadAllText($rt.Trace)
+$res.RtText = $txt
 $res.RtSections = $rt.Sections
 $res.RtCounts = "$($rt.Steps)/$($rt.Conditions)/$($rt.Crossings)/$($rt.Unresolved)"
 $lines = $txt -split "\r\n"

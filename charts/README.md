@@ -76,7 +76,7 @@ and edge must be a fact with a file and a line.
 
 ## What is built
 
-**25 of the 26 catalogue questions ship** (2026-09-23); only `compare` does
+**26 of the 27 catalogue questions ship** (2026-09-23; `round-trip` 2026-09-28); only `compare` does
 not, parked by the owner. The scoreboard is `STATUS-questions.md`, the question
 set and each question's caveat is `question-catalogue.md`, the gate is
 `src\Test-Emitters.ps1`, and `src\New-ExampleGallery.ps1` renders a worked
@@ -112,6 +112,39 @@ Column states they can show (one function, `Get-SqlColumnState`, decides for
 identifier the SQL index does not extract -- none since extractor 1.19 fixed
 engine D19; kept as a guard), `older-only`, `server-sql`, `[stale source]` (not
 scanned -- not known, never an absence), `not-a-column`.
+
+### The Interface report -- trace core (spec 2026-09-27)
+
+```
+New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<TForm>.<Control> | <Unit>.<TClass>.<TField var> | TABLE.COLUMN `
+                        -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL> [-Depth 4]
+```
+
+* `round-trip` -- from a selection to its data anchor and both ways through the
+  pipe, as a Form A TEXT (`trace.dlgraph`, no picture yet): ANCHOR / WRITE /
+  SERVER / DATABASE / RESPONSE / READ / ALSO, every step anchored, conditions
+  quoted VERBATIM from sha256-fresh source (`WHEN` / `UNLESS`; a stale file
+  refuses by name), a `STOPS` for every hop the index cannot make (the UPDATE
+  and SELECT texts live in FIB$ rows the clones do not hold), and `ALSO` derived
+  from the index. The bundle is `trace.dlgraph` + `index.html` (the trace in a
+  `<pre>`) + `meta.json` + `xref.txt`; no `graph.*`. Engine asks E1-E4 are
+  named on the steps they would retire.
+
+On `frmBlueprint4.dxDBGrid1OperationVName` the gate (`E-RT0` / `E-RT`, via
+`src\Test-RoundTripHelpers.ps1`) measures: golden nodes 17/17 matched, 3 golden
+facts disclosed (not matched), guards 12/12; the trace is 76 steps, 31
+conditions, 4 crossings, 2 unresolved; ALSO 9 rows, pinned PENDING owner review
+(AC-10: three owner questions are open). `RT-ART` pins the bundle. Known limits,
+stated beside those numbers on purpose:
+
+* guards and `OMITS` see only the INNERMOST enclosing `if` (engine ask E1 --
+  a branch fact -- retires it);
+* golden READ facts [28]-[29] (the transport-convention helpers at
+  `uPipeSessionBuilder.pas:533` / `:534` / `:538`) are DISCLOSED, not matched --
+  that is the "3 golden facts disclosed";
+* the UPDATE / SELECT statement texts live in FIB$ rows the clones do not hold
+  (E4): the UPDATE (DATABASE) and the SELECT (READ) are each a `STOPS` -- they
+  are the 2 unresolved -- and the column hop is `[inferred]`.
 
 ### Engine defects the charts disclose
 
