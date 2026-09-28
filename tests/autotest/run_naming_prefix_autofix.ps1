@@ -499,6 +499,19 @@ Write-Host 'WARNING: field-name-prefix --fix warns on stderr; type-name-prefix (
 $WarnNeedle    = 'bare field read used as an expression operand'
 $AnyWarnNeedle = 'drag-lint: warning:'
 
+# The captured stderr as ONE [string], '' when the file is empty or missing.
+# NOT `Get-Content -Raw`: on a 0-byte file it returns no object at all
+# (AutomationNull), and `<nothing> -notmatch $x` evaluates to an EMPTY ARRAY --
+# falsy -- so WARN-B / WARN-C failed precisely when the engine printed nothing,
+# the outcome they exist to accept. That stayed hidden while lint-all's
+# writable open ran Migrate, whose FTS5 probe always put a line on stderr;
+# D24 (v1.18.0-alpha) made lint-all a read-only open, stderr went empty, and
+# both checks turned red against a CORRECT engine (battery 2026-09-24).
+function Read-Stderr([string]$Path) {
+  if (Test-Path -LiteralPath $Path) { return [System.IO.File]::ReadAllText($Path) }
+  return ''
+}
+
 # --- sub-case A: field-name-prefix --fix (dry-run, no --apply) MUST warn. ---
 $warnDir = Join-Path $WorkDir 'warn-field'
 $warnSrc = Join-Path $warnDir 'src'
@@ -515,9 +528,18 @@ $warnStdout = Join-Path $warnDir 'stdout.txt'
 $warnStderr = Join-Path $warnDir 'stderr.txt'
 Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb,'--config',$warnCfg,'--rule','field-name-prefix','--fix','--quiet') `
   -NoNewWindow -Wait -RedirectStandardOutput $warnStdout -RedirectStandardError $warnStderr
-$warnErrText = if (Test-Path $warnStderr) { Get-Content -Raw $warnStderr } else { '' }
+$warnErrText = Read-Stderr $warnStderr
 Check 'WARN-A: field-name-prefix --fix emits the warning on stderr' `
   ($warnErrText -match [regex]::Escape($WarnNeedle)) $warnErrText
+# POSITIVE CONTROL for WARN-B / WARN-C: their exact "no warning" expression,
+# fed WARN-A's stderr (which does warn), must come out False -- and fed an
+# empty capture, True -- or those two checks cannot tell a warning from silence.
+Check 'WARN POSITIVE CONTROL: the no-warning test rejects a stderr that warns' `
+  (-not ($warnErrText -notmatch [regex]::Escape($AnyWarnNeedle)))
+$emptyErr = Join-Path $warnDir 'empty-stderr.txt'
+[System.IO.File]::WriteAllText($emptyErr, '')
+Check 'WARN POSITIVE CONTROL: the no-warning test accepts a 0-byte stderr' `
+  ([bool]((Read-Stderr $emptyErr) -notmatch [regex]::Escape($AnyWarnNeedle)))
 
 # --- sub-case B: type-name-prefix --fix --apply must NOT warn (ref-gap E). ---
 $warnDir2 = Join-Path $WorkDir 'warn-type'
@@ -535,7 +557,7 @@ $warnStdout2 = Join-Path $warnDir2 'stdout.txt'
 $warnStderr2 = Join-Path $warnDir2 'stderr.txt'
 Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb2,'--config',$warnCfg2,'--rule','type-name-prefix','--fix','--apply','--quiet') `
   -NoNewWindow -Wait -RedirectStandardOutput $warnStdout2 -RedirectStandardError $warnStderr2
-$warnErrText2 = if (Test-Path $warnStderr2) { Get-Content -Raw $warnStderr2 } else { '' }
+$warnErrText2 = Read-Stderr $warnStderr2
 Check 'WARN-B: type-name-prefix --fix --apply does NOT emit the unrenamed-references warning (ref-gap E covers all type sites)' `
   ($warnErrText2 -notmatch [regex]::Escape($AnyWarnNeedle)) $warnErrText2
 
@@ -555,7 +577,7 @@ $warnStdout3 = Join-Path $warnDir3 'stdout.txt'
 $warnStderr3 = Join-Path $warnDir3 'stderr.txt'
 Start-Process -FilePath $Exe -ArgumentList @('lint-all','--db',$warnDb3,'--config',$warnCfg3,'--rule','param-name-prefix','--fix','--apply','--quiet') `
   -NoNewWindow -Wait -RedirectStandardOutput $warnStdout3 -RedirectStandardError $warnStderr3
-$warnErrText3 = if (Test-Path $warnStderr3) { Get-Content -Raw $warnStderr3 } else { '' }
+$warnErrText3 = Read-Stderr $warnStderr3
 Check 'WARN-C: param-name-prefix-only --fix does NOT emit any unrenamed-references warning' `
   ($warnErrText3 -notmatch [regex]::Escape($AnyWarnNeedle)) $warnErrText3
 
