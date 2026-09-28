@@ -515,8 +515,9 @@ read from that code and MEASURED on the gate's trace
 (`frmBlueprint4.dxDBGrid1OperationVName`), not assumed.
 
 * Sections: `ANCHOR` and `ALSO` join `WRITE` / `READ` / `RESPONSE` and the tier names.
-  A generated trace always writes all seven, in this order: `ANCHOR`, `WRITE`,
-  `SERVER`, `DATABASE`, `RESPONSE`, `READ`, `ALSO`.
+  A generated trace always writes these seven, in this order: `ANCHOR`, `WRITE`,
+  `SERVER`, `DATABASE`, `RESPONSE`, `READ`, `ALSO` -- plus `DERIVED` right after
+  `ANCHOR` when, and only when, the anchor is a CALCULATED field (8.5).
 * Header attributes: `FROM <selection>` and `REGENERATE <command>` join `TITLE` / `INDEX` / `TIERS`.
 * `STOPS <reason> @anchor` is a NUMBERED step (counted in steps) that also counts as unresolved -- the construct OQ-7 asked for.
 * `WHEN "<cond>"` / `UNLESS "<cond>"` under a step are conditions, counted where `GUARD` counts; `END TRACE` accepts `conditions` as a synonym of `guards`. The condition is written in double quotes (owner decision 2026-09-27: Pascal's `''` stays as it is inside them, e.g. `UNLESS "SQL = ''"`). For an `if` it is the source text VERBATIM; the `try` / `except` and `case` forms below add GENERATED words to source text, and say so. `WHEN` continues when it is true, `UNLESS` when it is false, and the other branch is the `-- else ...` note.
@@ -562,7 +563,8 @@ ALSO
 
 A section note is **not a step, not a `STOPS`, and not counted unresolved**; it
 has no number and no anchor, and `END TRACE` does not count it. A section may
-carry steps OR a note, never both (`Write-FormA` refuses the mix). Three uses:
+carry steps OR a note, never both (`Write-FormA` refuses the mix) -- the ONE
+exception is `DERIVED`, whose note is the lead-in ABOVE its rows (8.5). Three uses:
 
 * an EMPTY `ALSO` -- `-- no other route to this anchor in the index` (an empty
   ALSO is not a hop that failed);
@@ -589,7 +591,12 @@ $title = $(if ($A.Stop) { "Why $Target cannot be traced" } else { "How $name rea
 ```
 
 i.e. `TITLE "Why <selection> cannot be traced"` for a stopped trace, and
-`TITLE "How <TABLE.COLUMN> reaches <selection> and goes back"` otherwise.
+`TITLE "How <TABLE.COLUMN> reaches <selection> and goes back"` otherwise. A trace
+that stops because its anchor is a CALCULATED field (8.5) says so in the title:
+`TITLE "Why <selection> cannot be traced -- it is calculated"` (gate `RT-CALC`:
+`Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calculated`).
+The ` -- ` sits inside the quoted title, which the checker does not read as a
+comment and `Read-FormA` reads whole.
 
 Final review I2: the title claims only the DIRECTIONS that were walked through to the
 database tier. When one stops after the anchor (8.1), `Emit-RoundTrip.ps1` rewrites it
@@ -655,3 +662,79 @@ matcher's job (gate `E-RT`: 17/17 nodes matched, 3 golden facts disclosed).
 `ROUTES`, `RECEIVES` and `LOADS`-with-`VIA` are uses of verbs already in the
 golden set. Re-run `Test-FormA.ps1` on a generated trace to regenerate this
 list; a drift fails `A-RT7-VERBS`.
+
+### 8.5 The `DERIVED` section -- a calculated anchor offers its sources (calc-field brief, owner 2026-09-28)
+
+Owner requirement: a selection bound to a CALCULATED field must say it is
+calculated, name what it is calculated from, and offer to trace one of those
+fields instead. Written by `Emit-RoundTrip.ps1` from `Trace.Walk.ps1` Part 6
+(`Resolve-CalcField`, `New-CalcFieldItems`). The field is CALCULATED when its
+dataset has an `OnCalcFields` wiring (a same-line name match, E3) and that
+handler WRITES it -- `<TField var>.<Member> :=` for a variable bound to the
+field's name (the Task 3 FF / FieldByName rule), or `FieldByName('<name>')...:=`.
+Anything else keeps the anchor's ordinary `STOPS`.
+
+The construct, measured on gate `RT-CALC` (`frmBlueprint4.dxDBGrid1FtrsVFtrName`,
+REGENERATE commands shortened here):
+
+```
+[09] STOPS FtrName is a calculated field of FMTFtrs (created at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index @Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C at :756 sets FieldKind fkCalculated at :735; ask E3
+       UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973
+       WHEN "Assigned(FfFtrs_FtrName)" @Blueprint4.ViewModel.pas:985
+       VIA FtrNameString @MSCTYPES.PAS:840 -- computed by this call at :986, its body is not walked, nor are those of TagOf
+
+DERIVED
+  -- FtrName is calculated from 18 fields -- trace one of them instead:
+[10] FROM MSCLIST.NOTATION VIA FfFtrs_Notation [inferred] @Blueprint4.ViewModel.pas:987 -- in FtrsOnCalcFields; FfFtrs_Notation bound at :879: ...; ask in-class-field-reads
+       REGENERATE New-DiagramArtifact.ps1 -Question round-trip -Target Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation -DbPath "..." -ServerDbPath "..." -SqlDbPath "..." -Depth 4
+...
+[18] FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType [inferred] @Blueprint4.ViewModel.pas:990 -- in FtrsOnCalcFields; FtrType set at :978, FfFtrs_FtrType bound at :858: ...
+```
+
+* **The `STOPS` stays the ONE unresolved step.** Its text names the field, its
+  dataset, the creating line when one names the field beside the dataset, and the
+  handler's range; its conditions are the handler's own guards, VERBATIM (P16): an
+  Exit before the first write (`UNLESS ... -- else Exit at :N`), then the
+  if-forms enclosing each write (`WHEN` in a then branch; a case arm or an except
+  handler is not a branch condition, as in the walk; with several writes each
+  condition names the writes it encloses, `-- around the write at :N`). A `VIA`
+  facet names the call that computes the value (the first token of the
+  right-hand side) ONCE: its body is not walked.
+* **`DERIVED`** is a new section, written right after `ANCHOR` and only for a
+  calculated anchor. It is the one section whose NOTE stands above its rows (8.1):
+  `-- <Field> is calculated from <N> fields -- trace one of them instead:` (`trace
+  it instead` for one field; `... and <U> value(s) the walk cannot map -- trace one
+  of the fields instead` when some cannot be mapped; `-- ... from no field --
+  nothing to trace instead` with no rows). `Write-FormA` refuses a note with rows
+  in any OTHER section; `Read-FormA` reads the note before the rows.
+* **A row is a numbered step** (counted in steps, never unresolved -- a true
+  anchored fact: the read of the source on the write statement) whose text opens
+  with `FROM`: `FROM <TABLE.COLUMN> VIA <var>` for a TField variable bound to a
+  column of the anchor's table; `VIA <local>, set from <var>` for a local assigned
+  ONCE before the read from exactly one TField variable (one hop, never more);
+  `FROM <name> (calculated) VIA <var>` for a source the same handler writes (marked,
+  not expanded); `(not a column of <TABLE>)` for a bound literal the SQL index does
+  not hold; `FROM <name>, not mapped: <why>` for a value the walk cannot map (a
+  parameter, a non-TField field, a local set at several places, a name it cannot
+  place) -- named, never guessed, and with no command. The grade and ask are the
+  binding's (Task 3: `[inferred]` via FF) and the unbound in-class read's
+  (`in-class-field-reads`).
+* **`REGENERATE` is also a FACET** (7-space indent) under a row: the ready
+  command that traces that field instead -- the header's command with `-Target`
+  set to the TField variable (`<Unit>.<TClass>.<FfVar>`, a form the anchor resolver
+  accepts). The header attribute keeps its 2-space indent, so the two never meet.
+  `Test-FormA.ps1` classifies it by `HEADERKW` (no verb); a row's `FROM` head
+  likewise, so neither adds to the verb set of 8.4.
+* **Why a section and not rows under the STOPS.** The owner's words are a
+  question -- "calculated from X, Y, Z: trace X, Y or Z instead?" -- and each
+  answer needs its own anchor and its own command line. Facets under the STOPS
+  would carry neither a number nor a count; a section keeps every candidate a
+  numbered, anchored, counted fact, keeps the STOPS the one unresolved, and leaves
+  `END TRACE` recomputed as always (FtrName: 27 steps = 9 + 18, 2 conditions, 1
+  unresolved).
+* **Out of scope, named, no offer:** a field written only in another event's
+  handler (`AfterScroll`, `OnNewRecord`, ...) -- `STOPS <Field> is not a column
+  of <TABLE> ...: it is set in <Handler>, wired as <DataSet>.<Event> at :N, not in
+  an OnCalcFields handler, so no source fields are offered`; a field whose creating
+  call's body sets `FieldKind fkLookup` -- `STOPS <Field> is a lookup field of
+  <DataSet> ...`. Both use the ordinary stopped-trace title.

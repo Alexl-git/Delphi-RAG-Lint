@@ -147,6 +147,25 @@ New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<
   guess: the trace is ONE named `STOPS` listing the datasets (measured, gate
   `RT-N2`: `OPERAT.NAME` -- 5 datasets load OPERAT in the CLIENT clone); pass the
   control or the dataset field instead.
+* A selection bound to a CALCULATED field (calc-field brief, owner 2026-09-28) has
+  no column to reach, so it stops at its anchor -- and says why and what to do
+  instead. The field is calculated when its dataset has an `OnCalcFields` wiring
+  and that handler WRITES it (through a TField variable bound to its name, or
+  `FieldByName('<name>')`). The `STOPS` names where it is created and computed,
+  the handler's guards are its conditions (verbatim), and the call that computes it
+  is a `VIA` facet whose body is not walked. A `DERIVED` section (grammar spec 8.5)
+  follows ANCHOR: `-- <Field> is calculated from N fields -- trace one of them
+  instead:`, then one numbered row per SOURCE field the computation reads (a local
+  set from one TField variable is followed one hop; a source that is itself
+  calculated is marked `(calculated)`, not expanded; a value the walk cannot map is
+  named, never guessed), each with a `REGENERATE` facet holding the ready command
+  that traces that field instead. Title: `Why <selection> cannot be traced -- it is
+  calculated`. Gate `RT-CALC`: `frmBlueprint4.dxDBGrid1FtrsVFtrName` -> 18 rows,
+  27 steps / 2 conditions / 0 crossings / 1 unresolved; Tolerance -> 4 rows, 13/2/0/1;
+  the DimAbbr row's command run end to end -> `MSCLIST.DIMABBR`, 98/35/4/2 (the Num
+  holdout's 103 minus the 5 control-side anchor hops a TField-variable target does
+  not walk). A field set only in another event's handler, or created as a lookup
+  (`fkLookup`), is a named `STOPS` with no offer.
 
 On `frmBlueprint4.dxDBGrid1OperationVName` the gate (`E-RT0` / `E-RT`, via
 `src\Test-RoundTripHelpers.ps1`) measures: golden nodes 17/17 matched, 3 golden
