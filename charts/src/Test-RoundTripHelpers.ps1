@@ -242,4 +242,49 @@ $srvS = @($textS -split "\r\n" | Where-Object { $_ -cmatch '^\[\d+\] SERVER STOP
 $vbS = $(if ($textS.Contains('UNLESS "SQL = ''''" @uGenericTableRoute.pas:196')) { 'verbatim' } else { 'rewritten' })
 $res.FormAStopsAll = "$exS/$($cS.Steps)/$($cS.Conditions)/$($cS.Crossings)/$($cS.Unresolved)/$rtS/$srvS/$vbS"
 
+# ---- 3. the anchor: the hop feeds-from misses (AC-15), and the non-data-bound / TABLE.COLUMN forms (AC-13) ----
+. (Join-Path $PSScriptRoot 'Trace.Walk.ps1')
+$S = Get-SqlTableSet $DbSql
+$DbPath = Get-CloneDb $DbCli
+# the extraction changed nothing: the colREASON chain still grades certain>certain>by name>inferred
+$cf = [string](@((Get-IndexedFileShas).Keys | Where-Object { $_ -like '*\uCausFailForm.dfm' })[0])
+$xc = Get-DataSourceChain $cf 'dsrCausFail' $S
+$res.ChainUnchanged = "$($xc.Grade):$($xc.ResolvedTable):$((@($xc.Hops | ForEach-Object { $_.Grade })) -join '>'):$(@($xc.DataSetSites | Where-Object { $_.Kind -eq 'assign' }).Count)"
+# Get-DataSetSites answers the same question of a FIELD: FDsrOperation.DataSet := FMTOperation at :657 in Create
+$vmPas = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.ViewModel.pas'
+$ds = Get-DataSetSites 0 '' $vmPas 'FDsrOperation' $null
+$res.FieldDataSetSites = (@($ds | ForEach-Object { "$($_.Kind):$($_.Line):$($_.Rhs):$(($_.Routine -split '\.')[-1])" }) -join ',')
+# the re-point chain from Blueprint4.pas:2282
+$bp = [string](@((Get-IndexedFileShas).Keys | Where-Object { $_ -like '*\CLIENT\Blueprint4.dfm' })[0])
+$ch = Get-DataSourceChain $bp 'Blueprint4_Model.dsrOperation' $S
+$rp = @($ch.RePointedAt | Where-Object { $_.Control -eq 'dxDBGrid1OperationV' })
+# EVERY re-point site of the view, with its RHS: the second is the `:= nil` teardown (FormClose), which the trace skips
+$res.RePointSite = "$($ch.Grade):$($rp.Count):$((@($rp | ForEach-Object { "$($_.Line)=$($_.Rhs)" })) -join ','):$($rp[0].ControlFrom)"
+$rc = Get-RePointChain $rp[0] $null
+$res.RePointHops = (@($rc.Hops | ForEach-Object { "$($_.Hop)=$($_.Grade)@$([IO.Path]::GetFileName($_.File)):$($_.Line)" }) -join ',')
+$res.RePointDataSet = "$($rc.DataSet.Name):$($rc.DataSet.Type):$($rc.DataSet.Line):$($rc.StopReason)"
+# the whole anchor through the trace's own resolver, all four -Target forms
+$a1 = Resolve-TraceAnchor 'frmBlueprint4.dxDBGrid1OperationVName' $S $null
+$res.Anchor1 = "$($a1.TableColumn):$($a1.DataSet.Name):$($a1.Items.Count):$($a1.Stop)"
+$res.Anchor1Grades = (@($a1.Items | ForEach-Object { $(if ($_.Grade) { $_.Grade } else { 'certain' }) }) -join '>')
+$res.Anchor1Files = (@($a1.Items | ForEach-Object { ($_.Anchor -split ':')[0] } | Select-Object -Unique) -join ',')
+$a2 = Resolve-TraceAnchor 'Blueprint4.TfrmBlueprint4.dxDBGrid1OperationVName' $S $null
+$res.Anchor2 = "$($a2.TableColumn):$($a2.Grades -join '/'):$($a2.Stop)"
+# P3: the resolver returns a stop REASON and ZERO chain items; the one-step trace is the emitter's (Task 7, RT-N1)
+$a3 = Resolve-TraceAnchor 'OPERAT.NAME' $S $null
+$res.Anchor3 = "$($a3.TableColumn):$($a3.Items.Count):$($a3.Stop -replace '\s+', ' ')"
+$a4 = Resolve-TraceAnchor 'frmBlueprint4.cxGroupBox16' $S $null
+$res.Anchor4 = "$($a4.Items.Count):$($a4.StopAnchor):$($a4.Stop -replace '\s+', ' ')"
+# P13: the TField form with a DOTTED unit -- the spec's own example (4 segments, split from the right);
+# it resolves its dataset and column, or ends in a named stop reason -- never a throw
+$a6 = $(try { Resolve-TraceAnchor 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfOperation_FileName' $S $null } catch { [pscustomobject]@{ Threw = $_.Exception.Message } })
+$res.AnchorTField = $(if ($a6.PSObject.Properties['Threw']) { "threw: $($a6.Threw)" } else { "$($a6.TableColumn):$($a6.DataSet.Name):$($a6.Items.Count):$($a6.Stop -replace '\s+', ' ')" })
+# Review Focus 5: the re-point file (Blueprint4.pas, not the view model) stale -> the refusal names Blueprint4.pas
+$bpPas = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.pas'
+$stDir = Join-Path $work 'stale-form'; New-Item -ItemType Directory -Force $stDir | Out-Null
+$l = [IO.File]::ReadAllLines($bpPas); $l[2281] = $l[2281] + ' '
+[IO.File]::WriteAllText((Join-Path $stDir 'Blueprint4.pas'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$a5 = Resolve-TraceAnchor 'frmBlueprint4.dxDBGrid1OperationVName' $S @{ $bpPas = (Join-Path $stDir 'Blueprint4.pas') }
+$res.Anchor5Stale = "$([IO.Path]::GetFileName([string]$a5.StaleFile)):$($a5.TableColumn)"
+
 [pscustomobject]$res

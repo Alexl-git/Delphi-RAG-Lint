@@ -2257,6 +2257,34 @@ Step 'E-RT0' {
   # text its own parser or the checker would misread (16 cases), and not the three look-alikes that are safe
   Chk 'A-RT2-TITLEQUOTE' $rt0.FormATitleQuote 'refused/refused'
   Chk 'A-RT2-TEXTGUARD' $rt0.FormATextGuard 'refused 16/16; accepted []; wrongly refused []'
+  # Task 3: the extraction is behaviour-preserving; the field form of the question answers :657
+  Chk 'A-RT3-CHAIN-SAME' $rt0.ChainUnchanged 'one-table:CAUSFAIL:certain>certain>by name>inferred:1'
+  Chk 'A-RT3-FIELDDS'    $rt0.FieldDataSetSites 'assign:657:FMTOperation:Create'
+  # AC-15: dangling in the DFM, re-pointed at Blueprint4.pas:2282 (receiver kept the control), then
+  # property [certain, bound] -> accessor [by name] -> field [by name, in-class read] -> DataSet := [certain] -> FMTOperation.
+  # MEASURED 2 sites, not the plan's 1: :3213 is `DataSource:= nil` in FormClose (teardown) -- the trace skips a nil
+  # re-point as the chain skips a nil DataSet assignment, so the anchor below still follows :2282 alone
+  Chk 'A-RT3-REPOINT'    $rt0.RePointSite 'dangling:2:2282=FBlueprint_ViewModel.pdsrOperation,3213=nil:receiver'
+  Chk 'A-RT3-HOPS'       $rt0.RePointHops 're-point=certain@Blueprint4.pas:2282,member=certain@Blueprint4.Interfaces.pas:171,accessor=by name@Blueprint4.ViewModel.pas:1263,field=by name@Blueprint4.ViewModel.pas:99,dataset=certain@Blueprint4.ViewModel.pas:657'
+  Chk 'A-RT3-DATASET'    $rt0.RePointDataSet 'FMTOperation:TFDMemTable:78:'
+  Chk 'A-RT3-ANCHOR'     $rt0.Anchor1 'OPERAT.NAME:FMTOperation:9:'
+  Chk 'A-RT3-GRADES'     $rt0.Anchor1Grades 'certain>certain>certain>by name>by name>certain>certain>inferred>inferred'
+  Chk 'A-RT3-FILES'      $rt0.Anchor1Files 'Blueprint4.dfm,Blueprint4.pas,Blueprint4.Interfaces.pas,Blueprint4.ViewModel.pas,MS1.SQL'
+  Chk 'A-RT3-UNITFORM'   $rt0.Anchor2 'OPERAT.NAME:by name:'
+  # Review Focus 2: OPERAT.NAME is loaded by several view models -> a named stop reason, no guess.
+  # MEASURED FIVE, not the plan's three: AssignGroups (:306) and AssignTools2 (:282, :423) load OPERAT into a field
+  # named FMTOperat. The candidate filter is a dataset-type SUFFIX match: `LIKE 'T%Table%'` also took the grid VIEW
+  # Blueprint4.TfrmBlueprint4.dxDBGrid1OperationV (TcxGridDBTableView, 'OPERAT' beside it at Blueprint4.pas:2331).
+  # P3: the RESOLVER returns the reason and ZERO chain items; the one numbered STOPS is the emitter's (Task 7, RT-N1)
+  Chk 'A-RT3-COLUMN'     $rt0.Anchor3 'OPERAT.NAME:0:OPERAT.NAME: 5 datasets load OPERAT in this index (AssignGroups.ViewModel.TAssignGroupsViewModel.FMTOperat, AssignTools2.ViewModel.TAssignTools2ViewModel.FMTOperat, Blueprint4.ViewModel.TBlueprint_ViewModel.FMTOperation, CompGroup2.ViewModel.TCompGroup2ViewModel.FMTOperation, ControlPlan2.ViewModel.TControlPlan_ViewModel.FMTOperation) -- pass the control or the dataset field'
+  # AC-13: not data-bound -> a stop reason anchored at the component (symbols.start_line 180), ZERO chain items (P3)
+  Chk 'A-RT3-NOTBOUND'   $rt0.Anchor4 '0:Blueprint4.dfm:180:frmBlueprint4.cxGroupBox16 (TcxGroupBox) is not data-bound: no field binding and no DataSource on it or its two enclosing components in the DFM'
+  # P13: the spec's own TField example (a DOTTED unit, 4 segments, split from the right) RESOLVES: the bound write at
+  # :939 `FfOperation_FileName := FF(FMTOperation, 'FILENAME')` [by name: the FMTOperation read is unbound] -> the
+  # dataset -> OPERAT -> OPERAT.FILENAME (4 items)
+  Chk 'A-RT3-TFIELD'     $rt0.AnchorTField 'OPERAT.FILENAME:FMTOperation:4:'
+  # Review Focus 5: the stale file named is the FORM unit
+  Chk 'A-RT3-STALE-FORM' $rt0.Anchor5Stale 'Blueprint4.pas:'
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters

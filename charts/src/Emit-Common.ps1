@@ -1451,6 +1451,56 @@ SELECT r.receiver_text AS rt, r.name_text AS prop, r.start_line AS line, r.start
   , $out.ToArray()
 }
 
+# Where a datasource gets its dataset: 'dfm' rows from the DataSet property of
+# component $DsId (0 = no component, a FIELD datasource), and 'assign' / 'read'
+# / 'stale' rows from `<Local>.DataSet` member accesses in $DsPas, the RHS read
+# from fresh source (-Following 5: 10 of 53 assignments wrap). Extracted from
+# Get-DataSourceChain UNCHANGED so Get-RePointChain can ask the same question of
+# a view-model field; the chain's pins (A-FF0-DS-CHART 54/5/49) guard it.
+# Returns (, array) rows Kind ('dfm'|'assign'|'read'|'stale'), File, Line,
+# Routine, Rhs, Eid (the enclosing routine's symbol id; 0 on a 'dfm' row).
+function Get-DataSetSites([int] $DsId, [string] $DsFile, [string] $DsPas, [string] $Local, [hashtable] $SourceOverride) {
+  $sites = New-Object System.Collections.ArrayList
+  if ($DsId) {
+    $dfmSet = Invoke-IndexQuery @"
+SELECT sl.text AS t, sl.start_line AS line FROM string_literals sl
+ WHERE sl.kind = 'dfm-prop' AND sl.owner_name = 'DataSet' AND sl.symbol_id = $DsId
+"@
+    foreach ($x in $dfmSet) {
+      [void]$sites.Add([pscustomobject]@{ Kind = 'dfm'; File = $DsFile; Line = [int]$x.line; Routine = ''; Rhs = [string]$x.t; Eid = 0 })
+    }
+  }
+  if ($DsPas) {
+    [void](Get-IndexedFileShas)                       # loads the path -> file id map
+    $pid2 = $script:DlFileIds[$DbPath][$DsPas]
+    $code = Invoke-IndexQuery @"
+SELECT r.start_line AS line, r.start_col AS col, r.end_col AS ecol, r.enclosing_symbol_id AS eid,
+       encl.qualified_name AS routine
+  FROM refs r LEFT JOIN symbols encl ON encl.id = r.enclosing_symbol_id
+ WHERE r.file_id = $pid2 AND r.kind = 'member-access' AND r.name_text = 'DataSet'
+   AND $(Get-ReceiverMatchSql 'r.receiver_text' $Local)
+ ORDER BY r.start_line, r.start_col
+"@ 'Get-DataSetSites'
+    foreach ($x in $code) {
+      $ctx = Get-SourceContext $DsPas ([int]$x.line) ([int]$x.col) ([int]$x.ecol - [int]$x.col) $SourceOverride -Following 5
+      if ($ctx.Stale) {
+        [void]$sites.Add([pscustomobject]@{ Kind = 'stale'; File = $DsPas; Line = [int]$x.line; Routine = [string]$x.routine; Rhs = ''; Eid = [int]$x.eid })
+        continue
+      }
+      if ($ctx.After -match '^\s*:=') {
+        $buf = $ctx.After -replace '^\s*:=', ''
+        foreach ($f in $ctx.Following) { if ($buf -match ';') { break }; $buf += ' ' + $f }
+        # whitespace is collapsed, not deleted: `(VM as IFoo)` must not read `(VMasIFoo)`
+        $rhs = ((($buf -split ';')[0].Trim()) -replace '\s*\.\s*', '.') -replace '\s+', ' '
+        [void]$sites.Add([pscustomobject]@{ Kind = 'assign'; File = $DsPas; Line = [int]$x.line; Routine = [string]$x.routine; Rhs = $rhs; Eid = [int]$x.eid })
+      } else {
+        [void]$sites.Add([pscustomobject]@{ Kind = 'read'; File = $DsPas; Line = [int]$x.line; Routine = [string]$x.routine; Rhs = ''; Eid = [int]$x.eid })
+      }
+    }
+  }
+  , $sites.ToArray()
+}
+
 # ---- the datasource chain (feeds-from and lands-where share it) ------------------
 #
 # control --DataSource--> TDataSource --DataSet--> memtable --owner--> view model
@@ -1640,41 +1690,10 @@ SELECT DISTINCT UPPER(sl.text) AS col
   }
 
   # ---- hop 2: where the datasource gets its dataset ------------------------------
+  # (hop 3 below reads $pid2: the declaring file of the RHS root is the datasource's unit)
+  $pid2 = $(if ($dsPas) { $fileIds[$dsPas] } else { 0 })
   $sites = New-Object System.Collections.ArrayList
-  $dfmSet = Invoke-IndexQuery @"
-SELECT sl.text AS t, sl.start_line AS line FROM string_literals sl
- WHERE sl.kind = 'dfm-prop' AND sl.owner_name = 'DataSet' AND sl.symbol_id = $([int]$d.id)
-"@
-  foreach ($x in $dfmSet) {
-    [void]$sites.Add([pscustomobject]@{ Kind = 'dfm'; File = $dsFile; Line = [int]$x.line; Routine = ''; Rhs = [string]$x.t })
-  }
-  if ($dsPas) {
-    $pid2 = $fileIds[$dsPas]
-    $code = Invoke-IndexQuery @"
-SELECT r.start_line AS line, r.start_col AS col, r.end_col AS ecol, r.enclosing_symbol_id AS eid,
-       encl.qualified_name AS routine
-  FROM refs r LEFT JOIN symbols encl ON encl.id = r.enclosing_symbol_id
- WHERE r.file_id = $pid2 AND r.kind = 'member-access' AND r.name_text = 'DataSet'
-   AND $(Get-ReceiverMatchSql 'r.receiver_text' $local)
- ORDER BY r.start_line, r.start_col
-"@ 'Get-DataSourceChain (dataset sites)'
-    foreach ($x in $code) {
-      $ctx = Get-SourceContext $dsPas ([int]$x.line) ([int]$x.col) ([int]$x.ecol - [int]$x.col) $SourceOverride -Following 5
-      if ($ctx.Stale) {
-        [void]$sites.Add([pscustomobject]@{ Kind = 'stale'; File = $dsPas; Line = [int]$x.line; Routine = [string]$x.routine; Rhs = ''; Eid = [int]$x.eid })
-        continue
-      }
-      if ($ctx.After -match '^\s*:=') {
-        $buf = $ctx.After -replace '^\s*:=', ''
-        foreach ($f in $ctx.Following) { if ($buf -match ';') { break }; $buf += ' ' + $f }
-        # whitespace is collapsed, not deleted: `(VM as IFoo)` must not read `(VMasIFoo)`
-        $rhs = ((($buf -split ';')[0].Trim()) -replace '\s*\.\s*', '.') -replace '\s+', ' '
-        [void]$sites.Add([pscustomobject]@{ Kind = 'assign'; File = $dsPas; Line = [int]$x.line; Routine = [string]$x.routine; Rhs = $rhs; Eid = [int]$x.eid })
-      } else {
-        [void]$sites.Add([pscustomobject]@{ Kind = 'read'; File = $dsPas; Line = [int]$x.line; Routine = [string]$x.routine; Rhs = ''; Eid = [int]$x.eid })
-      }
-    }
-  }
+  foreach ($x in (Get-DataSetSites ([int]$d.id) $dsFile $dsPas $local $SourceOverride)) { [void]$sites.Add($x) }
   $o.DataSetSites = $sites.ToArray()
 
   $staleSites = @($sites | Where-Object { $_.Kind -eq 'stale' })
@@ -1803,6 +1822,135 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
          else { "$unit names $($cand.Count) tables in upper case; $($fits.Count) of them hold all $($o.BoundColumns.Count) bound column(s)$caseNote" }
   Add-Hop 'table' 'unresolved' "$($cand.Count) candidates" ([string]$ts[0].path) ([int]$ts[0].line) $why
   Complete 'many' $why
+}
+
+# ---- the hop feeds-from misses (spec 2026-09-27 section 3, AC-15) -------------------
+# WHEN the designer datasource dangles and the control is re-pointed in code,
+# follow the assignment's RIGHT-HAND SIDE: `X.Member` -> the member ref on that
+# line, right of the re-pointed `.DataSource` ref (BOUND by the resolver:
+# certain; else by name on the root's declared type) -> a property's `read`
+# accessor, quoted from the fresh declaration line -> the accessor's ONE
+# implementation, found by name in a class whose heritage names the interface
+# ([by name]) -> the field the accessor body reads (an UNBOUND in-class read --
+# INBOX-in-class-field-reads-unbound.md, so [by name]) -> `<field>.DataSet :=`
+# through Get-DataSetSites (an assignment line read from fresh source: certain)
+# -> the dataset field. A hop that cannot be made STOPS with its reason; a
+# stale file on the way sets StaleFile so the caller can REFUSE (AC-14).
+# Used by the round-trip trace ONLY (owner decision 3, 2026-09-27): feeds-from
+# and lands-where still stop at the dangling datasource.
+# $RePoint is ONE row of Get-RePointSites (the caller picks the control's row).
+# Returns Hops[] {Hop, Grade, Label, File, Line, Routine, Reason, Ask}, DataSet
+# ($null | Name, Id, ClassId, File, Fid, Line, Type), StopReason ('' when the
+# dataset was reached), StaleFile ('' | the indexed path that differs).
+function Get-RePointChain($RePoint, [hashtable] $SourceOverride) {
+  $hops = New-Object System.Collections.ArrayList
+  function Hop($h, $g, $l, $f, $n, $r, $why, $ask) {
+    [void]$hops.Add([pscustomobject]@{ Hop = $h; Grade = $g; Label = $l; File = $f; Line = $n; Routine = $r; Reason = $why; Ask = $ask })
+  }
+  function Done([string] $stop, $ds, [string] $stale) { [pscustomobject]@{ Hops = $hops.ToArray(); DataSet = $ds; StopReason = $stop; StaleFile = $stale } }
+  if ($RePoint.Stale) { return (Done "$([IO.Path]::GetFileName($RePoint.File)) differs from the indexed copy -- the re-point at :$($RePoint.Line) is not read" $null $RePoint.File) }
+  $rn = (($RePoint.Routine -split '\.') | Select-Object -Last 1)
+  Hop 're-point' 'certain' "$($RePoint.Control).$($RePoint.Prop) := $($RePoint.Rhs)" $RePoint.File $RePoint.Line $rn '' ''
+  $rr = Get-RhsRoot $RePoint.Rhs
+  if (-not $rr.Root) { return (Done $rr.Reason $null '') }
+  $segs = @((($RePoint.Rhs.Trim() -replace '^Self\s*\.\s*', '') -replace '\s', '') -split '\.')
+  if ($segs.Count -lt 2) { return (Done "RHS $($RePoint.Rhs) names no member of $($rr.Root) -- a bare datasource is the designer case Get-DataSourceChain already follows" $null '') }
+  $member = $segs[1] -replace '\(.*$', ''
+  [void](Get-IndexedFileShas)
+  $fid = $script:DlFileIds[$DbPath][$RePoint.File]
+  $mq = ConvertTo-SqlText $member
+  # the member ref on the re-point line, RIGHT of the re-pointed property's own ref
+  # (the Task 1 filter, T1-C2): the chain starts from this ONE assignment, never from
+  # another site of the same member. BOUND when the resolver bound it.
+  $mref = Invoke-IndexQuery @"
+SELECT t.id AS tid, t.kind AS tkind, t.qualified_name AS tq, t.start_line AS tline, t.signature AS tsig, tf.path AS tpath, t.file_id AS tfid, t.parent_id AS tpid
+  FROM refs r JOIN symbols t ON t.id = r.symbol_id JOIN files tf ON tf.id = t.file_id
+ WHERE r.file_id = $fid AND r.start_line = $($RePoint.Line) AND r.kind = 'member-access' AND r.name_text = '$mq'
+   AND EXISTS (SELECT 1 FROM refs d WHERE d.file_id = r.file_id AND d.start_line = r.start_line AND d.kind = 'member-access'
+               AND d.name_text = '$(ConvertTo-SqlText $RePoint.Prop)' AND d.start_col < r.start_col)
+ ORDER BY r.start_col
+"@
+  $grade = 'certain'
+  if ($mref.Count -eq 0) {
+    # unbound: the root's declared type, then its member by name
+    $decl = Invoke-IndexQuery "SELECT s.signature AS sig FROM symbols s WHERE s.file_id = $fid AND UPPER(s.name) = UPPER('$(ConvertTo-SqlText $rr.Root)') AND s.kind IN ('field','property','var','param','local_var') ORDER BY s.start_line LIMIT 1"
+    if ($decl.Count -eq 0) { return (Done "$($rr.Root) is not declared in $([IO.Path]::GetFileName($RePoint.File))" $null '') }
+    $tn = ConvertTo-SqlText ((([string]$decl[0].sig) -replace '<.*$', '').Trim())
+    $mref = Invoke-IndexQuery @"
+SELECT t.id AS tid, t.kind AS tkind, t.qualified_name AS tq, t.start_line AS tline, t.signature AS tsig, tf.path AS tpath, t.file_id AS tfid, t.parent_id AS tpid
+  FROM symbols t JOIN files tf ON tf.id = t.file_id
+ WHERE UPPER(t.name) = UPPER('$mq') AND t.kind IN ('property','field')
+   AND t.parent_id IN (SELECT c.id FROM symbols c WHERE c.kind IN ('class','interface') AND UPPER(c.name) = UPPER('$tn'))
+"@
+    if ($mref.Count -ne 1) { return (Done "$member is not a property or field of $(([string]$decl[0].sig).Trim()) in this index ($($mref.Count) matches)" $null '') }
+    $grade = 'by name'
+  }
+  $m = $mref[0]
+  Hop 'member' $grade "$member : $(([string]$m.tsig).Trim())" ([string]$m.tpath) ([int]$m.tline) (($([string]$m.tq) -split '\.')[-2]) $(if ($grade -eq 'by name') { "member found by name on the declared type of $($rr.Root)" } else { '' }) ''
+  $fieldQ = 'SELECT s.id AS id, s.name AS name, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid FROM symbols s JOIN files f ON f.id = s.file_id'
+  $fieldRow = $null
+  $fieldWhy = ''; $fieldAsk = ''
+  if ([string]$m.tkind -eq 'property') {
+    # the read accessor, quoted from the FRESH declaration line
+    if (-not (Test-SourceFresh ([string]$m.tpath) $SourceOverride)) { return (Done "$([IO.Path]::GetFileName([string]$m.tpath)) differs from the indexed copy -- the property's read accessor is not read" $null ([string]$m.tpath)) }
+    $lines = Get-StrippedSourceLines (Resolve-SourceReadPath ([string]$m.tpath) $SourceOverride)
+    $pl = $lines[[int]$m.tline - 1]
+    if ($pl -notmatch '\bread\s+([A-Za-z_][A-Za-z0-9_]*)') { return (Done "property $member at $([IO.Path]::GetFileName([string]$m.tpath)):$($m.tline) has no read accessor on its declaration line" $null '') }
+    $acc = $Matches[1]
+    $ownerName = (([string]$m.tq) -split '\.')[-2]
+    # a field accessor (`read FX`) is the field itself, found by name in the property's class
+    $fieldRow = Invoke-IndexQuery "$fieldQ WHERE s.parent_id = $([int]$m.tpid) AND s.name = '$(ConvertTo-SqlText $acc)' AND s.kind = 'field'"
+    if ($fieldRow.Count) { $fieldWhy = "the read accessor of $member, by name in its class" }
+    else {
+      # the implementing class: the property's own class, or one whose heritage LISTS the
+      # interface (an exact entry of the comma list, plain or unit-qualified -- LIKE '%X%'
+      # would also take `IX2` and read `_` as a wildcard)
+      $on = ConvertTo-SqlText $ownerName
+      $impl = Invoke-IndexQuery @"
+SELECT s.id AS id, s.qualified_name AS q, s.impl_start_line AS istart, s.impl_end_line AS iend, f.path AS path, s.file_id AS fid, s.parent_id AS pid
+  FROM symbols s JOIN files f ON f.id = s.file_id
+ WHERE s.name = '$(ConvertTo-SqlText $acc)' AND s.kind = 'method' AND s.impl_start_line > 0
+   AND s.parent_id IN (SELECT c.id FROM symbols c WHERE c.kind = 'class' AND (c.id = $([int]$m.tpid)
+        OR INSTR(',' || REPLACE(COALESCE(c.heritage, ''), ' ', '') || ',', ',$on,') > 0
+        OR INSTR(',' || REPLACE(COALESCE(c.heritage, ''), ' ', '') || ',', '.$on,') > 0))
+"@
+      if ($impl.Count -ne 1) { return (Done "$acc has $($impl.Count) implementations in classes implementing $ownerName -- cannot tell which" $null '') }
+      $i = $impl[0]
+      Hop 'accessor' 'by name' "$acc" ([string]$i.path) ([int]$i.istart) (($([string]$i.q) -split '\.')[-2]) "the read accessor of $member, implemented once in a class whose heritage names $ownerName" 'in-class-field-reads'
+      # the field the accessor body reads: an in-class read, unbound in this index
+      $reads = Invoke-IndexQuery @"
+SELECT DISTINCT r.name_text AS n FROM refs r
+ WHERE r.file_id = $([int]$i.fid) AND r.start_line BETWEEN $([int]$i.istart) AND $([int]$i.iend) AND r.kind = 'read' AND r.name_text <> 'Result'
+   AND r.name_text IN (SELECT s.name FROM symbols s WHERE s.parent_id = $([int]$i.pid) AND s.kind = 'field')
+"@
+      if ($reads.Count -ne 1) { return (Done "$acc reads $($reads.Count) fields of its class -- cannot tell which is the datasource" $null '') }
+      $fieldRow = Invoke-IndexQuery "$fieldQ WHERE s.parent_id = $([int]$i.pid) AND s.name = '$(ConvertTo-SqlText ([string]$reads[0].n))' AND s.kind = 'field'"
+      $fieldWhy = 'an in-class read, unbound in this index'; $fieldAsk = 'in-class-field-reads'
+    }
+    if ($fieldRow.Count -ne 1) { return (Done "the datasource field behind $member was not found" $null '') }
+    $fr = $fieldRow[0]
+    Hop 'field' 'by name' "$([string]$fr.name) : $(([string]$fr.sig).Trim())" ([string]$fr.path) ([int]$fr.line) '' $fieldWhy $fieldAsk
+  } else {
+    # the member IS the datasource field: the member hop above already stands on it
+    $fr = [pscustomobject]@{ id = [int]$m.tid; name = $member; sig = [string]$m.tsig; line = [int]$m.tline
+                             path = [string]$m.tpath; fid = [int]$m.tfid; pid = [int]$m.tpid }
+  }
+  # `<field>.DataSet :=` in the field's unit
+  $sites = Get-DataSetSites 0 '' ([string]$fr.path) ([string]$fr.name) $SourceOverride
+  $stale = @($sites | Where-Object { $_.Kind -eq 'stale' })
+  $assigns = @($sites | Where-Object { $_.Kind -eq 'assign' -and $_.Rhs -ne 'nil' })
+  if ($stale.Count -and -not $assigns.Count) { return (Done "$([IO.Path]::GetFileName([string]$fr.path)) differs from the indexed copy -- its $($stale.Count) DataSet site(s) are not read" $null ([string]$fr.path)) }
+  if (-not $assigns.Count) { return (Done "$([string]$fr.name).DataSet is never assigned in $([IO.Path]::GetFileName([string]$fr.path)) ($($sites.Count) site(s) scanned)" $null '') }
+  $a0 = $assigns[0]
+  $dsName = (($a0.Rhs -replace '^Self\.', '') -split '\.')[-1]
+  $dsRow = Invoke-IndexQuery "$fieldQ WHERE s.parent_id = $([int]$fr.pid) AND s.name = '$(ConvertTo-SqlText $dsName)' AND s.kind = 'field'"
+  if ($dsRow.Count -ne 1) { return (Done "the dataset $($a0.Rhs) assigned at :$($a0.Line) is not a field of the same class ($($dsRow.Count) matches)" $null '') }
+  # as in Get-DataSourceChain: certain when every non-nil assignment names the same RHS
+  $rhsSet = @($assigns | ForEach-Object { $_.Rhs.ToUpperInvariant() } | Sort-Object -Unique)
+  $why = $(if ($rhsSet.Count -gt 1) { "$($assigns.Count) assignments with $($rhsSet.Count) different right-hand sides, following the first" } else { '' })
+  Hop 'dataset' $(if ($why) { 'inferred' } else { 'certain' }) "$([string]$fr.name).DataSet := $($a0.Rhs)" $a0.File $a0.Line (($a0.Routine -split '\.')[-1]) $why ''
+  $d = $dsRow[0]
+  Done '' ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) ''
 }
 
 # The cache key of one chain: the DFM path and the datasource TEXT, case-folded.
