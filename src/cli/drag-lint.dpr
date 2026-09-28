@@ -183,6 +183,11 @@ uses
   DRagLint.Convert.GlyphVacuum in '..\report\DRagLint.Convert.GlyphVacuum.pas',
   DRagLint.Lint.SharedUnit in '..\lint\DRagLint.Lint.SharedUnit.pas',
   DRagLint.Lint.ReviewMarker in '..\lint\DRagLint.Lint.ReviewMarker.pas',
+  DRagLint.Analysis.LintTree in '..\analysis\DRagLint.Analysis.LintTree.pas',
+  DRagLint.Project.Members in '..\core\DRagLint.Project.Members.pas',
+  DRagLint.Project.Coherence in '..\core\DRagLint.Project.Coherence.pas',
+  DRagLint.Analysis.SurfaceFingerprint in '..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas',
+  DRagLint.Analysis.SurfaceAdapters in '..\analysis\DRagLint.Analysis.SurfaceAdapters.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

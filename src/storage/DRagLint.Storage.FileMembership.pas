@@ -104,7 +104,10 @@ procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT
 /// --apply --reindex` died "attempt to write a readonly database" (exit 3).
 /// run_readonly_then_writer_same_process.ps1 is the regression check for that
 /// verb; since readers are read-write again it can no longer fail on this
-/// param, so SharedCache=False is currently UNPINNED by any test.
+/// param. SharedCache=False itself is pinned by
+/// tests\autotest\run_sharedcache_private_pin.ps1: an in-process insert beside
+/// an open reader cursor on `files` commits, and fails "database table is
+/// locked" with the parameter flipped (proven RED 2026-09-28).
 /// ConnectWriter sets the same param, so no drag-lint connection ever shares
 /// a cache with another.
 /// What keeps the handle a reader: the journal_mode pragma names the header's
@@ -158,7 +161,8 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
 /// mode, because a reader must never convert anything.
 /// PRIVATE CACHE (SharedCache=False) for the reasons on ConnectReadOnly: a
 /// shared cache means table-level SQLITE_LOCKED the busy timeout does not
-/// retry, and pragmas leaking between connections. Unpinned by any test.
+/// retry, and pragmas leaking between connections. Pinned by
+/// tests\autotest\run_sharedcache_private_pin.ps1.
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>

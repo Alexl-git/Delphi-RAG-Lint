@@ -811,23 +811,39 @@ end;
 
 { The unit an entry names. 'AOnly.CallFromA (AOnly.pas)' -> 'aonly';
   'DRagLint.CLI' (a Used-in-units entry, which has no parentheses) ->
-  'draglint.cli'. Lowercased, extension dropped, so it can be matched against
-  the closure set either way round. }
+  'draglint.cli'. Lowercased, so it can be matched against the closure set.
+
+  THE EXTENSION IS DROPPED ONLY FROM A FILE NAME -- the '(file.pas)' part or a
+  path. A bare Used-in-units entry is a UNIT NAME, and a dotted unit name may
+  END in a segment spelled like an extension: `DRagLint.Parser.DFM`. Stripped
+  as if it were a file, it keyed 'draglint.parser', which no closure holds, so
+  an unshared unit's block read as carrying a foreign entry: it entered the
+  project-tag regime, lost its `(+N more)` windows, and a STALE entry naming
+  that unit was preserved forever instead of reaped. Not stripping errs toward
+  "cannot vouch" for a hand-written bare `Foo.pas`, which PRESERVES -- the
+  fail-safe direction of this unit; stripping errs toward a coincidental
+  "vouch", which deletes. Guarded by
+  tests\autotest\run_doc_unit_name_extension_segment.ps1. }
 function EntryUnitKey(const AEntry: string): string;
 var
-  P, Q: Integer;
+  P, Q    : Integer;
+  FileForm: Boolean;
 begin
   Result:= WithoutConfidence(BareEntry(AEntry));
+  FileForm:= False;
   P:= LastDelimiter('(', Result);
   if P > 0 then
   begin
     Q:= LastDelimiter(')', Result);
-    if Q > P then Result:= Copy(Result, P + 1, Q - P - 1);
+    if Q > P then
+    begin
+      Result:= Copy(Result, P + 1, Q - P - 1);
+      FileForm:= True;
+    end;
   end;
   Result:= LowerCase(Trim(Result));
-  if EndsText('.pas', Result) then Result:= Copy(Result, 1, Length(Result) - 4)
-  else if EndsText('.dpr', Result) then Result:= Copy(Result, 1, Length(Result) - 4)
-  else if EndsText('.dfm', Result) then Result:= Copy(Result, 1, Length(Result) - 4);
+  if not (FileForm or (LastDelimiter('\/', Result) > 0)) then Exit;
+  if MatchText(ExtractFileExt(Result), ['.pas', '.dpr', '.dfm']) then Result:= ChangeFileExt(Result, '');
 end;
 
 { ---------------------------------------------------------------------------

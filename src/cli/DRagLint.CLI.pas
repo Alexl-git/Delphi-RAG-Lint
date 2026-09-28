@@ -823,6 +823,8 @@ begin
   Writeln('                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured');
   Writeln('                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under');
   Writeln('                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)');
+  Writeln('  drag-lint index --project <file.dproj> --db <file.sqlite> --resolve-only   (the same, for a PROJECT database -- the form');
+  Writeln('                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)');
   Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
@@ -1925,6 +1927,34 @@ begin
   AObj.AddPair('stale_files', TJSONNumber.Create(Rep.Changed));
 end;
 
+{ The command that refreshes AStore, shaped by the database's own scan type.
+
+  A PROJECT database is refreshed through its project file. The advisories used
+  to print `index <dir> --db <db>` for every database -- the one form the house
+  rules forbid against a project DB, because a folder walk adds every loose .pas
+  under the folder and then adopts the widened set as the DB's scope (measured
+  2026-09-02: DataCopy 39 -> 72 files). `--resolve-only` is exempt from that
+  refusal and harmless, but an operator copying the advice does not know that,
+  and the same text without `--resolve-only` is the widening command. So the
+  advice names the form that is right for the DB it is printed about. A library
+  (folder) database keeps the `<dir>` form, which is correct for it.
+
+  AResolveOnly selects the cheap re-derive (minutes) over the re-parse (hours).
+  Guarded by tests\autotest\run_resolver_advice_names_project_form.ps1. }
+function IndexRemedyFor(const AStore: ISymbolStore; const ADbPath: string; AResolveOnly: Boolean): string;
+var
+  ScanType: string;
+  Suffix  : string;
+begin
+  ScanType:= '';
+  if AStore <> nil then ScanType:= AStore.GetMetaValue(SCAN_TYPE_KEY);
+  Suffix:= IfThen(AResolveOnly, ' --resolve-only', '');
+  if SameText(ScanType, SCAN_TYPE_PROJECT) then
+    Result:= Format('index --project <file.dproj> --db "%s"%s', [ADbPath, Suffix])
+  else
+    Result:= Format('index <dir> --db "%s"%s', [ADbPath, Suffix]);
+end;
+
 procedure NoteIndexFreshnessOnce(const AStore: ISymbolStore; const ADbPath: string);
 var Note: string;
 begin
@@ -2034,7 +2064,8 @@ begin
     Writeln(ErrOutput, Format('  resolver: edges were derived by a NEWER resolver (%s) than this build (%s) -- reads are fine; ' +
       'an index run with this engine is refused. Use the engine that resolved it.', [Prev, Cur]))
   else if Prev <> Cur then
-    Writeln(ErrOutput, Format('  resolver: edges were derived by %s, this build is %s -- re-derive with `index <dir> --db <db> --resolve-only` (minutes, not a re-parse).', [Prev, Cur]));
+    Writeln(ErrOutput, Format('  resolver: edges were derived by %s, this build is %s -- re-derive with `%s` (minutes, not a re-parse).',
+      [Prev, Cur, IndexRemedyFor(AStore, ADbPath, {AResolveOnly=}True)]));
 end;
 
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
@@ -3624,13 +3655,22 @@ begin
       smClosure is the project model -- the section's roots are .dpr/.dproj
       paths and its files are that project's members. smFolderTree and
       smLibrary both walk folders, which is the library model. }
-    Store.SetMetaValue(SCAN_TYPE_KEY,
-      IfThen(AItem.Mode = smClosure, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
+    if AItem.Mode = smClosure then
+      Store.SetMetaValue(SCAN_TYPE_KEY, SCAN_TYPE_PROJECT)
+    else
+      Store.SetMetaValue(SCAN_TYPE_KEY, SCAN_TYPE_LIBRARY);
     { D27: the project tag, from the ONE project file a closure section roots at.
-      A multi-root section names no single project, so it records none and its
-      readers fall back to the DB base name, as before. }
+      A multi-root or folder section names no single project, so it records none
+      and its readers fall back to the DB base name, as before.
+
+      "Records none" must CLEAR, not merely skip (TH-3, 2026-09-28): a DB stamped
+      while its section had one root kept that project's name after the section
+      grew a second, so every fact written through it claimed a project the
+      section no longer is. Pinned by run_index_all_project_tag_stamp.ps1. }
     if (AItem.Mode = smClosure) and (Length(AItem.Roots) = 1) then
-      Store.SetMetaValue(PROJECT_TAG_KEY, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(AItem.Roots[0])));
+      Store.SetMetaValue(PROJECT_TAG_KEY, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(AItem.Roots[0])))
+    else
+      Store.SetMetaValue(PROJECT_TAG_KEY, '');
     { Item 1a: everything above -- the fingerprints and the scan_type stamp
       especially -- can still be sitting in the -wal at this point. Fold it in
       so the section's database is self-contained the moment the section
@@ -5410,15 +5450,19 @@ begin
       A stamp is a claim about SCOPE, so only a run that established one may
       write it: a project target, or a folder walk. Anything narrower -- one
       file, or a resolve-only pass -- leaves the existing claim alone. }
-    if (not AArgs.ResolveOnly) and
-       (IsProjectScopedTarget or TDirectory.Exists(AArgs.Path)) then
-      Store.SetMetaValue(SCAN_TYPE_KEY,
-        IfThen(IsProjectScopedTarget, SCAN_TYPE_PROJECT, SCAN_TYPE_LIBRARY));
+    if (not AArgs.ResolveOnly) and IsProjectScopedTarget then
+      Store.SetMetaValue(SCAN_TYPE_KEY, SCAN_TYPE_PROJECT)
+    else if (not AArgs.ResolveOnly) and TDirectory.Exists(AArgs.Path) then
+      Store.SetMetaValue(SCAN_TYPE_KEY, SCAN_TYPE_LIBRARY);
     { D27: a project scan also records WHICH project, the tag its doc facts
       carry -- same guard as the scope stamp above (a scope-establishing run). }
     if (not AArgs.ResolveOnly) and IsProjectScopedTarget then
       Store.SetMetaValue(PROJECT_TAG_KEY, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(
-        if AArgs.ProjectPath <> '' then AArgs.ProjectPath else AArgs.Path)));
+        if AArgs.ProjectPath <> '' then AArgs.ProjectPath else AArgs.Path)))
+    { A folder walk establishes a scope that names no project: clear a stale
+      tag, as the manifest path does for a multi-root section (TH-3). }
+    else if (not AArgs.ResolveOnly) and TDirectory.Exists(AArgs.Path) then
+      Store.SetMetaValue(PROJECT_TAG_KEY, '');
     { Item 1a: UNCONDITIONAL, unlike the stamp above. The stamp is a claim about
       SCOPE and only a run that established one may write it; a checkpoint
       claims nothing, it just makes whatever this run DID write durable in the
@@ -12291,7 +12335,11 @@ begin
             (lint-all does) must not pay an ExpandFileName per file. }
           FlowFid:= FlowStore.FindFileIdByPath(FlowIdent);
           if FlowFid <= 0 then FlowFid:= FlowStore.FindFileIdByPath(ExpandFileName(FlowIdent));
-          if FlowFid <= 0 then begin FlowStore:= nil; FlowFid:= 0; end;
+          if FlowFid <= 0 then
+          begin
+            FlowStore:= nil;
+            FlowFid:= 0;
+          end;
           { D27: this store runs the doc rules, so its recorded project names the tag. }
           if FlowStore <> nil then TSharedFacts.ProjectTag:= ProjectTagFor(FlowStore, FlowDb, AArgs);
         end;
@@ -15399,9 +15447,9 @@ begin
                   'with this engine is refused (a writer never downgrades an index).',
                   [IdxVer, ResVer, DRAGLINT_EXTRACTOR_VERSION, DRAGLINT_RESOLVER_VERSION, DRAGLINT_VERSION]))
               else if IdxStale then
-                JOne.AddPair('remedy', 'index <dir> --db <db>   (a re-parse: hours across the box)')
+                JOne.AddPair('remedy', IndexRemedyFor(St, DbP, {AResolveOnly=}False) + '   (a re-parse: hours across the box)')
               else if ResStale then
-                JOne.AddPair('remedy', 'index <dir> --db <db> --resolve-only   (minutes, no parse becomes wrong)');
+                JOne.AddPair('remedy', IndexRemedyFor(St, DbP, {AResolveOnly=}True) + '   (minutes, no parse becomes wrong)');
             end;
           end;
           JIdx.AddElement(JOne);
@@ -16839,8 +16887,16 @@ function DoSafeDelete(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore; Edits: TArray<TTextEdit>; Reason: string;
 begin
-  if AArgs.Name   = '' then begin Writeln('ERROR: safe-delete needs --name <QualifiedName>'); Exit(2); end;
-  if AArgs.DbPath = '' then begin Writeln('ERROR: --db required'                           ); Exit(2); end;
+  if AArgs.Name = '' then
+  begin
+    Writeln('ERROR: safe-delete needs --name <QualifiedName>');
+    Exit(2);
+  end;
+  if AArgs.DbPath = '' then
+  begin
+    Writeln('ERROR: --db required');
+    Exit(2);
+  end;
   { A read-only open does not CREATE a missing file, so without this the verb
     died "FATAL: unable to open database file" (exit 3) -- fix round 1. }
   if not FileExists(AArgs.DbPath) then
@@ -18647,7 +18703,11 @@ var
   Findings   : TArray<TLintFinding> ;
   DefDisabled: TArray<string>       ;
 begin
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath])); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath]));
+    Exit(2);
+  end;
   { READ-ONLY (D24), for the reason on lint-all's open. }
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
@@ -18821,11 +18881,21 @@ begin
     begin
       var QN: string:= AArgs.QName;
       if QN = '' then QN:= AArgs.Name;
-      if QN = '' then begin Writeln('ERROR: rename --kind symbol needs --name <QualifiedName> --to <New>'); Exit (2 ); end;
+      if QN = '' then
+      begin
+        Writeln('ERROR: rename --kind symbol needs --name <QualifiedName> --to <New>');
+        Exit(2);
+      end;
       if AArgs.RenameTo = '' then
-      begin Writeln('ERROR: --to required'); Exit(2); end;
+      begin
+        Writeln('ERROR: --to required');
+        Exit(2);
+      end;
       if AArgs.DbPath = '' then
-      begin Writeln('ERROR: --db required for --kind symbol'); Exit(2); end;
+      begin
+        Writeln('ERROR: --db required for --kind symbol');
+        Exit(2);
+      end;
       if not FileExists(AArgs.DbPath) then
       begin
         Writeln(Format('Database not found: %s', [AArgs.DbPath])); { a read-only open would die FATAL, exit 3 }
@@ -18879,7 +18949,11 @@ begin
     Writeln('Usage: drag-lint rename --qname Foo.TBar.Baz --to NewName ' + '[--db PATH] [--dry-run] [--no-backup]');
     Exit(2);
   end;
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(1); end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(1);
+  end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk); { READ-ONLY (D24): edits source, never the index }
   if not RoOk then Exit(2);

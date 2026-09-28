@@ -240,6 +240,12 @@
     
     <DCCReference Include="..\lint\DRagLint.Lint.SharedUnit.pas"/>
     <DCCReference Include="..\lint\DRagLint.Lint.ReviewMarker.pas"/>
+  
+    <DCCReference Include="..\analysis\DRagLint.Analysis.LintTree.pas"/>
+    <DCCReference Include="..\core\DRagLint.Project.Members.pas"/>
+    <DCCReference Include="..\core\DRagLint.Project.Coherence.pas"/>
+    <DCCReference Include="..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas"/>
+    <DCCReference Include="..\analysis\DRagLint.Analysis.SurfaceAdapters.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

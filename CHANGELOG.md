@@ -3,6 +3,55 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.19.2-alpha -- 2026-09-28
+
+PATCH: five backlog defects from `docs\BACKLOG-TRIAGE-2026-09-28.md` (FIX-1, FIX-2, FIX-5, TH-3) and two
+test/hygiene items (TH-1, TH-5, FIX-9). Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha, resolver
+1.10.0-alpha and schema v23 are unchanged -- no index needs a re-parse or a re-resolve. No new rules (188).
+
+### Fixed
+
+- **`context` listed one call site twice and said it was written by `v0.18`.** A class-method call such as
+  `TLintConfigWriter.SaveToFile(CP, Cfg)` indexes a bound `call` AND an unbound `member-access` on the same
+  span, and the kind-blind caller lookup returned both, so the bundle printed `## Callers (2)` for one site
+  (while `find-callers` said one) and spent the caller cap on repeats. Callers are now deduplicated on
+  (file, line, col) before the cap. The header names the running engine instead of the release that added
+  the bundle. Guard: `tests\autotest\run_context_callers_dedup_and_version.ps1` (one site -> 1, two sites
+  -> 2, the cap still applies).
+- **A `Used in units:` entry spelled like a file extension -- `DRagLint.Parser.DFM` -- was read as a
+  foreign unit.** `EntryUnitKey` stripped `.pas`/`.dpr`/`.dfm` from every entry, keying that one
+  `draglint.parser`, which no closure holds. An unshared block then entered the project-tag regime, and a
+  STALE entry naming that (indexed) unit was preserved forever instead of reaped. The extension is now
+  dropped only from a file form (`(file.pas)` or a path). Guard:
+  `tests\autotest\run_doc_unit_name_extension_segment.ps1`, with a control that a `.DFM`-named unit NOT in
+  the closure is still preserved.
+- **The resolver-staleness advice named `index <dir> --db <db>` for a PROJECT database** -- the form the
+  house rules forbid there (a folder walk widens a project DB into a folder DB). The stderr note and
+  `info --json`'s `remedy` now say `index --project <file.dproj> --db "<path>" [--resolve-only]` for a
+  project DB and keep `index <dir>` for a library one, with the real DB path; `--help` lists the project
+  form beside the `<dir>` one. Guard: `tests\autotest\run_resolver_advice_names_project_form.ps1` (the
+  advised command also runs and clears the verdict).
+- **A section that stopped naming one project kept that project's `project_tag`.** `index --all` stamps
+  the tag from a one-root closure section but only SKIPPED the stamp for a multi-root or folder section,
+  so a DB stamped when its section had one root carried that name after it grew a second, and every doc
+  fact written through it claimed the old project. Both index paths now clear the key when their scope
+  names no single project. Guard: `tests\autotest\run_index_all_project_tag_stamp.ps1` -- also the first
+  test of the `index --all` stamp itself.
+
+### Tests and hygiene
+
+- **`SharedCache=False` is pinned** (ruling R22; the source said "UNPINNED by any test"):
+  `tests\SharedCachePinTests.dpr` via `run_sharedcache_private_pin.ps1` inserts through a second in-process
+  writer while a reader cursor on `files` is mid-step. It carries its own control (the same shape with
+  `SharedCache=True` must fail) and was proven RED against the production code by flipping the parameter
+  ("database table is locked: files").
+- **drag-lint's own `.dpr`/`.dproj` list five units the closure already compiled** (`reconcile-project
+  --apply`): `Analysis.LintTree`, `Analysis.SurfaceFingerprint`, `Analysis.SurfaceAdapters`,
+  `Project.Members`, `Project.Coherence`. `files=` is unchanged (134): the closure reached them through
+  `uses`. `DRagLint.Convert.Backup` is reported STALE (listed, used by nothing) and left for its owner.
+- Seven legacy findings beside earlier hunks in `DRagLint.CLI.pas` fixed (two constant `IfThen` calls, five
+  multi-statement lines).
+
 ## v1.19.1-alpha -- 2026-09-28
 
 PATCH: two converter asks, the circular-dependency examples made trustworthy, and two tests that pinned
