@@ -60,7 +60,7 @@ interface / project / command constant / wire field / db column / any symbol.**
 | `consumers` | table / column | `Emit-Consumers.ps1` | CAUSFAIL (SERVER): 1 certain reader, 1 certain writer, 3 triggers; FOLDERS 3 inferred readers; FOLDERS 2 declarations, newest 79 columns |
 | `feeds-from` | control | `Emit-FeedsFrom.ps1` | colREASON: 5 graded hops to CAUSFAIL.REASON; 267 of 808 field-bound CLIENT controls reach one table |
 | `lands-where` | ORM property / field / control | `Emit-LandsWhere.ps1` | TmcCAUSFAIL.REASON: 4 server rows, 1 trigger, 1 client binding; convention 1,992 of 1,997 |
-| `round-trip` | control / field / TABLE.COLUMN | `Emit-RoundTrip.ps1` | OPERAT.NAME from frmBlueprint4.dxDBGrid1OperationVName: 17/17 golden nodes matched, 3 golden facts disclosed (READ [28]-[29], transport helpers at uPipeSessionBuilder.pas:533/:534/:538), 12/12 guards; 76 steps / 31 conditions / 4 crossings / 2 unresolved (the E4 UPDATE and SELECT STOPS); ALSO 9 (owner-accepted 2026-09-28: all callers count; dataset scope; anchors only). Limits: guards and OMITS see the innermost enclosing `if` only (E1); statement texts are FIB$ rows the clones do not hold (E4). TEXT bundle (`trace.dlgraph`), no chart yet |
+| `round-trip` | control / field / TABLE.COLUMN | `Emit-RoundTrip.ps1` | OPERAT.NAME from frmBlueprint4.dxDBGrid1OperationVName: 17/17 golden nodes matched, 3 golden facts disclosed (READ [28]-[29], transport helpers at uPipeSessionBuilder.pas:533/:534/:538), 12/12 guards; 76 steps / 31 conditions / 4 crossings / 2 unresolved (the E4 UPDATE and SELECT STOPS); ALSO 9 (owner-accepted 2026-09-28: all callers count; dataset scope; anchors only). Limits: guards see the innermost enclosing `if` only (E1); OMITS tests every enclosing `if` up to a loop or case arm; statement texts are FIB$ rows the clones do not hold (E4). A direction that stops after the anchor notes its un-walked tiers and the title claims only the walked direction (`RT-NOWIRE`: frmAssignGroups.grdFtrsColNum, 33/10/2/2). TEXT bundle (`trace.dlgraph`), no chart yet |
 | `round-trip` (holdout, AC-16) | control | `Emit-RoundTrip.ps1` | MSCLIST.NUM from frmBlueprint4.dxDBGrid1FtrsVNum through FMTFtrs / SendDeltaFtrs (a different dataset and sender than OPERAT.NAME; the re-point at Blueprint4.pas:2283 recovered from source, P29): 103 steps / 35 conditions / 4 crossings / 2 unresolved, pinned by gate `RT-HOLD`. Owner-accepted 2026-09-28: the owner checked the path's shape against the OPERAT.NAME trace and the golden, not every line. FtrName (the plan's default) was not used: it is one of 12 calculated fields added to FMTFtrs after BuildMemTable (Blueprint4.ViewModel.pas:748-761), no DB column |
 
 **The caveat each of the last four ships with** -- say it whenever the chart is
@@ -245,11 +245,18 @@ GAP 2 (raise/handle) is NOT touched by this change and they declined to guess.
 
 ---
 
-## >>> THE ENGINE IS AHEAD OF OUR BINARY. READ BEFORE MEASURING ANYTHING <<<
+## HISTORY (superseded 2026-09-27): the engine WAS ahead of our binary on 2026-09-23
+
+**Superseded.** Since 2026-09-27 (Task 0 of the trace-core plan) every emitter runs the
+SHARED deployed engine `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`
+(1.18.x-1.19.x over the trace-core branch; reads on the r=1.9 clones measured
+byte-identical between them -- run `--version` for the one deployed now), and the
+clones carry `v=1.19.0-alpha / r=1.9.0-alpha`. What follows is the 2026-09-23 record,
+kept because it is why the clones and the version guard exist.
 
 **2026-09-23 05:30 -- the engine team reindexed the whole corpus** (CLIENT,
 SERVER and the DL self-index) with `v=1.17.0-alpha` / `r=1.6.0-alpha`.
-**Our deployed engine is `1.16.0-alpha` / resolver `1.5.1-alpha` -- OLDER on two
+**Our deployed engine WAS `1.16.0-alpha` / resolver `1.5.1-alpha` -- OLDER on two
 axes**, and `RefuseIfEngineOlderThanDb` does not cover the resolver axis, so
 nothing refused.
 
@@ -257,7 +264,7 @@ The skew gives WRONG ANSWERS, not errors: `call_edges` unchanged at 20,343 on
 CLIENT, yet `reverse-calltree --direction callees` on `SendDeltaOperation` fell
 from 9 nodes to 4. Callers unaffected.
 
-* **The suite is RED -- 9 failures, and they must STAY red.** They are the
+* **The suite WAS RED -- 9 failures, which had to STAY red.** They are the
   detector for the redeploy. Two families only: callee-direction (7) and the
   field-backed property accessor (2). Everything else still passes.
 * **Work on CLONES** in `charts\scratch\db\` (gitignored, verified identical to
@@ -345,7 +352,11 @@ who-writes "bound, not reported" workaround is dropped.
 **The earlier batches are all done.** 26 of 27 catalogue questions ship (`round-trip` 2026-09-28); only
 `compare` does not, parked by the owner.
 
-**THE SUITE IS GREEN (2026-09-28 00:13) on the SHARED engine 1.18.0-alpha /
+**THE SUITE IS GREEN (2026-09-28 14:33-15:00, after the round-trip final fix wave) on the shared deployed engine
+(`--version`: 1.19.1-alpha) and the same r=1.9 clones.** OPERAT.NAME 76/31/4/2 and the holdout 103/35/4/2 did not move;
+the wave's own pins are listed in its commits.
+
+**THE SUITE WAS GREEN (2026-09-28 00:13) on the SHARED engine 1.18.0-alpha /
 resolver 1.9.0-alpha** (Task 0 of the trace-core plan). Every emitter now runs
 `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`, not this
 worktree's 1.16 build. All 9 clones re-taken 2026-09-27 23:15 at

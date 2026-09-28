@@ -62,8 +62,8 @@ function New-RowHref([string] $File, [int] $Line) {
 # RefuseIfEngineOlderThanDb does not cover the resolver axis, so nothing
 # refuses. The skew yields SMALLER CONFIDENT ANSWERS, never an error. Since
 # 2026-09-27 the charts run the SHARED engine
-# (C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe, 1.18.0-alpha /
-# resolver 1.9.0-alpha), and the clones under scratch\db were re-taken on
+# (C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe -- 1.18.x-1.19.x over the
+# trace-core branch; reads on the r=1.9 clones measured byte-identical between them), and the clones under scratch\db were re-taken on
 # 2026-09-27 23:15 (DL at 23:50) and carry v=1.19.0-alpha / r=1.9.0-alpha (schema_meta,
 # checked at the resolver-1.9 re-baseline).
 #

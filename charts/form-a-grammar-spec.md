@@ -562,14 +562,22 @@ ALSO
 
 A section note is **not a step, not a `STOPS`, and not counted unresolved**; it
 has no number and no anchor, and `END TRACE` does not count it. A section may
-carry steps OR a note, never both (`Write-FormA` refuses the mix). Two uses:
+carry steps OR a note, never both (`Write-FormA` refuses the mix). Three uses:
 
 * an EMPTY `ALSO` -- `-- no other route to this anchor in the index` (an empty
   ALSO is not a hop that failed);
 * every un-walked section when the trace STOPS at its anchor -- each of
   `WRITE`, `SERVER`, `DATABASE`, `RESPONSE`, `READ`, `ALSO` carries
   `-- not walked: the trace stopped at [NN]`, where `[NN]` is the anchor's
-  `STOPS` step (so an empty `WRITE` never reads as "no write path").
+  `STOPS` step (so an empty `WRITE` never reads as "no write path");
+* every tier a DIRECTION did not reach when it stopped AFTER the anchor resolved
+  (final review I2) -- `-- not walked: the write direction stopped at [NN]`, `[NN]`
+  being the STOPS that ended it: a `WRITE` STOPS (no event wiring, E3; no crossing
+  within `-Depth`) notes `SERVER`, `DATABASE` and `RESPONSE`; a `SERVER` STOPS (no
+  dispatch arm or no one implementation, E2) notes `DATABASE`, and the response's
+  `WITH` facet reads `unknown, no server handler was reached`. `READ` is one section,
+  so a READ server stop simply has no `DATABASE` steps. Measured: gate `RT-NOWIRE`
+  (`frmAssignGroups.grdFtrsColNum`, write stopped at `[09]`) and `RT-SRVSTOP`.
 
 ### 8.2 The stopped-trace title (Task 7 fix round 1, commit 030a37b8)
 
@@ -582,6 +590,16 @@ $title = $(if ($A.Stop) { "Why $Target cannot be traced" } else { "How $name rea
 
 i.e. `TITLE "Why <selection> cannot be traced"` for a stopped trace, and
 `TITLE "How <TABLE.COLUMN> reaches <selection> and goes back"` otherwise.
+
+Final review I2: the title claims only the DIRECTIONS that were walked through to the
+database tier. When one stops after the anchor (8.1), `Emit-RoundTrip.ps1` rewrites it
+once every step is numbered:
+
+* write stopped: `How <TABLE.COLUMN> reaches <selection> (the way back stops at step <n>)`
+  (`RT-NOWIRE`: `How MSCLIST.NUM reaches frmAssignGroups.grdFtrsColNum (the way back stops at step 9)`);
+* read stopped: `How <selection> goes back to <TABLE.COLUMN> (the way there stops at step <n>)`;
+* both: `Where the trace between <selection> and <TABLE.COLUMN> stops (steps <n> and <m>)`
+  (`RT-SRVSTOP`).
 Measured: `TITLE "Why frmBlueprint4.cxGroupBox16 cannot be traced"` (gate
 `RT-N1`), `TITLE "Why OPERAT.NAME cannot be traced"` (`RT-N2`).
 
@@ -598,11 +616,14 @@ break), which a note cannot carry -- then it is named by its anchor only,
 omitted record lies in ONE routine; otherwise the note starts at `not walked`:
 
 ```
-[NN] OMITS <n> step(s) in branches for other tables, innermost enclosing if only @<file>:<line> -- [in <Routine>; ]not walked, the branch conditions: WHEN "<cond>" @<file>:<line> / WHEN at <file>:<line> / ...; ask E1
+[NN] OMITS <n> step(s) in branches for other tables, every enclosing if read up to a loop or case arm @<file>:<line> -- [in <Routine>; ]not walked, the branch conditions: WHEN "<cond>" @<file>:<line> / WHEN at <file>:<line> / ...; ask E1
 ```
 
-The walk sees only the INNERMOST enclosing `if` of a line (the index holds
-tokens, not branches), which is why the text says so and the step names ask E1.
+Final review I5: EVERY `if` of a line's enclosing chain is tested, innermost first, and the
+first that is a branch for another table is the one named (it was the innermost `if` only).
+The chain is read from fresh source outwards until a loop or a case arm, which the reader
+does not place (the index holds tokens, not branches) -- which is why the text says so and
+the step names ask E1. A GUARD still quotes only the innermost `if` of its Exit (T4-R4).
 
 ### 8.4 Verb set -- MEASURED, and it is NOT a subset of the golden's
 

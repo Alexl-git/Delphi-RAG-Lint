@@ -18,8 +18,9 @@
 
   RUNS AGAINST THE CLONES in charts\scratch\db\, never the live corpus. See
   PLAN-next-five-verbs.md for why: a live run risks a lock, and a live DB can be
-  re-indexed mid-run. Since 2026-09-27 the engine is the shared deployed one
-  (1.18.0-alpha / resolver 1.9.0-alpha), matching the clones' resolver.
+  re-indexed mid-run. Since 2026-09-27 the engine is the shared deployed one;
+  the page prints the version it reports (--version, read at run time) and the
+  clones' own schema_meta stamps -- never a number written here by hand.
 #>
 [CmdletBinding()]
 param(
@@ -48,6 +49,19 @@ foreach ($d in @($CLI, $SRV, $DC, $DL, $MT, $SQL)) {
   if (-not (Test-Path $d)) { throw "clone missing: $d -- see PLAN-next-five-verbs.md for how they are made" }
 }
 
+# final-review I3: the page states the engine and the clone stamps it READ now -- the engine's own --version and the
+# CLIENT clone's schema_meta fingerprints -- never a version written here by hand (one went stale at 1.18.0-alpha
+# while the deployed engine moved to 1.19.1-alpha)
+$EngineExe = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+$engVer = @(& $EngineExe --version 2>$null | Where-Object { $_ -match '^drag-lint \S+$' } | Select-Object -First 1)
+$engVer = $(if ($engVer.Count) { ($engVer[0] -replace '^drag-lint\s+', '').Trim() } else { 'unknown (--version printed no version line)' })
+$meta = @{}
+try {
+  $mj = (& $EngineExe sql --db $CLI --query "SELECT key, value FROM schema_meta WHERE key IN ('indexer_fingerprint', 'resolver_fingerprint', 'indexed_at_unix')" --format json 2>$null) -join "`n" | ConvertFrom-Json
+  foreach ($row in $mj.rows) { $meta[[string]$row[0]] = [string]$row[1] }
+} catch { }
+$cloneVer = $(if ($meta.Count) { "$((($meta['indexer_fingerprint']) -split ';')[0]) / $((($meta['resolver_fingerprint']) -split ';')[0])" } else { 'unknown (schema_meta not read)' })
+$cloneAt = $(if ($meta['indexed_at_unix'] -match '^\d+$') { [DateTimeOffset]::FromUnixTimeSeconds([long]$meta['indexed_at_unix']).UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'") } else { 'an unstamped time' })
 # question, target, db, extra args, and WHY this one was picked. The note is
 # rendered into the index, because a gallery without a reason per example is
 # just thirty pictures.
@@ -166,7 +180,7 @@ $EX = @(
 
   # round-trip (spec 2026-09-27) is a TEXT question: its bundle is trace.dlgraph shown in a <pre>, not a chart.
   # The three targets are the gate's (E-RT0 / RT-N1 / RT-N2), so the numbers below are the gate's numbers.
-  @{ Q='round-trip';       T='frmBlueprint4.dxDBGrid1OperationVName'; D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a grid column to OPERAT.NAME and both ways through the pipe: 76 steps, 31 conditions, 4 crossings, 2 unresolved (the UPDATE and SELECT texts live in FIB$ rows the clones do not hold, E4); ALSO 9 rows, owner-accepted 2026-09-28 (all callers count; dataset scope; anchors only)' }
+  @{ Q='round-trip';       T='frmBlueprint4.dxDBGrid1OperationVName'; D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a grid column to OPERAT.NAME and both ways through the pipe: 76 steps, 31 conditions, 4 crossings, 2 unresolved (the statement for the posted row and the SELECT text live in FIB$ rows the clones do not hold, E4); ALSO 9 rows, owner-accepted 2026-09-28 (all callers count; dataset scope; anchors only)' }
   @{ Q='round-trip';       T='frmBlueprint4.cxGroupBox16';            D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a control that is NOT data-bound: one STOPS saying why, and every later section notes it was not walked -- the title claims no reach' }
   @{ Q='round-trip';       T='OPERAT.NAME';                           D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a TABLE.COLUMN that five datasets load: one STOPS naming all five, never a guess -- pass the control or the dataset field instead' }
 )
@@ -248,7 +262,7 @@ $CATALOGUE = @(
      Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,992 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
 
   @{ Q='round-trip';      Sel='control / field / TABLE.COLUMN'; St='shipped'
-     Note='A TEXT question: the answer is a Form A document (<code>trace.dlgraph</code>), not a chart, and its anchors are <code>@File.pas:line</code> text, not click targets. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards and OMITS see only the innermost enclosing <code>if</code> (engine ask E1); a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO is owner-accepted (2026-09-28): all callers count; dataset scope; anchors only.' }
+     Note='A TEXT question: the answer is a Form A document (<code>trace.dlgraph</code>), not a chart, and its anchors are <code>@File.pas:line</code> text, not click targets. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards see only the innermost enclosing <code>if</code> (engine ask E1), and OMITS reads every enclosing <code>if</code> up to a loop or case arm; a direction that stops after the anchor leaves its later sections noted &ldquo;not walked&rdquo; and the title claims only the walked direction; a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO is owner-accepted (2026-09-28): all callers count; dataset scope; anchors only.' }
 
   @{ Q='compare';         Sel='two index runs';  St='parked'
      Note='Parked by owner decision, and genuinely dependent on the IR: there is no <code>ir</code> or <code>compare</code> verb in the deployed engine, confirmed against a deliberate fake control.' }
@@ -375,8 +389,8 @@ foreach ($c in ($CATALOGUE | Where-Object { $_.St -ne 'shipped' })) {
 [void]$sb.AppendLine('</table>')
 
 [void]$sb.AppendLine('<div class="note"><p><b>These charts were generated against frozen clones, not the live corpus.</b> ' +
-  'Engine 1.18.0-alpha / resolver 1.9.0-alpha (the shared deployed engine) against clones at ' +
-  'v=1.19.0-alpha / r=1.9.0-alpha, taken 2026-09-27; the clones freeze the numbers so a ' +
+  "Engine $engVer (the shared deployed engine, as its --version reports it) against clones at " +
+  "$cloneVer (the CLIENT clone's schema_meta), indexed $cloneAt; the clones freeze the numbers so a " +
   'live re-index cannot move them underneath a run.</p></div>')
 
 [void]$sb.AppendLine('</main><footer>')

@@ -66,8 +66,9 @@ and edge must be a fact with a file and a line.
 
 * PowerShell only, never Bash. Wait by BLOCKING, never polling.
 * Engine by path: the SHARED deployed engine
-  `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (1.18.0-alpha /
-  resolver 1.9.0-alpha since 2026-09-27), never this worktree's own build.
+  `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (1.18.x-1.19.x
+  over this branch; reads on the r=1.9 clones measured byte-identical between
+  them), never this worktree's own build. Run `--version` for the one deployed now.
 * Self-index only as
   `index --project src\cli\drag-lint.dproj --db src\cli\_D-RAG\drag-lint.sqlite`.
 * Strict 7-bit ASCII, CRLF, no BOM in every `.pas` / `.ps1` / `.bat`.
@@ -130,12 +131,18 @@ New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<
   verbatim; a `try` / `except` condition is the statement text plus a GENERATED
   ` raises` (` ... ` standing for statements left out), and a `case` condition is
   the `case X of` header with its else arm named in the note (grammar spec
-  section 8); a stale file refuses by name -- a `STOPS` for every hop the index cannot make (the UPDATE
-  and SELECT texts live in FIB$ rows the clones do not hold), and `ALSO` derived
-  from the index. The bundle is `trace.dlgraph` + `index.html` (the trace in a
+  section 8); a stale file refuses by name -- a `STOPS` for every hop the index cannot make (the statement
+  for the posted row and the SELECT text live in FIB$ rows the clones do not hold), and `ALSO` derived
+  from the index. A DIRECTION that stops after the anchor resolved (no event wiring,
+  no crossing within `-Depth`, no server dispatch) ends there: every tier it did not reach
+  carries the generated note `-- not walked: the <write|read> direction stopped at [NN]`, and
+  the title claims only the walked direction (gate `RT-NOWIRE` on the read-only listing
+  `frmAssignGroups.grdFtrsColNum`, 33 steps / 10 conditions / 2 crossings / 2 unresolved;
+  `RT-SRVSTOP` for a server that stops). The bundle is `trace.dlgraph` + `index.html` (the trace in a
   `<pre>`) + `meta.json` + `xref.txt`; no `graph.*`. The page is a document:
-  its anchors are `@File.pas:line` text, not click targets. Engine asks E1-E4 are
-  named on the steps they would retire.
+  its anchors are `@File.pas:line` text, not click targets. Engine asks (E1-E4,
+  in-class-field-reads, receiver-typed-calls, type-use-binding) are named on the steps they
+  would retire; a hop no engine fact would retire (the walk's own inference) names none.
 * A `TABLE.COLUMN` selection that is not loaded by exactly one dataset does not
   guess: the trace is ONE named `STOPS` listing the datasets (measured, gate
   `RT-N2`: `OPERAT.NAME` -- 5 datasets load OPERAT in the CLIENT clone); pass the
@@ -152,14 +159,16 @@ holdout (AC-16), a second field the owner checked by the path's shape:
 `SendDeltaFtrs`, 103 steps, 35 conditions, 4 crossings, 2 unresolved. Known
 limits, stated beside those numbers on purpose:
 
-* guards and `OMITS` see only the INNERMOST enclosing `if` (engine ask E1 --
-  a branch fact -- retires it);
+* a guard sees only the INNERMOST enclosing `if` of its Exit (engine ask E1 --
+  a branch fact -- retires it); `OMITS` tests every enclosing `if` of a line, outwards
+  until a loop or a case arm, which the source reader does not place;
 * golden READ facts [28]-[29] (the transport-convention helpers at
   `uPipeSessionBuilder.pas:533` / `:534` / `:538`) are DISCLOSED, not matched --
   that is the "3 golden facts disclosed";
-* the UPDATE / SELECT statement texts live in FIB$ rows the clones do not hold
-  (E4): the UPDATE (DATABASE) and the SELECT (READ) are each a `STOPS` -- they
-  are the 2 unresolved -- and the column hop is `[inferred]`.
+* the statement texts live in FIB$ rows the clones do not hold (E4): the statement
+  for the posted row (DATABASE -- `FDef.InsertSQL`, `UpdateSQL` or `DeleteSQL`, picked by the
+  case over `ARequest`) and the SELECT (READ) are each a `STOPS` -- they are the 2
+  unresolved -- and the column hop is `[inferred]`.
 
 ### Engine defects the charts disclose
 
