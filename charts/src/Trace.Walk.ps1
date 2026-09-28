@@ -15,6 +15,14 @@
 
 function Get-TraceAnchorText([string] $Path, [int] $Line) { "$([IO.Path]::GetFileName($Path)):$Line" }
 
+# FW-R2 (final review): a bare `:N` in a generated NOTE means "line N of the step's OWN anchor
+# file" -- write `File.pas:N` instead whenever the referenced line lives in a DIFFERENT file than
+# that anchor, so the locator is never ambiguous (a property's field is bound on an assignment
+# line that sits in the FORM unit, not the field's own declaring unit -- Resolve-PropertyReadField).
+function Get-TraceNoteLocator([string] $AnchorFile, [string] $RefFile, [int] $RefLine) {
+  $(if (([IO.Path]::GetFileName($AnchorFile)) -eq ([IO.Path]::GetFileName($RefFile))) { ":$RefLine" } else { Get-TraceAnchorText $RefFile $RefLine })
+}
+
 # literal-derived text made safe for a step line or a note (the writer refuses ' @',
 # ' [' and ' -- '; a note refuses '; ', its separator). SPACE-ANCHORED on purpose: it
 # is applied to source-derived labels (a re-point RHS), and an indexer `Fields[0]` must
@@ -221,7 +229,15 @@ SELECT DISTINCT ma.accessor_symbol_id AS aid FROM member_accesses ma JOIN refs r
 "@
   if ($ma.Count -eq 1) {
     $fr = Invoke-IndexQuery "$fq WHERE s.id = $([int]$ma[0].aid) AND s.kind = 'field'"
-    if ($fr.Count -eq 1) { $out.Field = $fr[0]; $out.Accessor = [string]$fr[0].name; $out.Reason = "the read accessor of $([string]$Prop.name), bound on the assignment line :$([int]$Assign.Line)"; return $out }
+    if ($fr.Count -eq 1) {
+      $out.Field = $fr[0]; $out.Accessor = [string]$fr[0].name
+      # FW-R2 (final review): the BINDS step this note attaches to anchors on the FIELD's own
+      # declaring file ($fr[0].path, as Complete-AnchorFromDataSet uses it) -- the assignment can
+      # sit in a DIFFERENT file (the form that wires the datasource), so a bare `:N` would silently
+      # misread as a line of the field's file. Get-TraceNoteLocator qualifies it when the files differ.
+      $out.Reason = "the read accessor of $([string]$Prop.name), bound on the assignment line $(Get-TraceNoteLocator ([string]$fr[0].path) ([string]$Assign.File) ([int]$Assign.Line))"
+      return $out
+    }
   }
   if (-not (Test-SourceFresh ([string]$Prop.path) $SourceOverride)) {
     $out.StaleFile = [string]$Prop.path; $out.Reason = "$([IO.Path]::GetFileName([string]$Prop.path)) differs from the indexed copy -- the property's read accessor is not read"; return $out
@@ -1692,12 +1708,52 @@ function Get-DatabaseSteps($ServerItems, $Ctx, [string] $Mode, $SqlSet, [hashtab
         # Insert / Update / Delete), and AfterPost fires for an inserted row too. So the step names the
         # statement for the POSTED row: every write-statement member of the same receiver the routine names
         # (a convention list, like UpdateSQL itself), and the walked `case` condition above them, if any
-        $wm = @($p0.F.Refs | Where-Object { $_.kind -eq 'member-access' -and [string]$_.nm -in $script:RtWriteStmts -and [string]$_.recv -ceq [string]$p0.Ref.recv } |
-                Sort-Object { [int]$_.line }, { [int]$_.col } | ForEach-Object { "$(if ($_.recv) { [string]$_.recv + '.' })$([string]$_.nm)" } | Select-Object -Unique)
+        $wmSorted = @($p0.F.Refs | Where-Object { $_.kind -eq 'member-access' -and [string]$_.nm -in $script:RtWriteStmts -and [string]$_.recv -ceq [string]$p0.Ref.recv } |
+                      Sort-Object { [int]$_.line }, { [int]$_.col })
+        # dedup by bare name, keeping the FIRST (sorted) occurrence -- same as the old Select-Object
+        # -Unique on the formatted string, but keeping the ref object (its own line) for FW-R1
+        $wmSeen = @{}; $wmRefs = @()
+        foreach ($r in $wmSorted) { $k = [string]$r.nm; if (-not $wmSeen.ContainsKey($k)) { $wmSeen[$k] = 1; $wmRefs += $r } }
         $sel = Get-WalkedCaseSelector $ServerItems $p0.F ([int]$p0.Ref.line)
-        $alts = $(if ($wm.Count -gt 1) { "$((@($wm | Select-Object -SkipLast 1)) -join ', ') or $($wm[-1])" } else { $sText })
-        $how = $(if ($wm.Count -gt 1 -and $sel) { ", picked by the case over $($sel.Selector) at :$($sel.Line) and" } else { ',' })
-        $why = "the statement for the posted $($Ctx.Table) row is $alts$how$($src.TrimStart(',')) ($held)"
+        # FW-R1 (final review): only ONE loader was named for all three members, and it is true of
+        # whichever member $stmtName happens to be (:149, UpdateSQL) -- InsertSQL/DeleteSQL load on
+        # OTHER lines of the same routine (:148/:150). Each member gets its OWN load line, found the
+        # same way $loader is above: naming refs for THAT bare name, whose routine also holds the
+        # walk's own FIB$DATASETS_INFO read.
+        $wmNaming = @()
+        foreach ($own in @($ServerItems | Where-Object { $_.Owner -gt 0 } | ForEach-Object { [int]$_.Owner } | Select-Object -Unique)) {
+          $fw = $script:RtFacts["$DbPath|$own"]
+          if (-not $fw) { continue }
+          foreach ($m in @($fw.Refs | Where-Object { $_.kind -eq 'member-access' -and [string]$_.nm -in $script:RtWriteStmts })) { $wmNaming += [pscustomobject]@{ F = $fw; Ref = $m } }
+        }
+        $wm = @()
+        foreach ($r in $wmRefs) {
+          $ownLoader = $null
+          foreach ($fs in @($ServerItems | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^READS .*FIB\$DATASETS_INFO' })) {
+            $fsFile, $fsLine = $fs.Anchor -split ':'
+            $hit = @($wmNaming | Where-Object { [string]$_.Ref.nm -eq [string]$r.nm -and [IO.Path]::GetFileName($_.F.Path) -eq $fsFile -and [int]$fsLine -ge $_.F.ImplStart -and [int]$fsLine -le $_.F.ImplEnd } |
+                     Sort-Object { [int]$_.Ref.line } | Select-Object -First 1)
+            if ($hit.Count) { $ownLoader = $hit[0]; break }
+          }
+          $wm += [pscustomobject]@{ Text = "$(if ($r.recv) { [string]$r.recv + '.' })$([string]$r.nm)"; Loader = $ownLoader }
+        }
+        $allLoaded = $wm.Count -gt 0 -and -not (@($wm | Where-Object { -not $_.Loader })).Count
+        $names = $(if ($wm.Count -gt 1 -and $allLoaded) {
+          @($wm | ForEach-Object { "$($_.Text) (loaded at $(Get-TraceAnchorText $_.Loader.F.Path ([int]$_.Loader.Ref.line)))" })
+        } else { @($wm | ForEach-Object { $_.Text }) })
+        $alts = $(if ($names.Count -gt 1) { "$((@($names | Select-Object -SkipLast 1)) -join ', ') or $($names[-1])" } else { $sText })
+        $how = $(if ($wm.Count -gt 1 -and $sel) { ", picked by the case over $($sel.Selector) at :$($sel.Line)" } else { '' })
+        $fromWhat = "from FIB`$DATASETS_INFO rows$(if ($fb -eq 0) { ' the index does not hold' })"
+        $loadClause = $(
+          if ($names.Count -gt 1 -and $allLoaded) { ", $fromWhat" }
+          elseif ($loader) { ", loaded at $(Get-TraceAnchorText $loader.F.Path ([int]$loader.Ref.line)) $fromWhat" }
+          else {
+            $anyLdr = @($wm | Where-Object { $_.Loader } | Select-Object -First 1)
+            if ($anyLdr.Count) { ", loaded in $($anyLdr[0].Loader.F.Short) ($(Get-TraceAnchorText $anyLdr[0].Loader.F.Path ([int]$anyLdr[0].Loader.F.ImplStart))-$([int]$anyLdr[0].Loader.F.ImplEnd)), $fromWhat" }
+            else { ", whose text the walk does not read" }
+          }
+        )
+        $why = "the statement for the posted $($Ctx.Table) row is $alts$how$loadClause ($held)"
       }
       $anchor = Get-TraceAnchorText $p0.F.Path ([int]$p0.Ref.line); $rn = $p0.F.Short
       $nt = "the statement member is named here$(if ($applyOwners -contains $p0.F.Id) { ', in the routine that executes it' })"

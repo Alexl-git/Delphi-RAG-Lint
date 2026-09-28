@@ -2374,8 +2374,11 @@ Step 'E-RT0' {
   # RE-PINNED by final-review M7 (the statement for the POSTED row: HandleUpdateRecord picks Insert / Update / Delete by
   # `case ARequest of` :188, a condition the walk already quoted, and AfterPost fires for an inserted row too). Was
   # 'the UPDATE statement for OPERAT is FDef.UpdateSQL, loaded at uDatasetsDef.pas:149 from ...'; anchor unchanged (:190)
-  Chk 'A-RT5-STOPS'     $rt0.RtStops ('the statement for the posted OPERAT row is FDef.InsertSQL, FDef.UpdateSQL or FDef.DeleteSQL, picked by the case over ARequest at :188 ' +
-                                      'and loaded at uDatasetsDef.pas:149 from FIB$DATASETS_INFO rows the index does not hold (fb_datasets has 0 rows in MicroniteMW1Service)')
+  # RE-PINNED AGAIN by the fix wave (FW-R1): one shared "loaded at uDatasetsDef.pas:149" was true of UpdateSQL
+  # alone -- InsertSQL/DeleteSQL load at :148/:150 of the SAME routine. Each member now names its OWN load line
+  Chk 'A-RT5-STOPS'     $rt0.RtStops ('the statement for the posted OPERAT row is FDef.InsertSQL (loaded at uDatasetsDef.pas:148), ' +
+                                      'FDef.UpdateSQL (loaded at uDatasetsDef.pas:149) or FDef.DeleteSQL (loaded at uDatasetsDef.pas:150), ' +
+                                      'picked by the case over ARequest at :188, from FIB$DATASETS_INFO rows the index does not hold (fb_datasets has 0 rows in MicroniteMW1Service)')
   Chk 'A-RT5-COLUMN'    $rt0.RtColumn 1
   Chk 'A-RT5-RSPOK'     $rt0.RtRspOk 2
   # the rebinding switched indexes: files on CLIENT / on SERVER, counted through Invoke-OnDb
@@ -2549,6 +2552,10 @@ Step 'E-RT0' {
   # member_accesses fact on the assignment line :125, certain): the anchor dataset is FMemTable, one step later. It still
   # stops -- the table comes through the constant CAUSFAIL_TABLE (a follow-on) -- but on the right symbol. Was 'MemTable|6/1|...MemTable...'
   Chk 'A-RT6-OTHERSTOP' $rt0.RtOtherStop 'FMemTable|7/1|no upper-case table-name literal shares a line with FMemTable in uCausFail.ViewModel -- the table cannot be inferred'
+  # fix wave (FW-R2): the BINDS note's assignment-line locator is qualified with the FORM unit's filename --
+  # `dsrCausFail.DataSet:= FViewModel.MemTable` sits in uCausFailForm.pas:125, a DIFFERENT file than the BINDS
+  # step's own anchor (FMemTable's declaring unit, uCausFail.ViewModel.pas). Was '... bound on the assignment line :125'
+  Chk 'A-RTF-R2-BINDNOTE' $rt0.RtOtherBindNote "BINDS FMemTable : TFDMemTable @uCausFail.ViewModel.pas:45 -- the anchor dataset, the read accessor of MemTable, bound on the assignment line uCausFailForm.pas:125"
   # Task 7 fix round 1 (I3): stopped at its anchor's [06] -> no reach in the title, six sections noted "not walked"
   # naming [06] (was "How frmCausFail.colREASON reaches frmCausFail.colREASON and goes back" and six bare headers)
   # RE-PINNED by final-review I8: the stop is now [07] (READS MemTable, then BINDS FMemTable); was [06]
@@ -2705,6 +2712,11 @@ Step 'RT-NOWIRE' {
                                                            'SERVER=not walked: the write direction stopped at [09] | DATABASE=not walked: the write direction stopped at [09] | ' +
                                                            'RESPONSE=not walked: the write direction stopped at [09] | ALSO=no other route to this anchor in the index')
   Chk 'A-RT-NOWIRE-COUNTS' "$($rtnw.Steps)/$($rtnw.Conditions)/$($rtnw.Crossings)/$($rtnw.Unresolved)|$($rtnw.WriteSteps)/$($rtnw.ReadSteps)/$($rtnw.AlsoSteps)|$LASTEXITCODE|$($rtnw.AllClickable)" '33/10/2/2|1/24/0|0|True'
+  # fix wave (FW-R2): the same locator fix on a SECOND property (FtrsMT/FMTFtrs) -- the datasource wiring
+  # `dsrFtrs.DataSet:= FViewModel.FtrsMT` sits in AssignGroups.pas:125 (the form), a different file than the
+  # BINDS step's anchor (FMTFtrs declared in AssignGroups.ViewModel.pas). Was '... bound on the assignment line :125'
+  $nwBind = (@(($rtnw.Text -split "`r`n") | Where-Object { $_ -match '^\[\d+\] BINDS FMTFtrs ' }))[0] -replace '^\[\d+\] ', ''
+  Chk 'A-RTF-R2-NOWIRE' $nwBind 'BINDS FMTFtrs : TFDMemTable @AssignGroups.ViewModel.pas:43 -- the anchor dataset, the read accessor of FtrsMT, bound on the assignment line AssignGroups.pas:125'
 }
 # final-review I2 (b), synthetic: the server side stops but the walk goes on. No corpus case on the SERVER clone, so the
 # CLIENT clone stands in as the server index -- it holds no dispatch routine (A-RT0-DISPATCH: Pipes.Commands is not in it),
@@ -2765,7 +2777,14 @@ Step 'RT-HOLD' {
   # the sender call from DoAfterPostFtrs, the rspOK guard whose else arm reverts FMTFtrs, the datasource re-point: each exactly once
   Chk 'A-RT9-SENDER'  "$($rt0.HoldSender)/$($rt0.HoldCancel)/$($rt0.HoldRePoint)" '1/1/1'
   Chk 'A-RT9-FORMA'   $rt0.HoldFormA 0
-  # steps/conditions/crossings/unresolved -- the two unresolved are the E4 UPDATE and SELECT STOPS, as for OPERAT.NAME
+  # fix wave (FW-R1): the per-statement load lines are DERIVED, not OPERAT-specific -- proven here on a
+  # different anchor table (MSCLIST) and receiver: FDef.InsertSQL/UpdateSQL/DeleteSQL each name their OWN
+  # uDatasetsDef.pas line (:148/:149/:150), the same routine LoadFromInternal used for OPERAT.NAME
+  Chk 'A-RTF-R1-HOLDSTOPS' $rt0.HoldStops ('the statement for the posted MSCLIST row is FDef.InsertSQL (loaded at uDatasetsDef.pas:148), ' +
+                                           'FDef.UpdateSQL (loaded at uDatasetsDef.pas:149) or FDef.DeleteSQL (loaded at uDatasetsDef.pas:150), ' +
+                                           'picked by the case over ARequest at :188, from FIB$DATASETS_INFO rows the index does not hold (fb_datasets has 0 rows in MicroniteMW1Service)')
+  # steps/conditions/crossings/unresolved -- the two unresolved are the statement for the posted row and the
+  # SELECT STOPS (both E4), as for OPERAT.NAME
   Chk 'A-RT9-COUNTS'  $rt0.HoldCounts '103/35/4/2'
   # final-review I6: [27] CoerceMSCLISTPlanIds -- the caller's branch condition first, then the callee's own guards
   # (was UNLESS "FieldCnt = 0", UNLESS "Wanted.Count = 0", then WHEN "TableName = 'MSCLIST'")

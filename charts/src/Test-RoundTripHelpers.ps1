@@ -616,6 +616,12 @@ $res.RtAssignAt = $(try {
 $rtO = $(try { & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmCausFail.colREASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null } catch { [pscustomobject]@{ Threw = $_.Exception.Message } })
 $res.RtOther = $(if ($rtO.PSObject.Properties['Threw']) { "threw: $($rtO.Threw)" } else { "$($rtO.TableColumn):$($rtO.Steps -gt 0):$(Test-Path $rtO.Trace)" })
 $res.RtOtherStop = $(if ($rtO.PSObject.Properties['Threw']) { '' } else { "$($rtO.DataSet)|$($rtO.Steps)/$($rtO.Unresolved)|$($rtO.Stop -replace '\s+', ' ')" })
+# fix wave (FW-R2): the BINDS FMemTable note's assignment-line locator -- the property's read accessor is bound on
+# `dsrCausFail.DataSet:= FViewModel.MemTable` in the FORM unit (uCausFailForm.pas:125), a DIFFERENT file than the
+# BINDS step's own anchor (FMemTable's declaring file, uCausFail.ViewModel.pas), so it must be qualified
+$res.RtOtherBindNote = $(if ($rtO.PSObject.Properties['Threw']) { '' } else {
+  (@(($rtO.Text -split "`r`n") | Where-Object { $_ -match '^\[\d+\] BINDS FMemTable ' }))[0] -replace '^\[\d+\] ', ''
+})
 # Task 7 fix round 1 (I3): that trace stops at its anchor's SIXTH step, so its title claims no reach and every later
 # section carries the generated note naming [06] -- the number is the ANCHOR count, not a constant
 $res.RtOtherShape = $(if ($rtO.PSObject.Properties['Threw']) { '' } else {
@@ -912,6 +918,9 @@ $hl = $rh.Text -split "\r\n"
 $res.HoldSender = (@($hl | Where-Object { $_ -match "^\[\d+\] CALLS TBlueprint_ViewModel\.SendDeltaFtrs 'AfterPost' @Blueprint4\.ViewModel\.pas:3565 -- " })).Count
 $res.HoldCancel = (@($hl | Where-Object { $_ -match '^       UNLESS ".*<> rspOK\)" @Blueprint4\.ViewModel\.pas:3599 -- else .*FMTFtrs\.CancelUpdates @Blueprint4\.ViewModel\.pas:3611' })).Count
 $res.HoldRePoint = (@($hl | Where-Object { $_ -match '^\[\d+\] SETS dxDBGrid1FtrsV\.DataSource := FBlueprint_ViewModel\.pdsrFtrs @Blueprint4\.pas:2283 -- in FormShow$' })).Count
+# fix wave (FW-R1): the same per-statement load lines as OPERAT.NAME's A-RT5-STOPS, on a DIFFERENT anchor table
+# (MSCLIST) -- proves the derivation is generic, not hard-coded to OPERAT's :148/:149/:150
+$res.HoldStops = @(@($hl | Where-Object { $_ -match '^\[\d+\] STOPS the statement for the posted MSCLIST row ' }) | ForEach-Object { ($_ -replace '^\[\d+\] STOPS ', '') -replace ' @.*$', '' })[0]
 & (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture $rh.Trace -Quiet 6>$null | Out-Null
 $res.HoldFormA = $LASTEXITCODE
 # final-review I6: CoerceMSCLISTPlanIds' conditions in evaluation order -- the caller's enclosing branch first
