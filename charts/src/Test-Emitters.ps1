@@ -2283,6 +2283,15 @@ Step 'E-RT0' {
   # :939 `FfOperation_FileName := FF(FMTOperation, 'FILENAME')` [by name: the FMTOperation read is unbound] -> the
   # dataset -> OPERAT -> OPERAT.FILENAME (4 items)
   Chk 'A-RT3-TFIELD'     $rt0.AnchorTField 'OPERAT.FILENAME:FMTOperation:4:'
+  # fix round 1 (Important 1): only the FieldByName shape proves the column. The :939 FF(...) line is [inferred]
+  # (an inference about FF), naming the call; the rule holds for a BOUND dataset read too (latent until the
+  # in-class-read gap closes): FF/SomeLookup bound -> inferred, FieldByName bound -> certain, unbound -> by name
+  Chk 'A-RT3-TFIELD-GRADE' $rt0.AnchorTFieldStep "inferred|in-class-field-reads|the TField variable via FF(dataset, literal), assumed to return the dataset's field named by the literal, and FMTOperation matched by name among the class's dataset fields"
+  Chk 'A-RT3-FV-GRADES'  $rt0.FieldVarGrades 'FF/bound=inferred,FF/unbound=inferred,SomeLookup/bound=inferred,FieldByName/bound=certain,FieldByName/unbound=by name'
+  # ruling T3-M1: the shared sanitiser touches only what the writer refuses (' [') -- an indexer stays as written;
+  # the generated column label's grade tag reads '(certain)', rewritten at its source
+  Chk 'A-RT3-WORD-INDEXER' $rt0.TraceWordIndexer 'X.Fields[0].DataSet (by name]'
+  Chk 'A-RT3-COLNOTE'    $rt0.ColumnNote 'column NAME of OPERAT: (certain) a column of the newest of 2 declarat...'
   # Review Focus 5: the stale file named is the FORM unit
   Chk 'A-RT3-STALE-FORM' $rt0.Anchor5Stale 'Blueprint4.pas:'
 }

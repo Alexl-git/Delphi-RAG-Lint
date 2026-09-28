@@ -279,6 +279,19 @@ $res.Anchor4 = "$($a4.Items.Count):$($a4.StopAnchor):$($a4.Stop -replace '\s+', 
 # it resolves its dataset and column, or ends in a named stop reason -- never a throw
 $a6 = $(try { Resolve-TraceAnchor 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfOperation_FileName' $S $null } catch { [pscustomobject]@{ Threw = $_.Exception.Message } })
 $res.AnchorTField = $(if ($a6.PSObject.Properties['Threw']) { "threw: $($a6.Threw)" } else { "$($a6.TableColumn):$($a6.DataSet.Name):$($a6.Items.Count):$($a6.Stop -replace '\s+', ' ')" })
+# fix round 1 (Important 1): the FF shape at :939 is an INFERENCE about FF -- never certain. The real step's
+# grade, ask and reason, then the grading rule on every shape, including the LATENT one (a BOUND dataset
+# read through a non-FieldByName call, which the index does not produce today): only FieldByName + bound is certain
+$t6 = $(if ($a6.PSObject.Properties['Threw']) { $null } else { $a6.Items[0] })
+$res.AnchorTFieldStep = $(if ($t6) { "$(if ($t6.Grade) { $t6.Grade } else { 'certain' })|$($t6.Ask)|$($t6.Note)" } else { 'no step' })
+$gr = foreach ($gc in @(@($false, $true, 'FF'), @($false, $false, 'FF'), @($false, $true, 'SomeLookup'), @($true, $true, ''), @($true, $false, ''))) {
+  $g = Get-FieldVarLineGrade $gc[0] $gc[1] @($gc[2]) 'FMT'
+  "$(if ($gc[0]) { 'FieldByName' } else { $gc[2] })/$(if ($gc[1]) { 'bound' } else { 'unbound' })=$(if ($g.Grade) { $g.Grade } else { 'certain' })"
+}
+$res.FieldVarGrades = $gr -join ','
+# ruling T3-M1: the shared sanitiser leaves an indexer as written; the generated column label reads '(certain)'
+$res.TraceWordIndexer = ConvertTo-TraceWord 'X.Fields[0].DataSet [by name]'
+$res.ColumnNote = $(if ($a1.Items.Count) { $a1.Items[$a1.Items.Count - 1].Note } else { '' })
 # Review Focus 5: the re-point file (Blueprint4.pas, not the view model) stale -> the refusal names Blueprint4.pas
 $bpPas = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.pas'
 $stDir = Join-Path $work 'stale-form'; New-Item -ItemType Directory -Force $stDir | Out-Null

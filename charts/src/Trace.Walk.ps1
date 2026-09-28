@@ -16,9 +16,11 @@
 function Get-TraceAnchorText([string] $Path, [int] $Line) { "$([IO.Path]::GetFileName($Path)):$Line" }
 
 # literal-derived text made safe for a step line or a note (the writer refuses ' @',
-# ' [' and ' -- '; a note refuses '; ', its separator)
+# ' [' and ' -- '; a note refuses '; ', its separator). SPACE-ANCHORED on purpose: it
+# is applied to source-derived labels (a re-point RHS), and an indexer `Fields[0]` must
+# be quoted as written (ruling T3-M1) -- only what the writer refuses is touched.
 function ConvertTo-TraceWord([string] $s, [int] $Max = 72) {
-  $t = (([string]$s) -replace '\s+', ' ').Trim() -replace ' -- ', ' - ' -replace ' @', ' at ' -replace '\[', '(' -replace '\]', ')' -replace '"', "'" -replace '; ', ', '
+  $t = (([string]$s) -replace '\s+', ' ').Trim() -replace ' -- ', ' - ' -replace ' @', ' at ' -replace ' \[', ' (' -replace '"', "'" -replace '; ', ', '
   $(if ($t.Length -gt $Max) { $t.Substring(0, $Max - 3) + '...' } else { $t })
 }
 
@@ -62,7 +64,10 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line, COUNT(*) AS n FROM string_liter
   $R.TableColumn = "$($R.Table).$($R.Column)"
   $cs = Get-SqlColumnState $SqlSet $R.Table $Col $SourceOverride
   if ($cs.IsColumn) {
-    [void]$R.Items.Add((New-TraceStep 'step' "READS $($R.TableColumn)" (Get-TraceAnchorText $cs.File ([int]$cs.Line)) 'inferred' '' (ConvertTo-TraceWord "column $($R.Column) of $($R.Table): $($cs.Label)") 'E4'))
+    # the label is GENERATED text whose grade tags are bracketed (`[certain] a column of ...`); as
+    # a note they read `(certain)` -- rewritten here, at their source, never in the shared sanitiser
+    $lbl = ([string]$cs.Label) -replace '\[([^\]]*)\]', '($1)'
+    [void]$R.Items.Add((New-TraceStep 'step' "READS $($R.TableColumn)" (Get-TraceAnchorText $cs.File ([int]$cs.Line)) 'inferred' '' (ConvertTo-TraceWord "column $($R.Column) of $($R.Table): $lbl") 'E4'))
   } else {
     $R.Stop = "$($R.TableColumn): $($cs.Label)"
     $R.StopAnchor = $R.Items[$R.Items.Count - 1].Anchor
@@ -170,13 +175,33 @@ SELECT d.symbol_id AS sid, d.owner_name AS prop, d.start_line AS line, s.name AS
   Complete-AnchorFromDataSet $R ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) $col $SqlSet $SourceOverride
 }
 
+# The grade of a TField-variable assignment line (fix round 1, Important 1). ONLY the
+# FieldByName shape proves the column: `FfX := FMT.FieldByName('COL')` names the dataset
+# as its receiver and the literal as the field -- certain when the dataset read is BOUND,
+# [by name] when it is not (INBOX-in-class-field-reads-unbound). Any other shape --
+# `FfX := FF(FMT, 'COL')`, but equally `SomeLookup(FMT, 'Caption')` -- proves only
+# WHICH dataset and literal appear on the line; that the call returns FMT's field COL is
+# an inference about the called routine: [inferred], whether or not the read is bound,
+# and the reason names the call. $Calls: the call names on the line.
+# Returns Grade ('' | 'by name' | 'inferred'), Reason, Ask.
+function Get-FieldVarLineGrade([bool] $FieldByName, [bool] $Bound, [string[]] $Calls, [string] $DsName) {
+  if ($FieldByName) {
+    if ($Bound) { return [pscustomobject]@{ Grade = ''; Reason = 'the TField variable, by FieldByName on its dataset'; Ask = '' } }
+    return [pscustomobject]@{ Grade = 'by name'; Reason = "the TField variable, by FieldByName on $DsName, matched by name among the class's dataset fields"; Ask = 'in-class-field-reads' }
+  }
+  $cl = @($Calls | Where-Object { $_ } | Sort-Object -Unique)
+  $via = $(if ($cl.Count -eq 1) { "via $($cl[0])(dataset, literal)" } elseif ($cl.Count) { "via one of $($cl -join ', ')" } else { 'with no call on the line' })
+  $r = "the TField variable $via, assumed to return the dataset's field named by the literal"
+  if (-not $Bound) { $r += ", and $DsName matched by name among the class's dataset fields" }
+  [pscustomobject]@{ Grade = 'inferred'; Reason = $r; Ask = $(if ($Bound) { '' } else { 'in-class-field-reads' }) }
+}
+
 # <Unit>.<TClass>.<FfX>: a TField variable. Its dataset and column come from the
 # lines that WRITE it (a bound write): on such a line, the dataset is a field of
 # the same class with a dataset type that the line names (a read, or the receiver
 # of `.FieldByName`), and the column is the line's ONE string literal. That covers
 # `FfX := FMT.FieldByName('COL')` and a helper call `FfX := FF(FMT, 'COL')`
-# (Blueprint4.ViewModel.pas:939). An in-class read is unbound in this index, so a
-# dataset matched by NAME is graded [by name] (INBOX-in-class-field-reads-unbound).
+# (Blueprint4.ViewModel.pas:939); Get-FieldVarLineGrade says how far each proves it.
 # $Name is the variable's name (the LAST segment of the target -- the unit may be dotted, P13).
 function Resolve-AnchorFromFieldVar($Mem, [string] $Target, [string] $Name, $R, $SqlSet, [hashtable] $SourceOverride) {
   $cls = Invoke-IndexQuery "SELECT s.parent_id AS pid FROM symbols s WHERE s.id = $([int]$Mem.id)"
@@ -188,6 +213,10 @@ SELECT r.start_line AS line, f.path AS path,
          WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND (m.kind = 'read' OR (m.kind = 'member-access' AND m.name_text = 'FieldByName'))) AS ds,
        (SELECT MAX(m.symbol_id IS NOT NULL) FROM refs m JOIN symbols s ON s.id = m.symbol_id AND s.parent_id = $cpid AND s.kind = 'field' AND $(Get-DataSetTypeSql 's')
          WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND m.kind = 'read') AS bound,
+       (SELECT COUNT(*) FROM refs m JOIN symbols s ON s.parent_id = $cpid AND s.kind = 'field' AND $(Get-DataSetTypeSql 's')
+                AND (s.name = m.receiver_text OR 'Self.' || s.name = m.receiver_text)
+         WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND m.kind = 'member-access' AND m.name_text = 'FieldByName') AS fbn,
+       (SELECT GROUP_CONCAT(DISTINCT m.name_text) FROM refs m WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND m.kind = 'call') AS calls,
        (SELECT GROUP_CONCAT(sl.text, '|') FROM string_literals sl WHERE sl.file_id = r.file_id AND sl.start_line = r.start_line AND sl.kind = 'literal') AS col
   FROM refs r JOIN files f ON f.id = r.file_id
  WHERE r.symbol_id = $([int]$Mem.id) AND r.kind = 'write' ORDER BY r.start_line
@@ -204,9 +233,9 @@ SELECT r.start_line AS line, f.path AS path,
   $dsRow = Invoke-IndexQuery "SELECT s.id AS id, s.name AS name, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.parent_id = $cpid AND s.name = '$(ConvertTo-SqlText $dsName)' AND s.kind = 'field'"
   if ($dsRow.Count -ne 1) { $R.Stop = "$dsName is not a field of the class declaring $Name"; $R.StopAnchor = Get-TraceAnchorText ([string]$Mem.path) ([int]$Mem.line); return $R }
   $site = $ok[0]
-  $byName = -not ([int]$(if ($site.bound) { $site.bound } else { 0 }))
-  [void]$R.Items.Add((New-TraceStep 'step' "SETS $Name := $dsName field '$col'" (Get-TraceAnchorText ([string]$site.path) ([int]$site.line)) $(if ($byName) { 'by name' } else { '' }) '' `
-                       $(if ($byName) { "the TField variable, its dataset $dsName matched by name among the class's dataset fields" } else { 'the TField variable' }) $(if ($byName) { 'in-class-field-reads' } else { '' })))
+  $g = Get-FieldVarLineGrade ([int]$(if ($site.fbn) { $site.fbn } else { 0 }) -gt 0) ([int]$(if ($site.bound) { $site.bound } else { 0 }) -gt 0) `
+                             @(([string]$site.calls) -split ',' | Where-Object { $_ -and $_ -ne 'FieldByName' }) $dsName
+  [void]$R.Items.Add((New-TraceStep 'step' "SETS $Name := $dsName field '$col'" (Get-TraceAnchorText ([string]$site.path) ([int]$site.line)) $g.Grade '' $g.Reason $g.Ask))
   $d = $dsRow[0]
   Complete-AnchorFromDataSet $R ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) $col $SqlSet $SourceOverride
 }
