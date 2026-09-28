@@ -150,7 +150,9 @@ are older batch harnesses, not part of the PowerShell battery.
   path; every suite here already takes `-Exe` and resolves it, which is why the
   battery never saw this. PowerShell is not affected (it requires `.\` anyway) --
   this bites `cmd /c` one-liners and anything copied out of a doc's "Reproducing"
-  block.
+  block. **2026-09-27: that Win32 exe was DELETED** (owner ruling). `third_party\dll`
+  is still on the user PATH, so a bare name now FAILS ("not recognized") instead
+  of silently running the old build. The rule is unchanged: use a full path.
 - **For a LONG run, redirect through `cmd.exe` -- PowerShell holds native stderr
   until the process exits.** This is a harness rule, not an engine defect, and it was
   mis-attributed to the engine for two sessions
