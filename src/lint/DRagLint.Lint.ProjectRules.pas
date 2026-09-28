@@ -136,13 +136,22 @@ type
   /// belong in a report section, never in Finding.Message -- a finding line is a
   /// single parsed record and a newline in it corrupts every consumer.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect (DRagLint.Lint.ProjectRules.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect (DRagLint.Lint.ProjectRules.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ProjectRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCycleCoupling = record
     Finding: TLintFinding ;
     Detail : TArray<string>;
+    /// <summary>Every unit of the cycle, sorted by name: file path, unit name
+    /// and the line of its `unit` clause (1 when unknown). Feeds the per-unit
+    /// view, cycle-participant-unit.</summary>
+    MemberPaths: TArray<string>;
+    MemberNames: TArray<string>;
+    MemberLines: TArray<Integer>;
+    /// <summary>True when some edge of the cycle runs through an INTERFACE
+    /// uses clause -- the shape `cycles` calls "interface coupling".</summary>
+    HasIntfEdge: Boolean;
   end;
 
 /// <summary>Every circular unit dependency, each with the per-edge symbol
@@ -563,6 +572,24 @@ var
           var CC: TCycleCoupling;
           CC.Finding:= F;
           CC.Detail := CouplingLines(Comp);
+          CC.MemberPaths:= nil;
+          CC.MemberNames:= nil;
+          CC.MemberLines:= nil;
+          CC.HasIntfEdge:= False;
+          for var Ci: Integer:= 0 to Comp.Count - 1 do
+            for var Cj: Integer:= 0 to Comp.Count - 1 do
+              if (Ci <> Cj) and EdgeHasIntf.ContainsKey(IntToStr(Comp[Ci]) + '|' + IntToStr(Comp[Cj])) then
+                CC.HasIntfEdge:= True;
+          for Idx:= 0 to Sorted.Count - 1 do
+          begin
+            var Mf: Int64;
+            if not FileOfUnit.TryGetValue(LowerCase(Sorted[Idx]), Mf) then Continue;
+            var Ml: Integer:= 1;
+            UnitLine.TryGetValue(Mf, Ml);
+            CC.MemberPaths:= CC.MemberPaths + [AStore.GetFilePath(Mf)];
+            CC.MemberNames:= CC.MemberNames + [Sorted[Idx]];
+            CC.MemberLines:= CC.MemberLines + [Ml];
+          end;
           Findings.Add(CC);
           finally
             Sorted.Free;
@@ -686,6 +713,45 @@ var
 begin
   Result:= nil;
   for CC in CollectCircularUsesDetailed(AStore) do Result:= Result + [CC.Finding];
+end;
+
+{ NR-C1 (BACKLOG-TRIAGE-2026-09-28): the PER-UNIT view of circular-uses. That
+  rule reports ONE finding per cycle, anchored at its alphabetically-first unit,
+  so `lint <any other member>` -- the view an editor shows for the file open --
+  says nothing about the cycle the unit is in. This emits one info finding per
+  MEMBER, on its `unit` line, naming the group and pointing at the playbook
+  (`cycles --plan`, which a model has followed end to end: CYC-2/CYC-4).
+  A projection of the same Tarjan pass, never a second one, so the two rules
+  cannot disagree about which units cycle. OFF by default until its corpus
+  count is audited. Guarded by tests\autotest\run_cycle_participant_unit.ps1. }
+function CollectCycleParticipants(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  CC   : TCycleCoupling;
+  I    : Integer;
+  F    : TLintFinding;
+  Names: string;
+begin
+  Result:= nil;
+  for CC in CollectCircularUsesDetailed(AStore) do
+  begin
+    Names:= string.Join(', ', CC.MemberNames);
+    for I:= 0 to High(CC.MemberPaths) do
+    begin
+      F:= Default(TLintFinding);
+      F.RuleId   := 'cycle-participant-unit';
+      F.Severity := 'info';
+      F.FilePath := CC.MemberPaths[I];
+      F.StartLine:= CC.MemberLines[I];
+      F.StartCol := 1;
+      F.EndLine  := CC.MemberLines[I];
+      F.EndCol   := 1;
+      F.Message  := Format('Unit %s is one of %d units in a circular unit dependency (%s), %s -- ' +
+        '`drag-lint cycles --plan` prints the step-by-step refactoring',
+        [CC.MemberNames[I], Length(CC.MemberPaths), Names,
+         (if CC.HasIntfEdge then 'with INTERFACE coupling' else 'implementation-only (legal, lower impact)')]);
+      Result:= Result + [F];
+    end;
+  end;
 end;
 
 { Shared by the two uses-edge rules below (global-only-uses-edge and
@@ -3722,6 +3788,10 @@ begin
     var T0: Int64:= Tick;
     if WantRule('circular-uses') then
       for var Cf in CollectCircularUses(AStore) do Findings.Add(Cf);
+    { NR-C1: the per-unit view of the same cycles. OFF by default (OptedIn)
+      until its corpus count is audited -- see CollectCycleParticipants. }
+    if WantRule('cycle-participant-unit') and OptedIn('cycle-participant-unit') then
+      for var Cp in CollectCycleParticipants(AStore) do Findings.Add(Cp);
     Inc(TCirc, Tick - T0); T0:= Tick;
 
     { global-only-uses-edge: whole-refs-graph pass (not per-file), and the ONE

@@ -7,9 +7,18 @@ breaking changes** until v1.0.
 
 MINOR: resolver batch. `DRAGLINT_RESOLVER_VERSION` 1.10.0-alpha -> **1.11.0-alpha** (every index owes a
 re-RESOLVE, not a re-parse: `index --all --resolve-only`, measured ~1 min per ORM3 project DB).
-Extractor 1.20.0-alpha and schema v23 unchanged. No new rules (188).
+Extractor 1.20.0-alpha and schema v23 unchanged. ONE new rule, OFF by default (189).
 
 ### Added
+
+- **`cycle-participant-unit`** (project-wide, info, OFF by default) -- the PER-UNIT view of `circular-uses`
+  (NR-C1). `circular-uses` reports one finding per cycle, anchored at its alphabetically-first unit, so a
+  per-file `lint` of any other member said nothing about the cycle it is in. This puts one finding on each
+  member's `unit` line, names the group, says whether it is coupled through an interface or
+  implementation-only, and points at `cycles --plan`. A projection of the same Tarjan pass, so the two rules
+  cannot disagree. Opt in with `--rule cycle-participant-unit` or `"enabled"`. Guard:
+  `tests\autotest\run_cycle_participant_unit.ps1` (unit-line anchor, a bystander unit, the non-anchor member's
+  per-file view, implementation-only, agreement with circular-uses, OFF by default).
 
 - **`project-facts --dproj <X.dproj> [--platform] [--config] [--db] [--json]`** -- what a project's BUILD
   does (owner ruling 2026-09-16, C9 / FIX-6). For one platform + config: every define that is ON and which

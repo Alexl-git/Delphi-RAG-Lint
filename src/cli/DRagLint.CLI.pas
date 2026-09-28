@@ -11835,8 +11835,8 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..14] of string = (
-    'unused-public-symbol', 'unused-private-member', 'circular-uses', 'global-only-uses-edge',
+  LINT_GATE_PROJECT_RULES: array[0..15] of string = (
+    'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
@@ -18386,6 +18386,8 @@ begin
       way a PROJECT_RULES_OFF_BY_DEFAULT entry would. }
     if Cfg.ShouldKeep('discarded-effect-free-result', {ADefaultDisabled=}True) then
       OptIn:= OptIn + ['discarded-effect-free-result'];
+    if Cfg.ShouldKeep('cycle-participant-unit', {ADefaultDisabled=}True) then
+      OptIn:= OptIn + ['cycle-participant-unit'];
     if Cfg.ShouldKeep('query-name-with-effect', {ADefaultDisabled=}True) then
       OptIn:= OptIn + ['query-name-with-effect'];
     if Cfg.ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
@@ -18825,6 +18827,8 @@ begin
       OptedIn gate treats an explicit rule request as opting in. }
     if LoadLintConfig(AArgs).ShouldKeep('discarded-effect-free-result', {ADefaultDisabled=}True) then
       OptIn2:= OptIn2 + ['discarded-effect-free-result'];
+    if LoadLintConfig(AArgs).ShouldKeep('cycle-participant-unit', {ADefaultDisabled=}True) then
+      OptIn2:= OptIn2 + ['cycle-participant-unit'];
     if LoadLintConfig(AArgs).ShouldKeep('query-name-with-effect', {ADefaultDisabled=}True) then
       OptIn2:= OptIn2 + ['query-name-with-effect'];
     if LoadLintConfig(AArgs).ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
