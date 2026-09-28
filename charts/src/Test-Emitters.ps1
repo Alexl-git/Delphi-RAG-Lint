@@ -2517,7 +2517,7 @@ Step 'E-RT0' {
   #   crossing): VerifyAll :4306                                                                            1
   # LoadOneTable's other callers are NOT routes: it takes the table from its caller, so only a caller passing the
   # anchor's table reaches the anchor -- those ARE the fill lines. SendDeltaOperation names 'TABLE=OPERAT|' itself,
-  # so every caller is a route. OWNER REVIEW PENDING (AC-10) -- measured 2026-09-28
+  # so every caller is a route. Measured 2026-09-28. OWNER-ACCEPTED 2026-09-28 (AC-10): all callers count; dataset scope; anchors only
   Chk 'A-RT6-ALSO'      $rt0.RtAlso 9
   Chk 'A-RT6-ALSOROWS'  $rt0.RtAlsoRows ('FIRES FMTOperation.AfterDelete -> DoAfterDeleteOperation|' + ((@('CALLS TBlueprint_ViewModel.SendDeltaOperation') * 7) -join '|') +
                                          "|LOADS FMTOperation VIA TBlueprint_ViewModel.LoadOneTable 'OPERAT'")
@@ -2684,6 +2684,21 @@ Step 'RT-ART' {
   # fix round 1 (I3, T8-R1): a text bundle claims no click targets; its anchors are @file:line text
   if ($html -match 'Every row is a real anchor|<b>\d+</b> click targets</span>' -or $html -notmatch 'not click targets') { Fail 'A-RT-ART-NOTE' 'the text bundle page claims clickable anchors' }
   if ((Get-Content (Join-Path $art.Bundle 'trace.dlgraph') -Raw) -cne $rt0.RtText) { Fail 'A-RT-ART' 'trace.dlgraph in the bundle differs from the emitter output' }
+}
+# AC-16, the holdout: a SECOND edited field, pinned only after the owner read its trace. frmBlueprint4.dxDBGrid1FtrsVNum
+# -> MSCLIST.NUM, a different dataset (FMTFtrs) and sender (SendDeltaFtrs) than OPERAT.NAME; its datasource re-point at
+# Blueprint4.pas:2283 is the P29 case (control recovered from source). The brief's default FtrName was NOT used: it is
+# one of the 12 calculated fields added to FMTFtrs after BuildMemTable (Blueprint4.ViewModel.pas:748-761), no DB column.
+# OWNER-ACCEPTED 2026-09-28: the owner compared the Num trace with the OPERAT.NAME trace and the golden and checked the
+# path's shape, not every line. Measured 2026-09-28 on the 1.19 / 1.9 clones; a drift is a FINDING, not a number to edit.
+Note 'round-trip: the holdout ...'
+Step 'RT-HOLD' {
+  Chk 'A-RT9-ANCHOR'  $rt0.HoldAnchor 'MSCLIST.NUM:FMTFtrs'
+  # the sender call from DoAfterPostFtrs, the rspOK guard whose else arm reverts FMTFtrs, the datasource re-point: each exactly once
+  Chk 'A-RT9-SENDER'  "$($rt0.HoldSender)/$($rt0.HoldCancel)/$($rt0.HoldRePoint)" '1/1/1'
+  Chk 'A-RT9-FORMA'   $rt0.HoldFormA 0
+  # steps/conditions/crossings/unresolved -- the two unresolved are the E4 UPDATE and SELECT STOPS, as for OPERAT.NAME
+  Chk 'A-RT9-COUNTS'  $rt0.HoldCounts '103/35/4/2'
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters

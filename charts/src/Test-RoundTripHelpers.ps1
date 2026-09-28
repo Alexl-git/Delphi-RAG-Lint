@@ -899,4 +899,20 @@ $res.TraceNegatedMut = $(try {
     "$($cx.Bad):$($cx.Which)" }) -join ','
 } catch { "threw: $($_.Exception.Message)" })
 
+# ---- 9. the holdout (AC-16): dxDBGrid1FtrsVNum -> MSCLIST.NUM, accepted by the owner on 2026-09-28 ----
+# A second edited field through a different dataset (FMTFtrs) and sender (SendDeltaFtrs) than OPERAT.NAME. The owner
+# compared this trace with the OPERAT.NAME trace and the golden and checked the path's shape, not every line. FtrName
+# (the brief's default) is a CALCULATED field of FMTFtrs (Blueprint4.ViewModel.pas:756), no DB column, so not a holdout.
+# Ruling T9-R1: the three line patterns are what the trace WRITES (the re-point is `.DataSource`, not
+# `.DataController.DataSource`; the sender call carries its 'AfterPost' argument), each anchored to its line.
+$rh = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmBlueprint4.dxDBGrid1FtrsVNum' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null
+$res.HoldCounts = "$($rh.Steps)/$($rh.Conditions)/$($rh.Crossings)/$($rh.Unresolved)"
+$res.HoldAnchor = "$($rh.TableColumn):$($rh.DataSet)"
+$hl = $rh.Text -split "\r\n"
+$res.HoldSender = (@($hl | Where-Object { $_ -match "^\[\d+\] CALLS TBlueprint_ViewModel\.SendDeltaFtrs 'AfterPost' @Blueprint4\.ViewModel\.pas:3565 -- " })).Count
+$res.HoldCancel = (@($hl | Where-Object { $_ -match '^       UNLESS ".*<> rspOK\)" @Blueprint4\.ViewModel\.pas:3599 -- else .*FMTFtrs\.CancelUpdates @Blueprint4\.ViewModel\.pas:3611' })).Count
+$res.HoldRePoint = (@($hl | Where-Object { $_ -match '^\[\d+\] SETS dxDBGrid1FtrsV\.DataSource := FBlueprint_ViewModel\.pdsrFtrs @Blueprint4\.pas:2283 -- in FormShow$' })).Count
+& (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture $rh.Trace -Quiet 6>$null | Out-Null
+$res.HoldFormA = $LASTEXITCODE
+
 [pscustomobject]$res

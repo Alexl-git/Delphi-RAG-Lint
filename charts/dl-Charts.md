@@ -62,7 +62,7 @@ The twenty-sixth is a TEXT question (a `trace.dlgraph` bundle, no picture yet):
 * `round-trip` (`-Target <control | field | TABLE.COLUMN> -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>`)
   -- the Interface report's trace core: Form A text, conditions from fresh source (an `if` verbatim; the `try` / `except` and `case` forms marked), STOPS where the index ends.
   The page is a document: anchors are `@File.pas:line` text, not click targets.
-  ALSO counts are pinned pending owner review.
+  ALSO is owner-accepted (2026-09-28): all callers count; the anchor dataset's scope; anchors only.
 
 Engine defects the charts disclosed -- D1 (parenless calls), D12 (effects), D13
 (who-writes), D18 (multi-line SQL.Add reads), D19 (quoted identifiers) -- are FIXED

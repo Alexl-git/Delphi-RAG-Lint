@@ -166,7 +166,7 @@ $EX = @(
 
   # round-trip (spec 2026-09-27) is a TEXT question: its bundle is trace.dlgraph shown in a <pre>, not a chart.
   # The three targets are the gate's (E-RT0 / RT-N1 / RT-N2), so the numbers below are the gate's numbers.
-  @{ Q='round-trip';       T='frmBlueprint4.dxDBGrid1OperationVName'; D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a grid column to OPERAT.NAME and both ways through the pipe: 76 steps, 31 conditions, 4 crossings, 2 unresolved (the UPDATE and SELECT texts live in FIB$ rows the clones do not hold, E4); ALSO 9 rows, pinned pending owner review' }
+  @{ Q='round-trip';       T='frmBlueprint4.dxDBGrid1OperationVName'; D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a grid column to OPERAT.NAME and both ways through the pipe: 76 steps, 31 conditions, 4 crossings, 2 unresolved (the UPDATE and SELECT texts live in FIB$ rows the clones do not hold, E4); ALSO 9 rows, owner-accepted 2026-09-28 (all callers count; dataset scope; anchors only)' }
   @{ Q='round-trip';       T='frmBlueprint4.cxGroupBox16';            D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a control that is NOT data-bound: one STOPS saying why, and every later section notes it was not walked -- the title claims no reach' }
   @{ Q='round-trip';       T='OPERAT.NAME';                           D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a TABLE.COLUMN that five datasets load: one STOPS naming all five, never a guess -- pass the control or the dataset field instead' }
 )
@@ -248,7 +248,7 @@ $CATALOGUE = @(
      Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,992 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
 
   @{ Q='round-trip';      Sel='control / field / TABLE.COLUMN'; St='shipped'
-     Note='A TEXT question: the answer is a Form A document (<code>trace.dlgraph</code>), not a chart, and its anchors are <code>@File.pas:line</code> text, not click targets. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards and OMITS see only the innermost enclosing <code>if</code> (engine ask E1); a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO counts are pinned pending owner review.' }
+     Note='A TEXT question: the answer is a Form A document (<code>trace.dlgraph</code>), not a chart, and its anchors are <code>@File.pas:line</code> text, not click targets. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards and OMITS see only the innermost enclosing <code>if</code> (engine ask E1); a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO is owner-accepted (2026-09-28): all callers count; dataset scope; anchors only.' }
 
   @{ Q='compare';         Sel='two index runs';  St='parked'
      Note='Parked by owner decision, and genuinely dependent on the IR: there is no <code>ir</code> or <code>compare</code> verb in the deployed engine, confirmed against a deliberate fake control.' }

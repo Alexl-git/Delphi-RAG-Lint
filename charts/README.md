@@ -144,9 +144,13 @@ New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<
 On `frmBlueprint4.dxDBGrid1OperationVName` the gate (`E-RT0` / `E-RT`, via
 `src\Test-RoundTripHelpers.ps1`) measures: golden nodes 17/17 matched, 3 golden
 facts disclosed (not matched), guards 12/12; the trace is 76 steps, 31
-conditions, 4 crossings, 2 unresolved; ALSO 9 rows, pinned PENDING owner review
-(AC-10: three owner questions are open). `RT-ART` pins the bundle. Known limits,
-stated beside those numbers on purpose:
+conditions, 4 crossings, 2 unresolved; ALSO 9 rows, OWNER-ACCEPTED 2026-09-28
+(AC-10: all callers count, importers included; the scope is the anchor dataset;
+ALSO rows are anchors only). `RT-ART` pins the bundle. `RT-HOLD` pins the
+holdout (AC-16), a second field the owner checked by the path's shape:
+`frmBlueprint4.dxDBGrid1FtrsVNum` -> `MSCLIST.NUM` through `FMTFtrs` /
+`SendDeltaFtrs`, 103 steps, 35 conditions, 4 crossings, 2 unresolved. Known
+limits, stated beside those numbers on purpose:
 
 * guards and `OMITS` see only the INNERMOST enclosing `if` (engine ask E1 --
   a branch fact -- retires it);
