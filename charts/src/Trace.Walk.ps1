@@ -479,7 +479,21 @@ function New-ShimIfResult($X, [int] $ThenIdx, [string] $Keyword, [int[]] $Blk) {
   if (Test-ShimDirective $X $it) { return (New-ShimUnknown $X 'sits under a conditional-compilation directive') }
   $cond = Get-ShimSpanText $X.Raw $X.Stripped $it.L $it.E $th.L $th.C
   if ($null -eq $cond) { return (New-ShimUnknown $X 'has a condition that wraps a comment across lines') }
-  New-ShimResult $X $(if ($it.L -eq $X.ExitLine) { 'inline' } else { 'block' }) $Keyword $cond $it.L $Blk[0] $Blk[1] '' $it.L $it.C
+  $r = New-ShimResult $X $(if ($it.L -eq $X.ExitLine) { 'inline' } else { 'block' }) $Keyword $cond $it.L $Blk[0] $Blk[1] '' $it.L $it.C
+  # Task 6 fix round 1: where the condition's text lies -- after the `if` token, before the `then` (0-based
+  # columns, the tokens' own), so a caller can tell a ref IN the condition from one in the branch
+  if ($r.Form -ne 'unknown') { $r | Add-Member -NotePropertyMembers @{ CondL1 = $it.L; CondC1 = $it.E; CondL2 = $th.L; CondC2 = $th.C } }
+  $r
+}
+
+# Is the ref at ($Line, 1-based $Col) inside the CONDITION of shim result $G (between its `if` and `then`)?
+# Only an if-form result carries the span; any other form answers $false. Pure.
+function Test-InShimCondition($G, [int] $Line, [int] $Col) {
+  if (-not $G.PSObject.Properties['CondL1']) { return $false }
+  $c = $Col - 1
+  $after = ($Line -gt $G.CondL1) -or ($Line -eq $G.CondL1 -and $c -ge $G.CondC1)
+  $before = ($Line -lt $G.CondL2) -or ($Line -eq $G.CondL2 -and $c -lt $G.CondC2)
+  $after -and $before
 }
 
 function New-ShimCaseResult($X, [int] $CaseIdx, [int] $ElseIdx) {
@@ -722,7 +736,7 @@ $script:RtFacts = @{}
 $script:RtImpls = @{}
 # calls that are DATASET OPs / transaction / SQL steps, and the verb they get
 $script:RtOps = @{ SaveToStream = 'SERIALIZES'; LoadFromStream = 'DESERIALIZES'; CommitUpdates = 'APPLIES'; CancelUpdates = 'APPLIES'
-                   ApplyUpdates = 'APPLIES'; EmptyDataSet = 'LOADS'; StartTransaction = 'OPENS'; Commit = 'RUNS'; Rollback = 'RUNS'
+                   ApplyUpdates = 'APPLIES'; EmptyDataSet = 'EMPTIES'; StartTransaction = 'OPENS'; Commit = 'RUNS'; Rollback = 'RUNS'
                    Execute = 'RUNS'; ExecSQL = 'RUNS'; Open = 'RUNS' }
 $script:RtEvents = @('AfterPost', 'AfterDelete', 'BeforePost', 'AfterInsert', 'OnUpdateRecord', 'OnUpdateError', 'OnReconcileError')
 
@@ -930,28 +944,57 @@ function Get-ConcatAssignExpr([string] $Raw, [string] $Stripped) {
   $Raw.Substring($m.Length, $e - $m.Length).Trim()
 }
 
-# The payload a transport call carries: the routine's literals before the send that
-# name the anchor table, else its key=value literals; plus the stream when a
-# SaveToStream precedes. Inferred from literals, never a fact.
-function Get-PayloadText($F, [int] $Line, $Ctx) {
+# The RHS of the assignment whose target starts at the 1-based column $Col (`X:= <expr>;`, anywhere on the
+# line -- `if W <> '' then SQL:= SQL + ...;` too), as the source writes it, up to the `;` that ends it on
+# this line; '' when the line holds no `:=` there or the statement runs on. Pure, like Get-ConcatAssignExpr.
+function Get-AssignExprAt([string] $Raw, [string] $Stripped, [int] $Col) {
+  $c0 = $Col - 1
+  if ($c0 -lt 0 -or $c0 -ge $Stripped.Length) { return '' }
+  $m = [regex]::Match($Stripped.Substring($c0), '^[A-Za-z_][\w.]*\s*:=')
+  if (-not $m.Success) { return '' }
+  $b = $c0 + $m.Length
+  $e = $Stripped.IndexOf(';', $b)
+  if ($e -lt 0 -or $Raw.Length -lt $e) { return '' }
+  $Raw.Substring($b, $e - $b).Trim()
+}
+
+# The literals a transport call's payload is inferred from (pure, over $F.Lits): the routine's literals
+# before the send that name the anchor table, else its key=value literals.
+function Get-PayloadLits($F, [int] $Line, [string] $Table) {
   $before = @($F.Lits | Where-Object { [int]$_.line -lt $Line -and $_.kind -eq 'literal' })
-  $pl = @($before | Where-Object { $Ctx.Table -and ([string]$_.text).ToUpperInvariant().Contains([string]$Ctx.Table) })
+  $pl = @($before | Where-Object { $Table -and ([string]$_.text).ToUpperInvariant().Contains($Table.ToUpperInvariant()) })
   if (-not $pl.Count) { $pl = @($before | Where-Object { [string]$_.text -match '[=|]' }) }
+  , $pl
+}
+
+# A sender serves ONLY the anchor's table when its PAYLOAD literals name that table as a word (fix round 1,
+# M2: an error message naming the table, :3992, is not the payload). Pure.
+function Test-TableSpecificSender($F, [int] $Line, [string] $Table) {
+  $rx = "(?i)\b$([regex]::Escape($Table))\b"
+  [bool]@(Get-PayloadLits $F $Line $Table | Where-Object { [string]$_.text -match $rx }).Count
+}
+
+# The payload a transport call carries (Get-PayloadLits), plus the stream when a SaveToStream precedes.
+# Inferred from literals, never a fact. Returns Text and the facet's Note -- which says so when the text is
+# an assignment quoted as written (fix round 1, M5) rather than the literals joined.
+function Get-PayloadText($F, [int] $Line, $Ctx) {
+  $pl = Get-PayloadLits $F $Line ([string]$Ctx.Table)
   $t = (@($pl | ForEach-Object { Format-TraceLiteral $_ $F $Ctx }) -join ' + ')
+  $nt = 'payload inferred from the literals before the send'
   # Task 6: literals that one assignment CONCATENATES with values (`P:= 'TABLE=' + ATableName + ...;`)
   # are quoted as that expression, as written -- the literals alone, joined, would read as the payload
   $pls = @($pl | ForEach-Object { [int]$_.line } | Sort-Object -Unique)
   if ($pls.Count -eq 1) {
     $src = Get-TraceSource $F.Path $Ctx.SourceOverride
     $ex = Get-ConcatAssignExpr $src.Raw[$pls[0] - 1] $src.Stripped[$pls[0] - 1]
-    if ($ex -and $ex -notmatch '"| @| \[| -- |--$|[^\x20-\x7E]') { $t = $ex }
+    if ($ex -and $ex -notmatch '"| @| \[| -- |--$|[^\x20-\x7E]') { $t = $ex; $nt = "payload quoted from the assignment at :$($pls[0])" }
   }
   $sv = @($F.Refs | Where-Object { [int]$_.line -lt $Line -and [string]$_.nm -eq 'SaveToStream' -and $_.kind -eq 'call' } | Select-Object -Last 1)
   if ($sv.Count) {
     $fmt = Get-StreamFormat ((Get-TraceSource $F.Path $Ctx.SourceOverride).Raw[[int]$sv[0].line - 1])
     $t += $(if ($t) { ' + ' } else { '' }) + $(if ($fmt) { "$fmt stream" } else { 'stream' })
   }
-  $(if ($t) { $t } else { 'payload built before the send (no literal found)' })
+  [pscustomobject]@{ Text = $(if ($t) { $t } else { 'payload built before the send (no literal found)' }); Note = $nt }
 }
 
 function Add-CallsStep($List, $Tgt, $Sub, $Caller, [int] $SiteLine, [string] $Lits = '', [switch] $Always, [string] $Note = '') {
@@ -1108,17 +1151,18 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
     if ($condSeen.ContainsKey($ck)) { continue }
     $condSeen[$ck] = 1
     # VERBATIM (P16 / T4-C1): the shim's text as it stands -- New-TraceCond refuses what it cannot carry
-    $co = [pscustomobject]@{ IfLine = $g.IfLine; Guard = $true; Item = (New-TraceCond $g.Keyword $g.Condition (Get-TraceAnchorText $F.Path $g.IfLine) (Get-ElseNote $F $g $Ctx) 'E1') }
+    $co = [pscustomobject]@{ IfLine = $g.IfLine; Guard = $true; G = $g; Item = (New-TraceCond $g.Keyword $g.Condition (Get-TraceAnchorText $F.Path $g.IfLine) (Get-ElseNote $F $g $Ctx) 'E1') }
     # Task 6: `<try body> raises` is the condition of the WHOLE try body, so it hangs on the body's first
     # path step, as an except handler's condition does below -- not on the step nearest the `except`
     # (HandleTableLoad :605 had landed on the Commit, the body's last statement)
     if ($g.Form -eq 'except' -and $g.StmtLine) { $co | Add-Member HostFrom ([int]$g.StmtLine); $co | Add-Member HostTo ([int]$g.IfLine) }
     $conds += $co
   }
-  # Task 6: a bound call in the condition of an Exit guard is a step even when its subtree holds none --
-  # the path turns on its answer (HandleTableLoad :549 `if not TryBuildSafeWhere(..) then .. Exit`); without
-  # it the guard hung on the step before it, reading as that call's condition
-  $guardAt = @{}; foreach ($gc in $conds) { $guardAt[[int]$gc.IfLine] = 1 }
+  # Task 6: a bound call IN THE CONDITION of an Exit guard -- between its `if` and `then` (fix round 1,
+  # Important 1: not merely on its line, where a one-line guard also holds failure-branch code) -- is a
+  # step even when its subtree holds none: the path turns on its answer (HandleTableLoad :549 `if not
+  # TryBuildSafeWhere(..) then .. Exit`); without it the guard hung on the step before it
+  $guardGs = @($conds | ForEach-Object { $_.G })
 
   # ---- the branch structure of the body's step lines (T5-R1; fix round 1, Important 1) -------------
   # Every line that could make a step gets the CHAIN of its enclosing conditions, read once over the
@@ -1231,7 +1275,8 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
       [void]$x.Children.Add((New-TraceFacet 'FROM' $Ctx.NearIndex '' 'the index this side was read from'))
       [void]$x.Children.Add((New-TraceFacet 'TO' $Ctx.FarIndex '' 'the counterpart index, queried separately'))
       [void]$x.Children.Add((New-TraceFacet 'OVER' "$(Get-UnitName ([string]$trans[0].tpath)).$([string]$trans[0].tname)" (Get-TraceAnchorText ([string]$trans[0].tpath) ([int]$trans[0].tistart)) 'transport unit matched by naming convention'))
-      [void]$x.Children.Add((New-TraceFacet 'WITH' "$([string]$c.tname) $(Get-PayloadText $F $ln $Ctx)" (Get-TraceAnchorText $F.Path $ln) 'payload inferred from the literals before the send'))
+      $pt = Get-PayloadText $F $ln $Ctx
+      [void]$x.Children.Add((New-TraceFacet 'WITH' "$([string]$c.tname) $($pt.Text)" (Get-TraceAnchorText $F.Path $ln) $pt.Note))
       [void]$x.Children.Add((New-TraceFacet 'CONTRACT' ([string]$c.tq) (Get-TraceAnchorText ([string]$c.tpath) ([int]$c.tdecl)) ''))
       Add-RtItem $items $x $ln $Id
       continue
@@ -1283,13 +1328,15 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
         }
       }
     }
-    # bound calls into project code (not transport, not constructors): descend. On an Exit guard's line a
+    # bound calls into project code (not transport, not constructors): descend. In an Exit guard's CONDITION a
     # call into a transport-convention unit is a step too (this line carried no crossing) -- the server's
     # own helpers live in uPipe* units (HandleTableLoad :549 TryBuildSafeWhere, in uPipeSessionBuilder) --
     # but it is NOT descended: the convention keeps transport bodies out of the walk, the step only names
     # the call the guard turns on
-    $g1 = $guardAt.ContainsKey($ln)
-    foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and $_.tid -and [int]$_.tistart -gt 0 -and ($g1 -or -not ($_.tpipe -and [int]$_.tpipe -eq 1)) -and [string]$_.tkind -ne 'constructor' })) {
+    foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and $_.tid -and [int]$_.tistart -gt 0 -and [string]$_.tkind -ne 'constructor' })) {
+      $cc = $c
+      $g1 = [bool]@($guardGs | Where-Object { Test-InShimCondition $_ $ln ([int]$cc.col) }).Count
+      if (-not $g1 -and $c.tpipe -and [int]$c.tpipe -eq 1) { continue }
       $sub = $(if ($c.tpipe -and [int]$c.tpipe -eq 1) { [pscustomobject]@{ Items = @(); Conds = @() } } else { Walk-Routine ([int]$c.tid) ($Depth - 1) $Visited $Ctx })
       $tgt = [pscustomobject]@{ Id = [int]$c.tid; Short = (Get-ShortName ([string]$c.tq) (Get-UnitName ([string]$c.tpath))); Path = [string]$c.tpath; Line = [int]$c.tistart; Grade = ''; Ask = '' }
       Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits $F $Ctx) -Always:$g1
@@ -1511,10 +1558,12 @@ function Get-DatabaseSteps($ServerItems, $Ctx, [string] $Mode, $SqlSet, [hashtab
 # DATABASE for a READ (Task 6; P15's rule: the STOPS says only what was QUERIED). The routine that
 # RUNS the query is an `<x>.Open` owner that reads no FIB$ table itself (a FIB$ reader loads the
 # dataset DEFINITIONS, it does not fetch the anchor's rows). Its first literal opening with SELECT is
-# where the statement is assembled -- the one-line assignment holding it quoted as written when it
-# concatenates (Get-ConcatAssignExpr) -- and the FIB$ tables the walk reads are named with the rows
+# where the statement is assembled; every assignment to the variable that literal is assigned to is
+# named, each quoted as written (Get-AssignExprAt; fix round 1, M3) -- and the FIB$ tables the walk reads are named with the rows
 # THIS index holds of their snapshot (fb_datasets / fb_field_info, counted now; E4 asks for them).
-# With no such literal, the routine and line of the last query run. Run under the SERVER $DbPath.
+# With no such literal, the routine and line of the last query run. The stop carries `After`, the RUNS
+# step that executes the query, so the emitter can place the DATABASE steps in source order (M4). Run
+# under the SERVER $DbPath.
 $script:RtFbSnapshot = @{ 'FIB$DATASETS_INFO' = 'fb_datasets'; 'FIB$FIELDS_INFO' = 'fb_field_info' }
 function Get-SelectStop($ServerItems, $Ctx) {
   $fib = @($ServerItems | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^READS .*\bFIB\$\w+' })
@@ -1538,17 +1587,34 @@ function Get-SelectStop($ServerItems, $Ctx) {
     if (-not $sel.Count) { continue }
     $ln = [int]$sel[0].line
     $src = Get-TraceSource $F.Path $Ctx.SourceOverride
-    $ex = Get-ConcatAssignExpr $src.Raw[$ln - 1] $src.Stripped[$ln - 1]
-    # quoted only when the stop text can carry it untouched (ConvertTo-TraceStopText rewrites these)
-    $as = $(if ($ex -and $ex -notmatch '"| @| \[| -- |; |\s\s|[^\x20-\x7E]') { " as $ex" } else { '' })
-    $why = "the SELECT statement for $($Ctx.Table) is assembled at $(Get-TraceAnchorText $F.Path $ln)$as, from values the index holds no text for$heldTxt"
-    return (New-TraceStep 'stops' (ConvertTo-TraceStopText $why) (Get-TraceAnchorText $F.Path $ln) '' $F.Short 'the statement is assembled here, in the routine that runs it' 'E4')
+    # fix round 1 (M3): EVERY assignment to the variable the SELECT literal is assigned to (`SQL:= 'SELECT '
+    # ...` :544, then `SQL:= SQL + ' WHERE ' + WhereSql` :556), each quoted as written when the stop text can
+    # carry it untouched (ConvertTo-TraceStopText rewrites ' -- ', ' @', ' [', '; ' and runs of blanks)
+    $w0 = @($F.Refs | Where-Object { [int]$_.line -eq $ln -and $_.kind -eq 'write' -and -not $_.recv -and [int]$_.col -lt [int]$sel[0].col } | Select-Object -Last 1)
+    $parts = @()
+    $ws = $(if ($w0.Count) { @($F.Refs | Where-Object { $_.kind -eq 'write' -and -not $_.recv -and [string]$_.nm -eq [string]$w0[0].nm }) } else { @() })
+    foreach ($w in $ws) {
+      $wl = [int]$w.line
+      $ex = Get-AssignExprAt $src.Raw[$wl - 1] $src.Stripped[$wl - 1] ([int]$w.col)
+      $at = $(if ($parts.Count) { ":$wl" } else { Get-TraceAnchorText $F.Path $wl })
+      $parts += $(if ($ex -and $ex -notmatch '"| @| \[| -- |; |\s\s|[^\x20-\x7E]') { "$at ($([string]$w.nm):= $ex)" } else { $at })
+    }
+    $where = $(if (-not $parts.Count) { "at $(Get-TraceAnchorText $F.Path $ln)" }
+               elseif ($parts.Count -eq 1) { "in $([string]$w0[0].nm) at $($parts[0])" }
+               else { "in $([string]$w0[0].nm) at $((@($parts | Select-Object -SkipLast 1)) -join ', ') and $($parts[-1])" })
+    $why = "the SELECT statement for $($Ctx.Table) is assembled $where, from values the index holds no text for$heldTxt"
+    $st = New-TraceStep 'stops' (ConvertTo-TraceStopText $why) (Get-TraceAnchorText $F.Path $ln) '' $F.Short 'the statement is assembled here, in the routine that runs it' 'E4'
+    # M4: the DATABASE steps stand right after the step that RUNS this routine's query (the emitter places them)
+    $st | Add-Member -NotePropertyName After -NotePropertyValue (@($runs | Where-Object { [int]$_.Owner -eq $own } | Select-Object -First 1) | Select-Object -First 1)
+    return $st
   }
   $last = @($runs | Select-Object -Last 1)
   if (-not $last.Count) { $last = @($ServerItems | Where-Object { $_.Kind -ne 'crosses' } | Select-Object -Last 1) }
   $why = "no walked routine assembles a SELECT for $($Ctx.Table) from a literal$(if ($last.Count) { ", run in $($last[0].Routine) at $($last[0].Anchor)" })$heldTxt"
   $anchor = $(if ($last.Count) { $last[0].Anchor } else { Get-TraceAnchorText $Ctx.SqlSet.Tables[$Ctx.Table].File $Ctx.SqlSet.Tables[$Ctx.Table].Line })
-  New-TraceStep 'stops' (ConvertTo-TraceStopText $why) $anchor '' $(if ($last.Count) { $last[0].Routine } else { '' }) '' 'E4'
+  $st = New-TraceStep 'stops' (ConvertTo-TraceStopText $why) $anchor '' $(if ($last.Count) { $last[0].Routine } else { '' }) '' 'E4'
+  if ($last.Count) { $st | Add-Member -NotePropertyName After -NotePropertyValue $last[0] }
+  $st
 }
 
 # The event wiring on the anchor dataset in its unit: `<ds>.<Event> := <Handler>`.
@@ -1607,18 +1673,41 @@ SELECT sl.start_line AS line, e.qualified_name AS routine, t.id AS tid, t.qualif
   , $out.ToArray()
 }
 
-# ALSO (AC-10, ruling P10): the other routes into a traced SENDER. A sender whose own literals name
-# the anchor table (`'TABLE=OPERAT|'`) serves only that table, so EVERY bound caller of it is a route
-# to the anchor; a sender that takes the table from its caller (LoadOneTable's ATableName) serves
-# every table, and its routes to the anchor are the fill lines (Get-FillRoutes), not its callers.
-# $SkipIds: callers already on the page -- the traced routine and each listed wiring's handler.
+# What the traced paths already show (fix round 1). $Paths: one item list per direction, in text order.
+# Walking each until its first CLIENT-side crossing (M1: a SERVER / DATABASE actor's crossing is never a
+# sender -- its Owner is a SERVER symbol id, meaningless on the CLIENT index): that crossing is the
+# direction's SENDER, and the Owner of every client item before it is a routine already on the page --
+# the handler, any helper between it and the sender, the sender itself (Important 2: none of them is
+# "another caller"). Pure.
+function Get-TracedRouteIds($Paths) {
+  $snd = New-Object System.Collections.ArrayList; $cal = New-Object System.Collections.ArrayList
+  foreach ($p in $Paths) {
+    foreach ($i in @($p)) {
+      if ([string]$i.Actor -in 'SERVER', 'DATABASE') { continue }
+      $o = $(if ($i.PSObject.Properties['Owner']) { [int]$i.Owner } else { 0 })
+      if ($i.Kind -eq 'crosses') { if ($o) { [void]$snd.Add($i) }; break }
+      if ($o -and -not $cal.Contains($o)) { [void]$cal.Add($o) }
+    }
+  }
+  [pscustomobject]@{ Senders = $snd.ToArray(); Callers = $cal.ToArray() }
+}
+
+# ALSO (AC-10, ruling P10): the other routes into a traced SENDER. A sender whose PAYLOAD literals name
+# the anchor table (`'TABLE=OPERAT|'`; Test-TableSpecificSender, M2) serves only that table, so EVERY
+# bound caller of it is a route to the anchor; a sender that takes the table from its caller
+# (LoadOneTable's ATableName) serves every table, and its routes to the anchor are the fill lines
+# (Get-FillRoutes), not its callers. $Senders: the crossing items (Owner, Line) of Get-TracedRouteIds.
+# $SkipIds: callers already on the page -- Get-TracedRouteIds' Callers and each listed wiring's handler.
 # Rows are ordered by the call line and anchored at the call site. Client index.
-function Get-AlsoRoutes($Crossings, [int[]] $SkipIds, $Ctx) {
+function Get-AlsoRoutes($Senders, [int[]] $SkipIds, $Ctx) {
   $out = New-Object System.Collections.ArrayList
-  $rx = "(?i)\b$([regex]::Escape([string]$Ctx.Table))\b"
-  foreach ($sid in @($Crossings | ForEach-Object { [int]$_.Owner } | Where-Object { $_ } | Select-Object -Unique)) {
+  $done = @{}
+  foreach ($x in @($Senders)) {
+    $sid = [int]$x.Owner
+    if (-not $sid -or $done.ContainsKey($sid)) { continue }
+    $done[$sid] = 1
     $S = Get-RoutineFacts $sid $Ctx.Likes
-    if (-not @($S.Lits | Where-Object { $_.kind -eq 'literal' -and [string]$_.text -match $rx }).Count) { continue }
+    if (-not (Test-TableSpecificSender $S ([int]$x.Line) ([string]$Ctx.Table))) { continue }
     $callers = Get-AllIndexRows @"
 SELECT e.id AS eid, e.qualified_name AS q, r.start_line AS line, ef.path AS path, r.id AS rid
   FROM call_edges ce JOIN refs r ON r.id = ce.ref_id JOIN symbols e ON e.id = r.enclosing_symbol_id JOIN files ef ON ef.id = e.file_id

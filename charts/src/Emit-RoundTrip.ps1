@@ -156,9 +156,17 @@ if (-not $A.Stop) {
     # the far side on the SERVER index, then its DATABASE facts, still on the SERVER index (AC-9)
     $srvR = Invoke-OnDb $ServerDbPath { Get-ServerHandling $xr.Command $r0.Ctx $Depth }
     if ($srvR.Contract) { [void]$xr.Children.Add((New-TraceFacet 'CONTRACT' $srvR.Contract.Text $srvR.Contract.Anchor 'the far side, from the counterpart index')) }
-    foreach ($i in $srvR.Items) { $i.Actor = 'SERVER'; [void]$secRd.Items.Add($i) }
     $dbR = Invoke-OnDb $ServerDbPath { Get-DatabaseSteps $srvR.Items $r0.Ctx 'read' $sqlSet $SourceOverride }
-    foreach ($i in $dbR) { $i.Actor = 'DATABASE'; [void]$secRd.Items.Add($i) }
+    foreach ($i in $dbR) { $i.Actor = 'DATABASE' }
+    # fix round 1 (M4): the DATABASE steps stand right after the SERVER step that RUNS the query (the stop's
+    # After), in source order -- not after the whole server walk
+    $runAt = @($dbR | Where-Object { $_.PSObject.Properties['After'] -and $_.After } | ForEach-Object { $_.After } | Select-Object -First 1)
+    $dbPlaced = $false
+    foreach ($i in $srvR.Items) {
+      $i.Actor = 'SERVER'; [void]$secRd.Items.Add($i)
+      if (-not $dbPlaced -and $runAt.Count -and [object]::ReferenceEquals($i, $runAt[0])) { foreach ($d in $dbR) { [void]$secRd.Items.Add($d) }; $dbPlaced = $true }
+    }
+    if (-not $dbPlaced) { foreach ($d in $dbR) { [void]$secRd.Items.Add($d) } }
     # the rows come back on the SAME ExecuteCommand call (ruling P4: request and response share its anchor)
     $backR = New-TraceStep 'crosses' 'process boundary' $xr.Anchor '' $xr.Routine 'the rows come back'
     [void]$backR.Children.Add((New-TraceFacet 'FROM' $srvName '' 'server index'))
@@ -170,13 +178,17 @@ if (-not $A.Stop) {
   }
   # ---- ALSO (AC-10, ruling P10): every other route to the anchor the index holds, minus the traced ones --
   # the other wirings (above), the other callers of a sender that serves only this table, the other fill lines
-  $xs = @(@($secW.Items) + @($secRd.Items) | Where-Object { $_.Kind -eq 'crosses' -and $_.PSObject.Properties['Owner'] })
-  foreach ($r in (Get-AlsoRoutes $xs @($wiring | ForEach-Object { [int]$_.HandlerId }) $Ctx)) { [void]$alsoRows.Add($r) }
+  # fix round 1: the senders are each direction's first CLIENT crossing (M1), and every routine on the client
+  # path before it is already on the page (Important 2) -- with each listed wiring's handler, never "another caller"
+  $traced = Get-TracedRouteIds (@(, @($secW.Items)) + @(, @($secRd.Items)))
+  $skipIds = @(@($traced.Callers) + @($wiring | ForEach-Object { [int]$_.HandlerId }) | Select-Object -Unique)
+  foreach ($r in (Get-AlsoRoutes $traced.Senders $skipIds $Ctx)) { [void]$alsoRows.Add($r) }
   foreach ($r in @($routes | Select-Object -Skip 1)) {
     [void]$alsoRows.Add((New-TraceStep 'step' "LOADS $($A.DataSet.Name) VIA $($r.TargetShort)$($r.Lits)" (Get-TraceAnchorText $A.DataSet.File $r.Line) '' $r.Routine 'another fill route'))
   }
   foreach ($r in $alsoRows) { [void]$secAl.Items.Add($r) }
-  if (-not $secAl.Items.Count) { [void]$secAl.Items.Add((New-TraceStep 'stops' 'no other route to this anchor in the index' (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line))) }
+  # T6-R2: an empty ALSO is not a hop that failed -- no STOPS, nothing unresolved; the section says so in a note
+  if (-not $secAl.Items.Count) { $secAl.Note = 'no other route to this anchor in the index' }
   $read = $secRd.Items.Count; $also = $secAl.Items.Count
 }
 

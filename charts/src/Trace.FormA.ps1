@@ -21,6 +21,7 @@
       TIERS <t> -> <t> -> ...
     <blank>
     <SECTION>
+      -- <note>                    (an EMPTY section only, instead of any step: T6-R2)
     [NN] [<ACTOR> ]<text>[ [by name]|[inferred]] @<file>:<line>[ -- <note>]
            WHEN|UNLESS "<condition>" @<file>:<line>[ -- <note>]
            <FACET> <text>[ @<file>:<line>][ -- <note>]
@@ -60,7 +61,9 @@ function New-Trace([string] $Name, [string] $Title, [string] $From, [string] $In
 
 function Add-TraceSection($Trace, [string] $Name) {
   if ($Name -cnotmatch '^[A-Z]+$') { throw "Add-TraceSection: '$Name' is not an upper-case section name" }
-  $s = [pscustomobject]@{ Name = $Name; Items = (New-Object System.Collections.ArrayList) }
+  # Note: a GENERATED line under the header, written `  -- <note>` (a Form A comment the checker skips) --
+  # what an EMPTY section says instead of a STOPS (Task 6 ruling T6-R2: nothing failed, nothing is unresolved)
+  $s = [pscustomobject]@{ Name = $Name; Note = ''; Items = (New-Object System.Collections.ArrayList) }
   [void]$Trace.Sections.Add($s)
   $s
 }
@@ -204,6 +207,11 @@ function Write-FormA($Trace) {
   foreach ($sec in $Trace.Sections) {
     & $L ''
     & $L $sec.Name
+    if ($sec.Note) {
+      if ($sec.Items.Count) { throw "Write-FormA: section $($sec.Name) has steps AND a note -- a note stands only for an empty section" }
+      if ($sec.Note -match '[\r\n]') { throw "Write-FormA: section $($sec.Name) note contains a line break" }
+      & $L "  -- $($sec.Note)"
+    }
     foreach ($i in $sec.Items) {
       $n++; $i.Number = $n
       $head = ('[{0:00}] ' -f $n) + $(if ($i.Actor) { "$($i.Actor) " } else { '' })
@@ -265,6 +273,7 @@ function Read-FormA([string] $Text) {
       continue
     }
     if ($raw -cmatch '^[A-Z]+$') { $sec = Add-TraceSection $T $raw; $cur = $null; continue }
+    if ($raw -cmatch '^  -- (.+)$' -and $sec -and -not $sec.Items.Count -and -not $sec.Note) { $sec.Note = $Matches[1]; continue }
     if ($raw -cmatch $rxStep) {
       $m = $Matches
       if (-not $sec) { throw "Read-FormA: a step before any section: $raw" }

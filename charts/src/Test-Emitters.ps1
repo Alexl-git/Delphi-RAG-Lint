@@ -2468,14 +2468,17 @@ Step 'E-RT0' {
   # [by name], TryBuildSafeWhere (a step because the :549 guard turns on it; in a uPipe* unit, so not descended),
   # the read transaction, the query, SaveToStream, Commit, and rspData overwriting the :519 rspError default.
   # DATABASE: the SELECT STOPS (A-RT6-READSTOPS) and the column [inferred]. Then the rows back and the CLIENT
-  # load: RECEIVES rspData, EmptyDataSet (RtOps verb LOADS, under WHEN "AMT.Active"), LoadFromStream
+  # load: RECEIVES rspData, EmptyDataSet (under WHEN "AMT.Active"), LoadFromStream.
+  # FIX ROUND 1 moved it: T6-R1 -- EmptyDataSet's verb is EMPTIES (was LOADS: it empties the dataset); M4 -- the two
+  # DATABASE steps stand right after the RUNS that executes the query (Qry.Open :594), in source order, no longer after
+  # SENDS rspData :618
   Chk 'A-RT6-READ'      $rt0.RtRead ("LOADS FMTOperation VIA TBlueprint_ViewModel.LoadOneTable 'OPERAT'|CALLS TBlueprint_ViewModel.LoadOneTable 'OPERAT'|CROSSES process boundary|" +
                                      'SERVER ROUTES cmdTableLoad TO IPipeSessionBuilder.HandleTableLoad|SERVER CALLS TPipeSessionBuilder.HandleTableLoad [by name]|' +
                                      'SERVER CALLS TDatasetsDef.EnsureLoaded [by name]|SERVER CALLS TDatasetsDef.LoadFromInternal|SERVER READS FROM FIB$DATASETS_INFO [inferred]|' +
                                      'SERVER RUNS Q.Open|SERVER READS FROM FIB$FIELDS_INFO [inferred]|SERVER RUNS Q.Open|SERVER CALLS TDatasetsDef.GetTable [by name]|' +
-                                     'SERVER CALLS TryBuildSafeWhere|SERVER OPENS AThreadStorage.Transaction.StartTransaction|SERVER RUNS Qry.Open|SERVER SERIALIZES Qry.SaveToStream|' +
-                                     'SERVER RUNS AThreadStorage.Transaction.Commit|SERVER SENDS rspData|DATABASE STOPS|DATABASE READS OPERAT.NAME [inferred]|CROSSES process boundary|' +
-                                     'CLIENT RECEIVES rspData|CLIENT LOADS AMT.EmptyDataSet|CLIENT DESERIALIZES AMT.LoadFromStream')
+                                     'SERVER CALLS TryBuildSafeWhere|SERVER OPENS AThreadStorage.Transaction.StartTransaction|SERVER RUNS Qry.Open|DATABASE STOPS|DATABASE READS OPERAT.NAME [inferred]|' +
+                                     'SERVER SERIALIZES Qry.SaveToStream|SERVER RUNS AThreadStorage.Transaction.Commit|SERVER SENDS rspData|CROSSES process boundary|' +
+                                     'CLIENT RECEIVES rspData|CLIENT EMPTIES AMT.EmptyDataSet|CLIENT DESERIALIZES AMT.LoadFromStream')
   # AC-7 on the READ path, in WALK order (ruling P9): the client connection guard, the server's missing-definition
   # and unsafe-WHERE guards, the except handler whose Exit is :612 (T1-C1; its condition anchors at the `except`
   # line, :605, and hangs on the try body's FIRST step, Qry.Open), the response guard
@@ -2489,16 +2492,20 @@ Step 'E-RT0' {
                                           'UNLESS "T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises" @uPipeSessionBuilder.pas:605 | ' +
                                           'UNLESS "(GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspData)" @Blueprint4.ViewModel.pas:1137 | ' +
                                           'WHEN "AMT.Active" @Blueprint4.ViewModel.pas:1162 | WHEN "Length(RspPayload) > 0" @Blueprint4.ViewModel.pas:1163')
-  # AC-12: the SELECT text is a numbered STOPS. It says only what was queried: the statement is ASSEMBLED at :544
-  # (quoted as written), and the FIB$ tables the READ walk reads have no snapshot rows in the SERVER clone
+  # AC-12: the SELECT text is a numbered STOPS. It says only what was queried: WHERE the statement is assembled, and the
+  # FIB$ tables the READ walk reads have no snapshot rows in the SERVER clone. FIX ROUND 1 (M3) moved the text: it names
+  # EVERY assignment to the variable the SELECT literal goes into -- :544 and the :556 ' WHERE ' extension -- each quoted
+  # as written (was ":544 as <the :544 expression>" alone)
   Chk 'A-RT6-READSTOPS' $rt0.RtReadStops 1
-  Chk 'A-RT6-READSTOPTEXT' $rt0.RtReadStopText ("DATABASE STOPS the SELECT statement for OPERAT is assembled at uPipeSessionBuilder.pas:544 as 'SELECT ' + ColSQL + ' FROM ' + ATableName, " +
+  Chk 'A-RT6-READSTOPTEXT' $rt0.RtReadStopText ("DATABASE STOPS the SELECT statement for OPERAT is assembled in SQL at uPipeSessionBuilder.pas:544 (SQL:= 'SELECT ' + ColSQL + ' FROM ' + ATableName) and :556 (SQL:= SQL + ' WHERE ' + WhereSql), " +
                                                 'from values the index holds no text for, and the FIB$ rows the walk reads (FIB$DATASETS_INFO, FIB$FIELDS_INFO) are not in the index ' +
                                                 '(fb_datasets has 0 rows, fb_field_info has 0 rows in MicroniteMW1Service) @uPipeSessionBuilder.pas:544 -- in TPipeSessionBuilder.HandleTableLoad; ' +
                                                 'the statement is assembled here, in the routine that runs it; ask E4')
   # the payload as the source ASSEMBLES it (one concatenating assignment, :1134) -- its literals alone, joined,
-  # would read 'TABLE=' + '|BLOBS=0|WHERE=' as if that were the payload
-  Chk 'A-RT6-READPAYLOAD' $rt0.RtReadPayload "WITH cmdTableLoad 'TABLE=' + ATableName + '|BLOBS=0|WHERE=' + AWhere @Blueprint4.ViewModel.pas:1136 -- payload inferred from the literals before the send"
+  # would read 'TABLE=' + '|BLOBS=0|WHERE=' as if that were the payload. FIX ROUND 1 (M5): the note says the text is the
+  # assignment quoted as written (was "payload inferred from the literals before the send"). The WRITE WITH (A-RT5-PAYLOAD)
+  # joins literals, quotes no assignment, and keeps its note
+  Chk 'A-RT6-READPAYLOAD' $rt0.RtReadPayload "WITH cmdTableLoad 'TABLE=' + ATableName + '|BLOBS=0|WHERE=' + AWhere @Blueprint4.ViewModel.pas:1136 -- payload quoted from the assignment at :1134"
   # AC-10 (ruling P10): ALSO = every route to the anchor the index holds MINUS the routes traced. Derived:
   #   the other wiring on FMTOperation (AfterDelete, :640)                                               1
   #   SendDeltaOperation's 9 bound callers (A-RT0-CALLERS) minus the two already on the page -- the traced
@@ -2524,6 +2531,23 @@ Step 'E-RT0' {
   # (the brief expected CAUSFAIL.REASON -- a resolver finding, reported, not fixed here)
   Chk 'A-RT6-OTHER'     $rt0.RtOther ':True:True'
   Chk 'A-RT6-OTHERSTOP' $rt0.RtOtherStop 'MemTable|6/1|no upper-case table-name literal shares a line with MemTable in uCausFail.ViewModel -- the table cannot be inferred'
+  # Task 6 FIX ROUND 1. Important 1 (threw before: no span): the guard-line rule takes only a call INSIDE the condition,
+  # between `if` and `then` -- Foo on a one-line guard `if not X(A) then begin Foo(B); Exit; end;` is failure-branch code,
+  # as is Log after the `then` of a wrapped one; the rule used to take every bound call on the if line
+  Chk 'A-RT6-GUARDSPAN' $rt0.RtGuardSpan 'X:True,Foo:False,Y:True,Z:True,Log:False'
+  # Important 2 + M1 (threw before): the routines on each client path before its first crossing are already on the page
+  # (handler 10 -> helper 11 -> sender 12: the helper is NOT another caller); a SERVER-actor crossing (owner 99, a SERVER
+  # id) is never taken as a sender, and nothing after a path's crossing counts (owner 77)
+  Chk 'A-RT6-TRACEDIDS' $rt0.RtTracedIds 'callers 10,11,12,20; senders 12@50,20@70'
+  # T6-R1 (was LOADS)
+  Chk 'A-RT6-EMPTYVERB' $rt0.RtEmptyVerb 'EMPTIES'
+  # T6-R2 (threw before: sections had no note): an empty ALSO writes no row -- checker exit 0, 0 steps, 0 unresolved --
+  # and a generated `  -- no other route to this anchor in the index` under its header, read back byte for byte
+  Chk 'A-RT6-ALSOEMPTY' $rt0.RtAlsoEmpty '0/0/0/True/identical'
+  # M2 (threw before; the old rule, ANY literal naming the table, answered True,True): only the payload literals count
+  Chk 'A-RT6-TABLESENDER' $rt0.RtTableSender 'False,True'
+  # M3 (threw before): an assignment's expression anywhere on its line, as written; a statement that runs on gives none
+  Chk 'A-RT6-ASSIGNAT'  $rt0.RtAssignAt "['SELECT ' + C + ' FROM ' + T],[SQL + ' WHERE ' + W],[]"
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters

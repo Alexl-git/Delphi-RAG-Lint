@@ -564,6 +564,53 @@ $res.RtSuccessRsp = $(try {
   $wNf = @((& $mk 'write' 'ARsp' 'param' ''), (& $mk 'read' 'rspNotFound' 'enum_value' 'rspNotFound'))
   "$($sr -join ','),$(Get-BranchPathSide @([pscustomobject]@{ Rs = $wOk }) @([pscustomobject]@{ Rs = $wNf }))"
 } catch { "threw: $($_.Exception.Message)" })
+# ---- 6b. Task 6 fix round 1 (Important 1-2, T6-R1, T6-R2, T6-R4 M1-M5) ---------------------
+# Important 1: the guard-line rule takes only a call INSIDE the condition (between `if` and `then`). On a one-line
+# guard `if not X(A) then begin Foo(B); Exit; end;` Foo is failure-branch code; a wrapped condition keeps its 2nd line
+$gsSrc = @('procedure P;', 'begin', '  if not X(A) then begin Foo(B); Exit; end;', '  if not Y(A) or', '     Z(B) then begin Log(C); Exit; end;', 'end;')
+$gsPas = Join-Path $work 'guard-span.pas'
+[IO.File]::WriteAllText($gsPas, (($gsSrc -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$res.RtGuardSpan = $(try {
+  $gR = [IO.File]::ReadAllLines($gsPas); $gS = Get-StrippedSourceLines $gsPas
+  $g3 = Get-GuardConditionFromLines $gR $gS 3 1; $g5 = Get-GuardConditionFromLines $gR $gS 5 1
+  # 1-based ref columns, as refs.start_col: X :3 col 10, Foo :3 col 26, Y :4 col 10, Z :5 col 6, Log :5 col 22
+  (@(@($g3, 3, 10, 'X'), @($g3, 3, 26, 'Foo'), @($g5, 4, 10, 'Y'), @($g5, 5, 6, 'Z'), @($g5, 5, 22, 'Log')) | ForEach-Object { "$($_[3]):$(Test-InShimCondition $_[0] $_[1] $_[2])" }) -join ','
+} catch { "threw: $($_.Exception.Message)" })
+# Important 2 + M1: the callers already on the page are the owners of every CLIENT item before each direction's
+# crossing (handler -> helper -> sender: the helper is not "another caller"); a SERVER-actor crossing is never a sender
+$res.RtTracedIds = $(try {
+  $pI = { param($k, $o, $l, $a) [pscustomobject]@{ Kind = $k; Owner = $o; Line = $l; Actor = $a } }
+  $pw = @((& $pI 'step' 0 1 ''), (& $pI 'step' 10 2 ''), (& $pI 'step' 11 3 ''), (& $pI 'step' 12 4 ''), (& $pI 'crosses' 12 50 ''), (& $pI 'step' 12 51 ''))
+  $pr = @((& $pI 'step' 0 1 ''), (& $pI 'crosses' 99 5 'SERVER'), (& $pI 'step' 20 6 ''), (& $pI 'crosses' 20 70 ''), (& $pI 'step' 77 80 'SERVER'))
+  $tr = Get-TracedRouteIds (@(, $pw) + @(, $pr))
+  "callers $((@($tr.Callers) | Sort-Object) -join ','); senders $((@($tr.Senders | ForEach-Object { "$($_.Owner)@$($_.Line)" })) -join ',')"
+} catch { "threw: $($_.Exception.Message)" })
+# T6-R1: EmptyDataSet empties the dataset
+$res.RtEmptyVerb = [string]$RtOps['EmptyDataSet']
+# T6-R2: an empty ALSO is no STOPS -- no rows, a generated section note, 0 unresolved, checker and round trip hold
+$res.RtAlsoEmpty = $(try {
+  $Te = New-Trace 'X' 'x' 'x' 'A' '2026-09-28' 'x' 'client'
+  [void](Add-TraceSection $Te 'READ').Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1'))
+  $sae = Add-TraceSection $Te 'ALSO'; $sae.Note = 'no other route to this anchor in the index'
+  $tE = Write-FormA $Te
+  [IO.File]::WriteAllText((Join-Path $work 'also-empty.dlgraph'), $tE, (New-Object Text.ASCIIEncoding))
+  & (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture (Join-Path $work 'also-empty.dlgraph') -Quiet 6>$null | Out-Null
+  $cE = Get-TraceCounts $Te
+  "$LASTEXITCODE/$($cE.Steps)/$($cE.Unresolved)/$($tE.Contains("ALSO`r`n  -- no other route to this anchor in the index`r`n"))/$(if ((Write-FormA (Read-FormA $tE)) -ceq $tE) { 'identical' } else { 'differs' })"
+} catch { "threw: $($_.Exception.Message)" })
+# M2: a sender is table-specific only when its PAYLOAD literals (the ones Get-PayloadText selects before the send)
+# name the table -- an error message naming it after the send does not make a table-parameter sender one
+$res.RtTableSender = $(try {
+  $sF = [pscustomobject]@{ Lits = @([pscustomobject]@{ kind = 'literal'; text = 'TABLE='; line = 5 }, [pscustomobject]@{ kind = 'literal'; text = 'OPERAT %s FAILED'; line = 9 }) }
+  $a1 = Test-TableSpecificSender $sF 7 'OPERAT'
+  $sF.Lits += [pscustomobject]@{ kind = 'literal'; text = 'TABLE=OPERAT|'; line = 4 }
+  "$a1,$(Test-TableSpecificSender $sF 7 'OPERAT')"
+} catch { "threw: $($_.Exception.Message)" })
+# M3: every assignment to the SQL variable is named -- the expression of one that is not at the line start too
+$res.RtAssignAt = $(try {
+  (@(@("  SQL:= 'SELECT ' + C + ' FROM ' + T;", 3), @("  if W <> '' then SQL:= SQL + ' WHERE ' + W;", 19), @('  X:= Y(', 3)) | ForEach-Object {
+    $aS = $_[0] -replace "'[^']*'", { ' ' * $_.Value.Length }; "[$(Get-AssignExprAt $_[0] $aS $_[1])]" }) -join ','
+} catch { "threw: $($_.Exception.Message)" })
 # Review Focus 1: a control whose datasource is NOT dangling completes with a trace (a named STOPS is fine, a throw is not)
 $rtO = $(try { & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmCausFail.colREASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null } catch { [pscustomobject]@{ Threw = $_.Exception.Message } })
 $res.RtOther = $(if ($rtO.PSObject.Properties['Threw']) { "threw: $($rtO.Threw)" } else { "$($rtO.TableColumn):$($rtO.Steps -gt 0):$(Test-Path $rtO.Trace)" })
