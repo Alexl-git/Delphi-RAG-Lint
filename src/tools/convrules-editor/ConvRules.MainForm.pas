@@ -113,13 +113,19 @@ type
       FEdDest        : TEdit                 ; // destination .dproj
       FChkMissing    : TCheckBox             ; // Find missing
       FChkUnqualified: TCheckBox             ; // Include unqualified names
-      FLblHarvest    : TLabel                ; // 'N listed, M masked'
+      FLblHarvest    : TLabel                ; // 'N listed, M masked, F filtered'
       FHarvest       : TArray<THarvestedUnit>; // accumulated, unclassified; session state only
       FHarvestRows   : TArray<TUnitRow>      ; // FHarvest classified by FResolver
       FResolver      : TDestinationResolver  ; // nil until a destination loads
       FResolverFor   : string                ; // '<DPROJ>|<platform>' FResolver was built for
       FDestNote      : string                ; // appended to harvest status lines
       FDestWarn      : Boolean               ; // FDestNote holds a WARNING (degraded answer): report via SetError
+      FEdMask        : TEdit                 ; // name mask
+      FRbMaskRegex   : TRadioButton          ; // off = wildcard
+      FChkHideLib    : TCheckBox             ;
+      FChkHideProj   : TCheckBox             ;
+      FChkHideQual   : TCheckBox             ;
+      FEdMaskFolder  : TEdit                 ; // only a ROOTED path is applied (CurrentMask)
 
       FFromPlatform: TConvPlatform; // FROM picker library platform
       FToPlatform  : TConvPlatform; // TO picker library platform
@@ -1826,8 +1832,20 @@ type
       procedure HarvestOptionClick(Sender: TObject);
       function  UnitHasRule(const AUnit: string): Boolean;
       function  IsHarvested(const AUnit: string): Boolean;
-      function  VisibleHarvestRows(out AHidden: Integer): TArray<TUnitRow>;
+      /// <summary>The harvest rows to list, in display order.</summary>
+      /// <param name="AHidden">Receives how many rows the session masks hid.</param>
+      /// <param name="AFiltered">Receives how many rows the check boxes dropped or a
+      /// unit rule already covers. Result + AHidden + AFiltered = Length(FHarvestRows).</param>
+      /// <returns>Rows that pass the check boxes, have no rule, and survive CurrentMask.</returns>
+      function  VisibleHarvestRows(out AHidden, AFiltered: Integer): TArray<TUnitRow>;
       procedure UnitListCustomDrawItem(Sender: TCustomListView; Item: TListItem; State: TCustomDrawState; var DefaultDraw: Boolean);
+      /// <summary>The session masks as the mask controls set them.</summary>
+      /// <returns>Default(TUnitMask) before the strip is built. Folder is '' unless the
+      /// folder edit holds a rooted path: a relative one would expand against the
+      /// process's current directory.</returns>
+      function  CurrentMask: TUnitMask;
+      procedure MaskChanged(Sender: TObject);
+      procedure DoBrowseMaskFolder(Sender: TObject);
       /// <summary>Adds #unuse (From type's unit) and #use (To type's unit) for
       /// the #convert blocks at AHeads, skipping any the book already says.</summary>
       /// <param name="AHeads">Node indices of #convert headers.</param>
@@ -2348,6 +2366,8 @@ uses
   , ConvRules.WorkingSet
   , ConvRules.CurationForm
   , ConvRules.RuleChooser
+  , ConvRules.UnitPick // usmRegex / IsValidUnitSearch for the mask row
+  , Vcl.FileCtrl       // SelectDirectory for the mask folder
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -6370,13 +6390,14 @@ end; // procedure
 
 procedure TConvRulesForm.RefreshUnitList;
 var
-  N     : TRuleNode       ;
-  Item  : TListItem       ;
-  S     : TUnitSets       ;
-  Cand  : string          ;
-  R     : TUnitRow        ;
-  Shown : TArray<TUnitRow>;
-  Hidden: Integer         ;
+  N       : TRuleNode       ;
+  Item    : TListItem       ;
+  S       : TUnitSets       ;
+  Cand    : string          ;
+  R       : TUnitRow        ;
+  Shown   : TArray<TUnitRow>;
+  Hidden  : Integer         ;
+  Filtered: Integer         ;
 
   function InConflict(const AUnit: string): Boolean;
   var
@@ -6451,7 +6472,7 @@ begin
         Item.Data:= nil; // NOT a rule -- see DoDeleteUnit
       end;
 
-    Shown:= VisibleHarvestRows(Hidden);
+    Shown:= VisibleHarvestRows(Hidden, Filtered);
     for R in Shown do
     begin
       Item:= FUnitList.Items.Add;
@@ -6466,7 +6487,7 @@ begin
       Item.Data:= nil; // NOT a rule -- same convention as a candidate row
     end;
     if FLblHarvest <> nil then
-      FLblHarvest.Caption:= Format('%d of %d listed, %d masked', [Length(Shown), Length(FHarvestRows), Hidden]);
+      FLblHarvest.Caption:= Format('%d listed, %d masked, %d filtered', [Length(Shown), Hidden, Filtered]);
   finally
     FUnitList.Items.EndUpdate;
   end; // try
@@ -6505,24 +6526,79 @@ end;
 
 { Classified harvest rows that pass the check boxes, have no rule yet, and survive
   the masks; display order. A same-named Examine candidate does NOT hide one --
-  RefreshUnitList drops the candidate instead (ruling R7). }
-function TConvRulesForm.VisibleHarvestRows(out AHidden: Integer): TArray<TUnitRow>;
+  RefreshUnitList drops the candidate instead (ruling R7). Every harvested row is
+  counted exactly once: listed, AHidden (masked) or AFiltered (check boxes / rule). }
+function TConvRulesForm.VisibleHarvestRows(out AHidden, AFiltered: Integer): TArray<TUnitRow>;
 var
   R   : TUnitRow;
   Rows: TArray<TUnitRow>;
 begin
-  Rows:= nil;
+  Rows     := nil;
+  AFiltered:= 0;
   for R in FHarvestRows do
     if ShouldAdd(R.Status, FChkMissing.Checked, FChkUnqualified.Checked)
       and not UnitHasRule(R.Harvest.UnitName) then
-      Rows:= Rows + [R];
-  Result:= SortForDisplay(ApplyMask(Rows, Default(TUnitMask), AHidden));
+      Rows:= Rows + [R]
+    else
+      Inc(AFiltered);
+  Result:= SortForDisplay(ApplyMask(Rows, CurrentMask, AHidden));
+end;
+
+function TConvRulesForm.CurrentMask: TUnitMask;
+begin
+  Result:= Default(TUnitMask);
+  if FEdMask = nil then
+    Exit;
+  Result.NameMask:= Trim(FEdMask.Text);
+  if FRbMaskRegex.Checked then
+    Result.NameMode:= usmRegex
+  else
+    Result.NameMode:= usmWildcard;
+  Result.HideLibrary  := FChkHideLib.Checked;
+  Result.HideProject  := FChkHideProj.Checked;
+  Result.HideQualified:= FChkHideQual.Checked;
+  // IsUnder expands a relative folder against the CURRENT directory, which is not
+  // anything the user chose -- so only a rooted path is applied (MaskChanged greys
+  // the edit otherwise).
+  if TPath.IsPathRooted(Trim(FEdMaskFolder.Text)) then
+    Result.Folder:= Trim(FEdMaskFolder.Text);
+end;
+
+procedure TConvRulesForm.MaskChanged(Sender: TObject);
+var
+  Mask: TUnitMask;
+begin
+  Mask:= CurrentMask;
+  if FEdMask <> nil then
+  begin
+    // An invalid pattern hides nothing (UnitMask); grey the box so that is visible.
+    if (Mask.NameMask <> '') and not IsValidUnitSearch(Mask.NameMask, Mask.NameMode) then
+      FEdMask.Font.Color:= clGrayText
+    else
+      FEdMask.Font.Color:= clWindowText;
+    // Likewise a folder that is not rooted is not applied.
+    if (Trim(FEdMaskFolder.Text) <> '') and (Mask.Folder = '') then
+      FEdMaskFolder.Font.Color:= clGrayText
+    else
+      FEdMaskFolder.Font.Color:= clWindowText;
+  end;
+  RefreshUnitList;
+end;
+
+procedure TConvRulesForm.DoBrowseMaskFolder(Sender: TObject);
+var
+  Dir: string;
+begin
+  if not SelectDirectory('Hide units under this folder', '', Dir) then
+    Exit;
+  FEdMaskFolder.Text:= Dir;
+  MaskChanged(Sender);
 end;
 
 procedure TConvRulesForm.BuildHarvestStrip(AParent: TWinControl);
 const
   ROW_H    = 30;
-  ROWS     = 3;
+  ROWS     = 5;
   LABEL_W  = 76;
   BUTTON_W = 96;
   BROWSE_W = 28;
@@ -6612,6 +6688,52 @@ begin
   FLblHarvest.Parent          := OptRow;
   FLblHarvest.AlignWithMargins:= True;
   FLblHarvest.Caption         := '';
+
+  var LMaskRow: TFlowPanel:= NewFlowRow;
+  var LMaskLbl: TLabel:= TLabel.Create(Self);
+  LMaskLbl.Parent          := LMaskRow;
+  LMaskLbl.AlignWithMargins:= True;
+  LMaskLbl.Caption         := 'Mask:';
+  FEdMask:= TEdit.Create(Self);
+  FEdMask.Parent          := LMaskRow;
+  FEdMask.Width           := CHECK_W;
+  FEdMask.AlignWithMargins:= True;
+  FEdMask.TextHint        := 'hide names like cx* or ^Db';
+  FEdMask.OnChange        := MaskChanged;
+  var LRbWild: TRadioButton:= TRadioButton.Create(Self);
+  LRbWild.Parent          := LMaskRow;
+  LRbWild.Caption         := 'Wildcard';
+  LRbWild.Checked         := True;
+  LRbWild.AlignWithMargins:= True;
+  LRbWild.OnClick         := MaskChanged;
+  FRbMaskRegex:= TRadioButton.Create(Self);
+  FRbMaskRegex.Parent          := LMaskRow;
+  FRbMaskRegex.Caption         := 'Regex';
+  FRbMaskRegex.AlignWithMargins:= True;
+  FRbMaskRegex.OnClick         := MaskChanged;
+
+  var LHideRow: TFlowPanel:= NewFlowRow;
+  FChkHideLib := NewCheck('hide library', 'Hide units the library index knows as written');
+  FChkHideLib.Parent := LHideRow;
+  FChkHideProj:= NewCheck('hide project', 'Hide units found in the destination''s folders');
+  FChkHideProj.Parent:= LHideRow;
+  FChkHideQual:= NewCheck('hide qualified', 'Hide dotted names (already scope-qualified)');
+  FChkHideQual.Parent:= LHideRow;
+  for var LChk: TCheckBox in TArray<TCheckBox>.Create(FChkHideLib, FChkHideProj, FChkHideQual) do
+  begin
+    LChk.OnClick:= nil;   // NewCheck ticks it; masks start OFF
+    LChk.Checked:= False;
+    LChk.OnClick:= MaskChanged;
+  end;
+  FEdMaskFolder:= TEdit.Create(Self);
+  FEdMaskFolder.Parent          := LHideRow;
+  FEdMaskFolder.Width           := CHECK_W;
+  FEdMaskFolder.AlignWithMargins:= True;
+  FEdMaskFolder.TextHint        := 'hide units under folder';
+  FEdMaskFolder.Hint            := 'Hide project units under this ABSOLUTE folder; a relative path is not applied and shows grey';
+  FEdMaskFolder.ShowHint        := True;
+  FEdMaskFolder.OnExit          := MaskChanged;
+  NewButton(LHideRow, '...', 'Choose a folder whose units to hide', DoBrowseMaskFolder).Width:= BROWSE_W;
 end;
 
 function TConvRulesForm.EnsureResolver: Boolean;
