@@ -7245,64 +7245,89 @@ begin
   SetStatus(Format('Added #unuse for %s', [string.Join(', ', Names)]));
 end; // procedure
 
+{ Acts on EVERY selected row: a rule row (Data <> nil) deletes its node; a
+  harvested '(used)' row or an Examine '(candidate)' row (Data = nil, NOT a rule)
+  is dismissed from its own session set only. More than one row asks first. }
 procedure TConvRulesForm.DoDeleteUnit(Sender: TObject);
 var
-  N   : TRuleNode     ;
-  Cand: string        ;
-  Kept: TArray<string>;
-  U   : string        ;
+  Item     : TListItem        ;
+  N        : TRuleNode        ;
+  Nodes    : TArray<TRuleNode>;
+  UsedNames: TArray<string>   ;
+  CandNames: TArray<string>   ;
+  Shown    : TArray<string>   ;
+  Kept     : TArray<string>   ;
+  U        : string           ;
 begin
-  if FUnitList.Selected = nil then
+  // Collect every target BEFORE mutating anything: RefreshUnitList and
+  // ReclassifyHarvest rebuild the list items, and a freed node leaves its row's
+  // Data dangling.
+  Nodes    := nil;
+  UsedNames:= nil;
+  CandNames:= nil;
+  Shown    := nil;
+  Item:= FUnitList.Selected;
+  while Item <> nil do
+  begin
+    if Item.Data <> nil then
+      Nodes:= Nodes + [TRuleNode(Item.Data)]
+    else if Item.Caption = HARVEST_CAPTION then
+      UsedNames:= UsedNames + [Item.SubItems[0]]
+    else
+      CandNames:= CandNames + [Item.SubItems[0]];
+    Shown:= Shown + [Item.Caption + ' ' + Item.SubItems[0]];
+    Item:= FUnitList.GetNextItem(Item, sdAll, [isSelected]);
+  end; // while
+  if Length(Shown) = 0 then
   begin
     SetStatus('Select a unit rule to delete.');
     Exit;
   end;
-  N:= TRuleNode(FUnitList.Selected.Data);
-
-  // Data = nil is NOT a rule: an Examine CANDIDATE or a harvested '(used)' row.
-  // Dismissing drops it from its own session set only. The rule book is untouched,
-  // so no SyncRawFromModel either.
-  if N = nil then
-  begin
-    Cand:= FUnitList.Selected.SubItems[0];
-    if FUnitList.Selected.Caption = HARVEST_CAPTION then
-    begin
-      FHarvest:= WithoutUnit(FHarvest, Cand);
-      ReclassifyHarvest; // rebuilds FHarvestRows and refreshes the list
-      UpdateToolbarEnabled;
-      SetStatus('Dismissed unit ' + Cand + ' (no rule written).');
+  if Length(Shown) > 1 then
+    if MessageDlg(Format('%d unit rule(s) will be deleted and %d unit(s) dismissed. Continue?' + sLineBreak + sLineBreak + '%s', [Length(Nodes), Length(UsedNames) + Length(CandNames), string.Join(sLineBreak, Shown)]), mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
       Exit;
-    end; // if
-    Kept:= nil;
-    for U in FUnitCandidates do
-      if not SameText(U, Cand) then
-        Kept:= Kept + [U];
-    FUnitCandidates:= Kept;
-    RefreshUnitList;
-    UpdateToolbarEnabled;
-    SetStatus('Dismissed candidate unit ' + Cand + '.');
-    Exit;
+
+  if Length(Nodes) > 0 then
+  begin
+    // Capture the active block's NODE (not its index) ONCE around the whole batch,
+    // the same pattern DoMappings uses -- deleting a unit-directive node ahead of
+    // the active #convert block shifts every later node's index by one, and a
+    // stale FActiveHdr can then equal another block's NEW index (fix wave,
+    // Important 1). No N is ever the active block's header (that is always an
+    // rnkConvert node; DoDeleteUnit only reaches unit-directive nodes), so Hdr is
+    // not an object TObjectList is about to free.
+    var Hdr: TRuleNode:= nil;
+    if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
+      Hdr:= FBook.Nodes[FActiveHdr];
+    for N in Nodes do
+      FBook.Nodes.Remove(N); // TObjectList owns its items -> frees N
+    if Hdr <> nil then
+    begin
+      FActiveHdr:= FBook.Nodes.IndexOf(Hdr);
+      RefreshRulesList; // FRules' Item.Data header indices are stale after the shift too
+    end;
   end; // if
 
-  // Capture the active block's NODE (not its index) before the delete, the same
-  // pattern DoMappings uses -- deleting a unit-directive node ahead of the active
-  // #convert block shifts every later node's index by one, and a stale
-  // FActiveHdr can then equal another block's NEW index (fix wave, Important 1).
-  // N itself is never the active block's header (that is always an rnkConvert
-  // node; DoDeleteUnit only reaches unit-directive nodes), so Hdr is not the
-  // object TObjectList is about to free.
-  var Hdr: TRuleNode:= nil;
-  if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
-    Hdr:= FBook.Nodes[FActiveHdr];
-  FBook.Nodes.Remove(N); // TObjectList owns its items -> frees N
-  if Hdr <> nil then
+  if Length(CandNames) > 0 then
   begin
-    FActiveHdr:= FBook.Nodes.IndexOf(Hdr);
-    RefreshRulesList; // FRules' Item.Data header indices are stale after the shift too
-  end;
-  RefreshUnitList;
-  SyncRawFromModel;
-  SetStatus('Deleted unit rule.');
+    Kept:= nil;
+    for U in FUnitCandidates do
+      if not MatchText(U, CandNames) then
+        Kept:= Kept + [U];
+    FUnitCandidates:= Kept;
+  end; // if
+  for U in UsedNames do
+    FHarvest:= WithoutUnit(FHarvest, U);
+
+  if Length(UsedNames) > 0 then
+    ReclassifyHarvest // rebuilds FHarvestRows and refreshes the list
+  else
+    RefreshUnitList;
+  // The rule book changed only when a rule row was deleted.
+  if Length(Nodes) > 0 then
+    SyncRawFromModel;
+  UpdateToolbarEnabled;
+  SetStatus(Format('Deleted %d unit rule(s); dismissed %d unit(s) (no rule written).', [Length(Nodes), Length(UsedNames) + Length(CandNames)]));
 end; // procedure
 
 { Setting a conversion already adds its unit rules (AddDerivedUnitRules); this
