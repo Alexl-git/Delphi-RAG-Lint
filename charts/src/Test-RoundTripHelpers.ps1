@@ -532,4 +532,41 @@ foreach ($ln in $secLines['SERVER']) {
 $res.RtWasTxn = (@($condsOf | Where-Object { $_.Cond -like 'WHEN "not WasTxn"*' } | ForEach-Object { $_.Head }) -join ' | ')
 $res.RtCondEnsure = (@($condsOf | Where-Object { $_.Head -like 'CALLS TDatasetsDef.EnsureLoaded*' -or $_.Head -like 'CALLS TBroadcastServer.PushTableChanged*' } | ForEach-Object { "$($_.Head -replace ' \[by name\]', '') :: $($_.Cond)" }) -join ' | ')
 
+# ---- 6. READ and ALSO (AC-6, AC-9, AC-10; Review Focus 1) ----------------------------------
+# AC-6: both directions; AC-9: four crossings -- cmdDelta out and back, cmdTableLoad out and back
+$res.RtDirs = "$($rt.WriteSteps -gt 0)/$($rt.ReadSteps -gt 0)"
+$res.RtXings = $rt.Crossings
+# the READ section, every step head in text order (actor word kept): the fill call, its callee, the send,
+# the SERVER walk, the DATABASE stop and column, the rows back, the CLIENT load
+$res.RtRead = (@($secLines['READ'] | Where-Object { $_ -match '^\[\d+\] ' } | ForEach-Object { (StepHead $_) -replace '\bSTOPS .*$', 'STOPS' }) -join '|')
+# AC-7 on the READ path, in walk order (ruling P9 + T1-C1): the client connection guard (:1133), the server's
+# missing-definition (:525) and unsafe-WHERE (:549) guards, the except handler whose Exit is :612 (its condition
+# anchors at the `except` line, :605), the response guard (:1137)
+$res.RtReadGuards = (@($secLines['READ'] | Where-Object { $_ -match '^       UNLESS ".*" @(Blueprint4\.ViewModel\.pas:(1133|1137)|uPipeSessionBuilder\.pas:(525|549|605))( |$)' } | ForEach-Object { $(if ($_ -match '" @(\S+)') { $Matches[1] }) }) -join ',')
+# every condition of the READ section, verbatim, with its anchor
+$res.RtReadConds = (@($secLines['READ'] | Where-Object { $_ -match '^       (WHEN|UNLESS) ' } | ForEach-Object { ($_.Trim()) -replace ' -- .*$', '' }) -join ' | ')
+# AC-12: the SELECT statement text is a numbered STOPS naming the empty fb_field_info
+$res.RtReadStops = @($secLines['READ'] | Where-Object { $_ -match '^\[\d+\] (SERVER |DATABASE )?STOPS .*fb_field_info' }).Count
+$res.RtReadStopText = (@($secLines['READ'] | Where-Object { $_ -match '^\[\d+\] (SERVER |DATABASE )?STOPS ' } | ForEach-Object { ($_ -replace '^\[\d+\] ', '') }) -join ' | ')
+# the payload of the READ send, as the source assembles it
+$res.RtReadPayload = (@($secLines['READ'] | Where-Object { $_ -match '^       WITH cmdTableLoad ' } | ForEach-Object { $_.Trim() }) -join ' | ')
+# AC-10 (ruling P10): ALSO = every route to the anchor the index holds, minus the routes traced
+$res.RtAlso = $rt.AlsoSteps
+$res.RtAlsoRows = (@($secLines['ALSO'] | Where-Object { $_ -match '^\[\d+\] ' } | ForEach-Object { (StepHead $_) -replace ' \[by name\]', '' }) -join '|')
+$res.RtAlsoAnchors = (@($secLines['ALSO'] | Where-Object { $_ -match '^\[\d+\] ' } | ForEach-Object { ($_ -replace '^.* @(\S+).*$', '$1') }) -join ',')
+# the whole trace still passes the checker and reads back byte for byte with both directions in it
+& (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture $rt.Trace -Quiet 6>$null | Out-Null
+$res.RtFormA = "$LASTEXITCODE/$(if ((Write-FormA (Read-FormA $txt)) -ceq $txt) { 'identical' } else { 'differs' })"
+# T5-R13: success is a POSITIVE list (rspOK, rspData) -- rspNotFound / rspDenied (Pipes.Protocol.pas:212-213) are
+# error codes, so an if answering rspOK in one branch and rspNotFound in the other has ONE path side
+$res.RtSuccessRsp = $(try {
+  $sr = foreach ($n in 'rspOK', 'rspData', 'rspNotFound', 'rspDenied', 'rspError') { Test-SuccessLine @((& $mk 'write' 'ARsp' 'param' ''), (& $mk 'read' $n 'enum_value' $n)) }
+  $wNf = @((& $mk 'write' 'ARsp' 'param' ''), (& $mk 'read' 'rspNotFound' 'enum_value' 'rspNotFound'))
+  "$($sr -join ','),$(Get-BranchPathSide @([pscustomobject]@{ Rs = $wOk }) @([pscustomobject]@{ Rs = $wNf }))"
+} catch { "threw: $($_.Exception.Message)" })
+# Review Focus 1: a control whose datasource is NOT dangling completes with a trace (a named STOPS is fine, a throw is not)
+$rtO = $(try { & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmCausFail.colREASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null } catch { [pscustomobject]@{ Threw = $_.Exception.Message } })
+$res.RtOther = $(if ($rtO.PSObject.Properties['Threw']) { "threw: $($rtO.Threw)" } else { "$($rtO.TableColumn):$($rtO.Steps -gt 0):$(Test-Path $rtO.Trace)" })
+$res.RtOtherStop = $(if ($rtO.PSObject.Properties['Threw']) { '' } else { "$($rtO.DataSet)|$($rtO.Steps)/$($rtO.Unresolved)|$($rtO.Stop -replace '\s+', ' ')" })
+
 [pscustomobject]$res

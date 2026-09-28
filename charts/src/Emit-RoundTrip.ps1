@@ -24,9 +24,11 @@
   var's declared type (receiver-typed-calls, filed as INBOX-charts-receiver-typed-calls-unbound).
   Every such step names its ask.
 
-  This task (5) walks WRITE -> SERVER -> DATABASE -> RESPONSE. READ is a single
-  placeholder STOPS and ALSO holds only the other wirings on the dataset; Task 6
-  replaces both.
+  WRITE -> SERVER -> DATABASE -> RESPONSE (Task 5) is one section per tier; READ
+  (Task 6) is one section whose steps carry their actor word (SERVER / DATABASE /
+  CLIENT after the crossing). ALSO is DERIVED (AC-10): the other wirings on the
+  dataset, the other callers of a sender that serves only the anchor's table, and
+  the other fill lines -- every route the index holds minus the ones traced.
 #>
 [CmdletBinding()]
 param(
@@ -136,9 +138,45 @@ if (-not $A.Stop) {
   # T5-R1: one OMITS disclosure per section, whichever routines the walk left them in
   foreach ($sec in @($secW, $secS, $secD, $secR)) { Merge-TraceOmits $sec }
   $write = $secW.Items.Count + $secS.Items.Count + $secD.Items.Count + $secR.Items.Count
-  # ---- 6. READ (Task 6) and ALSO -----------------------------------------------------------
-  [void]$secRd.Items.Add((New-TraceStep 'stops' 'the READ direction is not walked yet (Task 6)' (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line)))
+  # ---- 6. READ: the first fill route, its callee to the send, the server, and back -----------
+  # One section; the actor word says which side a step runs on (the WRITE half has a section per tier).
+  # Each route walks with its own Seen (Get-FillRoutes): the READ path runs the FIB$ reads WRITE showed.
+  $routes = Get-FillRoutes $A.DataSet $Ctx $Depth
+  if (-not $routes.Count) {
+    [void]$secRd.Items.Add((New-TraceStep 'stops' (ConvertTo-TraceStopText "no bound call on a line naming '$($A.Table)' beside $($A.DataSet.Name) in $(Get-UnitName $A.DataSet.File) reaches a transport call carrying a protocol constant within $Depth call levels") (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line)))
+  } else {
+    $r0 = $routes[0]
+    [void]$secRd.Items.Add((New-TraceStep 'step' "LOADS $($A.DataSet.Name) VIA $($r0.TargetShort)$($r0.Lits)" (Get-TraceAnchorText $A.DataSet.File $r0.Line) '' $r0.Routine 'the fill call carrying the table literal'))
+    $entry = New-TraceStep 'step' "CALLS $($r0.TargetShort)$($r0.Lits)" (Get-TraceAnchorText $r0.TargetPath $r0.TargetImpl) '' $r0.Routine "from :$($r0.Line)"
+    foreach ($c in $r0.Walk.Conds) { [void]$entry.Children.Add($c) }
+    $ri = @($entry) + @($r0.Walk.Items)
+    $xi = [array]::IndexOf(@($ri | ForEach-Object { $_.Kind }), 'crosses')
+    for ($k = 0; $k -le $xi; $k++) { [void]$secRd.Items.Add($ri[$k]) }
+    $xr = $ri[$xi]
+    # the far side on the SERVER index, then its DATABASE facts, still on the SERVER index (AC-9)
+    $srvR = Invoke-OnDb $ServerDbPath { Get-ServerHandling $xr.Command $r0.Ctx $Depth }
+    if ($srvR.Contract) { [void]$xr.Children.Add((New-TraceFacet 'CONTRACT' $srvR.Contract.Text $srvR.Contract.Anchor 'the far side, from the counterpart index')) }
+    foreach ($i in $srvR.Items) { $i.Actor = 'SERVER'; [void]$secRd.Items.Add($i) }
+    $dbR = Invoke-OnDb $ServerDbPath { Get-DatabaseSteps $srvR.Items $r0.Ctx 'read' $sqlSet $SourceOverride }
+    foreach ($i in $dbR) { $i.Actor = 'DATABASE'; [void]$secRd.Items.Add($i) }
+    # the rows come back on the SAME ExecuteCommand call (ruling P4: request and response share its anchor)
+    $backR = New-TraceStep 'crosses' 'process boundary' $xr.Anchor '' $xr.Routine 'the rows come back'
+    [void]$backR.Children.Add((New-TraceFacet 'FROM' $srvName '' 'server index'))
+    [void]$backR.Children.Add((New-TraceFacet 'TO' $cliName '' 'client index'))
+    [void]$backR.Children.Add((New-TraceFacet 'WITH' $(if ($srvR.Responses.Count) { $srvR.Responses -join ' or ' } else { 'no rsp* constant read in the handler' }) $xr.Anchor ''))
+    [void]$secRd.Items.Add($backR)
+    for ($k = $xi + 1; $k -lt $ri.Count; $k++) { $ri[$k].Actor = 'CLIENT'; [void]$secRd.Items.Add($ri[$k]) }
+    Merge-TraceOmits $secRd
+  }
+  # ---- ALSO (AC-10, ruling P10): every other route to the anchor the index holds, minus the traced ones --
+  # the other wirings (above), the other callers of a sender that serves only this table, the other fill lines
+  $xs = @(@($secW.Items) + @($secRd.Items) | Where-Object { $_.Kind -eq 'crosses' -and $_.PSObject.Properties['Owner'] })
+  foreach ($r in (Get-AlsoRoutes $xs @($wiring | ForEach-Object { [int]$_.HandlerId }) $Ctx)) { [void]$alsoRows.Add($r) }
+  foreach ($r in @($routes | Select-Object -Skip 1)) {
+    [void]$alsoRows.Add((New-TraceStep 'step' "LOADS $($A.DataSet.Name) VIA $($r.TargetShort)$($r.Lits)" (Get-TraceAnchorText $A.DataSet.File $r.Line) '' $r.Routine 'another fill route'))
+  }
   foreach ($r in $alsoRows) { [void]$secAl.Items.Add($r) }
+  if (-not $secAl.Items.Count) { [void]$secAl.Items.Add((New-TraceStep 'stops' 'no other route to this anchor in the index' (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line))) }
   $read = $secRd.Items.Count; $also = $secAl.Items.Count
 }
 

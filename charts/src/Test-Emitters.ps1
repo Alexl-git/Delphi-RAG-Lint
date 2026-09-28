@@ -2341,8 +2341,11 @@ Step 'E-RT0' {
   # AC-9 (ruling P4): CROSSES STEP lines only. TWO at :3985 -- the request (WRITE) and the response (RESPONSE)
   # ride the one FConn.ExecuteCommand call. Facets in text order: the request's FROM/TO/OVER/WITH, its own
   # CONTRACT (cmdDelta, Pipes.Protocol.pas:55) and the far side's (IPipeSessionBuilder.HandleDelta, :392,
-  # from the SERVER index); then the response's FROM/TO/WITH
-  Chk 'A-RT5-CROSS'     "$($rt0.RtCrossOut)|$($rt0.RtCrossFacets)" '2|FROM,TO,OVER,WITH,CONTRACT,CONTRACT,FROM,TO,WITH'
+  # from the SERVER index); then the response's FROM/TO/WITH.
+  # READ SECTION ADDED (Task 6, ruling P6): the facet list doubles -- the READ request at :1136 (FROM/TO/OVER/WITH,
+  # cmdTableLoad's CONTRACT, IPipeSessionBuilder.HandleTableLoad's) and its rows coming back (FROM/TO/WITH). The step
+  # count stays 2: it counts the WRITE CROSSES at :3985 only (the READ ones anchor at :1136, A-RT6-XINGS counts all four)
+  Chk 'A-RT5-CROSS'     "$($rt0.RtCrossOut)|$($rt0.RtCrossFacets)" '2|FROM,TO,OVER,WITH,CONTRACT,CONTRACT,FROM,TO,WITH,FROM,TO,OVER,WITH,CONTRACT,CONTRACT,FROM,TO,WITH'
   # the CALLS / ROUTES steps anchored in the five server units, in walk order. MEASURED, beyond the plan's six:
   # SplitPayload (:409, kept for its own `BarPos < 0` guard), EnsureLoaded [by name] (:429, the FIB$ reads sit
   # under it, so GetTable's by-name unit scan finds them Seen and adds none), LoadFromInternal (bound, under
@@ -2355,8 +2358,10 @@ Step 'E-RT0' {
                                        'CALLS TDatasetsDef.LoadFromInternal|CALLS TDatasetsDef.GetTable [by name]|' +
                                        'CALLS TGenericApplyContext.HandleUpdateRecord|CALLS TGenericApplyContext.BindParams|' +
                                        'CALLS TBroadcastServer.PushTableChanged [by name]')
-  # the FIB$DATASETS_INFO SQL literal, once (a message that merely NAMES the table, :433/:434, is not SQL)
-  Chk 'A-RT5-FIB'       $rt0.RtFib 1
+  # the FIB$DATASETS_INFO SQL literal, once per direction (a message that merely NAMES the table, :433/:434, is not
+  # SQL). READ SECTION ADDED (Task 6): 1 -> 2 -- the READ server walk runs EnsureLoaded -> LoadFromInternal too, and
+  # each direction walks with its own Seen, so the read at :130 is a step of both paths
+  Chk 'A-RT5-FIB'       $rt0.RtFib 2
   # AC-12 (ruling P15, scoped to WRITE/SERVER/DATABASE by P5): the STOPS says only what was queried --
   # FDef.UpdateSQL from its ref at uGenericTableRoute.pas:190 (in the routine that runs Cmd.Execute), "loaded at
   # uDatasetsDef.pas:149" because LoadFromInternal both names UpdateSQL and holds the walk's FIB$DATASETS_INFO
@@ -2379,7 +2384,11 @@ Step 'E-RT0' {
   # on OPENS (:492), WHEN "not GDatasetsDef.Loaded" on EnsureLoaded (:429), WHEN "not FLoaded" on LoadFromInternal
   # (:97), WHEN "Field is TBlobField" + UNLESS "IsOld or Field.IsNull" on BindParams' LoadFromStream (:157/:160),
   # WHEN "Assigned(GBroadcastServer)" on PushTableChanged (:507). No step moved
-  Chk 'A-RT5-COUNTS'    $rt0.RtCounts '45/21/2/2'
+  # READ SECTION ADDED (Task 6, ruling P6): 45/21/2/2 -> 76/31/4/2. The READ placeholder STOPS (1 step, 1 unresolved)
+  # and the lone ALSO row are replaced by READ's 24 steps (fill call, callee, send, 15 SERVER, 2 DATABASE, rows back,
+  # 3 CLIENT) and ALSO's 9 rows (A-RT6-ALSO): 45 - 2 + 24 + 9 = 76. Conditions +10 (A-RT6-READCONDS), crossings +2
+  # (the cmdTableLoad request and its rows), unresolved stays 2 (the READ DATABASE STOPS replaces the placeholder)
+  Chk 'A-RT5-COUNTS'    $rt0.RtCounts '76/31/4/2'
   # Pre-review rulings. T5-R1: no step from a branch for another table (failed 12 before the fix), ONE OMITS per
   # section counting the 5 candidate calls left out and quoting the 4 branch conditions verbatim (E1)
   Chk 'A-RT5-OTHERTABLE' $rt0.RtOtherTable 0
@@ -2447,6 +2456,74 @@ Step 'E-RT0' {
   Chk 'A-RT5-CONDENSURE' $rt0.RtCondEnsure ('CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: UNLESS "FLoaded" @uDatasetsDef.pas:94 | ' +
                                           'CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: WHEN "not GDatasetsDef.Loaded" @uGenericTableRoute.pas:429 | ' +
                                           'CALLS TBroadcastServer.PushTableChanged@uBroadcastServer.pas:401 :: WHEN "Assigned(GBroadcastServer)" @uGenericTableRoute.pas:507')
+  # Task 6: the READ direction and ALSO. AC-6 both directions (green since Task 5's placeholder -- ruling P11: the RED
+  # step was A-RT6-READ, which read the placeholder STOPS). AC-9: four crossings -- cmdDelta out and its response,
+  # cmdTableLoad out and its rows -- on the CLIENT and SERVER clones queried separately (Invoke-OnDb, A-RT5-ONDB)
+  Chk 'A-RT6-DIRS'      $rt0.RtDirs 'True/True'
+  Chk 'A-RT6-XINGS'     $rt0.RtXings 4
+  # every READ step in text order (routine names as the trace writes them, class kept -- ruling P8). The fill line
+  # LoadAllForFolder :1207 carries 'OPERAT' beside FMTOperation (the first of the fill lines, by line; BuildSchema
+  # :769's call reaches no crossing and is dropped); its callee LoadOneTable sends cmdTableLoad at :1136. SERVER:
+  # dispatch :142 -> :147, the by-name implementation, EnsureLoaded's FIB$ reads (this direction's own Seen), GetTable
+  # [by name], TryBuildSafeWhere (a step because the :549 guard turns on it; in a uPipe* unit, so not descended),
+  # the read transaction, the query, SaveToStream, Commit, and rspData overwriting the :519 rspError default.
+  # DATABASE: the SELECT STOPS (A-RT6-READSTOPS) and the column [inferred]. Then the rows back and the CLIENT
+  # load: RECEIVES rspData, EmptyDataSet (RtOps verb LOADS, under WHEN "AMT.Active"), LoadFromStream
+  Chk 'A-RT6-READ'      $rt0.RtRead ("LOADS FMTOperation VIA TBlueprint_ViewModel.LoadOneTable 'OPERAT'|CALLS TBlueprint_ViewModel.LoadOneTable 'OPERAT'|CROSSES process boundary|" +
+                                     'SERVER ROUTES cmdTableLoad TO IPipeSessionBuilder.HandleTableLoad|SERVER CALLS TPipeSessionBuilder.HandleTableLoad [by name]|' +
+                                     'SERVER CALLS TDatasetsDef.EnsureLoaded [by name]|SERVER CALLS TDatasetsDef.LoadFromInternal|SERVER READS FROM FIB$DATASETS_INFO [inferred]|' +
+                                     'SERVER RUNS Q.Open|SERVER READS FROM FIB$FIELDS_INFO [inferred]|SERVER RUNS Q.Open|SERVER CALLS TDatasetsDef.GetTable [by name]|' +
+                                     'SERVER CALLS TryBuildSafeWhere|SERVER OPENS AThreadStorage.Transaction.StartTransaction|SERVER RUNS Qry.Open|SERVER SERIALIZES Qry.SaveToStream|' +
+                                     'SERVER RUNS AThreadStorage.Transaction.Commit|SERVER SENDS rspData|DATABASE STOPS|DATABASE READS OPERAT.NAME [inferred]|CROSSES process boundary|' +
+                                     'CLIENT RECEIVES rspData|CLIENT LOADS AMT.EmptyDataSet|CLIENT DESERIALIZES AMT.LoadFromStream')
+  # AC-7 on the READ path, in WALK order (ruling P9): the client connection guard, the server's missing-definition
+  # and unsafe-WHERE guards, the except handler whose Exit is :612 (T1-C1; its condition anchors at the `except`
+  # line, :605, and hangs on the try body's FIRST step, Qry.Open), the response guard
+  Chk 'A-RT6-READGUARDS' $rt0.RtReadGuards 'Blueprint4.ViewModel.pas:1133,uPipeSessionBuilder.pas:525,uPipeSessionBuilder.pas:549,uPipeSessionBuilder.pas:605,Blueprint4.ViewModel.pas:1137'
+  # every READ condition verbatim: the five guards above plus the branch conditions of their steps (EnsureLoaded's own
+  # FLoaded Exit, the ifs around EnsureLoaded / LoadFromInternal, around EmptyDataSet and LoadFromStream)
+  Chk 'A-RT6-READCONDS' $rt0.RtReadConds ('UNLESS "not (Assigned(FConn) and FConn.Connected)" @Blueprint4.ViewModel.pas:1133 | UNLESS "FLoaded" @uDatasetsDef.pas:94 | ' +
+                                          'WHEN "not GDatasetsDef.Loaded" @uPipeSessionBuilder.pas:523 | WHEN "not FLoaded" @uDatasetsDef.pas:97 | ' +
+                                          'UNLESS "not GDatasetsDef.GetTable(ATableName, Def)" @uPipeSessionBuilder.pas:525 | ' +
+                                          'UNLESS "not TryBuildSafeWhere(WhereStr, Def, WhereSql, WhereVals)" @uPipeSessionBuilder.pas:549 | ' +
+                                          'UNLESS "T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises" @uPipeSessionBuilder.pas:605 | ' +
+                                          'UNLESS "(GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspData)" @Blueprint4.ViewModel.pas:1137 | ' +
+                                          'WHEN "AMT.Active" @Blueprint4.ViewModel.pas:1162 | WHEN "Length(RspPayload) > 0" @Blueprint4.ViewModel.pas:1163')
+  # AC-12: the SELECT text is a numbered STOPS. It says only what was queried: the statement is ASSEMBLED at :544
+  # (quoted as written), and the FIB$ tables the READ walk reads have no snapshot rows in the SERVER clone
+  Chk 'A-RT6-READSTOPS' $rt0.RtReadStops 1
+  Chk 'A-RT6-READSTOPTEXT' $rt0.RtReadStopText ("DATABASE STOPS the SELECT statement for OPERAT is assembled at uPipeSessionBuilder.pas:544 as 'SELECT ' + ColSQL + ' FROM ' + ATableName, " +
+                                                'from values the index holds no text for, and the FIB$ rows the walk reads (FIB$DATASETS_INFO, FIB$FIELDS_INFO) are not in the index ' +
+                                                '(fb_datasets has 0 rows, fb_field_info has 0 rows in MicroniteMW1Service) @uPipeSessionBuilder.pas:544 -- in TPipeSessionBuilder.HandleTableLoad; ' +
+                                                'the statement is assembled here, in the routine that runs it; ask E4')
+  # the payload as the source ASSEMBLES it (one concatenating assignment, :1134) -- its literals alone, joined,
+  # would read 'TABLE=' + '|BLOBS=0|WHERE=' as if that were the payload
+  Chk 'A-RT6-READPAYLOAD' $rt0.RtReadPayload "WITH cmdTableLoad 'TABLE=' + ATableName + '|BLOBS=0|WHERE=' + AWhere @Blueprint4.ViewModel.pas:1136 -- payload inferred from the literals before the send"
+  # AC-10 (ruling P10): ALSO = every route to the anchor the index holds MINUS the routes traced. Derived:
+  #   the other wiring on FMTOperation (AfterDelete, :640)                                               1
+  #   SendDeltaOperation's 9 bound callers (A-RT0-CALLERS) minus the two already on the page -- the traced
+  #   handler DoAfterPostOperation and DoAfterDeleteOperation, the AfterDelete row's handler: ImportJenVICI,
+  #   ImportLK, ImportNikon, ImportSheffield, ImportZEISS, AddOperation, VerifyAll                       7
+  #   the fill lines (A-RT0-FILLS) minus the traced LoadAllForFolder :1207 and BuildSchema :769 (reaches no
+  #   crossing): VerifyAll :4306                                                                            1
+  # LoadOneTable's other callers are NOT routes: it takes the table from its caller, so only a caller passing the
+  # anchor's table reaches the anchor -- those ARE the fill lines. SendDeltaOperation names 'TABLE=OPERAT|' itself,
+  # so every caller is a route. OWNER REVIEW PENDING (AC-10) -- measured 2026-09-28
+  Chk 'A-RT6-ALSO'      $rt0.RtAlso 9
+  Chk 'A-RT6-ALSOROWS'  $rt0.RtAlsoRows ('FIRES FMTOperation.AfterDelete -> DoAfterDeleteOperation|' + ((@('CALLS TBlueprint_ViewModel.SendDeltaOperation') * 7) -join '|') +
+                                         "|LOADS FMTOperation VIA TBlueprint_ViewModel.LoadOneTable 'OPERAT'")
+  Chk 'A-RT6-ALSOANCHORS' $rt0.RtAlsoAnchors ('Blueprint4.ViewModel.pas:640,Blueprint4.ViewModel.pas:1853,Blueprint4.ViewModel.pas:2175,Blueprint4.ViewModel.pas:2441,' +
+                                              'Blueprint4.ViewModel.pas:3124,Blueprint4.ViewModel.pas:3416,Blueprint4.ViewModel.pas:4099,Blueprint4.ViewModel.pas:4273,Blueprint4.ViewModel.pas:4306')
+  # AC-1 / AC-2 with both directions in the text: the checker passes it and it reads back byte for byte
+  Chk 'A-RT6-FORMA'     $rt0.RtFormA '0/identical'
+  # T5-R13 (failed before: rspNotFound / rspDenied read as success, the if read `both`): success is rspOK / rspData only
+  Chk 'A-RT6-SUCCESSRSP' $rt0.RtSuccessRsp 'True,True,False,False,False,then'
+  # Review Focus 1: a control whose datasource is NOT dangling completes -- no throw. The Task 3 resolver stops at
+  # ANCHOR with a named reason: the chain lands on MemTable (a property; the field is FMemTable) and the table comes
+  # through the constant CAUSFAIL_TABLE, which no literal on the dataset's line names. So TableColumn is empty
+  # (the brief expected CAUSFAIL.REASON -- a resolver finding, reported, not fixed here)
+  Chk 'A-RT6-OTHER'     $rt0.RtOther ':True:True'
+  Chk 'A-RT6-OTHERSTOP' $rt0.RtOtherStop 'MemTable|6/1|no upper-case table-name literal shares a line with MemTable in uCausFail.ViewModel -- the table cannot be inferred'
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
