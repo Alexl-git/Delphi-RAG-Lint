@@ -6091,15 +6091,13 @@ end; // procedure
 
 function HarvestNames(const AUnits: TArray<THarvestedUnit>): string;
 var
-  H: THarvestedUnit;
+  Names: TArray<string>;
+  i    : Integer;
 begin
-  Result:= '';
-  for H in AUnits do
-  begin
-    if Result <> '' then
-      Result:= Result + ',';
-    Result:= Result + H.UnitName;
-  end;
+  SetLength(Names, Length(AUnits));
+  for i:= 0 to High(AUnits) do
+    Names[i]:= AUnits[i].UnitName;
+  Result:= string.Join(',', Names);
 end;
 
 procedure TestUsesHarvestText;
@@ -6393,15 +6391,13 @@ end;
 
 function RowNames(const ARows: TArray<TUnitRow>): string;
 var
-  R: TUnitRow;
+  Names: TArray<string>;
+  i    : Integer;
 begin
-  Result:= '';
-  for R in ARows do
-  begin
-    if Result <> '' then
-      Result:= Result + ',';
-    Result:= Result + R.Harvest.UnitName;
-  end;
+  SetLength(Names, Length(ARows));
+  for i:= 0 to High(ARows) do
+    Names[i]:= ARows[i].Harvest.UnitName;
+  Result:= string.Join(',', Names);
 end;
 
 procedure TestUnitMask;
