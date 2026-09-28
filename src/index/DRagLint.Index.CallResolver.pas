@@ -861,6 +861,15 @@ type
     /// <param name="ALc">The lowercased identifier.</param>
     /// <returns>True when such a declaration is visible.</returns>
     function UnitScopeDeclaresValue(ARefFileId: Int64; const ALc: string): Boolean;
+    /// <summary>True when a unit-level const/var named ALc -- a VALUE, not a
+    /// type or enum value -- is visible from ARefFileId: the own unit (either
+    /// section), or the interface of a unit it uses.</summary>
+    /// <param name="ARefFileId">The referencing file.</param>
+    /// <param name="ALc">The lowercased identifier.</param>
+    /// <returns>True when such a value is visible.</returns>
+    /// <remarks>RB-4's gate in UnshadowedUnitFile: a value spelled like a unit
+    /// is what the compiler reads for `Name.X`, ahead of the unit.</remarks>
+    function UnitLevelValueVisible(ARefFileId: Int64; const ALc: string): Boolean;
     /// <summary>The unit rung of a bare name: the routines named ALc declared in
     /// ARefFileId itself or, when it has none, in the interface of a unit it
     /// uses. Same two rungs as LookupUnitLevelRoutine.</summary>
@@ -3304,6 +3313,18 @@ begin
     for V in E do Result:= Result or Visible(V.FileId, V.Section);
 end;
 
+function TCallResolver.UnitLevelValueVisible(ARefFileId: Int64; const ALc: string): Boolean;
+var
+  L: TList<TSymbol>;
+  S: TSymbol       ;
+begin
+  Result:= False;
+  if not FNameToUnitValues.TryGetValue(ALc, L) then Exit;
+  for S in L do
+    if (S.FileId = ARefFileId)
+       or (SameText(S.Section, 'interface') and CandInScope(ARefFileId, S.FileId)) then Exit(True);
+end;
+
 procedure TCallResolver.AddVisibleUnitRoutines(ARefFileId: Int64; const ALc: string;
   AMatches: TList<TSymbol>);
 var
@@ -4354,7 +4375,18 @@ begin
   // exists globally), so an ambiguous type name still yields 0 rather than a
   // guess. Class METHODS and constructors are ordinary children of the type
   // symbol, so LookupMethodOnType needs no change to find them.
-  Result:= ResolveTypeNameToSymbol(AReceiverExpr, ACallRef.FileId);
+  //
+  // --- Kind 8 (resolver 1.11.0-alpha, RB-1): a VALUE the rungs above do not
+  //     see -- a field or property of an ANCESTOR class, or a UNIT-LEVEL var
+  //     (the own unit, or a used unit's interface): `GDatasetsDef.GetTable(...)`
+  //     on ORM3 SERVER. Those calls were unbound with no edge, and the charts
+  //     traced them by name. TypeOfOrdinaryName is the scope walk the `with`
+  //     scope already types through, in Delphi's order: the class chain, then
+  //     exactly ONE visible unit-level var (two -> nothing, uses-clause order is
+  //     not modelled), and only then the name as a TYPE -- so the kind-7 type
+  //     rung is still the last word when no value of the name is in scope. Pinned by
+  //     tests\callresolve\run_unit_var_receiver_bind.ps1.
+  Result:= TypeOfOrdinaryName(ACallRef, AReceiverExpr);
   if Result > 0 then Exit;
 
   // Unresolved receiver identifier (unknown local/param/field, and not a type we
@@ -4686,6 +4718,13 @@ begin
   if Pos('.', First) > 0 then First:= Copy(First, 1, Pos('.', First) - 1);
   if LexicalScopeDeclaresValue(ARef.EnclosingSymbolId, First)
      or EnclosingClassChainDeclares(ARef.EnclosingSymbolId, First, ClassId) then Exit;
+  { RB-4 (resolver 1.11.0-alpha): a UNIT-LEVEL var/const spelled like the unit
+    is nearer than the unit name too -- the own unit's, or one a used unit's
+    interface exports. Its type may be one the index cannot see, which answers
+    TypeId 0 exactly as a unit receiver does. Values only: a type or enum value
+    of the name is not what `uLib.Go` reads. Pinned by N3 in
+    tests\callresolve\run_unit_var_receiver_bind.ps1. }
+  if UnitLevelValueVisible(ARef.FileId, LowerCase(First)) then Exit;
   { A with target is nearer still (D14). TypeReceiver answers 0 for a receiver
     the with scope left UNDECIDED, which is exactly the TypeId the unit rungs
     take, so without this test an untypable target's member spelled like a unit

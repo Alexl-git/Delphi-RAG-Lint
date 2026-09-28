@@ -12945,10 +12945,20 @@ begin
       repository has been bitten by before: R3(c) would stop shadowing, the pass
       would OVER-BIND, and the run would report a clean result. Loud, and on its
       own line, so it cannot be read as part of the numbers above. }
-    if EnumShadowDecls = 0 then
-      ResolveLog('calls      enum-shadow-set: WARNING -- the unit-level const/var shadow set is EMPTY, ' +
-        'so R3(c) shadowing is INERT and any bindings above may be OVER-BOUND. This is a fail-open: ' +
-        'treat them as unverified and reindex before trusting them.');
+    { FIX-4 (resolver 1.11.0-alpha): the set is read by the same query the
+      resolver's map is built from, so EMPTY is a fact about the index, not a
+      load failure -- and it is only a hazard when the enum stream actually
+      BOUND something under it. Measured 2026-09-23: the warning fired on three
+      sections (ORM3-TestCachedUpdates, SQL, OCRPDF-App) that bound nothing,
+      telling the reader to reindex an index with nothing wrong in it. }
+    if (EnumShadowDecls = 0) and (EnumBound > 0) then
+      ResolveLog(Format('calls      enum-shadow-set: WARNING -- the unit-level const/var shadow set is EMPTY ' +
+        'while %d enum read(s) were bound, so R3(c) shadowing was INERT for them. If this index truly ' +
+        'declares no unit-level const/var they are correct; otherwise they may be OVER-BOUND -- reindex ' +
+        'before trusting them.', [EnumBound]))
+    else if EnumShadowDecls = 0 then
+      ResolveLog('calls      enum-shadow-set: empty -- this index declares no unit-level const/var, ' +
+        'and the enum stream bound nothing, so no binding depends on it.');
     { Make the staleness VISIBLE. Silence here is what let a stale index degrade
       unnoticed: counts only went down and nothing errored. If this line ever
       appears, the fix is to REINDEX the named tree, not to re-run the resolve. }

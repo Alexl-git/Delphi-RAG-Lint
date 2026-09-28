@@ -3,6 +3,43 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.20.0-alpha -- 2026-09-28
+
+MINOR: resolver batch. `DRAGLINT_RESOLVER_VERSION` 1.10.0-alpha -> **1.11.0-alpha** (every index owes a
+re-RESOLVE, not a re-parse: `index --all --resolve-only`, measured ~1 min per ORM3 project DB).
+Extractor 1.20.0-alpha and schema v23 unchanged. No new rules (188).
+
+### Fixed
+
+- **A call on a unit-level var, or on a field the enclosing routine's own rung could not see, now binds**
+  (RB-1, charts `receiver-typed-calls`). `GDatasetsDef.GetTable(...)` and
+  `GBroadcastServer.PushTableChanged(...)` on ORM3 SERVER were `call` refs with no target and no
+  call_edges row: the receiver typer knew locals, parameters, the enclosing class's OWN fields and
+  properties, casts and type names, and never a unit-level `var` -- nor a field reached from a nested
+  routine, where the "enclosing class" it asked was the outer routine. Its last identifier rung now uses
+  the same scope walk the `with` scope types through: the class chain, then exactly one visible
+  unit-level var (own unit, or a used unit's interface; two -> nothing), and only then the name as a type.
+  Measured A/B on copies re-resolved with this build: ORM3 SERVER **+42 bindings** (all 9 sites charts
+  named; call_edges 28,691 -> 28,729), ORM3 CLIENT **+184** (`MyFolder`, `dmStyles`, `MyStation`, form
+  globals; 23,788 -> 23,895) -- **0 bindings lost or moved on either**. Guard:
+  `tests\callresolve\run_unit_var_receiver_bind.ps1` (4 binds, a unit-qualified control, 3 negatives: a
+  shadowing local of an unindexed type, a name two used units export, and RB-4 below).
+- **A unit-level var spelled like a unit shadows the unit for a qualified call** (RB-4). The unit rungs'
+  shadow gate checked locals, the class chain and `with` targets but not unit-level values, so with a
+  var `uLib` of a type the index cannot see, `uLib.Go` bound to unit uLib's routine. It now declines.
+- **`enum-shadow-set: WARNING` only when something depends on it** (FIX-4). The shadow set is read by the
+  same query the resolver's map is built from, so an empty set is a fact about the index. It was a
+  WARNING telling the reader to reindex on three sections that bound nothing; it is now an informational
+  line there, and still a WARNING (with the count) when enum reads were bound under it.
+
+### Not changed, measured for a ruling
+
+- **Bare reads of the enclosing class's own FIELDS stay unbound** (RB-2, charts `in-class-field-reads`).
+  That decline is by design and pinned by two guards (`run_with_scope_bind.ps1` OWN-FIELD,
+  `run_parenless_call_bind.ps1` NEG-FIELD: "binding it is a separate decision"). The cost of lifting it,
+  counted by this batch's own decline counters: **31,417** reads on ORM3 SERVER and **21,137** on CLIENT
+  would each gain a `member_accesses` row.
+
 ## v1.19.2-alpha -- 2026-09-28
 
 PATCH: five backlog defects from `docs\BACKLOG-TRIAGE-2026-09-28.md` (FIX-1, FIX-2, FIX-5, TH-3) and two

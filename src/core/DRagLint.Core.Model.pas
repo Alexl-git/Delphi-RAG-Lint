@@ -14,7 +14,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.19.2-alpha';
+  DRAGLINT_VERSION = '1.20.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -217,7 +217,27 @@ const
   /// parse change: remedy is `index --all --resolve-only`. A MINOR: a new
   /// class of derived row, and bindings that can disappear. The reservation
   /// for C2.3 + the IsStub unification MOVES from 1.9.0 to 1.10.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.10.0-alpha';
+  /// <para>1.9.0-alpha -&gt; 1.10.0-alpha (2026-09-28, rode the extractor
+  /// 1.20.0 re-parse; this paragraph written 2026-09-28 after the fact): an
+  /// explicit `Self.X := v` write binds X on the enclosing class chain in
+  /// TCallResolver.ResolveWriteRef and skips the with and lexical rungs, so a
+  /// same-named local is no longer bound. Bindings that MOVE. The reservation
+  /// for C2.3 + the IsStub unification MOVES from 1.10.0 to 1.11.0-alpha.</para>
+  /// <para>1.10.0-alpha -&gt; 1.11.0-alpha (2026-09-28, RB-1 + RB-4 + FIX-4):
+  /// (RB-1) TypeReceiver's last identifier rung is TypeOfOrdinaryName, so a
+  /// call on a field/property of an ANCESTOR class or on a unit-level var
+  /// (own unit, or exactly one visible in a used unit's interface) is typed
+  /// and binds -- `GDatasetsDef.GetTable(...)` on ORM3 SERVER; the type-name
+  /// rung is still last. (RB-4) UnshadowedUnitFile also declines when a
+  /// unit-level var/const spelled like the receiver's first segment is
+  /// visible, so `uLib.Go` no longer binds to unit uLib's routine when a var
+  /// uLib of an unindexed type is nearer. (FIX-4) the calls stage's
+  /// `enum-shadow-set` line is a WARNING only when the enum stream bound reads
+  /// under an empty shadow set. DERIVED rows only, no parse change: remedy is
+  /// `index --all --resolve-only`. A MINOR: new bindings, and bindings that
+  /// can disappear. The reservation for C2.3 + the IsStub unification MOVES
+  /// from 1.11.0 to 1.12.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.11.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
