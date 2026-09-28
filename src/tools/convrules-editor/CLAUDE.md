@@ -294,15 +294,48 @@ anything is converted. Spec and plan (gitignored, main tree):
 * **Harvested rows are `Data = nil` with Kind `(used)`** (Examine candidates are
   `(candidate)`, also `Data = nil`). They are session state, never written to
   the book. A harvested name that is also an Examine candidate shows ONCE, as
-  the harvested row (`IsHarvested`) -- it carries the status and used-by that a
-  candidate row lacks.
+  the harvested row -- it carries the status and used-by that a candidate row
+  lacks -- but only while that harvested row is actually LISTED (rulings R7,
+  R16): `RefreshUnitList` computes the shown rows once, first, and a candidate
+  yields only to a name in that set (`IndexOfRow`). A harvested twin the check
+  boxes or masks hide does not hide the candidate.
+* **Which harvested rows are listed is pure: `ConvRules.UnitMask.FilterHarvestRows`**
+  (rows, Find missing, Include unqualified, a has-rule predicate, the mask) ->
+  `THarvestView` = the shown rows in display order + `Masked` + `Filtered`.
+  Every row lands in exactly one bucket (shown + masked + filtered = total; the
+  tests pin it). A row the check boxes drop or a rule covers is `Filtered` even
+  when a mask would also hide it. `MainForm` only renders the result and the
+  `N listed, M masked, F filtered` label.
 * **Delete acts on every selected row** (MultiSelect is on): a rule row deletes
   its node, a `(used)` / `(candidate)` row is dismissed from its own session
   set. More than one row asks first.
-* **The resolver is cached on `<DPROJ upper-cased>|<platform>`**, and the key is
-  recorded only when the library list loaded -- a failed library load is
-  retried on the next classify, not cached. `cpBoth` classifies as Win64 and
-  says so in the status line.
+* **Nothing about the destination is cached between classifies (ruling R13).**
+  `EnsureResolver` frees and rebuilds `TDestinationResolver` on EVERY classify:
+  it re-reads the `.dproj` and its `.dpr`, and the new resolver lists each
+  folder at most once, for that classify only. A session-long cache (the old
+  `<DPROJ>|<platform>` key) kept reporting MISSING after the owner copied the
+  unit into the destination. Only the library unit list is cached, by
+  `EnsurePickLists` -- the engine query is the expensive part; a failed load is
+  not cached and is retried. Classifies happen only on user actions: a harvest,
+  a destination commit, a platform change, dismissing harvested rows. A check
+  box or mask change NEVER reclassifies; it re-filters (`RefreshUnitList`).
+  `cpBoth` classifies as Win64 and says so in the status line.
+* **The Destination row shows `Platform: Win64` / `Win32` / `Both -> Win64`**
+  (`DestPlatformLabel`, ruling R17), set at build and by `PlatformChanged`. The
+  TO platform box is the only control; the label is read-only.
+* **Enter in the Destination edit commits it** (`DestKeyPress`, ruling R18),
+  exactly like leaving the edit; the key is swallowed so the edit does not beep.
+* **Pasted text without the word `uses` is a LIST** (`HarvestText`): comments
+  (`{..}`, `(*..*)`, `//..`) and quoted strings are removed first, the reserved
+  word `in` is dropped, then it splits on `,` `;` and whitespace. So a `.dpr`
+  uses-clause selection (`U1 in 'U1.pas' {Form1}, // old DM`) yields only the
+  unit names. It is deliberately NOT read as `'uses ' + text + ';'` through the
+  scanner (ruling R14's first proposal): the scanner stops at the first `;` and
+  keeps one name per comma entry, which measurably dropped `DB, Data.DB` from
+  `Forms, Vcl.Dialogs; DB` + newline + `Data.DB` and would collapse a
+  one-name-per-line list to its first name. Known limit: a selection that runs
+  PAST the clause's `;` into code (`begin`, `Application.Run`) lists those
+  identifiers too. Prose containing the word `uses` is still read as source.
 * **`.dproj` reading is deliberately narrow:** only the `'$(Base)'!=''` and
   `'$(Base_<P>)'!=''` property groups are read; a search-path entry holding a
   macro (`$(Platform)`, `$(Config)`, ...) is skipped and COUNTED in the status
@@ -329,10 +362,21 @@ anything is converted. Spec and plan (gitignored, main tree):
   reports "another program has the clipboard open" through `SetError`. A driven
   run hung on the old modal "Cannot open clipboard: Access is denied".
 * **GUI check: `tests\gui\drive-unit-harvest.ps1 -Exe <ConvRulesEditor.exe>`**
-  (a frozen `drag-lint.exe` beside the exe; needs ORM3's `CLIENT\DM\dmCPData.pas`).
-  Drives text paste, a CF_HDROP file-list paste, and a held clipboard (any
-  editor dialog = FAIL). RED on the pre-feature build, RED on a Task-6 build for
-  the file-list case, GREEN 13/0 on the branch head. It is NOT wired into the
-  `tests\autotest` battery -- run it by hand, like `drive-unit-picker.ps1`.
-  Explorer drag-drop itself, a real Ctrl+V keypress and the visual checks (bold
-  MISSING, wrapped strip at other widths) are owner checks.
+  (a frozen `drag-lint.exe` beside the exe whose Win64 library index answers).
+  It needs NO real project: it writes a FIXTURE in a fresh temp folder --
+  `dest\Dest.dproj` (the IDE's Base / Base_Win64 group shape, `Vcl` a Win64
+  scope name), `dest\Dest.dpr` with one member `Local in 'Local.pas'`, and a
+  source `source\Src.pas` using `Local, Forms, NoSuchUnitXyz, FileOnlyXyz` --
+  and deletes it on exit. It sets the Destination edit (WM_SETTEXT) and commits
+  it with Enter (WM_CHAR), then asserts EXACT statuses: NoSuchUnitXyz
+  `MISSING`, Forms `via scope -> Vcl.Forms`, Local not listed with Find missing
+  on. Also: a CF_HDROP file-list paste (FileOnlyXyz comes only from Src.pas), a
+  held clipboard (any editor dialog = FAIL), and the R13 case -- `uses
+  LateUnit;` is MISSING, LateUnit.pas is written into the fixture destination,
+  the same paste then reads `project`. `-ProofNoDestination` leaves the
+  Destination edit empty: the status assertions then FAIL, which is the proof
+  the check can fail. RED on the pre-feature build (no Paste button). It is NOT
+  wired into the `tests\autotest` battery -- run it by hand, like
+  `drive-unit-picker.ps1`. Explorer drag-drop itself, a real Ctrl+V keypress
+  and the visual checks (bold MISSING, the platform label, wrapped strip at
+  other widths) are owner checks.
