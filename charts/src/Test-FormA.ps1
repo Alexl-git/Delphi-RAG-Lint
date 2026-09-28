@@ -17,7 +17,9 @@
 [CmdletBinding()]
 param(
   [string] $Fixture = (Join-Path $PSScriptRoot '..\fixtures\golden-operat-name-roundtrip.md'),
-  [switch] $Quiet
+  [switch] $Quiet,
+  # writes the regenerated verb set to the pipeline (sorted, comma-joined) so a caller can pin it
+  [switch] $PassThru
 )
 
 $ErrorActionPreference = 'Stop'
@@ -107,8 +109,9 @@ for ($k = 0; $k -lt $block.Count; $k++) {
     $h = $toks[1]
   }
 
-  # structural at column 1
-  if ($raw.Length -gt 0 -and $raw[0] -ne ' ') {
+  # structural at column 1 -- never a numbered line: `[NN] SERVER ROUTES ...` starts at column 1 too,
+  # and reading its actor word as a section header skipped the verb and let anything behind it pass
+  if ($null -eq $gutter -and $raw.Length -gt 0 -and $raw[0] -ne ' ') {
     if ($h -eq 'TRACE' -or $h -eq 'END' -or $SECTIONS -contains $h) { $classified++; continue }
   }
   if ($HEADERKW -contains $h) { $classified++; continue }
@@ -183,6 +186,7 @@ if (-not $Quiet) {
   Write-Host ""
 }
 
+if ($PassThru) { (@($verbs | Sort-Object) -join ',') }
 if ($fail.Count -eq 0) {
   if (-not $Quiet) { Write-Host "  PASS -- the golden satisfies the grammar's checkable rules." -ForegroundColor Green }
   exit 0

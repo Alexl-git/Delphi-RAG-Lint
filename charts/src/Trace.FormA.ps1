@@ -153,6 +153,15 @@ function Get-TraceAnchors($Trace) {
   $n
 }
 
+# AC-11 / P14: the numbered step lines of a Form A TEXT whose own anchor is not a clickable source span,
+# `@<file>.<pas|dfm|dpr|inc|sql>:<line from 1>`. The anchor is the last thing before the first ' -- '
+# (a step text never holds one), so an anchor quoted in the NOTE does not stand in for a missing one;
+# 'index:0' -- the anchor a STOPS falls back to when the resolver had none -- is not clickable either.
+# No unary comma: callers count with @(Get-TraceUnclickable $t).Count, which a wrapped array reads as 1.
+function Get-TraceUnclickable([string] $Text) {
+  @($Text -split "\r\n" | Where-Object { $_ -match '^\[\d{2,3}\] ' -and (($_ -split ' -- ', 2)[0]) -notmatch ' @[A-Za-z0-9_$.\-]+\.(pas|dfm|dpr|inc|sql):[1-9]\d*$' })
+}
+
 function Format-TraceNote([string] $Routine, [string] $Note, [string] $Ask) {
   $parts = @()
   if ($Routine) {

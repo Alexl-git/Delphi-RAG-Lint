@@ -315,7 +315,8 @@ function Resolve-TraceAnchor([string] $Target, $SqlSet, [hashtable] $SourceOverr
 #   except  `try S .. except .. Exit`              -> UNLESS "S raises"; a body of several statements is
 #                                                     quoted "S1 ... Sn raises" -- which one raises is not in the source
 #                                                     (' ... ', never ' .. ', Pascal's range operator -- ruling T4-R3)
-#   case    `case X of .. else .. Exit`            -> UNLESS "case X of else"
+#   case    `case X of .. else .. Exit`            -> UNLESS "case X of", the note `else arm at :<line>` (T4-C3:
+#                                                     the source line verbatim, the arm said in generated text)
 #   unknown anything else: a loop, a case arm, no branch, a condition holding a double-quote, two
 #           Exits on the anchored line, a comment wrapping across the quoted lines, a conditional-
 #           compilation directive ({$IF.. {$ELSE {$ENDIF) between the guard and the Exit --
@@ -503,7 +504,8 @@ function New-ShimCaseResult($X, [int] $CaseIdx, [int] $ElseIdx) {
   if (Test-ShimDirective $X $ca) { return (New-ShimUnknown $X 'sits under a conditional-compilation directive') }
   $sel = Get-ShimSpanText $X.Raw $X.Stripped $ca.L $ca.C $of[0].L $of[0].E
   if ($null -eq $sel) { return (New-ShimUnknown $X 'has a condition that wraps a comment across lines') }
-  New-ShimResult $X 'case' 'UNLESS' "$sel else" $ca.L $X.Tok[$ElseIdx].L (Find-BlockEnd $X.Stripped $ca.L $ca.C) '' $ca.L $ca.C
+  # T4-C3: VERBATIM through `of`; that the Exit is in the else arm is the condition's generated note (Get-ElseNote)
+  New-ShimResult $X 'case' 'UNLESS' $sel $ca.L $X.Tok[$ElseIdx].L (Find-BlockEnd $X.Stripped $ca.L $ca.C) '' $ca.L $ca.C
 }
 
 # The Exit sits in the handler of the try at token $TryIdx (its `except` at $ExIdx):
@@ -930,6 +932,8 @@ function Get-ElseNote($F, $G, $Ctx) {
     $parts += $(if ($lt -match '"|; |[^\x20-\x7E]') { "a literal at :$([int]$l.line)" } else { $lt })
   }
   if ($G.ExitArg) { $parts += "Exit($($G.ExitArg))" }
+  # T4-C3: a case condition quotes only `case X of`; the note says which arm the Exit sits in
+  if ($G.PSObject.Properties['Form'] -and $G.Form -eq 'case') { return "else arm at :$($G.BlockStart)$(if ($parts.Count) { ': ' + ($parts -join ', ') })" }
   $(if ($parts.Count) { 'else ' + ($parts -join ', ') } else { '' })
 }
 

@@ -23,7 +23,7 @@ What that means for this document:
 | part | status after the fixture correction |
 |---|---|
 | Sections 1, 2 (lexical, layout, indentation, trivia) | **Stands.** Derived from structure, not from the defective counts. |
-| Section 3 (EBNF) | **Stands structurally.** The `verb` production as drafted is superseded by the regenerated 26-verb set in section 7. |
+| Section 3 (EBNF) | **Stands structurally.** The `verb` production as drafted is superseded by the regenerated 27-verb set in section 7. |
 | Section 4 (model) | **Stands.** |
 | Section 5 (35 EARS criteria) | **Stands as patterns.** Criteria quoting a COUNT or a LINE NUMBER must take their values from section 7: the block is lines 40..138 with 30 anchors, not 40..123 with 29. |
 | Section 6 (open questions) | **OQ-1, OQ-2, OQ-3 and OQ-4 are RESOLVED by the correction** -- counts recompute, numbering is contiguous from [01], `CROSSES` carries structured `FROM`/`TO`/`OVER`/`WITH`, and `TIERS` is present. The rest stand. |
@@ -471,21 +471,27 @@ golden, each caught with the right code:
 | step `[29]` renumbered `[19]` | `E-STEP-ORDER` step [19] does not exceed [28] |
 | unmodified golden (control) | PASS, exit 0 |
 
-### Verb set, REGENERATED from the corrected fixture (26)
+### Verb set, REGENERATED from the corrected fixture (27)
 
 ```
 ADDS  APPLIES  ATTACHES  BINDS  BROADCASTS  BUILDS  CALLS  COUNTS
-DESERIALIZES  EXTRACTS  FIRES  LOADS  LOGS  NOTIFIES  OPENS
+DESERIALIZES  EDITS  EXTRACTS  FIRES  LOADS  LOGS  NOTIFIES  OPENS
 PREFIXES  READS  RECEIVES  ROUTES  RUNS  SENDS  SERIALIZES  SETS
 SPLITS  VALIDATES  WRITES
 ```
+
+`EDITS` was restored on 2026-09-28 (round-trip Task 7). The checker read the
+actor word of a numbered line (`[01] USER EDITS ...`, `[47] SERVER ROUTES ...`)
+as a section header, because a numbered line starts at column 1, so the verb
+behind an actor was never collected -- and anything behind an actor word passed
+unclassified. The set printed 26 until then.
 
 This supersedes the drafted list in section 2.3. Differences worth noting:
 `DESERIALIZES`, `ATTACHES`, `SELECTS`, `COUNTS` and `RECORDS` were missing from
 the draft; `LOOKS UP` is no longer used (the corrected fixture expresses it as
 `LOADS` with `VIA` / `FROM` facets); and `SELECTS` and `RECORDS` classify as
-FACET heads rather than verbs, which is why the regenerated set is 26 and not
-28. Facet heads are deliberately kept out of the verb set so `E-UNKNOWN-HEAD`
+FACET heads rather than verbs, which is why the regenerated set is 27 and not
+29. Facet heads are deliberately kept out of the verb set so `E-UNKNOWN-HEAD`
 stays meaningful.
 
 ### Two defects the re-run found -- both in the CHECKER, not the grammar

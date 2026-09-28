@@ -616,4 +616,118 @@ $rtO = $(try { & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmCaus
 $res.RtOther = $(if ($rtO.PSObject.Properties['Threw']) { "threw: $($rtO.Threw)" } else { "$($rtO.TableColumn):$($rtO.Steps -gt 0):$(Test-Path $rtO.Trace)" })
 $res.RtOtherStop = $(if ($rtO.PSObject.Properties['Threw']) { '' } else { "$($rtO.DataSet)|$($rtO.Steps)/$($rtO.Unresolved)|$($rtO.Stop -replace '\s+', ' ')" })
 
+# ---- 7. the golden matcher (AC-5, AC-7) and the whole-trace checks (AC-1, AC-2, AC-4, AC-11) ----
+# One row per ANCHORED line of a trace model: each numbered step, and each condition and facet under it
+# (a child row carries its step's number). A child's routine is its own `in X` part only -- a facet has none,
+# and it does not inherit its step's: a CONTRACT facet in Pipes.Protocol.pas is not IN the sender.
+function Get-GoldenRowSubject([string] $Kind, [string] $Text) {
+  if ($Kind -in 'cond', 'stops') { return '' }
+  $tk = @($Text -split '\s+' | Where-Object { $_ })
+  # a step's first word is its verb; a facet's text starts at its subject. `READS FROM X` is about X.
+  $k = $(if ($Kind -eq 'facet') { 0 } else { 1 })
+  while ($k -lt $tk.Count -and $tk[$k] -cin 'FROM', 'TO', 'VIA', 'ONTO', 'AT') { $k++ }
+  $(if ($k -lt $tk.Count) { $tk[$k] } else { '' })
+}
+function Get-GoldenRows($Trace) {
+  $rows = New-Object System.Collections.ArrayList
+  $add = { param($Step, $Kind, $Anchor, $Text, $Routine, $Ask)
+    $ai = $Anchor.LastIndexOf(':')
+    [void]$rows.Add([pscustomobject]@{ Seq = $rows.Count; Step = [int]$Step; Kind = $Kind; File = $Anchor.Substring(0, $ai); Line = [int]$Anchor.Substring($ai + 1)
+                                       Text = $Text; Routine = [string]$Routine; Ask = [string]$Ask; Subject = (Get-GoldenRowSubject $Kind $Text) }) }
+  foreach ($sec in $Trace.Sections) {
+    foreach ($i in $sec.Items) {
+      & $add $i.Number $i.Kind $i.Anchor $i.Text $i.Routine $i.Ask
+      foreach ($ch in $i.Children) {
+        if (-not $ch.Anchor) { continue }
+        if ($ch.Kind -eq 'cond') { & $add $i.Number 'cond' $ch.Anchor $ch.Condition $ch.Routine $ch.Ask } else { & $add $i.Number 'facet' $ch.Anchor $ch.Text '' '' }
+      }
+    }
+  }
+  , $rows
+}
+function Test-GoldenWord([string] $Text, [string] $Word) { $Text -match ('(^|[^A-Za-z0-9_])' + [regex]::Escape($Word) + '($|[^A-Za-z0-9_])') }
+# AC-5: a node is MATCHED by a row in the node's FILE that is anchored to the node -- at the golden's own line,
+# or IN the node's routine (the row's `in X`), or ABOUT it (the row's subject is the symbol or `<qualifier>.<symbol>`;
+# a CALLS step anchors at the callee's body, where the golden may cite its declaration). Naming the symbol
+# somewhere in the text is NOT a match (`FIRES FMTOperation.AfterPost -> DoAfterPostOperation` is about AfterPost,
+# anchored in Create). DISCLOSED: a STOPS naming the symbol AND its engine ask; a STOPS with no ask is missing.
+# AC-7: a guard is MATCHED by a condition at its file:line whose verbatim text holds the guard's word;
+# DISCLOSED by a STOPS naming the word or anchored at that file:line, again with its ask.
+# MatchedBy / GuardsBy name the row that matched (`<node>=<step>[/<child kind>]@<line>`), so a pin shows WHAT matched.
+function Measure-GoldenMatch($Trace, $Inv) {
+  $rows = Get-GoldenRows $Trace
+  $mb = @(); $nd = @(); $nx = @(); $nxN = @()
+  foreach ($n in $Inv.Nodes) {
+    $sym = [string]$n.Symbol; $gl = [int]$n.Golden
+    $cand = @($rows | Where-Object { $_.Kind -ne 'stops' -and $_.File -eq $n.File -and
+                ($_.Line -eq $gl -or (($_.Routine -split '\.')[-1] -ceq $sym) -or $_.Subject -ceq $sym -or $_.Subject.EndsWith(".$sym", [StringComparison]::Ordinal)) })
+    if ($cand.Count) {
+      $b = @($cand | Sort-Object @{ E = { $(if ($_.Line -eq $gl) { 0 } else { 1 }) } }, @{ E = { $(if ($_.Kind -in 'step', 'crosses') { 0 } else { 1 }) } }, Seq)[0]
+      $mb += "$($n.N)=$('{0:00}' -f $b.Step)$(if ($b.Kind -in 'cond', 'facet') { "/$($b.Kind)" })@$($b.Line)"
+      continue
+    }
+    $st = @($rows | Where-Object { $_.Kind -eq 'stops' -and (Test-GoldenWord $_.Text $sym) })
+    $sa = @($st | Where-Object { $_.Ask })
+    if ($sa.Count) { $nd += "$($n.N):$($sa[0].Ask)" }
+    elseif ($st.Count) { $nx += "$($n.N):$($n.Name) (a STOPS names it, with no ask)"; $nxN += "$($n.N)*" }
+    else { $nx += "$($n.N):$($n.Name)"; $nxN += "$($n.N)" }
+  }
+  $gb = @(); $gd = @(); $gx = @(); $gxN = @()
+  foreach ($g in $Inv.Guards) {
+    $hit = @($rows | Where-Object { $_.Kind -eq 'cond' -and $_.File -eq $g.File -and $_.Line -eq [int]$g.Line -and $_.Text.Contains([string]$g.Word) })
+    if ($hit.Count) { $gb += "$($g.G)@$('{0:00}' -f $hit[0].Step)"; continue }
+    $st = @($rows | Where-Object { $_.Kind -eq 'stops' -and ($_.Text.Contains([string]$g.Word) -or ($_.File -eq $g.File -and $_.Line -eq [int]$g.Line)) })
+    $sa = @($st | Where-Object { $_.Ask })
+    if ($sa.Count) { $gd += "$($g.G):$($sa[0].Ask)" }
+    elseif ($st.Count) { $gx += "$($g.G):$($g.Name) (a STOPS names it, with no ask)"; $gxN += "$($g.G)*" }
+    else { $gx += "$($g.G):$($g.Name)"; $gxN += "$($g.G)" }
+  }
+  [pscustomobject]@{ Matched = $mb.Count; MatchedBy = ($mb -join ','); Disclosed = ($nd -join ','); Missing = ($nx -join '|'); MissingN = ($nxN -join ',')
+                     GuardsMatched = $gb.Count; GuardsBy = ($gb -join ','); GuardsDisclosed = ($gd -join ','); GuardsMissing = ($gx -join '|'); GuardsMissingN = ($gxN -join ',') }
+}
+$T7 = Read-FormA $txt
+$gm7 = Measure-GoldenMatch $T7 $inv
+$res.GoldenMatched = $gm7.Matched; $res.GoldenMatchedBy = $gm7.MatchedBy; $res.GoldenDisclosed = $gm7.Disclosed; $res.GoldenMissing = $gm7.Missing
+$res.GuardsMatched = $gm7.GuardsMatched; $res.GuardsBy = $gm7.GuardsBy; $res.GuardsDisclosed = $gm7.GuardsDisclosed; $res.GuardsMissing = $gm7.GuardsMissing
+# the matcher can say all three things (proven on a synthetic trace, not merely on the one that passes):
+# LoadOneTable matched; a MENTION of LoadAllForFolder, and GetTable in the wrong file, not matched; a STOPS
+# with its ask discloses HandleTableLoad; a STOPS naming PushTableChanged with NO ask does not disclose it.
+# Guards: 3950 matched; ChangeCount one line off (3972) not matched, but disclosed by a STOPS at 3973 with E1.
+$Tm = New-Trace 'X' 'x' 'x' 'A' '2026-09-28' 'x' 'client -> server'
+$sm = Add-TraceSection $Tm 'WRITE'
+$m1 = New-TraceStep 'step' 'CALLS TBlueprint_ViewModel.LoadOneTable' 'Blueprint4.ViewModel.pas:1123'
+[void]$m1.Children.Add((New-TraceCond 'UNLESS' 'FSuppressEvents' 'Blueprint4.ViewModel.pas:3950'))
+[void]$m1.Children.Add((New-TraceCond 'UNLESS' 'FMTOperation.ChangeCount = 0' 'Blueprint4.ViewModel.pas:3972'))
+[void]$sm.Items.Add($m1)
+[void]$sm.Items.Add((New-TraceStep 'step' 'SETS P := LoadAllForFolder' 'Blueprint4.ViewModel.pas:10' '' 'TBlueprint_ViewModel.Create'))
+[void]$sm.Items.Add((New-TraceStep 'step' 'CALLS TDatasetsDef.GetTable' 'uOther.pas:5'))
+[void]$sm.Items.Add((New-TraceStep 'stops' 'HandleTableLoad is not reached from the dispatch' 'uPipeSessionBuilder.pas:1' '' '' '' 'E2'))
+[void]$sm.Items.Add((New-TraceStep 'stops' 'the PushTableChanged call is unbound' 'uGenericTableRoute.pas:507'))
+[void]$sm.Items.Add((New-TraceStep 'stops' 'the ChangeCount guard is not quoted' 'Blueprint4.ViewModel.pas:3973' '' '' '' 'E1'))
+$gmS = Measure-GoldenMatch (Read-FormA (Write-FormA $Tm)) $inv
+$res.GoldenClassify = "$($gmS.MatchedBy) | $($gmS.Disclosed) | $($gmS.MissingN) || $($gmS.GuardsBy) | $($gmS.GuardsDisclosed) | $($gmS.GuardsMissingN)"
+# AC-1 on the REAL trace, and the verb set it yields: Test-FormA now reads the verb AFTER an actor word
+# (`[47] SERVER ROUTES ...`), which a numbered line starting at column 1 used to skip as a section header
+$res.TraceVerbs = & (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture $rt.Trace -Quiet -PassThru
+$res.TraceFormA = $LASTEXITCODE
+$res.GoldenVerbs = & (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Quiet -PassThru
+# ... and so garbage behind an actor word is unclassified (it passed as a "section header" before)
+[IO.File]::WriteAllText((Join-Path $work 'trace-actor-mut.dlgraph'), ($txt -replace '\] SERVER CALLS TPipeSessionBuilder\.HandleTableLoad', '] SERVER 42 TPipeSessionBuilder.HandleTableLoad'), (New-Object Text.ASCIIEncoding))
+& (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture (Join-Path $work 'trace-actor-mut.dlgraph') -Quiet 6>$null | Out-Null
+$res.TraceFormAActorMut = $LASTEXITCODE
+# AC-2, AC-4
+$res.TraceRoundTrip = $(if ((Write-FormA $T7) -ceq $txt) { 'identical' } else { 'differs' })
+$tb = [IO.File]::ReadAllBytes($rt.Trace)
+$res.TraceBytes = "$(@($tb | Where-Object { $_ -ne 0x0D -and $_ -ne 0x0A -and ($_ -lt 0x20 -or $_ -gt 0x7E) }).Count)/$(([regex]::Matches($txt, '(?<!\r)\n')).Count)/$(if ($tb[0] -eq 0xEF) { 'BOM' } else { 'noBOM' })"
+# AC-11 / P14: every step line is a clickable source span, COMPUTED by the emitter (AllClickable) and here from
+# the text -- and the check FAILS when one anchor is removed
+$res.TraceAnchors = "$(@(Get-TraceUnclickable $txt).Count)/$($rt.ClickTargets)/$($rt.AllClickable)"
+$cut = $txt -replace ' @Blueprint4\.ViewModel\.pas:78 -- the anchor dataset', ' -- the anchor dataset'
+$res.TraceAnchorsCut = "$(@(Get-TraceUnclickable $cut).Count)/$($cut -ne $txt)"
+# no condition is written negated: a `not (` the source did not write (heuristic: the golden's three negated
+# guards are source text -- `not (Assigned(..`, `not TryBuildSafeWhere`, `not GDatasetsDef.GetTable`)
+# T4-C3: a case guard quotes its source line verbatim through `of`; the else arm is the generated note
+$res.TraceCaseCond = (@($txt -split "\r\n" | Where-Object { $_ -match '^       (WHEN|UNLESS) "case ' } | ForEach-Object { $_.Trim() }) -join ' | ')
+$res.TraceNegated = @((Get-GoldenRows $T7) | Where-Object { $_.Kind -eq 'cond' -and $_.Text -match '^\s*not\s*\(' -and $_.Text -notmatch 'Assigned|TryBuildSafeWhere|GetTable' }).Count
+
 [pscustomobject]$res

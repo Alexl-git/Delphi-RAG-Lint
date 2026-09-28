@@ -223,5 +223,6 @@ Write-Host ("  anchor={0}  steps={1}  conditions={2}  crossings={3}  unresolved=
   OnDbProof    = $proof
   ClickTargets = (Get-TraceAnchors $T)
   Expected     = (Get-TraceAnchors $T)
-  AllClickable = $true
+  # P14: computed from the written step lines, never assumed
+  AllClickable = (@(Get-TraceUnclickable $text).Count -eq 0)
 }
