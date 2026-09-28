@@ -76,7 +76,9 @@ if ($A.StaleFile) {
   throw "round-trip: $([IO.Path]::GetFileName($A.StaleFile)) differs from the indexed copy (sha256) -- refusing to follow the anchor chain through it. Reindex the project, then re-run."
 }
 $name = $(if ($A.TableColumn) { $A.TableColumn } else { $Target })
-$T = New-Trace $name "How $name reaches $Target and goes back" $Target "$cliName + $srvName + SQL" $asOf $regen 'client -> pipe -> server -> database'
+# fix round 1 (I3): a trace that STOPS at its anchor reaches nothing, so its title claims no reach
+$title = $(if ($A.Stop) { "Why $Target cannot be traced" } else { "How $name reaches $Target and goes back" })
+$T = New-Trace $name $title $Target "$cliName + $srvName + SQL" $asOf $regen 'client -> pipe -> server -> database'
 $secA = Add-TraceSection $T 'ANCHOR'
 foreach ($i in $A.Items) { [void]$secA.Items.Add($i) }
 $stopAnchor = $(if ($A.StopAnchor -and $A.StopAnchor -ne 'unknown:0') { $A.StopAnchor } elseif ($A.Items.Count) { $A.Items[-1].Anchor } else { 'index:0' })
@@ -91,6 +93,13 @@ $write = 0; $read = 0; $also = 0
 $secW = Add-TraceSection $T 'WRITE'; $secS = Add-TraceSection $T 'SERVER'; $secD = Add-TraceSection $T 'DATABASE'; $secR = Add-TraceSection $T 'RESPONSE'
 $secRd = Add-TraceSection $T 'READ'; $secAl = Add-TraceSection $T 'ALSO'
 $alsoRows = New-Object System.Collections.ArrayList
+# fix round 1 (I3, the T6-R2 mechanism): after an anchor STOPS no later section is walked. Each one says so in a
+# GENERATED section note -- not a STOPS, not counted unresolved -- so an empty WRITE never reads as "no write path".
+# The anchor's STOPS is the last ANCHOR item, and ANCHOR is the first section, so its number is the ANCHOR count.
+if ($A.Stop) {
+  $notWalked = ConvertTo-TraceNoteText ("not walked: the trace stopped at [{0:00}]" -f $secA.Items.Count)
+  foreach ($s in @($secW, $secS, $secD, $secR, $secRd, $secAl)) { $s.Note = $notWalked }
+}
 
 if (-not $A.Stop) {
   # ---- 2. WRITE: the first event wiring on the dataset, its handler, down to the send ------

@@ -2531,6 +2531,9 @@ Step 'E-RT0' {
   # (the brief expected CAUSFAIL.REASON -- a resolver finding, reported, not fixed here)
   Chk 'A-RT6-OTHER'     $rt0.RtOther ':True:True'
   Chk 'A-RT6-OTHERSTOP' $rt0.RtOtherStop 'MemTable|6/1|no upper-case table-name literal shares a line with MemTable in uCausFail.ViewModel -- the table cannot be inferred'
+  # Task 7 fix round 1 (I3): stopped at its anchor's [06] -> no reach in the title, six sections noted "not walked"
+  # naming [06] (was "How frmCausFail.colREASON reaches frmCausFail.colREASON and goes back" and six bare headers)
+  Chk 'A-RT6-OTHERSHAPE' $rt0.RtOtherShape 'Why frmCausFail.colREASON cannot be traced|6|[06]'
   # Task 6 FIX ROUND 1. Important 1 (threw before: no span): the guard-line rule takes only a call INSIDE the condition,
   # between `if` and `then` -- Foo on a one-line guard `if not X(A) then begin Foo(B); Exit; end;` is failure-branch code,
   # as is Log after the `then` of a wrapped one; the rule used to take every bound call on the if line
@@ -2555,12 +2558,32 @@ Step 'E-RT' {
   # AC-5: matched / disclosed / missing. A node is matched by a row in its FILE at the golden's line, IN its routine,
   # or ABOUT it (subject `X` or `Q.X`) -- a mere mention is not a match (A-RT7-CLASSIFY). The golden's 17: all matched,
   # nothing disclosed. Where a line differs the golden cites the declaration and the trace the body (4 277->3948,
-  # 5 279->3960, 7 63->1209, 8 75->389, 9 59->199, 11 63->183, 13 120->401, 14 321->1207 the fill call IN it,
-  # 15 266->1123, 17 59->502); 6 is the TCommandID.cmdDelta CONTRACT facet at :55 (the golden's :389 is the doc
-  # comment of IPipeSessionBuilder.HandleDelta, which the crossing also carries as a CONTRACT at :392)
+  # 5 279->3960, 7 63->1209, 8 75->389, 9 59->199, 11 63->183, 14 321->1207 the fill call IN it, 15 266->1123,
+  # 17 59->502). Two golden lines are COMMENTS (fix round 1, I1 -- A-RT7-DOCDECL): 6 is the far-side CONTRACT
+  # IPipeSessionBuilder.HandleDelta @Pipes.Protocol.pas:392, the declaration its :389 payload contract sits above
+  # (RE-PINNED 6=14/facet@55 -> 6=14/facet@392 by the doc-line rule: the TCommandID.cmdDelta constant at :55 is the
+  # command id, a different fact, and no longer matches); 13 is PushTableChanged's body @:401, the implementation of
+  # the :124 declaration its :120 comment sits above (unchanged)
   Chk 'A-RT7-NODES'     "$($rt0.GoldenMatched)/$($rt0.GoldenDisclosed)/$($rt0.GoldenMissing)" '17//'
-  Chk 'A-RT7-NODESBY'   $rt0.GoldenMatchedBy ('1=07@78,2=05@99,3=10@639,4=11@3948,5=12@3960,6=14/facet@55,7=16@1209,8=17@389,9=25@199,' +
+  Chk 'A-RT7-NODESBY'   $rt0.GoldenMatchedBy ('1=07@78,2=05@99,3=10@639,4=11@3948,5=12@3960,6=14/facet@392,7=16@1209,8=17@389,9=25@199,' +
                                               '10=21@130,11=31@183,12=09@2808,13=37@401,14=44@1207,15=45@1123,16=46/facet@57,17=48@502')
+  # I1: the golden lines that are a line of the comment block directly above a declaration, from INDEX facts only
+  # (`comment` string_literals covering every line down to the next symbol, nothing indexed between; symbol_docs
+  # first): `<file>:<golden>=<decl>-<decl end>/<impl>-<impl end>`, every clone that indexes the file agreeing
+  Chk 'A-RT7-DOCDECL'   $rt0.GoldenDocDecl 'Pipes.Protocol.pas:389=392-392/0-0,uBroadcastServer.pas:120=124-124/401-441'
+  # ... and the negative: WITHOUT the :392 CONTRACT row node 6 is MISSING (16 matched) -- not matched via :55
+  # (before the rule: '|17', node 6 read matched through the command-id constant)
+  Chk 'A-RT7-DOCNEG'    $rt0.GoldenDocNeg '6|16'
+  # I2 (controller ruling on golden READ [28]-[29]): the BLOBS / WHERE keys and the column list come from transport-
+  # convention helpers, not steps -- DISCLOSED, never silently ignored. Goes red if the list changes or the walk
+  # starts producing one (then it moves right of the `||`, as the synthetic A-RT7-FACTSPROD shows)
+  Chk 'A-RT7-FACTS'     "$($rt0.GoldenFactsReason) | $($rt0.GoldenFactsDisclosed) || $($rt0.GoldenFactsOnPage)" ('transport-convention helper, not a step | ' +
+                          'uPipeSessionBuilder.pas:533 READ [28] READS BLOBS key,uPipeSessionBuilder.pas:534 READ [28] READS WHERE key,' +
+                          'uPipeSessionBuilder.pas:538 READ [29] BUILDS column list FROM Def.NonBlobCols || ')
+  Chk 'A-RT7-FACTSPROD' $rt0.GoldenFactsProduced '2 || uPipeSessionBuilder.pas:533@07'
+  # M: no numbered item of the real trace is unanchored; a nulled anchor ([05]) and a colon-less one ([07]) are
+  # REPORTED -- both counted unanchored, node 2 (whose only row is [05]) missing -- where they used to throw
+  Chk 'A-RT7-UNANCHORED' "$($rt0.GoldenUnanchored)/$($rt0.GoldenUnanchoredNeg)" '/05,07|2|16'
   # AC-7: every golden guard is a condition at its if/except line holding its word verbatim, client AND server
   Chk 'A-RT7-GUARDS'    "$($rt0.GuardsMatched)/$($rt0.GuardsDisclosed)/$($rt0.GuardsMissing)" '12//'
   Chk 'A-RT7-GUARDSBY'  $rt0.GuardsBy '1@11,2@12,3@12,4@18,5@18,6@25,7@26,8@31,9@45,10@55,11@56,12@65'
@@ -2568,7 +2591,13 @@ Step 'E-RT' {
   # in the wrong file are not; a STOPS with its ask discloses 17 (E2), one without an ask leaves 13 missing (*);
   # guard 2 one line off is not matched, a STOPS at its line with E1 discloses it
   Chk 'A-RT7-CLASSIFY'  $rt0.GoldenClassify '15=01@1123 | 17:E2 | 1,2,3,4,5,6,7,8,9,10,11,12,13*,14,16 || 1@01 | 2:E1 | 3,4,5,6,7,8,9,10,11,12'
-  Chk 'A-RT7-NONEGATE'  $rt0.TraceNegated 0
+  # I4 (REPLACED, fix round 1; the name is kept): was a count of `not (` conditions minus an exclusion list keyed on
+  # this golden's own text (0, and 0 on every mutation below). Now `bad/checked/skipped`: every condition not in the
+  # ` ... raises` or `case X of` form occurs VERBATIM in the fresh source from its anchor line (whitespace collapsed,
+  # at identifier boundaries, not behind a dropped `not`)
+  Chk 'A-RT7-NONEGATE'  $rt0.TraceNegated '0/27/4'
+  # ... and goes red on a mutated quote: `not ` prefixed to guard 1 (:3950), `not ` dropped from guard 6 (:431)
+  Chk 'A-RT7-NONEGATEMUT' $rt0.TraceNegatedMut '1:Blueprint4.ViewModel.pas:3950,1:uGenericTableRoute.pas:431'
   # AC-1 on the generated trace, with the verb set the checker now reads after an actor word too (Task 2 gap:
   # `[NN] SERVER <anything>` passed as a section header, exit 0 before -- A-RT7-ACTORMUT); the golden gains EDITS
   Chk 'A-RT7-FORMA'     $rt0.TraceFormA 0
@@ -2587,6 +2616,19 @@ Step 'E-RT' {
 }
 
 Note 'round-trip negatives ...'
+# Task 7 fix round 1 (I3): a trace that STOPS at its anchor claims no reach. Its shape, read off the written text:
+# the TITLE, the sections carrying the GENERATED `  -- not walked: the trace stopped at [NN]` note (T6-R2: a note,
+# never a STOPS, never unresolved), the stop numbers those notes name, the Test-FormA exit, and the Read-FormA
+# round trip. Before the fix: "How X reaches X and goes back" and six bare section headers (readable as "no path").
+function Get-StoppedTraceShape([string] $Text, [string] $Path) {
+  . "$SRC\Trace.FormA.ps1"
+  $ttl = $(if ($Text -match '(?m)^  TITLE "([^"]*)"\r$') { $Matches[1] } else { '' })
+  $nw = @([regex]::Matches($Text, '(?m)^([A-Z]+)\r\n  -- not walked: the trace stopped at (\[\d+\])\r$'))
+  & "$SRC\Test-FormA.ps1" -Fixture $Path -Quiet 6>$null | Out-Null
+  $fa = $LASTEXITCODE
+  $rtp = $(try { if ((Write-FormA (Read-FormA $Text)) -ceq $Text) { 'identical' } else { 'differs' } } catch { "threw: $($_.Exception.Message)" })
+  "$ttl|$(($nw | ForEach-Object { $_.Groups[1].Value }) -join ',')|$((@($nw | ForEach-Object { $_.Groups[2].Value } | Select-Object -Unique)) -join ',')|$fa|$rtp"
+}
 # AC-13 (ruling P3, asserted on the EMITTER): not data-bound -> no throw, ONE numbered STOPS, a trace the checker passes
 Step 'RT-N1' {
   $script:rtn1 = & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.cxGroupBox16' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir 6>$null
@@ -2594,12 +2636,16 @@ Step 'RT-N1' {
   Chk 'A-RT-N1'         "$($rtn1.Steps)/$($rtn1.Unresolved)/$($rtn1.Conditions)/$($rtn1.AllClickable)/$LASTEXITCODE" '1/1/0/True/0'
   if ($rtn1.Text -notmatch '\[01\] STOPS frmBlueprint4\.cxGroupBox16 \(TcxGroupBox\) is not data-bound') { Fail 'A-RT-N1' 'the one step is not the STOPS naming why' }
   if ($rtn1.Text -notmatch 'END TRACE  1 steps, 0 conditions, 0 crossings, 1 unresolved\.') { Fail 'A-RT-N1' 'END TRACE does not count the STOPS' }
+  # I3: no reach claimed; all six later sections say they were not walked, naming the [01] STOPS
+  Chk 'A-RT-N1-SHAPE'   (Get-StoppedTraceShape $rtn1.Text $rtn1.Trace) 'Why frmBlueprint4.cxGroupBox16 cannot be traced|WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|[01]|0|identical'
 }
 # Review Focus 2: TABLE.COLUMN loaded by several datasets -> ONE STOPS naming all five (the brief said three: the
 # clone holds five, A-RT3-COLUMN), no throw
 Step 'RT-N2' {
   $script:rtn2 = & "$SRC\Emit-RoundTrip.ps1" -Target 'OPERAT.NAME' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir 6>$null
   Chk 'A-RT-N2'         "$($rtn2.Steps)/$($rtn2.Unresolved)/$($rtn2.TableColumn)" '1/1/OPERAT.NAME'
+  # I3: the same shape, and the N2 trace passes Test-FormA and reads back byte for byte too
+  Chk 'A-RT-N2-SHAPE'   (Get-StoppedTraceShape $rtn2.Text $rtn2.Trace) 'Why OPERAT.NAME cannot be traced|WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|[01]|0|identical'
   if ($rtn2.Text -notmatch '\[01\] STOPS OPERAT\.NAME: 5 datasets load OPERAT in this index \(AssignGroups\.ViewModel\.TAssignGroupsViewModel\.FMTOperat, .*ControlPlan2\.ViewModel\.TControlPlan_ViewModel\.FMTOperation\)') { Fail 'A-RT-N2' 'the STOPS does not name the five datasets' }
 }
 # AC-14: a stale view model (a COPY with one trailing space, never the source) -> REFUSED, the file named, NO .dlgraph
@@ -2657,7 +2703,7 @@ if (-not $Quiet) {
   Write-Host ("  consumers      : CAUSFAIL cert/inf readers {0}/{1}, writers {2}/{3}, {4} triggers; REASON bindings {5}/{6}; facts {7}/{8}/{9}; literals {10}/{11}/{12}; proc bodies {13}" -f (V $co1 'CertainReaders'), (V $co1 'InferredReaders'), (V $co1 'CertainWriters'), (V $co1 'InferredWriters'), (V $co1 'Triggers'), (V $co2c 'IndexBindings'), (V $co2c 'DrawnBindings'), (V $co1 'IndexReadFacts'), (V $co1 'IndexWriteFacts'), (V $co1 'IndexFactSymbols'), (V $co1 'IndexVerbLiterals'), (V $co1 'IndexFromJoinTables'), (V $co1 'IndexFactReadTables'), (V $co1 'ProcBodies'))
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
-  Write-Host ("  round-trip     : golden nodes {0}/17 matched (disclosed: {1}); guards {2}/12 (disclosed: {3}); steps/conditions/crossings/unresolved {4}; ALSO {5}; N1 {6} step(s); stale {7}; holdout candidates {8}" -f (V $rt0 'GoldenMatched'), (V $rt0 'GoldenDisclosed'), (V $rt0 'GuardsMatched'), (V $rt0 'GuardsDisclosed'), (V $rt0 'RtCounts'), (V $rt0 'RtAlso'), (V $rtn1 'Steps'), $(if ($rtStale) { $rtStale } else { '?' }), (V $rt0 'HoldoutCandidates'))
+  Write-Host ("  round-trip     : golden nodes {0}/17 matched (disclosed: {1}); {9} golden facts disclosed ({10}): {11}; guards {2}/12 (disclosed: {3}); steps/conditions/crossings/unresolved {4}; ALSO {5}; N1 {6} step(s); stale {7}; holdout candidates {8}" -f (V $rt0 'GoldenMatched'), (V $rt0 'GoldenDisclosed'), (V $rt0 'GuardsMatched'), (V $rt0 'GuardsDisclosed'), (V $rt0 'RtCounts'), (V $rt0 'RtAlso'), (V $rtn1 'Steps'), $(if ($rtStale) { $rtStale } else { '?' }), (V $rt0 'HoldoutCandidates'), (V $rt0 'GoldenFactsDisclosedN'), (V $rt0 'GoldenFactsReason'), (V $rt0 'GoldenFactsDisclosed'))
   Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''

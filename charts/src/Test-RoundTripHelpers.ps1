@@ -615,6 +615,12 @@ $res.RtAssignAt = $(try {
 $rtO = $(try { & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmCausFail.colREASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null } catch { [pscustomobject]@{ Threw = $_.Exception.Message } })
 $res.RtOther = $(if ($rtO.PSObject.Properties['Threw']) { "threw: $($rtO.Threw)" } else { "$($rtO.TableColumn):$($rtO.Steps -gt 0):$(Test-Path $rtO.Trace)" })
 $res.RtOtherStop = $(if ($rtO.PSObject.Properties['Threw']) { '' } else { "$($rtO.DataSet)|$($rtO.Steps)/$($rtO.Unresolved)|$($rtO.Stop -replace '\s+', ' ')" })
+# Task 7 fix round 1 (I3): that trace stops at its anchor's SIXTH step, so its title claims no reach and every later
+# section carries the generated note naming [06] -- the number is the ANCHOR count, not a constant
+$res.RtOtherShape = $(if ($rtO.PSObject.Properties['Threw']) { '' } else {
+  $oT = $(if ($rtO.Text -match '(?m)^  TITLE "([^"]*)"\r$') { $Matches[1] } else { '' })
+  $oN = @([regex]::Matches($rtO.Text, '(?m)^[A-Z]+\r\n  -- not walked: the trace stopped at (\[\d+\])\r$'))
+  "$oT|$($oN.Count)|$((@($oN | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)) -join ',')" })
 
 # ---- 7. the golden matcher (AC-5, AC-7) and the whole-trace checks (AC-1, AC-2, AC-4, AC-11) ----
 # One row per ANCHORED line of a trace model: each numbered step, and each condition and facet under it
@@ -628,12 +634,16 @@ function Get-GoldenRowSubject([string] $Kind, [string] $Text) {
   while ($k -lt $tk.Count -and $tk[$k] -cin 'FROM', 'TO', 'VIA', 'ONTO', 'AT') { $k++ }
   $(if ($k -lt $tk.Count) { $tk[$k] } else { '' })
 }
+# Fix round 1 (M): a numbered item whose anchor is missing or is not `<file>:<line>` (the P14 case) is a row with
+# NO file -- it matches nothing, so its node reads MISSING -- and Anchored $false, which Measure-GoldenMatch counts
+# as unclickable. It used to throw a null-method / Substring error instead of being reported.
 function Get-GoldenRows($Trace) {
   $rows = New-Object System.Collections.ArrayList
   $add = { param($Step, $Kind, $Anchor, $Text, $Routine, $Ask)
-    $ai = $Anchor.LastIndexOf(':')
-    [void]$rows.Add([pscustomobject]@{ Seq = $rows.Count; Step = [int]$Step; Kind = $Kind; File = $Anchor.Substring(0, $ai); Line = [int]$Anchor.Substring($ai + 1)
-                                       Text = $Text; Routine = [string]$Routine; Ask = [string]$Ask; Subject = (Get-GoldenRowSubject $Kind $Text) }) }
+    $an = [string]$Anchor; $ai = $an.LastIndexOf(':'); $ln = 0
+    $ok = $ai -gt 0 -and [int]::TryParse($an.Substring($ai + 1), [ref]$ln) -and $ln -gt 0
+    [void]$rows.Add([pscustomobject]@{ Seq = $rows.Count; Step = [int]$Step; Kind = $Kind; File = $(if ($ok) { $an.Substring(0, $ai) } else { '' }); Line = $(if ($ok) { $ln } else { 0 })
+                                       Anchored = $ok; Text = $Text; Routine = [string]$Routine; Ask = [string]$Ask; Subject = (Get-GoldenRowSubject $Kind $Text) }) }
   foreach ($sec in $Trace.Sections) {
     foreach ($i in $sec.Items) {
       & $add $i.Number $i.Kind $i.Anchor $i.Text $i.Routine $i.Ask
@@ -654,13 +664,29 @@ function Test-GoldenWord([string] $Text, [string] $Word) { $Text -match ('(^|[^A
 # AC-7: a guard is MATCHED by a condition at its file:line whose verbatim text holds the guard's word;
 # DISCLOSED by a STOPS naming the word or anchored at that file:line, again with its ask.
 # MatchedBy / GuardsBy name the row that matched (`<node>=<step>[/<child kind>]@<line>`), so a pin shows WHAT matched.
-function Measure-GoldenMatch($Trace, $Inv) {
+#
+# Fix round 1 (I1) -- a golden line that is a COMMENT. When the golden cites a line of the comment block directly
+# above a declaration ($DocDecl: `<file>:<golden line>` -> that declaration's span and its implementation's,
+# Get-GoldenDocDecl), the node IS that declaration: it is matched by a row at the golden line, on the declaration,
+# or inside its implementation (Test-GoldenDocLine) -- by POSITION from the index, and by nothing else: no routine
+# or subject rule, because a name match there can be a different fact (node 6: the golden's :389 is the payload
+# contract above IPipeSessionBuilder.HandleDelta @:392; the TCommandID.cmdDelta constant @:55 is the command id and
+# must not stand in for it. Node 13: the golden's :120 is the comment above TBroadcastServer.PushTableChanged @:124,
+# whose implementation (:401-441) the CALLS step anchors in).
+#
+# Fix round 1 (I2) -- $Facts: golden facts the walk DELIBERATELY does not produce as steps (each File, Line, What).
+# A fact with no row at its file:line is DISCLOSED (FactsDisclosed); one the trace now carries is listed in FactsOnPage,
+# so a walk that starts producing it, or a changed list, moves the pin.
+# Unanchored: the step numbers of numbered items with no clickable anchor (fix round 1, M).
+function Measure-GoldenMatch($Trace, $Inv, [hashtable] $DocDecl = @{}, $Facts = @()) {
   $rows = Get-GoldenRows $Trace
   $mb = @(); $nd = @(); $nx = @(); $nxN = @()
   foreach ($n in $Inv.Nodes) {
     $sym = [string]$n.Symbol; $gl = [int]$n.Golden
-    $cand = @($rows | Where-Object { $_.Kind -ne 'stops' -and $_.File -eq $n.File -and
-                ($_.Line -eq $gl -or (($_.Routine -split '\.')[-1] -ceq $sym) -or $_.Subject -ceq $sym -or $_.Subject.EndsWith(".$sym", [StringComparison]::Ordinal)) })
+    $dl = [string]$DocDecl["$($n.File):$gl"]
+    $cand = $(if ($dl) { @($rows | Where-Object { $_.Kind -ne 'stops' -and $_.File -eq $n.File -and (Test-GoldenDocLine $dl $gl $_.Line) }) }
+              else { @($rows | Where-Object { $_.Kind -ne 'stops' -and $_.File -eq $n.File -and
+                ($_.Line -eq $gl -or (($_.Routine -split '\.')[-1] -ceq $sym) -or $_.Subject -ceq $sym -or $_.Subject.EndsWith(".$sym", [StringComparison]::Ordinal)) }) })
     if ($cand.Count) {
       $b = @($cand | Sort-Object @{ E = { $(if ($_.Line -eq $gl) { 0 } else { 1 }) } }, @{ E = { $(if ($_.Kind -in 'step', 'crosses') { 0 } else { 1 }) } }, Seq)[0]
       $mb += "$($n.N)=$('{0:00}' -f $b.Step)$(if ($b.Kind -in 'cond', 'facet') { "/$($b.Kind)" })@$($b.Line)"
@@ -682,13 +708,143 @@ function Measure-GoldenMatch($Trace, $Inv) {
     elseif ($st.Count) { $gx += "$($g.G):$($g.Name) (a STOPS names it, with no ask)"; $gxN += "$($g.G)*" }
     else { $gx += "$($g.G):$($g.Name)"; $gxN += "$($g.G)" }
   }
+  $fd = @(); $fp = @()
+  foreach ($f in $Facts) {
+    $on = @($rows | Where-Object { $_.File -eq $f.File -and $_.Line -eq [int]$f.Line })
+    if ($on.Count) { $fp += "$($f.File):$($f.Line)@$('{0:00}' -f $on[0].Step)" } else { $fd += "$($f.File):$($f.Line) $($f.What)" }
+  }
+  $un = @($rows | Where-Object { -not $_.Anchored } | ForEach-Object { '{0:00}' -f $_.Step })
   [pscustomobject]@{ Matched = $mb.Count; MatchedBy = ($mb -join ','); Disclosed = ($nd -join ','); Missing = ($nx -join '|'); MissingN = ($nxN -join ',')
-                     GuardsMatched = $gb.Count; GuardsBy = ($gb -join ','); GuardsDisclosed = ($gd -join ','); GuardsMissing = ($gx -join '|'); GuardsMissingN = ($gxN -join ',') }
+                     GuardsMatched = $gb.Count; GuardsBy = ($gb -join ','); GuardsDisclosed = ($gd -join ','); GuardsMissing = ($gx -join '|'); GuardsMissingN = ($gxN -join ',')
+                     FactsDisclosed = ($fd -join ','); FactsDisclosedN = $fd.Count; FactsOnPage = ($fp -join ','); Unanchored = ($un -join ',') }
 }
+# I1: which golden lines are a line of the comment block directly above a declaration, from INDEX facts only (no
+# source text): a symbol_docs span holding the line gives its symbol's declaration; otherwise the next declaration
+# below the line (the first symbol starting after it) owns the line when `comment` string_literals cover EVERY line
+# from the golden line down to that declaration and no symbol, ref or other literal lies between. Each clone that
+# indexes the file answers ON ITS OWN (CLIENT, SERVER, SQL are never unioned); the answers must agree, or the line
+# gets no tolerance. Returns `<file leaf>:<golden line>` -> the declaration line, for the lines that qualify.
+function Get-GoldenDocDecl($Inv, [string[]] $Dbs) {
+  $votes = @{}
+  $leaves = @($Inv.Nodes | ForEach-Object { [string]$_.File } | Select-Object -Unique)
+  foreach ($db in $Dbs) {
+    $fr = Rows $db ('SELECT id AS fid, path AS p FROM files WHERE ' + (($leaves | ForEach-Object { "path LIKE '%\$(ConvertTo-SqlText $_)'" }) -join ' OR '))
+    $fidOf = @{}
+    foreach ($leaf in $leaves) { $h = @($fr | Where-Object { [IO.Path]::GetFileName([string]$_.p) -eq $leaf }); if ($h.Count -eq 1) { $fidOf[$leaf] = [int]$h[0].fid } }
+    $parts = @(foreach ($n in $Inv.Nodes) {
+      if (-not $fidOf.ContainsKey([string]$n.File)) { continue }
+      $gl = [int]$n.Golden; $fid = $fidOf[[string]$n.File]
+      $ndq = "(SELECT MIN(s.start_line) FROM symbols s WHERE s.file_id = $fid AND s.start_line > $gl)"
+      $in = { param($a) "($a.start_line BETWEEN $gl AND $ndq - 1 OR $a.end_line BETWEEN $gl AND $ndq - 1)" }
+      $dsq = { param($c) "(SELECT s.$c FROM symbol_docs d JOIN symbols s ON s.id = d.symbol_id WHERE s.file_id = $fid AND d.start_line <= $gl AND d.end_line >= $gl ORDER BY s.start_line LIMIT 1)" }
+      $nsq = { param($c) "(SELECT MAX(s.$c) FROM symbols s WHERE s.file_id = $fid AND s.start_line = $ndq AND s.kind <> 'param')" }
+      "SELECT $([int]$n.N) AS n, $ndq AS nd, $(& $nsq 'end_line') AS ne, $(& $nsq 'impl_start_line') AS ni, $(& $nsq 'impl_end_line') AS nie, " +
+      "$(& $dsq 'start_line') AS dd, $(& $dsq 'end_line') AS de, $(& $dsq 'impl_start_line') AS di, $(& $dsq 'impl_end_line') AS die, " +
+      "(SELECT COUNT(*) FROM symbols s WHERE s.file_id = $fid AND $(& $in 's')) + (SELECT COUNT(*) FROM refs r WHERE r.file_id = $fid AND $(& $in 'r')) + " +
+      "(SELECT COUNT(*) FROM string_literals l WHERE l.file_id = $fid AND l.kind <> 'comment' AND $(& $in 'l')) AS other, " +
+      "(SELECT group_concat(l.start_line || '-' || l.end_line) FROM string_literals l WHERE l.file_id = $fid AND l.kind = 'comment' AND l.end_line >= $gl AND l.start_line <= $ndq - 1) AS cm"
+    })
+    if (-not $parts.Count) { continue }
+    foreach ($q in (Rows $db ($parts -join ' UNION ALL '))) {
+      $n = @($Inv.Nodes | Where-Object { [int]$_.N -eq [int]$q.n })[0]
+      $gl = [int]$n.Golden; $decl = ''
+      if ([string]$q.dd) { $decl = "$([int]$q.dd)-$([int]$q.de)/$([int]$q.di)-$([int]$q.die)" }
+      elseif ([string]$q.nd -and [int]$q.other -eq 0) {
+        $cov = @{}
+        foreach ($sp in @(([string]$q.cm) -split ',' | Where-Object { $_ })) { $ab = $sp -split '-'; for ($k = [int]$ab[0]; $k -le [int]$ab[1]; $k++) { $cov[$k] = $true } }
+        if (@($gl..([int]$q.nd - 1) | Where-Object { -not $cov.ContainsKey($_) }).Count -eq 0) { $decl = "$([int]$q.nd)-$([int]$q.ne)/$([int]$q.ni)-$([int]$q.nie)" }
+      }
+      $k = "$($n.File):$gl"
+      if (-not $votes.ContainsKey($k)) { $votes[$k] = @() }
+      $votes[$k] += $decl
+    }
+  }
+  # value: `<decl start>-<decl end>/<impl start>-<impl end>` (impl 0-0: no body, an interface method)
+  $out = @{}
+  foreach ($k in $votes.Keys) { $u = @($votes[$k] | Select-Object -Unique); if ($u.Count -eq 1 -and $u[0]) { $out[$k] = [string]$u[0] } }
+  $out
+}
+# the lines a doc-line node's declaration owns: the golden line, the declaration, and its implementation (if any)
+function Test-GoldenDocLine([string] $Span, [int] $Golden, [int] $Line) {
+  $d = [int[]]($Span -split '[-/]')
+  $Line -eq $Golden -or ($Line -ge $d[0] -and $Line -le $d[1]) -or ($d[2] -gt 0 -and $Line -ge $d[2] -and $Line -le $d[3])
+}
+# I4: every quoted condition occurs VERBATIM in the fresh source, starting on its anchor line. Skipped: the
+# ` ... raises` form (an except handler -- the quote names the guarded statements, it is not a boolean) and the
+# `case X of` form. The quote, whitespace collapsed, must start on the anchor line of the collapsed text that runs
+# from that line on (a wrapped condition continues below it), at identifier boundaries, and NOT right behind a
+# `not` it dropped. Only the anchored line and the lines a condition wraps onto are looked at; each file must be
+# sha256-fresh against the clone that indexes it (Test-SourceFresh) -- a stale or unindexed file is a failure.
+# Returns Bad/Checked/Skipped and Which (`<file>:<line>` of each failure).
+function Measure-CondVerbatim($Rows, [string[]] $Dbs) {
+  $pathOf = @{}; $srcOf = @{}; $bad = @(); $chk = 0; $skp = 0
+  foreach ($r in @($Rows | Where-Object { $_.Kind -eq 'cond' })) {
+    if ($r.Text -match ' raises$' -or $r.Text -match '^case .+ of$') { $skp++; continue }
+    $chk++
+    if (-not $pathOf.ContainsKey($r.File)) {
+      $pathOf[$r.File] = $null
+      foreach ($db in $Dbs) {
+        $DbPath = Get-CloneDb $db
+        $ps = @((Get-IndexedFileShas).Keys | Where-Object { [IO.Path]::GetFileName([string]$_) -eq $r.File })
+        if ($ps.Count -eq 1) { $pathOf[$r.File] = @{ Db = $DbPath; Path = [string]$ps[0] }; break }
+      }
+    }
+    $po = $pathOf[$r.File]
+    if (-not $po) { $bad += "$($r.File):$($r.Line) (no clone indexes it)"; continue }
+    $DbPath = $po.Db
+    if (-not (Test-SourceFresh $po.Path)) { $bad += "$($r.File):$($r.Line) (stale)"; continue }
+    if (-not $srcOf.ContainsKey($po.Path)) { $srcOf[$po.Path] = [IO.File]::ReadAllLines($po.Path) }
+    $sl = $srcOf[$po.Path]
+    if ($r.Line -lt 1 -or $r.Line -gt $sl.Count) { $bad += "$($r.File):$($r.Line) (no such line)"; continue }
+    $q = ($r.Text -replace '\s+', ' ').Trim()
+    $first = ($sl[$r.Line - 1] -replace '\s+', ' ').Trim()
+    $w = ((@($sl[($r.Line - 1)..([Math]::Min($sl.Count, $r.Line + 19) - 1)]) -join ' ') -replace '\s+', ' ').Trim()
+    $ok = $false; $i = $w.IndexOf($q, [StringComparison]::Ordinal)
+    while (-not $ok -and $i -ge 0 -and $i -lt $first.Length) {
+      $pre = $w.Substring(0, $i); $post = $w.Substring($i + $q.Length)
+      $bL = -not ($q -match '^[A-Za-z0-9_]' -and $pre -match '[A-Za-z0-9_]$')
+      $bR = -not ($q -match '[A-Za-z0-9_]$' -and $post -match '^[A-Za-z0-9_]')
+      $ok = $bL -and $bR -and ($pre.TrimEnd() -notmatch '(?i)(^|[^A-Za-z0-9_])not$')
+      $i = $w.IndexOf($q, $i + 1, [StringComparison]::Ordinal)
+    }
+    if (-not $ok) { $bad += "$($r.File):$($r.Line)" }
+  }
+  [pscustomobject]@{ Bad = $bad.Count; Checked = $chk; Skipped = $skp; Which = ($bad -join '|') }
+}
+# I2 (controller ruling, Task 6 review): the golden's READ [28]-[29] -- the BLOBS / WHERE keys at
+# uPipeSessionBuilder.pas:533/:534 and the column list at :538 -- come from transport-convention helpers, not steps.
+# They are DISCLOSED facts of THIS golden (the list describes the golden, not the walk).
+$goldenFacts = @(
+  [pscustomobject]@{ File = 'uPipeSessionBuilder.pas'; Line = 533; What = 'READ [28] READS BLOBS key' }
+  [pscustomobject]@{ File = 'uPipeSessionBuilder.pas'; Line = 534; What = 'READ [28] READS WHERE key' }
+  [pscustomobject]@{ File = 'uPipeSessionBuilder.pas'; Line = 538; What = 'READ [29] BUILDS column list FROM Def.NonBlobCols' })
+$res.GoldenFactsReason = 'transport-convention helper, not a step'
+$docDecl = Get-GoldenDocDecl $inv @($DbCli, $DbSrv, $DbSql)
+$res.GoldenDocDecl = (@($docDecl.Keys | Sort-Object | ForEach-Object { "$_=$($docDecl[$_])" })) -join ','
 $T7 = Read-FormA $txt
-$gm7 = Measure-GoldenMatch $T7 $inv
+$gm7 = Measure-GoldenMatch $T7 $inv $docDecl $goldenFacts
 $res.GoldenMatched = $gm7.Matched; $res.GoldenMatchedBy = $gm7.MatchedBy; $res.GoldenDisclosed = $gm7.Disclosed; $res.GoldenMissing = $gm7.Missing
 $res.GuardsMatched = $gm7.GuardsMatched; $res.GuardsBy = $gm7.GuardsBy; $res.GuardsDisclosed = $gm7.GuardsDisclosed; $res.GuardsMissing = $gm7.GuardsMissing
+$res.GoldenFactsDisclosed = $gm7.FactsDisclosed; $res.GoldenFactsDisclosedN = $gm7.FactsDisclosedN; $res.GoldenFactsOnPage = $gm7.FactsOnPage; $res.GoldenUnanchored = $gm7.Unanchored
+# I1 negative: the SAME trace without the far-side CONTRACT @Pipes.Protocol.pas:392 -- node 6 must turn MISSING, not
+# fall back to the TCommandID.cmdDelta constant @:55 (which it read as matched before the doc-line rule)
+$res.GoldenDocNeg = $(try {
+  $Tn = Read-FormA $txt
+  foreach ($s in $Tn.Sections) { foreach ($i in $s.Items) { foreach ($ch in @($i.Children)) { if ($ch.Anchor -eq 'Pipes.Protocol.pas:392') { $i.Children.Remove($ch) } } } }
+  $gN = Measure-GoldenMatch $Tn $inv $docDecl $goldenFacts
+  "$($gN.MissingN)|$($gN.Matched)"
+} catch { "threw: $($_.Exception.Message)" })
+# M: an item with no anchor (the P14 case) is reported -- its node MISSING, its step counted unanchored -- never a
+# throw (it threw a Substring / null-method error before). [05] READS FDsrOperation @VM:99 is node 2's only row:
+# its anchor nulled, and [07]'s cut to a colon-less `Blueprint4.ViewModel.pas` (node 1 keeps [44] LOADS FMTOperation)
+$res.GoldenUnanchoredNeg = $(try {
+  $Tu = Read-FormA $txt
+  $uAll = @($Tu.Sections | ForEach-Object { $_.Items })
+  @($uAll | Where-Object { $_.Anchor -eq 'Blueprint4.ViewModel.pas:99' })[0].Anchor = $null
+  @($uAll | Where-Object { $_.Anchor -eq 'Blueprint4.ViewModel.pas:78' })[0].Anchor = 'Blueprint4.ViewModel.pas'
+  $gU = Measure-GoldenMatch $Tu $inv $docDecl $goldenFacts
+  "$($gU.Unanchored)|$($gU.MissingN)|$($gU.Matched)"
+} catch { "threw: $($_.Exception.Message)" })
 # the matcher can say all three things (proven on a synthetic trace, not merely on the one that passes):
 # LoadOneTable matched; a MENTION of LoadAllForFolder, and GetTable in the wrong file, not matched; a STOPS
 # with its ask discloses HandleTableLoad; a STOPS naming PushTableChanged with NO ask does not disclose it.
@@ -704,8 +860,11 @@ $m1 = New-TraceStep 'step' 'CALLS TBlueprint_ViewModel.LoadOneTable' 'Blueprint4
 [void]$sm.Items.Add((New-TraceStep 'stops' 'HandleTableLoad is not reached from the dispatch' 'uPipeSessionBuilder.pas:1' '' '' '' 'E2'))
 [void]$sm.Items.Add((New-TraceStep 'stops' 'the PushTableChanged call is unbound' 'uGenericTableRoute.pas:507'))
 [void]$sm.Items.Add((New-TraceStep 'stops' 'the ChangeCount guard is not quoted' 'Blueprint4.ViewModel.pas:3973' '' '' '' 'E1'))
-$gmS = Measure-GoldenMatch (Read-FormA (Write-FormA $Tm)) $inv
+# I2: a walk that starts producing a disclosed golden fact as a step moves it from disclosed to on-page
+[void]$sm.Items.Add((New-TraceStep 'step' 'READS BLOBS key' 'uPipeSessionBuilder.pas:533'))
+$gmS = Measure-GoldenMatch (Read-FormA (Write-FormA $Tm)) $inv $docDecl $goldenFacts
 $res.GoldenClassify = "$($gmS.MatchedBy) | $($gmS.Disclosed) | $($gmS.MissingN) || $($gmS.GuardsBy) | $($gmS.GuardsDisclosed) | $($gmS.GuardsMissingN)"
+$res.GoldenFactsProduced = "$($gmS.FactsDisclosedN) || $($gmS.FactsOnPage)"
 # AC-1 on the REAL trace, and the verb set it yields: Test-FormA now reads the verb AFTER an actor word
 # (`[47] SERVER ROUTES ...`), which a numbered line starting at column 1 used to skip as a section header
 $res.TraceVerbs = & (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture $rt.Trace -Quiet -PassThru
@@ -724,10 +883,19 @@ $res.TraceBytes = "$(@($tb | Where-Object { $_ -ne 0x0D -and $_ -ne 0x0A -and ($
 $res.TraceAnchors = "$(@(Get-TraceUnclickable $txt).Count)/$($rt.ClickTargets)/$($rt.AllClickable)"
 $cut = $txt -replace ' @Blueprint4\.ViewModel\.pas:78 -- the anchor dataset', ' -- the anchor dataset'
 $res.TraceAnchorsCut = "$(@(Get-TraceUnclickable $cut).Count)/$($cut -ne $txt)"
-# no condition is written negated: a `not (` the source did not write (heuristic: the golden's three negated
-# guards are source text -- `not (Assigned(..`, `not TryBuildSafeWhere`, `not GDatasetsDef.GetTable`)
 # T4-C3: a case guard quotes its source line verbatim through `of`; the else arm is the generated note
 $res.TraceCaseCond = (@($txt -split "\r\n" | Where-Object { $_ -match '^       (WHEN|UNLESS) "case ' } | ForEach-Object { $_.Trim() }) -join ' | ')
-$res.TraceNegated = @((Get-GoldenRows $T7) | Where-Object { $_.Kind -eq 'cond' -and $_.Text -match '^\s*not\s*\(' -and $_.Text -notmatch 'Assigned|TryBuildSafeWhere|GetTable' }).Count
+# I4 (replaces the `not (` heuristic): every condition quoted verbatim from the fresh source at its anchor line
+$cv = Measure-CondVerbatim (Get-GoldenRows $T7) @($DbCli, $DbSrv)
+$res.TraceNegated = "$($cv.Bad)/$($cv.Checked)/$($cv.Skipped)$(if ($cv.Which) { " $($cv.Which)" })"
+# ... and it goes RED on a mutated condition: a `not ` prefixed to one quote, and a `not ` dropped from another
+$res.TraceNegatedMut = $(try {
+  (@(@('FSuppressEvents', 'not FSuppressEvents'), @('not GDatasetsDef.GetTable(TableName, Def)', 'GDatasetsDef.GetTable(TableName, Def)')) | ForEach-Object {
+    $mu = $_
+    $Tx = Read-FormA $txt
+    foreach ($s in $Tx.Sections) { foreach ($i in $s.Items) { foreach ($ch in $i.Children) { if ($ch.Kind -eq 'cond' -and $ch.Condition -ceq $mu[0]) { $ch.Condition = $mu[1] } } } }
+    $cx = Measure-CondVerbatim (Get-GoldenRows $Tx) @($DbCli, $DbSrv)
+    "$($cx.Bad):$($cx.Which)" }) -join ','
+} catch { "threw: $($_.Exception.Message)" })
 
 [pscustomobject]$res
