@@ -1101,6 +1101,20 @@ begin
   end;
   if FMembers.TryGetValue(ARef.Id, M) then
   begin
+    { FIX-3 (resolver 1.11.0-alpha): `uVars.GFlag := True` -- D22 binds a
+      unit-qualified var, and the receiver is a UNIT, which Classify cannot
+      place, so the write scored '?' "receiver not classified" while the same
+      write spelled bare (`GFlag := True`) scored 'g'. A bound target that is
+      a unit-level var/const is a global write, whatever names its unit. }
+    if (M.MemberMode = MEMBER_MODE_WRITE) and (M.TargetSymbolId > 0) then
+    begin
+      var T: TSymbol:= SymbolById(M.TargetSymbolId);
+      if (T.Kind in [skVarDecl, skConstDecl]) and (SymbolById(T.ParentId).Kind = skUnit) then
+      begin
+        ASum.AddFlag(efGlobal, 'writes ' + ARef.ReceiverText + '.' + ARef.NameText + ' (unit-level)', AChanged);
+        Exit;
+      end;
+    end;
     if M.MemberMode = MEMBER_MODE_WRITE then MemberWrite(AIndex, ARef.ReceiverText, ARef.NameText, ASum, AChanged);
     Exit;
   end;

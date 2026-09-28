@@ -44,6 +44,12 @@ Extractor 1.20.0-alpha and schema v23 unchanged. No new rules (188).
   same query the resolver's map is built from, so an empty set is a fact about the index. It was a
   WARNING telling the reader to reindex on three sections that bound nothing; it is now an informational
   line there, and still a WARNING (with the count) when enum reads were bound under it.
+- **A write to a unit-level var spelled through its unit is a global write in the purity verdict** (FIX-3,
+  part 1). `uVars.GFlag := True` binds (D22) as a member write whose receiver is a unit, which the purity
+  stage could not classify, so the routine scored `?` (unknown) while `GFlag := True` scored `g`. Both now
+  score `g`. Guard: `tests\autotest\run_purity_unit_qualified_write.ps1` (bare spelling, a qualified READ and
+  a local object's member write are the controls). Part 2 of FIX-3 -- a call through a procedural-type
+  variable read as a bare value -- is not in this release.
 - **`lint --stand-in-for` no longer leaks a directory per process** (TH-2). The stand-in copy lives in
   `%TEMP%\drag-lint-standin-<pid>`, per-process by design, and nothing removed it: 303 of them had piled up
   on the owner's box. The engine now deletes its own at exit and, on first use, sweeps directories whose

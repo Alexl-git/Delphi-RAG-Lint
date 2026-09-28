@@ -231,7 +231,10 @@ const
   /// rung is still last. (RB-4) UnshadowedUnitFile also declines when a
   /// unit-level var/const spelled like the receiver's first segment is
   /// visible, so `uLib.Go` no longer binds to unit uLib's routine when a var
-  /// uLib of an unindexed type is nearer. (FIX-4) the calls stage's
+  /// uLib of an unindexed type is nearer. (FIX-3) the purity stage scores a
+  /// bound unit-qualified write (`uVars.GFlag := True`, a member-access in
+  /// write mode) as a GLOBAL write, as it already scored the bare spelling --
+  /// it scored '?' "receiver not classified". (FIX-4) the calls stage's
   /// `enum-shadow-set` line is a WARNING only when the enum stream bound reads
   /// under an empty shadow set. DERIVED rows only, no parse change: remedy is
   /// `index --all --resolve-only`. A MINOR: new bindings, and bindings that
