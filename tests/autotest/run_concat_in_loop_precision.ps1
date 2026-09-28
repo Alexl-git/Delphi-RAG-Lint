@@ -203,8 +203,11 @@ Check "V := V + 'f' in the INNER loop (line $lnInnerLoop) -- the outer reset doe
 
 Write-Host ''
 Write-Host 'KNOWN LIMITATION, asserted so a future fix is visible' -ForegroundColor Cyan
+# WITHOUT a store this stays true on purpose. With a store, lint / lint-all / the
+# LSP drop it (2026-09-27, R11) -- that half is pinned by
+# run_concat_in_loop_type_aware.ps1, which also asserts this no-store case.
 Check "i := i + Count (line $lnAddVar) still fires -- type-blind for a variable operand" `
-  ($fired -contains $lnAddVar) 'flip this when a store-backed built-in supersedes the .scm rule'
+  ($fired -contains $lnAddVar) 'no store here; the store-backed filter is pinned by run_concat_in_loop_type_aware.ps1'
 
 Write-Host ''
 # D23: the scratch folder is per run ($PID); remove it so they do not pile up in TEMP.

@@ -45,13 +45,14 @@
 ;                         nonsense for an array of records. A wrong finding AND
 ;                         unfollowable advice.
 ;
-; STILL TYPE-BLIND for a VARIABLE operand: `i := i + Count` is indistinguishable
-; from `S := S + Word` in the tree alone -- `StartPos := StartPos + Length(...)`
-; was the 5th false positive in that sample and this query cannot see it. Closing
-; that needs a store-backed built-in that supersedes this query when an index is
-; present -- exactly what was done for string-equality-comparison (see
-; DRagLint.CLI.pas, where the .scm findings are dropped when a store exists).
-; Tracked in docs\INBOX-concat-in-loop-is-type-blind.md.
+; STILL TYPE-BLIND for a VARIABLE operand IN THIS QUERY: `i := i + Count` is
+; indistinguishable from `S := S + Word` in the tree alone. WITH A STORE the
+; surfaces close that gap after the fact (2026-09-27, R11): lint, lint-all and the
+; LSP pass these findings through TAstChecker.DropNonStringConcat, which drops a
+; match whose target's declared type is proven non-string (numeric, boolean, enum,
+; pointer, dynamic array, set) and keeps an unknown or ambiguous one. Without a
+; store (bare `lint <file>`) this query's answer is final and stays type-blind.
+; Pinned by tests\autotest\run_concat_in_loop_type_aware.ps1.
 ;
 ; FOURTH CONSTRAINT ADDED 2026-09-23 (L6):
 ;

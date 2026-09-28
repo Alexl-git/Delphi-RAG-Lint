@@ -12313,6 +12313,10 @@ begin
         for var SEF: TLintFinding in Findings do
           if not SameText(SEF.RuleId, 'string-equality-comparison') then KeptSE:= KeptSE + [SEF];
         Findings:= KeptSE;
+        { The .scm concat-in-loop query cannot see a type; with a store, drop the
+          accumulations whose target is proven non-string (R11). Same filter as
+          lint-all and the LSP -- see TAstChecker.DropNonStringConcat. }
+        Findings:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(EffPath, FlowStore, FlowFid, Findings);
       end;
       { unused local variables (H2164) }
       if (NarrowRule = '') or (NarrowRule = 'unused-local') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals(EffPath);
@@ -17903,6 +17907,8 @@ begin
           for var LF in LintF do
             if not SameText(LF.RuleId, 'string-equality-comparison') then KeptSE:= KeptSE + [LF];
           LintF:= KeptSE;
+          { R11: drop concat-in-loop on a proven non-string target, as lint and the LSP do. }
+          LintF:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(PasPath, Store, Store.FindFileIdByPath(PasPath), LintF);
         end;
         ScanAdd( 0, LintF);
         if LintRuleWants(Nr, ['unused-local']) then

@@ -311,16 +311,37 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
-      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectDecls, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+24 more)</para>
+      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+24 more)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectDecls"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.CollectDeclTypes"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckTypeAware(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
+      /// <summary>Removes each <c>concat-in-loop</c> finding whose assignment target is
+      /// PROVEN not to be a string: a numeric, boolean, enum or pointer type by the
+      /// store's category, or a dynamic array / set by its declared type text.</summary>
+      /// <param name="AFile">The unit the findings were produced for; parsed through
+      /// TAstParseCache.</param>
+      /// <param name="AStore">The index that resolves a declared type's category; when
+      /// nil, AFindings is returned unchanged (the .scm rule stays type-blind there).</param>
+      /// <param name="AFileId">AFile's id in AStore, passed to ResolveTypeCategory.</param>
+      /// <param name="AFindings">Findings from any rules; only <c>concat-in-loop</c>
+      /// entries are examined, every other entry passes through.</param>
+      /// <returns>AFindings in their original order, minus the <c>concat-in-loop</c>
+      /// findings whose target is proven non-string.</returns>
+      /// <remarks>The target is the assignment's left identifier: a var, param, field or
+      /// inline <c>var X: T</c> (flat per-file type map, AMBIGUOUS_DECL_TYPE when two declarations disagree),
+      /// or <c>Result</c>, typed by the innermost enclosing function's return type. An
+      /// UNKNOWN or AMBIGUOUS type KEEPS the finding: recall on real string
+      /// accumulation is not traded for precision. A record, class or interface target
+      /// is kept too, since an overloaded Add can concatenate. The one filter that
+      /// lint, lint-all and the LSP all call, so the three surfaces cannot disagree.
+      /// Never raises; a file that does not parse returns AFindings unchanged.</remarks>
+      class function DropNonStringConcat(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
       /// <summary>FireDAC misuse: 'Open' on a data-modifying statement, or 'ExecSQL' on a SELECT.</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
       /// <returns>'firedac-open-execsql-mismatch' findings; empty if none.</returns>
@@ -981,6 +1002,78 @@ const
     rule declines at once rather than each needing its own guard. Two
     declarations of the same type are not a conflict. Absence over wrong. }
   AMBIGUOUS_DECL_TYPE = '<ambiguous-decl>';
+
+{ The UTF-8 source text a node spans; '' for a null node or an out-of-range span. }
+function SrcText(const N: TTSNode; const ASrc: TBytes): string;
+var
+  S, E, L: Integer;
+begin
+  Result:= '';
+  if N.IsNull then Exit;
+  S:= Integer(N.StartByte);
+  E:= Integer(N.EndByte);
+  L:= E - S;
+  if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
+  Result:= TEncoding.UTF8.GetString(ASrc, S, L);
+end;
+
+{ Collect declared name (lowercased) -> type text for vars, params and fields
+  into ATypeMap: a FLAT, file-scoped map. Shared by CheckTypeAware and
+  DropNonStringConcat so both read a type the same way.
+
+  TWO ROUTINES MAY EACH DECLARE THE SAME NAME. A plain AddOrSetValue would let
+  whichever declaration is visited last decide the type for every use in the
+  file -- including uses inside the OTHER routine. Measured: YADF.Layout.pas
+  declares `W: string` at :1076 and `W: TArray<string>` at :2357;
+  length-zero-compare resolved the array one to `string` and told the author to
+  write `W = ''` for a dynamic array. So a name whose declarations DISAGREE is
+  recorded as AMBIGUOUS_DECL_TYPE, which no type predicate matches, and every
+  type-aware rule fails safe on it. Two declarations of the SAME type are not a
+  conflict. Absence over wrong.
+
+  AIncludeInline adds the inline forms `var X: T;` (varDef) and
+  `var X: T := v;` (varAssignDef), which share declVar's layout (name
+  identifiers, then a type: field). OPT-IN: CheckTypeAware still passes False, so
+  its rules see exactly the map they always did; widening theirs is a separate,
+  measured change. An untyped `var X := v;` has no type: field and is skipped. }
+procedure CollectDeclTypes(const N: TTSNode; const ASrc: TBytes; ATypeMap: TDictionary<string, string>; AIncludeInline: Boolean);
+var
+  I, J     : Integer;
+  TypeNode : TTSNode;
+  NameId   : TTSNode;
+  TypeStart: Integer;
+  TTxt     : string ;
+  LowName  : string ;
+  Prior    : string ;
+  IsSection: Boolean;
+  IsInline : Boolean;
+begin
+  if N.IsNull then Exit;
+  IsSection:= (N.NodeType = 'declVar') or (N.NodeType = 'declArg') or (N.NodeType = 'declField');
+  IsInline := AIncludeInline and ((N.NodeType = 'varDef') or (N.NodeType = 'varAssignDef'));
+  if IsSection or IsInline then
+  begin
+    TypeNode:= N.ChildByField('type');
+    if not TypeNode.IsNull then
+    begin
+      TTxt:= Trim(SrcText(TypeNode, ASrc));
+      TypeStart:= Integer(TypeNode.StartByte);
+      for J:= 0 to N.NamedChildCount - 1 do
+      begin
+        NameId:= N.NamedChild(J);
+        if (NameId.NodeType = 'identifier') and (Integer(NameId.StartByte) < TypeStart) then
+        begin
+          LowName:= LowerCase(SrcText(NameId, ASrc));
+          if ATypeMap.TryGetValue(LowName, Prior) and (not SameText(Prior, TTxt)) then
+            ATypeMap.AddOrSetValue(LowName, AMBIGUOUS_DECL_TYPE)
+          else
+            ATypeMap.AddOrSetValue(LowName, TTxt);
+        end;
+      end;
+    end;
+  end;
+  for I:= 0 to N.NamedChildCount - 1 do CollectDeclTypes(N.NamedChild(I), ASrc, ATypeMap, AIncludeInline);
+end;
 
 var
   GKeywordSet: TDictionary<string, Boolean> = nil;
@@ -2015,14 +2108,8 @@ var
   Findings: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
-  var
-    S, E, L: Integer;
   begin
-    Result:= '';
-    if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
-    if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
-    Result:= TEncoding.UTF8.GetString(Src, S, L);
+    Result:= SrcText(N, Src);
   end;
 
   { Is this statement an unconditional flow-terminator (Exit/raise/Break/Continue/Halt)? }
@@ -2655,60 +2742,6 @@ var
     or (L = 'tpair') or (L = 'tdatetimefield')
     or (Copy(L, 1, 6) = 'tarray') or (Copy(L, 1, 5) = 'tproc') or (Copy(L, 1, 5) = 'tfunc') then
       Result:= False;
-  end;
-
-  { Collect declared name -> type text for vars, params and fields (flat map). }
-  procedure CollectDecls(const N: TTSNode);
-  var
-    I, J     : Integer;
-    TypeNode : TTSNode;
-    NameId   : TTSNode;
-    TypeStart: Integer;
-    TTxt     : string ;
-  begin
-    if N.IsNull then Exit;
-    if (N.NodeType = 'declVar') or (N.NodeType = 'declArg') or (N.NodeType = 'declField') then
-    begin
-      TypeNode:= N.ChildByField('type');
-      if not TypeNode.IsNull then
-      begin
-        TTxt:= Trim(NodeStr(TypeNode));
-        TypeStart:= Integer(TypeNode.StartByte);
-        for J:= 0 to N.NamedChildCount - 1 do
-        begin
-          NameId:= N.NamedChild(J);
-          if (NameId.NodeType = 'identifier') and (Integer(NameId.StartByte) < TypeStart) then
-          begin
-            { TWO ROUTINES MAY EACH DECLARE THE SAME NAME. TypeMap is flat and
-              FILE-scoped, so a plain AddOrSetValue lets whichever declaration is
-              visited last decide the type for every use in the file -- including
-              uses inside the OTHER routine.
-
-              Measured: YADF.Layout.pas declares `W: string` at :1076 and
-              `W: TArray<string>` at :2357. `length-zero-compare` resolved the
-              array one to `string` and told the author to write `W = ''` for a
-              dynamic array, which is wrong advice. It fired in all three YADF
-              projects, since the unit is shared.
-
-              A name whose declarations DISAGREE is recorded as ambiguous rather
-              than as either answer. The sentinel is deliberately a type name
-              nothing can match, so every type-aware rule reading TypeMap
-              (string / float / interface / pointer / integer / no-op cast) fails
-              safe on it at once, instead of each needing its own guard. Two
-              declarations of the SAME type are not a conflict and are left
-              alone. Absence over wrong -- the same rule MineReturnExpressions
-              follows for a mutated Result. }
-            var LowName: string:= LowerCase(NodeStr(NameId));
-            var Prior  : string;
-            if TypeMap.TryGetValue(LowName, Prior) and (not SameText(Prior, TTxt)) then
-              TypeMap.AddOrSetValue(LowName, AMBIGUOUS_DECL_TYPE)
-            else
-              TypeMap.AddOrSetValue(LowName, TTxt);
-          end;
-        end;
-      end;
-    end;
-    for I:= 0 to N.NamedChildCount - 1 do CollectDecls(N.NamedChild(I));
   end;
 
   { v0.71: collect 'x is TFoo' guards into a set of 'x|TFoo' keys (both lowercased).
@@ -3494,7 +3527,7 @@ begin
 
     if PF.Tree <> nil then
     begin
-      CollectDecls (PF.Tree.RootNode);
+      CollectDeclTypes(PF.Tree.RootNode, Src, TypeMap, False);
       CollectGuards(PF.Tree.RootNode);
       CollectEnums (PF.Tree.RootNode);
       CheckExpr    (PF.Tree.RootNode);
@@ -3507,6 +3540,99 @@ begin
     Guards.Free;
     TypeMap.Free;
     Findings.Free;
+  end;
+end; // function
+
+class function TAstChecker.DropNonStringConcat(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+const
+  RULE_ID = 'concat-in-loop';
+  { Store categories that can never hold a string. Record, class and interface
+    are deliberately absent: an overloaded Add operator can concatenate. }
+  NON_STRING_CATEGORIES: set of TTypeCategory = [tcFloat, tcOrdinal, tcBoolean, tcEnum, tcPointer];
+var
+  PF       : TParsedFile;
+  TypeMap  : TDictionary<string, string>;
+  NonString: TDictionary<string, Boolean>; { 'line:col' of a proven non-string target }
+  HasConcat: Boolean;
+
+  { True only when ATypeText is known and cannot be a string. }
+  function ProvenNonString(const ATypeText: string): Boolean;
+  var
+    L: string;
+    C: TTypeCategory;
+  begin
+    Result:= False;
+    if (ATypeText = '') or (ATypeText = AMBIGUOUS_DECL_TYPE) then Exit;
+    C:= AStore.ResolveTypeCategory(ATypeText, AFileId);
+    if C <> tcUnknown then Exit(C in NON_STRING_CATEGORIES);
+    { No category for container types: a dynamic array or a set is never a string. }
+    L:= LowerCase(Trim(ATypeText));
+    Result:= L.StartsWith('tarray<') or L.StartsWith('array of') or L.StartsWith('set of') or (L = 'tbytes');
+  end;
+
+  { Records every `X := X + Y` whose X is proven non-string. AReturnType is the
+    innermost enclosing function's return type text ('' outside one), which is
+    what types `Result`. }
+  procedure Walk(const N: TTSNode; const AReturnType: string);
+  var
+    I       : Integer;
+    Ret     : string;
+    Hdr, Lhs: TTSNode;
+    Target  : string;
+    TypeText: string;
+    P       : TTSPoint;
+  begin
+    if N.IsNull then Exit;
+    Ret:= AReturnType;
+    if N.NodeType = 'defProc' then
+    begin
+      Hdr:= N.ChildByField('header');
+      Ret:= (if Hdr.IsNull then '' else Trim(SrcText(Hdr.ChildByField('type'), PF.Src)));
+    end
+    else if N.NodeType = 'assignment' then
+    begin
+      Lhs:= N.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
+      begin
+        Target:= LowerCase(Trim(SrcText(Lhs, PF.Src)));
+        if Target = 'result' then TypeText:= Ret
+        else if not TypeMap.TryGetValue(Target, TypeText) then TypeText:= '';
+        if ProvenNonString(TypeText) then
+        begin
+          P:= N.StartPoint;
+          NonString.AddOrSetValue(Format('%d:%d', [Integer(P.Row) + 1, Integer(P.Column) + 1]), True);
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), Ret);
+  end;
+
+begin
+  Result:= AFindings;
+  if AStore = nil then Exit;
+  HasConcat:= False;
+  for var F in AFindings do
+    if SameText(F.RuleId, RULE_ID) then
+    begin
+      HasConcat:= True;
+      Break;
+    end;
+  if not HasConcat then Exit;
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  TypeMap  := TDictionary<string, string>.Create;
+  NonString:= TDictionary<string, Boolean>.Create;
+  try
+    CollectDeclTypes(PF.Tree.RootNode, PF.Src, TypeMap, True); { inline `var X: T` too }
+    Walk(PF.Tree.RootNode, '');
+    if NonString.Count = 0 then Exit;
+    Result:= nil;
+    for var F in AFindings do
+      if not (SameText(F.RuleId, RULE_ID) and NonString.ContainsKey(Format('%d:%d', [F.StartLine, F.StartCol]))) then
+        Result:= Result + [F];
+  finally
+    NonString.Free;
+    TypeMap.Free;
   end;
 end; // function
 

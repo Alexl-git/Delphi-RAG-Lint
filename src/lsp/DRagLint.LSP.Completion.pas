@@ -960,7 +960,9 @@ begin
         if not SameText(LF.RuleId, 'string-equality-comparison') then Rebuilt:= Rebuilt + [LF];
       for var TF in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(AFile, AStore, AStore.FindFileIdByPath(AFile)) do
         if SameText(TF.RuleId, 'string-equality-comparison') then Rebuilt:= Rebuilt + [TF];
-      Findings:= Rebuilt;
+      { R11: the same concat-in-loop filter lint and lint-all apply -- one routine,
+        so the gutter cannot disagree with the CLI about a non-string target. }
+      Findings:= DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat(AFile, AStore, AStore.FindFileIdByPath(AFile), Rebuilt);
     end;
     for F in Findings do
     begin

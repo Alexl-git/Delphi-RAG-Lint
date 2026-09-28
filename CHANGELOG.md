@@ -3,6 +3,28 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.18.1-alpha -- 2026-09-28
+
+PATCH: `concat-in-loop` precision with a store present. Extractor 1.19.0-alpha, resolver 1.9.0-alpha
+and schema v23 are UNCHANGED -- no index needs a re-parse or a re-resolve. No new rules (188).
+
+### Fixed (only DRAGLINT_VERSION moves)
+
+- **`concat-in-loop` stops reporting a target that is PROVEN not to be a string (R11).** The rule is
+  a tree-sitter query and cannot see a type, so `Total := Total + Count` (Integer), `Sum := Sum + D`
+  (Double), `Arr := Arr + Other` (`TArray<...>`) and `Result := Result + N` in an Integer function
+  all fired with advice ("use TStringList or string.Join") that is nonsense for them -- ~13 of 146
+  findings on this repo. With a store present, `lint`, `lint-all` and the LSP now pass the .scm
+  findings through ONE filter, `TAstChecker.DropNonStringConcat`: a target (var, param, field or
+  inline `var X: T`) whose declared type is a
+  float / ordinal / boolean / enum / pointer (store category) or a dynamic array / set (type text)
+  is dropped. An UNKNOWN or AMBIGUOUS type, and a record / class / interface target (an overloaded
+  Add can concatenate), KEEP the finding, so recall on real string accumulation is unchanged.
+  Without a store nothing changes. The per-file declaration collector moved out of `CheckTypeAware`
+  into the shared `CollectDeclTypes` so both read a type the same way (behaviour unchanged).
+  Guard: `tests\autotest\run_concat_in_loop_type_aware.ps1` (33 checks, all three surfaces, a
+  "MUST fire" twin for every "must NOT fire" case).
+
 ## v1.18.0-alpha -- 2026-09-24
 
 MINOR: follow-up defects D20-D31. `DRAGLINT_RESOLVER_VERSION` moves 1.8.0-alpha -> 1.9.0-alpha
