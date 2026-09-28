@@ -21,7 +21,8 @@
   same-line name match (E3); the UPDATE / SELECT texts live in FIB$ rows the
   clones do not hold (E4); the accessor's field read is unbound (INBOX-in-class-
   field-reads-unbound); a member call on a unit-level var is resolved through the
-  var's declared type (unit-var-reads, not yet filed). Every such step names its ask.
+  var's declared type (receiver-typed-calls, filed as INBOX-charts-receiver-typed-calls-unbound).
+  Every such step names its ask.
 
   This task (5) walks WRITE -> SERVER -> DATABASE -> RESPONSE. READ is a single
   placeholder STOPS and ALSO holds only the other wirings on the dataset; Task 6
@@ -131,6 +132,8 @@ if (-not $A.Stop) {
       [void]$alsoRows.Add((New-TraceStep 'step' "FIRES $($A.DataSet.Name).$($w.Event) -> $($w.Handler)" (Get-TraceAnchorText $A.DataSet.File $w.Line) $w.Grade $w.Routine 'another wiring on the same dataset' 'E3'))
     }
   }
+  # T5-R1: one OMITS disclosure per section, whichever routines the walk left them in
+  foreach ($sec in @($secW, $secS, $secD, $secR)) { Merge-TraceOmits $sec }
   $write = $secW.Items.Count + $secS.Items.Count + $secD.Items.Count + $secR.Items.Count
   # ---- 6. READ (Task 6) and ALSO -----------------------------------------------------------
   [void]$secRd.Items.Add((New-TraceStep 'stops' 'the READ direction is not walked yet (Task 6)' (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line)))

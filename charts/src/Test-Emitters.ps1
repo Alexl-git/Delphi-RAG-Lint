@@ -2346,12 +2346,13 @@ Step 'E-RT0' {
   # the CALLS / ROUTES steps anchored in the five server units, in walk order. MEASURED, beyond the plan's six:
   # SplitPayload (:409, kept for its own `BarPos < 0` guard), EnsureLoaded [by name] (:429, the FIB$ reads sit
   # under it, so GetTable's by-name unit scan finds them Seen and adds none), LoadFromInternal (bound, under
-  # EnsureLoaded), CoerceMSCLISTPlanIds (:469, a `TableName = 'MSCLIST'` branch the line walk cannot prune -- E1)
-  # and BindParams (under HandleUpdateRecord, one LoadFromStream). GetTable / EnsureLoaded / PushTableChanged
-  # are [by name]: member calls on the unit vars GDatasetsDef / GBroadcastServer stay unbound (D22)
+  # EnsureLoaded) and BindParams (under HandleUpdateRecord, one LoadFromStream). GetTable / EnsureLoaded /
+  # PushTableChanged are [by name] (ask receiver-typed-calls: member calls on the unit vars GDatasetsDef /
+  # GBroadcastServer stay unbound, D22). MOVED by T5-R1: CoerceMSCLISTPlanIds (:469) is gone -- its enclosing
+  # condition `TableName = 'MSCLIST'` names another table, so the call is in the OMITS disclosure, not the path
   Chk 'A-RT5-SERVER'    $rt0.RtServer ('ROUTES cmdDelta TO IPipeSessionBuilder.HandleDelta|CALLS TPipeSessionBuilder.HandleDelta [by name]|' +
                                        'CALLS TGenericTableRoute.HandleDelta|CALLS SplitPayload|CALLS TDatasetsDef.EnsureLoaded [by name]|' +
-                                       'CALLS TDatasetsDef.LoadFromInternal|CALLS TDatasetsDef.GetTable [by name]|CALLS CoerceMSCLISTPlanIds|' +
+                                       'CALLS TDatasetsDef.LoadFromInternal|CALLS TDatasetsDef.GetTable [by name]|' +
                                        'CALLS TGenericApplyContext.HandleUpdateRecord|CALLS TGenericApplyContext.BindParams|' +
                                        'CALLS TBroadcastServer.PushTableChanged [by name]')
   # the FIB$DATASETS_INFO SQL literal, once (a message that merely NAMES the table, :433/:434, is not SQL)
@@ -2365,9 +2366,36 @@ Step 'E-RT0' {
   Chk 'A-RT5-RSPOK'     $rt0.RtRspOk 2
   # the rebinding switched indexes: files on CLIENT / on SERVER, counted through Invoke-OnDb
   Chk 'A-RT5-ONDB'      $rt0.RtOnDb '625/471'
-  # first green run 2026-09-28: 61 steps (9 anchor, 5 write, 40 server, 2 database, 3 response, 1 read, 1 also),
-  # 19 conditions, 2 crossings, 2 unresolved (the DATABASE STOPS and Task 6's READ placeholder). A drift is a finding
-  Chk 'A-RT5-COUNTS'    $rt0.RtCounts '61/19/2/2'
+  # 50 steps (9 anchor, 5 write, 29 server, 2 database, 3 response, 1 read, 1 also), 12 conditions, 2 crossings,
+  # 2 unresolved (the DATABASE STOPS and Task 6's READ placeholder). MOVED by T5-R1 from 61/19/2/2: the other-table
+  # branches of HandleDelta (Coerce / CaptureOptrlistDelta + CurrentRoles / QChk.Open / ApplyOptrlistSyncItems +
+  # SyncRolesOnConn: 12 steps, 7 conditions) and the routine-level `READS MSCLIST` sql fact left the path; ONE
+  # OMITS step discloses them. A drift is a finding
+  Chk 'A-RT5-COUNTS'    $rt0.RtCounts '50/12/2/2'
+  # Pre-review rulings. T5-R1: no step from a branch for another table (failed 12 before the fix), ONE OMITS per
+  # section counting the 5 candidate calls left out and quoting the 4 branch conditions verbatim (E1)
+  Chk 'A-RT5-OTHERTABLE' $rt0.RtOtherTable 0
+  Chk 'A-RT5-OMITS'     $rt0.RtOmits ("OMITS 5 call(s) in branches for other tables @uGenericTableRoute.pas:468 -- in TGenericTableRoute.HandleDelta; " +
+                                      "not walked, the branch conditions: WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 / " +
+                                      "WHEN `"TableName = 'OPTRLIST'`" @uGenericTableRoute.pas:476 / " +
+                                      "WHEN `"(TableName = 'MSCLIST') and (Ctx.AppliedIns > 0)`" @uGenericTableRoute.pas:515 / " +
+                                      "WHEN `"(TableName = 'OPTRLIST') and (Length(RoleSyncItems) > 0)`" @uGenericTableRoute.pas:540; ask E1")
+  # the enclosing-condition reader on synthetic lines: then -> WHEN, through begin/try -> WHEN, else -> UNLESS, no branch -> unknown
+  Chk 'A-RT5-ENCLOSING' $rt0.RtEnclosing "block:WHEN:T = 'MSCLIST':3 | block:WHEN:(T = 'X') and (N > 0):5 | block:UNLESS:(T = 'X') and (N > 0):5 | unknown:::0"
+  # the prune rule: only WHEN + `= '<known other table>'`; UNLESS, <>, or, a non-table literal, the anchor's table all keep the step
+  Chk 'A-RT5-OTHERRULE' $rt0.RtOtherTableRule 'True,False,False,False,True,False,False,False'
+  # T5-R2: HandleDelta's 411 / 421 conditions hang on CALLS SplitPayload and so name their own routine
+  Chk 'A-RT5-CONDROUTINE' $rt0.RtCondRoutine ("in TGenericTableRoute.HandleDelta; else 'cmdDelta: TABLE= prefix missing (payload bytes=%d)'; ask E1 | " +
+                                             "in TGenericTableRoute.HandleDelta; else 'cmdDelta: empty delta stream for '; ask E1")
+  # T5-R3: literals quoted as the source writes them -- the trailing blank of 'cmdDelta: empty delta stream for '
+  # (above) is read from the source columns, because string_literals.text is stored TRIMMED; `"%s"` at :433 cannot be
+  # carried, so its line is named; Pascal's doubled '' restored; '; ' named. The shim's string reader was NOT the cause
+  # (the doubled-'' synthetic below already quoted verbatim before the fix)
+  Chk 'A-RT5-ELSE431'   $rt0.RtElse431 'in TGenericTableRoute.HandleDelta; else a literal at :433; ask E1'
+  Chk 'A-RT5-ELSELITS'  $rt0.RtElseLits "else 'Can''t find the row' | else a literal at :5 | else a literal at :5"
+  Chk 'A-RT5-DOUBLEQ'   $rt0.RtDoubledQuote "inline:UNLESS:S = 'it''s' | block:UNLESS:(S = 'a'' then') or (N = 0)"
+  # the condition model's new routine field reads back: the written trace round-trips byte for byte
+  Chk 'A-RT5-ROUNDTRIP' $rt0.RtRoundTrip 'identical'
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters

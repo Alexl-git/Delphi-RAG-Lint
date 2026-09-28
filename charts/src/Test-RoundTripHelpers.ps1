@@ -417,4 +417,48 @@ $res.RtRspOk = (LinesLike '^\[\d+\] RECEIVES rspOK @Blueprint4\.ViewModel\.pas:3
 # the rebinding really switched indexes: file counts differ (CLIENT 625, SERVER 471)
 $res.RtOnDb = $rt.OnDbProof
 
+# ---- 5b. the pre-review rulings T5-R1..R3 -------------------------------------------------
+$secLines = @{}; $secOf = ''
+foreach ($ln in $lines) { if ($ln -cmatch '^[A-Z]+$') { $secOf = $ln; $secLines[$secOf] = @(); continue }; if ($secOf) { $secLines[$secOf] += $ln } }
+# T5-R1: no step of the anchor's path comes from a branch for ANOTHER table. HandleDelta's MSCLIST / OPTRLIST
+# branches (:468-469, :476-477, :515-531, :540-551) and its routine-level `sql_reads MSCLIST` fact were steps
+$res.RtOtherTable = @($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] ' -and $_ -match 'CoerceMSCLISTPlanIds|CaptureOptrlistDelta|ApplyOptrlistSyncItems|SyncRolesOnConn|QChk\.Open|READS MSCLIST' }).Count
+# ... and ONE disclosure per section says what was left out, quoting the branch conditions verbatim
+$res.RtOmits = (@($lines | Where-Object { $_ -match '^\[\d+\] OMITS ' } | ForEach-Object { $_ -replace '^\[\d+\] ', '' }) -join ' || ')
+# the enclosing condition of a LINE (pure, over line arrays): then-branch WHEN, else-branch UNLESS, through
+# begin / try blocks to the nearest if; a statement in no branch is a named unknown
+$encSrc = @('procedure P;', 'begin', "  if T = 'MSCLIST' then", '    A;', "  if (T = 'X') and (N > 0) then", '  begin', '    try', '      B;',
+            '    except', '    end;', '  end', '  else', '    C;', '  D;', 'end;')
+$encPas = Join-Path $work 'enclosing.pas'
+[IO.File]::WriteAllText($encPas, (($encSrc -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$res.RtEnclosing = $(try {
+  $eR = [IO.File]::ReadAllLines($encPas); $eS = Get-StrippedSourceLines $encPas
+  (@(@(4, 4), @(8, 6), @(13, 4), @(14, 2)) | ForEach-Object { $o = Get-EnclosingConditionFromLines $eR $eS $_[0] $_[1] 1; "$($o.Form):$($o.Keyword):$($o.Condition):$($o.IfLine)" }) -join ' | '
+} catch { "threw: $($_.Exception.Message)" })
+# the prune predicate: WHEN + `= '<a known table>'` that is not the anchor's, and no `or` / `not` / `<>`
+$res.RtOtherTableRule = $(try {
+  $tabs = @('OPERAT', 'MSCLIST')
+  (@(@('WHEN', "TableName = 'MSCLIST'"), @('UNLESS', "TableName = 'MSCLIST'"), @('WHEN', "TableName <> 'MSCLIST'"), @('WHEN', "(T = 'MSCLIST') or (T = 'OPERAT')"),
+     @('WHEN', "(TableName = 'MSCLIST') and (X > 0)"), @('WHEN', "X = 'NOTATABLE'"), @('WHEN', "(A = 'MSCLIST') or B"), @('WHEN', "TableName = 'OPERAT'")) |
+    ForEach-Object { Test-OtherTableBranch $_[0] $_[1] 'OPERAT' $tabs }) -join ','
+} catch { "threw: $($_.Exception.Message)" })
+# T5-R2: a condition hung on a CALLS step of ANOTHER routine names its own routine (411 / 421 hang on CALLS SplitPayload)
+$res.RtCondRoutine = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:(411|421) ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
+# T5-R3: an else note quotes a literal VERBATIM with Pascal's doubled '' (the index stores it unescaped); one the
+# writer cannot carry (a double quote, the note separator) is named by its line, never rewritten
+$res.RtElse431 = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:431 ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
+$res.RtElseLits = $(try {
+  $eF = [pscustomobject]@{ Path = 'X.pas'; Refs = @(); Lits = @() }
+  $eG = [pscustomobject]@{ BlockStart = 4; BlockEnd = 6; ExitArg = '' }
+  (@("Can't find the row", 'no entry for table "%s"', 'first; second part') | ForEach-Object {
+    $eF.Lits = @([pscustomobject]@{ kind = 'literal'; text = $_; line = 5 }); Get-ElseNote $eF $eG @{} }) -join ' | '
+} catch { "threw: $($_.Exception.Message)" })
+# T5-R3 / Task 4 review: the shim's string reader over Pascal's doubled '' quotes a condition as written
+$dqPas = Join-Path $work 'doubled-quote.pas'
+[IO.File]::WriteAllText($dqPas, ((@('procedure Q;', 'begin', "  if S = 'it''s' then Exit;", "  if (S = 'a'' then') or", "     (N = 0) then Exit;", 'end;') -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$dqR = [IO.File]::ReadAllLines($dqPas); $dqS = Get-StrippedSourceLines $dqPas
+$res.RtDoubledQuote = (@(@(3, 1), @(5, 1)) | ForEach-Object { $o = Get-GuardConditionFromLines $dqR $dqS $_[0] $_[1]; "$($o.Form):$($o.Keyword):$($o.Condition)" }) -join ' | '
+# the written trace still reads back byte for byte (the condition model gained a routine field for T5-R2)
+$res.RtRoundTrip = $(if ((Write-FormA (Read-FormA $txt)) -ceq $txt) { 'identical' } else { 'differs' })
+
 [pscustomobject]$res

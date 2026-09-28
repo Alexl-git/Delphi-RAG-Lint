@@ -107,13 +107,15 @@ function New-TraceStep([string] $Kind, [string] $Text, [string] $Anchor, [string
 }
 
 # The condition is kept VERBATIM; one carrying a double-quote or a line break is refused (see the header).
-function New-TraceCond([string] $Keyword, [string] $Condition, [string] $Anchor, [string] $Note = '', [string] $Ask = '') {
+# $Routine: set when the condition hangs on a step of ANOTHER routine (a CALLS step), so it does not
+# read as the callee's -- written as the note's `in <Routine>` part (Task 5 ruling T5-R2).
+function New-TraceCond([string] $Keyword, [string] $Condition, [string] $Anchor, [string] $Note = '', [string] $Ask = '', [string] $Routine = '') {
   if ($Keyword -cnotin $script:FormAConds) { throw "New-TraceCond: '$Keyword' is not WHEN/UNLESS" }
   if ($Anchor -notmatch $script:FormAAnchor) { throw "New-TraceCond: '$Condition' has no anchor; got '$Anchor'" }
   if ([string]::IsNullOrWhiteSpace($Condition)) { throw 'New-TraceCond: empty condition' }
   if ($Condition.Contains('"')) { throw "New-TraceCond: the condition carries a double-quote, so it cannot be quoted verbatim: $Condition" }
   if ($Condition -match '[\r\n]') { throw "New-TraceCond: the condition must not contain a line break (join a wrapped condition first): $Condition" }
-  [pscustomobject]@{ Kind = 'cond'; Keyword = $Keyword; Condition = $Condition; Anchor = $Anchor; Note = $Note; Ask = $Ask }
+  [pscustomobject]@{ Kind = 'cond'; Keyword = $Keyword; Condition = $Condition; Anchor = $Anchor; Note = $Note; Ask = $Ask; Routine = $Routine }
 }
 
 function New-TraceFacet([string] $Head, [string] $Text, [string] $Anchor = '', [string] $Note = '') {
@@ -213,7 +215,7 @@ function Write-FormA($Trace) {
         default   { & $L ($head + $i.Text + $(if ($i.Grade) { " [$($i.Grade)]" } else { '' }) + $tail) }
       }
       foreach ($ch in $i.Children) {
-        $cn = Format-TraceNote '' $ch.Note $ch.Ask
+        $cn = Format-TraceNote $(if ($ch.Kind -eq 'cond') { $ch.Routine } else { '' }) $ch.Note $ch.Ask
         if ($ch.Kind -eq 'cond') {
           # verbatim: no truncation, no quote rewriting (New-TraceCond refused a '"' already)
           & $L ("       $($ch.Keyword) `"$($ch.Condition)`" @$($ch.Anchor)" + $(if ($cn) { " -- $cn" } else { '' }))
@@ -277,7 +279,7 @@ function Read-FormA([string] $Text) {
       $m = $Matches
       if (-not $cur) { throw "Read-FormA: a condition before any step: $raw" }
       $rn, $nt, $ask = Split-TraceNote ([string]$m[4])
-      [void]$cur.Children.Add((New-TraceCond ([string]$m[1]) ([string]$m[2]) ([string]$m[3]) $nt $ask))
+      [void]$cur.Children.Add((New-TraceCond ([string]$m[1]) ([string]$m[2]) ([string]$m[3]) $nt $ask $rn))
       continue
     }
     if ($raw -cmatch $rxFacet) {
