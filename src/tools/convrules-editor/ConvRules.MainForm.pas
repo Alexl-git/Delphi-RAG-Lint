@@ -6930,22 +6930,41 @@ end;
 
 procedure TConvRulesForm.DoPasteUnits(Sender: TObject);
 var
-  Files: TArray<string>;
+  Files  : TArray<string>;
+  Text   : string;
+  HasText: Boolean;
 begin
   Files:= nil;
-  if Clipboard.HasFormat(CF_HDROP) then
-  begin
-    Clipboard.Open;
-    try
-      Files:= FilesFromHDrop(HDROP(Clipboard.GetAsHandle(CF_HDROP)));
-    finally
-      Clipboard.Close;
+  Text := '';
+  // OpenClipboard fails while another process holds the clipboard -- clipboard
+  // history or the shell inspecting a just-copied file list, typically. VCL raises
+  // EClipboardException for that, which would surface as a modal exception box;
+  // report it on the status line instead. Only the READ is guarded: the harvest
+  // below keeps its own error handling.
+  try
+    if Clipboard.HasFormat(CF_HDROP) then
+    begin
+      Clipboard.Open;
+      try
+        Files:= FilesFromHDrop(HDROP(Clipboard.GetAsHandle(CF_HDROP)));
+      finally
+        Clipboard.Close;
+      end;
+    end;
+    HasText:= (Length(Files) = 0) and (Clipboard.HasFormat(CF_UNICODETEXT) or Clipboard.HasFormat(CF_TEXT));
+    if HasText then
+      Text:= Clipboard.AsText;
+  except
+    on E: EClipboardException do
+    begin
+      SetError('Paste: ' + E.Message + ' -- another program has the clipboard open; try again.');
+      Exit;
     end;
   end;
   if Length(Files) > 0 then
     AddSourceFiles(Files)
-  else if Clipboard.HasFormat(CF_UNICODETEXT) or Clipboard.HasFormat(CF_TEXT) then
-    AddSourceText(Clipboard.AsText)
+  else if HasText then
+    AddSourceText(Text)
   else
     SetError('Paste: the clipboard holds neither text nor files.');
 end;
