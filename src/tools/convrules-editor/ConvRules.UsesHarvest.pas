@@ -10,6 +10,7 @@ interface
 
 uses
   System.SysUtils
+  , ConvRules.Platform
   ;
 
 type
@@ -31,6 +32,20 @@ type
     /// <summary>Absolute path from the entry's `in '...'` part; '' for a plain
     /// entry such as `Vcl.Forms`.</summary>
     FilePath: string;
+  end;
+
+  /// <summary>What the classifier needs from a destination .dproj, for ONE platform.</summary>
+  TProjectSettings = record
+    /// <summary>The .dproj's folder, no trailing delimiter.</summary>
+    ProjectDir: string;
+    /// <summary>Absolute path of the .dpr named by MainSource; '' when absent.</summary>
+    MainSource: string;
+    /// <summary>Absolute search-path folders, compiler order, de-duplicated.</summary>
+    SearchPath: TArray<string>;
+    /// <summary>Unit scope names, compiler order, de-duplicated.</summary>
+    Scopes    : TArray<string>;
+    /// <summary>Entries dropped because they hold an unexpanded $(...) macro.</summary>
+    Skipped   : TArray<string>;
   end;
 
 const
@@ -75,12 +90,46 @@ function IndexOfUnit(const AUnits: TArray<THarvestedUnit>; const AName: string):
 /// <returns>'interface, U1' when a section is known, else just UsedBy.</returns>
 function HarvestFlagText(const AUnit: THarvestedUnit): string;
 
+/// <summary>Absolute path of the .dpr a .dproj names in MainSource.</summary>
+/// <param name="ADprojText">The .dproj XML text.</param>
+/// <param name="ADprojDir">The .dproj's folder.</param>
+/// <returns>The path, or '' when there is no MainSource element.</returns>
+function MainSourceOf(const ADprojText, ADprojDir: string): string;
+
+/// <summary>Search path, scope names and main source of a .dproj, for one platform.</summary>
+/// <param name="ADprojText">The .dproj XML text.</param>
+/// <param name="ADprojDir">The .dproj's folder; relative entries resolve against it.</param>
+/// <param name="APlatform">cpWin32 or cpWin64; cpBoth reads Win64.</param>
+/// <returns>The settings. Only the `'$(Base)'!=''` and `'$(Base_&lt;P&gt;)'!=''`
+/// groups are read, in document order; `$(DCC_UnitSearchPath)` and
+/// `$(DCC_Namespace)` in a value expand to the value accumulated so far.</returns>
+/// <remarks>Build-configuration groups (Cfg_n) are NOT read -- a spec decision,
+/// not an oversight. An entry still holding `$(` after expansion goes to Skipped.</remarks>
+function ReadProjectSettings(const ADprojText, ADprojDir: string; APlatform: TConvPlatform): TProjectSettings;
+
+/// <summary>The .dproj that owns a project index.</summary>
+/// <param name="AProjectDb">A path like `C:\P\App\_D-RAG\App.sqlite`.</param>
+/// <returns>`C:\P\App\App.dproj` when the DB sits in a `_D-RAG` folder, else ''.
+/// Pure: existence is NOT checked.</returns>
+function ProjectFileForDb(const AProjectDb: string): string;
+
+/// <summary>Harvest the used units of source files.</summary>
+/// <param name="APaths">.pas files (their uses clauses), .dpr files (the clause
+/// plus every member file that exists), .dproj files (their MainSource .dpr).</param>
+/// <param name="AErrors">One human-readable line per file that was skipped:
+/// unreadable, wrong extension, missing MainSource, missing member.</param>
+/// <returns>The merged harvest, first occurrence winning.</returns>
+/// <remarks>Reads the disk. One level only: a used unit that is not a member
+/// is listed but its own uses are not followed.</remarks>
+function HarvestFiles(const APaths: TArray<string>; out AErrors: TArray<string>): TArray<THarvestedUnit>;
+
 implementation
 
 uses
   System.Generics.Collections
   , System.IOUtils
   , System.RegularExpressions
+  , System.StrUtils
   , ConvRules.Usage
   ;
 
@@ -185,6 +234,159 @@ begin
     end;
   finally
     Paths.Free;
+  end;
+end;
+
+const
+  GROUP_RE       = '<PropertyGroup\s+Condition="([^"]*)"\s*>(.*?)</PropertyGroup>';
+  MAINSOURCE_RE  = '<MainSource>\s*([^<]+?)\s*</MainSource>';
+  SEARCH_RE      = '<DCC_UnitSearchPath>(.*?)</DCC_UnitSearchPath>';
+  NAMESPACE_RE   = '<DCC_Namespace>(.*?)</DCC_Namespace>';
+  SEARCH_SELF    = '$(DCC_UnitSearchPath)';
+  NAMESPACE_SELF = '$(DCC_Namespace)';
+  BASE_COND      = '''$(base)''!=''''';
+  PLAT_COND_FMT  = '''$(base_%s)''!=''''';
+  MACRO_MARK     = '$(';
+  EXT_PAS        = '.pas';
+  EXT_DPR        = '.dpr';
+  EXT_DPROJ      = '.dproj';
+  DRAG_FOLDER    = '_D-RAG';
+
+function MainSourceOf(const ADprojText, ADprojDir: string): string;
+var
+  M: TMatch;
+begin
+  M:= TRegEx.Match(ADprojText, MAINSOURCE_RE, [roIgnoreCase]);
+  if M.Success then
+    Result:= TPath.GetFullPath(TPath.Combine(ADprojDir, M.Groups[1].Value))
+  else
+    Result:= '';
+end;
+
+{ ';'-separated list -> trimmed, non-empty, de-duplicated (case-insensitive). }
+function SplitList(const AValue: string): TArray<string>;
+var
+  S: string;
+begin
+  Result:= nil;
+  for S in AValue.Split([';']) do
+    if (Trim(S) <> '') and (IndexText(Trim(S), Result) = NOT_FOUND) then
+      Result:= Result + [Trim(S)];
+end;
+
+function ReadProjectSettings(const ADprojText, ADprojDir: string; APlatform: TConvPlatform): TProjectSettings;
+var
+  PlatCond : string;
+  SearchRaw: string;
+  NsRaw    : string;
+  Cond     : string;
+  M        : TMatch;
+  V        : TMatch;
+  E        : string;
+  Full     : string;
+begin
+  if APlatform = cpWin32 then
+    PlatCond:= Format(PLAT_COND_FMT, ['win32'])
+  else
+    PlatCond:= Format(PLAT_COND_FMT, ['win64']);
+  Result.ProjectDir:= ExcludeTrailingPathDelimiter(ADprojDir);
+  Result.MainSource:= MainSourceOf(ADprojText, ADprojDir);
+  Result.SearchPath:= nil;
+  Result.Scopes    := nil;
+  Result.Skipped   := nil;
+  SearchRaw:= '';
+  NsRaw    := '';
+  for M in TRegEx.Matches(ADprojText, GROUP_RE, [roIgnoreCase, roSingleLine]) do
+  begin
+    Cond:= LowerCase(StringReplace(M.Groups[1].Value, ' ', '', [rfReplaceAll]));
+    if (Cond <> BASE_COND) and (Cond <> PlatCond) then
+      Continue;
+    V:= TRegEx.Match(M.Groups[2].Value, SEARCH_RE, [roIgnoreCase, roSingleLine]);
+    if V.Success then
+      SearchRaw:= StringReplace(V.Groups[1].Value, SEARCH_SELF, SearchRaw, [rfReplaceAll, rfIgnoreCase]);
+    V:= TRegEx.Match(M.Groups[2].Value, NAMESPACE_RE, [roIgnoreCase, roSingleLine]);
+    if V.Success then
+      NsRaw:= StringReplace(V.Groups[1].Value, NAMESPACE_SELF, NsRaw, [rfReplaceAll, rfIgnoreCase]);
+  end;
+  for E in SplitList(NsRaw) do
+    if Pos(MACRO_MARK, E) > 0 then
+      Result.Skipped:= Result.Skipped + [E]
+    else
+      Result.Scopes:= Result.Scopes + [E];
+  for E in SplitList(SearchRaw) do
+    if Pos(MACRO_MARK, E) > 0 then
+      Result.Skipped:= Result.Skipped + [E]
+    else
+    begin
+      Full:= ExcludeTrailingPathDelimiter(TPath.GetFullPath(TPath.Combine(ADprojDir, E)));
+      if IndexText(Full, Result.SearchPath) = NOT_FOUND then
+        Result.SearchPath:= Result.SearchPath + [Full];
+    end;
+end;
+
+function ProjectFileForDb(const AProjectDb: string): string;
+var
+  Dir: string;
+begin
+  Result:= '';
+  if AProjectDb = '' then
+    Exit;
+  Dir:= ExtractFileDir(AProjectDb);
+  if not SameText(ExtractFileName(Dir), DRAG_FOLDER) then
+    Exit;
+  Result:= TPath.Combine(ExtractFileDir(Dir), ChangeFileExt(ExtractFileName(AProjectDb), EXT_DPROJ));
+end;
+
+{ A .dpr: its own clause (UsedBy = project name, no section) plus each member
+  file that exists. A member whose `in` file is missing is reported, not fatal. }
+function HarvestDpr(const ADprPath: string; var AErrors: TArray<string>): TArray<THarvestedUnit>;
+var
+  Text: string;
+  D   : TDprMember;
+begin
+  Text:= TFile.ReadAllText(ADprPath);
+  Result:= HarvestPasText(Text, ChangeFileExt(ExtractFileName(ADprPath), ''), False);
+  for D in ReadDprMembers(Text, ExtractFileDir(ADprPath)) do
+  begin
+    if D.FilePath = '' then
+      Continue;
+    if not TFile.Exists(D.FilePath) then
+    begin
+      AErrors:= AErrors + [Format('%s: member %s not found (%s)', [ExtractFileName(ADprPath), D.UnitName, D.FilePath])];
+      Continue;
+    end;
+    Result:= MergeHarvest(Result, HarvestPasText(TFile.ReadAllText(D.FilePath), D.UnitName, True));
+  end;
+end;
+
+function HarvestFiles(const APaths: TArray<string>; out AErrors: TArray<string>): TArray<THarvestedUnit>;
+var
+  P  : string;
+  Ext: string;
+  Dpr: string;
+begin
+  Result := nil;
+  AErrors:= nil;
+  for P in APaths do
+  try
+    Ext:= LowerCase(ExtractFileExt(P));
+    if Ext = EXT_PAS then
+      Result:= MergeHarvest(Result, HarvestPasText(TFile.ReadAllText(P), ChangeFileExt(ExtractFileName(P), ''), True))
+    else if Ext = EXT_DPR then
+      Result:= MergeHarvest(Result, HarvestDpr(P, AErrors))
+    else if Ext = EXT_DPROJ then
+    begin
+      Dpr:= MainSourceOf(TFile.ReadAllText(P), ExtractFileDir(P));
+      if (Dpr = '') or not TFile.Exists(Dpr) then
+        AErrors:= AErrors + [Format('%s: no MainSource .dpr found', [ExtractFileName(P)])]
+      else
+        Result:= MergeHarvest(Result, HarvestDpr(Dpr, AErrors));
+    end
+    else
+      AErrors:= AErrors + [Format('%s: not a .pas/.dpr/.dproj -- ignored', [ExtractFileName(P)])];
+  except
+    on E: Exception do
+      AErrors:= AErrors + [Format('%s: %s', [ExtractFileName(P), E.Message])];
   end;
 end;
 

@@ -6175,6 +6175,88 @@ begin
   Check('harvest.flag.nosection', HarvestFlagText(R[1]) = PASTED_SOURCE, HarvestFlagText(R[1]));
 end;
 
+procedure TestProjectSettings;
+const
+  DPROJ =
+    '<Project>' + #13#10 +
+    '<PropertyGroup><MainSource>App.dpr</MainSource></PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Config)''==''Base'' or ''$(Base)''!=''''">' + #13#10 +
+    '  <Base>true</Base>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Base)''!=''''">' + #13#10 +
+    '  <DCC_Namespace>System;Data;Vcl;$(DCC_Namespace)</DCC_Namespace>' + #13#10 +
+    '  <DCC_UnitSearchPath>..\Common;.\;$(BDS)\lib;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Base_Win32)''!=''''">' + #13#10 +
+    '  <DCC_Namespace>Winapi;Bde;$(DCC_Namespace)</DCC_Namespace>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Base_Win64)''!=''''">' + #13#10 +
+    '  <DCC_Namespace>Winapi;$(DCC_Namespace)</DCC_Namespace>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Cfg_1)''!=''''">' + #13#10 +
+    '  <DCC_UnitSearchPath>C:\CfgOnly;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '</Project>';
+var
+  S: TProjectSettings;
+begin
+  S:= ReadProjectSettings(DPROJ, 'C:\P\App', cpWin64);
+  Check('dproj.mainsource', SameText(S.MainSource, 'C:\P\App\App.dpr'), S.MainSource);
+  Check('dproj.projectdir', SameText(S.ProjectDir, 'C:\P\App'), S.ProjectDir);
+  Check('dproj.win64.scopes.inherit', string.Join(';', S.Scopes) = 'Winapi;System;Data;Vcl', string.Join(';', S.Scopes));
+  Check('dproj.searchpath.relative', SameText(string.Join(';', S.SearchPath), 'C:\P\Common;C:\P\App'), string.Join(';', S.SearchPath));
+  Check('dproj.searchpath.macro.skipped', string.Join(';', S.Skipped) = '$(BDS)\lib', string.Join(';', S.Skipped));
+  Check('dproj.cfg.groups.ignored', Pos('CFGONLY', UpperCase(string.Join(';', S.SearchPath))) = 0, string.Join(';', S.SearchPath));
+  S:= ReadProjectSettings(DPROJ, 'C:\P\App', cpWin32);
+  Check('dproj.win32.scopes.bde', string.Join(';', S.Scopes) = 'Winapi;Bde;System;Data;Vcl', string.Join(';', S.Scopes));
+  S:= ReadProjectSettings(DPROJ, 'C:\P\App', cpBoth);
+  Check('dproj.both.is.win64', string.Join(';', S.Scopes) = 'Winapi;System;Data;Vcl', string.Join(';', S.Scopes));
+  S:= ReadProjectSettings('<Project></Project>', 'C:\P\App', cpWin64);
+  Check('dproj.no.mainsource', S.MainSource = '', S.MainSource);
+end;
+
+procedure TestProjectFileForDb;
+begin
+  Check('dbproject.drag.folder', SameText(ProjectFileForDb('C:\P\App\_D-RAG\App.sqlite'), 'C:\P\App\App.dproj'), ProjectFileForDb('C:\P\App\_D-RAG\App.sqlite'));
+  Check('dbproject.other.folder', ProjectFileForDb('C:\P\App\App.sqlite') = '', ProjectFileForDb('C:\P\App\App.sqlite'));
+  Check('dbproject.empty', ProjectFileForDb('') = '', '');
+end;
+
+procedure TestHarvestFiles;
+var
+  Dir : string;
+  R   : TArray<THarvestedUnit>;
+  Errs: TArray<string>;
+  i   : Integer;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrules-harvest-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'App.dproj'), '<Project><PropertyGroup><MainSource>App.dpr</MainSource></PropertyGroup></Project>', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'App.dpr'),
+      'program App;' + #13#10 + 'uses' + #13#10 + '  Vcl.Forms,' + #13#10 + '  U1 in ''U1.pas'',' + #13#10 + '  Gone in ''Gone.pas'';' + #13#10 + 'begin end.', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'U1.pas'),
+      'unit U1;' + #13#10 + 'interface' + #13#10 + 'uses DB, Forms;' + #13#10 + 'implementation' + #13#10 + 'uses DBTables;' + #13#10 + 'end.', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'notes.txt'), 'x', TEncoding.ASCII);
+
+    R:= HarvestFiles([TPath.Combine(Dir, 'App.dproj'), TPath.Combine(Dir, 'notes.txt')], Errs);
+    Check('harvest.files.dproj.names', HarvestNames(R) = 'Vcl.Forms,U1,Gone,DB,Forms,DBTables', HarvestNames(R));
+    Check('harvest.files.dpr.usedby', (Length(R) > 0) and (R[0].UsedBy = 'App') and (R[0].Section = ''), HarvestNames(R));
+    i:= IndexOfUnit(R, 'DBTables');
+    Check('harvest.files.member.section', (i >= 0) and (R[i].Section = 'implementation') and (R[i].UsedBy = 'U1'), IntToStr(i));
+    Check('harvest.files.member.gone.reported', (Length(Errs) = 2) and (Pos('Gone', Errs[0]) > 0), string.Join(' | ', Errs));
+    Check('harvest.files.other.ext.reported', (Length(Errs) = 2) and (Pos('notes.txt', Errs[1]) > 0), string.Join(' | ', Errs));
+
+    R:= HarvestFiles([TPath.Combine(Dir, 'U1.pas')], Errs);
+    Check('harvest.files.pas', (HarvestNames(R) = 'DB,Forms,DBTables') and (Length(Errs) = 0), HarvestNames(R));
+
+    R:= HarvestFiles([TPath.Combine(Dir, 'NoSuch.pas')], Errs);
+    Check('harvest.files.unreadable.reported', (Length(R) = 0) and (Length(Errs) = 1), string.Join(' | ', Errs));
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -6304,6 +6386,9 @@ begin
     TestUsesHarvestText;
     TestDprMembers;
     TestHarvestMergeAndFlag;
+    TestProjectSettings;
+    TestProjectFileForDb;
+    TestHarvestFiles;
 
     FreeAndNil(GParseBook);
 
