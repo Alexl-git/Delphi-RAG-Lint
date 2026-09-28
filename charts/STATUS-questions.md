@@ -270,6 +270,38 @@ from 9 nodes to 4. Callers unaffected.
 
 ## Resume point
 
+**NEXT ACTION (2026-09-27): implement the Interface report trace core,
+SUBAGENT-DRIVEN** (owner's choice). Local, gitignored (public repo):
+spec `docs\superpowers\specs\2026-09-27-interface-report-trace-core-design.md`,
+plan `docs\superpowers\plans\2026-09-27-interface-report-trace-core.md`
+(9 tasks, AC-1..AC-16 mapped; drafted by a Fable agent, self-reviewed).
+Invoke `superpowers:subagent-driven-development` on the plan.
+
+**OWNER ANSWERED 2026-09-27 (session charts-86 owns the branch from now): all
+three as recommended -- (1) Task 0 engine switch FIRST, (2) double-quoted
+conditions, (3) re-point hop in the new trace ONLY.** The decisions were:
+1. **Task 0 before Task 1: switch engines.** The engine session
+   (`delphi-rag-lint-4a`) deployed engine 1.18.0 / resolver 1.9.0 and asked
+   every worktree to stop using its own build. Proposed: every emitter's
+   default `$Engine` -> `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`;
+   re-clone all 9 DBs (keep `*.pre-1.9`); re-run the gate, tracing every moved
+   pin; drop the who-writes "bound, not reported" workaround (their D31).
+   Also D22: unit-qualified vars/consts bind (+4 CLIENT member_accesses). The
+   plan's Global Constraints and measured basis name the OLD engine/clones --
+   amend them in Task 0; Task 1 re-measures on the new clones. We acked them.
+2. Conditions double-quoted: `UNLESS "SQL = ''"` (Pascal `''` breaks single quotes).
+3. The code re-point hop lives only in the new trace (`Get-RePointChain`
+   after a `dangling` chain); wiring it into feeds-from/lands-where re-grades
+   ~30 pins (426 dangling controls) and is a separate later change.
+   (Informational: DISPATCH takes the first call after the constant INTO
+   ANOTHER UNIT -- plain "first call" picks the unit-local ParseTableFromPayload.)
+
+Programme after this spec (owner, 2026-09-27): holdout field -> chart drawn
+from the Form A text -> shared IDE selection (control / its interface field /
+a .pas variable) -> IDE command (text to clipboard, open chart) -> review the
+other questions -> PORT all of them into the drag-lint engine with docs and
+ORM3 examples. Regenerate on demand; no drift tracking; no bookmarks.
+
 **DONE 2026-09-24: the Blueprint4 "Operation Name" example**, engine-made, in
 `charts\docs\examples\protocol-trace\` (gitignored output) with
 `README-Blueprint4-Operation-Name.md` (column -> wire mapping, IDE path, where
