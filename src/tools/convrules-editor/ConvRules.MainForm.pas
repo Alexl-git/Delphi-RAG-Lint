@@ -20,6 +20,7 @@ uses
   , System.IOUtils
   , System.Generics.Collections
   , Winapi.Windows
+  , Winapi.ActiveX // IDropTarget: a field's type, so INTERFACE-visible
   , Vcl.Forms
   , Vcl.Controls
   , Vcl.StdCtrls
@@ -110,6 +111,7 @@ type
       FTabUnits      : TTabSheet             ; // the Unit Rules page; "is it active?" checks
       FHarvestStrip  : TPanel                ; // the control strip above FUnitList
       FHarvestBtnRow : TFlowPanel            ; // Add source / Paste / Clear row (Task 7 adds none; Task 6 adds rows below)
+      FDropTarget    : IDropTarget           ; // OLE target on the form's window; re-registered by CreateWnd
       FEdDest        : TEdit                 ; // destination .dproj
       FChkMissing    : TCheckBox             ; // Find missing
       FChkUnqualified: TCheckBox             ; // Include unqualified names
@@ -1826,6 +1828,7 @@ type
       procedure AddSourceText(const AText: string);
       procedure DoAddSource(Sender: TObject);
       procedure DoPasteUnits(Sender: TObject);
+      procedure UnitListKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
       procedure DoClearHarvest(Sender: TObject);
       procedure DoBrowseDest(Sender: TObject);
       procedure DestChanged(Sender: TObject);
@@ -2223,6 +2226,16 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function CanCast(const AFromType, AToType: string): Boolean;
+    protected
+      /// <summary>Registers the OLE drop target on every new window handle.</summary>
+      /// <remarks>A VCL style switch recreates the handle, so this runs more than once;
+      /// the target object is created on the first call and reused.</remarks>
+      procedure CreateWnd; override;
+      /// <summary>Revokes the drop target before the window handle goes.</summary>
+      /// <remarks>Overrides DestroyWindowHandle, not DestroyWnd: TWinControl.Destroy
+      /// calls DestroyWindowHandle directly, so a DestroyWnd override would miss the
+      /// form's final teardown and leave the target registered on a dying window.</remarks>
+      procedure DestroyWindowHandle; override;
     public
       { Application.CreateForm calls this standard Create(AOwner); we route it to
       CreateNew (no .dfm) and build the UI in code. Being created via CreateForm
@@ -2369,6 +2382,8 @@ uses
   , ConvRules.RuleChooser
   , ConvRules.UnitPick // usmRegex / IsValidUnitSearch for the mask row
   , Vcl.FileCtrl       // SelectDirectory for the mask folder
+  , Winapi.ShellAPI    // HDROP for a pasted Explorer file list
+  , ConvRules.DropTarget
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -3064,6 +3079,7 @@ begin
   LStatusCol.Caption:= 'Status';
   LStatusCol.Width  := UNIT_STATUS_COL_W;
   FUnitList.OnCustomDrawItem:= UnitListCustomDrawItem;
+  FUnitList.OnKeyDown       := UnitListKeyDown;
 
   // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
   // than relying on "index 0 happens to be first created", which TabRules.
@@ -6687,7 +6703,7 @@ begin
 
   FHarvestBtnRow:= NewFlowRow;
   NewButton(FHarvestBtnRow, 'Add source...', 'Harvest used units from .pas / .dpr / .dproj files (multi-select)', DoAddSource);
-  NewButton(FHarvestBtnRow, 'Paste', 'Harvest used units from clipboard text (a uses clause or a list of names). Ctrl+V on the list does the same', DoPasteUnits);
+  NewButton(FHarvestBtnRow, 'Paste', 'Harvest used units from files copied in Explorer, or from clipboard text (a uses clause or a list of names). Ctrl+V on the list does the same', DoPasteUnits);
   NewButton(FHarvestBtnRow, 'Clear list', 'Drop every harvested row; unit rules are untouched', DoClearHarvest);
 
   OptRow:= NewFlowRow;
@@ -6913,11 +6929,58 @@ begin
 end;
 
 procedure TConvRulesForm.DoPasteUnits(Sender: TObject);
+var
+  Files: TArray<string>;
 begin
-  if Clipboard.HasFormat(CF_UNICODETEXT) or Clipboard.HasFormat(CF_TEXT) then
+  Files:= nil;
+  if Clipboard.HasFormat(CF_HDROP) then
+  begin
+    Clipboard.Open;
+    try
+      Files:= FilesFromHDrop(HDROP(Clipboard.GetAsHandle(CF_HDROP)));
+    finally
+      Clipboard.Close;
+    end;
+  end;
+  if Length(Files) > 0 then
+    AddSourceFiles(Files)
+  else if Clipboard.HasFormat(CF_UNICODETEXT) or Clipboard.HasFormat(CF_TEXT) then
     AddSourceText(Clipboard.AsText)
   else
-    SetError('Paste: the clipboard holds no text.');
+    SetError('Paste: the clipboard holds neither text nor files.');
+end;
+
+procedure TConvRulesForm.UnitListKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if (Key = Ord('V')) and (ssCtrl in Shift) then
+  begin
+    DoPasteUnits(Sender);
+    Key:= 0;
+  end;
+end;
+
+procedure TConvRulesForm.CreateWnd;
+begin
+  inherited CreateWnd;
+  if FDropTarget = nil then
+    FDropTarget:= TFormDropTarget.Create(
+      procedure(const AFiles: TArray<string>)
+      begin
+        AddSourceFiles(AFiles);
+      end,
+      procedure(const AText: string)
+      begin
+        AddSourceText(AText);
+      end);
+  if not RegisterFormDropTarget(Handle, FDropTarget) and (FLblStatus <> nil) then
+    SetError('Drag and drop is unavailable (RegisterDragDrop failed); use Add source... or Paste.');
+end;
+
+procedure TConvRulesForm.DestroyWindowHandle;
+begin
+  if WindowHandle <> 0 then
+    RevokeFormDropTarget(WindowHandle);
+  inherited DestroyWindowHandle;
 end;
 
 procedure TConvRulesForm.DoClearHarvest(Sender: TObject);
