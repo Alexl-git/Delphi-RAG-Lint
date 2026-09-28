@@ -129,7 +129,7 @@ on a chart, and each detector stays as a guard (R25).
 | D1 parenless free-function calls were never bound (`N := NextId;`) -- FIXED, resolver 1.7/1.8 (CLIENT call edges 20,409 -> 23,790; e.g. `NextSeq`, `ResolveLogDir` now appear) | every caller/callee walk: `butterfly`, `who-calls`, `what-it-calls`, `change-impact`, `exception-paths` | walks follow resolved edges only; a call the resolver cannot bind is still absent, so a short list is a lower bound |
 | D6 butterfly listed duplicate callee rows | `butterfly` | **FIXED here** -- rows are distinct symbols, arrows follow the engine's tree (a hop-2 callee is no longer drawn as called by the focus); gate `A-BF6-*` fails on any duplicate |
 | D12 own-name result assignment scored as a GLOBAL write (31 CLIENT functions on 1.18, e.g. `Ap.AP_FP_Greater_Eq`) -- FIXED, extractor 1.19 (0 on every clone; `AP_FP_Greater_Eq` is now pure) | `effects` | guard kept: when the witness is "writes <own name> (non-local)" the `g` moves to a dashed "engine D12" disclosure (driven synthetically, `A-FX12-DETECT`) |
-| D13 `write` refs never got a symbol_id (32,909 of 32,909 on CLIENT at 1.18) -- FIXED, extractor 1.19 (21,916 bound) | `who-writes` | the fix gives a bound write NO member-access row (0 of 21,916), so `find-callers` still does not report a bare in-class write: the chart says "0 member-access write(s) reported by find-callers + 4 bound write(s) find-callers does not report" and lists the writes BOUND to the member by line (`FConnected`: uPipeClientConnection.pas:164/320/455/543); what 1.19 leaves unbound (a write in a `with` body, `fLOTSIZE` at uPLANLIST.PAS:2547; bare in-class READS, `FNoRecursion` 9) is listed by name. Both directions, on every mode and in the bundle header: nothing claims zero beside a population the index holds (ruling R26) |
+| D13 `write` refs never got a symbol_id (32,909 of 32,909 on CLIENT at 1.18) -- FIXED, extractor 1.19 (21,916 bound) | `who-writes` | the fix gave a bound write NO member-access row (0 of 21,916), so `find-callers` did not report a bare in-class write and the chart disclosed them as "bound, not reported" -- RETIRED 2026-09-27: engine 1.18 (D31) reports them, so `FConnected`'s writes at uPipeClientConnection.pas:164/320/455/543 are its writers wing; what 1.19 leaves unbound (a write in a `with` body, `fLOTSIZE` at uPLANLIST.PAS:2547; bare in-class READS, `FNoRecursion` 9) is listed by name. Both directions, on every mode and in the bundle header: nothing claims zero beside a population the index holds (ruling R26) |
 | D18 `sql_reads` misses SQL split over `SQL.Add` lines -- FIXED, extractor 1.19 (SERVER read facts 19 -> 112) | `consumers`, `touches-tables`, `lands-where` | `PrepareLoadQuery` on CAUSFAIL is now a `[certain]` reader; literals stay `[inferred]` beside the facts for SQL passed through a variable (FOLDERS: 3 inferred readers) |
 | D19 quoted identifiers not extracted -- FIXED, extractor 1.19 | `consumers`, `feeds-from`, `lands-where` | `FOLDERCOUNT.TABLE` / `IPCHART.ACTION` are ordinary columns; the `quoted` state is a guard |
 
@@ -332,14 +332,37 @@ green (1072 s):
    names (cosmetic).
 
 **Still open:** (1) owner decides the R24 wave (6 pre-existing unpaged
-population queries -- ledger `.superpowers\sdd\PLAN-last-four-verbs\progress.md`);
-(2) when the engine deploys D31, adopt the deployed engine (audit list in the
-ledger) and drop the who-writes "bound, not reported" workaround.
+population queries -- ledger `.superpowers\sdd\PLAN-last-four-verbs\progress.md`).
+(2) DONE 2026-09-27 (Task 0, below): the deployed engine is adopted and the
+who-writes "bound, not reported" workaround is dropped.
 
 **The earlier batches are all done.** 25 of 26 catalogue questions ship; only
 `compare` does not, parked by the owner.
 
-**THE SUITE IS GREEN (2026-09-24 03:48) on extractor 1.19.0 / resolver 1.8.0** --
+**THE SUITE IS GREEN (2026-09-28 00:13) on the SHARED engine 1.18.0-alpha /
+resolver 1.9.0-alpha** (Task 0 of the trace-core plan). Every emitter now runs
+`C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`, not this
+worktree's 1.16 build. All 9 clones re-taken 2026-09-27 23:15 at
+`v=1.19.0-alpha / r=1.9.0-alpha` (old copies kept as `*.sqlite.pre-1.9`); the
+DL clone was re-taken again at 23:50 because the 21:45 DL index had NO call
+edges for the 20 units edited since their parse (7,429 vs 13,095 edges; kept as
+`DL-drag-lint.sqlite.withheld-2145`). Moved pins, each traced:
+* who-writes (engine D31: `find-callers --resolved` reports a bare write BOUND
+  to the member, at the same lines the chart used to list): FConnected writes
+  0 -> 4, fLOTSIZE 0 -> 5, FNoRecursion 0 -> 48. The "bound, not reported"
+  disclosure and `BoundUnreported` are gone; the site SQL anchors bound bare
+  refs; counts read "N resolved write(s) reported by find-callers" (was
+  "member-access"); the bundle-header label test moved to who-reads
+  FNoRecursion (9 unbound reads still need it).
+* `A-AR1-EXTEDGES` 30716 -> 6880: engine deps-report fix c4034b21 (their D5);
+  both engines on the SAME clone give 30716 / 6880; 6880 = distinct unresolved
+  (file, unit) `unit_uses` pairs.
+* D22 (+4 CLIENT, +1 DataCopy member_accesses) moved no pin.
+* find-callers JSON `line` is now the call SITE (`caller_line` = declaration):
+  no emitter read the resolved `line`; the Emit-Common comment that said
+  otherwise, and protocol-trace's "cannot see enum values" note, are corrected.
+
+**THE SUITE WAS GREEN (2026-09-24 03:48) on extractor 1.19.0 / resolver 1.8.0** --
 all 9 clones re-taken 02:53 (previous copies kept as `*.pre-1.19`), every moved pin
 traced against them (commit 8e17bedf: D1 parenless calls, D12, D13, D18, D19, and
 two SOURCE changes in the DL self-index). Before that:
