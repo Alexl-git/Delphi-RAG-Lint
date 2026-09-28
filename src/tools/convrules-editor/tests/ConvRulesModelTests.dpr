@@ -6276,8 +6276,9 @@ var
   Probe  : TFileProbe;
   Members: TArray<TDprMember>;
   M      : TDprMember;
+  Plain  : TDprMember;
   Lib    : TArray<string>;
-  R      : TUnitResolver;
+  R      : TDestinationResolver;
   S      : TUnitStatus;
 begin
   Files:= ['C:\P\App\Local.pas', 'C:\P\Common\Shared.dcu'];
@@ -6290,7 +6291,7 @@ begin
   Members:= [M];
   Lib:= ['Vcl.Forms', 'Data.DB', 'System.SysUtils', 'Bde.DBTables', 'Local', 'Winapi.Foo', 'System.Foo'];
 
-  R:= TUnitResolver.Create(FixtureSettings(cpWin64), Members, Lib, Probe);
+  R:= TDestinationResolver.Create(FixtureSettings(cpWin64), Members, Lib, Probe);
   try
     S:= R.Classify('DMain');
     Check('resolver.member', (S.Kind = uskProject) and SameText(S.Resolved, 'C:\P\App\DMain.pas'), StatusText(S) + ' ' + S.Resolved);
@@ -6314,7 +6315,7 @@ begin
     R.Free;
   end;
 
-  R:= TUnitResolver.Create(FixtureSettings(cpWin32), Members, Lib, Probe);
+  R:= TDestinationResolver.Create(FixtureSettings(cpWin32), Members, Lib, Probe);
   try
     S:= R.Classify('DBTables');
     Check('resolver.win32.dbtables.viascope', (S.Kind = uskViaScope) and (S.Resolved = 'Bde.DBTables'), StatusText(S));
@@ -6322,10 +6323,20 @@ begin
     R.Free;
   end;
 
-  R:= TUnitResolver.Create(FixtureSettings(cpWin64), nil, nil, Probe);
+  R:= TDestinationResolver.Create(FixtureSettings(cpWin64), nil, nil, Probe);
   try
     S:= R.Classify('Vcl.Forms');
     Check('resolver.empty.library.missing', S.Kind = uskMissing, StatusText(S));
+  finally
+    R.Free;
+  end;
+
+  Plain.UnitName:= 'Vcl.Forms';
+  Plain.FilePath:= '';
+  R:= TDestinationResolver.Create(FixtureSettings(cpWin64), [M, Plain], Lib, Probe);
+  try
+    S:= R.Classify('Vcl.Forms');
+    Check('resolver.plain.dpr.entry.not.member', S.Kind = uskLibrary, StatusText(S));
   finally
     R.Free;
   end;
@@ -6346,7 +6357,7 @@ procedure TestUnitResolverDisk;
 var
   Dir: string;
   St : TProjectSettings;
-  R  : TUnitResolver;
+  R  : TDestinationResolver;
 begin
   Dir:= TPath.Combine(TPath.GetTempPath, 'convrules-resolver-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -6357,7 +6368,7 @@ begin
     St.SearchPath:= [TPath.Combine(Dir, 'NoSuchFolder')];
     St.Scopes    := nil;
     St.Skipped   := nil;
-    R:= TUnitResolver.Create(St, nil, nil, nil);
+    R:= TDestinationResolver.Create(St, nil, nil, nil);
     try
       Check('resolver.disk.found', R.Classify('ondisk').Kind = uskProject, StatusText(R.Classify('ondisk')));
       Check('resolver.disk.missing', R.Classify('NotThere').Kind = uskMissing, StatusText(R.Classify('NotThere')));

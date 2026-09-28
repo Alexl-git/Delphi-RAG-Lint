@@ -20,8 +20,9 @@ type
   TUnitStatus = record
     /// <summary>The verdict.</summary>
     Kind    : TUnitStatusKind;
-    /// <summary>uskProject: the file found ('' for a member without an `in`
-    /// path); uskViaScope: the qualified name, e.g. 'Vcl.Forms'; else ''.</summary>
+    /// <summary>uskProject: the file found (a member's `in` path, or the
+    /// .pas/.dcu found on disk); uskViaScope: the qualified name, e.g.
+    /// 'Vcl.Forms'; else ''.</summary>
     Resolved: string;
   end;
 
@@ -29,11 +30,13 @@ type
   TFileProbe = reference to function(const APath: string): Boolean;
 
   /// <summary>Resolves unit names the way the destination's compiler would.</summary>
-  /// <remarks>Order, first match wins: destination member; APath.pas/.dcu in the
-  /// project folder or a search-path folder (project); the name in the library
+  /// <remarks>Order, first match wins: destination member (a .dpr entry WITH an
+  /// `in` path; a plain entry such as `Vcl.Forms` is not one and resolves through
+  /// the later steps); AName.pas/.dcu in the project folder or a search-path
+  /// folder (project); the name in the library
   /// list (library); each scope name prefixed, same checks (via scope); else
   /// MISSING. Case-insensitive throughout. Not thread-safe.</remarks>
-  TUnitResolver = class
+  TDestinationResolver = class
   private
     FMembers : TDictionary<string, string>;
     FLibrary : TDictionary<string, Boolean>;
@@ -46,7 +49,8 @@ type
   public
     /// <summary>Builds the lookup tables.</summary>
     /// <param name="ASettings">Destination settings for the platform being classified.</param>
-    /// <param name="AMembers">Destination .dpr members.</param>
+    /// <param name="AMembers">Destination .dpr entries; only those with a
+    /// FilePath (an `in` path) become members, plain entries are ignored here.</param>
     /// <param name="ALibrary">Library unit names for the platform; empty makes
     /// every library-only unit MISSING (the caller must say so).</param>
     /// <param name="AProbe">nil = read the disk, one listing per folder, cached.</param>
@@ -114,7 +118,7 @@ begin
   Result:= (AStatus.Kind = uskMissing) or ((AStatus.Kind = uskViaScope) and AIncludeUnqualified);
 end;
 
-constructor TUnitResolver.Create(const ASettings: TProjectSettings; const AMembers: TArray<TDprMember>; const ALibrary: TArray<string>; const AProbe: TFileProbe);
+constructor TDestinationResolver.Create(const ASettings: TProjectSettings; const AMembers: TArray<TDprMember>; const ALibrary: TArray<string>; const AProbe: TFileProbe);
 var
   D: TDprMember;
   S: string;
@@ -124,7 +128,7 @@ begin
   FLibrary := TDictionary<string, Boolean>.Create;
   FDirFiles:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   for D in AMembers do
-    if not FMembers.ContainsKey(UpperCase(D.UnitName)) then
+    if (D.FilePath <> '') and not FMembers.ContainsKey(UpperCase(D.UnitName)) then
       FMembers.Add(UpperCase(D.UnitName), D.FilePath);
   for S in ALibrary do
     FLibrary.AddOrSetValue(UpperCase(S), True);
@@ -133,7 +137,7 @@ begin
   FProbe := AProbe;
 end;
 
-destructor TUnitResolver.Destroy;
+destructor TDestinationResolver.Destroy;
 begin
   FDirFiles.Free;
   FLibrary.Free;
@@ -141,7 +145,7 @@ begin
   inherited Destroy;
 end;
 
-function TUnitResolver.FileInDir(const ADir, AFileName: string): Boolean;
+function TDestinationResolver.FileInDir(const ADir, AFileName: string): Boolean;
 var
   Files: TDictionary<string, Boolean>;
   F    : string;
@@ -159,7 +163,7 @@ begin
   Result:= Files.ContainsKey(UpperCase(AFileName));
 end;
 
-function TUnitResolver.ResolveProject(const AName: string; out APath: string): Boolean;
+function TDestinationResolver.ResolveProject(const AName: string; out APath: string): Boolean;
 var
   Dir: string;
   Ext: string;
@@ -177,7 +181,7 @@ begin
   Result:= False;
 end;
 
-function TUnitResolver.Classify(const AName: string): TUnitStatus;
+function TDestinationResolver.Classify(const AName: string): TUnitStatus;
 var
   Path: string;
   S   : string;
