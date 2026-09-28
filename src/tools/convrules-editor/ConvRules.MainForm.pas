@@ -1716,15 +1716,14 @@ type
       procedure CbUnitSelected(Sender: TObject);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCheckUnits (ConvRules.MainForm.pas) (+7 more)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshUnitList.HasRuleFor, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.Units.NormalizeUnitSets, IfThen, Pointer, SameText</para>
-      /// <para>Reads: FUnitList, FBook, FUnitCandidates</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.HasRuleFor"/>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas) (+11 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.IsHarvested, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf, ConvRules.MainForm.TConvRulesForm.UnitHasRule, ConvRules.MainForm.TConvRulesForm.VisibleHarvestRows, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.Units.NormalizeUnitSets, ConvRules.UnitStatus.StatusText, ConvRules.UsesHarvest.HarvestFlagText, Format, IfThen, Pointer, SameText</para>
+      /// <para>Reads: FUnitList, FBook, FUnitCandidates, FLblHarvest</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.IsHarvested"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.UnitNodes"/>
-      /// <seealso cref="ConvRules.Units.NormalizeUnitSets"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UnitHasRule"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.VisibleHarvestRows"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshUnitList;
