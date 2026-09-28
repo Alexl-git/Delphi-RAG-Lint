@@ -294,3 +294,266 @@ function Resolve-TraceAnchor([string] $Target, $SqlSet, [hashtable] $SourceOverr
   if ($segs.Count -ne 2) { throw "round-trip: $t is not <Form>.<Control>" }
   Resolve-AnchorFromControl $segs[0] $segs[1] $R $SqlSet $SourceOverride
 }
+
+# ---- Part 2: the condition shim (spec section 4; engine ask E1 retires it) ---------------
+# The index holds tokens, not conditions. For an Exit the index ALREADY anchored
+# (a `call` ref named Exit inside the routine) the branch around it is read from
+# the source and its condition quoted VERBATIM from the RAW text -- never negated
+# or rewritten. Pure over two line arrays (raw and comment/string-stripped, same
+# columns) so synthetic cases test it; Get-GuardCondition is the fresh-checked
+# wrapper and REFUSES a stale file by name (AC-14).
+#
+# The branch is found on KEYWORD TOKENS of the stripped text, read backwards from
+# the Exit (a line count cannot see `end else begin`, whose begin is the opener,
+# nor an `if .. then .. else` NESTED inside the exit block, SendDeltaOperation:3993).
+# The token just before a statement says where it stands: `then` -> the if's then
+# branch; `else` -> the else of the if (or case) it pairs with; `on .. do` -> an
+# except handler; `;` / `begin` / `try` -> a statement of the enclosing block,
+# whose opener is then read the same way. Forms:
+#   inline  the `if` and the Exit share a line    -> UNLESS "C" (then branch), WHEN "C" (else branch)
+#   block   the `if` is on an earlier line         -> the same keywords
+#   except  `try S .. except .. Exit`              -> UNLESS "S raises"; a body of several statements is
+#                                                     quoted "S1 .. Sn raises" -- which one raises is not in the source
+#   case    `case X of .. else .. Exit`            -> UNLESS "case X of else"
+#   unknown anything else (a loop, a case arm, no branch, a condition holding a double-quote) --
+#           Reason is plain GENERATED text the walker writes as a STOPS naming E1; never a guess, never a throw
+#
+# Quoting (P16): a condition is the raw text between `if` and `then`. A wrapped one
+# is JOINED: each line's piece runs from its first to its last code or string
+# character (a comment at either END of a piece is dropped, as it would swallow
+# the join; one inside is kept as written) and the pieces are joined with ONE
+# space. Nothing inside a piece changes -- no whitespace collapse, no truncation,
+# no quote rewriting. A condition holding `"` cannot be written (New-TraceCond
+# refuses it) and comes back as a named `unknown`.
+#
+# Result: Form, Keyword ('' for unknown), Condition, IfLine (the if / except / case
+# line: the condition's anchor), BlockStart..BlockEnd (the lines of the branch
+# holding the Exit, for its `-- else ...` note), ExitArg (`Exit(<arg>)`), Reason.
+
+$script:ShimTokenRx = [regex]'(?i)\b(begin|end|try|case|record|except|finally|if|then|else|do|on|with|while|for|of|repeat|until|procedure|function)\b|;|:(?!=)'
+$script:ShimOpeners = @('begin', 'try', 'case', 'record', 'repeat')
+$script:ShimClosers = @('end', 'until')
+
+# The line on which the block opened by the begin/try/case at ($OpenerLine, $OpenerCol)
+# is closed by its `end` (col 0: counting from the start of the line).
+function Find-BlockEnd([string[]] $Stripped, [int] $OpenerLine, [int] $OpenerCol = 0) {
+  $d = 0
+  for ($i = $OpenerLine - 1; $i -lt $Stripped.Count; $i++) {
+    $t = $(if ($i -eq $OpenerLine - 1) { $Stripped[$i].Substring([Math]::Min($OpenerCol, $Stripped[$i].Length)) } else { $Stripped[$i] })
+    foreach ($m in $script:ShimTokenRx.Matches($t)) {
+      $k = $m.Value.ToLowerInvariant()
+      if ($k -in $script:ShimOpeners) { $d++ } elseif ($k -in $script:ShimClosers) { $d--; if ($d -le 0) { return $i + 1 } }
+    }
+  }
+  $Stripped.Count
+}
+
+# The raw text from ($L1, $C1) to ($L2, $C2) (1-based lines, 0-based columns, end
+# exclusive), one piece per line, joined with one space -- see "Quoting" above.
+function Get-ShimSpanText([string[]] $Raw, [string[]] $Stripped, [int] $L1, [int] $C1, [int] $L2, [int] $C2) {
+  $pieces = @()
+  for ($l = $L1; $l -le $L2; $l++) {
+    $r = $Raw[$l - 1]; $s = $Stripped[$l - 1]
+    $a = $(if ($l -eq $L1) { $C1 } else { 0 })
+    $b = $(if ($l -eq $L2) { [Math]::Min($C2, $r.Length) } else { $r.Length })
+    $first = -1; $last = -1; $i = $a
+    while ($i -lt $b) {
+      $ch = $r[$i]
+      if ($i -lt $s.Length -and -not [char]::IsWhiteSpace($s[$i])) { if ($first -lt 0) { $first = $i }; $last = $i; $i++ }
+      elseif ([char]::IsWhiteSpace($ch)) { $i++ }
+      elseif ($ch -eq "'") {
+        # a string the stripped copy blanked: it runs to its closing quote
+        $j = $r.IndexOf("'", $i + 1); if ($j -lt 0 -or $j -ge $b) { $j = $b - 1 }
+        if ($first -lt 0) { $first = $i }; $last = $j; $i = $j + 1
+      }
+      elseif ($ch -eq '/' -and $i + 1 -lt $b -and $r[$i + 1] -eq '/') { break }
+      elseif ($ch -eq '{') { $j = $r.IndexOf('}', $i + 1); $i = $(if ($j -lt 0) { $b } else { $j + 1 }) }
+      elseif ($ch -eq '(' -and $i + 1 -lt $b -and $r[$i + 1] -eq '*') { $j = $r.IndexOf('*)', $i + 2); $i = $(if ($j -lt 0) { $b } else { $j + 2 }) }
+      else { $i++ }      # the tail of a comment opened on an earlier line
+    }
+    if ($first -ge 0) { $pieces += $r.Substring($first, $last - $first + 1) }
+  }
+  $pieces -join ' '
+}
+
+function New-ShimResult($X, [string] $Form, [string] $Keyword, [string] $Condition, [int] $IfLine, [int] $BlockStart, [int] $BlockEnd, [string] $Reason = '') {
+  if ($Form -ne 'unknown' -and $Condition.Contains('"')) {
+    return (New-ShimResult $X 'unknown' '' '' 0 0 0 "the condition over the Exit at :$($X.ExitLine) holds a double-quote, which a Form A condition cannot carry verbatim")
+  }
+  [pscustomobject]@{ Form = $Form; Keyword = $Keyword; Condition = $Condition; IfLine = $IfLine; BlockStart = $BlockStart; BlockEnd = $BlockEnd; ExitArg = $X.ExitArg; Reason = $Reason }
+}
+
+function New-ShimUnknown($X, [string] $Why) { New-ShimResult $X 'unknown' '' '' 0 0 0 "the Exit at :$($X.ExitLine) $Why, a shape the source shim does not read" }
+
+# the `if` token owning the `then` at token $ThenIdx (-1: none before a statement boundary)
+function Find-ShimIf($X, [int] $ThenIdx) {
+  for ($q = $ThenIdx - 1; $q -ge 0; $q--) {
+    $k = $X.Tok[$q].T
+    if ($k -eq 'if') { return $q }
+    if ($k -in ';', 'begin', 'end', 'then', 'else', 'do', 'try', 'except', 'finally', 'of', 'repeat', 'until', 'case', 'procedure', 'function') { return -1 }
+  }
+  -1
+}
+
+# What the `else` at token $ElseIdx pairs with: back over balanced blocks, an inner
+# if's own `else` absorbs the next `then`; the first free `then` before any `;` is
+# the if's; a `case` opener is the case's. $null: neither.
+function Find-ShimElseOwner($X, [int] $ElseIdx) {
+  $d = 0; $semi = $false; $pend = 0
+  for ($q = $ElseIdx - 1; $q -ge 0; $q--) {
+    $k = $X.Tok[$q].T
+    if ($k -in $script:ShimClosers) { $d++; continue }
+    if ($k -in $script:ShimOpeners) {
+      if ($d -gt 0) { $d--; continue }
+      return $(if ($k -eq 'case') { [pscustomobject]@{ Kind = 'case'; Idx = $q } } else { $null })
+    }
+    if ($d -gt 0) { continue }
+    if ($k -eq ';') { $semi = $true }
+    elseif ($k -eq 'else') { $pend++ }
+    elseif ($k -eq 'then' -and -not $semi) {
+      if ($pend -gt 0) { $pend--; continue }
+      $i = Find-ShimIf $X $q
+      return $(if ($i -ge 0) { [pscustomobject]@{ Kind = 'if'; Idx = $i; Then = $q } } else { $null })
+    }
+    elseif ($k -in 'procedure', 'function') { return $null }
+  }
+  $null
+}
+
+# the depth-0 tokens in $Want strictly between token indexes $From and $To
+function Get-ShimLevelTokens($X, [int] $From, [int] $To, [string[]] $Want) {
+  $d = 0; $hits = @()
+  for ($q = $From + 1; $q -lt $To; $q++) {
+    $k = $X.Tok[$q].T
+    if ($k -in $script:ShimOpeners) { $d++ } elseif ($k -in $script:ShimClosers) { $d-- } elseif ($d -eq 0 -and $k -in $Want) { $hits += $q }
+  }
+  , $hits
+}
+
+function New-ShimIfResult($X, [int] $ThenIdx, [string] $Keyword, [int[]] $Blk) {
+  $i = Find-ShimIf $X $ThenIdx
+  if ($i -lt 0) { return (New-ShimUnknown $X 'follows a then with no if before it') }
+  $it = $X.Tok[$i]; $th = $X.Tok[$ThenIdx]
+  $cond = Get-ShimSpanText $X.Raw $X.Stripped $it.L $it.E $th.L $th.C
+  New-ShimResult $X $(if ($it.L -eq $X.ExitLine) { 'inline' } else { 'block' }) $Keyword $cond $it.L $Blk[0] $Blk[1]
+}
+
+function New-ShimCaseResult($X, [int] $CaseIdx, [int] $ElseIdx) {
+  $ca = $X.Tok[$CaseIdx]
+  $of = @(for ($q = $CaseIdx + 1; $q -lt $X.Tok.Count; $q++) { if ($X.Tok[$q].T -eq 'of') { $X.Tok[$q]; break } })
+  if (-not $of.Count) { return (New-ShimUnknown $X 'sits in a case with no of') }
+  New-ShimResult $X 'case' 'UNLESS' ((Get-ShimSpanText $X.Raw $X.Stripped $ca.L $ca.C $of[0].L $of[0].E) + ' else') $ca.L $X.Tok[$ElseIdx].L (Find-BlockEnd $X.Stripped $ca.L $ca.C)
+}
+
+# The Exit sits in the handler of the try at token $TryIdx (its `except` at $ExIdx):
+# the protected statements are the depth-0 `;`-separated spans of the try body.
+function New-ShimExceptResult($X, [int] $TryIdx, [int] $ExIdx) {
+  $tr = $X.Tok[$TryIdx]; $ex = $X.Tok[$ExIdx]
+  $stm = @(); $sl = $tr.L; $sc = $tr.E
+  $semis = Get-ShimLevelTokens $X $TryIdx $ExIdx @(';')
+  foreach ($q in (@($semis) + $ExIdx)) {
+    $e = $X.Tok[$q]
+    $txt = Get-ShimSpanText $X.Raw $X.Stripped $sl $sc $e.L $e.C
+    if ($txt) { $stm += $txt }
+    $sl = $e.L; $sc = $e.E
+  }
+  if (-not $stm.Count) { return (New-ShimUnknown $X 'sits in the handler of an empty try') }
+  $s = $(if ($stm.Count -eq 1) { $stm[0] } else { "$($stm[0]) .. $($stm[-1])" })
+  New-ShimResult $X 'except' 'UNLESS' "$s raises" $ex.L $ex.L (Find-BlockEnd $X.Stripped $tr.L $tr.C)
+}
+
+# The statement holding the Exit starts at token $P (Tok.Count: the Exit itself);
+# $Blk is that statement's first and last line.
+function Resolve-ShimStatement($X, [int] $P, [int[]] $Blk) {
+  if ($P -le 0) { return (New-ShimUnknown $X 'is not inside a branch') }
+  $k = $X.Tok[$P - 1].T
+  if ($k -eq 'then') { return (New-ShimIfResult $X ($P - 1) 'UNLESS' $Blk) }
+  if ($k -eq 'else') {
+    $o = Find-ShimElseOwner $X ($P - 1)
+    if (-not $o) { return (New-ShimUnknown $X 'follows an else the shim cannot pair') }
+    if ($o.Kind -eq 'case') { return (New-ShimCaseResult $X $o.Idx ($P - 1)) }
+    return (New-ShimIfResult $X $o.Then 'WHEN' $Blk)
+  }
+  if ($k -eq 'do') {
+    # the statement head: an `on` right after `except` or `;` is a handler; else with / while / for
+    for ($q = $P - 2; $q -ge 0; $q--) {
+      $h = $X.Tok[$q].T
+      if ($h -eq 'on' -and $q -gt 0 -and $X.Tok[$q - 1].T -in 'except', ';') { return (Resolve-ShimEnclosing $X $q) }
+      if ($h -in 'with', 'while', 'for') { return (New-ShimUnknown $X "sits under a $h statement") }
+      if ($h -in ';', 'begin', 'end', 'then', 'else', 'do', 'try', 'except', 'finally', 'of', 'repeat', 'until', 'case') { break }
+    }
+    return (New-ShimUnknown $X 'sits under a do the shim cannot place')
+  }
+  if ($k -eq ':') { return (New-ShimUnknown $X 'sits in a case arm') }
+  Resolve-ShimEnclosing $X $P
+}
+
+# The Exit (or the statement at token $P) is one statement of a block: find the
+# block's opener and read IT as the statement that holds the Exit.
+function Resolve-ShimEnclosing($X, [int] $P) {
+  $d = 0
+  for ($q = $P - 1; $q -ge 0; $q--) {
+    $k = $X.Tok[$q].T
+    if ($k -in $script:ShimClosers) { $d++; continue }
+    if ($k -in $script:ShimOpeners) {
+      if ($d -gt 0) { $d--; continue }
+      $o = $X.Tok[$q]
+      $blk = @($o.L, (Find-BlockEnd $X.Stripped $o.L $o.C))
+      if ($k -eq 'begin') {
+        # a begin after then / else / do / a case label is a branch; any other is the routine body (or a bare block)
+        if ($q -gt 0 -and $X.Tok[$q - 1].T -in 'then', 'else', 'do', ':') { return (Resolve-ShimStatement $X $q $blk) }
+        return (New-ShimUnknown $X 'is not inside a branch')
+      }
+      if ($k -eq 'try') {
+        $mk = Get-ShimLevelTokens $X $q $P @('except', 'finally')
+        if ($mk.Count -and $X.Tok[$mk[-1]].T -eq 'except') { return (New-ShimExceptResult $X $q $mk[-1]) }
+        return (Resolve-ShimStatement $X $q $blk)     # in the try body or the finally: the try is the statement
+      }
+      if ($k -eq 'case') {
+        $els = Get-ShimLevelTokens $X $q $P @('else')
+        foreach ($e in $els) {
+          $ow = Find-ShimElseOwner $X $e
+          if ($ow -and $ow.Kind -eq 'case' -and $ow.Idx -eq $q) { return (New-ShimCaseResult $X $q $e) }
+        }
+        return (New-ShimUnknown $X 'sits in a case arm')
+      }
+      return (New-ShimUnknown $X "sits inside a $k")
+    }
+    if ($d -eq 0 -and $k -in 'procedure', 'function') { return (New-ShimUnknown $X 'is not inside a branch') }
+  }
+  New-ShimUnknown $X 'is not inside a branch'
+}
+
+function Get-GuardConditionFromLines([string[]] $Raw, [string[]] $Stripped, [int] $ExitLine, [int] $RoutineStart) {
+  $X = [pscustomobject]@{ Raw = $Raw; Stripped = $Stripped; ExitLine = $ExitLine; ExitArg = ''; Tok = $null }
+  if ($ExitLine -lt 1 -or $ExitLine -gt $Stripped.Count) { return (New-ShimUnknown $X 'is outside the file') }
+  $s = $Stripped[$ExitLine - 1]
+  $em = [regex]::Match($s, '(?i)\bExit\b')
+  if (-not $em.Success) { return (New-ShimUnknown $X 'is not an Exit in this copy of the file') }
+  # Exit(<arg>): the raw text inside the balanced parentheses
+  $p = $em.Index + $em.Length
+  while ($p -lt $s.Length -and [char]::IsWhiteSpace($s[$p])) { $p++ }
+  if ($p -lt $s.Length -and $s[$p] -eq '(') {
+    $d = 0
+    for ($j = $p; $j -lt $s.Length; $j++) {
+      if ($s[$j] -eq '(') { $d++ } elseif ($s[$j] -eq ')') { $d--; if ($d -eq 0) { $X.ExitArg = $Raw[$ExitLine - 1].Substring($p + 1, $j - $p - 1).Trim(); break } }
+    }
+  }
+  $tok = New-Object System.Collections.ArrayList
+  for ($l = [Math]::Max($RoutineStart, 1); $l -le $ExitLine; $l++) {
+    $t = $(if ($l -eq $ExitLine) { $s.Substring(0, $em.Index) } else { $Stripped[$l - 1] })
+    foreach ($m in $script:ShimTokenRx.Matches($t)) { [void]$tok.Add([pscustomobject]@{ L = $l; C = $m.Index; E = $m.Index + $m.Length; T = $m.Value.ToLowerInvariant() }) }
+  }
+  $X.Tok = $tok
+  Resolve-ShimStatement $X $tok.Count @($ExitLine, $ExitLine)
+}
+
+function Get-GuardCondition([string] $Path, [int] $ExitLine, [int] $RoutineStart, [hashtable] $SourceOverride) {
+  if (-not (Test-SourceFresh $Path $SourceOverride)) {
+    throw "round-trip: $([IO.Path]::GetFileName($Path)) differs from the indexed copy (sha256) -- refusing to quote a condition from it. Reindex the project, then re-run."
+  }
+  $read = Resolve-SourceReadPath $Path $SourceOverride
+  $stripped = Get-StrippedSourceLines $read
+  $raw = [IO.File]::ReadAllLines($read, [Text.Encoding]::GetEncoding(28591))
+  Get-GuardConditionFromLines $raw $stripped $ExitLine $RoutineStart
+}

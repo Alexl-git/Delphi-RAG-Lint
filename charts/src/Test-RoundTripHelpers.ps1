@@ -300,4 +300,70 @@ $l = [IO.File]::ReadAllLines($bpPas); $l[2281] = $l[2281] + ' '
 $a5 = Resolve-TraceAnchor 'frmBlueprint4.dxDBGrid1OperationVName' $S @{ $bpPas = (Join-Path $stDir 'Blueprint4.pas') }
 $res.Anchor5Stale = "$([IO.Path]::GetFileName([string]$a5.StaleFile)):$($a5.TableColumn)"
 
+# ---- 4. the condition shim: the 12 golden guards, verbatim, on fresh files (AC-7); stale refuses (AC-14) ----
+$inv = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..\fixtures\golden-operat-name-inventory.psd1')
+$srcOf = @{ 'Blueprint4.ViewModel.pas' = @{ Db = $DbCli; P = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.ViewModel.pas' }
+            'uGenericTableRoute.pas'   = @{ Db = $DbSrv; P = 'C:\Projects\DB\ORM3\SERVER\uGenericTableRoute.pas' }
+            'uPipeSessionBuilder.pas'  = @{ Db = $DbSrv; P = 'C:\Projects\DB\ORM3\SERVER\uPipeSessionBuilder.pas' } }
+# the Exit line that sits under each golden guard's if/except line (measured, Task 1 A-RT0-EXITS)
+$exitOf = @{ 3950 = 3950; 3973 = 3973; 3974 = 3974; 411 = 415; 421 = 425; 431 = 435; 446 = 451; 196 = 200; 1133 = 1133; 525 = 530; 549 = 554; 1137 = 1140 }
+$startOf = @{ 'Blueprint4.ViewModel.pas' = @{ 3950 = 3948; 3973 = 3960; 3974 = 3960; 1133 = 1123; 1137 = 1123 }
+              'uGenericTableRoute.pas' = @{ 411 = 389; 421 = 389; 431 = 389; 446 = 389; 196 = 183 }
+              'uPipeSessionBuilder.pas' = @{ 525 = 502; 549 = 502 } }
+$gl = @()
+foreach ($g in $inv.Guards) {
+  $DbPath = Get-CloneDb $srcOf[$g.File].Db
+  $c = Get-GuardCondition $srcOf[$g.File].P $exitOf[[int]$g.Line] $startOf[$g.File][[int]$g.Line] $null
+  $gl += "$($g.G):$($c.Form):$($c.Keyword):$($c.IfLine):$(if ($c.Condition.Contains($g.Word)) { 'ok' } else { "MISS[$($c.Condition)]" })"
+}
+$res.Guards = $gl -join ','
+$DbPath = Get-CloneDb $DbCli
+$c90 = Get-GuardCondition $vmPas 4004 3960 $null
+$res.Guard3990 = "$($c90.Form):$($c90.Keyword):$($c90.IfLine):$($c90.BlockStart)-$($c90.BlockEnd):$($c90.Condition)"
+$c73 = Get-GuardCondition $vmPas 3973 3960 $null
+$res.Guard3973 = "$($c73.Condition)|$($c73.ExitArg)"
+$DbPath = Get-CloneDb $DbSrv
+$c46 = Get-GuardCondition $srcOf['uGenericTableRoute.pas'].P 451 389 $null
+$res.Guard446 = "$($c46.Form):$($c46.Condition):$($c46.BlockStart)-$($c46.BlockEnd)"
+$c93 = Get-GuardCondition $srcOf['uGenericTableRoute.pas'].P 193 183 $null
+$res.Guard193 = "$($c93.Form):$($c93.Keyword)"
+# T1-C1: HandleTableLoad's THIRD Exit (:612) sits in an `on E: Exception do begin` handler whose try (:591)
+# guards ELEVEN statements -- which one raises is not in the source, so the first and last are quoted
+$c612 = Get-GuardCondition $srcOf['uPipeSessionBuilder.pas'].P 612 502 $null
+$res.Guard612 = "$($c612.Form):$($c612.Keyword):$($c612.IfLine):$($c612.BlockStart)-$($c612.BlockEnd):$($c612.Condition)"
+# Review Focus 3: synthetic line arrays -- a wrapped `if`, an `else Exit`, an except handler
+$syn = @('procedure P;', 'begin', '  if (A = 1) or', '     (B = 2) then', '  begin', '    Exit;', '  end;', '  if C then X else Exit;', '  try', '    Load(S);', '  except', '    on E: Exception do begin', '      Exit;', '    end;', '  end;', 'end;')
+$g1 = Get-GuardConditionFromLines $syn $syn 6 1
+$g2 = Get-GuardConditionFromLines $syn $syn 8 1
+$g3 = Get-GuardConditionFromLines $syn $syn 13 1
+$res.ShimSynthetic = "$($g1.Form):$($g1.Keyword):$($g1.Condition):$($g1.IfLine)|$($g2.Form):$($g2.Keyword):$($g2.Condition)|$($g3.Form):$($g3.Keyword):$($g3.Condition):$($g3.IfLine)"
+# The shapes the line-count walk of the plan's draft misread, on a real file so comments and strings are
+# stripped as in the corpus: a wrapped `if` whose first line ends in a comment and whose condition holds a
+# string with two spaces (joined, never collapsed); an Exit in an `end else begin` block (WHEN); an `if`
+# whose Exit is on the NEXT line (no begin); a `"` in the condition (named, not thrown, not rewritten);
+# and the shapes the shim does not read -- a loop, a case arm, an Exit in no branch -- as named results
+$shp = @(
+  'procedure P1;', 'begin', "  if (S = 'a  b') or  // why", "     (T = 1) then", '  begin', '    Exit;', '  end;', 'end;',                   # 1-8
+  'procedure P2;', 'begin', '  if C then', '  begin', '    X;', '  end else begin', '    Exit;', '  end;', 'end;',                      # 9-17
+  'procedure P3;', 'begin', '  if D { note } then', '    Exit;', 'end;',                                                               # 18-22
+  'procedure P4;', 'begin', "  if S = '""' then Exit;", 'end;',                                                                       # 23-26
+  'procedure P5;', 'begin', '  while X do begin', '    Exit;', '  end;', 'end;',                                                      # 27-32
+  'procedure P6;', 'begin', '  case K of', '    1: Exit;', '  end;', 'end;',                                                          # 33-38
+  'procedure P7;', 'begin', '  if A then Y;', '  Exit;', 'end;')                                                                      # 39-43
+$shpPas = Join-Path $work 'shim-shapes.pas'
+[IO.File]::WriteAllText($shpPas, (($shp -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$shR = [IO.File]::ReadAllLines($shpPas); $shS = Get-StrippedSourceLines $shpPas
+$sh = foreach ($q in @(@(6, 1), @(15, 9), @(21, 18), @(25, 23), @(30, 27), @(36, 33), @(42, 39))) {
+  $o = Get-GuardConditionFromLines $shR $shS $q[0] $q[1]
+  "$($o.Form):$($o.Keyword):$($o.Condition):$($o.IfLine):$($o.BlockStart)-$($o.BlockEnd):$($o.Reason)"
+}
+$res.ShimShapes = $sh -join '|'
+# AC-14: a manufactured stale view model (one trailing blank on the guard line) -> the wrapper REFUSES and names the file
+$stVm = Join-Path $work 'stale-vm'; New-Item -ItemType Directory -Force $stVm | Out-Null
+$l = [IO.File]::ReadAllLines($vmPas); $l[3949] = $l[3949] + ' '
+[IO.File]::WriteAllText((Join-Path $stVm 'Blueprint4.ViewModel.pas'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$DbPath = Get-CloneDb $DbCli
+$res.ShimStale = $(try { Get-GuardCondition $vmPas 3950 3948 @{ $vmPas = (Join-Path $stVm 'Blueprint4.ViewModel.pas') } | Out-Null; 'accepted' }
+                   catch { $(if ($_.Exception.Message -like '*Blueprint4.ViewModel.pas differs from the indexed copy*') { 'refused-named' } else { "wrong: $($_.Exception.Message)" }) })
+
 [pscustomobject]$res
