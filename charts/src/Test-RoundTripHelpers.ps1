@@ -448,7 +448,7 @@ $res.RtCondRoutine = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @
 # writer cannot carry (a double quote, the note separator) is named by its line, never rewritten
 $res.RtElse431 = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:431 ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
 $res.RtElseLits = $(try {
-  $eF = [pscustomobject]@{ Path = 'X.pas'; Refs = @(); Lits = @() }
+  $eF = [pscustomobject]@{ Path = 'X.pas'; Refs = @([pscustomobject]@{ kind = 'write'; tkind = 'param'; line = 5; nm = 'AOut' }); Lits = @() }   # line 5 writes a parameter: the payload line (T5-R11)
   $eG = [pscustomobject]@{ BlockStart = 4; BlockEnd = 6; ExitArg = '' }
   (@("Can't find the row", 'no entry for table "%s"', 'first; second part') | ForEach-Object {
     $eF.Lits = @([pscustomobject]@{ kind = 'literal'; text = $_; line = 5 }); Get-ElseNote $eF $eG @{} }) -join ' | '
@@ -496,4 +496,40 @@ $res.RtEntryNote = (@($secLines['WRITE'] | Where-Object { $_ -match '^\[\d+\] CA
 $res.RtPayload = (@($lines | Where-Object { $_ -match '^       WITH cmdDelta ' } | ForEach-Object { $_.Trim() }) -join ' | ')
 $res.RtSendArg = (@($secLines['WRITE'] | Where-Object { $_ -match '^\[\d+\] CALLS TBlueprint_ViewModel\.SendDeltaOperation' } | ForEach-Object { StepHead $_ }) -join ' | ')
 $res.RtStreamFmt = $(try { (@('    FMTOperation.SaveToStream(MS, sfBinary);', '  X.SaveToStream(MS);', '  X.SaveToStream(MS, TFmt(1));') | ForEach-Object { "[$(Get-StreamFormat $_)]" }) -join ',' } catch { "threw: $($_.Exception.Message)" })
+
+# ---- 5d. fix round 2 (task re-review Important, rulings T5-R10..R12) -------------------------------
+# T5-R10: the path side of an if -- an error response is not success; an inverted if keeps its ELSE
+$mk = { param($kind, $nm, $tk, $tn) [pscustomobject]@{ kind = $kind; nm = $nm; tkind = $tk; tname = $tn } }
+$wOk  = @((& $mk 'write' 'ARsp' 'param' ''), (& $mk 'read' 'rspOK' 'enum_value' 'rspOK'))
+$wErr = @((& $mk 'write' 'ARsp' 'param' ''), (& $mk 'read' 'rspError' 'enum_value' 'rspError'))
+$roll = @((& $mk 'call' 'Rollback' '' '')); $comm = @((& $mk 'call' 'Commit' '' ''))
+$res.RtPathSide = $(try {
+  $L = { param($rs) [pscustomobject]@{ Rs = $rs } }
+  @((Get-BranchPathSide @((& $L $comm), (& $L $wOk)) @((& $L $roll), (& $L $wErr))),     # normal: then answers
+    (Get-BranchPathSide @((& $L $roll), (& $L $wErr)) @((& $L $comm), (& $L $wOk))),     # inverted: else answers
+    (Get-BranchPathSide @((& $L $wOk)) @((& $L $comm))),                                 # both answer
+    (Get-BranchPathSide @((& $L $roll)) @((& $L $wErr))),                                # neither
+    (Test-SuccessLine $wErr)) -join ','
+} catch { "threw: $($_.Exception.Message)" })
+# T5-R11: the else note quotes the literal that goes OUT (a parameter / rsp write / raise line), never a logger's
+$res.RtElsePick = $(try {
+  $pF = [pscustomobject]@{ Path = 'X.pas'; Refs = @((& $mk 'call' 'Warning' '' ''), (& $mk 'write' 'AOut' 'param' '')); Lits = @() }
+  $pF.Refs[0] | Add-Member line 5; $pF.Refs[1] | Add-Member line 6
+  $pF.Lits = @([pscustomobject]@{ kind = 'literal'; text = 'logged, not sent back'; line = 5 }, [pscustomobject]@{ kind = 'literal'; text = 'sent back to the caller'; line = 6 })
+  $pG = [pscustomobject]@{ BlockStart = 5; BlockEnd = 6; ExitArg = '' }
+  $a1 = Get-ElseNote $pF $pG @{}
+  $pF.Refs = @($pF.Refs[0])
+  $a2 = Get-ElseNote $pF $pG @{}
+  "[$a1] [$a2]"
+} catch { "threw: $($_.Exception.Message)" })
+# T5-R12: every path step inside a readable if carries it -- the transaction's OPENS and its Commit both say
+# WHEN "not WasTxn"; and what EnsureLoaded / PushTableChanged now carry
+$condsOf = @(); $lastHead = ''
+foreach ($ln in $secLines['SERVER']) {
+  if ($ln -match '^\[\d+\] ') { $lastHead = ($ln -replace '^\[\d+\] ', '') -replace ' @(\S+).*$', '@$1'; continue }
+  if ($ln -match '^       (WHEN|UNLESS) ') { $condsOf += [pscustomobject]@{ Head = $lastHead; Cond = (($ln.Trim()) -replace ' -- .*$', '') } }
+}
+$res.RtWasTxn = (@($condsOf | Where-Object { $_.Cond -like 'WHEN "not WasTxn"*' } | ForEach-Object { $_.Head }) -join ' | ')
+$res.RtCondEnsure = (@($condsOf | Where-Object { $_.Head -like 'CALLS TDatasetsDef.EnsureLoaded*' -or $_.Head -like 'CALLS TBroadcastServer.PushTableChanged*' } | ForEach-Object { "$($_.Head -replace ' \[by name\]', '') :: $($_.Cond)" }) -join ' | ')
+
 [pscustomobject]$res

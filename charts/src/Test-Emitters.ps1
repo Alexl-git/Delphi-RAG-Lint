@@ -2375,13 +2375,20 @@ Step 'E-RT0' {
   # rspError DEFAULT (overwritten by :553 rspOK), the else of `if ApplyResult = 0` (:562 Rollback, :566 rspError)
   # and the except handler (:573 Rollback, :576 rspError) -- and three conditions say where they went:
   # WHEN "ApplyResult = 0" (its else note), UNLESS "<try body> raises" (the handler), WHEN "not WasTxn" (the Commit)
-  Chk 'A-RT5-COUNTS'    $rt0.RtCounts '45/15/2/2'
+  # FIX ROUND 2 (T5-R12): 45/15 -> 45/21 -- every path step inside a readable if now carries it: WHEN "not WasTxn"
+  # on OPENS (:492), WHEN "not GDatasetsDef.Loaded" on EnsureLoaded (:429), WHEN "not FLoaded" on LoadFromInternal
+  # (:97), WHEN "Field is TBlobField" + UNLESS "IsOld or Field.IsNull" on BindParams' LoadFromStream (:157/:160),
+  # WHEN "Assigned(GBroadcastServer)" on PushTableChanged (:507). No step moved
+  Chk 'A-RT5-COUNTS'    $rt0.RtCounts '45/21/2/2'
   # Pre-review rulings. T5-R1: no step from a branch for another table (failed 12 before the fix), ONE OMITS per
   # section counting the 5 candidate calls left out and quoting the 4 branch conditions verbatim (E1)
   Chk 'A-RT5-OTHERTABLE' $rt0.RtOtherTable 0
-  # fix round 1 (T5-R6): 5 -> 4 -- a count of the STEPS the omitted lines would have yielded (a dry walk of each
-  # bound callee), so the logger DeltaDiagLog (:523) no longer counts; the text states the innermost-if limit
-  Chk 'A-RT5-OMITS'     $rt0.RtOmits ("OMITS 4 step(s) in branches for other tables, innermost enclosing if only @uGenericTableRoute.pas:468 -- in TGenericTableRoute.HandleDelta; " +
+  # fix round 1 (T5-R6): the logger DeltaDiagLog (:523) no longer counts; the text states the innermost-if limit.
+  # FIX ROUND 2 (Important): 4 -> 11 -- the number is STEPS, each call counted with its whole subtree (a dry walk):
+  # CoerceMSCLISTPlanIds + its Q.Open (2), CaptureOptrlistDelta + CurrentRoles (2), QChk.Open (1),
+  # ApplyOptrlistSyncItems + SyncRolesOnConn + Q.Open + 3 ExecSQL (6). (The 12th step 28101d5f removed, `READS
+  # MSCLIST`, was a routine-level sql fact, dropped by the fact filter, not a line of these branches.)
+  Chk 'A-RT5-OMITS'     $rt0.RtOmits ("OMITS 11 step(s) in branches for other tables, innermost enclosing if only @uGenericTableRoute.pas:468 -- in TGenericTableRoute.HandleDelta; " +
                                       "not walked, the branch conditions: WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 / " +
                                       "WHEN `"TableName = 'OPTRLIST'`" @uGenericTableRoute.pas:476 / " +
                                       "WHEN `"(TableName = 'MSCLIST') and (Ctx.AppliedIns > 0)`" @uGenericTableRoute.pas:515 / " +
@@ -2391,14 +2398,15 @@ Step 'E-RT0' {
   # the prune rule: only WHEN + `= '<known other table>'`; UNLESS, <>, or, a non-table literal, the anchor's table all keep the step
   Chk 'A-RT5-OTHERRULE' $rt0.RtOtherTableRule 'True,False,False,False,True,False,False,False'
   # T5-R2: HandleDelta's 411 / 421 conditions hang on CALLS SplitPayload and so name their own routine
-  # fix round 1: each Exit guard between the :405 default and the :553 overwrite also says what it responds
-  Chk 'A-RT5-CONDROUTINE' $rt0.RtCondRoutine ("in TGenericTableRoute.HandleDelta; else 'cmdDelta: TABLE= prefix missing (payload bytes=%d)', responds rspError, the default set at :405; ask E1 | " +
+  # fix round 1: each Exit guard between the :405 default and the :553 overwrite also says what it responds.
+  # FIX ROUND 2 (T5-R11): the literal is :414's (the payload written to the ARspPayload parameter), not :413's logger text
+  Chk 'A-RT5-CONDROUTINE' $rt0.RtCondRoutine ("in TGenericTableRoute.HandleDelta; else 'cmdDelta: TABLE= prefix missing', responds rspError, the default set at :405; ask E1 | " +
                                              "in TGenericTableRoute.HandleDelta; else 'cmdDelta: empty delta stream for ', responds rspError, the default set at :405; ask E1")
   # T5-R3: literals quoted as the source writes them -- the trailing blank of 'cmdDelta: empty delta stream for '
   # (above) is read from the source columns, because string_literals.text is stored TRIMMED; `"%s"` at :433 cannot be
   # carried, so its line is named; Pascal's doubled '' restored; '; ' named. The shim's string reader was NOT the cause
   # (the doubled-'' synthetic below already quoted verbatim before the fix)
-  Chk 'A-RT5-ELSE431'   $rt0.RtElse431 'in TGenericTableRoute.HandleDelta; else a literal at :433, responds rspError, the default set at :405; ask E1'
+  Chk 'A-RT5-ELSE431'   $rt0.RtElse431 'in TGenericTableRoute.HandleDelta; else a literal at :434, responds rspError, the default set at :405; ask E1'
   Chk 'A-RT5-ELSELITS'  $rt0.RtElseLits "else 'Can''t find the row' | else a literal at :5 | else a literal at :5"
   Chk 'A-RT5-DOUBLEQ'   $rt0.RtDoubledQuote "inline:UNLESS:S = 'it''s' | block:UNLESS:(S = 'a'' then') or (N = 0)"
   # the condition model's new routine field reads back: the written trace round-trips byte for byte
@@ -2408,8 +2416,10 @@ Step 'E-RT0' {
   # rspError; the handler is the note of UNLESS "<try body> raises" (the body's last statement is a 75-line if, so the
   # quote is `S1 ... raises`); the rspOK says what it overwrites. Protocol constants only in an else note (not mtError)
   Chk 'A-RT5-BRANCHSTEPS' $rt0.RtBranchSteps 0
-  Chk 'A-RT5-APPLYWHEN' $rt0.RtApplyWhen "else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:562, rspError, 'cmdDelta %s: %d errors. %s'; ask E1"
-  Chk 'A-RT5-EXCEPTCOND' $rt0.RtExceptCond "UNLESS `"ApplyResult:= Mem.ApplyUpdates(0) ... raises`" @uGenericTableRoute.pas:570 -- else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:573, rspError, 'cmdDelta %s: WasTxn=%d EXCEPTION %s'; ask E1"
+  # FIX ROUND 2 (T5-R11): the else of :495 quotes no literal (its :563 text goes to a local, the payload line :565
+  # has none); the handler quotes :575's payload literal, not :574's DeltaDiagLog text
+  Chk 'A-RT5-APPLYWHEN' $rt0.RtApplyWhen "else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:562, rspError; ask E1"
+  Chk 'A-RT5-EXCEPTCOND' $rt0.RtExceptCond "UNLESS `"ApplyResult:= Mem.ApplyUpdates(0) ... raises`" @uGenericTableRoute.pas:570 -- else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:573, rspError, 'cmdDelta %s: %s'; ask E1"
   Chk 'A-RT5-RSPOKNOTE' $rt0.RtRspOkNote 'in TGenericTableRoute.HandleDelta; overwrites the rspError default set at :405'
   # the enclosing CHAIN reader (synthetic): if inside an else, an except handler, a then branch
   Chk 'A-RT5-CHAIN'     $rt0.RtChain "inline:WHEN:W:11 > block:UNLESS:R = 0:5 | except:WHEN:R:= Apply ... raises:13 | block:WHEN:R = 0:5"
@@ -2425,6 +2435,18 @@ Step 'E-RT0' {
   Chk 'A-RT5-PAYLOAD'   $rt0.RtPayload "WITH cmdDelta 'TABLE=OPERAT|' + sfBinary stream @Blueprint4.ViewModel.pas:3985 -- payload inferred from the literals before the send"
   Chk 'A-RT5-SENDARG'   $rt0.RtSendArg "CALLS TBlueprint_ViewModel.SendDeltaOperation 'AfterPost'"
   Chk 'A-RT5-STREAMFMT' $rt0.RtStreamFmt '[sfBinary],[],[]'
+  # Fix round 2. T5-R10 (threw before): the path side of an if -- normal / INVERTED (`if Failed then ..rspError..
+  # else ..rspOK..`: the else is the path) / both / neither; an rspError write alone is not success
+  Chk 'A-RT5-PATHSIDE'  $rt0.RtPathSide 'then,else,both,none,False'
+  # T5-R11 (picked the logger's literal before): the literal on the parameter-writing line; a logger-only block quotes none
+  Chk 'A-RT5-ELSEPICK'  $rt0.RtElsePick "[else 'sent back to the caller'] []"
+  # T5-R12 (only the Commit carried it before): the transaction's OPENS AND its Commit both carry WHEN "not WasTxn";
+  # EnsureLoaded and PushTableChanged gained the ifs they sit under (named in HandleDelta, T5-R2) -- EnsureLoaded
+  # also keeps its own `FLoaded` guard, hung there as the callee's
+  Chk 'A-RT5-WASTXN'    $rt0.RtWasTxn 'OPENS AThreadStorage.UpdateTransaction.StartTransaction@uGenericTableRoute.pas:492 | RUNS AThreadStorage.UpdateTransaction.Commit@uGenericTableRoute.pas:498'
+  Chk 'A-RT5-CONDENSURE' $rt0.RtCondEnsure ('CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: UNLESS "FLoaded" @uDatasetsDef.pas:94 | ' +
+                                          'CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: WHEN "not GDatasetsDef.Loaded" @uGenericTableRoute.pas:429 | ' +
+                                          'CALLS TBroadcastServer.PushTableChanged@uBroadcastServer.pas:401 :: WHEN "Assigned(GBroadcastServer)" @uGenericTableRoute.pas:507')
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
