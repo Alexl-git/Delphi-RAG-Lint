@@ -31,6 +31,16 @@ Extractor 1.20.0-alpha and schema v23 unchanged. No new rules (188).
   same query the resolver's map is built from, so an empty set is a fact about the index. It was a
   WARNING telling the reader to reindex on three sections that bound nothing; it is now an informational
   line there, and still a WARNING (with the count) when enum reads were bound under it.
+- **`lint --stand-in-for` no longer leaks a directory per process** (TH-2). The stand-in copy lives in
+  `%TEMP%\drag-lint-standin-<pid>`, per-process by design, and nothing removed it: 303 of them had piled up
+  on the owner's box. The engine now deletes its own at exit and, on first use, sweeps directories whose
+  owning process no longer exists (a live process of any user keeps its directory). Guard:
+  `tests\autotest\run_lint_stand_in_for.ps1` B8/B9, run against a private temp root with a live-owner
+  control.
+- **Legacy `rename --qname` exits 2 for a missing database** (TH-4), like every other verb and its own
+  `--kind symbol` path; it said 1, the "ran and failed" code. Guard: `run_rename_missing_db_exit.ps1`.
+- `function-result-not-set`'s own-name result assignment (D21) is now pinned for a generic free function
+  `F<T>` (it already worked; the fixture had no case).
 
 ### Not changed, measured for a ruling
 

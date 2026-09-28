@@ -186,6 +186,31 @@ Check 'B7  no finding MESSAGE names the materialised stand-in directory' `
       ($snapStand -notmatch 'drag-lint-standin-\d+') `
       "a message still carries the temp path: $(($snapStand -split "`r?`n" | Where-Object { $_ -match 'drag-lint-standin-' } | Select-Object -First 1))"
 
+# --- B8/B9: the per-process stand-in directory does not leak (TH-2) -------------
+# Every `lint --stand-in-for` process left C:\TEMP\drag-lint-standin-<pid>
+# behind -- 303 of them on the owner's box. The engine now removes its own at
+# exit and sweeps dead owners' on first use. Run against a PRIVATE temp root so
+# the sweep can never touch a real engine's directory, and so a live directory
+# the test plants is provably one the sweep must keep.
+$tmpRoot = Join-Path $WorkDir 'tmp'
+New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
+$deadDir = Join-Path $tmpRoot 'drag-lint-standin-2147480001'   # no such process
+$liveDir = Join-Path $tmpRoot ("drag-lint-standin-$PID")      # THIS pwsh: alive
+New-Item -ItemType Directory -Path $deadDir, $liveDir -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $deadDir 'uStale.pas') -Value 'unit uStale; interface implementation end.' -Encoding ascii
+$oldTemp = $env:TEMP; $oldTmp = $env:TMP
+try {
+  $env:TEMP = $tmpRoot; $env:TMP = $tmpRoot
+  $p = Start-Process -FilePath $exePath -ArgumentList @('lint', $snap, '--stand-in-for', $real, '--db', $db, '--rules-dir', $rules) `
+         -NoNewWindow -PassThru -Wait -RedirectStandardOutput (Join-Path $WorkDir 'b8.out') -RedirectStandardError (Join-Path $WorkDir 'b8.err')
+} finally { $env:TEMP = $oldTemp; $env:TMP = $oldTmp }
+$ownDir = Join-Path $tmpRoot ("drag-lint-standin-{0}" -f $p.Id)
+Check 'B8  CONTROL: the stand-in run produced findings (it really materialised)' `
+      ((Get-Content (Join-Path $WorkDir 'b8.out') -Raw) -match 'finding') 'the run did nothing, so B8 would pass vacuously'
+Check "B8  the run's OWN stand-in directory is gone after it exits (pid $($p.Id))" (-not (Test-Path -LiteralPath $ownDir)) $ownDir
+Check 'B9  a DEAD owner''s stand-in directory is swept' (-not (Test-Path -LiteralPath $deadDir)) $deadDir
+Check 'B9b CONTROL: a LIVE process''s stand-in directory is kept' (Test-Path -LiteralPath $liveDir) $liveDir
+
 Write-Host ''
 if ($fail) { Write-Host 'run_lint_stand_in_for: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_lint_stand_in_for: PASS' -ForegroundColor Green

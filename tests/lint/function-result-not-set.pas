@@ -37,4 +37,19 @@ begin
     exit;
   Result := 1;
 end;
+{ D21: a function sets its result through its OWN NAME (`F6 := 1`), the Pascal
+  form D12 fixed in purity. TH-4 (2026-09-28): the generic free-function shape
+  F<T> had no pin -- F7 sets it through its own name, F8 is the control that
+  still fires. }
+function F6: Integer;
+begin
+  F6 := 1;
+end;
+function F7<T>(const A: T): Integer;
+begin
+  F7 := 1;
+end;
+function F8<T>(const A: T): Integer;
+begin
+end;
 end.

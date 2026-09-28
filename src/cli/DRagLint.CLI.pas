@@ -11901,6 +11901,64 @@ begin
     Writeln(ErrOutput, '[lint-checker] ' + AName);
 end;
 
+const
+  STANDIN_DIR_PREFIX = 'drag-lint-standin-';
+
+var
+  { The `lint --stand-in-for` directory THIS process materialised into, removed
+    in the unit's finalization. Empty when the run used none. }
+  GStandInDir: string = '';
+  { The dead-owner sweep runs once per process, not once per lint. }
+  GStandInSwept: Boolean = False;
+
+{ Removes every `<ATempRoot>\drag-lint-standin-<pid>` directory whose owning
+  process no longer exists.
+
+  THE LEAK (TH-2, 2026-09-28). The stand-in directory is per-PROCESS by design
+  -- the same buffer reuses one path, two engines cannot collide -- and nothing
+  ever removed it: every `lint --stand-in-for` process (the IDE lints unsaved
+  buffers this way) left one behind, 303 in C:\TEMP on this box. The owner now
+  removes its own in finalization; this sweep clears what a killed process
+  (TerminateProcess skips finalization) or an older engine left.
+
+  A directory is removed only when OpenProcess reports the PID as nonexistent
+  (ERROR_INVALID_PARAMETER). A live process of any user -- access denied
+  included -- keeps its directory, so a concurrent engine is never touched.
+  Best-effort: a directory that cannot be removed is left for the next sweep.
+  Pinned by tests\autotest\run_lint_stand_in_for.ps1 B8/B9. }
+procedure SweepDeadStandInDirs(const ATempRoot: string);
+var
+  Dir : string ;
+  Tail: string ;
+  Pid : Integer;
+  H   : THandle;
+begin
+  if GStandInSwept then Exit;
+  GStandInSwept:= True;
+  try
+    for Dir in TDirectory.GetDirectories(ATempRoot, STANDIN_DIR_PREFIX + '*') do
+    begin
+      Tail:= Copy(ExtractFileName(Dir), Length(STANDIN_DIR_PREFIX) + 1, MaxInt);
+      if (not TryStrToInt(Tail, Pid)) or (Pid <= 0) or (Cardinal(Pid) = GetCurrentProcessId) then Continue;
+      H:= OpenProcess(SYNCHRONIZE, False, DWORD(Pid));
+      if H <> 0 then
+      begin
+        CloseHandle(H);
+        Continue;
+      end;
+      if GetLastError <> ERROR_INVALID_PARAMETER then Continue;
+      try
+        TDirectory.Delete(Dir, True);
+      except
+        on E: Exception do TraceLintChecker('stand-in sweep kept ' + Dir + ': ' + E.Message);
+      end;
+    end;
+  except
+    { The sweep is housekeeping: it must never fail the lint it runs inside. }
+    on E: Exception do TraceLintChecker('stand-in sweep skipped: ' + E.Message);
+  end;
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -11981,8 +12039,10 @@ begin
     StandInLogical:= AArgs.StandInFor;
     try
       var SiDir: string := IncludeTrailingPathDelimiter(
-        TPath.Combine(TPath.GetTempPath, Format('drag-lint-standin-%d', [GetCurrentProcessId])));
+        TPath.Combine(TPath.GetTempPath, Format(STANDIN_DIR_PREFIX + '%d', [GetCurrentProcessId])));
+      SweepDeadStandInDirs(TPath.GetTempPath);
       if not TDirectory.Exists(SiDir) then TDirectory.CreateDirectory(SiDir);
+      GStandInDir:= SiDir; { removed in finalization -- see SweepDeadStandInDirs }
       { BACKSLASH-NORMALISE BEFORE ExtractFileName, AND THIS IS NOT A STYLE FIX.
 
         ExtractFileName splits on PathDelim and DriveDelim -- '\' and ':' -- and
@@ -18949,10 +19009,14 @@ begin
     Writeln('Usage: drag-lint rename --qname Foo.TBar.Baz --to NewName ' + '[--db PATH] [--dry-run] [--no-backup]');
     Exit(2);
   end;
+  { Exit 2, the usage/environment code every other verb's missing-DB check
+    returns -- including this verb's own --kind symbol path above. This one said
+    1 ("findings/failure"), so a script could not tell "no database" from a
+    rename that ran and failed (TH-4). }
   if not FileExists(AArgs.DbPath) then
   begin
     Writeln(Format('Database not found: %s', [AArgs.DbPath]));
-    Exit(1);
+    Exit(2);
   end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk); { READ-ONLY (D24): edits source, never the index }
@@ -28210,6 +28274,20 @@ begin
     end;
   end; // try
 end; // function
+
+initialization
+
+finalization
+  { This process's stand-in directory (TH-2). Best-effort: a file another
+    process still holds leaves the directory for the next run's sweep. }
+  if GStandInDir <> '' then
+    try
+      TDirectory.Delete(GStandInDir, True);
+    except  // dl:ok try-except-swallowed@7954 -- REVIEWED 2026-09-28: finalization must not raise at exit; a directory left behind is removed by the next run's dead-owner sweep
+      { Any class: an exception escaping finalization is a runtime error at
+        process exit, which would turn a finished lint into a failed one. }
+      on E: Exception do GStandInDir:= '';
+    end;
 
 end.
 

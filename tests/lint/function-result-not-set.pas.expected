@@ -9,3 +9,8 @@ function-result-not-set 7
 !function-result-not-set 24
 # F5 CONTROL: the bare exit leaves Result unset on that path -> possible (info)
 function-result-not-set 34
+# D21 own-name result: F6 (plain) and F7<T> (generic free function) set it -> no finding
+!function-result-not-set 44
+!function-result-not-set 48
+# F8<T> CONTROL: a generic function that never sets it still fires
+function-result-not-set 52
