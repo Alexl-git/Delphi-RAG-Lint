@@ -2790,6 +2790,59 @@ Step 'RT-HOLD' {
   # (was UNLESS "FieldCnt = 0", UNLESS "Wanted.Count = 0", then WHEN "TableName = 'MSCLIST'")
   Chk 'A-RT9-CONDORDER' $rt0.HoldCoerceConds "WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 | UNLESS `"FieldCnt = 0`" @uGenericTableRoute.pas:310 | UNLESS `"Wanted.Count = 0`" @uGenericTableRoute.pas:336"
 }
+# calc-field brief (owner, 2026-09-28, URGENT): a CALCULATED anchor says so and offers its source fields. The owner's
+# pick FtrName stopped at [09] "MSCLIST.FTRNAME: not extracted as a column ..." (9/0/0/1) -- true, not WHY. Now: the
+# STOPS names the calc field, where it is created (C(FMTFtrs, 'FtrName', ...) :756, whose C sets fkCalculated :735)
+# and computed (FtrsOnCalcFields :961-1119, wired :790), the handler's guards VERBATIM, the call that computes it
+# (FtrNameString, its body not walked), and DERIVED lists the 17 TField variables on :986-993 plus the local FtrType
+# (:978, one hop to FfFtrs_FtrType) = 18 rows, each with a REGENERATE command. Rule: Trace.Walk Part 6 (generic).
+# Measured 2026-09-28 on the 1.19 / 1.9 clones with the 1.20.0-alpha exe; red on HEAD f1cd1eb8 first (old stop, 9/0/0/1,
+# no DERIVED; the synthetic ones threw: no Resolve-CalcField). Pins move at the re-clone only with a named mechanism.
+Note 'round-trip: calculated fields ...'
+Step 'RT-CALC' {
+  Chk 'A-RTC-FTR-TITLE'  $rt0.CalcFtrTitle 'Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calculated'
+  Chk 'A-RTC-FTR-STOP'   $rt0.CalcFtrStop ('STOPS FtrName is a calculated field of FMTFtrs (created at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
+                                           '@Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C at :756 sets FieldKind fkCalculated at :735; ask E3')
+  Chk 'A-RTC-FTR-GUARDS' $rt0.CalcFtrChildren ('UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_FtrName)" @Blueprint4.ViewModel.pas:985 | ' +
+                                               'VIA FtrNameString @MSCTYPES.PAS:840 -- computed by this call at :986, its body is not walked, nor are those of TagOf')
+  Chk 'A-RTC-FTR-NOTE'   $rt0.CalcFtrNote 'FtrName is calculated from 18 fields -- trace one of them instead:'
+  # every candidate and its column, in source order (:987-993, FtrType's row at its read :990); each target is the TField variable
+  $vm = 'Blueprint4.ViewModel.TBlueprint_ViewModel'
+  $ftrRows = @('NOTATION:Notation', 'SPECTYPE:SpecType', 'USL:USL', 'LSL:LSL', 'DECIMALS:Decimals', 'NOMINAL:Nominal', 'UPPERTOL:UpperTol', 'LOWERTOL:LowerTol', 'FTRTYPE:*FtrType',
+               'MATHLINE:MathLine', 'DIMABBR:DimAbbr', 'DIMNAME:DimName', 'FTRSUFFIX:FtrSuffix', 'ATTRNAME:AttrName', 'ATTRTYPE:AttrType', 'ATTRCODE:AttrCode', 'ID:ID', 'MASTERID:MasterID') |
+             ForEach-Object { $c, $v = $_ -split ':'; if ($v -like '*FtrType') { "FROM MSCLIST.$c VIA FtrType, set from FfFtrs_FtrType => $vm.FfFtrs_FtrType" } else { "FROM MSCLIST.$c VIA FfFtrs_$v => $vm.FfFtrs_$v" } }
+  Chk 'A-RTC-FTR-ROWS'   $rt0.CalcFtrRows ($ftrRows -join ' ## ')
+  # the rows are anchored facts: counted in steps (9 + 18), never unresolved; the ONE unresolved is the STOPS
+  Chk 'A-RTC-FTR-COUNTS' $rt0.CalcFtrCounts '27/2/0/1'
+  Chk 'A-RTC-FTR-CHECK'  $rt0.CalcFtrCheck ('0|identical|True|ANCHOR,DERIVED,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|DERIVED=FtrName is calculated from 18 fields -- trace one of them instead: | ' +
+                                            ((@('WRITE', 'SERVER', 'DATABASE', 'RESPONSE', 'READ', 'ALSO') | ForEach-Object { "$_=not walked: the trace stopped at [09]" }) -join ' | '))
+  # the second case: Tolerance (:760), five writes in a nested case; the case arms are not branch conditions (the walk's
+  # rule), the enclosing if is reached from the else-arm write at :1050 and says so
+  Chk 'A-RTC-TOL-TITLE'  $rt0.CalcTolTitle 'Why frmBlueprint4.dxDBGrid1FtrsVTolerance cannot be traced -- it is calculated'
+  Chk 'A-RTC-TOL-STOP'   $rt0.CalcTolStop ('STOPS Tolerance is a calculated field of FMTFtrs (created at :760, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
+                                           '@Blueprint4.ViewModel.pas:1045 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C at :760 sets FieldKind fkCalculated at :735; ask E3')
+  Chk 'A-RTC-TOL-GUARDS' $rt0.CalcTolChildren 'UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_Tolerance)" @Blueprint4.ViewModel.pas:1041 -- around the write at :1050'
+  Chk 'A-RTC-TOL-OFFER'  "$($rt0.CalcTolNote)|$($rt0.CalcTolRows)" ('Tolerance is calculated from 4 fields -- trace one of them instead:|' +
+                                                                    ((@('USL', 'LSL', 'UpperTol', 'LowerTol') | ForEach-Object { "FROM MSCLIST.$($_.ToUpperInvariant()) VIA FfFtrs_$_ => $vm.FfFtrs_$_" }) -join ' ## '))
+  Chk 'A-RTC-TOL-COUNTS' "$($rt0.CalcTolCounts)|$(($rt0.CalcTolCheck -split '\|')[0..2] -join '|')" '13/2/0/1|0|identical|True'
+  # ONE candidate's REGENERATE command run end to end, as written: DimAbbr -> MSCLIST.DIMABBR through FMTFtrs and
+  # SendDeltaFtrs. 98 = the owner-accepted Num holdout's 103 minus the 5 control-side anchor hops (DFM binding,
+  # re-point, accessor, datasource) a TField-variable target does not walk: write/read/also 38/24/32 are Num's
+  Chk 'A-RTC-E2E'        $rt0.CalcE2E "How MSCLIST.DIMABBR reaches $vm.FfFtrs_DimAbbr and goes back|END TRACE  98 steps, 35 conditions, 4 crossings, 2 unresolved."
+  # synthetic facts, NO index (Resolve-CalcField is pure): the positive names every value it cannot map and marks a
+  # calculated source without expanding it; the negatives keep today's stop or name the kind, never an offer
+  Chk 'A-RTC-SYN-OFFER'  $rt0.CalcSynOffer ('calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-syn.pas:8 | ' +
+                                           'UNLESS DataSet.State = dsInsert -- else Exit at :5 / WHEN Assigned(FfA) / VIA Fmt -- computed by this call at :8, its body is not walked | ' +
+                                           'A is calculated from 3 fields and 3 value(s) the walk cannot map -- trace one of the fields instead: | ' +
+                                           'FROM T.B VIA FfB [inferred] => CMD uSynth.TSynth.FfB ## FROM T.K VIA L, set from FfK [inferred] => CMD uSynth.TSynth.FfK ## ' +
+                                           'FROM C (calculated) VIA FfC [inferred] => CMD uSynth.TSynth.FfC ## FROM Zz, not mapped: not a field, local or parameter the walk can place =>  ## ' +
+                                           'FROM FNum, not mapped: a field of TSynth of type Integer, not a TField variable =>  ## ' +
+                                           'FROM FfZ, not mapped: FfZ is written on 2 line(s) naming 2 (dataset field, column literal) pairs => ')
+  Chk 'A-RTC-SYN-NOWIRE' "$($rt0.CalcSynNoWire)|$($rt0.CalcSynNoWrite)" 'not calculated|not calculated'
+  Chk 'A-RTC-SYN-FBN'    $rt0.CalcSynFieldByName 'calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-fbn.pas:3 |  | A is calculated from 1 field -- trace it instead: | FROM T.B VIA FfB [inferred] => CMD uSynth.TSynth.FfB'
+  Chk 'A-RTC-SYN-EVENT'  $rt0.CalcSynEvent 'event | A is not a column of T in the SQL index: it is set in CalcH, wired as FMT.AfterScroll at :20, not in an OnCalcFields handler, so no source fields are offered @calc-event.pas:8'
+  Chk 'A-RTC-SYN-LOOKUP' $rt0.CalcSynLookup 'lookup | A is a lookup field of FMT: MakeLookup sets FieldKind fkLookup at :40, not a column of T in the SQL index, so no source fields are offered @calc-lookup.pas:12'
+}
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
 # passed a '&#183;' separator into it -- so each of those charts printed the six

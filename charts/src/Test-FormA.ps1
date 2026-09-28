@@ -30,11 +30,11 @@ function Fail([string] $code, [int] $line, [string] $msg) {
 
 # ---- keyword tables (spec 2.3) ----------------------------------------------
 $TIERS     = @('USER','CLIENT','SERVER','DATABASE','PIPE')
-$SECTIONS  = @('WRITE','READ','RESPONSE','ANCHOR','ALSO') + $TIERS          # ANCHOR / ALSO: round-trip (spec 2026-09-27)
+$SECTIONS  = @('WRITE','READ','RESPONSE','ANCHOR','DERIVED','ALSO') + $TIERS   # ANCHOR / ALSO: round-trip (spec 2026-09-27); DERIVED: a calculated anchor's sources (8.5)
 $ITEMHEADS = @('GUARD','ON','CROSSES','STOPS','WHEN','UNLESS')             # STOPS / WHEN / UNLESS: round-trip
 $FACETS1   = @('ONTO','AT','CONTRACT','FROM','TO','OVER','WITH','VIA','SELECTS','RECORDS')
 $FACETS2   = @{ 'BOUND' = 'VIA'; 'SOURCED' = 'FROM'; 'LOOKS' = 'UP' }
-$HEADERKW  = @('TITLE','INDEX','TIERS','FROM','REGENERATE')                 # FROM / REGENERATE: round-trip header attributes
+$HEADERKW  = @('TITLE','INDEX','TIERS','FROM','REGENERATE')                 # FROM / REGENERATE: round-trip header attributes (REGENERATE is also a DERIVED row's facet, 8.5)
 $RESERVED  = @('OTHERWISE','ONLY','WHEN','AND','AS','INTO','->','+')
 
 # ---- 1. byte-level checks (spec 2.1, AC-29) ---------------------------------

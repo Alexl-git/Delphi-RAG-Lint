@@ -5,7 +5,7 @@
   writes the bytes, Test-RoundTripHelpers proves the round trip (spec AC-2).
 
   Grammar: charts\form-a-grammar-spec.md section 8 (the amendments for this
-  question): ANCHOR / ALSO are sections, STOPS is a numbered step that also
+  question): ANCHOR / DERIVED / ALSO are sections, STOPS is a numbered step that also
   counts as unresolved, WHEN / UNLESS are conditions under a step (counted where
   the golden counts GUARD), FROM / REGENERATE are header attributes, and
   `[by name]` is a certainty marker beside `[certain]` / `[inferred]`.
@@ -21,10 +21,11 @@
       TIERS <t> -> <t> -> ...
     <blank>
     <SECTION>
-      -- <note>                    (an EMPTY section only, instead of any step: T6-R2)
+      -- <note>                    (an EMPTY section only, instead of any step: T6-R2 --
+                                    or DERIVED's lead-in, above its rows: 8.5)
     [NN] [<ACTOR> ]<text>[ [by name]|[inferred]] @<file>:<line>[ -- <note>]
            WHEN|UNLESS "<condition>" @<file>:<line>[ -- <note>]
-           <FACET> <text>[ @<file>:<line>][ -- <note>]
+           <FACET> <text>[ @<file>:<line>][ -- <note>]   (FACET: VIA ONTO AT CONTRACT FROM TO OVER WITH REGENERATE)
     [NN] [<ACTOR> ]CROSSES <text> @<file>:<line>[ -- <note>]
     [NN] [<ACTOR> ]STOPS <reason> @<file>:<line>[ -- <note>]
     <blank>
@@ -48,7 +49,8 @@
   everything the writer accepts, its parser and Test-FormA.ps1 read back.
 #>
 
-$script:FormAFacets = @('VIA', 'ONTO', 'AT', 'CONTRACT', 'FROM', 'TO', 'OVER', 'WITH')
+# REGENERATE as a facet: the command that traces a DERIVED row's source instead (8.5)
+$script:FormAFacets = @('VIA', 'ONTO', 'AT', 'CONTRACT', 'FROM', 'TO', 'OVER', 'WITH', 'REGENERATE')
 $script:FormAConds  = @('WHEN', 'UNLESS')
 $script:FormAActors = @('USER', 'CLIENT', 'SERVER', 'DATABASE')
 $script:FormAAnchor = '^[A-Za-z0-9_$.\-]+:\d+$'
@@ -87,7 +89,7 @@ function Test-TraceText([string] $Text, [string] $What, [switch] $Head) {
   if (-not $Head) { return }
   if ($Text -match '^(USER|CLIENT|SERVER|DATABASE|CROSSES|STOPS)(\s|$)') { throw "Form A $What must not be or begin with an actor or kind word (pass -Actor / -Kind): $Text" }
   if ($Text -match '^(WHEN|UNLESS|GUARD|UNRESOLVED)(\s|$)') { throw "Form A $What must not begin with a counted head word (WHEN UNLESS GUARD UNRESOLVED): $Text" }
-  if ($Text -match '^(WRITE|READ|RESPONSE|ANCHOR|ALSO|USER|CLIENT|SERVER|DATABASE|PIPE)\s+(STOPS|CROSSES)(\s|$)') { throw "Form A $What must not be a section word before STOPS / CROSSES: $Text" }
+  if ($Text -match '^(WRITE|READ|RESPONSE|ANCHOR|DERIVED|ALSO|USER|CLIENT|SERVER|DATABASE|PIPE)\s+(STOPS|CROSSES)(\s|$)') { throw "Form A $What must not be a section word before STOPS / CROSSES: $Text" }
   if ($Text -match '^[\[@]') { throw "Form A $What must not begin with '[' or '@' (the checker drops an annotation token): $Text" }
 }
 
@@ -217,7 +219,8 @@ function Write-FormA($Trace) {
     & $L ''
     & $L $sec.Name
     if ($sec.Note) {
-      if ($sec.Items.Count) { throw "Write-FormA: section $($sec.Name) has steps AND a note -- a note stands only for an empty section" }
+      # a note stands for an EMPTY section (T6-R2), except in DERIVED, where it is the lead-in to the rows (8.5)
+      if ($sec.Items.Count -and $sec.Name -cne 'DERIVED') { throw "Write-FormA: section $($sec.Name) has steps AND a note -- a note stands only for an empty section (or leads DERIVED's rows)" }
       if ($sec.Note -match '[\r\n]') { throw "Write-FormA: section $($sec.Name) note contains a line break" }
       & $L "  -- $($sec.Note)"
     }
@@ -265,7 +268,7 @@ function Read-FormA([string] $Text) {
   $lines = $lines[0..($lines.Count - 2)]
   $rxStep  = '^\[(\d{2,3})\] (?:(USER|CLIENT|SERVER|DATABASE) )?(?:(CROSSES|STOPS) )?(.*?)(?: \[(by name|inferred)\])?(?: @(\S+))?(?: -- (.*))?$'
   $rxCond  = '^       (WHEN|UNLESS) "([^"]*)" @(\S+)(?: -- (.*))?$'
-  $rxFacet = '^       (VIA|ONTO|AT|CONTRACT|FROM|TO|OVER|WITH) (.*?)(?: @(\S+))?(?: -- (.*))?$'
+  $rxFacet = '^       (VIA|ONTO|AT|CONTRACT|FROM|TO|OVER|WITH|REGENERATE) (.*?)(?: @(\S+))?(?: -- (.*))?$'
   $rxEnd   = '^END TRACE  (\d+) steps, (\d+) conditions, (\d+) crossings, (\d+) unresolved\.$'
   $T = New-Trace 'x' 'x' 'x' 'x' 'x' 'x' 'x'
   $sec = $null; $cur = $null; $counts = $null

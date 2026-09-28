@@ -43,7 +43,7 @@ function Get-DataSetTypeSql([string] $A = 's') {
 
 function New-AnchorResult {
   [pscustomobject]@{ Items = (New-Object System.Collections.ArrayList); DataSet = $null; Table = ''; Column = ''; TableColumn = ''
-                     Stop = ''; StopAnchor = ''; StaleFile = ''; Grades = @() }
+                     Stop = ''; StopAnchor = ''; StaleFile = ''; Grades = @(); Calc = $null }
 }
 
 # The note of a column step (final-review I7): what the SQL index says about the column, as GENERATED
@@ -94,6 +94,11 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line, COUNT(*) AS n FROM string_liter
   } else {
     $R.Stop = "$($R.TableColumn): $($cs.Label)"
     $R.StopAnchor = $R.Items[$R.Items.Count - 1].Anchor
+    # calc-field brief (owner, 2026-09-28): before that stop, is the field CALCULATED (Part 6)? Only an
+    # OnCalcFields handler that writes it makes it one; the stop then says so and the emitter offers its
+    # source fields. A field set in another event, or created as a lookup, is a named stop with no offer.
+    $cf = Get-CalcFieldInfo $Ds $Col $R.Table $SqlSet $SourceOverride
+    if ($cf) { $R.Calc = $cf; $R.Stop = $cf.StopText; $R.StopAnchor = $cf.Anchor }
     $R.TableColumn = ''
   }
   $R
@@ -282,8 +287,34 @@ function Get-FieldVarLineGrade([bool] $FieldByName, [bool] $Bound, [string[]] $C
 function Resolve-AnchorFromFieldVar($Mem, [string] $Target, [string] $Name, $R, $SqlSet, [hashtable] $SourceOverride) {
   $cls = Invoke-IndexQuery "SELECT s.parent_id AS pid FROM symbols s WHERE s.id = $([int]$Mem.id)"
   $cpid = [int]$cls[0].pid
-  $w = Invoke-IndexQuery @"
-SELECT r.start_line AS line, f.path AS path,
+  $w = Get-FieldVarWriteRows $cpid "r.symbol_id = $([int]$Mem.id)"
+  # a pair only where the line names exactly ONE dataset field and ONE literal
+  $fp = Get-FieldVarPairs $w
+  $ok = $fp.Ok; $pairs = $fp.Pairs
+  if ($pairs.Count -ne 1) {
+    $R.Stop = "$Target is written on $($w.Count) line(s) naming $($pairs.Count) (dataset field, column literal) pair(s)$(if ($pairs.Count) { " ($(($pairs | ForEach-Object { $_ -replace '\|', '.' }) -join ', '))" }) -- cannot tell which"
+    $R.StopAnchor = Get-TraceAnchorText ([string]$Mem.path) ([int]$Mem.line)
+    return $R
+  }
+  $dsName, $col = $pairs[0] -split '\|'
+  $dsRow = Invoke-IndexQuery "SELECT s.id AS id, s.name AS name, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.parent_id = $cpid AND s.name = '$(ConvertTo-SqlText $dsName)' AND s.kind = 'field'"
+  if ($dsRow.Count -ne 1) { $R.Stop = "$dsName is not a field of the class declaring $Name"; $R.StopAnchor = Get-TraceAnchorText ([string]$Mem.path) ([int]$Mem.line); return $R }
+  $site = $ok[0]
+  $g = Get-FieldVarSiteGrade $site $dsName
+  [void]$R.Items.Add((New-TraceStep 'step' "SETS $Name := $dsName field '$col'" (Get-TraceAnchorText ([string]$site.path) ([int]$site.line)) $g.Grade '' $g.Reason $g.Ask))
+  $d = $dsRow[0]
+  Complete-AnchorFromDataSet $R ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) $col $SqlSet $SourceOverride
+}
+
+# The WRITE lines of the TField variables of class $ClassId that $Where selects (a condition on `r`,
+# the write ref), each with what Resolve-AnchorFromFieldVar reads off the line: the dataset fields of
+# the class the line names (ds), whether one is a bound read (bound), the FieldByName count (fbn), the
+# call names (calls) and the literals (col). var: the variable's name, vq its qualified name. Shared by
+# the TField-variable anchor and the calc-field check (Part 6), so both read ONE rule.
+function Get-FieldVarWriteRows([int] $ClassId, [string] $Where) {
+  $cpid = $ClassId
+  Get-AllIndexRows @"
+SELECT v.name AS var, v.qualified_name AS vq, r.start_line AS line, f.path AS path,
        (SELECT GROUP_CONCAT(DISTINCT s.name) FROM refs m JOIN symbols s ON s.parent_id = $cpid AND s.kind = 'field' AND $(Get-DataSetTypeSql 's')
                 AND (s.name = m.name_text OR s.name = m.receiver_text OR 'Self.' || s.name = m.receiver_text)
          WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND (m.kind = 'read' OR (m.kind = 'member-access' AND m.name_text = 'FieldByName'))) AS ds,
@@ -294,26 +325,22 @@ SELECT r.start_line AS line, f.path AS path,
          WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND m.kind = 'member-access' AND m.name_text = 'FieldByName') AS fbn,
        (SELECT GROUP_CONCAT(DISTINCT m.name_text) FROM refs m WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND m.kind = 'call') AS calls,
        (SELECT GROUP_CONCAT(sl.text, '|') FROM string_literals sl WHERE sl.file_id = r.file_id AND sl.start_line = r.start_line AND sl.kind = 'literal') AS col
-  FROM refs r JOIN files f ON f.id = r.file_id
- WHERE r.symbol_id = $([int]$Mem.id) AND r.kind = 'write' ORDER BY r.start_line
-"@
-  # a pair only where the line names exactly ONE dataset field and ONE literal
-  $ok = @($w | Where-Object { $_.ds -and $_.col -and ([string]$_.ds) -notmatch ',' -and ([string]$_.col) -notmatch '\|' })
-  $pairs = @($ok | ForEach-Object { "$([string]$_.ds)|$([string]$_.col)" } | Sort-Object -Unique)
-  if ($pairs.Count -ne 1) {
-    $R.Stop = "$Target is written on $($w.Count) line(s) naming $($pairs.Count) (dataset field, column literal) pair(s)$(if ($pairs.Count) { " ($(($pairs | ForEach-Object { $_ -replace '\|', '.' }) -join ', '))" }) -- cannot tell which"
-    $R.StopAnchor = Get-TraceAnchorText ([string]$Mem.path) ([int]$Mem.line)
-    return $R
-  }
-  $dsName, $col = $pairs[0] -split '\|'
-  $dsRow = Invoke-IndexQuery "SELECT s.id AS id, s.name AS name, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.parent_id = $cpid AND s.name = '$(ConvertTo-SqlText $dsName)' AND s.kind = 'field'"
-  if ($dsRow.Count -ne 1) { $R.Stop = "$dsName is not a field of the class declaring $Name"; $R.StopAnchor = Get-TraceAnchorText ([string]$Mem.path) ([int]$Mem.line); return $R }
-  $site = $ok[0]
-  $g = Get-FieldVarLineGrade ([int]$(if ($site.fbn) { $site.fbn } else { 0 }) -gt 0) ([int]$(if ($site.bound) { $site.bound } else { 0 }) -gt 0) `
-                             @(([string]$site.calls) -split ',' | Where-Object { $_ -and $_ -ne 'FieldByName' }) $dsName
-  [void]$R.Items.Add((New-TraceStep 'step' "SETS $Name := $dsName field '$col'" (Get-TraceAnchorText ([string]$site.path) ([int]$site.line)) $g.Grade '' $g.Reason $g.Ask))
-  $d = $dsRow[0]
-  Complete-AnchorFromDataSet $R ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) $col $SqlSet $SourceOverride
+  FROM refs r JOIN files f ON f.id = r.file_id JOIN symbols v ON v.id = r.symbol_id
+ WHERE $Where AND r.kind = 'write'
+"@ 'r.start_line, r.id'
+}
+
+# The (dataset field, column literal) pairs of a variable's write rows: a pair only where the line names
+# exactly ONE dataset field and ONE literal. Ok: those rows; Pairs: the distinct 'DS|COL' strings. Pure.
+function Get-FieldVarPairs($Rows) {
+  $ok = @($Rows | Where-Object { $_.ds -and $_.col -and ([string]$_.ds) -notmatch ',' -and ([string]$_.col) -notmatch '\|' })
+  [pscustomobject]@{ Ok = $ok; Pairs = @($ok | ForEach-Object { "$([string]$_.ds)|$([string]$_.col)" } | Sort-Object -Unique) }
+}
+
+# Get-FieldVarLineGrade over one write row of Get-FieldVarWriteRows.
+function Get-FieldVarSiteGrade($Site, [string] $DsName) {
+  Get-FieldVarLineGrade ([int]$(if ($Site.fbn) { $Site.fbn } else { 0 }) -gt 0) ([int]$(if ($Site.bound) { $Site.bound } else { 0 }) -gt 0) `
+                        @(([string]$Site.calls) -split ',' | Where-Object { $_ -and $_ -ne 'FieldByName' }) $DsName
 }
 
 # TABLE.COLUMN: the dataset fields whose unit names the table beside them. Exactly
@@ -1840,13 +1867,15 @@ function Get-SelectStop($ServerItems, $Ctx) {
 
 # The event wiring on the anchor dataset in its unit: `<ds>.<Event> := <Handler>`.
 # The handler is the last plain READ on the wiring line and is matched BY NAME
-# among the dataset's class methods (E3: the assignment is not bound).
-function Get-EventWiring($Ds) {
+# among the dataset's class methods (E3: the assignment is not bound). $Events: the event names
+# to read ($RtEvents, the write events, unless the caller asks for others -- the calc-field
+# check asks for OnCalcFields and for every other On*/After*/Before* event, Part 6).
+function Get-EventWiring($Ds, [string[]] $Events = $script:RtEvents) {
   $rows = Get-AllIndexRows @"
 SELECT r.start_line AS line, r.id AS rid, r.name_text AS ev, e.qualified_name AS routine,
        (SELECT h.name_text FROM refs h WHERE h.file_id = r.file_id AND h.start_line = r.start_line AND h.kind = 'read' AND h.name_text <> '$(ConvertTo-SqlText $Ds.Name)' AND h.name_text <> r.name_text ORDER BY h.start_col DESC LIMIT 1) AS handler
   FROM refs r LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id
- WHERE r.file_id = $($Ds.Fid) AND r.kind = 'member-access' AND r.name_text IN ($(ConvertTo-SqlInList $script:RtEvents)) AND r.receiver_text = '$(ConvertTo-SqlText $Ds.Name)'
+ WHERE r.file_id = $($Ds.Fid) AND r.kind = 'member-access' AND r.name_text IN ($(ConvertTo-SqlInList $Events)) AND r.receiver_text = '$(ConvertTo-SqlText $Ds.Name)'
 "@ 'r.start_line, r.id'
   $out = New-Object System.Collections.ArrayList
   foreach ($r in $rows) {
@@ -1941,4 +1970,378 @@ SELECT e.id AS eid, e.qualified_name AS q, r.start_line AS line, ef.path AS path
     }
   }
   , $out.ToArray()
+}
+
+# ---- Part 6: a CALCULATED anchor field (calc-field brief, owner 2026-09-28) -------------------------
+# A selection bound to a field that is not a column of its table stops at the anchor. When the field is
+# CALCULATED -- its dataset has an OnCalcFields wiring (Get-EventWiring: a same-line name match, E3) AND that
+# handler WRITES the field, through a TField variable bound to the field's name (Get-FieldVarWriteRows, the
+# Task 3 rule) or through `FieldByName('<name>')` -- the STOPS says so, carries the handler's own guards as
+# conditions (VERBATIM, the shim), and the emitter offers the SOURCE fields the computation reads, each with
+# a ready command to trace it instead. Nothing here names a form, a dataset, a table or a field: the anchor
+# parametrises every rule. Deeper computation inside a called routine is NOT walked, and the trace says so.
+#
+# Three layers: Get-CalcFieldFacts reads the index and the FRESH source (a stale file refuses, AC-14);
+# Resolve-CalcField decides and lists the sources, PURE over those facts (synthetic facts test it);
+# New-CalcFieldItems turns the result into Form A items, pure. Out of scope and NAMED, never offered: a field
+# written only in another event's handler (AfterScroll, OnNewRecord, ...) and a field whose creating routine
+# sets FieldKind fkLookup.
+$script:CalcStmtRx  = [regex]'(?i)\b(begin|end|try|case|record|repeat|until|else|except|finally|if)\b|:=|[()\[\];]'
+$script:CalcFkKinds = @('fkCalculated', 'fkLookup', 'fkInternalCalc', 'fkAggregate', 'fkData')
+# a bound read of one of these kinds is a CONSTANT of the computation (an enum value, a type, a routine), not a value source
+$script:CalcConstKinds = @('const', 'constant', 'enum_value', 'enum', 'type', 'class', 'record', 'interface', 'function', 'procedure', 'method', 'unit', 'resourcestring')
+
+# The statement that starts at ($Line, 0-based $Col): up to its first depth-0 `;`, or a depth-0 end / until /
+# else / except / finally (a statement that is a branch, or the last of a block, has no `;` of its own), or the
+# routine's last line. Depth counts ( ) [ ] and begin/try/case/record/repeat .. end/until; an `if` after the
+# `:=` is a Delphi 13 conditional expression, whose `else` stays inside. AssignLine / AssignCol: the first
+# depth-0 `:=` (AssignCol -1: none). Pure over the stripped lines. L2/C2: the end, C2 exclusive.
+function Get-StatementSpan([string[]] $Stripped, [int] $Line, [int] $Col, [int] $LastLine) {
+  $pd = 0; $bd = 0; $ifs = 0; $al = 0; $ac = -1
+  $last = [Math]::Min($LastLine, $Stripped.Count)
+  for ($l = $Line; $l -le $last; $l++) {
+    $s = $Stripped[$l - 1]; $from = $(if ($l -eq $Line) { [Math]::Min($Col, $s.Length) } else { 0 })
+    foreach ($m in $script:CalcStmtRx.Matches($s.Substring($from))) {
+      $k = $m.Value.ToLowerInvariant(); $at = $from + $m.Index
+      if ($k -in '(', '[') { $pd++; continue }
+      if ($k -in ')', ']') { $pd--; continue }
+      if ($pd -gt 0) { continue }
+      if ($k -eq ':=') { if ($ac -lt 0 -and $bd -eq 0) { $al = $l; $ac = $at }; continue }
+      if ($k -in 'begin', 'try', 'case', 'record', 'repeat') { $bd++; continue }
+      if ($k -in 'end', 'until') { if ($bd -gt 0) { $bd--; continue }; return [pscustomobject]@{ L1 = $Line; C1 = $Col; L2 = $l; C2 = $at; AssignLine = $al; AssignCol = $ac } }
+      if ($bd -gt 0) { continue }
+      if ($k -eq 'if') { if ($ac -ge 0) { $ifs++ }; continue }
+      if ($k -eq 'else' -and $ifs -gt 0) { $ifs--; continue }
+      if ($k -in ';', 'else', 'except', 'finally') { return [pscustomobject]@{ L1 = $Line; C1 = $Col; L2 = $l; C2 = $at; AssignLine = $al; AssignCol = $ac } }
+    }
+  }
+  [pscustomobject]@{ L1 = $Line; C1 = $Col; L2 = $last; C2 = $(if ($last -ge 1) { $Stripped[$last - 1].Length } else { 0 }); AssignLine = $al; AssignCol = $ac }
+}
+
+# Is (1-based $Line, 0-based $Col0) on the right-hand side of span $Sp -- after its `:=`, before its end? Pure.
+function Test-InStatementRhs($Sp, [int] $Line, [int] $Col0) {
+  if ($Sp.AssignCol -lt 0) { return $false }
+  $after = ($Line -gt $Sp.AssignLine) -or ($Line -eq $Sp.AssignLine -and $Col0 -gt $Sp.AssignCol)
+  $before = ($Line -lt $Sp.L2) -or ($Line -eq $Sp.L2 -and $Col0 -lt $Sp.C2)
+  $after -and $before
+}
+
+# The 0-based column where the receiver of the member at 0-based $MemberCol starts: back over blanks, the
+# dot, blanks, then the (possibly dotted) identifier. -1 when the member has no dotted receiver. Pure.
+function Get-ReceiverStart([string] $S, [int] $MemberCol) {
+  $p = $MemberCol - 1
+  while ($p -ge 0 -and [char]::IsWhiteSpace($S[$p])) { $p-- }
+  if ($p -lt 0 -or $S[$p] -ne '.') { return -1 }
+  $p--
+  while ($p -ge 0 -and [char]::IsWhiteSpace($S[$p])) { $p-- }
+  $e = $p
+  while ($p -ge 0 -and ($S[$p] -match '[A-Za-z0-9_.]')) { $p-- }
+  $(if ($p -lt $e) { $p + 1 } else { -1 })
+}
+
+# The statements of handler $H that WRITE the field: `<Var>.<Member> :=` for a TField variable in $Vars, or
+# `<X>.FieldByName('<Field>').<Member> :=`. $H: Refs (Get-RoutineFacts columns), Raw, Stripped, ImplStart,
+# ImplEnd. Each write: Line, Col (0-based, the statement's first token), Span (Get-StatementSpan). Pure.
+function Find-CalcWrites($H, [string[]] $Vars, [string] $Field) {
+  $out = New-Object System.Collections.ArrayList
+  $seen = @{}
+  foreach ($r in @($H.Refs | Where-Object { [string]$_.kind -eq 'member-access' } | Sort-Object { [int]$_.line }, { [int]$_.col })) {
+    $ln = [int]$r.line
+    if ($ln -lt $H.ImplStart -or $ln -gt $H.ImplEnd -or $ln -gt $H.Stripped.Count) { continue }
+    $s = $H.Stripped[$ln - 1]; $c0 = [int]$r.col - 1; $e = [int]$r.ecol - 1
+    $hit = $false
+    if ($Vars.Count -and $Vars -contains [string]$r.recv) {
+      $hit = ($e -le $s.Length) -and ($s.Substring($e) -match '^\s*:=')
+    } elseif ([string]$r.nm -eq 'FieldByName' -and $Field -and $c0 -ge 0 -and $c0 -lt $H.Raw[$ln - 1].Length) {
+      $m = [regex]::Match($H.Raw[$ln - 1].Substring($c0), "^FieldByName\s*\(\s*'((?:[^']|'')*)'\s*\)\s*\.\s*[A-Za-z_]\w*\s*:=")
+      # the := must be CODE in the stripped copy (not inside a comment)
+      $hit = $m.Success -and ($m.Groups[1].Value.Replace("''", "'") -ieq $Field) -and ($c0 + $m.Length -le $s.Length) -and ($s.Substring($c0 + $m.Length - 2, 2) -eq ':=')
+    }
+    if (-not $hit) { continue }
+    $st = Get-ReceiverStart $s $c0
+    if ($st -lt 0) { continue }
+    if ($seen.ContainsKey("$ln|$st")) { continue }
+    $seen["$ln|$st"] = 1
+    [void]$out.Add([pscustomobject]@{ Line = $ln; Col = $st; Span = (Get-StatementSpan $H.Stripped $ln $st $H.ImplEnd) })
+  }
+  , $out.ToArray()
+}
+
+# The guards of the computation, VERBATIM (P16): every Exit of the handler before its first write (the Exit
+# guard's own UNLESS / WHEN, from Get-GuardConditionFromLines, the note `else Exit at :N`), then each write's
+# chain of enclosing ifs (Get-EnclosingChainFromLines: WHEN "C" in a then branch; if-forms only, as the walk). A shape the shim cannot read
+# is not guessed: its generated reason is returned in Unknown for the STOPS note. Pure.
+function Get-CalcConditions($H, $Writes) {
+  $out = New-Object System.Collections.ArrayList; $unk = New-Object System.Collections.ArrayList; $seen = @{}
+  $first = @($Writes | Sort-Object Line, Col)[0]
+  $add = { param($kw, $cond, $line, $note) $k = "$kw|$cond|$line"; if (-not $seen.ContainsKey($k)) { $seen[$k] = 1; [void]$out.Add([pscustomobject]@{ Keyword = $kw; Condition = $cond; Line = $line; Note = $note }) } }
+  $exits = @($H.Refs | Where-Object { [string]$_.kind -eq 'call' -and [string]$_.nm -eq 'Exit' -and [int]$_.line -ge $H.ImplStart -and [int]$_.line -lt $first.Line } | ForEach-Object { [int]$_.line } | Sort-Object -Unique)
+  foreach ($xl in $exits) {
+    $g = Get-GuardConditionFromLines $H.Raw $H.Stripped $xl $H.ImplStart
+    if ($g.Form -eq 'unknown') { [void]$unk.Add($g.Reason); continue }
+    & $add $g.Keyword $g.Condition $g.IfLine "else Exit at :$xl"
+  }
+  # the if-forms only, as Walk-Routine writes them (a case arm or an except handler is not a branch condition);
+  # when the field is written by several statements, each condition names the writes it encloses
+  $around = [ordered]@{}
+  foreach ($w in $Writes) {
+    foreach ($e in @(Get-EnclosingChainFromLines $H.Raw $H.Stripped $w.Line $w.Col $H.ImplStart | ForEach-Object { $_ } | Where-Object { $_.Form -in 'inline', 'block' })) {
+      $k = "$($e.Keyword)|$($e.Condition)|$($e.IfLine)"
+      if (-not $around.Contains($k)) { $around[$k] = [pscustomobject]@{ E = $e; Lines = (New-Object System.Collections.ArrayList) } }
+      if (-not $around[$k].Lines.Contains($w.Line)) { [void]$around[$k].Lines.Add($w.Line) }
+    }
+  }
+  foreach ($a in $around.Values) {
+    & $add $a.E.Keyword $a.E.Condition $a.E.IfLine $(if (@($Writes).Count -gt 1) { "around the write$(if ($a.Lines.Count -gt 1) { 's' }) at $((@($a.Lines | ForEach-Object { ":$_" })) -join ', ')" } else { '' })
+  }
+  [pscustomobject]@{ Conds = $out.ToArray(); Unknown = $unk.ToArray() }
+}
+
+# What one read on a computation's right-hand side is: a TField variable of the class (Kind var), a LOCAL of
+# the handler resolved ONE hop -- its one assignment before the read names exactly one TField variable (Kind
+# local) -- or something the walk cannot map (Kind unmapped, with Why). $null: a constant (a bound enum value,
+# type or routine), which is not a source. Locals shadow class fields, as in Pascal. Pure.
+function Resolve-CalcRead($F, $H, $R) {
+  $nm = [string]$R.nm
+  if ($nm -eq 'Self') { return $null }
+  if ($H.Locals.ContainsKey($nm)) {
+    if ($H.Locals[$nm] -ne 'local_var') { return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a parameter of $($H.Name)" } }
+    $pos = [int]$R.line * 100000 + [int]$R.col
+    $ws = @($H.Refs | Where-Object { [string]$_.kind -eq 'write' -and [string]$_.nm -eq $nm -and ([int]$_.line * 100000 + [int]$_.col) -lt $pos })
+    if ($ws.Count -ne 1) { return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a local of $($H.Name) set at $($ws.Count) places before this read" } }
+    $w = $ws[0]
+    $sp = Get-StatementSpan $H.Stripped ([int]$w.line) ([int]$w.col - 1) $H.ImplEnd
+    $vs = @($H.Refs | Where-Object { [string]$_.kind -eq 'read' -and (Test-InStatementRhs $sp ([int]$_.line) ([int]$_.col - 1)) -and -not $H.Locals.ContainsKey([string]$_.nm) -and
+                                     $F.ClassFields.ContainsKey([string]$_.nm) -and ([string]$F.ClassFields[[string]$_.nm]) -match '^T\w*Field$' } |
+             ForEach-Object { [string]$_.nm } | Sort-Object -Unique)
+    if ($vs.Count -ne 1) { return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a local of $($H.Name) set at :$([int]$w.line) from $($vs.Count) TField variables" } }
+    return [pscustomobject]@{ Kind = 'local'; Name = $nm; Var = $vs[0]; SetLine = [int]$w.line }
+  }
+  if ($F.ClassFields.ContainsKey($nm)) {
+    $sig = [string]$F.ClassFields[$nm]
+    if ($sig -match '^T\w*Field$') { return [pscustomobject]@{ Kind = 'var'; Name = $nm; Var = $nm } }
+    return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a field of $($F.ClassName) of type $sig, not a TField variable" }
+  }
+  if ($R.tid) {
+    if ([string]$R.tkind -in $script:CalcConstKinds) { return $null }
+    return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a $([string]$R.tkind) outside $($F.ClassName), not a TField variable" }
+  }
+  [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "not a field, local or parameter the walk can place" }
+}
+
+# The decision, PURE over the facts of Get-CalcFieldFacts (or synthetic ones). $F: Field (as the selection
+# names it), DsName, Table, ClassName, Vars (the TField variables bound to the field), Bindings (var ->
+# Get-CalcBinding result), ClassFields (name -> declared type), Wirings (Event, Line, Handler, WirePath, H),
+# Creating ($null | Line, Path, Call, Kind, KindLine, KindPath), IsColumn (scriptblock: ($F, literal) -> bool).
+# Returns $null (not calculated: the caller keeps its stop) or Kind calculated | event | lookup with StopText,
+# StopNote and Anchor; a calculated one also carries Handler, Writes, Conds, Sources and HeadCall.
+function Resolve-CalcField($F) {
+  foreach ($w in @($F.Wirings | Where-Object { $_.Event -eq 'OnCalcFields' })) {
+    $ws = Find-CalcWrites $w.H $F.Vars $F.Field
+    if ($ws.Count) { return (New-CalcInfo $F $w $ws) }
+  }
+  foreach ($w in @($F.Wirings | Where-Object { $_.Event -ne 'OnCalcFields' })) {
+    $ws = Find-CalcWrites $w.H $F.Vars $F.Field
+    if (-not $ws.Count) { continue }
+    $at = Get-TraceAnchorText $w.H.Path $ws[0].Line
+    return [pscustomobject]@{ Kind = 'event'; Anchor = $at; StopNote = ''
+      StopText = "$($F.Field) is not a column of $($F.Table) in the SQL index: it is set in $($w.Handler), wired as $($F.DsName).$($w.Event) at $(Get-TraceNoteLocator $w.H.Path $w.WirePath $w.Line), not in an OnCalcFields handler, so no source fields are offered" }
+  }
+  if ($F.Creating -and $F.Creating.Kind -eq 'fkLookup') {
+    $c = $F.Creating
+    return [pscustomobject]@{ Kind = 'lookup'; Anchor = (Get-TraceAnchorText $c.Path $c.Line); StopNote = ''
+      StopText = "$($F.Field) is a lookup field of $($F.DsName): $($c.Call) sets FieldKind fkLookup at $(Get-TraceNoteLocator $c.Path $c.KindPath $c.KindLine), not a column of $($F.Table) in the SQL index, so no source fields are offered" }
+  }
+  $null
+}
+
+function New-CalcInfo($F, $Wire, $Writes) {
+  $H = $Wire.H
+  $cd = Get-CalcConditions $H $Writes
+  # the reads on every write's right-hand side, in source order; one row per variable (or name)
+  $rhs = @($H.Refs | Where-Object { [string]$_.kind -eq 'read' } | Where-Object { $r = $_; @($Writes | Where-Object { Test-InStatementRhs $_.Span ([int]$r.line) ([int]$r.col - 1) }).Count } |
+           Sort-Object { [int]$_.line }, { [int]$_.col })
+  $src = New-Object System.Collections.ArrayList; $have = @{}
+  foreach ($r in $rhs) {
+    if ($F.Vars -contains [string]$r.nm) { continue }
+    $x = Resolve-CalcRead $F $H $r
+    if (-not $x) { continue }
+    $key = $(if ($x.Kind -eq 'unmapped') { "?$($x.Name)" } else { $x.Var })
+    if ($have.ContainsKey($key)) { continue }
+    $have[$key] = 1
+    [void]$src.Add((New-CalcSourceRow $F $H $r $x))
+  }
+  # the call that computes the value: the first token of a right-hand side, when it is a call; the others named
+  $calls = @($H.Refs | Where-Object { [string]$_.kind -eq 'call' } | Where-Object { $r = $_; @($Writes | Where-Object { Test-InStatementRhs $_.Span ([int]$r.line) ([int]$r.col - 1) }).Count } |
+             Sort-Object { [int]$_.line }, { [int]$_.col })
+  $head = $null
+  foreach ($w in $Writes) {
+    $sp = $w.Span
+    $hc = @($calls | Where-Object { Test-InStatementRhs $sp ([int]$_.line) ([int]$_.col - 1) } | Select-Object -First 1)
+    if (-not $hc.Count) { continue }
+    # nothing but blanks between the := and the call
+    $gap = $(if ([int]$hc[0].line -eq $sp.AssignLine) { $H.Stripped[$sp.AssignLine - 1].Substring($sp.AssignCol + 2, [int]$hc[0].col - 1 - ($sp.AssignCol + 2)) }
+             else { $H.Stripped[$sp.AssignLine - 1].Substring($sp.AssignCol + 2) + (@(for ($l = $sp.AssignLine + 1; $l -lt [int]$hc[0].line; $l++) { $H.Stripped[$l - 1] }) -join '') + $H.Stripped[[int]$hc[0].line - 1].Substring(0, [int]$hc[0].col - 1) })
+    if ($gap.Trim()) { continue }
+    $head = $hc[0]; break
+  }
+  $hcall = $null
+  if ($head) {
+    $others = @($calls | ForEach-Object { [string]$_.nm } | Where-Object { $_ -ne [string]$head.nm } | Select-Object -Unique)
+    $at = $(if ($head.tid -and $head.tpath -and [int]$head.tdecl -gt 0) { Get-TraceAnchorText ([string]$head.tpath) ([int]$head.tdecl) } else { Get-TraceAnchorText $H.Path ([int]$head.line) })
+    $hcall = [pscustomobject]@{ Name = [string]$head.nm; Anchor = $at
+                                Note = "computed by this call at :$([int]$head.line), its body is not walked$(if ($others.Count) { ", nor are those of $($others -join ', ')" })" }
+  }
+  $first = @($Writes | Sort-Object Line, Col)[0]
+  $anchor = Get-TraceAnchorText $H.Path $first.Line
+  $created = $(if ($F.Creating) { "created at $(Get-TraceNoteLocator $H.Path $F.Creating.Path $F.Creating.Line), " } else { '' })
+  $kindNote = $(if ($F.Creating -and $F.Creating.Kind) { ", $($F.Creating.Call) at $(Get-TraceNoteLocator $H.Path $F.Creating.Path $F.Creating.Line) sets FieldKind $($F.Creating.Kind) at $(Get-TraceNoteLocator $H.Path $F.Creating.KindPath $F.Creating.KindLine)" } else { '' })
+  $unkNote = $(if ($cd.Unknown.Count) { ", not read as a guard: $((@($cd.Unknown | ForEach-Object { ConvertTo-TraceNoteText $_ })) -join ', ')" } else { '' })
+  [pscustomobject]@{
+    Kind = 'calculated'; Field = $F.Field; DsName = $F.DsName; Table = $F.Table; Handler = $Wire; Writes = $Writes; Anchor = $anchor
+    Conds = $cd.Conds; CondUnknown = $cd.Unknown; Sources = $src.ToArray(); HeadCall = $hcall
+    StopText = "$($F.Field) is a calculated field of $($F.DsName) (${created}computed in $($Wire.Handler) at $(Get-TraceNoteLocator $H.Path $H.Path $H.ImplStart)-$($H.ImplEnd)), not a column of $($F.Table) in the SQL index"
+    StopNote = "wired as $($F.DsName).OnCalcFields at $(Get-TraceNoteLocator $H.Path $Wire.WirePath $Wire.Line), the handler matched by name$kindNote$unkNote"
+  }
+}
+
+# One offered source as row data: Text, Line (the read on the statement), Grade, Note, Ask, Target (the
+# -Target that traces it instead, '' when there is none) and Mapped (a field, not an unmapped value). Pure.
+function New-CalcSourceRow($F, $H, $R, $X) {
+  $row = [pscustomobject]@{ Text = ''; Line = [int]$R.line; Grade = ''; Note = ''; Ask = ''; Target = ''; Mapped = $false; Name = $X.Name }
+  if ($X.Kind -eq 'unmapped') { $row.Text = ConvertTo-TraceStopText "FROM $($X.Name), not mapped: $($X.Why)"; return $row }
+  $b = $F.Bindings[$X.Var]
+  if (-not $b -or $b.Why) {
+    $why = $(if ($b) { $b.Why } else { 'no binding line of it is in the index' })
+    $row.Text = ConvertTo-TraceStopText "FROM $($X.Name), not mapped: $($X.Var) $why"; return $row
+  }
+  $row.Mapped = $true; $row.Target = $b.Qname
+  $mark = ''
+  if ($b.DataSet -ne $F.DsName) { $label = "$($b.Literal) of $($b.DataSet)" }
+  elseif ((Find-CalcWrites $H @($X.Var) $b.Literal).Count) { $label = $b.Literal; $mark = ' (calculated)' }
+  elseif (& $F.IsColumn $F $b.Literal) { $label = "$($F.Table).$($b.Literal.ToUpperInvariant())" }
+  else { $label = $b.Literal; $mark = " (not a column of $($F.Table))" }
+  $via = $(if ($X.Kind -eq 'local') { "$($X.Name), set from $($X.Var)" } else { $X.Var })
+  $row.Text = ConvertTo-TraceStopText "FROM $label$mark VIA $via"
+  $bound = "$($X.Var) bound at $(Get-TraceNoteLocator $H.Path $b.Path $b.Line): $($b.Reason)"
+  $pre = $(if ($X.Kind -eq 'local') { "$($X.Name) set at :$($X.SetLine), " } else { '' })
+  $calc = $(if ($mark -eq ' (calculated)') { "itself calculated in $($H.Name), not expanded, " } else { '' })
+  $row.Note = ConvertTo-TraceNoteText "$calc$pre$bound"
+  # the read of an in-class field is unbound in this index: matched by name among the class's fields
+  $unbound = -not $R.tid
+  $row.Grade = $(if ($b.Grade) { $b.Grade } elseif ($unbound) { 'by name' } else { '' })
+  $row.Ask = $(if ($b.Ask) { $b.Ask } elseif ($unbound) { 'in-class-field-reads' } else { '' })
+  $row
+}
+
+# A TField variable's binding from its write rows (Get-FieldVarWriteRows): exactly ONE (dataset field, column
+# literal) pair binds it -- DataSet, Literal, Line, Path, Qname and the Task 3 grade -- else Why says what the
+# rows name instead. Pure.
+function Get-CalcBinding([string] $Var, $Rows) {
+  $fp = Get-FieldVarPairs $Rows
+  if ($fp.Pairs.Count -ne 1) { return [pscustomobject]@{ Var = $Var; Why = "is written on $(@($Rows).Count) line(s) naming $($fp.Pairs.Count) (dataset field, column literal) pairs" } }
+  $ds, $lit = $fp.Pairs[0] -split '\|'
+  $site = $fp.Ok[0]
+  $g = Get-FieldVarSiteGrade $site $ds
+  [pscustomobject]@{ Var = $Var; Why = ''; DataSet = $ds; Literal = $lit; Line = [int]$site.line; Path = [string]$site.path; Qname = [string]$site.vq
+                     Grade = $g.Grade; Reason = $g.Reason; Ask = $g.Ask }
+}
+
+# One handler's facts: its refs (nested routines' left out, as Get-RoutineFacts does), its locals and
+# parameters, and its FRESH source (Get-TraceSource refuses a stale file).
+function Get-CalcHandler($Wiring, [hashtable] $SourceOverride) {
+  $s = Invoke-IndexQuery "SELECT s.name AS name, s.impl_start_line AS istart, s.impl_end_line AS iend, s.file_id AS fid, f.path AS path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.id = $([int]$Wiring.HandlerId)"
+  $s = $s[0]; $id = [int]$Wiring.HandlerId
+  $refs = Get-AllIndexRows @"
+SELECT r.id AS rid, r.kind AS kind, r.name_text AS nm, r.receiver_text AS recv, r.start_line AS line, r.start_col AS col, r.end_col AS ecol,
+       t.id AS tid, t.kind AS tkind, t.qualified_name AS tq, t.start_line AS tdecl, tf.path AS tpath
+  FROM refs r
+  LEFT JOIN symbols t ON t.id = COALESCE((SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = r.id), r.symbol_id)
+  LEFT JOIN files tf ON tf.id = t.file_id
+ WHERE r.file_id = $([int]$s.fid) AND r.start_line BETWEEN $([int]$s.istart) AND $([int]$s.iend)
+   AND (r.enclosing_symbol_id = $id OR r.enclosing_symbol_id IS NULL)
+"@ 'r.start_line, r.start_col, r.id'
+  $loc = Invoke-IndexQuery "SELECT name AS name, kind AS kind FROM symbols WHERE parent_id = $id AND kind IN ('local_var', 'param')"
+  $locals = @{}; foreach ($l in $loc) { $locals[[string]$l.name] = [string]$l.kind }
+  $src = Get-TraceSource ([string]$s.path) $SourceOverride
+  [pscustomobject]@{ Name = [string]$s.name; Path = [string]$s.path; ImplStart = [int]$s.istart; ImplEnd = [int]$s.iend; Refs = $refs; Locals = $locals
+                     Raw = $src.Raw; Stripped = $src.Stripped }
+}
+
+# The facts Resolve-CalcField decides on, read from the index (the dataset's unit and class) and the fresh source.
+function Get-CalcFieldFacts($Ds, [string] $Col, [string] $Table, $SqlSet, [hashtable] $SourceOverride) {
+  $cls = Invoke-IndexQuery "SELECT name AS name FROM symbols WHERE id = $([int]$Ds.ClassId)"
+  $cf = Get-AllIndexRows "SELECT s.id AS id, s.name AS name, s.signature AS sig FROM symbols s WHERE s.parent_id = $([int]$Ds.ClassId) AND s.kind = 'field'" 's.id'
+  $fields = @{}; foreach ($f in $cf) { $fields[[string]$f.name] = ([string]$f.sig).Trim() }
+  $rows = Get-FieldVarWriteRows ([int]$Ds.ClassId) "v.parent_id = $([int]$Ds.ClassId) AND v.kind = 'field' AND TRIM(v.signature) LIKE 'T%Field'"
+  $bind = @{}
+  foreach ($g in @($rows | Group-Object { [string]$_.var })) { $bind[$g.Name] = Get-CalcBinding $g.Name $g.Group }
+  $vars = @($bind.Values | Where-Object { -not $_.Why -and $_.DataSet -eq $Ds.Name -and $_.Literal -ieq $Col } | ForEach-Object { $_.Var })
+  # every event wired on the dataset: OnCalcFields decides; any other On*/After*/Before* names a field set there
+  $ev = Invoke-IndexQuery "SELECT DISTINCT r.name_text AS ev FROM refs r WHERE r.file_id = $($Ds.Fid) AND r.kind = 'member-access' AND r.receiver_text = '$(ConvertTo-SqlText $Ds.Name)' AND (r.name_text LIKE 'On%' OR r.name_text LIKE 'After%' OR r.name_text LIKE 'Before%')"
+  $events = @($ev | ForEach-Object { [string]$_.ev } | Where-Object { $_ -cmatch '^(On|After|Before)[A-Z]' })
+  $wir = New-Object System.Collections.ArrayList
+  if ($events.Count) {
+    # assigned first: Get-EventWiring returns its array whole (Sort-RtWiring's unary comma), a pipe would sort ONE item
+    $wl = Get-EventWiring $Ds $events
+    foreach ($w in @($wl | Sort-Object @{ E = { if ($_.Event -eq 'OnCalcFields') { 0 } else { 1 } } }, @{ E = { [int]$_.Line } })) {
+      [void]$wir.Add([pscustomobject]@{ Event = $w.Event; Line = $w.Line; Handler = $w.Handler; WirePath = $Ds.File; H = (Get-CalcHandler $w $SourceOverride) })
+    }
+  }
+  # the line that CREATES the field: its name as a literal beside the dataset on a line that writes no variable (a
+  # binding line writes one); its first call, and the FieldKind that call's body sets (`F.FieldKind:= fkCalculated`)
+  $creating = $null
+  $cl = Invoke-IndexQuery @"
+SELECT sl.start_line AS line FROM string_literals sl
+ WHERE sl.file_id = $($Ds.Fid) AND sl.kind = 'literal' AND UPPER(sl.text) = UPPER('$(ConvertTo-SqlText $Col)')
+   AND EXISTS (SELECT 1 FROM refs d WHERE d.file_id = sl.file_id AND d.start_line = sl.start_line AND d.kind = 'read' AND d.name_text = '$(ConvertTo-SqlText $Ds.Name)')
+   AND NOT EXISTS (SELECT 1 FROM refs w WHERE w.file_id = sl.file_id AND w.start_line = sl.start_line AND w.kind = 'write')
+ ORDER BY sl.start_line LIMIT 1
+"@
+  if ($cl.Count) {
+    $ln = [int]$cl[0].line
+    $call = Invoke-IndexQuery "SELECT r.name_text AS nm, COALESCE((SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = r.id), r.symbol_id) AS tid FROM refs r WHERE r.file_id = $($Ds.Fid) AND r.start_line = $ln AND r.kind = 'call' ORDER BY r.start_col LIMIT 1"
+    $creating = [pscustomobject]@{ Line = $ln; Path = $Ds.File; Call = $(if ($call.Count) { [string]$call[0].nm } else { '' }); Kind = ''; KindLine = 0; KindPath = '' }
+    if ($call.Count -and $call[0].tid) {
+      $fk = Invoke-IndexQuery @"
+SELECT r.name_text AS k, r.start_line AS line, f.path AS path FROM refs r JOIN files f ON f.id = r.file_id
+ WHERE r.enclosing_symbol_id = $([int]$call[0].tid) AND r.kind = 'read' AND r.name_text IN ($(ConvertTo-SqlInList $script:CalcFkKinds))
+   AND EXISTS (SELECT 1 FROM refs m WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND m.kind = 'member-access' AND m.name_text = 'FieldKind')
+ ORDER BY r.start_line LIMIT 1
+"@
+      if ($fk.Count) { $creating.Kind = [string]$fk[0].k; $creating.KindLine = [int]$fk[0].line; $creating.KindPath = [string]$fk[0].path }
+    }
+  }
+  [pscustomobject]@{ Field = $Col; DsName = $Ds.Name; Table = $Table; ClassName = $(if ($cls.Count) { [string]$cls[0].name } else { '' })
+                     Vars = $vars; Bindings = $bind; ClassFields = $fields; Wirings = $wir.ToArray(); Creating = $creating
+                     SqlSet = $SqlSet; SourceOverride = $SourceOverride; IsColumn = { param($F, $lit) (Get-SqlColumnState $F.SqlSet $F.Table $lit $F.SourceOverride).IsColumn } }
+}
+
+function Get-CalcFieldInfo($Ds, [string] $Col, [string] $Table, $SqlSet, [hashtable] $SourceOverride) {
+  Resolve-CalcField (Get-CalcFieldFacts $Ds $Col $Table $SqlSet $SourceOverride)
+}
+
+# The Form A items of a CALCULATED anchor (Kind calculated): the STOPS -- its guards as conditions, the call
+# that computes the value as a VIA facet -- and the DERIVED rows, one numbered step per source with a
+# REGENERATE facet holding the command that traces it instead ($CmdFor: target -> command). Note: the DERIVED
+# section's lead-in (form-a-grammar-spec.md 8.5). Pure.
+function New-CalcFieldItems($Info, [scriptblock] $CmdFor) {
+  $H = $Info.Handler.H
+  $stop = New-TraceStep 'stops' (ConvertTo-TraceStopText $Info.StopText) $Info.Anchor '' $H.Name (ConvertTo-TraceNoteText $Info.StopNote) 'E3'
+  foreach ($c in $Info.Conds) { [void]$stop.Children.Add((New-TraceCond $c.Keyword $c.Condition (Get-TraceAnchorText $H.Path $c.Line) $c.Note)) }
+  if ($Info.HeadCall) { [void]$stop.Children.Add((New-TraceFacet 'VIA' $Info.HeadCall.Name $Info.HeadCall.Anchor $Info.HeadCall.Note)) }
+  $rows = New-Object System.Collections.ArrayList
+  foreach ($s in $Info.Sources) {
+    $st = New-TraceStep 'step' $s.Text (Get-TraceAnchorText $H.Path $s.Line) $s.Grade $H.Name $s.Note $s.Ask
+    if ($s.Target) { [void]$st.Children.Add((New-TraceFacet 'REGENERATE' (& $CmdFor $s.Target))) }
+    [void]$rows.Add($st)
+  }
+  $n = @($Info.Sources | Where-Object { $_.Mapped }).Count; $u = @($Info.Sources).Count - $n
+  $fw = $(if ($n -eq 1) { 'field' } else { 'fields' })
+  $which = $(if ($n -eq 1) { 'it' } elseif ($u) { 'one of the fields' } else { 'one of them' })
+  $note = $(if ($n -and -not $u) { "$($Info.Field) is calculated from $n $fw -- trace $which instead:" }
+            elseif ($n) { "$($Info.Field) is calculated from $n $fw and $u value(s) the walk cannot map -- trace $which instead:" }
+            elseif ($u) { "$($Info.Field) is calculated from $u value(s) the walk cannot map -- no field to trace instead" }
+            else { "$($Info.Field) is calculated from no field -- nothing to trace instead" })
+  [pscustomobject]@{ Stop = $stop; Rows = $rows.ToArray(); Note = $note }
 }

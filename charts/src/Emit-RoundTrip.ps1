@@ -30,6 +30,10 @@
   CLIENT after the crossing). ALSO is DERIVED (AC-10): the other wirings on the
   dataset, the other callers of a sender that serves only the anchor's table, and
   the other fill lines -- every route the index holds minus the ones traced.
+
+  A CALCULATED anchor field (Trace.Walk Part 6: an OnCalcFields handler writes it) stops at the anchor
+  saying so, with the handler's guards verbatim, and a DERIVED section (grammar spec 8.5) offers each
+  source field the computation reads, with a REGENERATE command that traces it instead.
 #>
 [CmdletBinding()]
 param(
@@ -75,7 +79,9 @@ function Get-IndexStamp([string] $Db) {
   $(if ($r.Count -and "$($r[0].v)" -match '^\d+$') { [DateTimeOffset]::FromUnixTimeSeconds([long]$r[0].v).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm'Z'") } else { 'unstamped' })
 }
 $asOf = (@($DbPath, $ServerDbPath, $SqlDbPath) | ForEach-Object { Get-IndexStamp $_ }) -join '/'
-$regen = "New-DiagramArtifact.ps1 -Question round-trip -Target $Target -DbPath `"$DbPath`" -ServerDbPath `"$ServerDbPath`" -SqlDbPath `"$SqlDbPath`" -Depth $Depth"
+# the command that traces a target on these three indexes at this depth: the header's REGENERATE, and each DERIVED row's (8.5)
+function Get-RegenerateCommand([string] $For) { "New-DiagramArtifact.ps1 -Question round-trip -Target $For -DbPath `"$DbPath`" -ServerDbPath `"$ServerDbPath`" -SqlDbPath `"$SqlDbPath`" -Depth $Depth" }
+$regen = Get-RegenerateCommand $Target
 
 # ---- 1. the anchor -------------------------------------------------------------------
 $A = Resolve-TraceAnchor $Target $sqlSet $SourceOverride
@@ -83,15 +89,28 @@ if ($A.StaleFile) {
   throw "round-trip: $([IO.Path]::GetFileName($A.StaleFile)) differs from the indexed copy (sha256) -- refusing to follow the anchor chain through it. Reindex the project, then re-run."
 }
 $name = $(if ($A.TableColumn) { $A.TableColumn } else { $Target })
-# fix round 1 (I3): a trace that STOPS at its anchor reaches nothing, so its title claims no reach
-$title = $(if ($A.Stop) { "Why $Target cannot be traced" } else { "How $name reaches $Target and goes back" })
+# calc-field brief: a CALCULATED anchor (Trace.Walk Part 6) stops with its guards and offers its source fields
+$calc = $(if ($A.Calc -and $A.Calc.Kind -eq 'calculated') { New-CalcFieldItems $A.Calc ${function:Get-RegenerateCommand} } else { $null })
+# fix round 1 (I3): a trace that STOPS at its anchor reaches nothing, so its title claims no reach -- and a calculated
+# anchor says why in the title (8.2)
+$title = $(if ($calc) { "Why $Target cannot be traced -- it is calculated" } elseif ($A.Stop) { "Why $Target cannot be traced" } else { "How $name reaches $Target and goes back" })
 $T = New-Trace $name $title $Target "$cliName + $srvName + SQL" $asOf $regen 'client -> pipe -> server -> database'
 $secA = Add-TraceSection $T 'ANCHOR'
 foreach ($i in $A.Items) { [void]$secA.Items.Add($i) }
 $stopAnchor = $(if ($A.StopAnchor -and $A.StopAnchor -ne 'unknown:0') { $A.StopAnchor } elseif ($A.Items.Count) { $A.Items[-1].Anchor } else { 'index:0' })
-if ($A.Stop) {
+if ($calc) {
+  [void]$secA.Items.Add($calc.Stop)
+} elseif ($A.Stop) {
   # the resolver's reason is GENERATED text: made safe where the writer refuses, never truncated (T3-M2)
   [void]$secA.Items.Add((New-TraceStep 'stops' (ConvertTo-TraceStopText $A.Stop) $stopAnchor))
+}
+# DERIVED (8.5): only for a calculated anchor -- its lead-in note, then one numbered row per source field, each a
+# true anchored fact (counted in steps, never unresolved) carrying the command that traces that field instead
+$secDv = $null
+if ($calc) {
+  $secDv = Add-TraceSection $T 'DERIVED'
+  $secDv.Note = ConvertTo-TraceNoteText $calc.Note
+  foreach ($r in $calc.Rows) { [void]$secDv.Items.Add($r) }
 }
 
 $Ctx = @{ Table = $A.Table; Column = $A.Column; TableColumn = $A.TableColumn; DataSet = $A.DataSet; SqlSet = $sqlSet; SourceOverride = $SourceOverride
@@ -275,6 +294,11 @@ Write-Host ("  anchor={0}  steps={1}  conditions={2}  crossings={3}  unresolved=
   ReadSteps    = $read
   AlsoSteps    = $also
   Also         = @($secAl.Items | ForEach-Object { $_.Text })
+  # calc-field brief: the DERIVED section of a calculated anchor -- its lead-in note and each row as
+  # `<text> => <target>` (the target is '' for a value the walk cannot map)
+  DerivedNote  = $(if ($secDv) { $secDv.Note } else { '' })
+  Derived      = @($(if ($secDv) { $secDv.Items | ForEach-Object { $ri = $_; "$($ri.Text) => $((@($ri.Children | Where-Object { $_.Kind -eq 'facet' -and $_.Head -eq 'REGENERATE' } | ForEach-Object { if ($_.Text -match '-Target (\S+)') { $Matches[1] } }) -join ''))" } }))
+  DerivedCommands = @($(if ($secDv) { $secDv.Items | ForEach-Object { $_.Children | Where-Object { $_.Kind -eq 'facet' -and $_.Head -eq 'REGENERATE' } | ForEach-Object { $_.Text } } }))
   Sections     = (@($T.Sections | ForEach-Object { $_.Name }) -join ',')
   OnDbProof    = $proof
   ClickTargets = (Get-TraceAnchors $T)
