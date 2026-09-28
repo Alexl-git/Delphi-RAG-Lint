@@ -428,6 +428,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer): string; overload;
+      /// <summary>Adds every unit name indexed in ADb to ASeen (ListUnits' per-DB step).</summary>
+      /// <param name="ADb">One index path.</param>
+      /// <param name="ASeen">Receives the names; the caller owns it and sets its dedup rules.</param>
+      /// <param name="AError">Receives the failure text; '' on success.</param>
+      /// <returns>False when the engine could not answer from ADb.</returns>
+      function AddUnitsOfDb(const ADb: string; ASeen: TStringList; out AError: string): Boolean;
     public
       /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
       /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
@@ -609,8 +615,9 @@ type
       /// </remarks>
       function ListDescendantsOf(const AAncestor: string; const ADbs: TArray<string>; out ANames: TArray<string>; out AError: string): Boolean; overload;
 
-      /// <summary>List indexed project unit names (kind=unit), sorted. Backed by
-      /// `query find --no-docs --kind unit`. Returns False + AError on failure.</summary>
+      /// <summary>Every unit name (kind=unit) in the adapter's own DB set --
+      /// library and project alike -- sorted: ListUnits over DbList. Returns
+      /// False + AError on failure.</summary>
       /// <param name="ANames"><!-- drag-lint:auto type -->out TArray&lt;string&gt;</param>
       /// <param name="AError"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
@@ -627,6 +634,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListProjectUnits(out ANames: TArray<string>; out AError: string): Boolean;
+
+      /// <summary>List the unit names (kind=unit) indexed in exactly the DBs
+      /// given, sorted and de-duplicated case-insensitively. Backed by one
+      /// read-only `sql` query per DB (see AddUnitsOfDb for why not a listing
+      /// verb).</summary>
+      /// <param name="ADbs">The DB set to ask, independent of the adapter's own
+      /// set -- the unit picker asks the project DB and each library DB
+      /// separately so it can list them in separate columns.</param>
+      /// <param name="ANames">Receives the unit names; empty on failure.</param>
+      /// <param name="AError">Receives the failure text; '' on success.</param>
+      /// <returns>False as soon as one DB cannot be read; ANames is then empty.</returns>
+      function ListUnits(const ADbs: TArray<string>; out ANames: TArray<string>; out AError: string): Boolean;
 
       /// <summary>The distinct component TYPES placed on AUnit's form, read from the
       /// unit's companion .dfm (`object &lt;Name&gt;: &lt;TType&gt;` lines) -- the
@@ -650,10 +669,10 @@ type
       /// <para>Mutates: AError (out), ATypes (out)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveUnitFile"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListControlTypesInUnit(const AUnit: string; const AControlSet: TArray<string>; out ATypes: TArray<string>; out AError: string): Boolean;
@@ -1288,41 +1307,66 @@ begin
 end; // function
 
 function TEngineAdapter.ListProjectUnits(out ANames: TArray<string>; out AError: string): Boolean;
+begin
+  Result:= ListUnits(FDbList, ANames, AError);
+end;
+
+{ Every unit name in ONE index, added to ASeen. `sql` is used because no listing
+  verb answers this: `query find` demands a doc clause, and the `--no-docs` one
+  this used to pass is a FILTER -- it returned only the UNDOCUMENTED units
+  (measured 2026-09-24: 2,103 of library-Win64's 5,646; System.SysUtils and all
+  but 3 of 395 cx* units missing). The row cap defaults to 200, hence --limit. }
+function TEngineAdapter.AddUnitsOfDb(const ADb: string; ASeen: TStringList; out AError: string): Boolean;
+const
+  UNIT_SQL   = 'SELECT DISTINCT name FROM symbols WHERE kind=''unit''';
+  ROW_CAP    = 1000000;
+  TIMEOUT_MS = 120000 ;
 var
-  Output: string     ;
-  Code  : Integer    ;
-  SL    : TStringList;
-  Ln    : string     ;
-  Seen  : TStringList;
-  p     : Integer    ;
+  Output: string    ;
+  Code  : Integer   ;
+  Root  : TJSONValue;
+  Rows  : TJSONArray;
+  Row   : TJSONValue;
+begin
+  AError:= '';
+  Code:= RunCapture(Format('sql --query "%s" --db "%s" --json --limit %d --timeout-ms %d', [UNIT_SQL, ADb, ROW_CAP, TIMEOUT_MS]), Output);
+  Root:= nil;
+  if Code = 0 then
+    Root:= TJSONObject.ParseJSONValue(SliceJsonObject(Output));
+  try
+    if not (Root is TJSONObject) or not TJSONObject(Root).TryGetValue<TJSONArray>('rows', Rows) then
+    begin
+      AError:= Format('unit listing failed for %s (exit %d): %s', [ADb, Code, Trim(Output)]);
+      Exit(False);
+    end;
+    // `sql --json` rows are POSITIONAL arrays, one per row: [["Ap"], ["uMain"], ...].
+    for Row in Rows do
+      if (Row is TJSONArray) and (TJSONArray(Row).Count > 0) then
+        ASeen.Add(TJSONArray(Row).Items[0].Value);
+    Result:= True;
+  finally
+    Root.Free;
+  end; // try
+end; // function
+
+function TEngineAdapter.ListUnits(const ADbs: TArray<string>; out ANames: TArray<string>; out AError: string): Boolean;
+var
+  Seen: TStringList;
+  Db  : string     ;
 begin
   AError:= '';
   SetLength(ANames, 0);
-  // `query find --no-docs --kind unit` -> "UnitName  [unit]  file:line"
-  Code:= RunCapture(Format('query find --no-docs --kind unit%s', [DbArgs]), Output);
-  if Code = 2 then
-  begin
-    AError:= Format('query find (units) failed (exit %d)', [Code]);
-    Exit(False);
-  end;
-  SL  := TStringList.Create;
   Seen:= TStringList.Create;
   try
-    Seen.Sorted:= True; Seen.Duplicates:= dupIgnore; Seen.CaseSensitive:= False;
-    SL.Text:= Output;
-    for Ln in SL do
-    begin
-      p:= Pos('  [unit]', Ln);
-      if p <= 0 then
-        Continue;
-      var U: string:= Trim(Copy(Ln, 1, p - 1));
-      if U <> '' then
-        Seen.Add(U);
-    end;
+    Seen.CaseSensitive:= False;
+    Seen.Sorted       := True;
+    Seen.Duplicates   := dupIgnore;
+    for Db in ADbs do
+      if (Trim(Db) <> '') and not AddUnitsOfDb(Db, Seen, AError) then
+        Exit(False);
     ANames:= Seen.ToStringArray;
     Result:= True;
   finally
-    SL.Free;
     Seen.Free;
   end; // try
 end; // function

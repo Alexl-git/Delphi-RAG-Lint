@@ -28,6 +28,7 @@ uses
   , ConvRules.FormTypes in '..\ConvRules.FormTypes.pas'
   , ConvRules.RuleCatalog in '..\ConvRules.RuleCatalog.pas'
   , ConvRules.SkipList in '..\ConvRules.SkipList.pas'
+  , ConvRules.UnitPick in '..\ConvRules.UnitPick.pas'
   ;
 
 var
@@ -1307,6 +1308,142 @@ begin
   );
   Check('derive.add'   , Contains(S.Adds   , 'cxButtons'));
   Check('derive.remove', Contains(S.Removes, 'Abcbtn'   ));
+end; // procedure
+
+{ MissingUnitNodes: what auto-derive inserts is only what the book does not
+  already say, so a replacement made twice adds its unit rules once. }
+procedure TestMissingUnitNodes;
+var
+  Book: TRuleBook;
+  S   : TUnitSets;
+  M   : TUnitSets;
+begin
+  S:= Default(TUnitSets);
+  S.Adds   := ['CXEDIT', 'cxGrid'];
+  S.Removes:= ['ovcef', 'OvcBase'];
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString('#use cxEdit'#13#10 + '#unuse Ovcef'#13#10);
+    M:= MissingUnitNodes(Book, S);
+    Check('units.missing.adds.skip.present', string.Join(',', M.Adds) = 'cxGrid', string.Join(',', M.Adds));
+    Check('units.missing.removes.skip.present', string.Join(',', M.Removes) = 'OvcBase', string.Join(',', M.Removes));
+  finally
+    Book.Free;
+  end; // try
+  // Positive control: with nothing in the book, nothing is filtered out.
+  Book:= TRuleBook.Create;
+  try
+    M:= MissingUnitNodes(Book, S);
+    Check('units.missing.empty.book.keeps.all', (Length(M.Adds) = 2) and (Length(M.Removes) = 2), Format('%d/%d', [Length(M.Adds), Length(M.Removes)]));
+  finally
+    Book.Free;
+  end; // try
+end; // procedure
+
+{ ConvRules.UnitPick: the unit picker's two filters. The form unit is outside
+  this runner's closure, so every rule it applies is pinned here. }
+procedure TestUnitPickFilter;
+var
+  All: TArray<string>;
+  F  : TUnitFilter   ;
+  R  : TArray<string>;
+begin
+  All:= ['cxGrid', 'cxEdit', 'dxBar', 'System.SysUtils', 'Vcl.Forms', 'CXLIB'];
+  F:= Default(TUnitFilter);
+  R:= FilterUnits(All, F);
+  Check('unitpick.filter.empty.keeps.all', Length(R) = Length(All), IntToStr(Length(R)));
+
+  F.NameText:= 'GRID';
+  R:= FilterUnits(All, F);
+  Check('unitpick.filter.name.substring.nocase', string.Join(',', R) = 'cxGrid', string.Join(',', R));
+
+  F.NameText:= '';
+  F.Search  := 'cx*';
+  F.Mode    := usmWildcard;
+  R:= FilterUnits(All, F);
+  Check('unitpick.filter.wildcard', string.Join(',', R) = 'cxGrid,cxEdit,CXLIB', string.Join(',', R));
+
+  F.NameText:= 'edit';
+  R:= FilterUnits(All, F);
+  Check('unitpick.filter.name.and.search', string.Join(',', R) = 'cxEdit', string.Join(',', R));
+
+  // A mask is a whole-name match, like a file mask: 'Grid' alone matches nothing.
+  F.NameText:= '';
+  F.Search  := 'Grid';
+  R:= FilterUnits(All, F);
+  Check('unitpick.filter.wildcard.wholename', Length(R) = 0, string.Join(',', R));
+
+  F.Search:= '^(dx|vcl)';
+  F.Mode  := usmRegex;
+  R:= FilterUnits(All, F);
+  Check('unitpick.filter.regex.nocase', string.Join(',', R) = 'dxBar,Vcl.Forms', string.Join(',', R));
+  Check('unitpick.search.regex.valid', IsValidUnitSearch(F.Search, usmRegex));
+
+  F.Search:= '([';
+  Check('unitpick.search.regex.invalid', not IsValidUnitSearch(F.Search, usmRegex));
+  R:= FilterUnits(All, F);
+  Check('unitpick.filter.regex.invalid.ignored', Length(R) = Length(All), IntToStr(Length(R)));
+
+  F.Search:= '[cx';
+  F.Mode  := usmWildcard;
+  Check('unitpick.search.wildcard.invalid', not IsValidUnitSearch(F.Search, usmWildcard));
+  R:= FilterUnits(All, F);
+  Check('unitpick.filter.wildcard.invalid.ignored', Length(R) = Length(All), IntToStr(Length(R)));
+  Check('unitpick.search.empty.valid', IsValidUnitSearch('', usmRegex) and IsValidUnitSearch('', usmWildcard));
+end; // procedure
+
+{ ListUnits answers per DB SET, not per adapter: the picker's project column and
+  library column come from separate calls, so a project DB must not surface an
+  RTL unit and the library must. Hits the real exe + indexes; Skips without them. }
+procedure TestListUnitsPerDb;
+const
+  LibWin64  = 'C:\Projects\.drag-lint\library-Win64.sqlite';
+  ProjectDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite';
+var
+  Exe : string        ;
+  eng : TEngineAdapter;
+  Proj: TArray<string>;
+  Lib : TArray<string>;
+  Err : string        ;
+begin
+  Exe:= ResolveExe;
+  if (Exe = '') or not TFile.Exists(LibWin64) or not TFile.Exists(ProjectDb) then
+  begin
+    Skip('engine.listunits', 'exe, library-Win64 or CLIENT project db absent');
+    Exit;
+  end;
+  // The adapter's own DB set is deliberately BOTH, so a result that ignored the
+  // ADbs argument would show up as an RTL unit in the project list.
+  eng:= TEngineAdapter.Create(Exe, [LibWin64, ProjectDb]);
+  try
+    Check('engine.listunits.project.ok', eng.ListUnits([ProjectDb], Proj, Err), Err);
+    Check('engine.listunits.library.ok', eng.ListUnits([LibWin64], Lib, Err), Err);
+    Check('engine.listunits.project.has.own', Contains(Proj, 'uMain'), IntToStr(Length(Proj)));
+    Check('engine.listunits.project.no.rtl', not Contains(Proj, 'System.SysUtils'));
+    Check('engine.listunits.library.has.rtl', Contains(Lib, 'System.SysUtils'), IntToStr(Length(Lib)));
+  finally
+    eng.Free;
+  end; // try
+end; // procedure
+
+{ The picker's library column per platform, and the one-platform-only note. }
+procedure TestUnitPickPlatform;
+var
+  W32: TArray<string>;
+  W64: TArray<string>;
+begin
+  Check('unitpick.merge.sorted.unique', string.Join(',', MergeUnitLists(['b', 'A'], ['a', 'C'])) = 'A,b,C', string.Join(',', MergeUnitLists(['b', 'A'], ['a', 'C'])));
+
+  W32:= ['Only32', 'Shared'];
+  W64:= ['shared', 'Only64'];
+  Check('unitpick.lib.win32', string.Join(',', LibraryUnitsFor(cpWin32, W32, W64)) = 'Only32,Shared');
+  Check('unitpick.lib.win64', string.Join(',', LibraryUnitsFor(cpWin64, W32, W64)) = 'shared,Only64');
+  Check('unitpick.lib.both', string.Join(',', LibraryUnitsFor(cpBoth, W32, W64)) = 'Only32,Only64,Shared', string.Join(',', LibraryUnitsFor(cpBoth, W32, W64)));
+
+  Check('unitpick.gap.only32', PlatformGapNote('Only32', W32, W64) = 'Only32: not in the Win64 library', PlatformGapNote('Only32', W32, W64));
+  Check('unitpick.gap.only64.nocase', PlatformGapNote('only64', W32, W64) = 'only64: not in the Win32 library', PlatformGapNote('only64', W32, W64));
+  Check('unitpick.gap.shared.silent', PlatformGapNote('SHARED', W32, W64) = '');
+  Check('unitpick.gap.neither.silent', PlatformGapNote('MyProjectUnit', W32, W64) = '');
 end; // procedure
 
 { DeclaringUnitOf hits the real drag-lint exe + library DB, so it Skips (not
@@ -6071,6 +6208,10 @@ begin
     TestOutlineClassNames;
     TestScratchDbPath;
     TestOutlineClassesLive;
+    TestMissingUnitNodes;
+    TestUnitPickFilter;
+    TestUnitPickPlatform;
+    TestListUnitsPerDb;
 
     FreeAndNil(GParseBook);
 
