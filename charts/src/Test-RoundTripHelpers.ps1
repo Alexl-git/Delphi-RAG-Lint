@@ -314,9 +314,11 @@ $gl = @()
 foreach ($g in $inv.Guards) {
   $DbPath = Get-CloneDb $srcOf[$g.File].Db
   $c = Get-GuardCondition $srcOf[$g.File].P $exitOf[[int]$g.Line] $startOf[$g.File][[int]$g.Line] $null
-  $gl += "$($g.G):$($c.Form):$($c.Keyword):$($c.IfLine):$(if ($c.Condition.Contains($g.Word)) { 'ok' } else { "MISS[$($c.Condition)]" })"
+  # ruling T4-R2: the EXACT quoted condition, not a Contains($g.Word) -- a regression adding `not (..)` or
+  # trailing text must break the pin; the golden's word is still checked (`ok`/`MISS`) for the AC-7 matcher
+  $gl += "$($g.G):$($c.Form):$($c.Keyword):$($c.IfLine):$(if ($c.Condition.Contains($g.Word)) { 'ok' } else { 'MISS' }):$($c.Condition)"
 }
-$res.Guards = $gl -join ','
+$res.Guards = $gl -join ' | '
 $DbPath = Get-CloneDb $DbCli
 $c90 = Get-GuardCondition $vmPas 4004 3960 $null
 $res.Guard3990 = "$($c90.Form):$($c90.Keyword):$($c90.IfLine):$($c90.BlockStart)-$($c90.BlockEnd):$($c90.Condition)"
@@ -358,6 +360,25 @@ $sh = foreach ($q in @(@(6, 1), @(15, 9), @(21, 18), @(25, 23), @(30, 27), @(36,
   "$($o.Form):$($o.Keyword):$($o.Condition):$($o.IfLine):$($o.BlockStart)-$($o.BlockEnd):$($o.Reason)"
 }
 $res.ShimShapes = $sh -join '|'
+# Fix round 1 (review of Task 4): two Exits on the anchored line; a comment wrapping across the lines of
+# a condition (an apostrophe, and a `(*` form, in its tail); a conditional-compilation choice between the
+# guard and the Exit (one line and wrapped). Each is a NAMED unknown. The control: a comment CLOSED on its
+# own line inside a wrapped condition is still quoted as written.
+$fx = @(
+  'procedure F1;', 'begin', '  if A then begin X; Exit; end else begin Y; Exit; end;', 'end;',                                        # 1-4
+  'procedure F2;', 'begin', '  if A and { first line', "  don't } B then", '    Exit;', 'end;',                                   # 5-10
+  'procedure F3;', 'begin', '  if A and (* first', '  // *) B then', '    Exit;', 'end;',                                            # 11-16
+  'procedure F4;', 'begin', '  {$IFDEF X} if A then {$ELSE} if B then {$ENDIF} Exit;', 'end;',                                      # 17-20
+  'procedure F5;', 'begin', '{$IFDEF X}', '  if A then', '{$ELSE}', '  if B then', '{$ENDIF}', '    Exit;', 'end;',                  # 21-29
+  'procedure F6;', 'begin', '  if A and { c } B or', '     C then', '    Exit;', 'end;')                                                 # 30-35
+$fxPas = Join-Path $work 'shim-fix1.pas'
+[IO.File]::WriteAllText($fxPas, (($fx -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$fxR = [IO.File]::ReadAllLines($fxPas); $fxS = Get-StrippedSourceLines $fxPas
+$fr = foreach ($q in @(@(3, 1), @(9, 5), @(15, 11), @(19, 17), @(28, 21), @(34, 30))) {
+  $o = Get-GuardConditionFromLines $fxR $fxS $q[0] $q[1]
+  "$($o.Form):$($o.Keyword):$($o.Condition):$($o.Reason)"
+}
+$res.ShimFix1 = $fr -join '|'
 # AC-14: a manufactured stale view model (one trailing blank on the guard line) -> the wrapper REFUSES and names the file
 $stVm = Join-Path $work 'stale-vm'; New-Item -ItemType Directory -Force $stVm | Out-Null
 $l = [IO.File]::ReadAllLines($vmPas); $l[3949] = $l[3949] + ' '

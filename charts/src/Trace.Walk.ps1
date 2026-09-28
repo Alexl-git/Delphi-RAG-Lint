@@ -313,10 +313,18 @@ function Resolve-TraceAnchor([string] $Target, $SqlSet, [hashtable] $SourceOverr
 #   inline  the `if` and the Exit share a line    -> UNLESS "C" (then branch), WHEN "C" (else branch)
 #   block   the `if` is on an earlier line         -> the same keywords
 #   except  `try S .. except .. Exit`              -> UNLESS "S raises"; a body of several statements is
-#                                                     quoted "S1 .. Sn raises" -- which one raises is not in the source
+#                                                     quoted "S1 ... Sn raises" -- which one raises is not in the source
+#                                                     (' ... ', never ' .. ', Pascal's range operator -- ruling T4-R3)
 #   case    `case X of .. else .. Exit`            -> UNLESS "case X of else"
-#   unknown anything else (a loop, a case arm, no branch, a condition holding a double-quote) --
+#   unknown anything else: a loop, a case arm, no branch, a condition holding a double-quote, two
+#           Exits on the anchored line, a comment wrapping across the quoted lines, a conditional-
+#           compilation directive ({$IF.. {$ELSE {$ENDIF) between the guard and the Exit --
 #           Reason is plain GENERATED text the walker writes as a STOPS naming E1; never a guess, never a throw
+#
+# KNOWN LIMIT (ruling T4-R4): the INNERMOST guard only. `if A then begin if B then
+# Exit end` quotes B; that A also guards the Exit is not reported by the shim.
+# The walk sees A only if A has its own Exit. Engine ask E1 (branch and condition
+# facts from the syntax tree) retires this.
 #
 # Quoting (P16): a condition is the raw text between `if` and `then`. A wrapped one
 # is JOINED: each line's piece runs from its first to its last code or string
@@ -350,6 +358,12 @@ function Find-BlockEnd([string[]] $Stripped, [int] $OpenerLine, [int] $OpenerCol
 
 # The raw text from ($L1, $C1) to ($L2, $C2) (1-based lines, 0-based columns, end
 # exclusive), one piece per line, joined with one space -- see "Quoting" above.
+# The span always starts right after a CODE token (if / case / try / `;`), so the
+# raw text is read with a string/comment state from there; a `{` or `(*` comment
+# not closed on its own line would carry into the next piece, whose quote would
+# then be garbled -- $null instead (fix round 1), which the callers turn into a
+# named unknown. A raw character the stripped copy blanked that opens neither a
+# string nor a comment is the same situation read from the other side: $null.
 function Get-ShimSpanText([string[]] $Raw, [string[]] $Stripped, [int] $L1, [int] $C1, [int] $L2, [int] $C2) {
   $pieces = @()
   for ($l = $L1; $l -le $L2; $l++) {
@@ -367,9 +381,9 @@ function Get-ShimSpanText([string[]] $Raw, [string[]] $Stripped, [int] $L1, [int
         if ($first -lt 0) { $first = $i }; $last = $j; $i = $j + 1
       }
       elseif ($ch -eq '/' -and $i + 1 -lt $b -and $r[$i + 1] -eq '/') { break }
-      elseif ($ch -eq '{') { $j = $r.IndexOf('}', $i + 1); $i = $(if ($j -lt 0) { $b } else { $j + 1 }) }
-      elseif ($ch -eq '(' -and $i + 1 -lt $b -and $r[$i + 1] -eq '*') { $j = $r.IndexOf('*)', $i + 2); $i = $(if ($j -lt 0) { $b } else { $j + 2 }) }
-      else { $i++ }      # the tail of a comment opened on an earlier line
+      elseif ($ch -eq '{') { $j = $r.IndexOf('}', $i + 1); if ($j -lt 0) { return $null }; $i = $j + 1 }
+      elseif ($ch -eq '(' -and $i + 1 -lt $b -and $r[$i + 1] -eq '*') { $j = $r.IndexOf('*)', $i + 2); if ($j -lt 0) { return $null }; $i = $j + 2 }
+      else { return $null }
     }
     if ($first -ge 0) { $pieces += $r.Substring($first, $last - $first + 1) }
   }
@@ -430,11 +444,27 @@ function Get-ShimLevelTokens($X, [int] $From, [int] $To, [string[]] $Want) {
   , $hits
 }
 
+# Ruling T4-R1: a conditional-compilation directive between the guard's token and
+# the Exit (`{$IFDEF X} if A then {$ELSE} if B then {$ENDIF} Exit;`) means the
+# stripped copy shows ONE branch of a choice the compiler makes -- $true, and the
+# caller returns a named unknown rather than quote a condition that may not apply.
+function Test-ShimDirective($X, $Tok) {
+  $t = ''
+  for ($l = $Tok.L; $l -le $X.ExitLine; $l++) {
+    $r = $X.Raw[$l - 1]
+    $a = $(if ($l -eq $Tok.L) { $Tok.C } else { 0 }); $b = $(if ($l -eq $X.ExitLine) { [Math]::Min($X.ExitCol, $r.Length) } else { $r.Length })
+    if ($b -gt $a) { $t += $r.Substring($a, $b - $a) + "`n" }
+  }
+  $t -match '(?i)(\{|\(\*)\$(IF|ELSE|ENDIF)'
+}
+
 function New-ShimIfResult($X, [int] $ThenIdx, [string] $Keyword, [int[]] $Blk) {
   $i = Find-ShimIf $X $ThenIdx
   if ($i -lt 0) { return (New-ShimUnknown $X 'follows a then with no if before it') }
   $it = $X.Tok[$i]; $th = $X.Tok[$ThenIdx]
+  if (Test-ShimDirective $X $it) { return (New-ShimUnknown $X 'sits under a conditional-compilation directive') }
   $cond = Get-ShimSpanText $X.Raw $X.Stripped $it.L $it.E $th.L $th.C
+  if ($null -eq $cond) { return (New-ShimUnknown $X 'has a condition that wraps a comment across lines') }
   New-ShimResult $X $(if ($it.L -eq $X.ExitLine) { 'inline' } else { 'block' }) $Keyword $cond $it.L $Blk[0] $Blk[1]
 }
 
@@ -442,23 +472,29 @@ function New-ShimCaseResult($X, [int] $CaseIdx, [int] $ElseIdx) {
   $ca = $X.Tok[$CaseIdx]
   $of = @(for ($q = $CaseIdx + 1; $q -lt $X.Tok.Count; $q++) { if ($X.Tok[$q].T -eq 'of') { $X.Tok[$q]; break } })
   if (-not $of.Count) { return (New-ShimUnknown $X 'sits in a case with no of') }
-  New-ShimResult $X 'case' 'UNLESS' ((Get-ShimSpanText $X.Raw $X.Stripped $ca.L $ca.C $of[0].L $of[0].E) + ' else') $ca.L $X.Tok[$ElseIdx].L (Find-BlockEnd $X.Stripped $ca.L $ca.C)
+  if (Test-ShimDirective $X $ca) { return (New-ShimUnknown $X 'sits under a conditional-compilation directive') }
+  $sel = Get-ShimSpanText $X.Raw $X.Stripped $ca.L $ca.C $of[0].L $of[0].E
+  if ($null -eq $sel) { return (New-ShimUnknown $X 'has a condition that wraps a comment across lines') }
+  New-ShimResult $X 'case' 'UNLESS' "$sel else" $ca.L $X.Tok[$ElseIdx].L (Find-BlockEnd $X.Stripped $ca.L $ca.C)
 }
 
 # The Exit sits in the handler of the try at token $TryIdx (its `except` at $ExIdx):
 # the protected statements are the depth-0 `;`-separated spans of the try body.
 function New-ShimExceptResult($X, [int] $TryIdx, [int] $ExIdx) {
   $tr = $X.Tok[$TryIdx]; $ex = $X.Tok[$ExIdx]
+  if (Test-ShimDirective $X $tr) { return (New-ShimUnknown $X 'sits under a conditional-compilation directive') }
   $stm = @(); $sl = $tr.L; $sc = $tr.E
   $semis = Get-ShimLevelTokens $X $TryIdx $ExIdx @(';')
   foreach ($q in (@($semis) + $ExIdx)) {
     $e = $X.Tok[$q]
     $txt = Get-ShimSpanText $X.Raw $X.Stripped $sl $sc $e.L $e.C
+    if ($null -eq $txt) { return (New-ShimUnknown $X 'has a try body that wraps a comment across lines') }
     if ($txt) { $stm += $txt }
     $sl = $e.L; $sc = $e.E
   }
   if (-not $stm.Count) { return (New-ShimUnknown $X 'sits in the handler of an empty try') }
-  $s = $(if ($stm.Count -eq 1) { $stm[0] } else { "$($stm[0]) .. $($stm[-1])" })
+  # ruling T4-R3: ' ... ', not ' .. ' (Pascal's range operator)
+  $s = $(if ($stm.Count -eq 1) { $stm[0] } else { "$($stm[0]) ... $($stm[-1])" })
   New-ShimResult $X 'except' 'UNLESS' "$s raises" $ex.L $ex.L (Find-BlockEnd $X.Stripped $tr.L $tr.C)
 }
 
@@ -525,11 +561,15 @@ function Resolve-ShimEnclosing($X, [int] $P) {
 }
 
 function Get-GuardConditionFromLines([string[]] $Raw, [string[]] $Stripped, [int] $ExitLine, [int] $RoutineStart) {
-  $X = [pscustomobject]@{ Raw = $Raw; Stripped = $Stripped; ExitLine = $ExitLine; ExitArg = ''; Tok = $null }
+  $X = [pscustomobject]@{ Raw = $Raw; Stripped = $Stripped; ExitLine = $ExitLine; ExitCol = 0; ExitArg = ''; Tok = $null }
   if ($ExitLine -lt 1 -or $ExitLine -gt $Stripped.Count) { return (New-ShimUnknown $X 'is outside the file') }
   $s = $Stripped[$ExitLine - 1]
-  $em = [regex]::Match($s, '(?i)\bExit\b')
-  if (-not $em.Success) { return (New-ShimUnknown $X 'is not an Exit in this copy of the file') }
+  $ems = [regex]::Matches($s, '(?i)\bExit\b')
+  if (-not $ems.Count) { return (New-ShimUnknown $X 'is not an Exit in this copy of the file') }
+  # fix round 1: the index anchors a LINE; with two Exits on it (`if A then begin ..Exit.. end else begin ..Exit.. end`)
+  # the shim cannot tell which one it was asked about -- named, never the first one's branch by default
+  if ($ems.Count -gt 1) { return (New-ShimUnknown $X 'shares its line with another Exit') }
+  $em = $ems[0]; $X.ExitCol = $em.Index
   # Exit(<arg>): the raw text inside the balanced parentheses
   $p = $em.Index + $em.Length
   while ($p -lt $s.Length -and [char]::IsWhiteSpace($s[$p])) { $p++ }

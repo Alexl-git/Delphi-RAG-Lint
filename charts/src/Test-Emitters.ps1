@@ -2294,8 +2294,15 @@ Step 'E-RT0' {
   Chk 'A-RT3-COLNOTE'    $rt0.ColumnNote 'column NAME of OPERAT: (certain) a column of the newest of 2 declarat...'
   # Review Focus 5: the stale file named is the FORM unit
   Chk 'A-RT3-STALE-FORM' $rt0.Anchor5Stale 'Blueprint4.pas:'
-  # Task 4: the 12 golden guards quoted verbatim (form:keyword:if-line:ok); no negation anywhere
-  Chk 'A-RT4-GUARDS'    $rt0.Guards '1:inline:UNLESS:3950:ok,2:inline:UNLESS:3973:ok,3:inline:UNLESS:3974:ok,4:block:UNLESS:411:ok,5:block:UNLESS:421:ok,6:block:UNLESS:431:ok,7:except:UNLESS:446:ok,8:block:UNLESS:196:ok,9:inline:UNLESS:1133:ok,10:block:UNLESS:525:ok,11:block:UNLESS:549:ok,12:block:UNLESS:1137:ok'
+  # Task 4: the 12 golden guards quoted verbatim (form:keyword:if-line:ok:<the EXACT condition> -- ruling T4-R2);
+  # no negation anywhere
+  Chk 'A-RT4-GUARDS'    $rt0.Guards ("1:inline:UNLESS:3950:ok:FSuppressEvents | 2:inline:UNLESS:3973:ok:FMTOperation.ChangeCount = 0 | " +
+                                     '3:inline:UNLESS:3974:ok:not (Assigned(FConn) and FConn.Connected) | ' + "4:block:UNLESS:411:ok:TableName = '' | " +
+                                     '5:block:UNLESS:421:ok:Length(StreamBytes) = 0 | 6:block:UNLESS:431:ok:not GDatasetsDef.GetTable(TableName, Def) | ' +
+                                     '7:except:UNLESS:446:ok:Mem.LoadFromStream(MS, sfBinary) raises | ' + "8:block:UNLESS:196:ok:SQL = '' | " +
+                                     '9:inline:UNLESS:1133:ok:not (Assigned(FConn) and FConn.Connected) | 10:block:UNLESS:525:ok:not GDatasetsDef.GetTable(ATableName, Def) | ' +
+                                     '11:block:UNLESS:549:ok:not TryBuildSafeWhere(WhereStr, Def, WhereSql, WhereVals) | ' +
+                                     '12:block:UNLESS:1137:ok:(GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspData)')
   # the response guard: block 3991-4005 holds CancelUpdates (AC-8 is proven on the trace in Task 5). The
   # `else FLastPersistError:=` at :3993 is the NESTED if's else, not this block's -- still UNLESS
   Chk 'A-RT4-RESPONSE'  $rt0.Guard3990 'block:UNLESS:3990:3991-4005:(GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspOK)'
@@ -2303,8 +2310,9 @@ Step 'E-RT0' {
   # BlockStart is the `except` line; BlockEnd the `end` closing the try statement (:444), per Find-BlockEnd
   Chk 'A-RT4-EXCEPT'    $rt0.Guard446 'except:Mem.LoadFromStream(MS, sfBinary) raises:446-453'
   Chk 'A-RT4-CASE'      $rt0.Guard193 'case:UNLESS'
-  # T1-C1: the third HandleTableLoad Exit, in the handler of the try at :591 (eleven statements, first .. last)
-  Chk 'A-RT4-EXCEPT612' $rt0.Guard612 'except:UNLESS:605:605-614:T0Open:= GetTickCount64 .. AThreadStorage.Transaction.Commit raises'
+  # T1-C1: the third HandleTableLoad Exit, in the handler of the try at :591 (eleven statements, first ... last;
+  # ' ... ' not ' .. ', which reads as Pascal's range operator -- ruling T4-R3)
+  Chk 'A-RT4-EXCEPT612' $rt0.Guard612 'except:UNLESS:605:605-614:T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises'
   Chk 'A-RT4-WRAP'      $rt0.ShimSynthetic 'block:UNLESS:(A = 1) or (B = 2):3|inline:WHEN:C|except:UNLESS:Load(S) raises:11'
   # Review Focus 3 on a stripped file: a wrapped line's trailing comment is dropped and the string's two spaces kept;
   # `end else begin` is WHEN; an Exit on the line after `then`; then the named results (Reason) for a `"`, a loop,
@@ -2314,6 +2322,16 @@ Step 'E-RT0' {
                                          'unknown:::0:0-0:the Exit at :30 sits under a while statement, a shape the source shim does not read|' +
                                          'unknown:::0:0-0:the Exit at :36 sits in a case arm, a shape the source shim does not read|' +
                                          'unknown:::0:0-0:the Exit at :42 is not inside a branch, a shape the source shim does not read')
+  # fix round 1: two Exits on the anchored line; a comment wrapping across a condition's lines (`{` with an
+  # apostrophe in its tail, `(*` with `//` in its tail); a {$IFDEF}/{$ELSE}/{$ENDIF} choice between the guard and
+  # the Exit (one line, wrapped) -- each a NAMED unknown (pre-fix: UNLESS A, "A and 't } B ", "A and", B, B).
+  # Control: a comment closed on its own line inside a wrapped condition is quoted as written
+  Chk 'A-RT4-FIX1'      $rt0.ShimFix1 ('unknown:::the Exit at :3 shares its line with another Exit, a shape the source shim does not read|' +
+                                       'unknown:::the Exit at :9 has a condition that wraps a comment across lines, a shape the source shim does not read|' +
+                                       'unknown:::the Exit at :15 has a condition that wraps a comment across lines, a shape the source shim does not read|' +
+                                       'unknown:::the Exit at :19 sits under a conditional-compilation directive, a shape the source shim does not read|' +
+                                       'unknown:::the Exit at :28 sits under a conditional-compilation directive, a shape the source shim does not read|' +
+                                       'block:UNLESS:A and { c } B or C:')
   Chk 'A-RT4-STALE'     $rt0.ShimStale 'refused-named'
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
