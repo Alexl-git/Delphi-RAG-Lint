@@ -743,7 +743,9 @@ begin
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);');
   Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
   Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
+  Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
+  Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
   Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
   Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
@@ -7370,9 +7372,53 @@ begin
     Exit(0);
   end; // if
 
-  if AArgs.SubCommand <> '' then begin Writeln('ERROR: unknown query subcommand: ', AArgs.SubCommand); Exit(2); end;
+  if AArgs.SubCommand <> '' then
+  begin
+    Writeln('ERROR: unknown query subcommand: ', AArgs.SubCommand);
+    Exit(2);
+  end;
 
-  if (AArgs.QName = '') and (AArgs.Name = '') then begin Writeln('ERROR: query requires --name or --qname'); Exit (2 ); end;
+  { `query --kind <k> --all` (2026-09-28, INBOX-2026-09-24-converter-to-engine-
+    list-units-and-object-leak #1): EVERY symbol of one kind -- no name, no doc
+    clause, no row cap. The converter's unit picker had to use
+    `query find --no-docs --kind unit`, which is a FILTER (undocumented only) and
+    listed 2,103 of 5,646 library units, then `sql` with its 200-row default.
+    `--all` is the existing global flag (IndexAll); here it means "all of this
+    kind". FindSymbolsByKind returns nothing for a limit below 1, so MaxInt is
+    the uncapped listing. }
+  if AArgs.IndexAll and (AArgs.QName = '') and (AArgs.Name = '') then
+  begin
+    if AArgs.Kind = '' then
+    begin
+      Writeln('ERROR: query --all requires --kind <kind> (e.g. --kind unit)');
+      Exit(2);
+    end;
+    for DbPath in PathsToScan do
+    begin
+      var RoOk: Boolean;
+      Store:= OpenReadOnlyStore(DbPath, RoOk);
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
+      for S in Store.FindSymbolsByKind(AArgs.Kind, AArgs.PublicOnly, MaxInt) do
+      begin
+        SetLength(AllSymbols, Length(AllSymbols) + 1);
+        AllSymbols[High(AllSymbols)]:= S;
+        SetLength(AllPaths, Length(AllPaths) + 1);
+        AllPaths[High(AllPaths)]:= Store.GetFilePath(S.FileId);
+      end;
+    end;
+    PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths);
+    if Length(AllSymbols) = 0 then Exit(1) else Exit(0);
+  end;
+
+  if (AArgs.QName = '') and (AArgs.Name = '') then
+  begin
+    Writeln('ERROR: query requires --name or --qname');
+    Exit(2);
+  end;
 
   for DbPath in PathsToScan do
   begin

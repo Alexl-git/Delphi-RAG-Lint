@@ -259,5 +259,5 @@ drag-lint's own code.
 
 ---
 
-*Counts verified against v1.17.0-alpha (extractor 1.18.0-alpha, resolver 1.6.0-alpha, schema 23). `drag-lint rules` is always the
+*Counts verified against v1.19.1-alpha (extractor 1.20.0-alpha, resolver 1.10.0-alpha, schema 23) on 2026-09-28. `drag-lint rules` is always the
 authority -- this page can lag the catalogue.*

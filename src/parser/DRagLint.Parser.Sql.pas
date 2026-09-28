@@ -387,7 +387,12 @@ var
       TypeText:= Trim(Copy(Trimmed, J + 1, MaxInt));
     end;
     if Name = '' then Exit;
-    ComputeLineCol(AText, AItemStart, ColLine, ColCol);
+    { Position the column on its OWN first character, not on AItemStart: the
+      item starts just past the comma, so for a column written on its own line
+      AItemStart is the newline BEFORE it and the column was recorded one line
+      early (2026-09-28, INBOX-sql-column-start-line-one-early). The leading
+      blanks Trim removed are exactly what to skip. }
+    ComputeLineCol(AText, AItemStart + (Length(Item) - Length(TrimLeft(Item))), ColLine, ColCol);
     AState.AddSymbol(skSqlColumn, Name, ATableName + '.' + Name, ATableIdx, ColLine, ColCol, ColLine, ColCol + Length(Name), TypeText);
   end; // procedure
 

@@ -27,6 +27,11 @@ what the resolver bound, grouped by target:
 | a property or field | every bound access (`member_accesses`) | `[certain, read]` / `[certain, write]` |
 | an **enum value** | every bound READ, bare (`cmdDelta`) or qualified (`TCommandID.cmdDelta`) -- one row per site | `[certain, read]` |
 
+A write through `Self` (`Self.FFlag := False`) is listed as `[certain, write]` on
+an index parsed with extractor 1.20.0-alpha or later -- earlier it was indexed as
+a READ -- and it always names the field, even when a local of the same name is
+in scope.
+
 The enum-value rows need an index resolved at resolver 1.6.0-alpha or later;
 an older index answers 0 until `index --all --resolve-only` has run. A read the
 resolver DECLINED (two visible candidates, or a same-named local, constant or

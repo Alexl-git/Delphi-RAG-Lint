@@ -32,6 +32,7 @@ The full, verbatim output for all three report levels is in
 
 ### `cycles --edges` -- the cycle and its edges
 
+<!-- dl:verbatim-cycles --edges -->
 ```
 1 circular unit group(s) found:
   [2 units] customers <-> orders   (has interface coupling -- widest recompile blast radius)
@@ -41,6 +42,7 @@ The full, verbatim output for all three report levels is in
 
 ### `cycles --causes` -- the exact symbol that forces the cycle
 
+<!-- dl:verbatim-cycles --causes -->
 ```
 1 circular unit group(s) found:
   [2 units] customers <-> orders   (has interface coupling -- widest recompile blast radius)
@@ -52,6 +54,7 @@ The full, verbatim output for all three report levels is in
 
 An excerpt (the full output is in [REPORT.md](REPORT.md)):
 
+<!-- dl:excerpt-cycles --plan -->
 ```
 ### Step 1: what moves where
 1. `TOrder` -- **class with methods**, declared at `Orders.pas` lines 6-19; method bodies at `Orders.pas` lines 30-35, 37-44.

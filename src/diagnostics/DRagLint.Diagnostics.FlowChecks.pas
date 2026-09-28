@@ -691,21 +691,22 @@ end;
 /// TComponent descendant constructed with a non-nil AOwner argument is
 /// inserted into that owner's Components list and freed automatically when
 /// the owner is destroyed, so the local holding the reference is NOT a leak
-/// candidate even if never separately stored or freed. Requires a store
-/// (ancestry needs the indexed type hierarchy) -- on the bare no-store lint
-/// path this always returns False, leaving the current (conservative) leak
-/// check in effect. Also False for Create(nil) (explicit nil owner: no
-/// owner, so no transfer -- genuinely leak-checked) and for any type that
-/// does not resolve as a TComponent descendant (e.g. TStringList.Create,
-/// which has no AOwner parameter at all).</summary>
+/// candidate even if never separately stored or freed. With a store, the type
+/// must resolve as a TComponent descendant (project index, then library
+/// index). WITHOUT a store the type cannot be proven, so only the owner idiom
+/// counts: a first argument of exactly Self, Application, Owner or AOwner.
+/// Always False for Create(nil) (explicit nil owner: no owner, so no transfer
+/// -- genuinely leak-checked), for a parameterless Create, and store-free for
+/// any other argument (e.g. Create(Holder)).</summary>
 /// <param name="AConstructorNode">The constructor RHS expr node (exprCall or
 /// exprDot), as passed to ExprIsConstructor.</param>
 /// <param name="ASrc">The routine's source bytes (for node-text extraction).</param>
 /// <param name="AStore">Optional symbol store; nil disables this check.</param>
 /// <param name="AFileId">File id within AStore (0 when no store).</param>
-/// <returns>True only when a store is present, the constructed type is a
-/// TComponent descendant, and the first constructor argument is present and
-/// is not the literal "nil".</returns>
+/// <returns>With a store: True when the constructed type is a TComponent
+/// descendant and the first constructor argument is present and not the literal
+/// "nil". Without a store: True only when the first argument is Self,
+/// Application, Owner or AOwner.</returns>
 /// <summary>True when ATypeText names a type that CANNOT leak, so a
 /// "created but never freed" finding about it would be unfalsifiable: an
 /// INTERFACE (reference-counted by the runtime -- freeing it manually is the
@@ -846,13 +847,31 @@ function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const AS
 var
   Ent, TypeNode, ArgsN, FirstArg: TTSNode;
   TypeName: string;
+  OwnerArg: string;
 begin
   Result := False;
-  if (AStore = nil) or AConstructorNode.IsNull then Exit;
+  if AConstructorNode.IsNull then Exit;
   { Only the exprCall shape carries an args list (Create(Self) / Create(nil) /
     Create()); the bare exprDot shape (parameterless `TFoo.Create`) has no
     argument to inspect, so it can never be an owner-transfer. }
   if AConstructorNode.NodeType <> 'exprCall' then Exit;
+  { STORE-FREE (2026-09-28, converter INBOX 2026-09-24 #2): nothing can prove the
+    type is a TComponent, so the ARGUMENT decides, and only the component-owner
+    idiom counts -- a first argument of exactly Self / Application / Owner /
+    AOwner. `BtnOpen := TButton.Create(Self)` was reported as a leak on every
+    store-free lint while the same file was clean with --db. Create(nil), a
+    Create(<other variable>) and a parameterless Create stay leak-checked. A wrong
+    guess here can only SUPPRESS a finding -- a missed leak, never a false one,
+    the direction this rule is tuned for (see DescendsViaSplitChain). }
+  if AStore = nil then
+  begin
+    ArgsN := AConstructorNode.ChildByField('args');
+    if ArgsN.IsNull or (ArgsN.NamedChildCount = 0) then Exit;
+    FirstArg := ArgsN.NamedChild(0);
+    if FirstArg.IsNull then Exit;
+    OwnerArg := Trim(NodeText(FirstArg, ASrc)); { NodeText lowercases }
+    Exit((OwnerArg = 'self') or (OwnerArg = 'application') or (OwnerArg = 'owner') or (OwnerArg = 'aowner'));
+  end;
   Ent := AConstructorNode.ChildByField('entity');
   if Ent.IsNull or (Ent.NodeType <> 'exprDot') then Exit;
   { The constructed type is the lhs of the `TType.Create` dot-expr; take the

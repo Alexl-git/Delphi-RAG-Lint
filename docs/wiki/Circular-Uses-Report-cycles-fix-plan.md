@@ -35,6 +35,18 @@ Part A prints it as the same kind of steps. When no edge can be cut mechanically
 (it carries a routine, or a class whose bodies use the cycle), the playbook says
 so and gives the standard remedy instead of guessing.
 
+## Worked example, and whether a model can follow it
+
+[Circular Dependency Report](Circular-Dependency-Report) walks through a real
+four-unit cycle. The full, unabridged playbook for it is
+`circular-demo/CYCLE-REPORT.md` in the repository -- that is the file to hand to
+a model. Its followability is measured: Haiku at its lowest effort, given only
+that report and a fresh copy of the project ("Break the cycle."), produced a
+tree that compiled with 0 errors, printed the predicted `cycles` output, and
+touched only the named files (4 of 4 criteria; re-run on engine 1.19.0-alpha).
+The examples are regenerated from the engine and checked for drift by the test
+battery, so they always show what the current `--plan` prints.
+
 ## Reaching it in the IDE
 drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...
 

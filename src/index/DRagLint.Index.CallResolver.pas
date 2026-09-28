@@ -1409,6 +1409,9 @@ type
     /// name of an enclosing function are result assignments with no symbol row
     /// to bind. Delphi settles a clash between two used units by uses-clause
     /// ORDER, which this engine does not model, so that is 'ambiguous'.
+    /// An explicit `Self.X := v` (resolver 1.10.0-alpha) skips the with scope and
+    /// the lexical scopes: it binds X on the enclosing class chain or declines
+    /// 'not-found', exactly as ResolveBareMemberRead treats a `Self.X` read.
     /// Counted into WriteStats, one outcome per call.
     /// </remarks>
     function ResolveWriteRef(const ARef: TReference; out AReason: string): Int64;
@@ -4938,17 +4941,20 @@ end;
 
 function TCallResolver.ResolveWriteRef(const ARef: TReference; out AReason: string): Int64;
 var
-  Lines: TStringList    ;
-  Scope: TWriteScope    ;
-  WType: Int64          ;
-  WKind: TWithMemberKind;
-  Verd : TWithVerdict   ;
+  Lines  : TStringList    ;
+  Scope  : TWriteScope    ;
+  WType  : Int64          ;
+  WKind  : TWithMemberKind;
+  Verd   : TWithVerdict   ;
+  ClassId: Int64          ;
+  ViaSelf: Boolean        ;
 begin
   Result := 0;
   AReason:= '';
   Verd   := wvNone;
   WType  := 0;
   WKind  := wmNone;
+  ViaSelf:= False;
   Lines  := LinesOf(ARef.FileId);
   Scope  := WriteScopeOf(ARef.EnclosingSymbolId);
   { The `with` scope reads the file's text, so a line that no longer matches
@@ -4958,6 +4964,21 @@ begin
     AReason:= 'unreadable'
   else if SameText(ARef.NameText, 'Result') then
     AReason:= 'result'
+  else if SameText(ExtractReceiverExpr(Lines[ARef.StartLine - 1], ARef.StartCol), 'Self') then
+  begin
+    { `Self.X := v` (2026-09-28): the explicit qualifier names the member of the
+      enclosing class whatever a local or a `with` target declares -- the rule
+      ResolveBareMemberRead already applies to `Self.X` reads. Neither the with
+      scope nor the lexical rungs run for it. }
+    ViaSelf:= True;
+    EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
+    Result:= LookupMemberOnType(ClassId, ARef.NameText).Id;
+    if Result <= 0 then
+    begin
+      Result := 0;
+      AReason:= 'not-found';
+    end;
+  end
   else
     { Merge of D13 with D14: the with scope at THIS position, nearer than every
       scope below, replaces the pre-merge "any `with` above the site in the
@@ -4975,7 +4996,7 @@ begin
       AReason:= (if WKind = wmRoutine then 'routine' else 'with-scope');
     end;
   end
-  else if AReason = '' then
+  else if (AReason = '') and not ViaSelf then
   begin
     Result:= ScopeWriteTarget(Scope, ARef.NameText, AReason);
     { Nothing nearer declares the name: the unit, then the units it uses. }

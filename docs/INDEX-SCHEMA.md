@@ -55,6 +55,15 @@ Schema history, one line per step:
   pre-v23 row still carries the list in its name until the next re-parse. A
   consumer that matched `name LIKE '%<%'` finds nothing on a v23 index; read
   `generic_params` instead. **This is the current version.**
+- 2026-09-28 (no schema step; extractor 1.20.0-alpha + resolver 1.10.0-alpha, one
+  re-parse): **`Self.X := v` is a `write` ref** on `X` (it was a `read`), next to the
+  `read` ref for `Self` itself; `Result := Self.X` stays a read, and `Self.X[i] := v`
+  keeps the ref kinds the bare `X[i] := v` form gets. The resolver binds an explicit
+  `Self.X` write on the enclosing class chain -- never on a same-named local or a
+  `with` target -- so `find-callers --resolved` reports it with `mode=write`.
+  **`sql_column` rows sit on the column's OWN identifier**: a column written on its
+  own line used to be recorded one line early (on the newline after the previous
+  comma). An index parsed before 1.20.0-alpha keeps the old rows until its re-parse.
 - 2026-09-23 (no schema step; resolver 1.6.0-alpha): `refs.symbol_id` is now also
   set for enum-value reads -- a bare `read` ref naming an enum value, and a
   `member-access` ref qualified by the enum type or its unit. No new table, no

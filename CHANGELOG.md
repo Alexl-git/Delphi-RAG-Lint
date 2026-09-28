@@ -3,6 +3,73 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.19.1-alpha -- 2026-09-28
+
+PATCH: two converter asks, the circular-dependency examples made trustworthy, and two tests that pinned
+the old behaviour. Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha, resolver 1.10.0-alpha and schema
+v23 are unchanged -- no index needs a re-parse or a re-resolve. No new rules (188).
+
+### Added
+
+- **`query --kind <k> --all` lists EVERY symbol of one kind** -- no name, no doc clause, no row cap
+  (converter INBOX 2026-09-24 #1). The convrules-editor unit picker needed "every unit in DB X" and used
+  `query find --no-docs --kind unit`, which is a FILTER (undocumented symbols only): it listed 2,103 of 5,646
+  library units. `--help`, README and AI-USAGE now also say, beside `query find`, that `--no-docs` is a
+  filter. `--all` is the existing global flag. Guard: `tests\autotest\run_query_list_kind.ps1` (250 units,
+  one documented -- more than `sql`'s 200-row default, and not the `--no-docs` filter).
+- **`tests\autotest\run_cycle_examples_fresh.ps1`** -- every circular-dependency example is regenerated from
+  and checked against the current engine: `circular-demo\CYCLE-REPORT.md` and
+  `docs\examples\circular-uses-demo\REPORT.md` block-for-block (`dl:verbatim-cycles` markers), the README,
+  wiki and example-README excerpts line-for-line (`dl:excerpt-cycles`). `-Update` rewrites the verbatim
+  blocks. Paths are shown relative to the directory each doc's commands run from.
+
+### Fixed
+
+- **`object-leak` no longer reports `TButton.Create(Self)` on a store-free lint** (converter INBOX
+  2026-09-24 #2). Without a store nothing can prove the type is a `TComponent`, so the ownership check
+  always said "no transfer"; `ConvRules.RuleChooser.pas` gave 3 findings without `--db` and 0 with it. Now,
+  store-free, a first constructor argument of exactly `Self` / `Application` / `Owner` / `AOwner` is the
+  owner idiom and transfers ownership. `Create(nil)`, `Create(<other variable>)` and a parameterless
+  `Create` stay leak-checked; with a store the precise `TComponent` check is unchanged. Guard:
+  `tests\autotest\run_object_leak_owner_arg_no_store.ps1` (4 suppressed, 3 still reported).
+- **The circular-dependency examples were stale.** `circular-demo\CYCLE-REPORT.md` -- the "full report" the
+  wiki and README link to, and the file to hand to a model -- dated from 2026-08-17, before the playbook
+  rewrite (`70e41bed`); it was the report shape Haiku FAILED on. The README even said so. The uses-demo
+  `REPORT.md` lacked the CRLF instruction added by `f144a55c`. Both are regenerated; the README and wiki
+  excerpts now quote only verbatim engine lines. Haiku re-ran the followability test against engine
+  1.19.0-alpha with the regenerated report: PASSED 4/4 again (0 errors, identical program output, the
+  predicted `cycles` output byte-for-byte, only the named files touched).
+- **Two tests pinned the old behaviour.** `run_self_field_refs.ps1` required `Self.client :=` to be a READ;
+  it now requires both use sites with their true kinds (one write, one read). `run_index_never_downgrades_
+  resolver.ps1`'s lexical trap could not be built for a two-digit minor (resolver 1.10.0-alpha); it now
+  uses the mirror trap (numerically older, lexically newer -- must be re-derived, not refused) when the
+  first cannot exist.
+
+## v1.19.0-alpha -- 2026-09-28
+
+MINOR: extractor batch (owner-scheduled). `DRAGLINT_EXTRACTOR_VERSION` 1.19.0-alpha -> **1.20.0-alpha**
+(every index re-parses) and `DRAGLINT_RESOLVER_VERSION` 1.9.0-alpha -> **1.10.0-alpha** (rides the same
+re-parse). Schema v23 unchanged. No new rules (188).
+
+### Fixed
+
+- **`Self.FField := X` is indexed as a WRITE** (was a READ). The extractor's ref-gap D branch emitted the
+  member of every `Self.X` as `read`, whichever side of `:=` it sat on, and the `assignment` case only
+  emitted `write` for a bare-identifier left side -- so `find-callers --resolved` listed a writer as a
+  reader and charts' who-writes under-reported. The `assignment` case now emits the `Self` read and the
+  member WRITE itself and does not walk that left side again. `Result := Self.FFlag` stays a read;
+  `Self.FItems[0] := v` keeps whatever the bare `FItems[0] := v` form gets.
+- **An explicit `Self.X` write binds the MEMBER, not a same-named local** (resolver). `ResolveWriteRef`
+  had no receiver handling, so `Self.FFlag := FFlag` inside a routine with a local `FFlag` bound the
+  local. It now binds on the enclosing class chain and skips the with and lexical rungs -- the rule
+  `ResolveBareMemberRead` already applied to `Self.X` reads. Guard:
+  `tests\callresolve\run_self_qualified_write.ps1` (every "is a write" check has a "still a read" twin).
+- **A `sql_column` symbol sits on its own identifier.** `ParseColumnList` positioned a column on the
+  character just past the preceding comma -- the newline before a column written on its own line -- so
+  every such column was recorded ONE LINE EARLY (MS1.SQL `FOLDERCOUNT."TABLE"` at 3847 for 3848). A
+  column on the `CREATE` line was already right and is the guard's control. Guard:
+  `tests\autotest\run_sql_column_position.ps1`. Charts' gate pins the old 3847 and will move.
+
 ## v1.18.1-alpha -- 2026-09-28
 
 PATCH: `concat-in-loop` precision with a store present. Extractor 1.19.0-alpha, resolver 1.9.0-alpha

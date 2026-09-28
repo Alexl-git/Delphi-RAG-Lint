@@ -664,4 +664,6 @@
 #   take WriteMemberAccess). No code token changed; the engine rebuilt from this tree.
 #
 #   Superseded: 1.9.0-alpha|b2121f749843e1d3d5df61bdd7eb41a36e4c0119c8d78062569b7a8de703d575
-1.9.0-alpha|aafb3c523b3de03bb7b46665fac0b0d50bacf1282b64600e3f05e7746e22b17e
+1.10.0-alpha|550bdab3dc8ce08465404035ce1d044c9c2e3dee16c8781890fa077692ab31ba
+# superseded: 1.9.0-alpha|aafb3c523b3de03bb7b46665fac0b0d50bacf1282b64600e3f05e7746e22b17e
+#   2026-09-28 1.9.0 -> 1.10.0-alpha: ResolveWriteRef binds an explicit Self.X write on the enclosing class chain, skipping the with and lexical rungs (same rule as ResolveBareMemberRead). Rides the 1.20.0 extractor re-parse.

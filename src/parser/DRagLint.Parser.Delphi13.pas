@@ -2748,7 +2748,29 @@ begin
     if NodeType = 'assignment' then
     begin
       var Lhs:= ANode.ChildByField('lhs');
-      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then AState.EmitRef('write', NodeText(Lhs, AState.Source), Lhs);
+      { `Self.X := v` WRITES X (2026-09-28, INBOX-self-qualified-field-write-
+        indexed-as-read). The exprDot case's ref-gap D branch emits the member of
+        every `Self.X` as a READ, whichever side of `:=` it is on, so this left
+        side used to index as a read. Emit it here instead -- the `Self` read the
+        exprDot case would have emitted, then the member as a write -- and do NOT
+        walk the left side below, or ref-gap D would add the read back. Only the
+        plain `Self.<identifier>` shape: `Self.FItems[0] := v` is an exprIndex
+        left side and keeps whatever the bare `FItems[0] := v` form gets. }
+      var SelfMemberLhs:= False;
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then AState.EmitRef('write', NodeText(Lhs, AState.Source), Lhs)
+      else if (not Lhs.IsNull) and (Lhs.NodeType = 'exprDot') then
+      begin
+        var DotBase:= Lhs.ChildByField('lhs');
+        var DotMember:= Lhs.ChildByField('rhs');
+        if (not DotBase.IsNull) and (DotBase.NodeType = 'identifier')
+           and SameText(Trim(NodeText(DotBase, AState.Source)), 'Self')
+           and (not DotMember.IsNull) and (DotMember.NodeType = 'identifier') then
+        begin
+          AState.EmitRef('read', NodeText(DotBase, AState.Source), DotBase);
+          AState.EmitRef('write', NodeText(DotMember, AState.Source), DotMember);
+          SelfMemberLhs:= True;
+        end;
+      end;
       // Bug B fix: a bare-identifier RHS (`Result := maxItems;`) is a READ of
       // that symbol, but a lone identifier that IS the whole RHS hits no case
       // in the generic recurse below (it is neither exprDot/exprArgs/etc.), so
@@ -2761,7 +2783,13 @@ begin
       // not via 'assignment'.rhs).
       var Rhs:= ANode.ChildByField('rhs');
       if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then AState.EmitRef('read', NodeText(Rhs, AState.Source), Rhs);
-      for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+      for i:= 0 to ANode.NamedChildCount - 1 do
+      begin
+        var Child:= ANode.NamedChild(i);
+        { the Self.X left side was fully emitted above }
+        if SelfMemberLhs and (Child.StartByte = Lhs.StartByte) and (Child.EndByte = Lhs.EndByte) then Continue;
+        Walk(Child, AState, AParentSymbolIdx, AParentQualifiedName);
+      end;
       Exit;
     end;
 

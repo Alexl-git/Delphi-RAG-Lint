@@ -418,7 +418,12 @@ An interface-coupled cycle is cut to a legal implementation-only one (Part A); a
 `circular-demo` project, applying Part A and then Part B literally compiles,
 prints exactly the predicted output at each stage (the last being `No circular
 unit dependencies found.`), and the program's output is byte-identical to the
-original's.
+original's. **Followability is measured, not claimed:** Haiku at its lowest
+effort, given only that report and a fresh copy of the project ("Break the
+cycle."), produced a tree that compiled with 0 errors and matched the predicted
+`cycles` output -- 4 of 4 criteria, first on 2026-09-23 and again on 2026-09-28
+against engine 1.19.0-alpha. The report shape before it failed the same test,
+which is how the playbook got its current form.
 
 > **Worked example:** [docs/examples/circular-uses-demo/](docs/examples/circular-uses-demo/)
 > is a tiny compiling two-unit cycle, with the exact `--edges` / `--causes` /
@@ -460,8 +465,10 @@ drag-lint index  --project circular-demo\CircularDemo.dproj --db circular-demo\_
 drag-lint cycles --db circular-demo\_D-RAG\CircularDemo.sqlite --edges --causes --plan --format text
 ```
 
-An excerpt of the real output:
+An excerpt of the real output (every quoted line is verbatim; `...` marks an
+elision):
 
+<!-- dl:excerpt-cycles --edges --causes --plan --format text -->
 ```
 ## Cycle 1: demologger <-> democonfig <-> demoaudit <-> demosession
 
@@ -472,15 +479,17 @@ An excerpt of the real output:
 ...
 ### Step 1: what moves where
 1. `TDemoSession` -- **class with methods**, declared at `DemoSession.pas` lines 14-47; method bodies at `DemoSession.pas` lines 64-73, 75-80, 82-86, 88-95, 97-100.
-   - Recipe: **extract a base class** and keep `TDemoSession` where it is. Why: its method bodies use `GDemoSessionCount`, `GDemoAuditCount`, `GDemoAuditTrail`, which live in units of this cycle; ...
+   - Recipe: **extract a base class** and keep `TDemoSession` where it is. Why: its method bodies use `GDemoSessionCount`, `GDemoAuditCount`, `GDemoAuditTrail`, which live in units of this cycle; moving the class would mean moving those bodies (lines 64-73, 75-80, 82-86, 88-95, 97-100) AND everything they use.
 ...
-12. [ ] Run `drag-lint cycles --db "...\CircularDemo.sqlite"`. It must print exactly:
-    1 circular unit group(s) found:
-      [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
+12. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
+1 circular unit group(s) found:
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
 ```
 
-(`circular-demo/CYCLE-REPORT.md` holds the output of an earlier version of the
-playbook; regenerate it with the two commands above.)
+`circular-demo/CYCLE-REPORT.md` is the full, unabridged output -- the file to
+hand to a model. It, this excerpt and the wiki's are regenerated from and
+checked against the current engine by `tests\autotest\run_cycle_examples_fresh.ps1`,
+so none of them can silently fall behind the playbook again.
 
 Longer walkthrough: [wiki -- Circular Dependency Report](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report).
 
@@ -741,7 +750,8 @@ Win64 build.
 | [`wiki --term "<phrase>"`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/wiki) | **Route a human word to the code.** Looks a phrase or alias up against the `dl:wiki` concept topics authors write inside ordinary `///` comments -- "the scheduler", "delta streaming" -- and prints the owning symbol, its `SeeCode` participants (each resolved to `file:line`) and the body. Exits 1 when nothing matches, so a script can branch on it | `--list` (every topic), `--check` (SeeCode drift gate, exits 1 on drift), `--json` |
 | `query --text "<phrase>"` | Search **string literals AND comment prose** -- constants, resourcestrings, DFM captions, SQL exception text, and `//` / `{ }` / `(* *)` / `///` comments | `--any-order`, `--substring`, `--source pas\|dfm\|sql`, `--kind <k>`, `--limit N` |
 | [`query find-callers`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-find-callers) `--name <n>` | Every call-site for a symbol, with source context | `--context N`, `--resolved` (precise call-edges; every row names the CALL SITE -- text `(<file>:<line>)`, JSON `line` -- with the caller's declaration line under JSON `caller_line`; since 2026-09-16 a PROPERTY or FIELD name lists its bound reads/writes too, tagged `[certain, read]` / `[certain, write]` -- since resolver 1.8.0-alpha that includes BARE reads: a member of a `with` target, a property of the enclosing class, and `Self.X`; since 2026-09-23 an ENUM VALUE name lists every bound read the same way, tagged `[certain, read]`. **Two known wrong-bind risks, both on BARE enum reads only:** a `with` whose target the index cannot type -- since resolver 1.8.0-alpha the `with` scope IS modelled and a with member wins wherever the target types (and a bare CALL under an untypable target binds nothing), but an enum read there keeps its binding and `enum-read-inside-with` reports the collisions it can prove; 0 such bindings on ORM3 CLIENT -- and a `{$SCOPEDENUMS ON}` unit, which measured 0 across the whole project corpus but was NOT measured on the platform LIBRARY indexes, where RTL/VCL scoped enums live. In either place, verify a bare-name binding against the declaration before trusting it; qualified reads (`TEnum.Value`) are unaffected. Numbers and method: the enum-value bullet in `CHANGELOG.md`. Since 1.18.0-alpha (D31) a bound BARE write (`FFlag := True`) is listed too, tagged `[certain, write]`; since resolver 1.9.0-alpha (D22) a UNIT-QUALIFIED var or const (`uStyles.SkipRefresh`) lists its bound reads and writes, tagged by mode (a const is always `read`; an index resolved before 1.9.0-alpha answers 0 for them until `index --all --resolve-only`). Known gap: `Self.FField := X` is still reported as a `read` (`docs/INBOX-self-qualified-field-write-indexed-as-read.md`)) |
-| `query find` | Find symbols by documentation state, or by declaration text | `--doc-tag`, `--doc-contains`, `--decl-contains`, `--no-docs`, `--kind`, `--name`, `--unit`, `--public` |
+| `query --kind <k> --all` | **List every symbol of one kind** -- e.g. every unit in a DB. No name, no doc clause, no row cap | `--public`, `--json` |
+| `query find` | Find symbols by documentation state, or by declaration text. `--no-docs` is a FILTER (undocumented symbols only) -- to list them all use `query --kind <k> --all` | `--doc-tag`, `--doc-contains`, `--decl-contains`, `--no-docs`, `--kind`, `--name`, `--unit`, `--public` |
 | [`query type-usage`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-type-usage) `--in <f.pas>` | Of a LIST of type names, which does this file actually **reference**? Counts declarations, `X.Create` sites and inheritance; a name only in a comment or string literal is not a reference -- the difference from grep. Name-keyed | `--names A,B,C`, `--names-file <f>`, `--json` |
 | `query unit-usage` `--in <f.pas> --unit <U>` | Of unit **U's exported surface**, which symbols does this file reference? `0 of N` means the `uses` entry is a dead import. The unit is resolved in whichever index HAS it, so a project file can be asked about an RTL/VCL unit (pass both `--db`s). Comments and string literals are excluded structurally | `--json` |
 | [`query ancestors`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-ancestors) `--name <t>` | Transitive class/interface ancestry | `--of <ancestor>` |
@@ -972,7 +982,7 @@ CLI-only verbs).
 ### Lint rule pack (188 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.18.0-alpha: **188 rules across 16 categories -- 135
+external `.scm`). As of v1.19.1-alpha: **188 rules across 16 categories -- 135
 built-in and 53 external `.scm`, 158 enabled by default, and 23 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
@@ -1226,7 +1236,7 @@ the PowerShell battery.
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
-**v1.18.0-alpha**; development continues daily.
+**v1.19.1-alpha**; development continues daily.
 
 ---
 

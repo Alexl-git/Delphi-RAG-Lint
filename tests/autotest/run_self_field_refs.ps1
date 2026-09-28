@@ -177,8 +177,19 @@ if ($clientReads.Count -ge 1) {
     ($null -eq $onDeclLine -or @($onDeclLine).Count -eq 0) `
     ("declLine=$declLine; rows=" + ($clientReads | ConvertTo-Json -Compress))
 }
-Check 'at least 2 Self.client read sites captured (write-side lhs + read-side rhs)' `
-  ($clientReads.Count -ge 2) ("rows=" + ($clientReads | ConvertTo-Json -Compress))
+# Both Self.client USE SITES must be captured -- that is what rename-at-use
+# needs. Until 2026-09-28 the write-side lhs was captured as a READ (the
+# INBOX-self-qualified-field-write-indexed-as-read defect); extractor
+# 1.20.0-alpha captures it as a WRITE. So: exactly one read (the rhs of
+# `Y := Self.client`) and exactly one write (the lhs of `Self.client := other`),
+# two sites in total -- the same coverage, each with its true kind.
+$clientWrites = @(Get-Refs 'client' 'write')
+Check 'the read-side Self.client (rhs) is captured as exactly ONE read' `
+  ($clientReads.Count -eq 1) ("reads=" + ($clientReads | ConvertTo-Json -Compress))
+Check 'the write-side Self.client (lhs) is captured as exactly ONE write' `
+  ($clientWrites.Count -eq 1) ("writes=" + ($clientWrites | ConvertTo-Json -Compress))
+Check 'both Self.client use sites captured (2 sites, read + write)' `
+  (($clientReads.Count + $clientWrites.Count) -eq 2) ("reads=$($clientReads.Count) writes=$($clientWrites.Count)")
 
 Write-Host ''
 Write-Host 'NEGATIVE (over-capture guard): non-Self dotted member Method gained no spurious read' -ForegroundColor Cyan

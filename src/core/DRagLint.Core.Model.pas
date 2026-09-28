@@ -14,7 +14,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.18.1-alpha';
+  DRAGLINT_VERSION = '1.19.1-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -87,7 +87,7 @@ const
     lexer and the grammar see them (a body with an apostrophe, or a 5-quote
     delimiter, made the whole unit unparseable). Schema unchanged. Re-parses
     every index. docs\INBOX-defects-found-2026-09-23-rule-work.md D18/D19 }
-  DRAGLINT_EXTRACTOR_VERSION = '1.19.0-alpha';
+  DRAGLINT_EXTRACTOR_VERSION = '1.20.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -217,7 +217,7 @@ const
   /// parse change: remedy is `index --all --resolve-only`. A MINOR: a new
   /// class of derived row, and bindings that can disappear. The reservation
   /// for C2.3 + the IsStub unification MOVES from 1.9.0 to 1.10.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.9.0-alpha';
+  DRAGLINT_RESOLVER_VERSION = '1.10.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

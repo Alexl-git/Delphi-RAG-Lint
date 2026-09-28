@@ -128,6 +128,7 @@ See also [Features](Features) for the grouped overview and
 * [purge-locals](purge-locals) -- `purge-locals`
 * [query ancestors](query-ancestors) -- `query ancestors`
 * [query find-callers](query-find-callers) -- `query find-callers`
+* [query --kind --all](query-kind-all) -- `query --kind <k> --all` (every symbol of one kind)
 * [query --name-like](query-name-like) -- `query --name-like`
 * [query typecat](query-typecat) -- `query typecat`
 * [query type-usage](query-type-usage) -- `query type-usage`

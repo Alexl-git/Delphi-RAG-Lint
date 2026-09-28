@@ -323,6 +323,14 @@
         ],
         "sqlOnlyMS": true,
         "useIgnoreFiles": true
+      },
+      {
+        "name": "DMTEST",
+        "include": [
+          "C:\\Projects\\DB\\ORM3\\CLIENT\\DM\\DMTEST.dproj"
+        ],
+        "useIgnoreFiles": true,
+        "sqlOnlyMS": true
       }
     ]
   }

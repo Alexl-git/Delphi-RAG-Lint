@@ -1,11 +1,14 @@
 # drag-lint cycles report -- circular-uses-demo
 
-Verbatim output of `drag-lint cycles` on this folder (unmodified; only the database path
-is shortened to `demo.sqlite`).
-Indexed with: `drag-lint index circular-uses-demo --db demo.sqlite`
+Verbatim output of `drag-lint cycles` on this folder, run from `docs\examples`. The only
+change is that file paths are shown relative to that folder, so the text is the same on any
+machine. Each block is regenerated from the current engine and checked for drift by
+`tests\autotest\run_cycle_examples_fresh.ps1` -- the `dl:verbatim-cycles` comments mark them.
+Indexed with: `drag-lint index circular-uses-demo --db demo.sqlite` (from `docs\examples`)
 
 ## `drag-lint cycles --db demo.sqlite --edges`
 
+<!-- dl:verbatim-cycles --edges -->
 ```
 1 circular unit group(s) found:
   [2 units] customers <-> orders   (has interface coupling -- widest recompile blast radius)
@@ -15,6 +18,7 @@ Indexed with: `drag-lint index circular-uses-demo --db demo.sqlite`
 
 ## `drag-lint cycles --db demo.sqlite --causes`
 
+<!-- dl:verbatim-cycles --causes -->
 ```
 1 circular unit group(s) found:
   [2 units] customers <-> orders   (has interface coupling -- widest recompile blast radius)
@@ -27,6 +31,7 @@ Indexed with: `drag-lint index circular-uses-demo --db demo.sqlite`
 The playbook carries its own code blocks, so it is fenced here with four backticks;
 read it as the raw text `cycles --plan` prints.
 
+<!-- dl:verbatim-cycles --plan -->
 ````
 # Cycle refactoring playbook
 
@@ -44,8 +49,8 @@ other cycles are stale.
 Status: **interface coupling** -- units of this cycle use each other in their INTERFACE uses clauses.
 
 Files:
-- `customers` -> `C:\Projects\Delphi-RAG-lint\docs\examples\circular-uses-demo\Customers.pas`
-- `orders` -> `C:\Projects\Delphi-RAG-lint\docs\examples\circular-uses-demo\Orders.pas`
+- `customers` -> `circular-uses-demo\Customers.pas`
+- `orders` -> `circular-uses-demo\Orders.pas`
 
 ### Why it cycles
 - `customers` interface uses `TOrder` (class) at `Customers.pas:13`; declared in `Orders.pas:10`.
@@ -75,7 +80,7 @@ For each unit of the cycle that uses a unit whose declarations move. A unit can 
 ### Step 3: create the new units
 Each new unit may use only RTL / library units and other new `*.Contracts` units -- never a unit of this cycle (`Customers`, `Orders`). Create each file with EXACTLY this text:
 
-#### `Orders.Contracts` -> `C:\Projects\Delphi-RAG-lint\docs\examples\circular-uses-demo\Orders.Contracts.pas`
+#### `Orders.Contracts` -> `circular-uses-demo\Orders.Contracts.pas`
 ```pascal
 unit Orders.Contracts;
 
@@ -100,7 +105,7 @@ end.
 ### Step 4: edit the existing files
 Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
 
-#### `Customers.pas`  (`C:\Projects\Delphi-RAG-lint\docs\examples\circular-uses-demo\Customers.pas`)
+#### `Customers.pas`  (`circular-uses-demo\Customers.pas`)
 E1. Replace line 30. Current text:
 ```pascal
 procedure TCustomer.AddOrder(const AOrder: TOrder);
@@ -136,7 +141,7 @@ uses
   Orders.Contracts;
 ```
 
-#### `Orders.pas`  (`C:\Projects\Delphi-RAG-lint\docs\examples\circular-uses-demo\Orders.pas`)
+#### `Orders.pas`  (`circular-uses-demo\Orders.pas`)
 E1. Replace line 10. Current text:
 ```pascal
   TOrder = class
@@ -154,11 +159,11 @@ uses
 
 ### Checklist
 Tick each box in order. Do not skip the compile.
-1. [ ] Create `C:\Projects\Delphi-RAG-lint\docs\examples\circular-uses-demo\Orders.Contracts.pas` with the exact text given for `Orders.Contracts`.
+1. [ ] Create `circular-uses-demo\Orders.Contracts.pas` with the exact text given for `Orders.Contracts`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
 2. [ ] Apply every edit listed for `Customers.pas`, in the order listed.
 3. [ ] Apply every edit listed for `Orders.pas`, in the order listed.
 4. [ ] Compile the project. Expect 0 errors; on an error see "If the compile fails" below.
-5. [ ] Re-index: `drag-lint index "C:\Projects\Delphi-RAG-lint\docs\examples\circular-uses-demo" --db "demo.sqlite"`
+5. [ ] Re-index: `drag-lint index "circular-uses-demo" --db "demo.sqlite"`
 6. [ ] Run `drag-lint cycles --db "demo.sqlite"`. It must print exactly:
 ```text
 No circular unit dependencies found.
@@ -174,5 +179,4 @@ No circular unit dependencies found.
 
 ### Part B (optional): remove the implementation-only cycle too
 Nothing to do: after Part A no cycle remains among these units.
-
 ````

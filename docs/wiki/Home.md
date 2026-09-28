@@ -8,7 +8,7 @@ call edges in SQLite, and answers questions about them: *where is this declared*
 wrong with it*. It ships as a command-line tool, a RAD Studio IDE plugin, and a
 language server.
 
-**Status: alpha** (current release v1.17.0-alpha; extractor 1.18.0-alpha, resolver 1.6.0-alpha, index schema 23). Expect breaking changes. The index format is stable within a
+**Status: alpha** (current release v1.19.1-alpha; extractor 1.20.0-alpha, resolver 1.10.0-alpha, index schema 23). Expect breaking changes. The index format is stable within a
 schema version; the CLI surface is not yet frozen.
 
 ## Start here

@@ -178,7 +178,23 @@ for ($m = $min + 1; $m -le $min + 400 -and -not $trap; $m++) {
     if ([string]::CompareOrdinal($cand, $engineVer) -lt 0) { $trap = $cand }
   }
 }
-Check 'R2 precondition: a version that sorts BELOW the engine yet is numerically ABOVE it' ($trap -ne '') "engine=$engineVer trap=$trap"
+# Whether that trap EXISTS depends on the engine's own digits: for a two-digit
+# minor (1.10.0-alpha, the first one, 2026-09-28) every same-major candidate
+# sorts ABOVE it, so there is no numerically-newer-lexically-older stamp to
+# plant. The MIRROR trap then always exists -- numerically OLDER, lexically
+# NEWER ("1.9.x" sorts above "1.10.0"). A lexical compare would REFUSE it as
+# newer; the numeric compare must re-derive it. Either trap proves the same
+# thing: the comparison is numeric. Exactly one of the two runs.
+$mirror = ''
+if (-not $trap) {
+  for ($m = $min - 1; $m -ge 0 -and -not $mirror; $m--) {
+    for ($p = 9; $p -ge 0 -and -not $mirror; $p--) {
+      $cand = "$maj.$m.$p$suffix"
+      if ([string]::CompareOrdinal($cand, $engineVer) -gt 0) { $mirror = $cand }
+    }
+  }
+}
+Check 'R2 precondition: a lexical trap exists in one direction or the other' (($trap -ne '') -or ($mirror -ne '')) "engine=$engineVer trap=$trap mirror=$mirror"
 if ($trap) {
   Fresh
   PlantResolver $db $trap
@@ -186,6 +202,13 @@ if ($trap) {
   RunIndex @('--resolve-only')
   Check 'R2 REFUSES (exit 2)' ($script:LastExit -eq 2) "exit=$($script:LastExit)"
   Check 'R2 file byte-identical' ((Md5 $db) -eq $md5)
+}
+elseif ($mirror) {
+  Fresh
+  PlantResolver $db $mirror
+  RunIndex @('--resolve-only')
+  Check "R2-mirror: a numerically OLDER stamp ($mirror) that sorts lexically NEWER is NOT refused" ($script:LastExit -eq 0) "exit=$($script:LastExit)"
+  Check 'R2-mirror: the stamp is re-derived to the engine''s own resolver version' ((StampVersion (MetaGet $db 'resolver_fingerprint')) -eq $engineVer) "stamp=$(MetaGet $db 'resolver_fingerprint')"
 }
 
 Write-Host ''
