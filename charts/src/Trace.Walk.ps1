@@ -597,3 +597,493 @@ function Get-GuardCondition([string] $Path, [int] $ExitLine, [int] $RoutineStart
   $raw = [IO.File]::ReadAllLines($read, [Text.Encoding]::GetEncoding(28591))
   Get-GuardConditionFromLines $raw $stripped $ExitLine $RoutineStart
 }
+
+# ---- Part 3: the walk (spec section 4) ---------------------------------------------------
+# Rulings this part carries: a condition reaches New-TraceCond VERBATIM ($g.Condition --
+# no sanitiser, no length cap: P16, T4-C1); a shim `unknown` becomes a numbered STOPS
+# whose text is the shim's GENERATED Reason, naming E1 (T3-M2); nothing here names the
+# anchor's table, dataset or command -- the anchor ($Ctx) parametrises every rule; what IS named
+# is convention (cmd* / rsp* constants, FIB$ tables, UpdateSQL / SelectSQL, the RtOps verbs).
+$script:RtFacts = @{}
+$script:RtImpls = @{}
+# calls that are DATASET OPs / transaction / SQL steps, and the verb they get
+$script:RtOps = @{ SaveToStream = 'SERIALIZES'; LoadFromStream = 'DESERIALIZES'; CommitUpdates = 'APPLIES'; CancelUpdates = 'APPLIES'
+                   ApplyUpdates = 'APPLIES'; EmptyDataSet = 'LOADS'; StartTransaction = 'OPENS'; Commit = 'RUNS'; Rollback = 'RUNS'
+                   Execute = 'RUNS'; ExecSQL = 'RUNS'; Open = 'RUNS' }
+$script:RtEvents = @('AfterPost', 'AfterDelete', 'BeforePost', 'AfterInsert', 'OnUpdateRecord', 'OnUpdateError', 'OnReconcileError')
+
+# A GENERATED stop reason made safe for a STOPS step (ruling T3-M2): only what the writer
+# refuses in a text (' -- ', ' @', ' [') and what splits a note ('; ') is touched, a bracket
+# PAIR reads as parentheses, and nothing is truncated -- a stop that names every candidate
+# keeps them all. Never applied to source-derived text (a condition, an RHS quote).
+function ConvertTo-TraceStopText([string] $s) {
+  $t = (([string]$s) -replace '\s+', ' ').Trim() -replace ' \[([^\]]*)\]', ' ($1)'
+  $t -replace ' -- ', ' - ' -replace ' @', ' at ' -replace ' \[', ' (' -replace '; ', ', '
+}
+
+function Get-BoundaryLikes([string] $Pattern) {
+  (@($Pattern -split '\|' | ForEach-Object { "u.qualified_name LIKE '$(ConvertTo-SqlText $_)'" })) -join ' OR '
+}
+
+# One routine's body facts: every ref in its impl range joined to the symbol it
+# binds to (call_edges target first, then refs.symbol_id) with the target's unit
+# tested against the transport convention (tpipe), and every literal. Paged;
+# cached per index + id for the run (the key carries $DbPath: CLIENT and SERVER
+# ids are different populations and are never mixed). A NESTED routine's body
+# lies inside its outer routine's impl range: its refs (enclosed by the nested
+# symbol) and its literals are left out -- it is walked as its own routine when
+# called, never twice as part of the outer body.
+function Get-RoutineFacts([int] $Id, [string] $Likes) {
+  $key = "$DbPath|$Id"
+  if ($script:RtFacts.ContainsKey($key)) { return $script:RtFacts[$key] }
+  $s = Invoke-IndexQuery @"
+SELECT s.id AS id, s.name AS name, s.qualified_name AS q, s.impl_start_line AS istart, s.impl_end_line AS iend, s.start_line AS decl,
+       f.path AS path, s.file_id AS fid, s.parent_id AS pid, sf.sql_reads AS sqlr, sf.sql_writes AS sqlw
+  FROM symbols s JOIN files f ON f.id = s.file_id LEFT JOIN symbol_facts sf ON sf.symbol_id = s.id
+ WHERE s.id = $Id
+"@
+  if ($s.Count -eq 0) { throw "Get-RoutineFacts: symbol $Id is not in $DbPath" }
+  $s = $s[0]
+  $F = [pscustomobject]@{ Id = $Id; Name = [string]$s.name; Qname = [string]$s.q; Short = (Get-ShortName ([string]$s.q) (Get-UnitName ([string]$s.path)))
+                          Path = [string]$s.path; Fid = [int]$s.fid; Pid = $(if ($s.pid) { [int]$s.pid } else { 0 })
+                          ImplStart = [int]$s.istart; ImplEnd = [int]$s.iend; Decl = [int]$s.decl
+                          SqlReads = [string]$s.sqlr; SqlWrites = [string]$s.sqlw; Refs = @(); Lits = @() }
+  if ($F.ImplStart -gt 0) {
+    $F.Refs = Get-AllIndexRows @"
+SELECT r.id AS rid, r.kind AS kind, r.name_text AS nm, r.receiver_text AS recv, r.start_line AS line, r.start_col AS col, r.end_col AS ecol,
+       t.id AS tid, t.kind AS tkind, t.name AS tname, t.qualified_name AS tq, t.impl_start_line AS tistart, t.start_line AS tdecl, tf.path AS tpath, t.file_id AS tfid,
+       (SELECT 1 FROM symbols u WHERE u.file_id = t.file_id AND u.kind = 'unit' AND ($Likes)) AS tpipe
+  FROM refs r
+  LEFT JOIN symbols t ON t.id = COALESCE((SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = r.id), r.symbol_id)
+  LEFT JOIN files tf ON tf.id = t.file_id
+ WHERE r.file_id = $($F.Fid) AND r.start_line BETWEEN $($F.ImplStart) AND $($F.ImplEnd)
+   AND (r.enclosing_symbol_id = $Id OR r.enclosing_symbol_id IS NULL)
+"@ 'r.start_line, r.start_col, r.id'
+    $F.Lits = Get-AllIndexRows @"
+SELECT sl.kind AS kind, sl.text AS text, sl.start_line AS line
+  FROM string_literals sl
+ WHERE sl.file_id = $($F.Fid) AND sl.start_line BETWEEN $($F.ImplStart) AND $($F.ImplEnd) AND sl.kind IN ('literal', 'format')
+   AND NOT EXISTS (SELECT 1 FROM symbols n WHERE n.parent_id = $Id AND n.impl_start_line > 0 AND sl.start_line BETWEEN n.impl_start_line AND n.impl_end_line)
+"@ 'sl.start_line, sl.start_col, sl.id'
+  }
+  $script:RtFacts[$key] = $F
+  $F
+}
+
+function Add-RtItem($List, $Item, [int] $Line, [int] $Owner) {
+  $Item | Add-Member -NotePropertyName Line -NotePropertyValue $Line -Force
+  $Item | Add-Member -NotePropertyName Owner -NotePropertyValue $Owner -Force
+  [void]$List.Add($Item)
+}
+
+function Get-LineLits($Lits) {
+  $l = @($Lits | Where-Object { $_.kind -eq 'literal' } | ForEach-Object { '"' + (ConvertTo-TraceWord ([string]$_.text) 40) + '"' })
+  $(if ($l.Count) { ' ' + ($l -join ' ') } else { '' })
+}
+
+# The implementation of an UNBOUND `<Receiver>.<Name>(...)`: the receiver's declared
+# type, then the one method of that name in that class. A plain receiver is looked
+# up in the NEAREST scope that declares it -- the routine's locals and params, then
+# its class's fields and properties, then unit-level vars -- and only there: an
+# index-wide name match took `MS` (a TMemoryStream local of SendDeltaOperation) for
+# another routine's TABZMemoryStream. A dotted receiver (`X.Y.Name`) has no scope
+# the index can give, so its last segment is matched index-wide. A receiver the
+# index does not declare, or declares with a library type, resolves to nothing and
+# the call is left alone. Rows carry the receiver's declaration kinds (rkinds),
+# which say which engine ask the [by name] hop waits on: a FIELD / PROPERTY receiver
+# is INBOX-in-class-field-reads-unbound; any other ('receiver-typed-calls': a member
+# call on a unit var such as GDatasetsDef, D22 did not bind it) has no filed ask yet.
+# Cached per index + routine + receiver + name: the same `FConn.X` repeats in a body.
+function Resolve-ImplByName([string] $Recv, [string] $Name, $F) {
+  $segs = @(($Recv -replace '^Self\.', '') -split '\.')
+  $root = $segs[-1]
+  $key = "$DbPath|$($F.Id)|$($Recv.ToUpperInvariant())|$Name"
+  if ($script:RtImpls.ContainsKey($key)) { return , $script:RtImpls[$key] }
+  $scopes = $(if ($segs.Count -eq 1) { @("s.parent_id = $($F.Id) AND s.kind IN ('local_var','param')", "s.parent_id = $($F.Pid) AND s.kind IN ('field','property')", "s.kind = 'var'") }
+              else { @("s.kind IN ('var','field','property','param','local_var')") })
+  $t = @()
+  foreach ($sc in $scopes) {
+    # the first scope that DECLARES the name wins, typed or not (an untyped inline var hides the outer names)
+    $t = Invoke-IndexQuery "SELECT DISTINCT COALESCE(TRIM(s.signature), '') AS sig, s.kind AS k FROM symbols s WHERE UPPER(s.name) = UPPER('$(ConvertTo-SqlText $root)') AND $sc"
+    if ($t.Count) { break }
+  }
+  $t = @($t | Where-Object { [string]$_.sig -ne '' })
+  $r = @()
+  if ($t.Count) {
+    $types = @($t | ForEach-Object { (([string]$_.sig) -replace '<.*$', '').Trim() } | Where-Object { $_ } | Sort-Object -Unique)
+    $kinds = (@($t | ForEach-Object { [string]$_.k } | Sort-Object -Unique)) -join ','
+    $r = Invoke-IndexQuery @"
+SELECT s.id AS id, s.qualified_name AS q, s.impl_start_line AS istart, f.path AS path, s.file_id AS fid, s.parent_id AS pid, '$kinds' AS rkinds
+  FROM symbols s JOIN files f ON f.id = s.file_id
+ WHERE s.name = '$(ConvertTo-SqlText $Name)' AND s.kind = 'method' AND s.impl_start_line > 0
+   AND s.parent_id IN (SELECT c.id FROM symbols c WHERE c.kind = 'class' AND UPPER(c.name) IN ($(ConvertTo-SqlInList ($types | ForEach-Object { $_.ToUpperInvariant() }))))
+"@
+  }
+  $script:RtImpls[$key] = $r
+  , $r
+}
+
+# The handler a wiring line names: bound (certain) or a method of the same class by name (E3).
+function Resolve-HandlerByName($Ref, $F) {
+  if ($Ref.tid -and [int]$Ref.tistart -gt 0) {
+    return [pscustomobject]@{ Id = [int]$Ref.tid; Short = (Get-ShortName ([string]$Ref.tq) (Get-UnitName ([string]$Ref.tpath))); Path = [string]$Ref.tpath; Line = [int]$Ref.tistart; Grade = ''; Ask = '' }
+  }
+  $h = Invoke-IndexQuery "SELECT s.id AS id, s.qualified_name AS q, s.impl_start_line AS istart, f.path AS path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.parent_id = $($F.Pid) AND s.name = '$(ConvertTo-SqlText ([string]$Ref.nm))' AND s.kind = 'method' AND s.impl_start_line > 0"
+  if ($h.Count -ne 1) { return $null }
+  [pscustomobject]@{ Id = [int]$h[0].id; Short = (Get-ShortName ([string]$h[0].q) (Get-UnitName ([string]$h[0].path))); Path = [string]$h[0].path; Line = [int]$h[0].istart; Grade = 'by name'; Ask = 'E3' }
+}
+
+# A FIB$ literal that is SQL reading a FIB$ table (`FROM FIB$DATASETS_INFO`), not a message
+# that names one (`'cmdDelta: no FIB$DATASETS_INFO entry for table "%s"'`, HandleDelta:433).
+$script:RtFibSqlRx = '(?i)\b(FROM|JOIN|INTO|UPDATE)\s+FIB\$'
+
+# FIB$ SQL literals of a unit, with the routine each sits in (a by-name callee's unit).
+function Get-FibLiterals([int] $Fid) {
+  $rows = Get-AllIndexRows @"
+SELECT sl.text AS text, sl.start_line AS line, sl.id AS id,
+       (SELECT s.name FROM symbols s WHERE s.file_id = sl.file_id AND s.impl_start_line <= sl.start_line AND s.impl_end_line >= sl.start_line AND s.kind IN ('method','procedure','function','constructor') ORDER BY s.impl_start_line DESC LIMIT 1) AS routine
+  FROM string_literals sl
+ WHERE sl.file_id = $Fid AND sl.kind = 'literal' AND sl.text LIKE '%FIB$%'
+"@ 'sl.start_line, sl.id'
+  , @($rows | Where-Object { [string]$_.text -match $script:RtFibSqlRx })
+}
+
+# What the other branch does: dataset ops, enum reads and literals inside the
+# exit block, plus `Exit(<arg>)`. Written as the condition's `-- else ...` note.
+function Get-ElseNote($F, $G, $Ctx) {
+  $parts = @()
+  $in = @($F.Refs | Where-Object { [int]$_.line -ge $G.BlockStart -and [int]$_.line -le $G.BlockEnd })
+  foreach ($o in @($in | Where-Object { $_.kind -eq 'call' -and $script:RtOps.ContainsKey([string]$_.nm) })) {
+    $parts += "$(if ($o.recv) { [string]$o.recv + '.' })$([string]$o.nm) @$(Get-TraceAnchorText $F.Path ([int]$o.line))"
+  }
+  $en = @($in | Where-Object { [string]$_.tkind -eq 'enum_value' } | ForEach-Object { [string]$_.tname } | Sort-Object -Unique)
+  if ($en.Count) { $parts += ($en -join '/') }
+  $lits = @($F.Lits | Where-Object { [int]$_.line -ge $G.BlockStart -and [int]$_.line -le $G.BlockEnd -and $_.kind -in 'literal', 'format' -and ([string]$_.text).Trim().Length -gt 8 } | Select-Object -First 1)
+  foreach ($l in $lits) { $parts += "'" + (ConvertTo-TraceWord ([string]$l.text) 60) + "'" }
+  if ($G.ExitArg) { $parts += "Exit($($G.ExitArg))" }
+  $(if ($parts.Count) { 'else ' + (($parts -join ', ') -replace '; ', ', ') } else { '' })
+}
+
+# The payload a transport call carries: the routine's literals before the send that
+# name the anchor table, else its key=value literals; plus the stream when a
+# SaveToStream precedes. Inferred from literals, never a fact.
+function Get-PayloadText($F, [int] $Line, $Ctx) {
+  $before = @($F.Lits | Where-Object { [int]$_.line -lt $Line -and $_.kind -eq 'literal' })
+  $pl = @($before | Where-Object { $Ctx.Table -and ([string]$_.text).ToUpperInvariant().Contains([string]$Ctx.Table) })
+  if (-not $pl.Count) { $pl = @($before | Where-Object { [string]$_.text -match '[=|]' }) }
+  $t = (@($pl | ForEach-Object { '"' + (ConvertTo-TraceWord ([string]$_.text) 40) + '"' }) -join ' + ')
+  if (@($F.Refs | Where-Object { [int]$_.line -lt $Line -and [string]$_.nm -eq 'SaveToStream' }).Count) { $t += $(if ($t) { ' + ' } else { '' }) + 'sfBinary stream' }
+  $(if ($t) { $t } else { 'payload built before the send (no literal found)' })
+}
+
+function Add-CallsStep($List, $Tgt, $Sub, $Caller, [int] $SiteLine, [string] $Lits = '', [switch] $Always) {
+  if (-not $Always -and -not $Sub.Items.Count -and -not $Sub.Conds.Count) { return }
+  $s = New-TraceStep 'step' "CALLS $($Tgt.Short)$Lits" (Get-TraceAnchorText $Tgt.Path $Tgt.Line) $Tgt.Grade $Caller.Short "from :$SiteLine" $Tgt.Ask
+  foreach ($c in $Sub.Conds) { [void]$s.Children.Add($c) }
+  Add-RtItem $List $s $SiteLine $Caller.Id
+  foreach ($i in $Sub.Items) { [void]$List.Add($i) }
+}
+
+# One routine BODY, line by line, as trace items (spec section 4's classifier).
+# Bound callees are walked and kept only when their subtree holds a step (drops
+# logger noise); a CROSSES item carries .Command for the driver. Conditions hang
+# on the step of their `if` line, else the nearest step of this body above it,
+# else they come back in .Conds for the caller's CALLS step.
+function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
+  $items = New-Object System.Collections.ArrayList
+  $pend  = New-Object System.Collections.ArrayList
+  $res = [pscustomobject]@{ Items = $items; Conds = $pend }
+  if ($Visited.ContainsKey($Id) -or $Depth -lt 0) { return $res }
+  $Visited[$Id] = 1
+  $F = Get-RoutineFacts $Id $Ctx.Likes
+  if ($F.ImplStart -le 0) { return $res }
+  # the body's refs and literals by line, built once (a per-line filter over the whole body is quadratic)
+  $refsAt = @{}; $litsAt = @{}
+  foreach ($r in $F.Refs) { $k = [int]$r.line; if (-not $refsAt.ContainsKey($k)) { $refsAt[$k] = New-Object System.Collections.ArrayList }; [void]$refsAt[$k].Add($r) }
+  foreach ($l in $F.Lits) { $k = [int]$l.line; if (-not $litsAt.ContainsKey($k)) { $litsAt[$k] = New-Object System.Collections.ArrayList }; [void]$litsAt[$k].Add($l) }
+
+  # the conditions: one per Exit the index anchored, quoted by the shim (E1). A condition two
+  # Exits share is written once. The lines of the branch that ends in the Exit (its block,
+  # less the `if` line itself) are the OTHER path: the condition's `-- else ...` note says
+  # what they do, so the walk does not also list them as steps of the path that continues
+  # (without this, SendDeltaOperation's `FMTOperation.CancelUpdates` at :3999 -- the failure
+  # branch of the :3990 response guard -- read as a step between rspOK and CommitUpdates).
+  $conds = @(); $condSeen = @{}; $skip = @{}
+  foreach ($xl in @($F.Refs | Where-Object { $_.kind -eq 'call' -and [string]$_.nm -eq 'Exit' } | ForEach-Object { [int]$_.line } | Sort-Object -Unique)) {
+    $g = Get-GuardCondition $F.Path $xl $F.ImplStart $Ctx.SourceOverride
+    if ($g.Form -eq 'unknown') {
+      Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText $g.Reason) (Get-TraceAnchorText $F.Path $xl) '' $F.Short 'no condition is quoted for this Exit' 'E1') $xl $Id
+      continue
+    }
+    for ($q = $g.BlockStart; $q -le $g.BlockEnd; $q++) { if ($q -ne $g.IfLine) { $skip[$q] = 1 } }
+    $ck = "$($g.IfLine)|$($g.Keyword)|$($g.Condition)"
+    if ($condSeen.ContainsKey($ck)) { continue }
+    $condSeen[$ck] = 1
+    # VERBATIM (P16 / T4-C1): the shim's text as it stands -- New-TraceCond refuses what it cannot carry
+    $conds += [pscustomobject]@{ IfLine = $g.IfLine; Item = (New-TraceCond $g.Keyword $g.Condition (Get-TraceAnchorText $F.Path $g.IfLine) (Get-ElseNote $F $g $Ctx) 'E1') }
+  }
+
+  # every line with a ref OR a literal: a SQL literal can stand on a line of its own (uDatasetsDef.pas:130)
+  foreach ($ln in @(@($refsAt.Keys) + @($litsAt.Keys) | Sort-Object -Unique)) {
+    if ($skip.ContainsKey($ln)) { continue }
+    $rs   = @(if ($refsAt.ContainsKey($ln)) { $refsAt[$ln] })
+    $lits = @(if ($litsAt.ContainsKey($ln)) { $litsAt[$ln] })
+    $enum = @($rs | Where-Object { [string]$_.tkind -eq 'enum_value' })
+    $cmd  = @($enum | Where-Object { [string]$_.tname -like 'cmd*' })
+    $rsp  = @($enum | Where-Object { [string]$_.tname -like 'rsp*' })
+    $trans = @($rs | Where-Object { $_.kind -eq 'call' -and $_.tpipe -and [int]$_.tpipe -eq 1 })
+    # CROSSES: a transport call carrying a protocol constant
+    if ($trans.Count -and $cmd.Count) {
+      $c = $cmd[0]
+      $x = New-TraceStep 'crosses' 'process boundary' (Get-TraceAnchorText $F.Path $ln) '' $F.Short "$([string]$c.tname) via $([string]$trans[0].tname)"
+      $x | Add-Member -NotePropertyName Command -NotePropertyValue ([string]$c.tname)
+      [void]$x.Children.Add((New-TraceFacet 'FROM' $Ctx.NearIndex '' 'the index this side was read from'))
+      [void]$x.Children.Add((New-TraceFacet 'TO' $Ctx.FarIndex '' 'the counterpart index, queried separately'))
+      [void]$x.Children.Add((New-TraceFacet 'OVER' "$(Get-UnitName ([string]$trans[0].tpath)).$([string]$trans[0].tname)" (Get-TraceAnchorText ([string]$trans[0].tpath) ([int]$trans[0].tistart)) 'transport unit matched by naming convention'))
+      [void]$x.Children.Add((New-TraceFacet 'WITH' "$([string]$c.tname) $(Get-PayloadText $F $ln $Ctx)" (Get-TraceAnchorText $F.Path $ln) 'payload inferred from the literals before the send'))
+      [void]$x.Children.Add((New-TraceFacet 'CONTRACT' ([string]$c.tq) (Get-TraceAnchorText ([string]$c.tpath) ([int]$c.tdecl)) ''))
+      Add-RtItem $items $x $ln $Id
+      continue
+    }
+    # RESPONSE: a read of an rsp* constant
+    if ($rsp.Count) {
+      $verb = $(if (@($rs | Where-Object { $_.kind -eq 'write' }).Count) { 'SENDS' } else { 'RECEIVES' })
+      Add-RtItem $items (New-TraceStep 'step' "$verb $((@($rsp | ForEach-Object { [string]$_.tname } | Sort-Object -Unique)) -join ' or ')" (Get-TraceAnchorText $F.Path $ln) '' $F.Short) $ln $Id
+      continue
+    }
+    # DATASET OP / transaction / SQL execution
+    $ops = @($rs | Where-Object { $_.kind -eq 'call' -and $script:RtOps.ContainsKey([string]$_.nm) })
+    foreach ($o in $ops) {
+      $recv = $(if ($o.recv) { [string]$o.recv + '.' } else { '' })
+      Add-RtItem $items (New-TraceStep 'step' "$($script:RtOps[[string]$o.nm]) $recv$([string]$o.nm)$(Get-LineLits $lits)" (Get-TraceAnchorText $F.Path $ln) '' $F.Short) $ln $Id
+    }
+    if ($ops.Count) { continue }
+    # a FIB$ literal in the body
+    foreach ($l in @($lits | Where-Object { [string]$_.text -match $script:RtFibSqlRx })) {
+      $k = "$($F.Path)|$ln"
+      if ($Ctx.Seen.ContainsKey($k)) { continue }
+      $Ctx.Seen[$k] = 1
+      Add-RtItem $items (New-TraceStep 'step' "READS $(ConvertTo-TraceWord ([string]$l.text) 60)" (Get-TraceAnchorText $F.Path $ln) 'inferred' $F.Short 'a FIB$ literal in the body' 'E4') $ln $Id
+    }
+    # event wiring / attach: `<x>.<Event> := <Handler>`
+    $ev = @($rs | Where-Object { $_.kind -eq 'member-access' -and [string]$_.nm -in $script:RtEvents })
+    if ($ev.Count) {
+      $h = @($rs | Where-Object { $_.kind -in 'read', 'member-access', 'call' -and [string]$_.nm -ne [string]$ev[0].nm -and [string]$_.nm -ne [string]$ev[0].recv } | Select-Object -Last 1)
+      if ($h.Count) {
+        $hs = Resolve-HandlerByName $h[0] $F
+        if ($hs) {
+          $verb = $(if ([string]$ev[0].nm -like 'On*') { 'ATTACHES' } else { 'FIRES' })
+          Add-RtItem $items (New-TraceStep 'step' "$verb $([string]$ev[0].recv).$([string]$ev[0].nm) -> $($hs.Short)" (Get-TraceAnchorText $F.Path $ln) $hs.Grade $F.Short '' $hs.Ask) $ln $Id
+          $sub = Walk-Routine $hs.Id ($Depth - 1) $Visited $Ctx
+          Add-CallsStep $items $hs $sub $F $ln
+          continue
+        }
+      }
+    }
+    # bound calls into project code (not transport, not constructors): descend
+    foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and $_.tid -and [int]$_.tistart -gt 0 -and -not ($_.tpipe -and [int]$_.tpipe -eq 1) -and [string]$_.tkind -ne 'constructor' })) {
+      $sub = Walk-Routine ([int]$c.tid) ($Depth - 1) $Visited $Ctx
+      $tgt = [pscustomobject]@{ Id = [int]$c.tid; Short = (Get-ShortName ([string]$c.tq) (Get-UnitName ([string]$c.tpath))); Path = [string]$c.tpath; Line = [int]$c.tistart; Grade = ''; Ask = '' }
+      Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits)
+    }
+    # unbound calls with a receiver the index declares: the implementation BY NAME
+    foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and -not $_.tid -and $_.recv })) {
+      $impl = Resolve-ImplByName ([string]$c.recv) ([string]$c.nm) $F
+      $ask = $(if ($impl.Count -and (@(([string]$impl[0].rkinds) -split ',') | Where-Object { $_ -in 'field', 'property' })) { 'in-class-field-reads' } else { 'receiver-typed-calls' })
+      if ($impl.Count -eq 1) {
+        $i = $impl[0]
+        $sub = Walk-Routine ([int]$i.id) ($Depth - 1) $Visited $Ctx
+        $tgt = [pscustomobject]@{ Id = [int]$i.id; Short = (Get-ShortName ([string]$i.q) (Get-UnitName ([string]$i.path))); Path = [string]$i.path; Line = [int]$i.istart; Grade = 'by name'; Ask = $ask }
+        Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits) -Always
+        foreach ($fl in (Get-FibLiterals ([int]$i.fid))) {
+          $k = "$([string]$i.path)|$([int]$fl.line)"
+          if ($Ctx.Seen.ContainsKey($k)) { continue }
+          $Ctx.Seen[$k] = 1
+          Add-RtItem $items (New-TraceStep 'step' "READS $(ConvertTo-TraceWord ([string]$fl.text) 60)" (Get-TraceAnchorText ([string]$i.path) ([int]$fl.line)) 'inferred' ([string]$fl.routine) "a FIB`$ literal in $(Get-UnitName ([string]$i.path)), the unit of $($tgt.Short)" 'E4') $ln $Id
+        }
+      } elseif ($impl.Count -gt 1) {
+        Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText "$([string]$c.recv).$([string]$c.nm) is unbound and $($impl.Count) classes implement $([string]$c.nm)") (Get-TraceAnchorText $F.Path $ln) '' $F.Short '' $ask) $ln $Id
+      }
+    }
+  }
+  # the routine's own SQL facts, at its last line so a condition never lands on them
+  if ($F.SqlWrites) { Add-RtItem $items (New-TraceStep 'step' "WRITES $(ConvertTo-TraceWord $F.SqlWrites)" (Get-TraceAnchorText $F.Path $F.ImplStart) '' $F.Short 'sql_writes fact') $F.ImplEnd $Id }
+  if ($F.SqlReads)  { Add-RtItem $items (New-TraceStep 'step' "READS $(ConvertTo-TraceWord $F.SqlReads)"  (Get-TraceAnchorText $F.Path $F.ImplStart) '' $F.Short 'sql_reads fact')  $F.ImplEnd $Id }
+  foreach ($c in $conds) {
+    $own = @($items | Where-Object { $_.Owner -eq $Id -and $_.Kind -ne 'stops' })
+    # $hostStep, never $host: $Host is PowerShell's read-only automatic variable (ruling P1)
+    $hostStep = @($own | Where-Object { $_.Line -eq $c.IfLine } | Select-Object -First 1)
+    if (-not $hostStep.Count) { $hostStep = @($own | Where-Object { $_.Kind -eq 'step' -and $_.Line -lt $c.IfLine } | Select-Object -Last 1) }
+    if ($hostStep.Count) { [void]$hostStep[0].Children.Add($c.Item) } else { [void]$pend.Add($c.Item) }
+  }
+  $res
+}
+
+# ---- Part 4: the server side, run under the SERVER $DbPath ------------------------------
+# DISPATCH (spec section 4; engine ask E2 retires it): a read of the command
+# constant inside a transport-unit routine, then the first BOUND call after it
+# whose target is declared OUTSIDE that unit (Task 1: the spec's plain "first
+# call after it" picks the unit-local ParseTableFromPayload for cmdTableLoad),
+# bounded by the next enum read (the next case arm or the error path).
+function Find-DispatchArm([string] $CmdName, [string] $Likes) {
+  $reads = Invoke-IndexQuery @"
+SELECT r.start_line AS line, encl.id AS eid, encl.qualified_name AS routine, encl.impl_end_line AS iend, f.path AS path, f.id AS fid
+  FROM refs r JOIN symbols tgt ON tgt.id = r.symbol_id JOIN symbols encl ON encl.id = r.enclosing_symbol_id
+  JOIN files f ON f.id = encl.file_id JOIN symbols u ON u.file_id = f.id AND u.kind = 'unit'
+ WHERE tgt.kind = 'enum_value' AND tgt.name = '$(ConvertTo-SqlText $CmdName)' AND ($Likes)
+ ORDER BY f.path, r.start_line
+"@ 'round-trip (dispatch reads)'
+  foreach ($rd in $reads) {
+    $next = Invoke-IndexQuery "SELECT MIN(r.start_line) AS l FROM refs r JOIN symbols t ON t.id = r.symbol_id WHERE r.enclosing_symbol_id = $([int]$rd.eid) AND t.kind = 'enum_value' AND r.start_line > $([int]$rd.line)"
+    $hi = $(if ($next.Count -and $next[0].l) { [int]$next[0].l } else { [int]$rd.iend })
+    $c = Invoke-IndexQuery @"
+SELECT r.start_line AS line, t.id AS id, t.qualified_name AS q, t.kind AS kind, t.impl_start_line AS istart, t.start_line AS decl, t.name AS name, tf.path AS path
+  FROM refs r JOIN call_edges ce ON ce.ref_id = r.id JOIN symbols t ON t.id = ce.target_symbol_id JOIN files tf ON tf.id = t.file_id
+ WHERE r.enclosing_symbol_id = $([int]$rd.eid) AND r.start_line > $([int]$rd.line) AND r.start_line <= $hi AND t.file_id <> $([int]$rd.fid)
+ ORDER BY r.start_line, r.start_col LIMIT 1
+"@
+    if ($c.Count) {
+      return [pscustomobject]@{ Line = [int]$rd.line; Routine = (($([string]$rd.routine) -split '\.')[-1]); Path = [string]$rd.path; CallLine = [int]$c[0].line
+                                Target = [pscustomobject]@{ id = [int]$c[0].id; q = [string]$c[0].q; kind = [string]$c[0].kind; istart = [int]$c[0].istart; decl = [int]$c[0].decl; path = [string]$c[0].path; name = [string]$c[0].name } }
+    }
+  }
+  $null
+}
+
+# An interface method -> its ONE implementation, in a class whose heritage names the interface.
+function Resolve-InterfaceImpl($Target) {
+  $iface = (([string]$Target.q) -split '\.')[-2]
+  $r = Invoke-IndexQuery @"
+SELECT s.id AS id, s.qualified_name AS q, s.impl_start_line AS istart, f.path AS path
+  FROM symbols s JOIN files f ON f.id = s.file_id
+ WHERE s.name = '$(ConvertTo-SqlText $Target.name)' AND s.kind = 'method' AND s.impl_start_line > 0
+   AND s.parent_id IN (SELECT c.id FROM symbols c WHERE c.kind = 'class' AND c.heritage LIKE '%$(ConvertTo-SqlText $iface)%')
+"@
+  , $r
+}
+
+function Get-ServerHandling([string] $CmdName, $Ctx, [int] $Depth) {
+  $items = New-Object System.Collections.ArrayList
+  $out = [pscustomobject]@{ Items = $items; Responses = @(); Contract = $null }
+  $arm = Find-DispatchArm $CmdName $Ctx.Likes
+  if (-not $arm) {
+    $decl = Invoke-IndexQuery "SELECT s.start_line AS l, f.path AS p FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.kind = 'enum_value' AND s.name = '$(ConvertTo-SqlText $CmdName)' LIMIT 1"
+    $anchor = $(if ($decl.Count) { Get-TraceAnchorText ([string]$decl[0].p) ([int]$decl[0].l) } else { 'unknown:0' })
+    Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText "no transport routine of $($Ctx.FarIndex) reads $CmdName and then calls a handler declared in another unit") $anchor '' '' '' 'E2') 0 0
+    return $out
+  }
+  $T = $arm.Target
+  Add-RtItem $items (New-TraceStep 'step' "ROUTES $CmdName TO $(Get-ShortName $T.q (Get-UnitName $T.path))" (Get-TraceAnchorText $arm.Path $arm.Line) '' $arm.Routine "the first cross-unit call after the constant, at :$($arm.CallLine)" 'E2') $arm.Line 0
+  $out.Contract = [pscustomobject]@{ Text = $T.q; Anchor = (Get-TraceAnchorText $T.path $T.decl) }
+  $impl = $null; $grade = ''
+  if ($T.istart -gt 0) {
+    $impl = [pscustomobject]@{ Id = $T.id; Short = (Get-ShortName $T.q (Get-UnitName $T.path)); Path = $T.path; Line = $T.istart; Grade = '' }
+  } else {
+    $im = Resolve-InterfaceImpl $T
+    if ($im.Count -ne 1) {
+      Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText "$($T.q) has $($im.Count) implementations in classes whose heritage names its interface") (Get-TraceAnchorText $T.path $T.decl) '' $arm.Routine '' 'E2') $arm.CallLine 0
+      return $out
+    }
+    $impl = [pscustomobject]@{ Id = [int]$im[0].id; Short = (Get-ShortName ([string]$im[0].q) (Get-UnitName ([string]$im[0].path))); Path = [string]$im[0].path; Line = [int]$im[0].istart; Grade = 'by name' }
+    $grade = 'by name'
+  }
+  $visited = @{}
+  $sub = Walk-Routine $impl.Id $Depth $visited $Ctx
+  $s = New-TraceStep 'step' "CALLS $($impl.Short)" (Get-TraceAnchorText $impl.Path $impl.Line) $grade $arm.Routine "from :$($arm.CallLine)$(if ($grade) { ', the interface method resolved to its one implementation' })" $(if ($grade) { 'E2' } else { '' })
+  foreach ($c in $sub.Conds) { [void]$s.Children.Add($c) }
+  Add-RtItem $items $s $arm.CallLine 0
+  foreach ($i in $sub.Items) { [void]$items.Add($i) }
+  $rsp = New-Object System.Collections.ArrayList
+  foreach ($id in $visited.Keys) {
+    $F = $script:RtFacts["$DbPath|$id"]
+    if (-not $F) { continue }
+    foreach ($e in @($F.Refs | Where-Object { [string]$_.tkind -eq 'enum_value' -and [string]$_.tname -like 'rsp*' })) { [void]$rsp.Add([string]$e.tname) }
+  }
+  $out.Responses = @($rsp | Sort-Object -Unique)
+  $out
+}
+
+# DATABASE (ruling P15: the STOPS says only what was QUERIED). A SQL fact naming the
+# anchor table is kept as is; otherwise the statement text is a STOPS naming
+#   * the statement member -- `<recv>.UpdateSQL` for a write, `<recv>.SelectSQL` for a
+#     read -- ONLY when a ref of a walked routine names it, anchored at that ref: the
+#     APPLY's own ref first (a routine that also runs `<x>.Execute` / `ExecSQL`), else
+#     the first in walk order; with no such ref, the routine and line of the apply
+#     (the last RUNS / APPLIES step);
+#   * "loaded at <file:line> from FIB$DATASETS_INFO" ONLY when one walked routine both
+#     names that member and holds the walk's own FIB$DATASETS_INFO read;
+#   * the fb_datasets row count of THIS index, counted now (fb_datasets is the engine's
+#     snapshot of FIB$DATASETS_INFO; E4 asks for it to be populated).
+# The column comes from the SQL index, [inferred]. Run under the SERVER $DbPath.
+function Get-DatabaseSteps($ServerItems, $Ctx, [string] $Mode, $SqlSet, [hashtable] $SourceOverride) {
+  $items = New-Object System.Collections.ArrayList
+  $verb = $(if ($Mode -eq 'write') { 'WRITES' } else { 'READS' })
+  $fact = @($ServerItems | Where-Object { $_.Kind -eq 'step' -and $_.Text -match "^$verb .*\b$([regex]::Escape($Ctx.Table))\b" })
+  $tblFile = $SqlSet.Tables[$Ctx.Table].File; $tblLine = $SqlSet.Tables[$Ctx.Table].Line
+  if (-not $fact.Count) {
+    $stmtName = $(if ($Mode -eq 'write') { 'UpdateSQL' } else { 'SelectSQL' })
+    $kind = $(if ($Mode -eq 'write') { 'UPDATE' } else { 'SELECT' })
+    $naming = @()
+    foreach ($own in @($ServerItems | Where-Object { $_.Owner -gt 0 } | ForEach-Object { [int]$_.Owner } | Select-Object -Unique)) {
+      $F = $script:RtFacts["$DbPath|$own"]
+      if (-not $F) { continue }
+      foreach ($m in @($F.Refs | Where-Object { $_.kind -eq 'member-access' -and [string]$_.nm -eq $stmtName })) { $naming += [pscustomobject]@{ F = $F; Ref = $m } }
+    }
+    $applyOwners = @($ServerItems | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^RUNS (\S+\.)?(Execute|ExecSQL)\b' } | ForEach-Object { [int]$_.Owner })
+    $pick = @($naming | Where-Object { $applyOwners -contains $_.F.Id } | Select-Object -First 1)
+    if (-not $pick.Count) { $pick = @($naming | Select-Object -First 1) }
+    $loader = $null
+    foreach ($fs in @($ServerItems | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^READS .*FIB\$DATASETS_INFO' })) {
+      $fsFile, $fsLine = $fs.Anchor -split ':'
+      $hit = @($naming | Where-Object { [IO.Path]::GetFileName($_.F.Path) -eq $fsFile -and [int]$fsLine -ge $_.F.ImplStart -and [int]$fsLine -le $_.F.ImplEnd } | Select-Object -First 1)
+      if ($hit.Count) { $loader = $hit[0]; break }
+    }
+    $fb = [int](Invoke-IndexQuery 'SELECT COUNT(*) AS n FROM fb_datasets')[0].n
+    $held = $(if ($fb -eq 0) { "fb_datasets has 0 rows in $($Ctx.FarIndex)" } else { "fb_datasets has $fb rows in $($Ctx.FarIndex), which this walk does not look up" })
+    if ($pick.Count) {
+      $p0 = $pick[0]
+      $sText = "$(if ($p0.Ref.recv) { [string]$p0.Ref.recv + '.' })$stmtName"
+      $src = $(if ($loader) { ", loaded at $(Get-TraceAnchorText $loader.F.Path ([int]$loader.Ref.line)) from FIB`$DATASETS_INFO rows$(if ($fb -eq 0) { ' the index does not hold' })" } else { ', whose text the walk does not read' })
+      $why = "the $kind statement for $($Ctx.Table) is $sText$src ($held)"
+      $anchor = Get-TraceAnchorText $p0.F.Path ([int]$p0.Ref.line); $rn = $p0.F.Short
+      $nt = "the statement member is named here$(if ($applyOwners -contains $p0.F.Id) { ', in the routine that executes it' })"
+    } else {
+      $last = @($ServerItems | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^(RUNS|APPLIES) ' } | Select-Object -Last 1)
+      if (-not $last.Count) { $last = @($ServerItems | Where-Object { $_.Kind -ne 'crosses' } | Select-Object -Last 1) }
+      $why = "no walked routine names the $kind statement for $($Ctx.Table)$(if ($last.Count) { ", applied in $($last[0].Routine) at $($last[0].Anchor)" }) ($held)"
+      $anchor = $(if ($last.Count) { $last[0].Anchor } else { Get-TraceAnchorText $tblFile $tblLine }); $rn = $(if ($last.Count) { $last[0].Routine } else { '' }); $nt = ''
+    }
+    Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText $why) $anchor '' $rn $nt 'E4') 0 0
+  }
+  $cs = Get-SqlColumnState $SqlSet $Ctx.Table $Ctx.Column $SourceOverride
+  if ($cs.IsColumn) {
+    # the label is GENERATED text with bracketed grade tags; as a note they read `(certain)` (as the anchor's column step)
+    $lbl = ([string]$cs.Label) -replace '\[([^\]]*)\]', '($1)'
+    Add-RtItem $items (New-TraceStep 'step' "$verb $($Ctx.TableColumn)" (Get-TraceAnchorText $cs.File ([int]$cs.Line)) 'inferred' '' (ConvertTo-TraceWord "column $($Ctx.Column) of $($Ctx.Table): $lbl") 'E4') 0 0
+  } else {
+    Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText "$($Ctx.TableColumn): $($cs.Label)") (Get-TraceAnchorText $tblFile $tblLine) '' '' '' 'E4') 0 0
+  }
+  , $items.ToArray()
+}
+
+# The event wiring on the anchor dataset in its unit: `<ds>.<Event> := <Handler>`.
+# The handler is the last plain READ on the wiring line and is matched BY NAME
+# among the dataset's class methods (E3: the assignment is not bound).
+function Get-EventWiring($Ds) {
+  $rows = Get-AllIndexRows @"
+SELECT r.start_line AS line, r.id AS rid, r.name_text AS ev, e.qualified_name AS routine,
+       (SELECT h.name_text FROM refs h WHERE h.file_id = r.file_id AND h.start_line = r.start_line AND h.kind = 'read' AND h.name_text <> '$(ConvertTo-SqlText $Ds.Name)' AND h.name_text <> r.name_text ORDER BY h.start_col DESC LIMIT 1) AS handler
+  FROM refs r LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id
+ WHERE r.file_id = $($Ds.Fid) AND r.kind = 'member-access' AND r.name_text IN ($(ConvertTo-SqlInList $script:RtEvents)) AND r.receiver_text = '$(ConvertTo-SqlText $Ds.Name)'
+"@ 'r.start_line, r.id'
+  $out = New-Object System.Collections.ArrayList
+  foreach ($r in $rows) {
+    if (-not $r.handler) { continue }
+    $h = Invoke-IndexQuery "SELECT s.id AS id, s.qualified_name AS q, s.impl_start_line AS istart, f.path AS path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.parent_id = $($Ds.ClassId) AND s.name = '$(ConvertTo-SqlText ([string]$r.handler))' AND s.kind = 'method' AND s.impl_start_line > 0"
+    if ($h.Count -ne 1) { continue }
+    [void]$out.Add([pscustomobject]@{ Line = [int]$r.line; Event = [string]$r.ev; Handler = [string]$r.handler; HandlerId = [int]$h[0].id
+                                       HandlerShort = (Get-ShortName ([string]$h[0].q) (Get-UnitName ([string]$h[0].path))); HandlerImpl = [int]$h[0].istart; HandlerPath = [string]$h[0].path
+                                       Routine = (($([string]$r.routine) -split '\.')[-1]); Grade = 'by name' })
+  }
+  , $out.ToArray()
+}

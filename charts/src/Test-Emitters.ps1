@@ -2333,6 +2333,41 @@ Step 'E-RT0' {
                                        'unknown:::the Exit at :28 sits under a conditional-compilation directive, a shape the source shim does not read|' +
                                        'block:UNLESS:A and { c } B or C:')
   Chk 'A-RT4-STALE'     $rt0.ShimStale 'refused-named'
+  # Task 5: WRITE -> SERVER -> DATABASE -> RESPONSE, and the READ/ALSO placeholders Task 6 fills
+  Chk 'A-RT5-SECTIONS'  $rt0.RtSections 'ANCHOR,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO'
+  # AC-8: the :3990 response guard's else note names FMTOperation.CancelUpdates @:3999. That block (3991-4005)
+  # is the failure branch, so its lines are the note, not steps: CancelUpdates is NOT also a step of the path
+  Chk 'A-RT5-CANCEL'    $rt0.RtCancel 1
+  # AC-9 (ruling P4): CROSSES STEP lines only. TWO at :3985 -- the request (WRITE) and the response (RESPONSE)
+  # ride the one FConn.ExecuteCommand call. Facets in text order: the request's FROM/TO/OVER/WITH, its own
+  # CONTRACT (cmdDelta, Pipes.Protocol.pas:55) and the far side's (IPipeSessionBuilder.HandleDelta, :392,
+  # from the SERVER index); then the response's FROM/TO/WITH
+  Chk 'A-RT5-CROSS'     "$($rt0.RtCrossOut)|$($rt0.RtCrossFacets)" '2|FROM,TO,OVER,WITH,CONTRACT,CONTRACT,FROM,TO,WITH'
+  # the CALLS / ROUTES steps anchored in the five server units, in walk order. MEASURED, beyond the plan's six:
+  # SplitPayload (:409, kept for its own `BarPos < 0` guard), EnsureLoaded [by name] (:429, the FIB$ reads sit
+  # under it, so GetTable's by-name unit scan finds them Seen and adds none), LoadFromInternal (bound, under
+  # EnsureLoaded), CoerceMSCLISTPlanIds (:469, a `TableName = 'MSCLIST'` branch the line walk cannot prune -- E1)
+  # and BindParams (under HandleUpdateRecord, one LoadFromStream). GetTable / EnsureLoaded / PushTableChanged
+  # are [by name]: member calls on the unit vars GDatasetsDef / GBroadcastServer stay unbound (D22)
+  Chk 'A-RT5-SERVER'    $rt0.RtServer ('ROUTES cmdDelta TO IPipeSessionBuilder.HandleDelta|CALLS TPipeSessionBuilder.HandleDelta [by name]|' +
+                                       'CALLS TGenericTableRoute.HandleDelta|CALLS SplitPayload|CALLS TDatasetsDef.EnsureLoaded [by name]|' +
+                                       'CALLS TDatasetsDef.LoadFromInternal|CALLS TDatasetsDef.GetTable [by name]|CALLS CoerceMSCLISTPlanIds|' +
+                                       'CALLS TGenericApplyContext.HandleUpdateRecord|CALLS TGenericApplyContext.BindParams|' +
+                                       'CALLS TBroadcastServer.PushTableChanged [by name]')
+  # the FIB$DATASETS_INFO SQL literal, once (a message that merely NAMES the table, :433/:434, is not SQL)
+  Chk 'A-RT5-FIB'       $rt0.RtFib 1
+  # AC-12 (ruling P15, scoped to WRITE/SERVER/DATABASE by P5): the STOPS says only what was queried --
+  # FDef.UpdateSQL from its ref at uGenericTableRoute.pas:190 (in the routine that runs Cmd.Execute), "loaded at
+  # uDatasetsDef.pas:149" because LoadFromInternal both names UpdateSQL and holds the walk's FIB$DATASETS_INFO
+  # read, and the fb_datasets count of the SERVER clone taken at run time
+  Chk 'A-RT5-STOPS'     $rt0.RtStops 'the UPDATE statement for OPERAT is FDef.UpdateSQL, loaded at uDatasetsDef.pas:149 from FIB$DATASETS_INFO rows the index does not hold (fb_datasets has 0 rows in MicroniteMW1Service)'
+  Chk 'A-RT5-COLUMN'    $rt0.RtColumn 1
+  Chk 'A-RT5-RSPOK'     $rt0.RtRspOk 2
+  # the rebinding switched indexes: files on CLIENT / on SERVER, counted through Invoke-OnDb
+  Chk 'A-RT5-ONDB'      $rt0.RtOnDb '625/471'
+  # first green run 2026-09-28: 61 steps (9 anchor, 5 write, 40 server, 2 database, 3 response, 1 read, 1 also),
+  # 19 conditions, 2 crossings, 2 unresolved (the DATABASE STOPS and Task 6's READ placeholder). A drift is a finding
+  Chk 'A-RT5-COUNTS'    $rt0.RtCounts '61/19/2/2'
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters

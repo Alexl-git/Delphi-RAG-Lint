@@ -387,4 +387,34 @@ $DbPath = Get-CloneDb $DbCli
 $res.ShimStale = $(try { Get-GuardCondition $vmPas 3950 3948 @{ $vmPas = (Join-Path $stVm 'Blueprint4.ViewModel.pas') } | Out-Null; 'accepted' }
                    catch { $(if ($_.Exception.Message -like '*Blueprint4.ViewModel.pas differs from the indexed copy*') { 'refused-named' } else { "wrong: $($_.Exception.Message)" }) })
 
+# ---- 5. the WRITE direction end to end (AC-8, AC-9, AC-12) --------------------------------
+# 6>$null: the emitter prints the whole trace (Write-Host); its else notes quote source text such as
+# 'OPERAT %s FAILED', which must not read as a failure in the gate log
+$rt = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null
+$txt = [IO.File]::ReadAllText($rt.Trace)
+$res.RtSections = $rt.Sections
+$res.RtCounts = "$($rt.Steps)/$($rt.Conditions)/$($rt.Crossings)/$($rt.Unresolved)"
+$lines = $txt -split "\r\n"
+function LinesLike([string] $rx) { , @($lines | Where-Object { $_ -match $rx }) }
+# AC-8: the response guard carries the failure branch naming CancelUpdates
+$res.RtCancel = (LinesLike 'UNLESS ".*<> rspOK\)" @Blueprint4\.ViewModel\.pas:3990 -- else .*FMTOperation\.CancelUpdates @Blueprint4\.ViewModel\.pas:3999').Count
+# AC-9: client -> server -> database, on separately queried indexes. CROSSES STEP lines only (ruling P4):
+# the request and the response are both anchored at the one ExecuteCommand call that carries both
+$res.RtCrossOut = (LinesLike '^\[\d+\] CROSSES process boundary @Blueprint4\.ViewModel\.pas:3985').Count
+$res.RtCrossFacets = (@((LinesLike '^       (FROM|TO|OVER|WITH|CONTRACT) ') | ForEach-Object { ($_.Trim() -split ' ')[0] }) -join ',')
+$res.RtServer = (@((LinesLike '^\[\d+\] (CALLS|ROUTES) ') | Where-Object { $_ -match '@(Pipes\.Commands|uPipeSessionBuilder|uGenericTableRoute|uDatasetsDef|uBroadcastServer)\.pas' } | ForEach-Object { ($_ -replace '^\[\d+\] ', '') -replace ' @.*$', '' }) -join '|')
+$res.RtFib = (LinesLike 'READS FROM FIB\$DATASETS_INFO \[inferred\] @uDatasetsDef\.pas:130').Count
+# AC-12: the UPDATE text is a numbered STOPS counted as unresolved; the column comes from the SQL index.
+# Ruling P5: only the WRITE / SERVER / DATABASE sections -- READ holds this task's placeholder STOPS (Task 6)
+$secOf = ''; $stopsW = @()
+foreach ($ln in $lines) {
+  if ($ln -cmatch '^[A-Z]+$') { $secOf = $ln; continue }
+  if ($secOf -in 'WRITE', 'SERVER', 'DATABASE' -and $ln -match '^\[\d+\] STOPS ') { $stopsW += (($ln -replace '^\[\d+\] STOPS ', '') -replace ' @.*$', '') }
+}
+$res.RtStops = $stopsW -join '|'
+$res.RtColumn = (LinesLike 'WRITES OPERAT\.NAME \[inferred\] @MS1\.SQL:2808').Count
+$res.RtRspOk = (LinesLike '^\[\d+\] RECEIVES rspOK @Blueprint4\.ViewModel\.pas:3990').Count + (LinesLike 'APPLIES FMTOperation\.CommitUpdates @Blueprint4\.ViewModel\.pas:4010').Count
+# the rebinding really switched indexes: file counts differ (CLIENT 625, SERVER 471)
+$res.RtOnDb = $rt.OnDbProof
+
 [pscustomobject]$res
