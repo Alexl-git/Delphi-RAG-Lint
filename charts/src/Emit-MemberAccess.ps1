@@ -152,6 +152,13 @@ if ($shownNames.Count) {
   # USE of that field -- so the table must be read the same way here, via
   # accessor_symbol_id. Matching only on the member left all 602 rows
   # unanchored; the cross-check below is what caught it.
+  #
+  # ... AND A BARE ACCESS BOUND TO THE MEMBER ITSELF (engine D31, 1.18.0 /
+  # resolver 1.9.0, measured 2026-09-27). `FConnected := True` inside its own
+  # class is a `write` ref BOUND to FConnected with NO member_accesses row, and
+  # find-callers --resolved now reports it (FConnected: 4 writes, 0 on the 1.16
+  # engine; FNoRecursion: 48). The second arm anchors those, so the verb and the
+  # SQL still count the same population and the cross-check still holds.
   $sql = @"
 SELECT $($encl.Select) AS routine, ma.mode AS mode, f.path AS path,
        r.start_line AS ln, r.start_col AS col
@@ -164,7 +171,16 @@ SELECT $($encl.Select) AS routine, ma.mode AS mode, f.path AS path,
  WHERE (m.qualified_name = '$(ConvertTo-SqlText $sel.Qname)'
         OR acc.qualified_name = '$(ConvertTo-SqlText $sel.Qname)')
    AND $($encl.Select) IN ($(ConvertTo-SqlInList $shownNames))
- ORDER BY r.start_line, r.start_col
+UNION ALL
+SELECT $($encl.Select) AS routine, r.kind AS mode, f.path AS path,
+       r.start_line AS ln, r.start_col AS col
+  FROM refs r
+  JOIN files f ON f.id = r.file_id
+  $($encl.Join)
+ WHERE r.symbol_id = $($sel.Id) AND r.kind IN ('read', 'write')
+   AND NOT EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id)
+   AND $($encl.Select) IN ($(ConvertTo-SqlInList $shownNames))
+ ORDER BY ln, col
 "@
   $siteRows = Invoke-IndexQuery $sql "$question (site anchors)"
   # Truncation is SILENT, and a result landing EXACTLY on the cap is
@@ -296,9 +312,9 @@ $ftbl  = New-Object System.Text.StringBuilder
 # them has a member_accesses row (0 of 21,916), which is what find-callers
 # reports. So FConnected's four writes are now bound to FConnected itself, the
 # by-name check below no longer sees them, and the verb still does not: the
-# chart said "no write sites (602 reads)" -- a false absence. Those are counted
-# as BOUND UNREPORTED: exact (the index binds them to THIS symbol), disclosed on
-# the focus, never merged into the verb's totals or the writers wing. The
+# chart said "no write sites (602 reads)" -- a false absence. Those were counted
+# as BOUND UNREPORTED and disclosed on the focus until engine D31 made the verb
+# report them (see Get-UnreportedAccess below). The
 # by-name check stays for what 1.19 still leaves unbound (10,993 on CLIENT),
 # e.g. a field written inside a `with` body (uPLANLIST.PAS:2544-2550).
 #
@@ -311,33 +327,22 @@ $ftbl  = New-Object System.Text.StringBuilder
 # Now ONE function measures what find-callers does not report, for EITHER
 # direction, and it runs for BOTH directions on every chart, because every
 # chart prints both totals somewhere (zero notes, the bundle header):
-#   bound      refs of that kind BOUND to this symbol with no member_accesses
-#              row (the verb reads member_accesses; exact)            -- lines
 #   same       UNBOUND refs of that kind with this NAME in the declaring file
 #              (very probably this member; by name)                    -- lines
 #   else       ... in every other file (may be other symbols; by name) -- count
-# Measured on CLIENT 1.19: every bound field/property READ has a member_accesses
-# row (4,319 of 4,319), so bound-unreported is write-side only today; the read
-# side's gap is UNBOUND bare reads (FNoRecursion 9, FConnected 3).
+#
+# ENGINE D31 RETIRED THE THIRD POPULATION (shared engine 1.18.0 / resolver
+# 1.9.0, adopted 2026-09-27). This function also counted "bound": refs BOUND to
+# this symbol with no member_accesses row, which find-callers did not report.
+# find-callers --resolved now reports them -- FConnected 4 writes, FNoRecursion
+# 48, fLOTSIZE 5, each listed by the verb at the same lines this function used
+# to list -- so they are in the verb's totals and the writers wing, and counting
+# them here as well would double-count. The site query's second arm anchors them.
+# What is still unreported is UNBOUND (FNoRecursion 9 bare reads, FConnected 3).
 function Get-UnreportedAccess([string] $Kind) {
   $nm  = ConvertTo-SqlText $sel.Name
   $pth = ConvertTo-SqlText $sel.Path
-  $u = [ordered]@{ Kind = $Kind; Bound = 0; BoundLines = @(); Same = 0; SameLines = @(); Else = 0; Total = 0 }
-  $boundWhere = "r.kind = '$Kind' AND r.symbol_id = $($sel.Id) AND NOT EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id)"
-  $bc = Invoke-IndexQuery "SELECT COUNT(*) AS c FROM refs r WHERE $boundWhere"
-  $u.Bound = [int]$bc[0].c
-  if ($u.Bound) {
-    # Assigned FIRST: piping Invoke-IndexQuery's `, $array` hands ForEach-Object
-    # ONE item, the whole array, and `$_.ln` member-enumerates into one string.
-    $blRows = Invoke-IndexQuery @"
-SELECT f.path AS path, r.start_line AS ln FROM refs r JOIN files f ON f.id = r.file_id
- WHERE $boundWhere
- ORDER BY (f.path <> '$pth'), f.path, r.start_line LIMIT 12
-"@
-    $u.BoundLines = @($blRows | ForEach-Object {
-      if ([string]::Equals([string]$_.path, $sel.Path, [StringComparison]::OrdinalIgnoreCase)) { ":$($_.ln)" }
-      else { "$([IO.Path]::GetFileName([string]$_.path)):$($_.ln)" } })
-  }
+  $u = [ordered]@{ Kind = $Kind; Same = 0; SameLines = @(); Else = 0; Total = 0 }
   $unbWhere = "r.kind = '$Kind' AND r.symbol_id IS NULL AND lower(r.name_text) = lower('$nm')"
   $cnt = Invoke-IndexQuery @"
 SELECT (f.path = '$pth') AS same, COUNT(*) AS c
@@ -354,32 +359,33 @@ SELECT r.start_line AS ln FROM refs r JOIN files f ON f.id = r.file_id
 "@
     $u.SameLines = @($lnRows | ForEach-Object { ":$($_.ln)" })
   }
-  $u.Total = $u.Bound + $u.Same + $u.Else
+  $u.Total = $u.Same + $u.Else
   [pscustomobject]$u
 }
 $wU = Get-UnreportedAccess 'write'
 $rU = Get-UnreportedAccess 'read'
 # the names the rest of this file (and the gate) already read
-$d13Same = $wU.Same; $d13Else = $wU.Else; $d13Lines = $wU.SameLines; $bound = $wU.Bound; $boundLines = $wU.BoundLines
+$d13Same = $wU.Same; $d13Else = $wU.Else; $d13Lines = $wU.SameLines
 
 # What find-callers does NOT report, as a " + ..." tail; '' when nothing.
 function Get-UnreportedTail($U) {
   $k = $U.Kind
   $t = ''
-  if ($U.Bound) { $t += " + $($U.Bound) bound $k(s) find-callers does not report" }
   if ($U.Same)  { $t += " + $($U.Same) unbound $k(s) named $($sel.Name) in $([IO.Path]::GetFileName($sel.Path))" }
   if ($U.Else)  { $t += " + $($U.Else) unbound same-name $k(s) in other files (may be other symbols)" }
   $t
 }
 # "602 reads" when the verb's count is the whole story; otherwise the count is
-# named for what it is and the rest is added -- never a bare "0 writes".
+# named for what it is and the rest is added -- never a bare "0 writes". It was
+# "member-access" until engine D31: the verb now also reports bare accesses BOUND
+# to the member, so "resolved" (find-callers --resolved) is what it counts.
 function Format-AccessCount([int] $N, $U) {
-  if ($U.Total) { "$N member-access $($U.Kind)(s) reported by find-callers$(Get-UnreportedTail $U)" }
+  if ($U.Total) { "$N resolved $($U.Kind)(s) reported by find-callers$(Get-UnreportedTail $U)" }
   else { "$N $($U.Kind)$(if ($N -ne 1) { 's' })" }
 }
 # the bundle header's label for the same count (New-DiagramArtifact); $null = its default
-$writesLabel = $(if ($wU.Total) { "member-access write sites reported by find-callers$(Get-UnreportedTail $wU)" } else { $null })
-$readsLabel  = $(if ($rU.Total) { "member-access read sites reported by find-callers$(Get-UnreportedTail $rU)" } else { $null })
+$writesLabel = $(if ($wU.Total) { "resolved write sites reported by find-callers$(Get-UnreportedTail $wU)" } else { $null })
+$readsLabel  = $(if ($rU.Total) { "resolved read sites reported by find-callers$(Get-UnreportedTail $rU)" } else { $null })
 # ... and the routine count beside it counts only the routines find-callers reported
 $routinesLabel = $(if (($showWrite -and $wU.Total) -or ($showRead -and $rU.Total)) { 'routines reported by find-callers' } else { $null })
 
@@ -390,15 +396,10 @@ function Get-ZeroNote([string] $Kind, $U, [int] $OtherN, $OtherU) {
   $head = $(if ($U.Total) { Format-AccessCount 0 $U } else { "no $Kind sites" })
   "$head ($(Format-AccessCount $OtherN $OtherU))"
 }
-# one set of rows per direction: bound by line, unbound same-file by line,
-# unbound elsewhere by count -- none of them counted in a wing or a total
+# one set of rows per direction: unbound same-file by line, unbound elsewhere
+# by count -- none of them counted in a wing or a total
 function Add-UnreportedRows($U, [string] $Prefix) {
   $k = $U.Kind
-  if ($U.Bound) {
-    $more = $(if ($U.Bound -gt $U.BoundLines.Count) { " (+$($U.Bound - $U.BoundLines.Count) more)" } else { '' })
-    Add-DisclosureRow $ftbl ("$($U.Bound) bare $k(s) BOUND to $($sel.Name) in the index at $($U.BoundLines -join ', ')$more -- " +
-                             'find-callers does not report them (no member-access row), NOT counted above') $PAL.lineInk
-  }
   if ($U.Same) {
     $more = $(if ($U.Same -gt $U.SameLines.Count) { " (+$($U.Same - $U.SameLines.Count) more)" } else { '' })
     Add-DisclosureRow $ftbl ("${Prefix}: $($U.Same) UNBOUND $k(s) named $($sel.Name) in $([IO.Path]::GetFileName($sel.Path)) " +
@@ -514,14 +515,11 @@ $expected = $anchoredRows + 1
   CrossCheck      = $crossCheck
   D13SameFile     = $d13Same              # unbound same-name writes, declaring file
   D13Elsewhere    = $d13Else              # ... in every other file (weaker)
-  BoundUnreported = $bound                # write refs BOUND to this symbol the verb does not report
-  BoundLines      = ($boundLines -join ',')
   # the read-side twin (R26), measured on EVERY chart whatever -Mode drew
-  ReadsBound      = $rU.Bound             # read refs BOUND to this symbol the verb does not report
   ReadsSameFile   = $rU.Same              # unbound same-name reads, declaring file
   ReadsElsewhere  = $rU.Else
   ReadsSameLines  = ($rU.SameLines -join ',')
-  WritesUnreported = $wU.Total            # bound + unbound (same file + elsewhere), writes
+  WritesUnreported = $wU.Total            # unbound (same file + elsewhere), writes
   ReadsUnreported  = $rU.Total            # ... reads
   # the bundle header's labels (New-DiagramArtifact); $null = its default wording
   WritesLabel     = $writesLabel

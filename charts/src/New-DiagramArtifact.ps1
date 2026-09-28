@@ -210,10 +210,11 @@ $vocab = @{
 $v = $vocab[$Question]
 $leftCount  = $r.($v[0]); $leftLabel  = $v[1]
 $rightCount = $r.($v[2]); $rightLabel = $v[3]
-# An emitter may NAME its own count (property "<Count>Label"): who-writes on a
-# field whose bare writes are bound but not reported by find-callers must not
-# read "0 write sites" (ruling R26) -- it reads "0 member-access write sites
-# reported by find-callers + 4 bound write(s) find-callers does not report".
+# An emitter may NAME its own count (property "<Count>Label"): who-reads on a
+# field whose bare reads the index leaves UNBOUND must not read "0 read sites"
+# (ruling R26) -- it reads "0 resolved read sites reported by find-callers + 9
+# unbound read(s) named FNoRecursion in Blueprint4.pas". Only Emit-MemberAccess sets one.
+# (Its first use, bound writes find-callers did not report, retired with engine D31.)
 if ($r.PSObject.Properties["$($v[0])Label"] -and $r."$($v[0])Label") { $leftLabel  = [string]$r."$($v[0])Label" }
 if ($r.PSObject.Properties["$($v[2])Label"] -and $r."$($v[2])Label") { $rightLabel = [string]$r."$($v[2])Label" }
 

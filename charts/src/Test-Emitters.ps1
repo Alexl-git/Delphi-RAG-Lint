@@ -344,13 +344,14 @@ Step 'E-MA2' {
   #   R 0/35 -> 0/1: 34 now bound -- 26 locals, 4 params, 4 fields, NONE to
   #     RChartSampleData.R; the one left is `R:= ClipRect` at uStyles.pas:452,
   #     inside `with img do with img.Canvas do` (1.19 binds with-body READS, D14).
-  # Neither member has a write bound to ITSELF, so BoundUnreported is 0 on both.
-  Chk 'A-MA2-D13'      "$($m2.D13SameFile)/$($m2.D13Elsewhere)/$($m2.BoundUnreported)" '0/0/0'
+  # The third field (BoundUnreported, 0 on both) retired with engine D31
+  # (2026-09-27): find-callers now reports a bare write bound to the member.
+  Chk 'A-MA2-D13'      "$($m2.D13SameFile)/$($m2.D13Elsewhere)" '0/0'
   if ((Dot $m2) -match 'engine D13') { Fail 'A-MA2-D13' 'the D13 disclosure still fires on VERDICT, where every write it named is now bound elsewhere' }
   # a missing precondition FAILS (final wave, item 9): `if ($m1) { ... }` used to
   # skip this row silently whenever E-MA1 had thrown, and the run still passed
   if (-not $m1) { Fail 'A-MA1-D13' 'precondition: E-MA1 produced no result, so the D13 count of R was never checked' }
-  else { Chk 'A-MA1-D13' "$($m1.D13SameFile)/$($m1.D13Elsewhere)/$($m1.BoundUnreported)" '0/1/0' }
+  else { Chk 'A-MA1-D13' "$($m1.D13SameFile)/$($m1.D13Elsewhere)" '0/1' }
 }
 
 # ENGINE D13: up to 1.18 write refs were never bound on CLIENT, so the verb saw
@@ -361,76 +362,97 @@ Step 'E-MA2' {
 # by-name check is silent (4/0 -> 0/0) -- but find-callers still reports none of
 # them (no bound write ref has a member_accesses row: 0 of 21,916), and the chart
 # said "no write sites (602 reads)", a FALSE absence. Emit-MemberAccess now
-# counts writes BOUND to the member that the verb does not report, and says so.
-Note 'who-writes FConnected (bound writes the verb does not report) ...'
+# counted writes BOUND to the member that the verb did not report, and said so.
+# RE-BASELINED 2026-09-27 (engine D31, shared engine 1.18.0 / resolver 1.9.0):
+# find-callers --resolved now REPORTS those four bound writes, at the same
+# lines, so they are the writers wing (Writes 0 -> 4, 3 routines: Connect x2,
+# Create, Disconnect) and the "bound, not reported" disclosure is gone. The
+# site query anchors them through its bound-ref arm; CrossCheck proves the verb
+# and the SQL agree on all four.
+Note 'who-writes FConnected (bare writes the verb now reports, engine D31) ...'
 Step 'E-MA-D13' {
   $script:m14 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'uPipeClientConnection.TPipeClientConnection.FConnected' -Mode write -DbPath $DbCli -OutDir $OutDir
-  Chk 'A-MA14-WRITES' $m14.Writes 0
+  Chk 'A-MA14-WRITES' $m14.Writes 4
+  Chk 'A-MA14-ROUTINES' $m14.Routines 3
+  Chk 'A-MA14-XCHECK' "$($m14.CrossCheck) $($m14.Unanchored)" 'agree 0'
   Chk 'A-MA14-D13'    "$($m14.D13SameFile)/$($m14.D13Elsewhere)" '0/0'
-  Chk 'A-MA14-BOUND'  "$($m14.BoundUnreported) $($m14.BoundLines)" '4 :164,:320,:455,:543'
   $t14 = Dot $m14
-  # FIX ROUND 1 (R26): the zero note names the verb's count for what it is and adds
-  # both directions' unreported populations -- never "no write sites" / "0 writes".
-  # FConnected also has 3 UNBOUND bare reads in its own unit (the read-side twin).
-  Chk 'A-MA14-READS' "$($m14.ReadsBound)/$($m14.ReadsSameFile)/$($m14.ReadsElsewhere)" '0/3/0'
-  if ($t14 -notmatch [regex]::Escape('0 member-access write(s) reported by find-callers + 4 bound write(s) find-callers does not report (602 member-access read(s) reported by find-callers + 3 unbound read(s) named FConnected in uPipeClientConnection.pas)')) {
-    Fail 'A-MA14-ZERO' 'the zero note does not say it is only what find-callers REPORTS, with both populations' }
-  if ($t14 -match 'no write sites') { Fail 'A-MA14-ZERO' 'a "no write sites" claim sits beside 4 bound writes (R26)' }
-  if ($t14 -notmatch '4 bare write\(s\) BOUND to FConnected in the index at :164, :320, :455, :543 -- find-callers does not report them') { Fail 'A-MA14-LINES' 'the four bound write lines are not listed' }
+  # a row anchors its routine's FIRST site; Connect's second (:455) is in its tooltip
+  foreach ($ln in 164, 320, 543) {
+    if (-not (HasLine $t14 $ln)) { Fail 'A-MA14-LINES' "the bound write at uPipeClientConnection.pas:$ln is not an anchored writer row" }
+  }
+  if ($t14 -notmatch [regex]::Escape('TITLE="2 write sites: 320:3, 455:3"')) { Fail 'A-MA14-LINES' 'Connect does not list both of its writes (:320, :455)' }
+  # FConnected also has 3 UNBOUND bare reads in its own unit (the read-side twin,
+  # R26): the write chart still carries the read count WITH that population.
+  Chk 'A-MA14-READS' "$($m14.ReadsSameFile)/$($m14.ReadsElsewhere)" '3/0'
+  if ($t14 -notmatch [regex]::Escape('reads (not drawn): 602 resolved read(s) reported by find-callers + 3 unbound read(s) named FConnected in uPipeClientConnection.pas')) {
+    Fail 'A-MA14-READNOTE' 'the not-drawn read count does not carry its unbound population' }
+  if ($t14 -match 'no write sites') { Fail 'A-MA14-ZERO' 'a "no write sites" claim beside 4 reported writes' }
+  if ($t14 -match 'BOUND to FConnected') { Fail 'A-MA14-RETIRED' 'the retired "bound, not reported" disclosure still fires' }
   if ($t14 -match 'engine D13') { Fail 'A-MA14-SILENT' 'the by-name D13 disclosure still fires on FConnected, whose writes are all bound now' }
 }
 
 # The by-name D13 path on REAL data after the fix (R25): 1.19 still leaves a
 # field written inside a `with` body unbound. uPLANLIST.PAS:2547
 # `fLOTSIZE := StrToIntA(...)` sits in `with Z14slctFrm do` (TANSIZ14Plan.EditForm).
-# The same chart carries 5 in-class writes BOUND to fLOTSIZE -- both disclosures at once.
+# The same chart carried 5 in-class writes BOUND to fLOTSIZE as a second
+# disclosure. RE-BASELINED 2026-09-27 (engine D31): find-callers reports those 5
+# now, at the same lines, so Writes 0 -> 5 and they are anchored writer rows.
 Note 'who-writes fLOTSIZE (engine D13 residue: a write in a with body) ...'
 Step 'E-MA-D13B' {
   $script:m15 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'uPLANLIST.TmcPLANLIST.fLOTSIZE' -Mode write -DbPath $DbCli -OutDir $OutDir
-  Chk 'A-MA15-D13'   "$($m15.Writes)/$($m15.D13SameFile)/$($m15.D13Elsewhere)" '0/1/0'
-  Chk 'A-MA15-BOUND' "$($m15.BoundUnreported) $($m15.BoundLines)" '5 :1315,:1453,:1517,:1580,:2055'
+  Chk 'A-MA15-D13'   "$($m15.Writes)/$($m15.D13SameFile)/$($m15.D13Elsewhere)" '5/1/0'
+  Chk 'A-MA15-XCHECK' "$($m15.CrossCheck) $($m15.Unanchored)" 'agree 0'
   $t15 = Dot $m15
+  foreach ($ln in 1315, 1453, 1517, 1580, 2055) {
+    if (-not (HasLine $t15 $ln)) { Fail 'A-MA15-LINES' "the bound write at uPLANLIST.PAS:$ln is not an anchored writer row" }
+  }
   if ($t15 -notmatch 'engine D13: 1 UNBOUND write\(s\) named fLOTSIZE in uPLANLIST\.PAS at :2547 -- by name, NOT counted above') { Fail 'A-MA15-D13' 'the unbound with-body write is not listed by name' }
   # ... and the zero note with unbound writes and NO bound one (it said "no RESOLVED
   # write sites" before fix round 1, R26): TTabSwitchMessage.Result (7 `Result :=` lines in its own unit, by name --
   # 10,481 of the 10,993 writes 1.19 leaves unbound are `Result`)
   $script:m16 = & "$SRC\Emit-MemberAccess.ps1" -Qname 'INSPFLDR.Messages.TTabSwitchMessage.Result' -Mode write -DbPath $DbCli -OutDir $OutDir
-  Chk 'A-MA16-D13'   "$($m16.Writes)/$($m16.D13SameFile)/$($m16.D13Elsewhere)/$($m16.BoundUnreported)" '0/7/10474/0'
-  Chk 'A-MA16-READS'  "$($m16.ReadsBound)/$($m16.ReadsSameFile)/$($m16.ReadsElsewhere)" '0/0/4888'
-  if ((Dot $m16) -notmatch [regex]::Escape('0 member-access write(s) reported by find-callers + 7 unbound write(s) named Result in INSPFLDR.Messages.pas + 10474 unbound same-name write(s) in other files (may be other symbols) (0 member-access read(s) reported by find-callers + 4888 unbound same-name read(s) in other files (may be other symbols))')) {
+  Chk 'A-MA16-D13'   "$($m16.Writes)/$($m16.D13SameFile)/$($m16.D13Elsewhere)" '0/7/10474'
+  Chk 'A-MA16-READS'  "$($m16.ReadsSameFile)/$($m16.ReadsElsewhere)" '0/4888'
+  # "member-access" -> "resolved" (2026-09-27, engine D31): the verb's count now
+  # includes bare accesses bound to the member, so it is not member-access only.
+  if ((Dot $m16) -notmatch [regex]::Escape('0 resolved write(s) reported by find-callers + 7 unbound write(s) named Result in INSPFLDR.Messages.pas + 10474 unbound same-name write(s) in other files (may be other symbols) (0 resolved read(s) reported by find-callers + 4888 unbound same-name read(s) in other files (may be other symbols))')) {
     Fail 'A-MA16-ZERO' 'the zero note does not name what find-callers reports beside the unbound populations' }
 }
 
 # FIX ROUND 1 (ruling R26): nothing may claim zero writes -- or zero reads --
 # while the index holds bound or unbound ones. Blueprint4.TfrmBlueprint4.FNoRecursion
 # is the shape 1,073 CLIENT fields share: 48 bare writes BOUND (none reported by
-# find-callers) and 9 UNBOUND bare reads in its own unit, 0 of either reported.
+# find-callers at 1.16) and 9 UNBOUND bare reads in its own unit.
 # The first cut printed "48 bare write(s) BOUND" and right under it "no read
 # sites (0 writes)"; -Mode read printed "(0 writes)" with no disclosure at all.
-Note 'who-writes/who-reads FNoRecursion (R26: bound writes, unbound reads, 0 reported) ...'
+# RE-BASELINED 2026-09-27 (engine D31): find-callers reports the 48 writes now
+# (26 routines), so Writes 0 -> 48 and the write-side zero note is gone; the
+# 9 unbound reads are still unreported, so the READ zero note still carries them.
+Note 'who-writes/who-reads FNoRecursion (R26: 48 reported writes, 9 unbound reads) ...'
 Step 'E-MA-R26' {
   $script:mfb = & "$SRC\Emit-MemberAccess.ps1" -Qname 'Blueprint4.TfrmBlueprint4.FNoRecursion' -Mode both -DbPath $DbCli -OutDir $OutDir
   $script:mfr = & "$SRC\Emit-MemberAccess.ps1" -Qname 'Blueprint4.TfrmBlueprint4.FNoRecursion' -Mode read -DbPath $DbCli -OutDir (Join-Path $OutDir 'r26')
   foreach ($p in @(@('A-MA-R26-BOTH', $mfb), @('A-MA-R26-READ', $mfr))) {
-    Chk $p[0] "$($p[1].Writes)/$($p[1].Reads) w=$($p[1].BoundUnreported)/$($p[1].D13SameFile)/$($p[1].D13Elsewhere) r=$($p[1].ReadsBound)/$($p[1].ReadsSameFile)/$($p[1].ReadsElsewhere)" '0/0 w=48/0/0 r=0/9/0'
+    Chk $p[0] "$($p[1].Writes)/$($p[1].Reads) w=$($p[1].D13SameFile)/$($p[1].D13Elsewhere) r=$($p[1].ReadsSameFile)/$($p[1].ReadsElsewhere)" '48/0 w=0/0 r=9/0'
   }
-  $wPh = '0 member-access write(s) reported by find-callers + 48 bound write(s) find-callers does not report'
-  $rPh = '0 member-access read(s) reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas'
+  Chk 'A-MA-R26-XCHECK' "$($mfb.CrossCheck) $($mfb.Unanchored) $($mfb.Routines)" 'agree 0 26'
+  $rPh = '0 resolved read(s) reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas'
   $tb = Dot $mfb; $tr = Dot $mfr
-  if ($tb -notmatch [regex]::Escape("$wPh ($rPh)")) { Fail 'A-MA-R26-BOTH' 'the write-side zero note does not carry both populations' }
-  if ($tb -notmatch [regex]::Escape("$rPh ($wPh)")) { Fail 'A-MA-R26-BOTH' 'the read-side zero note does not carry both populations' }
+  if ($tb -notmatch [regex]::Escape("$rPh (48 writes)")) { Fail 'A-MA-R26-BOTH' 'the read-side zero note does not carry its unbound population and the write count' }
   if ($tb -notmatch 'engine: 9 UNBOUND read\(s\) named FNoRecursion in Blueprint4\.pas at :1950, :2084, :2113, :2138, :2163, :2179, :2238, :3142, :3546 -- by name') { Fail 'A-MA-R26-BOTH' 'the 9 unbound reads are not listed' }
-  if ($tr -notmatch [regex]::Escape("$rPh ($wPh)")) { Fail 'A-MA-R26-READ' 'who-reads prints the write count without its bound population' }
-  if ($tr -match 'BOUND to FNoRecursion') { Fail 'A-MA-R26-READ' 'who-reads draws the write lines it does not render' }
-  # the bundle HEADER (New-DiagramArtifact): who-writes FConnected must not read
-  # "0 write sites / 0 routines" beside 4 listed bound writes
-  $art = & "$SRC\New-DiagramArtifact.ps1" -Question who-writes -Target 'uPipeClientConnection.TPipeClientConnection.FConnected' -DbPath $DbCli -OutRoot (Join-Path $OutDir 'bundle-r26')
+  if ($tr -notmatch [regex]::Escape("$rPh (48 writes)")) { Fail 'A-MA-R26-READ' 'who-reads prints the zero without its unbound population' }
+  if ("$tb $tr" -match 'BOUND to FNoRecursion') { Fail 'A-MA-R26-RETIRED' 'the retired "bound, not reported" disclosure still fires' }
+  # the bundle HEADER (New-DiagramArtifact) takes the emitter's own label: who-reads
+  # FNoRecursion must not read "0 read sites / 0 routines" beside 9 unbound reads.
+  # (This was who-writes FConnected until D31 made its 4 bound writes reported.)
+  $art = & "$SRC\New-DiagramArtifact.ps1" -Question who-reads -Target 'Blueprint4.TfrmBlueprint4.FNoRecursion' -DbPath $DbCli -OutRoot (Join-Path $OutDir 'bundle-r26')
   $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
-  Chk 'A-MA-R26-HDR' "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '0 member-access write sites reported by find-callers + 4 bound write(s) find-callers does not report / 0 routines reported by find-callers'
+  Chk 'A-MA-R26-HDR' "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '0 resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas / 0 routines reported by find-callers'
   $script:r26html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
   # a real bundle says it is not a test chart (fix round 2: meta.testChart)
   Chk 'A-MA-R26-META' $meta.testChart 'False'
-  if ($r26html -notmatch [regex]::Escape('<span><b>0</b> member-access write sites reported by find-callers + 4 bound write(s) find-callers does not report</span>')) { Fail 'A-MA-R26-HDR' 'the rendered bundle header does not name the bound writes' }
+  if ($r26html -notmatch [regex]::Escape('<span><b>0</b> resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas</span>')) { Fail 'A-MA-R26-HDR' 'the rendered bundle header does not name the unbound reads' }
 }
 
 Note 'who-reads Connected at scale (602 sites, 598 routines, cap 25) ...'
@@ -657,8 +679,8 @@ Step 'A-MA-R26-SWEEP' {
                    @('m15', $m15), @('m16', $m16), @('mfb', $mfb), @('mfr', $mfr), @('r26-bundle', $r26html))) {
     $o = $p[1]
     if (-not $o) { Fail 'A-MA-R26-SWEEP' "precondition: $($p[0]) produced no result, so it was never swept"; continue }
-    # the bundle html is judged with the counts of the chart it wraps (m14, FConnected)
-    if ($o -is [string]) { $txt = $o; $cnt = $m14 } else { $txt = Dot $o; $cnt = $o }
+    # the bundle html is judged with the counts of the chart it wraps (mfr, who-reads FNoRecursion)
+    if ($o -is [string]) { $txt = $o; $cnt = $mfr } else { $txt = Dot $o; $cnt = $o }
     $seen++
     foreach ($msg in (Get-R26Problems $p[0] $txt $cnt)) { Fail 'A-MA-R26-SWEEP' $msg }
   }
@@ -675,7 +697,7 @@ Step 'A-MA-R26-SWEEP' {
   $syn = "$(@(Get-R26Problems 'pre' $old $preFx).Count)/$(@(Get-R26Problems 'w' $old $cnts).Count)/" +
          "$(@(Get-R26Problems 'w1' 'no write sites (602 reads)' ([pscustomobject]@{ WritesUnreported = 4; ReadsUnreported = 0 })).Count)/" +
          "$(@(Get-R26Problems 'r' 'x (0 read(s))' $cnts).Count)/" +
-         "$(@(Get-R26Problems 'ok' '0 member-access write(s) reported by find-callers + 48 bound write(s) find-callers does not report (0 member-access read(s) reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas)' $cnts).Count)"
+         "$(@(Get-R26Problems 'ok' '0 resolved read(s) reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas (0 resolved write(s) reported by find-callers + 48 unbound write(s))' $cnts).Count)"
   Chk 'A-MA-R26-SWEEP-CANFAIL' $syn '2/2/1/1/0'
 }
 # N7 is the BUNDLER's contract, not an emitter's: the refusal must propagate AND
@@ -881,7 +903,13 @@ Step 'E-AR' {
   Chk 'A-AR1-ZONES'    $ar1.Zones 3
   Chk 'A-AR1-INTERNAL' $ar1.InternalEdges 2859
   Chk 'A-AR1-EXTUNITS' $ar1.ExternalUnits 293
-  Chk 'A-AR1-EXTEDGES' $ar1.ExternalEdges 30716
+  # RE-BASELINED 2026-09-27: 6880, was 30716. ENGINE change, not an index change
+  # (both engines agree on the SAME clone: 1.16 says 30716, 1.18 says 6880).
+  # Engine commit c4034b21 (their D5, which this pin's +14 note raised): an
+  # external is credited only to the units that name it, one edge per
+  # (importer, external). 6880 = distinct (file_id, unit_name_norm) unit_uses
+  # rows with target_file_id NULL, measured on this clone and on *.pre-1.9.
+  Chk 'A-AR1-EXTEDGES' $ar1.ExternalEdges 6880
   Chk 'A-AR1-GROUPS'   $ar1.Groups 5
   Chk 'A-AR1-BACK'     $ar1.BackEdges 3
   # The red-team's classifier gap: bare `spring` lands in `unknown`.
@@ -2191,7 +2219,7 @@ if (-not $Quiet) {
   Write-Host 'Emitter verification -- fifteen questions, thirteen emitters, four indexes'
   Write-Host ("  bytes          : {0} non-ascii, {1} bare LF" -f $nonAscii, $bareLf)
   Write-Host ("  butterfly      : {0} callers / {1} callees, {2} clicks" -f (V $b 'Callers'), (V $b 'Callees'), (V $b 'ClickTargets'))
-  Write-Host ("  butterfly D6   : {0} callees from 19 tree nodes, {1} arrows, {2} leave the focus; D12 {3} (synthetic {4}); FConnected bound-unreported {5}, fLOTSIZE D13 {6}" -f (V $b6 'Callees'), (V $b6 'Edges'), (V $b6 'FocusOut'), (V $fx7 'D12Suspect'), $fx12, (V $m14 'BoundUnreported'), (V $m15 'D13SameFile'))
+  Write-Host ("  butterfly D6   : {0} callees from 19 tree nodes, {1} arrows, {2} leave the focus; D12 {3} (synthetic {4}); FConnected writes {5} (D31), fLOTSIZE D13 {6}" -f (V $b6 'Callees'), (V $b6 'Edges'), (V $b6 'FocusOut'), (V $fx7 'D12Suspect'), $fx12, (V $m14 'Writes'), (V $m15 'D13SameFile'))
   Write-Host ("  deps           : {0} used by / {1} uses" -f (V $d 'UsedBy'), (V $d 'Uses'))
   Write-Host ("  who-calls      : {0} sites d2, {1} sites + {2} cycle d3, {3} name-only NOT merged" -f (V $w1 'Callers'), (V $w2 'Callers'), (V $w2 'Cycles'), (V $w2 'NameOnly'))
   Write-Host ("  what-it-calls  : {0}/{1}/{2} rows at d1/d2/d3, {3} cycles, ties butterfly's {4}" -f (V $c1 'Rows'), (V $c2 'Rows'), (V $c3 'Rows'), (V $c3 'Cycles'), (V $b 'Callees'))

@@ -13,12 +13,12 @@
       cmdTableLoad   42 refs, 42 bound   (was 42 / 0)
       index-wide     5,983 refs bound to 592 enum_value symbols (CLIENT)
 
-  BUT THE VERB CANNOT SEE THEM ON THIS BUILD. Our engine is resolver 1.5.1 and
-  `query find-callers --name cmdDelta --resolved` returns `[]`, because the
-  union arm that reads enum-value bindings is 1.6.0 code we do not have. So this
-  emitter reads `refs` by SQL. That is a deliberate workaround with a shelf life:
-  when the engine is redeployed the verb becomes available, and this emitter
-  should be re-examined rather than left on SQL out of habit.
+  THE VERB COULD NOT SEE THEM ON THE OLD BUILD (resolver 1.5.1: `query
+  find-callers --name cmdDelta --resolved` returned `[]`). RE-EXAMINED
+  2026-09-27 on the shared engine 1.18.0 / resolver 1.9.0: the verb now reports
+  them -- cmdDelta 38 rows on the CLIENT clone, equal to the 38 bound refs. This
+  emitter stays on SQL because it needs each site's line AND column and the
+  enclosing routine in one query; the verb gives no column.
 
   THE COLUMN IS `kind`, AND THERE IS NO `mode` (measured)
   --------------------------------------------------------
@@ -241,7 +241,7 @@ if ($unattributed -gt 0) {
   Add-DisclosureRow $ftbl "$unattributed reference(s) sit at unit level, not inside a routine" $PAL.lineInk
 }
 Add-DisclosureRow $ftbl 'rows are zoned by FILE PATH: a shared unit is in both project indexes' $PAL.lineInk
-Add-DisclosureRow $ftbl 'read from refs by SQL -- find-callers --resolved cannot see enum values on this build' $PAL.lineInk
+Add-DisclosureRow $ftbl 'read from refs by SQL (the site line and column; find-callers --resolved also reports enum-value refs, without a column)' $PAL.lineInk
 # R7, from the engine team: a bare-name enum binding inside a `with`-bearing
 # routine may be naming the receiver's member instead. 178 such reads on CLIENT.
 # This index stores every enum ref with a bare name_text and carries no `with`

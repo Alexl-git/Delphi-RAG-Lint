@@ -209,7 +209,7 @@ $CATALOGUE = @(
   @{ Q='what-it-calls';   Sel='method';          St='shipped'
      Note='Caller and callee walks follow resolved <code>call_edges</code>, and only RESOLVED calls are walked. Engine D1 (a parenless call such as <code>N := NextId;</code> never bound) was FIXED in resolver 1.7/1.8 -- CLIENT call edges 20,409 &rarr; 23,790 -- but a call the resolver still cannot bind is missing, so a short list remains a lower bound.' }
   @{ Q='who-writes';      Sel='field/property';  St='shipped'
-     Note='The writers wing is what <code>find-callers</code> reports: member-access writes. Extractor 1.19 binds a BARE in-class assignment (<code>FConnected := True</code>; engine D13, fixed) but gives it no member-access row, so the verb still does not report it: the chart lists such writes BOUND to the member by line, and any write or read still unbound (e.g. inside a <code>with</code> body; bare in-class reads) by name; neither is counted in a wing, and no count reads as a bare zero beside them.' }
+     Note='The writers wing is what <code>find-callers</code> reports: member-access writes AND, since engine 1.18 (D31), a BARE in-class assignment bound to the member (<code>FConnected := True</code>). A write or read the index still leaves unbound (e.g. inside a <code>with</code> body; bare in-class reads) is listed by name, never counted in a wing, and no count reads as a bare zero beside it.' }
   @{ Q='who-reads';       Sel='field/property';  St='shipped' }
   @{ Q='hierarchy';       Sel='type';            St='shipped' }
   @{ Q='class-surface';   Sel='type';            St='shipped' }

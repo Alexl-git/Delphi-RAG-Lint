@@ -57,12 +57,15 @@ function New-RowHref([string] $File, [int] $Line) {
 # WHY THIS EXISTS -- and what it is NOT about
 # -------------------------------------------
 # On 2026-09-23 at 05:30 the engine team reindexed the corpus to
-# v=1.17.0-alpha / r=1.6.0-alpha. The engine deployed in this worktree is
+# v=1.17.0-alpha / r=1.6.0-alpha. The engine deployed in this worktree was
 # 1.16.0-alpha with resolver 1.5.1-alpha -- OLDER on two axes -- and
 # RefuseIfEngineOlderThanDb does not cover the resolver axis, so nothing
-# refuses. The skew yields SMALLER CONFIDENT ANSWERS, never an error. The clones
-# under scratch\db were re-taken on 2026-09-24 02:53 and carry
-# v=1.19.0-alpha / r=1.8.0-alpha (schema_meta, checked at the 1.19 re-baseline).
+# refuses. The skew yields SMALLER CONFIDENT ANSWERS, never an error. Since
+# 2026-09-27 the charts run the SHARED engine
+# (C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe, 1.18.0-alpha /
+# resolver 1.9.0-alpha), and the clones under scratch\db were re-taken on
+# 2026-09-27 23:15 (DL at 23:50) and carry v=1.19.0-alpha / r=1.9.0-alpha (schema_meta,
+# checked at the resolver-1.9 re-baseline).
 #
 # This guard is NOT about corruption. Reads are proven safe: only `index`
 # re-resolves, and a full day of reads left both DBs still on r=1.6.0-alpha.
@@ -87,9 +90,12 @@ function New-RowHref([string] $File, [int] $Line) {
 # by habit, and "by habit" is precisely what is being guarded against.
 #
 # THE SUFFIX RULE (N35, controller ruling R3, 2026-09-23). The clone root also
-# holds HISTORY: `*.sqlite.pre-1.19`, `*.sqlite.pre-1.18` and `*.sqlite.pre-reindex-0530` are
-# byte-for-byte older clones kept for comparison. They sit under the root, so the
-# whitelist alone ACCEPTS them -- and a 562-file pre-1.18 CLIENT answers every
+# holds HISTORY: `*.sqlite.pre-1.9`, `*.sqlite.pre-1.19`, `*.sqlite.pre-1.18` and
+# `*.sqlite.pre-reindex-0530` are byte-for-byte older clones kept for comparison
+# (`pre-1.9` = the resolver-1.8 set, before the 2026-09-27 re-take), plus
+# `DL-drag-lint.sqlite.withheld-2145` (a first DL copy whose resolver had
+# withheld every call edge of the 20 units edited since their parse). They sit
+# under the root, so the whitelist alone ACCEPTS them -- and a 562-file pre-1.18 CLIENT answers every
 # query confidently with the older parse. The file name must END in `.sqlite`.
 # This is checked BEFORE the live-DB override on purpose: the override exists to
 # reach a live corpus DB, never to reach a history copy.
@@ -105,7 +111,7 @@ function Get-CloneDb([string] $Path) {
 
   if (-not $full.EndsWith('.sqlite', [StringComparison]::OrdinalIgnoreCase)) {
     throw ("refusing a database whose name does not end in .sqlite: $full -- the clone root keeps " +
-           'history copies (*.sqlite.pre-1.19, *.sqlite.pre-1.18, *.sqlite.pre-reindex-0530) beside the live clones, and ' +
+           'history copies (*.sqlite.pre-1.9, *.sqlite.pre-1.19, *.sqlite.pre-1.18, *.sqlite.pre-reindex-0530) beside the live clones, and ' +
            'they answer with an OLDER parse. Point at the *.sqlite clone itself.')
   }
 
@@ -119,10 +125,9 @@ function Get-CloneDb([string] $Path) {
   }
 
   throw ("refusing a non-clone database: $full -- charts run against the clones in $root. " +
-         'The deployed engine (1.16.0-alpha / resolver 1.5.1-alpha) is OLDER than the indexed ' +
-         'clones (v=1.19.0-alpha / r=1.8.0-alpha), and a live DB can be re-indexed mid-run, so ' +
-         'an asserted count would not be reproducible. Set DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 to ' +
-         'override deliberately once the engine has been redeployed.')
+         'A live DB can be re-indexed mid-run, so an asserted count would not be reproducible; ' +
+         'the clones (v=1.19.0-alpha / r=1.9.0-alpha) freeze it. Set DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 ' +
+         'to override deliberately.')
 }
 
 # ---- engine -----------------------------------------------------------------
@@ -572,8 +577,11 @@ function Get-EdgelessDisclosure($Rows) {
 # Same lesson as its finding 1 in a new place: ask what the index already
 # stores before writing SQL to recompute it.
 #
-# `find-callers --resolved` still cannot answer this -- its `line` is the
-# caller's DECLARATION line -- which is why a site anchor needs SQL at all.
+# `find-callers --resolved` answers only half of this. Up to engine 1.16 its
+# `line` was the caller's DECLARATION line; since 1.18 (measured 2026-09-27)
+# `line` is the CALL SITE and the declaration moved to `caller_line`. It still
+# gives no COLUMN, and three accesses can share a line, which is why a site
+# anchor needs SQL at all.
 function Get-EnclosingRoutineSql([string] $RefAlias, [string] $JoinAlias = 'encl') {
   [pscustomobject]@{
     Join   = "LEFT JOIN symbols $JoinAlias ON $JoinAlias.id = $RefAlias.enclosing_symbol_id"
