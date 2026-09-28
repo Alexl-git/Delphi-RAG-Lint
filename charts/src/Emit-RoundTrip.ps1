@@ -21,8 +21,9 @@
   same-line name match (E3); the UPDATE / SELECT texts live in FIB$ rows the
   clones do not hold (E4); the accessor's field read is unbound (INBOX-in-class-
   field-reads-unbound); a member call on a unit-level var is resolved through the
-  var's declared type (receiver-typed-calls, filed as INBOX-charts-receiver-typed-calls-unbound).
-  Every such step names its ask.
+  var's declared type (receiver-typed-calls, filed as INBOX-charts-receiver-typed-calls-unbound);
+  a field's declared type is matched to its class by name (type-use-binding, INBOX-charts-type-use-unbound).
+  Every such step names its ask; a hop that is the walk's own inference names none (final-review M2).
 
   WRITE -> SERVER -> DATABASE -> RESPONSE (Task 5) is one section per tier; READ
   (Task 6) is one section whose steps carry their actor word (SERVER / DATABASE /
@@ -67,7 +68,13 @@ if ($sqlSet.TableCount -eq 0) { throw "round-trip: $SqlDbPath is not a SQL index
 $cliName = [IO.Path]::GetFileNameWithoutExtension($DbPath) -replace '^CLIENT-', ''
 $srvName = [IO.Path]::GetFileNameWithoutExtension($ServerDbPath) -replace '^SERVER-', ''
 $likes = Get-BoundaryLikes $BoundaryPattern
-$asOf = (Get-Item $DbPath).LastWriteTimeUtc.ToString('yyyy-MM-dd')
+# final-review M3: AS OF is each index's OWN last-indexed stamp (schema_meta indexed_at_unix), in the order the
+# INDEX line names them, UTC to the minute -- not a file date. An index without the stamp says `unstamped`.
+function Get-IndexStamp([string] $Db) {
+  $r = Invoke-OnDb $Db { Invoke-IndexQuery "SELECT value AS v FROM schema_meta WHERE key = 'indexed_at_unix'" }
+  $(if ($r.Count -and "$($r[0].v)" -match '^\d+$') { [DateTimeOffset]::FromUnixTimeSeconds([long]$r[0].v).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm'Z'") } else { 'unstamped' })
+}
+$asOf = (@($DbPath, $ServerDbPath, $SqlDbPath) | ForEach-Object { Get-IndexStamp $_ }) -join '/'
 $regen = "New-DiagramArtifact.ps1 -Question round-trip -Target $Target -DbPath `"$DbPath`" -ServerDbPath `"$ServerDbPath`" -SqlDbPath `"$SqlDbPath`" -Depth $Depth"
 
 # ---- 1. the anchor -------------------------------------------------------------------
@@ -101,11 +108,31 @@ if ($A.Stop) {
   foreach ($s in @($secW, $secS, $secD, $secR, $secRd, $secAl)) { $s.Note = $notWalked }
 }
 
+# final-review I2: a DIRECTION that stops after the anchor resolved. Its STOPS ends it, so the tiers it did not
+# reach are not walked and say so -- the same generated section note (T6-R2: not a STOPS, not unresolved),
+# naming the STOPS by the number it gets when written: WRITE stops (no wiring, no crossing) -> SERVER, DATABASE
+# and RESPONSE; the server side stops (no dispatch arm, no one implementation) -> DATABASE, and RESPONSE claims no
+# response. READ is one section, so a READ server stop skips its DATABASE steps. $WStop / $RStop: the STOPS that
+# ended each direction ($null: walked through to the database tier); the TITLE claims only the walked ones.
+$WStop = $null; $RStop = $null
+$notes = New-Object System.Collections.ArrayList
+function Add-NotWalked($Sec, $Stop, [string] $Dir) { [void]$notes.Add([pscustomobject]@{ Sec = $Sec; Stop = $Stop; Dir = $Dir }) }
+# the number Write-FormA will give $Item: its place across the sections, counted after every merge
+function Get-TraceItemNumber($Trace, $Item) {
+  $n = 0
+  foreach ($s in $Trace.Sections) { foreach ($i in $s.Items) { $n++; if ([object]::ReferenceEquals($i, $Item)) { return $n } } }
+  throw "Get-TraceItemNumber: the item is not in the trace"
+}
+$unknownRsp = 'unknown, no server handler was reached'
+
 if (-not $A.Stop) {
-  # ---- 2. WRITE: the first event wiring on the dataset, its handler, down to the send ------
+  # ---- 2. WRITE: the preferred event wiring on the dataset, its handler, down to the send ------
+  # final-review I4: Get-EventWiring orders by write preference (AfterPost first, a delete last), then line
   $wiring = Get-EventWiring $A.DataSet
   if (-not $wiring.Count) {
-    [void]$secW.Items.Add((New-TraceStep 'stops' "no $($script:RtEvents -join '/') handler is wired on $($A.DataSet.Name) in $(Get-UnitName $A.DataSet.File)" (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line) '' '' '' 'E3'))
+    $WStop = New-TraceStep 'stops' "no $($script:RtEvents -join '/') handler is wired on $($A.DataSet.Name) in $(Get-UnitName $A.DataSet.File)" (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line) '' '' '' 'E3'
+    [void]$secW.Items.Add($WStop)
+    foreach ($s in @($secS, $secD, $secR)) { Add-NotWalked $s $WStop 'write' }
   } else {
     $w0 = $wiring[0]
     [void]$secW.Items.Add((New-TraceStep 'step' "FIRES $($A.DataSet.Name).$($w0.Event) -> $($w0.Handler)" (Get-TraceAnchorText $A.DataSet.File $w0.Line) $w0.Grade $w0.Routine 'handler named on the wiring line' 'E3'))
@@ -118,7 +145,9 @@ if (-not $A.Stop) {
     $xi = [array]::IndexOf(@($clientItems | ForEach-Object { $_.Kind }), 'crosses')
     if ($xi -lt 0) {
       foreach ($i in $clientItems) { [void]$secW.Items.Add($i) }
-      [void]$secW.Items.Add((New-TraceStep 'stops' "$($w0.HandlerShort) never reaches a transport call carrying a protocol constant within $Depth call levels" $clientItems[-1].Anchor '' $w0.HandlerShort '' ''))
+      $WStop = New-TraceStep 'stops' "$($w0.HandlerShort) never reaches a transport call carrying a protocol constant within $Depth call levels" $clientItems[-1].Anchor '' $w0.HandlerShort '' ''
+      [void]$secW.Items.Add($WStop)
+      foreach ($s in @($secS, $secD, $secR)) { Add-NotWalked $s $WStop 'write' }
     } else {
       for ($k = 0; $k -le $xi; $k++) { [void]$secW.Items.Add($clientItems[$k]) }
       $xing = $clientItems[$xi]
@@ -127,15 +156,19 @@ if (-not $A.Stop) {
       if ($srv.Contract) { [void]$xing.Children.Add((New-TraceFacet 'CONTRACT' $srv.Contract.Text $srv.Contract.Anchor 'the far side, from the counterpart index')) }
       foreach ($i in $srv.Items) { [void]$secS.Items.Add($i) }
       # ---- 4. DATABASE, still on the SERVER index: its routine facts and its fb_datasets count (P15) --
-      $dbItems = Invoke-OnDb $ServerDbPath { Get-DatabaseSteps $srv.Items $Ctx 'write' $sqlSet $SourceOverride }
-      foreach ($i in $dbItems) { [void]$secD.Items.Add($i) }
+      # final-review I2: only below a server handler that was walked -- a list holding just the server's STOPS
+      # has no statement and no apply to name
+      if ($srv.Walked) {
+        $dbItems = Invoke-OnDb $ServerDbPath { Get-DatabaseSteps $srv.Items $Ctx 'write' $sqlSet $SourceOverride }
+        foreach ($i in $dbItems) { [void]$secD.Items.Add($i) }
+      } else { $WStop = $srv.Stop; Add-NotWalked $secD $srv.Stop 'write' }
       # ---- 5. RESPONSE: back across, then the client's remaining lines --------------------
       # anchored at the SAME line as the request: the one ExecuteCommand call sends the request
       # and returns the response frame (ruling P4 -- two CROSSES steps at one anchor is correct)
       $back = New-TraceStep 'crosses' 'process boundary' $xing.Anchor '' $xing.Routine 'the response frame'
       [void]$back.Children.Add((New-TraceFacet 'FROM' $srvName '' 'server index'))
       [void]$back.Children.Add((New-TraceFacet 'TO' $cliName '' 'client index'))
-      [void]$back.Children.Add((New-TraceFacet 'WITH' $(if ($srv.Responses.Count) { $srv.Responses -join ' or ' } else { 'no rsp* constant read in the handler' }) $xing.Anchor ''))
+      [void]$back.Children.Add((New-TraceFacet 'WITH' $(if (-not $srv.Walked) { $unknownRsp } elseif ($srv.Responses.Count) { $srv.Responses -join ' or ' } else { 'no rsp* constant read in the handler' }) $xing.Anchor ''))
       [void]$secR.Items.Add($back)
       for ($k = $xi + 1; $k -lt $clientItems.Count; $k++) { [void]$secR.Items.Add($clientItems[$k]) }
     }
@@ -152,7 +185,8 @@ if (-not $A.Stop) {
   # Each route walks with its own Seen (Get-FillRoutes): the READ path runs the FIB$ reads WRITE showed.
   $routes = Get-FillRoutes $A.DataSet $Ctx $Depth
   if (-not $routes.Count) {
-    [void]$secRd.Items.Add((New-TraceStep 'stops' (ConvertTo-TraceStopText "no bound call on a line naming '$($A.Table)' beside $($A.DataSet.Name) in $(Get-UnitName $A.DataSet.File) reaches a transport call carrying a protocol constant within $Depth call levels") (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line)))
+    $RStop = New-TraceStep 'stops' (ConvertTo-TraceStopText "no bound call on a line naming '$($A.Table)' beside $($A.DataSet.Name) in $(Get-UnitName $A.DataSet.File) reaches a transport call carrying a protocol constant within $Depth call levels") (Get-TraceAnchorText $A.DataSet.File $A.DataSet.Line)
+    [void]$secRd.Items.Add($RStop)
   } else {
     $r0 = $routes[0]
     [void]$secRd.Items.Add((New-TraceStep 'step' "LOADS $($A.DataSet.Name) VIA $($r0.TargetShort)$($r0.Lits)" (Get-TraceAnchorText $A.DataSet.File $r0.Line) '' $r0.Routine 'the fill call carrying the table literal'))
@@ -165,7 +199,9 @@ if (-not $A.Stop) {
     # the far side on the SERVER index, then its DATABASE facts, still on the SERVER index (AC-9)
     $srvR = Invoke-OnDb $ServerDbPath { Get-ServerHandling $xr.Command $r0.Ctx $Depth }
     if ($srvR.Contract) { [void]$xr.Children.Add((New-TraceFacet 'CONTRACT' $srvR.Contract.Text $srvR.Contract.Anchor 'the far side, from the counterpart index')) }
-    $dbR = Invoke-OnDb $ServerDbPath { Get-DatabaseSteps $srvR.Items $r0.Ctx 'read' $sqlSet $SourceOverride }
+    # final-review I2: no DATABASE steps below a server side that stopped (READ is one section: nothing to note)
+    $dbR = @()
+    if ($srvR.Walked) { $dbR = Invoke-OnDb $ServerDbPath { Get-DatabaseSteps $srvR.Items $r0.Ctx 'read' $sqlSet $SourceOverride } } else { $RStop = $srvR.Stop }
     foreach ($i in $dbR) { $i.Actor = 'DATABASE' }
     # fix round 1 (M4): the DATABASE steps stand right after the SERVER step that RUNS the query (the stop's
     # After), in source order -- not after the whole server walk
@@ -180,7 +216,7 @@ if (-not $A.Stop) {
     $backR = New-TraceStep 'crosses' 'process boundary' $xr.Anchor '' $xr.Routine 'the rows come back'
     [void]$backR.Children.Add((New-TraceFacet 'FROM' $srvName '' 'server index'))
     [void]$backR.Children.Add((New-TraceFacet 'TO' $cliName '' 'client index'))
-    [void]$backR.Children.Add((New-TraceFacet 'WITH' $(if ($srvR.Responses.Count) { $srvR.Responses -join ' or ' } else { 'no rsp* constant read in the handler' }) $xr.Anchor ''))
+    [void]$backR.Children.Add((New-TraceFacet 'WITH' $(if (-not $srvR.Walked) { $unknownRsp } elseif ($srvR.Responses.Count) { $srvR.Responses -join ' or ' } else { 'no rsp* constant read in the handler' }) $xr.Anchor ''))
     [void]$secRd.Items.Add($backR)
     for ($k = $xi + 1; $k -lt $ri.Count; $k++) { $ri[$k].Actor = 'CLIENT'; [void]$secRd.Items.Add($ri[$k]) }
     Merge-TraceOmits $secRd
@@ -202,6 +238,14 @@ if (-not $A.Stop) {
 }
 
 # ---- 7. write it -- LAST, so a refusal above leaves nothing behind -------------------------
+# final-review I2: the not-walked notes and the title, now that every step has its final number
+foreach ($x in $notes) { $x.Sec.Note = ConvertTo-TraceNoteText ("not walked: the {0} direction stopped at [{1:00}]" -f $x.Dir, (Get-TraceItemNumber $T $x.Stop)) }
+if (-not $A.Stop -and ($WStop -or $RStop)) {
+  $nW = $(if ($WStop) { Get-TraceItemNumber $T $WStop } else { 0 }); $nR = $(if ($RStop) { Get-TraceItemNumber $T $RStop } else { 0 })
+  $T.Title = $(if ($WStop -and $RStop) { "Where the trace between $Target and $name stops (steps $([Math]::Min($nW, $nR)) and $([Math]::Max($nW, $nR)))" }
+               elseif ($WStop) { "How $name reaches $Target (the way back stops at step $nW)" }
+               else { "How $Target goes back to $name (the way there stops at step $nR)" })
+}
 $text = Write-FormA $T
 $base = 'roundtrip_' + ($Target -replace '[^A-Za-z0-9]', '_')
 $path = Join-Path $OutDir "$base.dlgraph"
@@ -214,6 +258,9 @@ Write-Host ("  anchor={0}  steps={1}  conditions={2}  crossings={3}  unresolved=
 [pscustomobject]@{
   Trace        = $path
   Text         = $text
+  Title        = $T.Title
+  # final-review I2: each section's generated note, `<SECTION>=<note>` (empty sections only)
+  Notes        = (@($T.Sections | Where-Object { $_.Note } | ForEach-Object { "$($_.Name)=$($_.Note)" }) -join ' | ')
   Anchor       = $name
   DataSet      = $(if ($A.DataSet) { $A.DataSet.Name } else { '' })
   Table        = $A.Table

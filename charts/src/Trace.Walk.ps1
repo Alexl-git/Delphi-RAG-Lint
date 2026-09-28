@@ -38,11 +38,26 @@ function New-AnchorResult {
                      Stop = ''; StopAnchor = ''; StaleFile = ''; Grades = @() }
 }
 
+# The note of a column step (final-review I7): what the SQL index says about the column, as GENERATED
+# text, never truncated (T3-M2). It states the SQL fact on its own terms -- the step's [inferred] grade is
+# the dataset -> table hop, and the note must not read as grading the column. An extracted column reads
+# `NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2808)`; any other state
+# (quoted, older declaration, server SQL) keeps Get-SqlColumnState's label, made safe for a note.
+function Get-ColumnFactNote($Cs, $SqlSet) {
+  $n = [int]$SqlSet.Tables[[string]$Cs.Table].DeclCount
+  $at = "$([IO.Path]::GetFileName([string]$Cs.File)):$([int]$Cs.Line)"
+  if ($Cs.State -eq 'yes') {
+    $of = $(if ($n -gt 1) { "the newest of $n $($Cs.Table) declarations" } else { "the $($Cs.Table) declaration" })
+    return "$($Cs.Column) is a column of $of (SQL index, $at)"
+  }
+  ConvertTo-TraceStopText "$($Cs.Column) of $($Cs.Table) in the SQL scripts: $(([string]$Cs.Label) -replace '\[([^\]]*)\]', '($1)')"
+}
+
 # The table beside the dataset (a literal of the SQL table set on a line that reads
 # the dataset field), then the column in the SQL index. Shared by every anchor form.
-function Complete-AnchorFromDataSet($R, $Ds, [string] $Col, $SqlSet, [hashtable] $SourceOverride) {
+function Complete-AnchorFromDataSet($R, $Ds, [string] $Col, $SqlSet, [hashtable] $SourceOverride, [string] $BindGrade = '', [string] $BindNote = 'the anchor dataset') {
   $R.DataSet = $Ds
-  [void]$R.Items.Add((New-TraceStep 'step' "BINDS $($Ds.Name) : $($Ds.Type)" (Get-TraceAnchorText $Ds.File $Ds.Line) '' '' 'the anchor dataset'))
+  [void]$R.Items.Add((New-TraceStep 'step' "BINDS $($Ds.Name) : $($Ds.Type)" (Get-TraceAnchorText $Ds.File $Ds.Line) $BindGrade '' $BindNote))
   $lit = Invoke-IndexQuery @"
 SELECT sl.text AS t, MIN(sl.start_line) AS line, COUNT(*) AS n FROM string_literals sl
  WHERE sl.file_id = $($Ds.Fid) AND sl.kind = 'literal' AND sl.text IN ($(ConvertTo-SqlInList $SqlSet.Names))
@@ -58,16 +73,16 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line, COUNT(*) AS n FROM string_liter
   $R.Table = [string]$lit[0].t
   $encl = Invoke-IndexQuery "SELECT e.qualified_name AS q FROM refs r JOIN symbols e ON e.id = r.enclosing_symbol_id WHERE r.file_id = $($Ds.Fid) AND r.start_line = $([int]$lit[0].line) AND r.name_text = '$(ConvertTo-SqlText $Ds.Name)' LIMIT 1"
   $rn = $(if ($encl.Count) { (([string]$encl[0].q) -split '\.')[-1] } else { '' })
-  [void]$R.Items.Add((New-TraceStep 'step' "READS $($R.Table)" (Get-TraceAnchorText $Ds.File ([int]$lit[0].line)) 'inferred' $rn "the table literal beside $($Ds.Name) on $($lit[0].n) line(s)" 'E4'))
+  # final-review M2: no ask -- that the literal names the dataset's table is the walk's inference from a shared
+  # line; E4 (fb_datasets rows) holds server-side definitions and would not retire it
+  [void]$R.Items.Add((New-TraceStep 'step' "READS $($R.Table)" (Get-TraceAnchorText $Ds.File ([int]$lit[0].line)) 'inferred' $rn "the table literal beside $($Ds.Name) on $($lit[0].n) line(s)"))
   if (-not $Col) { $R.Stop = "$($Ds.Name) reaches $($R.Table) but the selection binds no column"; $R.StopAnchor = Get-TraceAnchorText $Ds.File $Ds.Line; return $R }
   $R.Column = $Col.ToUpperInvariant()
   $R.TableColumn = "$($R.Table).$($R.Column)"
   $cs = Get-SqlColumnState $SqlSet $R.Table $Col $SourceOverride
   if ($cs.IsColumn) {
-    # the label is GENERATED text whose grade tags are bracketed (`[certain] a column of ...`); as
-    # a note they read `(certain)` -- rewritten here, at their source, never in the shared sanitiser
-    $lbl = ([string]$cs.Label) -replace '\[([^\]]*)\]', '($1)'
-    [void]$R.Items.Add((New-TraceStep 'step' "READS $($R.TableColumn)" (Get-TraceAnchorText $cs.File ([int]$cs.Line)) 'inferred' '' (ConvertTo-TraceWord "column $($R.Column) of $($R.Table): $lbl") 'E4'))
+    # final-review I7: the column fact as a GENERATED note, never truncated (T3-M2) -- Get-ColumnFactNote
+    [void]$R.Items.Add((New-TraceStep 'step' "READS $($R.TableColumn)" (Get-TraceAnchorText $cs.File ([int]$cs.Line)) 'inferred' '' (Get-ColumnFactNote $cs $SqlSet) 'E4'))
   } else {
     $R.Stop = "$($R.TableColumn): $($cs.Label)"
     $R.StopAnchor = $R.Items[$R.Items.Count - 1].Anchor
@@ -164,15 +179,60 @@ SELECT d.symbol_id AS sid, d.owner_name AS prop, d.start_line AS line, s.name AS
     if ($h.Hop -eq 'table') { continue }     # the table is re-derived beside the DATASET, not from the unit's literals
     $verb = $(switch ($h.Hop) { 'datasource' { 'READS' } 'dataset' { 'SETS' } 'rhs-type' { 'READS' } })
     $grade = $(if ($h.Grade -in 'by name', 'inferred') { $h.Grade } else { '' })
-    [void]$R.Items.Add((New-TraceStep 'step' "$verb $(ConvertTo-TraceWord $h.Label 90)" (Get-TraceAnchorText $h.File $h.Line) $grade '' (ConvertTo-TraceNoteText $h.Reason) $(if ($grade) { 'E4' } else { '' })))
+    # final-review M2: the ask that would retire THIS hop's grade, or none -- E4 (populated fb_datasets) retires none
+    # of them. rhs-type [by name]: the declared type is matched to a class by NAME because no `type_use` ref is bound
+    # (0 of 60,603 on the CLIENT clone) -- ask type-use-binding. A datasource resolved through a module name, or a
+    # dataset picked among several right-hand sides, is the walk's own choice: no engine fact retires it
+    $ask = $(if ($grade -and $h.Hop -eq 'rhs-type') { 'type-use-binding' } else { '' })
+    [void]$R.Items.Add((New-TraceStep 'step' "$verb $(ConvertTo-TraceWord $h.Label 90)" (Get-TraceAnchorText $h.File $h.Line) $grade '' (ConvertTo-TraceNoteText $h.Reason) $ask))
   }
   $a0 = $assign[0]
   $dsName = (($a0.Rhs -replace '^Self\.', '') -split '\.')[-1]
   $tf = Invoke-IndexQuery "SELECT s.id AS id FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path = '$(ConvertTo-SqlText $ch.RhsType.TypeFile)' AND s.kind IN ('class','interface') AND UPPER(s.name) = UPPER('$(ConvertTo-SqlText $ch.RhsType.TypeName)')"
-  $dsRow = $(if ($tf.Count -eq 1) { Invoke-IndexQuery "SELECT s.id AS id, s.name AS name, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.parent_id = $([int]$tf[0].id) AND s.name = '$(ConvertTo-SqlText $dsName)' AND s.kind IN ('field','property')" } else { , @() })
+  $dsRow = $(if ($tf.Count -eq 1) { Invoke-IndexQuery "SELECT s.id AS id, s.name AS name, s.kind AS kind, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.parent_id = $([int]$tf[0].id) AND s.name = '$(ConvertTo-SqlText $dsName)' AND s.kind IN ('field','property')" } else { , @() })
   if ($dsRow.Count -ne 1) { $R.Stop = "the dataset $($a0.Rhs) (assigned at :$($a0.Line)) is not a field or property of $($ch.RhsType.TypeName) in this index"; $R.StopAnchor = Get-TraceAnchorText $a0.File $a0.Line; return $R }
   $d = $dsRow[0]
+  if ([string]$d.kind -eq 'property') {
+    # final-review I8: a PROPERTY is not the dataset -- its read accessor is. The wirings and the table literal
+    # sit on the FIELD behind it (uCausFail.ViewModel: property MemTable, `read FMemTable`), so the anchor follows
+    # the accessor to that field, as Get-RePointChain does, and stops (if it must) on the field
+    $pf = Resolve-PropertyReadField $d $a0 $SourceOverride
+    [void]$R.Items.Add((New-TraceStep 'step' "READS $([string]$d.name) : $(([string]$d.sig).Trim())" (Get-TraceAnchorText ([string]$d.path) ([int]$d.line)) '' '' "a property of $($ch.RhsType.TypeName)$(if ($pf.Accessor) { ", read $($pf.Accessor)" })"))
+    if ($pf.StaleFile) { $R.StaleFile = $pf.StaleFile; $R.Stop = $pf.Reason; $R.StopAnchor = $R.Items[$R.Items.Count - 1].Anchor; return $R }
+    if (-not $pf.Field) { $R.Stop = $pf.Reason; $R.StopAnchor = $R.Items[$R.Items.Count - 1].Anchor; return $R }
+    $d = $pf.Field
+    return (Complete-AnchorFromDataSet $R ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) $col $SqlSet $SourceOverride $pf.Grade "the anchor dataset, $($pf.Reason)")
+  }
   Complete-AnchorFromDataSet $R ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) $col $SqlSet $SourceOverride
+}
+
+# final-review I8: the FIELD a dataset property reads. The index fact first -- the member_accesses row of the
+# property's ref on the assignment line ($Assign: File, Line), whose accessor is a field (certain); else the
+# `read <X>` accessor quoted from the FRESH declaration line and the field of that name in the property's class
+# ([by name], as Get-RePointChain grades it). Returns Field ($null | id, name, sig, line, path, fid, pid),
+# Accessor, Grade, Reason (the stop reason when Field is $null), StaleFile.
+function Resolve-PropertyReadField($Prop, $Assign, [hashtable] $SourceOverride) {
+  $fq = 'SELECT s.id AS id, s.name AS name, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid FROM symbols s JOIN files f ON f.id = s.file_id'
+  $out = [pscustomobject]@{ Field = $null; Accessor = ''; Grade = ''; Reason = ''; StaleFile = '' }
+  $ma = Invoke-IndexQuery @"
+SELECT DISTINCT ma.accessor_symbol_id AS aid FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id JOIN files f ON f.id = r.file_id
+ WHERE f.path = '$(ConvertTo-SqlText ([string]$Assign.File))' AND r.start_line = $([int]$Assign.Line) AND ma.member_symbol_id = $([int]$Prop.id)
+   AND ma.accessor_kind = 'field' AND ma.accessor_symbol_id IS NOT NULL
+"@
+  if ($ma.Count -eq 1) {
+    $fr = Invoke-IndexQuery "$fq WHERE s.id = $([int]$ma[0].aid) AND s.kind = 'field'"
+    if ($fr.Count -eq 1) { $out.Field = $fr[0]; $out.Accessor = [string]$fr[0].name; $out.Reason = "the read accessor of $([string]$Prop.name), bound on the assignment line :$([int]$Assign.Line)"; return $out }
+  }
+  if (-not (Test-SourceFresh ([string]$Prop.path) $SourceOverride)) {
+    $out.StaleFile = [string]$Prop.path; $out.Reason = "$([IO.Path]::GetFileName([string]$Prop.path)) differs from the indexed copy -- the property's read accessor is not read"; return $out
+  }
+  $pl = (Get-StrippedSourceLines (Resolve-SourceReadPath ([string]$Prop.path) $SourceOverride))[[int]$Prop.line - 1]
+  if ($pl -notmatch '\bread\s+([A-Za-z_][A-Za-z0-9_]*)') { $out.Reason = "property $([string]$Prop.name) at $([IO.Path]::GetFileName([string]$Prop.path)):$([int]$Prop.line) has no read accessor on its declaration line"; return $out }
+  $out.Accessor = $Matches[1]
+  $fr = Invoke-IndexQuery "$fq WHERE s.parent_id = $([int]$Prop.pid) AND s.name = '$(ConvertTo-SqlText $out.Accessor)' AND s.kind = 'field'"
+  if ($fr.Count -ne 1) { $out.Reason = "the read accessor $($out.Accessor) of $([string]$Prop.name) is not a field of its class ($($fr.Count) matches) -- a getter method is not followed"; return $out }
+  $out.Field = $fr[0]; $out.Grade = 'by name'; $out.Reason = "the read accessor of $([string]$Prop.name), by name in its class"
+  $out
 }
 
 # The grade of a TField-variable assignment line (fix round 1, Important 1). ONLY the
@@ -497,6 +557,31 @@ function Test-InShimCondition($G, [int] $Line, [int] $Col) {
   $after -and $before
 }
 
+# final-review I1: the FAILURE branch of an if-form Exit guard on its `then` line, as 0-based columns
+# [From, To) of that line (CondL2): for UNLESS (the Exit in the then branch) from the `then` to the
+# if statement's own `else` or `;` on that line, else to the line end; for WHEN (the Exit in the else
+# branch) from that `else` to the `;` that ends it, else to the line end -- $null when the else is not
+# on the line (its lines are the guard's block). Tokens are read from the stripped line: a begin / try /
+# case .. end nests, and an `if` nested in the branch takes the next `else` for itself. Pure.
+function Get-GuardFailSpan($G, [string] $Stripped) {
+  if (-not $G.PSObject.Properties['CondL2']) { return $null }
+  $c0 = [int]$G.CondC2
+  if ($c0 -ge $Stripped.Length) { return $null }
+  $d = 0; $pend = 0; $els = -1; $end = $Stripped.Length
+  foreach ($m in $script:ShimTokenRx.Matches($Stripped.Substring($c0 + 4))) {
+    $k = $m.Value.ToLowerInvariant(); $at = $c0 + 4 + $m.Index
+    if ($k -in $script:ShimOpeners) { $d++; continue }
+    if ($k -in $script:ShimClosers) { $d--; continue }
+    if ($d -ne 0) { continue }
+    if ($k -eq 'if') { $pend++; continue }
+    if ($k -eq 'else') { if ($pend -gt 0) { $pend--; continue }; if ($els -lt 0) { $els = $at; continue } }
+    if ($k -eq ';') { $end = $at + 1; break }
+  }
+  if ($G.Keyword -ceq 'UNLESS') { return [pscustomobject]@{ Line = [int]$G.CondL2; From = $c0; To = $(if ($els -ge 0) { $els } else { $end }) } }
+  if ($els -lt 0) { return $null }
+  [pscustomobject]@{ Line = [int]$G.CondL2; From = $els; To = $end }
+}
+
 function New-ShimCaseResult($X, [int] $CaseIdx, [int] $ElseIdx) {
   $ca = $X.Tok[$CaseIdx]
   $of = @(for ($q = $CaseIdx + 1; $q -lt $X.Tok.Count; $q++) { if ($X.Tok[$q].T -eq 'of') { $X.Tok[$q]; break } })
@@ -741,6 +826,14 @@ $script:RtOps = @{ SaveToStream = 'SERIALIZES'; LoadFromStream = 'DESERIALIZES';
                    ApplyUpdates = 'APPLIES'; EmptyDataSet = 'EMPTIES'; StartTransaction = 'OPENS'; Commit = 'RUNS'; Rollback = 'RUNS'
                    Execute = 'RUNS'; ExecSQL = 'RUNS'; Open = 'RUNS' }
 $script:RtEvents = @('AfterPost', 'AfterDelete', 'BeforePost', 'AfterInsert', 'OnUpdateRecord', 'OnUpdateError', 'OnReconcileError')
+# final-review I4: which wiring the WRITE direction starts from -- the event that sends an EDITED row
+# first, a delete last; a generic, stated order, then the line (Sort-RtWiring). Every $RtEvents name is in it.
+$script:RtWritePreference = @('AfterPost', 'BeforePost', 'AfterInsert', 'OnUpdateRecord', 'OnUpdateError', 'OnReconcileError', 'AfterDelete')
+
+# Wirings in write preference order ($RtWritePreference), each event's by line. An event outside the list sorts last. Pure.
+function Sort-RtWiring($Wirings) {
+  , @($Wirings | Sort-Object @{ E = { $i = [array]::IndexOf($script:RtWritePreference, [string]$_.Event); $(if ($i -lt 0) { 99 } else { $i }) } }, @{ E = { [int]$_.Line } })
+}
 
 # A GENERATED stop reason made safe for a STOPS step (ruling T3-M2): only what the writer
 # refuses in a text (' -- ', ' @', ' [') and what splits a note ('; ') is touched, a bracket
@@ -905,7 +998,11 @@ SELECT sl.text AS text, sl.start_line AS line, sl.id AS id,
 # is left out and its line named, never rewritten.
 function Get-ElseNote($F, $G, $Ctx) {
   $parts = @()
-  $in = @($F.Refs | Where-Object { [int]$_.line -ge $G.BlockStart -and [int]$_.line -le $G.BlockEnd })
+  # final-review I1: on the guard's `then` line only the failure span counts (Get-GuardFailSpan) -- the
+  # condition before it, and a then branch that is the path (a WHEN guard), are not the else
+  $spL = $(if ($G.PSObject.Properties['SpanLine']) { [int]$G.SpanLine } else { 0 })
+  $inBr = { param($o) [int]$o.line -ge $G.BlockStart -and [int]$o.line -le $G.BlockEnd -and ([int]$o.line -ne $spL -or (([int]$o.col - 1) -ge $G.SpanFrom -and ([int]$o.col - 1) -lt $G.SpanTo)) }
+  $in = @($F.Refs | Where-Object { & $inBr $_ })
   foreach ($o in @($in | Where-Object { $_.kind -eq 'call' -and $script:RtOps.ContainsKey([string]$_.nm) })) {
     $parts += "$(if ($o.recv) { [string]$o.recv + '.' })$([string]$o.nm) @$(Get-TraceAnchorText $F.Path ([int]$o.line))"
   }
@@ -923,9 +1020,12 @@ function Get-ElseNote($F, $G, $Ctx) {
   }
   if ($F.PSObject.Properties['Fid'] -and $F.Fid) {
     $st = (Get-TraceSource $F.Path $Ctx.SourceOverride).Stripped
-    for ($q = [int]$G.BlockStart; $q -le [int]$G.BlockEnd -and $q -le $st.Count; $q++) { if ($st[$q - 1] -match '(?i)\braise\b') { $outLn[$q] = 1 } }
+    for ($q = [int]$G.BlockStart; $q -le [int]$G.BlockEnd -and $q -le $st.Count; $q++) {
+      $sl = $(if ($q -eq $spL) { $st[$q - 1].Substring([Math]::Min([int]$G.SpanFrom, $st[$q - 1].Length), [Math]::Max(0, [Math]::Min([int]$G.SpanTo, $st[$q - 1].Length) - [Math]::Min([int]$G.SpanFrom, $st[$q - 1].Length))) } else { $st[$q - 1] })
+      if ($sl -match '(?i)\braise\b') { $outLn[$q] = 1 }
+    }
   }
-  $lits = @($F.Lits | Where-Object { [int]$_.line -ge $G.BlockStart -and [int]$_.line -le $G.BlockEnd -and $outLn.ContainsKey([int]$_.line) -and $_.kind -in 'literal', 'format' -and ([string]$_.text).Trim().Length -gt 8 } | Select-Object -First 1)
+  $lits = @($F.Lits | Where-Object { (& $inBr $_) -and $outLn.ContainsKey([int]$_.line) -and $_.kind -in 'literal', 'format' -and ([string]$_.text).Trim().Length -gt 8 } | Select-Object -First 1)
   foreach ($l in $lits) {
     $raw = $(if ($F.PSObject.Properties['Fid'] -and $F.Fid) { (Get-TraceSource $F.Path $Ctx.SourceOverride).Raw } else { $null })
     $lt = Get-LiteralSourceText $l $raw
@@ -1094,7 +1194,7 @@ function New-OmitStep($Recs) {
     $seen[$k] = 1
     $cs += $(if ($r.Condition -match '; |[\r\n]') { "$($r.Keyword) at $($r.Anchor)" } else { "$($r.Keyword) `"$($r.Condition)`" @$($r.Anchor)" })
   }
-  $s = New-TraceStep 'step' "OMITS $n step(s) in branches for other tables, innermost enclosing if only" $Recs[0].Anchor '' $(if ($rn.Count -eq 1) { $rn[0] } else { '' }) ('not walked, the branch conditions: ' + ($cs -join ' / ')) 'E1'
+  $s = New-TraceStep 'step' "OMITS $n step(s) in branches for other tables, every enclosing if read up to a loop or case arm" $Recs[0].Anchor '' $(if ($rn.Count -eq 1) { $rn[0] } else { '' }) ('not walked, the branch conditions: ' + ($cs -join ' / ')) 'E1'
   $s | Add-Member -NotePropertyName Omits -NotePropertyValue @($Recs)
   $s
 }
@@ -1144,6 +1244,7 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
   # (without this, SendDeltaOperation's `FMTOperation.CancelUpdates` at :3999 -- the failure
   # branch of the :3990 response guard -- read as a step between rspOK and CommitUpdates).
   $conds = @(); $condSeen = @{}; $skip = @{}
+  $src = Get-TraceSource $F.Path $Ctx.SourceOverride
   foreach ($xl in @($F.Refs | Where-Object { $_.kind -eq 'call' -and [string]$_.nm -eq 'Exit' } | ForEach-Object { [int]$_.line } | Sort-Object -Unique)) {
     $g = Get-GuardCondition $F.Path $xl $F.ImplStart $Ctx.SourceOverride
     if ($g.Form -eq 'unknown') {
@@ -1151,6 +1252,16 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
       continue
     }
     for ($q = $g.BlockStart; $q -le $g.BlockEnd; $q++) { if ($q -ne $g.IfLine) { $skip[$q] = 1 } }
+    # final-review I1: the IfLine is kept for its CONDITION only. On the `then` line, the refs and literals of
+    # the failure branch (`if X then begin FMT.CancelUpdates; Exit; end;`) are not path steps -- they are
+    # the else note, and only that span of the line is (Get-ElseNote reads SpanLine / SpanFrom / SpanTo)
+    $sp = $(if ($g.PSObject.Properties['CondL2']) { Get-GuardFailSpan $g $src.Stripped[[int]$g.CondL2 - 1] } else { $null })
+    if ($sp) {
+      $g | Add-Member -NotePropertyMembers @{ SpanLine = $sp.Line; SpanFrom = $sp.From; SpanTo = $sp.To }
+      $inSp = { param($o) $c = [int]$o.col - 1; $c -ge $sp.From -and $c -lt $sp.To }
+      if ($refsAt.ContainsKey($sp.Line)) { $refsAt[$sp.Line] = [Collections.ArrayList]@($refsAt[$sp.Line] | Where-Object { -not (& $inSp $_) }) }
+      if ($litsAt.ContainsKey($sp.Line)) { $litsAt[$sp.Line] = [Collections.ArrayList]@($litsAt[$sp.Line] | Where-Object { -not (& $inSp $_) }) }
+    }
     $ck = "$($g.IfLine)|$($g.Keyword)|$($g.Condition)"
     if ($condSeen.ContainsKey($ck)) { continue }
     $condSeen[$ck] = 1
@@ -1171,7 +1282,6 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
   # ---- the branch structure of the body's step lines (T5-R1; fix round 1, Important 1) -------------
   # Every line that could make a step gets the CHAIN of its enclosing conditions, read once over the
   # routine's tokens from fresh source (E1: the index holds no branches).
-  $src = Get-TraceSource $F.Path $Ctx.SourceOverride
   $allTok = Get-ShimTokens $src.Stripped $F.ImplStart $F.ImplEnd
   $allLines = @(@($refsAt.Keys) + @($litsAt.Keys) | Sort-Object -Unique)
   $info = @{}
@@ -1186,16 +1296,19 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
   }
   $infoLines = @($info.Keys | Sort-Object)
 
-  # T5-R1: a line whose innermost enclosing IF is a branch for another table is not walked -- the first
-  # if of its chain, so a try / except inside that branch (HandleDelta :516-531) is inside it too. Only
-  # what would have yielded a step is counted (T5-R6: a logger call yields none)
+  # T5-R1: a line inside a branch for another table is not walked. Final-review I5: EVERY if of its
+  # enclosing chain is tested, innermost first, and the first that is such a branch is the one named (it was
+  # the innermost if only, so a line one if deeper stayed on the path); a try / except inside that branch
+  # (HandleDelta :516-531) is inside it too. The chain is read outwards until a loop or a case arm, which the
+  # reader does not place (Get-EnclosingChainFromLines). Only what would have yielded a step is counted
+  # (T5-R6: a logger call yields none)
   $others = @(@($Ctx.SqlSet.Names) | Where-Object { $Ctx.Table -and ([string]$_).ToUpperInvariant() -ne ([string]$Ctx.Table).ToUpperInvariant() } | ForEach-Object { ([string]$_).ToUpperInvariant() })
   $branchy = [bool](@($F.Lits | Where-Object { $_.kind -eq 'literal' -and $others -contains ([string]$_.text).ToUpperInvariant() }).Count)
   $omitLines = @{}; $omitRecs = New-Object System.Collections.ArrayList; $omitFirst = 0
   if ($branchy) {
     foreach ($ln in $infoLines) {
-      $e0 = @($info[$ln].Chain | Where-Object { $_.Form -in 'inline', 'block' } | Select-Object -First 1)
-      if (-not $e0.Count -or -not (Test-OtherTableBranch $e0[0].Keyword $e0[0].Condition $Ctx.Table $Ctx.SqlSet.Names)) { continue }
+      $e0 = @($info[$ln].Chain | Where-Object { $_.Form -in 'inline', 'block' -and (Test-OtherTableBranch $_.Keyword $_.Condition $Ctx.Table $Ctx.SqlSet.Names) } | Select-Object -First 1)
+      if (-not $e0.Count) { continue }
       $omitLines[$ln] = 1
       $y = Get-LineYield $info[$ln] $F $Depth $Visited $Ctx
       if ($y -gt 0) {
@@ -1402,9 +1515,19 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
     if (-not $hostStep.Count) { $hostStep = @($own | Where-Object { $_.Line -eq $c.IfLine } | Select-Object -First 1) }
     if (-not $hostStep.Count) { $hostStep = @($own | Where-Object { $_.Kind -eq 'step' -and $_.Line -lt $c.IfLine } | Select-Object -Last 1) }
     if ($hostStep.Count) {
+      $h0 = $hostStep[0]
       # T5-R2: hung on the CALLS step of ANOTHER routine, the condition names its own routine
-      if ($hostStep[0].PSObject.Properties['CalleeId'] -and [int]$hostStep[0].CalleeId -ne $Id) { $c.Item.Routine = $F.Short }
-      [void]$hostStep[0].Children.Add($c.Item)
+      $onCall = $h0.PSObject.Properties['CalleeId'] -and [int]$h0.CalleeId -ne $Id
+      if ($onCall) { $c.Item.Routine = $F.Short }
+      if ($onCall -and $c.PSObject.Properties['HostLines']) {
+        # final-review I6: an if ENCLOSING the call is evaluated before it runs, so it stands ahead of the
+        # callee's own conditions (Add-CallsStep added those); these callers' ifs keep their own order. A
+        # guard hung here (its Exit follows the call, or the call is inside its condition) is evaluated
+        # after the callee's and stays behind them
+        $k = $(if ($h0.PSObject.Properties['CallerConds']) { [int]$h0.CallerConds } else { 0 })
+        $h0.Children.Insert($k, $c.Item)
+        $h0 | Add-Member -NotePropertyName CallerConds -NotePropertyValue ($k + 1) -Force
+      } else { [void]$h0.Children.Add($c.Item) }
     } else { [void]$pend.Add($c.Item) }
   }
   $res
@@ -1455,12 +1578,15 @@ SELECT s.id AS id, s.qualified_name AS q, s.impl_start_line AS istart, f.path AS
 
 function Get-ServerHandling([string] $CmdName, $Ctx, [int] $Depth) {
   $items = New-Object System.Collections.ArrayList
-  $out = [pscustomobject]@{ Items = $items; Responses = @(); Contract = $null }
+  # final-review I2: Walked -- a handler was reached and walked; when not, Stop is the STOPS that ended the
+  # server side, and the caller walks no DATABASE tier and claims no response
+  $out = [pscustomobject]@{ Items = $items; Responses = @(); Contract = $null; Walked = $false; Stop = $null }
   $arm = Find-DispatchArm $CmdName $Ctx.Likes
   if (-not $arm) {
     $decl = Invoke-IndexQuery "SELECT s.start_line AS l, f.path AS p FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.kind = 'enum_value' AND s.name = '$(ConvertTo-SqlText $CmdName)' LIMIT 1"
     $anchor = $(if ($decl.Count) { Get-TraceAnchorText ([string]$decl[0].p) ([int]$decl[0].l) } else { 'unknown:0' })
-    Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText "no transport routine of $($Ctx.FarIndex) reads $CmdName and then calls a handler declared in another unit") $anchor '' '' '' 'E2') 0 0
+    $out.Stop = New-TraceStep 'stops' (ConvertTo-TraceStopText "no transport routine of $($Ctx.FarIndex) reads $CmdName and then calls a handler declared in another unit") $anchor '' '' '' 'E2'
+    Add-RtItem $items $out.Stop 0 0
     return $out
   }
   $T = $arm.Target
@@ -1472,7 +1598,8 @@ function Get-ServerHandling([string] $CmdName, $Ctx, [int] $Depth) {
   } else {
     $im = Resolve-InterfaceImpl $T
     if ($im.Count -ne 1) {
-      Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText "$($T.q) has $($im.Count) implementations in classes whose heritage names its interface") (Get-TraceAnchorText $T.path $T.decl) '' $arm.Routine '' 'E2') $arm.CallLine 0
+      $out.Stop = New-TraceStep 'stops' (ConvertTo-TraceStopText "$($T.q) has $($im.Count) implementations in classes whose heritage names its interface") (Get-TraceAnchorText $T.path $T.decl) '' $arm.Routine '' 'E2'
+      Add-RtItem $items $out.Stop $arm.CallLine 0
       return $out
     }
     $impl = [pscustomobject]@{ Id = [int]$im[0].id; Short = (Get-ShortName ([string]$im[0].q) (Get-UnitName ([string]$im[0].path))); Path = [string]$im[0].path; Line = [int]$im[0].istart; Grade = 'by name' }
@@ -1480,6 +1607,7 @@ function Get-ServerHandling([string] $CmdName, $Ctx, [int] $Depth) {
   }
   $visited = @{}
   $sub = Walk-Routine $impl.Id $Depth $visited $Ctx
+  $out.Walked = $true
   $s = New-TraceStep 'step' "CALLS $($impl.Short)" (Get-TraceAnchorText $impl.Path $impl.Line) $grade $arm.Routine "from :$($arm.CallLine)$(if ($grade) { ', the interface method resolved to its one implementation' })" $(if ($grade) { 'E2' } else { '' })
   foreach ($c in $sub.Conds) { [void]$s.Children.Add($c) }
   Add-RtItem $items $s $arm.CallLine 0
@@ -1506,6 +1634,27 @@ function Get-ServerHandling([string] $CmdName, $Ctx, [int] $Depth) {
 #   * the fb_datasets row count of THIS index, counted now (fb_datasets is the engine's
 #     snapshot of FIB$DATASETS_INFO; E4 asks for it to be populated).
 # The column comes from the SQL index, [inferred]. Run under the SERVER $DbPath.
+# final-review M7: the write-statement members of a dataset definition (FireDAC / FIB convention, as
+# UpdateSQL / SelectSQL are) -- which one runs depends on the posted row
+$script:RtWriteStmts = @('InsertSQL', 'UpdateSQL', 'ModifySQL', 'DeleteSQL')
+
+# The `case <X> of` condition the walk already quoted (a cond under a walked step) in routine $F above
+# line $Line: its selector as written and its line, or $null. A selector the stop text cannot carry
+# untouched (' @', ' [', ' -- ', '; ', a double quote) is not quoted (T3-M2). Pure over the items.
+function Get-WalkedCaseSelector($Items, $F, [int] $Line) {
+  $leaf = [IO.Path]::GetFileName([string]$F.Path)
+  foreach ($i in @($Items)) {
+    foreach ($ch in @($i.Children | Where-Object { $_.Kind -eq 'cond' -and [string]$_.Condition -cmatch '^case\s+(.+?)\s+of$' })) {
+      $x = [regex]::Match([string]$ch.Condition, '^case\s+(.+?)\s+of$').Groups[1].Value
+      $f, $l = ([string]$ch.Anchor) -split ':'
+      if ($f -ne $leaf -or [int]$l -lt $F.ImplStart -or [int]$l -ge $Line) { continue }
+      if ($x -match '"| @| \[| -- |; ') { return $null }
+      return [pscustomobject]@{ Selector = $x; Line = [int]$l }
+    }
+  }
+  $null
+}
+
 function Get-DatabaseSteps($ServerItems, $Ctx, [string] $Mode, $SqlSet, [hashtable] $SourceOverride) {
   $items = New-Object System.Collections.ArrayList
   $verb = $(if ($Mode -eq 'write') { 'WRITES' } else { 'READS' })
@@ -1538,21 +1687,33 @@ function Get-DatabaseSteps($ServerItems, $Ctx, [string] $Mode, $SqlSet, [hashtab
       $sText = "$(if ($p0.Ref.recv) { [string]$p0.Ref.recv + '.' })$stmtName"
       $src = $(if ($loader) { ", loaded at $(Get-TraceAnchorText $loader.F.Path ([int]$loader.Ref.line)) from FIB`$DATASETS_INFO rows$(if ($fb -eq 0) { ' the index does not hold' })" } else { ', whose text the walk does not read' })
       $why = "the $kind statement for $($Ctx.Table) is $sText$src ($held)"
+      if ($Mode -eq 'write') {
+        # final-review M7: the handler that runs the statement may pick it per row (`case ARequest of` :188 --
+        # Insert / Update / Delete), and AfterPost fires for an inserted row too. So the step names the
+        # statement for the POSTED row: every write-statement member of the same receiver the routine names
+        # (a convention list, like UpdateSQL itself), and the walked `case` condition above them, if any
+        $wm = @($p0.F.Refs | Where-Object { $_.kind -eq 'member-access' -and [string]$_.nm -in $script:RtWriteStmts -and [string]$_.recv -ceq [string]$p0.Ref.recv } |
+                Sort-Object { [int]$_.line }, { [int]$_.col } | ForEach-Object { "$(if ($_.recv) { [string]$_.recv + '.' })$([string]$_.nm)" } | Select-Object -Unique)
+        $sel = Get-WalkedCaseSelector $ServerItems $p0.F ([int]$p0.Ref.line)
+        $alts = $(if ($wm.Count -gt 1) { "$((@($wm | Select-Object -SkipLast 1)) -join ', ') or $($wm[-1])" } else { $sText })
+        $how = $(if ($wm.Count -gt 1 -and $sel) { ", picked by the case over $($sel.Selector) at :$($sel.Line) and" } else { ',' })
+        $why = "the statement for the posted $($Ctx.Table) row is $alts$how$($src.TrimStart(',')) ($held)"
+      }
       $anchor = Get-TraceAnchorText $p0.F.Path ([int]$p0.Ref.line); $rn = $p0.F.Short
       $nt = "the statement member is named here$(if ($applyOwners -contains $p0.F.Id) { ', in the routine that executes it' })"
     } else {
       $last = @($ServerItems | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^(RUNS|APPLIES) ' } | Select-Object -Last 1)
       if (-not $last.Count) { $last = @($ServerItems | Where-Object { $_.Kind -ne 'crosses' } | Select-Object -Last 1) }
-      $why = "no walked routine names the $kind statement for $($Ctx.Table)$(if ($last.Count) { ", applied in $($last[0].Routine) at $($last[0].Anchor)" }) ($held)"
+      $what = $(if ($Mode -eq 'write') { "the statement for the posted $($Ctx.Table) row" } else { "the $kind statement for $($Ctx.Table)" })
+      $why = "no walked routine names $what$(if ($last.Count) { ", applied in $($last[0].Routine) at $($last[0].Anchor)" }) ($held)"
       $anchor = $(if ($last.Count) { $last[0].Anchor } else { Get-TraceAnchorText $tblFile $tblLine }); $rn = $(if ($last.Count) { $last[0].Routine } else { '' }); $nt = ''
     }
     Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText $why) $anchor '' $rn $nt 'E4') 0 0
   }
   $cs = Get-SqlColumnState $SqlSet $Ctx.Table $Ctx.Column $SourceOverride
   if ($cs.IsColumn) {
-    # the label is GENERATED text with bracketed grade tags; as a note they read `(certain)` (as the anchor's column step)
-    $lbl = ([string]$cs.Label) -replace '\[([^\]]*)\]', '($1)'
-    Add-RtItem $items (New-TraceStep 'step' "$verb $($Ctx.TableColumn)" (Get-TraceAnchorText $cs.File ([int]$cs.Line)) 'inferred' '' (ConvertTo-TraceWord "column $($Ctx.Column) of $($Ctx.Table): $lbl") 'E4') 0 0
+    # final-review I7: the same untruncated column fact as the anchor's column step
+    Add-RtItem $items (New-TraceStep 'step' "$verb $($Ctx.TableColumn)" (Get-TraceAnchorText $cs.File ([int]$cs.Line)) 'inferred' '' (Get-ColumnFactNote $cs $SqlSet) 'E4') 0 0
   } else {
     Add-RtItem $items (New-TraceStep 'stops' (ConvertTo-TraceStopText "$($Ctx.TableColumn): $($cs.Label)") (Get-TraceAnchorText $tblFile $tblLine) '' '' '' 'E4') 0 0
   }
@@ -1640,7 +1801,8 @@ SELECT r.start_line AS line, r.id AS rid, r.name_text AS ev, e.qualified_name AS
                                        HandlerShort = (Get-ShortName ([string]$h[0].q) (Get-UnitName ([string]$h[0].path))); HandlerImpl = [int]$h[0].istart; HandlerPath = [string]$h[0].path
                                        Routine = (($([string]$r.routine) -split '\.')[-1]); Grade = 'by name' })
   }
-  , $out.ToArray()
+  # final-review I4: in write preference order (AfterPost first), not by line -- the WRITE direction starts at [0]
+  Sort-RtWiring $out.ToArray()
 }
 
 # ---- Part 5: READ routes and ALSO (Task 6) ---------------------------------------------

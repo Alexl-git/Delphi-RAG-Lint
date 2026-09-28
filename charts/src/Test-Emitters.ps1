@@ -44,7 +44,8 @@ function Fail([string] $code, [string] $msg) {
   [void]$fail.Add([pscustomobject]@{ Code = $code; Message = $msg })
 }
 function Chk([string] $code, $actual, $expected) {
-  if ("$actual" -ne "$expected") { Fail $code "expected $expected, got $actual" }
+  # final-review I9: case-SENSITIVE -- a pin that differs only in case is a difference
+  if ("$actual" -cne "$expected") { Fail $code "expected $expected, got $actual" }
 }
 function Note([string] $s) { if (-not $Quiet) { Write-Host $s } }
 
@@ -2293,7 +2294,9 @@ Step 'E-RT0' {
   # ruling T3-M1: the shared sanitiser touches only what the writer refuses (' [') -- an indexer stays as written;
   # the generated column label's grade tag reads '(certain)', rewritten at its source
   Chk 'A-RT3-WORD-INDEXER' $rt0.TraceWordIndexer 'X.Fields[0].DataSet (by name]'
-  Chk 'A-RT3-COLNOTE'    $rt0.ColumnNote 'column NAME of OPERAT: (certain) a column of the newest of 2 declarat...'
+  # RE-PINNED by final-review I7 (generated text is never truncated, T3-M2; the note states the SQL fact, not a grade
+  # set against the hop's [inferred]): was 'column NAME of OPERAT: (certain) a column of the newest of 2 declarat...'
+  Chk 'A-RT3-COLNOTE'    $rt0.ColumnNote 'NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2808)'
   # Review Focus 5: the stale file named is the FORM unit
   Chk 'A-RT3-STALE-FORM' $rt0.Anchor5Stale 'Blueprint4.pas:'
   # Task 4: the 12 golden guards quoted verbatim (form:keyword:if-line:ok:<the EXACT condition> -- ruling T4-R2);
@@ -2368,7 +2371,11 @@ Step 'E-RT0' {
   # FDef.UpdateSQL from its ref at uGenericTableRoute.pas:190 (in the routine that runs Cmd.Execute), "loaded at
   # uDatasetsDef.pas:149" because LoadFromInternal both names UpdateSQL and holds the walk's FIB$DATASETS_INFO
   # read, and the fb_datasets count of the SERVER clone taken at run time
-  Chk 'A-RT5-STOPS'     $rt0.RtStops 'the UPDATE statement for OPERAT is FDef.UpdateSQL, loaded at uDatasetsDef.pas:149 from FIB$DATASETS_INFO rows the index does not hold (fb_datasets has 0 rows in MicroniteMW1Service)'
+  # RE-PINNED by final-review M7 (the statement for the POSTED row: HandleUpdateRecord picks Insert / Update / Delete by
+  # `case ARequest of` :188, a condition the walk already quoted, and AfterPost fires for an inserted row too). Was
+  # 'the UPDATE statement for OPERAT is FDef.UpdateSQL, loaded at uDatasetsDef.pas:149 from ...'; anchor unchanged (:190)
+  Chk 'A-RT5-STOPS'     $rt0.RtStops ('the statement for the posted OPERAT row is FDef.InsertSQL, FDef.UpdateSQL or FDef.DeleteSQL, picked by the case over ARequest at :188 ' +
+                                      'and loaded at uDatasetsDef.pas:149 from FIB$DATASETS_INFO rows the index does not hold (fb_datasets has 0 rows in MicroniteMW1Service)')
   Chk 'A-RT5-COLUMN'    $rt0.RtColumn 1
   Chk 'A-RT5-RSPOK'     $rt0.RtRspOk 2
   # the rebinding switched indexes: files on CLIENT / on SERVER, counted through Invoke-OnDb
@@ -2399,7 +2406,9 @@ Step 'E-RT0' {
   # CoerceMSCLISTPlanIds + its Q.Open (2), CaptureOptrlistDelta + CurrentRoles (2), QChk.Open (1),
   # ApplyOptrlistSyncItems + SyncRolesOnConn + Q.Open + 3 ExecSQL (6). (The 12th step 28101d5f removed, `READS
   # MSCLIST`, was a routine-level sql fact, dropped by the fact filter, not a line of these branches.)
-  Chk 'A-RT5-OMITS'     $rt0.RtOmits ("OMITS 11 step(s) in branches for other tables, innermost enclosing if only @uGenericTableRoute.pas:468 -- in TGenericTableRoute.HandleDelta; " +
+  # RE-PINNED by final-review I5 (every if of a line's enclosing chain is tested, not only the innermost): the text no
+  # longer states the innermost-if limit; the count stays 11 -- no line of HandleDelta sits one if deeper in these branches
+  Chk 'A-RT5-OMITS'     $rt0.RtOmits ("OMITS 11 step(s) in branches for other tables, every enclosing if read up to a loop or case arm @uGenericTableRoute.pas:468 -- in TGenericTableRoute.HandleDelta; " +
                                       "not walked, the branch conditions: WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 / " +
                                       "WHEN `"TableName = 'OPTRLIST'`" @uGenericTableRoute.pas:476 / " +
                                       "WHEN `"(TableName = 'MSCLIST') and (Ctx.AppliedIns > 0)`" @uGenericTableRoute.pas:515 / " +
@@ -2455,8 +2464,10 @@ Step 'E-RT0' {
   # EnsureLoaded and PushTableChanged gained the ifs they sit under (named in HandleDelta, T5-R2) -- EnsureLoaded
   # also keeps its own `FLoaded` guard, hung there as the callee's
   Chk 'A-RT5-WASTXN'    $rt0.RtWasTxn 'OPENS AThreadStorage.UpdateTransaction.StartTransaction@uGenericTableRoute.pas:492 | RUNS AThreadStorage.UpdateTransaction.Commit@uGenericTableRoute.pas:498'
-  Chk 'A-RT5-CONDENSURE' $rt0.RtCondEnsure ('CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: UNLESS "FLoaded" @uDatasetsDef.pas:94 | ' +
-                                          'CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: WHEN "not GDatasetsDef.Loaded" @uGenericTableRoute.pas:429 | ' +
+  # RE-PINNED by final-review I6 (caller condition before callee guards: the enclosing if is evaluated before the call
+  # runs); was UNLESS "FLoaded" first, then WHEN "not GDatasetsDef.Loaded"
+  Chk 'A-RT5-CONDENSURE' $rt0.RtCondEnsure ('CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: WHEN "not GDatasetsDef.Loaded" @uGenericTableRoute.pas:429 | ' +
+                                          'CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: UNLESS "FLoaded" @uDatasetsDef.pas:94 | ' +
                                           'CALLS TBroadcastServer.PushTableChanged@uBroadcastServer.pas:401 :: WHEN "Assigned(GBroadcastServer)" @uGenericTableRoute.pas:507')
   # Task 6: the READ direction and ALSO. AC-6 both directions (green since Task 5's placeholder -- ruling P11: the RED
   # step was A-RT6-READ, which read the placeholder STOPS). AC-9: four crossings -- cmdDelta out and its response,
@@ -2487,8 +2498,10 @@ Step 'E-RT0' {
   Chk 'A-RT6-READGUARDS' $rt0.RtReadGuards 'Blueprint4.ViewModel.pas:1133,uPipeSessionBuilder.pas:525,uPipeSessionBuilder.pas:549,uPipeSessionBuilder.pas:605,Blueprint4.ViewModel.pas:1137'
   # every READ condition verbatim: the five guards above plus the branch conditions of their steps (EnsureLoaded's own
   # FLoaded Exit, the ifs around EnsureLoaded / LoadFromInternal, around EmptyDataSet and LoadFromStream)
-  Chk 'A-RT6-READCONDS' $rt0.RtReadConds ('UNLESS "not (Assigned(FConn) and FConn.Connected)" @Blueprint4.ViewModel.pas:1133 | UNLESS "FLoaded" @uDatasetsDef.pas:94 | ' +
-                                          'WHEN "not GDatasetsDef.Loaded" @uPipeSessionBuilder.pas:523 | WHEN "not FLoaded" @uDatasetsDef.pas:97 | ' +
+  # RE-PINNED by final-review I6 (caller condition before callee guards): WHEN "not GDatasetsDef.Loaded" @:523 now
+  # stands ahead of EnsureLoaded's own UNLESS "FLoaded" @:94 (was the reverse)
+  Chk 'A-RT6-READCONDS' $rt0.RtReadConds ('UNLESS "not (Assigned(FConn) and FConn.Connected)" @Blueprint4.ViewModel.pas:1133 | WHEN "not GDatasetsDef.Loaded" @uPipeSessionBuilder.pas:523 | ' +
+                                          'UNLESS "FLoaded" @uDatasetsDef.pas:94 | WHEN "not FLoaded" @uDatasetsDef.pas:97 | ' +
                                           'UNLESS "not GDatasetsDef.GetTable(ATableName, Def)" @uPipeSessionBuilder.pas:525 | ' +
                                           'UNLESS "not TryBuildSafeWhere(WhereStr, Def, WhereSql, WhereVals)" @uPipeSessionBuilder.pas:549 | ' +
                                           'UNLESS "T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises" @uPipeSessionBuilder.pas:605 | ' +
@@ -2528,14 +2541,18 @@ Step 'E-RT0' {
   # T5-R13 (failed before: rspNotFound / rspDenied read as success, the if read `both`): success is rspOK / rspData only
   Chk 'A-RT6-SUCCESSRSP' $rt0.RtSuccessRsp 'True,True,False,False,False,then'
   # Review Focus 1: a control whose datasource is NOT dangling completes -- no throw. The Task 3 resolver stops at
-  # ANCHOR with a named reason: the chain lands on MemTable (a property; the field is FMemTable) and the table comes
-  # through the constant CAUSFAIL_TABLE, which no literal on the dataset's line names. So TableColumn is empty
+  # ANCHOR with a named reason: the chain reaches the property MemTable, follows it to its field FMemTable (final-review
+  # I8), and the table comes through the constant CAUSFAIL_TABLE, which no literal on the dataset's line names. So TableColumn is empty
   # (the brief expected CAUSFAIL.REASON -- a resolver finding, reported, not fixed here)
   Chk 'A-RT6-OTHER'     $rt0.RtOther ':True:True'
-  Chk 'A-RT6-OTHERSTOP' $rt0.RtOtherStop 'MemTable|6/1|no upper-case table-name literal shares a line with MemTable in uCausFail.ViewModel -- the table cannot be inferred'
+  # RE-PINNED by final-review I8 (a dataset PROPERTY is followed to the field its read accessor names -- here the
+  # member_accesses fact on the assignment line :125, certain): the anchor dataset is FMemTable, one step later. It still
+  # stops -- the table comes through the constant CAUSFAIL_TABLE (a follow-on) -- but on the right symbol. Was 'MemTable|6/1|...MemTable...'
+  Chk 'A-RT6-OTHERSTOP' $rt0.RtOtherStop 'FMemTable|7/1|no upper-case table-name literal shares a line with FMemTable in uCausFail.ViewModel -- the table cannot be inferred'
   # Task 7 fix round 1 (I3): stopped at its anchor's [06] -> no reach in the title, six sections noted "not walked"
   # naming [06] (was "How frmCausFail.colREASON reaches frmCausFail.colREASON and goes back" and six bare headers)
-  Chk 'A-RT6-OTHERSHAPE' $rt0.RtOtherShape 'Why frmCausFail.colREASON cannot be traced|6|[06]'
+  # RE-PINNED by final-review I8: the stop is now [07] (READS MemTable, then BINDS FMemTable); was [06]
+  Chk 'A-RT6-OTHERSHAPE' $rt0.RtOtherShape 'Why frmCausFail.colREASON cannot be traced|6|[07]'
   # Task 6 FIX ROUND 1. Important 1 (threw before: no span): the guard-line rule takes only a call INSIDE the condition,
   # between `if` and `then` -- Foo on a one-line guard `if not X(A) then begin Foo(B); Exit; end;` is failure-branch code,
   # as is Log after the `then` of a wrapped one; the rule used to take every bound call on the if line
@@ -2616,6 +2633,30 @@ Step 'E-RT' {
   # T4-C3: the case guard quotes `case ARequest of` verbatim; the else arm is generated text (was "case ARequest of else")
   Chk 'A-RT7-CASE'      $rt0.TraceCaseCond 'UNLESS "case ARequest of" @uGenericTableRoute.pas:188 -- else arm at :192; ask E1'
 }
+# ---- round-trip, the final review's fix wave (I1-I9, M2, M3, M7) ----
+Note 'round-trip: the final review ...'
+Step 'E-RTF' {
+  # I1 (synthetic walk, no index): an Exit guard's IfLine is walked for its CONDITION only. Before: `APPLIES
+  # FMT.CancelUpdates` and `SENDS rspError` were path steps carrying the guards that skip them (inverted), and
+  # the WHEN guard's else note named its own then branch. After: the failure branch is the else note, nothing else
+  Chk 'A-RTF-I1-WALK'   $rt0.FinI1Walk ('SERIALIZES FMT.SaveToStream [UNLESS not Ready (else FMT.CancelUpdates @fin-i1a.pas:4), UNLESS Failed (else rspError)] > ' +
+                                        'APPLIES FMT.ApplyUpdates [] || pending:  ## APPLIES FMT.ApplyUpdates [WHEN Ready (else FMT.CancelUpdates @fin-i1b.pas:3)] || pending: ')
+  # ... the failure span of a guard's `then` line: up to the if's own `;` (a statement after it is the path), an
+  # else-branch Exit from its else, a nested if keeping its else, no span when the else is on a later line
+  Chk 'A-RTF-I1-SPAN'   $rt0.FinI1Span '[then Exit;],[else Exit;],[then begin if B then X else Y; Exit; end;],[then Exit],[]'
+  # I4: the WRITE direction starts at AfterPost even when an AfterDelete (or a BeforePost) is wired above it
+  Chk 'A-RTF-I4-WIRING' $rt0.FinI4Wiring 'AfterPost@15,AfterPost@20,BeforePost@5,AfterDelete@10'
+  # I5 (synthetic walk): a call one if DEEPER in another table's branch is omitted too (it was a path step)
+  Chk 'A-RTF-I5-OMITS'  $rt0.FinI5Omits ("OMITS 1 step(s) in branches for other tables, every enclosing if read up to a loop or case arm -- not walked, the branch conditions: " +
+                                        "WHEN `"T = 'MSCLIST'`" @fin-i5.pas:3 > APPLIES FMT.CommitUpdates")
+  # M2: the ask on each ANCHOR step of OPERAT.NAME || of colREASON. Before: 08=E4 (the table-literal hop) and colREASON
+  # 04=E4 (FViewModel's declared type matched by name) -- E4 (populated fb_datasets) retires neither. Now the literal hop
+  # names none (the walk's own inference) and the rhs-type hop names type-use-binding (0 of 60,603 type_use refs bound)
+  Chk 'A-RTF-M2-ASKS'   $rt0.FinM2Asks '01=-,02=-,03=-,04=in-class-field-reads,05=in-class-field-reads,06=-,07=-,08=-,09=E4 || 01=-,02=-,03=-,04=type-use-binding,05=-,06=-,07=-'
+  # M3: AS OF is each index's own schema_meta indexed_at_unix (CLIENT / SERVER / SQL, UTC to the minute) -- it was the
+  # CLIENT clone FILE's UTC date, 2026-09-28, a stamp the header did not read
+  Chk 'A-RTF-M3-ASOF'   $rt0.FinM3AsOf '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-09-28T02:46Z/2026-09-28T02:46Z/2026-09-28T02:45Z'
+}
 
 Note 'round-trip negatives ...'
 # Task 7 fix round 1 (I3): a trace that STOPS at its anchor claims no reach. Its shape, read off the written text:
@@ -2624,7 +2665,7 @@ Note 'round-trip negatives ...'
 # round trip. Before the fix: "How X reaches X and goes back" and six bare section headers (readable as "no path").
 function Get-StoppedTraceShape([string] $Text, [string] $Path) {
   . "$SRC\Trace.FormA.ps1"
-  $ttl = $(if ($Text -match '(?m)^  TITLE "([^"]*)"\r$') { $Matches[1] } else { '' })
+  $ttl = $(if ($Text -cmatch '(?m)^  TITLE "([^"]*)"\r$') { $Matches[1] } else { '' })
   $nw = @([regex]::Matches($Text, '(?m)^([A-Z]+)\r\n  -- not walked: the trace stopped at (\[\d+\])\r$'))
   & "$SRC\Test-FormA.ps1" -Fixture $Path -Quiet 6>$null | Out-Null
   $fa = $LASTEXITCODE
@@ -2636,8 +2677,8 @@ Step 'RT-N1' {
   $script:rtn1 = & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.cxGroupBox16' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir 6>$null
   & "$SRC\Test-FormA.ps1" -Fixture $rtn1.Trace -Quiet | Out-Null
   Chk 'A-RT-N1'         "$($rtn1.Steps)/$($rtn1.Unresolved)/$($rtn1.Conditions)/$($rtn1.AllClickable)/$LASTEXITCODE" '1/1/0/True/0'
-  if ($rtn1.Text -notmatch '\[01\] STOPS frmBlueprint4\.cxGroupBox16 \(TcxGroupBox\) is not data-bound') { Fail 'A-RT-N1' 'the one step is not the STOPS naming why' }
-  if ($rtn1.Text -notmatch 'END TRACE  1 steps, 0 conditions, 0 crossings, 1 unresolved\.') { Fail 'A-RT-N1' 'END TRACE does not count the STOPS' }
+  if ($rtn1.Text -cnotmatch '\[01\] STOPS frmBlueprint4\.cxGroupBox16 \(TcxGroupBox\) is not data-bound') { Fail 'A-RT-N1' 'the one step is not the STOPS naming why' }
+  if ($rtn1.Text -cnotmatch 'END TRACE  1 steps, 0 conditions, 0 crossings, 1 unresolved\.') { Fail 'A-RT-N1' 'END TRACE does not count the STOPS' }
   # I3: no reach claimed; all six later sections say they were not walked, naming the [01] STOPS
   Chk 'A-RT-N1-SHAPE'   (Get-StoppedTraceShape $rtn1.Text $rtn1.Trace) 'Why frmBlueprint4.cxGroupBox16 cannot be traced|WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|[01]|0|identical'
 }
@@ -2648,7 +2689,34 @@ Step 'RT-N2' {
   Chk 'A-RT-N2'         "$($rtn2.Steps)/$($rtn2.Unresolved)/$($rtn2.TableColumn)" '1/1/OPERAT.NAME'
   # I3: the same shape, and the N2 trace passes Test-FormA and reads back byte for byte too
   Chk 'A-RT-N2-SHAPE'   (Get-StoppedTraceShape $rtn2.Text $rtn2.Trace) 'Why OPERAT.NAME cannot be traced|WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|[01]|0|identical'
-  if ($rtn2.Text -notmatch '\[01\] STOPS OPERAT\.NAME: 5 datasets load OPERAT in this index \(AssignGroups\.ViewModel\.TAssignGroupsViewModel\.FMTOperat, .*ControlPlan2\.ViewModel\.TControlPlan_ViewModel\.FMTOperation\)') { Fail 'A-RT-N2' 'the STOPS does not name the five datasets' }
+  if ($rtn2.Text -cnotmatch '\[01\] STOPS OPERAT\.NAME: 5 datasets load OPERAT in this index \(AssignGroups\.ViewModel\.TAssignGroupsViewModel\.FMTOperat, .*ControlPlan2\.ViewModel\.TControlPlan_ViewModel\.FMTOperation\)') { Fail 'A-RT-N2' 'the STOPS does not name the five datasets' }
+}
+# final-review I2 (a): a direction that stops AFTER the anchor resolved. frmAssignGroups.grdFtrsColNum is a read-only
+# listing: its dataset FMTFtrs (AssignGroups.ViewModel, behind the property FtrsMT -- I8) has NO event wiring. Found on
+# the CLIENT clone by querying every dataset field that feeds a `.DataSet :=` and has no AfterPost/.../OnReconcileError
+# member-access in its unit (14 fields), then the field-bound controls of those view models' forms. The WRITE STOPS
+# ([09], E3) ends the write direction: SERVER / DATABASE / RESPONSE carry the generated `not walked` note naming it (not
+# a STOPS, not unresolved), and the title claims only the READ direction. Before the fix: "How MSCLIST.NUM reaches ...
+# and goes back" over three bare headers (and, before I8, the anchor stopped on the property FtrsMT)
+Step 'RT-NOWIRE' {
+  $script:rtnw = & "$SRC\Emit-RoundTrip.ps1" -Target 'frmAssignGroups.grdFtrsColNum' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir 6>$null
+  & "$SRC\Test-FormA.ps1" -Fixture $rtnw.Trace -Quiet 6>$null | Out-Null
+  Chk 'A-RT-NOWIRE'       "$($rtnw.Title)|$($rtnw.Notes)" ('How MSCLIST.NUM reaches frmAssignGroups.grdFtrsColNum (the way back stops at step 9)|' +
+                                                           'SERVER=not walked: the write direction stopped at [09] | DATABASE=not walked: the write direction stopped at [09] | ' +
+                                                           'RESPONSE=not walked: the write direction stopped at [09] | ALSO=no other route to this anchor in the index')
+  Chk 'A-RT-NOWIRE-COUNTS' "$($rtnw.Steps)/$($rtnw.Conditions)/$($rtnw.Crossings)/$($rtnw.Unresolved)|$($rtnw.WriteSteps)/$($rtnw.ReadSteps)/$($rtnw.AlsoSteps)|$LASTEXITCODE|$($rtnw.AllClickable)" '33/10/2/2|1/24/0|0|True'
+}
+# final-review I2 (b), synthetic: the server side stops but the walk goes on. No corpus case on the SERVER clone, so the
+# CLIENT clone stands in as the server index -- it holds no dispatch routine (A-RT0-DISPATCH: Pipes.Commands is not in it),
+# so both directions' server STOPS (E2) fire. The DATABASE tier is not walked (the write one gets the note; READ is one
+# section and simply has no DATABASE step), and each response WITH says the response is unknown. Before the fix:
+# Get-DatabaseSteps ran on the lone STOPS -- "no walked routine names the UPDATE statement ..., applied in  at <enum
+# declaration>", a WRITES/READS column step -- and WITH read "no rsp* constant read in the handler"
+Step 'RT-SRVSTOP' {
+  $script:rtss = & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbCli -SqlDbPath $DbSql -OutDir (Join-Path $OutDir 'rt-srvstop') 6>$null
+  $ssl = $rtss.Text -split "`r`n"
+  Chk 'A-RT-SRVSTOP'      "$($rtss.Title)|$($rtss.Notes)" 'Where the trace between frmBlueprint4.dxDBGrid1OperationVName and OPERAT.NAME stops (steps 15 and 22)|DATABASE=not walked: the write direction stopped at [15]'
+  Chk 'A-RT-SRVSTOP-SHAPE' "$($rtss.Steps)/$($rtss.Conditions)/$($rtss.Crossings)/$($rtss.Unresolved)|$(@($ssl | Where-Object { $_ -cmatch '^       WITH unknown, no server handler was reached @' }).Count)|$(@($ssl | Where-Object { $_ -cmatch '^\[\d+\] DATABASE |applied in  at|UPDATE statement' }).Count)" '35/8/4/2|2|0'
 }
 # AC-14: a stale view model (a COPY with one trailing space, never the source) -> REFUSED, the file named, NO .dlgraph
 Step 'RT-STALE' {
@@ -2661,7 +2729,7 @@ Step 'RT-STALE' {
   try { & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir -SourceOverride @{ $vmp = (Join-Path $stDir 'Blueprint4.ViewModel.pas') } 6>$null | Out-Null }
   catch { $threw = $true; $m = $_.Exception.Message }
   if (-not $threw) { Fail 'A-RT-STALE' 'did not refuse' }
-  elseif ($m -notlike '*Blueprint4.ViewModel.pas differs from the indexed copy*') { Fail 'A-RT-STALE' "refusal does not name the file: $m" }
+  elseif ($m -cnotlike '*Blueprint4.ViewModel.pas differs from the indexed copy*') { Fail 'A-RT-STALE' "refusal does not name the file: $m" }
   if (Get-ChildItem $stDir -Filter *.dlgraph) { Fail 'A-RT-STALE' 'left a .dlgraph behind after refusing' }
   $script:rtStale = $(if ($threw) { 'refused' } else { 'accepted' })
 }
@@ -2674,15 +2742,15 @@ Step 'RT-ART' {
   Chk 'A-RT-ART-LABELS' "$($meta.leftLabel)/$($meta.rightLabel)" 'steps/unresolved'
   Chk 'A-RT-ART-COUNTS' "$($meta.leftCount)/$($meta.rightCount)" "$($rt0.RtCounts -split '/' | Select-Object -First 1)/$($rt0.RtCounts -split '/' | Select-Object -Last 1)"
   Chk 'A-RT-ART-DEPTH'  $meta.depth 4
-  foreach ($flag in '-ServerDbPath ', '-SqlDbPath ', '-Depth 4') { if ($meta.regenerate -notlike "*$flag*") { Fail 'A-RT-ART' "the regenerate command drops $flag" } }
+  foreach ($flag in '-ServerDbPath ', '-SqlDbPath ', '-Depth 4') { if ($meta.regenerate -cnotlike "*$flag*") { Fail 'A-RT-ART' "the regenerate command drops $flag" } }
   if (-not (Test-Path (Join-Path $art.Bundle 'trace.dlgraph'))) { Fail 'A-RT-ART' 'no trace.dlgraph in the bundle' }
   if (Test-Path (Join-Path $art.Bundle 'graph.svg')) { Fail 'A-RT-ART' 'a graph.svg was written for a text question' }
   $html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
-  if ($html -notmatch '<pre[^>]*>TRACE OPERAT\.NAME') { Fail 'A-RT-ART' 'index.html does not show the trace' }
+  if ($html -cnotmatch '<pre[^>]*>TRACE OPERAT\.NAME') { Fail 'A-RT-ART' 'index.html does not show the trace' }
   # fix round 1 (I2, T8-R3): the footer names the text as what it is -- no paste-unchanged promise, no graph.*
-  if ($html -notmatch '<footer>\s*trace\.dlgraph \(Form A text\) &middot; meta\.json' -or $html -match 'graph\.svg|DocInsight') { Fail 'A-RT-ART-FOOT' 'the text bundle footer is not "trace.dlgraph (Form A text) &middot; meta.json ..."' }
+  if ($html -cnotmatch '<footer>\s*trace\.dlgraph \(Form A text\) &middot; meta\.json' -or $html -cmatch 'graph\.svg|DocInsight') { Fail 'A-RT-ART-FOOT' 'the text bundle footer is not "trace.dlgraph (Form A text) &middot; meta.json ..."' }
   # fix round 1 (I3, T8-R1): a text bundle claims no click targets; its anchors are @file:line text
-  if ($html -match 'Every row is a real anchor|<b>\d+</b> click targets</span>' -or $html -notmatch 'not click targets') { Fail 'A-RT-ART-NOTE' 'the text bundle page claims clickable anchors' }
+  if ($html -cmatch 'Every row is a real anchor|<b>\d+</b> click targets</span>' -or $html -cnotmatch 'not click targets') { Fail 'A-RT-ART-NOTE' 'the text bundle page claims clickable anchors' }
   if ((Get-Content (Join-Path $art.Bundle 'trace.dlgraph') -Raw) -cne $rt0.RtText) { Fail 'A-RT-ART' 'trace.dlgraph in the bundle differs from the emitter output' }
 }
 # AC-16, the holdout: a SECOND edited field, pinned only after the owner read its trace. frmBlueprint4.dxDBGrid1FtrsVNum
@@ -2699,6 +2767,9 @@ Step 'RT-HOLD' {
   Chk 'A-RT9-FORMA'   $rt0.HoldFormA 0
   # steps/conditions/crossings/unresolved -- the two unresolved are the E4 UPDATE and SELECT STOPS, as for OPERAT.NAME
   Chk 'A-RT9-COUNTS'  $rt0.HoldCounts '103/35/4/2'
+  # final-review I6: [27] CoerceMSCLISTPlanIds -- the caller's branch condition first, then the callee's own guards
+  # (was UNLESS "FieldCnt = 0", UNLESS "Wanted.Count = 0", then WHEN "TableName = 'MSCLIST'")
+  Chk 'A-RT9-CONDORDER' $rt0.HoldCoerceConds "WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 | UNLESS `"FieldCnt = 0`" @uGenericTableRoute.pas:310 | UNLESS `"Wanted.Count = 0`" @uGenericTableRoute.pas:336"
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters

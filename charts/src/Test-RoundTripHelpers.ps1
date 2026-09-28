@@ -914,5 +914,88 @@ $res.HoldCancel = (@($hl | Where-Object { $_ -match '^       UNLESS ".*<> rspOK\
 $res.HoldRePoint = (@($hl | Where-Object { $_ -match '^\[\d+\] SETS dxDBGrid1FtrsV\.DataSource := FBlueprint_ViewModel\.pdsrFtrs @Blueprint4\.pas:2283 -- in FormShow$' })).Count
 & (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture $rh.Trace -Quiet 6>$null | Out-Null
 $res.HoldFormA = $LASTEXITCODE
+# final-review I6: CoerceMSCLISTPlanIds' conditions in evaluation order -- the caller's enclosing branch first
+$hcAt = [array]::FindIndex($hl, [Predicate[string]]{ param($l) $l -match '^\[\d+\] CALLS CoerceMSCLISTPlanIds ' })
+$hcC = @(); if ($hcAt -ge 0) { for ($q = $hcAt + 1; $q -lt $hl.Count -and $hl[$q] -match '^       (WHEN|UNLESS) '; $q++) { $hcC += (($hl[$q].Trim()) -replace ' -- .*$', '') } }
+$res.HoldCoerceConds = $hcC -join ' | '
+
+# ---- 10. the final review (I1, I2, I4-I8, M2, M3, M7) ------------------------------------------
+# Synthetic walks: Walk-Routine over a routine written to a scratch .pas, its facts injected into the walk's own
+# caches (RtFacts; the sha map Test-SourceFresh reads, keyed by a synthetic $DbPath) -- NO index is read. A ref is
+# a hashtable of Get-RoutineFacts columns; `at` names the token whose FIRST occurrence on its line is the ref's
+# 1-based start_col. Returns the walk's Items and Conds.
+function Invoke-SynthWalk([string] $Name, [string[]] $Src, $Refs, [string] $Table = 'OPERAT', [string[]] $Tables = @('OPERAT', 'MSCLIST'), $Lits = @()) {
+  $DbPath = "synth:$Name"
+  $p = Join-Path $work "$Name.pas"
+  [IO.File]::WriteAllText($p, (($Src -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  if (-not $script:DlFileShas) { $script:DlFileShas = @{} }
+  $script:DlFileShas[$DbPath] = @{ $p = (Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash }
+  $cols = 'rid', 'kind', 'nm', 'recv', 'line', 'col', 'ecol', 'tid', 'tkind', 'tname', 'tq', 'tistart', 'tdecl', 'tpath', 'tfid', 'tpipe'
+  $rs = @(foreach ($r in $Refs) {
+    $o = [ordered]@{}; foreach ($c in $cols) { $o[$c] = $(if ($r.ContainsKey($c)) { $r[$c] } else { $null }) }
+    if ($r.ContainsKey('at')) { $o.col = $Src[[int]$r.line - 1].IndexOf([string]$r.at) + 1 }
+    [pscustomobject]$o })
+  $ls = @(foreach ($l in $Lits) { $c = $Src[[int]$l.line - 1].IndexOf("'$($l.text)'") + 1; [pscustomobject]@{ kind = 'literal'; text = $l.text; line = $l.line; col = $c; ecol = $c + ([string]$l.text).Length + 2 } })
+  $script:RtFacts["$DbPath|1"] = [pscustomobject]@{ Id = 1; Name = 'P'; Qname = 'uSynth.TSynth.P'; Short = 'TSynth.P'; Path = $p; Fid = 1; Pid = 0
+                                                     ImplStart = 1; ImplEnd = $Src.Count; Decl = 1; SqlReads = ''; SqlWrites = ''; Refs = $rs; Lits = $ls }
+  $ctx = @{ Table = $Table; Column = 'X'; TableColumn = "$Table.X"; DataSet = $null; SqlSet = [pscustomobject]@{ Names = $Tables }; SourceOverride = $null
+            Likes = '1 = 0'; NearIndex = 'A'; FarIndex = 'B'; Seen = @{} }
+  Walk-Routine 1 4 @{} $ctx
+}
+# a walk as text: `<step head> [<cond>, <cond>]` per item, ' > ' between; then ` || pending: <conds>`
+function Format-SynthWalk($W) {
+  $fc = { param($c) "$($c.Keyword) $($c.Condition)$(if ($c.Note) { " ($($c.Note))" })" }
+  $it = @($W.Items | ForEach-Object { "$($_.Text) [$((@($_.Children | Where-Object { $_.Kind -eq 'cond' } | ForEach-Object { & $fc $_ })) -join ', ')]" })
+  "$($it -join ' > ') || pending: $((@($W.Conds | ForEach-Object { & $fc $_ })) -join ', ')"
+}
+# I1: an Exit guard's IfLine is walked for its CONDITION only. `if X then begin FMT.CancelUpdates; Exit; end;`
+# wrote APPLIES FMT.CancelUpdates as a path step with UNLESS "X" hung on it (inverted) AND named it in the else
+# note; an `ARspCmd:= rspError` after the `then` was a SENDS. P2: a WHEN guard (Exit in the else) keeps its then
+# branch as the path, and its else note names only the else branch.
+$res.FinI1Walk = $(try {
+  $s1 = @('procedure TSynth.P;', 'begin', '  FMT.SaveToStream(MS);', '  if not Ready then begin FMT.CancelUpdates; Exit; end;',
+          '  if Failed then begin ARspCmd:= rspError; Exit; end;', '  FMT.ApplyUpdates;', 'end;')
+  $r1 = @(@{ kind = 'call'; nm = 'SaveToStream'; recv = 'FMT'; line = 3; at = 'SaveToStream' }, @{ kind = 'read'; nm = 'Ready'; line = 4; at = 'Ready' },
+          @{ kind = 'call'; nm = 'CancelUpdates'; recv = 'FMT'; line = 4; at = 'CancelUpdates' }, @{ kind = 'call'; nm = 'Exit'; line = 4; at = 'Exit' },
+          @{ kind = 'read'; nm = 'Failed'; line = 5; at = 'Failed' }, @{ kind = 'write'; nm = 'ARspCmd'; tkind = 'param'; line = 5; at = 'ARspCmd' },
+          @{ kind = 'read'; nm = 'rspError'; tkind = 'enum_value'; tname = 'rspError'; line = 5; at = 'rspError' }, @{ kind = 'call'; nm = 'Exit'; line = 5; at = 'Exit' },
+          @{ kind = 'call'; nm = 'ApplyUpdates'; recv = 'FMT'; line = 6; at = 'ApplyUpdates' })
+  $s2 = @('procedure TSynth.P;', 'begin', '  if Ready then FMT.ApplyUpdates else begin FMT.CancelUpdates; Exit; end;', 'end;')
+  $r2 = @(@{ kind = 'read'; nm = 'Ready'; line = 3; at = 'Ready' }, @{ kind = 'call'; nm = 'ApplyUpdates'; recv = 'FMT'; line = 3; at = 'ApplyUpdates' },
+          @{ kind = 'call'; nm = 'CancelUpdates'; recv = 'FMT'; line = 3; at = 'CancelUpdates' }, @{ kind = 'call'; nm = 'Exit'; line = 3; at = 'Exit' })
+  "$(Format-SynthWalk (Invoke-SynthWalk 'fin-i1a' $s1 $r1)) ## $(Format-SynthWalk (Invoke-SynthWalk 'fin-i1b' $s2 $r2))"
+} catch { "threw: $($_.Exception.Message)" })
+# I1: the failure span on a guard's `then` line (0-based [From,To) of the stripped line), pure: a then-branch Exit
+# up to its `;`, a statement after it on the line is the path; an else-branch Exit from its else; a nested if takes
+# its own else; an else on a later line leaves the then line alone
+$res.FinI1Span = $(try {
+  # (line, keyword, which `then` is the guard's: 0 = the first)
+  (@(@('  if A then Exit; Foo;', 'UNLESS', 0), @('  if A then Foo else Exit;', 'WHEN', 0), @('  if A then begin if B then X else Y; Exit; end;', 'UNLESS', 0),
+     @('  if A then if B then Exit else Y;', 'UNLESS', 1), @('  if A then Foo', 'WHEN', 0)) | ForEach-Object {
+    $ln = $_[0]; $th = @([regex]::Matches($ln, '\bthen\b'))[$_[2]].Index
+    $sp = Get-GuardFailSpan ([pscustomobject]@{ Keyword = $_[1]; CondL2 = 1; CondC2 = $th }) $ln
+    $(if ($sp) { "[$($ln.Substring($sp.From, $sp.To - $sp.From).Trim())]" } else { '[]' }) }) -join ','
+} catch { "threw: $($_.Exception.Message)" })
+# I4: the WRITE direction starts at the preferred event -- AfterPost wired BELOW an AfterDelete (and a BeforePost)
+$res.FinI4Wiring = $(try {
+  # assigned directly: Sort-RtWiring keeps its array whole with a unary comma (@(...) would nest it)
+  $sw = Sort-RtWiring @([pscustomobject]@{ Event = 'AfterDelete'; Line = 10 }, [pscustomobject]@{ Event = 'AfterPost'; Line = 20 },
+                        [pscustomobject]@{ Event = 'BeforePost'; Line = 5 }, [pscustomobject]@{ Event = 'AfterPost'; Line = 15 })
+  (@($sw | ForEach-Object { "$($_.Event)@$($_.Line)" })) -join ','
+} catch { "threw: $($_.Exception.Message)" })
+# I5: a line one if DEEPER inside another table's branch is omitted too -- the whole enclosing chain is tested
+$res.FinI5Omits = $(try {
+  $s5 = @('procedure TSynth.P;', 'begin', "  if T = 'MSCLIST' then", '  begin', '    if N > 0 then FMT.ApplyUpdates;', '  end;', '  FMT.CommitUpdates;', 'end;')
+  $r5 = @(@{ kind = 'read'; nm = 'T'; line = 3; at = 'T =' }, @{ kind = 'read'; nm = 'N'; line = 5; at = 'N >' },
+          @{ kind = 'call'; nm = 'ApplyUpdates'; recv = 'FMT'; line = 5; at = 'ApplyUpdates' }, @{ kind = 'call'; nm = 'CommitUpdates'; recv = 'FMT'; line = 7; at = 'CommitUpdates' })
+  $w5 = Invoke-SynthWalk 'fin-i5' $s5 $r5 -Lits @(@{ text = 'MSCLIST'; line = 3 })
+  (@($w5.Items | ForEach-Object { "$($_.Text)$(if ($_.Note) { " -- $($_.Note)" })" })) -join ' > '
+} catch { "threw: $($_.Exception.Message)" })
+# M2: the ask on every ANCHOR step (`<NN>=<ask>`, '-' for none) -- E4 on a designer-chain hop or on the table-literal hop
+# was a wrong ask: the rhs-type [by name] hop names type-use-binding (no type_use ref is bound), the table literal none
+$askOf = { param($t) (@(($t -split "\r\n") | Where-Object { $_ -cmatch '^\[\d+\] ' } | ForEach-Object { $n = $_.Substring(1, 2); $(if ($_ -match '; ask (\S+)$|-- ask (\S+)$') { "$n=$($Matches[1])$($Matches[2])" } else { "$n=-" }) } | Select-Object -First 9)) -join ',' }
+$res.FinM2Asks = "$(& $askOf $txt) || $(if ($rtO.PSObject.Properties['Text']) { & $askOf $rtO.Text })"
+# M3: the header's AS OF is each index's own schema_meta indexed_at_unix, UTC to the minute (was the CLIENT file's date)
+$res.FinM3AsOf = @($txt -split "\r\n" | Where-Object { $_ -clike '  INDEX *' })[0]
 
 [pscustomobject]$res
