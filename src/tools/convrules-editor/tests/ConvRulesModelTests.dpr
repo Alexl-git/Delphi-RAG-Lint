@@ -29,6 +29,7 @@ uses
   , ConvRules.RuleCatalog in '..\ConvRules.RuleCatalog.pas'
   , ConvRules.SkipList in '..\ConvRules.SkipList.pas'
   , ConvRules.UnitPick in '..\ConvRules.UnitPick.pas'
+  , ConvRules.UsesHarvest in '..\ConvRules.UsesHarvest.pas'
   ;
 
 var
@@ -6086,6 +6087,94 @@ begin
   end; // try
 end; // procedure
 
+function HarvestNames(const AUnits: TArray<THarvestedUnit>): string;
+var
+  H: THarvestedUnit;
+begin
+  Result:= '';
+  for H in AUnits do
+  begin
+    if Result <> '' then
+      Result:= Result + ',';
+    Result:= Result + H.UnitName;
+  end;
+end;
+
+procedure TestUsesHarvestText;
+var
+  R: TArray<THarvestedUnit>;
+begin
+  R:= HarvestText('uses Forms, DB {comment, Fake}, Foo in ''Foo.pas'';');
+  Check('harvest.text.uses.names', HarvestNames(R) = 'Forms,DB,Foo', HarvestNames(R));
+  Check('harvest.text.uses.usedby', (Length(R) = 3) and (R[0].UsedBy = PASTED_SOURCE), HarvestNames(R));
+  Check('harvest.text.uses.nosection', (Length(R) = 3) and (R[0].Section = ''), HarvestNames(R));
+
+  R:= HarvestText('Forms, Vcl.Dialogs; DB' + #13#10 + 'Data.DB');
+  Check('harvest.text.list.names', HarvestNames(R) = 'Forms,Vcl.Dialogs,DB,Data.DB', HarvestNames(R));
+
+  // Prose: '3' (number), 'units:' (colon) and '12x.' (trailing dot) are not identifiers.
+  R:= HarvestText('Replace these 3 units: Forms and 12x.');
+  Check('harvest.text.list.drops.nonidents', HarvestNames(R) = 'Replace,these,Forms,and', HarvestNames(R));
+
+  R:= HarvestText('Forms forms FORMS');
+  Check('harvest.text.dedup.nocase', HarvestNames(R) = 'Forms', HarvestNames(R));
+
+  R:= HarvestText('');
+  Check('harvest.text.empty', Length(R) = 0, IntToStr(Length(R)));
+end;
+
+procedure TestDprMembers;
+const
+  DPR =
+    'program App;' + #13#10 +
+    'uses' + #13#10 +
+    '  Vcl.Forms,' + #13#10 +
+    '  U1 in ''U1.pas'' {Form1},' + #13#10 +
+    '  Sub.U2 in ''..\Sub\U2.pas'' {dm: TDataModule};' + #13#10 +
+    'begin' + #13#10 +
+    'end.';
+var
+  M: TArray<TDprMember>;
+begin
+  M:= ReadDprMembers(DPR, 'C:\P\App');
+  Check('dpr.members.count', Length(M) = 3, IntToStr(Length(M)));
+  if Length(M) <> 3 then
+    Exit;
+  Check('dpr.members.plain.name', M[0].UnitName = 'Vcl.Forms', M[0].UnitName);
+  Check('dpr.members.plain.nopath', M[0].FilePath = '', M[0].FilePath);
+  Check('dpr.members.in.path', SameText(M[1].FilePath, 'C:\P\App\U1.pas'), M[1].FilePath);
+  Check('dpr.members.dotted.relative', (M[2].UnitName = 'Sub.U2') and SameText(M[2].FilePath, 'C:\P\Sub\U2.pas'), M[2].UnitName + ' ' + M[2].FilePath);
+end;
+
+procedure TestHarvestMergeAndFlag;
+var
+  A: TArray<THarvestedUnit>;
+  B: TArray<THarvestedUnit>;
+  R: TArray<THarvestedUnit>;
+  H: THarvestedUnit;
+begin
+  H.UnitName:= 'Forms';
+  H.Section := 'interface';
+  H.UsedBy  := 'U1';
+  A:= [H];
+  H.UnitName:= 'forms';
+  H.UsedBy  := 'U2';
+  B:= [H];
+  H.UnitName:= 'DB';
+  H.Section := '';
+  H.UsedBy  := PASTED_SOURCE;
+  B:= B + [H];
+  R:= MergeHarvest(A, B);
+  Check('harvest.merge.nocase', HarvestNames(R) = 'Forms,DB', HarvestNames(R));
+  Check('harvest.merge.first.kept', (Length(R) = 2) and (R[0].UsedBy = 'U1'), HarvestNames(R));
+  Check('harvest.indexof.nocase', IndexOfUnit(R, 'db') = 1, IntToStr(IndexOfUnit(R, 'db')));
+  Check('harvest.without', HarvestNames(WithoutUnit(R, 'FORMS')) = 'DB', HarvestNames(WithoutUnit(R, 'FORMS')));
+  if Length(R) <> 2 then
+    Exit;
+  Check('harvest.flag.section', HarvestFlagText(R[0]) = 'interface, U1', HarvestFlagText(R[0]));
+  Check('harvest.flag.nosection', HarvestFlagText(R[1]) = PASTED_SOURCE, HarvestFlagText(R[1]));
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -6212,6 +6301,9 @@ begin
     TestUnitPickFilter;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
+    TestUsesHarvestText;
+    TestDprMembers;
+    TestHarvestMergeAndFlag;
 
     FreeAndNil(GParseBook);
 
