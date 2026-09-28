@@ -45,6 +45,17 @@
 # missing --db exit 2 "Database not found", not FATAL exit 3; and a WRITER
 # converts a rollback-journal index back to WAL (ruling R16) while no reader does.
 #
+# BATTERY FIX (2026-09-27, controller ruling R21): a reader that closes LAST must
+# checkpoint and clean up like any other SQLite connection. D25 opened readers
+# SQLITE_OPEN_READONLY, and a read-only last closer can neither checkpoint nor
+# delete the -wal/-shm: every read verb left both beside a cleanly closed index,
+# and WAL content a writer left behind (a killed indexer, a writer that closed
+# while a reader was open) stayed OUTSIDE the main file -- so copying X.sqlite
+# alone, the standard practice here, silently missed it. Two probes pin it:
+# every read verb below must leave no -wal/-shm, and a read of an index whose
+# writer died with committed pages still in the -wal must fold them into the
+# main file (the positive control proves the main file alone lacked them).
+#
 # Usage: pwsh -File tests/autotest/run_readonly_verbs.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
@@ -74,6 +85,9 @@ c.close()
 }
 
 function HeaderByte18([string]$Db) { [IO.File]::ReadAllBytes($Db)[18] }
+
+# The -wal / -shm files beside $Db, as a comma list ('' when there are none).
+function Sidecars([string]$Db) { (@('-wal','-shm') | Where-Object { Test-Path -LiteralPath ($Db + $_) }) -join ',' }
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
@@ -116,6 +130,7 @@ $db = "$WorkDir\ro.sqlite"
 $idxOut = & $Exe index $srcDir --db $db 2>&1
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 Check 'db created' (Test-Path $db)
+Check 'fixture index (a writer, closed last) leaves no -wal/-shm' ((Sidecars $db) -eq '') "sidecars=$(Sidecars $db)"
 
 $trigBase = TriggerCount $db
 Check 'fixture has FTS5 sync triggers (>0)' ([int]$trigBase -gt 0) "triggers=$trigBase"
@@ -140,6 +155,10 @@ function ReadVerbUnchanged([string]$Label, [scriptblock]$Run, [int]$ExpectExit =
     & $Run *> $null
     $ec = $LASTEXITCODE
     Check "$Label exits $ExpectExit" ($ec -eq $ExpectExit) "exit=$ec"
+    # Sidecars FIRST: TriggerCount's python connection, closing last, would
+    # clean up whatever the verb left and make this probe vacuous.
+    $side = Sidecars $db
+    Check "$Label leaves no -wal/-shm (a reader that closes last cleans up)" ($side -eq '') "sidecars=$side"
     Start-Sleep -Milliseconds 100
     $md5  = Md5 $db
     $trig = TriggerCount $db
@@ -220,6 +239,43 @@ Check 'migrate-dbs --apply exits 0 and moves the index' (($LASTEXITCODE -eq 0) -
 if (Test-Path $newDb) {
     Check 'migrate-dbs keeps the moved index WAL (header byte 18 = 2)' ((HeaderByte18 $newDb) -eq 2) "byte18=$(HeaderByte18 $newDb)"
 }
+
+# --- R21: a reader that closes LAST folds a dead writer's WAL into the main file ---
+# The writer commits one row with autocheckpoint off and then exits WITHOUT
+# closing (os._exit), exactly as a killed indexer would: the row lives only in
+# the -wal. A read verb is then the only -- so the last -- connection.
+$walDb = "$WorkDir\walleft.sqlite"
+Copy-Item -LiteralPath $db -Destination $walDb
+$walPy = "$WorkDir\wal_writer_dies.py"
+@'
+import os, sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+c.execute("PRAGMA wal_autocheckpoint = 0")
+c.execute("CREATE TABLE r21_probe (v TEXT)")
+c.execute("INSERT INTO r21_probe VALUES ('folded')")
+c.commit()
+os._exit(0)
+'@ | Set-Content $walPy -Encoding ascii
+$probePy = "$WorkDir\probe_main_only.py"
+@'
+import shutil, sqlite3, sys
+shutil.copyfile(sys.argv[1], sys.argv[2])
+c = sqlite3.connect(sys.argv[2])
+r = c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name = 'r21_probe'").fetchone()[0]
+print(c.execute("SELECT v FROM r21_probe").fetchone()[0] if r else "absent")
+c.close()
+'@ | Set-Content $probePy -Encoding ascii
+python $walPy $walDb
+$walLen = if (Test-Path -LiteralPath "$walDb-wal") { (Get-Item -LiteralPath "$walDb-wal").Length } else { 0 }
+Check 'R21 fixture: the dead writer left committed pages in the -wal' ($walLen -gt 0) "wal bytes=$walLen"
+$before = (python $probePy $walDb "$WorkDir\mainonly-before.sqlite").Trim()
+Check 'R21 POSITIVE CONTROL: the main file ALONE lacks the row before the read' ($before -eq 'absent') "main-only=$before"
+$rq = (& $Exe query --name TFoo --db $walDb 2>&1) -join "`n"
+Check 'R21 read verb on the dead writer''s index exits 0' ($LASTEXITCODE -eq 0) $rq
+Check 'R21 the reader, closing last, leaves no -wal/-shm' ((Sidecars $walDb) -eq '') "sidecars=$(Sidecars $walDb)"
+$after = (python $probePy $walDb "$WorkDir\mainonly-after.sqlite").Trim()
+Check 'R21 the main file ALONE now holds the row (the WAL was checkpointed into it)' ($after -eq 'folded') "main-only=$after"
+Check 'R21 the reader leaves header byte 18 (WAL)' ((HeaderByte18 $walDb) -eq 2) "byte18=$(HeaderByte18 $walDb)"
 
 # --- read verbs still produce correct output (guard against a broken read path) ---
 $q = & $Exe query --name TFoo --db $db 2>&1

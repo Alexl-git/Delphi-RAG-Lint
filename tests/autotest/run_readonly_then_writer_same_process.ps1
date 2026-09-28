@@ -17,6 +17,12 @@
   THE FIX: ConnectReadOnly and ConnectWriter set SharedCache=False, so every
   drag-lint connection has a private cache, in-process exactly as cross-process.
 
+  SINCE THE BATTERY FIX (ruling R21, 2026-09-27) readers are read-write under
+  query_only again, as in 1.17.0, so this case no longer reproduces the
+  read-only shared cache and would pass without SharedCache=False. It stays as
+  the end-to-end check of `document --apply --reindex`; SharedCache=False is
+  kept on both opens so no connection can ever share a cache with another.
+
   ASSERTS: the verb exits 0, prints no readonly-database error, wrote the
   managed block, left the index fresh (a second identical run is a no-op) and
   left the index WAL. POSITIVE CONTROL: the first run really changed the

@@ -9,7 +9,9 @@
   the database it was only supposed to read. The owner's ruling: only the IDE
   writes; every other client reads.
 
-  A true SQLITE_OPEN_READONLY cannot be used (WAL needs write access to -shm);
+  A true SQLITE_OPEN_READONLY is not used: it DOES open a WAL index (measured,
+  D25), but a read-only connection that closes last can neither checkpoint nor
+  delete the -wal/-shm (ruling R21, battery 2026-09-24). A read-write open under
   `PRAGMA query_only` is the mechanism, and the journal mode the connection
   names must be the one the file ALREADY has, because FireDAC runs
   `PRAGMA journal_mode = <param>` on every connect (W1, HeaderSaysWal).

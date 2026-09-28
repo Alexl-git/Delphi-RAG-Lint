@@ -762,9 +762,10 @@ type
     public
       /// <summary>Opens (or creates) the SQLite index at ADbPath.</summary>
       /// <param name="ADbPath">Full path to the .sqlite index file.</param>
-      /// <param name="AReadOnly">When True the connection is opened normally and
-      /// then put under `PRAGMA query_only = ON` (a true SQLITE_OPEN_READONLY
-      /// fails on a WAL database -- see Connect), with the journal mode the file
+      /// <param name="AReadOnly">When True the connection is opened read-write
+      /// (never create) and then put under `PRAGMA query_only = ON` -- not a
+      /// true SQLITE_OPEN_READONLY, whose last close can neither checkpoint nor
+      /// delete the -wal/-shm (see Connect) -- with the journal mode the file
       /// ALREADY has so the header is left alone. NO DDL/migration is performed:
       /// the caller must NOT invoke Migrate or any Upsert/Delete/Insert method,
       /// and every write on this handle raises SQLITE_READONLY. Only the
@@ -3668,20 +3669,26 @@ begin
   FConn.Params.Values['Database'   ]:= ADbPath;
   if AReadOnly then
   begin
-    { v0.86 Task 4: query verbs must never mutate the shared index. SINCE
-      2026-09-24 (D25) the open IS SQLITE_OPEN_READONLY (ConnectReadOnly), and
-      that was MEASURED, not assumed: SQLite 3.45.3 opens a WAL index read-only
-      whether it is cleanly closed, under another process's BEGIN IMMEDIATE, or
-      beside a read-only -shm -- as long as FireDAC's connect-time journal_mode
-      pragma names WAL. The "disk I/O error" this comment used to blame on the
-      -shm (citing wal.html) was that pragma at its default, Delete, which fails
-      on a read-only WAL handle in all three cases. On top of the open mode,
-      'PRAGMA query_only = ON' still makes every CREATE/DROP/INSERT/UPDATE/DELETE
-      return SQLITE_READONLY, so no DDL-on-read (no stamp, no FTS5 probe, no
-      DROP TRIGGER) and no data change is possible. query_only is per-connection
-      (does not disturb a concurrent LSP/writer). A read-only handle cannot
-      delete the -wal/-shm it creates, so a cleanly closed index keeps an empty
-      -wal and a -shm after a read; the main file is untouched.
+    { v0.86 Task 4: query verbs must never mutate the shared index. The open
+      is read-write (never create) under 'PRAGMA query_only = ON', which makes
+      every CREATE/DROP/INSERT/UPDATE/DELETE return SQLITE_READONLY, so no
+      DDL-on-read (no stamp, no FTS5 probe, no DROP TRIGGER) and no data change
+      is possible. query_only is per-connection (does not disturb a concurrent
+      LSP/writer).
+      NOT SQLITE_OPEN_READONLY -- and not because it fails. D25 (2026-09-24)
+      MEASURED that SQLite 3.45.3 opens a WAL index read-only whether it is
+      cleanly closed, under another process's BEGIN IMMEDIATE, or beside a
+      read-only -shm, as long as FireDAC's connect-time journal_mode pragma
+      names WAL; the "disk I/O error" an older comment here blamed on the -shm
+      (citing wal.html) was that pragma at its default, Delete. D25 shipped
+      the read-only open and the battery (2026-09-24) caught what it does at
+      CLOSE: a read-only connection that closes LAST can neither checkpoint
+      the WAL nor delete the -wal/-shm. Every read verb and every graceful LSP
+      shutdown left both files behind, and pages a writer had left in the
+      -wal stayed outside the main file, so a copy of X.sqlite alone lost
+      them. Ruling R21 restored this read-write handle, whose last close
+      checkpoints and cleans up; pinned by run_readonly_verbs.ps1 and
+      run_control_channel_guard.ps1 (S5, F1-4). See ConnectReadOnly.
 
       THE JOURNAL MODE IS THE ONE THE FILE ALREADY HAS -- read from its header
       (HeaderSaysWal), NOT a fixed 'WAL'. Until 2026-09-15 this path asked for

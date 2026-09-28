@@ -388,9 +388,11 @@ begin
         library DB was passed, with "disk I/O error". MEASURED 2026-09-24 (D25,
         SQLite 3.45.3): the cause was FireDAC's default connect-time
         `journal_mode = DELETE` on a read-only WAL handle, not missing write
-        access to the -shm as this comment used to say. ConnectReadOnly opens
-        SQLITE_OPEN_READONLY, names the journal mode the file already has (so the
-        pragma is a no-op and the open succeeds), adds PRAGMA query_only, and
+        access to the -shm as this comment used to say. ConnectReadOnly still
+        does NOT open SQLITE_OPEN_READONLY (ruling R21): a read-only connection
+        that closes last can neither checkpoint nor delete the -wal/-shm. It
+        opens read-write (never create), names the journal mode the file
+        already has (so the pragma is a no-op), adds PRAGMA query_only, and
         arms the busy timeout before the connect. }
       ConnectReadOnly(LibConn, ALibDbPath);
       { The old lookup was 'SELECT 1 FROM symbols WHERE unit_name_norm = :N'.

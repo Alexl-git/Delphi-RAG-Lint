@@ -36,8 +36,9 @@ v23 are UNCHANGED -- no index needs a re-parse. No new rules (188).
 
 ### Changed (batch C of the D20-D30 follow-ups; no version constant moves)
 
-- **D25 -- readers now open SQLITE_OPEN_READONLY; the "WAL cannot be opened read-only" claim was
-  measured and is false.** Three comments (`TSQLiteSymbolStore.Connect`, `DbContainsFile`, the
+- **D25 -- the "WAL cannot be opened read-only" claim was measured and is false; readers still
+  do NOT open SQLITE_OPEN_READONLY, because a read-only LAST closer cannot checkpoint.** Three
+  comments (`TSQLiteSymbolStore.Connect`, `DbContainsFile`, the
   library open in `Lint.ProjectChecks`) said a read-only open of a WAL index fails "disk I/O error"
   for want of write access to the `-shm`. A throwaway FireDAC probe (SQLite `sqlite_version()` =
   **3.45.3**) against a copy of the self index, `SELECT COUNT(*) FROM symbols`, header bytes 18/19
@@ -52,12 +53,24 @@ v23 are UNCHANGED -- no index needs a re-parse. No new rules (188).
 
   The error is FireDAC's connect-time `PRAGMA journal_mode = DELETE` (its default) on a read-only
   WAL handle -- E (naming WAL) passes where D (Normal locking alone) fails. Every write attempt
-  after connect was refused under B and C. Decision: cases 1, 2 and 4 pass under B, so
-  `ConnectReadOnly` now sets `OpenMode=ReadOnly` and keeps `query_only`, the header-derived journal
-  mode and the pre-connect busy timeout. Known cost: a read-only handle cannot delete the `-wal`/`-shm`
-  it creates, so reading a cleanly closed index leaves an empty (0-byte) `-wal` and a `-shm` beside
-  it (the main file is untouched). Case 3 passes on Windows with a writer holding the `-shm`; the
-  no-writer read-only-`-shm` case was not measured and is the documented limit. The two probe
+  after connect was refused under B and C. Case 3 passes on Windows with a writer holding the
+  `-shm`; the no-writer read-only-`-shm` case was not measured and is the documented limit.
+  **Decision, as shipped and then corrected before release (controller ruling R21):** B was first
+  adopted (`OpenMode=ReadOnly`), and the full battery turned red on what the probe never measured --
+  the CLOSE. A read-only connection that closes LAST can neither checkpoint the WAL nor delete the
+  `-wal`/`-shm`: every read verb on a cleanly closed index, and every graceful `drag-lint shutdown`
+  of an LSP engine, left both files beside it (`run_control_channel_guard.ps1` S5 / F1-4; 1.17.0
+  green, the batch C engine red), and -- worse -- committed pages a writer left in the `-wal` (a
+  killed indexer, a writer that closed while a reader was open) stayed OUTSIDE the main file until
+  the next writer, so copying `X.sqlite` alone, the standard practice here, silently lost them.
+  `ConnectReadOnly` is therefore C again -- a read-write open under `query_only` -- with
+  `OpenMode=ReadWrite` so a missing file still raises instead of being created, and it KEEPS the
+  parts of D24/D25 that fixed real defects: `SharedCache=False`, `LockingMode=Normal`, the
+  header-derived journal mode and the pre-connect busy timeout. `query_only` refuses statements,
+  not the pager's close-time checkpoint, so the last reader to close folds the WAL into the main
+  file and removes both sidecars. Guard: `tests\autotest\run_readonly_verbs.ps1` (no `-wal`/`-shm`
+  after any read verb; a writer that died with a row only in its `-wal` -> after one read verb the
+  main file ALONE holds the row, with the positive control that it did not before). The two probe
   connections used `SharedCache=False`: FireDAC's default shared cache made same-process
   connections share one pager and gave "database schema is locked" / a header rewrite that no
   cross-process reader would see. That shared cache is also live in drag-lint itself (FireDAC's static
