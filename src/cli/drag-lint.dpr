@@ -188,6 +188,7 @@ uses
   DRagLint.Project.Coherence in '..\core\DRagLint.Project.Coherence.pas',
   DRagLint.Analysis.SurfaceFingerprint in '..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas',
   DRagLint.Analysis.SurfaceAdapters in '..\analysis\DRagLint.Analysis.SurfaceAdapters.pas',
+  DRagLint.Project.Facts in '..\project\DRagLint.Project.Facts.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

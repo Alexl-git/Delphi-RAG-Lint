@@ -246,6 +246,7 @@
     <DCCReference Include="..\core\DRagLint.Project.Coherence.pas"/>
     <DCCReference Include="..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas"/>
     <DCCReference Include="..\analysis\DRagLint.Analysis.SurfaceAdapters.pas"/>
+    <DCCReference Include="..\project\DRagLint.Project.Facts.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

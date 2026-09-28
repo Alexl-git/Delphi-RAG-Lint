@@ -667,7 +667,14 @@ prints the resolved define profile (platform built-ins plus the `DCC_Define` of
 the `.dproj`'s `Base`, `Base_<Platform>`, `Cfg_N` and `Cfg_N_<Platform>` groups;
 the two platform groups were skipped before extractor 1.18.0-alpha, so an older
 index could parse the wrong branch of a per-platform `{$IFDEF}` and drop units
-from a project closure); `fb-snapshot --connection "..." --db
+from a project closure). Not a diagnostic but a real question -- **"what does
+this project's BUILD do?"** -- is `project-facts --dproj P [--platform
+win32|win64] [--config Release|Debug] [--db <projectDb>] [--json]`: the defines
+that are ON and which group / option set / built-in sets each, every `<Import>`,
+the output paths and runtime packages, and a notice when EurekaLog or madExcept
+is compiled in without its build step imported (an msbuild exe then dies at
+start-up); `--db` adds the units whose uses name that tool. Reach for it before
+grepping a `.dproj`. `fb-snapshot --connection "..." --db
 <sql.sqlite>` snapshots a live Firebird schema; `ghost-check <dproj>` compiles
 an UNSAVED buffer from a shadow dir -- `--unit <real.pas> --buffer <buf>` for
 one unit or `--overlays <manifest>` for several, and `--in-place` restores the

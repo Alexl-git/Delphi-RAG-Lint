@@ -9,6 +9,19 @@ MINOR: resolver batch. `DRAGLINT_RESOLVER_VERSION` 1.10.0-alpha -> **1.11.0-alph
 re-RESOLVE, not a re-parse: `index --all --resolve-only`, measured ~1 min per ORM3 project DB).
 Extractor 1.20.0-alpha and schema v23 unchanged. No new rules (188).
 
+### Added
+
+- **`project-facts --dproj <X.dproj> [--platform] [--config] [--db] [--json]`** -- what a project's BUILD
+  does (owner ruling 2026-09-16, C9 / FIX-6). For one platform + config: every define that is ON and which
+  group (`Base`, `Base_<Platform>`, `Cfg_N`, `Cfg_N_<Platform>`), option set or built-in turns it on;
+  every `<Import>`; the exe/dcu output paths; the runtime packages; and a notice when a post-processor
+  (EurekaLog, madExcept) is compiled in but no import brings in its build step. `--db` adds the units whose
+  uses name that tool. Acceptance, on DataCopy Win64 Release: EUREKALOG/EUREKALOG_VER7 ON from `Base`, no
+  EurekaLog import (notice), 6 references (`ExceptionLog7` in 4 units, `EBase`, `ECore`). A report verb: no
+  index needed, none written; `src\project\DRagLint.Project.Facts.pas` reads the file itself (the
+  define-profile unit is on the extractor-hashed surface). Guard: `tests\autotest\run_project_facts.ps1`
+  (32 checks; a mutant that ignores an option set's condition is caught).
+
 ### Fixed
 
 - **A call on a unit-level var, or on a field the enclosing routine's own rung could not see, now binds**

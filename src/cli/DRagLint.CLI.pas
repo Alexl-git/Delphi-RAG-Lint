@@ -150,6 +150,7 @@ uses
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence
   , DRagLint.Project.OwnRoots
+  , DRagLint.Project.Facts
   , DRagLint.FormsMap
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
@@ -940,6 +941,7 @@ begin
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
   Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
+  Writeln('  drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH] [--json]   (what the BUILD does: defines ON and what sets each, <Import>s, output paths, packages; flags a post-processor define with no build step imported)');
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
   Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
@@ -21974,6 +21976,198 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>The files of ADbPath whose uses clause names a unit starting with
+/// one of APrefixes (lowercased), as 'path  (Unit)' lines, sorted.</summary>
+/// <param name="ADbPath">An index; the caller checked it exists.</param>
+/// <param name="APrefixes">Lowercased unit-name prefixes.</param>
+/// <returns>One entry per (file, unit) pair; empty when none.</returns>
+/// <remarks>Reads unit_uses, which the indexer fills under the project's
+/// define profile -- so a use inside an IFDEF appears exactly when that define
+/// is ON for the indexed config. READ-ONLY open.</remarks>
+function UnitsUsingPrefixes(const ADbPath: string; const APrefixes: TArray<string>): TArray<string>;
+var
+  Conn: TFDConnection;
+  Q   : TFDQuery     ;
+  Pfx : string       ;
+  Seen: TDictionary<string, Byte>;
+  Line: string       ;
+begin
+  Result:= nil;
+  Conn:= TFDConnection.Create(nil);
+  Q   := TFDQuery.Create(nil);
+  Seen:= TDictionary<string, Byte>.Create;
+  try
+    ConnectReadOnly(Conn, ADbPath);
+    Q.Connection:= Conn;
+    Q.SQL.Text  := 'SELECT f.path AS path, u.unit_name AS unit_name FROM unit_uses u ' +
+                   'JOIN files f ON f.id = u.file_id WHERE lower(u.unit_name) LIKE :p ' +
+                   'ORDER BY f.path, u.unit_name';
+    for Pfx in APrefixes do
+    begin
+      Q.Close;
+      Q.ParamByName('p').AsString:= Pfx + '%';
+      Q.Open;
+      var FldPath: TField:= Q.FieldByName('path');
+      var FldUnit: TField:= Q.FieldByName('unit_name');
+      while not Q.Eof do
+      begin
+        Line:= Format('%s  (%s)', [FldPath.AsString, FldUnit.AsString]);
+        if not Seen.ContainsKey(LowerCase(Line)) then
+        begin
+          Seen.Add(LowerCase(Line), 0);
+          Result:= Result + [Line];
+        end;
+        Q.Next;
+      end;
+    end;
+    TArray.Sort<string>(Result);
+  finally
+    Seen.Free;
+    Q.Free;
+    Conn.Free;
+  end; // try
+end; // function
+
+/// <summary>FIX-6 (owner ruling 2026-09-16, C9): drag-lint project-facts
+/// --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH]
+/// [--json] -- what the project's BUILD does for one platform + config: the
+/// defines that are ON and which group, option set or built-in turns each on;
+/// every &lt;Import&gt;; the output paths; the runtime packages; and a notice
+/// for a post-processor (EurekaLog, madExcept) whose define is on but whose
+/// build step no import brings in.</summary>
+/// <param name="AArgs">PpDproj (--dproj, required), CheckPlatform
+/// (--platform, default Win64), WorkspaceConfig (--config, default Release),
+/// DbPath (--db, optional: adds the units that reference each active
+/// post-processor), AsJson.</param>
+/// <returns>0 on a report; 2 when --dproj is missing or not a file, or --db
+/// names a file that does not exist.</returns>
+/// <remarks>A report verb, not a lint rule: no index is needed, none is
+/// written. Guarded by tests\autotest\run_project_facts.ps1.</remarks>
+function DoProjectFacts(const AArgs: TArgs): Integer;
+const
+  PACKAGES_SHOWN = 8;
+var
+  Facts : TProjectFacts           ;
+  D     : TProjectDefine          ;
+  Imp   : TProjectImport          ;
+  N     : string                  ;
+  P     : TPostProcessor          ;
+  Users : TArray<string>          ;
+  JRoot : TJSONObject             ;
+  JArr  : TJSONArray              ;
+  JOne  : TJSONObject             ;
+  JUsers: TJSONObject             ;
+  S     : string                  ;
+begin
+  if (AArgs.PpDproj = '') or not FileExists(AArgs.PpDproj) then
+  begin
+    Writeln(ErrOutput, 'Usage: drag-lint project-facts --dproj <X.dproj> [--platform win32|win64] ' +
+      '[--config Release|Debug] [--db <index.sqlite>] [--json]');
+    if AArgs.PpDproj <> '' then Writeln(ErrOutput, 'ERROR: not a file: ' + AArgs.PpDproj);
+    Exit(2);
+  end;
+  if (AArgs.DbPath <> '') and not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(ErrOutput, 'Database not found: ' + AArgs.DbPath);
+    Exit(2);
+  end;
+  Facts:= ReadProjectFacts(ExpandFileName(AArgs.PpDproj), AArgs.CheckPlatform, AArgs.WorkspaceConfig);
+
+  if AArgs.AsJson then
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('dproj'   , Facts.DprojPath);
+      JRoot.AddPair('platform', Facts.Platform);
+      JRoot.AddPair('config'  , Facts.Config);
+      JRoot.AddPair('cfg'     , Facts.CfgAlias);
+      JArr:= TJSONArray.Create;
+      for D in Facts.Defines do
+      begin
+        JOne:= TJSONObject.Create;
+        JOne.AddPair('name', D.Name);
+        var JSrc: TJSONArray:= TJSONArray.Create;
+        for S in D.Sources do JSrc.Add(S);
+        JOne.AddPair('sources', JSrc);
+        JArr.AddElement(JOne);
+      end;
+      JRoot.AddPair('defines', JArr);
+      JArr:= TJSONArray.Create;
+      for Imp in Facts.Imports do
+      begin
+        JOne:= TJSONObject.Create;
+        JOne.AddPair('project'  , Imp.Project);
+        JOne.AddPair('condition', Imp.Condition);
+        JOne.AddPair('kind'     , Imp.Kind);
+        JArr.AddElement(JOne);
+      end;
+      JRoot.AddPair('imports'   , JArr);
+      JRoot.AddPair('exe_output', Facts.ExeOutput);
+      JRoot.AddPair('dcu_output', Facts.DcuOutput);
+      JArr:= TJSONArray.Create;
+      for S in Facts.UsePackages do JArr.Add(S);
+      JRoot.AddPair('packages', JArr);
+      JArr:= TJSONArray.Create;
+      for S in Facts.Notices do JArr.Add(S);
+      JRoot.AddPair('notices', JArr);
+      if AArgs.DbPath <> '' then
+      begin
+        JUsers:= TJSONObject.Create;
+        for P in ActivePostProcessors(Facts) do
+        begin
+          JArr:= TJSONArray.Create;
+          for S in UnitsUsingPrefixes(AArgs.DbPath, P.UnitPrefixes) do JArr.Add(S);
+          JUsers.AddPair(P.Tool, JArr);
+        end;
+        JRoot.AddPair('referenced_by', JUsers);
+      end;
+      Writeln(JRoot.ToJSON);
+    finally
+      JRoot.Free;
+    end; // try
+    Exit(0);
+  end;
+
+  Writeln(Format('project : %s', [Facts.DprojPath]));
+  Writeln(Format('build   : %s %s (%s)', [Facts.Platform, Facts.Config, Facts.CfgAlias]));
+  Writeln('');
+  Writeln(Format('defines ON (%d):', [Length(Facts.Defines)]));
+  for D in Facts.Defines do
+    Writeln(Format('  %-32s %s', [D.Name, string.Join(', ', D.Sources)]));
+  Writeln('');
+  Writeln(Format('imports (%d):', [Length(Facts.Imports)]));
+  for Imp in Facts.Imports do
+  begin
+    Writeln(Format('  [%s] %s', [Imp.Kind, Imp.Project]));
+    if Imp.Condition <> '' then Writeln('      if ' + Imp.Condition);
+  end;
+  Writeln('');
+  Writeln('exe output : ' + (if Facts.ExeOutput <> '' then Facts.ExeOutput else '(not set)'));
+  Writeln('dcu output : ' + (if Facts.DcuOutput <> '' then Facts.DcuOutput else '(not set)'));
+  { A real project lists hundreds of runtime packages (DataCopy: 269); the text
+    form names the first few and says where the rest are. }
+  S:= string.Join(';', Copy(Facts.UsePackages, 0, PACKAGES_SHOWN));
+  if Length(Facts.UsePackages) > PACKAGES_SHOWN then
+    S:= S + Format(' (+%d more; --json lists all)', [Length(Facts.UsePackages) - PACKAGES_SHOWN]);
+  Writeln(Format('packages   : %d%s', [Length(Facts.UsePackages), (if S <> '' then ' -- ' + S else '')]));
+  if AArgs.DbPath <> '' then
+    for P in ActivePostProcessors(Facts) do
+    begin
+      Users:= UnitsUsingPrefixes(AArgs.DbPath, P.UnitPrefixes);
+      Writeln('');
+      Writeln(Format('%s referenced by (%d, from %s):', [P.Tool, Length(Users), ExtractFileName(AArgs.DbPath)]));
+      for N in Users do Writeln('  ' + N);
+    end;
+  Writeln('');
+  if Length(Facts.Notices) = 0 then Writeln('notices    : none')
+  else
+  begin
+    Writeln(Format('notices (%d):', [Length(Facts.Notices)]));
+    for N in Facts.Notices do Writeln('  ! ' + N);
+  end;
+  Result:= 0;
+end; // function
+
 /// <summary>v14 (D5): drag-lint dump-call-edges --db PATH -- diagnostic dump of
 /// every resolved call edge in the index, one per line, as
 /// ref_id|target_qname|confidence. target_qname is the resolved target symbol's
@@ -28097,6 +28291,7 @@ begin
     else if Args.Command = 'dump-pp-eval'      then Result:= DoDumpPpEval      (Args)
     else if Args.Command = 'preprocess-file'   then Result:= DoPreprocessFile  (Args)
     else if Args.Command = 'pp-profile'        then Result:= DoPpProfile       (Args)
+    else if Args.Command = 'project-facts'     then Result:= DoProjectFacts    (Args)
     else if Args.Command = 'dump-call-edges'   then Result:= DoDumpCallEdges   (Args)
     else if Args.Command = 'find-callees'      then Result:= DoFindCallees     (Args)
     else if Args.Command = 'ambiguous-calls'   then Result:= DoAmbiguousCalls  (Args)
