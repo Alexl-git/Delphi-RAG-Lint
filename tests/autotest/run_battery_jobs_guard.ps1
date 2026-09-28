@@ -201,8 +201,9 @@ Write-Host 'No two runners share a FIXED scratch directory' -ForegroundColor Cya
 # built with a GUID or a PID is unique by construction and is skipped, so this
 # cannot nag about the safe idiom.
 $scratchRe = '(?:\$env:TEMP|\$env:TMP|C:\\TEMP)\\([A-Za-z0-9._-]+)'
+function Get-FixedScratchNames([string]$Root) {
 $byName    = @{}
-foreach ($f in @(Get-ChildItem -Path $testsRoot -Recurse -File -Filter 'run_*.ps1')) {
+foreach ($f in @(Get-ChildItem -Path $Root -Recurse -File -Filter 'run_*.ps1')) {
   $inBlockComment = $false
   foreach ($line in (Get-Content -LiteralPath $f.FullName)) {
     # COMMENTS ARE NOT CODE. Caught red-handed the first time this ran: the
@@ -221,6 +222,9 @@ foreach ($f in @(Get-ChildItem -Path $testsRoot -Recurse -File -Filter 'run_*.ps
     }
   }
 }
+return $byName
+}
+$byName = Get-FixedScratchNames $testsRoot
 $shared = @($byName.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 })
 # A collision between two runners that are BOTH quarantined can never happen in
 # parallel, so it is not a defect -- report it, do not fail on it.
@@ -232,8 +236,25 @@ $unsafe = @($shared | Where-Object {
   })
   $parallel.Count -gt 1
 })
-Check 'the scratch-path scan found paths at all (vacuity)' ($byName.Count -gt 0) `
-  "distinct fixed scratch names: $($byName.Count) -- 0 would mean the regex stopped matching and this check proves nothing"
+# VACUITY, proven by a PLANTED pair rather than by the tree still containing the
+# defect. Until 2026-09-28 this asserted the real tree had >0 fixed names -- true
+# only while the bug it guards against existed. The TH-2 sweep made every runner
+# per-run and this check went red for doing its job. A planted pair sharing one
+# fixed name must be found with two owners; a per-run ($PID) line must not.
+$plant = Join-Path ([IO.Path]::GetTempPath()) ("jobs-guard-plant-{0}" -f $PID)
+try {
+  New-Item -ItemType Directory -Path $plant -Force | Out-Null
+  [IO.File]::WriteAllText((Join-Path $plant 'run_plant_a.ps1'), "`$d = Join-Path `$env:TEMP 'x'`r`n`$w = 'C:\TEMP\planted_shared'`r`n", [Text.Encoding]::ASCII)
+  # Split so run_scratch_dirs_are_per_run.ps1 does not read THIS line as a fixed path.
+  [IO.File]::WriteAllText((Join-Path $plant 'run_plant_b.ps1'), ("`$w = `"`$env:TEMP" + '\planted_shared' + "`"`r`n"), [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText((Join-Path $plant 'run_plant_c.ps1'), "`$w = `"C:\TEMP\planted_safe_`$PID`"`r`n", [Text.Encoding]::ASCII)
+  $pl = Get-FixedScratchNames $plant
+  Check 'POSITIVE CONTROL the scan finds a planted fixed name shared by two runners' `
+    ($pl.ContainsKey('planted_shared') -and ($pl['planted_shared'].Count -eq 2)) ("found: " + (($pl.Keys) -join ', '))
+  Check 'POSITIVE CONTROL and skips a per-run ($PID) name' (-not ($pl.Keys | Where-Object { $_ -like 'planted_safe*' })) ''
+} finally {
+  if (Test-Path -LiteralPath $plant) { Remove-Item -LiteralPath $plant -Recurse -Force -ErrorAction SilentlyContinue }
+}
 Check 'no fixed scratch directory is shared by two parallel-eligible runners' ($unsafe.Count -eq 0) `
   (($unsafe | ForEach-Object { "$($_.Key) <- " + (@($_.Value) -join ', ') }) -join ' ; ')
 if ($shared.Count -gt $unsafe.Count) {

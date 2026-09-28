@@ -1,8 +1,9 @@
 . "$PSScriptRoot\_manifest_common.ps1"   # gives $Exe + Check (mirror run_manifest.ps1's dot-source+capture)
+try {
 $rootA = "$PSScriptRoot\..\fixtures\reconcile"      # has .pas files
 $rootB = "$PSScriptRoot\..\fixtures\manifest\proj"  # different folder, NOT indexed into the drift DB -- but HAS .pas files
 $rootC = "$PSScriptRoot\..\fixtures\drift-nosrc"    # exists on disk, but contains NO .pas/.inc/.dfm -- not drift
-$db = "$env:TEMP\drift.sqlite"
+$db = "$env:TEMP\drift_$PID.sqlite"
 if (Test-Path $db) { Remove-Item -Force $db }
 & $Exe index "$rootA" --db $db 2>&1 | Out-Null
 Check 'index rootA exits 0' ($LASTEXITCODE -eq 0)
@@ -18,3 +19,7 @@ Check 'rootB (has .pas) flagged'      ($d3 -match 'MISSING.*proj')
 Check 'rootC (no source) NOT flagged' (-not ($d3 -match 'MISSING.*drift-nosrc'))
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\drift_$PID.sqlite", "$env:TEMP\drift_$PID.sqlite-wal", "$env:TEMP\drift_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

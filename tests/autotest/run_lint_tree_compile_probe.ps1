@@ -28,8 +28,9 @@ Needs dcc64. Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 [CmdletBinding()]
 param(
   [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Work = "$env:TEMP\dl-probe-guard"
+  [string]$Work = "$env:TEMP\dl-probe-guard-$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d=''){
   Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($d){" -- $d"}else{''}))
@@ -112,3 +113,7 @@ Check 'NEG unchanged buffer -> tier 3 does not run' ($r2.compiled -ne $true) `
 
 if($fail){ Write-Host 'PROBE GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PROBE GUARD: PASS' -ForegroundColor Green; exit 0
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\dl-probe-guard-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

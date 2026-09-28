@@ -37,13 +37,14 @@
   Usage: pwsh -File tests\lint-project\purity-rules\run_purity_rules.ps1
 #>
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 Set-Location $repo
 $exePath = (Resolve-Path $Exe).Path
 $dir     = $PSScriptRoot
 $fixture = Join-Path $dir 'uRules.pas'
-$db      = Join-Path $env:TEMP "purity_rules_test.sqlite"
+$db      = Join-Path $env:TEMP "purity_rules_test_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
 $RuleDiscard = 'discarded-effect-free-result'
@@ -132,4 +133,8 @@ if ($pass) {
   Write-Host ("      GetPath msg = [{0}]" -f $mPath)
   Write-Host ("      GetLog  msg = [{0}]" -f $mLog)
   exit 1
+}
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\purity_rules_test_$PID.sqlite", "$env:TEMP\purity_rules_test_$PID.sqlite-wal", "$env:TEMP\purity_rules_test_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
 }

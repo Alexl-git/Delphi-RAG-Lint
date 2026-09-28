@@ -3,6 +3,7 @@
 # for the single-file --file style and run_buildlocal_tests.ps1 for the
 # dcc64 compile-check invocation).
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
@@ -30,7 +31,7 @@ Assert "json edit set non-empty" ($json.Count -ge 1)
 Assert "json edit has file/line/text fields" ($null -ne $json[0].file -and $null -ne $json[0].line -and $null -ne $json[0].text)
 
 # ----- --apply: file now contains the call + the new method; compiles -----
-$tmp = Join-Path $env:TEMP "extractmethod_apply_basic"
+$tmp = Join-Path $env:TEMP "extractmethod_apply_basic_$PID"
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp | Out-Null
 Copy-Item $basic (Join-Path $tmp "Basic.pas")
@@ -43,7 +44,7 @@ Assert "apply: no .bak written with --no-backup" (-not (Test-Path "$t.bak"))
 Assert "apply result compiles (dcc64)" (Test-Compiles $t)
 
 # ----- backup: .bak created unless --no-backup -----
-$tmp2 = Join-Path $env:TEMP "extractmethod_apply_backup"
+$tmp2 = Join-Path $env:TEMP "extractmethod_apply_backup_$PID"
 if (Test-Path $tmp2) { Remove-Item $tmp2 -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp2 | Out-Null
 Copy-Item $basic (Join-Path $tmp2 "Basic.pas")
@@ -68,7 +69,7 @@ Assert "carried#1: reason says used outside the selection" ($raOut -match 'used 
 # MULTIPLE lines (all moved into the new method) -- after --apply the
 # orphan `var` keyword line must be gone and the file must compile. -----
 $multiVar = Join-Path $dir "MultiVar.pas"
-$tmp3 = Join-Path $env:TEMP "extractmethod_apply_multivar"
+$tmp3 = Join-Path $env:TEMP "extractmethod_apply_multivar_$PID"
 if (Test-Path $tmp3) { Remove-Item $tmp3 -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp3 | Out-Null
 Copy-Item $multiVar (Join-Path $tmp3 "MultiVar.pas")
@@ -93,3 +94,7 @@ Assert "usage error: missing --from-line/--to-line/--name exits nonzero" ($LASTE
 
 Write-Host ""
 if ($fail -gt 0) { Write-Host "extract-method: $fail FAIL"; exit 1 } else { Write-Host "extract-method: all pass"; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\extractmethod_apply_basic_$PID", "$env:TEMP\extractmethod_apply_backup_$PID", "$env:TEMP\extractmethod_apply_multivar_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

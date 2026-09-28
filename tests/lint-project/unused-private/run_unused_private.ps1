@@ -8,12 +8,13 @@
 #   - unused-unit-in-uses fires for helper2 (interface-section, zero symbols used)
 #   - unused-unit-in-uses does NOT fire for producer (UsedPublicMethod referenced)
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 Set-Location $repo
 $exePath = (Resolve-Path $Exe).Path
 $dir = $PSScriptRoot
-$db  = Join-Path $env:TEMP "unused_private_test.sqlite"
+$db  = Join-Path $env:TEMP "unused_private_test_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
 Write-Host "Indexing fixture..."
@@ -61,4 +62,8 @@ if ($pass) {
 } else {
   Write-Host ("FAIL  hasUnusedMethod={0} hasUnusedField={1} noPublicFP={2} hasUnusedHelper={3} hasUnusedHelper2={4} noProducerFP={5} noGetCountFP={6} noSetCountFP={7} noFCountFP={8}" -f $hasUnusedMethod, $hasUnusedField, $noPublicFP, $hasUnusedHelper, $hasUnusedHelper2, $noProducerFP, $noGetCountFP, $noSetCountFP, $noFCountFP)
   exit 1
+}
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\unused_private_test_$PID.sqlite", "$env:TEMP\unused_private_test_$PID.sqlite-wal", "$env:TEMP\unused_private_test_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
 }

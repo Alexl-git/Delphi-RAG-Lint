@@ -1,10 +1,11 @@
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
 $exe = (Resolve-Path $Exe).Path
 $dir = Join-Path $PSScriptRoot "safedelete"
-$db  = Join-Path $env:TEMP "refactor_safedelete.sqlite"
+$db  = Join-Path $env:TEMP "refactor_safedelete_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 & $exe index $dir --db $db | Out-Null
 $fail = 0
@@ -19,11 +20,11 @@ $dry = (& $exe safe-delete --name Dead.NeverCalled --db $db 2>$null) -join "`n"
 Assert "dry-run proposes deleting NeverCalled" ($dry -match 'delete lines')
 
 # --apply into a temp copy, verify NeverCalled is gone (decl + body)
-$tmp = Join-Path $env:TEMP "safedelete_apply"
+$tmp = Join-Path $env:TEMP "safedelete_apply_$PID"
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp | Out-Null
 Copy-Item (Join-Path $dir "Dead.pas") $tmp
-$db2 = Join-Path $env:TEMP "refactor_safedelete2.sqlite"; if (Test-Path $db2) { Remove-Item $db2 -Force }
+$db2 = Join-Path $env:TEMP "refactor_safedelete2_$PID.sqlite"; if (Test-Path $db2) { Remove-Item $db2 -Force }
 & $exe index $tmp --db $db2 | Out-Null
 $t = Join-Path $tmp "Dead.pas"
 & $exe safe-delete --name Dead.NeverCalled --apply --no-backup --db $db2 2>$null | Out-Null
@@ -32,3 +33,7 @@ Assert "apply removed the NeverCalled implementation body" ($after -notmatch "Wr
 
 Write-Host ""
 if ($fail -gt 0) { Write-Host "safe-delete: $fail FAIL"; exit 1 } else { Write-Host "safe-delete: all pass"; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\safedelete_apply_$PID", "$env:TEMP\refactor_safedelete_$PID.sqlite", "$env:TEMP\refactor_safedelete_$PID.sqlite-wal", "$env:TEMP\refactor_safedelete_$PID.sqlite-shm", "$env:TEMP\refactor_safedelete2_$PID.sqlite", "$env:TEMP\refactor_safedelete2_$PID.sqlite-wal", "$env:TEMP\refactor_safedelete2_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

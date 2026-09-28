@@ -36,6 +36,7 @@
 param(
   [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -61,7 +62,7 @@ if (Test-Path $dllSrc) {
 $dir = Join-Path $PSScriptRoot '..\lint-project\objleak-owned'
 $dir = (Resolve-Path $dir).Path
 $pas = Join-Path $dir 'objleakowned.pas'
-$db  = Join-Path $env:TEMP 'objleak_owned.sqlite'
+$db  = Join-Path $env:TEMP "objleak_owned_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
 & $Exe index $dir --db $db 2>&1 | Out-Null
@@ -96,3 +97,7 @@ Check 'genuine leak: TLabel.Create(nil) (explicit nil owner) IS flagged' $nilLea
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\objleak_owned_$PID.sqlite", "$env:TEMP\objleak_owned_$PID.sqlite-wal", "$env:TEMP\objleak_owned_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

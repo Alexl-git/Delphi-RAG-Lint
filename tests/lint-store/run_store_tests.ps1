@@ -43,6 +43,7 @@ param(
   [string]$Tests  = "tests\lint-store",
   [string]$Filter = "*"
 )
+try {
 
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -92,14 +93,14 @@ foreach ($case in $cases) {
   }
 
   # index the case dir into a throwaway store
-  $db = Join-Path $env:TEMP ("lintstore_" + $case.Name + ".sqlite")
+  $db = Join-Path $env:TEMP ("lintstore_" + $case.Name + "_$PID.sqlite")
   if (Test-Path $db) { Remove-Item $db -Force }
   & $exePath index $case.FullName --db $db 2>$null | Out-Null
 
   # collect findings, each tagged with its owning .pas basename
   $findings = @()
   if ($mode -eq "lint-all") {
-    $report = Join-Path $env:TEMP ("lintstore_" + $case.Name + ".report.txt")
+    $report = Join-Path $env:TEMP ("lintstore_" + $case.Name + "_$PID.report.txt")
     $args = @("lint-all","--db",$db,"--json")
     if (Test-Path $cfgFile) { $args += @("--config",$cfgFile) }
     $raw = & $exePath @args 2>$null
@@ -196,3 +197,8 @@ foreach ($case in $cases) {
 Write-Host ""
 Write-Host ("store-tests: $pass pass / $fail fail / " + ($pass + $fail) + " total")
 if ($fail -gt 0) { exit 1 } else { exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  # One store per case (plus -wal/-shm siblings), so the per-run set is enumerated by its $PID suffix.
+  foreach ($d23 in @(Get-ChildItem -LiteralPath $env:TEMP -Filter "lintstore_*_$PID.*" -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

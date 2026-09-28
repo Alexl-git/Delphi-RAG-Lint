@@ -65,7 +65,7 @@
     * after the run, the longest COMPLETE line actually emitted is measured
       from the log on disk and asserted <= 128, because the pre-flight is an
       estimate and the log is ground truth.
-  The default `-WorkDir` is deliberately short (`$env:TEMP\dlflush`, a `s`
+  The default `-WorkDir` is deliberately short (`$env:TEMP\dlflush_<pid>`, a `s`
   subdirectory, `uNNNN.pas` units) so the budget holds for any plausible
   `$env:TEMP` rather than only for this box's.
 
@@ -78,14 +78,15 @@
   whose headers say "run from a NEUTRAL CWD" and then actually do it. It does
   not need to -- every path it hands the exe (`$srcDir`, `--db`) is absolute,
   and the battery supplies the repo root as CWD deliberately (see
-  tests\run_battery.ps1) so config-walk-up effects stay visible. `$env:TEMP\dlflush`
+  tests\run_battery.ps1) so config-walk-up effects stay visible. `$env:TEMP\dlflush_<pid>`
   below is where the FIXTURE lives, not a working directory.
 #>
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\dlflush"
+  [string]$WorkDir = "$env:TEMP\dlflush_$PID"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -253,3 +254,7 @@ Check 'at least one in-flight sample is NOT a bare 128-byte buffer multiple' `
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\dlflush_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

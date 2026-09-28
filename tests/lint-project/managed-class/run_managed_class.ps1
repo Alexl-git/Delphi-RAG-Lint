@@ -4,13 +4,14 @@
 # uninitialized class reference); with a store the type resolves to a class
 # (unmanaged, checkable) and the finding correctly surfaces.
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 Set-Location $repo
 $exePath = (Resolve-Path $Exe).Path
 $dir = $PSScriptRoot
 $pas = Join-Path $dir "managedclass.pas"
-$db  = Join-Path $env:TEMP "managed_class.sqlite"
+$db  = Join-Path $env:TEMP "managed_class_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
 function UsedBefore($raw) {
@@ -33,4 +34,8 @@ if (($noStore.Count -eq 0) -and ($withStore.Count -ge 1)) {
 } else {
   Write-Host "FAIL  managed-class (expected store-free=0, store-backed>=1)"
   exit 1
+}
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\managed_class_$PID.sqlite", "$env:TEMP\managed_class_$PID.sqlite-wal", "$env:TEMP\managed_class_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
 }

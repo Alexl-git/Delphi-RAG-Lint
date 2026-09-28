@@ -43,7 +43,8 @@ Extractor 1.20.0-alpha and schema v23 unchanged. ONE new rule, OFF by default (1
   unit-level var (own unit, or a used unit's interface; two -> nothing), and only then the name as a type.
   Measured A/B on copies re-resolved with this build: ORM3 SERVER **+42 bindings** (all 9 sites charts
   named; call_edges 28,691 -> 28,729), ORM3 CLIENT **+184** (`MyFolder`, `dmStyles`, `MyStation`, form
-  globals; 23,788 -> 23,895) -- **0 bindings lost or moved on either**. Guard:
+  globals; 23,788 -> 23,895) -- **0 bindings lost or moved on either**; also DataCopy +56 (interface-typed
+  fields reached from nested routines) and YADF 0, again 0 lost or moved. Guard:
   `tests\callresolve\run_unit_var_receiver_bind.ps1` (4 binds, a unit-qualified control, 3 negatives: a
   shadowing local of an unindexed type, a name two used units export, and RB-4 below).
 - **A unit-level var spelled like a unit shadows the unit for a qualified call** (RB-4). The unit rungs'

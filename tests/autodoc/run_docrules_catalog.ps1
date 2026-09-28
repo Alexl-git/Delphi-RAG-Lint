@@ -149,6 +149,8 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 #             1 site on this repo, 0 across DataCopy/YADF/ORM3's 282 dl:ok lines)
 #             and `review-marker-reason-unreviewed` (review-markers, hint, OFF:
 #             the REVIEWED stamp is new, so every older marker would report).
+# 2026-09-28: 135 -> 136, from `cycle-participant-unit` (project-wide, info, OFF by
+#             default: the per-unit view of circular-uses, NR-C1).
 # 2026-09-23: 132 -> 133, from `ifdef-undefined-symbol` (project-wide, warning,
 #             OFF by default: 175 findings on ORM3 CLIENT, all deliberate trace switches).
 # 2026-09-23: 131 -> 132. assert-with-side-effect (INBOX 2026-09-23 rule 4):
@@ -205,7 +207,7 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # pinned deliberately -- a builtin appearing or vanishing unnoticed is exactly
 # what this line exists to catch -- so it is UPDATED with the change that moves
 # it, never relaxed to a range.
-Assert ("built-in rule count = 133 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed); got {0}" -f $builtins.Count) ($builtins.Count -eq 135)
+Assert ("built-in rule count = 133 (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit); got {0}" -f $builtins.Count) ($builtins.Count -eq 136)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)

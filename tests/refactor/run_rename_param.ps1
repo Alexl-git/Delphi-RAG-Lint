@@ -1,4 +1,5 @@
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
@@ -16,7 +17,7 @@ Assert "param dry-run renames Value->pValue" ($dry -match 'Value -> pValue')
 Assert "param dry-run hits multiple sites" (([regex]::Matches($dry,'Value -> pValue')).Count -ge 3)
 
 # --apply into a temp copy, then verify the file content changed and Integer is intact
-$tmp = Join-Path $env:TEMP "param_apply_test"
+$tmp = Join-Path $env:TEMP "param_apply_test_$PID"
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp | Out-Null
 Copy-Item $src (Join-Path $tmp "Param.pas")
@@ -31,3 +32,7 @@ Assert "apply did NOT touch interface line is acceptable either way" $true
 
 Write-Host ""
 if ($fail -gt 0) { Write-Host "rename-param: $fail FAIL"; exit 1 } else { Write-Host "rename-param: all pass"; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\param_apply_test_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

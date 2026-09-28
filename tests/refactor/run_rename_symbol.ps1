@@ -1,10 +1,11 @@
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
 $exe = (Resolve-Path $Exe).Path
 $dir = Join-Path $PSScriptRoot "rename"
-$db  = Join-Path $env:TEMP "refactor_rename.sqlite"
+$db  = Join-Path $env:TEMP "refactor_rename_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 & $exe index $dir --db $db | Out-Null
 $fail = 0
@@ -26,3 +27,7 @@ Assert "refuses reserved-word target" ($kw -match 'reserved word')
 
 Write-Host ""
 if ($fail -gt 0) { Write-Host "rename-symbol: $fail FAIL"; exit 1 } else { Write-Host "rename-symbol: all pass"; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\refactor_rename_$PID.sqlite", "$env:TEMP\refactor_rename_$PID.sqlite-wal", "$env:TEMP\refactor_rename_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

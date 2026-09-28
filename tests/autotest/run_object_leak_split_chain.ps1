@@ -52,6 +52,7 @@
 param(
   [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
 )
+try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -78,8 +79,8 @@ $libDir = Join-Path $root 'lib'
 $appDir = Join-Path $root 'app'
 $pas    = Join-Path $appDir 'objleaksplitapp.pas'
 
-$libDb = Join-Path $env:TEMP 'objleak_split_lib.sqlite'
-$appDb = Join-Path $env:TEMP 'objleak_split_app.sqlite'
+$libDb = Join-Path $env:TEMP "objleak_split_lib_$PID.sqlite"
+$appDb = Join-Path $env:TEMP "objleak_split_app_$PID.sqlite"
 foreach ($d in @($libDb, $appDb)) { if (Test-Path $d) { Remove-Item $d -Force } }
 
 & $Exe index $libDir --db $libDb 2>&1 | Out-Null
@@ -129,3 +130,7 @@ Check "control: TPlainThing.Create IS still flagged (line $plainLine)"          
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\objleak_split_lib_$PID.sqlite", "$env:TEMP\objleak_split_lib_$PID.sqlite-wal", "$env:TEMP\objleak_split_lib_$PID.sqlite-shm", "$env:TEMP\objleak_split_app_$PID.sqlite", "$env:TEMP\objleak_split_app_$PID.sqlite-wal", "$env:TEMP\objleak_split_app_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

@@ -1,10 +1,11 @@
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+try {
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
 $exe = (Resolve-Path $Exe).Path
 $dir = Join-Path $PSScriptRoot "findunit"
-$db  = Join-Path $env:TEMP "refactor_findunit.sqlite"
+$db  = Join-Path $env:TEMP "refactor_findunit_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 & $exe index $dir --db $db | Out-Null
 $fail = 0
@@ -20,11 +21,11 @@ $json = & $exe find-unit --name TWidget --in $target --json --db $db 2>$null | C
 Assert "json edit set non-empty" (@($json).Count -ge 1)
 
 # --apply into a temp copy, then verify Lib is in the uses clause
-$tmp = Join-Path $env:TEMP "findunit_apply"
+$tmp = Join-Path $env:TEMP "findunit_apply_$PID"
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp | Out-Null
 Copy-Item (Join-Path $dir "*.pas") $tmp
-$db2 = Join-Path $env:TEMP "refactor_findunit2.sqlite"; if (Test-Path $db2) { Remove-Item $db2 -Force }
+$db2 = Join-Path $env:TEMP "refactor_findunit2_$PID.sqlite"; if (Test-Path $db2) { Remove-Item $db2 -Force }
 & $exe index $tmp --db $db2 | Out-Null
 $t = Join-Path $tmp "Target.pas"
 & $exe find-unit --name TWidget --in $t --apply --no-backup --db $db2 2>$null | Out-Null
@@ -38,3 +39,7 @@ Assert "already-used or unresolved is a clean no-op (no crash)" ($LASTEXITCODE -
 
 Write-Host ""
 if ($fail -gt 0) { Write-Host "find-unit: $fail FAIL"; exit 1 } else { Write-Host "find-unit: all pass"; exit 0 }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\findunit_apply_$PID", "$env:TEMP\refactor_findunit_$PID.sqlite", "$env:TEMP\refactor_findunit_$PID.sqlite-wal", "$env:TEMP\refactor_findunit_$PID.sqlite-shm", "$env:TEMP\refactor_findunit2_$PID.sqlite", "$env:TEMP\refactor_findunit2_$PID.sqlite-wal", "$env:TEMP\refactor_findunit2_$PID.sqlite-shm")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}

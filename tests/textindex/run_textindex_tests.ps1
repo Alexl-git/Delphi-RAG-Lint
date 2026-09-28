@@ -4,8 +4,9 @@
 # .sql files whose name starts with "MS" -- the migration-script convention
 # where Firebird CREATE EXCEPTION messages actually live. Plain ad-hoc .sql
 # is skipped by default (use --no-sql-ms to index every .sql).
+try {
 $exe = "third_party\dll-win64\drag-lint.exe"
-$sb  = "$env:TEMP\dl_textindex"; Remove-Item $sb -Recurse -Force -ErrorAction SilentlyContinue
+$sb  = "$env:TEMP\dl_textindex_$PID"; Remove-Item $sb -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item "tests\textindex" $sb -Recurse
 $db = "$sb\idx.sqlite"
 & $exe index $sb --db $db | Out-Null
@@ -38,3 +39,7 @@ $allFolder = & $exe query --text "folder" --substring --db $db --json | ConvertF
 Check "no var/method 'Folder' as a hit" (($allFolder | Where-Object { $_.text -eq 'Folder' }).Count -eq 0)
 
 if ($fail -gt 0) { Write-Error "$fail textindex test(s) failed"; exit 1 } else { "textindex: all pass" }
+} finally {
+  # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
+  foreach ($d23 in @("$env:TEMP\dl_textindex_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}
