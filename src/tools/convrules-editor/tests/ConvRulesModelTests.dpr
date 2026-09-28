@@ -31,6 +31,7 @@ uses
   , ConvRules.UnitPick in '..\ConvRules.UnitPick.pas'
   , ConvRules.UsesHarvest in '..\ConvRules.UsesHarvest.pas'
   , ConvRules.UnitStatus in '..\ConvRules.UnitStatus.pas'
+  , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   ;
 
 var
@@ -6380,6 +6381,67 @@ begin
   end;
 end;
 
+{ ConvRules.UnitMask: session-only masks over harvested rows, and the display order. }
+function MaskRow(const AName: string; AKind: TUnitStatusKind; const AResolved: string): TUnitRow;
+begin
+  Result.Harvest.UnitName:= AName;
+  Result.Harvest.Section := '';
+  Result.Harvest.UsedBy  := 'U1';
+  Result.Status.Kind     := AKind;
+  Result.Status.Resolved := AResolved;
+end;
+
+function RowNames(const ARows: TArray<TUnitRow>): string;
+var
+  R: TUnitRow;
+begin
+  Result:= '';
+  for R in ARows do
+  begin
+    if Result <> '' then
+      Result:= Result + ',';
+    Result:= Result + R.Harvest.UnitName;
+  end;
+end;
+
+procedure TestUnitMask;
+var
+  Rows  : TArray<TUnitRow>;
+  M     : TUnitMask;
+  Hidden: Integer;
+  Shown : TArray<TUnitRow>;
+begin
+  Rows:= [MaskRow('Vcl.Forms', uskLibrary, ''), MaskRow('Local', uskProject, 'C:\P\Common\Local.pas'),
+    MaskRow('Forms', uskViaScope, 'Vcl.Forms'), MaskRow('DBTables', uskMissing, ''), MaskRow('cxGrid', uskMissing, '')];
+  M:= Default(TUnitMask);
+  Shown:= ApplyMask(Rows, M, Hidden);
+  Check('mask.none', (Hidden = 0) and (Length(Shown) = 5), IntToStr(Hidden));
+  M.HideLibrary:= True;
+  Check('mask.library', RowNames(ApplyMask(Rows, M, Hidden)) = 'Local,Forms,DBTables,cxGrid', RowNames(ApplyMask(Rows, M, Hidden)));
+  M:= Default(TUnitMask);
+  M.HideProject:= True;
+  Check('mask.project', RowNames(ApplyMask(Rows, M, Hidden)) = 'Vcl.Forms,Forms,DBTables,cxGrid', RowNames(ApplyMask(Rows, M, Hidden)));
+  M:= Default(TUnitMask);
+  M.HideQualified:= True;
+  Check('mask.qualified', RowNames(ApplyMask(Rows, M, Hidden)) = 'Local,Forms,DBTables,cxGrid', RowNames(ApplyMask(Rows, M, Hidden)));
+  M:= Default(TUnitMask);
+  M.Folder:= 'C:\P\Common';
+  Shown:= ApplyMask(Rows, M, Hidden);
+  Check('mask.folder', (RowNames(Shown) = 'Vcl.Forms,Forms,DBTables,cxGrid') and (Hidden = 1), RowNames(Shown));
+  M.Folder:= 'C:\P\Com';
+  Check('mask.folder.prefix.trap', Length(ApplyMask(Rows, M, Hidden)) = 5, IntToStr(Hidden));
+  M:= Default(TUnitMask);
+  M.NameMask:= 'cx*';
+  M.NameMode:= usmWildcard;
+  Check('mask.name.wildcard', RowNames(ApplyMask(Rows, M, Hidden)) = 'Vcl.Forms,Local,Forms,DBTables', RowNames(ApplyMask(Rows, M, Hidden)));
+  M.NameMask:= '^db';
+  M.NameMode:= usmRegex;
+  Check('mask.name.regex', RowNames(ApplyMask(Rows, M, Hidden)) = 'Vcl.Forms,Local,Forms,cxGrid', RowNames(ApplyMask(Rows, M, Hidden)));
+  M.NameMask:= '[';
+  Check('mask.name.invalid.hides.nothing', Length(ApplyMask(Rows, M, Hidden)) = 5, IntToStr(Hidden));
+  Check('sort.missing.first', RowNames(SortForDisplay(Rows)) = 'DBTables,cxGrid,Forms,Local,Vcl.Forms', RowNames(SortForDisplay(Rows)));
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -6514,6 +6576,7 @@ begin
     TestHarvestFiles;
     TestUnitResolver;
     TestUnitResolverDisk;
+    TestUnitMask;
 
     FreeAndNil(GParseBook);
 
