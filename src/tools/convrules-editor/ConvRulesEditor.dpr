@@ -36,6 +36,7 @@ uses
   , ConvRules.UnitPick in 'ConvRules.UnitPick.pas'
   , ConvRules.UnitPicker in 'ConvRules.UnitPicker.pas'
   , ConvRules.UsesHarvest in 'ConvRules.UsesHarvest.pas'
+  , ConvRules.UnitStatus in 'ConvRules.UnitStatus.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

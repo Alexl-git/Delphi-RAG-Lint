@@ -30,6 +30,7 @@ uses
   , ConvRules.SkipList in '..\ConvRules.SkipList.pas'
   , ConvRules.UnitPick in '..\ConvRules.UnitPick.pas'
   , ConvRules.UsesHarvest in '..\ConvRules.UsesHarvest.pas'
+  , ConvRules.UnitStatus in '..\ConvRules.UnitStatus.pas'
   ;
 
 var
@@ -6257,6 +6258,117 @@ begin
   end;
 end;
 
+function FixtureSettings(APlatform: TConvPlatform): TProjectSettings;
+begin
+  Result.ProjectDir:= 'C:\P\App';
+  Result.MainSource:= 'C:\P\App\App.dpr';
+  Result.SearchPath:= ['C:\P\Common'];
+  if APlatform = cpWin32 then
+    Result.Scopes:= ['Winapi', 'Bde', 'System', 'Data', 'Vcl']
+  else
+    Result.Scopes:= ['Winapi', 'System', 'Data', 'Vcl'];
+  Result.Skipped:= nil;
+end;
+
+procedure TestUnitResolver;
+var
+  Files  : TArray<string>;
+  Probe  : TFileProbe;
+  Members: TArray<TDprMember>;
+  M      : TDprMember;
+  Lib    : TArray<string>;
+  R      : TUnitResolver;
+  S      : TUnitStatus;
+begin
+  Files:= ['C:\P\App\Local.pas', 'C:\P\Common\Shared.dcu'];
+  Probe:= function(const APath: string): Boolean
+    begin
+      Result:= IndexText(APath, Files) >= 0;
+    end;
+  M.UnitName:= 'DMain';
+  M.FilePath:= 'C:\P\App\DMain.pas';
+  Members:= [M];
+  Lib:= ['Vcl.Forms', 'Data.DB', 'System.SysUtils', 'Bde.DBTables', 'Local', 'Winapi.Foo', 'System.Foo'];
+
+  R:= TUnitResolver.Create(FixtureSettings(cpWin64), Members, Lib, Probe);
+  try
+    S:= R.Classify('DMain');
+    Check('resolver.member', (S.Kind = uskProject) and SameText(S.Resolved, 'C:\P\App\DMain.pas'), StatusText(S) + ' ' + S.Resolved);
+    S:= R.Classify('Local');
+    Check('resolver.project.before.library', (S.Kind = uskProject) and SameText(S.Resolved, 'C:\P\App\Local.pas'), StatusText(S));
+    S:= R.Classify('Shared');
+    Check('resolver.searchpath.dcu', S.Kind = uskProject, StatusText(S));
+    S:= R.Classify('Vcl.Forms');
+    Check('resolver.library', S.Kind = uskLibrary, StatusText(S));
+    S:= R.Classify('Forms');
+    Check('resolver.viascope', (S.Kind = uskViaScope) and (S.Resolved = 'Vcl.Forms'), StatusText(S));
+    Check('resolver.viascope.text', StatusText(S) = 'via scope -> Vcl.Forms', StatusText(S));
+    S:= R.Classify('forms');
+    Check('resolver.nocase', (S.Kind = uskViaScope) and SameText(S.Resolved, 'Vcl.Forms'), StatusText(S));
+    S:= R.Classify('Foo');
+    Check('resolver.scope.order', S.Resolved = 'Winapi.Foo', S.Resolved);
+    S:= R.Classify('DBTables');
+    Check('resolver.win64.dbtables.missing', S.Kind = uskMissing, StatusText(S));
+    Check('resolver.missing.text', StatusText(S) = STATUS_MISSING_TEXT, StatusText(S));
+  finally
+    R.Free;
+  end;
+
+  R:= TUnitResolver.Create(FixtureSettings(cpWin32), Members, Lib, Probe);
+  try
+    S:= R.Classify('DBTables');
+    Check('resolver.win32.dbtables.viascope', (S.Kind = uskViaScope) and (S.Resolved = 'Bde.DBTables'), StatusText(S));
+  finally
+    R.Free;
+  end;
+
+  R:= TUnitResolver.Create(FixtureSettings(cpWin64), nil, nil, Probe);
+  try
+    S:= R.Classify('Vcl.Forms');
+    Check('resolver.empty.library.missing', S.Kind = uskMissing, StatusText(S));
+  finally
+    R.Free;
+  end;
+
+  Check('status.unknown.text', StatusText(UnknownStatus) = 'no destination', StatusText(UnknownStatus));
+  S.Kind:= uskLibrary;
+  Check('shouldadd.findmissing.library', not ShouldAdd(S, True, True), '');
+  Check('shouldadd.all.library', ShouldAdd(S, False, True), '');
+  S.Kind:= uskViaScope;
+  Check('shouldadd.unqualified.on', ShouldAdd(S, True, True), '');
+  Check('shouldadd.unqualified.off', not ShouldAdd(S, True, False), '');
+  S.Kind:= uskMissing;
+  Check('shouldadd.missing', ShouldAdd(S, True, False), '');
+  Check('shouldadd.unknown', ShouldAdd(UnknownStatus, True, False), '');
+end;
+
+procedure TestUnitResolverDisk;
+var
+  Dir: string;
+  St : TProjectSettings;
+  R  : TUnitResolver;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrules-resolver-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'OnDisk.pas'), 'unit OnDisk; end.', TEncoding.ASCII);
+    St.ProjectDir:= Dir;
+    St.MainSource:= '';
+    St.SearchPath:= [TPath.Combine(Dir, 'NoSuchFolder')];
+    St.Scopes    := nil;
+    St.Skipped   := nil;
+    R:= TUnitResolver.Create(St, nil, nil, nil);
+    try
+      Check('resolver.disk.found', R.Classify('ondisk').Kind = uskProject, StatusText(R.Classify('ondisk')));
+      Check('resolver.disk.missing', R.Classify('NotThere').Kind = uskMissing, StatusText(R.Classify('NotThere')));
+    finally
+      R.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -6389,6 +6501,8 @@ begin
     TestProjectSettings;
     TestProjectFileForDb;
     TestHarvestFiles;
+    TestUnitResolver;
+    TestUnitResolverDisk;
 
     FreeAndNil(GParseBook);
 
