@@ -38,6 +38,22 @@ type
     Folder       : string;
   end;
 
+  /// <summary>Answers "does a unit rule already speak about AUnit?".</summary>
+  THasRuleFunc = reference to function(const AUnit: string): Boolean;
+
+  /// <summary>What the Unit Rules list shows of the harvest, and where every
+  /// other harvested row went.</summary>
+  /// <remarks>Each input row lands in exactly one bucket:
+  /// Length(Shown) + Masked + Filtered = the number of rows given.</remarks>
+  THarvestView = record
+    /// <summary>The rows to list, in SortForDisplay order.</summary>
+    Shown   : TArray<TUnitRow>;
+    /// <summary>Rows that passed the check boxes and have no rule, but a mask hid.</summary>
+    Masked  : Integer;
+    /// <summary>Rows the check boxes dropped, or that a unit rule already covers.</summary>
+    Filtered: Integer;
+  end;
+
 /// <summary>Whether AMask hides ARow.</summary>
 /// <param name="ARow">A harvested row.</param>
 /// <param name="AMask">The mask.</param>
@@ -58,6 +74,24 @@ function ApplyMask(const ARows: TArray<TUnitRow>; const AMask: TUnitMask; out AH
 /// <returns>A reordered copy.</returns>
 function SortForDisplay(const ARows: TArray<TUnitRow>): TArray<TUnitRow>;
 
+/// <summary>The harvested rows the Unit Rules list shows, with the three counts
+/// its status label reports.</summary>
+/// <param name="ARows">Every classified harvested row.</param>
+/// <param name="AFindMissing">Find missing is ticked (see ShouldAdd).</param>
+/// <param name="AIncludeUnqualified">Include unqualified names is ticked.</param>
+/// <param name="AHasRule">True when a unit rule already covers the name; such a
+/// row is Filtered. nil means no row has a rule.</param>
+/// <param name="AMask">The session masks, applied after the check boxes and rules.</param>
+/// <returns>Shown in display order; a row the check boxes drop or a rule covers
+/// counts as Filtered even when a mask would also hide it.</returns>
+function FilterHarvestRows(const ARows: TArray<TUnitRow>; AFindMissing, AIncludeUnqualified: Boolean; const AHasRule: THasRuleFunc; const AMask: TUnitMask): THarvestView;
+
+/// <summary>Index of the row whose harvested name is AName, case-insensitive.</summary>
+/// <param name="ARows">The rows.</param>
+/// <param name="AName">A unit name.</param>
+/// <returns>The index, or -1 when no row has that name.</returns>
+function IndexOfRow(const ARows: TArray<TUnitRow>; const AName: string): Integer;
+
 implementation
 
 uses
@@ -66,6 +100,7 @@ uses
 
 const
   DISPLAY_ORDER: array[0..Ord(High(TUnitStatusKind))] of TUnitStatusKind = (uskMissing, uskViaScope, uskUnknown, uskProject, uskLibrary);
+  NOT_FOUND    = -1;
 
 function IsUnder(const APath, AFolder: string): Boolean;
 begin
@@ -117,6 +152,31 @@ begin
     for R in ARows do
       if R.Status.Kind = K then
         Result:= Result + [R];
+end;
+
+function FilterHarvestRows(const ARows: TArray<TUnitRow>; AFindMissing, AIncludeUnqualified: Boolean; const AHasRule: THasRuleFunc; const AMask: TUnitMask): THarvestView;
+var
+  R     : TUnitRow;
+  Passed: TArray<TUnitRow>;
+begin
+  Result:= Default(THarvestView);
+  Passed:= nil;
+  for R in ARows do
+    if ShouldAdd(R.Status, AFindMissing, AIncludeUnqualified) and not (Assigned(AHasRule) and AHasRule(R.Harvest.UnitName)) then
+      Passed:= Passed + [R]
+    else
+      Inc(Result.Filtered);
+  Result.Shown:= SortForDisplay(ApplyMask(Passed, AMask, Result.Masked));
+end;
+
+function IndexOfRow(const ARows: TArray<TUnitRow>; const AName: string): Integer;
+var
+  i: Integer;
+begin
+  for i:= 0 to High(ARows) do
+    if SameText(ARows[i].Harvest.UnitName, AName) then
+      Exit(i);
+  Result:= NOT_FOUND;
 end;
 
 end.

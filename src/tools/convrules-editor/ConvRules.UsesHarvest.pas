@@ -55,8 +55,10 @@ const
 /// <summary>Used units named by a piece of dropped or pasted text.</summary>
 /// <param name="AText">Any text. When it contains the keyword `uses` it is read
 /// as Delphi source (comments, strings and `in '...'` handled by
-/// ScanUsesClausesSectioned); otherwise it is split on commas, semicolons and
-/// whitespace and only identifier-shaped tokens (dotted allowed) are kept.</param>
+/// ScanUsesClausesSectioned); otherwise comments ({..}, (*..*), //..) and quoted
+/// strings are removed, the rest is split on commas, semicolons and whitespace,
+/// and only identifier-shaped tokens (dotted allowed) other than the reserved
+/// word `in` are kept -- so a .dpr uses-clause selection yields its unit names only.</param>
 /// <returns>First occurrence wins, case-insensitively; Section is always '' and
 /// UsedBy is PASTED_SOURCE.</returns>
 function HarvestText(const AText: string): TArray<THarvestedUnit>;
@@ -113,6 +115,13 @@ function ReadProjectSettings(const ADprojText, ADprojDir: string; APlatform: TCo
 /// Pure: existence is NOT checked.</returns>
 function ProjectFileForDb(const AProjectDb: string): string;
 
+/// <summary>The Destination row's platform label: the platform a destination is
+/// classified for.</summary>
+/// <param name="APlatform">The TO platform.</param>
+/// <returns>'Platform: Win32', 'Platform: Win64', or 'Platform: Both -> Win64' --
+/// cpBoth classifies as Win64, as ReadProjectSettings does.</returns>
+function DestPlatformLabel(APlatform: TConvPlatform): string;
+
 /// <summary>Harvest the used units of source files.</summary>
 /// <param name="APaths">.pas files (their uses clauses), .dpr files (the clause
 /// plus every member file that exists), .dproj files (their MainSource .dpr).</param>
@@ -138,6 +147,9 @@ const
   USES_RE     = '(^|[^A-Za-z0-9_.])uses($|[^A-Za-z0-9_])';
   DPR_IN_RE   = '([A-Za-z_][A-Za-z0-9_.]*)\s+in\s+''([^'']+)''';
   NOT_FOUND   = -1;
+  // A brace comment, a (* *) comment, a // comment to end of line, a quoted string.
+  NONCODE_RE  = '\{[^}]*\}|\(\*.*?\*\)|//[^\r\n]*|''[^'']*''';
+  IN_WORD     = 'in';
 
 function MakeUnit(const AName, ASection, AUsedBy: string): THarvestedUnit;
 begin
@@ -204,9 +216,15 @@ var
 begin
   if TRegEx.IsMatch(AText, USES_RE, [roIgnoreCase]) then
     Exit(HarvestPasText(AText, PASTED_SOURCE, False));
+  // A list, or a uses-clause selection without its keyword. Comments and quoted
+  // strings go first and the reserved word `in` is dropped, so a .dpr fragment
+  // (U1 in 'U1.pas' with a form comment and a line comment) yields only U1. NOT
+  // read as 'uses ' + AText + ';' through the scanner: that stops at the first
+  // ';' and keeps one name per comma entry, so 'A; B' and a one-name-per-line
+  // list would lose every name after the first.
   Result:= nil;
-  for Tok in AText.Split([',', ';', ' ', #9, #13, #10], TStringSplitOptions.ExcludeEmpty) do
-    if TRegEx.IsMatch(Tok, IDENT_RE) and (IndexOfUnit(Result, Tok) = NOT_FOUND) then
+  for Tok in TRegEx.Replace(AText, NONCODE_RE, ' ', [roSingleLine]).Split([',', ';', ' ', #9, #13, #10], TStringSplitOptions.ExcludeEmpty) do
+    if TRegEx.IsMatch(Tok, IDENT_RE) and not SameText(Tok, IN_WORD) and (IndexOfUnit(Result, Tok) = NOT_FOUND) then
       Result:= Result + [MakeUnit(Tok, '', PASTED_SOURCE)];
 end;
 
@@ -251,6 +269,7 @@ const
   EXT_DPR        = '.dpr';
   EXT_DPROJ      = '.dproj';
   DRAG_FOLDER    = '_D-RAG';
+  PLATFORM_LABEL = 'Platform: ';
 
 function MainSourceOf(const ADprojText, ADprojDir: string): string;
 var
@@ -335,6 +354,16 @@ begin
   if not SameText(ExtractFileName(Dir), DRAG_FOLDER) then
     Exit;
   Result:= TPath.Combine(ExtractFileDir(Dir), ChangeFileExt(ExtractFileName(AProjectDb), EXT_DPROJ));
+end;
+
+function DestPlatformLabel(APlatform: TConvPlatform): string;
+begin
+  case APlatform of
+    cpWin32: Result:= PLATFORM_LABEL + 'Win32';
+    cpWin64: Result:= PLATFORM_LABEL + 'Win64';
+  else
+    Result:= PLATFORM_LABEL + 'Both -> Win64';
+  end;
 end;
 
 { A .dpr: its own clause (UsedBy = project name, no section) plus each member

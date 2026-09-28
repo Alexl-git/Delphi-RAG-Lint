@@ -6121,6 +6121,13 @@ begin
 
   R:= HarvestText('');
   Check('harvest.text.empty', Length(R) = 0, IntToStr(Length(R)));
+
+  // A .dpr uses-clause selection WITHOUT the keyword (ruling R14): the `in` word,
+  // the quoted path and both comment styles must not become units.
+  R:= HarvestText('U1 in ''U1.pas'' {Form1},' + #13#10 + '  Sub.U2 in ''..\Sub\U2.pas'', // old DM' + #13#10 + '  Vcl.Forms');
+  Check('harvest.text.dpr.fragment', HarvestNames(R) = 'U1,Sub.U2,Vcl.Forms', HarvestNames(R));
+  R:= HarvestText('A IN ''a.pas'' (* Old, Junk *), B');
+  Check('harvest.text.list.strips.paren.comment.and.IN', HarvestNames(R) = 'A,B', HarvestNames(R));
 end;
 
 procedure TestDprMembers;
@@ -6438,6 +6445,58 @@ begin
   Check('sort.missing.first', RowNames(SortForDisplay(Rows)) = 'DBTables,cxGrid,Forms,Local,Vcl.Forms', RowNames(SortForDisplay(Rows)));
 end;
 
+{ ConvRules.UnitMask.FilterHarvestRows: the check boxes, the rules and the masks
+  together, and the three buckets every harvested row lands in exactly once. }
+procedure TestFilterHarvestRows;
+const
+  TOTAL = 7;
+var
+  Rows   : TArray<TUnitRow>;
+  M      : TUnitMask;
+  V      : THarvestView;
+  HasRule: THasRuleFunc;
+begin
+  Rows:= [MaskRow('NoDest', uskUnknown, ''), MaskRow('Local', uskProject, 'C:\P\Local.pas'),
+    MaskRow('Vcl.Forms', uskLibrary, ''), MaskRow('Forms', uskViaScope, 'Vcl.Forms'),
+    MaskRow('DBTables', uskMissing, ''), MaskRow('Ruled', uskMissing, ''), MaskRow('cxGrid', uskMissing, '')];
+  HasRule:= function(const AUnit: string): Boolean
+    begin
+      Result:= SameText(AUnit, 'ruled');
+    end;
+  M:= Default(TUnitMask);
+  M.NameMask:= 'cx*';
+  M.NameMode:= usmWildcard;
+
+  V:= FilterHarvestRows(Rows, True, True, HasRule, M);
+  Check('view.missing.shown', RowNames(V.Shown) = 'DBTables,Forms,NoDest', RowNames(V.Shown));
+  Check('view.missing.counts', (V.Masked = 1) and (V.Filtered = 3), Format('masked=%d filtered=%d', [V.Masked, V.Filtered]));
+  Check('view.missing.buckets.sum', Length(V.Shown) + V.Masked + V.Filtered = TOTAL, IntToStr(Length(V.Shown) + V.Masked + V.Filtered));
+
+  V:= FilterHarvestRows(Rows, False, True, HasRule, M);
+  Check('view.all.shown', RowNames(V.Shown) = 'DBTables,Forms,NoDest,Local,Vcl.Forms', RowNames(V.Shown));
+  Check('view.all.counts', (V.Masked = 1) and (V.Filtered = 1), Format('masked=%d filtered=%d', [V.Masked, V.Filtered]));
+  Check('view.all.buckets.sum', Length(V.Shown) + V.Masked + V.Filtered = TOTAL, IntToStr(Length(V.Shown) + V.Masked + V.Filtered));
+
+  V:= FilterHarvestRows(Rows, True, False, nil, Default(TUnitMask));
+  Check('view.noscope.norule.shown', RowNames(V.Shown) = 'DBTables,Ruled,cxGrid,NoDest', RowNames(V.Shown));
+  Check('view.noscope.norule.counts', (V.Masked = 0) and (V.Filtered = 3), Format('masked=%d filtered=%d', [V.Masked, V.Filtered]));
+  Check('view.noscope.buckets.sum', Length(V.Shown) + V.Masked + V.Filtered = TOTAL, IntToStr(Length(V.Shown) + V.Masked + V.Filtered));
+
+  Check('view.empty', (Length(FilterHarvestRows(nil, True, True, HasRule, M).Shown) = 0), '');
+
+  // Ruling R16: a candidate yields to a harvested twin only when that twin is LISTED.
+  Check('indexofrow.nocase', IndexOfRow(Rows, 'forms') = 3, IntToStr(IndexOfRow(Rows, 'forms')));
+  Check('indexofrow.absent', IndexOfRow(Rows, 'Nope') = -1, IntToStr(IndexOfRow(Rows, 'Nope')));
+end;
+
+{ ConvRules.UsesHarvest.DestPlatformLabel: the Destination row's platform label (ruling R17). }
+procedure TestDestPlatformLabel;
+begin
+  Check('destplatform.win32', DestPlatformLabel(cpWin32) = 'Platform: Win32', DestPlatformLabel(cpWin32));
+  Check('destplatform.win64', DestPlatformLabel(cpWin64) = 'Platform: Win64', DestPlatformLabel(cpWin64));
+  Check('destplatform.both', DestPlatformLabel(cpBoth) = 'Platform: Both -> Win64', DestPlatformLabel(cpBoth));
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -6573,6 +6632,8 @@ begin
     TestUnitResolver;
     TestUnitResolverDisk;
     TestUnitMask;
+    TestFilterHarvestRows;
+    TestDestPlatformLabel;
 
     FreeAndNil(GParseBook);
 

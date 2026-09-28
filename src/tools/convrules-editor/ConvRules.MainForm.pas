@@ -113,13 +113,13 @@ type
       FHarvestBtnRow : TFlowPanel            ; // Add source / Paste / Clear row (Task 7 adds none; Task 6 adds rows below)
       FDropTarget    : IDropTarget           ; // OLE target on the form's window; re-registered by CreateWnd
       FEdDest        : TEdit                 ; // destination .dproj
+      FLblDestPlat   : TLabel                ; // 'Platform: <TO>' on the Destination row (ruling R17)
       FChkMissing    : TCheckBox             ; // Find missing
       FChkUnqualified: TCheckBox             ; // Include unqualified names
       FLblHarvest    : TLabel                ; // 'N listed, M masked, F filtered'
       FHarvest       : TArray<THarvestedUnit>; // accumulated, unclassified; session state only
       FHarvestRows   : TArray<TUnitRow>      ; // FHarvest classified by FResolver
-      FResolver      : TDestinationResolver  ; // nil until a destination loads
-      FResolverFor   : string                ; // '<DPROJ>|<platform>' FResolver was built for
+      FResolver      : TDestinationResolver  ; // nil until a destination loads; rebuilt by every classify (EnsureResolver)
       FDestNote      : string                ; // appended to harvest status lines
       FDestWarn      : Boolean               ; // FDestNote holds a WARNING (degraded answer): report via SetError
       FEdMask        : TEdit                 ; // name mask
@@ -1717,13 +1717,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas) (+11 more)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.IsHarvested, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf, ConvRules.MainForm.TConvRulesForm.UnitHasRule, ConvRules.MainForm.TConvRulesForm.VisibleHarvestRows, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.Units.NormalizeUnitSets, ConvRules.UnitStatus.StatusText, ConvRules.UsesHarvest.HarvestFlagText, Format, IfThen, Pointer, SameText</para>
-      /// <para>Reads: FUnitList, FBook, FUnitCandidates, FLblHarvest</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.IsHarvested"/>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.CurrentMask, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf, ConvRules.MainForm.TConvRulesForm.UnitHasRule, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.UnitMask.FilterHarvestRows, ConvRules.UnitMask.IndexOfRow, ConvRules.Units.NormalizeUnitSets, ConvRules.UnitStatus.StatusText, ConvRules.UsesHarvest.HarvestFlagText, Format, IfThen, Pointer, SameText</para>
+      /// <para>Reads: FUnitList, FBook, FHarvestRows, FChkMissing, FChkUnqualified, FUnitCandidates, FLblHarvest</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.CurrentMask"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UnitHasRule"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.VisibleHarvestRows"/>
+      /// <seealso cref="ConvRules.Model.TRuleBook.UnitNodes"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshUnitList;
@@ -1821,7 +1821,33 @@ type
       /// <returns>False when the user cancelled.</returns>
       function PickUnit(const ACaption, AInitial: string; ASide: TUnitPickSide; out AUnit: string): Boolean;
       procedure BuildHarvestStrip(AParent: TWinControl);
+      /// <summary>Builds FResolver afresh for the destination in FEdDest and the TO
+      /// platform (cpBoth classifies as Win64).</summary>
+      /// <returns>True when FResolver is ready to classify. False when FEdDest is
+      /// empty, the .dproj does not exist, it names no existing MainSource .dpr, or
+      /// reading it raised; FResolver is then nil.</returns>
+      /// <remarks>Cache contract (ruling R13): NOTHING about the destination is
+      /// cached between calls. Every call frees FResolver and re-reads the .dproj
+      /// and its .dpr, and the new resolver lists each folder at most once, for this
+      /// classify only -- so a unit copied into the destination is found by the next
+      /// harvest. Only the library unit list is cached, by EnsurePickLists (the
+      /// engine query is the expensive part). Side effects: FDestNote is reset and
+      /// then carries every note for the status line (destination unreadable,
+      /// library list unavailable, macro entries skipped, TO = Both); FDestWarn is
+      /// set when the note is a warning that must go out through SetError. Errors
+      /// are reported through FDestNote/FDestWarn, never raised.</remarks>
       function  EnsureResolver: Boolean;
+      /// <summary>Classifies every harvested unit against the destination
+      /// (EnsureResolver, so the destination is re-read) into FHarvestRows, then
+      /// refreshes the list.</summary>
+      /// <remarks>Only user actions call this: a harvest (AddHarvest), a destination
+      /// commit (DestChanged), a platform change and dismissing harvested rows
+      /// (DoDeleteUnit). A check box or mask change does
+      /// NOT reclassify -- it only re-filters (RefreshUnitList). With no usable
+      /// destination every row is UnknownStatus. A classification that raises part
+      /// way leaves the remaining rows UnknownStatus, appends the error to FDestNote
+      /// and sets FDestWarn; errors are reported, never raised -- the caller puts
+      /// FDestNote on the status line.</remarks>
       procedure ReclassifyHarvest;
       procedure AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string);
       procedure AddSourceFiles(const APaths: TArray<string>);
@@ -1832,20 +1858,14 @@ type
       procedure DoClearHarvest(Sender: TObject);
       procedure DoBrowseDest(Sender: TObject);
       procedure DestChanged(Sender: TObject);
+      procedure DestKeyPress(Sender: TObject; var Key: Char);
       procedure HarvestOptionClick(Sender: TObject);
       procedure HarvestRowResize(Sender: TObject);
       function  UnitHasRule(const AUnit: string): Boolean;
-      function  IsHarvested(const AUnit: string): Boolean;
       function  SelectedUnitRows: TArray<TListItem>;
       function  CanonicalLibraryName(const AName: string): string;
       procedure DoAcceptScopeRenames(Sender: TObject);
       procedure UnitListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
-      /// <summary>The harvest rows to list, in display order.</summary>
-      /// <param name="AHidden">Receives how many rows the session masks hid.</param>
-      /// <param name="AFiltered">Receives how many rows the check boxes dropped or a
-      /// unit rule already covers. Result + AHidden + AFiltered = Length(FHarvestRows).</param>
-      /// <returns>Rows that pass the check boxes, have no rule, and survive CurrentMask.</returns>
-      function  VisibleHarvestRows(out AHidden, AFiltered: Integer): TArray<TUnitRow>;
       procedure UnitListCustomDrawItem(Sender: TCustomListView; Item: TListItem; State: TCustomDrawState; var DefaultDraw: Boolean);
       /// <summary>The session masks as the mask controls set them.</summary>
       /// <returns>Default(TUnitMask) before the strip is built. Folder is '' unless the
@@ -2012,14 +2032,14 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.SetDbs, ConvRules.MainForm.TConvRulesForm.LoadAllClasses, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Platform.PlatformToStr, Format, TConvPlatform</para>
-      /// <para>Reads: FCbFromPlat, FCbToPlat, FEngine, FCbFrom, FCbTo, FFromPlatform, FToPlatform, FFromClasses (+1 more)   Writes: FFromPlatform, FToPlatform, FFromClasses, FToClasses</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.SetDbs, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.LoadAllClasses, ConvRules.MainForm.TConvRulesForm.ReclassifyHarvest, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Platform.PlatformToStr, ConvRules.UsesHarvest.DestPlatformLabel, Format, TConvPlatform</para>
+      /// <para>Reads: FCbFromPlat, FCbToPlat, FFromPlatform, FToPlatform, FLblDestPlat, FEngine, FCbFrom, FCbTo (+5 more)   Writes: FFromPlatform, FToPlatform, FFromClasses, FToClasses</para>
       /// <para>UI thread only -- touches Screen</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.SetDbs"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.EngineDbSet"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadAllClasses"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.Platform.PlatformToStr"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ReclassifyHarvest"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PlatformChanged(Sender: TObject);
@@ -3393,6 +3413,8 @@ begin
   // GEditorToPlatform sees the platform on screen, not the command line's.
   GEditorFromPlatform:= FFromPlatform;
   GEditorToPlatform  := FToPlatform;
+  if FLblDestPlat <> nil then
+    FLblDestPlat.Caption:= DestPlatformLabel(FToPlatform);
   FEngine.SetDbs(EngineDbSet);
   // Force LoadAllClasses to re-query (its guard exits when both caches are set).
   FFromClasses:= [];
@@ -3406,7 +3428,7 @@ begin
     var LWarn: Boolean:= False;
     if Length(FHarvest) > 0 then
     begin
-      ReclassifyHarvest; // the resolver key carries the platform, so this rebuilds it
+      ReclassifyHarvest; // rebuilds the resolver for the new TO platform
       // How a destination or classification failure reaches the user on this path.
       LNote:= FDestNote;
       LWarn:= FDestWarn;
@@ -6427,9 +6449,7 @@ var
   S       : TUnitSets       ;
   Cand    : string          ;
   R       : TUnitRow        ;
-  Shown   : TArray<TUnitRow>;
-  Hidden  : Integer         ;
-  Filtered: Integer         ;
+  View    : THarvestView    ;
 
   function InConflict(const AUnit: string): Boolean;
   var
@@ -6492,9 +6512,12 @@ begin
       Item.Data:= Pointer(N);
     end; // for
 
+    // Computed once, before the candidates: a candidate yields to a harvested row
+    // of the same name only when that row is actually LISTED (rulings R7, R16) --
+    // a harvested twin the check boxes or masks hide must not hide it too.
+    View:= FilterHarvestRows(FHarvestRows, FChkMissing.Checked, FChkUnqualified.Checked, UnitHasRule, CurrentMask);
     for Cand in FUnitCandidates do
-      // A harvested row of the same name wins (ruling R7): it carries the Status.
-      if not UnitHasRule(Cand) and not IsHarvested(Cand) then
+      if not UnitHasRule(Cand) and (IndexOfRow(View.Shown, Cand) < 0) then
       begin
         Item:= FUnitList.Items.Add;
         Item.Caption:= '(candidate)';
@@ -6504,8 +6527,7 @@ begin
         Item.Data:= nil; // NOT a rule -- see DoDeleteUnit
       end;
 
-    Shown:= VisibleHarvestRows(Hidden, Filtered);
-    for R in Shown do
+    for R in View.Shown do
     begin
       Item:= FUnitList.Items.Add;
       Item.Caption:= HARVEST_CAPTION;
@@ -6519,7 +6541,7 @@ begin
       Item.Data:= nil; // NOT a rule -- same convention as a candidate row
     end;
     if FLblHarvest <> nil then
-      FLblHarvest.Caption:= Format('%d listed, %d masked, %d filtered', [Length(Shown), Hidden, Filtered]);
+      FLblHarvest.Caption:= Format('%d listed, %d masked, %d filtered', [Length(View.Shown), View.Masked, View.Filtered]);
   finally
     FUnitList.Items.EndUpdate;
   end; // try
@@ -6540,19 +6562,6 @@ begin
       rnkUnuse  : if SameText(N.UnuseUnit, AUnit) then Exit;
       rnkUseSwap: if SameText(N.SwapOld, AUnit) then Exit;
     end;
-  Result:= False;
-end;
-
-{ Is AUnit one of the classified harvest rows (case-insensitive)? RefreshUnitList
-  uses it to drop an Examine candidate the harvest also holds: the harvested row
-  wins, because only it carries a Status (ruling R7). }
-function TConvRulesForm.IsHarvested(const AUnit: string): Boolean;
-var
-  R: TUnitRow;
-begin
-  for R in FHarvestRows do
-    if SameText(R.Harvest.UnitName, AUnit) then
-      Exit(True);
   Result:= False;
 end;
 
@@ -6623,26 +6632,6 @@ begin
   SetStatus(Format('Added %d #useswap: %s', [Length(Added), string.Join(', ', Added)]));
 end; // procedure
 
-{ Classified harvest rows that pass the check boxes, have no rule yet, and survive
-  the masks; display order. A same-named Examine candidate does NOT hide one --
-  RefreshUnitList drops the candidate instead (ruling R7). Every harvested row is
-  counted exactly once: listed, AHidden (masked) or AFiltered (check boxes / rule). }
-function TConvRulesForm.VisibleHarvestRows(out AHidden, AFiltered: Integer): TArray<TUnitRow>;
-var
-  R   : TUnitRow;
-  Rows: TArray<TUnitRow>;
-begin
-  Rows     := nil;
-  AFiltered:= 0;
-  for R in FHarvestRows do
-    if ShouldAdd(R.Status, FChkMissing.Checked, FChkUnqualified.Checked)
-      and not UnitHasRule(R.Harvest.UnitName) then
-      Rows:= Rows + [R]
-    else
-      Inc(AFiltered);
-  Result:= SortForDisplay(ApplyMask(Rows, CurrentMask, AHidden));
-end;
-
 function TConvRulesForm.CurrentMask: TUnitMask;
 begin
   Result:= Default(TUnitMask);
@@ -6704,6 +6693,7 @@ const
   SHORT_CHECK_W= 100; // 'Find missing', 'hide library' / 'project' / 'qualified'
   RADIO_W      = 76;  // 'Wildcard', 'Regex'
   MASK_EDIT_W  = 140; // name mask and folder mask edits
+  PLATFORM_LABEL_W= 150; // 'Platform: Both -> Win64'
 var
   DestRow: TPanel;
   OptRow : TFlowPanel;
@@ -6775,6 +6765,18 @@ begin
   var LBrowse: TButton:= NewButton(DestRow, '...', 'Choose the destination .dproj the code is moving INTO', DoBrowseDest);
   LBrowse.Align:= alRight;
   LBrowse.Width:= BROWSE_W;
+  // Created after the browse button, so alRight places it LEFT of the button
+  // (the button's right edge is further right, and alRight orders by it).
+  FLblDestPlat:= TLabel.Create(Self);
+  FLblDestPlat.Parent          := DestRow;
+  FLblDestPlat.Align           := alRight;
+  FLblDestPlat.AutoSize        := False;
+  FLblDestPlat.Width           := PLATFORM_LABEL_W;
+  FLblDestPlat.Layout          := tlCenter;
+  FLblDestPlat.AlignWithMargins:= True;
+  FLblDestPlat.Caption         := DestPlatformLabel(FToPlatform);
+  FLblDestPlat.Hint            := 'The TO platform the destination is classified for; change it with the TO platform box';
+  FLblDestPlat.ShowHint        := True;
   FEdDest:= TEdit.Create(Self);
   FEdDest.Parent          := DestRow;
   FEdDest.Align           := alClient;
@@ -6782,6 +6784,7 @@ begin
   FEdDest.Hint            := 'Destination .dproj: its folder, search path and unit scope names decide what is MISSING (session only)';
   FEdDest.ShowHint        := True;
   FEdDest.OnExit          := DestChanged;
+  FEdDest.OnKeyPress      := DestKeyPress; // Enter commits too (ruling R18)
 
   FHarvestBtnRow:= NewFlowRow;
   NewButton(FHarvestBtnRow, 'Add source...', 'Harvest used units from .pas / .dpr / .dproj files (multi-select)', DoAddSource);
@@ -6849,7 +6852,6 @@ end;
 function TConvRulesForm.EnsureResolver: Boolean;
 var
   Dproj   : string;
-  Key     : string;
   Plat    : TConvPlatform;
   Settings: TProjectSettings;
   Members : TArray<TDprMember>;
@@ -6860,13 +6862,11 @@ begin
   Plat := FToPlatform;
   if Plat = cpBoth then
     Plat:= cpWin64;
-  Key:= UpperCase(Dproj) + '|' + PlatformToStr(Plat);
-  if (FResolver <> nil) and (Key = FResolverFor) then
-    Exit(True);
+  // Never reused (ruling R13): a cached resolver kept its .dpr members and folder
+  // listings, so a unit copied into the destination stayed MISSING all session.
   FreeAndNil(FResolver);
-  FResolverFor:= '';
-  FDestNote   := '';
-  FDestWarn   := False;
+  FDestNote:= '';
+  FDestWarn:= False;
   if Dproj = '' then
     Exit(False);
   if not TFile.Exists(Dproj) then
@@ -6916,9 +6916,7 @@ begin
       Exit(False);
     end;
   end;
-  if LibOk then
-    FResolverFor:= Key; // a failed library load is retried on the next classify
-  Result:= True;
+  Result:= True; // a failed library load is retried by EnsurePickLists on the next classify
 end;
 
 procedure TConvRulesForm.ReclassifyHarvest;
@@ -6943,11 +6941,9 @@ begin
   except  // dl:ok try-except-swallowed@6394 -- REVIEWED 2026-09-28 (re-reviewed, fix round 1) not swallowed: E.Message goes into FDestNote with FDestWarn set, and every caller (AddHarvest, DestChanged, PlatformChanged) puts it on the status line through SetError; raising would take the click handler down (rulings R6, R8)
     on E: Exception do
     begin
-      // Reported, not raised. Forget the key so the next classify rebuilds the
-      // resolver (and FDestNote) instead of appending this note again.
-      FDestNote   := FDestNote + ' Classification stopped: ' + E.Message;
-      FDestWarn   := True;
-      FResolverFor:= '';
+      // Reported, not raised; the next classify rebuilds the resolver and FDestNote.
+      FDestNote:= FDestNote + ' Classification stopped: ' + E.Message;
+      FDestWarn:= True;
     end;
   end;
   RefreshUnitList;
@@ -7125,6 +7121,16 @@ begin
   end
   else if Trim(FEdDest.Text) <> '' then
     SetError('Destination not loaded.' + FDestNote);
+end;
+
+{ FEdDest.OnKeyPress: Enter commits the destination, like leaving the edit does.
+  The key is swallowed, so a single-line edit does not beep. }
+procedure TConvRulesForm.DestKeyPress(Sender: TObject; var Key: Char);
+begin
+  if Key <> Char(VK_RETURN) then
+    Exit;
+  Key:= #0;
+  DestChanged(Sender);
 end;
 
 procedure TConvRulesForm.HarvestOptionClick(Sender: TObject);
