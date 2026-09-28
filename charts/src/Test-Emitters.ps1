@@ -2205,6 +2205,40 @@ $o = [pscustomobject]@{
 }
 NegTest 'LW-ART-N' 'lands-where needs -ServerDbPath' 'never' {
   & "$SRC\New-DiagramArtifact.ps1" -Question lands-where -Target 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -SqlDbPath $DbSql -OutRoot (Join-Path $OutDir 'bundle-lw-n') }
+# ---- round-trip (spec 2026-09-27-interface-report-trace-core), Task 1: the re-measure ----
+# Every string below was MEASURED 2026-09-27 on the 1.19 / 1.8 clones and is PINNED.
+# RE-MEASURED 2026-09-28 on the 1.19 / 1.9 clones Task 0 re-took: the helper returns the
+# SAME 23 values on both, so the re-clone (D22, D31, resolver 1.9) moved none of these facts.
+# A drift is a FINDING about the index (or about a helper), never a number to edit.
+Note 'round-trip: the re-measure ...'
+Step 'E-RT0' {
+  $script:rt0 = & "$SRC\Test-RoundTripHelpers.ps1" -DbCli $DbCli -DbSrv $DbSrv -DbSql $DbSql -OutDir $OutDir
+  # GetTable is UNBOUND at every call site and has one implementation: the walk resolves it BY NAME
+  Chk 'A-RT0-GETTABLE'  $rt0.GetTableCalls 'uGenericTableRoute.pas:431:-1,uPipeSessionBuilder.pas:525:-1,uPipeSessionBuilder.pas:649:-1,uPipeSessionBuilder.pas:1301:-1'
+  Chk 'A-RT0-GETIMPL'   $rt0.GetTableImpls 'uDatasetsDef.TDatasetsDef.GetTable:199'
+  Chk 'A-RT0-GLOBALS'   $rt0.GlobalVars 'var:TBroadcastServer:136,var:TDatasetsDef:66'
+  # the post-commit broadcast: one unbound call in HandleDelta, one implementation (golden node 13 cites :120, the declaration area)
+  Chk 'A-RT0-PUSH'      $rt0.PushCalls 'uGenericTableRoute.pas:507:-1:HandleDelta'
+  Chk 'A-RT0-PUSHIMPL'  $rt0.PushImpl 'uBroadcastServer.TBroadcastServer.PushTableChanged:401:decl124'
+  # the Exit lines the 12 golden guards hang on (plus 4004, 193 and 612, which are branch ends, not golden guards;
+  # 612 is HandleTableLoad's except-handler Exit after Rollback -- the plan's probe read 515-560 only, and 612 is on the 1.8 clone too)
+  Chk 'A-RT0-EXITS'     $rt0.ExitLines 'DoAfterPostOperation=3950;SendDeltaOperation=3973/3974/4004;LoadOneTable=1133/1140;HandleDelta=415/425/435/451;HandleUpdateRecord=193/200;HandleTableLoad=530/554/612'
+  # the anchor chain feeds-from stops at today (spec section 3): dangling DFM module, code re-point, bound property, one accessor, an unbound in-class read, one DataSet site
+  # (REPOINT is the one pdsrOperation site right of a `.DataSource` ref; Blueprint4.pas holds 10 more, all `.DataSet` reads)
+  Chk 'A-RT0-DFMDS'     "$($rt0.DfmDataSource)/$($rt0.DfmModuleSymbols)" 'Blueprint4_Model.dsrOperation@4497/0'
+  Chk 'A-RT0-REPOINT'   $rt0.RePointMember '2282:FBlueprint_ViewModel:property:Blueprint4.Interfaces.IBlueprint_ViewModel.pdsrOperation:171:ro'
+  Chk 'A-RT0-ACCESSOR'  "$($rt0.AccessorImpls)|$($rt0.AccessorReads)" 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetpdsrOperation:1263|FDsrOperation:-1'
+  Chk 'A-RT0-DSSITE'    "$($rt0.DataSetSites)|$($rt0.AnchorFields)" '657:Create|FDsrOperation:TDataSource:99,FMTOperation:TFDMemTable:78'
+  Chk 'A-RT0-TABLELIT'  "$($rt0.TableLiterals)|$($rt0.SqlColumn)" '769:BuildSchema,1207:LoadAllForFolder,4306:VerifyAll|MS1.SQL:2808,MScript2.SQL:1640'
+  # the ALSO basis (AC-10): 9 bound callers of the sender, 3 fill lines (B is not a route -- it never crosses)
+  Chk 'A-RT0-CALLERS'   $rt0.SenderCallers 'ImportJenVICI:1853,ImportLK:2175,ImportNikon:2441,ImportSheffield:3124,ImportZEISS:3416,DoAfterPostOperation:3951,DoAfterDeleteOperation:3957,AddOperation:4099,VerifyAll:4273'
+  Chk 'A-RT0-FILLS'     $rt0.FillLines '769:BuildSchema->B,1207:LoadAllForFolder->LoadOneTable,4306:VerifyAll->LoadOneTable'
+  # the server dispatch: Pipes.Commands is SERVER-only; the first CROSS-UNIT bound call after the constant is the handler (ParseTableFromPayload is unit-local)
+  Chk 'A-RT0-DISPATCH'  "$($rt0.DispatchArms)|$($rt0.PipesCommandsOnClient)" 'cmdDelta@173->Pipes.Protocol.IPipeSessionBuilder.HandleDelta@177:impl0;cmdTableLoad@142->Pipes.Protocol.IPipeSessionBuilder.HandleTableLoad@147:impl0|0'
+  Chk 'A-RT0-HANDLERS'  $rt0.HandlerImpls 'uGenericTableRoute.TGenericTableRoute.HandleDelta:389:[],uPipeSessionBuilder.TPipeSessionBuilder.HandleDelta:1209:[TInterfacedObject, IPipeSessionBuilder],uPipeSessionBuilder.TPipeSessionBuilder.HandleTableLoad:502:[TInterfacedObject, IPipeSessionBuilder]'
+  # the snapshot tables are EMPTY on both clones: the UPDATE / SELECT statement texts are STOPS (E4)
+  Chk 'A-RT0-FBROWS'    $rt0.FbRows '0/0/0/0'
+}
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
 # passed a '&#183;' separator into it -- so each of those charts printed the six
@@ -2245,6 +2279,7 @@ if (-not $Quiet) {
   Write-Host ("  consumers      : CAUSFAIL cert/inf readers {0}/{1}, writers {2}/{3}, {4} triggers; REASON bindings {5}/{6}; facts {7}/{8}/{9}; literals {10}/{11}/{12}; proc bodies {13}" -f (V $co1 'CertainReaders'), (V $co1 'InferredReaders'), (V $co1 'CertainWriters'), (V $co1 'InferredWriters'), (V $co1 'Triggers'), (V $co2c 'IndexBindings'), (V $co2c 'DrawnBindings'), (V $co1 'IndexReadFacts'), (V $co1 'IndexWriteFacts'), (V $co1 'IndexFactSymbols'), (V $co1 'IndexVerbLiterals'), (V $co1 'IndexFromJoinTables'), (V $co1 'IndexFactReadTables'), (V $co1 'ProcBodies'))
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
+  Write-Host ("  round-trip     : re-measure GetTable {0}; broadcast {1}; golden files stale today (informational): {2}; holdout candidates {3}" -f (V $rt0 'GetTableImpls'), (V $rt0 'PushImpl'), (V $rt0 'GoldenStaleToday'), (V $rt0 'HoldoutCandidates'))
   Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
