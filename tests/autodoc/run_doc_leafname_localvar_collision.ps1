@@ -73,8 +73,13 @@ try {
   Check 'SANITY: find-callers --name Child --resolved --json parsed' $rcOk $rcJ
   Check 'SANITY: the METHOD Child has NO resolved caller (the dangerous shape)' `
         ($rcOk -and @($rcRows | Where-Object { $_.target_qname -eq 'uLeafDecl.TWalker.Child' }).Count -eq 0) $rcJ
+  # "Every row is X" is vacuous over ZERO rows (TH-2, 2026-09-28): the five
+  # writes must actually be there, or an engine that stopped reporting bound
+  # writes -- or answered nothing -- passed this line.
   Check 'SANITY: every Child row is a WRITE of one of the five locals (D31), nothing else' `
         ($rcOk -and @($rcRows | Where-Object { $_.target_qname -notmatch '^uLeafUse\.Use[A-E]\.Child$' -or $_.mode -ne 'write' }).Count -eq 0) $rcJ
+  Check 'SANITY: and there are exactly five such rows (not vacuous on an empty answer)' `
+        ($rcOk -and @($rcRows | Where-Object { $_.target_qname -match '^uLeafUse\.Use[A-E]\.Child$' -and $_.mode -eq 'write' }).Count -eq 5) $rcJ
   Check 'SANITY: Anchor HAS a resolved caller (DriveAnchor)' `
         ($ra -match 'DriveAnchor') $ra
 
