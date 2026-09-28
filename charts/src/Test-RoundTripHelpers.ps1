@@ -131,4 +131,90 @@ SELECT c.name AS n, (SELECT x.text FROM string_literals x WHERE x.kind = 'dfm-pr
 "@
 $res.HoldoutCandidates = Join-Rows $m9 { "$($_.n)=$($_.fld)" }
 
+# ---- 2. the Form A model round trip (AC-2, AC-3, AC-4, AC-11, AC-12) ------------------
+. (Join-Path $PSScriptRoot 'Trace.FormA.ps1')
+$T = New-Trace 'OPERAT.NAME' 'How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back' 'frmBlueprint4.dxDBGrid1OperationVName' `
+               'Micronite2027 + MicroniteMW1Service + SQL' '2026-09-24' 'New-DiagramArtifact.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1OperationVName' 'client -> pipe -> server -> database'
+$sA = Add-TraceSection $T 'ANCHOR'
+$s1 = New-TraceStep 'step' 'BINDS dxDBGrid1OperationVName : TcxGridDBColumn ONTO Name' 'Blueprint4.dfm:4534' '' '' 'DataBinding.FieldName'
+[void]$s1.Children.Add((New-TraceFacet 'VIA' 'dxDBGrid1OperationV.DataController.DataSource = Blueprint4_Model.dsrOperation' 'Blueprint4.dfm:4497' 'dangling: module Blueprint4_Model is declared nowhere in this index'))
+[void]$sA.Items.Add($s1)
+[void]$sA.Items.Add((New-TraceStep 'step' 'CALLS GetpdsrOperation' 'Blueprint4.ViewModel.pas:1263' 'by name' 'TBlueprint_ViewModel' '' 'in-class-field-reads'))
+$sW = Add-TraceSection $T 'WRITE'
+$s3 = New-TraceStep 'step' 'CALLS DoAfterPostOperation' 'Blueprint4.ViewModel.pas:3948' '' 'Create' 'from :639'
+[void]$s3.Children.Add((New-TraceCond 'UNLESS' 'FSuppressEvents' 'Blueprint4.ViewModel.pas:3950' '' 'E1'))
+[void]$sW.Items.Add($s3)
+$s4 = New-TraceStep 'step' "RECEIVES rspOK" 'Blueprint4.ViewModel.pas:3990' '' 'SendDeltaOperation'
+[void]$s4.Children.Add((New-TraceCond 'UNLESS' '(GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspOK)' 'Blueprint4.ViewModel.pas:3990' 'else FMTOperation.CancelUpdates @Blueprint4.ViewModel.pas:3999' 'E1'))
+[void]$sW.Items.Add($s4)
+$x = New-TraceStep 'crosses' 'process boundary' 'Blueprint4.ViewModel.pas:3985' '' 'SendDeltaOperation'
+[void]$x.Children.Add((New-TraceFacet 'FROM' 'Micronite2027' '' 'the index this side was read from'))
+[void]$x.Children.Add((New-TraceFacet 'WITH' 'cmdDelta "TABLE=OPERAT|" + sfBinary stream' 'Blueprint4.ViewModel.pas:3985'))
+[void]$x.Children.Add((New-TraceFacet 'CONTRACT' 'Pipes.Protocol.TCommandID.cmdDelta' 'Pipes.Protocol.pas:55'))
+[void]$sW.Items.Add($x)
+$sD = Add-TraceSection $T 'DATABASE'
+[void]$sD.Items.Add((New-TraceStep 'stops' 'the UPDATE statement for OPERAT is FDef.UpdateSQL, loaded from FIB$DATASETS_INFO rows the clone does not hold (fb_datasets is empty)' 'uGenericTableRoute.pas:210' '' 'HandleUpdateRecord' '' 'E4'))
+# the actor goes through -Actor: the model refuses a text that BEGINS with an actor word (it would read back as one)
+[void]$sD.Items.Add((New-TraceStep 'step' 'WRITES OPERAT.NAME' 'MS1.SQL:2808' 'inferred' '' 'column NAME of OPERAT in the newest declaration' 'E4' 'SERVER'))
+$text1 = Write-FormA $T
+[IO.File]::WriteAllText((Join-Path $work 'model.dlgraph'), $text1, (New-Object Text.ASCIIEncoding))
+$res.FormACounts = "$((Get-TraceCounts $T).Steps)/$((Get-TraceCounts $T).Conditions)/$((Get-TraceCounts $T).Crossings)/$((Get-TraceCounts $T).Unresolved)"
+$res.FormAEnd = @($text1 -split "\r\n" | Where-Object { $_ -like 'END TRACE*' })[0]   # @(): one match is a string, and [0] of a string is its first char
+$res.FormAAnchors = Get-TraceAnchors $T
+# AC-2: parse it back, write it again, byte for byte
+$T2 = Read-FormA $text1
+$text2 = Write-FormA $T2
+$rtA = $text1 -split "\r\n"; $rtB = $text2 -split "\r\n"; $rtK = 0
+while ($rtK -lt $rtA.Count -and $rtK -lt $rtB.Count -and $rtA[$rtK] -ceq $rtB[$rtK]) { $rtK++ }
+$res.FormARoundTrip = $(if ($text1 -ceq $text2) { 'identical' } else { "differs at line $($rtK + 1)" })
+$res.FormARoundTripLines = "$($rtA.Count)/$($rtB.Count)"
+# AC-4: bytes
+$bytes = [IO.File]::ReadAllBytes((Join-Path $work 'model.dlgraph'))
+$res.FormABytes = "$(@($bytes | Where-Object { $_ -ne 0x0D -and $_ -ne 0x0A -and ($_ -lt 0x20 -or $_ -gt 0x7E) }).Count)/$(([regex]::Matches($text1, '(?<!\r)\n')).Count)/$(if ($bytes[0] -eq 0xEF) { 'BOM' } else { 'noBOM' })"
+# AC-1: the checker accepts what the writer wrote
+& (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture (Join-Path $work 'model.dlgraph') -Quiet | Out-Null
+$res.FormAChecker = $LASTEXITCODE
+# the checker still fails on a mutation of the written text (proven to fail, not merely to pass);
+# 6>$null: its FAIL lines are Write-Host, and an expected failure must not read as one in the gate log
+$mut = $text1 -replace '(\d+) conditions', '9 conditions'
+[IO.File]::WriteAllText((Join-Path $work 'model-mut.dlgraph'), $mut, (New-Object Text.ASCIIEncoding))
+& (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture (Join-Path $work 'model-mut.dlgraph') -Quiet 6>$null | Out-Null
+$res.FormACheckerMut = $LASTEXITCODE
+# AC-11: a step without an anchor is refused by the model
+$res.FormANoAnchor = $(try { New-TraceStep 'step' 'CALLS X' '' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*AC-11*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+# Review Focus 4: a non-ASCII byte in a quoted condition is refused, never written as '?'
+$Tn = New-Trace 'X' 'x' 'x' 'A' '2026-09-27' 'x' 'client'
+$sn = Add-TraceSection $Tn 'WRITE'
+$stn = New-TraceStep 'step' 'CALLS X' 'X.pas:1'
+[void]$stn.Children.Add((New-TraceCond 'UNLESS' ('a ' + [char]0xE9 + ' b') 'X.pas:2'))
+[void]$sn.Items.Add($stn)
+$res.FormANonAscii = $(try { Write-FormA $Tn | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*not 7-bit ASCII*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+# a note with '; ' would break the parser's split -- refused up front
+$res.FormABadNote = $(try { $Tb = New-Trace 'X' 'x' 'x' 'A' '2026-09-27' 'x' 'client'; $sb2 = Add-TraceSection $Tb 'WRITE'; [void]$sb2.Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1' '' '' 'a; b')); Write-FormA $Tb | Out-Null; 'accepted' } catch { 'refused' })
+# P16: a condition is quoted VERBATIM, so one carrying a double-quote cannot be quoted -- the model refuses it
+$res.FormAQuote = $(try { New-TraceCond 'WHEN' 'S = "x"' 'X.pas:1' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*double-quote*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+# P7 / AC-12: a numbered STOPS is unresolved in EVERY section, with or without an actor word before it
+# (`[NN] SERVER STOPS ...`); a Pascal condition with '' is written verbatim and reads back
+$Ts = New-Trace 'X' 'x' 'x' 'A' '2026-09-28' 'x' 'client -> server'
+$stAct = @('', 'CLIENT', 'SERVER', 'DATABASE', 'SERVER', 'USER', '')
+$stSec = @('ANCHOR', 'READ', 'WRITE', 'SERVER', 'DATABASE', 'RESPONSE', 'ALSO')
+for ($q = 0; $q -lt $stSec.Count; $q++) {
+  $ssec = Add-TraceSection $Ts $stSec[$q]
+  [void]$ssec.Items.Add((New-TraceStep 'stops' "no fact carries hop $($q + 1)" "X.pas:$($q + 1)" '' '' '' '' $stAct[$q]))
+  if ($stSec[$q] -eq 'SERVER') {
+    $sq = New-TraceStep 'step' 'CALLS HandleUpdateRecord' 'uGenericTableRoute.pas:208' '' 'HandleUpdateRecord'
+    [void]$sq.Children.Add((New-TraceCond 'UNLESS' "SQL = ''" 'uGenericTableRoute.pas:196'))
+    [void]$ssec.Items.Add($sq)
+  }
+}
+$textS = Write-FormA $Ts
+[IO.File]::WriteAllText((Join-Path $work 'model-stops.dlgraph'), $textS, (New-Object Text.ASCIIEncoding))
+& (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture (Join-Path $work 'model-stops.dlgraph') -Quiet | Out-Null
+$exS = $LASTEXITCODE
+$cS = Get-TraceCounts $Ts
+$rtS = $(if ((Write-FormA (Read-FormA $textS)) -ceq $textS) { 'identical' } else { 'differs' })
+$srvS = @($textS -split "\r\n" | Where-Object { $_ -cmatch '^\[\d+\] SERVER STOPS ' }).Count
+$vbS = $(if ($textS.Contains('UNLESS "SQL = ''''" @uGenericTableRoute.pas:196')) { 'verbatim' } else { 'rewritten' })
+$res.FormAStopsAll = "$exS/$($cS.Steps)/$($cS.Conditions)/$($cS.Crossings)/$($cS.Unresolved)/$rtS/$srvS/$vbS"
+
 [pscustomobject]$res

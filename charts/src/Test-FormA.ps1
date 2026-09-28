@@ -28,11 +28,11 @@ function Fail([string] $code, [int] $line, [string] $msg) {
 
 # ---- keyword tables (spec 2.3) ----------------------------------------------
 $TIERS     = @('USER','CLIENT','SERVER','DATABASE','PIPE')
-$SECTIONS  = @('WRITE','READ','RESPONSE') + $TIERS
-$ITEMHEADS = @('GUARD','ON','CROSSES')
+$SECTIONS  = @('WRITE','READ','RESPONSE','ANCHOR','ALSO') + $TIERS          # ANCHOR / ALSO: round-trip (spec 2026-09-27)
+$ITEMHEADS = @('GUARD','ON','CROSSES','STOPS','WHEN','UNLESS')             # STOPS / WHEN / UNLESS: round-trip
 $FACETS1   = @('ONTO','AT','CONTRACT','FROM','TO','OVER','WITH','VIA','SELECTS','RECORDS')
 $FACETS2   = @{ 'BOUND' = 'VIA'; 'SOURCED' = 'FROM'; 'LOOKS' = 'UP' }
-$HEADERKW  = @('TITLE','INDEX','TIERS')
+$HEADERKW  = @('TITLE','INDEX','TIERS','FROM','REGENERATE')                 # FROM / REGENERATE: round-trip header attributes
 $RESERVED  = @('OTHERWISE','ONLY','WHEN','AND','AS','INTO','->','+')
 
 # ---- 1. byte-level checks (spec 2.1, AC-29) ---------------------------------
@@ -78,8 +78,12 @@ for ($k = 0; $k -lt $block.Count; $k++) {
 
   # gutter
   $gutter = $null
-  if ($work -match '^\[(\d\d)\]\s') { $gutter = [int]$Matches[1]; $work = $work -replace '^\[\d\d\]', '    ' }
+  # two OR three digits (a generated trace may pass 99 steps)
+  if ($work -match '^\[(\d{2,3})\]\s') { $gutter = [int]$Matches[1]; $work = $work -replace '^\[\d{2,3}\]', '    ' }
 
+  # `[by name]` is a two-token certainty marker (round-trip); drop it as a phrase
+  # before the split, or its halves would read as a subject and a verb.
+  $work = $work.Replace('[by name]', '')
   # @() is load-bearing: a single-token line otherwise yields a string, and
   # indexing a string gives a [char], which has no ToUpper().
   $toks = @($work.Trim() -split '\s+' | Where-Object { $_ -ne '' })
@@ -96,12 +100,21 @@ for ($k = 0; $k -lt $block.Count; $k++) {
   # continuation: anchor-only or OTHERWISE-led (spec 2.5)
   if ($h -match '^@' -or $h -eq 'OTHERWISE') { $classified++; continue }
 
+  # a numbered STOPS / CROSSES may stand behind an actor word (`[NN] SERVER STOPS ...`,
+  # in ANY section). The gutter line starts at column 1, so without this the check below
+  # takes SERVER for a section header and the STOPS is never counted unresolved.
+  if ($null -ne $gutter -and $SECTIONS -contains $h -and $toks.Count -gt 1 -and ($toks[1] -ceq 'STOPS' -or $toks[1] -ceq 'CROSSES')) {
+    $h = $toks[1]
+  }
+
   # structural at column 1
   if ($raw.Length -gt 0 -and $raw[0] -ne ' ') {
     if ($h -eq 'TRACE' -or $h -eq 'END' -or $SECTIONS -contains $h) { $classified++; continue }
   }
   if ($HEADERKW -contains $h) { $classified++; continue }
   if ($h -eq 'GUARD')   { $guards++;    $classified++; continue }
+  if ($h -eq 'WHEN' -or $h -eq 'UNLESS') { $guards++; $classified++; continue }   # a round-trip condition counts where GUARD counts
+  if ($h -eq 'STOPS')   { $unresolved++; $classified++; continue }                # numbered (counted above) AND unresolved
   if ($h -eq 'CROSSES') { $crossings++; $classified++; continue }
   if ($h -eq 'UNRESOLVED') { $unresolved++; $classified++; continue }
   if ($h -eq 'ON')      { $classified++; continue }
@@ -135,7 +148,8 @@ for ($k = 0; $k -lt $block.Count; $k++) {
 
 # ---- 4. counts vs declaration (AC-35) ---------------------------------------
 $endLine = $all[$endLn - 1]
-if ($endLine -match 'END TRACE\s+(\d+) steps?,\s*(\d+) guards?,\s*(\d+) crossings?,\s*(\d+) unresolved') {
+# the golden's `guards` and the round-trip's `conditions` (WHEN / UNLESS) are one count
+if ($endLine -match 'END TRACE\s+(\d+) steps?,\s*(\d+) (?:guards?|conditions?),\s*(\d+) crossings?,\s*(\d+) unresolved') {
   $dS = [int]$Matches[1]; $dG = [int]$Matches[2]; $dC = [int]$Matches[3]; $dU = [int]$Matches[4]
   if ($dS -ne $steps)      { Fail 'E-COUNTS' $endLn "steps: declared $dS, recomputed $steps" }
   if ($dG -ne $guards)     { Fail 'E-COUNTS' $endLn "guards: declared $dG, recomputed $guards" }

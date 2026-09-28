@@ -2238,6 +2238,21 @@ Step 'E-RT0' {
   Chk 'A-RT0-HANDLERS'  $rt0.HandlerImpls 'uGenericTableRoute.TGenericTableRoute.HandleDelta:389:[],uPipeSessionBuilder.TPipeSessionBuilder.HandleDelta:1209:[TInterfacedObject, IPipeSessionBuilder],uPipeSessionBuilder.TPipeSessionBuilder.HandleTableLoad:502:[TInterfacedObject, IPipeSessionBuilder]'
   # the snapshot tables are EMPTY on both clones: the UPDATE / SELECT statement texts are STOPS (E4)
   Chk 'A-RT0-FBROWS'    $rt0.FbRows '0/0/0/0'
+  # Task 2: the model writes 7 numbered items (2 anchor, 3 write, 2 database), 2 conditions, 1 crossing, 1 STOPS
+  Chk 'A-RT2-COUNTS'    $rt0.FormACounts '7/2/1/1'
+  Chk 'A-RT2-END'       $rt0.FormAEnd 'END TRACE  7 steps, 2 conditions, 1 crossings, 1 unresolved.'
+  Chk 'A-RT2-ANCHOR'    $rt0.FormANoAnchor 'refused'
+  Chk 'A-RT2-ANCHORS'   $rt0.FormAAnchors 12
+  Chk 'A-RT2-ROUNDTRIP' $rt0.FormARoundTrip 'identical'
+  Chk 'A-RT2-BYTES'     $rt0.FormABytes '0/0/noBOM'
+  Chk 'A-RT2-FORMA'     "$($rt0.FormAChecker)/$($rt0.FormACheckerMut)" '0/1'
+  Chk 'A-RT2-NONASCII'  $rt0.FormANonAscii 'refused'
+  Chk 'A-RT2-BADNOTE'   $rt0.FormABadNote 'refused'
+  # P16: a condition is quoted verbatim, so a double-quote inside one is refused by the model
+  Chk 'A-RT2-QUOTE'     $rt0.FormAQuote 'refused'
+  # P7: seven STOPS, one per section, five behind an actor word ([NN] SERVER STOPS twice): checker exit 0 =
+  # it counted all 7 unresolved; the round trip holds; UNLESS "SQL = ''" is written verbatim
+  Chk 'A-RT2-STOPSALL'  $rt0.FormAStopsAll '0/8/1/0/7/identical/2/verbatim'
 }
 # ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
