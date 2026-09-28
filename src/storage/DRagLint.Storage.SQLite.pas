@@ -3716,8 +3716,10 @@ begin
     and convert a WAL index to a rollback journal. Normal locking, synchronous
     NORMAL, journal mode WAL (so a rollback-journal index is converted back,
     as this path always did -- ruling R16), and a PRIVATE cache: FireDAC's
-    process-wide shared cache made a writer opened beside a live read-only
-    connection unable to write (see ConnectReadOnly).
+    process-wide shared cache would put this writer on one pager with any
+    in-process reader -- table-level SQLITE_LOCKED the busy timeout does not
+    retry, and pragmas leaking between them (see ConnectReadOnly; unpinned by
+    any test, ruling R22).
     The busy timeout gives DDL ops (e.g. DROP TRIGGER) time to acquire the
     exclusive WAL lock when a concurrent LSP reader holds the DB -- without it
     a schema change races the LSP server and fails SQLITE_BUSY -- and it is

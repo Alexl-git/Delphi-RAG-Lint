@@ -268,6 +268,9 @@ c.close()
 python $walPy $walDb
 $walLen = if (Test-Path -LiteralPath "$walDb-wal") { (Get-Item -LiteralPath "$walDb-wal").Length } else { 0 }
 Check 'R21 fixture: the dead writer left committed pages in the -wal' ($walLen -gt 0) "wal bytes=$walLen"
+# POSITIVE CONTROL for the Sidecars helper itself: it must SEE the -wal/-shm
+# the dead writer left, or every "leaves no -wal/-shm" check above is vacuous.
+Check 'R21 POSITIVE CONTROL: Sidecars sees the dead writer''s -wal/-shm' ((Sidecars $walDb) -ne '') "sidecars=$(Sidecars $walDb)"
 $before = (python $probePy $walDb "$WorkDir\mainonly-before.sqlite").Trim()
 Check 'R21 POSITIVE CONTROL: the main file ALONE lacks the row before the read' ($before -eq 'absent') "main-only=$before"
 $rq = (& $Exe query --name TFoo --db $walDb 2>&1) -join "`n"

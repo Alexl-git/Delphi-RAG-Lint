@@ -90,19 +90,23 @@ procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT
 /// query_only refuses STATEMENTS, not the pager's close-time checkpoint.
 /// Pinned by run_readonly_verbs.ps1 (no sidecar after any read verb; a dead
 /// writer's WAL folded into the main file by the closing reader).
-/// IN-PROCESS IT IS SAFE ONLY WITH A PRIVATE CACHE, hence SharedCache=False.
+/// A PRIVATE CACHE, hence SharedCache=False (kept deliberately, ruling R22).
 /// FireDAC's static SQLite switches shared-cache mode on for the whole process
 /// (FireDAC.Phys.SQLiteWrapper.Stat, InternalAfterLoad), and a connection with
 /// no SharedCache param joins the shared cache of any other connection to the
-/// same file. A WRITER opened while a reader's connection was alive then
-/// shared that reader's cache and failed "attempt to write a readonly
-/// database": `document --project --apply --reindex` holds its read-only store
-/// across the post-edit reindex and died with exit 3 after writing the source
-/// (fix round 1, pinned by run_readonly_then_writer_same_process.ps1). The
-/// probe saw the other direction too: with the cache shared, a read-only
-/// connection beside a live writer was ALLOWED to write and rewrote the
-/// header. ConnectWriter sets the same param, so no drag-lint connection ever
-/// shares a cache with another.
+/// same file in the process. Connections sharing a cache share one pager:
+/// they take TABLE-level locks that fail SQLITE_LOCKED, which the busy
+/// timeout does not retry (the "database schema is locked" the D25 probe
+/// hit), and a pragma or open mode on one leaks to the others (the probe saw
+/// a query_only connection beside a live writer ALLOWED to write, rewriting
+/// the header). While readers were SQLITE_OPEN_READONLY (D25) a writer that
+/// joined a reader's cache could not write at all: `document --project
+/// --apply --reindex` died "attempt to write a readonly database" (exit 3).
+/// run_readonly_then_writer_same_process.ps1 is the regression check for that
+/// verb; since readers are read-write again it can no longer fail on this
+/// param, so SharedCache=False is currently UNPINNED by any test.
+/// ConnectWriter sets the same param, so no drag-lint connection ever shares
+/// a cache with another.
 /// What keeps the handle a reader: the journal_mode pragma names the header's
 /// mode (HeaderSaysWal), so it is a no-op; locking_mode is Normal, so a reader
 /// never holds the file exclusively; and query_only makes every write
@@ -152,8 +156,9 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
 /// (an incremental index included) converts it back, as the store's writer
 /// did before D24. Readers are different: ConnectReadOnly names the header's
 /// mode, because a reader must never convert anything.
-/// PRIVATE CACHE (SharedCache=False) for the reason on ConnectReadOnly: a
-/// writer joining a read-only connection's shared cache cannot write.
+/// PRIVATE CACHE (SharedCache=False) for the reasons on ConnectReadOnly: a
+/// shared cache means table-level SQLITE_LOCKED the busy timeout does not
+/// retry, and pragmas leaking between connections. Unpinned by any test.
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>

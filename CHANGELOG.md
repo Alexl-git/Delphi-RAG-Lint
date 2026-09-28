@@ -75,10 +75,15 @@ v23 are UNCHANGED -- no index needs a re-parse. No new rules (188).
   connections share one pager and gave "database schema is locked" / a header rewrite that no
   cross-process reader would see. That shared cache is also live in drag-lint itself (FireDAC's static
   SQLite enables it process-wide), so `ConnectReadOnly` and `ConnectWriter` both set
-  `SharedCache=False`: without it a writer opened while a read-only connection to the same file was
-  alive joined its read-only cache, and `document --project --apply --reindex` died "attempt to write
-  a readonly database" (exit 3) after writing the source. Guard:
-  `tests\autotest\run_readonly_then_writer_same_process.ps1`.
+  `SharedCache=False`: while readers were `SQLITE_OPEN_READONLY`, a writer opened beside a live
+  reader joined its read-only cache, and `document --project --apply --reindex` died "attempt to
+  write a readonly database" (exit 3) after writing the source.
+  `tests\autotest\run_readonly_then_writer_same_process.ps1` is the regression check for that verb,
+  but with readers read-write again it can no longer fail on this param. `SharedCache=False` is
+  kept deliberately (ruling R22): a shared cache puts in-process connections on one pager, with
+  table-level `SQLITE_LOCKED` that the busy timeout does not retry (the probe's "schema is locked")
+  and pragmas leaking between connections. It is currently UNPINNED by any test; a pinning test
+  is on the triage list.
 - **D24 -- one writer open, and five read verbs stop writing the index.** New
   `DRagLint.Storage.FileMembership.ConnectWriter` (Normal locking, synchronous NORMAL, journal mode
   WAL, a private cache, and the busy timeout armed before the connect) is now the only way an index

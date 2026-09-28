@@ -14696,10 +14696,13 @@ begin
     Exit(2);
   end;
 
-  { A read-only open still CREATES the file when it is absent -- the same trap
-    that once left a 4096-byte drag-lint.sqlite in an arbitrary directory and
-    reported it as a valid, empty index. Only an existence check can express
-    "do not create". }
+  { A reader's open no longer CREATES an absent file (ConnectReadOnly opens
+    READWRITE without CREATE, FireDAC.Phys.SQLiteWrapper.pas:2040), but it
+    RAISES "unable to open database file", an unhelpful message for a wrong
+    --db. Before that open mode it created one -- the trap that left a 4096-byte
+    drag-lint.sqlite in an arbitrary directory and reported it as a valid,
+    empty index. This existence check turns both into the actionable
+    "database not found", exit 2. }
   if not TFile.Exists(DbPath) then
   begin
     Writeln(ErrOutput, 'ERROR: database not found: ', DbPath);
