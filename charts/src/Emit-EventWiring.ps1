@@ -27,7 +27,7 @@ param(
   [Parameter(Mandatory)][string] $DbPath,
   [string] $Control,                        # optional filter, NOT a selector
   [string] $OutDir,
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe',
+  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
   [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'

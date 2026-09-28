@@ -17,8 +17,9 @@
   gallery of easy cases would hide exactly the behaviour worth reviewing.
 
   RUNS AGAINST THE CLONES in charts\scratch\db\, never the live corpus. See
-  PLAN-next-five-verbs.md for why: this worktree's engine is OLDER than the
-  indexes, so a live run risks a lock and an `index` run would downgrade them.
+  PLAN-next-five-verbs.md for why: a live run risks a lock, and a live DB can be
+  re-indexed mid-run. Since 2026-09-27 the engine is the shared deployed one
+  (1.18.0-alpha / resolver 1.9.0-alpha), matching the clones' resolver.
 #>
 [CmdletBinding()]
 param(
@@ -363,12 +364,9 @@ foreach ($c in ($CATALOGUE | Where-Object { $_.St -ne 'shipped' })) {
 [void]$sb.AppendLine('</table>')
 
 [void]$sb.AppendLine('<div class="note"><p><b>These charts were generated against frozen clones, not the live corpus.</b> ' +
-  'The engine deployed in this worktree is older than the indexes it is reading ' +
-  '(engine 1.16.0-alpha / resolver 1.5.1-alpha against clones at v=1.19.0-alpha / r=1.8.0-alpha), ' +
-  'which yields smaller confident answers rather than errors. The callee direction is ' +
-  'affected; callers, uses-edges, DFM events, DI bindings, purity facts and the ' +
-  'dependency report are not. Anything on this page reached through <code>call_edges</code> ' +
-  'in the callee direction should be read with that in mind.</p></div>')
+  'Engine 1.18.0-alpha / resolver 1.9.0-alpha (the shared deployed engine) against clones at ' +
+  'v=1.19.0-alpha / r=1.9.0-alpha, taken 2026-09-27; the clones freeze the numbers so a ' +
+  'live re-index cannot move them underneath a run.</p></div>')
 
 [void]$sb.AppendLine('</main><footer>')
 [void]$sb.AppendLine("generated $((Get-Date).ToUniversalTime().ToString('s'))Z by New-ExampleGallery.ps1 &middot; the output is gitignored and regenerable; edit the generator, not this page")

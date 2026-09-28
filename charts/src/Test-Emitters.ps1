@@ -1168,7 +1168,7 @@ Note 'negatives W-* (engine wrappers fail loudly, R19) ...'
 Step 'E-W' {
   & {
     . "$SRC\Emit-Common.ps1"
-    $Engine = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe'
+    $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
     $DbPath = Get-CloneDb $DbCli
     function Throws([string] $code, [string] $phrase, [scriptblock] $b) {
       $threw = $false
@@ -1671,7 +1671,7 @@ Step 'E-CO' {
   # also gets its old MScript2 extraction back as an older-only column, which is
   # exactly the 1.18 shape (quoted is tried BEFORE older).
   $script:cqs = & {
-    $Engine = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe'
+    $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
     . "$SRC\Emit-Common.ps1"
     $real = Get-SqlTableSet $DbSql
     $ip = $real.Tables['IPCHART']
@@ -1939,7 +1939,7 @@ Step 'E-LW' {
   # clones. A non-zero here is the SIGNAL that fb-snapshot landed in a clone and
   # the switch must be built -- not a number to re-pin.
   # Emit-Common resolves $Engine from the CALLER's scope (its header), so the block names it
-  $script:ol = & { $Engine = 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"; "$((Get-OrmLinksState $DbCli).Rows)/$((Get-OrmLinksState $DbSrv).Rows)" }
+  $script:ol = & { $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"; "$((Get-OrmLinksState $DbCli).Rows)/$((Get-OrmLinksState $DbSrv).Rows)" }
   Chk 'A-OL-ROWS'       $ol '0/0'
 
   $script:lw1 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir

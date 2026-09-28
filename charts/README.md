@@ -65,8 +65,9 @@ and edge must be a fact with a file and a line.
 ## House rules that apply here too
 
 * PowerShell only, never Bash. Wait by BLOCKING, never polling.
-* Engine by path: `..\third_party\dll-win64\drag-lint.exe` (1.16.0-alpha seeded
-  2026-09-22 until the first local build).
+* Engine by path: the SHARED deployed engine
+  `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (1.18.0-alpha /
+  resolver 1.9.0-alpha since 2026-09-27), never this worktree's own build.
 * Self-index only as
   `index --project src\cli\drag-lint.dproj --db src\cli\_D-RAG\drag-lint.sqlite`.
 * Strict 7-bit ASCII, CRLF, no BOM in every `.pas` / `.ps1` / `.bat`.
