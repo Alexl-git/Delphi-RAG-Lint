@@ -1,13 +1,13 @@
-<!-- dl:backlog status=open last-measured=2026-09-23 -->
+<!-- dl:backlog status=open last-measured=2026-09-28 -->
 # STATUS: the 27 diagram questions
 
 The live scoreboard for `charts\question-catalogue.md`. **27 catalogue rows**
 (`protocol-trace` appears twice -- field and method are different questions).
 
-Updated 2026-09-23. Branch `feat/archify-ir`, 24 commits, NOTHING PUSHED.
+Updated 2026-09-28. Branch `feat/archify-ir`, 75 commits ahead of `main` at 716ec8f9 (measured: `git rev-list --count <merge-base>..HEAD`), no remote branch, NOTHING PUSHED.
 
 ```
-SHIPPED                     26   emitters exist, tested, clickable (round-trip: text, not a chart)
+SHIPPED                     26   emitters exist, tested; charts clickable (round-trip is TEXT: anchors are @file:line text, not clickable)
 PLANNED (ready to build)     0
 UNPLANNED, unblocked         0
 BLOCKED on data              0   consumers / feeds-from / lands-where ship DERIVED (path A)

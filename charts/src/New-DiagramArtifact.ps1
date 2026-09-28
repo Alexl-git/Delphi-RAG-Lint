@@ -276,14 +276,48 @@ $fp = [pscustomobject]@{
 $fp | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $dir 'meta.json') -Encoding ascii
 
 # ---- 3. the shell ------------------------------------------------------------
+# A TEXT question (round-trip) returns its document as .Trace; every other question
+# draws a chart. The branch is on WHAT THE QUESTION PRODUCED, never on a missing
+# svg: a chart question that wrote no svg must fail naming graph.svg, not be
+# shown as a text bundle that is not there either.
+$isText  = [bool]($r.PSObject.Properties['Trace'] -and $r.Trace)
 $svgPath = Join-Path $dir 'graph.svg'
-if (Test-Path $svgPath) {
+if ($isText) {
+  $tracePath = Join-Path $dir 'trace.dlgraph'
+  if (-not (Test-Path $tracePath)) { throw "$Question returned a trace but $tracePath is missing" }
+  # the document itself, escaped, in a <pre>
+  $doc = [IO.File]::ReadAllText($tracePath)
+  $svg = '<pre style="margin:0;font:13px/1.5 var(--mono);white-space:pre">' + $doc.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;') + '</pre>'
+  # T8-R1: a text page has NO click targets -- its anchors are @File.pas:line TEXT
+  $anchorSpan = "<span><b>$($r.ClickTargets)</b> anchors, written as @file:line text -- not click targets</span>"
+  $note = "    <p><b>This is a document, not a chart.</b> <code class=`"k`">$Question</code> answers in`n" +
+          "    Form A TEXT (<code class=`"k`">trace.dlgraph</code>; grammar:`n" +
+          "    <code class=`"k`">charts\form-a-grammar-spec.md</code> section 8). Each step's anchor is`n" +
+          "    written as <code class=`"k`">@File.pas:line</code> text, so nothing on this page is a`n" +
+          "    click target. A chart drawn from this text is later work.</p>"
+  $footFiles = 'trace.dlgraph (Form A text) &middot; '
+} else {
+  if (-not (Test-Path $svgPath)) { throw "$Question drew no chart: $svgPath is missing" }
   $svg = [IO.File]::ReadAllText($svgPath)
   $svg = $svg -replace '(?s)^.*?(?=<svg)', ''          # drop the XML prolog + DOCTYPE
-} else {
-  # a text question: the document itself, escaped, in a <pre>
-  $doc = [IO.File]::ReadAllText((Join-Path $dir 'trace.dlgraph'))
-  $svg = '<pre style="margin:0;font:13px/1.5 var(--mono);white-space:pre">' + $doc.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;') + '</pre>'
+  $anchorSpan = "<span><b>$($r.ClickTargets)</b> click targets</span>"
+  $note = @'
+    <p><b>Clicks open the file in your running IDE.</b> Every row is a real anchor
+    carrying <code class="k">draglint://open?file=..&amp;line=..</code>. The IDE
+    plugin already runs the pipe server
+    (<code class="k">DragLint.Plugin.OpenSourceServer.pas</code>, started from
+    <code class="k">DragLint.Plugin.Wizard.pas:117</code>), listening on
+    <code class="k">\\.\pipe\drag-lint-open-source</code> for
+    <code class="k">&lt;file&gt;&lt;TAB&gt;&lt;line&gt;&lt;LF&gt;</code>.</p>
+    <p style="margin-top:10px">A browser cannot write to a named pipe, so the
+    one-time bridge is a protocol handler:
+    <code class="k">charts\src\Register-DragLintProtocol.ps1</code> (HKCU only,
+    no elevation, <code class="k">-Unregister</code> to undo). Without it a click
+    falls through to this page's own handler, which shows you the exact message
+    it would have sent. If the IDE is not running, the handler falls back to
+    ShellExecute, mirroring the standalone viewer.</p>
+'@
+  $footFiles = 'graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry, same layout run) &middot; '
 }
 
 $short = $Qname
@@ -330,7 +364,7 @@ $html = @"
   <div class="meta">
     <span><b>$leftCount</b> $leftLabel</span>
     <span><b>$rightCount</b> $rightLabel</span>
-    <span><b>$($r.ClickTargets)</b> click targets</span>
+    $anchorSpan
     <span>index <b>$([IO.Path]::GetFileName($DbPath))</b></span>
     <span>generated <b>$($fp.generated)</b></span>
   </div>
@@ -339,24 +373,11 @@ $html = @"
   <div class="stage">$svg</div>
 
   <div class="note">
-    <p><b>Clicks open the file in your running IDE.</b> Every row is a real anchor
-    carrying <code class="k">draglint://open?file=..&amp;line=..</code>. The IDE
-    plugin already runs the pipe server
-    (<code class="k">DragLint.Plugin.OpenSourceServer.pas</code>, started from
-    <code class="k">DragLint.Plugin.Wizard.pas:117</code>), listening on
-    <code class="k">\\.\pipe\drag-lint-open-source</code> for
-    <code class="k">&lt;file&gt;&lt;TAB&gt;&lt;line&gt;&lt;LF&gt;</code>.</p>
-    <p style="margin-top:10px">A browser cannot write to a named pipe, so the
-    one-time bridge is a protocol handler:
-    <code class="k">charts\src\Register-DragLintProtocol.ps1</code> (HKCU only,
-    no elevation, <code class="k">-Unregister</code> to undo). Without it a click
-    falls through to this page's own handler, which shows you the exact message
-    it would have sent. If the IDE is not running, the handler falls back to
-    ShellExecute, mirroring the standalone viewer.</p>
+$note
   </div>
 </main>
 <footer>
-  $(if (Test-Path $svgPath) { 'graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry, same layout run) &middot; ' } else { 'trace.dlgraph (Form A; paste into a DocInsight remarks block unchanged) &middot; ' })meta.json (regenerate command + index fingerprint)
+  ${footFiles}meta.json (regenerate command + index fingerprint)
 </footer>
 <div id="toast"></div>
 <script>

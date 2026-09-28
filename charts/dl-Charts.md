@@ -60,7 +60,8 @@ them, and each carries its caveat on the chart:
 The twenty-sixth is a TEXT question (a `trace.dlgraph` bundle, no picture yet):
 
 * `round-trip` (`-Target <control | field | TABLE.COLUMN> -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>`)
-  -- the Interface report's trace core: Form A text, conditions verbatim from fresh source, STOPS where the index ends.
+  -- the Interface report's trace core: Form A text, conditions from fresh source (an `if` verbatim; the `try` / `except` and `case` forms marked), STOPS where the index ends.
+  The page is a document: anchors are `@File.pas:line` text, not click targets.
   ALSO counts are pinned pending owner review.
 
 Engine defects the charts disclosed -- D1 (parenless calls), D12 (effects), D13

@@ -453,6 +453,8 @@ Step 'E-MA-R26' {
   # a real bundle says it is not a test chart (fix round 2: meta.testChart)
   Chk 'A-MA-R26-META' $meta.testChart 'False'
   if ($r26html -notmatch [regex]::Escape('<span><b>0</b> resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas</span>')) { Fail 'A-MA-R26-HDR' 'the rendered bundle header does not name the unbound reads' }
+  # a CHART bundle still takes the svg branch of the shell (Task 8 split it from the text branch)
+  if ($r26html -notmatch '<div class="stage"><svg' -or $r26html -notmatch 'graph\.svg &middot; graph\.png') { Fail 'A-MA-R26-SVG' 'a chart bundle does not show its svg inline, or its footer does not name graph.svg' }
 }
 
 Note 'who-reads Connected at scale (602 sites, 598 routines, cap 25) ...'
@@ -2677,6 +2679,10 @@ Step 'RT-ART' {
   if (Test-Path (Join-Path $art.Bundle 'graph.svg')) { Fail 'A-RT-ART' 'a graph.svg was written for a text question' }
   $html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
   if ($html -notmatch '<pre[^>]*>TRACE OPERAT\.NAME') { Fail 'A-RT-ART' 'index.html does not show the trace' }
+  # fix round 1 (I2, T8-R3): the footer names the text as what it is -- no paste-unchanged promise, no graph.*
+  if ($html -notmatch '<footer>\s*trace\.dlgraph \(Form A text\) &middot; meta\.json' -or $html -match 'graph\.svg|DocInsight') { Fail 'A-RT-ART-FOOT' 'the text bundle footer is not "trace.dlgraph (Form A text) &middot; meta.json ..."' }
+  # fix round 1 (I3, T8-R1): a text bundle claims no click targets; its anchors are @file:line text
+  if ($html -match 'Every row is a real anchor|<b>\d+</b> click targets</span>' -or $html -notmatch 'not click targets') { Fail 'A-RT-ART-NOTE' 'the text bundle page claims clickable anchors' }
   if ((Get-Content (Join-Path $art.Bundle 'trace.dlgraph') -Raw) -cne $rt0.RtText) { Fail 'A-RT-ART' 'trace.dlgraph in the bundle differs from the emitter output' }
 }
 # ---- output sweep: no escaped entity printed as text -------------------------

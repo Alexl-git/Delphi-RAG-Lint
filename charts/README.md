@@ -79,8 +79,11 @@ and edge must be a fact with a file and a line.
 **26 of the 27 catalogue questions ship** (2026-09-23; `round-trip` 2026-09-28); only `compare` does
 not, parked by the owner. The scoreboard is `STATUS-questions.md`, the question
 set and each question's caveat is `question-catalogue.md`, the gate is
-`src\Test-Emitters.ps1`, and `src\New-ExampleGallery.ps1` renders a worked
-example of every shipped question into `docs\examples\index.html`.
+`src\Test-Emitters.ps1`, and `src\New-ExampleGallery.ps1` renders worked
+examples into `docs\examples\index.html` -- 76 over the 25 shipped question
+names (26 rows; `protocol-trace` is two), three or four each, measured on the
+2026-09-28 run. `round-trip`'s three are TEXT bundles (the trace in a `<pre>`,
+anchors as `@file:line` text, not click targets); the rest are charts.
 
 ### The last four (PLAN-last-four-verbs.md)
 
@@ -123,12 +126,20 @@ New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<
 * `round-trip` -- from a selection to its data anchor and both ways through the
   pipe, as a Form A TEXT (`trace.dlgraph`, no picture yet): ANCHOR / WRITE /
   SERVER / DATABASE / RESPONSE / READ / ALSO, every step anchored, conditions
-  quoted VERBATIM from sha256-fresh source (`WHEN` / `UNLESS`; a stale file
-  refuses by name), a `STOPS` for every hop the index cannot make (the UPDATE
+  (`WHEN` / `UNLESS`) read from sha256-fresh source -- an `if` condition quoted
+  verbatim; a `try` / `except` condition is the statement text plus a GENERATED
+  ` raises` (` ... ` standing for statements left out), and a `case` condition is
+  the `case X of` header with its else arm named in the note (grammar spec
+  section 8); a stale file refuses by name -- a `STOPS` for every hop the index cannot make (the UPDATE
   and SELECT texts live in FIB$ rows the clones do not hold), and `ALSO` derived
   from the index. The bundle is `trace.dlgraph` + `index.html` (the trace in a
-  `<pre>`) + `meta.json` + `xref.txt`; no `graph.*`. Engine asks E1-E4 are
+  `<pre>`) + `meta.json` + `xref.txt`; no `graph.*`. The page is a document:
+  its anchors are `@File.pas:line` text, not click targets. Engine asks E1-E4 are
   named on the steps they would retire.
+* A `TABLE.COLUMN` selection that is not loaded by exactly one dataset does not
+  guess: the trace is ONE named `STOPS` listing the datasets (measured, gate
+  `RT-N2`: `OPERAT.NAME` -- 5 datasets load OPERAT in the CLIENT clone); pass the
+  control or the dataset field instead.
 
 On `frmBlueprint4.dxDBGrid1OperationVName` the gate (`E-RT0` / `E-RT`, via
 `src\Test-RoundTripHelpers.ps1`) measures: golden nodes 17/17 matched, 3 golden

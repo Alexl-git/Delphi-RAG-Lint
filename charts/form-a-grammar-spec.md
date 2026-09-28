@@ -28,7 +28,7 @@ What that means for this document:
 | Section 5 (35 EARS criteria) | **Stands as patterns.** Criteria quoting a COUNT or a LINE NUMBER must take their values from section 7: the block is lines 40..138 with 30 anchors, not 40..123 with 29. |
 | Section 6 (open questions) | **OQ-1, OQ-2, OQ-3 and OQ-4 are RESOLVED by the correction** -- counts recompute, numbering is contiguous from [01], `CROSSES` carries structured `FROM`/`TO`/`OVER`/`WITH`, and `TIERS` is present. The rest stand. |
 | Section 7 (verification walk) | **RE-RUN 2026-09-23 and PASSING.** Now executable: `charts\src\Test-FormA.ps1`, 99/99 lines classified, counts recomputed, verb set regenerated, and proven to FAIL on five mutations. |
-| Section 8 (round-trip amendments) | **Added 2026-09-28.** The GENERATED trace's additions: `ANCHOR` / `ALSO`, `FROM` / `REGENERATE`, `STOPS`, `WHEN` / `UNLESS`, `[by name]`, the section note, the stopped-trace title, `OMITS`, and its measured 18-verb set (two verbs, `EMPTIES` and `OMITS`, are not in the golden's 27). |
+| Section 8 (round-trip amendments) | **Added 2026-09-28.** The GENERATED trace's additions: `ANCHOR` / `ALSO`, `FROM` / `REGENERATE`, `STOPS`, `WHEN` / `UNLESS` (with the marked `try` / `except` and `case` forms), `[by name]`, an OPEN owner question on pasting into DocInsight, the section note, the stopped-trace title, `OMITS`, and its measured 18-verb set (two verbs, `EMPTIES` and `OMITS`, are not in the golden's 27). |
 
 The gate named in the original draft has been cleared: the verb set is
 regenerated and the walk has been re-run against the corrected block, by a
@@ -519,10 +519,33 @@ read from that code and MEASURED on the gate's trace
   `SERVER`, `DATABASE`, `RESPONSE`, `READ`, `ALSO`.
 * Header attributes: `FROM <selection>` and `REGENERATE <command>` join `TITLE` / `INDEX` / `TIERS`.
 * `STOPS <reason> @anchor` is a NUMBERED step (counted in steps) that also counts as unresolved -- the construct OQ-7 asked for.
-* `WHEN "<cond>"` / `UNLESS "<cond>"` under a step are conditions, counted where `GUARD` counts; `END TRACE` accepts `conditions` as a synonym of `guards`. The condition is written in double quotes, VERBATIM from the source (owner decision 2026-09-27: Pascal's `''` stays as it is inside them, e.g. `UNLESS "SQL = ''"`); `WHEN` continues when it is true, `UNLESS` when it is false, and the other branch is the `-- else ...` note.
+* `WHEN "<cond>"` / `UNLESS "<cond>"` under a step are conditions, counted where `GUARD` counts; `END TRACE` accepts `conditions` as a synonym of `guards`. The condition is written in double quotes (owner decision 2026-09-27: Pascal's `''` stays as it is inside them, e.g. `UNLESS "SQL = ''"`). For an `if` it is the source text VERBATIM; the `try` / `except` and `case` forms below add GENERATED words to source text, and say so. `WHEN` continues when it is true, `UNLESS` when it is false, and the other branch is the `-- else ...` note.
   Nothing is ever escaped: a condition that itself carries a double quote is
   refused by `New-TraceCond`, and the walk (the shim's `unknown` form) turns
   that hop into a `STOPS` naming E1 instead -- see the header of `Trace.FormA.ps1`.
+* The `try` / `except` form (`Trace.Walk.ps1` shim, `:315-317` and `:526-532`): an Exit in an
+  except handler is guarded by `UNLESS "<statements> raises"`. The statement texts are
+  source text, verbatim; ` raises` is GENERATED. One statement is quoted whole
+  (`UNLESS "Mem.LoadFromStream(MS, sfBinary) raises" @uGenericTableRoute.pas:446`);
+  several are `S1 ... Sn raises` -- first and last verbatim, ` ... ` (never ` .. `,
+  Pascal's range operator; ruling T4-R3) standing for the statements between
+  (`UNLESS "T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises"
+  @uPipeSessionBuilder.pas:605`). A LAST statement of more than three code lines is
+  left out -- `S1 ... raises`, the connector standing for the statements after S1
+  (Task 5 fix round 1, e.g. `UNLESS "ApplyResult:= Mem.ApplyUpdates(0) ... raises"
+  @uGenericTableRoute.pas:570`); a compound FIRST statement makes the form a named
+  unknown, i.e. a `STOPS` naming E1. Which statement raises is not in the source.
+* The `case` form (`Trace.Walk.ps1:318-319`, ruling T4-C3): an Exit in a `case` `else`
+  arm is guarded by `UNLESS "case <X> of"` -- the case header, verbatim -- and the note
+  names the arm in generated text: `UNLESS "case ARequest of" @uGenericTableRoute.pas:188
+  -- else arm at :192`.
+* OPEN QUESTION for the owner (ruling T8-R3, 2026-09-28): the bundle footer once
+  promised that `trace.dlgraph` pastes "into a DocInsight remarks block unchanged".
+  It does not: the trace quotes Pascal that carries `<` (e.g.
+  `UNLESS "(GLE <> ERROR_SUCCESS) or ..." @Blueprint4.ViewModel.pas:3990`), which is
+  invalid as XML doc-comment text, and every line of a paste needs a `///` prefix. The writer does neither today (no escaping, no
+  prefix). Whether Form A gains a DocInsight rendering (escape `<` / `&`, prefix
+  `///`) is the owner's call; the footer now says only `trace.dlgraph (Form A text)`.
 * Certainty gains `[by name]` (a name match) beside `[certain]` / `[inferred]`; it is two tokens and the checker drops it as a phrase.
 * Gutters may be two OR three digits.
 * The canonical emitter (`Trace.FormA.ps1`) numbers every item, anchors every step INCLUDING `CROSSES` (at the send line), and never writes an epilogue. `Read-FormA` reads only the canonical layout; the golden stays hand-aligned and is checked, not parsed.
@@ -567,11 +590,15 @@ Measured: `TITLE "Why frmBlueprint4.cxGroupBox16 cannot be traced"` (gate
 `OMITS` is a NUMBERED disclosure step: it is **counted in steps** and is
 **not** unresolved (it is a `step`, not a `STOPS`). One per section at most
 (T5-R1), at the first omitted line; the `<n>` it states is the count of STEPS
-the omitted branches would have yielded (T5-R6), and its note quotes each
-branch condition verbatim with its anchor:
+the omitted branches would have yielded (T5-R6), and its note lists each distinct
+branch condition with its anchor (`Trace.Walk.ps1:1087-1100`): quoted verbatim,
+`<KEYWORD> "<cond>" @<file>:<line>`, unless the condition contains `; ` (or a line
+break), which a note cannot carry -- then it is named by its anchor only,
+`<KEYWORD> at <file>:<line>`. The `in <Routine>; ` prefix is written only when every
+omitted record lies in ONE routine; otherwise the note starts at `not walked`:
 
 ```
-[NN] OMITS <n> step(s) in branches for other tables, innermost enclosing if only @<file>:<line> -- in <Routine>; not walked, the branch conditions: WHEN "<cond>" @<file>:<line> / ...; ask E1
+[NN] OMITS <n> step(s) in branches for other tables, innermost enclosing if only @<file>:<line> -- [in <Routine>; ]not walked, the branch conditions: WHEN "<cond>" @<file>:<line> / WHEN at <file>:<line> / ...; ask E1
 ```
 
 The walk sees only the INNERMOST enclosing `if` of a line (the index holds

@@ -163,6 +163,12 @@ $EX = @(
   @{ Q='lands-where';      T='uSTATIONS.TmcSTATIONS.GRIDS';        D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state server-sql: in NO script declaration, yet the server''s SQL writes it -- the scripts lag the schema, so "computed or UI-only" would be false' }
   @{ Q='lands-where';      T='uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE';  D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='declared as the quoted identifier "TABLE" in MS1.SQL:3848 -- extracted since extractor 1.19 (engine D19), so an ordinary column; before that it was the one real column in the quoted state' }
   @{ Q='lands-where';      T='uINSPRSLT.TmcINSPRSLT.DistHist';     D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state not-a-column: named by no script and no server SQL -- computed or UI-only, and the DB side stays unanchored' }
+
+  # round-trip (spec 2026-09-27) is a TEXT question: its bundle is trace.dlgraph shown in a <pre>, not a chart.
+  # The three targets are the gate's (E-RT0 / RT-N1 / RT-N2), so the numbers below are the gate's numbers.
+  @{ Q='round-trip';       T='frmBlueprint4.dxDBGrid1OperationVName'; D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a grid column to OPERAT.NAME and both ways through the pipe: 76 steps, 31 conditions, 4 crossings, 2 unresolved (the UPDATE and SELECT texts live in FIB$ rows the clones do not hold, E4); ALSO 9 rows, pinned pending owner review' }
+  @{ Q='round-trip';       T='frmBlueprint4.cxGroupBox16';            D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a control that is NOT data-bound: one STOPS saying why, and every later section notes it was not walked -- the title claims no reach' }
+  @{ Q='round-trip';       T='OPERAT.NAME';                           D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a TABLE.COLUMN that five datasets load: one STOPS naming all five, never a guess -- pass the control or the dataset field instead' }
 )
 
 if ($Only) { $EX = @($EX | Where-Object { $Only -contains $_.Q }) }
@@ -177,12 +183,14 @@ foreach ($e in $EX) {
     $splat = @{ Question = $e.Q; Target = $e.T; DbPath = $e.D; OutRoot = $dir } + $e.A
     $r = & (Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1') @splat 6>$null
     if (-not (Test-Path $r.Shell)) { throw 'no index.html produced' }
+    # a TEXT bundle (round-trip) has anchors as @file:line text, not click targets
+    $isText = Test-Path (Join-Path $r.Bundle 'trace.dlgraph')
     [void]$made.Add([pscustomobject]@{
       Question = $e.Q; Target = $e.T; Db = [IO.Path]::GetFileNameWithoutExtension($e.D)
-      Why = $e.Why; Shell = $r.Shell; Clicks = $r.ClickTargets
+      Why = $e.Why; Shell = $r.Shell; Clicks = $r.ClickTargets; IsText = $isText
       Bytes = (Get-Item $r.Shell).Length
     })
-    Write-Host ("  OK   {0}  ({1} click targets)" -f $label, $r.ClickTargets)
+    Write-Host ("  OK   {0}  ({1} {2})" -f $label, $r.ClickTargets, $(if ($isText) { 'anchors as text' } else { 'click targets' }))
   } catch {
     [void]$failed.Add([pscustomobject]@{ Question = $e.Q; Target = $e.T; Error = $_.Exception.Message })
     Write-Host ("  FAIL {0}  -- {1}" -f $label, $_.Exception.Message)
@@ -198,7 +206,7 @@ foreach ($e in $EX) {
 # ones a reviewer most needs to see -- with the REASON, so "not here yet" can be
 # told apart from "cannot be done".
 #
-# The catalogue is the same 26 rows as charts\STATUS-questions.md. Keep them in
+# The catalogue is the same 27 rows as charts\STATUS-questions.md. Keep them in
 # step: this list is the page's own copy and nothing checks it against that doc.
 $CATALOGUE = @(
   @{ Q='butterfly';       Sel='method';          St='shipped'
@@ -238,6 +246,9 @@ $CATALOGUE = @(
      Note='DFM DataSource &rarr; dataset &rarr; view model &rarr; TABLE.COLUMN, every hop graded. It stops rather than guess on a dangling module, an interface-typed view model or several candidate tables; 267 of 808 field-bound CLIENT controls reach one table, and each chart prints that coverage.' }
   @{ Q='lands-where';     Sel='ORM property / field'; St='shipped'
      Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,992 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
+
+  @{ Q='round-trip';      Sel='control / field / TABLE.COLUMN'; St='shipped'
+     Note='A TEXT question: the answer is a Form A document (<code>trace.dlgraph</code>), not a chart, and its anchors are <code>@File.pas:line</code> text, not click targets. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards and OMITS see only the innermost enclosing <code>if</code> (engine ask E1); a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO counts are pinned pending owner review.' }
 
   @{ Q='compare';         Sel='two index runs';  St='parked'
      Note='Parked by owner decision, and genuinely dependent on the IR: there is no <code>ir</code> or <code>compare</code> verb in the deployed engine, confirmed against a deliberate fake control.' }
@@ -321,7 +332,7 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine('<title>dl-charts &mdash; diagram gallery</title>')
 [void]$sb.AppendLine($css)
 [void]$sb.AppendLine('<header><h1>dl-charts &mdash; diagram gallery</h1>')
-[void]$sb.AppendLine('<div class="sub">Every question in the catalogue, whether or not it is built yet. Worked examples open a real chart &mdash; the rows are live anchors, so a click opens the file in a running RAD Studio. The unbuilt rows carry the reason they are unbuilt, because &ldquo;not here yet&rdquo; and &ldquo;cannot be done&rdquo; are different answers.</div>')
+[void]$sb.AppendLine('<div class="sub">Every question in the catalogue, whether or not it is built yet. Worked examples open a real chart &mdash; the rows are live anchors, so a click opens the file in a running RAD Studio &mdash; except <code>round-trip</code>, whose answer is a Form A text document with <code>@file:line</code> anchors as text. The unbuilt rows carry the reason they are unbuilt, because &ldquo;not here yet&rdquo; and &ldquo;cannot be done&rdquo; are different answers.</div>')
 [void]$sb.AppendLine('<div class="counts">')
 [void]$sb.AppendLine("<span class=`"pill ok`">$nShipped shipped</span>")
 [void]$sb.AppendLine("<span class=`"pill`">$($CATALOGUE.Count) catalogue questions</span>")
@@ -347,7 +358,7 @@ foreach ($c in ($CATALOGUE | Where-Object { $_.St -eq 'shipped' })) {
     [void]$sb.AppendLine('<div class="card">')
     [void]$sb.AppendLine("<a href=`"$href`">$([Net.WebUtility]::HtmlEncode($m.Target))</a>")
     [void]$sb.AppendLine("<div class=`"why`">$($m.Why)</div>")
-    [void]$sb.AppendLine("<div class=`"foot`"><span>$($m.Db)</span><span>$($m.Clicks) click targets</span></div>")
+    [void]$sb.AppendLine("<div class=`"foot`"><span>$($m.Db)</span><span>$(if ($m.IsText) { "text document, $($m.Clicks) @file:line anchors (not clickable)" } else { "$($m.Clicks) click targets" })</span></div>")
     [void]$sb.AppendLine('</div>')
   }
   [void]$sb.AppendLine('</div>')
