@@ -100,7 +100,8 @@ if (-not $A.Stop) {
     [void]$secW.Items.Add((New-TraceStep 'step' "FIRES $($A.DataSet.Name).$($w0.Event) -> $($w0.Handler)" (Get-TraceAnchorText $A.DataSet.File $w0.Line) $w0.Grade $w0.Routine 'handler named on the wiring line' 'E3'))
     $visited = @{}
     $sub = Walk-Routine $w0.HandlerId $Depth $visited $Ctx
-    $entry = New-TraceStep 'step' "CALLS $($w0.HandlerShort)" (Get-TraceAnchorText $w0.HandlerPath $w0.HandlerImpl) '' $w0.Routine "from :$($w0.Line)"
+    # fix round 1: the handler runs ON the event -- the routine that wires it (Create) does not call it
+    $entry = New-TraceStep 'step' "CALLS $($w0.HandlerShort)" (Get-TraceAnchorText $w0.HandlerPath $w0.HandlerImpl) '' '' "on $($A.DataSet.Name).$($w0.Event), wired at :$($w0.Line) in $($w0.Routine)"
     foreach ($c in $sub.Conds) { [void]$entry.Children.Add($c) }
     $clientItems = @($entry) + @($sub.Items)
     $xi = [array]::IndexOf(@($clientItems | ForEach-Object { $_.Kind }), 'crosses')

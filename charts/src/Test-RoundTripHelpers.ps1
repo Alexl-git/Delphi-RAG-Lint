@@ -461,4 +461,39 @@ $res.RtDoubledQuote = (@(@(3, 1), @(5, 1)) | ForEach-Object { $o = Get-GuardCond
 # the written trace still reads back byte for byte (the condition model gained a routine field for T5-R2)
 $res.RtRoundTrip = $(if ((Write-FormA (Read-FormA $txt)) -ceq $txt) { 'identical' } else { 'differs' })
 
+# ---- 5c. fix round 1 (task review Important 1-2, rulings T5-R5, T5-R6) -------------------------
+function StepHead([string] $l) { ($l -replace '^\[\d+\] ', '') -replace ' @.*$', '' }
+function NoteOf([string] $l) { $(if ($l -match ' -- (.*)$') { $Matches[1] } else { '' }) }
+# Important 1: the else of `if ApplyResult = 0` (:557-569) and the except handler (:570-579) are not steps
+# of the path, and the :405 `ARspCmd:= rspError` is a default the :553 rspOK overwrites, not a SENDS
+$res.RtBranchSteps = @($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] .*@uGenericTableRoute\.pas:(405|562|566|573|576)( |$)' }).Count
+$res.RtApplyWhen = (@($lines | Where-Object { $_ -match '^       WHEN "ApplyResult = 0" @uGenericTableRoute\.pas:495' } | ForEach-Object { NoteOf $_ }) -join ' | ')
+$res.RtExceptCond = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:570' } | ForEach-Object { $_.Trim() }) -join ' | ')
+$res.RtRspOkNote = (@($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] SENDS rspOK ' } | ForEach-Object { NoteOf $_ }) -join ' | ')
+# the chain of enclosing conditions of a line, innermost first (synthetic): else of an if, an except handler
+$chSrc = @('procedure P;', 'begin', '  try', '    R:= Apply;', '    if R = 0 then', '    begin', '      Send(1);', '    end', '    else', '    begin',
+           '      if W then Roll;', '    end;', '  except', '    on E: Exception do Roll2;', '  end;', 'end;')
+$chPas = Join-Path $work 'chain.pas'
+[IO.File]::WriteAllText($chPas, (($chSrc -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$res.RtChain = $(try {
+  $cR = [IO.File]::ReadAllLines($chPas); $cS = Get-StrippedSourceLines $chPas
+  (@(@(11, 16), @(14, 23), @(7, 6)) | ForEach-Object {
+    $ch = Get-EnclosingChainFromLines $cR $cS $_[0] $_[1] 1   # assigned directly: the unary-comma contract
+    ($ch | ForEach-Object { "$($_.Form):$($_.Keyword):$($_.Condition):$($_.IfLine)" }) -join ' > ' }) -join ' | '
+} catch { "threw: $($_.Exception.Message)" })
+# an except whose try body ends in a statement of many lines quotes `S1 ... raises`, never the whole block
+$exSrc = @('procedure Q;', 'begin', '  try', '    A:= 1;', '    if A = 1 then', '    begin', '      B;', '      C;', '    end;', '  except', '    Exit;', '  end;', 'end;')
+$exPas = Join-Path $work 'except-long.pas'
+[IO.File]::WriteAllText($exPas, (($exSrc -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+$xR = [IO.File]::ReadAllLines($exPas); $xS = Get-StrippedSourceLines $exPas
+$xo = Get-GuardConditionFromLines $xR $xS 11 1
+$res.RtExceptLong = "$($xo.Form):$($xo.Keyword):$($xo.Condition):$($xo.IfLine)"
+# Important 2: the OnUpdateRecord handler runs inside Mem.ApplyUpdates -- after OPENS, not at the :479 attach
+$res.RtApplyOrder = (@($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] (OPENS |APPLIES Mem\.ApplyUpdates|CALLS TGenericApplyContext\.HandleUpdateRecord|RUNS Cmd\.Execute)' } | ForEach-Object { StepHead $_ }) -join ' > ')
+$res.RtHandlerNote = (@($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] CALLS TGenericApplyContext\.HandleUpdateRecord' } | ForEach-Object { NoteOf $_ }) -join ' | ')
+$res.RtEntryNote = (@($secLines['WRITE'] | Where-Object { $_ -match '^\[\d+\] CALLS TBlueprint_ViewModel\.DoAfterPostOperation' } | ForEach-Object { NoteOf $_ }) -join ' | ')
+# T5-R5: payload and call literals quoted as written; the stream format read from the SaveToStream arguments
+$res.RtPayload = (@($lines | Where-Object { $_ -match '^       WITH cmdDelta ' } | ForEach-Object { $_.Trim() }) -join ' | ')
+$res.RtSendArg = (@($secLines['WRITE'] | Where-Object { $_ -match '^\[\d+\] CALLS TBlueprint_ViewModel\.SendDeltaOperation' } | ForEach-Object { StepHead $_ }) -join ' | ')
+$res.RtStreamFmt = $(try { (@('    FMTOperation.SaveToStream(MS, sfBinary);', '  X.SaveToStream(MS);', '  X.SaveToStream(MS, TFmt(1));') | ForEach-Object { "[$(Get-StreamFormat $_)]" }) -join ',' } catch { "threw: $($_.Exception.Message)" })
 [pscustomobject]$res

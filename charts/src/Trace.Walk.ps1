@@ -390,11 +390,25 @@ function Get-ShimSpanText([string[]] $Raw, [string[]] $Stripped, [int] $L1, [int
   $pieces -join ' '
 }
 
-function New-ShimResult($X, [string] $Form, [string] $Keyword, [string] $Condition, [int] $IfLine, [int] $BlockStart, [int] $BlockEnd, [string] $Reason = '') {
+# StmtLine / StmtCol: where the statement that owns the branch starts (its if / try / case token) --
+# the point Get-EnclosingChainFromLines asks next, to walk outwards (fix round 1).
+# How many lines of the span ($L1,$C1)..($L2,$C2) carry code (the stripped copy is non-blank there).
+function Get-ShimCodeLineCount([string[]] $Stripped, [int] $L1, [int] $C1, [int] $L2, [int] $C2) {
+  $n = 0
+  for ($l = $L1; $l -le $L2; $l++) {
+    $s = $Stripped[$l - 1]
+    $a = $(if ($l -eq $L1) { [Math]::Min($C1, $s.Length) } else { 0 }); $b = $(if ($l -eq $L2) { [Math]::Min($C2, $s.Length) } else { $s.Length })
+    if ($b -gt $a -and $s.Substring($a, $b - $a).Trim()) { $n++ }
+  }
+  $n
+}
+
+function New-ShimResult($X, [string] $Form, [string] $Keyword, [string] $Condition, [int] $IfLine, [int] $BlockStart, [int] $BlockEnd, [string] $Reason = '', [int] $StmtLine = 0, [int] $StmtCol = 0) {
   if ($Form -ne 'unknown' -and $Condition.Contains('"')) {
     return (New-ShimResult $X 'unknown' '' '' 0 0 0 "the condition over the $($X.What) at :$($X.ExitLine) holds a double-quote, which a Form A condition cannot carry verbatim")
   }
-  [pscustomobject]@{ Form = $Form; Keyword = $Keyword; Condition = $Condition; IfLine = $IfLine; BlockStart = $BlockStart; BlockEnd = $BlockEnd; ExitArg = $X.ExitArg; Reason = $Reason }
+  [pscustomobject]@{ Form = $Form; Keyword = $Keyword; Condition = $Condition; IfLine = $IfLine; BlockStart = $BlockStart; BlockEnd = $BlockEnd; ExitArg = $X.ExitArg; Reason = $Reason
+                     StmtLine = $StmtLine; StmtCol = $StmtCol }
 }
 
 function New-ShimUnknown($X, [string] $Why) { New-ShimResult $X 'unknown' '' '' 0 0 0 "the $($X.What) at :$($X.ExitLine) $Why, a shape the source shim does not read" }
@@ -465,7 +479,7 @@ function New-ShimIfResult($X, [int] $ThenIdx, [string] $Keyword, [int[]] $Blk) {
   if (Test-ShimDirective $X $it) { return (New-ShimUnknown $X 'sits under a conditional-compilation directive') }
   $cond = Get-ShimSpanText $X.Raw $X.Stripped $it.L $it.E $th.L $th.C
   if ($null -eq $cond) { return (New-ShimUnknown $X 'has a condition that wraps a comment across lines') }
-  New-ShimResult $X $(if ($it.L -eq $X.ExitLine) { 'inline' } else { 'block' }) $Keyword $cond $it.L $Blk[0] $Blk[1]
+  New-ShimResult $X $(if ($it.L -eq $X.ExitLine) { 'inline' } else { 'block' }) $Keyword $cond $it.L $Blk[0] $Blk[1] '' $it.L $it.C
 }
 
 function New-ShimCaseResult($X, [int] $CaseIdx, [int] $ElseIdx) {
@@ -475,7 +489,7 @@ function New-ShimCaseResult($X, [int] $CaseIdx, [int] $ElseIdx) {
   if (Test-ShimDirective $X $ca) { return (New-ShimUnknown $X 'sits under a conditional-compilation directive') }
   $sel = Get-ShimSpanText $X.Raw $X.Stripped $ca.L $ca.C $of[0].L $of[0].E
   if ($null -eq $sel) { return (New-ShimUnknown $X 'has a condition that wraps a comment across lines') }
-  New-ShimResult $X 'case' 'UNLESS' "$sel else" $ca.L $X.Tok[$ElseIdx].L (Find-BlockEnd $X.Stripped $ca.L $ca.C)
+  New-ShimResult $X 'case' 'UNLESS' "$sel else" $ca.L $X.Tok[$ElseIdx].L (Find-BlockEnd $X.Stripped $ca.L $ca.C) '' $ca.L $ca.C
 }
 
 # The Exit sits in the handler of the try at token $TryIdx (its `except` at $ExIdx):
@@ -483,19 +497,23 @@ function New-ShimCaseResult($X, [int] $CaseIdx, [int] $ElseIdx) {
 function New-ShimExceptResult($X, [int] $TryIdx, [int] $ExIdx) {
   $tr = $X.Tok[$TryIdx]; $ex = $X.Tok[$ExIdx]
   if (Test-ShimDirective $X $tr) { return (New-ShimUnknown $X 'sits under a conditional-compilation directive') }
-  $stm = @(); $sl = $tr.L; $sc = $tr.E
+  $stm = @(); $lines = @(); $sl = $tr.L; $sc = $tr.E
   $semis = Get-ShimLevelTokens $X $TryIdx $ExIdx @(';')
   foreach ($q in (@($semis) + $ExIdx)) {
     $e = $X.Tok[$q]
     $txt = Get-ShimSpanText $X.Raw $X.Stripped $sl $sc $e.L $e.C
     if ($null -eq $txt) { return (New-ShimUnknown $X 'has a try body that wraps a comment across lines') }
-    if ($txt) { $stm += $txt }
+    if ($txt) { $stm += $txt; $lines += (Get-ShimCodeLineCount $X.Stripped $sl $sc $e.L $e.C) }
     $sl = $e.L; $sc = $e.E
   }
   if (-not $stm.Count) { return (New-ShimUnknown $X 'sits in the handler of an empty try') }
-  # ruling T4-R3: ' ... ', not ' .. ' (Pascal's range operator)
-  $s = $(if ($stm.Count -eq 1) { $stm[0] } else { "$($stm[0]) ... $($stm[-1])" })
-  New-ShimResult $X 'except' 'UNLESS' "$s raises" $ex.L $ex.L (Find-BlockEnd $X.Stripped $tr.L $tr.C)
+  # ruling T4-R3: ' ... ', not ' .. ' (Pascal's range operator). Fix round 1 (Task 5): a statement of more
+  # than three code lines is a compound block (an if / begin .. end), not a quotable statement: a LAST one is
+  # left out -- `S1 ... raises`, the connector standing for the statements after S1 -- and a FIRST (or only)
+  # one makes the form a named unknown; quoting it whole wrote a 75-line condition (HandleDelta :493-569)
+  if ($lines[0] -gt 3) { return (New-ShimUnknown $X 'sits in the handler of a try whose body opens with a compound statement') }
+  $s = $(if ($stm.Count -eq 1) { $stm[0] } elseif ($lines[-1] -gt 3) { "$($stm[0]) ..." } else { "$($stm[0]) ... $($stm[-1])" })
+  New-ShimResult $X 'except' 'UNLESS' "$s raises" $ex.L $ex.L (Find-BlockEnd $X.Stripped $tr.L $tr.C) '' $tr.L $tr.C
 }
 
 # The statement holding the Exit starts at token $P (Tok.Count: the Exit itself);
@@ -604,15 +622,28 @@ function Get-GuardCondition([string] $Path, [int] $ExitLine, [int] $RoutineStart
 # then branch, UNLESS "C" in the else branch (the reverse of a guard's, which says when the path
 # CONTINUES past its Exit). Anything the reader cannot place -- no branch, a loop, a case arm, a
 # directive -- is a named `unknown`, and the caller keeps the statement. Innermost if only (T4-R4).
-function Get-EnclosingConditionFromLines([string[]] $Raw, [string[]] $Stripped, [int] $Line, [int] $Col, [int] $RoutineStart) {
+# The keyword tokens of lines $From..$To, once per routine (fix round 1: every step line of a routine
+# asks for its enclosing chain, and re-tokenizing the body per ask was quadratic).
+function Get-ShimTokens([string[]] $Stripped, [int] $From, [int] $To) {
+  $tok = New-Object System.Collections.ArrayList
+  for ($l = [Math]::Max($From, 1); $l -le [Math]::Min($To, $Stripped.Count); $l++) {
+    foreach ($m in $script:ShimTokenRx.Matches($Stripped[$l - 1])) { [void]$tok.Add([pscustomobject]@{ L = $l; C = $m.Index; E = $m.Index + $m.Length; T = $m.Value.ToLowerInvariant() }) }
+  }
+  , $tok
+}
+
+function Get-EnclosingConditionFromLines([string[]] $Raw, [string[]] $Stripped, [int] $Line, [int] $Col, [int] $RoutineStart, $AllTok = $null) {
   $X = [pscustomobject]@{ Raw = $Raw; Stripped = $Stripped; ExitLine = $Line; ExitCol = 0; ExitArg = ''; Tok = $null; What = 'statement' }
   if ($Line -lt 1 -or $Line -gt $Stripped.Count) { return (New-ShimUnknown $X 'is outside the file') }
   $X.ExitCol = [Math]::Min([Math]::Max($Col, 0), $Stripped[$Line - 1].Length)
-  $tok = New-Object System.Collections.ArrayList
-  for ($l = [Math]::Max($RoutineStart, 1); $l -le $Line; $l++) {
-    $t = $(if ($l -eq $Line) { $Stripped[$l - 1].Substring(0, $X.ExitCol) } else { $Stripped[$l - 1] })
-    foreach ($m in $script:ShimTokenRx.Matches($t)) { [void]$tok.Add([pscustomobject]@{ L = $l; C = $m.Index; E = $m.Index + $m.Length; T = $m.Value.ToLowerInvariant() }) }
+  if ($null -eq $AllTok) { $AllTok = Get-ShimTokens $Stripped $RoutineStart $Line }
+  # the tokens that END before ($Line, $ExitCol): a binary search over the (line, end) order
+  $lo = 0; $hi = $AllTok.Count
+  while ($lo -lt $hi) {
+    $mid = [int][Math]::Floor(($lo + $hi) / 2); $m = $AllTok[$mid]
+    if ($m.L -lt $Line -or ($m.L -eq $Line -and $m.E -le $X.ExitCol)) { $lo = $mid + 1 } else { $hi = $mid }
   }
+  $tok = $(if ($lo -gt 0) { $AllTok.GetRange(0, $lo) } else { New-Object System.Collections.ArrayList })
   $X.Tok = $tok
   $g = Resolve-ShimStatement $X $tok.Count @($Line, $Line)
   if ($g.Form -ne 'unknown') { $g.Keyword = $(if ($g.Keyword -eq 'UNLESS') { 'WHEN' } else { 'UNLESS' }) }
@@ -631,6 +662,21 @@ function Get-TraceSource([string] $Path, [hashtable] $SourceOverride) {
     $script:RtSrc[$k] = [pscustomobject]@{ Stripped = (Get-StrippedSourceLines $read); Raw = [IO.File]::ReadAllLines($read, [Text.Encoding]::GetEncoding(28591)) }
   }
   $script:RtSrc[$k]
+}
+
+# The CHAIN of enclosing conditions of the statement at ($Line, $Col), innermost first: each branch's
+# owning statement (its if / try / case token) is asked in turn, until one sits in no branch. Pure.
+function Get-EnclosingChainFromLines([string[]] $Raw, [string[]] $Stripped, [int] $Line, [int] $Col, [int] $RoutineStart, $AllTok = $null) {
+  if ($null -eq $AllTok) { $AllTok = Get-ShimTokens $Stripped $RoutineStart $Line }
+  $out = @(); $l = $Line; $c = $Col
+  for ($i = 0; $i -lt 12; $i++) {
+    $e = Get-EnclosingConditionFromLines $Raw $Stripped $l $c $RoutineStart $AllTok
+    if ($e.Form -eq 'unknown') { break }
+    $out += $e
+    if (-not $e.StmtLine -or ($e.StmtLine -eq $l -and $e.StmtCol -ge $c)) { break }
+    $l = $e.StmtLine; $c = $e.StmtCol
+  }
+  , $out
 }
 
 # The fresh-checked wrapper of Get-EnclosingConditionFromLines.
@@ -744,9 +790,27 @@ function Add-RtItem($List, $Item, [int] $Line, [int] $Owner) {
   [void]$List.Add($Item)
 }
 
-function Get-LineLits($Lits) {
-  $l = @($Lits | Where-Object { $_.kind -eq 'literal' } | ForEach-Object { '"' + (ConvertTo-TraceWord ([string]$_.text) 40) + '"' })
+# A SOURCE literal for a step or facet TEXT (ruling T5-R5): the token as written (quotes, doubled '',
+# full length), or -- when the text cannot carry it (a double quote the checker would pair, ' @' / ' ['
+# / ' -- ', a byte outside ASCII) -- `(a literal at :N)`. Never shortened or rewritten.
+function Format-TraceLiteral($Lit, $F, $Ctx) {
+  $raw = $(if ($F.PSObject.Properties['Fid'] -and $F.Fid) { (Get-TraceSource $F.Path $Ctx.SourceOverride).Raw } else { $null })
+  $lt = Get-LiteralSourceText $Lit $raw
+  $(if ($lt -match '"| @| \[| -- |--$|[^\x20-\x7E]') { "(a literal at :$([int]$Lit.line))" } else { $lt })
+}
+
+function Get-LineLits($Lits, $F, $Ctx) {
+  $l = @($Lits | Where-Object { $_.kind -eq 'literal' } | ForEach-Object { Format-TraceLiteral $_ $F $Ctx })
   $(if ($l.Count) { ' ' + ($l -join ' ') } else { '' })
+}
+
+# The stream format a `SaveToStream(<stream>, <format>)` call names: its last argument when that is one
+# plain identifier, as written; '' otherwise (the caller then says just "stream"). Pure, over one raw line.
+function Get-StreamFormat([string] $RawLine) {
+  $m = [regex]::Match($RawLine, '(?i)\bSaveToStream\s*\(([^()]*)\)')
+  if (-not $m.Success) { return '' }
+  $a = @($m.Groups[1].Value -split ',' | ForEach-Object { $_.Trim() })
+  $(if ($a.Count -ge 2 -and $a[-1] -match '^[A-Za-z_]\w*$') { $a[-1] } else { '' })
 }
 
 # The implementation of an UNBOUND `<Receiver>.<Name>(...)`: the receiver's declared
@@ -829,7 +893,8 @@ function Get-ElseNote($F, $G, $Ctx) {
   foreach ($o in @($in | Where-Object { $_.kind -eq 'call' -and $script:RtOps.ContainsKey([string]$_.nm) })) {
     $parts += "$(if ($o.recv) { [string]$o.recv + '.' })$([string]$o.nm) @$(Get-TraceAnchorText $F.Path ([int]$o.line))"
   }
-  $en = @($in | Where-Object { [string]$_.tkind -eq 'enum_value' } | ForEach-Object { [string]$_.tname } | Sort-Object -Unique)
+  # the protocol constants only (fix round 1: `mtError`, a logger's level, is not what the branch answers)
+  $en = @($in | Where-Object { [string]$_.tkind -eq 'enum_value' -and ([string]$_.tname -like 'rsp*' -or [string]$_.tname -like 'cmd*') } | ForEach-Object { [string]$_.tname } | Sort-Object -Unique)
   if ($en.Count) { $parts += ($en -join '/') }
   $lits = @($F.Lits | Where-Object { [int]$_.line -ge $G.BlockStart -and [int]$_.line -le $G.BlockEnd -and $_.kind -in 'literal', 'format' -and ([string]$_.text).Trim().Length -gt 8 } | Select-Object -First 1)
   foreach ($l in $lits) {
@@ -848,14 +913,18 @@ function Get-PayloadText($F, [int] $Line, $Ctx) {
   $before = @($F.Lits | Where-Object { [int]$_.line -lt $Line -and $_.kind -eq 'literal' })
   $pl = @($before | Where-Object { $Ctx.Table -and ([string]$_.text).ToUpperInvariant().Contains([string]$Ctx.Table) })
   if (-not $pl.Count) { $pl = @($before | Where-Object { [string]$_.text -match '[=|]' }) }
-  $t = (@($pl | ForEach-Object { '"' + (ConvertTo-TraceWord ([string]$_.text) 40) + '"' }) -join ' + ')
-  if (@($F.Refs | Where-Object { [int]$_.line -lt $Line -and [string]$_.nm -eq 'SaveToStream' }).Count) { $t += $(if ($t) { ' + ' } else { '' }) + 'sfBinary stream' }
+  $t = (@($pl | ForEach-Object { Format-TraceLiteral $_ $F $Ctx }) -join ' + ')
+  $sv = @($F.Refs | Where-Object { [int]$_.line -lt $Line -and [string]$_.nm -eq 'SaveToStream' -and $_.kind -eq 'call' } | Select-Object -Last 1)
+  if ($sv.Count) {
+    $fmt = Get-StreamFormat ((Get-TraceSource $F.Path $Ctx.SourceOverride).Raw[[int]$sv[0].line - 1])
+    $t += $(if ($t) { ' + ' } else { '' }) + $(if ($fmt) { "$fmt stream" } else { 'stream' })
+  }
   $(if ($t) { $t } else { 'payload built before the send (no literal found)' })
 }
 
-function Add-CallsStep($List, $Tgt, $Sub, $Caller, [int] $SiteLine, [string] $Lits = '', [switch] $Always) {
+function Add-CallsStep($List, $Tgt, $Sub, $Caller, [int] $SiteLine, [string] $Lits = '', [switch] $Always, [string] $Note = '') {
   if (-not $Always -and -not $Sub.Items.Count -and -not $Sub.Conds.Count) { return }
-  $s = New-TraceStep 'step' "CALLS $($Tgt.Short)$Lits" (Get-TraceAnchorText $Tgt.Path $Tgt.Line) $Tgt.Grade $Caller.Short "from :$SiteLine" $Tgt.Ask
+  $s = New-TraceStep 'step' "CALLS $($Tgt.Short)$Lits" (Get-TraceAnchorText $Tgt.Path $Tgt.Line) $Tgt.Grade $Caller.Short $(if ($Note) { $Note } else { "from :$SiteLine" }) $Tgt.Ask
   $s | Add-Member -NotePropertyName CalleeId -NotePropertyValue ([int]$Tgt.Id)
   foreach ($c in $Sub.Conds) { [void]$s.Children.Add($c) }
   Add-RtItem $List $s $SiteLine $Caller.Id
@@ -877,9 +946,37 @@ function Get-LineCandidates($Rs, $Lits, $F) {
   , $out
 }
 
-# The OMITS disclosure (T5-R1): how many candidate calls were left out and the verbatim branch
-# conditions that left them out (generated connectors, E1). $Recs: Count, Keyword, Condition,
-# Anchor, Routine. A condition the note cannot carry ('; ') is named by its anchor only.
+# A line that answers the path: a response written or a commit (the success branch of an if, fix round 1).
+function Test-SuccessLine($Rs) {
+  (@($Rs | Where-Object { [string]$_.tkind -eq 'enum_value' -and [string]$_.tname -like 'rsp*' }).Count -and @($Rs | Where-Object { $_.kind -eq 'write' }).Count) -or
+  [bool]@($Rs | Where-Object { $_.kind -eq 'call' -and [string]$_.nm -in 'CommitUpdates', 'Commit' }).Count
+}
+
+# How many STEPS one line would have yielded, with the classifier's own precedence (T5-R6: an OMITS
+# counts these, not calls): a crossing or a response is one, else its dataset ops, else its FIB$ SQL,
+# event wiring, calls resolvable by name, and bound calls whose subtree holds a step -- the last found
+# by a DRY walk over copies of Visited and Seen, so the omission changes nothing the real walk sees.
+function Get-LineYield($I, $F, [int] $Depth, [hashtable] $Visited, $Ctx) {
+  $rs = @($I.Rs)
+  $en = @($rs | Where-Object { [string]$_.tkind -eq 'enum_value' })
+  if (@($en | Where-Object { [string]$_.tname -like 'cmd*' }).Count -and @($rs | Where-Object { $_.kind -eq 'call' -and $_.tpipe -and [int]$_.tpipe -eq 1 }).Count) { return 1 }
+  if (@($en | Where-Object { [string]$_.tname -like 'rsp*' }).Count) { return 1 }
+  $ops = @($rs | Where-Object { $_.kind -eq 'call' -and $script:RtOps.ContainsKey([string]$_.nm) })
+  if ($ops.Count) { return $ops.Count }
+  $n = @($I.Lits | Where-Object { [string]$_.text -match $script:RtFibSqlRx }).Count
+  if (@($rs | Where-Object { $_.kind -eq 'member-access' -and [string]$_.nm -in $script:RtEvents }).Count) { $n++ }
+  $dry = @{}; foreach ($k in $Ctx.Keys) { $dry[$k] = $Ctx[$k] }; $dry['Seen'] = $Ctx.Seen.Clone()
+  foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and $_.tid -and [int]$_.tistart -gt 0 -and -not ($_.tpipe -and [int]$_.tpipe -eq 1) -and [string]$_.tkind -ne 'constructor' })) {
+    $sub = Walk-Routine ([int]$c.tid) ($Depth - 1) ($Visited.Clone()) $dry
+    if ($sub.Items.Count -or $sub.Conds.Count) { $n++ }
+  }
+  $n += @($rs | Where-Object { $_.kind -eq 'call' -and -not $_.tid -and $_.recv -and (Resolve-ImplByName ([string]$_.recv) ([string]$_.nm) $F).Count -eq 1 }).Count
+  $n
+}
+
+# The OMITS disclosure (T5-R1): how many STEPS the omitted lines would have yielded (T5-R6) and the
+# verbatim branch conditions that left them out (generated connectors, E1). $Recs: Count, Keyword,
+# Condition, Anchor, Routine. A condition the note cannot carry ('; ') is named by its anchor only.
 function New-OmitStep($Recs) {
   $n = [int](@($Recs) | Measure-Object -Property Count -Sum).Sum
   $rn = @($Recs | ForEach-Object { [string]$_.Routine } | Sort-Object -Unique)
@@ -890,7 +987,7 @@ function New-OmitStep($Recs) {
     $seen[$k] = 1
     $cs += $(if ($r.Condition -match '; |[\r\n]') { "$($r.Keyword) at $($r.Anchor)" } else { "$($r.Keyword) `"$($r.Condition)`" @$($r.Anchor)" })
   }
-  $s = New-TraceStep 'step' "OMITS $n call(s) in branches for other tables" $Recs[0].Anchor '' $(if ($rn.Count -eq 1) { $rn[0] } else { '' }) ('not walked, the branch conditions: ' + ($cs -join ' / ')) 'E1'
+  $s = New-TraceStep 'step' "OMITS $n step(s) in branches for other tables, innermost enclosing if only" $Recs[0].Anchor '' $(if ($rn.Count -eq 1) { $rn[0] } else { '' }) ('not walked, the branch conditions: ' + ($cs -join ' / ')) 'E1'
   $s | Add-Member -NotePropertyName Omits -NotePropertyValue @($Recs)
   $s
 }
@@ -916,6 +1013,10 @@ function Merge-TraceOmits($Section) {
 # `WHEN "<x> = '<TABLE>'"` for a known table that is not the anchor's) is not on
 # the anchor's path: it is not walked, and one OMITS step counts it and quotes the
 # condition. Only a routine whose literals name such a table is read for this.
+# Fix round 1: every step line's enclosing CHAIN is read; the else branch of an if whose
+# then branch answers (a response or a commit) and an except handler are that
+# condition's else note, not path steps; a response overwritten later on the path is a
+# default; an attached On* handler runs at its receiver's ApplyUpdates, not at the attach.
 function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
   $items = New-Object System.Collections.ArrayList
   $pend  = New-Object System.Collections.ArrayList
@@ -947,29 +1048,98 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
     if ($condSeen.ContainsKey($ck)) { continue }
     $condSeen[$ck] = 1
     # VERBATIM (P16 / T4-C1): the shim's text as it stands -- New-TraceCond refuses what it cannot carry
-    $conds += [pscustomobject]@{ IfLine = $g.IfLine; Item = (New-TraceCond $g.Keyword $g.Condition (Get-TraceAnchorText $F.Path $g.IfLine) (Get-ElseNote $F $g $Ctx) 'E1') }
+    $conds += [pscustomobject]@{ IfLine = $g.IfLine; Guard = $true; Item = (New-TraceCond $g.Keyword $g.Condition (Get-TraceAnchorText $F.Path $g.IfLine) (Get-ElseNote $F $g $Ctx) 'E1') }
   }
 
+  # ---- the branch structure of the body's step lines (T5-R1; fix round 1, Important 1) -------------
+  # Every line that could make a step gets the CHAIN of its enclosing conditions, read once over the
+  # routine's tokens from fresh source (E1: the index holds no branches).
+  $src = Get-TraceSource $F.Path $Ctx.SourceOverride
+  $allTok = Get-ShimTokens $src.Stripped $F.ImplStart $F.ImplEnd
+  $allLines = @(@($refsAt.Keys) + @($litsAt.Keys) | Sort-Object -Unique)
+  $info = @{}
+  foreach ($ln in $allLines) {
+    if ($skip.ContainsKey($ln)) { continue }
+    $rs = @(if ($refsAt.ContainsKey($ln)) { $refsAt[$ln] }); $lits = @(if ($litsAt.ContainsKey($ln)) { $litsAt[$ln] })
+    $cand = Get-LineCandidates $rs $lits $F
+    $evr = @($rs | Where-Object { $_.kind -eq 'member-access' -and [string]$_.nm -in $script:RtEvents })
+    if (-not $cand.Count -and -not $evr.Count) { continue }
+    $col = [int](@(@($cand) + @($evr)) | Measure-Object -Property col -Minimum).Minimum
+    $info[$ln] = [pscustomobject]@{ Rs = $rs; Lits = $lits; Chain = (Get-EnclosingChainFromLines $src.Raw $src.Stripped $ln $col $F.ImplStart $allTok) }
+  }
+  $infoLines = @($info.Keys | Sort-Object)
+
+  # T5-R1: a line whose innermost enclosing IF is a branch for another table is not walked -- the first
+  # if of its chain, so a try / except inside that branch (HandleDelta :516-531) is inside it too. Only
+  # what would have yielded a step is counted (T5-R6: a logger call yields none)
   $others = @(@($Ctx.SqlSet.Names) | Where-Object { $Ctx.Table -and ([string]$_).ToUpperInvariant() -ne ([string]$Ctx.Table).ToUpperInvariant() } | ForEach-Object { ([string]$_).ToUpperInvariant() })
   $branchy = [bool](@($F.Lits | Where-Object { $_.kind -eq 'literal' -and $others -contains ([string]$_.text).ToUpperInvariant() }).Count)
-  $omitItem = $null; $omitRecs = New-Object System.Collections.ArrayList
-  # every line with a ref OR a literal: a SQL literal can stand on a line of its own (uDatasetsDef.pas:130)
-  foreach ($ln in @(@($refsAt.Keys) + @($litsAt.Keys) | Sort-Object -Unique)) {
-    if ($skip.ContainsKey($ln)) { continue }
-    $rs   = @(if ($refsAt.ContainsKey($ln)) { $refsAt[$ln] })
-    $lits = @(if ($litsAt.ContainsKey($ln)) { $litsAt[$ln] })
-    if ($branchy) {
-      $cand = Get-LineCandidates $rs $lits $F
-      if ($cand.Count) {
-        $col = [int](@($cand) | Measure-Object -Property col -Minimum).Minimum
-        $e = Get-EnclosingCondition $F.Path $ln $col $F.ImplStart $Ctx.SourceOverride
-        if ($e.Form -ne 'unknown' -and (Test-OtherTableBranch $e.Keyword $e.Condition $Ctx.Table $Ctx.SqlSet.Names)) {
-          [void]$omitRecs.Add([pscustomobject]@{ Count = $cand.Count; Keyword = $e.Keyword; Condition = $e.Condition; Anchor = (Get-TraceAnchorText $F.Path $e.IfLine); Routine = $F.Short })
-          if (-not $omitItem) { $omitItem = New-OmitStep $omitRecs; Add-RtItem $items $omitItem $ln $Id }
-          continue
-        }
+  $omitLines = @{}; $omitRecs = New-Object System.Collections.ArrayList; $omitFirst = 0
+  if ($branchy) {
+    foreach ($ln in $infoLines) {
+      $e0 = @($info[$ln].Chain | Where-Object { $_.Form -in 'inline', 'block' } | Select-Object -First 1)
+      if (-not $e0.Count -or -not (Test-OtherTableBranch $e0[0].Keyword $e0[0].Condition $Ctx.Table $Ctx.SqlSet.Names)) { continue }
+      $omitLines[$ln] = 1
+      $y = Get-LineYield $info[$ln] $F $Depth $Visited $Ctx
+      if ($y -gt 0) {
+        [void]$omitRecs.Add([pscustomobject]@{ Count = $y; Keyword = $e0[0].Keyword; Condition = $e0[0].Condition; Anchor = (Get-TraceAnchorText $F.Path $e0[0].IfLine); Routine = $F.Short })
+        if (-not $omitFirst) { $omitFirst = $ln }
       }
     }
+  }
+
+  # Important 1: an if whose THEN branch holds a response or a commit (the success branch) -- its steps
+  # carry WHEN "<cond>", and its ELSE branch is that condition's `-- else ...` note, not steps of the
+  # path; a line in an except handler is the note of UNLESS "<try body> raises". Innermost first.
+  $br = @{}
+  foreach ($ln in $infoLines) {
+    if ($omitLines.ContainsKey($ln)) { continue }
+    foreach ($e in $info[$ln].Chain) {
+      if ($e.Form -notin 'inline', 'block') { continue }
+      $k = "$($e.StmtLine):$($e.StmtCol)"
+      if (-not $br.ContainsKey($k)) { $br[$k] = [pscustomobject]@{ E = $e; Then = (New-Object System.Collections.ArrayList); Else = (New-Object System.Collections.ArrayList); Removed = (New-Object System.Collections.ArrayList) } }
+      if ($e.Keyword -ceq 'WHEN') { [void]$br[$k].Then.Add($ln) } else { [void]$br[$k].Else.Add($ln) }
+    }
+  }
+  $qual = @{}
+  foreach ($k in $br.Keys) { if (@($br[$k].Then | Where-Object { Test-SuccessLine $info[$_].Rs }).Count) { $qual[$k] = 1 } }
+  $xb = @{}
+  foreach ($ln in $infoLines) {
+    if ($omitLines.ContainsKey($ln)) { continue }
+    foreach ($e in $info[$ln].Chain) {
+      if ($e.Form -eq 'except') {
+        $k = "$($e.StmtLine):$($e.StmtCol)"
+        if (-not $xb.ContainsKey($k)) { $xb[$k] = [pscustomobject]@{ E = $e; Removed = (New-Object System.Collections.ArrayList) } }
+        [void]$xb[$k].Removed.Add($ln); $skip[$ln] = 1; break
+      }
+      $k = "$($e.StmtLine):$($e.StmtCol)"
+      if ($e.Form -in 'inline', 'block' -and $e.Keyword -ceq 'UNLESS' -and $qual.ContainsKey($k)) { [void]$br[$k].Removed.Add($ln); $skip[$ln] = 1; break }
+    }
+  }
+  foreach ($k in @($qual.Keys | Sort-Object { $br[$_].E.IfLine })) {
+    $b = $br[$k]
+    $nt = $(if ($b.Removed.Count) { Get-ElseNote $F ([pscustomobject]@{ BlockStart = ($b.Removed | Measure-Object -Minimum).Minimum; BlockEnd = ($b.Removed | Measure-Object -Maximum).Maximum; ExitArg = '' }) $Ctx } else { '' })
+    $conds += [pscustomobject]@{ IfLine = $b.E.IfLine; HostLines = @($b.Then); Item = (New-TraceCond 'WHEN' $b.E.Condition (Get-TraceAnchorText $F.Path $b.E.IfLine) $nt 'E1') }
+  }
+  foreach ($k in @($xb.Keys | Sort-Object { $xb[$_].E.IfLine })) {
+    $b = $xb[$k]
+    # a handler that does nothing the walk would show (a logger line) has no else to name
+    if (-not (@($b.Removed | ForEach-Object { Get-LineYield $info[$_] $F $Depth $Visited $Ctx }) | Measure-Object -Sum).Sum) { continue }
+    $nt = Get-ElseNote $F ([pscustomobject]@{ BlockStart = ($b.Removed | Measure-Object -Minimum).Minimum; BlockEnd = ($b.Removed | Measure-Object -Maximum).Maximum; ExitArg = '' }) $Ctx
+    $conds += [pscustomobject]@{ IfLine = $b.E.IfLine; HostFrom = $b.E.StmtLine; HostTo = $b.E.IfLine; Item = (New-TraceCond 'UNLESS' $b.E.Condition (Get-TraceAnchorText $F.Path $b.E.IfLine) $nt 'E1') }
+  }
+
+  # Important 2: an On* handler ATTACHED to a dataset runs inside that dataset's ApplyUpdates, not at the
+  # attach line -- its CALLS subtree waits for the first later `<receiver>.ApplyUpdates` step
+  $deferred = New-Object System.Collections.ArrayList
+  foreach ($ln in $allLines) {
+    if ($skip.ContainsKey($ln)) { continue }
+    if ($omitLines.ContainsKey($ln)) {
+      if ($ln -eq $omitFirst) { Add-RtItem $items (New-OmitStep $omitRecs) $ln $Id }
+      continue
+    }
+    $rs   = @(if ($refsAt.ContainsKey($ln)) { $refsAt[$ln] })
+    $lits = @(if ($litsAt.ContainsKey($ln)) { $litsAt[$ln] })
     $enum = @($rs | Where-Object { [string]$_.tkind -eq 'enum_value' })
     $cmd  = @($enum | Where-Object { [string]$_.tname -like 'cmd*' })
     $rsp  = @($enum | Where-Object { [string]$_.tname -like 'rsp*' })
@@ -997,7 +1167,15 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
     $ops = @($rs | Where-Object { $_.kind -eq 'call' -and $script:RtOps.ContainsKey([string]$_.nm) })
     foreach ($o in $ops) {
       $recv = $(if ($o.recv) { [string]$o.recv + '.' } else { '' })
-      Add-RtItem $items (New-TraceStep 'step' "$($script:RtOps[[string]$o.nm]) $recv$([string]$o.nm)$(Get-LineLits $lits)" (Get-TraceAnchorText $F.Path $ln) '' $F.Short) $ln $Id
+      Add-RtItem $items (New-TraceStep 'step' "$($script:RtOps[[string]$o.nm]) $recv$([string]$o.nm)$(Get-LineLits $lits $F $Ctx)" (Get-TraceAnchorText $F.Path $ln) '' $F.Short) $ln $Id
+      if ([string]$o.nm -eq 'ApplyUpdates') {
+        $rv = ([string]$o.recv) -replace '^Self\.', ''
+        foreach ($d in @($deferred | Where-Object { $_.Recv -eq $rv })) {
+          $sub = Walk-Routine $d.Hs.Id ($Depth - 1) $Visited $Ctx
+          Add-CallsStep $items $d.Hs $sub $F $ln -Note "fired by $rv.ApplyUpdates at :$ln, attached as $($d.Recv).$($d.Event) at :$($d.Line)"
+          $deferred.Remove($d)
+        }
+      }
     }
     if ($ops.Count) { continue }
     # a FIB$ literal in the body
@@ -1016,8 +1194,12 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
         if ($hs) {
           $verb = $(if ([string]$ev[0].nm -like 'On*') { 'ATTACHES' } else { 'FIRES' })
           Add-RtItem $items (New-TraceStep 'step' "$verb $([string]$ev[0].recv).$([string]$ev[0].nm) -> $($hs.Short)" (Get-TraceAnchorText $F.Path $ln) $hs.Grade $F.Short '' $hs.Ask) $ln $Id
-          $sub = Walk-Routine $hs.Id ($Depth - 1) $Visited $Ctx
-          Add-CallsStep $items $hs $sub $F $ln
+          if ($verb -eq 'ATTACHES' -and $ev[0].recv) {
+            [void]$deferred.Add([pscustomobject]@{ Recv = (([string]$ev[0].recv) -replace '^Self\.', ''); Event = [string]$ev[0].nm; Hs = $hs; Line = $ln })
+          } else {
+            $sub = Walk-Routine $hs.Id ($Depth - 1) $Visited $Ctx
+            Add-CallsStep $items $hs $sub $F $ln
+          }
           continue
         }
       }
@@ -1026,7 +1208,7 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
     foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and $_.tid -and [int]$_.tistart -gt 0 -and -not ($_.tpipe -and [int]$_.tpipe -eq 1) -and [string]$_.tkind -ne 'constructor' })) {
       $sub = Walk-Routine ([int]$c.tid) ($Depth - 1) $Visited $Ctx
       $tgt = [pscustomobject]@{ Id = [int]$c.tid; Short = (Get-ShortName ([string]$c.tq) (Get-UnitName ([string]$c.tpath))); Path = [string]$c.tpath; Line = [int]$c.tistart; Grade = ''; Ask = '' }
-      Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits)
+      Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits $F $Ctx)
     }
     # unbound calls with a receiver the index declares: the implementation BY NAME
     foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and -not $_.tid -and $_.recv })) {
@@ -1036,7 +1218,7 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
         $i = $impl[0]
         $sub = Walk-Routine ([int]$i.id) ($Depth - 1) $Visited $Ctx
         $tgt = [pscustomobject]@{ Id = [int]$i.id; Short = (Get-ShortName ([string]$i.q) (Get-UnitName ([string]$i.path))); Path = [string]$i.path; Line = [int]$i.istart; Grade = 'by name'; Ask = $ask }
-        Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits) -Always
+        Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits $F $Ctx) -Always
         foreach ($fl in (Get-FibLiterals ([int]$i.fid))) {
           $k = "$([string]$i.path)|$([int]$fl.line)"
           if ($Ctx.Seen.ContainsKey($k)) { continue }
@@ -1048,11 +1230,26 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
       }
     }
   }
-  if ($omitItem) {
-    $om = New-OmitStep $omitRecs
-    $items[$items.IndexOf($omitItem)] = $om
-    $om | Add-Member -NotePropertyName Line -NotePropertyValue $omitItem.Line -Force
-    $om | Add-Member -NotePropertyName Owner -NotePropertyValue $Id -Force
+  # an attached handler no ApplyUpdates of its receiver fires in this routine: at the end, saying so
+  foreach ($d in @($deferred)) {
+    $sub = Walk-Routine $d.Hs.Id ($Depth - 1) $Visited $Ctx
+    Add-CallsStep $items $d.Hs $sub $F $d.Line -Note "attached as $($d.Recv).$($d.Event) at :$($d.Line), no $($d.Recv).ApplyUpdates follows in this routine"
+  }
+  # Important 1: a response written and then OVERWRITTEN on the path (`ARspCmd:= rspError` :405, then
+  # `ARspCmd:= rspOK` :553) is a default, not a send. The later send names it, and every Exit guard
+  # between the two says it responds with that default.
+  $sends = @($items | Where-Object { $_.Owner -eq $Id -and $_.Kind -eq 'step' -and $_.Text -like 'SENDS rsp*' })
+  foreach ($s0 in $sends) {
+    $tg0 = @(@(if ($refsAt.ContainsKey([int]$s0.Line)) { $refsAt[[int]$s0.Line] }) | Where-Object { $_.kind -eq 'write' } | ForEach-Object { [string]$_.nm })
+    if (-not $tg0.Count) { continue }
+    $later = @($sends | Where-Object { $_.Line -gt $s0.Line -and $items.Contains($_) -and @(@(if ($refsAt.ContainsKey([int]$_.Line)) { $refsAt[[int]$_.Line] }) | Where-Object { $_.kind -eq 'write' -and [string]$_.nm -eq $tg0[0] }).Count } | Select-Object -First 1)
+    if (-not $later.Count) { continue }
+    $rn = $s0.Text -replace '^SENDS ', ''
+    $items.Remove($s0)
+    $later[0].Note = ((@($later[0].Note, "overwrites the $rn default set at :$($s0.Line)") | Where-Object { $_ }) -join ', ')
+    foreach ($gc in @($conds | Where-Object { $_.PSObject.Properties['Guard'] -and $_.IfLine -gt $s0.Line -and $_.IfLine -lt $later[0].Line })) {
+      $gc.Item.Note = $(if ($gc.Item.Note) { "$($gc.Item.Note), responds $rn, the default set at :$($s0.Line)" } else { "else responds $rn, the default set at :$($s0.Line)" })
+    }
   }
   # the routine's own SQL facts, at its last line so a condition never lands on them -- only the
   # anchor's table: a fact naming another table is not a step of this path (T5-R1)
@@ -1063,7 +1260,10 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
   foreach ($c in $conds) {
     $own = @($items | Where-Object { $_.Owner -eq $Id -and $_.Kind -ne 'stops' -and -not $_.PSObject.Properties['Omits'] })
     # $hostStep, never $host: $Host is PowerShell's read-only automatic variable (ruling P1)
-    $hostStep = @($own | Where-Object { $_.Line -eq $c.IfLine } | Select-Object -First 1)
+    $hostStep = @()
+    if ($c.PSObject.Properties['HostLines']) { $hostStep = @($own | Where-Object { $c.HostLines -contains $_.Line } | Select-Object -First 1) }
+    elseif ($c.PSObject.Properties['HostFrom']) { $hostStep = @($own | Where-Object { $_.Line -gt $c.HostFrom -and $_.Line -lt $c.HostTo } | Select-Object -First 1) }
+    if (-not $hostStep.Count) { $hostStep = @($own | Where-Object { $_.Line -eq $c.IfLine } | Select-Object -First 1) }
     if (-not $hostStep.Count) { $hostStep = @($own | Where-Object { $_.Kind -eq 'step' -and $_.Line -lt $c.IfLine } | Select-Object -Last 1) }
     if ($hostStep.Count) {
       # T5-R2: hung on the CALLS step of ANOTHER routine, the condition names its own routine
