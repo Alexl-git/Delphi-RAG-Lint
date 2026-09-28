@@ -265,3 +265,74 @@ model tests cover; the form only renders.
   toolbar's class is `TToolBar` (VCL registers Delphi class names). A click is a
   posted mouse down/up at `TB_GETITEMRECT`; a posted `WM_COMMAND` does nothing.
   Raw DSL's memo has no window until its tab has been shown.
+
+## Unit Rules harvest -- hand-over notes (feat/unit-harvest, 2026-09-28)
+
+The Unit Rules tab lists the units a SOURCE uses (pasted or dropped text,
+`.pas` / `.dpr` / `.dproj` files) and classifies each against a DESTINATION
+`.dproj`, so a unit the destination cannot resolve shows as MISSING before
+anything is converted. Spec and plan (gitignored, main tree):
+`docs\superpowers\specs\2026-09-28-unit-rules-harvest-and-missing-design.md`,
+`docs\superpowers\plans\2026-09-28-unit-rules-harvest-and-missing.md`.
+
+* **Three pure units own the logic; the tests cover all three.**
+  `ConvRules.UsesHarvest` -- text / `.dpr` / `.dproj` parsing, `HarvestFiles`,
+  the merge. `ConvRules.UnitStatus` -- `TDestinationResolver`, which classifies
+  a unit against the destination. `ConvRules.UnitMask` -- the session masks and
+  the display order. `ConvRules.DropTarget` is Windows glue only.
+* **The resolver is `TDestinationResolver`, NOT `TUnitResolver`.**
+  `ConvRules.Units` already declares an unrelated `TUnitResolver` (a
+  reference-to-function type for `DeriveUnits`); the two compiled side by side
+  only by uses order. Do not "restore" the plan's name.
+* **A destination MEMBER is a `.dpr` entry WITH an `in` path.** A plain entry
+  (`Vcl.Forms`) is not a member; it resolves through the file / library / scope
+  steps like any other name. Counting it as a member reported library units as
+  `project` and defeated the hide-library mask.
+* **`MainForm` is wiring only.** Every decision a test can check lives in the
+  three pure units; `MainForm.pas` is outside the tests' compile closure (see
+  above), so build the editor too.
+* **Harvested rows are `Data = nil` with Kind `(used)`** (Examine candidates are
+  `(candidate)`, also `Data = nil`). They are session state, never written to
+  the book. A harvested name that is also an Examine candidate shows ONCE, as
+  the harvested row (`IsHarvested`) -- it carries the status and used-by that a
+  candidate row lacks.
+* **Delete acts on every selected row** (MultiSelect is on): a rule row deletes
+  its node, a `(used)` / `(candidate)` row is dismissed from its own session
+  set. More than one row asks first.
+* **The resolver is cached on `<DPROJ upper-cased>|<platform>`**, and the key is
+  recorded only when the library list loaded -- a failed library load is
+  retried on the next classify, not cached. `cpBoth` classifies as Win64 and
+  says so in the status line.
+* **`.dproj` reading is deliberately narrow:** only the `'$(Base)'!=''` and
+  `'$(Base_<P>)'!=''` property groups are read; a search-path entry holding a
+  macro (`$(Platform)`, `$(Config)`, ...) is skipped and COUNTED in the status
+  line, never guessed at.
+* **Degraded classification goes red.** Destination unreadable, library list
+  unavailable (MISSING is then over-reported) or classification stopped part
+  way sets `FDestWarn`, and the harvest status line goes out through
+  `SetError`, not `SetStatus`. The informational notes (macros skipped, TO =
+  Both) stay on `SetStatus`. Exceptions from the `.dproj`/`.dpr` read and the
+  classify loop are caught and reported -- a bad project must not crash a drop.
+* **The strip's height is `HarvestRowResize`'s job, not `TPanel.AutoSize`.**
+  Each flow row AutoSizes to its wrapped content; the strip's height is set to
+  the sum of the rows on each row's `OnResize`. `AutoSize` on the strip itself
+  measurably did not re-run after the rows wrapped, and the list covered the
+  folder edit.
+* **The OLE drop target is on the FORM**, registered in `CreateWnd` (a VCL
+  style switch recreates the handle) and revoked in `DestroyWindowHandle`, NOT
+  `DestroyWnd` -- `TWinControl.Destroy` calls `DestroyWindowHandle` directly,
+  so a `DestroyWnd` revoke is skipped at form destruction.
+* **A drop hands its payload on with `TThread.ForceQueue`,** after `Drop`
+  returns, so Explorer's drag loop is never held while the editor reads files
+  or queries the engine.
+* **Paste catches `EClipboardException` only**, around the clipboard READ, and
+  reports "another program has the clipboard open" through `SetError`. A driven
+  run hung on the old modal "Cannot open clipboard: Access is denied".
+* **GUI check: `tests\gui\drive-unit-harvest.ps1 -Exe <ConvRulesEditor.exe>`**
+  (a frozen `drag-lint.exe` beside the exe; needs ORM3's `CLIENT\DM\dmCPData.pas`).
+  Drives text paste, a CF_HDROP file-list paste, and a held clipboard (any
+  editor dialog = FAIL). RED on the pre-feature build, RED on a Task-6 build for
+  the file-list case, GREEN 13/0 on the branch head. It is NOT wired into the
+  `tests\autotest` battery -- run it by hand, like `drive-unit-picker.ps1`.
+  Explorer drag-drop itself, a real Ctrl+V keypress and the visual checks (bold
+  MISSING, wrapped strip at other widths) are owner checks.
