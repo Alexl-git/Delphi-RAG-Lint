@@ -35,6 +35,10 @@ uses
   , ConvRules.RuleChooser in 'ConvRules.RuleChooser.pas'
   , ConvRules.UnitPick in 'ConvRules.UnitPick.pas'
   , ConvRules.UnitPicker in 'ConvRules.UnitPicker.pas'
+  , ConvRules.UsesHarvest in 'ConvRules.UsesHarvest.pas'
+  , ConvRules.UnitStatus in 'ConvRules.UnitStatus.pas'
+  , ConvRules.UnitMask in 'ConvRules.UnitMask.pas'
+  , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

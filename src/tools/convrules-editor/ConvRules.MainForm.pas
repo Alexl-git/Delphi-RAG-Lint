@@ -20,6 +20,7 @@ uses
   , System.IOUtils
   , System.Generics.Collections
   , Winapi.Windows
+  , Winapi.ActiveX // IDropTarget: a field's type, so INTERFACE-visible
   , Vcl.Forms
   , Vcl.Controls
   , Vcl.StdCtrls
@@ -46,6 +47,9 @@ uses
   , ConvRules.SkipList // TSkipList: a field's type, so this has to be INTERFACE-visible
   , ConvRules.Usage // TUsedUnitRef: a field's type, so this has to be INTERFACE-visible
   , ConvRules.UnitPicker // TUnitPickSide: a method parameter's type, so INTERFACE-visible
+  , ConvRules.UsesHarvest // THarvestedUnit: a field's type, so INTERFACE-visible
+  , ConvRules.UnitStatus  // dl:unit ConvRules.UnitStatus accepted -- TDestinationResolver types a field; STATUS_MISSING_TEXT travels with StatusText so the bold-MISSING draw cannot drift from the text it matches
+  , ConvRules.UnitMask    // TUnitRow: a field's type
   ;
 
 const
@@ -104,6 +108,26 @@ type
       FPickProjLoaded: Boolean       ;
       FPickW32Loaded : Boolean       ;
       FPickW64Loaded : Boolean       ;
+      FTabUnits      : TTabSheet             ; // the Unit Rules page; "is it active?" checks
+      FHarvestStrip  : TPanel                ; // the control strip above FUnitList
+      FHarvestBtnRow : TFlowPanel            ; // Add source / Paste / Clear row (Task 7 adds none; Task 6 adds rows below)
+      FDropTarget    : IDropTarget           ; // OLE target on the form's window; re-registered by CreateWnd
+      FEdDest        : TEdit                 ; // destination .dproj
+      FLblDestPlat   : TLabel                ; // 'Platform: <TO>' on the Destination row (ruling R17)
+      FChkMissing    : TCheckBox             ; // Find missing
+      FChkUnqualified: TCheckBox             ; // Include unqualified names
+      FLblHarvest    : TLabel                ; // 'N listed, M masked, F filtered'
+      FHarvest       : TArray<THarvestedUnit>; // accumulated, unclassified; session state only
+      FHarvestRows   : TArray<TUnitRow>      ; // FHarvest classified by FResolver
+      FResolver      : TDestinationResolver  ; // nil until a destination loads; rebuilt by every classify (EnsureResolver)
+      FDestNote      : string                ; // appended to harvest status lines
+      FDestWarn      : Boolean               ; // FDestNote holds a WARNING (degraded answer): report via SetError
+      FEdMask        : TEdit                 ; // name mask
+      FRbMaskRegex   : TRadioButton          ; // off = wildcard
+      FChkHideLib    : TCheckBox             ;
+      FChkHideProj   : TCheckBox             ;
+      FChkHideQual   : TCheckBox             ;
+      FEdMaskFolder  : TEdit                 ; // only a ROOTED path is applied (CurrentMask)
 
       FFromPlatform: TConvPlatform; // FROM picker library platform
       FToPlatform  : TConvPlatform; // TO picker library platform
@@ -122,6 +146,7 @@ type
       FTbFindInFrom  : TToolButton; // mapping: select the same-named From row
       FTbOnlyType    : TToolButton; // mapping: pool type-narrowing toggle (caption flips)
       FTbMappings    : TToolButton; // mapping: open the conditional #mapping editor
+      FTbScopeRenames: TToolButton; // unit rules: #useswap Name -> Scope.Name for "via scope" rows
       FTbExamine     : TToolButton; // examine: pick .dfm/.pas, mark used From props
       FTbClearExamine: TToolButton; // examine: drop the current examination
       FPanelTop      : TPanel     ;
@@ -1691,15 +1716,14 @@ type
       procedure CbUnitSelected(Sender: TObject);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCheckUnits (ConvRules.MainForm.pas) (+7 more)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshUnitList.HasRuleFor, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.Units.NormalizeUnitSets, IfThen, Pointer, SameText</para>
-      /// <para>Reads: FUnitList, FBook, FUnitCandidates</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.HasRuleFor"/>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas) (+11 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.CurrentMask, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf, ConvRules.MainForm.TConvRulesForm.UnitHasRule, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.UnitMask.FilterHarvestRows, ConvRules.UnitMask.IndexOfRow, ConvRules.Units.NormalizeUnitSets, ConvRules.UnitStatus.StatusText, ConvRules.UsesHarvest.HarvestFlagText, Format, IfThen, Pointer, SameText</para>
+      /// <para>Reads: FUnitList, FBook, FHarvestRows, FChkMissing, FChkUnqualified, FUnitCandidates, FLblHarvest</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.CurrentMask"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UnitHasRule"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.UnitNodes"/>
-      /// <seealso cref="ConvRules.Units.NormalizeUnitSets"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshUnitList;
@@ -1796,6 +1820,60 @@ type
       /// <param name="AUnit">Receives the chosen name.</param>
       /// <returns>False when the user cancelled.</returns>
       function PickUnit(const ACaption, AInitial: string; ASide: TUnitPickSide; out AUnit: string): Boolean;
+      procedure BuildHarvestStrip(AParent: TWinControl);
+      /// <summary>Builds FResolver afresh for the destination in FEdDest and the TO
+      /// platform (cpBoth classifies as Win64).</summary>
+      /// <returns>True when FResolver is ready to classify. False when FEdDest is
+      /// empty, the .dproj does not exist, it names no existing MainSource .dpr, or
+      /// reading it raised; FResolver is then nil.</returns>
+      /// <remarks>Cache contract (ruling R13): NOTHING about the destination is
+      /// cached between calls. Every call frees FResolver and re-reads the .dproj
+      /// and its .dpr, and the new resolver lists each folder at most once, for this
+      /// classify only -- so a unit copied into the destination is found by the next
+      /// harvest. Only the library unit list is cached, by EnsurePickLists (the
+      /// engine query is the expensive part). Side effects: FDestNote is reset and
+      /// then carries every note for the status line (destination unreadable,
+      /// library list unavailable, macro entries skipped, TO = Both); FDestWarn is
+      /// set when the note is a warning that must go out through SetError. Errors
+      /// are reported through FDestNote/FDestWarn, never raised.</remarks>
+      function  EnsureResolver: Boolean;
+      /// <summary>Classifies every harvested unit against the destination
+      /// (EnsureResolver, so the destination is re-read) into FHarvestRows, then
+      /// refreshes the list.</summary>
+      /// <remarks>Only user actions call this: a harvest (AddHarvest), a destination
+      /// commit (DestChanged), a platform change and dismissing harvested rows
+      /// (DoDeleteUnit). A check box or mask change does
+      /// NOT reclassify -- it only re-filters (RefreshUnitList). With no usable
+      /// destination every row is UnknownStatus. A classification that raises part
+      /// way leaves the remaining rows UnknownStatus, appends the error to FDestNote
+      /// and sets FDestWarn; errors are reported, never raised -- the caller puts
+      /// FDestNote on the status line.</remarks>
+      procedure ReclassifyHarvest;
+      procedure AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string);
+      procedure AddSourceFiles(const APaths: TArray<string>);
+      procedure AddSourceText(const AText: string);
+      procedure DoAddSource(Sender: TObject);
+      procedure DoPasteUnits(Sender: TObject);
+      procedure UnitListKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+      procedure DoClearHarvest(Sender: TObject);
+      procedure DoBrowseDest(Sender: TObject);
+      procedure DestChanged(Sender: TObject);
+      procedure DestKeyPress(Sender: TObject; var Key: Char);
+      procedure HarvestOptionClick(Sender: TObject);
+      procedure HarvestRowResize(Sender: TObject);
+      function  UnitHasRule(const AUnit: string): Boolean;
+      function  SelectedUnitRows: TArray<TListItem>;
+      function  CanonicalLibraryName(const AName: string): string;
+      procedure DoAcceptScopeRenames(Sender: TObject);
+      procedure UnitListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+      procedure UnitListCustomDrawItem(Sender: TCustomListView; Item: TListItem; State: TCustomDrawState; var DefaultDraw: Boolean);
+      /// <summary>The session masks as the mask controls set them.</summary>
+      /// <returns>Default(TUnitMask) before the strip is built. Folder is '' unless the
+      /// folder edit holds a rooted path: a relative one would expand against the
+      /// process's current directory.</returns>
+      function  CurrentMask: TUnitMask;
+      procedure MaskChanged(Sender: TObject);
+      procedure DoBrowseMaskFolder(Sender: TObject);
       /// <summary>Adds #unuse (From type's unit) and #use (To type's unit) for
       /// the #convert blocks at AHeads, skipping any the book already says.</summary>
       /// <param name="AHeads">Node indices of #convert headers.</param>
@@ -1954,14 +2032,14 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.SetDbs, ConvRules.MainForm.TConvRulesForm.LoadAllClasses, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Platform.PlatformToStr, Format, TConvPlatform</para>
-      /// <para>Reads: FCbFromPlat, FCbToPlat, FEngine, FCbFrom, FCbTo, FFromPlatform, FToPlatform, FFromClasses (+1 more)   Writes: FFromPlatform, FToPlatform, FFromClasses, FToClasses</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.SetDbs, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.LoadAllClasses, ConvRules.MainForm.TConvRulesForm.ReclassifyHarvest, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Platform.PlatformToStr, ConvRules.UsesHarvest.DestPlatformLabel, Format, TConvPlatform</para>
+      /// <para>Reads: FCbFromPlat, FCbToPlat, FFromPlatform, FToPlatform, FLblDestPlat, FEngine, FCbFrom, FCbTo (+5 more)   Writes: FFromPlatform, FToPlatform, FFromClasses, FToClasses</para>
       /// <para>UI thread only -- touches Screen</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.SetDbs"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.EngineDbSet"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadAllClasses"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.Platform.PlatformToStr"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ReclassifyHarvest"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PlatformChanged(Sender: TObject);
@@ -2172,6 +2250,16 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function CanCast(const AFromType, AToType: string): Boolean;
+    protected
+      /// <summary>Registers the OLE drop target on every new window handle.</summary>
+      /// <remarks>A VCL style switch recreates the handle, so this runs more than once;
+      /// the target object is created on the first call and reused.</remarks>
+      procedure CreateWnd; override;
+      /// <summary>Revokes the drop target before the window handle goes.</summary>
+      /// <remarks>Overrides DestroyWindowHandle, not DestroyWnd: TWinControl.Destroy
+      /// calls DestroyWindowHandle directly, so a DestroyWnd override would miss the
+      /// form's final teardown and leave the target registered on a dying window.</remarks>
+      procedure DestroyWindowHandle; override;
     public
       { Application.CreateForm calls this standard Create(AOwner); we route it to
       CreateNew (no .dfm) and build the UI in code. Being created via CreateForm
@@ -2316,6 +2404,10 @@ uses
   , ConvRules.WorkingSet
   , ConvRules.CurationForm
   , ConvRules.RuleChooser
+  , ConvRules.UnitPick // usmRegex / IsValidUnitSearch for the mask row
+  , Vcl.FileCtrl       // SelectDirectory for the mask folder
+  , Winapi.ShellAPI    // HDROP for a pasted Explorer file list
+  , ConvRules.DropTarget
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2323,6 +2415,9 @@ const { VCL style names as they are recorded INSIDE the .vsf files linked by
     TStyleManager.IsValidStyle; if the .rc ever swaps a style, these must follow. }
   STYLE_LIGHT = 'Windows11 Modern Light';
   STYLE_DARK  = 'Windows11 Modern Dark';
+  HARVEST_CAPTION     = '(used)'; // Kind column of a harvested (not-yet-ruled) row
+  UNIT_STATUS_SUBITEM = 3;        // SubItems index of the Status column
+  UNIT_STATUS_COL_W   = 170;
 
   { ---- helpers ---- }
 
@@ -2414,6 +2509,11 @@ begin
   if GEditorFormPath <> '' then
     FLastFormDir:= ExtractFileDir(GEditorFormPath);
 
+  // Destination defaults to the .dproj that owns --project-db, when it exists.
+  var LDefaultDest: string:= ProjectFileForDb(GEditorProjectDb);
+  if (LDefaultDest <> '') and TFile.Exists(LDefaultDest) then
+    FEdDest.Text:= LDefaultDest;
+
   if GEditorFormPath <> '' then
   begin
     if TFile.Exists(GEditorFormPath) then
@@ -2441,6 +2541,7 @@ begin
   FComponentSet.Free;
   FPersistentSet.Free;
   FDeclUnits.Free;
+  FResolver.Free;
   inherited;
 end; // destructor
 
@@ -2629,9 +2730,10 @@ begin
   AddBtn('+ Swap'       , 'Add #useswap Old -> New1[, New2 ...]'                      , DoAddSwap );
   AddBtn('+ Add unit'   , 'Add #use <unit> -- a unit to ADD to the uses clause'       , DoAddUse  );
   AddBtn('+ Remove unit', 'Add #unuse <unit> -- a unit to REMOVE from the uses clause', DoAddUnuse);
-  AddBtn('Delete unit rule', 'Delete the unit rule selected on the Unit Rules tab ' + '(or dismiss the Examine candidate selected there)', DoDeleteUnit);
+  AddBtn('Delete unit rule', 'Delete the unit rule selected on the Unit Rules tab ' + '(or dismiss the Examine candidate or harvested row selected there)', DoDeleteUnit);
   AddBtn('Derive units', 'Add #use/#unuse from every #convert To/From type (deduped)', DoDeriveUnits);
   AddBtn('Check units' , 'Report #use/#unuse conflicts (ADD wins)'                   , DoCheckUnits );
+  FTbScopeRenames:= AddBtn('Accept scope renames', 'Add #useswap Name -> Scope.Name for every selected "via scope" row', DoAcceptScopeRenames);
 end; // begin
 
 { Enables only what the current selection supports. Several actions were previously always
@@ -2645,6 +2747,14 @@ begin
   FTbExamine.Enabled:= (FActiveHdr >= 0);
   FTbClearExamine.Enabled:= (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
   FTbMappings.Enabled:= (FActiveHdr >= 0);
+  if (FTbScopeRenames <> nil) and (FUnitList <> nil) then
+  begin
+    var LScope: Boolean:= False;
+    for var LItem: TListItem in SelectedUnitRows do
+      if (LItem.Caption = HARVEST_CAPTION) and (LItem.SubItems.Count > 1) and (LItem.SubItems[1] <> '') then
+        LScope:= True;
+    FTbScopeRenames.Enabled:= LScope;
+  end;
 end;
 
 { FGrid.OnSelectCell -- the grid row is half of the Assign/Unassign gate, so the
@@ -2986,6 +3096,8 @@ begin
   // --- Unit Rules tab: #use / #unuse / #useswap authoring + derive/check ---
   TabUnits:= TTabSheet.Create(FTabs); TabUnits.PageControl:= FTabs;
   TabUnits.Caption:= 'Unit Rules';
+  FTabUnits:= TabUnits;
+  BuildHarvestStrip(TabUnits);
   // The six authoring buttons that used to sit on a 64px panel here are now the
   // toolbar's "unit rules" group; the tab keeps the list they act on.
   FUnitList:= TListView.Create(Self);
@@ -2996,6 +3108,13 @@ begin
   FUnitList.Columns.Add.Caption:= 'Old'   ; FUnitList.Columns[1].Width:= 110;
   FUnitList.Columns.Add.Caption:= 'New(s)'; FUnitList.Columns[2].Width:= 150;
   FUnitList.Columns.Add.Caption:= 'Flag'  ; FUnitList.Columns[3].Width:= 90;
+  var LStatusCol: TListColumn:= FUnitList.Columns.Add;
+  LStatusCol.Caption:= 'Status';
+  LStatusCol.Width  := UNIT_STATUS_COL_W;
+  FUnitList.OnCustomDrawItem:= UnitListCustomDrawItem;
+  FUnitList.OnKeyDown       := UnitListKeyDown;
+  FUnitList.OnSelectItem    := UnitListSelectItem;
+  FUnitList.MultiSelect     := True;
 
   // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
   // than relying on "index 0 happens to be first created", which TabRules.
@@ -3294,6 +3413,8 @@ begin
   // GEditorToPlatform sees the platform on screen, not the command line's.
   GEditorFromPlatform:= FFromPlatform;
   GEditorToPlatform  := FToPlatform;
+  if FLblDestPlat <> nil then
+    FLblDestPlat.Caption:= DestPlatformLabel(FToPlatform);
   FEngine.SetDbs(EngineDbSet);
   // Force LoadAllClasses to re-query (its guard exits when both caches are set).
   FFromClasses:= [];
@@ -3303,8 +3424,22 @@ begin
   Screen.Cursor:= crHourGlass;
   try
     LoadAllClasses;
-    SetStatus(Format(
-        'Platforms: FROM=%s TO=%s -- %d source + %d target classes.', [PlatformToStr(FFromPlatform), PlatformToStr(FToPlatform), Length(FFromClasses), Length(FToClasses)]));
+    var LNote: string:= '';
+    var LWarn: Boolean:= False;
+    if Length(FHarvest) > 0 then
+    begin
+      ReclassifyHarvest; // rebuilds the resolver for the new TO platform
+      // How a destination or classification failure reaches the user on this path.
+      LNote:= FDestNote;
+      LWarn:= FDestWarn;
+    end;
+    var LMsg: string:= Format(
+        'Platforms: FROM=%s TO=%s -- %d source + %d target classes.%s', [PlatformToStr(FFromPlatform), PlatformToStr(FToPlatform), Length(FFromClasses), Length(FToClasses), LNote]);
+    // A degraded classification must not look like a clean answer (spec 7, ruling R8).
+    if LWarn then
+      SetError(LMsg)
+    else
+      SetStatus(LMsg);
   finally
     Screen.Cursor:= crDefault;
   end;
@@ -5101,6 +5236,11 @@ procedure TConvRulesForm.DoOpenForm(Sender: TObject);
 var
   Files: TArray<string>;
 begin
+  if FTabs.ActivePage = FTabUnits then
+  begin
+    DoAddSource(Sender); // Unit Rules tab: Open... harvests used units instead
+    Exit;
+  end;
   if PickFormFiles(Files) then
     LoadFormFiles(Files);
 end;
@@ -6304,10 +6444,12 @@ end; // procedure
 
 procedure TConvRulesForm.RefreshUnitList;
 var
-  N   : TRuleNode;
-  Item: TListItem;
-  S   : TUnitSets;
-  Cand: string   ;
+  N       : TRuleNode       ;
+  Item    : TListItem       ;
+  S       : TUnitSets       ;
+  Cand    : string          ;
+  R       : TUnitRow        ;
+  View    : THarvestView    ;
 
   function InConflict(const AUnit: string): Boolean;
   var
@@ -6332,22 +6474,6 @@ var
       if SameText(R.UnitName, AUnit) then
         Exit(R.Section);
     Result:= 'from Examine';
-  end;
-
-{ Does a unit directive already speak about AUnit? SwapOld, not SwapNew: a #useswap's
-    new units are replacements the legacy form would not itself have used. }
-  function HasRuleFor(const AUnit: string): Boolean;
-  var
-    N: TRuleNode;
-  begin
-    Result:= True;
-    for N in FBook.UnitNodes do
-    case N.Kind of
-      rnkUse    : if SameText(N.UseUnit, AUnit) then Exit  ;
-      rnkUnuse  : if SameText(N.UnuseUnit, AUnit) then Exit;
-      rnkUseSwap: if SameText(N.SwapOld, AUnit) then Exit  ;
-    end;
-    Result:= False;
   end;
 
 begin
@@ -6386,8 +6512,12 @@ begin
       Item.Data:= Pointer(N);
     end; // for
 
+    // Computed once, before the candidates: a candidate yields to a harvested row
+    // of the same name only when that row is actually LISTED (rulings R7, R16) --
+    // a harvested twin the check boxes or masks hide must not hide it too.
+    View:= FilterHarvestRows(FHarvestRows, FChkMissing.Checked, FChkUnqualified.Checked, UnitHasRule, CurrentMask);
     for Cand in FUnitCandidates do
-      if not HasRuleFor(Cand) then
+      if not UnitHasRule(Cand) and (IndexOfRow(View.Shown, Cand) < 0) then
       begin
         Item:= FUnitList.Items.Add;
         Item.Caption:= '(candidate)';
@@ -6396,10 +6526,641 @@ begin
         Item.SubItems.Add(SectionOf(Cand) );
         Item.Data:= nil; // NOT a rule -- see DoDeleteUnit
       end;
+
+    for R in View.Shown do
+    begin
+      Item:= FUnitList.Items.Add;
+      Item.Caption:= HARVEST_CAPTION;
+      Item.SubItems.Add(R.Harvest.UnitName);
+      if R.Status.Kind = uskViaScope then
+        Item.SubItems.Add(R.Status.Resolved)
+      else
+        Item.SubItems.Add('');
+      Item.SubItems.Add(HarvestFlagText(R.Harvest));
+      Item.SubItems.Add(StatusText(R.Status));
+      Item.Data:= nil; // NOT a rule -- same convention as a candidate row
+    end;
+    if FLblHarvest <> nil then
+      FLblHarvest.Caption:= Format('%d listed, %d masked, %d filtered', [Length(View.Shown), View.Masked, View.Filtered]);
   finally
     FUnitList.Items.EndUpdate;
   end; // try
 end; // begin
+
+{ Does a unit directive already speak about AUnit? SwapOld, not SwapNew: a #useswap's
+  new units are replacements the legacy form would not itself have used. }
+function TConvRulesForm.UnitHasRule(const AUnit: string): Boolean;
+var
+  N: TRuleNode;
+begin
+  Result:= True;
+  if AUnit = '' then
+    Exit(False);
+  for N in FBook.UnitNodes do
+    case N.Kind of
+      rnkUse    : if SameText(N.UseUnit, AUnit) then Exit;
+      rnkUnuse  : if SameText(N.UnuseUnit, AUnit) then Exit;
+      rnkUseSwap: if SameText(N.SwapOld, AUnit) then Exit;
+    end;
+  Result:= False;
+end;
+
+{ Selected rows that are NOT rules (candidates and harvested rows, Data = nil). }
+function TConvRulesForm.SelectedUnitRows: TArray<TListItem>;
+var
+  Item: TListItem;
+begin
+  Result:= nil;
+  Item:= FUnitList.Selected;
+  while Item <> nil do
+  begin
+    if Item.Data = nil then
+      Result:= Result + [Item];
+    Item:= FUnitList.GetNextItem(Item, sdAll, [isSelected]);
+  end;
+end;
+
+{ The library's own spelling of AName ('vcl.forms' -> 'Vcl.Forms'), so an accepted
+  rename writes the canonical name; AName itself when the library does not know it. }
+function TConvRulesForm.CanonicalLibraryName(const AName: string): string;
+var
+  U: string;
+begin
+  for U in FPickWin64 do
+    if SameText(U, AName) then
+      Exit(U);
+  for U in FPickWin32 do
+    if SameText(U, AName) then
+      Exit(U);
+  Result:= AName;
+end;
+
+{ FUnitList.OnSelectItem -- the selection is the whole of the Accept scope renames gate. }
+procedure TConvRulesForm.UnitListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+begin
+  UpdateToolbarEnabled;
+end;
+
+{ One #useswap Name -> Scope.Name per selected "via scope" harvested row; the rule
+  then covers the name, so the harvested row drops out of the list on refresh. }
+procedure TConvRulesForm.DoAcceptScopeRenames(Sender: TObject);
+var
+  Item : TListItem;
+  N    : TRuleNode;
+  Added: TArray<string>;
+begin
+  Added:= nil;
+  for Item in SelectedUnitRows do
+    if (Item.Caption = HARVEST_CAPTION) and (Item.SubItems.Count > 1) and (Item.SubItems[1] <> '') then
+    begin
+      N:= TRuleNode.Create;
+      N.Kind   := rnkUseSwap;
+      N.SwapOld:= Item.SubItems[0];
+      N.SwapNew:= [CanonicalLibraryName(Item.SubItems[1])];
+      N.Dirty  := True;
+      InsertUnitNode(N);
+      Added:= Added + [N.SwapOld + ' -> ' + N.SwapNew[0]];
+    end;
+  if Length(Added) = 0 then
+  begin
+    SetStatus('Select one or more "via scope" rows first.');
+    Exit;
+  end;
+  RefreshUnitList;
+  SyncRawFromModel;
+  UpdateToolbarEnabled;
+  SetStatus(Format('Added %d #useswap: %s', [Length(Added), string.Join(', ', Added)]));
+end; // procedure
+
+function TConvRulesForm.CurrentMask: TUnitMask;
+begin
+  Result:= Default(TUnitMask);
+  if FEdMask = nil then
+    Exit;
+  Result.NameMask:= Trim(FEdMask.Text);
+  if FRbMaskRegex.Checked then
+    Result.NameMode:= usmRegex
+  else
+    Result.NameMode:= usmWildcard;
+  Result.HideLibrary  := FChkHideLib.Checked;
+  Result.HideProject  := FChkHideProj.Checked;
+  Result.HideQualified:= FChkHideQual.Checked;
+  // IsUnder expands a relative folder against the CURRENT directory, which is not
+  // anything the user chose -- so only a rooted path is applied (MaskChanged greys
+  // the edit otherwise).
+  if TPath.IsPathRooted(Trim(FEdMaskFolder.Text)) then
+    Result.Folder:= Trim(FEdMaskFolder.Text);
+end;
+
+procedure TConvRulesForm.MaskChanged(Sender: TObject);
+var
+  Mask: TUnitMask;
+begin
+  Mask:= CurrentMask;
+  if FEdMask <> nil then
+  begin
+    // An invalid pattern hides nothing (UnitMask); grey the box so that is visible.
+    if (Mask.NameMask <> '') and not IsValidUnitSearch(Mask.NameMask, Mask.NameMode) then
+      FEdMask.Font.Color:= clGrayText
+    else
+      FEdMask.Font.Color:= clWindowText;
+    // Likewise a folder that is not rooted is not applied.
+    if (Trim(FEdMaskFolder.Text) <> '') and (Mask.Folder = '') then
+      FEdMaskFolder.Font.Color:= clGrayText
+    else
+      FEdMaskFolder.Font.Color:= clWindowText;
+  end;
+  RefreshUnitList;
+end;
+
+procedure TConvRulesForm.DoBrowseMaskFolder(Sender: TObject);
+var
+  Dir: string;
+begin
+  if not SelectDirectory('Hide units under this folder', '', Dir) then
+    Exit;
+  FEdMaskFolder.Text:= Dir;
+  MaskChanged(Sender);
+end;
+
+procedure TConvRulesForm.BuildHarvestStrip(AParent: TWinControl);
+const
+  ROW_H        = 30;  // one line of controls; a flow row grows past it when it wraps
+  LABEL_W      = 76;
+  BUTTON_W     = 96;
+  BROWSE_W     = 28;
+  CHECK_W      = 180; // 'Include unqualified names'
+  SHORT_CHECK_W= 100; // 'Find missing', 'hide library' / 'project' / 'qualified'
+  RADIO_W      = 76;  // 'Wildcard', 'Regex'
+  MASK_EDIT_W  = 140; // name mask and folder mask edits
+  PLATFORM_LABEL_W= 150; // 'Platform: Both -> Win64'
+var
+  DestRow: TPanel;
+  OptRow : TFlowPanel;
+  RowTop : Integer; // next row's Top: distinct and increasing, so alTop keeps build order
+
+  function NewFlowRow: TFlowPanel;
+  begin
+    Result:= TFlowPanel.Create(Self);
+    Result.Parent    := FHarvestStrip;
+    // Below every row so far. A counter, NOT FHarvestStrip.ClientHeight: that asks
+    // Windows, which creates the handle chain up to the form mid-BuildUI (CreateWnd
+    // would then run before the status label exists); and the auto-sized strip's
+    // Height no longer counts rows.
+    Result.Top       := RowTop;
+    Inc(RowTop, ROW_H);
+    Result.Align     := alTop;
+    Result.Height    := ROW_H;
+    Result.BevelOuter:= bvNone;
+    Result.AutoSize  := True; // wraps onto more lines at a narrow tab instead of clipping
+    Result.OnResize  := HarvestRowResize; // ... and the strip follows
+  end;
+
+  function NewButton(AParentRow: TWinControl; const ACaption, AHint: string; AOnClick: TNotifyEvent): TButton;
+  begin
+    Result:= TButton.Create(Self);
+    Result.Parent          := AParentRow;
+    Result.Caption         := ACaption;
+    Result.Hint            := AHint;
+    Result.ShowHint        := True;
+    Result.Width           := BUTTON_W;
+    Result.AlignWithMargins:= True;
+    Result.OnClick         := AOnClick;
+  end;
+
+  function NewCheck(const ACaption, AHint: string; AWidth: Integer): TCheckBox;
+  begin
+    Result:= TCheckBox.Create(Self);
+    Result.Parent          := OptRow;
+    Result.Caption         := ACaption;
+    Result.Hint            := AHint;
+    Result.ShowHint        := True;
+    Result.Width           := AWidth;
+    Result.Checked         := True;
+    Result.AlignWithMargins:= True;
+    Result.OnClick         := HarvestOptionClick; // after Checked, so building does not fire it
+  end;
+
+begin
+  FHarvestStrip:= TPanel.Create(Self);
+  FHarvestStrip.Parent    := AParent;
+  FHarvestStrip.Align     := alTop;
+  FHarvestStrip.BevelOuter:= bvNone; // height: set below, then kept by HarvestRowResize
+  RowTop:= 0;
+
+  DestRow:= TPanel.Create(Self);
+  DestRow.Parent    := FHarvestStrip;
+  DestRow.Top       := RowTop;
+  Inc(RowTop, ROW_H);
+  DestRow.Align     := alTop;
+  DestRow.Height    := ROW_H;
+  DestRow.BevelOuter:= bvNone;
+  var LLbl: TLabel:= TLabel.Create(Self);
+  LLbl.Parent          := DestRow;
+  LLbl.Align           := alLeft;
+  LLbl.Width           := LABEL_W;
+  LLbl.AutoSize        := False;
+  LLbl.Layout          := tlCenter;
+  LLbl.Caption         := 'Destination:';
+  var LBrowse: TButton:= NewButton(DestRow, '...', 'Choose the destination .dproj the code is moving INTO', DoBrowseDest);
+  LBrowse.Align:= alRight;
+  LBrowse.Width:= BROWSE_W;
+  // Created after the browse button, so alRight places it LEFT of the button
+  // (the button's right edge is further right, and alRight orders by it).
+  FLblDestPlat:= TLabel.Create(Self);
+  FLblDestPlat.Parent          := DestRow;
+  FLblDestPlat.Align           := alRight;
+  FLblDestPlat.AutoSize        := False;
+  FLblDestPlat.Width           := PLATFORM_LABEL_W;
+  FLblDestPlat.Layout          := tlCenter;
+  FLblDestPlat.AlignWithMargins:= True;
+  FLblDestPlat.Caption         := DestPlatformLabel(FToPlatform);
+  FLblDestPlat.Hint            := 'The TO platform the destination is classified for; change it with the TO platform box';
+  FLblDestPlat.ShowHint        := True;
+  FEdDest:= TEdit.Create(Self);
+  FEdDest.Parent          := DestRow;
+  FEdDest.Align           := alClient;
+  FEdDest.AlignWithMargins:= True;
+  FEdDest.Hint            := 'Destination .dproj: its folder, search path and unit scope names decide what is MISSING (session only)';
+  FEdDest.ShowHint        := True;
+  FEdDest.OnExit          := DestChanged;
+  FEdDest.OnKeyPress      := DestKeyPress; // Enter commits too (ruling R18)
+
+  FHarvestBtnRow:= NewFlowRow;
+  NewButton(FHarvestBtnRow, 'Add source...', 'Harvest used units from .pas / .dpr / .dproj files (multi-select)', DoAddSource);
+  NewButton(FHarvestBtnRow, 'Paste', 'Harvest used units from files copied in Explorer, or from clipboard text (a uses clause or a list of names). Ctrl+V on the list does the same', DoPasteUnits);
+  NewButton(FHarvestBtnRow, 'Clear list', 'Drop every harvested row; unit rules are untouched', DoClearHarvest);
+
+  OptRow:= NewFlowRow;
+  FChkMissing    := NewCheck('Find missing', 'List only units the destination cannot resolve', SHORT_CHECK_W);
+  FChkUnqualified:= NewCheck('Include unqualified names', 'Also list names that compile only through a unit scope name (Forms -> Vcl.Forms)', CHECK_W);
+  FLblHarvest:= TLabel.Create(Self);
+  FLblHarvest.Parent          := OptRow;
+  FLblHarvest.AlignWithMargins:= True;
+  FLblHarvest.Caption         := '';
+
+  var LMaskRow: TFlowPanel:= NewFlowRow;
+  var LMaskLbl: TLabel:= TLabel.Create(Self);
+  LMaskLbl.Parent          := LMaskRow;
+  LMaskLbl.AlignWithMargins:= True;
+  LMaskLbl.Caption         := 'Mask:';
+  FEdMask:= TEdit.Create(Self);
+  FEdMask.Parent          := LMaskRow;
+  FEdMask.Width           := MASK_EDIT_W;
+  FEdMask.AlignWithMargins:= True;
+  FEdMask.TextHint        := 'hide names like cx* or ^Db';
+  FEdMask.OnChange        := MaskChanged;
+  var LRbWild: TRadioButton:= TRadioButton.Create(Self);
+  LRbWild.Parent          := LMaskRow;
+  LRbWild.Caption         := 'Wildcard';
+  LRbWild.Width           := RADIO_W;
+  LRbWild.Checked         := True;
+  LRbWild.AlignWithMargins:= True;
+  LRbWild.OnClick         := MaskChanged;
+  FRbMaskRegex:= TRadioButton.Create(Self);
+  FRbMaskRegex.Parent          := LMaskRow;
+  FRbMaskRegex.Caption         := 'Regex';
+  FRbMaskRegex.Width           := RADIO_W;
+  FRbMaskRegex.AlignWithMargins:= True;
+  FRbMaskRegex.OnClick         := MaskChanged;
+
+  var LHideRow: TFlowPanel:= NewFlowRow;
+  FChkHideLib := NewCheck('hide library', 'Hide units the library index knows as written', SHORT_CHECK_W);
+  FChkHideLib.Parent := LHideRow;
+  FChkHideProj:= NewCheck('hide project', 'Hide units found in the destination''s folders', SHORT_CHECK_W);
+  FChkHideProj.Parent:= LHideRow;
+  FChkHideQual:= NewCheck('hide qualified', 'Hide dotted names (already scope-qualified)', SHORT_CHECK_W);
+  FChkHideQual.Parent:= LHideRow;
+  for var LChk: TCheckBox in TArray<TCheckBox>.Create(FChkHideLib, FChkHideProj, FChkHideQual) do
+  begin
+    LChk.OnClick:= nil;   // NewCheck ticks it; masks start OFF
+    LChk.Checked:= False;
+    LChk.OnClick:= MaskChanged;
+  end;
+  FEdMaskFolder:= TEdit.Create(Self);
+  FEdMaskFolder.Parent          := LHideRow;
+  FEdMaskFolder.Width           := MASK_EDIT_W;
+  FEdMaskFolder.AlignWithMargins:= True;
+  FEdMaskFolder.TextHint        := 'hide units under folder';
+  FEdMaskFolder.Hint            := 'Hide project units under this ABSOLUTE folder; a relative path is not applied and shows grey';
+  FEdMaskFolder.ShowHint        := True;
+  FEdMaskFolder.OnExit          := MaskChanged;
+  NewButton(LHideRow, '...', 'Choose a folder whose units to hide', DoBrowseMaskFolder).Width:= BROWSE_W;
+  FHarvestStrip.Height:= RowTop; // one line per row until the rows are laid out and resize
+end;
+
+function TConvRulesForm.EnsureResolver: Boolean;
+var
+  Dproj   : string;
+  Plat    : TConvPlatform;
+  Settings: TProjectSettings;
+  Members : TArray<TDprMember>;
+  Lib     : TArray<string>;
+  LibOk   : Boolean;
+begin
+  Dproj:= Trim(FEdDest.Text);
+  Plat := FToPlatform;
+  if Plat = cpBoth then
+    Plat:= cpWin64;
+  // Never reused (ruling R13): a cached resolver kept its .dpr members and folder
+  // listings, so a unit copied into the destination stayed MISSING all session.
+  FreeAndNil(FResolver);
+  FDestNote:= '';
+  FDestWarn:= False;
+  if Dproj = '' then
+    Exit(False);
+  if not TFile.Exists(Dproj) then
+  begin
+    FDestNote:= Format(' Destination %s does not exist.', [Dproj]);
+    FDestWarn:= True;
+    Exit(False);
+  end;
+  try
+    Settings:= ReadProjectSettings(TFile.ReadAllText(Dproj), ExtractFileDir(Dproj), Plat);
+    if (Settings.MainSource = '') or not TFile.Exists(Settings.MainSource) then
+    begin
+      FDestNote:= Format(' Destination %s: no MainSource .dpr found.', [ExtractFileName(Dproj)]);
+      FDestWarn:= True;
+      Exit(False);
+    end;
+    Members:= ReadDprMembers(TFile.ReadAllText(Settings.MainSource), ExtractFileDir(Settings.MainSource));
+    EnsurePickLists(Plat);
+    if Plat = cpWin32 then
+    begin
+      Lib  := FPickWin32;
+      LibOk:= FPickW32Loaded;
+    end
+    else
+    begin
+      Lib  := FPickWin64;
+      LibOk:= FPickW64Loaded;
+    end;
+    if not LibOk then
+    begin
+      FDestNote:= FDestNote + ' Library list unavailable -- MISSING is over-reported.';
+      FDestWarn:= True;
+    end;
+    // Informational notes: FDestWarn stays as it is.
+    if Length(Settings.Skipped) > 0 then
+      FDestNote:= FDestNote + Format(' %d entr(y/ies) skipped (unexpanded macro): %s.', [Length(Settings.Skipped), string.Join('; ', Settings.Skipped)]);
+    if FToPlatform = cpBoth then
+      FDestNote:= FDestNote + ' TO platform is Both -- classified for Win64.';
+    FResolver:= TDestinationResolver.Create(Settings, Members, Lib, nil);
+  except
+    on E: Exception do
+    begin
+      // Reported, not raised: a bad .dproj must not take the handler down.
+      FDestNote:= ' Destination could not be read: ' + E.Message;
+      FDestWarn:= True;
+      FreeAndNil(FResolver);
+      Exit(False);
+    end;
+  end;
+  Result:= True; // a failed library load is retried by EnsurePickLists on the next classify
+end;
+
+procedure TConvRulesForm.ReclassifyHarvest;
+var
+  HasDest: Boolean;
+  i      : Integer;
+begin
+  var LGuard: IInterface:= HourGlass;  // dl:ok write-only-local@8f1f -- REVIEWED 2026-09-28 RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read
+  HasDest:= EnsureResolver;
+  // Sized and defaulted up front, so a classification that stops part-way
+  // leaves every remaining row UnknownStatus rather than uninitialised.
+  SetLength(FHarvestRows, Length(FHarvest));
+  for i:= 0 to High(FHarvest) do
+  begin
+    FHarvestRows[i].Harvest:= FHarvest[i];
+    FHarvestRows[i].Status := UnknownStatus;
+  end;
+  if HasDest then
+  try
+    for i:= 0 to High(FHarvest) do
+      FHarvestRows[i].Status:= FResolver.Classify(FHarvest[i].UnitName);
+  except  // dl:ok try-except-swallowed@6394 -- REVIEWED 2026-09-28 (re-reviewed, fix round 1) not swallowed: E.Message goes into FDestNote with FDestWarn set, and every caller (AddHarvest, DestChanged, PlatformChanged) puts it on the status line through SetError; raising would take the click handler down (rulings R6, R8)
+    on E: Exception do
+    begin
+      // Reported, not raised; the next classify rebuilds the resolver and FDestNote.
+      FDestNote:= FDestNote + ' Classification stopped: ' + E.Message;
+      FDestWarn:= True;
+    end;
+  end;
+  RefreshUnitList;
+end;
+
+procedure TConvRulesForm.AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string);
+var
+  Before: Integer;
+  Msg   : string;
+begin
+  FTabs.ActivePage:= FTabUnits;
+  Before  := Length(FHarvest);
+  FHarvest:= MergeHarvest(FHarvest, AAdded);
+  ReclassifyHarvest;
+  Msg:= Format('%s: %d used unit(s), %d new; %d in the list.', [AWhat, Length(AAdded), Length(FHarvest) - Before, Length(FHarvest)]);
+  if FResolver = nil then
+    Msg:= Msg + ' Unclassified: no usable destination project.';
+  Msg:= Msg + FDestNote;
+  if Length(AErrors) > 0 then
+    SetError(Msg + Format(' %d problem(s): %s', [Length(AErrors), string.Join(' | ', AErrors)]))
+  else if FDestWarn then
+    SetError(Msg) // a degraded classification must not look like a clean answer (spec 7, R8)
+  else
+    SetStatus(Msg);
+end;
+
+procedure TConvRulesForm.AddSourceFiles(const APaths: TArray<string>);
+var
+  Errs : TArray<string>;
+  Units: TArray<THarvestedUnit>;
+begin
+  if Length(APaths) = 0 then
+    Exit;
+  var LGuard: IInterface:= HourGlass;  // dl:ok write-only-local@8f1f -- REVIEWED 2026-09-28 RAII cursor guard: held for its Release side effect at scope exit (HourGlass), never read
+  Units:= HarvestFiles(APaths, Errs);
+  AddHarvest(Units, Errs, Format('%d source file(s)', [Length(APaths)]));
+end;
+
+procedure TConvRulesForm.AddSourceText(const AText: string);
+begin
+  AddHarvest(HarvestText(AText), nil, 'Pasted text');
+end;
+
+procedure TConvRulesForm.DoAddSource(Sender: TObject);
+var
+  Dlg: TOpenDialog;
+begin
+  Dlg:= TOpenDialog.Create(Self);
+  try
+    Dlg.Filter := 'Delphi units and projects (*.pas;*.dpr;*.dproj)|*.pas;*.dpr;*.dproj|All files (*.*)|*.*';
+    Dlg.Options:= Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
+    if (FLastFormDir <> '') and TDirectory.Exists(FLastFormDir) then
+      Dlg.InitialDir:= FLastFormDir;
+    if not Dlg.Execute then
+      Exit;
+    SetLastFormDir(ExtractFileDir(Dlg.FileName));
+    AddSourceFiles(Dlg.Files.ToStringArray);
+  finally
+    Dlg.Free;
+  end;
+end;
+
+procedure TConvRulesForm.DoPasteUnits(Sender: TObject);
+var
+  Files  : TArray<string>;
+  Text   : string;
+  HasText: Boolean;
+begin
+  Files:= nil;
+  Text := '';
+  // OpenClipboard fails while another process holds the clipboard -- clipboard
+  // history or the shell inspecting a just-copied file list, typically. VCL raises
+  // EClipboardException for that, which would surface as a modal exception box;
+  // report it on the status line instead. Only the READ is guarded: the harvest
+  // below keeps its own error handling.
+  try
+    if Clipboard.HasFormat(CF_HDROP) then
+    begin
+      Clipboard.Open;
+      try
+        Files:= FilesFromHDrop(HDROP(Clipboard.GetAsHandle(CF_HDROP)));
+      finally
+        Clipboard.Close;
+      end;
+    end;
+    HasText:= (Length(Files) = 0) and (Clipboard.HasFormat(CF_UNICODETEXT) or Clipboard.HasFormat(CF_TEXT));
+    if HasText then
+      Text:= Clipboard.AsText;
+  except
+    on E: EClipboardException do
+    begin
+      SetError('Paste: ' + E.Message + ' -- another program has the clipboard open; try again.');
+      Exit;
+    end;
+  end;
+  if Length(Files) > 0 then
+    AddSourceFiles(Files)
+  else if HasText then
+    AddSourceText(Text)
+  else
+    SetError('Paste: the clipboard holds neither text nor files.');
+end;
+
+procedure TConvRulesForm.UnitListKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if (Key = Ord('V')) and (ssCtrl in Shift) then
+  begin
+    DoPasteUnits(Sender);
+    Key:= 0;
+  end;
+end;
+
+procedure TConvRulesForm.CreateWnd;
+begin
+  inherited CreateWnd;
+  if FDropTarget = nil then
+    FDropTarget:= TFormDropTarget.Create(
+      procedure(const AFiles: TArray<string>)
+      begin
+        AddSourceFiles(AFiles);
+      end,
+      procedure(const AText: string)
+      begin
+        AddSourceText(AText);
+      end);
+  if not RegisterFormDropTarget(Handle, FDropTarget) and (FLblStatus <> nil) then
+    SetError('Drag and drop is unavailable (RegisterDragDrop failed); use Add source... or Paste.');
+end;
+
+procedure TConvRulesForm.DestroyWindowHandle;
+begin
+  if WindowHandle <> 0 then
+    RevokeFormDropTarget(WindowHandle);
+  inherited DestroyWindowHandle;
+end;
+
+procedure TConvRulesForm.DoClearHarvest(Sender: TObject);
+begin
+  FHarvest    := nil;
+  FHarvestRows:= nil;
+  RefreshUnitList;
+  SetStatus('Harvested units cleared; unit rules untouched.');
+end;
+
+procedure TConvRulesForm.DoBrowseDest(Sender: TObject);
+var
+  Dlg: TOpenDialog;
+begin
+  Dlg:= TOpenDialog.Create(Self);
+  try
+    Dlg.Filter := 'Delphi project (*.dproj)|*.dproj';
+    Dlg.Options:= Dlg.Options + [ofFileMustExist];
+    if Trim(FEdDest.Text) <> '' then
+      Dlg.InitialDir:= ExtractFileDir(Trim(FEdDest.Text));
+    if not Dlg.Execute then
+      Exit;
+    FEdDest.Text:= Dlg.FileName;
+  finally
+    Dlg.Free;
+  end;
+  DestChanged(Sender);
+end;
+
+procedure TConvRulesForm.DestChanged(Sender: TObject);
+begin
+  ReclassifyHarvest;
+  if FResolver <> nil then
+  begin
+    var LMsg: string:= Format('Destination: %s (%s).%s', [ExtractFileName(Trim(FEdDest.Text)), PlatformToStr(FToPlatform), FDestNote]);
+    // A degraded classification must not look like a clean answer (spec 7, R8).
+    if FDestWarn then
+      SetError(LMsg)
+    else
+      SetStatus(LMsg);
+  end
+  else if Trim(FEdDest.Text) <> '' then
+    SetError('Destination not loaded.' + FDestNote);
+end;
+
+{ FEdDest.OnKeyPress: Enter commits the destination, like leaving the edit does.
+  The key is swallowed, so a single-line edit does not beep. }
+procedure TConvRulesForm.DestKeyPress(Sender: TObject; var Key: Char);
+begin
+  if Key <> Char(VK_RETURN) then
+    Exit;
+  Key:= #0;
+  DestChanged(Sender);
+end;
+
+procedure TConvRulesForm.HarvestOptionClick(Sender: TObject);
+begin
+  RefreshUnitList;
+end;
+
+{ A flow row wrapped or unwrapped: the strip is exactly its rows' heights. Done by
+  hand because TPanel.AutoSize on the strip did not re-run after the rows grew
+  (measured: strip stayed 150 px over 167 px of rows, the list covering the last). }
+procedure TConvRulesForm.HarvestRowResize(Sender: TObject);
+var
+  H: Integer;
+  i: Integer;
+begin
+  H:= 0;
+  for i:= 0 to FHarvestStrip.ControlCount - 1 do
+    Inc(H, FHarvestStrip.Controls[i].Height);
+  if FHarvestStrip.Height <> H then
+    FHarvestStrip.Height:= H;
+end;
+
+procedure TConvRulesForm.UnitListCustomDrawItem(Sender: TCustomListView; Item: TListItem; State: TCustomDrawState; var DefaultDraw: Boolean);
+begin
+  if (Item.Data = nil) and (Item.SubItems.Count > UNIT_STATUS_SUBITEM) and (Item.SubItems[UNIT_STATUS_SUBITEM] = STATUS_MISSING_TEXT) then
+    Sender.Canvas.Font.Style:= [fsBold]
+  else
+    Sender.Canvas.Font.Style:= [];
+  DefaultDraw:= True;
+end;
 
 { Old unit from the FROM side, then one or more New units from the TO side --
   the picker returns one name per open, so each further New is offered with a
@@ -6412,7 +7173,11 @@ var
   NewUnits: TArray<string>;
   N       : TRuleNode     ;
 begin
-  if not PickUnit('Unit swap: the OLD unit to replace', '', psFrom, OldU) then
+  var LRows: TArray<TListItem>:= SelectedUnitRows;
+  var LInitial: string:= '';
+  if Length(LRows) = 1 then
+    LInitial:= LRows[0].SubItems[0];
+  if not PickUnit('Unit swap: the OLD unit to replace', LInitial, psFrom, OldU) then
     Exit;
   if not PickUnit(Format('Unit swap: a NEW unit replacing %s', [OldU]), '', psTo, U) then
     Exit;
@@ -6451,67 +7216,123 @@ end; // procedure
 
 procedure TConvRulesForm.DoAddUnuse(Sender: TObject);
 var
-  U: string   ;
-  N: TRuleNode;
+  U    : string           ;
+  N    : TRuleNode        ;
+  Rows : TArray<TListItem>;
+  Names: TArray<string>   ;
+  Item : TListItem        ;
 begin
-  if not PickUnit('Remove unit (#unuse)', '', psFrom, U) then
-    Exit;
-  N:= TRuleNode.Create; N.Kind:= rnkUnuse; N.UnuseUnit:= U; N.Dirty:= True;
-  InsertUnitNode(N);
+  Rows:= SelectedUnitRows;
+  if Length(Rows) = 0 then
+  begin
+    if not PickUnit('Remove unit (#unuse)', '', psFrom, U) then
+      Exit;
+    Names:= [U];
+  end
+  else
+  begin
+    Names:= nil;
+    for Item in Rows do
+      Names:= Names + [Item.SubItems[0]];
+    if MessageDlg(Format('Add #unuse for %d unit(s)? They are DELETED from the result with no replacement:' + sLineBreak + sLineBreak + '%s', [Length(Names), string.Join(', ', Names)]), mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+      Exit;
+  end;
+  for U in Names do
+  begin
+    N:= TRuleNode.Create;
+    N.Kind     := rnkUnuse;
+    N.UnuseUnit:= U;
+    N.Dirty    := True;
+    InsertUnitNode(N);
+  end;
   RefreshUnitList;
   SyncRawFromModel;
-  SetStatus('Added #unuse ' + U);
+  SetStatus(Format('Added #unuse for %s', [string.Join(', ', Names)]));
 end; // procedure
 
+{ Acts on EVERY selected row: a rule row (Data <> nil) deletes its node; a
+  harvested '(used)' row or an Examine '(candidate)' row (Data = nil, NOT a rule)
+  is dismissed from its own session set only. More than one row asks first. }
 procedure TConvRulesForm.DoDeleteUnit(Sender: TObject);
 var
-  N   : TRuleNode     ;
-  Cand: string        ;
-  Kept: TArray<string>;
-  U   : string        ;
+  Item     : TListItem        ;
+  N        : TRuleNode        ;
+  Nodes    : TArray<TRuleNode>;
+  UsedNames: TArray<string>   ;
+  CandNames: TArray<string>   ;
+  Shown    : TArray<string>   ;
+  Kept     : TArray<string>   ;
+  U        : string           ;
 begin
-  if FUnitList.Selected = nil then
+  // Collect every target BEFORE mutating anything: RefreshUnitList and
+  // ReclassifyHarvest rebuild the list items, and a freed node leaves its row's
+  // Data dangling.
+  Nodes    := nil;
+  UsedNames:= nil;
+  CandNames:= nil;
+  Shown    := nil;
+  Item:= FUnitList.Selected;
+  while Item <> nil do
+  begin
+    if Item.Data <> nil then
+      Nodes:= Nodes + [TRuleNode(Item.Data)]
+    else if Item.Caption = HARVEST_CAPTION then
+      UsedNames:= UsedNames + [Item.SubItems[0]]
+    else
+      CandNames:= CandNames + [Item.SubItems[0]];
+    Shown:= Shown + [Item.Caption + ' ' + Item.SubItems[0]];
+    Item:= FUnitList.GetNextItem(Item, sdAll, [isSelected]);
+  end; // while
+  if Length(Shown) = 0 then
   begin
     SetStatus('Select a unit rule to delete.');
     Exit;
   end;
-  N:= TRuleNode(FUnitList.Selected.Data);
+  if Length(Shown) > 1 then
+    if MessageDlg(Format('%d unit rule(s) will be deleted and %d unit(s) dismissed. Continue?' + sLineBreak + sLineBreak + '%s', [Length(Nodes), Length(UsedNames) + Length(CandNames), string.Join(sLineBreak, Shown)]), mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+      Exit;
 
-  // Data = nil is an Examine CANDIDATE, not a rule: dismissing it drops it from the
-  // harvested set only. The rule book is untouched, so no SyncRawFromModel either.
-  if N = nil then
+  if Length(Nodes) > 0 then
   begin
-    Cand:= FUnitList.Selected.SubItems[0];
-    Kept:= nil;
-    for U in FUnitCandidates do
-      if not SameText(U, Cand) then
-        Kept:= Kept + [U];
-    FUnitCandidates:= Kept;
-    RefreshUnitList;
-    UpdateToolbarEnabled;
-    SetStatus('Dismissed candidate unit ' + Cand + '.');
-    Exit;
+    // Capture the active block's NODE (not its index) ONCE around the whole batch,
+    // the same pattern DoMappings uses -- deleting a unit-directive node ahead of
+    // the active #convert block shifts every later node's index by one, and a
+    // stale FActiveHdr can then equal another block's NEW index (fix wave,
+    // Important 1). No N is ever the active block's header (that is always an
+    // rnkConvert node; DoDeleteUnit only reaches unit-directive nodes), so Hdr is
+    // not an object TObjectList is about to free.
+    var Hdr: TRuleNode:= nil;
+    if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
+      Hdr:= FBook.Nodes[FActiveHdr];
+    for N in Nodes do
+      FBook.Nodes.Remove(N); // TObjectList owns its items -> frees N
+    if Hdr <> nil then
+    begin
+      FActiveHdr:= FBook.Nodes.IndexOf(Hdr);
+      RefreshRulesList; // FRules' Item.Data header indices are stale after the shift too
+    end;
   end; // if
 
-  // Capture the active block's NODE (not its index) before the delete, the same
-  // pattern DoMappings uses -- deleting a unit-directive node ahead of the active
-  // #convert block shifts every later node's index by one, and a stale
-  // FActiveHdr can then equal another block's NEW index (fix wave, Important 1).
-  // N itself is never the active block's header (that is always an rnkConvert
-  // node; DoDeleteUnit only reaches unit-directive nodes), so Hdr is not the
-  // object TObjectList is about to free.
-  var Hdr: TRuleNode:= nil;
-  if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
-    Hdr:= FBook.Nodes[FActiveHdr];
-  FBook.Nodes.Remove(N); // TObjectList owns its items -> frees N
-  if Hdr <> nil then
+  if Length(CandNames) > 0 then
   begin
-    FActiveHdr:= FBook.Nodes.IndexOf(Hdr);
-    RefreshRulesList; // FRules' Item.Data header indices are stale after the shift too
-  end;
-  RefreshUnitList;
-  SyncRawFromModel;
-  SetStatus('Deleted unit rule.');
+    Kept:= nil;
+    for U in FUnitCandidates do
+      if not MatchText(U, CandNames) then
+        Kept:= Kept + [U];
+    FUnitCandidates:= Kept;
+  end; // if
+  for U in UsedNames do
+    FHarvest:= WithoutUnit(FHarvest, U);
+
+  if Length(UsedNames) > 0 then
+    ReclassifyHarvest // rebuilds FHarvestRows and refreshes the list
+  else
+    RefreshUnitList;
+  // The rule book changed only when a rule row was deleted.
+  if Length(Nodes) > 0 then
+    SyncRawFromModel;
+  UpdateToolbarEnabled;
+  SetStatus(Format('Deleted %d unit rule(s); dismissed %d unit(s) (no rule written).', [Length(Nodes), Length(UsedNames) + Length(CandNames)]));
 end; // procedure
 
 { Setting a conversion already adds its unit rules (AddDerivedUnitRules); this

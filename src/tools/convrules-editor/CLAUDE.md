@@ -265,3 +265,118 @@ model tests cover; the form only renders.
   toolbar's class is `TToolBar` (VCL registers Delphi class names). A click is a
   posted mouse down/up at `TB_GETITEMRECT`; a posted `WM_COMMAND` does nothing.
   Raw DSL's memo has no window until its tab has been shown.
+
+## Unit Rules harvest -- hand-over notes (feat/unit-harvest, 2026-09-28)
+
+The Unit Rules tab lists the units a SOURCE uses (pasted or dropped text,
+`.pas` / `.dpr` / `.dproj` files) and classifies each against a DESTINATION
+`.dproj`, so a unit the destination cannot resolve shows as MISSING before
+anything is converted. Spec and plan (gitignored, main tree):
+`docs\superpowers\specs\2026-09-28-unit-rules-harvest-and-missing-design.md`,
+`docs\superpowers\plans\2026-09-28-unit-rules-harvest-and-missing.md`.
+
+* **Three pure units own the logic; the tests cover all three.**
+  `ConvRules.UsesHarvest` -- text / `.dpr` / `.dproj` parsing, `HarvestFiles`,
+  the merge. `ConvRules.UnitStatus` -- `TDestinationResolver`, which classifies
+  a unit against the destination. `ConvRules.UnitMask` -- the session masks and
+  the display order. `ConvRules.DropTarget` is Windows glue only.
+* **The resolver is `TDestinationResolver`, NOT `TUnitResolver`.**
+  `ConvRules.Units` already declares an unrelated `TUnitResolver` (a
+  reference-to-function type for `DeriveUnits`); the two compiled side by side
+  only by uses order. Do not "restore" the plan's name.
+* **A destination MEMBER is a `.dpr` entry WITH an `in` path.** A plain entry
+  (`Vcl.Forms`) is not a member; it resolves through the file / library / scope
+  steps like any other name. Counting it as a member reported library units as
+  `project` and defeated the hide-library mask.
+* **`MainForm` is wiring only.** Every decision a test can check lives in the
+  three pure units; `MainForm.pas` is outside the tests' compile closure (see
+  above), so build the editor too.
+* **Harvested rows are `Data = nil` with Kind `(used)`** (Examine candidates are
+  `(candidate)`, also `Data = nil`). They are session state, never written to
+  the book. A harvested name that is also an Examine candidate shows ONCE, as
+  the harvested row -- it carries the status and used-by that a candidate row
+  lacks -- but only while that harvested row is actually LISTED (rulings R7,
+  R16): `RefreshUnitList` computes the shown rows once, first, and a candidate
+  yields only to a name in that set (`IndexOfRow`). A harvested twin the check
+  boxes or masks hide does not hide the candidate.
+* **Which harvested rows are listed is pure: `ConvRules.UnitMask.FilterHarvestRows`**
+  (rows, Find missing, Include unqualified, a has-rule predicate, the mask) ->
+  `THarvestView` = the shown rows in display order + `Masked` + `Filtered`.
+  Every row lands in exactly one bucket (shown + masked + filtered = total; the
+  tests pin it). A row the check boxes drop or a rule covers is `Filtered` even
+  when a mask would also hide it. `MainForm` only renders the result and the
+  `N listed, M masked, F filtered` label.
+* **Delete acts on every selected row** (MultiSelect is on): a rule row deletes
+  its node, a `(used)` / `(candidate)` row is dismissed from its own session
+  set. More than one row asks first.
+* **Nothing about the destination is cached between classifies (ruling R13).**
+  `EnsureResolver` frees and rebuilds `TDestinationResolver` on EVERY classify:
+  it re-reads the `.dproj` and its `.dpr`, and the new resolver lists each
+  folder at most once, for that classify only. A session-long cache (the old
+  `<DPROJ>|<platform>` key) kept reporting MISSING after the owner copied the
+  unit into the destination. Only the library unit list is cached, by
+  `EnsurePickLists` -- the engine query is the expensive part; a failed load is
+  not cached and is retried. Classifies happen only on user actions: a harvest,
+  a destination commit, a platform change, dismissing harvested rows. A check
+  box or mask change NEVER reclassifies; it re-filters (`RefreshUnitList`).
+  `cpBoth` classifies as Win64 and says so in the status line.
+* **The Destination row shows `Platform: Win64` / `Win32` / `Both -> Win64`**
+  (`DestPlatformLabel`, ruling R17), set at build and by `PlatformChanged`. The
+  TO platform box is the only control; the label is read-only.
+* **Enter in the Destination edit commits it** (`DestKeyPress`, ruling R18),
+  exactly like leaving the edit; the key is swallowed so the edit does not beep.
+* **Pasted text without the word `uses` is a LIST** (`HarvestText`): comments
+  (`{..}`, `(*..*)`, `//..`) and quoted strings are removed first, the reserved
+  word `in` is dropped, then it splits on `,` `;` and whitespace. So a `.dpr`
+  uses-clause selection (`U1 in 'U1.pas' {Form1}, // old DM`) yields only the
+  unit names. It is deliberately NOT read as `'uses ' + text + ';'` through the
+  scanner (ruling R14's first proposal): the scanner stops at the first `;` and
+  keeps one name per comma entry, which measurably dropped `DB, Data.DB` from
+  `Forms, Vcl.Dialogs; DB` + newline + `Data.DB` and would collapse a
+  one-name-per-line list to its first name. Known limit: a selection that runs
+  PAST the clause's `;` into code (`begin`, `Application.Run`) lists those
+  identifiers too. Prose containing the word `uses` is still read as source.
+* **`.dproj` reading is deliberately narrow:** only the `'$(Base)'!=''` and
+  `'$(Base_<P>)'!=''` property groups are read; a search-path entry holding a
+  macro (`$(Platform)`, `$(Config)`, ...) is skipped and COUNTED in the status
+  line, never guessed at.
+* **Degraded classification goes red.** Destination unreadable, library list
+  unavailable (MISSING is then over-reported) or classification stopped part
+  way sets `FDestWarn`, and the harvest status line goes out through
+  `SetError`, not `SetStatus`. The informational notes (macros skipped, TO =
+  Both) stay on `SetStatus`. Exceptions from the `.dproj`/`.dpr` read and the
+  classify loop are caught and reported -- a bad project must not crash a drop.
+* **The strip's height is `HarvestRowResize`'s job, not `TPanel.AutoSize`.**
+  Each flow row AutoSizes to its wrapped content; the strip's height is set to
+  the sum of the rows on each row's `OnResize`. `AutoSize` on the strip itself
+  measurably did not re-run after the rows wrapped, and the list covered the
+  folder edit.
+* **The OLE drop target is on the FORM**, registered in `CreateWnd` (a VCL
+  style switch recreates the handle) and revoked in `DestroyWindowHandle`, NOT
+  `DestroyWnd` -- `TWinControl.Destroy` calls `DestroyWindowHandle` directly,
+  so a `DestroyWnd` revoke is skipped at form destruction.
+* **A drop hands its payload on with `TThread.ForceQueue`,** after `Drop`
+  returns, so Explorer's drag loop is never held while the editor reads files
+  or queries the engine.
+* **Paste catches `EClipboardException` only**, around the clipboard READ, and
+  reports "another program has the clipboard open" through `SetError`. A driven
+  run hung on the old modal "Cannot open clipboard: Access is denied".
+* **GUI check: `tests\gui\drive-unit-harvest.ps1 -Exe <ConvRulesEditor.exe>`**
+  (a frozen `drag-lint.exe` beside the exe whose Win64 library index answers).
+  It needs NO real project: it writes a FIXTURE in a fresh temp folder --
+  `dest\Dest.dproj` (the IDE's Base / Base_Win64 group shape, `Vcl` a Win64
+  scope name), `dest\Dest.dpr` with one member `Local in 'Local.pas'`, and a
+  source `source\Src.pas` using `Local, Forms, NoSuchUnitXyz, FileOnlyXyz` --
+  and deletes it on exit. It sets the Destination edit (WM_SETTEXT) and commits
+  it with Enter (WM_CHAR), then asserts EXACT statuses: NoSuchUnitXyz
+  `MISSING`, Forms `via scope -> Vcl.Forms`, Local not listed with Find missing
+  on. Also: a CF_HDROP file-list paste (FileOnlyXyz comes only from Src.pas), a
+  held clipboard (any editor dialog = FAIL), and the R13 case -- `uses
+  LateUnit;` is MISSING, LateUnit.pas is written into the fixture destination,
+  the same paste then reads `project`. `-ProofNoDestination` leaves the
+  Destination edit empty: the status assertions then FAIL, which is the proof
+  the check can fail. RED on the pre-feature build (no Paste button). It is NOT
+  wired into the `tests\autotest` battery -- run it by hand, like
+  `drive-unit-picker.ps1`. Explorer drag-drop itself, a real Ctrl+V keypress
+  and the visual checks (bold MISSING, the platform label, wrapped strip at
+  other widths) are owner checks.

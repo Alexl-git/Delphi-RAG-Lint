@@ -29,6 +29,9 @@ uses
   , ConvRules.RuleCatalog in '..\ConvRules.RuleCatalog.pas'
   , ConvRules.SkipList in '..\ConvRules.SkipList.pas'
   , ConvRules.UnitPick in '..\ConvRules.UnitPick.pas'
+  , ConvRules.UsesHarvest in '..\ConvRules.UsesHarvest.pas'
+  , ConvRules.UnitStatus in '..\ConvRules.UnitStatus.pas'
+  , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   ;
 
 var
@@ -6086,6 +6089,414 @@ begin
   end; // try
 end; // procedure
 
+function HarvestNames(const AUnits: TArray<THarvestedUnit>): string;
+var
+  Names: TArray<string>;
+  i    : Integer;
+begin
+  SetLength(Names, Length(AUnits));
+  for i:= 0 to High(AUnits) do
+    Names[i]:= AUnits[i].UnitName;
+  Result:= string.Join(',', Names);
+end;
+
+procedure TestUsesHarvestText;
+var
+  R: TArray<THarvestedUnit>;
+begin
+  R:= HarvestText('uses Forms, DB {comment, Fake}, Foo in ''Foo.pas'';');
+  Check('harvest.text.uses.names', HarvestNames(R) = 'Forms,DB,Foo', HarvestNames(R));
+  Check('harvest.text.uses.usedby', (Length(R) = 3) and (R[0].UsedBy = PASTED_SOURCE), HarvestNames(R));
+  Check('harvest.text.uses.nosection', (Length(R) = 3) and (R[0].Section = ''), HarvestNames(R));
+
+  R:= HarvestText('Forms, Vcl.Dialogs; DB' + #13#10 + 'Data.DB');
+  Check('harvest.text.list.names', HarvestNames(R) = 'Forms,Vcl.Dialogs,DB,Data.DB', HarvestNames(R));
+
+  // Prose: '3' (number), 'units:' (colon) and '12x.' (trailing dot) are not identifiers.
+  R:= HarvestText('Replace these 3 units: Forms and 12x.');
+  Check('harvest.text.list.drops.nonidents', HarvestNames(R) = 'Replace,these,Forms,and', HarvestNames(R));
+
+  R:= HarvestText('Forms forms FORMS');
+  Check('harvest.text.dedup.nocase', HarvestNames(R) = 'Forms', HarvestNames(R));
+
+  R:= HarvestText('');
+  Check('harvest.text.empty', Length(R) = 0, IntToStr(Length(R)));
+
+  // A .dpr uses-clause selection WITHOUT the keyword (ruling R14): the `in` word,
+  // the quoted path and both comment styles must not become units.
+  R:= HarvestText('U1 in ''U1.pas'' {Form1},' + #13#10 + '  Sub.U2 in ''..\Sub\U2.pas'', // old DM' + #13#10 + '  Vcl.Forms');
+  Check('harvest.text.dpr.fragment', HarvestNames(R) = 'U1,Sub.U2,Vcl.Forms', HarvestNames(R));
+  R:= HarvestText('A IN ''a.pas'' (* Old, Junk *), B');
+  Check('harvest.text.list.strips.paren.comment.and.IN', HarvestNames(R) = 'A,B', HarvestNames(R));
+end;
+
+procedure TestDprMembers;
+const
+  DPR =
+    'program App;' + #13#10 +
+    'uses' + #13#10 +
+    '  Vcl.Forms,' + #13#10 +
+    '  U1 in ''U1.pas'' {Form1},' + #13#10 +
+    '  Sub.U2 in ''..\Sub\U2.pas'' {dm: TDataModule};' + #13#10 +
+    'begin' + #13#10 +
+    'end.';
+var
+  M: TArray<TDprMember>;
+begin
+  M:= ReadDprMembers(DPR, 'C:\P\App');
+  Check('dpr.members.count', Length(M) = 3, IntToStr(Length(M)));
+  if Length(M) <> 3 then
+    Exit;
+  Check('dpr.members.plain.name', M[0].UnitName = 'Vcl.Forms', M[0].UnitName);
+  Check('dpr.members.plain.nopath', M[0].FilePath = '', M[0].FilePath);
+  Check('dpr.members.in.path', SameText(M[1].FilePath, 'C:\P\App\U1.pas'), M[1].FilePath);
+  Check('dpr.members.dotted.relative', (M[2].UnitName = 'Sub.U2') and SameText(M[2].FilePath, 'C:\P\Sub\U2.pas'), M[2].UnitName + ' ' + M[2].FilePath);
+end;
+
+procedure TestHarvestMergeAndFlag;
+var
+  A: TArray<THarvestedUnit>;
+  B: TArray<THarvestedUnit>;
+  R: TArray<THarvestedUnit>;
+  H: THarvestedUnit;
+begin
+  H.UnitName:= 'Forms';
+  H.Section := 'interface';
+  H.UsedBy  := 'U1';
+  A:= [H];
+  H.UnitName:= 'forms';
+  H.UsedBy  := 'U2';
+  B:= [H];
+  H.UnitName:= 'DB';
+  H.Section := '';
+  H.UsedBy  := PASTED_SOURCE;
+  B:= B + [H];
+  R:= MergeHarvest(A, B);
+  Check('harvest.merge.nocase', HarvestNames(R) = 'Forms,DB', HarvestNames(R));
+  Check('harvest.merge.first.kept', (Length(R) = 2) and (R[0].UsedBy = 'U1'), HarvestNames(R));
+  Check('harvest.indexof.nocase', IndexOfUnit(R, 'db') = 1, IntToStr(IndexOfUnit(R, 'db')));
+  Check('harvest.without', HarvestNames(WithoutUnit(R, 'FORMS')) = 'DB', HarvestNames(WithoutUnit(R, 'FORMS')));
+  if Length(R) <> 2 then
+    Exit;
+  Check('harvest.flag.section', HarvestFlagText(R[0]) = 'interface, U1', HarvestFlagText(R[0]));
+  Check('harvest.flag.nosection', HarvestFlagText(R[1]) = PASTED_SOURCE, HarvestFlagText(R[1]));
+end;
+
+procedure TestProjectSettings;
+const
+  DPROJ =
+    '<Project>' + #13#10 +
+    '<PropertyGroup><MainSource>App.dpr</MainSource></PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Config)''==''Base'' or ''$(Base)''!=''''">' + #13#10 +
+    '  <Base>true</Base>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Base)''!=''''">' + #13#10 +
+    '  <DCC_Namespace>System;Data;Vcl;$(DCC_Namespace)</DCC_Namespace>' + #13#10 +
+    '  <DCC_UnitSearchPath>..\Common;.\;$(BDS)\lib;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Base_Win32)''!=''''">' + #13#10 +
+    '  <DCC_Namespace>Winapi;Bde;$(DCC_Namespace)</DCC_Namespace>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Base_Win64)''!=''''">' + #13#10 +
+    '  <DCC_Namespace>Winapi;$(DCC_Namespace)</DCC_Namespace>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '<PropertyGroup Condition="''$(Cfg_1)''!=''''">' + #13#10 +
+    '  <DCC_UnitSearchPath>C:\CfgOnly;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>' + #13#10 +
+    '</PropertyGroup>' + #13#10 +
+    '</Project>';
+var
+  S: TProjectSettings;
+begin
+  S:= ReadProjectSettings(DPROJ, 'C:\P\App', cpWin64);
+  Check('dproj.mainsource', SameText(S.MainSource, 'C:\P\App\App.dpr'), S.MainSource);
+  Check('dproj.projectdir', SameText(S.ProjectDir, 'C:\P\App'), S.ProjectDir);
+  Check('dproj.win64.scopes.inherit', string.Join(';', S.Scopes) = 'Winapi;System;Data;Vcl', string.Join(';', S.Scopes));
+  Check('dproj.searchpath.relative', SameText(string.Join(';', S.SearchPath), 'C:\P\Common;C:\P\App'), string.Join(';', S.SearchPath));
+  Check('dproj.searchpath.macro.skipped', string.Join(';', S.Skipped) = '$(BDS)\lib', string.Join(';', S.Skipped));
+  Check('dproj.cfg.groups.ignored', Pos('CFGONLY', UpperCase(string.Join(';', S.SearchPath))) = 0, string.Join(';', S.SearchPath));
+  S:= ReadProjectSettings(DPROJ, 'C:\P\App', cpWin32);
+  Check('dproj.win32.scopes.bde', string.Join(';', S.Scopes) = 'Winapi;Bde;System;Data;Vcl', string.Join(';', S.Scopes));
+  S:= ReadProjectSettings(DPROJ, 'C:\P\App', cpBoth);
+  Check('dproj.both.is.win64', string.Join(';', S.Scopes) = 'Winapi;System;Data;Vcl', string.Join(';', S.Scopes));
+  S:= ReadProjectSettings('<Project></Project>', 'C:\P\App', cpWin64);
+  Check('dproj.no.mainsource', S.MainSource = '', S.MainSource);
+end;
+
+procedure TestProjectFileForDb;
+begin
+  Check('dbproject.drag.folder', SameText(ProjectFileForDb('C:\P\App\_D-RAG\App.sqlite'), 'C:\P\App\App.dproj'), ProjectFileForDb('C:\P\App\_D-RAG\App.sqlite'));
+  Check('dbproject.other.folder', ProjectFileForDb('C:\P\App\App.sqlite') = '', ProjectFileForDb('C:\P\App\App.sqlite'));
+  Check('dbproject.empty', ProjectFileForDb('') = '', '');
+end;
+
+procedure TestHarvestFiles;
+var
+  Dir : string;
+  R   : TArray<THarvestedUnit>;
+  Errs: TArray<string>;
+  i   : Integer;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrules-harvest-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'App.dproj'), '<Project><PropertyGroup><MainSource>App.dpr</MainSource></PropertyGroup></Project>', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'App.dpr'),
+      'program App;' + #13#10 + 'uses' + #13#10 + '  Vcl.Forms,' + #13#10 + '  U1 in ''U1.pas'',' + #13#10 + '  Gone in ''Gone.pas'';' + #13#10 + 'begin end.', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'U1.pas'),
+      'unit U1;' + #13#10 + 'interface' + #13#10 + 'uses DB, Forms;' + #13#10 + 'implementation' + #13#10 + 'uses DBTables;' + #13#10 + 'end.', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'notes.txt'), 'x', TEncoding.ASCII);
+
+    R:= HarvestFiles([TPath.Combine(Dir, 'App.dproj'), TPath.Combine(Dir, 'notes.txt')], Errs);
+    Check('harvest.files.dproj.names', HarvestNames(R) = 'Vcl.Forms,U1,Gone,DB,Forms,DBTables', HarvestNames(R));
+    Check('harvest.files.dpr.usedby', (Length(R) > 0) and (R[0].UsedBy = 'App') and (R[0].Section = ''), HarvestNames(R));
+    i:= IndexOfUnit(R, 'DBTables');
+    Check('harvest.files.member.section', (i >= 0) and (R[i].Section = 'implementation') and (R[i].UsedBy = 'U1'), IntToStr(i));
+    Check('harvest.files.member.gone.reported', (Length(Errs) = 2) and (Pos('Gone', Errs[0]) > 0), string.Join(' | ', Errs));
+    Check('harvest.files.other.ext.reported', (Length(Errs) = 2) and (Pos('notes.txt', Errs[1]) > 0), string.Join(' | ', Errs));
+
+    R:= HarvestFiles([TPath.Combine(Dir, 'U1.pas')], Errs);
+    Check('harvest.files.pas', (HarvestNames(R) = 'DB,Forms,DBTables') and (Length(Errs) = 0), HarvestNames(R));
+
+    R:= HarvestFiles([TPath.Combine(Dir, 'NoSuch.pas')], Errs);
+    Check('harvest.files.unreadable.reported', (Length(R) = 0) and (Length(Errs) = 1), string.Join(' | ', Errs));
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
+function FixtureSettings(APlatform: TConvPlatform): TProjectSettings;
+begin
+  Result.ProjectDir:= 'C:\P\App';
+  Result.MainSource:= 'C:\P\App\App.dpr';
+  Result.SearchPath:= ['C:\P\Common'];
+  if APlatform = cpWin32 then
+    Result.Scopes:= ['Winapi', 'Bde', 'System', 'Data', 'Vcl']
+  else
+    Result.Scopes:= ['Winapi', 'System', 'Data', 'Vcl'];
+  Result.Skipped:= nil;
+end;
+
+procedure TestUnitResolver;
+var
+  Files  : TArray<string>;
+  Probe  : TFileProbe;
+  Members: TArray<TDprMember>;
+  M      : TDprMember;
+  Plain  : TDprMember;
+  Lib    : TArray<string>;
+  R      : TDestinationResolver;
+  S      : TUnitStatus;
+begin
+  Files:= ['C:\P\App\Local.pas', 'C:\P\Common\Shared.dcu'];
+  Probe:= function(const APath: string): Boolean
+    begin
+      Result:= IndexText(APath, Files) >= 0;
+    end;
+  M.UnitName:= 'DMain';
+  M.FilePath:= 'C:\P\App\DMain.pas';
+  Members:= [M];
+  Lib:= ['Vcl.Forms', 'Data.DB', 'System.SysUtils', 'Bde.DBTables', 'Local', 'Winapi.Foo', 'System.Foo'];
+
+  R:= TDestinationResolver.Create(FixtureSettings(cpWin64), Members, Lib, Probe);
+  try
+    S:= R.Classify('DMain');
+    Check('resolver.member', (S.Kind = uskProject) and SameText(S.Resolved, 'C:\P\App\DMain.pas'), StatusText(S) + ' ' + S.Resolved);
+    S:= R.Classify('Local');
+    Check('resolver.project.before.library', (S.Kind = uskProject) and SameText(S.Resolved, 'C:\P\App\Local.pas'), StatusText(S));
+    S:= R.Classify('Shared');
+    Check('resolver.searchpath.dcu', S.Kind = uskProject, StatusText(S));
+    S:= R.Classify('Vcl.Forms');
+    Check('resolver.library', S.Kind = uskLibrary, StatusText(S));
+    S:= R.Classify('Forms');
+    Check('resolver.viascope', (S.Kind = uskViaScope) and (S.Resolved = 'Vcl.Forms'), StatusText(S));
+    Check('resolver.viascope.text', StatusText(S) = 'via scope -> Vcl.Forms', StatusText(S));
+    S:= R.Classify('forms');
+    Check('resolver.nocase', (S.Kind = uskViaScope) and SameText(S.Resolved, 'Vcl.Forms'), StatusText(S));
+    S:= R.Classify('Foo');
+    Check('resolver.scope.order', S.Resolved = 'Winapi.Foo', S.Resolved);
+    S:= R.Classify('DBTables');
+    Check('resolver.win64.dbtables.missing', S.Kind = uskMissing, StatusText(S));
+    Check('resolver.missing.text', StatusText(S) = STATUS_MISSING_TEXT, StatusText(S));
+  finally
+    R.Free;
+  end;
+
+  R:= TDestinationResolver.Create(FixtureSettings(cpWin32), Members, Lib, Probe);
+  try
+    S:= R.Classify('DBTables');
+    Check('resolver.win32.dbtables.viascope', (S.Kind = uskViaScope) and (S.Resolved = 'Bde.DBTables'), StatusText(S));
+  finally
+    R.Free;
+  end;
+
+  R:= TDestinationResolver.Create(FixtureSettings(cpWin64), nil, nil, Probe);
+  try
+    S:= R.Classify('Vcl.Forms');
+    Check('resolver.empty.library.missing', S.Kind = uskMissing, StatusText(S));
+  finally
+    R.Free;
+  end;
+
+  Plain.UnitName:= 'Vcl.Forms';
+  Plain.FilePath:= '';
+  R:= TDestinationResolver.Create(FixtureSettings(cpWin64), [M, Plain], Lib, Probe);
+  try
+    S:= R.Classify('Vcl.Forms');
+    Check('resolver.plain.dpr.entry.not.member', S.Kind = uskLibrary, StatusText(S));
+  finally
+    R.Free;
+  end;
+
+  Check('status.unknown.text', StatusText(UnknownStatus) = 'no destination', StatusText(UnknownStatus));
+  S.Kind:= uskLibrary;
+  Check('shouldadd.findmissing.library', not ShouldAdd(S, True, True), '');
+  Check('shouldadd.all.library', ShouldAdd(S, False, True), '');
+  S.Kind:= uskViaScope;
+  Check('shouldadd.unqualified.on', ShouldAdd(S, True, True), '');
+  Check('shouldadd.unqualified.off', not ShouldAdd(S, True, False), '');
+  S.Kind:= uskMissing;
+  Check('shouldadd.missing', ShouldAdd(S, True, False), '');
+  Check('shouldadd.unknown', ShouldAdd(UnknownStatus, True, False), '');
+end;
+
+procedure TestUnitResolverDisk;
+var
+  Dir: string;
+  St : TProjectSettings;
+  R  : TDestinationResolver;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrules-resolver-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'OnDisk.pas'), 'unit OnDisk; end.', TEncoding.ASCII);
+    St.ProjectDir:= Dir;
+    St.MainSource:= '';
+    St.SearchPath:= [TPath.Combine(Dir, 'NoSuchFolder')];
+    St.Scopes    := nil;
+    St.Skipped   := nil;
+    R:= TDestinationResolver.Create(St, nil, nil, nil);
+    try
+      Check('resolver.disk.found', R.Classify('ondisk').Kind = uskProject, StatusText(R.Classify('ondisk')));
+      Check('resolver.disk.missing', R.Classify('NotThere').Kind = uskMissing, StatusText(R.Classify('NotThere')));
+    finally
+      R.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
+{ ConvRules.UnitMask: session-only masks over harvested rows, and the display order. }
+function MaskRow(const AName: string; AKind: TUnitStatusKind; const AResolved: string): TUnitRow;
+begin
+  Result.Harvest.UnitName:= AName;
+  Result.Harvest.Section := '';
+  Result.Harvest.UsedBy  := 'U1';
+  Result.Status.Kind     := AKind;
+  Result.Status.Resolved := AResolved;
+end;
+
+function RowNames(const ARows: TArray<TUnitRow>): string;
+var
+  Names: TArray<string>;
+  i    : Integer;
+begin
+  SetLength(Names, Length(ARows));
+  for i:= 0 to High(ARows) do
+    Names[i]:= ARows[i].Harvest.UnitName;
+  Result:= string.Join(',', Names);
+end;
+
+procedure TestUnitMask;
+var
+  Rows  : TArray<TUnitRow>;
+  M     : TUnitMask;
+  Hidden: Integer;
+  Shown : TArray<TUnitRow>;
+begin
+  Rows:= [MaskRow('Vcl.Forms', uskLibrary, ''), MaskRow('Local', uskProject, 'C:\P\Common\Local.pas'),
+    MaskRow('Forms', uskViaScope, 'Vcl.Forms'), MaskRow('DBTables', uskMissing, ''), MaskRow('cxGrid', uskMissing, '')];
+  M:= Default(TUnitMask);
+  Shown:= ApplyMask(Rows, M, Hidden);
+  Check('mask.none', (Hidden = 0) and (Length(Shown) = 5), IntToStr(Hidden));
+  M.HideLibrary:= True;
+  Check('mask.library', RowNames(ApplyMask(Rows, M, Hidden)) = 'Local,Forms,DBTables,cxGrid', RowNames(ApplyMask(Rows, M, Hidden)));
+  M:= Default(TUnitMask);
+  M.HideProject:= True;
+  Check('mask.project', RowNames(ApplyMask(Rows, M, Hidden)) = 'Vcl.Forms,Forms,DBTables,cxGrid', RowNames(ApplyMask(Rows, M, Hidden)));
+  M:= Default(TUnitMask);
+  M.HideQualified:= True;
+  Check('mask.qualified', RowNames(ApplyMask(Rows, M, Hidden)) = 'Local,Forms,DBTables,cxGrid', RowNames(ApplyMask(Rows, M, Hidden)));
+  M:= Default(TUnitMask);
+  M.Folder:= 'C:\P\Common';
+  Shown:= ApplyMask(Rows, M, Hidden);
+  Check('mask.folder', (RowNames(Shown) = 'Vcl.Forms,Forms,DBTables,cxGrid') and (Hidden = 1), RowNames(Shown));
+  M.Folder:= 'C:\P\Com';
+  Check('mask.folder.prefix.trap', Length(ApplyMask(Rows, M, Hidden)) = 5, IntToStr(Hidden));
+  M:= Default(TUnitMask);
+  M.NameMask:= 'cx*';
+  M.NameMode:= usmWildcard;
+  Check('mask.name.wildcard', RowNames(ApplyMask(Rows, M, Hidden)) = 'Vcl.Forms,Local,Forms,DBTables', RowNames(ApplyMask(Rows, M, Hidden)));
+  M.NameMask:= '^db';
+  M.NameMode:= usmRegex;
+  Check('mask.name.regex', RowNames(ApplyMask(Rows, M, Hidden)) = 'Vcl.Forms,Local,Forms,cxGrid', RowNames(ApplyMask(Rows, M, Hidden)));
+  M.NameMask:= '[';
+  Check('mask.name.invalid.hides.nothing', Length(ApplyMask(Rows, M, Hidden)) = 5, IntToStr(Hidden));
+  Check('sort.missing.first', RowNames(SortForDisplay(Rows)) = 'DBTables,cxGrid,Forms,Local,Vcl.Forms', RowNames(SortForDisplay(Rows)));
+end;
+
+{ ConvRules.UnitMask.FilterHarvestRows: the check boxes, the rules and the masks
+  together, and the three buckets every harvested row lands in exactly once. }
+procedure TestFilterHarvestRows;
+const
+  TOTAL = 7;
+var
+  Rows   : TArray<TUnitRow>;
+  M      : TUnitMask;
+  V      : THarvestView;
+  HasRule: THasRuleFunc;
+begin
+  Rows:= [MaskRow('NoDest', uskUnknown, ''), MaskRow('Local', uskProject, 'C:\P\Local.pas'),
+    MaskRow('Vcl.Forms', uskLibrary, ''), MaskRow('Forms', uskViaScope, 'Vcl.Forms'),
+    MaskRow('DBTables', uskMissing, ''), MaskRow('Ruled', uskMissing, ''), MaskRow('cxGrid', uskMissing, '')];
+  HasRule:= function(const AUnit: string): Boolean
+    begin
+      Result:= SameText(AUnit, 'ruled');
+    end;
+  M:= Default(TUnitMask);
+  M.NameMask:= 'cx*';
+  M.NameMode:= usmWildcard;
+
+  V:= FilterHarvestRows(Rows, True, True, HasRule, M);
+  Check('view.missing.shown', RowNames(V.Shown) = 'DBTables,Forms,NoDest', RowNames(V.Shown));
+  Check('view.missing.counts', (V.Masked = 1) and (V.Filtered = 3), Format('masked=%d filtered=%d', [V.Masked, V.Filtered]));
+  Check('view.missing.buckets.sum', Length(V.Shown) + V.Masked + V.Filtered = TOTAL, IntToStr(Length(V.Shown) + V.Masked + V.Filtered));
+
+  V:= FilterHarvestRows(Rows, False, True, HasRule, M);
+  Check('view.all.shown', RowNames(V.Shown) = 'DBTables,Forms,NoDest,Local,Vcl.Forms', RowNames(V.Shown));
+  Check('view.all.counts', (V.Masked = 1) and (V.Filtered = 1), Format('masked=%d filtered=%d', [V.Masked, V.Filtered]));
+  Check('view.all.buckets.sum', Length(V.Shown) + V.Masked + V.Filtered = TOTAL, IntToStr(Length(V.Shown) + V.Masked + V.Filtered));
+
+  V:= FilterHarvestRows(Rows, True, False, nil, Default(TUnitMask));
+  Check('view.noscope.norule.shown', RowNames(V.Shown) = 'DBTables,Ruled,cxGrid,NoDest', RowNames(V.Shown));
+  Check('view.noscope.norule.counts', (V.Masked = 0) and (V.Filtered = 3), Format('masked=%d filtered=%d', [V.Masked, V.Filtered]));
+  Check('view.noscope.buckets.sum', Length(V.Shown) + V.Masked + V.Filtered = TOTAL, IntToStr(Length(V.Shown) + V.Masked + V.Filtered));
+
+  Check('view.empty', (Length(FilterHarvestRows(nil, True, True, HasRule, M).Shown) = 0), '');
+
+  // Ruling R16: a candidate yields to a harvested twin only when that twin is LISTED.
+  Check('indexofrow.nocase', IndexOfRow(Rows, 'forms') = 3, IntToStr(IndexOfRow(Rows, 'forms')));
+  Check('indexofrow.absent', IndexOfRow(Rows, 'Nope') = -1, IntToStr(IndexOfRow(Rows, 'Nope')));
+end;
+
+{ ConvRules.UsesHarvest.DestPlatformLabel: the Destination row's platform label (ruling R17). }
+procedure TestDestPlatformLabel;
+begin
+  Check('destplatform.win32', DestPlatformLabel(cpWin32) = 'Platform: Win32', DestPlatformLabel(cpWin32));
+  Check('destplatform.win64', DestPlatformLabel(cpWin64) = 'Platform: Win64', DestPlatformLabel(cpWin64));
+  Check('destplatform.both', DestPlatformLabel(cpBoth) = 'Platform: Both -> Win64', DestPlatformLabel(cpBoth));
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -6212,6 +6623,17 @@ begin
     TestUnitPickFilter;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
+    TestUsesHarvestText;
+    TestDprMembers;
+    TestHarvestMergeAndFlag;
+    TestProjectSettings;
+    TestProjectFileForDb;
+    TestHarvestFiles;
+    TestUnitResolver;
+    TestUnitResolverDisk;
+    TestUnitMask;
+    TestFilterHarvestRows;
+    TestDestPlatformLabel;
 
     FreeAndNil(GParseBook);
 
