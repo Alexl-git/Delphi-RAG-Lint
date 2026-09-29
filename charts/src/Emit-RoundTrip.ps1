@@ -276,6 +276,24 @@ $path = Join-Path $OutDir "$base.dlgraph"
 [IO.File]::WriteAllText($path, $text, (New-Object Text.ASCIIEncoding))
 Write-Host $text
 $c = Get-TraceCounts $T
+# DOC-R1 (2026-09-28): each ` @<file>:<line>` anchor's FULL path, so the bundle page can make the anchor a
+# draglint:// link into the IDE. The text keeps the bare leaf (grammar spec section 8); the path is looked up
+# in the three indexes and kept only when they name exactly ONE path for the leaf -- an ambiguous leaf stays text.
+$leaves = @([regex]::Matches($text, ' @([A-Za-z0-9_$.\-]+\.(?:pas|dfm|dpr|inc|sql)):[1-9]\d*', 'IgnoreCase') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+$anchorPaths = @{}
+if ($leaves.Count) {
+  $leafWhere = ($leaves | ForEach-Object { "path LIKE '%\$($_ -replace "'", "''")'" }) -join ' OR '
+  $pathsOf = @{}
+  foreach ($db in @($DbPath, $ServerDbPath, $SqlDbPath)) {
+    foreach ($row in (Invoke-OnDb $db { Invoke-IndexQuery "SELECT DISTINCT path AS p FROM files WHERE $leafWhere" 'round-trip anchor paths' })) {
+      $leaf = [IO.Path]::GetFileName([string]$row.p)
+      if ($leaves -notcontains $leaf) { continue }
+      if (-not $pathsOf.ContainsKey($leaf)) { $pathsOf[$leaf] = @{} }
+      $pathsOf[$leaf][([string]$row.p).ToLowerInvariant()] = [string]$row.p
+    }
+  }
+  foreach ($k in $pathsOf.Keys) { if ($pathsOf[$k].Count -eq 1) { $anchorPaths[$k] = @($pathsOf[$k].Values)[0] } }
+}
 $proof = "$((Invoke-IndexQuery 'SELECT COUNT(*) AS n FROM files')[0].n)/$((Invoke-OnDb $ServerDbPath { (Invoke-IndexQuery 'SELECT COUNT(*) AS n FROM files')[0].n }))"
 Write-Host ("  anchor={0}  steps={1}  conditions={2}  crossings={3}  unresolved={4}  write/read/also={5}/{6}/{7}" -f $name, $c.Steps, $c.Conditions, $c.Crossings, $c.Unresolved, $write, $read, $also)
 
@@ -310,4 +328,6 @@ Write-Host ("  anchor={0}  steps={1}  conditions={2}  crossings={3}  unresolved=
   Expected     = (Get-TraceAnchors $T)
   # P14: computed from the written step lines, never assumed
   AllClickable = (@(Get-TraceUnclickable $text).Count -eq 0)
+  # DOC-R1: anchor leaf -> the one full path the indexes hold for it (the bundle page links these)
+  AnchorPaths  = $anchorPaths
 }

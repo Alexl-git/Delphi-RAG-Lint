@@ -197,14 +197,14 @@ foreach ($e in $EX) {
     $splat = @{ Question = $e.Q; Target = $e.T; DbPath = $e.D; OutRoot = $dir } + $e.A
     $r = & (Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1') @splat 6>$null
     if (-not (Test-Path $r.Shell)) { throw 'no index.html produced' }
-    # a TEXT bundle (round-trip) has anchors as @file:line text, not click targets
+    # a TEXT bundle (round-trip): its @file:line anchors are links into the IDE (DOC-R1), counted apart from chart click targets
     $isText = Test-Path (Join-Path $r.Bundle 'trace.dlgraph')
     [void]$made.Add([pscustomobject]@{
       Question = $e.Q; Target = $e.T; Db = [IO.Path]::GetFileNameWithoutExtension($e.D)
       Why = $e.Why; Shell = $r.Shell; Clicks = $r.ClickTargets; IsText = $isText
       Bytes = (Get-Item $r.Shell).Length
     })
-    Write-Host ("  OK   {0}  ({1} {2})" -f $label, $r.ClickTargets, $(if ($isText) { 'anchors as text' } else { 'click targets' }))
+    Write-Host ("  OK   {0}  ({1} {2})" -f $label, $r.ClickTargets, $(if ($isText) { 'text anchors' } else { 'click targets' }))
   } catch {
     [void]$failed.Add([pscustomobject]@{ Question = $e.Q; Target = $e.T; Error = $_.Exception.Message })
     Write-Host ("  FAIL {0}  -- {1}" -f $label, $_.Exception.Message)
@@ -262,7 +262,7 @@ $CATALOGUE = @(
      Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,992 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
 
   @{ Q='round-trip';      Sel='control / field / TABLE.COLUMN'; St='shipped'
-     Note='A TEXT question: the answer is a Form A document (<code>trace.dlgraph</code>), not a chart, and its anchors are <code>@File.pas:line</code> text, not click targets. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards see only the innermost enclosing <code>if</code> (engine ask E1), and OMITS reads every enclosing <code>if</code> up to a loop or case arm; a direction that stops after the anchor leaves its later sections noted &ldquo;not walked&rdquo; and the title claims only the walked direction; a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO is owner-accepted (2026-09-28): all callers count; dataset scope; anchors only.' }
+     Note='A TEXT question: the answer is a Form A document (<code>trace.dlgraph</code>), not a chart, and each <code>@File.pas:line</code> anchor is a <code>draglint://</code> link into the IDE. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards see only the innermost enclosing <code>if</code> (engine ask E1), and OMITS reads every enclosing <code>if</code> up to a loop or case arm; a direction that stops after the anchor leaves its later sections noted &ldquo;not walked&rdquo; and the title claims only the walked direction; a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO is owner-accepted (2026-09-28): all callers count; dataset scope; anchors only.' }
 
   @{ Q='compare';         Sel='two index runs';  St='parked'
      Note='Parked by owner decision, and genuinely dependent on the IR: there is no <code>ir</code> or <code>compare</code> verb in the deployed engine, confirmed against a deliberate fake control.' }
@@ -372,7 +372,7 @@ foreach ($c in ($CATALOGUE | Where-Object { $_.St -eq 'shipped' })) {
     [void]$sb.AppendLine('<div class="card">')
     [void]$sb.AppendLine("<a href=`"$href`">$([Net.WebUtility]::HtmlEncode($m.Target))</a>")
     [void]$sb.AppendLine("<div class=`"why`">$($m.Why)</div>")
-    [void]$sb.AppendLine("<div class=`"foot`"><span>$($m.Db)</span><span>$(if ($m.IsText) { "text document, $($m.Clicks) @file:line anchors (not clickable)" } else { "$($m.Clicks) click targets" })</span></div>")
+    [void]$sb.AppendLine("<div class=`"foot`"><span>$($m.Db)</span><span>$(if ($m.IsText) { "text document, $($m.Clicks) @file:line anchors (linked)" } else { "$($m.Clicks) click targets" })</span></div>")
     [void]$sb.AppendLine('</div>')
   }
   [void]$sb.AppendLine('</div>')

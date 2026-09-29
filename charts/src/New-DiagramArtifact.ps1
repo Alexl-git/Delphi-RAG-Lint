@@ -271,7 +271,8 @@ $fp = [pscustomobject]@{
   # ones the header omits are exactly the ones worth auditing later --
   # who-calls' NameOnly, event-wiring's DfmFallback, touches-tables' Unresolved.
   # (round-trip's Trace is a path the move above made stale, and its Text IS trace.dlgraph)
-  emitter     = ($r | Select-Object -ExcludeProperty Dot, Svg, Plain, Png, Pdf, Trace, Text)
+  # (and AnchorPaths is the page's link table, not a count)
+  emitter     = ($r | Select-Object -ExcludeProperty Dot, Svg, Plain, Png, Pdf, Trace, Text, AnchorPaths)
 }
 $fp | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $dir 'meta.json') -Encoding ascii
 
@@ -287,14 +288,30 @@ if ($isText) {
   if (-not (Test-Path $tracePath)) { throw "$Question returned a trace but $tracePath is missing" }
   # the document itself, escaped, in a <pre>
   $doc = [IO.File]::ReadAllText($tracePath)
-  $svg = '<pre style="margin:0;font:13px/1.5 var(--mono);white-space:pre">' + $doc.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;') + '</pre>'
-  # T8-R1: a text page has NO click targets -- its anchors are @File.pas:line TEXT
-  $anchorSpan = "<span><b>$($r.ClickTargets)</b> anchors, written as @file:line text -- not click targets</span>"
+  $esc = $doc.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;')
+  # DOC-R1 (supersedes T8-R1): each ` @File.pas:line` anchor whose file the indexes name exactly once (the
+  # emitter's AnchorPaths) becomes a draglint:// link -- the same URI the charts carry, so a click opens the
+  # line in the IDE. The text itself is unchanged; an anchor with no single path stays plain text.
+  $ap = $(if ($r.PSObject.Properties['AnchorPaths'] -and $r.AnchorPaths) { $r.AnchorPaths } else { @{} })
+  $anc = @{ Total = 0; Linked = 0 }
+  $esc = [regex]::Replace($esc, '(?<= )@([A-Za-z0-9_$.\-]+\.(?:pas|dfm|dpr|inc|sql)):([1-9]\d*)', {
+    param($m)
+    $anc.Total++
+    $full = $ap[$m.Groups[1].Value]
+    if (-not $full) { return $m.Value }
+    $anc.Linked++
+    '<a href="draglint://open?file=' + [uri]::EscapeDataString($full) + '&amp;line=' + $m.Groups[2].Value + '">' + $m.Value + '</a>'
+  }, 'IgnoreCase')
+  $svg = '<pre style="margin:0;font:13px/1.5 var(--mono);white-space:pre">' + $esc + '</pre>'
+  $anchorSpan = "<span><b>$($anc.Linked)</b> of <b>$($anc.Total)</b> @file:line anchors link to the IDE</span>"
   $note = "    <p><b>This is a document, not a chart.</b> <code class=`"k`">$Question</code> answers in`n" +
           "    Form A TEXT (<code class=`"k`">trace.dlgraph</code>; grammar:`n" +
           "    <code class=`"k`">charts\form-a-grammar-spec.md</code> section 8). Each step's anchor is`n" +
-          "    written as <code class=`"k`">@File.pas:line</code> text, so nothing on this page is a`n" +
-          "    click target. A chart drawn from this text is later work.</p>"
+          "    written as <code class=`"k`">@File.pas:line</code>; an anchor whose file the indexes name exactly`n" +
+          "    once is a <code class=`"k`">draglint://open?file=..&amp;line=..</code> link that opens the line in`n" +
+          "    your running IDE, through the protocol handler`n" +
+          "    (<code class=`"k`">charts\src\Register-DragLintProtocol.ps1</code>, once per user). An anchor left`n" +
+          "    as plain text names a file the indexes hold at more than one path. A chart drawn from this text is later work.</p>"
   $footFiles = 'trace.dlgraph (Form A text) &middot; '
 } else {
   if (-not (Test-Path $svgPath)) { throw "$Question drew no chart: $svgPath is missing" }
@@ -312,10 +329,10 @@ if ($isText) {
     <p style="margin-top:10px">A browser cannot write to a named pipe, so the
     one-time bridge is a protocol handler:
     <code class="k">charts\src\Register-DragLintProtocol.ps1</code> (HKCU only,
-    no elevation, <code class="k">-Unregister</code> to undo). Without it a click
-    falls through to this page's own handler, which shows you the exact message
-    it would have sent. If the IDE is not running, the handler falls back to
-    ShellExecute, mirroring the standalone viewer.</p>
+    no elevation, <code class="k">-Unregister</code> to undo). A click also shows
+    a short note naming the file and line it asked for; if nothing opens, the
+    handler is not registered on this machine. If the IDE is not running, the
+    handler falls back to ShellExecute, mirroring the standalone viewer.</p>
 '@
   $footFiles = 'graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry, same layout run) &middot; '
 }
@@ -347,6 +364,8 @@ $html = @"
   .stage svg{max-width:100%;height:auto;}
   .stage a{cursor:pointer;}
   .stage a:hover text{text-decoration:underline;}
+  .stage pre a{color:var(--accent);text-decoration:none;}
+  .stage pre a:hover{text-decoration:underline;}
   .note{margin:18px 0 0;border-left:4px solid var(--warn);background:var(--warn-soft);
         padding:14px 18px;border-radius:0 8px 8px 0;font-size:14px;}
   .note b{color:var(--warn);}
@@ -387,15 +406,16 @@ $note
     t.textContent = msg; t.classList.add('on');
     clearTimeout(timer); timer = setTimeout(function () { t.classList.remove('on'); }, 5200);
   }
+  // DOC-R1: the click is NEVER cancelled. The browser hands the draglint:// URI to the registered
+  // protocol handler (Register-DragLintProtocol.ps1 -> Open-DragLintUri.ps1 -> the IDE plugin's pipe
+  // \\.\pipe\drag-lint-open-source); the toast only says what was asked, and what to do if nothing opens.
   document.querySelector('.stage').addEventListener('click', function (ev) {
     var a = ev.target.closest('a'); if (!a) return;
-    var href = a.getAttribute('xlink:href') || a.getAttribute('href') || '';
+    var href = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
     if (href.indexOf('draglint://') !== 0) return;
-    ev.preventDefault();
     var m = /file=([^&]*)&(?:amp;)?line=(\d+)/.exec(href);
-    if (!m) { toast('unparseable target: ' + href); return; }
-    var file = decodeURIComponent(m[1]), line = m[2];
-    toast('sent to the IDE over \\\\\\\\.\\\\pipe\\\\drag-lint-open-source  ->  ' + file + ' TAB ' + line + '   (register the protocol handler to make this click go straight through)');
+    var what = m ? decodeURIComponent(m[1]) + ':' + m[2] : href;
+    toast('opening ' + what + ' in the IDE -- if nothing opens, register the handler once: charts\\src\\Register-DragLintProtocol.ps1');
   });
 })();
 </script>

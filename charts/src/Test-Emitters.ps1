@@ -456,6 +456,11 @@ Step 'E-MA-R26' {
   if ($r26html -notmatch [regex]::Escape('<span><b>0</b> resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas</span>')) { Fail 'A-MA-R26-HDR' 'the rendered bundle header does not name the unbound reads' }
   # a CHART bundle still takes the svg branch of the shell (Task 8 split it from the text branch)
   if ($r26html -notmatch '<div class="stage"><svg' -or $r26html -notmatch 'graph\.svg &middot; graph\.png') { Fail 'A-MA-R26-SVG' 'a chart bundle does not show its svg inline, or its footer does not name graph.svg' }
+  # DOC-R1 (2026-09-28): a click on a chart row must REACH the draglint:// protocol handler. The page's handler
+  # used to call preventDefault and only toast "sent to the IDE", so nothing was ever sent. It must not cancel
+  # navigation, and it still toasts what it asked for.
+  if ($r26html -cmatch 'preventDefault') { Fail 'A-DOC-R1-NAV' 'the chart bundle page cancels draglint:// navigation (preventDefault): a click never reaches the IDE' }
+  if ($r26html -cnotmatch "toast\('opening ' \+ what") { Fail 'A-DOC-R1-TOAST' 'the chart bundle page no longer toasts the file and line a click asked for' }
 }
 
 Note 'who-reads Connected at scale (602 sites, 598 routines, cap 25) ...'
@@ -2788,8 +2793,19 @@ Step 'RT-ART' {
   if ($html -cnotmatch '<pre[^>]*>TRACE OPERAT\.NAME') { Fail 'A-RT-ART' 'index.html does not show the trace' }
   # fix round 1 (I2, T8-R3): the footer names the text as what it is -- no paste-unchanged promise, no graph.*
   if ($html -cnotmatch '<footer>\s*trace\.dlgraph \(Form A text\) &middot; meta\.json' -or $html -cmatch 'graph\.svg|DocInsight') { Fail 'A-RT-ART-FOOT' 'the text bundle footer is not "trace.dlgraph (Form A text) &middot; meta.json ..."' }
-  # fix round 1 (I3, T8-R1): a text bundle claims no click targets; its anchors are @file:line text
-  if ($html -cmatch 'Every row is a real anchor|<b>\d+</b> click targets</span>' -or $html -cnotmatch 'not click targets') { Fail 'A-RT-ART-NOTE' 'the text bundle page claims clickable anchors' }
+  # fix round 1 (I3): a text bundle is not a chart -- no "Every row" / "N click targets" chart wording
+  if ($html -cmatch 'Every row is a real anchor|<b>\d+</b> click targets</span>|not click targets') { Fail 'A-RT-ART-NOTE' 'the text bundle page carries chart wording or the retired "not click targets" claim' }
+  # DOC-R1 (supersedes T8-R1, 2026-09-28): every ` @File:line` anchor of the trace is a draglint:// link whose
+  # path exists on disk, names the same leaf and line as the text, and the header says N of N.
+  # Measured on the v=1.20 / r=1.11 clones: 126 anchors (12 files across CLIENT, COMMON, SERVER and SQL).
+  $rtLinks = [regex]::Matches($html, '<a href="draglint://open\?file=([^"&]+)&amp;line=(\d+)">@([^<:]+):(\d+)</a>')
+  $rtAnch  = [regex]::Matches((Get-Content (Join-Path $art.Bundle 'trace.dlgraph') -Raw), ' @([A-Za-z0-9_$.\-]+\.(?:pas|dfm|dpr|inc|sql)):[1-9]\d*', 'IgnoreCase').Count
+  Chk 'A-RT-ART-LINKS' "$($rtLinks.Count)/$rtAnch" '126/126'
+  $rtBadLink = @($rtLinks | Where-Object { $lp = [uri]::UnescapeDataString($_.Groups[1].Value); -not (Test-Path -LiteralPath $lp) -or [IO.Path]::GetFileName($lp) -ne $_.Groups[3].Value -or $_.Groups[2].Value -ne $_.Groups[4].Value })
+  if ($rtBadLink.Count) { Fail 'A-RT-ART-LINKS' "$($rtBadLink.Count) link(s) point at a missing file or a different leaf/line than their text, first: $($rtBadLink[0].Value)" }
+  if ($html -cnotmatch '<span><b>126</b> of <b>126</b> @file:line anchors link to the IDE</span>') { Fail 'A-RT-ART-LINKS' 'the header does not say "126 of 126 @file:line anchors link to the IDE"' }
+  # DOC-R1: the page's click handler never cancels navigation (the same script as a chart page)
+  if ($html -cmatch 'preventDefault' -or $html -cnotmatch "toast\('opening ' \+ what") { Fail 'A-DOC-R1-NAV' 'the text bundle page cancels draglint:// navigation, or lost its opening toast' }
   if ((Get-Content (Join-Path $art.Bundle 'trace.dlgraph') -Raw) -cne $rt0.RtText) { Fail 'A-RT-ART' 'trace.dlgraph in the bundle differs from the emitter output' }
 }
 # AC-16, the holdout: a SECOND edited field, pinned only after the owner read its trace. frmBlueprint4.dxDBGrid1FtrsVNum
