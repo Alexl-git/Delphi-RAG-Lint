@@ -3,7 +3,30 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased (next published release)
+## v1.20.2-alpha -- 2026-09-29
+
+PATCH: a source-destroying autofix defect fixed, the plugin's click path hardened, charts merged.
+Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha, resolver 1.11.0-alpha and schema v23 are
+unchanged -- no index needs a re-parse or a re-resolve.
+
+### Fixed
+
+- **`lint-all --fix --apply` for doc-drift DELETED overload declarations.** The fixer walked symbol
+  rows but re-read and re-wrote each one BY NAME (`TDocumenter.ExistingDocFor` / `BuildFor` take a
+  qualified name and use the first row). Two overloads share a name, so both rows planned a
+  delete+insert over overload 1's doc span; the second delete ran past the block and removed
+  overload 1's declaration line. Measured on the convrules-editor: 9 declarations lost
+  (`TEngineAdapter` x6, `ConvRules.Usage` x3), sibling doc blocks merged, and the preview gave no
+  hint. The checker had the same by-name read, so an overload's block was graded against the first
+  overload's doc; the missing-doc fixer inserted docs above the first overload for the same reason.
+  All three now work on the row (`ExistingDocForSymbol`, `BuildForSymbol`). **The defect predates
+  1.20.1** (public overloads were exposed); 1.20.1's wider doc-drift scope exposed more of them.
+  Second layer: `TTextEditApplier.Apply` now refuses a file's edits whole when two deletes overlap
+  -- never a valid plan -- and says so on stderr, leaving the file as found. Replayed on the
+  convrules-editor at 689f627e: 326 edits across 16 files, zero non-`///` lines changed, and a
+  second `--fix` has nothing left. Guards: `tests\autodoc\run_doc_drift_fix_overloads.ps1` (RED on
+  1.20.1), `tests\refactor\TextEditTests.dpr` (duplicate pair and overlap refused, adjacent deletes
+  still applied).
 
 ### Added
 
