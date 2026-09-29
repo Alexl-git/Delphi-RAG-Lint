@@ -282,10 +282,10 @@ begin
     if K = AKind then Exit(True);
 end;
 
-{ Public-surface test mirroring FindUndocumented's publicOnly SQL: a symbol is
-  public when its modifiers carry neither 'private' nor 'protected' AND it is
-  declared in the INTERFACE section. Keeps doc-drift scoped to the same public
-  API surface as missing-doc (CDD rule).
+{ doc-drift's scope: a symbol declared in the INTERFACE section, whatever its
+  visibility -- the same population the batch writer documents. Until v1.20.1
+  this also required modifiers carrying neither 'private' nor 'protected',
+  mirroring missing-doc's public-only SQL; see the v1.20.1 note below.
 
   THE SECTION HALF IS NOT DECORATION -- without it this predicate answered "yes"
   for every unit-level routine in the IMPLEMENTATION section, because such a
@@ -304,14 +304,23 @@ end;
   ("a comment there is unambiguously about the declaration", DRagLint.Doc.Facts),
   so a doc-comment on an implementation-only routine is outside CDD's stated
   scope of "public/published types, methods and interfaces" and is optional by
-  that rule. Optional prose is not drift. }
-function IsPublicSymbol(const ASym: TSymbol): Boolean;
-var
-  M: string;
+  that rule. Optional prose is not drift.
+
+  v1.20.1 -- THE VISIBILITY HALF IS GONE, for the same reason the section half
+  was added: the checker must grade exactly what the WRITER writes. The batch
+  writer (DRagLint.Doc.Batch, `document --unit/--project`, document-all) tests
+  the SECTION only, so it writes managed facts blocks on private and protected
+  members of interface-section classes too -- 194 of them on drag-lint's own
+  self-index. This predicate then dropped those members, so their blocks went
+  stale with nothing to report it: TConvRulesForm.RefreshUnitList kept a Calls:
+  line naming a deleted routine through a whole review
+  (INBOX-2026-09-28-converter-to-engine-doc-drift-misses-deleted-nested-callee).
+  missing-doc keeps its own public-only SQL (FindUndocumented); this predicate
+  scopes only the drift checker and its fixer. Guard:
+  tests\autodoc\run_doc_drift_private_member.ps1. }
+function IsDocWriterSurface(const ASym: TSymbol): Boolean;
 begin
-  M:= LowerCase(ASym.Modifiers);
-  Result:= (Pos('private', M) = 0) and (Pos('protected', M) = 0)
-       and SameText(Trim(ASym.Section), 'interface');
+  Result:= SameText(Trim(ASym.Section), 'interface');
 end;
 
 class function TDocLintRules.RunMissingDoc(const AStore: ISymbolStore; AFileId: Int64 = 0): TArray<TLintFinding>;
@@ -354,9 +363,10 @@ begin
   end;
 end;
 
-{ The documented public documentable decls doc-drift operates on: every symbol
-  the index has a doc for, narrowed to the public API surface and the
-  CDD-documentable kinds. Shared by RunDocDrift (report) and
+{ The documented documentable decls doc-drift operates on: every symbol the
+  index has a doc for, narrowed to the interface section (IsDocWriterSurface --
+  private and protected members included since v1.20.1; the name predates that)
+  and the CDD-documentable kinds. Shared by RunDocDrift (report) and
   FixEditsForDocDrift (repair) so both iterate exactly the same population.
   v(2026-08-13): the repair path then NARROWS that population to the decls whose
   findings it was actually handed -- same population, filtered by what the caller
@@ -385,7 +395,7 @@ begin
       disk and re-analysing it), not the single indexed lookup. }
     for Sym in AStore.ListDocumentedSymbols(MaxInt) do
       if ((AFileId <= 0) or (Sym.FileId = AFileId))
-         and IsDocumentableKind(Sym.Kind) and IsPublicSymbol(Sym) then Acc.Add(Sym);
+         and IsDocumentableKind(Sym.Kind) and IsDocWriterSurface(Sym) then Acc.Add(Sym);
     Result:= Acc.ToArray;
   finally
     Acc.Free;
