@@ -25,7 +25,7 @@ type
   /// so they are in Adds, NOT Removes).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.DoCheckUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshUnitList (ConvRules.MainForm.pas), declaration (ConvRules.Units.pas)</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCheckUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshUnitList (ConvRules.MainForm.pas), declaration (ConvRules.Units.pas) (+1 more)</para>
   /// <para>Used in units: ConvRules.MainForm, ConvRules.Units</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -38,7 +38,7 @@ type
   /// <summary>One From/To type pair fed to auto-derive (a #convert header).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.Units.DeriveUnits (ConvRules.Units.pas), declaration (ConvRules.Units.pas)</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.Units.DeriveUnits (ConvRules.Units.pas), declaration (ConvRules.Units.pas)</para>
   /// <para>Used in units: ConvRules.MainForm, ConvRules.Units</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -81,9 +81,8 @@ function NormalizeUnitSets(ABook: TRuleBook): TUnitSets;
 /// <returns><!-- drag-lint:auto type -->TUnitSets</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas)</para>
 /// <para>Calls: AResolve, ConvRules.Units.AddUniq, ConvRules.Units.ToArr</para>
-/// <para>Pure</para>
 /// <seealso cref="ConvRules.Units.AddUniq"/>
 /// <seealso cref="ConvRules.Units.ToArr"/>
 /// <!-- drag-lint:auto END -->

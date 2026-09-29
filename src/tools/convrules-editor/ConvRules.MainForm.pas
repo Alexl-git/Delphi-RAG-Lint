@@ -281,13 +281,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildToolbar, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, TLabel</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+24 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+22 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildToolbar, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, TLabel</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+24 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+23 more)</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildToolbar"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildTypePopup"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure BuildUI;
@@ -304,7 +304,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.BuildToolbar.AddBtn, ConvRules.MainForm.TConvRulesForm.BuildToolbar.AddSep</para>
-      /// <para>Reads: FToolbar   Writes: FToolbar, FTbAssign, FTbUnassign, FTbFindInFrom, FTbOnlyType, FTbMappings, FTbExamine, FTbClearExamine</para>
+      /// <para>Reads: FToolbar   Writes: FToolbar, FTbAssign, FTbUnassign, FTbFindInFrom, FTbOnlyType, FTbMappings, FTbExamine, FTbClearExamine (+1 more)</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildToolbar.AddBtn"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildToolbar.AddSep"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
@@ -320,14 +320,15 @@ type
       /// behaviour was worth replacing.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoDeleteUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoUnassign (ConvRules.MainForm.pas) (+5 more)</para>
-      /// <para>Reads: FTbAssign, FActiveHdr, FGrid, FPool, FTbUnassign, FTbFindInFrom, FTbExamine, FTbClearExamine (+3 more)</para>
-      /// <para>Pure</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoDeleteUnit (ConvRules.MainForm.pas) (+7 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SelectedUnitRows</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
+      /// <para>Reads: FTbAssign, FActiveHdr, FGrid, FPool, FTbUnassign, FTbFindInFrom, FTbExamine, FTbClearExamine (+5 more)</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedUnitRows"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure UpdateToolbarEnabled;
@@ -376,12 +377,11 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PoolSelectionChanged(Sender: TObject);
@@ -394,8 +394,8 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FormCloseHandler(Sender: TObject; var Action: TCloseAction);
@@ -403,12 +403,11 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadFile</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoLoad(Sender: TObject);
@@ -423,17 +422,17 @@ type
       /// over the editor's buffer) after a save the user asked for and did not get.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCurate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSaveClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ValidateText, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.SaveCompleteToString, ConvRules.Units.NormalizeUnitSets, ConvRules.WorkingSet.BackupPath, ExtractFileName, Format, Trim</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ValidateText, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.SaveCompleteToString, ConvRules.Units.NormalizeUnitSets, ConvRules.WorkingSet.BackupPath, ExtractFileName, Format, Trim</para>
       /// <para>Returns: False; True</para>
       /// <para>Complexity: 12 (cyclomatic, outer body), 93 lines (full implementation)</para>
       /// <para>Reads: FFilePath, FLblFile, FBook, FActiveHdr, FEngine, FFormTypeRows, FLblStatus   Writes: FFilePath</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ValidateText"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RescanRulesFolder"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DoSave(Sender: TObject): Boolean;
@@ -443,26 +442,24 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoSaveClick(Sender: TObject);
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ValidateText, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.SaveToString</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ValidateText, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.SaveToString</para>
       /// <para>Reads: FFilePath, FActiveHdr, FBook, FEngine</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ValidateText"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.SaveToString"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoValidate(Sender: TObject);
@@ -489,16 +486,15 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.Model.TRuleBook.Add, Default, Format, Integer, SameText, Trim</para>
-      /// <para>Complexity: 19 (cyclomatic, outer body), 97 lines (full implementation)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel (+6 more)</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 109 lines (full implementation)</para>
       /// <para>Reads: FCbFrom, FCbTo, FEngine, FActiveHdr, FBook, FRules</para>
       /// <para>UI thread only -- touches Application</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoAutoMatch"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadGridForBlock"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoNewConversion(Sender: TObject);
@@ -537,15 +533,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.DoAutoMatch.LeafName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.Mappings.ConditionalCasesOf (+6 more)</para>
+      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.ActiveConditionals, ConvRules.MainForm.TConvRulesForm.ActiveLinks, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.DoAutoMatch.LeafName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList (+9 more)</para>
       /// <para>Complexity: 19 (cyclomatic, outer body), 128 lines (full implementation)</para>
       /// <para>Reads: FActiveHdr, FToTree, FFromTree</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Casts.ResolveUnknownTypes"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AssignLink"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.CanCast"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoAutoMatch.LeafName"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.FindLinkForFrom"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAutoMatch(Sender: TObject);
@@ -557,7 +552,7 @@ type
       /// recover the full entry for a row whose header index is -1 (a cross-book rule).</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddRuleForSelectedClass (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas) (+7 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddRuleForSelectedClass (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas) (+9 more)</para>
       /// <para>Calls: ConvRules.RuleCatalog.HeaderIndexFor, ConvRules.RuleCatalog.RulesForType, ExtractFileName, NativeInt, Pointer</para>
       /// <para>Reads: FRules, FSelectedFormType, FCatalog, FBook   Writes: FRulesEntries</para>
       /// <seealso cref="ConvRules.RuleCatalog.HeaderIndexFor"/>
@@ -573,14 +568,13 @@ type
       /// <param name="Selected"><!-- drag-lint:auto type -->Boolean</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetStatus, ExtractFileName, Format, Integer</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ExtractFileName, Format, Integer</para>
       /// <para>Reads: FRulesEntries</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadGridForBlock"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
+      /// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
@@ -592,12 +586,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, Integer</para>
       /// <para>Reads: FRules, FRulesEntries</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RulesDblClick(Sender: TObject);
@@ -605,14 +598,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesSelectItem (ConvRules.MainForm.pas) (+1 more)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, Default, Format, Trim</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, Default, Format, Trim</para>
       /// <para>Reads: FTbOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+3 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshGrid"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshPool"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LoadGridForBlock(AHdrIdx: Integer);
@@ -625,15 +618,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoClearGridFindFrom (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearGridFindTo (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.GridFilterChange (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConditionalCasesOf, ConvRules.MainForm.GridRowMatchesFilter, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.RefreshGrid.ToCellFor, ConvRules.Model.PropCellText, Format, LeafType, Max, Trim</para>
+      /// <para>Calls: ConditionalCasesOf, ConvRules.MainForm.GridRowMatchesFilter, ConvRules.MainForm.TConvRulesForm.ActiveConditionals, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.RefreshGrid.ToCellFor, ConvRules.Model.PropCellText, Format, LeafType, Max, Trim</para>
       /// <para>Complexity: 10 (cyclomatic, outer body), 77 lines (full implementation)</para>
       /// <para>Reads: FGridFindFrom, FGridFindTo, FFromTree, FGrid, FLblGridMatch</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.GridRowMatchesFilter"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.FindLinkForFrom"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshGrid.ToCellFor"/>
       /// <seealso cref="ConvRules.Model.PropCellText"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshGrid;
@@ -645,12 +637,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshGrid</para>
       /// <para>Reads: FActiveHdr</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshGrid"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure GridFilterChange(Sender: TObject);
@@ -661,12 +652,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshGrid</para>
       /// <para>Reads: FGridFindFrom, FActiveHdr</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshGrid"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoClearGridFindFrom(Sender: TObject);
@@ -677,12 +667,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshGrid</para>
       /// <para>Reads: FGridFindTo, FActiveHdr</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshGrid"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoClearGridFindTo(Sender: TObject);
@@ -704,13 +693,13 @@ type
       /// skip on disk came back unmarked, and the next save then erased the mark.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFormFiles (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.FormTypes.MergeFormTypes, ConvRules.FormTypes.ScanDfmTypes, ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadDescendantSet, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, SameText</para>
+      /// <para>Calls: ConvRules.FormTypes.MergeFormTypes, ConvRules.FormTypes.ScanDfmTypes, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadDescendantSet, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, SameText</para>
       /// <para>Reads: FFormTypeRows, FVisualSet, FCatalog   Writes: FFormTypeRows, FHarvestedUnitPath, FVisualSet, FComponentSet, FPersistentSet</para>
       /// <seealso cref="ConvRules.FormTypes.MergeFormTypes"/>
       /// <seealso cref="ConvRules.FormTypes.ScanDfmTypes"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadDescendantSet"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HarvestFormTypes(const ADfmTexts: TArray<string>);
@@ -721,14 +710,14 @@ type
       /// this only tallies RowState.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ClassSearchChange (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeCheckClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas) (+4 more)</para>
-      /// <para>Calls: ConvRules.FormTypes.CountRows, ConvRules.FormTypes.FormTypesProgressCaption, ConvRules.FormTypes.VisibleRowIndexes, ConvRules.RuleCatalog.RulesForType, ExtractFileName</para>
+      /// <para>Calls: ConvRules.FormTypes.CountRows, ConvRules.FormTypes.FormTypesProgressCaption, ConvRules.FormTypes.VisibleRowIndexes, ConvRules.MainForm.TConvRulesForm.ClassSearchText, ConvRules.RuleCatalog.RulesForType, ExtractFileName</para>
       /// <para>Complexity: 12 (cyclomatic, outer body), 66 lines (full implementation)</para>
-      /// <para>Reads: FFormTypeList, FFilterMemo, FFormTypeRows, FVisualSet, FComponentSet, FPersistentSet, FCatalog, FVisibleRows (+2 more)   Writes: FVisibleRows</para>
+      /// <para>Reads: FFormTypeList, FFilterMemo, FFormTypeRows, FVisualSet, FComponentSet, FPersistentSet, FCatalog, FVisibleRows (+2 more)   Writes: FFormTypeRows, FVisibleRows</para>
       /// <seealso cref="ConvRules.FormTypes.CountRows"/>
       /// <seealso cref="ConvRules.FormTypes.FormTypesProgressCaption"/>
       /// <seealso cref="ConvRules.FormTypes.VisibleRowIndexes"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ClassSearchText"/>
       /// <seealso cref="ConvRules.RuleCatalog.RulesForType"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshFormTypes;
@@ -744,15 +733,15 @@ type
       /// ConvRules.FormTypes.ResolveSelectedRow, tested there headlessly; this is
       /// just the UI-facing wrapper that supplies FFormTypeList.ItemIndex.
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAddRuleForSelectedClass (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeCheckClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ToggleFormTypeSkip (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.FormTypes.ResolveSelectedRow</para>
       /// <para>Returns: -1; ResolveSelectedRow(FVisibleRows, FFormTypeList.ItemIndex, Length(FFormTypeRows))</para>
       /// <para>Reads: FFormTypeList, FVisibleRows, FFormTypeRows</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.FormTypes.ResolveSelectedRow"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SelectedRowIndex: Integer;
@@ -764,14 +753,14 @@ type
       /// against form-type class names. It changes only which rows RefreshFormTypes
       /// shows -- never a check state.
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes (ConvRules.MainForm.pas)</para>
       /// <para>Calls: Trim</para>
       /// <para>Reads: FRulesFilter</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ClassSearchText: string;
@@ -781,7 +770,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadSkipList, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.CatalogToIndexText, ConvRules.RuleCatalog.FindDuplicates, ConvRules.RuleCatalog.SameBookDups, ConvRules.RuleCatalog.ScanRulesFolder, ExtractFileName, ExtractFilePath, Format, Trim</para>
-      /// <para>Reads: FRulesFolder, FFilePath, FSkipList, FCatalog, FCatalogDups   Writes: FCatalog, FCatalogDups, FRulesFolder</para>
+      /// <para>Reads: FRulesFolder, FFilePath, FCatalog, FSkipMarksDirty, FLastSkipLoadFailed, FCatalogDups   Writes: FCatalog, FCatalogDups, FRulesFolder</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
@@ -804,13 +793,13 @@ type
       /// Fires whether the row is greyed or not, by design: a greyed row is
       /// a hint, never a prohibition.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.FormTypes.RowState, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, Format</para>
+      /// <para>Calls: ConvRules.FormTypes.RowState, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SelectedRowIndex, ConvRules.MainForm.TConvRulesForm.SetStatus, Format</para>
       /// <para>Reads: FBtnAddRule, FFormTypeRows   Writes: FSelectedFormType</para>
       /// <seealso cref="ConvRules.FormTypes.RowState"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedRowIndex"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FormTypeClick(Sender: TObject);
@@ -829,13 +818,13 @@ type
       /// picker, goes through OpenOwningRuleEntry -- the one implementation of the
       /// cross-book save/discard prompt.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.RulesForType, ConvRules.RuleChooser.TRuleChooserForm.Execute, ExtractFileName, Format</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SelectedRowIndex, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.RulesForType, ConvRules.RuleChooser.TRuleChooserForm.Execute, ExtractFileName, Format</para>
       /// <para>Reads: FCbFrom, FFormTypeRows, FCatalog, FCbTo   Writes: FSelectedFormType</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedRowIndex"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.RuleCatalog.RulesForType"/>
-      /// <seealso cref="ConvRules.RuleChooser.TRuleChooserForm.Execute"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FormTypeDblClick(Sender: TObject);
@@ -889,9 +878,8 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesDblClick (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, MessageDlg, SameText</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 84 lines (full implementation)</para>
-      /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr</para>
-      /// <para>Pure</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 93 lines (full implementation)</para>
+      /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr   Writes: FPendingSelectEntry, FHasPendingSelectEntry</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
@@ -909,13 +897,13 @@ type
       /// this button a second To for the same From class (R3.5) would be
       /// unreachable from a single-ruled row. Enabled/disabled by FormTypeClick.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, Format</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SelectedRowIndex, ConvRules.MainForm.TConvRulesForm.SetStatus, Format</para>
       /// <para>Reads: FCbFrom, FFormTypeRows, FCbTo   Writes: FSelectedFormType</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedRowIndex"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAddRuleForSelectedClass(Sender: TObject);
@@ -923,14 +911,13 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.FormTypes.ListIndexForRow, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList</para>
-      /// <para>Reads: FFormTypeRows, FVisibleRows, FFormTypeList</para>
-      /// <para>Pure</para>
+      /// <para>Calls: ConvRules.FormTypes.ListIndexForRow, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SelectedRowIndex</para>
+      /// <para>Reads: FFormTypeRows, FVisibleRows, FFormTypeList   Writes: FFormTypeRows</para>
       /// <seealso cref="ConvRules.FormTypes.ListIndexForRow"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveSkipList"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedRowIndex"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ToggleFormTypeSkip(Sender: TObject);
@@ -942,14 +929,13 @@ type
       /// decision, saved on the spot rather than at some later Save the user
       /// may never reach.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList</para>
-      /// <para>Reads: FFormTypeRows, FFormTypeList</para>
-      /// <para>Pure</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SelectedRowIndex</para>
+      /// <para>Reads: FFormTypeRows, FFormTypeList   Writes: FFormTypeRows</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveSkipList"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedRowIndex"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FormTypeCheckClick(Sender: TObject);
@@ -983,12 +969,11 @@ type
       /// <para>Returns: TStringList.Create</para>
       /// <para>Reads: FEngine</para>
       /// <para>Owns returned: new (caller owns)</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ListDescendantsOf"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LoadDescendantSet(const AAncestor: string): TStringList;
@@ -1004,12 +989,11 @@ type
       /// <para>Calls: ConvRules.RuleCatalog.BareTypeName, SameText</para>
       /// <para>Returns: 0; Length(Dup.Entries)</para>
       /// <para>Reads: FCatalogDups</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DuplicateSitesFor(const ATypeName: string): Integer;
@@ -1027,7 +1011,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DeclaringUnitCached(const ATypeName: string): string;
@@ -1058,16 +1042,16 @@ type
       /// button and --form all funnel through here, so none of them can drift.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoExamine (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoOpenForm (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes, ConvRules.MainForm.TConvRulesForm.HarvestUsedUnits, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.ShowUsageReport, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.Usage.ComputeUsage, Copy, ExtractFileExt, ExtractFileName, Format, LastDelimiter, SameText</para>
+      /// <para>Calls: ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.HarvestFormTypes, ConvRules.MainForm.TConvRulesForm.HarvestUsedUnits, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.ShowUsageReport, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.Usage.ComputeUsage, Copy, ExtractFileExt, ExtractFileName, Format, LastDelimiter, SameText</para>
       /// <para>Complexity: 10 (cyclomatic, outer body), 104 lines (full implementation)</para>
       /// <para>Reads: FUsedFiles, FActiveHdr, FFormTypeRows, FExamineInfo, FFromTree, FBook, FUnitCandidates, FGrid   Writes: FUsedFiles, FExamineInfo, FUsedProps</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.HarvestFormTypes"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.HarvestUsedUnits"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ShowUsageReport"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LoadFormFiles(const AFiles: TArray<string>);
@@ -1082,12 +1066,11 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PickFormFiles (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ChangeFileExt, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings.Take, ExtractFileExt, LowerCase, Trim</para>
       /// <para>Returns: nil</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings.Take"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ExpandUnitSiblings(const APaths: TArray<string>): TArray<string>;
@@ -1095,7 +1078,7 @@ type
       /// <param name="ADir"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.PickFormFiles (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAddSource (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PickFormFiles (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SetStatus, Trim</para>
       /// <para>Writes: FLastFormDir</para>
       /// <para>Catches: ERegistryException (swallowed)</para>
@@ -1104,23 +1087,10 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetLastFormDir(const ADir: string);
-      /// <summary>Panel button: browse for a form, then load it.</summary>
-      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.PickFormFiles</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFormFiles"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.PickFormFiles"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
       /// <summary>Put a NON-PROJECT unit into the From Unit box: browse for a
       /// loose .pas/.dfm pair and select its path in the combo.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
@@ -1143,16 +1113,17 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.PickFormFiles</para>
-      /// <para>Pure</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoAddSource, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.PickFormFiles</para>
+      /// <para>Reads: FTabs, FTabUnits</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoAddSource"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFormFiles"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.PickFormFiles"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoOpenForm      (Sender: TObject);
+      /// <summary>Panel button: browse for a form, then load it.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1190,12 +1161,11 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFormFiles (ConvRules.MainForm.pas)</para>
       /// <para>Calls: Format</para>
       /// <para>UI thread only -- touches F</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ShowUsageReport(const AMissing, ALoose: TArray<string>);
@@ -1229,13 +1199,12 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas)</para>
-      /// <para>Reads: FMnuTheme</para>
-      /// <para>Pure</para>
+      /// <para>Reads: FMnuTheme   Writes: FMnuTheme</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure BuildMenu;
@@ -1245,12 +1214,11 @@ type
       /// <!-- drag-lint:auto -->View &gt; Theme item handler; the item's Tag is Ord(TThemePref).
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SetThemePref, TThemePref</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetThemePref"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ThemeMenuClick(Sender: TObject);
@@ -1265,8 +1233,8 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure BuildTypePopup;
@@ -1286,12 +1254,11 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.GridPoolContextPopup (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TypeOfCell</para>
       /// <para>Reads: FPool, FGrid</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TypeOfCell"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function TypeAtPos(ASender: TObject; const APos: TPoint): string;
@@ -1314,7 +1281,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure GridPoolContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
@@ -1328,43 +1295,40 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ChangeFileExt, ConvRules.Engine.TEngineAdapter.EnumMembersOf/3, ConvRules.Engine.TEngineAdapter.ResolveTypeLocation/5, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.OpenSourceClient.SendOpenSource, ExtractFileName, Format</para>
+      /// <para>Calls: ChangeFileExt, ConvRules.Engine.TEngineAdapter.EnumMembersOf/3, ConvRules.Engine.TEngineAdapter.ResolveTypeLocation/5, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.OpenSourceClient.SendOpenSource, ExtractFileName, Format</para>
       /// <para>Reads: FCtxType, FEngine</para>
       /// <para>Catches: Exception (swallowed)</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.EnumMembersOf"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveTypeLocation"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.OpenSourceClient.SendOpenSource"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoGoToDefinition(Sender: TObject);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoOnlyType (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoUnassign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PoolFilter (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Mappings.MappedTargetPaths, ConvRules.Model.PropCellText, LowerCase, Pos, SameText, Trim</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames, ConvRules.MainForm.TConvRulesForm.ActiveLinks, ConvRules.Mappings.MappedTargetPaths, ConvRules.Model.PropCellText, LowerCase, Pos, SameText, Trim</para>
       /// <para>Reads: FBook, FPoolFind, FPool, FToTree, FPoolTypeFilter</para>
-      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <seealso cref="ConvRules.Mappings.MappedTargetPaths"/>
       /// <seealso cref="ConvRules.Model.PropCellText"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshPool;
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LeafType, ConvRules.MainForm.TConvRulesForm.LeafWritable, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError (+7 more)</para>
+      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.ActiveConditionals, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LeafType, ConvRules.MainForm.TConvRulesForm.LeafWritable, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.RefreshRulesList (+8 more)</para>
       /// <para>Reads: FActiveHdr, FPool, FGrid, FFromTree, FToTree</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Casts.ResolveUnknownTypes"/>
       /// <seealso cref="ConvRules.MainForm.PathOfGridCell"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AssignLink"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.CanCast"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.FindLinkForFrom"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAssign(Sender: TObject);
@@ -1387,12 +1351,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshPool</para>
       /// <para>Reads: FActiveHdr</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshPool"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PoolFilter(Sender: TObject);
@@ -1456,14 +1419,14 @@ type
       /// AppliedMappingNames(FBook.NodesInBlock(FActiveHdr)).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ActiveConditionals (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshPool (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Mappings.AppliedMappingNames, ConvRules.Model.TRuleBook.NodesInBlock</para>
       /// <para>Reads: FActiveHdr, FBook</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Mappings.AppliedMappingNames"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.NodesInBlock"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ActiveAppliedNames: TArray<string>;
@@ -1478,50 +1441,30 @@ type
       /// ConditionalFromPaths(FBook.Nodes.ToArray, ActiveAppliedNames).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Mappings.ConditionalFromPaths</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames, ConvRules.Mappings.ConditionalFromPaths</para>
       /// <para>Reads: FActiveHdr, FBook</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.Mappings.ConditionalFromPaths"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.Mappings.ConditionalFromPaths"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ActiveConditionals: TArray<TConditionalFrom>;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas) (+7 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas) (+8 more)</para>
       /// <para>Calls: ConvRules.Model.TRuleBook.SaveToString</para>
       /// <para>Reads: FRaw, FBook</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.SaveToString"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SyncRawFromModel;
-      /// <summary><!-- drag-lint:auto sum -->The list shows the rule book's unit directives
-      /// first, then -- underneath them -- the units Examine harvested that STILL have no
-      /// rule of their own (Item.Data = nil marks a candidate). Candidates are re-filtered
-      /// on every refresh rather than pruned once, so authoring a #use/#unuse/#useswap for
-      /// one silently retires its candidate row, and one source unit can fan out to several
-      /// replacements through the existing #useswap.</summary>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCheckUnits (ConvRules.MainForm.pas) (+6 more)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshUnitList.HasRuleFor, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.Units.NormalizeUnitSets, IfThen, Pointer, SameText</para>
-      /// <para>Reads: FUnitList, FBook, FUnitCandidates</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.HasRuleFor"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.UnitNodes"/>
-      /// <seealso cref="ConvRules.Units.NormalizeUnitSets"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
       /// <summary>Fill the Unit Rules tab's candidate rows from the `uses` clauses of
       /// APasTexts, each marked with the clause it was written in.</summary>
       /// <param name="APasTexts">One entry per .pas file. Scanned PER TEXT and merged:
@@ -1568,7 +1511,7 @@ type
       /// would otherwise have zero coverage.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestUnitFile (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ChangeFileExt, ConvRules.Engine.TEngineAdapter.OutlineClasses, ConvRules.FormTypes.DescribeOutlineOutcome, ConvRules.FormTypes.MergeClassRows, ConvRules.FormTypes.ScanDfmTypes, ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Usage.ScanClassesDeclared, ExtractFileName, Format, SameText</para>
+      /// <para>Calls: ChangeFileExt, ConvRules.Engine.TEngineAdapter.OutlineClasses, ConvRules.FormTypes.DescribeOutlineOutcome, ConvRules.FormTypes.MergeClassRows, ConvRules.FormTypes.ScanDfmTypes, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Usage.ScanClassesDeclared, ExtractFileName, Format, SameText</para>
       /// <para>Reads: FHarvestedUnitPath, FEngine, FFormTypeRows   Writes: FFormTypeRows, FHarvestedUnitPath</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>UI thread only -- touches Application</para>
@@ -1577,7 +1520,7 @@ type
       /// <seealso cref="ConvRules.FormTypes.DescribeOutlineOutcome"/>
       /// <seealso cref="ConvRules.FormTypes.MergeClassRows"/>
       /// <seealso cref="ConvRules.FormTypes.ScanDfmTypes"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HarvestUnitClasses(const AUnitText, APasPath: string): string;
@@ -1591,7 +1534,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.SkipList.MergePendingMarks, ConvRules.SkipList.ParseSkipList, ConvRules.SkipList.SkipFilePath, Default, ExtractFileName, Format</para>
-      /// <para>Reads: FSkipList, FRulesFolder   Writes: FSkipList</para>
+      /// <para>Reads: FSkipList, FRulesFolder   Writes: FSkipList, FLastSkipLoadFailed</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
@@ -1617,7 +1560,7 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ApplySkipMarks;
@@ -1634,8 +1577,8 @@ type
       /// timing trap the --form startup comment on LoadFile documents.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeCheckClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ToggleFormTypeSkip (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.FormTypes.SkipListFromRows, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.SkipList.EmitSkipList, ConvRules.SkipList.SkipFilePath, ExtractFileName, Format, MoveFileEx, PChar</para>
-      /// <para>Reads: FSkipList, FFormTypeRows, FRulesFolder   Writes: FSkipList</para>
+      /// <para>Calls: ConvRules.FormTypes.SkipListFromRows, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.SkipList.EmitSkipList, ConvRules.SkipList.SkipFilePath, DeleteFile, ExtractFileName, Format, MoveFileEx, PChar</para>
+      /// <para>Reads: FSkipList, FFormTypeRows, FRulesFolder   Writes: FSkipList, FSkipMarksDirty</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.FormTypes.SkipListFromRows"/>
@@ -1661,15 +1604,15 @@ type
       /// re-apply it (re-application itself is not wired to anything yet --
       /// only the record is kept).
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.FormTypes.ApplyNamedFilterToRows, ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.SkipList.SetNamedFilter, Default, Format, Trim, UpperCase</para>
+      /// <para>Calls: ConvRules.FormTypes.ApplyNamedFilterToRows, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.SkipList.SetNamedFilter, Default, Format, Trim, UpperCase</para>
       /// <para>Complexity: 10 (cyclomatic, outer body), 54 lines (full implementation)</para>
       /// <para>Reads: FFilterMemo, FChkStdCtrls, FFormTypeRows, FDeclUnits, FFilterError, FFilterName, FSkipList   Writes: FFormTypeRows, FSkipList</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.FormTypes.ApplyNamedFilterToRows"/>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveSkipList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ApplyNamedFilterClick(Sender: TObject);
@@ -1703,9 +1646,9 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoPickFromUnit (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.HarvestUnitFile, ConvRules.MainForm.TConvRulesForm.SetStatus, ExtractFileName, Format, Trim</para>
       /// <para>Reads: FCbUnit, FUnitCandidates</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.HarvestUnitFile"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
@@ -1714,6 +1657,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure CbUnitSelected(Sender: TObject);
+      /// <summary>Rebuilds the Unit Rules list from current state: the rule book's unit
+      /// directives first, then the harvested (used) rows that ConvRules.UnitMask.FilterHarvestRows
+      /// lets through, then the Examine candidates that still have no rule and no LISTED
+      /// harvested twin. Re-filters only -- it never reclassifies (that is ReclassifyHarvest),
+      /// so a check box or mask change is cheap.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas) (+11 more)</para>
@@ -1731,81 +1679,88 @@ type
       /// <param name="ANode"><!-- drag-lint:auto type -->TRuleNode</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Model.TRuleBook.Add, ConvRules.Model.TRuleBook.ConvertHeaders</para>
-      /// <para>Reads: FBook</para>
-      /// <para>Pure</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.Model.TRuleBook.Add, ConvRules.Model.TRuleBook.ConvertHeaders</para>
+      /// <para>Reads: FBook, FActiveHdr   Writes: FActiveHdr</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure InsertUnitNode(ANode: TRuleNode);
+      /// <summary><!-- drag-lint:auto sum -->Old unit from the FROM side, then one or
+      /// more New units from the TO side -- the picker returns one name per open, so each
+      /// further New is offered with a Yes/No between picks. Cancelling the first New
+      /// abandons the swap; cancelling a later one keeps what was picked so far.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, Format, InputQuery, Trim</para>
-      /// <para>Pure</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.PickUnit, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SelectedUnitRows, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, Format, MatchText, MessageDlg</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.InsertUnitNode"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.PickUnit"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedUnitRows"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SyncRawFromModel"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAddSwap(Sender: TObject);
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, InputQuery, Trim</para>
-      /// <para>Pure</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.PickUnit, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.InsertUnitNode"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.PickUnit"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SyncRawFromModel"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAddUse(Sender: TObject);
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, InputQuery, Trim</para>
-      /// <para>Pure</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.PickUnit, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SelectedUnitRows, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, Format, MessageDlg</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.InsertUnitNode"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.PickUnit"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedUnitRows"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SyncRawFromModel"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAddUnuse(Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->Acts on EVERY selected row: a rule row (Data
+      /// &lt;&gt; nil) deletes its node; a harvested '(used)' row or an Examine
+      /// '(candidate)' row (Data = nil, NOT a rule) is dismissed from its own session set
+      /// only. More than one row asks first.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, SameText, TRuleNode</para>
-      /// <para>Reads: FUnitList, FUnitCandidates, FBook   Writes: FUnitCandidates</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.UsesHarvest.WithoutUnit, Format, MatchText, MessageDlg, TRuleNode</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)</para>
+      /// <para>Reads: FUnitList, FActiveHdr, FBook, FUnitCandidates, FHarvest   Writes: FActiveHdr, FUnitCandidates, FHarvest</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SyncRawFromModel"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.UsesHarvest.WithoutUnit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoDeleteUnit(Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->Setting a conversion already adds its unit
+      /// rules (AddDerivedUnitRules); this button is for books written before that, and
+      /// is idempotent -- a second press adds nothing.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DeclaringUnitOf, ConvRules.MainForm.TConvRulesForm.DoDeriveUnits.HasUnuse, ConvRules.MainForm.TConvRulesForm.DoDeriveUnits.HasUse, ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.Model.TRuleBook.ConvertHeaders, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.Units.DeriveUnits, Format, SameText</para>
-      /// <para>Reads: FBook, FEngine</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DeclaringUnitOf"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoDeriveUnits.HasUnuse"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoDeriveUnits.HasUse"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.InsertUnitNode"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
+      /// <para>Calls: ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.Model.TRuleBook.ConvertHeaders, Format</para>
+      /// <para>Reads: FBook</para>
+      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SyncRawFromModel"/>
+      /// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoDeriveUnits(Sender: TObject);
@@ -1907,26 +1862,25 @@ type
       /// never changes a check state, so the progress line stays truthful.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshFormTypes</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ClassSearchChange(Sender: TObject);
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbUnitSelected (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas) (+35 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbUnitSelected (ConvRules.MainForm.pas) (+40 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetStatus(const S: string);
@@ -1935,14 +1889,14 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas) (+12 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas) (+18 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetError(const S: string);
@@ -1953,25 +1907,24 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SetError (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SetStatus (ConvRules.MainForm.pas)</para>
       /// <para>Reads: FLblStatus, FStatusIsError</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshStatusColor;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4, ConvRules.MainForm.TConvRulesForm.FromDbSet, ConvRules.MainForm.TConvRulesForm.ToDbSet</para>
       /// <para>Reads: FFromClasses, FToClasses, FEngine, FCbFrom, FCbTo   Writes: FFromClasses, FToClasses</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ListDescendantsOf"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.FromDbSet"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ToDbSet"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LoadAllClasses;
@@ -1983,14 +1936,14 @@ type
       /// LibDbsFor(FFromPlatform, GEditorLibDir) + [GEditorProjectDb].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.EngineDbSet (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadAllClasses (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Platform.LibDbsFor</para>
       /// <para>Reads: FFromPlatform</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Platform.LibDbsFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FromDbSet: TArray<string>;
@@ -1998,14 +1951,14 @@ type
       /// LibDbsFor(FToPlatform, GEditorLibDir) + [GEditorProjectDb].</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.EngineDbSet (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadAllClasses (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Platform.LibDbsFor</para>
       /// <para>Reads: FToPlatform</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Platform.LibDbsFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ToDbSet: TArray<string>;
@@ -2015,13 +1968,13 @@ type
       /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: LowerCase</para>
-      /// <para>Pure</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.FromDbSet, ConvRules.MainForm.TConvRulesForm.ToDbSet, LowerCase</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.FromDbSet"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ToDbSet"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EngineDbSet: TArray<string>;
@@ -2148,14 +2101,14 @@ type
       /// FBook.LinksForBlock(FActiveHdr).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FindLinkForFrom (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshPool (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Model.TRuleBook.LinksForBlock</para>
       /// <para>Reads: FActiveHdr, FBook</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.LinksForBlock"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ActiveLinks: TArray<TRuleNode>;
@@ -2164,13 +2117,12 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoUnassign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: SameText</para>
-      /// <para>Pure</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ActiveLinks, SameText</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindLinkForFrom(const AFromPath: string): TRuleNode;
@@ -2183,12 +2135,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshConvOptions (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid.ToCellFor (ConvRules.MainForm.pas) ?</para>
       /// <para>Calls: SameText</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LeafType(const ATree: TProptree; const APath: string): string;
@@ -2202,12 +2153,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas)</para>
       /// <para>Calls: SameText</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LeafWritable(const ATree: TProptree; const APath: string): Boolean;
@@ -2222,12 +2172,11 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CanCast (ConvRules.MainForm.pas)</para>
       /// <para>Calls: DRagLint.Convert.CastLib.ClassCastFor</para>
       /// <para>Reads: FCastDefs</para>
-      /// <para>Pure</para>
       /// <seealso cref="DRagLint.Convert.CastLib.ClassCastFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ClassCastName(const AFromType, AToType: string): string;
@@ -2275,29 +2224,28 @@ type
       /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Create, ConvRules.Theme.ResolveThemeMode, CreateNew, DRagLint.Convert.CastLib.ParseCastLib, ExtractFileDir, Format</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Create (+6 more)</para>
       /// <para>constructor</para>
-      /// <para>Writes: FBook, FFromPlatform, FToPlatform, FEngine, FActiveHdr, FSurfaceMinVis, FCastDefs, FEnumDefs (+1 more)</para>
+      /// <para>Reads: FEdDest   Writes: FBook, FFromPlatform, FToPlatform, FEngine, FActiveHdr, FSurfaceMinVis, FCastDefs, FEnumDefs (+1 more)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: override</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.MainForm.ReadLastFormDir"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildUI"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFormFiles"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.EngineDbSet"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(AOwner: TComponent); override;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Reads: FEngine, FBook, FVisualSet, FComponentSet, FPersistentSet, FDeclUnits</para>
-      /// <para>Pure</para>
+      /// <para>Reads: FEngine, FBook, FVisualSet, FComponentSet, FPersistentSet, FDeclUnits, FResolver</para>
       /// <para>Directives: override</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
@@ -2305,8 +2253,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoCurate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoad (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), declaration (ConvRulesEditor.dpr) ?</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.Model.TRuleBook.ConvertHeaders, ConvRules.Model.TRuleBook.LoadFromString, Format</para>
-      /// <para>Reads: FBook, FLblFile, FGrid, FPool, FRules, FFormTypeRows, FCatalog   Writes: FFilePath, FActiveHdr</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.Model.TRuleBook.ConvertHeaders, ConvRules.Model.TRuleBook.LoadFromString, ConvRules.RuleCatalog.HeaderIndexFor, Format, Integer</para>
+      /// <para>Reads: FBook, FLblFile, FGrid, FPool, FHasPendingSelectEntry, FPendingSelectEntry, FRules, FFormTypeRows (+1 more)   Writes: FFilePath, FActiveHdr</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
@@ -2352,7 +2300,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ThemeMenuClick (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Theme.ResolveThemeMode, ConvRules.Theme.ThemePrefToStr</para>
-      /// <para>Reads: FMnuTheme</para>
+      /// <para>Reads: FMnuTheme   Writes: FMnuTheme</para>
       /// <para>Catches: ERegistryException (swallowed)</para>
       /// <para>Touches: registry</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
@@ -6938,7 +6886,7 @@ begin
   try
     for i:= 0 to High(FHarvest) do
       FHarvestRows[i].Status:= FResolver.Classify(FHarvest[i].UnitName);
-  except  // dl:ok try-except-swallowed@6394 -- REVIEWED 2026-09-28 (re-reviewed, fix round 1) not swallowed: E.Message goes into FDestNote with FDestWarn set, and every caller (AddHarvest, DestChanged, PlatformChanged) puts it on the status line through SetError; raising would take the click handler down (rulings R6, R8)
+  except  // dl:ok try-except-swallowed@1494 -- REVIEWED 2026-09-29 (re-read after the 1.20.1 marker re-hash; code unchanged) not swallowed: E.Message goes into FDestNote with FDestWarn set, and every caller (AddHarvest, DestChanged, PlatformChanged) puts it on the status line through SetError; raising would take the click handler down (rulings R6, R8)
     on E: Exception do
     begin
       // Reported, not raised; the next classify rebuilds the resolver and FDestNote.

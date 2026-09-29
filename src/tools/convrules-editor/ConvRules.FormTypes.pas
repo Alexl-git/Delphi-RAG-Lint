@@ -61,7 +61,7 @@ type
   /// grey, which made "already done" and "filtered out" indistinguishable -- the
   /// defect this type exists to remove.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (ConvRules.FormTypes.pas)</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas), declaration (ConvRules.FormTypes.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRowState = (rsToDo, rsRuled, rsSkipped);
@@ -124,10 +124,9 @@ type
 /// (every TOvc*) together, which is how a conversion is actually chosen. The high
 /// counts are noise -- VARINSP.dfm's largest is 388 TLabel.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ConvRules.BlockFile.SplitRawLines, ConvRules.FormTypes.RowsFromCounts, ConvRules.Usage.ParseBlockHeader/2, Default, UpperCase</para>
 /// <para>Returns: RowsFromCounts(Counts)</para>
-/// <para>Pure</para>
 /// <seealso cref="ConvRules.BlockFile.SplitRawLines"/>
 /// <seealso cref="ConvRules.FormTypes.RowsFromCounts"/>
 /// <seealso cref="ConvRules.Usage.ParseBlockHeader"/>
@@ -183,6 +182,7 @@ function IsStandardVclOrFmxUnit(const AUnitName: string): Boolean;
 /// OPEN (excluding nothing) is only safe because AError is surfaced in the panel;
 /// a silent fail-open here would hide the fact that a condition never ran.
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.FormTypes.ApplyNamedFilterToRows (ConvRules.FormTypes.pas)</para>
 /// <para>Calls: ConvRules.FormTypes.IsStandardVclOrFmxUnit, Format, Trim</para>
 /// <para>Returns: StdHit or PatHit</para>
 /// <para>Catches: Exception (swallowed)</para>
@@ -255,9 +255,9 @@ function DescribeOutlineOutcome(ASucceeded, AIndexedNow: Boolean; const AFileNam
 /// Skipped is an explicit user decision and must never be masked by a
 /// derived fact such as Ruled.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.FormTypes.CountRows (ConvRules.FormTypes.pas), ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.FormTypes.CountRows (ConvRules.FormTypes.pas), ConvRules.MainForm.TConvRulesForm.FormTypeClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeDrawItem (ConvRules.MainForm.pas)</para>
 /// <para>Returns: rsSkipped; rsRuled; rsToDo</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RowState(const ARow: TFormTypeRow): TRowState;

@@ -30,20 +30,19 @@ type
   /// </remarks>
   TThemePref = (tpFollowIde, tpLight, tpDark);
 
-  /// <summary>Maps the IDE's registry theme name to a mode.</summary>
-  /// <param name="AIdeTheme">Value of HKCU\Software\Embarcadero\BDS\&lt;ver&gt;\Theme\Theme.</param>
-  /// <returns>tmDark only for 'Dark' (case-insensitive); tmLight for everything else.</returns>
-  /// <remarks>
-  /// Light is the deliberate default for absent, empty or unrecognised values:
-  /// guessing dark wrongly paints dark text on a dark ground, which is unreadable, whereas
-  /// guessing light wrongly is merely unfashionable.
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.Theme.ResolveThemeMode (ConvRules.Theme.pas)</para>
-  /// <para>Calls: SameText, Trim</para>
-  /// <para>Returns: tmDark</para>
-  /// <para>Pure</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>Maps the IDE's registry theme name to a mode.</summary>
+/// <param name="AIdeTheme">Value of HKCU\Software\Embarcadero\BDS\&lt;ver&gt;\Theme\Theme.</param>
+/// <returns>tmDark only for 'Dark' (case-insensitive); tmLight for everything else.</returns>
+/// <remarks>
+/// Light is the deliberate default for absent, empty or unrecognised values:
+/// guessing dark wrongly paints dark text on a dark ground, which is unreadable, whereas
+/// guessing light wrongly is merely unfashionable.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.Theme.ResolveThemeMode (ConvRules.Theme.pas)</para>
+/// <para>Calls: SameText, Trim</para>
+/// <para>Returns: tmDark; tmLight</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IdeThemeToMode(const AIdeTheme: string): TThemeMode;
 
 /// <summary>The mode to apply given the user's preference and the IDE's setting.</summary>
@@ -79,8 +78,8 @@ function ResolveThemeMode(APref: TThemePref; const AIdeTheme: string): TThemeMod
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.MainForm.TConvRulesForm.GridDrawCell (ConvRules.MainForm.pas)</para>
 /// <para>Returns: r or (g shl 8) or (b shl 16)</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 22 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 24 lines (full implementation)</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExamineRowColor(AWindowColor: Integer; AMode: TThemeMode): Integer;

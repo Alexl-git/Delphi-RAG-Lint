@@ -144,9 +144,8 @@ type
 /// <returns>The text after the last dot; the input unchanged when there is none.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.BlockOps.BlocksConvertingTypes (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.FindRuleForType (ConvRules.RuleCatalog.pas) (+4 more)</para>
+/// <para>Called from: ConvRules.BlockOps.BlocksConvertingTypes (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesSelectItem (ConvRules.MainForm.pas), ConvRules.RuleCatalog.FindDuplicates (ConvRules.RuleCatalog.pas) (+5 more)</para>
 /// <para>Calls: Copy, LastDelimiter, Trim</para>
-/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BareTypeName(const AQualified: string): string;
@@ -395,10 +394,9 @@ function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
 /// <para>An out-of-range LineNo is a stale index, not a fault: it falls back like any
 /// other miss and never raises.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor.HeaderMatches, SameText</para>
 /// <para>Returns: -1; Hint; i</para>
-/// <para>Pure</para>
 /// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
 /// <seealso cref="ConvRules.RuleCatalog.HeaderIndexFor.HeaderMatches"/>
 /// <!-- drag-lint:auto END -->

@@ -202,8 +202,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoDelete (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.DoMerge (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.DoSplit (ConvRules.CurationForm.pas), ConvRules.WorkingSet.TWorkingSet.SyncFromText (ConvRules.WorkingSet.pas)</para>
-      /// <para>Reads: FFiles</para>
-      /// <para>Pure</para>
+      /// <para>Reads: FFiles   Writes: FFiles</para>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddFile"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddText"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AnySelected"/>
@@ -307,8 +306,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.CurationForm.TCurationForm.BlocksChange (ConvRules.CurationForm.pas), ConvRules.WorkingSet.TWorkingSet.SelectByTag (ConvRules.WorkingSet.pas), ConvRules.WorkingSet.TWorkingSet.SelectByTypes (ConvRules.WorkingSet.pas)</para>
       /// <para>Calls: ConvRules.BlockOps.UnionSelections</para>
-      /// <para>Reads: FFiles</para>
-      /// <para>Pure</para>
+      /// <para>Reads: FFiles   Writes: FFiles</para>
       /// <seealso cref="ConvRules.BlockOps.UnionSelections"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddFile"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddText"/>
@@ -322,9 +320,8 @@ type
       /// <returns>Its rule-block indexes, ascending.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Returns: FFiles[AIndex].Selected</para>
+      /// <para>Returns: nil; FFiles[AIndex].Selected</para>
       /// <para>Reads: FFiles</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddFile"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddText"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AnySelected"/>
@@ -337,10 +334,9 @@ type
       /// <returns>Whether ComposeSelected would compose a SUBSET.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.UpdateEnabled (ConvRules.CurationForm.pas)</para>
-      /// <para>Returns: False</para>
+      /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.UpdateEnabled (ConvRules.CurationForm.pas), ConvRules.WorkingSet.TWorkingSet.ComposeSelected (ConvRules.WorkingSet.pas)</para>
+      /// <para>Returns: True; False</para>
       /// <para>Reads: FFiles</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddFile"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddText"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.ClearSelection"/>
@@ -353,8 +349,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoClearSelection (ConvRules.CurationForm.pas)</para>
-      /// <para>Reads: FFiles</para>
-      /// <para>Pure</para>
+      /// <para>Reads: FFiles   Writes: FFiles</para>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddFile"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddText"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AnySelected"/>
@@ -418,15 +413,14 @@ type
       /// therefore contributes nothing at all.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas)</para>
-      /// <para>Calls: ConvRules.BlockOps.Compose, ConvRules.BlockOps.SelectForCompose, ConvRules.BlockOps.SelectionReportLine, ConvRules.WorkingSet.TWorkingSet.ComposeAll</para>
-      /// <para>Returns: Compose(Inputs, AReport)</para>
+      /// <para>Calls: ConvRules.BlockOps.Compose, ConvRules.BlockOps.SelectForCompose, ConvRules.BlockOps.SelectionReportLine, ConvRules.WorkingSet.TWorkingSet.AnySelected, ConvRules.WorkingSet.TWorkingSet.ComposeAll</para>
+      /// <para>Returns: ComposeAll(AReport); Compose(Inputs, AReport)</para>
       /// <para>Reads: FFiles</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.BlockOps.Compose"/>
       /// <seealso cref="ConvRules.BlockOps.SelectForCompose"/>
       /// <seealso cref="ConvRules.BlockOps.SelectionReportLine"/>
+      /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AnySelected"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.ComposeAll"/>
-      /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComposeSelected(out AReport: TComposeReport): string;
@@ -480,7 +474,8 @@ function BackupPath(const APath: string): string;
 /// second spelling of one file would otherwise defeat all three.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoSplit (ConvRules.CurationForm.pas), ConvRules.CurationForm.TouchKey (ConvRules.CurationForm.pas), ConvRules.WorkingSet.TWorkingSet.IndexOfPath (ConvRules.WorkingSet.pas)</para>
-/// <para>Returns: TPath.GetFullPath(APath); APath</para>
+/// <para>Returns: ''; TPath.GetFullPath(APath); APath</para>
+/// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -497,6 +492,7 @@ function NormalizedPath(const APath: string): string;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoCompose (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.WriteBlocksTo (ConvRules.CurationForm.pas), ConvRules.WorkingSet.TWorkingSet.SaveFile (ConvRules.WorkingSet.pas)</para>
 /// <para>Calls: ConvRules.WorkingSet.BackupPath</para>
+/// <para>Catches: Exception (raises EInOutError)</para>
 /// <para>Mutates: ABackup (out)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="ConvRules.WorkingSet.BackupPath"/>

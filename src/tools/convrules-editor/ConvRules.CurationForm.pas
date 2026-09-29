@@ -113,7 +113,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.CurationForm.TCurationForm.Create (ConvRules.CurationForm.pas)</para>
       /// <para>Calls: TLabel</para>
-      /// <para>Reads: FStatus, FBtnSplit, FBtnByType, FFiles, FBlocks   Writes: FStatus, FBtnSplit, FBtnByType, FFiles, FBlocks</para>
+      /// <para>Reads: FStatus, FBtnSplit, FBtnDelete, FBtnMerge, FBtnCompose, FBtnByType, FBtnByTag, FBtnClearSel (+2 more)   Writes: FStatus, FBtnSplit, FBtnDelete, FBtnMerge, FBtnCompose, FBtnByType, FBtnByTag, FBtnClearSel (+2 more)</para>
       /// <seealso cref="ConvRules.CurationForm.TCurationForm.AskTargetFile"/>
       /// <seealso cref="ConvRules.CurationForm.TCurationForm.BlocksChange"/>
       /// <seealso cref="ConvRules.CurationForm.TCurationForm.CheckedIndexes"/>
@@ -158,8 +158,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.CurationForm.TCurationForm.BlocksChange (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.Execute (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.RefreshBlocks (ConvRules.CurationForm.pas)</para>
       /// <para>Calls: ConvRules.BlockOps.CanOperateOn, ConvRules.CurationForm.TCurationForm.CheckedIndexes, ConvRules.WorkingSet.TWorkingSet.AnySelected, ConvRules.WorkingSet.TWorkingSet.Count, ConvRules.WorkingSet.TWorkingSet.Item, Format</para>
-      /// <para>Reads: FBtnSplit, FSet, FBtnByType, FFormTypes</para>
-      /// <para>Pure</para>
+      /// <para>Reads: FBtnSplit, FSet, FBtnDelete, FBtnMerge, FBtnCompose, FBtnByType, FFormTypes, FBtnByTag (+1 more)</para>
       /// <seealso cref="ConvRules.BlockOps.CanOperateOn"/>
       /// <seealso cref="ConvRules.CurationForm.TCurationForm.CheckedIndexes"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AnySelected"/>
@@ -315,9 +314,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ChangeFileExt, ConvRules.BlockFile.GrammarAcceptsMerge, ConvRules.BlockFile.GrammarName, ConvRules.BlockFile.GrammarOf, ConvRules.CurationForm.ShowReport, ConvRules.CurationForm.TCurationForm.AskTargetFile, ConvRules.CurationForm.TCurationForm.RefreshBlocks, ConvRules.CurationForm.TCurationForm.RefreshFiles, ConvRules.CurationForm.TouchKey, ConvRules.RuleCatalog.CheckApplyIntegrity (+12 more)</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 97 lines (full implementation)</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 99 lines (full implementation)</para>
       /// <para>Reads: FSet, FStatus, FTouched</para>
-      /// <para>Pure</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="ConvRules.BlockFile.GrammarAcceptsMerge"/>
       /// <seealso cref="ConvRules.BlockFile.GrammarName"/>
       /// <seealso cref="ConvRules.BlockFile.GrammarOf"/>
@@ -333,7 +332,7 @@ type
       /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoDelete (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.DoMerge (ConvRules.CurationForm.pas), ConvRules.CurationForm.TCurationForm.DoSplit (ConvRules.CurationForm.pas)</para>
       /// <para>Calls: ConvRules.CurationForm.TouchKey, ConvRules.WorkingSet.TWorkingSet.Item, ConvRules.WorkingSet.TWorkingSet.SaveFile, ExtractFileName, Format</para>
       /// <para>Reads: FSet, FTouched, FStatus</para>
-      /// <para>Pure</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="ConvRules.CurationForm.TouchKey"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.Item"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.SaveFile"/>
@@ -373,6 +372,7 @@ type
       /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoSplit (ConvRules.CurationForm.pas)</para>
       /// <para>Calls: ConvRules.BlockFile.JoinBlocks, ConvRules.BlockFile.SplitBlocksFor, ConvRules.BlockOps.ConcatBlocks, ConvRules.BlockOps.DuplicateHeaders, ConvRules.CurationForm.TCurationForm.RefreshBlocks, ConvRules.CurationForm.TCurationForm.RefreshFiles, ConvRules.CurationForm.TouchKey, ConvRules.WorkingSet.TWorkingSet.SyncFromText, ConvRules.WorkingSet.WriteTextWithBackup, Format</para>
       /// <para>Reads: FTouched, FSet, FStatus</para>
+      /// <para>Catches: Exception (swallowed)</para>
       /// <para>Mutates: ABackup (out), ANote (out)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.BlockFile.JoinBlocks"/>

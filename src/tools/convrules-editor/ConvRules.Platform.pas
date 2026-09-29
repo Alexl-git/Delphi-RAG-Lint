@@ -25,7 +25,7 @@ type
   /// of a healthy index can shadow it. Use cpBoth deliberately, not by
   /// default.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.Platform.pas)</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.EnsurePickLists (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.EnsureResolver (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.Platform.pas) (+3 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConvPlatform = (cpWin32, cpWin64, cpBoth);
@@ -64,8 +64,8 @@ function ParsePlatform(const AText: string; ADefault: TConvPlatform): TConvPlatf
 /// <returns><!-- drag-lint:auto -->string -- Observed: 'win32'; 'win64'; 'both'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
-/// <para>Pure</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.DestChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PlatformToStr(APlatform: TConvPlatform): string;
@@ -77,10 +77,11 @@ function PlatformToStr(APlatform: TConvPlatform): string;
 /// <param name="ALibDir"><!-- drag-lint:auto type -->const string</param>
 /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
 /// [TPath.Combine(ALibDir, 'library-Win32.sqlite')]; [TPath.Combine(ALibDir,
-/// 'library-Win64.sqlite')].</returns>
+/// 'library-Win64.sqlite')]; [TPath.Combine(ALibDir, 'library-Win32.sqlite'),
+/// TPath.Combine(ALibDir, 'library-Win64.sqlite')].</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.FromDbSet (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ToDbSet (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.EnsurePickLists (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FromDbSet (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ToDbSet (ConvRules.MainForm.pas)</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

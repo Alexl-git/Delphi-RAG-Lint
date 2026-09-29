@@ -115,7 +115,7 @@ begin
   end;
 end;
 
-function TFormDropTarget.DragEnter(const dataObj: IDataObject; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint): HResult;  // dl:ok unused-parameter@b10b -- IDropTarget fixes this signature; the target accepts anywhere on the form, so key state and point are not needed
+function TFormDropTarget.DragEnter(const dataObj: IDataObject; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint): HResult;
 begin
   if CanAccept(dataObj) then
     FEffect:= DROPEFFECT_COPY
@@ -125,7 +125,7 @@ begin
   Result:= S_OK;
 end;
 
-function TFormDropTarget.DragOver(grfKeyState: Longint; pt: TPoint; var dwEffect: Longint): HResult;  // dl:ok unused-parameter@964e -- IDropTarget fixes this signature; the target accepts anywhere on the form, so key state and point are not needed
+function TFormDropTarget.DragOver(grfKeyState: Longint; pt: TPoint; var dwEffect: Longint): HResult;
 begin
   dwEffect:= FEffect;
   Result:= S_OK;
@@ -136,7 +136,7 @@ begin
   Result:= S_OK;
 end;
 
-function TFormDropTarget.Drop(const dataObj: IDataObject; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint): HResult;  // dl:ok unused-parameter@1685 -- IDropTarget fixes this signature; the target accepts anywhere on the form, so key state and point are not needed
+function TFormDropTarget.Drop(const dataObj: IDataObject; grfKeyState: Longint; pt: TPoint; var dwEffect: Longint): HResult;
 var
   F     : TFormatEtc;
   Medium: TStgMedium;

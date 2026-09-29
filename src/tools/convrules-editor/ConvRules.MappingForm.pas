@@ -85,20 +85,20 @@ type
       False reads the entry nodes (first load); True re-reads the window's own state, so
       a member list that changes under the user keeps every assignment already made. }
       /// <summary><!-- drag-lint:auto sum -->Re-resolve the source enum's members and
-      /// refold the cases onto them. AFromCurrent False reads the entry nodes (first load);
-      /// True re-reads the window's own state, so a member list that changes under the user
-      /// keeps every assignment already made.</summary>
+      /// refold the cases onto them. AFromCurrent False reads the entry nodes (first
+      /// load); True re-reads the window's own state, so a member list that changes under
+      /// the user keeps every assignment already made.</summary>
       /// <param name="AFromCurrent"><!-- drag-lint:auto type -->Boolean</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MappingForm.TMappingForm.DoReloadMembers (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.EnumMembersOf/4, ConvRules.MappingForm.TMappingForm.RefreshMemberList, ConvRules.Mappings.MappingCasesOf, ConvRules.Mappings.MappingWhenValues, Format, Trim</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.EnumMembersOf/4, ConvRules.MappingForm.TMappingForm.BuildNodes, ConvRules.MappingForm.TMappingForm.RefreshMemberList, ConvRules.Mappings.MappingCasesOf, ConvRules.Mappings.MappingWhenValues, Format, Trim</para>
       /// <para>Reads: FEdFromType, FEngine, FSeed, FName, FMemberNote   Writes: FMemberNote, FMembers, FCases</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.EnumMembersOf"/>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshMemberList"/>
       /// <seealso cref="ConvRules.Mappings.MappingCasesOf"/>
       /// <seealso cref="ConvRules.Mappings.MappingWhenValues"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LoadMembers(AFromCurrent: Boolean);
@@ -129,25 +129,25 @@ type
       /// Never touches the #else row: its value is a fallback, not a translation of any
       /// particular member.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MappingForm.TMappingForm.DoSuggestValues.PutValue, ConvRules.MappingForm.TMappingForm.RefreshCaseGrid, ConvRules.MappingForm.TMappingForm.Revalidate, ConvRules.Mappings.SuggestEnumPairs, Format, SameText, Trim</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.DoSuggestValues.Blocked, ConvRules.MappingForm.TMappingForm.DoSuggestValues.PutValue, ConvRules.MappingForm.TMappingForm.RefreshCaseGrid, ConvRules.MappingForm.TMappingForm.Revalidate, ConvRules.Mappings.SuggestEnumPairs, Format, SameText, Trim</para>
       /// <para>Reads: FStatus, FCases</para>
-      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DoSuggestValues.Blocked"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.DoSuggestValues.PutValue"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshCaseGrid"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
       /// <seealso cref="ConvRules.Mappings.SuggestEnumPairs"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoSuggestValues(Sender: TObject);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MappingForm.TMappingForm.DoAddTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoSuggestValues (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.RefreshMemberList (ConvRules.MappingForm.pas)</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.CurrentCase</para>
       /// <para>Reads: FGrid, FCases   Writes: FLoading</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.DeclChanged"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
@@ -176,42 +176,39 @@ type
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MappingForm.TMappingForm.Revalidate, Trim</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.CurrentCase, ConvRules.MappingForm.TMappingForm.Revalidate, Trim</para>
       /// <para>Reads: FLoading, FCases</para>
-      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure GridEdited(Sender: TObject; ACol, ARow: Longint; const AText: string);
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MappingForm.TMappingForm.RefreshCaseGrid, ConvRules.MappingForm.TMappingForm.Revalidate</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.CurrentCase, ConvRules.MappingForm.TMappingForm.RefreshCaseGrid, ConvRules.MappingForm.TMappingForm.Revalidate</para>
       /// <para>Reads: FCases, FGrid</para>
-      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshCaseGrid"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAddTarget(Sender: TObject);
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MappingForm.TMappingForm.RefreshMemberList, ConvRules.MappingForm.TMappingForm.Revalidate</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.CurrentCase, ConvRules.MappingForm.TMappingForm.RefreshMemberList, ConvRules.MappingForm.TMappingForm.Revalidate</para>
       /// <para>Reads: FGrid, FCases, FStatus</para>
-      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.RefreshMemberList"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Revalidate"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoRemoveTarget(Sender: TObject);
@@ -250,13 +247,13 @@ type
       /// </remarks>
       procedure DeclChanged(Sender: TObject);
       { Index into FCases of the selected member row; -1 when nothing is selected. }
-      /// <summary><!-- drag-lint:auto sum -->Index into FCases of the selected member row;
-      /// -1 when nothing is selected.</summary>
+      /// <summary><!-- drag-lint:auto sum -->Index into FCases of the selected member
+      /// row; -1 when nothing is selected.</summary>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: FMemberList.ItemIndex; -1.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.DoAddTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoRemoveTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoSuggestValues.Blocked (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.GridEdited (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.RefreshCaseGrid (ConvRules.MappingForm.pas)</para>
       /// <para>Reads: FMemberList, FCases</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
@@ -271,9 +268,9 @@ type
       /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.BuildNodes (ConvRules.MappingForm.pas)</para>
       /// <para>Calls: Trim</para>
       /// <para>Reads: FEdToTypes</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
@@ -283,20 +280,21 @@ type
       /// </remarks>
       function ToTypeList: TArray<string>;
       { The window's state as fresh nodes. THE CALLER OWNS THEM. }
-      /// <summary><!-- drag-lint:auto sum -->The window's state as fresh nodes. THE CALLER
-      /// OWNS THEM.</summary>
-      /// <returns><!-- drag-lint:auto type -->TArray&lt;TRuleNode&gt;</returns>
+      /// <summary><!-- drag-lint:auto sum -->The window's state as fresh nodes. THE
+      /// CALLER OWNS THEM.</summary>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleNode&gt; -- Observed:
+      /// BuildMappingNodes(FName, Trim(FEdFromType.Text), ToTypeList,
+      /// Trim(FEdWhenFrom.Text), FCases).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
-      /// <para>Calls: ConvRules.Mappings.BuildMappingNodes, Trim</para>
+      /// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.LoadMembers (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.Revalidate (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.Signature (ConvRules.MappingForm.pas)</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.ToTypeList, ConvRules.Mappings.BuildMappingNodes, Trim</para>
       /// <para>Reads: FName, FEdFromType, FEdWhenFrom, FCases</para>
-      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.ToTypeList"/>
       /// <seealso cref="ConvRules.Mappings.BuildMappingNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.DeclChanged"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function BuildNodes: TArray<TRuleNode>;
@@ -309,10 +307,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
-      /// <para>Calls: ConvRules.Model.TRuleNode.Emit</para>
-      /// <para>Pure</para>
-      /// <seealso cref="ConvRules.Model.TRuleNode.Emit"/>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.BuildNodes, ConvRules.Model.TRuleNode.Emit</para>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
+      /// <seealso cref="ConvRules.Model.TRuleNode.Emit"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.CurrentCase"/>
@@ -324,12 +321,11 @@ type
       /// <!-- drag-lint:auto -->Re-run ValidateMappings over the current state and re-gate OK.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MappingForm.TMappingForm.DeclChanged (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoAddTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoReloadMembers (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoRemoveTarget (ConvRules.MappingForm.pas), ConvRules.MappingForm.TMappingForm.DoSuggestValues (ConvRules.MappingForm.pas) (+2 more)</para>
-      /// <para>Calls: ConvRules.Mappings.MappingIssueIsWarning, ConvRules.Mappings.ValidateMappings, Format, Trim</para>
+      /// <para>Calls: ConvRules.MappingForm.TMappingForm.BuildNodes, ConvRules.Mappings.MappingIssueIsWarning, ConvRules.Mappings.ValidateMappings, Format, Trim</para>
       /// <para>Reads: FToTree, FMembers, FBlockToType, FIssues, FEdFromType, FBtnOk, FStatus, FMemberNote</para>
-      /// <para>Pure</para>
+      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.Mappings.MappingIssueIsWarning"/>
       /// <seealso cref="ConvRules.Mappings.ValidateMappings"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildNodes"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.BuildUI"/>
       /// <seealso cref="ConvRules.MappingForm.TMappingForm.Create"/>
       /// <!-- drag-lint:auto END -->

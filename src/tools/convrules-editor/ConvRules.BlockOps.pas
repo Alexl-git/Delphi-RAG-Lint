@@ -204,7 +204,7 @@ function BlocksWithTag(const ABlocks: TRuleBlocks; const ATag: string): TArray<I
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.WorkingSet.TWorkingSet.ComposeSelected (ConvRules.WorkingSet.pas)</para>
 /// <para>Calls: ConvRules.BlockOps.NormalizeIndexes, ConvRules.BlockOps.RuleBlockCount, ExtractFileName, Format</para>
-/// <para>Pure</para>
+/// <para>Returns: Format('%s: NO rule blocks selected -- only its file header/trailer ' + 'travel (its #remove / #unuse / #migrate still reach the job)', [ExtractFileName(APath)]); Format('%s: %d of %d rule block(s) selected; file header/trailer travel', [ExtractFileName(APath), Picked, Total])</para>
 /// <seealso cref="ConvRules.BlockOps.NormalizeIndexes"/>
 /// <seealso cref="ConvRules.BlockOps.RuleBlockCount"/>
 /// <!-- drag-lint:auto END -->

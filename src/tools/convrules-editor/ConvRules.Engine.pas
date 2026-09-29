@@ -250,16 +250,16 @@ type
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; 3; Integer(ExitCode).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListProjectUnits (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas) (+4 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.AddUnitsOfDb (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas) (+4 more)</para>
       /// <para>Calls: AnsiString, CloseHandle, Copy, CreatePipe, CreateProcessW, DWORD, FillChar, Format, GetExitCodeProcess, GetStdHandle (+7 more)</para>
       /// <para>Complexity: 19 (cyclomatic, outer body), 97 lines (full implementation)</para>
       /// <para>Reads: FExePath</para>
       /// <para>Mutates: AOutput (out)</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DeclaringUnitOf"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function RunCapture(const AArgs: string; out AOutput: string): Integer;
@@ -275,13 +275,12 @@ type
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.EnumMembersOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveTypeLocation/5 (ConvRules.Engine.pas)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.QueryJsonFor/4</para>
       /// <para>Overload 1 of 2</para>
-      /// <para>Pure</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.QueryJsonFor"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean; overload;
@@ -296,15 +295,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.QueryJsonFor/3 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Format, Trim</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Trim</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Mutates: AError (out), ACode (out), AJson (out)</para>
       /// <para>Directives: overload</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function QueryJsonFor(const AName: string; out AJson, AError: string; out ACode: Integer): Boolean; overload;
@@ -314,28 +313,27 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.DbArgs (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas)</para>
       /// <para>Calls: Format, Trim</para>
-      /// <para>Pure</para>
       /// <para>Directives: overload</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DeclaringUnitOf"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.EnumMembersOf"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgsFor(const ADbs: TArray<string>): string; overload;
       /// <returns><!-- drag-lint:auto -->string -- Observed: DbArgsFor(FDbList).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.Scaffold (ConvRules.Engine.pas) (+1 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgsFor</para>
       /// <para>Reads: FDbList</para>
-      /// <para>Pure</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DeclaringUnitOf"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.EnumMembersOf"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgs: string; overload;
@@ -350,13 +348,12 @@ type
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.DeclaringUnitOf (ConvRules.Engine.pas)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.ResolveClassQName/2</para>
       /// <para>Overload 1 of 3</para>
-      /// <para>Pure</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveClassQName"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string): string; overload;
@@ -385,8 +382,8 @@ type
       /// <seealso cref="ConvRules.Engine.ParseQuerySymbols"/>
       /// <seealso cref="ConvRules.Engine.SelectQuerySymbol"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.QueryJsonFor"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer; out AError: string): string; overload;
@@ -418,13 +415,12 @@ type
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.ResolveClassQName/3</para>
       /// <para>Returns: ResolveClassQName(AName, AAmbiguity, Ignored)</para>
       /// <para>Overload 3 of 3</para>
-      /// <para>Pure</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveClassQName"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer): string; overload;
@@ -442,14 +438,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListControlTypesInUnit (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitFile (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Copy, Format, Pos, SameText</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Copy, Format, Pos, SameText</para>
       /// <para>Complexity: 13 (cyclomatic, outer body), 55 lines (full implementation)</para>
       /// <para>Touches: file system</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveUnitFile(const AUnit: string): string;
@@ -461,11 +457,11 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
       /// <para>constructor</para>
       /// <para>Writes: FExePath, FDbList</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DeclaringUnitOf"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.EnumMembersOf"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AExePath: string; const ADbList: TArray<string>);
@@ -479,11 +475,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
       /// <para>Writes: FDbList</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DeclaringUnitOf"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetDbs(const ADbs: TArray<string>);
@@ -493,12 +489,12 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FDbList</para>
       /// <para>Owns returned: borrowed</para>
-      /// <para>Pure</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DeclaringUnitOf"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.EnumMembersOf"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbList: TArray<string>;
@@ -531,14 +527,14 @@ type
       /// True even for a bounded call on a large DevExpress control.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.ParseProptreeJson, ConvRules.Engine.TEngineAdapter.ResolveClassQName/3, ConvRules.Engine.TEngineAdapter.RunCapture, Default, Format, Trim</para>
+      /// <para>Calls: ConvRules.Engine.ParseProptreeJson, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.ResolveClassQName/3, ConvRules.Engine.TEngineAdapter.RunCapture, Default, Format, Trim</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Mutates: AError (out), ANote (out), ATree (out)</para>
       /// <seealso cref="ConvRules.Engine.ParseProptreeJson"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveClassQName"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetProptree(const AQname: string; out ATree: TProptree; out AError: string; out ANote: string; const AMinVisibility: string = ''): Boolean;
@@ -552,14 +548,13 @@ type
       /// <returns><!-- drag-lint:auto -->string -- Observed: QN.Substring(0, DotPos); ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DeclaringUnitCached (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.ResolveClassQName/1</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveClassQName"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DeclaringUnitOf(const ATypeName: string): string;
@@ -579,13 +574,12 @@ type
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4</para>
       /// <para>Overload 1 of 2</para>
       /// <para>Reads: FDbList</para>
-      /// <para>Pure</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ListDescendantsOf"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>; out AError: string): Boolean; overload;
@@ -608,9 +602,9 @@ type
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListDescendantsOf(const AAncestor: string; const ADbs: TArray<string>; out ANames: TArray<string>; out AError: string): Boolean; overload;
@@ -620,17 +614,18 @@ type
       /// False + AError on failure.</summary>
       /// <param name="ANames"><!-- drag-lint:auto type -->out TArray&lt;string&gt;</param>
       /// <param name="AError"><!-- drag-lint:auto type -->out string</param>
-      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ListUnits(FDbList, ANames,
+      /// AError).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Copy, Format, Pos, Trim</para>
-      /// <para>Mutates: AError (out), ANames (out)</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ListUnits</para>
+      /// <para>Reads: FDbList</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ListUnits"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListProjectUnits(out ANames: TArray<string>; out AError: string): Boolean;
@@ -697,13 +692,12 @@ type
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.ResolveTypeLocation/5</para>
       /// <para>Returns: ResolveTypeLocation(AType, AFile, ALine, AError, Ambiguity)</para>
       /// <para>Overload 1 of 2</para>
-      /// <para>Pure</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveTypeLocation"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveTypeLocation(const AType: string; out AFile: string; out ALine: Integer; out AError: string): Boolean; overload;
@@ -734,8 +728,8 @@ type
       /// <seealso cref="ConvRules.Engine.BareTypeName"/>
       /// <seealso cref="ConvRules.Engine.ParseQueryLocation"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.QueryJsonFor"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveTypeLocation(const AType: string; out AFile: string; out ALine: Integer; out AError: string; out AAmbiguity: Integer): Boolean; overload;
@@ -752,17 +746,16 @@ type
       /// READ those source lines and hand them to ParseEnumMembers. That makes this the
       /// one adapter verb that needs the library SOURCE on disk, not just the DB.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoGoToDefinition (ConvRules.MainForm.pas), ConvRules.MappingForm.TMappingForm.DoSuggestValues.Blocked (ConvRules.MappingForm.pas) ?</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoGoToDefinition (ConvRules.MainForm.pas), ConvRules.MappingForm.TMappingForm.DoSuggestValues.Blocked (ConvRules.MappingForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.EnumMembersOf/4</para>
       /// <para>Returns: EnumMembersOf(AType, AMembers, AError, Ambiguity)</para>
       /// <para>Overload 1 of 2</para>
-      /// <para>Pure</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.EnumMembersOf"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EnumMembersOf(const AType: string; out AMembers: TArray<string>; out AError: string): Boolean; overload;
@@ -782,7 +775,7 @@ type
       /// matters more than a tied jump: the wrong member list turns every literal check
       /// and the exhaustiveness pass into confident nonsense.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.EnumMembersOf/3 (ConvRules.Engine.pas), ConvRules.MappingForm.TMappingForm.DoSuggestValues.Blocked (ConvRules.MappingForm.pas) ?, ConvRules.MappingForm.TMappingForm.LoadMembers (ConvRules.MappingForm.pas)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.EnumMembersOf/3 (ConvRules.Engine.pas), ConvRules.MappingForm.TMappingForm.LoadMembers (ConvRules.MappingForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.BareTypeName, ConvRules.Engine.ParseEnumMembers, ConvRules.Engine.ParseQuerySymbols, ConvRules.Engine.SelectQuerySymbol, ConvRules.Engine.TEngineAdapter.QueryJsonFor/3, Format, SameText, Trim</para>
       /// <para>Returns: False; ParseEnumMembers(Decl, AMembers)</para>
       /// <para>Overload 2 of 2</para>
@@ -809,13 +802,13 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Format, Trim</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Trim</para>
       /// <para>Mutates: AError (out), ARules (out)</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Scaffold(const AFrom, ATo: string; out ARules: string; out AError: string): Boolean;
@@ -829,14 +822,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoValidate (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCapture, Format, Pos, Trim</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Pos, Trim</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ValidateText(const ARulesText, AFrom, ATo: string): TValidateResult;
@@ -861,16 +854,16 @@ type
       /// widen the DB into a directory DB.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.ScratchDbPath, ConvRules.Engine.TEngineAdapter.OutlineClasses.FirstLine, ConvRules.Engine.TEngineAdapter.OutlineClasses.TryOutline, ConvRules.Engine.TEngineAdapter.RunCapture, Copy, ExtractFilePath, ForceDirectories, Format, ParseOutlineClassNames, Pos, Trim</para>
+      /// <para>Calls: ConvRules.Engine.ScratchDbPath, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.OutlineClasses.FirstLine, ConvRules.Engine.TEngineAdapter.OutlineClasses.TryOutline, ConvRules.Engine.TEngineAdapter.RunCapture, Copy, ExtractFilePath, ForceDirectories, Format, ParseOutlineClassNames, Pos, Trim</para>
       /// <para>Returns: False; True</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Mutates: AClasses (out), AIndexedNow (out), AError (out)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.Engine.ScratchDbPath"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.OutlineClasses.FirstLine"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.OutlineClasses.TryOutline"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function OutlineClasses(const APasFile: string; out AClasses: TArray<string>;

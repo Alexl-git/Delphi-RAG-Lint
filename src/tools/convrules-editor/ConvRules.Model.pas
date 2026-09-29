@@ -79,7 +79,7 @@ type
   /// (byte-faithful round-trip for untouched lines).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.ActiveLinks (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BlockPercent (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas) (+51 more)</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.ActiveLinks (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FindLinkForFrom (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas) (+53 more)</para>
   /// <para>Used in units: ConvRules.MainForm, ConvRules.MappingForm, ConvRules.Mappings, ConvRules.Model, ConvRules.RuleCatalog, ConvRules.Units</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -162,9 +162,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MappingForm.TMappingForm.Signature (ConvRules.MappingForm.pas), ConvRules.Model.TRuleBook.SaveToString (ConvRules.Model.pas)</para>
       /// <para>Calls: ConvRules.Model.EmitSetList, Format</para>
-      /// <para>Complexity: 19 (cyclomatic, outer body), 50 lines (full implementation)</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 52 lines (full implementation)</para>
       /// <para>Reads: Dirty, Raw, Kind, FromType, ToType, Units, LinkTo, LinkFrom (+20 more)</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.EmitSetList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
@@ -176,7 +175,7 @@ type
   /// grid without disturbing that order.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.BlockOps.BlockLinks (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.BlockPercent (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.RuleCatalog.pas) (+4 more)</para>
+  /// <para>Used by: ConvRules.BlockOps.BlockLinks (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.RuleCatalog.CatalogFromText (ConvRules.RuleCatalog.pas), declaration (ConvRules.MainForm.pas), declaration (ConvRules.RuleCatalog.pas) (+3 more)</para>
   /// <para>Used in units: ConvRules.BlockOps, ConvRules.MainForm, ConvRules.RuleCatalog, ConvRules.Units</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -224,8 +223,7 @@ type
       /// <para>Called from: ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas)</para>
       /// <para>Calls: ConvRules.Model.ParseSetList, ConvRules.Model.SplitTopLevelCommas, ConvRules.Model.StripComment, ConvRules.Model.TRuleBook.ParseLine.SplitArrow, ConvRules.Model.TRuleBook.ParseLine.SplitBareArrow, Copy, LowerCase, Pos, Trim</para>
       /// <para>Returns: N</para>
-      /// <para>Complexity: 39 (cyclomatic, outer body), 281 lines (full implementation)</para>
-      /// <para>Pure</para>
+      /// <para>Complexity: 39 (cyclomatic, outer body), 285 lines (full implementation)</para>
       /// <seealso cref="ConvRules.Model.ParseSetList"/>
       /// <seealso cref="ConvRules.Model.SplitTopLevelCommas"/>
       /// <seealso cref="ConvRules.Model.StripComment"/>
@@ -288,9 +286,8 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;Integer&gt; -- Observed: L.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas) (+1 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.RuleCatalog.CatalogFromText (ConvRules.RuleCatalog.pas)</para>
       /// <para>Reads: FNodes</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
@@ -304,9 +301,8 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleNode&gt; -- Observed: L.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshUnitList (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshUnitList (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.UnitHasRule (ConvRules.MainForm.pas)</para>
       /// <para>Reads: FNodes</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
@@ -339,9 +335,8 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleNode&gt; -- Observed: L.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BlockPercent (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.Model.TRuleBook.LinksForBlock (ConvRules.Model.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.Model.TRuleBook.LinksForBlock (ConvRules.Model.pas)</para>
       /// <para>Reads: FNodes</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
@@ -356,10 +351,9 @@ type
       /// <returns><!-- drag-lint:auto -->TRuleNode -- Observed: ANode.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.BlockOps.DeleteBlocks (ConvRules.BlockOps.pas) ?, ConvRules.BlockOps.NormalizeIndexes (ConvRules.BlockOps.pas) ?, ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas) (+45 more)</para>
+      /// <para>Called from: ConvRules.BlockOps.DeleteBlocks (ConvRules.BlockOps.pas) ?, ConvRules.BlockOps.NormalizeIndexes (ConvRules.BlockOps.pas) ?, ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas) (+48 more)</para>
       /// <para>Reads: FNodes</para>
       /// <para>Owns returned: borrowed</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
@@ -409,9 +403,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas)</para>
       /// <para>Calls: SameText</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 30 lines (full implementation)</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 31 lines (full implementation)</para>
       /// <para>Reads: FNodes</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
@@ -437,9 +430,9 @@ type
       /// #ignore-only block read as 100 % complete and was then dropped on save as
       /// "empty".
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BlockPercent (ConvRules.MainForm.pas), ConvRules.Model.TRuleBook.SaveCompleteToString (ConvRules.Model.pas)</para>
-      /// <para>Returns: False</para>
-      /// <para>Pure</para>
+      /// <para>Called from: ConvRules.Model.TRuleBook.SaveCompleteToString (ConvRules.Model.pas)</para>
+      /// <para>Returns: True; False</para>
+      /// <para>Effect-free (proven)</para>
       /// <para>Directives: static</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>

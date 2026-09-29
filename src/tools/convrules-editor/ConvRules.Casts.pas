@@ -21,7 +21,7 @@ type
   /// <summary>A built-in cast the DSL understands (mirrors the engine catalog).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.Casts.CastFnFromName (ConvRules.Casts.pas), ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas), declaration (ConvRules.Casts.pas)</para>
+  /// <para>Used by: ConvRules.Casts.CastFnFromName (ConvRules.Casts.pas), ConvRules.ConvCatalog.ScalarCastNames (ConvRules.ConvCatalog.pas), ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas), declaration (ConvRules.Casts.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCastFn = (
@@ -39,23 +39,23 @@ type
   );
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas), declaration (ConvRules.Casts.pas)</para>
+  /// <para>Used by: ConvRules.ConvCatalog.ScalarCastNames (ConvRules.ConvCatalog.pas), ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas), declaration (ConvRules.Casts.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCastFnSet = set of TCastFn;
 
-  /// <summary>The DSL token for a cast (what gets emitted after ': '). Empty for
-  /// cfNone.</summary>
-  /// <param name="ACast"><!-- drag-lint:auto type -->TCastFn</param>
-  /// <returns><!-- drag-lint:auto -->string -- Observed: 'IntToStr'; 'FloatToStr';
-  /// 'StrToInt'; 'StrToIntDef'; 'StrToFloat'; 'StrToFloatDef'.</returns>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.Casts.CastFnFromName (ConvRules.Casts.pas), ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas)</para>
-  /// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
-  /// <para>Pure</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>The DSL token for a cast (what gets emitted after ': '). Empty for
+/// cfNone.</summary>
+/// <param name="ACast"><!-- drag-lint:auto type -->TCastFn</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: 'IntToStr'; 'FloatToStr';
+/// 'StrToInt'; 'StrToIntDef'; 'StrToFloat'; 'StrToFloatDef'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.Casts.CastFnFromName (ConvRules.Casts.pas), ConvRules.ConvCatalog.ScalarCastNames (ConvRules.ConvCatalog.pas), ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas)</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CastFnName(ACast: TCastFn): string;
 
 /// <summary>Parse a DSL cast token (case-insensitive) back to its enum; cfNone
@@ -99,14 +99,13 @@ function TypeFamilyOf(const ATypeName: string): TTypeFamily;
 /// distinguish the two via SameFamily/IsCastable below.</summary>
 /// <param name="AFromType"><!-- drag-lint:auto type -->const string</param>
 /// <param name="AToType"><!-- drag-lint:auto type -->const string</param>
-/// <returns><!-- drag-lint:auto -->TCastFnSet -- Observed: []; [cfIntToStr];
-/// [cfIntToFloat]; [cfFloatToStr]; [cfTrunc, cfRound]; [cfStrToInt, cfStrToIntDef].</returns>
+/// <returns><!-- drag-lint:auto -->TCastFnSet -- Observed: []; [cfIntToStr ];
+/// [cfIntToFloat]; [cfFloatToStr]; [cfTrunc, cfRound]; [cfStrToInt , cfStrToIntDef ].</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.Casts.IsCastable (ConvRules.Casts.pas), ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.Casts.IsCastable (ConvRules.Casts.pas), ConvRules.ConvCatalog.ScalarCastNames (ConvRules.ConvCatalog.pas), ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ConvRules.Casts.TypeFamilyOf</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 29 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 31 lines (full implementation)</para>
 /// <seealso cref="ConvRules.Casts.TypeFamilyOf"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -155,9 +154,8 @@ function IsCastable(const AFromType, AToType: string): Boolean;
 /// SameText(Trim(AType), 'unknown').</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.Casts.ResolveUnknownTypes (ConvRules.Casts.pas)</para>
+/// <para>Called from: ConvRules.Casts.ResolveUnknownTypes (ConvRules.Casts.pas), ConvRules.ConvCatalog.ConversionsFor (ConvRules.ConvCatalog.pas), ConvRules.MainForm.TConvRulesForm.RefreshConvOptions (ConvRules.MainForm.pas)</para>
 /// <para>Calls: SameText, Trim</para>
-/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsUnknownType(const AType: string): Boolean;

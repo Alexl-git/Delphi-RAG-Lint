@@ -34,7 +34,7 @@ type
   /// reproduces the source exactly -- this is why the unit does not use
   /// TStringList, whose Text property normalises terminators.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.BlockFile.BlockEol (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitOnHeaders (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitRawLines (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitTrailingRun (ConvRules.BlockFile.pas), declaration (ConvRules.BlockFile.pas) (+4 more)</para>
+  /// <para>Used by: ConvRules.BlockFile.BlockEol (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitOnHeaders (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitRawLines (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitTrailingRun (ConvRules.BlockFile.pas), declaration (ConvRules.BlockFile.pas) (+5 more)</para>
   /// <para>Used in units: ConvRules.BlockFile, ConvRules.BlockOps, ConvRules.FormTypes, ConvRules.Usage</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -111,17 +111,16 @@ const
   /// places that enforce it.</remarks>
   HEADERLESS_KINDS = [rbkPreamble, rbkTrailing];
 
-  /// <summary>PURE: split text into lines, keeping each line's exact terminator.</summary>
-  /// <param name="AText">Any text; '' yields an empty array.</param>
-  /// <returns>Lines in order; concatenating Text+Eol reproduces AText byte for byte.</returns>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.BlockFile.BlockEol (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitOnHeaders (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitTrailingRun (ConvRules.BlockFile.pas), ConvRules.BlockOps.BlockOtherLines (ConvRules.BlockOps.pas), ConvRules.BlockOps.ReplaceLineInBlock (ConvRules.BlockOps.pas) (+2 more)</para>
-  /// <para>Calls: CharInSet, Copy</para>
-  /// <para>Returns: List.ToArray</para>
-  /// <para>Pure</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>PURE: split text into lines, keeping each line's exact terminator.</summary>
+/// <param name="AText">Any text; '' yields an empty array.</param>
+/// <returns>Lines in order; concatenating Text+Eol reproduces AText byte for byte.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.BlockFile.BlockEol (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitOnHeaders (ConvRules.BlockFile.pas), ConvRules.BlockFile.SplitTrailingRun (ConvRules.BlockFile.pas), ConvRules.BlockOps.BlockOtherLines (ConvRules.BlockOps.pas), ConvRules.BlockOps.ReplaceLineInBlock (ConvRules.BlockOps.pas) (+3 more)</para>
+/// <para>Calls: CharInSet, Copy</para>
+/// <para>Returns: List.ToArray</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitRawLines(const AText: string): TArray<TRawLine>;
 
 /// <summary>PURE: the first whitespace-delimited token of a line, '' when blank.</summary>

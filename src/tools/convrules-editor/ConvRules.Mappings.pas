@@ -72,7 +72,7 @@ type
   /// Detail is the specific offender -- the path, the literal, the class or the
   /// uncovered member -- and is meant to be shown verbatim next to the kind.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MappingForm.TMappingForm.Revalidate (ConvRules.MappingForm.pas), ConvRules.Mappings.ValidateMappings (ConvRules.Mappings.pas), declaration (ConvRules.Mappings.pas)</para>
+  /// <para>Used by: ConvRules.MappingForm.TMappingForm.Revalidate (ConvRules.MappingForm.pas), ConvRules.Mappings.ValidateMappings (ConvRules.Mappings.pas), ConvRules.Mappings.ValidateMappings.AddIssue (ConvRules.Mappings.pas), declaration (ConvRules.Mappings.pas)</para>
   /// <para>Used in units: ConvRules.MappingForm, ConvRules.Mappings</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -238,8 +238,7 @@ function SuggestEnumPairs(const ASource, ATarget: TArray<string>; out AUnmatched
 /// <para>Called from: ConvRules.MappingForm.TMappingForm.Revalidate (ConvRules.MappingForm.pas)</para>
 /// <para>Calls: ConvRules.Mappings.HasText, ConvRules.Mappings.IsClause, ConvRules.Mappings.IsDeclaration, ConvRules.Mappings.ValidateMappings.AddIssue, ConvRules.Mappings.ValidateMappings.FindLeaf, Default, SameText</para>
 /// <para>Returns: Issues.ToArray</para>
-/// <para>Complexity: 29 (cyclomatic, outer body), 112 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Complexity: 29 (cyclomatic, outer body), 106 lines (full implementation)</para>
 /// <seealso cref="ConvRules.Mappings.HasText"/>
 /// <seealso cref="ConvRules.Mappings.IsClause"/>
 /// <seealso cref="ConvRules.Mappings.IsDeclaration"/>
@@ -277,8 +276,7 @@ function MappingNames(const ANodes: TArray<TRuleNode>): TArray<string>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.MappingForm.TMappingForm.EditMapping (ConvRules.MappingForm.pas)</para>
 /// <para>Calls: ConvRules.Mappings.IsDeclaration, SameText</para>
-/// <para>Returns: nil</para>
-/// <para>Pure</para>
+/// <para>Returns: nil; Node</para>
 /// <seealso cref="ConvRules.Mappings.IsDeclaration"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -345,8 +343,7 @@ function MappingWhenValues(const ANodes: TArray<TRuleNode>; const AName: string)
 /// <para>Called from: ConvRules.MappingForm.TMappingForm.LoadMembers (ConvRules.MappingForm.pas)</para>
 /// <para>Calls: ConvRules.Mappings.HasText, ConvRules.Mappings.IsClause, ConvRules.Mappings.MappingCasesOf.CaseKey, ConvRules.Mappings.MappingCasesOf.SetsFor, ConvRules.Mappings.MappingWhenFrom, SameText</para>
 /// <para>Returns: L.ToArray</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 80 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 81 lines (full implementation)</para>
 /// <seealso cref="ConvRules.Mappings.HasText"/>
 /// <seealso cref="ConvRules.Mappings.IsClause"/>
 /// <seealso cref="ConvRules.Mappings.MappingCasesOf.CaseKey"/>
@@ -428,8 +425,7 @@ function ConditionalFromPaths(const ANodes: TArray<TRuleNode>; const AApplied: T
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid.ToCellFor (ConvRules.MainForm.pas)</para>
 /// <para>Calls: SameText</para>
-/// <para>Returns: 0</para>
-/// <para>Pure</para>
+/// <para>Returns: C.Cases; 0</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ConditionalCasesOf(const AConds: TArray<TConditionalFrom>; const APath: string): Integer;

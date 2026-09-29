@@ -56,24 +56,25 @@ type
     Section : string; // 'interface' | 'implementation'
   end;
 
-  /// <summary>PURE: parses a DFM block header line into the class it declares.</summary>
-  /// <param name="ALine">One .dfm line, e.g. 'object btnA: TabcToggleBtn'. Accepts the
-  /// 'object', 'inherited' and 'inline' keywords real DFMs use for forms and frames.</param>
-  /// <param name="AClass">Receives the bare class name, with any trailing collection
-  /// index ('[0]') stripped; '' when the line is not a block header.</param>
-  /// <returns>True when ALine is a block header declaring a class.</returns>
-  /// <remarks>
-  /// Exported so ConvRules.FormTypes can harvest the types on a form through
-  /// the SAME parser this unit scans properties with. A second object-header parser
-  /// would be free to disagree with this one about what a form contains.
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.FormTypes.ScanDfmTypes (ConvRules.FormTypes.pas), ConvRules.Usage.ScanDfmText (ConvRules.Usage.pas)</para>
-  /// <para>Calls: ConvRules.BlockFile.FirstToken, Copy, Pos, SameText, Trim</para>
-  /// <para>Returns: False; AClass &lt;&gt; ''</para>
-  /// <para>Mutates: AClass (out)</para>
-  /// <seealso cref="ConvRules.BlockFile.FirstToken"/>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
+/// <summary>PURE: parses a DFM block header line into the class it declares.</summary>
+/// <param name="ALine">One .dfm line, e.g. 'object btnA: TabcToggleBtn'. Accepts the
+/// 'object', 'inherited' and 'inline' keywords real DFMs use for forms and frames.</param>
+/// <param name="AClass">Receives the bare class name, with any trailing collection
+/// index ('[0]') stripped; '' when the line is not a block header.</param>
+/// <returns>True when ALine is a block header declaring a class.</returns>
+/// <remarks>
+/// Exported so ConvRules.FormTypes can harvest the types on a form through
+/// the SAME parser this unit scans properties with. A second object-header parser
+/// would be free to disagree with this one about what a form contains.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: ConvRules.FormTypes.ScanDfmTypes (ConvRules.FormTypes.pas), ConvRules.Usage.ScanDfmText (ConvRules.Usage.pas)</para>
+/// <para>Calls: ConvRules.Usage.ParseBlockHeader/3</para>
+/// <para>Returns: ParseBlockHeader(ALine, AClass, Ignored)</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="ConvRules.Usage.ParseBlockHeader"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseBlockHeader(const ALine: string; out AClass: string): Boolean; overload;
 
 /// <summary>PURE: as ParseBlockHeader above, and additionally yields the INSTANCE name
@@ -114,10 +115,9 @@ function ScanDfmInstanceNames(const AText, AFromClass: string): TArray<string>;
 /// contents are never mistaken for assignments.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.Usage.ComputeUsage (ConvRules.Usage.pas)</para>
-/// <para>Calls: ConvRules.BlockFile.FirstToken, ConvRules.BlockFile.SplitRawLines, ConvRules.Usage.IsPropName, ConvRules.Usage.ParseBlockHeader, ConvRules.Usage.ScanDfmText.AddName, ConvRules.Usage.StripQuoted, Copy, Pos, SameText, Trim</para>
+/// <para>Calls: ConvRules.BlockFile.FirstToken, ConvRules.BlockFile.SplitRawLines, ConvRules.Usage.IsPropName, ConvRules.Usage.ParseBlockHeader/2, ConvRules.Usage.ScanDfmText.AddName, ConvRules.Usage.StripQuoted, Copy, Pos, SameText, Trim</para>
 /// <para>Returns: Names.ToArray</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 80 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 95 lines (full implementation)</para>
 /// <seealso cref="ConvRules.BlockFile.FirstToken"/>
 /// <seealso cref="ConvRules.BlockFile.SplitRawLines"/>
 /// <seealso cref="ConvRules.Usage.IsPropName"/>
@@ -160,9 +160,9 @@ function CandidatesFor(const AFromPaths: TArray<string>): TArray<string>;
 /// ruling that was a real trade-off -- survives here unchanged. Prefer the receiver-aware
 /// overload below when the instance names are known; ComputeUsage now does.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.Usage.ComputeUsage (ConvRules.Usage.pas)</para>
 /// <para>Calls: ConvRules.Usage.HarvestDotTokens, ConvRules.Usage.TNameSet.Add, ConvRules.Usage.TNameSet.Contains, ConvRules.Usage.TNameSet.Create, ConvRules.Usage.TNameSet.ToArray</para>
-/// <para>Pure</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
 /// <seealso cref="ConvRules.Usage.HarvestDotTokens"/>
 /// <seealso cref="ConvRules.Usage.TNameSet.Add"/>
 /// <seealso cref="ConvRules.Usage.TNameSet.Contains"/>
@@ -218,15 +218,9 @@ function ScanPasText(const AText: string; const ACandidates, AReceivers: TArray<
 /// would discard still contributes its units. For a candidate work list, over-reporting
 /// is the safe direction: nothing here creates a rule, and the user deletes rows.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFormFiles (ConvRules.MainForm.pas)</para>
-/// <para>Calls: ConvRules.Usage.IsIdentCh, ConvRules.Usage.IsIdentStartCh, ConvRules.Usage.ScanUsesClauses.HarvestClause, ConvRules.Usage.SkipNonCode, ConvRules.Usage.TNameSet.Create, ConvRules.Usage.TNameSet.ToArray, Copy, SameText, Trim</para>
-/// <para>Returns: NameSet.ToArray</para>
-/// <para>Pure</para>
-/// <seealso cref="ConvRules.Usage.IsIdentCh"/>
-/// <seealso cref="ConvRules.Usage.IsIdentStartCh"/>
-/// <seealso cref="ConvRules.Usage.ScanUsesClauses.HarvestClause"/>
-/// <seealso cref="ConvRules.Usage.SkipNonCode"/>
-/// <seealso cref="ConvRules.Usage.TNameSet.Create"/>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestUsedUnits (ConvRules.MainForm.pas)</para>
+/// <para>Calls: ConvRules.Usage.ScanUsesClausesSectioned</para>
+/// <seealso cref="ConvRules.Usage.ScanUsesClausesSectioned"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ScanUsesClauses(const APasText: string): TArray<string>;
@@ -267,9 +261,8 @@ function ScanClassesDeclared(const APasText: string): TArray<string>;
 /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: NameSet.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFormFiles (ConvRules.MainForm.pas), ConvRules.Usage.ComputeUsage (ConvRules.Usage.pas)</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestUsedUnits (ConvRules.MainForm.pas), ConvRules.Usage.ComputeUsage (ConvRules.Usage.pas)</para>
 /// <para>Calls: ConvRules.Usage.TNameSet.Add, ConvRules.Usage.TNameSet.Create, ConvRules.Usage.TNameSet.ToArray</para>
-/// <para>Pure</para>
 /// <seealso cref="ConvRules.Usage.TNameSet.Add"/>
 /// <seealso cref="ConvRules.Usage.TNameSet.Create"/>
 /// <seealso cref="ConvRules.Usage.TNameSet.ToArray"/>
@@ -301,17 +294,16 @@ function IsRowUsed(const AFromPath: string; const AUsed: TArray<string>): Boolea
 /// <param name="AFromClass">Bare From class name, e.g. 'TabcToggleBtn'.</param>
 /// <param name="AFromPaths">Every leaf path of the From property tree, used both to derive
 /// PAS candidates and to decide which used names have no row.</param>
-/// <returns><!-- drag-lint:auto -->TUsageSet -- Observed: Default(TUsageSet).</returns>
+/// <returns><!-- drag-lint:auto -->TUsageSet -- Observed: Default      (TUsageSet ).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFormFiles (ConvRules.MainForm.pas)</para>
-/// <para>Calls: ConvRules.Usage.CandidatesFor, ConvRules.Usage.LastSegment, ConvRules.Usage.MergeUsage, ConvRules.Usage.ScanDfmText, ConvRules.Usage.ScanPasText, Default, SameText</para>
-/// <para>Pure</para>
+/// <para>Calls: ConvRules.Usage.CandidatesFor, ConvRules.Usage.HasName, ConvRules.Usage.LastSegment, ConvRules.Usage.MergeUsage, ConvRules.Usage.ScanDfmInstanceNames, ConvRules.Usage.ScanDfmText, ConvRules.Usage.ScanPasText/4, Default, SameText</para>
 /// <seealso cref="ConvRules.Usage.CandidatesFor"/>
+/// <seealso cref="ConvRules.Usage.HasName"/>
 /// <seealso cref="ConvRules.Usage.LastSegment"/>
 /// <seealso cref="ConvRules.Usage.MergeUsage"/>
-/// <seealso cref="ConvRules.Usage.ScanDfmText"/>
-/// <seealso cref="ConvRules.Usage.ScanPasText"/>
+/// <seealso cref="ConvRules.Usage.ScanDfmInstanceNames"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ComputeUsage(const ADfmTexts, APasTexts: TArray<string>; const AFromClass: string; const AFromPaths: TArray<string>): TUsageSet;
