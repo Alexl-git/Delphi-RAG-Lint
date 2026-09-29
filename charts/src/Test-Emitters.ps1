@@ -2831,6 +2831,10 @@ Step 'RT-HOLD' {
 # `around` note), -TOL-OFFER / -TOL-COUNTS 13 -> 15 (I1b the two case selectors are rows), the synthetic strings (M3 a
 # constant-shaped name is no value, FfZ is a field; M4 row notes; the stop note is now in the string). New: -ROWNOTE,
 # -CMD (M5), -SYN-FBNREAD (I2), -SYN-CASE (I1), -SYN-LOOP (I1a), -SYN-CREATING (M1).
+# FIX ROUND 2 (calcfield-fix2-findings.md, red on HEAD 83ce59ae first). Moved: -CMD (R2-6 the -Target value single-quoted),
+# -TOL-OFFER / -SYN-CASE (R2-3 one wording for every chooser: `the value is chosen by`, `chooses the value (case at :N)`),
+# -SYN-OFFER (R2-2 ffFixed is no longer a constant by shape: a named row, 3 other values). New: -INSP-OFFER, -USL-OFFER,
+# -SYN-IFCHOOSER (R2-3), -SYN-CASEBEGIN (R2-1), -SYN-INHERITED (R2-2). A-RTC-E2E runs the row + `-OutRoot <scratch>` (R2-5).
 Note 'round-trip: calculated fields ...'
 Step 'RT-CALC' {
   $bindWhy = "the TField variable via FF(dataset, literal), assumed to return the dataset's field named by the literal, and FMTFtrs matched by name among the class's dataset fields"
@@ -2850,7 +2854,7 @@ Step 'RT-CALC' {
   Chk 'A-RTC-FTR-ROWNOTE' $rt0.CalcFtrRowLine 'FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType [inferred] @Blueprint4.ViewModel.pas:990 -- in FtrsOnCalcFields; FtrType set at :978, FfFtrs_FtrType bound at :858 via FF; ask in-class-field-reads'
   # M5: the header and all 18 row commands are runnable as written -- the call operator and the bundler's absolute path
   $bundler = [IO.Path]::GetFullPath((Join-Path $SRC 'New-DiagramArtifact.ps1'))
-  Chk 'A-RTC-CMD'        $rt0.CalcCmdHeads "19x & '$bundler' -Question round-trip -Target "
+  Chk 'A-RTC-CMD'        $rt0.CalcCmdHeads "19x & '$bundler' -Question round-trip -Target '"
   # the rows are anchored facts: counted in steps (9 + 18), never unresolved; the ONE unresolved is the STOPS
   Chk 'A-RTC-FTR-COUNTS' $rt0.CalcFtrCounts '27/2/0/1'
   Chk 'A-RTC-FTR-CHECK'  $rt0.CalcFtrCheck ("0|identical|True|ANCHOR,DERIVED,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|DERIVED=FtrName is calculated from 18 fields -- trace one of them instead (every binding below: $bindWhy): | " +
@@ -2863,10 +2867,10 @@ Step 'RT-CALC' {
                                            '@Blueprint4.ViewModel.pas:1045 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735, ' +
                                            'the formula is chosen by the case at :1043 (writes at :1045, :1046, :1047, :1049, :1050) and the case at :1044 (writes at :1045, :1046, :1047), their selectors are offered below; ask E3')
   Chk 'A-RTC-TOL-GUARDS' $rt0.CalcTolChildren 'UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_Tolerance)" @Blueprint4.ViewModel.pas:1041'
-  Chk 'A-RTC-TOL-OFFER'  "$($rt0.CalcTolNote)|$($rt0.CalcTolRows)" ("Tolerance is calculated from 4 fields, and the formula is chosen by 2 more (case at :1043, :1044) -- trace one of them instead (every binding below: $bindWhy):|" +
+  Chk 'A-RTC-TOL-OFFER'  "$($rt0.CalcTolNote)|$($rt0.CalcTolRows)" ("Tolerance is calculated from 4 fields, and the value is chosen by 2 more (case at :1043, :1044) -- trace one of them instead (every binding below: $bindWhy):|" +
                                                                     ((@(@('USL', 'LSL', 'UpperTol', 'LowerTol') | ForEach-Object { "FROM MSCLIST.$($_.ToUpperInvariant()) VIA FfFtrs_$_ => $vm.FfFtrs_$_" }) +
-                                                                      "FROM MSCLIST.SPECTYPE VIA FfFtrs_SpecType, selects the formula (case at :1043) => $vm.FfFtrs_SpecType" +
-                                                                      "FROM MSCLIST.NOTATION VIA FfFtrs_Notation, selects the formula (case at :1044) => $vm.FfFtrs_Notation") -join ' ## '))
+                                                                      "FROM MSCLIST.SPECTYPE VIA FfFtrs_SpecType, chooses the value (case at :1043) => $vm.FfFtrs_SpecType" +
+                                                                      "FROM MSCLIST.NOTATION VIA FfFtrs_Notation, chooses the value (case at :1044) => $vm.FfFtrs_Notation") -join ' ## '))
   Chk 'A-RTC-TOL-COUNTS' "$($rt0.CalcTolCounts)|$(($rt0.CalcTolCheck -split '\|')[0..2] -join '|')" '15/2/0/1|0|identical|True'
   # ONE candidate's REGENERATE command run end to end, AS WRITTEN (M5: the string itself, head and all): DimAbbr ->
   # MSCLIST.DIMABBR through FMTFtrs and SendDeltaFtrs. 98 = the owner-accepted Num holdout's 103 minus the 5
@@ -2878,12 +2882,13 @@ Step 'RT-CALC' {
   $ffWhy = 'FF assumed to return the named field'
   Chk 'A-RTC-SYN-OFFER'  $rt0.CalcSynOffer ("calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-syn.pas:8 -- $wired | " +
                                            'UNLESS DataSet.State = dsInsert -- else Exit at :5 / WHEN Assigned(FfA) / VIA Fmt -- computed by this call at :8, its body is not walked | ' +
-                                           "A is calculated from 4 fields, and 2 other values the walk cannot map -- trace one of them instead (every binding below: $ffWhy): | " +
+                                           "A is calculated from 4 fields, and 3 other values the walk cannot map -- trace one of them instead (every binding below: $ffWhy): | " +
                                            'FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB ## FROM T.K VIA L, set from FfK [inferred] -- L set at :6, FfK bound at :30 via FF => CMD uSynth.TSynth.FfK ## ' +
                                            'FROM C (calculated) VIA FfC [inferred] -- itself calculated in CalcH, not expanded, FfC bound at :30 via FF => CMD uSynth.TSynth.FfC ## ' +
                                            'FROM Zz, not mapped: not a field, local or parameter the walk can place =>  ## ' +
                                            'FROM FNum, not mapped: a field of TSynth of type Integer, not a TField variable =>  ## ' +
-                                           'FROM FfZ, not mapped: FfZ is written on 2 line(s) naming 2 (dataset field, column literal) pairs => ')
+                                           'FROM FfZ, not mapped: FfZ is written on 2 line(s) naming 2 (dataset field, column literal) pairs =>  ## ' +
+                                           'FROM ffFixed, not mapped: not a field, local or parameter the walk can place => ')
   Chk 'A-RTC-SYN-NOWIRE' "$($rt0.CalcSynNoWire)|$($rt0.CalcSynNoWrite)" 'not calculated|not calculated'
   Chk 'A-RTC-SYN-FBN'    $rt0.CalcSynFieldByName ("calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-fbn.pas:3 -- $wired |  | " +
                                                   "A is calculated from 1 field -- trace it instead (the binding below: $ffWhy): | FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB")
@@ -2898,20 +2903,47 @@ Step 'RT-CALC' {
                                                                                ($fbrHead -f '1') + "A is calculated from 2 fields -- trace one of them instead: | $fbrB ## " +
                                                                                'FROM T.W VIA DataSet.FieldByName [inferred] -- DataSet is a parameter of CalcH, taken as FMT, traced as T.W, the one dataset that loads T => CMD T.W')
   # I1: writes in the arms of `case TagOf(FfK) of` inside `if Assigned(FfA)` -- the if is written for both writes (no
-  # `around`), the case is no guard: named in the stop note, its selector FfK a row that selects the formula
+  # `around`), the case is no guard: named in the stop note, its selector FfK a row that chooses the value
   Chk 'A-RTC-SYN-CASE'   $rt0.CalcSynCase ("calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-case.pas:6 -- $wired, " +
                                            'the formula is chosen by the case at :5 (writes at :6, :7), its selector is offered below | WHEN Assigned(FfA) | ' +
-                                           "A is calculated from 1 field, and the formula is chosen by 1 more (case at :5) -- trace one of them instead (every binding below: $ffWhy): | " +
-                                           'FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB ## FROM T.K VIA FfK, selects the formula (case at :5) [inferred] -- FfK bound at :30 via FF => CMD uSynth.TSynth.FfK')
+                                           "A is calculated from 1 field, and the value is chosen by 1 more (case at :5) -- trace one of them instead (every binding below: $ffWhy): | " +
+                                           'FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB ## FROM T.K VIA FfK, chooses the value (case at :5) [inferred] -- FfK bound at :30 via FF => CMD uSynth.TSynth.FfK')
   # I1a: a shape the shim cannot place (a while loop) reaches the stop note with the shim's reason -- never silently dropped
   Chk 'A-RTC-SYN-LOOP'   $rt0.CalcSynLoop ("calculated | A is a calculated field of FMT (computed in CalcH at :1-5), not a column of T in the SQL index @calc-loop.pas:4 -- $wired, " +
                                            'not read as a guard: the statement at :4 sits under a while statement, a shape the source shim does not read |  | ' +
                                            "A is calculated from 1 field -- trace it instead (the binding below: $ffWhy): | FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB")
+  # FIX ROUND 2 (calcfield-fix2-findings.md, red on HEAD 83ce59ae first)
+  # R2-3: the fields read in the if CONDITIONS that choose the value are rows, counted in the lead-in. InspAsVarStr
+  # (:1104-1114, every write a constant) said "calculated from no field -- nothing to trace instead"; USLLSLName left out
+  # FtrType (:1003) and FfFtrs_ID / FfFtrs_MasterID (:1023)
+  $vmT = { param($v) "$vm.FfFtrs_$v" }
+  Chk 'A-RTC-INSP-OFFER' $rt0.CalcInspOffer ("InspAsVarStr is calculated from no field, but its value is chosen by 2 (if at :1106, :1110) -- trace one of them instead (every binding below: $bindWhy): | " +
+                                             "FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType, chooses the value (if at :1106) => $(& $vmT 'FtrType') ## " +
+                                             "FROM MSCLIST.INSPASVAR VIA FfFtrs_InspAsVar, chooses the value (if at :1110) => $(& $vmT 'InspAsVar') | 6/8/0/1 | 0/identical/True")
+  Chk 'A-RTC-USL-OFFER'  $rt0.CalcUslOffer ("USLLSLName is calculated from 2 fields, and the value is chosen by 3 more (if at :1003, :1023), and 1 other value the walk cannot map -- trace one of them instead (every binding below: $bindWhy): | " +
+                                            'FROM Spec, not mapped: a local of FtrsOnCalcFields set at 5 places before this read =>  ## ' +
+                                            "FROM MSCLIST.ATTRNAME VIA FfFtrs_AttrName => $(& $vmT 'AttrName') ## FROM MSCLIST.DIMNAME VIA FfFtrs_DimName => $(& $vmT 'DimName') ## " +
+                                            "FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType, chooses the value (if at :1003) => $(& $vmT 'FtrType') ## " +
+                                            "FROM MSCLIST.ID VIA FfFtrs_ID, chooses the value (if at :1023) => $(& $vmT 'ID') ## FROM MSCLIST.MASTERID VIA FfFtrs_MasterID, chooses the value (if at :1023) => $(& $vmT 'MasterID') | 10/8/0/1 | 0/identical/True")
+  Chk 'A-RTC-SYN-IFCHOOSER' $rt0.CalcSynIfChooser ("calculated | A is a calculated field of FMT (computed in CalcH at :1-5), not a column of T in the SQL index @calc-if.pas:3 -- $wired | " +
+                                                   'WHEN FfB.AsInteger > 0 -- around the write at :3 / UNLESS FfB.AsInteger > 0 -- around the write at :4 | ' +
+                                                   "A is calculated from no field, but its value is chosen by 1 (if at :3) -- trace it instead (the binding below: $ffWhy): | " +
+                                                   'FROM T.B VIA FfB, chooses the value (if at :3) [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB')
+  # R2-1: a begin-wrapped case arm (`1: begin .. end;`) is under the case like a bare arm -- selector offered, case named, no `around`
+  Chk 'A-RTC-SYN-CASEBEGIN' $rt0.CalcSynCaseBegin ("calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-caseb.pas:6 -- $wired, " +
+                                                   'the formula is chosen by the case at :5 (writes at :6, :7), its selector is offered below | WHEN Assigned(FfA) | ' +
+                                                   "A is calculated from 1 field, and the value is chosen by 1 more (case at :5) -- trace one of them instead (every binding below: $ffWhy): | " +
+                                                   'FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB ## FROM T.K VIA FfK, chooses the value (case at :5) [inferred] -- FfK bound at :30 via FF => CMD uSynth.TSynth.FfK')
+  # R2-2: an unbound receiver (an inherited TField variable) is a named row, counted; TKind (type shape) and Integer(...) are constants
+  Chk 'A-RTC-SYN-INHERITED' $rt0.CalcSynInherited ("calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-inh.pas:3 -- $wired |  | " +
+                                                   "A is calculated from 1 field, and 1 other value the walk cannot map -- trace it instead (the binding below: $ffWhy): | " +
+                                                   'FROM FfInherited, not mapped: not a field, local or parameter the walk can place =>  ## FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB')
   # M1: `created (FieldKind <k>)` only with the kind proven; otherwise the line only `named` the field
   $loopWhy = 'not read as a guard: the statement at :4 sits under a while statement, a shape the source shim does not read'
   Chk 'A-RTC-SYN-CREATING' $rt0.CalcSynCreating ("A is a calculated field of FMT (created (FieldKind fkCalculated) at :12, computed in CalcH at :1-5), not a column of T in the SQL index -- $wired, C sets FieldKind fkCalculated at :40, $loopWhy ## " +
                                                  "A is a calculated field of FMT (named at :12, computed in CalcH at :1-5), not a column of T in the SQL index -- $wired, $loopWhy")
-}# ---- output sweep: no escaped entity printed as text -------------------------
+}
+# ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
 # passed a '&#183;' separator into it -- so each of those charts printed the six
 # literal characters "&#183;" instead of a middle dot. Swept over EVERY .dot this

@@ -702,7 +702,8 @@ DERIVED
   -- the shim quotes no arm label -- so the case is named in the STOPS note (`the
   formula is chosen by the case at :1043 (writes at :1045, ...)`) and its SELECTOR
   is offered as rows (below), and an if that encloses the whole case is still
-  written. A condition that does not enclose EVERY write names the ones it does
+  written. A begin-wrapped arm (`1: begin .. end`, `else begin .. end`) is an arm
+  like a bare one (fix round 2, R2-1). A condition that does not enclose EVERY write names the ones it does
   (`-- around the write at :N`). Any other shape the shim cannot place (a loop, a
   `with`) ends the chain, and its generated reason is written in the note -- `not
   read as a guard: the statement at :N sits under a while statement, ...` --
@@ -710,10 +711,14 @@ DERIVED
   token of the right-hand side) ONCE: its body is not walked.
 * **`DERIVED`** is a new section, written right after `ANCHOR` and only for a
   calculated anchor. It is the one section whose NOTE stands above its rows (8.1):
-  `-- <Field> is calculated from <N> fields[, and the formula is chosen by <S> more
-  (case at :L, ...)][, and <U> other values the walk cannot map] -- trace one of
+  `-- <Field> is calculated from <N> fields[, and the value is chosen by <S> more
+  (if at :L, ..., case at :M, ...)][, and <U> other values the walk cannot map] -- trace one of
   them instead[ (every binding below: <reason>)]:` -- `trace it instead` when one
-  row carries a command, `-- nothing to trace instead` when none does. A binding
+  row carries a command, `-- nothing to trace instead` when none does. With no value
+  field but choosers: `<Field> is calculated from no field, but its value is chosen by
+  <S> (if at :L, ...)` -- `from no field` alone only when no condition reads a field
+  either (fix round 2, R2-3: InspAsVarStr, whose every write is a constant, said
+  `nothing to trace instead` although FfFtrs_InspAsVar and FtrType decide it). A binding
   reason that every row shares is stated ONCE there; each row keeps `bound at :N
   via FF`. `Write-FormA` refuses a note with rows in any OTHER section;
   `Read-FormA` reads the note before the rows.
@@ -728,26 +733,34 @@ DERIVED
   same column, else as `TABLE.COLUMN` when exactly one dataset loads the table,
   else with no command and the reason in its note; `FROM <name> (calculated) VIA
   <var>` for a source the same handler writes (marked, not expanded); `(not a
-  column of <TABLE>)` for a bound literal the SQL index does not hold; `, selects
-  the formula (case at :N)` for a read in a case selector; `FROM <name>, not
+  column of <TABLE>)` for a bound literal the SQL index does not hold; `, chooses
+  the value (case at :N)` / `(if at :N)` for a read in a CHOOSER -- a case selector,
+  or the condition of an if that encloses a write (fix round 2, R2-3; an Exit guard
+  is no chooser: it skips the handler); `FROM <name>, not
   mapped: <why>` for a field or value the walk cannot map (a TField variable it
   cannot bind -- counted as a field -- a parameter, a non-TField field, a local
   set at several places, a name it cannot place) -- named, never guessed, and with
   no command. A CONSTANT is no row and no value: a bound enum value, type or
   routine, or -- by NAME SHAPE, since the charts read clones only and no library
-  index -- an unbound name that is a receiver or call head (`TTktVerd.FromInteger`,
-  `Integer(...)`) or has the Delphi enum/type shape (`dsInsert`, `ffFixed`,
-  `TSpecType`). The grade and ask are the binding's (Task 3: `[inferred]` via FF)
+  index -- an unbound name with the Delphi TYPE shape (`^[TE][A-Z]`: `TTktVerd`,
+  `TSpecType`) or the typecast head of a built-in type (`Integer(...)`). Fix round 2
+  (R2-2) narrowed this: a receiver is NOT a constant (a TField variable is always
+  one, and an inherited or unbound variable must stay a named, counted row), and an
+  unbound enum-shaped name (`dsInsert`) is a named row too -- a longer row list
+  beats a silently short count. The grade and ask are the binding's (Task 3: `[inferred]` via FF)
   and the unbound in-class read's (`in-class-field-reads`).
 * **`REGENERATE` is also a FACET** (7-space indent) under a row: the ready
   command that traces that field instead -- the header's command with `-Target`
   set to the row's target (`<Unit>.<TClass>.<FfVar>` or `TABLE.COLUMN`, forms the
   anchor resolver accepts). Every round-trip REGENERATE command, header and rows,
   is RUNNABLE AS WRITTEN from any folder: `& '<absolute path>\New-DiagramArtifact.ps1'
-  -Question round-trip ...` (calc-field fix round 1 M5; gate `A-RTC-E2E` runs the
-  row's string unchanged). The header attribute keeps its 2-space indent, so the
+  -Question round-trip -Target '<target>' ...` (calc-field fix round 1 M5; the
+  `-Target` value single-quoted with any `'` doubled, fix round 2 R2-6; gate
+  `A-RTC-E2E` runs the row's string unchanged, appending only `-OutRoot` to keep
+  its bundle out of the owner's charts\artifacts). The header attribute keeps its 2-space indent, so the
   two never meet. `Test-FormA.ps1` classifies it by `HEADERKW` (no verb); a row's
-  `FROM` head likewise, so neither adds to the verb set of 8.4.* **Why a section and not rows under the STOPS.** The owner's words are a
+  `FROM` head likewise, so neither adds to the verb set of 8.4.
+* **Why a section and not rows under the STOPS.** The owner's words are a
   question -- "calculated from X, Y, Z: trace X, Y or Z instead?" -- and each
   answer needs its own anchor and its own command line. Facets under the STOPS
   would carry neither a number nor a count; a section keeps every candidate a

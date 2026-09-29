@@ -84,7 +84,8 @@ $asOf = (@($DbPath, $ServerDbPath, $SqlDbPath) | ForEach-Object { Get-IndexStamp
 # Calc-field fix round 1 (M5): RUNNABLE as written -- the call operator and the bundler's ABSOLUTE path (a bare
 # `New-DiagramArtifact.ps1 ...` is not found by PowerShell from any other folder)
 $bundler = (Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1') -replace "'", "''"
-function Get-RegenerateCommand([string] $For) { "& '$bundler' -Question round-trip -Target $For -DbPath `"$DbPath`" -ServerDbPath `"$ServerDbPath`" -SqlDbPath `"$SqlDbPath`" -Depth $Depth" }
+# fix round 2 (R2-6): the -Target value single-quoted (a target may carry `$`), any quote in it doubled
+function Get-RegenerateCommand([string] $For) { "& '$bundler' -Question round-trip -Target '$($For -replace "'", "''")' -DbPath `"$DbPath`" -ServerDbPath `"$ServerDbPath`" -SqlDbPath `"$SqlDbPath`" -Depth $Depth" }
 $regen = Get-RegenerateCommand $Target
 
 # ---- 1. the anchor -------------------------------------------------------------------
@@ -301,7 +302,7 @@ Write-Host ("  anchor={0}  steps={1}  conditions={2}  crossings={3}  unresolved=
   # calc-field brief: the DERIVED section of a calculated anchor -- its lead-in note and each row as
   # `<text> => <target>` (the target is '' for a value the walk cannot map)
   DerivedNote  = $(if ($secDv) { $secDv.Note } else { '' })
-  Derived      = @($(if ($secDv) { $secDv.Items | ForEach-Object { $ri = $_; "$($ri.Text) => $((@($ri.Children | Where-Object { $_.Kind -eq 'facet' -and $_.Head -eq 'REGENERATE' } | ForEach-Object { if ($_.Text -match '-Target (\S+)') { $Matches[1] } }) -join ''))" } }))
+  Derived      = @($(if ($secDv) { $secDv.Items | ForEach-Object { $ri = $_; "$($ri.Text) => $((@($ri.Children | Where-Object { $_.Kind -eq 'facet' -and $_.Head -eq 'REGENERATE' } | ForEach-Object { if ($_.Text -match "-Target '((?:[^']|'')*)'") { $Matches[1] -replace "''", "'" } }) -join ''))" } }))
   DerivedCommands = @($(if ($secDv) { $secDv.Items | ForEach-Object { $_.Children | Where-Object { $_.Kind -eq 'facet' -and $_.Head -eq 'REGENERATE' } | ForEach-Object { $_.Text } } }))
   Sections     = (@($T.Sections | ForEach-Object { $_.Name }) -join ',')
   OnDbProof    = $proof

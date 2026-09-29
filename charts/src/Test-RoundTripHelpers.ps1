@@ -1053,19 +1053,32 @@ $res.CalcFtrTitle = $pF.Title; $res.CalcFtrStop = $pF.Stop; $res.CalcFtrChildren
 $res.CalcFtrRows = $pF.Rows; $res.CalcFtrCounts = $pF.Counts; $res.CalcFtrCheck = $pF.Check
 # fix round 1 (M4): a row keeps `bound at :N via FF`, the shared reason is in the note -- the FtrType row, whole
 $res.CalcFtrRowLine = @(($rcF.Text -split "\r\n") | Where-Object { $_ -cmatch '^\[\d+\] FROM MSCLIST\.FTRTYPE ' })[0] -replace '^\[\d+\] ', ''
-# fix round 1 (M5): every REGENERATE (header and rows) is `& '<absolute path to New-DiagramArtifact.ps1>' ...`
-$res.CalcCmdHeads = (@(($rcF.Text -split "\r\n") | Where-Object { $_ -cmatch '^( {2}| {7})REGENERATE ' } | ForEach-Object { if ($_ -cmatch "^\s+REGENERATE (& '[^']+' -Question round-trip -Target )") { $Matches[1] } else { 'OTHER' } } | Group-Object | ForEach-Object { "$($_.Count)x $($_.Name)" })) -join ' | '
+# fix round 1 (M5): every REGENERATE (header and rows) is `& '<absolute path to New-DiagramArtifact.ps1>' ...`; fix round 2
+# (R2-6): its -Target value single-quoted
+$res.CalcCmdHeads = (@(($rcF.Text -split "\r\n") | Where-Object { $_ -cmatch '^( {2}| {7})REGENERATE ' } | ForEach-Object { if ($_ -cmatch "^\s+REGENERATE (& '[^']+' -Question round-trip -Target ')(?:[^']|'')+' -DbPath ") { $Matches[1] } else { 'OTHER' } } | Group-Object | ForEach-Object { "$($_.Count)x $($_.Name)" })) -join ' | '
 # the second corpus case: Tolerance (:760) -- five writes in a nested case, four source fields
 $rcT = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmBlueprint4.dxDBGrid1FtrsVTolerance' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null
 $pT = Get-CalcTraceParts $rcT
 $res.CalcTolTitle = $pT.Title; $res.CalcTolStop = $pT.Stop; $res.CalcTolChildren = $pT.Children; $res.CalcTolNote = $pT.Note
 $res.CalcTolRows = $pT.Rows; $res.CalcTolCounts = $pT.Counts; $res.CalcTolCheck = $pT.Check
-# ONE candidate's command, run END TO END exactly AS WRITTEN (fix round 1 M5: the row carries `& '<absolute path>'`, so
-# the string itself is run, head and all; the bundle lands in the bundler's default charts\artifacts, gitignored):
-# the DimAbbr row -> MSCLIST.DIMABBR through FMTFtrs and SendDeltaFtrs
+# fix round 2 (R2-3): the fields read in the if CONDITIONS that choose the value are offered like case selectors.
+# InspAsVarStr (:1104-1114) writes only constants -- it said "from no field -- nothing to trace instead" although
+# FfFtrs_InspAsVar (:1110) and FtrType (:1106, one hop to FfFtrs_FtrType) decide it; USLLSLName (:1001-1029) left out
+# FtrType (:1003), FfFtrs_ID and FfFtrs_MasterID (:1023). Their DERIVED note and rows `<text> => <target>`
+$vmq = 'Blueprint4.ViewModel.TBlueprint_ViewModel'
+$rcI = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target "$vmq.FfFtrs_InspAsVarStr" -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null
+$pI = Get-CalcTraceParts $rcI
+$res.CalcInspOffer = "$($pI.Note) | $($pI.Rows) | $($pI.Counts) | $(($pI.Check -split '\|')[0..2] -join '/')"
+$rcU = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target "$vmq.FfFtrs_USLLSLName" -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null
+$pU = Get-CalcTraceParts $rcU
+$res.CalcUslOffer = "$($pU.Note) | $($pU.Rows) | $($pU.Counts) | $(($pU.Check -split '\|')[0..2] -join '/')"
+# ONE candidate's command, run END TO END AS WRITTEN (fix round 1 M5: the row carries `& '<absolute path>'`, so the string
+# itself is run, head and all) with ONE flag appended -- fix round 2 (R2-5): `-OutRoot <this run's scratch folder>`, so the
+# gate never writes into the owner's real charts\artifacts; the row TEXT is unchanged. The DimAbbr row -> MSCLIST.DIMABBR
+# through FMTFtrs and SendDeltaFtrs
 $res.CalcE2E = $(try {
-  $cmd = @($rcF.DerivedCommands | Where-Object { $_ -match '-Target \S+\.FfFtrs_DimAbbr ' })[0]
-  $art = Invoke-Expression $cmd 6>$null
+  $cmd = @($rcF.DerivedCommands | Where-Object { $_ -match "-Target '[^']*\.FfFtrs_DimAbbr' " })[0]
+  $art = Invoke-Expression ($cmd + " -OutRoot '$((Join-Path $work 'calc-e2e') -replace "'", "''")'") 6>$null
   $et = [IO.File]::ReadAllText((Join-Path $art.Bundle 'trace.dlgraph'))
   $end = @($et -split "\r\n" | Where-Object { $_ -clike 'END TRACE*' })[0]
   $ttl = $(if ($et -cmatch '(?m)^  TITLE "([^"]*)"\r$') { $Matches[1] } else { '' })
@@ -1169,5 +1182,21 @@ $res.CalcSynCreating = $(try {
     $i = Resolve-CalcField (New-SynthCalcFacts 'calc-creating' $loopSrc $loopSpec -Creating $ck)
     "$($i.StopText) -- $($i.StopNote)" }) -join ' ## '
 } catch { "threw: $($_.Exception.Message)" })
+
+# fix round 2 (R2-1): a begin-wrapped case ARM (`1: begin .. end;`) and an else arm -- both writes are under the case
+# (its selector FfK offered for both), the case named, the if around it written with no `around` note
+$cbSrc = @('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', '  if Assigned(FfA) then', '  begin', '    case TagOf(FfK) of', '      1: begin FfA.AsFloat:= FfB.AsFloat; end;',
+           '      else FfA.AsFloat:= 0;', '    end;', '  end;', 'end;')
+$res.CalcSynCaseBegin = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-caseb' $cbSrc $caseSpec)) } catch { "threw: $($_.Exception.Message)" })
+# fix round 2 (R2-2): an UNBOUND receiver (an inherited TField variable the class's own fields do not list) is a named row,
+# counted -- never a silent constant; the type-shaped receiver TKind and the typecast head Integer(...) are constants
+$inhSrc = @('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', '  FfA.AsFloat:= FfInherited.AsFloat + TKind.Size + Integer(FfB.AsInteger);', 'end;')
+$inhSpec = @{ 3 = @('read:FfA', 'member-access:AsFloat:FfA', 'read:FfInherited', 'member-access:AsFloat:FfInherited', 'read:TKind', 'member-access:Size:TKind', 'read:Integer',
+                    'read:FfB', 'member-access:AsInteger:FfB') }
+$res.CalcSynInherited = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-inh' $inhSrc $inhSpec)) } catch { "threw: $($_.Exception.Message)" })
+# fix round 2 (R2-3): every write a constant, chosen by an if on FfB -- "from no field, but its value is chosen by 1"
+$ifSrc = @('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', "  if FfB.AsInteger > 0 then FfA.AsString:= 'Yes'", "  else FfA.AsString:= 'No';", 'end;')
+$ifSpec = @{ 3 = @('read:FfB', 'member-access:AsInteger:FfB', 'read:FfA', 'member-access:AsString:FfA'); 4 = @('read:FfA', 'member-access:AsString:FfA') }
+$res.CalcSynIfChooser = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-if' $ifSrc $ifSpec)) } catch { "threw: $($_.Exception.Message)" })
 
 [pscustomobject]$res
