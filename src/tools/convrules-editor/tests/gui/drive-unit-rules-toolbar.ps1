@@ -29,10 +29,6 @@ public static class W {
   public static string Txt(IntPtr h) { int n = (int)Send(h, 0x000E, IntPtr.Zero, IntPtr.Zero); var s = new StringBuilder(n + 2); SendSB(h, 0x000D, (IntPtr)(n + 1), s); return s.ToString(); }
   public static int Top(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.T; }
   public static int Left(IntPtr h) { RECT r; GetWindowRect(h, out r); return r.L; }
-  /* Toolbar buttons are not windows. Read each button's idCommand and caption out
-     of the editor's memory (TB_GETBUTTON / TB_GETBUTTONTEXTW write through a
-     pointer IN that process), then post the WM_COMMAND a real click sends. */
-  public static string Captions(IntPtr main) { var sb = new StringBuilder(); Walk(main, (tb, id, cap) => { sb.Append(cap).Append(" | "); return false; }); return sb.ToString(); }
   [DllImport("kernel32.dll")] static extern bool WriteProcessMemory(IntPtr p, IntPtr a, byte[] b, UIntPtr s, out UIntPtr put);
   /* Click the page-control tab captioned NAME: TCM_GETITEMW for each tab's text
      and TCM_GETITEMRECT for its rectangle, both through the editor's memory. */
@@ -59,35 +55,6 @@ public static class W {
           int x = (BitConverter.ToInt32(rc, 0) + BitConverter.ToInt32(rc, 8)) / 2, y = (BitConverter.ToInt32(rc, 4) + BitConverter.ToInt32(rc, 12)) / 2;
           IntPtr lp = (IntPtr)((y << 16) | (x & 0xFFFF));
           PostMessage(tc, 0x0201, (IntPtr)1, lp); PostMessage(tc, 0x0202, IntPtr.Zero, lp);
-          return true;
-        }
-      }
-      return false;
-    } finally { VirtualFreeEx(hp, mem, UIntPtr.Zero, 0x8000); CloseHandle(hp); }
-  }
-  /* VCL routes a toolbar click to the TToolButton under the cursor, so post a
-     real left click at the button's rectangle (TB_GETITEMRECT, by index). */
-  public static bool InvokeByName(IntPtr main, string name) {
-    uint pid; GetWindowThreadProcessId(main, out pid);
-    IntPtr hp = OpenProcess(0x0438, false, pid);
-    IntPtr mem = VirtualAllocEx(hp, IntPtr.Zero, (UIntPtr)1024, 0x3000, 0x04);
-    try {
-      foreach (var tb in Kids(main)) {
-        if (Cls(tb) != "TToolBar") continue;
-        int n = (int)Send(tb, 0x0418, IntPtr.Zero, IntPtr.Zero);
-        for (int i = 0; i < n; i++) {
-          Send(tb, 0x0417, (IntPtr)i, mem);
-          var b = new byte[32]; UIntPtr got; ReadProcessMemory(hp, mem, b, (UIntPtr)32, out got);
-          int id = BitConverter.ToInt32(b, 4);
-          int len = (int)Send(tb, 0x044B, (IntPtr)id, mem);
-          if (len <= 0) continue;
-          var t = new byte[(len + 1) * 2]; ReadProcessMemory(hp, mem, t, (UIntPtr)t.Length, out got);
-          if (Encoding.Unicode.GetString(t, 0, len * 2) != name) continue;
-          Send(tb, 0x041D, (IntPtr)i, mem);
-          var rc = new byte[16]; ReadProcessMemory(hp, mem, rc, (UIntPtr)16, out got);
-          int x = (BitConverter.ToInt32(rc, 0) + BitConverter.ToInt32(rc, 8)) / 2, y = (BitConverter.ToInt32(rc, 4) + BitConverter.ToInt32(rc, 12)) / 2;
-          IntPtr lp = (IntPtr)((y << 16) | (x & 0xFFFF));
-          PostMessage(tb, 0x0200, IntPtr.Zero, lp); PostMessage(tb, 0x0201, (IntPtr)1, lp); PostMessage(tb, 0x0202, IntPtr.Zero, lp);
           return true;
         }
       }
@@ -165,26 +132,44 @@ public static class W {
     }
     return r;
   }
-  static bool Walk(IntPtr main, Func<IntPtr, int, string, bool> visit) {
-    uint pid; GetWindowThreadProcessId(main, out pid);
-    IntPtr hp = OpenProcess(0x0438, false, pid);
-    IntPtr mem = VirtualAllocEx(hp, IntPtr.Zero, (UIntPtr)1024, 0x3000, 0x04);
-    try {
-      foreach (var tb in Kids(main)) {
-        if (Cls(tb) != "TToolBar" && Cls(tb) != "ToolbarWindow32") continue;
-        int n = (int)Send(tb, 0x0418, IntPtr.Zero, IntPtr.Zero);
-        for (int i = 0; i < n; i++) {
-          Send(tb, 0x0417, (IntPtr)i, mem);
-          var b = new byte[32]; UIntPtr got; ReadProcessMemory(hp, mem, b, (UIntPtr)32, out got);
-          int id = BitConverter.ToInt32(b, 4);
-          int len = (int)Send(tb, 0x044B, (IntPtr)id, mem);
-          if (len <= 0) continue;
-          var t = new byte[(len + 1) * 2]; ReadProcessMemory(hp, mem, t, (UIntPtr)t.Length, out got);
-          if (visit(tb, id, Encoding.Unicode.GetString(t, 0, len * 2))) return true;
-        }
-      }
-      return false;
-    } finally { VirtualFreeEx(hp, mem, UIntPtr.Zero, 0x8000); CloseHandle(hp); }
+  [DllImport("user32.dll")] static extern IntPtr GetMenu(IntPtr h);
+  [DllImport("user32.dll")] static extern IntPtr GetSubMenu(IntPtr m, int pos);
+  [DllImport("user32.dll")] static extern uint GetMenuItemID(IntPtr m, int pos);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string name);
+  /* The main menu's HMENU. A VCL style detaches the native menu from the window
+     (GetMenu -> 0) and paints its own bar, so the editor answers the registered
+     message 'ConvRulesEditor.MainMenuHandle' (MAIN_MENU_QUERY_MSG) with it. */
+  static IntPtr MenuOf(IntPtr main) {
+    IntPtr m = GetMenu(main);
+    return m != IntPtr.Zero ? m : Send(main, RegisterWindowMessage("ConvRulesEditor.MainMenuHandle"), IntPtr.Zero, IntPtr.Zero);
+  }
+  /* A main-menu caption without its '&' hot-key markers and without the
+     TAB-separated shortcut text VCL appends ("Save\tCtrl+S" -> "Save"). */
+  static string Clean(IntPtr m, int i) {
+    var s = new StringBuilder(256); GetMenuStringW(m, (uint)i, s, 256, 0x400);
+    string t = s.ToString().Replace("&", ""); int tab = t.IndexOf('\t');
+    return tab >= 0 ? t.Substring(0, tab) : t;
+  }
+  /* "Top|Item" -> post the item's WM_COMMAND to the main form, exactly what a
+     click sends. VCL's TMenuItem.Click ignores a disabled item. */
+  public static bool InvokeMenu(IntPtr main, string path) {
+    var parts = path.Split('|'); IntPtr m = MenuOf(main);
+    for (int p = 0; p < parts.Length; p++) {
+      int n = GetMenuItemCount(m), hit = -1;
+      for (int i = 0; i < n; i++) if (Clean(m, i) == parts[p]) { hit = i; break; }
+      if (hit < 0) return false;
+      if (p == parts.Length - 1) { uint id = GetMenuItemID(m, hit); PostMessage(main, 0x0111, (IntPtr)id, IntPtr.Zero); return true; }
+      m = GetSubMenu(m, hit);
+    }
+    return false;
+  }
+  public static string MenuCaptions(IntPtr main) {
+    var sb = new StringBuilder(); IntPtr bar = MenuOf(main);
+    for (int t = 0; t < GetMenuItemCount(bar); t++) {
+      IntPtr sub = GetSubMenu(bar, t);
+      for (int i = 0; sub != IntPtr.Zero && i < GetMenuItemCount(sub); i++) sb.Append(Clean(bar, t)).Append('|').Append(Clean(sub, i)).Append(" ; ");
+    }
+    return sb.ToString();
   }
 }
 '@
@@ -241,8 +226,9 @@ try {
   while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $main = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($main -eq $null) { $main = [IntPtr]::Zero } }
   Check 'main.window' ($main -ne [IntPtr]::Zero)
   Start-Sleep -Seconds 2
-  $caps = [W]::Captions($main)
-  Check 'toolbar.readable' ($caps -match '\+ New Conversion' -and $caps -match '\+ Add unit') $caps
+  $caps = [W]::MenuCaptions($main)
+  Check 'menubar.items' (($caps -match 'File\|Open\.\.\.') -and ($caps -match 'Conversion\|New Conversion') -and ($caps -match 'Mapping\|Auto-Match') -and ($caps -match 'Uses Units\|Swap\.\.\.') -and ($caps -match 'View\|Theme')) $caps
+  Check 'toolbar.gone' (@(Find $main 'TToolBar' $null).Count -eq 0)
 
   # --- 1. + New Conversion adds #unuse <From unit> and #use <To unit> ---
   $pick = @(Find $main 'TButton' 'Pick...')[0]
@@ -250,7 +236,7 @@ try {
   Check 'pickers.found' ($row2.Count -ge 2) "row2 combos=$($row2.Count)"
   SetText $row2[0] 'Vcl.CheckLst.TCheckListBox'
   SetText $row2[1] 'cxCheckListBox.TcxCheckListBox'
-  Check 'invoke.new-conversion' ([W]::InvokeByName($main, '+ New Conversion'))
+  Check 'invoke.new-conversion' ([W]::InvokeMenu($main, 'Conversion|New Conversion'))
   $t0 = Get-Date; $raw = ''
   while (((Get-Date) - $t0).TotalSeconds -lt 300 -and ($raw -notmatch '(?m)^#link ')) { Start-Sleep -Seconds 1; $raw = Raw $main; if ((Forms $p.Id).Count -gt 1) { break } }
   "  debug: waited {0:N0}s, forms=[{1}], memos={2}, raw.len={3}" -f ((Get-Date)-$t0).TotalSeconds, (TopsNow $p.Id), (@(Find $main 'TMemo' $null).Count), $raw.Length
@@ -267,20 +253,20 @@ try {
 
   # --- 2. Derive units again: idempotent ---
   $before = Raw $main
-  Check 'invoke.derive' ([W]::InvokeByName($main, 'Derive units'))
+  Check 'invoke.derive' ([W]::InvokeMenu($main, 'Uses Units|Derive units'))
   Start-Sleep -Seconds 8
   $after = Raw $main
   Check 'derive.button.idempotent' ($after -eq $before) ("lines {0} -> {1}" -f ($before -split "`n").Count, ($after -split "`n").Count)
 
   # --- 3. + Use through the picker ---
-  Check 'invoke.use' ([W]::InvokeByName($main, '+ Add unit'))
+  Check 'invoke.use' ([W]::InvokeMenu($main, 'Uses Units|Add unit...'))
   $e = PickTyped $p.Id 'Add unit (#use)' 'cxEdit'; Check 'use.picker' ($e -eq '') $e
   Start-Sleep -Seconds 1
   Check 'use.rule.written' ((Raw $main) -match '(?m)^#use cxEdit\s*$')
 
   # --- 4. + Swap with NO row selected: Old picker, then the multi-pick replacement
   #        picker (Enter adds, no Yes/No; the old unit and repeats are refused) ---
-  Check 'invoke.swap' ([W]::InvokeByName($main, '+ Swap'))
+  Check 'invoke.swap' ([W]::InvokeMenu($main, 'Uses Units|Swap...'))
   $e = PickTyped $p.Id 'Unit swap: the OLD unit to replace' 'OldUnitA'; Check 'swap.old.picker' ($e -eq '') $e
   $pk = WaitFor $p.Id 'Replacements for OldUnitA' 60
   Check 'swap.replacements.picker' ($pk -ne [IntPtr]::Zero) (TopsNow $p.Id)
@@ -304,13 +290,13 @@ try {
   $lv = UnitList $main
   Check 'unitlist.found' ($null -ne $lv) ((Find $main 'TListView' $null).Count)
   [W]::SelectRow($lv, (RowOf $lv 'Vcl.CheckLst'))
-  Check 'row.swap.invoke' ([W]::InvokeByName($main, '+ Swap'))
+  Check 'row.swap.invoke' ([W]::InvokeMenu($main, 'Uses Units|Swap...'))
   Check 'row.swap.no.old.picker' ((WaitFor $p.Id 'Unit swap: the OLD unit to replace' 3) -eq [IntPtr]::Zero) (TopsNow $p.Id)
   $e = PickReplacements $p.Id 'Replacements for Vcl.CheckLst' @('NewUnitX'); Check 'row.swap.first' ($e -eq '') $e
   Start-Sleep -Seconds 1
   $lv = UnitList $main
   [W]::SelectRow($lv, (RowOf $lv 'OldUnitA'))
-  Check 'row.swap2.invoke' ([W]::InvokeByName($main, '+ Swap'))
+  Check 'row.swap2.invoke' ([W]::InvokeMenu($main, 'Uses Units|Swap...'))
   $e = PickReplacements $p.Id 'Replacements for OldUnitA' @('NewUnitD'); Check 'row.swap.second.is.second.row' ($e -eq '') $e
   Start-Sleep -Seconds 1
   $raw = Raw $main
@@ -360,7 +346,7 @@ try {
 
   # --- 5. + Unuse, cancelled: nothing written ---
   $before = Raw $main
-  Check 'invoke.unuse' ([W]::InvokeByName($main, '+ Remove unit'))
+  Check 'invoke.unuse' ([W]::InvokeMenu($main, 'Uses Units|Remove unit'))
   $pk = WaitFor $p.Id 'Remove unit (#unuse)' 30
   Check 'unuse.picker' ($pk -ne [IntPtr]::Zero)
   if ($pk -ne [IntPtr]::Zero) { Click (@(Find $pk 'TButton' 'Cancel')[0]) }
