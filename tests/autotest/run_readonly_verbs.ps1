@@ -105,6 +105,8 @@ interface
 
 type
   TFoo = class
+  private
+    FLast: string;
   public
     function Greet: string;
     procedure DoWork;
@@ -119,7 +121,7 @@ end;
 
 procedure TFoo.DoWork;
 begin
-  Greet;
+  FLast := Greet;
 end;
 
 end.
@@ -150,6 +152,9 @@ Check 'fixture index is WAL (header byte 18 = 2)' ($b18Base -eq 2) "byte18=$b18B
 # the md5 alone just as well as one that read correctly, so without it the
 # sentinel could not tell a clean read from a crash. Every case here exits 0 on
 # this fixture (measured 2026-09-24; lint-all finds nothing to report in it).
+# 1.20.1: DoWork used to be a bare `Greet;` -- a discarded effect-free result,
+# which discarded-effect-free-result (ON since DEC-7) now reports, making
+# lint-all exit 1. It stores the result instead, so the fixture stays clean.
 function ReadVerbUnchanged([string]$Label, [scriptblock]$Run, [int]$ExpectExit = 0) {
     $md5Base = Md5 $db
     & $Run *> $null

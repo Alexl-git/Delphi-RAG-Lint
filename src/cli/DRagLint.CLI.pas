@@ -18383,8 +18383,11 @@ begin
       the scan runs at all. That makes the catalogue flag and the runtime gate
       say the same thing -- a bare lint-all never pays for the scan AND never
       prints a finding -- instead of running it and discarding the output the
-      way a PROJECT_RULES_OFF_BY_DEFAULT entry would. }
-    if Cfg.ShouldKeep('discarded-effect-free-result', {ADefaultDisabled=}True) then
+      way a PROJECT_RULES_OFF_BY_DEFAULT entry would.
+      EXCEPT discarded-effect-free-result, ON since 1.20.1 (owner ruling DEC-7,
+      2026-09-28: 3/3 real on ORM3). It still goes through ShouldKeep, now with
+      False, so --disable or a config "disabled" entry keeps turning it off. }
+    if Cfg.ShouldKeep('discarded-effect-free-result', {ADefaultDisabled=}False) then
       OptIn:= OptIn + ['discarded-effect-free-result'];
     if Cfg.ShouldKeep('cycle-participant-unit', {ADefaultDisabled=}True) then
       OptIn:= OptIn + ['cycle-participant-unit'];
@@ -18824,8 +18827,9 @@ begin
       OptIn2:= OptIn2 + ['dependent-project-not-recompiled'];
     { Purity v2 (spec section 14) -- see DoLintAll for why these two pass True
       where the four above pass False. `--rule <id>` still reaches them: the
-      OptedIn gate treats an explicit rule request as opting in. }
-    if LoadLintConfig(AArgs).ShouldKeep('discarded-effect-free-result', {ADefaultDisabled=}True) then
+      OptedIn gate treats an explicit rule request as opting in.
+      discarded-effect-free-result is ON since 1.20.1 (DEC-7), hence False. }
+    if LoadLintConfig(AArgs).ShouldKeep('discarded-effect-free-result', {ADefaultDisabled=}False) then
       OptIn2:= OptIn2 + ['discarded-effect-free-result'];
     if LoadLintConfig(AArgs).ShouldKeep('cycle-participant-unit', {ADefaultDisabled=}True) then
       OptIn2:= OptIn2 + ['cycle-participant-unit'];

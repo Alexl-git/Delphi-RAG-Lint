@@ -558,8 +558,13 @@ begin
       there is "not computed", never "nothing to report". Opt in via --enable
       or "enabled":["<id>"]; the CLI's OptIn array is what actually makes the
       scan run (see DoLintAll/DoLintProject), so a catalogue flag alone would
-      leave them unreachable rather than merely off. }
-    B('discarded-effect-free-result', 'project-wide', 'info', 'A proven effect-free value-returning routine is called in statement position and its result discarded -- the call does nothing', False);
+      leave them unreachable rather than merely off.
+      discarded-effect-free-result is ON since 1.20.1 (owner ruling DEC-7,
+      2026-09-28): 3/3 real on ORM3 (TAttrPlan.Describe). Known caveat: it does
+      not consider virtual overrides, so a call dispatched to an override with
+      effects can still be reported. Guard:
+      tests\lint-project\purity-rules\run_purity_rules.ps1 run 1. }
+    B('discarded-effect-free-result', 'project-wide', 'info', 'A proven effect-free value-returning routine is called in statement position and its result discarded -- the call does nothing', True);
     B('query-name-with-effect',       'project-wide', 'info', 'A Get*/Is*/Has*/Find*/Can*/Should* routine has a PROVEN escaping effect (writes a field, global state or frees storage) -- a question that also changes something', False);
     { assert-with-side-effect (INBOX 2026-09-23 rule 4) ships OFF for the same
       reason as the two above: it reads the STORED purity verdict and the resolved

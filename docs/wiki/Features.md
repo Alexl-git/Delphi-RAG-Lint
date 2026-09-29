@@ -64,7 +64,7 @@ The foundation. Everything below that says *(index)* reads what this produces.
 
 ## Linting
 
-**189 rules. 23 have an auto-fix. 158 are on by default.**
+**189 rules. 23 have an auto-fix. 159 are on by default.**
 136 are built-in checks; 53 are external tree-sitter `.scm` rules you can read
 and extend in `rules\`.
 
@@ -149,7 +149,7 @@ guesswork.
 | Strip generated blocks | `document --unit --strip` |
 | Generate a doc comment for a symbol | `generate-docs` |
 | Shared-unit markers, so several projects can document one unit without fighting | [`shared-unit`](shared-unit) |
-| Purity: every routine gets an effect summary (globals, heap, own fields, parameters written) computed to a fixpoint over the whole index; a proven one renders **Effect-free (proven)** in hover and autodoc. Two OFF-by-default rules use it: `discarded-effect-free-result` and `query-name-with-effect` | automatic; `--enable <id>` for the rules |
+| Purity: every routine gets an effect summary (globals, heap, own fields, parameters written) computed to a fixpoint over the whole index; a proven one renders **Effect-free (proven)** in hover and autodoc. Two rules use it: `discarded-effect-free-result` (ON by default since 1.20.1) and `query-name-with-effect` (OFF) | automatic; `--enable query-name-with-effect` |
 
 ## Refactoring and code generation
 
