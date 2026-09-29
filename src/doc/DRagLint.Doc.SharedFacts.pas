@@ -258,16 +258,21 @@ type
     /// rather than protect it. That case is the positive control in
     /// run_doc_drift_unseen_units.ps1 and it is what stops this predicate from
     /// degenerating into "never fixable".</para>
+    /// <para>A `(+N more)` WINDOW MARKER IS NOT AN ENTRY. It is stripped from
+    /// both the stored and the fresh content before the entries are compared,
+    /// so a block whose only change is the window count stays fixable, while a
+    /// windowed entry naming an unheld unit is still refused
+    /// (run_doc_drift_window_marker.ps1).</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.ProjectTags.WithoutMoreSuffix, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
     /// <para>Returns: False; ReconcileDropsUnvouchable(AStore, AStored, AFresh)</para>
-    /// <para>Complexity: 10 (cyclomatic, outer body), 89 lines (full implementation)</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 95 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
+    /// <seealso cref="DRagLint.Doc.ProjectTags.WithoutMoreSuffix"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitVouchable"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RegenerationDropsUnvouchable(const AStored, AFresh: string;
@@ -1936,10 +1941,16 @@ begin
 
         if not FreshIn.TryGetValue(Lab, FreshContent) then FreshContent:= '';
 
+        { THE WINDOW MARKER IS NOT AN ENTRY -- on EITHER side (1.20.3). Split in
+          as one, the last visible entry `E (X.pas) (+42 more)` matched nothing
+          once the fresh count became (+43 more), and was then read as naming a
+          unit called '+42 more' that no index holds: 12 blocks in the
+          convrules-editor refused a fix whose only change was the count.
+          Guarded by tests\autodoc\run_doc_drift_window_marker.ps1. }
         FreshSet:= TDictionary<string, Byte>.Create;
         try
-          for E in SplitEntries(FreshContent) do FreshSet.AddOrSetValue(LowerCase(Trim(E)), 1);
-          for E in SplitEntries(SC) do
+          for E in SplitEntries(WithoutMoreSuffix(FreshContent)) do FreshSet.AddOrSetValue(LowerCase(Trim(E)), 1);
+          for E in SplitEntries(WithoutMoreSuffix(SC)) do
           begin
             if FreshSet.ContainsKey(LowerCase(Trim(E))) then Continue;
             { Dropped. Vouchable ONLY if this index actually holds the unit the
