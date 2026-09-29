@@ -3,6 +3,34 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased (next published release)
+
+### Added
+
+- **Charts** (merged from `feat/archify-ir`): 26 of the 27 catalogue questions answer one formal
+  question about one selection with a chart drawn by Graphviz (`charts\src\New-DiagramArtifact.ps1`),
+  or a text trace for `round-trip`; `charts\src\Ask-Report.ps1` asks any of them with no setup. Every
+  row is a click-through link (`draglint://open?file=...&line=...`) into a running RAD Studio. See
+  `docs\wiki\Charts-and-the-IDE.md`. Needs Graphviz 16.1.
+
+### Security
+
+- **The IDE plugin's open-in-IDE pipe opened any existing file it was sent.** `DoOpenInIDE` called
+  `FileExists` on the path first -- for a UNC path that is itself a network logon from the IDE
+  process, leaking the user's NTLM hash to the named server -- and then opened `.dproj`, `.dpk`,
+  `.bpl` or anything else that existed. The path is now checked BEFORE any file-system access
+  (`DragLint.Plugin.OpenSourcePath.IsOpenableSourcePath`): a local `X:\` path only, extension
+  `.pas .dfm .dpr .inc .sql .fmx`, no streams, wildcards, device names, control characters or
+  segments ending in a dot or space. The pipe also sets `PIPE_REJECT_REMOTE_CLIENTS`. Found by the
+  charts session's review of the click path; the browser-side handler was hardened in the same way.
+  Guard: `tests\fixtures\T66_open_source_path.dpr` (33 cases, run by
+  `tests\run_legacy_cli_fixtures.ps1`).
+
+### Docs
+
+- The `ask-*.md` wiki pages and `Diagrams-and-Charts.md` led with `drag-lint ask`, a verb that does
+  not exist; they now say it is planned and show the chart-pipeline command that runs today.
+
 ## v1.20.1-alpha -- 2026-09-28
 
 PATCH: one rule default flipped by owner ruling, three false positives and one false negative fixed.

@@ -82,7 +82,8 @@ $Fixtures = @(
   'T40_compile_parser', 'T43_refactorform', 'T47_regcolors', 'T48_diag_cache',
   'T51_structure', 'T54_settings_scan_libraries', 'T55_codelens_cache',
   'T57_usages_form', 'T58_symbolsearch_form', 'T59_workspace_config',
-  'T63_lint_config_roundtrip', 'T64_lint_options_compile', 'T65_profile_apply'
+  'T63_lint_config_roundtrip', 'T64_lint_options_compile', 'T65_profile_apply',
+  'T66_open_source_path'
 )
 
 # Drivers that live in tests\ itself rather than tests\fixtures\. run_phase1_e2e

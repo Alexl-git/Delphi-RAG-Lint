@@ -74,6 +74,7 @@ contains
   DragLint.Plugin.Diagnose in 'DragLint.Plugin.Diagnose.pas',
   DragLint.Plugin.AboutForm in 'DragLint.Plugin.AboutForm.pas',
   DRagLint.Plugin.DbProbe in 'DRagLint.Plugin.DbProbe.pas',
+  DragLint.Plugin.OpenSourcePath in 'DragLint.Plugin.OpenSourcePath.pas',
   DragLint.Plugin.OpenSourceServer in 'DragLint.Plugin.OpenSourceServer.pas',
   DragLint.Plugin.DockForm in 'DragLint.Plugin.DockForm.pas' {DragLintDockFrame: TFrame},
   DragLint.Plugin.Providers in 'DragLint.Plugin.Providers.pas',

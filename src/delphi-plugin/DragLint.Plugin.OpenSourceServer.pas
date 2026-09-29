@@ -14,6 +14,9 @@ unit DragLint.Plugin.OpenSourceServer;
     * <file> absolute path (may contain spaces, never TAB/LF)
     * <line> 1-based; <col> optional 1-based caret column
     * one message per connection; no reply.
+    * <file> must pass DragLint.Plugin.OpenSourcePath.IsOpenableSourcePath (a
+      local X:\ path to .pas/.dfm/.dpr/.inc/.sql/.fmx) or it is dropped unread
+      -- since 2026-09-29; anything local can write to this pipe.
 
   Robust teardown (the part that matters given the v0.40 unload AVs):
     The listener thread blocks in ConnectNamedPipe.  To stop it cleanly we set
@@ -34,10 +37,17 @@ uses
   , System.SysUtils
   , System.Classes
   , ToolsAPI
+  , DragLint.Plugin.OpenSourcePath
   ;
 
 const
   OPEN_SOURCE_PIPE_NAME = '\\.\pipe\drag-lint-open-source';
+  { Not declared by Winapi.Windows. Refuses a client connecting over the
+    network (SMB), so only processes on this machine can reach the pipe. Other
+    local USERS are already kept out by the default DACL a nil
+    SECURITY_ATTRIBUTES gives: read to Everyone, write only to the creator,
+    SYSTEM and Administrators -- and this pipe is inbound, clients WRITE. }
+  PIPE_REJECT_REMOTE_CLIENTS = $00000008;
   SEP                   = #9;
   TERM                  = #10;
   MAX_MSG               = 8 * 1024; { a path + 2 ints; anything larger is bogus }
@@ -66,8 +76,19 @@ var
   Pos   : IOTAEditPosition  ;
   OpenOk: Boolean           ;
   I     : Integer           ;
+  Why   : string            ;
 begin
-  if (AFile = '') or not FileExists(AFile) then Exit;
+  { The gate runs BEFORE FileExists: FileExists on a UNC path is itself the
+    network access (an NTLM authentication to the named server) that a
+    hostile message would want. See DragLint.Plugin.OpenSourcePath. }
+  if not IsOpenableSourcePath(AFile, Why) then
+  begin
+    {$IFDEF DEBUG}
+    OutputDebugString(PChar('drag-lint open-source: refused -- ' + Why));
+    {$ENDIF}
+    Exit;
+  end;
+  if not FileExists(AFile) then Exit;
 
   { Open the target. For a CODE file force the SOURCE editor to the front via
     OpenModule + IOTASourceEditor.Show, so a form unit's .pas lands on the CODE
@@ -177,7 +198,7 @@ begin
     NameThreadForDebugging('drag-lint open-source pipe');
     while not Terminated do
     begin
-      Pipe:= CreateNamedPipe( OPEN_SOURCE_PIPE_NAME, PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE or PIPE_READMODE_BYTE or PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, 0, MAX_MSG, 0, nil);
+      Pipe:= CreateNamedPipe( OPEN_SOURCE_PIPE_NAME, PIPE_ACCESS_INBOUND, PIPE_TYPE_BYTE or PIPE_READMODE_BYTE or PIPE_WAIT or PIPE_REJECT_REMOTE_CLIENTS, PIPE_UNLIMITED_INSTANCES, 0, MAX_MSG, 0, nil);
       if Pipe = INVALID_HANDLE_VALUE then
       begin
         { transient failure -- back off briefly, re-check Terminated }

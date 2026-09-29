@@ -113,6 +113,7 @@
         <DCCReference Include="DragLint.Plugin.Diagnose.pas"/>
         <DCCReference Include="DragLint.Plugin.AboutForm.pas"/>
         <DCCReference Include="DRagLint.Plugin.DbProbe.pas"/>
+        <DCCReference Include="DragLint.Plugin.OpenSourcePath.pas"/>
         <DCCReference Include="DragLint.Plugin.OpenSourceServer.pas"/>
         <DCCReference Include="DragLint.Plugin.DockForm.pas">
             <Form>DragLintDockFrame</Form>
