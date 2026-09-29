@@ -181,6 +181,12 @@ limits, stated beside those numbers on purpose:
 * a guard sees only the INNERMOST enclosing `if` of its Exit (engine ask E1 --
   a branch fact -- retires it); `OMITS` tests every enclosing `if` of a line, outwards
   until a loop or a case arm, which the source reader does not place;
+* a call into a transport-convention unit (`Pipes.*`, `uPipe*`, `uBroadcast*`) is
+  not walked; it is a step only when an Exit guard's condition turns on it, or when
+  its own body makes an outward Windows I/O call (`WriteFile`, `WriteFileEx`,
+  `TransactNamedPipe`, `CallNamedPipe`) -- the post-commit broadcast
+  `TBroadcastServer.PushTableChanged` (RC-R6; the index's effect facts have no
+  pipe / IPC class to tell it from a logger);
 * golden READ facts [28]-[29] (the transport-convention helpers at
   `uPipeSessionBuilder.pas:533` / `:534` / `:538`) are DISCLOSED, not matched --
   that is the "3 golden facts disclosed";

@@ -2656,6 +2656,9 @@ Step 'E-RTF' {
   # I5 (synthetic walk): a call one if DEEPER in another table's branch is omitted too (it was a path step)
   Chk 'A-RTF-I5-OMITS'  $rt0.FinI5Omits ("OMITS 1 step(s) in branches for other tables, every enclosing if read up to a loop or case arm -- not walked, the branch conditions: " +
                                         "WHEN `"T = 'MSCLIST'`" @fin-i5.pas:3 > APPLIES FMT.CommitUpdates")
+  # RC-R6 (synthetic walk): a transport-convention callee whose body calls WriteFile is KEPT as a CALLS step (not
+  # descended); a logger-shaped transport callee is skipped; a non-transport callee with an empty body is pruned
+  Chk 'A-RC-R6-OUTWARD' $rt0.RcR6Outward 'CALLS TB.PushX [] || pending: '
   # M2: the ask on each ANCHOR step of OPERAT.NAME || of colREASON. Before: 08=E4 (the table-literal hop) and colREASON
   # 04=E4 (FViewModel's declared type matched by name) -- E4 (populated fb_datasets) retires neither. Now the literal hop
   # names none (the walk's own inference) and the rhs-type hop names type-use-binding (0 of 60,603 type_use refs bound)

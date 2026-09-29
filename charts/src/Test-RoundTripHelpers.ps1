@@ -933,7 +933,8 @@ $res.HoldCoerceConds = $hcC -join ' | '
 # caches (RtFacts; the sha map Test-SourceFresh reads, keyed by a synthetic $DbPath) -- NO index is read. A ref is
 # a hashtable of Get-RoutineFacts columns; `at` names the token whose FIRST occurrence on its line is the ref's
 # 1-based start_col. Returns the walk's Items and Conds.
-function Invoke-SynthWalk([string] $Name, [string[]] $Src, $Refs, [string] $Table = 'OPERAT', [string[]] $Tables = @('OPERAT', 'MSCLIST'), $Lits = @()) {
+# $Callees (RC-R6): id -> the callee's refs (hashtables), injected as bodiless facts (ImplStart 0: never walked).
+function Invoke-SynthWalk([string] $Name, [string[]] $Src, $Refs, [string] $Table = 'OPERAT', [string[]] $Tables = @('OPERAT', 'MSCLIST'), $Lits = @(), [hashtable] $Callees = @{}) {
   $DbPath = "synth:$Name"
   $p = Join-Path $work "$Name.pas"
   [IO.File]::WriteAllText($p, (($Src -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
@@ -947,6 +948,11 @@ function Invoke-SynthWalk([string] $Name, [string[]] $Src, $Refs, [string] $Tabl
   $ls = @(foreach ($l in $Lits) { $c = $Src[[int]$l.line - 1].IndexOf("'$($l.text)'") + 1; [pscustomobject]@{ kind = 'literal'; text = $l.text; line = $l.line; col = $c; ecol = $c + ([string]$l.text).Length + 2 } })
   $script:RtFacts["$DbPath|1"] = [pscustomobject]@{ Id = 1; Name = 'P'; Qname = 'uSynth.TSynth.P'; Short = 'TSynth.P'; Path = $p; Fid = 1; Pid = 0
                                                      ImplStart = 1; ImplEnd = $Src.Count; Decl = 1; SqlReads = ''; SqlWrites = ''; Refs = $rs; Lits = $ls }
+  foreach ($cid in $Callees.Keys) {
+    $script:RtFacts["$DbPath|$cid"] = [pscustomobject]@{ Id = [int]$cid; Name = "C$cid"; Qname = "uSynth.C$cid"; Short = "C$cid"; Path = $p; Fid = 1; Pid = 0
+                                                         ImplStart = 0; ImplEnd = 0; Decl = 1; SqlReads = ''; SqlWrites = ''
+                                                         Refs = @($Callees[$cid] | ForEach-Object { [pscustomobject]$_ }); Lits = @() }
+  }
   $ctx = @{ Table = $Table; Column = 'X'; TableColumn = "$Table.X"; DataSet = $null; SqlSet = [pscustomobject]@{ Names = $Tables }; SourceOverride = $null
             Likes = '1 = 0'; NearIndex = 'A'; FarIndex = 'B'; Seen = @{} }
   Walk-Routine 1 4 @{} $ctx
@@ -999,6 +1005,21 @@ $res.FinI5Omits = $(try {
           @{ kind = 'call'; nm = 'ApplyUpdates'; recv = 'FMT'; line = 5; at = 'ApplyUpdates' }, @{ kind = 'call'; nm = 'CommitUpdates'; recv = 'FMT'; line = 7; at = 'CommitUpdates' })
   $w5 = Invoke-SynthWalk 'fin-i5' $s5 $r5 -Lits @(@{ text = 'MSCLIST'; line = 3 })
   (@($w5.Items | ForEach-Object { "$($_.Text)$(if ($_.Note) { " -- $($_.Note)" })" })) -join ' > '
+} catch { "threw: $($_.Exception.Message)" })
+# RC-R6: a BOUND call into a transport-convention unit (tpipe) is skipped -- unless the callee's own body makes an
+# outward Windows I/O call (unbound WriteFile, receiver-less or Winapi.Windows): then it is a CALLS step, not
+# descended. PushX (transport, WriteFile) is kept; LogX (transport, a logger's LogMessage) is skipped as before;
+# WriteY (NOT transport, WriteFile, empty body) is descended and pruned as an empty subtree, exactly as before
+$res.RcR6Outward = $(try {
+  $s6 = @('procedure TSynth.P;', 'begin', "  GB.PushX('T');", "  GB.LogX('T');", '  GH.WriteY;', 'end;')
+  $tp = 'C:\synth\uBcast.pas'
+  $r6 = @(@{ kind = 'call'; nm = 'PushX'; recv = 'GB'; line = 3; at = 'PushX'; tid = 2; tkind = 'method'; tq = 'uBcast.TB.PushX'; tistart = 10; tpath = $tp; tpipe = 1 },
+          @{ kind = 'call'; nm = 'LogX'; recv = 'GB'; line = 4; at = 'LogX'; tid = 3; tkind = 'method'; tq = 'uBcast.TB.LogX'; tistart = 20; tpath = $tp; tpipe = 1 },
+          @{ kind = 'call'; nm = 'WriteY'; recv = 'GH'; line = 5; at = 'WriteY'; tid = 4; tkind = 'method'; tq = 'uHelp.TH.WriteY'; tistart = 30; tpath = 'C:\synth\uHelp.pas' })
+  $cal = @{ 2 = @(@{ kind = 'call'; nm = 'Enter'; recv = 'FLock' }, @{ kind = 'call'; nm = 'WriteFile'; recv = 'Winapi.Windows' })
+            3 = @(@{ kind = 'call'; nm = 'LogMessage'; recv = 'FLogger' })
+            4 = @(@{ kind = 'call'; nm = 'WriteFile'; recv = '' }) }
+  Format-SynthWalk (Invoke-SynthWalk 'rc-r6' $s6 $r6 -Callees $cal)
 } catch { "threw: $($_.Exception.Message)" })
 # M2: the ask on every ANCHOR step (`<NN>=<ask>`, '-' for none) -- E4 on a designer-chain hop or on the table-literal hop
 # was a wrong ask: the rhs-type [by name] hop names type-use-binding (no type_use ref is bound), the table literal none

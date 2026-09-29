@@ -869,6 +869,15 @@ $script:RtOps = @{ SaveToStream = 'SERIALIZES'; LoadFromStream = 'DESERIALIZES';
                    ApplyUpdates = 'APPLIES'; EmptyDataSet = 'EMPTIES'; StartTransaction = 'OPENS'; Commit = 'RUNS'; Rollback = 'RUNS'
                    Execute = 'RUNS'; ExecSQL = 'RUNS'; Open = 'RUNS' }
 $script:RtEvents = @('AfterPost', 'AfterDelete', 'BeforePost', 'AfterInsert', 'OnUpdateRecord', 'OnUpdateError', 'OnReconcileError')
+# RC-R6 (2026-09-28): the Windows I/O primitives that make a TRANSPORT-CONVENTION callee a step of the path.
+# The convention keeps transport bodies out of the walk, so a BOUND call into a transport unit is skipped --
+# right for a logger or a payload parser there (uPipeSessionBuilder.Log, ExtractKeyValue), wrong for a helper
+# whose own act is OUTWARD: TBroadcastServer.PushTableChanged writes the change notice to every subscriber's
+# pipe (WriteFile, uBroadcastServer.pas:434/:435). While that call was unbound (before resolver 1.11 RB-1) it
+# was a [by name] step; bound, it fell to the skip. The index's effect facts cannot tell the two apart (both
+# effect_summary '?'; `touches` has no pipe / IPC class), so the outward act is read from the callee's own
+# body: an UNBOUND call to one of these names, receiver-less or on Winapi.Windows (Test-OutwardIoCallee).
+$script:RtOutwardIoCalls = @('WriteFile', 'WriteFileEx', 'TransactNamedPipe', 'CallNamedPipe')
 # final-review I4: which wiring the WRITE direction starts from -- the event that sends an EDITED row
 # first, a delete last; a generic, stated order, then the line (Sort-RtWiring). Every $RtEvents name is in it.
 $script:RtWritePreference = @('AfterPost', 'BeforePost', 'AfterInsert', 'OnUpdateRecord', 'OnUpdateError', 'OnReconcileError', 'AfterDelete')
@@ -934,6 +943,14 @@ SELECT sl.kind AS kind, sl.text AS text, sl.start_line AS line, sl.start_col AS 
   }
   $script:RtFacts[$key] = $F
   $F
+}
+
+# RC-R6: does routine $Id's own body make an outward Windows I/O call ($RtOutwardIoCalls, unbound,
+# receiver-less or on Winapi.Windows)? Reads the callee's cached body facts; never walks it.
+function Test-OutwardIoCallee([int] $Id, $Ctx) {
+  $F = Get-RoutineFacts $Id $Ctx.Likes
+  [bool]@($F.Refs | Where-Object { $_.kind -eq 'call' -and -not $_.tid -and [string]$_.nm -in $script:RtOutwardIoCalls -and
+                                   ([string]::IsNullOrEmpty([string]$_.recv) -or [string]$_.recv -eq 'Winapi.Windows') }).Count
 }
 
 function Add-RtItem($List, $Item, [int] $Line, [int] $Owner) {
@@ -1191,7 +1208,7 @@ function Get-BranchPathSide($Then, $Else) {
 # a call counts its CALLS step AND every step of its subtree -- the number an OMITS states is steps):
 # a crossing or a response is one, else its dataset ops, else its FIB$ SQL, an event wiring with its
 # handler's subtree, else bound calls whose subtree holds a step and calls resolvable by name, each
-# with its subtree. Subtrees come from a DRY walk over copies of Visited and Seen, so the omission
+# with its subtree, and a transport callee that makes an outward I/O call (RC-R6) as one step. Subtrees come from a DRY walk over copies of Visited and Seen, so the omission
 # changes nothing the real walk sees.
 function Get-LineYield($I, $F, [int] $Depth, [hashtable] $Visited, $Ctx) {
   $rs = @($I.Rs)
@@ -1214,6 +1231,10 @@ function Get-LineYield($I, $F, [int] $Depth, [hashtable] $Visited, $Ctx) {
   foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and $_.tid -and [int]$_.tistart -gt 0 -and -not ($_.tpipe -and [int]$_.tpipe -eq 1) -and [string]$_.tkind -ne 'constructor' })) {
     $sub = Walk-Routine ([int]$c.tid) ($Depth - 1) ($Visited.Clone()) $dry
     if ($sub.Items.Count -or $sub.Conds.Count) { $n += 1 + $sub.Items.Count }
+  }
+  # RC-R6: a transport callee that makes an outward I/O call is one step (kept, not descended)
+  foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and $_.tid -and [int]$_.tistart -gt 0 -and $_.tpipe -and [int]$_.tpipe -eq 1 -and [string]$_.tkind -ne 'constructor' })) {
+    if (Test-OutwardIoCallee ([int]$c.tid) $Ctx) { $n += 1 }
   }
   foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and -not $_.tid -and $_.recv })) {
     $impl = Resolve-ImplByName ([string]$c.recv) ([string]$c.nm) $F
@@ -1492,14 +1513,19 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
     # call into a transport-convention unit is a step too (this line carried no crossing) -- the server's
     # own helpers live in uPipe* units (HandleTableLoad :549 TryBuildSafeWhere, in uPipeSessionBuilder) --
     # but it is NOT descended: the convention keeps transport bodies out of the walk, the step only names
-    # the call the guard turns on
+    # the call the guard turns on. RC-R6: a transport callee whose own body makes an outward I/O call
+    # ($RtOutwardIoCalls -- the post-commit broadcast) is a step too, by the same shape: kept, not descended
     foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and $_.tid -and [int]$_.tistart -gt 0 -and [string]$_.tkind -ne 'constructor' })) {
       $cc = $c
       $g1 = [bool]@($guardGs | Where-Object { Test-InShimCondition $_ $ln ([int]$cc.col) }).Count
-      if (-not $g1 -and $c.tpipe -and [int]$c.tpipe -eq 1) { continue }
+      $io = $false
+      if (-not $g1 -and $c.tpipe -and [int]$c.tpipe -eq 1) {
+        $io = Test-OutwardIoCallee ([int]$c.tid) $Ctx
+        if (-not $io) { continue }
+      }
       $sub = $(if ($c.tpipe -and [int]$c.tpipe -eq 1) { [pscustomobject]@{ Items = @(); Conds = @() } } else { Walk-Routine ([int]$c.tid) ($Depth - 1) $Visited $Ctx })
       $tgt = [pscustomobject]@{ Id = [int]$c.tid; Short = (Get-ShortName ([string]$c.tq) (Get-UnitName ([string]$c.tpath))); Path = [string]$c.tpath; Line = [int]$c.tistart; Grade = ''; Ask = '' }
-      Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits $F $Ctx) -Always:$g1
+      Add-CallsStep $items $tgt $sub $F $ln (Get-LineLits $lits $F $Ctx) -Always:($g1 -or $io)
     }
     # unbound calls with a receiver the index declares: the implementation BY NAME
     foreach ($c in @($rs | Where-Object { $_.kind -eq 'call' -and -not $_.tid -and $_.recv })) {
