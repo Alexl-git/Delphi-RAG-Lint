@@ -44,7 +44,7 @@ and a detailed INSTALL.md. Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha
   above made a windowed block fixable when its VISIBLE entries vouch, but the entries hidden inside
   the stored count were never examined -- a caller from another project, sorted after the window in
   a block written from a wider index, could be removed by `--fix`. Before, such a block was refused
-  only by the accident above. The fix is now also refused when the stored total (visible + N)
+  only by the accident above. The fix is now also refused when the stored total (distinct visible + N)
   exceeds the fresh total by more than the proven visible drops (entries naming a held unit that
   could not merely have moved into the fresh window). Every observed case GREW in count, so they
   stay `[FIXABLE]`. Guard: `CASE-HIDDEN-LOSS` in the same script (RED before this change).

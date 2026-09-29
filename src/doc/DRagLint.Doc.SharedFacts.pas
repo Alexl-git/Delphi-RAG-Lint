@@ -262,9 +262,9 @@ type
     /// sides, so a window that only grew or shifted stays fixable when every
     /// visible entry it drops names a held unit (run_doc_drift_window_marker.ps1).</para>
     /// <para>HIDDEN ENTRIES ARE CHECKED BY COUNT: True also when the stored total
-    /// (visible + N) exceeds the fresh total by more than the proven visible
-    /// drops, or when a count is unreadable. An entry that left the hidden part
-    /// while another joined still passes; `dl:shared` is the cure.</para>
+    /// (DISTINCT visible + N) exceeds the fresh total by more than the proven
+    /// visible drops, or when a count is unreadable. An entry that left the
+    /// hidden part while another joined still passes; `dl:shared` is the cure.</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
     /// <para>Calls: DRagLint.Doc.SharedFacts.UnmarkedRegenerationDropsUnvouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared</para>
@@ -1882,7 +1882,7 @@ var
   SIn, FreshIn: TFactMap;
   SRes, FreshRes: string;
   Lab, SC, FreshContent, E, FreshLast: string;
-  FreshSet: TDictionary<string, Byte>;
+  FreshSet, StoredSet: TDictionary<string, Byte>;
   StoredEntries, FreshEntries: TArray<string>;
   StoredHidden, FreshHidden, VisibleDrops: Integer;
 begin
@@ -1921,39 +1921,41 @@ begin
 
         if not FreshIn.TryGetValue(Lab, FreshContent) then FreshContent:= '';
 
-        { THE WINDOW MARKER IS NOT AN ENTRY on either side (1.20.3): split in as
-          one, `E (X.pas) (+42 more)` matched nothing once the count changed or
-          the window shifted, and read as a unit called '+42 more' (12
-          convrules-editor blocks). Guarded by run_doc_drift_window_marker.ps1. }
+        { THE WINDOW MARKER IS NOT AN ENTRY on either side (1.20.3): split in,
+          `E (X.pas) (+42 more)` matched nothing once the count changed or the
+          window shifted, and read as a unit called '+42 more' (12 convrules-
+          editor blocks). Guarded by run_doc_drift_window_marker.ps1. }
         StoredEntries:= SplitEntries(WithoutMoreSuffix(SC));
         FreshEntries := SplitEntries(WithoutMoreSuffix(FreshContent));
         if not (TryWindowHiddenCount(SC, StoredHidden) and
                 TryWindowHiddenCount(FreshContent, FreshHidden)) then Exit(True);
-        { A missing entry sorting after a WINDOWED fresh render's last visible
-          one may only have moved into that window: not a proven drop. }
-        FreshLast:= '';
-        if (FreshHidden > 0) and (Length(FreshEntries) > 0) then FreshLast:= FreshEntries[High(FreshEntries)];
+        { Missing but sorting after a WINDOWED fresh list's last entry: maybe hidden. }
+        FreshLast:= if (FreshHidden > 0) and (Length(FreshEntries) > 0) then FreshEntries[High(FreshEntries)] else '';
         VisibleDrops:= 0;
         FreshSet:= TDictionary<string, Byte>.Create;
         try
-          for E in FreshEntries do FreshSet.AddOrSetValue(LowerCase(Trim(E)), 1);
-          for E in StoredEntries do
-          begin
-            if FreshSet.ContainsKey(LowerCase(Trim(E))) then Continue;
-            { Dropped. Vouchable ONLY if this index actually holds the unit the
-              entry names -- then its absence is a fact, not a blind spot. }
-            if not UnitVouchable(AStore, E) then Exit(True);
-            if (FreshLast = '') or (TSharedFacts.CompareInboundEntries(E, FreshLast) < 0) then Inc(VisibleDrops);
+          StoredSet:= TDictionary<string, Byte>.Create;
+          try
+            for E in FreshEntries do FreshSet.AddOrSetValue(LowerCase(Trim(E)), 1);
+            for E in StoredEntries do
+            begin
+              if StoredSet.ContainsKey(LowerCase(Trim(E))) then Continue;
+              StoredSet.Add(LowerCase(Trim(E)), 1);
+              if FreshSet.ContainsKey(LowerCase(Trim(E))) then Continue;
+              { Dropped: vouchable ONLY if this index holds the unit it names. }
+              if not UnitVouchable(AStore, E) then Exit(True);
+              if (FreshLast = '') or (TSharedFacts.CompareInboundEntries(E, FreshLast) < 0) then Inc(VisibleDrops);
+            end;
+            { HIDDEN ENTRIES ARE CHECKED BY COUNT (1.20.3 fix wave): refuse when the
+              stored total (DISTINCT visible + N) exceeds the fresh one by more than
+              the proven visible drops. A repeated entry is not a loss. }
+            if (StoredSet.Count + StoredHidden) - (FreshSet.Count + FreshHidden) > VisibleDrops then Exit(True);
+          finally
+            StoredSet.Free;
           end;
         finally
           FreshSet.Free;
         end;
-
-        { HIDDEN ENTRIES ARE CHECKED BY COUNT (1.20.3 fix wave): nothing above sees
-          inside a stored window, so refuse when the stored total (visible + N)
-          exceeds the fresh total by more than the proven visible drops. }
-        if (Length(StoredEntries) + StoredHidden) - (Length(FreshEntries) + FreshHidden) > VisibleDrops then
-          Exit(True);
       end;
     finally
       FreshIn.Free;
