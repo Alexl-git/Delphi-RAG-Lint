@@ -1395,6 +1395,29 @@ begin
   Check('unitpick.search.empty.valid', IsValidUnitSearch('', usmRegex) and IsValidUnitSearch('', usmWildcard));
 end; // procedure
 
+{ ConvRules.UnitPick.AddPickedUnit: the replacement picker's accumulator. A
+  double-click adds, with no confirmation, so the list itself must refuse the
+  noise -- blanks, repeats, and the old unit named as its own replacement. }
+procedure TestUnitPickMulti;
+var
+  R: TArray<string>;
+begin
+  R:= AddPickedUnit(nil, '  Vcl.Forms ', 'Forms');
+  Check('unitpick.multi.add.trims', string.Join(',', R) = 'Vcl.Forms', string.Join(',', R));
+  R:= AddPickedUnit(R, 'Vcl.Controls', 'Forms');
+  Check('unitpick.multi.add.keeps.order', string.Join(',', R) = 'Vcl.Forms,Vcl.Controls', string.Join(',', R));
+  R:= AddPickedUnit(R, 'VCL.FORMS', 'Forms');
+  Check('unitpick.multi.add.dedupe.nocase', string.Join(',', R) = 'Vcl.Forms,Vcl.Controls', string.Join(',', R));
+  R:= AddPickedUnit(R, '   ', 'Forms');
+  Check('unitpick.multi.add.blank.ignored', Length(R) = 2, IntToStr(Length(R)));
+  // The reported defect: the replacement must never become (or equal) the old unit.
+  R:= AddPickedUnit(R, 'forms', 'Forms');
+  Check('unitpick.multi.add.old.refused', string.Join(',', R) = 'Vcl.Forms,Vcl.Controls', string.Join(',', R));
+  // Positive control: with no old unit to exclude, the same name is accepted.
+  R:= AddPickedUnit(nil, 'Forms', '');
+  Check('unitpick.multi.add.no.exclude', string.Join(',', R) = 'Forms', string.Join(',', R));
+end; // procedure
+
 { ListUnits answers per DB SET, not per adapter: the picker's project column and
   library column come from separate calls, so a project DB must not surface an
   RTL unit and the library must. Hits the real exe + indexes; Skips without them. }
@@ -6621,6 +6644,7 @@ begin
     TestOutlineClassesLive;
     TestMissingUnitNodes;
     TestUnitPickFilter;
+    TestUnitPickMulti;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;

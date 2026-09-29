@@ -236,9 +236,30 @@ get its full context with `drag-lint context --task "modify <Unit.Routine>"
 
 Every place the editor asks for a unit name opens `TUnitPickerForm`
 (`ConvRules.UnitPicker.pas`): **+ Add unit**, **+ Remove unit**, **+ Swap**
-(Old, then one New per open with "Add another?" between) and the From Unit
-**Pick...** button. Its decisions live in `ConvRules.UnitPick.pas`, which the
-model tests cover; the form only renders.
+and the From Unit **Pick...** button. Its decisions live in
+`ConvRules.UnitPick.pas`, which the model tests cover; the form only renders.
+
+* **Swap is row-driven, and the replacement picker is multi-pick (2026-09-29).**
+  The ROW is the Old unit: a right-click on a unit-list row (`FUnitPopup`:
+  Swap <Old> with... / Accept scope rename / Remove unit / Add unit / Delete)
+  or the toolbar **+ Swap** with exactly one row selected opens ONLY the
+  replacement picker (`TUnitPickerForm.ExecuteMulti`, caption
+  `Replacements for <Old>`). There a double-click, Enter or Space ADDS the unit
+  to a Replacements list with no confirmation; OK finishes; a chosen entry is
+  removed by double-click or Delete. The Old picker opens only when no row is
+  selected. `SwapUnit` MERGES into an existing `#useswap` for the same Old.
+  `AddPickedUnit` refuses blanks, repeats (any case) and the Old unit itself.
+* **Why (the defect it fixed):** every rule change rebuilds the list
+  (`Items.Clear`), dropping the selection, so the second **+ Swap** opened the
+  Old picker EMPTY -- indistinguishable from a replacement picker -- and the
+  replacement picked there became an Old unit. Guard:
+  `tests\gui\drive-unit-rules-toolbar.ps1` sections 4b/4c (40 checks).
+* **`IfThen` evaluates BOTH arguments.** `IfThen(Row <> nil, Format(..,
+  [Row.SubItems[1]]), '')` is an access violation on a nil row -- the popup
+  crashed on a right-click over empty space until it became if/else. The
+  `ifthen-both-branches` lint rule flags every such call; take it seriously.
+* **`#unuse` from selected rows no longer asks** (owner ruling 2026-09-29): a
+  rule row is undone by Delete. Delete of more than one row still asks.
 
 * **The lists come from `sql`, not `query find`.** `query find --no-docs` is a
   FILTER (undocumented symbols only) -- the From Unit combo used it and listed

@@ -147,6 +147,12 @@ type
       FTbOnlyType    : TToolButton; // mapping: pool type-narrowing toggle (caption flips)
       FTbMappings    : TToolButton; // mapping: open the conditional #mapping editor
       FTbScopeRenames: TToolButton; // unit rules: #useswap Name -> Scope.Name for "via scope" rows
+      FUnitPopup     : TPopupMenu ; // unit rules: right-click menu on a row (the row IS the Old unit)
+      FPopupItem     : TListItem  ; // the row under the cursor when FUnitPopup opened; nil = empty space
+      FMiSwap        : TMenuItem  ; // "Swap <Old> with..."
+      FMiScope       : TMenuItem  ; // "Accept scope rename"
+      FMiUnuse       : TMenuItem  ; // "Remove unit (#unuse)"
+      FMiDelete      : TMenuItem  ; // "Delete"
       FTbExamine     : TToolButton; // examine: pick .dfm/.pas, mark used From props
       FTbClearExamine: TToolButton; // examine: drop the current examination
       FPanelTop      : TPanel     ;
@@ -281,13 +287,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildToolbar, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, TLabel</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+24 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+23 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildToolbar, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, TLabel</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+25 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+28 more)</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddPopupItem"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildToolbar"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildTypePopup"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure BuildUI;
@@ -1454,7 +1460,7 @@ type
       function ActiveConditionals: TArray<TConditionalFrom>;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas) (+8 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas) (+8 more)</para>
       /// <para>Calls: ConvRules.Model.TRuleBook.SaveToString</para>
       /// <para>Reads: FRaw, FBook</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.SaveToString"/>
@@ -1664,7 +1670,7 @@ type
       /// so a check box or mask change is cheap.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas) (+11 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas) (+11 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.CurrentMask, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.InConflict, ConvRules.MainForm.TConvRulesForm.RefreshUnitList.SectionOf, ConvRules.MainForm.TConvRulesForm.UnitHasRule, ConvRules.Model.TRuleBook.UnitNodes, ConvRules.UnitMask.FilterHarvestRows, ConvRules.UnitMask.IndexOfRow, ConvRules.Units.NormalizeUnitSets, ConvRules.UnitStatus.StatusText, ConvRules.UsesHarvest.HarvestFlagText, Format, IfThen, Pointer, SameText</para>
       /// <para>Reads: FUnitList, FBook, FHarvestRows, FChkMissing, FChkUnqualified, FUnitCandidates, FLblHarvest</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.CurrentMask"/>
@@ -1679,7 +1685,7 @@ type
       /// <param name="ANode"><!-- drag-lint:auto type -->TRuleNode</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddSwap (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SwapUnit (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.Model.TRuleBook.Add, ConvRules.Model.TRuleBook.ConvertHeaders</para>
       /// <para>Reads: FBook, FActiveHdr   Writes: FActiveHdr</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
@@ -1690,19 +1696,22 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure InsertUnitNode(ANode: TRuleNode);
-      /// <summary><!-- drag-lint:auto sum -->Old unit from the FROM side, then one or
-      /// more New units from the TO side -- the picker returns one name per open, so each
-      /// further New is offered with a Yes/No between picks. Cancelling the first New
-      /// abandons the swap; cancelling a later one keeps what was picked so far.</summary>
+      /// <summary><!-- drag-lint:auto sum -->Toolbar + Swap. The selected row IS the Old
+      /// unit when exactly one row is selected -- any kind but #use -- so only the
+      /// replacement picker opens. With no such row the Old unit is asked for first. The
+      /// list is rebuilt after every rule change, which drops the selection: asking for
+      /// Old from a pre-filled picker that looked exactly like the replacement picker is
+      /// how a replacement once became an Old unit (2026-09-29).</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.PickUnit, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SelectedUnitRows, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, Format, MatchText, MessageDlg</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.InsertUnitNode"/>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.PickUnit, ConvRules.MainForm.TConvRulesForm.RowOldUnit, ConvRules.MainForm.TConvRulesForm.SwapUnit</para>
+      /// <para>Reads: FUnitList</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.PickUnit"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedUnitRows"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RowOldUnit"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SwapUnit"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAddSwap(Sender: TObject);
@@ -1721,7 +1730,7 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.PickUnit, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SelectedUnitRows, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, Format, MessageDlg</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.InsertUnitNode, ConvRules.MainForm.TConvRulesForm.PickUnit, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SelectedUnitRows, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, Format</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.InsertUnitNode"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.PickUnit"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
@@ -1730,6 +1739,39 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoAddUnuse(Sender: TObject);
+      /// <summary>Replaces AOld with the units picked in the replacement picker, with
+      /// no confirmation: #useswap AOld -> New1[, New2 ...].</summary>
+      /// <param name="AOld">The unit being replaced; must not be ''.</param>
+      /// <remarks>Merges into an existing #useswap for AOld (any case) rather than
+      /// adding a second rule for the same unit; AOld itself is never accepted as a
+      /// replacement (AddPickedUnit). Cancel changes nothing.</remarks>
+      procedure SwapUnit(const AOld: string);
+      /// <summary>The Old unit a unit-list row names.</summary>
+      /// <param name="AItem">The row; may be nil.</param>
+      /// <returns>The Old column (SubItems[0]) for every row kind -- harvested,
+      /// candidate, #unuse and #useswap alike; '' for a #use row (it replaces nothing)
+      /// and for nil.</returns>
+      function RowOldUnit(AItem: TListItem): string;
+      /// <summary>Opens the replacement (multi-pick) picker for the TO or FROM side.</summary>
+      /// <param name="ACaption">Window caption.</param>
+      /// <param name="AExclude">The unit being replaced; refused as a replacement.</param>
+      /// <param name="ASide">Which platform's library the picker lists.</param>
+      /// <param name="AUnits">Receives the picked units in pick order.</param>
+      /// <returns>True when OK was pressed with at least one unit.</returns>
+      function PickUnits(const ACaption, AExclude: string; ASide: TUnitPickSide; out AUnits: TArray<string>): Boolean;
+      /// <summary>Right-click menu: remembers the row under the cursor and enables
+      /// only the actions that row supports.</summary>
+      /// <param name="Sender">The popup menu.</param>
+      procedure UnitPopupPopup(Sender: TObject);
+      /// <summary>"Swap &lt;Old&gt; with...": SwapUnit on the right-clicked row.</summary>
+      /// <param name="Sender">The menu item.</param>
+      procedure PopSwapClick(Sender: TObject);
+      /// <summary>Appends one item to APopup ('-' makes a separator).</summary>
+      /// <param name="APopup">The menu to extend; owns nothing -- the item is owned by the form.</param>
+      /// <param name="ACaption">Item caption.</param>
+      /// <param name="AOnClick">Click handler; nil for a separator.</param>
+      /// <returns>The new item, so the caller can re-caption or disable it later.</returns>
+      function AddPopupItem(APopup: TPopupMenu; const ACaption: string; AOnClick: TNotifyEvent): TMenuItem;
       /// <summary><!-- drag-lint:auto sum -->Acts on EVERY selected row: a rule row (Data
       /// &lt;&gt; nil) deletes its node; a harvested '(used)' row or an Examine
       /// '(candidate)' row (Data = nil, NOT a rule) is dismissed from its own session set
@@ -3063,6 +3105,17 @@ begin
   FUnitList.OnKeyDown       := UnitListKeyDown;
   FUnitList.OnSelectItem    := UnitListSelectItem;
   FUnitList.MultiSelect     := True;
+
+  // Right-click on a row: the row IS the Old unit, so Swap never asks for it.
+  FUnitPopup:= TPopupMenu.Create(Self);
+  FUnitPopup.OnPopup:= UnitPopupPopup;
+  FMiSwap  := AddPopupItem(FUnitPopup, 'Swap with...'        , PopSwapClick        );
+  FMiScope := AddPopupItem(FUnitPopup, 'Accept scope rename' , DoAcceptScopeRenames);
+  FMiUnuse := AddPopupItem(FUnitPopup, 'Remove unit (#unuse)', DoAddUnuse          );
+  AddPopupItem(FUnitPopup, 'Add unit (#use)...', DoAddUse);
+  AddPopupItem(FUnitPopup, '-', nil);
+  FMiDelete:= AddPopupItem(FUnitPopup, 'Delete'              , DoDeleteUnit        );
+  FUnitList.PopupMenu:= FUnitPopup;
 
   // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
   // than relying on "index 0 happens to be first created", which TabRules.
@@ -7110,43 +7163,136 @@ begin
   DefaultDraw:= True;
 end;
 
-{ Old unit from the FROM side, then one or more New units from the TO side --
-  the picker returns one name per open, so each further New is offered with a
-  Yes/No between picks. Cancelling the first New abandons the swap; cancelling
-  a later one keeps what was picked so far. }
+{ Toolbar + Swap. The selected row IS the Old unit when exactly one row is
+  selected -- any kind but #use -- so only the replacement picker opens. With no
+  such row the Old unit is asked for first. The list is rebuilt after every rule
+  change, which drops the selection: asking for Old from a pre-filled picker that
+  looked exactly like the replacement picker is how a replacement once became an
+  Old unit (2026-09-29). }
 procedure TConvRulesForm.DoAddSwap(Sender: TObject);
 var
-  OldU    : string        ;
-  U       : string        ;
+  OldU: string;
+begin
+  OldU:= '';
+  if FUnitList.SelCount = 1 then
+    OldU:= RowOldUnit(FUnitList.Selected);
+  if (OldU = '') and not PickUnit('Unit swap: the OLD unit to replace', '', psFrom, OldU) then
+    Exit;
+  SwapUnit(OldU);
+end; // procedure
+
+procedure TConvRulesForm.SwapUnit(const AOld: string);
+var
   NewUnits: TArray<string>;
   N       : TRuleNode     ;
+  U       : string        ;
 begin
-  var LRows: TArray<TListItem>:= SelectedUnitRows;
-  var LInitial: string:= '';
-  if Length(LRows) = 1 then
-    LInitial:= LRows[0].SubItems[0];
-  if not PickUnit('Unit swap: the OLD unit to replace', LInitial, psFrom, OldU) then
+  if Trim(AOld) = '' then
     Exit;
-  if not PickUnit(Format('Unit swap: a NEW unit replacing %s', [OldU]), '', psTo, U) then
+  if not PickUnits(Format('Replacements for %s', [AOld]), AOld, psTo, NewUnits) then
     Exit;
-  NewUnits:= [U];
-  while MessageDlg(Format('#useswap %s -> %s' + sLineBreak + sLineBreak + 'Add another NEW unit?', [OldU, string.Join(', ', NewUnits)]), mtConfirmation, [mbYes, mbNo], 0) = mrYes do
-  begin
-    if not PickUnit(Format('Unit swap: another NEW unit replacing %s', [OldU]), '', psTo, U) then
+  N:= nil;
+  for var LNode: TRuleNode in FBook.UnitNodes do
+    if (LNode.Kind = rnkUseSwap) and SameText(LNode.SwapOld, AOld) then
+    begin
+      N:= LNode;
       Break;
-    if not MatchText(U, NewUnits) then
-      NewUnits:= NewUnits + [U];
-  end; // while
-  N:= TRuleNode.Create;
-  N.Kind   := rnkUseSwap;
-  N.SwapOld:= OldU;
-  N.SwapNew:= NewUnits;
-  N.Dirty  := True;
-  InsertUnitNode(N);
+    end;
+  if N = nil then
+  begin
+    N:= TRuleNode.Create;
+    N.Kind   := rnkUseSwap;
+    N.SwapOld:= Trim(AOld);
+    N.SwapNew:= nil;
+    for U in NewUnits do
+      N.SwapNew:= AddPickedUnit(N.SwapNew, U, AOld);
+    N.Dirty:= True;
+    InsertUnitNode(N);
+  end
+  else
+  begin
+    for U in NewUnits do
+      N.SwapNew:= AddPickedUnit(N.SwapNew, U, AOld);
+    N.Dirty:= True;
+  end;
   RefreshUnitList;
   SyncRawFromModel;
-  SetStatus(Format('Added #useswap %s -> %s', [OldU, string.Join(', ', N.SwapNew)]));
+  SetStatus(Format('#useswap %s -> %s', [N.SwapOld, string.Join(', ', N.SwapNew)]));
 end; // procedure
+
+function TConvRulesForm.RowOldUnit(AItem: TListItem): string;
+begin
+  Result:= '';
+  if (AItem = nil) or (AItem.SubItems.Count = 0) then
+    Exit;
+  Result:= Trim(AItem.SubItems[0]);
+end;
+
+function TConvRulesForm.PickUnits(const ACaption, AExclude: string; ASide: TUnitPickSide; out AUnits: TArray<string>): Boolean;
+var
+  Src: TUnitPickSource;
+begin
+  if ASide = psFrom then
+    EnsurePickLists(FFromPlatform)
+  else
+    EnsurePickLists(FToPlatform);
+  Src.ProjectUnits:= FPickProj;
+  Src.Win32Units  := FPickWin32;
+  Src.Win64Units  := FPickWin64;
+  Src.FromPlatform:= FFromPlatform;
+  Src.ToPlatform  := FToPlatform;
+  Result:= TUnitPickerForm.ExecuteMulti(Self, ACaption, AExclude, ASide, Src, AUnits);
+end; // function
+
+procedure TConvRulesForm.UnitPopupPopup(Sender: TObject);
+var
+  Pt  : TPoint;
+  OldU: string;
+begin
+  // PopupPoint is where the menu was invoked -- the right-click, not wherever the
+  // cursor has moved to since. A keyboard invocation (Shift+F10 / the menu key)
+  // lands on no row, so it falls back to the focused row when that is selected.
+  Pt:= FUnitList.ScreenToClient(FUnitPopup.PopupPoint);
+  FPopupItem:= FUnitList.GetItemAt(Pt.X, Pt.Y);
+  if (FPopupItem = nil) and (FUnitList.ItemFocused <> nil) and FUnitList.ItemFocused.Selected then
+    FPopupItem:= FUnitList.ItemFocused;
+  // A right-click on an unselected row makes it the selection, as Explorer does,
+  // so the Remove / Delete / Accept actions (which act on the selection) act on it.
+  if (FPopupItem <> nil) and not FPopupItem.Selected then
+  begin
+    FUnitList.ClearSelection;
+    FPopupItem.Selected:= True;
+    FPopupItem.Focused := True;
+  end;
+  OldU:= RowOldUnit(FPopupItem);
+  FMiSwap.Enabled  := OldU <> '';
+  if OldU <> '' then
+    FMiSwap.Caption:= Format('Swap %s with...', [OldU])
+  else
+    FMiSwap.Caption:= 'Swap with...';
+  FMiScope.Enabled := (FPopupItem <> nil) and (FPopupItem.Caption = HARVEST_CAPTION) and (FPopupItem.SubItems.Count > 1) and (FPopupItem.SubItems[1] <> '');
+  // NOT IfThen: it evaluates BOTH arguments, so the Format read FPopupItem.SubItems
+  // on a nil row -- an access violation on a right-click over empty space.
+  if FMiScope.Enabled then
+    FMiScope.Caption:= Format('Accept scope rename -> %s', [FPopupItem.SubItems[1]])
+  else
+    FMiScope.Caption:= 'Accept scope rename';
+  FMiUnuse.Enabled := (FPopupItem <> nil) and (FPopupItem.Data = nil);
+  FMiDelete.Enabled:= FPopupItem <> nil;
+end; // procedure
+
+procedure TConvRulesForm.PopSwapClick(Sender: TObject);
+begin
+  SwapUnit(RowOldUnit(FPopupItem));
+end;
+
+function TConvRulesForm.AddPopupItem(APopup: TPopupMenu; const ACaption: string; AOnClick: TNotifyEvent): TMenuItem;
+begin
+  Result:= TMenuItem.Create(Self);
+  Result.Caption:= ACaption;
+  Result.OnClick:= AOnClick;
+  APopup.Items.Add(Result);
+end;
 
 procedure TConvRulesForm.DoAddUse(Sender: TObject);
 var
@@ -7180,10 +7326,9 @@ begin
   else
   begin
     Names:= nil;
+    // No confirmation (owner ruling 2026-09-29): a #unuse is a rule row, undone by Delete.
     for Item in Rows do
       Names:= Names + [Item.SubItems[0]];
-    if MessageDlg(Format('Add #unuse for %d unit(s)? They are DELETED from the result with no replacement:' + sLineBreak + sLineBreak + '%s', [Length(Names), string.Join(', ', Names)]), mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
-      Exit;
   end;
   for U in Names do
   begin

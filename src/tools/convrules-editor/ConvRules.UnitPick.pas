@@ -70,6 +70,18 @@ function LibraryUnitsFor(APlatform: TConvPlatform; const AWin32, AWin64: TArray<
 /// name typed by hand -- nothing is known to be missing).</returns>
 function PlatformGapNote(const AUnit: string; const AWin32, AWin64: TArray<string>): string;
 
+/// <summary>AChosen with AUnit appended -- the replacement picker's accumulator,
+/// fed by a double-click (or Enter) on a list item and by OK.</summary>
+/// <param name="AChosen">The units picked so far, in pick order.</param>
+/// <param name="AUnit">The unit to add; trimmed first.</param>
+/// <param name="AExclude">The OLD unit being replaced ('' for none). A name
+/// equal to it (any case) is refused: a unit is never its own replacement, and
+/// that is exactly what an old unit landing in the replacement list looks like.</param>
+/// <returns>AChosen unchanged when the trimmed name is blank, already present
+/// (case-insensitive) or equal to AExclude; otherwise AChosen plus the trimmed
+/// name at the end. The first spelling picked is kept.</returns>
+function AddPickedUnit(const AChosen: TArray<string>; const AUnit, AExclude: string): TArray<string>;
+
 implementation
 
 uses
@@ -174,6 +186,17 @@ begin
     Result:= AUnit + ': not in the Win32 library'
   else
     Result:= '';
+end;
+
+function AddPickedUnit(const AChosen: TArray<string>; const AUnit, AExclude: string): TArray<string>;
+var
+  U: string;
+begin
+  Result:= AChosen;
+  U:= Trim(AUnit);
+  if (U = '') or SameText(U, Trim(AExclude)) or ContainsText(AChosen, U) then
+    Exit;
+  Result:= Result + [U];
 end;
 
 end.

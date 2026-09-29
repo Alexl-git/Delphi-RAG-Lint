@@ -348,7 +348,7 @@ type
       /// <summary>Empty every file's selection.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoClearSelection (ConvRules.CurationForm.pas)</para>
+      /// <para>Called from: ConvRules.CurationForm.TCurationForm.DoClearSelection (ConvRules.CurationForm.pas), ConvRules.MainForm.TConvRulesForm.UnitPopupPopup (ConvRules.MainForm.pas) ?</para>
       /// <para>Reads: FFiles   Writes: FFiles</para>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddFile"/>
       /// <seealso cref="ConvRules.WorkingSet.TWorkingSet.AddText"/>

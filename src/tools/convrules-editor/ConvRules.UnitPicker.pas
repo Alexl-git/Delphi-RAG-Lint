@@ -9,6 +9,11 @@ unit ConvRules.UnitPicker;
   Space on a list item returns that name; OK (or Enter in the name edit) returns
   the edit's text, so a unit that is not indexed yet can still be typed in.
 
+  ExecuteMulti is the replacement picker behind #useswap: there a double-click,
+  Enter or Space ADDS the unit to a Replacements list shown under the lists, with
+  no confirmation, and OK returns the whole list. A chosen entry is removed by
+  double-clicking it (or Delete).
+
   Every decision the form makes -- the filters, which library a platform shows,
   the "not in the Win64 library" note -- lives in ConvRules.UnitPick, which the
   model-test runner covers; this unit only renders and dispatches.
@@ -73,6 +78,11 @@ type
       FSidePlat : TConvPlatform ;
       FSilent   : Integer       ;
       FResult   : string        ;
+      FMulti    : Boolean       ;
+      FExclude  : string        ;
+      FChosen   : TArray<string>;
+      FChosenPnl: TPanel        ;
+      FLbChosen : TListBox      ;
       procedure BuildUI;
       procedure BuildTop;
       procedure BuildLists;
@@ -97,6 +107,11 @@ type
       procedure ShowNote(const AUnit: string);
       procedure AcceptList(AList: TListBox);
       procedure AcceptEdit;
+      procedure AddChosen(const AUnit: string);
+      procedure ShowChosen;
+      procedure RemoveChosen;
+      procedure ChosenDblClick(Sender: TObject);
+      procedure ChosenKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     public
       /// <summary>Creates the form. Prefer Execute over calling this directly.</summary>
       /// <param name="AOwner">Owning component.</param>
@@ -110,12 +125,26 @@ type
       /// <param name="AUnit">Receives the chosen name, trimmed; '' on cancel.</param>
       /// <returns>True when a non-empty name was accepted; False on Cancel / Esc.</returns>
       class function Execute(AOwner: TComponent; const ACaption, AInitial: string; ASide: TUnitPickSide; const ASource: TUnitPickSource; out AUnit: string): Boolean;
+      /// <summary>Shows the modal picker in REPLACEMENT mode and returns every unit
+      /// the user added: a double-click, Enter or Space on a list item adds it to the
+      /// Replacements list without asking; OK also adds a name typed in the edit.</summary>
+      /// <param name="AOwner">Owning component (the form is centred on it).</param>
+      /// <param name="ACaption">Window caption, e.g. 'Replacements for Forms'.</param>
+      /// <param name="AExclude">The OLD unit being replaced; it is never accepted as
+      /// one of its own replacements (see AddPickedUnit).</param>
+      /// <param name="ASide">Which platform's library the right list shows.</param>
+      /// <param name="ASource">The lists to show; see TUnitPickSource.</param>
+      /// <param name="AUnits">Receives the chosen names in pick order; nil on cancel.</param>
+      /// <returns>True when OK was pressed with at least one unit chosen; False on
+      /// Cancel / Esc.</returns>
+      class function ExecuteMulti(AOwner: TComponent; const ACaption, AExclude: string; ASide: TUnitPickSide; const ASource: TUnitPickSource; out AUnits: TArray<string>): Boolean;
   end;
 
 implementation
 
 uses
   System.StrUtils
+  , System.Math
   , Winapi.Windows
   ;
 
@@ -124,6 +153,7 @@ const
   FORM_HEIGHT = 540;
   TOP_H       = 96 ;
   BOTTOM_H    = 64 ;
+  CHOSEN_H    = 120;
   MARGIN      = 8  ;
   LBL_W       = 56 ;
   FIELD_X     = MARGIN + LBL_W + MARGIN;
@@ -283,6 +313,7 @@ var
   Btm      : TPanel ;
   BtnOk    : TButton;
   BtnCancel: TButton;
+  LblChosen: TLabel ;
 begin
   Btm:= TPanel.Create(Self);
   Btm.Parent    := Self;
@@ -311,6 +342,26 @@ begin
   BtnCancel.Caption    := 'Cancel';
   BtnCancel.Cancel     := True;
   BtnCancel.ModalResult:= mrCancel;
+
+  // The Replacements list: hidden in single mode, shown by ExecuteMulti above the
+  // button row (created after Btm, so alBottom stacks it on top of Btm).
+  FChosenPnl:= TPanel.Create(Self);
+  FChosenPnl.Parent    := Self;
+  FChosenPnl.Align     := alBottom;
+  FChosenPnl.Height    := CHOSEN_H;
+  FChosenPnl.BevelOuter:= bvNone;
+  FChosenPnl.Visible   := False;
+
+  LblChosen:= TLabel.Create(Self);
+  LblChosen.Parent := FChosenPnl;
+  LblChosen.Align  := alTop;
+  LblChosen.Caption:= 'Replacements -- double-click a unit in the lists above to add it; double-click (or Delete) one here to remove it:';
+
+  FLbChosen:= TListBox.Create(Self);
+  FLbChosen.Parent    := FChosenPnl;
+  FLbChosen.Align     := alClient;
+  FLbChosen.OnDblClick:= ChosenDblClick;
+  FLbChosen.OnKeyDown := ChosenKeyDown;
 end; // procedure
 
 procedure TUnitPickerForm.Load(const ASource: TUnitPickSource; ASide: TUnitPickSide);
@@ -492,7 +543,20 @@ end;
 
 procedure TUnitPickerForm.OkClick(Sender: TObject);
 begin
-  AcceptEdit;
+  if not FMulti then
+  begin
+    AcceptEdit;
+    Exit;
+  end;
+  // A name typed (or single-clicked) but not yet added still counts on OK.
+  FChosen:= AddPickedUnit(FChosen, FEdit.Text, FExclude);
+  ShowChosen;
+  if Length(FChosen) = 0 then
+  begin
+    FLblNote.Caption:= 'Pick at least one replacement: double-click a unit in the lists.';
+    Exit;
+  end;
+  ModalResult:= mrOk;
 end;
 
 procedure TUnitPickerForm.FormResized(Sender: TObject);
@@ -505,12 +569,26 @@ procedure TUnitPickerForm.AcceptList(AList: TListBox);
 begin
   if AList.ItemIndex < 0 then
     Exit;
+  if FMulti then
+  begin
+    AddChosen(ShownOf(AList)[AList.ItemIndex]);
+    Exit;
+  end;
   SetEditSilently(ShownOf(AList)[AList.ItemIndex]);
   AcceptEdit;
 end;
 
 procedure TUnitPickerForm.AcceptEdit;
 begin
+  if FMulti then
+  begin
+    // Enter in the edit adds what was typed; on an empty edit it finishes.
+    if Trim(FEdit.Text) = '' then
+      OkClick(nil)
+    else
+      AddChosen(FEdit.Text);
+    Exit;
+  end;
   FResult:= Trim(FEdit.Text);
   if FResult = '' then
   begin
@@ -536,6 +614,87 @@ begin
     Result:= F.ShowModal = mrOk;
     if Result then
       AUnit:= F.FResult;
+  finally
+    F.Free;
+  end; // try
+end; // function
+
+procedure TUnitPickerForm.AddChosen(const AUnit: string);
+var
+  Before: Integer;
+begin
+  Before := Length(FChosen);
+  FChosen:= AddPickedUnit(FChosen, AUnit, FExclude);
+  if Length(FChosen) > Before then
+  begin
+    ShowChosen;
+    SetEditSilently('');
+    FLblNote.Caption:= Format('%s added.', [Trim(AUnit)]);
+  end
+  else if SameText(Trim(AUnit), Trim(FExclude)) then
+    FLblNote.Caption:= Format('%s is the unit being replaced.', [Trim(AUnit)])
+  else if Trim(AUnit) <> '' then
+    FLblNote.Caption:= Format('%s is already a replacement.', [Trim(AUnit)]);
+end;
+
+procedure TUnitPickerForm.ShowChosen;
+begin
+  FLbChosen.Items.BeginUpdate;
+  try
+    FLbChosen.Items.Clear;
+    for var LUnit: string in FChosen do
+      FLbChosen.Items.Add(LUnit);
+  finally
+    FLbChosen.Items.EndUpdate;
+  end; // try
+end;
+
+procedure TUnitPickerForm.RemoveChosen;
+var
+  Idx: Integer;
+begin
+  Idx:= FLbChosen.ItemIndex;
+  if (Idx < 0) or (Idx > High(FChosen)) then
+    Exit;
+  Delete(FChosen, Idx, 1);
+  ShowChosen;
+  if FLbChosen.Count > 0 then
+    FLbChosen.ItemIndex:= Min(Idx, FLbChosen.Count - 1);
+end;
+
+procedure TUnitPickerForm.ChosenDblClick(Sender: TObject);
+begin
+  RemoveChosen;
+end;
+
+procedure TUnitPickerForm.ChosenKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if Key = VK_DELETE then
+  begin
+    Key:= 0;
+    RemoveChosen;
+  end;
+end;
+
+class function TUnitPickerForm.ExecuteMulti(AOwner: TComponent; const ACaption, AExclude: string; ASide: TUnitPickSide; const ASource: TUnitPickSource; out AUnits: TArray<string>): Boolean;
+var
+  F: TUnitPickerForm;
+begin
+  AUnits:= nil;
+  F:= TUnitPickerForm.Create(AOwner);
+  try
+    F.FMulti  := True;
+    F.FExclude:= AExclude;
+    F.Caption := ACaption;
+    // alBottom stacks by Top: 0 puts the Replacements panel ABOVE the button row.
+    F.FChosenPnl.Top    := 0;
+    F.FChosenPnl.Visible:= True;
+    F.Load(ASource, ASide);
+    F.ApplyFilter;
+    F.ActiveControl:= F.FEdit;
+    Result:= F.ShowModal = mrOk;
+    if Result then
+      AUnits:= F.FChosen;
   finally
     F.Free;
   end; // try

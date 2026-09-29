@@ -301,7 +301,7 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleNode&gt; -- Observed: L.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshUnitList (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.UnitHasRule (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RefreshUnitList (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SwapUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.UnitHasRule (ConvRules.MainForm.pas)</para>
       /// <para>Reads: FNodes</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
