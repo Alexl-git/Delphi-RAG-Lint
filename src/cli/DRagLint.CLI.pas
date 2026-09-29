@@ -238,6 +238,10 @@ type
       put in DbPaths; the first command-line --db then REPLACES it rather than
       appending, because the command line beats the config file. }
     DbFromConfig    : Boolean       ;
+    { '<file>: <key path>: expected <type>, got <type>' when the .drag-lint.json
+      defaults file could not be read (LoadConfigDefaults); '' otherwise. Readers
+      carry on with what was read; Run makes the WRITE verbs refuse. }
+    ConfigError     : string        ;
     { v21: --library-db, repeatable. Extra indexes consulted ONLY for calls the
       primary index cannot resolve; a hit is recorded as a qualified NAME on
       refs.external_target. Explicit rather than auto-opened from the manifest
@@ -1097,60 +1101,78 @@ begin
   end;
   if J = nil then Exit;
   try
-    { "db" is an EXPLICIT --db, so it goes into DbPaths too: every write verb
-      tells "explicit" from "defaulted" by DbPaths, and a config db left only
-      in DbPath would be ignored as if Run had guessed it. }
-    V:= J.GetValue('db');
-    if (V <> nil) and (V.Value <> '') then
-    begin
-      AArgs.DbPath      := V.Value;
-      AArgs.DbPaths     := [V.Value];
-      AArgs.DbFromConfig:= True;
-    end;
-    V:= J.GetValue('project');
-    if (V <> nil) and (V.Value <> '') then AArgs.ProjectPath:= V.Value;
-    V:= J.GetValue('path');
-    if (V <> nil) and (V.Value <> '') then AArgs.Path:= V.Value;
-    { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
-      It used to set AArgs.Rule for EVERY verb, so a "rule" left in a
-      .drag-lint.json anywhere above the CWD turned every lint-all into a
-      one-rule run whose report read as a clean project -- and nothing said so
-      (this file's banner is printed on every run and names no key).
-
-      Decided 2026-09-23: the key is a default for `lint` only, where the run is
-      the file or folder the user named, and it is ANNOUNCED on stderr. Every
-      other verb -- lint-all and lint-project above all, which are whole-project
-      questions -- IGNORES it and says so. --rule on the command line is the one
-      way to narrow those. ParamStr(1) rather than TArgs because this runs
-      before ParseArgs (see the --quiet note below). }
-    V:= J.GetValue('rule');
-    if (V <> nil) and (V.Value <> '') and not HasSwitch('--rule') then
-    begin
-      if SameText(ParamStr(1), 'lint') then
+    try
+      { "db" is an EXPLICIT --db, so it goes into DbPaths too: every write verb
+        tells "explicit" from "defaulted" by DbPaths, and a config db left only
+        in DbPath would be ignored as if Run had guessed it. }
+      V:= J.GetValue('db');
+      if (V <> nil) and (V.Value <> '') then
       begin
-        AArgs.Rule:= V.Value;
-        Writeln(ErrOutput, Format('drag-lint: note: this run is narrowed to rule "%s" by the "rule" key in %s' +
-          ' -- only that rule is reported. Pass --rule to choose another.', [V.Value, Candidate]));
-      end
-      else
-        Writeln(ErrOutput, Format('drag-lint: note: ignoring "rule": "%s" in %s for `%s` -- a defaults file ' +
-          'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
-          [V.Value, Candidate, ParamStr(1), V.Value]));
-    end;
-    V:= J.GetValue('watch');
-    if V is TJSONObject then begin JWatch:= TJSONObject(V); AArgs.Watch:= True; N:= JWatch.GetValue('interval') as TJSONNumber; if N <> nil then AArgs.Interval:= N.AsInt; end;
-    // v0.16 Task 13: "docs" section
-    V:= J.GetValue('docs');
-    if V is TJSONObject then
-    begin
-      JDocs:= TJSONObject(V);
-      B:= JDocs.GetValue('captureLooseComments') as TJSONBool;
-      if B <> nil then AArgs.Docs.CaptureLooseComments:= B.AsBoolean;
-      N:= JDocs.GetValue('allowBlankLineGap') as TJSONNumber;
-      if N <> nil then AArgs.Docs.AllowBlankLineGap:= N.AsInt;
-      V:= JDocs.GetValue('implPrecedence');
-      if (V <> nil) and (V.Value <> '') then AArgs.Docs.ImplPrecedence:= V.Value;
-    end;
+        AArgs.DbPath      := V.Value;
+        AArgs.DbPaths     := [V.Value];
+        AArgs.DbFromConfig:= True;
+      end;
+      V:= J.GetValue('project');
+      if (V <> nil) and (V.Value <> '') then AArgs.ProjectPath:= V.Value;
+      V:= J.GetValue('path');
+      if (V <> nil) and (V.Value <> '') then AArgs.Path:= V.Value;
+      { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
+        It used to set AArgs.Rule for EVERY verb, so a "rule" left in a
+        .drag-lint.json anywhere above the CWD turned every lint-all into a
+        one-rule run whose report read as a clean project -- and nothing said so
+        (this file's banner is printed on every run and names no key).
+
+        Decided 2026-09-23: the key is a default for `lint` only, where the run is
+        the file or folder the user named, and it is ANNOUNCED on stderr. Every
+        other verb -- lint-all and lint-project above all, which are whole-project
+        questions -- IGNORES it and says so. --rule on the command line is the one
+        way to narrow those. ParamStr(1) rather than TArgs because this runs
+        before ParseArgs (see the --quiet note below). }
+      V:= J.GetValue('rule');
+      if (V <> nil) and (V.Value <> '') and not HasSwitch('--rule') then
+      begin
+        if SameText(ParamStr(1), 'lint') then
+        begin
+          AArgs.Rule:= V.Value;
+          Writeln(ErrOutput, Format('drag-lint: note: this run is narrowed to rule "%s" by the "rule" key in %s' +
+            ' -- only that rule is reported. Pass --rule to choose another.', [V.Value, Candidate]));
+        end
+        else
+          Writeln(ErrOutput, Format('drag-lint: note: ignoring "rule": "%s" in %s for `%s` -- a defaults file ' +
+            'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
+            [V.Value, Candidate, ParamStr(1), V.Value]));
+      end;
+      V:= J.GetValue('watch');
+      if V is TJSONObject then
+      begin
+        JWatch:= TJSONObject(V);
+        AArgs.Watch:= True;
+        N:= GetManifestNumber(JWatch, 'interval', 'watch');
+        if N <> nil then AArgs.Interval:= N.AsInt;
+      end;
+      // v0.16 Task 13: "docs" section
+      V:= J.GetValue('docs');
+      if V is TJSONObject then
+      begin
+        JDocs:= TJSONObject(V);
+        B:= GetManifestBool(JDocs, 'captureLooseComments', 'docs');
+        if B <> nil then AArgs.Docs.CaptureLooseComments:= B.AsBoolean;
+        N:= GetManifestNumber(JDocs, 'allowBlankLineGap', 'docs');
+        if N <> nil then AArgs.Docs.AllowBlankLineGap:= N.AsInt;
+        V:= JDocs.GetValue('implPrecedence');
+        if (V <> nil) and (V.Value <> '') then AArgs.Docs.ImplPrecedence:= V.Value;
+      end;
+    except
+      { A WRONG-TYPED KEY (1.20.4 Task 4) used to escape as EInvalidCast and kill
+        EVERY verb with a FATAL that named neither the key nor the file. Now it is
+        named, the keys read before it stay applied, a reader carries on, and Run
+        makes the write verbs refuse (ConfigError). }
+      on E: EManifestError do
+      begin
+        AArgs.ConfigError:= Candidate + ': ' + E.Message;
+        Writeln(ErrOutput, 'WARNING: could not parse config at ', Candidate, ': ', E.Message);
+      end;
+    end; // try
   finally
     J.Free;
   end; // try
@@ -3882,6 +3904,17 @@ begin
   if AConfigPath <> '' then Result:= Result + ' --config ' + AnsiQuotedStr(TPath.GetFullPath(AConfigPath), '"');
 end;
 
+/// <summary>THE one wording of a write verb's refusal of a config it could not
+/// parse -- a manifest (Load, --config) or the .drag-lint.json defaults file --
+/// so every path prints, and the docs quote, the same two lines.</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AError">'&lt;file&gt;: &lt;key path&gt;: expected &lt;type&gt;, got &lt;type&gt;'.</param>
+procedure ReportManifestRefusal(const AVerb, AError: string);
+begin
+  Writeln(ErrOutput, 'ERROR: ', AVerb, ': refusing to write -- the manifest could not be parsed: ', AError);
+  Writeln(ErrOutput, '       Fix that file and re-run. A write verb does not fall back to the part that did parse.');
+end;
+
 /// <summary>A WRITE verb's refusal of a manifest that TManifestIO.Load could not
 /// fully parse (1.20.4 Task 4).</summary>
 /// <param name="AVerb">Verb name for the message prefix.</param>
@@ -3895,11 +3928,7 @@ end;
 function ManifestWriteRefused(const AVerb: string; const AManifest: TIndexManifest): Boolean;
 begin
   Result:= AManifest.LoadError <> '';
-  if Result then
-  begin
-    Writeln(ErrOutput, 'ERROR: ', AVerb, ': refusing to write -- the manifest could not be parsed: ', AManifest.LoadError);
-    Writeln(ErrOutput, '       Fix that file and re-run. A write verb does not fall back to the manifest that did parse.');
-  end;
+  if Result then ReportManifestRefusal(AVerb, AManifest.LoadError);
 end;
 
 // v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
@@ -3941,7 +3970,7 @@ begin
     except
       on E: EManifestError do
       begin
-        Writeln(ErrOutput, 'ERROR: manifest invalid: ', ConfigPath, ': ', E.Message);
+        ReportManifestRefusal('index --all', ConfigPath + ': ' + E.Message);
         Exit(2);
       end;
     end; // try
@@ -4557,22 +4586,31 @@ end;
 /// when the manifest will not load or two sections claim the project.</summary>
 /// <param name="AVerb">Verb name for the message prefix.</param>
 /// <param name="AProjectFile">The --project argument.</param>
-/// <param name="AStartDir">Where the local-manifest search starts.</param>
+/// <param name="AManifest">The manifest the caller loaded (reused, not reloaded).</param>
 /// <returns>The DB path to write, or '' to refuse.</returns>
 /// <remarks>The explicit --db half is the caller's: test DbPaths first.</remarks>
-function ResolveProjectWriteDb(const AVerb, AProjectFile, AStartDir: string): string;
+function ResolveProjectWriteDbIn(const AVerb, AProjectFile: string; const AManifest: TIndexManifest): string;
 var
-  Manifest : TIndexManifest;
   Claimants: TArray<string>;
 begin
   Result:= '';
+  { "will not load" includes a file Load had to skip: ownership asked of the
+    part that DID parse can miss the section that claims this project. }
+  if ManifestWriteRefused(AVerb, AManifest) then Exit;
+  if ResolveOwnProjectDb(AManifest, AProjectFile, Result, Claimants) = pdmAmbiguous then
+    ReportAmbiguousProject(AVerb, AProjectFile, Claimants);
+end;
+
+/// <summary>ResolveProjectWriteDbIn over the manifest loaded from AStartDir.</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AProjectFile">The --project argument.</param>
+/// <param name="AStartDir">Where the local-manifest search starts.</param>
+/// <returns>The DB path to write, or '' to refuse.</returns>
+function ResolveProjectWriteDb(const AVerb, AProjectFile, AStartDir: string): string;
+begin
+  Result:= '';
   try
-    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), AStartDir);
-    { "will not load" includes a file Load had to skip: ownership asked of the
-      part that DID parse can miss the section that claims this project. }
-    if ManifestWriteRefused(AVerb, Manifest) then Exit;
-    if ResolveOwnProjectDb(Manifest, AProjectFile, Result, Claimants) = pdmAmbiguous then
-      ReportAmbiguousProject(AVerb, AProjectFile, Claimants);
+    Result:= ResolveProjectWriteDbIn(AVerb, AProjectFile, TManifestIO.Load(ExtractFilePath(ParamStr(0)), AStartDir));
   except
     on E: Exception do
     begin
@@ -4585,8 +4623,10 @@ end;
 /// <summary>Resolves the database an `index` run WRITES.</summary>
 /// <param name="AArgs">Parsed arguments. An explicit --db (DbPaths non-empty)
 /// short-circuits everything; a --project argument selects the project rule.</param>
-/// <param name="AIndexPath">Where the manifest search starts and, without
-/// --project, the folder or file being indexed (used for prefix matching).</param>
+/// <param name="AIndexPath">Without --project, the folder or file being indexed
+/// (used for prefix matching).</param>
+/// <param name="AManifest">The manifest DoIndex loaded from AIndexPath, reused
+/// rather than reloaded; DoIndex has already refused it if it did not parse.</param>
 /// <returns>Absolute DB path, or '' when nothing defensible resolves (the
 /// caller refuses).</returns>
 /// <remarks>
@@ -4605,17 +4645,15 @@ end;
 /// prefixing AIndexPath (library sections skipped), else
 /// &lt;target&gt;\_D-RAG\&lt;name&gt;.sqlite.</para>
 /// </remarks>
-function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
+function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string; const AManifest: TIndexManifest): string;
 var
   DbBase: string;
-  Manifest : TIndexManifest ;
   Sec      : TIndexSection  ;
   IncPath  : string         ;
   PathNorm : string         ;
   IncNorm  : string         ;
   BestLen  : Integer        ;
   BestDb   : string         ;
-  EngineDir: string         ;
   OutDir   : string         ;
   DbRaw    : string         ;
 begin
@@ -4633,16 +4671,14 @@ begin
     landed in that section's DB. }
   var ProjFile: string:= AArgs.ProjectPath;
   if (ProjFile = '') and MatchText(ExtractFileExt(AIndexPath), ['.dpr', '.dproj', '.dpk']) then ProjFile:= AIndexPath;
-  if ProjFile <> '' then Exit(ResolveProjectWriteDb('index', ProjFile, AIndexPath));
+  if ProjFile <> '' then Exit(ResolveProjectWriteDbIn('index', ProjFile, AManifest));
 
   BestLen:= -1;
   BestDb:= '';
   try
-    EngineDir:= ExtractFilePath(ParamStr(0));
-    Manifest:= TManifestIO.Load(EngineDir, AIndexPath);
     PathNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(AIndexPath)).ToLower;
 
-    for Sec in Manifest.Sections do
+    for Sec in AManifest.Sections do
     begin
       // Skip library sections -- never auto-select them for index.
       if SameText(Sec.Source, 'registry-libraries') then Continue;
@@ -4657,13 +4693,13 @@ begin
           if DbRaw = '' then DbRaw:= Sec.Name + '.sqlite';
           if not TPath.IsPathRooted(DbRaw) then
           begin
-            OutDir:= Manifest.OutDir;
+            OutDir:= AManifest.OutDir;
             if OutDir <> '' then
             begin
               if TPath.IsPathRooted(OutDir) then BestDb:= TPath.Combine(OutDir, DbRaw)
-              else BestDb:= TPath.Combine(TPath.Combine(Manifest.RootDir, OutDir), DbRaw);
+              else BestDb:= TPath.Combine(TPath.Combine(AManifest.RootDir, OutDir), DbRaw);
             end
-            else BestDb:= TPath.Combine(Manifest.RootDir, DbRaw);
+            else BestDb:= TPath.Combine(AManifest.RootDir, DbRaw);
           end
           else BestDb:= DbRaw;
         end; // if
@@ -5087,10 +5123,12 @@ begin
     an explicit --db, because this run still reads the manifest (the size
     guard) and a broken one is the user's to fix, not ours to half-read. BOTH
     walks this verb makes are checked: from the target (DB selection, below)
-    and from the CWD (the size guard). }
-  if ManifestWriteRefused('index', TManifestIO.Load(ExtractFilePath(ParamStr(0)), IndexTarget)) then Exit(2);
-  if ManifestWriteRefused('index', TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir)) then Exit(2);
-  var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget);
+    and from the CWD (the size guard). Each is loaded ONCE and reused. }
+  var TargetManifest: TIndexManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), IndexTarget);
+  if ManifestWriteRefused('index', TargetManifest) then Exit(2);
+  var CwdManifest: TIndexManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+  if ManifestWriteRefused('index', CwdManifest) then Exit(2);
+  var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget, TargetManifest);
   if ResolvedDb = '' then
   begin
     { A project target's refusal (two claimants, or no manifest) was already
@@ -5158,12 +5196,7 @@ begin
   begin
     var IdxGuardMB: Integer:= 1500;
     if AArgs.SizeGuardMBSet then IdxGuardMB:= AArgs.SizeGuardMB
-    else
-      try
-        IdxGuardMB:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir).Settings.SizeGuardMB;
-      except
-        { best-effort, exactly as the consumer path treats a missing manifest }
-      end;
+    else IdxGuardMB:= CwdManifest.Settings.SizeGuardMB;
     SizeGuardCheck(ResolvedDb, IdxGuardMB, AArgs.Force32);
   end;
   if not AArgs.NoPreprocess then Writeln('Preprocess: ON  (per-config directive resolution; platform=', PpPlatform, ')')
@@ -19516,6 +19549,15 @@ var
   Claimants: TArray<string>;
 begin
   Result:= '';
+  { A HALF-READ CONFIG IS NOT WRITTEN THROUGH (1.20.4 Task 4). The compile
+    still runs and reports -- the caller wants dcc's answer -- but nothing is
+    cached: the defaults file may be the very thing that supplied --db, and a
+    manifest Load had to skip can name the wrong owner. }
+  if AArgs.ConfigError <> '' then
+  begin
+    Writeln(ErrOutput, 'compile-check: the .drag-lint.json defaults could not be parsed (', AArgs.ConfigError, ') -- findings will not be cached.');
+    Exit;
+  end;
   if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPath); { an explicit --db always wins }
   if ATarget = '' then Exit;
 
@@ -19541,6 +19583,11 @@ begin
       Writeln(ErrOutput, Format('compile-check: could not load the manifest (%s: %s) -- findings will not be cached.', [E.ClassName, E.Message]));
       Exit('');
     end;
+  end;
+  if Manifest.LoadError <> '' then
+  begin
+    Writeln(ErrOutput, 'compile-check: the manifest could not be parsed (', Manifest.LoadError, ') -- findings will not be cached.');
+    Exit;
   end;
 
   { The project DB is the one that owns compiler findings for this target. A
@@ -26410,6 +26457,7 @@ begin
         roAlreadyOwned: OutcomeText:= 'already-registered';
         roAmbiguous   : OutcomeText:= 'ambiguous';
         roNoManifest  : OutcomeText:= 'no-manifest';
+        roManifestUnparsed: OutcomeText:= 'manifest-unparsed';
       else               OutcomeText:= 'failed';
       end;
       O.AddPair('outcome', OutcomeText);
@@ -26425,6 +26473,9 @@ begin
     finally
       O.Free;
     end;
+    { The refusal is an EXIT CODE in JSON mode too: a caller that reads only
+      the code must not take an unparsed manifest for a registration. }
+    if Res.Outcome = roManifestUnparsed then Exit(2);
   end
   else
   begin
@@ -26452,6 +26503,11 @@ begin
           Writeln(ErrOutput, 'REFUSED: ', Res.Message);
           for var C: string in Res.Claimants do Writeln(ErrOutput, '  section: ', C);
           Exit(1);
+        end;
+      roManifestUnparsed:
+        begin
+          ReportManifestRefusal('register-project', Res.Message);
+          Exit(2);
         end;
     else
       begin
@@ -28648,6 +28704,18 @@ begin
     Args:= ParseArgs;
     if Args.ShowHelp then begin PrintHelp; Exit(0); end;
     if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
+
+    { A .drag-lint.json DEFAULTS FILE THAT COULD NOT BE READ (1.20.4 Task 4):
+      LoadConfigDefaults has warned and kept only the keys before the bad one.
+      A reader carries on with that; a verb that WRITES an index or a manifest
+      refuses, because the half it read may be the very "db" it would write.
+      compile-check computes and skips its cache instead (ResolveCompileCheckDb). }
+    if (Args.ConfigError <> '') and
+       MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project']) then
+    begin
+      ReportManifestRefusal(Args.Command, Args.ConfigError);
+      Exit(2);
+    end;
 
     { THE DEFAULT SCHEME: a project's own index + the platform library index.
       Owner ruling, 2026-08-13 -- "by default and maybe always", overridable only

@@ -306,14 +306,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas)</para>
-      /// <para>Calls: Default, DRagLint.Index.Manifest.GetArray, DRagLint.Index.Manifest.GetNumber, DRagLint.Index.Manifest.GetObject, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.JsonTypeName, DRagLint.Index.Manifest.ParseManifestRoot, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults (+6 more)</para>
+      /// <para>Calls: Default, DRagLint.Index.Manifest.GetManifestArray, DRagLint.Index.Manifest.GetManifestNumber, DRagLint.Index.Manifest.GetManifestObject, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.JsonTypeName, DRagLint.Index.Manifest.ParseManifestRoot, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults (+6 more)</para>
       /// <para>Returns: Default(TIndexManifest)</para>
       /// <para>Complexity: 30 (cyclomatic, outer body), 162 lines (full implementation)</para>
       /// <para>Mutates: ASettingsKeys (out)</para>
       /// <para>Directives: static</para>
-      /// <seealso cref="DRagLint.Index.Manifest.GetArray"/>
-      /// <seealso cref="DRagLint.Index.Manifest.GetNumber"/>
-      /// <seealso cref="DRagLint.Index.Manifest.GetObject"/>
+      /// <seealso cref="DRagLint.Index.Manifest.GetManifestArray"/>
+      /// <seealso cref="DRagLint.Index.Manifest.GetManifestNumber"/>
+      /// <seealso cref="DRagLint.Index.Manifest.GetManifestObject"/>
       /// <seealso cref="DRagLint.Index.Manifest.JsonStrArr"/>
       /// <seealso cref="DRagLint.Index.Manifest.JsonTypeName"/>
       /// <!-- drag-lint:auto END -->
@@ -656,6 +656,44 @@ function LoadDocComplexityMin: Integer;
 /// </remarks>
 function LoadDocHandlesOptions: TDocHandlesOptions;
 
+/// <summary>A manifest key's value when it is a JSON OBJECT; nil when the key is absent.</summary>
+/// <param name="AParent">The object that holds the key; must not be nil.</param>
+/// <param name="AKey">The key name.</param>
+/// <param name="AParentPath">AParent's own key path ('' at the root), used only in the message.</param>
+/// <returns>The value, owned by AParent; nil when AKey is absent.</returns>
+/// <exception cref="EManifestError">AKey is present with another JSON type (null
+/// included): '&lt;key path&gt;: expected object, got &lt;type&gt;'.</exception>
+/// <remarks>Shared by every reader of a drag-lint JSON config (the manifest and the
+/// CLI's .drag-lint.json defaults) so a wrong type is named the same way everywhere.</remarks>
+function GetManifestObject(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONObject;
+
+/// <summary>A manifest key's value when it is a JSON ARRAY; nil when the key is absent.</summary>
+/// <param name="AParent">The object that holds the key; must not be nil.</param>
+/// <param name="AKey">The key name.</param>
+/// <param name="AParentPath">AParent's own key path ('' at the root), used only in the message.</param>
+/// <returns>The value, owned by AParent; nil when AKey is absent.</returns>
+/// <exception cref="EManifestError">AKey is present with another JSON type:
+/// '&lt;key path&gt;: expected array, got &lt;type&gt;'.</exception>
+function GetManifestArray(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONArray;
+
+/// <summary>A manifest key's value when it is a JSON BOOLEAN; nil when the key is absent.</summary>
+/// <param name="AParent">The object that holds the key; must not be nil.</param>
+/// <param name="AKey">The key name.</param>
+/// <param name="AParentPath">AParent's own key path ('' at the root), used only in the message.</param>
+/// <returns>The value, owned by AParent; nil when AKey is absent.</returns>
+/// <exception cref="EManifestError">AKey is present with another JSON type (a
+/// quoted "yes" included): '&lt;key path&gt;: expected boolean, got &lt;type&gt;'.</exception>
+function GetManifestBool(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONBool;
+
+/// <summary>A manifest key's value when it is a JSON NUMBER; nil when the key is absent.</summary>
+/// <param name="AParent">The object that holds the key; must not be nil.</param>
+/// <param name="AKey">The key name.</param>
+/// <param name="AParentPath">AParent's own key path ('' at the root), used only in the message.</param>
+/// <returns>The value, owned by AParent; nil when AKey is absent.</returns>
+/// <exception cref="EManifestError">AKey is present with another JSON type (a
+/// quoted number included): '&lt;key path&gt;: expected number, got &lt;type&gt;'.</exception>
+function GetManifestNumber(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONNumber;
+
 implementation
 
 uses
@@ -665,6 +703,26 @@ uses
 { ---------------------------------------------------------------------- }
 {  Helpers                                                                 }
 { ---------------------------------------------------------------------- }
+
+var
+  { One WARNING per bad file per process. A single command loads the manifest
+    from several places (Run's --project default, the verb's own resolution,
+    the size guard), and the same line three times reads like three problems.
+    Guarded because the LSP server loads from more than one thread. }
+  GLoadWarned    : TDictionary<string, Boolean>;
+  GLoadWarnedLock: TObject;
+
+{ True the FIRST time AKey ('<file>: <message>') is seen in this process. }
+function FirstLoadWarning(const AKey: string): Boolean;
+begin
+  TMonitor.Enter(GLoadWarnedLock);
+  try
+    Result:= not GLoadWarned.ContainsKey(AKey);
+    if Result then GLoadWarned.Add(AKey, True);
+  finally
+    TMonitor.Exit(GLoadWarnedLock);
+  end;
+end;
 
 function JsonStrArr(const AArr: TJSONArray): TArray<string>;
 var
@@ -751,22 +809,22 @@ begin
       [KeyPath(AParentPath, AKey), AExpected, JsonTypeName(Result)]);
 end;
 
-function GetObject(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONObject;
+function GetManifestObject(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONObject;
 begin
   Result:= TJSONObject(GetTyped(AParent, AKey, AParentPath, TJSONObject, 'object'));
 end;
 
-function GetArray(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONArray;
+function GetManifestArray(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONArray;
 begin
   Result:= TJSONArray(GetTyped(AParent, AKey, AParentPath, TJSONArray, 'array'));
 end;
 
-function GetBool(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONBool;
+function GetManifestBool(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONBool;
 begin
   Result:= TJSONBool(GetTyped(AParent, AKey, AParentPath, TJSONBool, 'boolean'));
 end;
 
-function GetNumber(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONNumber;
+function GetManifestNumber(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONNumber;
 begin
   Result:= TJSONNumber(GetTyped(AParent, AKey, AParentPath, TJSONNumber, 'number'));
 end;
@@ -824,18 +882,18 @@ begin
   else if (V <> nil) then Result.IncludeOnly:= [V.Value];
 
   { useIgnoreFiles: accept also legacy 'useGitignore' key (back-compat) }
-  B:= GetBool(AObj, 'useIgnoreFiles', APath);
+  B:= GetManifestBool(AObj, 'useIgnoreFiles', APath);
   if B <> nil then Result.UseIgnoreFiles:= B.AsBoolean
   else
   begin
-    B:= GetBool(AObj, 'useGitignore', APath);
+    B:= GetManifestBool(AObj, 'useGitignore', APath);
     if B <> nil then Result.UseIgnoreFiles:= B.AsBoolean;
   end;
 
   V:= AObj.GetValue('dedupAgainst');
   if V <> nil then Result.DedupAgainst:= ParseStringOrArray(V);
 
-  B:= GetBool(AObj, 'sqlOnlyMS', APath);
+  B:= GetManifestBool(AObj, 'sqlOnlyMS', APath);
   if B <> nil then Result.SqlOnlyMS:= B.AsBoolean;
 end; // function
 
@@ -919,7 +977,7 @@ begin
     Root:= TJSONObject(RootVal);
 
     { -- settings block -- }
-    JSettings:= GetObject(Root, 'settings', '');
+    JSettings:= GetManifestObject(Root, 'settings', '');
     if JSettings <> nil then
     begin
       V:= JSettings.GetValue('currentProjectsIndexing');
@@ -936,7 +994,7 @@ begin
         Include(ASettingsKeys, skDefaultPlatform);
       end;
 
-      N:= GetNumber(JSettings, 'sizeGuardMB', 'settings');
+      N:= GetManifestNumber(JSettings, 'sizeGuardMB', 'settings');
       if N <> nil then
       begin
         Result.Settings.SizeGuardMB:= N.AsInt;
@@ -950,14 +1008,14 @@ begin
         Include(ASettingsKeys, skEnginePath);
       end;
 
-      N:= GetNumber(JSettings, 'maxJobs', 'settings');
+      N:= GetManifestNumber(JSettings, 'maxJobs', 'settings');
       if N <> nil then
       begin
         Result.Settings.MaxJobs:= N.AsInt;
         Include(ASettingsKeys, skMaxJobs);
       end;
 
-      N:= GetNumber(JSettings, 'maxParseFileKB', 'settings');
+      N:= GetManifestNumber(JSettings, 'maxParseFileKB', 'settings');
       if N <> nil then
       begin
         { 0 in JSON means "use default 2048"; a negative value disables the
@@ -971,17 +1029,17 @@ begin
     end; // if
 
     { -- docs block -- }
-    var JDocs: TJSONObject:= GetObject(Root, 'docs', '');
+    var JDocs: TJSONObject:= GetManifestObject(Root, 'docs', '');
     if JDocs <> nil then
     begin
-      var ND: TJSONNumber:= GetNumber(JDocs, 'max_return_cases', 'docs');
+      var ND: TJSONNumber:= GetManifestNumber(JDocs, 'max_return_cases', 'docs');
       if ND <> nil then
       begin
         Result.Docs.MaxReturnCases:= ND.AsInt;
         Include(ASettingsKeys, skMaxReturnCases);
       end;
 
-      var NC: TJSONNumber:= GetNumber(JDocs, 'max_callers', 'docs');
+      var NC: TJSONNumber:= GetManifestNumber(JDocs, 'max_callers', 'docs');
       if NC <> nil then
       begin
         Result.Docs.MaxCallers:= NC.AsInt;
@@ -991,7 +1049,7 @@ begin
       // ADP1 T2: docs.accessor_trivial_max_lines -- OVERRIDES the code
       // default of 2 when present; absent leaves Result.Docs.AccessorTrivialMaxLines
       // at the Defaults() value already seeded above (the filter stays ON).
-      var NA: TJSONNumber:= GetNumber(JDocs, 'accessor_trivial_max_lines', 'docs');
+      var NA: TJSONNumber:= GetManifestNumber(JDocs, 'accessor_trivial_max_lines', 'docs');
       if NA <> nil then
       begin
         Result.Docs.AccessorTrivialMaxLines:= NA.AsInt;
@@ -1001,7 +1059,7 @@ begin
       // ADP2 T3: docs.complexity_min -- OVERRIDES the code default of 10 when
       // present; absent leaves Result.Docs.ComplexityMin at the Defaults()
       // value already seeded above.
-      var NCx: TJSONNumber:= GetNumber(JDocs, 'complexity_min', 'docs');
+      var NCx: TJSONNumber:= GetManifestNumber(JDocs, 'complexity_min', 'docs');
       if NCx <> nil then
       begin
         Result.Docs.ComplexityMin:= NCx.AsInt;
@@ -1013,7 +1071,7 @@ begin
       // switch, so the key is recorded as present even when it is empty --
       // the merge must carry "none" over the global default, not drop it.
       // A non-string element is skipped rather than failing the whole load.
-      var JDlg: TJSONArray:= GetArray(JDocs, 'dialog_routines', 'docs');
+      var JDlg: TJSONArray:= GetManifestArray(JDocs, 'dialog_routines', 'docs');
       if JDlg <> nil then
       begin
         Result.Docs.Handles.DialogRoutines:= nil;
@@ -1023,7 +1081,7 @@ begin
         Include(ASettingsKeys, skDialogRoutines);
       end;
 
-      var NH: TJSONNumber:= GetNumber(JDocs, 'max_handles', 'docs');
+      var NH: TJSONNumber:= GetManifestNumber(JDocs, 'max_handles', 'docs');
       if NH <> nil then
       begin
         Result.Docs.Handles.MaxHandles:= NH.AsInt;
@@ -1032,7 +1090,7 @@ begin
     end;
 
     { -- indexes block -- }
-    JIndexes:= GetObject(Root, 'indexes', '');
+    JIndexes:= GetManifestObject(Root, 'indexes', '');
     if JIndexes <> nil then
     begin
       V:= JIndexes.GetValue('outDir');
@@ -1041,7 +1099,7 @@ begin
       V:= JIndexes.GetValue('exclude');
       if V is TJSONArray then Result.GlobalExclude:= JsonStrArr(TJSONArray(V));
 
-      JSections:= GetArray(JIndexes, 'sections', 'indexes');
+      JSections:= GetManifestArray(JIndexes, 'sections', 'indexes');
       if JSections <> nil then
       begin
         SetLength(Result.Sections, JSections.Count);
@@ -1087,7 +1145,8 @@ var
     RECORDED, so a write verb can refuse -- see TIndexManifest.LoadError. }
   procedure NoteLoadError(const APath, AMessage: string);
   begin
-    Writeln(ErrOutput, 'WARNING: could not parse config at ', APath, ': ', AMessage);
+    if FirstLoadWarning(APath + ': ' + AMessage) then
+      Writeln(ErrOutput, 'WARNING: could not parse config at ', APath, ': ', AMessage);
     if Errors <> '' then Errors:= Errors + '; ';
     Errors:= Errors + APath + ': ' + AMessage;
   end;
@@ -1693,5 +1752,13 @@ begin
     on Exception do Result:= TDocHandlesOptions.Defaults; { best-effort, as every loader above }
   end;
 end;
+
+initialization
+  GLoadWarnedLock:= TObject.Create;
+  GLoadWarned    := TDictionary<string, Boolean>.Create;
+
+finalization
+  GLoadWarned.Free;
+  GLoadWarnedLock.Free;
 
 end.

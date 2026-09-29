@@ -883,6 +883,16 @@
 #   instead of half-loading. The remaining hunks are `///` doc lines. No stored parse
 #   differs, so a ~5-hour re-parse would say nothing new.
 #   Superseded: 1.20.0-alpha|ada581d4c4d75f2bb2ebe42687000e44726e98ea6b8681098f97b4d60298e0b4
-1.20.0-alpha|04c82b3bb96c5c43cc69b974703f7ec871f4d0edeef8ae30c1c44683114d942a
+# 2026-09-29: hash re-pinned WITHIN 1.20.0-alpha again (1.20.4 Task 4 fix round 1). NO
+#   extractor bump, same reasoning as the entry above: `git diff -U0 HEAD` over the
+#   hashed roots lists only DRagLint.Index.Manifest.pas and DRagLint.Index.ManifestWrite.pas.
+#   Manifest.pas: the typed getters are EXPORTED (renamed GetManifestObject/Array/Bool/
+#   Number so the CLI's .drag-lint.json defaults reader names a bad key the same way),
+#   and Load prints each WARNING once per process (FirstLoadWarning). ManifestWrite.pas:
+#   register-project refuses (roManifestUnparsed) a manifest Load could not parse. All of
+#   it is config reading/writing; none of it changes what the parser extracts from a
+#   byte sequence. The rest of the diff is `///` managed facts. No stored parse differs.
+#   Superseded: 1.20.0-alpha|04c82b3bb96c5c43cc69b974703f7ec871f4d0edeef8ae30c1c44683114d942a
+1.20.0-alpha|3ed2c84c7deb9eea8cfed9702aacbe20c9989b13ee77a8f071079ad7d5c231be
 # superseded: 1.19.0-alpha|376c7143274119aa23760b9d41092862c6b7d24b426d7367cf5debb6286aa8b8
 #   2026-09-28 1.19.0 -> 1.20.0-alpha: Self.X := v emits a WRITE (Parser.Delphi13 assignment case); sql_column positioned on its own identifier (Parser.Sql FlushItem). Owner-scheduled batch; full re-parse run the same night.

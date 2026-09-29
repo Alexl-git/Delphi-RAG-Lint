@@ -187,11 +187,17 @@ A minimal manifest (JSON: double every backslash):
 not an array. A key of the wrong JSON type is named, with its path and both
 types: `indexes: expected object, got array`, or
 `indexes.sections[1].sqlOnlyMS: expected boolean, got string`. Text that is not
-JSON at all reads `(root): not valid JSON -- <parser detail>`. A WRITE verb
-(`index`, `index --all`, `refresh-findings`) REFUSES such a manifest with exit
-2 -- a bad local `.drag-lint.json` never quietly hands the run to the global
-manifest. A read verb prints the same message as a `WARNING` and carries on
-with whatever did parse.
+JSON at all reads `(root): not valid JSON -- <parser detail>`. The same goes
+for the `.drag-lint.json` defaults keys (`docs.captureLooseComments: expected
+boolean, got string`). A WRITE verb -- `index` (even with `--db`), `index --all`
+(`--config` included), `refresh-findings` without `--db`, `register-project`
+(and `purge-locals` when the bad key is in `.drag-lint.json`, which may be what
+named its `db`) -- REFUSES with exit 2 and
+`ERROR: <verb>: refusing to write -- the manifest could not be parsed: <file>: <key path>: expected <type>, got <type>`;
+a bad local `.drag-lint.json` never quietly hands the run to the global
+manifest. `compile-check` still compiles and reports, but caches nothing. A
+read verb prints `WARNING: could not parse config at <file>: <key path>: ...`
+once and carries on with whatever did parse.
 
 What a section's target makes it, and where its database lands:
 
@@ -505,9 +511,10 @@ staleness. `--resolved` lists precise callers from the resolved call edges.
 `Sections to build: 0` in the dry run means no manifest was found beside the
 exe (or at `--config`); that still exits 0, so read the dry run. A malformed
 manifest (beside the exe, a local `.drag-lint.json`, or `--config`) makes
-`index` refuse with exit 2 and `ERROR: ... the manifest could not be parsed`,
-naming the file, the key path and the types -- e.g. `indexes: expected object,
-got array` (`indexes` must be an object, section 2a).
+`index` refuse with exit 2 and
+`ERROR: index --all: refusing to write -- the manifest could not be parsed: <file>: indexes: expected object, got array`
+-- the file, the key path and both types (`indexes` must be an object,
+section 2a).
 
 ### No lint rules load
 
