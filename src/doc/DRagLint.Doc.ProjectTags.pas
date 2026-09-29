@@ -216,11 +216,28 @@ function AnyTagged(const AEntries: TArray<string>): Boolean;
 /// The marker is not an entry. Split in as one, `X (+3 more)` read as
 /// naming a unit called `+3 more` that no index holds.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas)</para>
+/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.TryWindowHiddenCount (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable (DRagLint.Doc.SharedFacts.pas) (+1 more)</para>
 /// <para>Calls: Copy, EndsText, TrimRight</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function WithoutMoreSuffix(const AContent: string): string;
+
+/// <summary>The N of a trailing `(+N more)` window marker on AContent.</summary>
+/// <param name="AContent">An inbound fact's content.</param>
+/// <param name="ACount">N; 0 when AContent carries no marker.</param>
+/// <returns>False when a marker is present but its N does not read as a
+/// non-negative number.</returns>
+/// <remarks>
+/// An unreadable count is UNKNOWN, not zero: a caller that judges a loss
+/// from the count must treat False as a possible loss.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.SharedFacts.UnmarkedRegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas)</para>
+/// <para>Calls: Copy, DRagLint.Doc.ProjectTags.WithoutMoreSuffix, Trim, TrimRight, TryStrToInt</para>
+/// <para>Mutates: ACount (out)</para>
+/// <seealso cref="DRagLint.Doc.ProjectTags.WithoutMoreSuffix"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function TryWindowHiddenCount(const AContent: string; out ACount: Integer): Boolean;
 
 /// <summary>AText with the project tags on its inbound fact entries removed,
 /// renamed, or its untagged entries dropped, inside managed fences only.</summary>
@@ -430,6 +447,20 @@ begin
   if not EndsText(MORE_CLOSE, Result) then Exit;
   P:= Result.LastIndexOf(MORE_OPEN) + 1;
   if P > 0 then Result:= TrimRight(Copy(Result, 1, P - 1));
+end;
+
+function TryWindowHiddenCount(const AContent: string; out ACount: Integer): Boolean;
+var
+  Marker: string;
+begin
+  ACount:= 0;
+  Marker:= Trim(Copy(TrimRight(AContent), Length(WithoutMoreSuffix(AContent)) + 1, MaxInt));
+  if Marker = '' then Exit(True);
+  { Marker is exactly '(+N more)' here -- WithoutMoreSuffix only cuts a tail
+    opening with MORE_OPEN and closing with MORE_CLOSE -- so N starts where
+    MORE_OPEN's leading blank would end. }
+  Result:= TryStrToInt(Copy(Marker, Length(MORE_OPEN),
+    Length(Marker) - Length(MORE_OPEN) - Length(MORE_CLOSE) + 1), ACount) and (ACount >= 0);
 end;
 
 { Takes one source line apart if it is an inbound fact line: AHead is everything
