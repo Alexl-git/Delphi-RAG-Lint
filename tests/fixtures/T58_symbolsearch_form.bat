@@ -16,7 +16,10 @@ if errorlevel 1 (
   exit /b 0
 )
 
-dcc64 -Q -B -E"%FIXTURES%" -U"%SRC%" -LUdesignide "%FIXTURES%\T58_symbolsearch_form.dpr" > "%FIXTURES%\t58_build.txt" 2>&1
+REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
+REM src\*.dcu is reused by any later build that searches that directory.
+if not exist "%HERE%_dcu\T58_symbolsearch_form" mkdir "%HERE%_dcu\T58_symbolsearch_form"
+dcc64 -NU"%HERE%_dcu\T58_symbolsearch_form" -Q -B -E"%FIXTURES%" -U"%SRC%" -LUdesignide "%FIXTURES%\T58_symbolsearch_form.dpr" > "%FIXTURES%\t58_build.txt" 2>&1
 
 if errorlevel 1 (
   echo FAIL: T58 compile failed

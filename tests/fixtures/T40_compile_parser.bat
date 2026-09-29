@@ -18,7 +18,10 @@ rem CompileCheck now pulls in more units transitively (preprocess, etc.), so
 rem search every src subdir for units + includes rather than an incomplete list.
 set UU=-U"%SRC%\core" -U"%SRC%\diagnostics" -U"%SRC%\preprocess" -U"%SRC%\parser" -U"%SRC%\config" -U"%SRC%\storage"
 set II=-I"%SRC%\core" -I"%SRC%\diagnostics" -I"%SRC%\preprocess" -I"%SRC%\parser"
-dcc64 -Q -B %UU% %II% -E"%SRC%\..\tests\fixtures" "%HERE%T40_compile_parser.dpr" >"%LOG%" 2>&1
+REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
+REM src\*.dcu is reused by any later build that searches that directory.
+if not exist "%HERE%_dcu\T40_compile_parser" mkdir "%HERE%_dcu\T40_compile_parser"
+dcc64 -NU"%HERE%_dcu\T40_compile_parser" -Q -B %UU% %II% -E"%SRC%\..\tests\fixtures" "%HERE%T40_compile_parser.dpr" >"%LOG%" 2>&1
 
 if errorlevel 1 (
   echo FAIL: T40 compile failed

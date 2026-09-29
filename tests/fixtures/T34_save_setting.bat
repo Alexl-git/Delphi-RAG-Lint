@@ -9,7 +9,10 @@ REM paths contain no spaces so they need no quotes; %IDELIB% does but has no
 REM trailing backslash, so it is quoted whole. Do not "tidy" this.
 call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat" >NUL
 REM -DDRAGLINT_TEST_REGROOT: Settings then writes HKCU\...\DelphiPlugin.Test, never the owner's live key. -B so no stale DCU built without the define is reused.
-dcc64 -B -DDRAGLINT_TEST_REGROOT -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core %HERE%T34_save_setting.dpr > "%HERE%t34_build.txt" 2>&1
+REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
+REM src\*.dcu is reused by any later build that searches that directory.
+if not exist "%HERE%_dcu\T34_save_setting" mkdir "%HERE%_dcu\T34_save_setting"
+dcc64 -NU"%HERE%_dcu\T34_save_setting" -B -DDRAGLINT_TEST_REGROOT -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core %HERE%T34_save_setting.dpr > "%HERE%t34_build.txt" 2>&1
 if not exist "%HERE%T34_save_setting.exe" (echo FAIL: build failed && type "%HERE%t34_build.txt" && exit /b 1)
 "%HERE%T34_save_setting.exe" > "%HERE%t34_out.txt"
 type "%HERE%t34_out.txt"

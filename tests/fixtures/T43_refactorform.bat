@@ -12,7 +12,10 @@ if errorlevel 1 (
   exit /b 0
 )
 
-dcc64 -Q -B -E"%FIXTURES%" -U"%SRC%" -LUdesignide "%FIXTURES%\T43_refactorform.dpr" > "%FIXTURES%\t43_build.txt" 2>&1
+REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
+REM src\*.dcu is reused by any later build that searches that directory.
+if not exist "%HERE%_dcu\T43_refactorform" mkdir "%HERE%_dcu\T43_refactorform"
+dcc64 -NU"%HERE%_dcu\T43_refactorform" -Q -B -E"%FIXTURES%" -U"%SRC%" -LUdesignide "%FIXTURES%\T43_refactorform.dpr" > "%FIXTURES%\t43_build.txt" 2>&1
 
 if errorlevel 1 (
   echo FAIL: T43 compile failed

@@ -9,7 +9,10 @@ REM closing quote escapes it, swallowing the next argument. %HERE% and the src
 REM paths contain no spaces so they need no quotes; %IDELIB% does but has no
 REM trailing backslash, so it is quoted whole. Do not "tidy" this.
 call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat" >NUL
-dcc64 -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core "-U%IDELIB%" -LUdesignide %HERE%T32_completionform.dpr > "%HERE%t32_build.txt" 2>&1
+REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
+REM src\*.dcu is reused by any later build that searches that directory.
+if not exist "%HERE%_dcu\T32_completionform" mkdir "%HERE%_dcu\T32_completionform"
+dcc64 -NU"%HERE%_dcu\T32_completionform" -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core "-U%IDELIB%" -LUdesignide %HERE%T32_completionform.dpr > "%HERE%t32_build.txt" 2>&1
 if not exist "%HERE%T32_completionform.exe" (echo FAIL: build failed && type "%HERE%t32_build.txt" && exit /b 1)
 "%HERE%T32_completionform.exe" > "%HERE%t32_out.txt"
 type "%HERE%t32_out.txt"

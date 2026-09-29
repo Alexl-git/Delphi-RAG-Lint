@@ -61,6 +61,11 @@
   fixtures and fails `owner plugin settings untouched` if any changed, then
   deletes the .Test key (values only, no subkeys: not recursive).
 
+  NO DCU LANDS UNDER src\. Every compiling .bat passes -NU into its own
+  tests\fixtures\_dcu\<name> (gitignored by *.dcu). The runner snapshots every
+  *.dcu under src\ before the fixtures and fails `no fixture wrote a DCU under
+  src\` on any file created, changed or removed.
+
   Usage: pwsh -File tests/run_legacy_cli_fixtures.ps1 [-Exe <path>]
 #>
 [CmdletBinding()]
@@ -175,6 +180,21 @@ Check 'SELF-TEST: registry comparison (equal=pass, empty=pass, changed value=fai
   ("equal={0} empty={1} changed={2} added={3}" -f $stEqual.Count, $stEmpty.Count, $stChanged.Count, $stAdded.Count)
 $liveBefore = Get-RegSnapshot $LiveRegKey
 
+# NO FIXTURE WRITES A DCU UNDER src\. Every compiling fixture passes -NU into
+# tests\fixtures\_dcu\<name>. A .dcu beside a source is reused by any later
+# build that searches that directory -- a Settings.dcu built with
+# DRAGLINT_TEST_REGROOT would ship a plugin that writes the test key. The
+# snapshot is `path|mtime ticks|length` of every *.dcu under src\ (build output
+# folders included: nothing in this runner builds the engine or the plugin), and
+# is compared with the same list comparison the self-test above proves.
+function Get-SrcDcuSnapshot {
+  $src = Join-Path $repoRoot 'src'
+  return @(Get-ChildItem $src -Recurse -Force -Filter *.dcu -File -ErrorAction SilentlyContinue |
+    ForEach-Object { '{0}|{1}|{2}' -f $_.FullName.Substring($src.Length + 1), $_.LastWriteTimeUtc.Ticks, $_.Length } |
+    Sort-Object)
+}
+$dcuBefore = Get-SrcDcuSnapshot
+
 $ran = 0
 foreach ($name in ($Fixtures + $RootDrivers)) {
   $bat = if ($RootDrivers -contains $name) { Join-Path $PSScriptRoot "$name.bat" }
@@ -227,6 +247,9 @@ Remove-Item Env:\EXE -ErrorAction SilentlyContinue
 
 $liveDiff = Compare-RegSnapshot $liveBefore (Get-RegSnapshot $LiveRegKey)
 Check 'owner plugin settings untouched' ($liveDiff.Count -eq 0) ($liveDiff -join '; ')
+$dcuDiff = Compare-RegSnapshot $dcuBefore (Get-SrcDcuSnapshot)
+Check 'no fixture wrote a DCU under src\' ($dcuDiff.Count -eq 0) `
+  ("{0} change(s): {1}" -f $dcuDiff.Count, (($dcuDiff | Select-Object -First 5) -join '; '))
 if (Test-Path $TestRegKey) {
   try   { Remove-Item -Path $TestRegKey -ErrorAction Stop }
   catch { Check 'test settings key removed' $false $_.Exception.Message }
