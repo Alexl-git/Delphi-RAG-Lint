@@ -690,10 +690,10 @@ begin
   Writeln('                               .drag-lint-ignore file, which is honoured by default. --no-sql-ms indexes EVERY');
   Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
   Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--dry-run] [--watch [--interval N]]');
+  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths; alias --scan-libraries)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--dry-run [--json]] [--jobs <n>]');
+  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--dry-run [--json]] [--jobs <n>]');
   Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr>');
   Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
   Writeln('                               members, the project-local units they transitively use, each one''s sibling');
@@ -864,7 +864,7 @@ begin
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('                               each --db adds an `indexes` entry: stored fingerprints, indexer_stale / resolver_stale, a verdict');
-  Writeln('                               (current | resolve-owed | reparse-owed | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
+  Writeln('                               (current | resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');

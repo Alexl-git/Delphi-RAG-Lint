@@ -258,16 +258,23 @@ type
     /// rather than protect it. That case is the positive control in
     /// run_doc_drift_unseen_units.ps1 and it is what stops this predicate from
     /// degenerating into "never fixable".</para>
+    /// <para>A `(+N more)` WINDOW MARKER IS NOT AN ENTRY: it is stripped on both
+    /// sides, so a window that only grew or shifted stays fixable when every
+    /// visible entry it drops names a held unit (run_doc_drift_window_marker.ps1).</para>
+    /// <para>HIDDEN ENTRIES ARE CHECKED BY COUNT: also True when the stored total
+    /// (distinct visible + N) exceeds the fresh total by more than the stored
+    /// entries missing from a WHOLE fresh list (a windowed one proves no drop),
+    /// or when a count is unreadable. A confidence marker is not identity. An
+    /// entry that left the hidden part while another joined still passes.</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared, LowerCase, Trim</para>
-    /// <para>Returns: False; ReconcileDropsUnvouchable(AStore, AStored, AFresh)</para>
-    /// <para>Complexity: 10 (cyclomatic, outer body), 89 lines (full implementation)</para>
-    /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitVouchable"/>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.UnmarkedRegenerationDropsUnvouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared</para>
+    /// <para>Returns: False; UnmarkedRegenerationDropsUnvouchable(AStore, AUnitPath, AStored, AFresh)</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.UnmarkedRegenerationDropsUnvouchable"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsShared"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RegenerationDropsUnvouchable(const AStored, AFresh: string;
@@ -1867,14 +1874,99 @@ begin
   end;
 end;
 
-class function TSharedFacts.RegenerationDropsUnvouchable(const AStored, AFresh: string;
-  const AStore: ISymbolStore; const AUnitPath: string): Boolean;
+{ The UNMARKED half of TSharedFacts.RegenerationDropsUnvouchable, same contract
+  (True withholds `fixable`). Unit-level so TSharedFacts' response set stays
+  inside the high-response limit (1.20.3 fix wave). }
+function UnmarkedRegenerationDropsUnvouchable(const AStore: ISymbolStore;
+  const AUnitPath, AStored, AFresh: string): Boolean;
 var
   SIn, FreshIn: TFactMap;
   SRes, FreshRes: string;
   Lab, SC, FreshContent, E: string;
-  FreshSet: TDictionary<string, Byte>;
-  I: Integer;
+  FreshSet, StoredSet: TDictionary<string, Byte>;
+  StoredEntries, FreshEntries: TArray<string>;
+  StoredHidden, FreshHidden, VisibleDrops: Integer;
+begin
+  Result:= False;
+
+  { AN UNMARKED BLOCK THAT PARTICIPATES IS MERGED TOO (2026-09-23), so the
+    question is what the MERGE drops, not what the fresh render lacks. }
+  if Participates(AStore, AUnitPath, AStored) then
+    Exit(ReconcileDropsUnvouchable(AStore, AStored, AFresh));
+
+  { Inbound labels, entry by entry -- `Covered by:` among them since D28, so a
+    test this index cannot see withholds `fixable` through the same entry test
+    as an unseen caller instead of a whole-label rule. }
+  ParseBlock(AStored, SIn, SRes);
+  try
+    ParseBlock(AFresh, FreshIn, FreshRes);
+    try
+      for Lab in INBOUND_LABELS do
+      begin
+        if not SIn.TryGetValue(Lab, SC) then Continue;
+        if Trim(SC) = '' then Continue;
+
+        { TRUNCATION ALONE DOES NOT WITHHOLD, and an earlier draft that made it
+          do so was a silent, unmeasured regression across every project.
+
+          Inbound lists cap at docs.max_callers (5 by default), so ANY symbol
+          with more than five callers renders a `(+N more)` window. Withholding
+          on the window itself therefore took `fixable` away from most
+          facts-block findings everywhere -- including the commonest and most
+          harmless one, a new in-closure caller, where nothing is deleted at all.
+
+          The window is a real limit on what can be known, but it is not
+          evidence of loss. What withholds is evidence: a VISIBLE entry this
+          index cannot vouch for, a whole unvouchable label going missing, or
+          a stored TOTAL the fresh render cannot account for (below). }
+
+        if not FreshIn.TryGetValue(Lab, FreshContent) then FreshContent:= '';
+
+        { THE WINDOW MARKER IS NOT AN ENTRY on either side (1.20.3): split in,
+          `E (X.pas) (+42 more)` matched nothing once the count changed or the
+          window shifted, and read as a unit called '+42 more' (12 convrules-
+          editor blocks). Guarded by run_doc_drift_window_marker.ps1. }
+        StoredEntries:= SplitEntries(WithoutMoreSuffix(SC));
+        FreshEntries := SplitEntries(WithoutMoreSuffix(FreshContent));
+        if not (TryWindowHiddenCount(SC, StoredHidden) and
+                TryWindowHiddenCount(FreshContent, FreshHidden)) then Exit(True);
+        { A drop is PROVEN only against a WHOLE fresh list: the cap runs in store order. }
+        VisibleDrops:= 0;
+        FreshSet:= TDictionary<string, Byte>.Create;
+        try
+          StoredSet:= TDictionary<string, Byte>.Create;
+          try
+            for E in FreshEntries do FreshSet.AddOrSetValue(EntryKey(E), 1);
+            for E in StoredEntries do
+            begin
+              if StoredSet.ContainsKey(EntryKey(E)) then Continue;
+              StoredSet.Add(EntryKey(E), 1);
+              if FreshSet.ContainsKey(EntryKey(E)) then Continue;
+              { Dropped: vouchable ONLY if this index holds the unit it names. }
+              if not UnitVouchable(AStore, E) then Exit(True);
+              if FreshHidden = 0 then Inc(VisibleDrops);
+            end;
+            { HIDDEN ENTRIES ARE CHECKED BY COUNT (1.20.3 fix wave): refuse when the
+              stored total (DISTINCT visible + N) exceeds the fresh one by more than
+              the proven visible drops. Keys are EntryKey: a repeat or a ' ?' is no loss. }
+            if (StoredSet.Count + StoredHidden) - (FreshSet.Count + FreshHidden) > VisibleDrops then Exit(True);
+          finally
+            StoredSet.Free;
+          end;
+        finally
+          FreshSet.Free;
+        end;
+      end;
+    finally
+      FreshIn.Free;
+    end;
+  finally
+    SIn.Free;
+  end;
+end;
+
+class function TSharedFacts.RegenerationDropsUnvouchable(const AStored, AFresh: string;
+  const AStore: ISymbolStore; const AUnitPath: string): Boolean;
 begin
   Result:= False;
   if AStore = nil then Exit;
@@ -1896,66 +1988,7 @@ begin
     The unmarked case is the defect; the marked case is the cure. }
   if TSharedUnit.IsShared(AUnitPath) then Exit(False);
 
-  { AN UNMARKED BLOCK THAT PARTICIPATES IS MERGED TOO (2026-09-23), so the
-    question is what the MERGE drops, not what the fresh render lacks. }
-  if Participates(AStore, AUnitPath, AStored) then
-    Exit(ReconcileDropsUnvouchable(AStore, AStored, AFresh));
-
-  { Inbound labels, entry by entry -- `Covered by:` among them since D28, so a
-    test this index cannot see withholds `fixable` through the same entry test
-    as an unseen caller instead of a whole-label rule. }
-  ParseBlock(AStored, SIn, SRes);
-  try
-    ParseBlock(AFresh, FreshIn, FreshRes);
-    try
-      for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
-      begin
-        Lab:= INBOUND_LABELS[I];
-        if not SIn.TryGetValue(Lab, SC) then Continue;
-        if Trim(SC) = '' then Continue;
-
-        { TRUNCATION ALONE DOES NOT WITHHOLD, and an earlier draft that made it
-          do so was a silent, unmeasured regression across every project.
-
-          Inbound lists cap at docs.max_callers (5 by default), so ANY symbol
-          with more than five callers renders a `(+N more)` window. Withholding
-          on the window itself therefore took `fixable` away from most
-          facts-block findings everywhere -- including the commonest and most
-          harmless one, a new in-closure caller, where nothing is deleted at all.
-
-          The window is a real limit on what can be known, but it is not
-          evidence of loss. What withholds is evidence: a VISIBLE entry this
-          index cannot vouch for, or a whole unvouchable label going missing.
-          Both are tested below and neither is weakened by a cap.
-
-          ACCEPTED RESIDUAL, stated rather than hidden: an entry hiding BEYOND
-          the window on an unmarked unit is still reapable. It is the same
-          window-unsoundness this unit's header documents, it is the behaviour
-          that shipped before this predicate existed, and closing it needs the
-          uncapped render that `dl:shared` units already get. }
-
-        if not FreshIn.TryGetValue(Lab, FreshContent) then FreshContent:= '';
-
-        FreshSet:= TDictionary<string, Byte>.Create;
-        try
-          for E in SplitEntries(FreshContent) do FreshSet.AddOrSetValue(LowerCase(Trim(E)), 1);
-          for E in SplitEntries(SC) do
-          begin
-            if FreshSet.ContainsKey(LowerCase(Trim(E))) then Continue;
-            { Dropped. Vouchable ONLY if this index actually holds the unit the
-              entry names -- then its absence is a fact, not a blind spot. }
-            if not UnitVouchable(AStore, E) then Exit(True);
-          end;
-        finally
-          FreshSet.Free;
-        end;
-      end;
-    finally
-      FreshIn.Free;
-    end;
-  finally
-    SIn.Free;
-  end;
+  Result:= UnmarkedRegenerationDropsUnvouchable(AStore, AUnitPath, AStored, AFresh);
 end;
 
 initialization
