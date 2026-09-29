@@ -9,7 +9,7 @@ REM closing quote escapes it, swallowing the next argument. %HERE% and the src
 REM paths contain no spaces so they need no quotes; %IDELIB% does but has no
 REM trailing backslash, so it is quoted whole. Do not "tidy" this.
 call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat" >NUL
-dcc64 -E%HERE% -U%HERE%..\..\src\delphi-plugin "-U%IDELIB%" -LUdesignide %HERE%T28_notifier.dpr > "%HERE%t28_build.txt" 2>&1
+dcc64 -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core;%HERE%..\..\src\index;%HERE%..\..\src\workspace;%HERE%..\..\src\lint;%HERE%..\..\src\project "-U%IDELIB%" -LUdesignide %HERE%T28_notifier.dpr > "%HERE%t28_build.txt" 2>&1
 if not exist "%HERE%T28_notifier.exe" (echo FAIL: build failed && type "%HERE%t28_build.txt" && exit /b 1)
 "%HERE%T28_notifier.exe" > "%HERE%t28_out.txt"
 type "%HERE%t28_out.txt"

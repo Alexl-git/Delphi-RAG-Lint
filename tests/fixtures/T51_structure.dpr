@@ -13,7 +13,7 @@ begin
   SC := TDragLintStructureCache.Create;
   try
     { Call with a non-existent file / exe: should return empty array cleanly }
-    Syms := SC.GetSymbolsForFile('C:\nonexistent\Foo.pas', 'drag-lint.exe');
+    Syms := SC.GetSymbolsForFile('C:\nonexistent\Foo.pas', 'drag-lint.exe', '');
     SC.InvalidateForFile('C:\nonexistent\Foo.pas');
     SC.Clear;
     WriteLn('StructureCache: OK');

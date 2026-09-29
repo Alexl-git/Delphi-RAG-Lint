@@ -83,8 +83,42 @@ $Fixtures = @(
   'T51_structure', 'T54_settings_scan_libraries', 'T55_codelens_cache',
   'T57_usages_form', 'T58_symbolsearch_form', 'T59_workspace_config',
   'T63_lint_config_roundtrip', 'T64_lint_options_compile', 'T65_profile_apply',
-  'T66_open_source_path'
+  'T66_open_source_path',
+  # --- POSITIVE CONTROL for the compile guard below: must NOT compile ----------
+  'T67_compile_fail'
 )
+
+# Fixtures that MUST fail, and the detail their failure must start with. The
+# Check for one of these passes only when it failed for exactly that reason; a
+# pass, or a failure for any other reason, is a FAIL of the guard itself.
+$ExpectFail = @{ 'T67_compile_fail' = 'compile failed' }
+
+# THE COMPILE GUARD. A fixture that compiles a .dpr with dcc64 used to be judged
+# by its .bat's exit code alone, and every such .bat checks only `if not exist
+# <exe>` after the compile. A failed compile leaves the PREVIOUS build's exe in
+# place, so the stale exe ran, printed OK, and 8 fixtures stayed green for weeks
+# on code that no longer compiled (F2613 on src\core units, E2035 on a changed
+# signature). So, centrally, for every .bat that runs dcc64: delete
+# fixtures\<name>.exe and the build log BEFORE it runs, and AFTER it runs fail on
+# any `Error:` / `Fatal:` line in the build log, whatever the exit code says.
+# The build log is the redirect target of the dcc64 line (one level of %VAR%
+# indirection, as T40's >"%LOG%" needs); it always lives in tests\fixtures.
+function Get-BuildLogPath([string]$BatText) {
+  $line = [regex]::Match($BatText, '(?im)^\s*dcc64\b.*$').Value
+  $targets = @([regex]::Matches($line, '(?<![0-9])>\s*"?([^"\s|&]+)"?') |
+               ForEach-Object { $_.Groups[1].Value })
+  if ($targets.Count -eq 0) { return $null }
+  $t = $targets[-1]
+  $v = [regex]::Match($t, '^%(\w+)%$')
+  if ($v.Success) {
+    $set = [regex]::Match($BatText, '(?im)^\s*set\s+' + $v.Groups[1].Value + '=(.+)$')
+    if (-not $set.Success) { return $null }
+    $t = $set.Groups[1].Value.Trim().Trim('"')
+  }
+  $leaf = ($t -split '[\\%]')[-1]
+  if (-not $leaf) { return $null }
+  return Join-Path $fixDir $leaf
+}
 
 # Drivers that live in tests\ itself rather than tests\fixtures\. run_phase1_e2e
 # is a genuine end-to-end smoke test over index / query / find-callers / lint /
@@ -101,6 +135,14 @@ foreach ($name in ($Fixtures + $RootDrivers)) {
   $bat = if ($RootDrivers -contains $name) { Join-Path $PSScriptRoot "$name.bat" }
          else                              { Join-Path $fixDir      "$name.bat" }
   if (-not (Test-Path $bat)) { Check $name $false 'fixture file missing'; continue }
+  $compiles = (Get-Content $bat -Raw) -match '(?im)^\s*dcc64\b'
+  $buildLog = $null
+  if ($compiles) {
+    $buildLog = Get-BuildLogPath (Get-Content $bat -Raw)
+    foreach ($stale in @((Join-Path $fixDir "$name.exe"), $buildLog)) {
+      if ($stale -and (Test-Path $stale)) { [IO.File]::Delete($stale) }
+    }
+  }
   $lg = Join-Path $env:TEMP ("drag-lint-legacy-{0}-{1}.log" -f $name, $PID)
   $p  = Start-Process cmd.exe -ArgumentList '/c', $bat -WorkingDirectory $repoRoot `
                       -PassThru -NoNewWindow -RedirectStandardOutput $lg -RedirectStandardError "$lg.err"
@@ -111,7 +153,21 @@ foreach ($name in ($Fixtures + $RootDrivers)) {
   else {
     $txt    = if (Test-Path $lg) { Get-Content $lg -Raw } else { '' }
     $first  = ([regex]::Matches($txt, '(?m)^FAIL[^\r\n]*') | ForEach-Object { $_.Value } | Select-Object -First 1)
-    Check $name ($p.ExitCode -eq 0) $(if ($first) { $first } else { "exit=$($p.ExitCode)" })
+    $ok     = ($p.ExitCode -eq 0)
+    $detail = if ($first) { $first } else { "exit=$($p.ExitCode)" }
+    if ($compiles) {
+      if (-not $buildLog -or -not (Test-Path $buildLog)) {
+        $ok = $false; $detail = 'compile failed: no build log found for the dcc64 line'
+      }
+      else {
+        $err = [regex]::Match((Get-Content $buildLog -Raw), '(?m)^[^\r\n]*\b(Error|Fatal):[^\r\n]*')
+        if ($err.Success) { $ok = $false; $detail = 'compile failed: ' + $err.Value.Trim() }
+      }
+    }
+    if ($ExpectFail.ContainsKey($name)) {
+      Check $name ((-not $ok) -and $detail.StartsWith($ExpectFail[$name])) ('EXPECTED FAIL -- ' + $detail)
+    }
+    else { Check $name $ok $detail }
   }
   $ran++
   foreach ($f in @($lg, "$lg.err")) { if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue } }
