@@ -241,7 +241,14 @@ $db   = & $dl resolve-dbs --project $proj           # when the project is in the
 ```
 
 **Always pass `--db`.** Give it the path `resolve-dbs --project` printed, or
-the `_D-RAG` path above.
+the `_D-RAG` path above. An explicit path is the only one you can read back
+from your own command line.
+
+Without `--db`, a `--project` run uses the project's OWN database and nothing
+else: its exact manifest section, else `<project dir>\_D-RAG\<project>.sqlite`.
+Two sections claiming the project is a refusal that names both. Before 1.20.4
+an unregistered project could be indexed into the FIRST manifest section's
+database -- another project's. `purge-locals` always needs an explicit `--db`.
 
 **What a project index holds.** The compile closure: the project members, the
 project-local units they use (transitively), each unit's sibling `.dfm`, its

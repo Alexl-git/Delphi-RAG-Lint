@@ -906,8 +906,8 @@ begin
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
-  Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
-  Writeln('  drag-lint refresh-findings --project <X.dproj> --db <db> [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build)');
+  Writeln('  drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]   (no --db: caches only into the project''s unique manifest owner, else reports uncached)');
+  Writeln('  drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build; no --db = the project''s own DB)');
   Writeln('  drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--in-place] [--format json|text]');
   Writeln('       ^ compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written.');
   Writeln('         --in-place restores the old behaviour (overwrites the real files for the compile,');
@@ -1008,6 +1008,10 @@ begin
   Writeln('         manifest (see resolve-dbs); if none resolves it FAILS rather');
   Writeln('         than adopting or creating one in the current directory.');
   Writeln('         index with no --db writes to <target>\_D-RAG\<name>.sqlite');
+  Writeln('         --project with no --db: the project''s OWN database only -- its');
+  Writeln('         exact manifest owner, else <project dir>\_D-RAG\<base>.sqlite.');
+  Writeln('         Never another section''s DB; two sections claiming the project');
+  Writeln('         refuse. Destructive purge-locals always needs an explicit --db.');
 end; // procedure
 
 /// <summary>True when ASwitch appears verbatim on the command line.</summary>
@@ -4178,14 +4182,6 @@ begin
   Result:= ReportFailedSections(FailedNames, TotalSections);
 end; // function
 
-/// <summary>Resolves the DB path for an index operation. If --db was given
-/// explicitly, returns it unchanged. Otherwise finds the manifest section
-/// whose include path covers AIndexPath (longest-prefix match) and returns
-/// that section's resolved db. Falls back to AArgs.DbPath when no match.</summary>
-/// <param name="AArgs">Parsed arguments; explicit DbPaths short-circuit the lookup.</param>
-/// <param name="AIndexPath">Path being indexed (folder or file); used for matching.</param>
-/// <returns>Absolute path to the DB to use for this index operation.</returns>
-/// <remarks>Library sections (source=registry-libraries) are skipped. Not thread-safe.</remarks>
 { ONE PLACE THAT SAYS WHY THERE IS NO DATABASE (2026-08-26).
 
   Every consumer below used to test TFile.Exists(DbPath) alone. With the cwd
@@ -4299,6 +4295,100 @@ begin
   Flush(ErrOutput);
 end;
 
+/// <summary>The ONE database a --project run may treat as its own: the exact
+/// manifest owner of the project file, else the documented default
+/// &lt;project dir&gt;\_D-RAG\&lt;project base name&gt;.sqlite.</summary>
+/// <param name="AManifest">The manifest this run loaded.</param>
+/// <param name="AProjectFile">The --project argument (.dproj/.dpr); a relative
+/// path resolves against the process CWD, as ResolveProjectDb does.</param>
+/// <param name="ADb">Receives the owner's DB path: the section's DB on
+/// pdmUnique, the _D-RAG default on pdmNone, '' on pdmAmbiguous.</param>
+/// <param name="AClaimants">Receives the names of the sections that claim the
+/// project -- two or more on pdmAmbiguous, which is what a refusal names.</param>
+/// <returns>pdmUnique, pdmNone or pdmAmbiguous, exactly as ResolveProjectDb.</returns>
+/// <remarks>
+/// <para>Never consults manifest ORDER or a folder prefix. Before 1.20.4 a
+/// --project run with no --db took the FIRST manifest section whose DB existed,
+/// and `index --project` wrote an unregistered project into it -- live, into
+/// Micronite2027.sqlite. Owner ruling 2026-08-13: the authoritative set is the
+/// platform library plus the project's own DB, nothing else; a guessed owner is
+/// worse than none.</para>
+/// <para>Does not test existence. Whether a missing file is created (index) or
+/// refused (every reader) is the caller's decision.</para>
+/// </remarks>
+function ResolveOwnProjectDb(const AManifest: TIndexManifest; const AProjectFile: string;
+  out ADb: string; out AClaimants: TArray<string>): TProjectDbMatch;
+begin
+  Result:= ResolveProjectDb(AManifest, AProjectFile, ADb, AClaimants);
+  if Result = pdmAmbiguous then ADb:= ''
+  else if (Result = pdmNone) and (AProjectFile <> '') then
+    ADb:= TPath.Combine(TPath.Combine(ExtractFilePath(ExpandFileName(AProjectFile)), DRAG_HOME_DIR),
+                        TPath.GetFileNameWithoutExtension(AProjectFile) + '.sqlite');
+end;
+
+/// <summary>Writes the refusal for a project that two or more manifest sections
+/// claim, naming every claimant, on stderr.</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AProjectFile">The project file as the user typed it.</param>
+/// <param name="AClaimants">The claiming section names, from ResolveOwnProjectDb.</param>
+/// <remarks>Same wording as `resolve-dbs --project`, so the two cannot drift
+/// into two instructions for one manifest defect. Naming the claimants IS the
+/// fix instruction.</remarks>
+procedure ReportAmbiguousProject(const AVerb, AProjectFile: string; const AClaimants: TArray<string>);
+begin
+  Writeln(ErrOutput, Format('ERROR: %s: %d manifest sections claim %s -- refusing to guess which index it belongs to.',
+                            [AVerb, Length(AClaimants), AProjectFile]));
+  for var C: string in AClaimants do Writeln(ErrOutput, '  section: ' + C);
+  Writeln(ErrOutput, 'Fix the manifest so exactly one section includes this project file, or pass --db.');
+  Flush(ErrOutput);
+end;
+
+/// <summary>The WRITE rule's manifest half, shared by index --project and
+/// refresh-findings: the project's own DB, or '' (having said why on stderr)
+/// when the manifest will not load or two sections claim the project.</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AProjectFile">The --project argument.</param>
+/// <param name="AStartDir">Where the local-manifest search starts.</param>
+/// <returns>The DB path to write, or '' to refuse.</returns>
+/// <remarks>The explicit --db half is the caller's: test DbPaths first.</remarks>
+function ResolveProjectWriteDb(const AVerb, AProjectFile, AStartDir: string): string;
+var
+  Manifest : TIndexManifest;
+  Claimants: TArray<string>;
+begin
+  Result:= '';
+  try
+    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), AStartDir);
+    if ResolveOwnProjectDb(Manifest, AProjectFile, Result, Claimants) = pdmAmbiguous then
+      ReportAmbiguousProject(AVerb, AProjectFile, Claimants);
+  except
+    on E: Exception do
+    begin
+      Result:= '';
+      Writeln(ErrOutput, Format('ERROR: %s: could not load the manifest (%s: %s).', [AVerb, E.ClassName, E.Message]));
+    end;
+  end; // try
+end;
+
+/// <summary>Resolves the database an `index` run WRITES.</summary>
+/// <param name="AArgs">Parsed arguments. An explicit --db (DbPaths non-empty)
+/// short-circuits everything; a --project argument selects the project rule.</param>
+/// <param name="AIndexPath">Where the manifest search starts and, without
+/// --project, the folder or file being indexed (used for prefix matching).</param>
+/// <returns>Absolute DB path, or '' when nothing defensible resolves (the
+/// caller refuses).</returns>
+/// <remarks>
+/// <para>THE WRITE RULE for a --project run: (1) an explicit --db, else (2) the
+/// exact manifest owner of the project file (pdmUnique, ExpandSectionDb naming),
+/// else (3) &lt;project dir&gt;\_D-RAG\&lt;project base name&gt;.sqlite. Two
+/// sections claiming the project (pdmAmbiguous) is a refusal naming both --
+/// never a pick. See ResolveOwnProjectDb.</para>
+/// <para>AArgs.DbPath alone is NOT an explicit --db: Run may have defaulted it.
+/// Honouring a defaulted DbPath "as if explicit" is exactly how an unregistered
+/// project was indexed into the first manifest section's DB.</para>
+/// <para>Without --project: the longest manifest include prefixing AIndexPath
+/// (library sections skipped), else &lt;target&gt;\_D-RAG\&lt;name&gt;.sqlite.</para>
+/// </remarks>
 function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
 var
   DbBase: string;
@@ -4315,6 +4405,12 @@ var
 begin
   // Explicit --db always wins.
   if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPath);
+
+  { A --project run writes the project's OWN database, never one chosen by
+    manifest order or by a folder prefix. The folder loop below cannot name it
+    anyway: a project include never prefixes a folder, and it names the DB with
+    the pre-_D-RAG OutDir\<section>.sqlite rule rather than ExpandSectionDb. }
+  if AArgs.ProjectPath <> '' then Exit(ResolveProjectWriteDb('index', AArgs.ProjectPath, AIndexPath));
 
   BestLen:= -1;
   BestDb:= '';
@@ -4355,7 +4451,9 @@ begin
   end; // try
 
   if BestDb <> '' then Exit(BestDb);
-  if AArgs.DbPath <> '' then Exit(AArgs.DbPath);   { an explicit --db always wins }
+  { No `DbPath <> ''` fallback here. An explicit --db already returned above;
+    a DbPath that is set without DbPaths was DEFAULTED, and is not this run's
+    to write. }
 
   { THE INDEX LIVES BESIDE WHAT IT INDEXES. This used to fall back to the cwd
     default, so a scan of a folder outside every manifest section wrote its
@@ -4757,7 +4855,12 @@ begin
     if not TFile.Exists(AArgs.ProjectPath) then begin Writeln('ERROR: .dproj not found: ', AArgs.ProjectPath); Exit(2); end;
   end;
 
-  var ResolvedDb: string:= ResolveIndexDb(AArgs, IfThen(AArgs.Path <> '', AArgs.Path, GetCurrentDir));
+  { The manifest search starts at what is being indexed: the positional path,
+    else the --project file, else the CWD. }
+  var IndexTarget: string:= AArgs.Path;
+  if IndexTarget = '' then IndexTarget:= AArgs.ProjectPath;
+  if IndexTarget = '' then IndexTarget:= GetCurrentDir;
+  var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget);
   if ResolvedDb = '' then
   begin
     Writeln('ERROR: index: no --db given and no index location resolves for this target.');
@@ -17888,8 +17991,12 @@ begin
   for var D in Dbs do
   begin
     if not TFile.Exists(D) then Continue;
-    if ProjectDb = '' then ProjectDb:= D;
-    if (LibDb = '') and StartsText('library-', ExtractFileName(D)) then LibDb:= D;
+    var IsLib: Boolean:= StartsText('library-', ExtractFileName(D));
+    { A --project run with no index of its own gets a library-only list from
+      ResolveConsumerDbs. The library is not that project's store: linting its
+      closure against it is "0 file(s) scanned", a silent zero. Refuse below. }
+    if (ProjectDb = '') and not (IsLib and (AArgs.ProjectPath <> '') and (Length(AArgs.DbPaths) = 0)) then ProjectDb:= D;
+    if (LibDb = '') and IsLib then LibDb:= D;
   end;
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
@@ -19108,26 +19215,33 @@ end; // function
   had been silently dead, and the owner's own broken edit (a property naming a
   getter he had just commented out) was reported by dcc and never shown.
 
-  Resolution uses ResolveReadDbs -- the SAME function resolve-dbs uses -- rather
-  than a second lookup that could disagree with it. A .dproj/.dpr/.dpk target is
-  the active project; anything else is an editor file. }
+  Resolution is the project's EXACT manifest owner (ResolveProjectDb, the same
+  function `resolve-dbs --project` uses), because this verb WRITES: it caches
+  compiler findings. It used to go through ResolveReadDbs, whose folder-match
+  fallback is documented as READ-path only -- so an editor file inside another
+  section's folder cached its findings into that section's DB, and a --project
+  run took whatever DB Run had defaulted. Since 1.20.4: an explicit --db, else
+  the unique owner of the project (a --project argument, else a .dproj/.dpr/.dpk
+  target); otherwise the compile still runs and reports, and nothing is cached. }
 function ResolveCompileCheckDb(const AArgs: TArgs; const ATarget: string): string;
 var
-  Manifest: TIndexManifest;
-  Paths   : TArray<string>;
-  Ext     : string        ;
-  ProjArg : string        ;
-  FileArg : string        ;
+  Manifest : TIndexManifest;
+  Ext      : string        ;
+  ProjArg  : string        ;
+  ProjDb   : string        ;
+  Claimants: TArray<string>;
 begin
-  Result:= AArgs.DbPath;
-  if Result <> '' then Exit; { an explicit --db always wins }
+  Result:= '';
+  if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPath); { an explicit --db always wins }
   if ATarget = '' then Exit;
 
   Ext:= LowerCase(ExtractFileExt(ATarget));
-  ProjArg:= ''; FileArg:= '';
-  if (Ext = '.dproj') or (Ext = '.dpr') or (Ext = '.dpk') then ProjArg:= ATarget
-  else FileArg:= ATarget;
+  ProjArg:= '';
+  if (Ext = '.dproj') or (Ext = '.dpr') or (Ext = '.dpk') then ProjArg:= ATarget;
   if AArgs.ProjectPath <> '' then ProjArg:= AArgs.ProjectPath;
+  { An editor file with no project names no owner. A FOLDER match would be a
+    guess, and a guess is not written to. }
+  if ProjArg = '' then Exit;
 
   try
     if AArgs.WorkspaceConfig <> '' then
@@ -19135,7 +19249,6 @@ begin
                    ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
     else
       Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-    Paths:= ResolveReadDbs(Manifest, ProjArg, FileArg);
   except
     { A manifest that will not load is not a reason to throw away a compile that
       already succeeded -- the caller wants dcc's answer, not ours. }
@@ -19146,10 +19259,13 @@ begin
     end;
   end;
 
-  { The project DB is the one that owns compiler findings for this target. The
-    platform library DB can also come back here and must never be written to. }
-  for var P: string in Paths do
-    if TFile.Exists(P) and not ContainsText(ExtractFileName(P), 'library-') then Exit(P);
+  { The project DB is the one that owns compiler findings for this target. A
+    project section never names a library DB, so none can come back here. }
+  case ResolveProjectDb(Manifest, ProjArg, ProjDb, Claimants) of
+    pdmUnique   : if TFile.Exists(ProjDb) then Result:= ProjDb;
+    pdmAmbiguous: ReportAmbiguousProject('compile-check', ProjArg, Claimants);
+    pdmNone     : ; { unregistered: no owner to cache into }
+  end;
 end;
 
 function DoCompileCheck(const AArgs: TArgs): Integer;
@@ -19384,7 +19500,7 @@ begin
 end; // function
 
 // fresh compiler findings: drag-lint refresh-findings --project <X.dproj|.dpr>
-// --db <db> [--platform win32|win64] [--full] [--json]
+// [--db <db>] [--platform win32|win64] [--full] [--json]
 //
 // Recompiles only what is STALE (files.mtime_unix newer than
 // files.last_compiled_unix) and refreshes compiler_findings for exactly the
@@ -19393,7 +19509,7 @@ end; // function
 //
 // Algorithm (see docs/superpowers/plans/2026-07-14-fresh-compiler-findings.md
 // Task 4 brief for the full spec this mirrors 1:1):
-//   1. Require --project + a readable --db.
+//   1. Require --project; the DB is --db, else the project's own (write rule).
 //   2. Open the store, Migrate.
 //   3. Stale := GetStaleFileIds. Nothing stale and no --full -> noop, exit 0.
 //   4. FullBuild := --full or (>= 2 files stale) -- a full build is not much
@@ -19413,21 +19529,29 @@ var
   Stale    : TArray<Int64>;
   FullBuild: Boolean      ;
   IsJson   : Boolean      ;
+  DbPath   : string       ;
 begin
-  if (AArgs.ProjectPath = '') or (AArgs.DbPath = '') then
+  if AArgs.ProjectPath = '' then
   begin
-    Writeln('Usage: drag-lint refresh-findings --project <X.dproj|.dpr> --db <db> ' +
+    Writeln('Usage: drag-lint refresh-findings --project <X.dproj|.dpr> [--db <db>] ' +
       '[--platform win32|win64] [--full] [--json]');
     Exit(2);
   end;
-  if NoDbResolved(AArgs.DbPath, 'refresh-findings') then Exit(2);
-  if not TFile.Exists(AArgs.DbPath) then
+  { This verb WRITES compiler findings, so it takes the write rule
+    (ResolveIndexDb): an explicit --db, else the project's exact manifest owner,
+    else its own <project dir>\_D-RAG\<base>.sqlite -- never a DB that Run or
+    manifest order supplied. Two claimants refuse. }
+  DbPath:= if Length(AArgs.DbPaths) > 0 then AArgs.DbPath
+           else ResolveProjectWriteDb('refresh-findings', AArgs.ProjectPath, GetCurrentDir);
+  if NoDbResolved(DbPath, 'refresh-findings') then Exit(2);
+  if not TFile.Exists(DbPath) then
   begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('ERROR: database not found: ', DbPath);
+    Writeln('       Build the project index first: drag-lint index --project "', AArgs.ProjectPath, '"');
     Exit(2);
   end;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store:= TSQLiteSymbolStore.Create(DbPath);
   Store.Migrate;
 
   // Step 3: nothing stale and no forced --full -> noop.
@@ -24714,8 +24838,18 @@ var
   SizeBefore: Int64        ;
   SizeAfter : Int64        ;
 begin
-  if AArgs.DbPath = '' then begin Writeln('ERROR: purge-locals needs an explicit --db <db>'); Exit(2); end;
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  { DbPaths, not DbPath: Run defaults DbPath from --project, and a DESTRUCTIVE
+    verb must not act on a database the user did not name. }
+  if Length(AArgs.DbPaths) = 0 then
+  begin
+    Writeln('ERROR: purge-locals needs an explicit --db <db>');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
 
   SizeBefore:= TFile.GetSize(AArgs.DbPath);
   { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
@@ -25531,7 +25665,8 @@ end; // function DetectPlatformFromDproj
 //   3. If no manifest is found or the resolved list is empty, fall back to the
 //      default .\drag-lint.sqlite so existing behaviour is preserved.
 //   4. --project names the ONE index that owns that project, so when it is given
-//      (and resolves unambiguously) that DB is promoted to the FRONT of the list.
+//      (and that DB exists) it is promoted to the FRONT of the list. When no
+//      such DB exists, only the platform library is kept (1.20.4).
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
@@ -25576,11 +25711,12 @@ begin
       Resolver.Free;
     end;
 
-    { The one DB that owns --project. Same function the IDE's Rebuild Index and
-      `resolve-dbs --project` use, so all three agree by construction. Anything
-      short of pdmUnique is left alone: a guessed owner is worse than none. }
+    { The one DB that owns --project: the manifest's exact owner (the same
+      ResolveProjectDb the IDE's Rebuild Index and `resolve-dbs --project` use),
+      else the project's own _D-RAG default. Two claimants name no owner: a
+      guessed owner is worse than none. }
     if AArgs.ProjectPath <> '' then
-      if ResolveProjectDb(Manifest, AArgs.ProjectPath, ProjDb, Claimants) <> pdmUnique then ProjDb:= '';
+      if ResolveOwnProjectDb(Manifest, AArgs.ProjectPath, ProjDb, Claimants) = pdmAmbiguous then ProjDb:= '';
   except
     // Any manifest parse / IO error: fall through to default.
     Resolved:= nil;
@@ -25609,6 +25745,23 @@ begin
     for D in Result do
       if not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Reordered:= Reordered + [D];
     Result:= Reordered;
+  end
+  else if AArgs.ProjectPath <> '' then
+  begin
+    { --project names a project with NO index of its own (never built, or two
+      sections claim it). Without an owner in front, Result[0] is simply the
+      first manifest section whose DB exists -- another project's -- and every
+      "first DB is the project DB" consumer (lint-all, wiring, exceptions-sync,
+      Run's own DbPath default) read or wrote it as this project's. Owner ruling
+      2026-08-13: the authoritative set is the platform library plus the
+      project's own DB, nothing else. So keep the library, drop the rest, and
+      SAY so: an empty answer must not read as a clean one. }
+    var LibOnly: TArray<string>:= nil;
+    for D in Result do
+      if StartsText('library-', ExtractFileName(D)) then LibOnly:= LibOnly + [D];
+    Result:= LibOnly;
+    Writeln(ErrOutput, Format('NOTE: no index owns %s -- other projects'' indexes are not consulted. ' +
+                              'Build it: drag-lint index --project "%s"', [AArgs.ProjectPath, AArgs.ProjectPath]));
   end;
 
   { Then reorder by what the indexes ACTUALLY CONTAIN, when this run names a
@@ -28200,15 +28353,32 @@ begin
       refresh-findings, forms-csv, uses-fix, check-unit...) reads AArgs.DbPath,
       so defaulting it once covers all of them and the next one added.
 
-      Only when the user gave NO explicit --db (DbPaths empty). ResolveConsumerDbs
-      already promotes the project's own DB to the front and leaves the list
-      alone when the project cannot be resolved unambiguously, so taking [0] here
-      inherits that caution rather than re-deciding it. }
+      Only when the user gave NO explicit --db (DbPaths empty), and only to the
+      project's OWN database (ResolveOwnProjectDb: the manifest's exact owner,
+      else <project dir>\_D-RAG\<base>.sqlite) when it exists. This used to take
+      ResolveConsumerDbs(Args)[0], which for a project the manifest does not
+      register is simply the FIRST section whose DB exists -- and `index
+      --project` then wrote an unregistered project into Micronite2027.sqlite
+      (1.20.4). DbPaths stays empty, so every verb can still tell an explicit
+      --db from this default; a WRITE verb must test DbPaths, never DbPath. }
     { doc-forget reads --project as a TAG NAME, never a project file. }
     if (Args.ProjectPath <> '') and (Length(Args.DbPaths) = 0) and (Args.Command <> 'doc-forget') then
     begin
-      var ProjDbs: TArray<string>:= ResolveConsumerDbs(Args);
-      if (Length(ProjDbs) > 0) and (ProjDbs[0] <> '') and TFile.Exists(ProjDbs[0]) then Args.DbPath:= ProjDbs[0];
+      var OwnDb: string:= '';
+      var OwnClaimants: TArray<string>:= nil;
+      try
+        if ResolveOwnProjectDb(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir),
+                               Args.ProjectPath, OwnDb, OwnClaimants) = pdmAmbiguous then OwnDb:= '';
+      except
+        on E: Exception do
+        begin
+          { No manifest, no default: each verb then reports its own missing DB. }
+          OwnDb:= '';
+          Writeln(ErrOutput, Format('NOTE: --project: could not load the manifest (%s: %s); no project database defaulted.',
+                                    [E.ClassName, E.Message]));
+        end;
+      end; // try
+      if (OwnDb <> '') and TFile.Exists(OwnDb) then Args.DbPath:= OwnDb;
     end;
     { THE PROJECT TAG (2026-09-23): the name this run writes into, and reaps
       from, inbound fact entries on a reconciled block -- the primary DB's base
