@@ -108,7 +108,7 @@ type
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
   /// is cached in class state, keyed on the store it was built from.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLint (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.UnmarkedRegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
+  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLint (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
   /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -261,10 +261,11 @@ type
     /// <para>A `(+N more)` WINDOW MARKER IS NOT AN ENTRY: it is stripped on both
     /// sides, so a window that only grew or shifted stays fixable when every
     /// visible entry it drops names a held unit (run_doc_drift_window_marker.ps1).</para>
-    /// <para>HIDDEN ENTRIES ARE CHECKED BY COUNT: True also when the stored total
-    /// (DISTINCT visible + N) exceeds the fresh total by more than the proven
-    /// visible drops, or when a count is unreadable. An entry that left the
-    /// hidden part while another joined still passes; `dl:shared` is the cure.</para>
+    /// <para>HIDDEN ENTRIES ARE CHECKED BY COUNT: also True when the stored total
+    /// (distinct visible + N) exceeds the fresh total by more than the stored
+    /// entries missing from a WHOLE fresh list (a windowed one proves no drop),
+    /// or when a count is unreadable. A confidence marker is not identity. An
+    /// entry that left the hidden part while another joined still passes.</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
     /// <para>Calls: DRagLint.Doc.SharedFacts.UnmarkedRegenerationDropsUnvouchable, DRagLint.Lint.SharedUnit.TSharedUnit.IsShared</para>
@@ -291,7 +292,7 @@ type
     /// non-determinism. Two comparators is the mirrored-predicate trap; there
     /// is deliberately only one, and both callers route through it.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.UnmarkedRegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
     /// <para>Calls: CompareText, DRagLint.Doc.ProjectTags.BareEntry</para>
     /// <para>Returns: CompareText(BareEntry(X), BareEntry(Y)); CompareText(X, Y)</para>
     /// <para>Directives: static</para>
@@ -1881,7 +1882,7 @@ function UnmarkedRegenerationDropsUnvouchable(const AStore: ISymbolStore;
 var
   SIn, FreshIn: TFactMap;
   SRes, FreshRes: string;
-  Lab, SC, FreshContent, E, FreshLast: string;
+  Lab, SC, FreshContent, E: string;
   FreshSet, StoredSet: TDictionary<string, Byte>;
   StoredEntries, FreshEntries: TArray<string>;
   StoredHidden, FreshHidden, VisibleDrops: Integer;
@@ -1929,26 +1930,25 @@ begin
         FreshEntries := SplitEntries(WithoutMoreSuffix(FreshContent));
         if not (TryWindowHiddenCount(SC, StoredHidden) and
                 TryWindowHiddenCount(FreshContent, FreshHidden)) then Exit(True);
-        { Missing but sorting after a WINDOWED fresh list's last entry: maybe hidden. }
-        FreshLast:= if (FreshHidden > 0) and (Length(FreshEntries) > 0) then FreshEntries[High(FreshEntries)] else '';
+        { A drop is PROVEN only against a WHOLE fresh list: the cap runs in store order. }
         VisibleDrops:= 0;
         FreshSet:= TDictionary<string, Byte>.Create;
         try
           StoredSet:= TDictionary<string, Byte>.Create;
           try
-            for E in FreshEntries do FreshSet.AddOrSetValue(LowerCase(Trim(E)), 1);
+            for E in FreshEntries do FreshSet.AddOrSetValue(EntryKey(E), 1);
             for E in StoredEntries do
             begin
-              if StoredSet.ContainsKey(LowerCase(Trim(E))) then Continue;
-              StoredSet.Add(LowerCase(Trim(E)), 1);
-              if FreshSet.ContainsKey(LowerCase(Trim(E))) then Continue;
+              if StoredSet.ContainsKey(EntryKey(E)) then Continue;
+              StoredSet.Add(EntryKey(E), 1);
+              if FreshSet.ContainsKey(EntryKey(E)) then Continue;
               { Dropped: vouchable ONLY if this index holds the unit it names. }
               if not UnitVouchable(AStore, E) then Exit(True);
-              if (FreshLast = '') or (TSharedFacts.CompareInboundEntries(E, FreshLast) < 0) then Inc(VisibleDrops);
+              if FreshHidden = 0 then Inc(VisibleDrops);
             end;
             { HIDDEN ENTRIES ARE CHECKED BY COUNT (1.20.3 fix wave): refuse when the
               stored total (DISTINCT visible + N) exceeds the fresh one by more than
-              the proven visible drops. A repeated entry is not a loss. }
+              the proven visible drops. Keys are EntryKey: a repeat or a ' ?' is no loss. }
             if (StoredSet.Count + StoredHidden) - (FreshSet.Count + FreshHidden) > VisibleDrops then Exit(True);
           finally
             StoredSet.Free;

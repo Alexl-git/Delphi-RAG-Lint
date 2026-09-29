@@ -17,7 +17,7 @@
 
   In the other three (MainForm:318, RuleCatalog:142, Model:76) the visible
   window also SHIFTED: the last visible entry changed, or visible entries left
-  the window. The other seven were inferred from all twelve turning FIXABLE.
+  the window. The other eight were inferred from all twelve turning FIXABLE.
   The common trigger: the marker-carrying last visible entry did not reappear
   verbatim in the fresh render (a count change OR a window shift).
 
@@ -37,12 +37,12 @@
                  would turn this red.
   CASE-SHIFT   : a new caller that sorts FIRST pushes the stored last visible
                  entry out of the window (S2..S6 (+1 more) -> S1..S5 (+2 more)).
-                 The total grew and the one visible drop names a held unit, so
-                 it is fixable (the MainForm:318 / RuleCatalog:142 shape).
+                 The total grew, so nothing can have been lost: fixable (the
+                 MainForm:318 / RuleCatalog:142 shape).
   CASE-UNWINDOWED: a stored window whose fresh render is no longer windowed
                  because a VISIBLE in-closure caller left (U1..U5 (+1 more) ->
-                 U2..U6). The shrink is exactly the visible, vouched drop, so
-                 it is fixable.
+                 U2..U6). The fresh list is WHOLE, so U1's absence is proven and
+                 vouched, and it accounts for the shrink exactly: fixable.
   CASE-HIDDEN-LOSS (1.20.3 fix wave, M1): a stored window whose hidden count
                  is larger than what the fresh render can account for (H1..H5
                  (+2 more) -> H1..H5), with no visible drop. The two hidden
@@ -52,10 +52,26 @@
   CASE-PUSHED-OUT (M1): a new caller that sorts first pushes the stored last
                  visible entry INTO the fresh window while two hidden entries
                  leave (P2..P6 (+2 more) -> P1..P5 (+1 more)). P6 is missing
-                 from the fresh visible list but sorts after its last entry, so
-                 it may only be hidden -- not a proven drop -- and the net loss
-                 of one is unaccounted for: refused. Counting P6 as a drop would
-                 wrongly balance the loss and turn this red.
+                 from the fresh visible list, but the fresh list is WINDOWED,
+                 so P6 may only be hidden -- not a proven drop -- and the net
+                 loss of one is unaccounted for: refused. Counting P6 as a drop
+                 would wrongly balance the loss and turn this red.
+  CASE-STORE-ORDER (M1, fix round 2): the fresh window is NOT the first five
+                 entries in display order. The engine caps in STORE order
+                 (certain callers first, the unverified bucket after) and sorts
+                 AFTER the cap, so an unverified caller A1 that sorts first is
+                 HIDDEN in the fresh render (K1..K5 (+1 more), total 6). The
+                 stored block shows A1 and hides two entries (A1, K1..K4
+                 (+2 more), total 7). A1 sorts before the fresh last entry yet
+                 is not gone; counting it as a drop would balance the loss of 1
+                 and let --fix delete a hidden entry. Refused: a drop counts
+                 only against a WHOLE (un-windowed) fresh list.
+  CASE-CONFIDENCE (M1, fix round 2): the fresh list is whole, but it renders
+                 the unverified caller A2 as `A2 (uCallers3.pas) ?` while the
+                 stored block has it plain and hides one more entry (A2..E2
+                 (+1 more), total 6; fresh A2 ?..E2, total 5). The ' ?' is
+                 confidence, not identity: A2 is not a drop, so the loss of 1
+                 is unaccounted for. Refused.
 
   Scratch folder + scratch DB only; the project index is built with
   `index --project` over a throwaway .dpr.
@@ -141,23 +157,43 @@ function Callers2Pairs([bool]$after) {
   return , $ps
 }
 
+# uCallers3: TTgt.GoMixed <- K1..K5 (resolved: a typed local) + A1 (unverified:
+# an untypable receiver, so the name bucket reports it with ' ?');
+# TTgt.GoFlat <- B2..E2 (resolved) + A2 (unverified).
+function CallerUnit3 {
+  $names = @('A1', 'K1', 'K2', 'K3', 'K4', 'K5', 'A2', 'B2', 'C2', 'D2', 'E2')
+  $ls = @('unit uCallers3;', 'interface')
+  foreach ($n in $names) { $ls += "procedure $n;" }
+  $ls += @('implementation', 'uses uTarget;')
+  foreach ($n in $names) {
+    $m = if ($n -match '^[AK]1$|^K') { 'GoMixed' } else { 'GoFlat' }
+    if ($n.StartsWith('A')) { $ls += "procedure $n; var U: IUnknownThing; begin U.$m; end;" }
+    else { $ls += "procedure $n; var T: TTgt; begin T.$m; end;" }
+  }
+  $ls += 'end.'
+  return $ls
+}
+
 Push-Location $W
 try {
   $tgt = Join-Path $W 'uTarget.pas'
   WriteAscii $tgt @(
     'unit uTarget;', 'interface',
+    'type', '  TTgt = class', '    procedure GoMixed;', '    procedure GoFlat;', '  end;',
     'procedure Target;', 'procedure Target2;',
     'procedure Target3;', 'procedure Target4;', 'procedure Target5;', 'procedure Target6;',
     'implementation',
     'procedure Target; begin end;', 'procedure Target2; begin end;',
     'procedure Target3; begin end;', 'procedure Target4; begin end;',
     'procedure Target5; begin end;', 'procedure Target6; begin end;',
+    'procedure TTgt.GoMixed; begin end;', 'procedure TTgt.GoFlat; begin end;',
     'end.')
   WriteAscii (Join-Path $W 'uCallers.pas') (CallerUnit 6)
   WriteAscii (Join-Path $W 'uCallers2.pas') (CallerUnit2 (Callers2Pairs $false))
+  WriteAscii (Join-Path $W 'uCallers3.pas') (CallerUnit3)
   $dpr = Join-Path $W 'Prod.dpr'
   WriteAscii $dpr @('program Prod;',
-    "uses uTarget in 'uTarget.pas', uCallers in 'uCallers.pas', uCallers2 in 'uCallers2.pas';",
+    "uses uTarget in 'uTarget.pas', uCallers in 'uCallers.pas', uCallers2 in 'uCallers2.pas', uCallers3 in 'uCallers3.pas';",
     'begin', 'end.')
   $db = Join-Path $W 'prod.sqlite'
 
@@ -188,7 +224,23 @@ try {
     '(?m)^(///\s*<para>Called from: uCallers2\.H1 [^<]*uCallers2\.H5 \(uCallers2\.pas\))(</para>)',
     '$1 (+2 more)$2')
   Check 'FIXTURE: the hidden window landed in Target4''s block' ($src3 -ne $src2)
-  [IO.File]::WriteAllText($tgt, $src3, (New-Object Text.ASCIIEncoding))
+
+  # CASE-STORE-ORDER / CASE-CONFIDENCE fixtures: the engine-written blocks are
+  # checked first, then replaced by what a wider (or differently-resolving)
+  # index would have written.
+  $bm = BlockAbove $tgt '^\s*procedure GoMixed;'
+  Check 'FIXTURE: GoMixed''s engine window is K1..K5 (+1 more), unverified A1 hidden' (($bm -match 'uCallers3\.K5 \(uCallers3\.pas\) \(\+1 more\)') -and ($bm -notmatch 'uCallers3\.A1')) $bm
+  $bf = BlockAbove $tgt '^\s*procedure GoFlat;'
+  Check 'FIXTURE: GoFlat''s engine list is whole and marks A2 unverified' (($bf -match 'uCallers3\.A2 \(uCallers3\.pas\) \?') -and ($bf -notmatch 'more\)')) $bf
+  $src4 = [regex]::Replace($src3,
+    '(?m)^(\s*///\s*<para>Called from: )uCallers3\.K1 [^<]*uCallers3\.K5 \(uCallers3\.pas\) \(\+1 more\)(</para>)',
+    '$1uCallers3.A1 (uCallers3.pas), uCallers3.K1 (uCallers3.pas), uCallers3.K2 (uCallers3.pas), uCallers3.K3 (uCallers3.pas), uCallers3.K4 (uCallers3.pas) (+2 more)$2')
+  Check 'FIXTURE: the store-order window landed in GoMixed''s block' ($src4 -ne $src3)
+  $src5 = [regex]::Replace($src4,
+    '(?m)^(\s*///\s*<para>Called from: )uCallers3\.A2 [^<]*uCallers3\.E2 \(uCallers3\.pas\)(</para>)',
+    '$1uCallers3.A2 (uCallers3.pas), uCallers3.B2 (uCallers3.pas), uCallers3.C2 (uCallers3.pas), uCallers3.D2 (uCallers3.pas), uCallers3.E2 (uCallers3.pas) (+1 more)$2')
+  Check 'FIXTURE: the plain-A2 window landed in GoFlat''s block' ($src5 -ne $src4)
+  [IO.File]::WriteAllText($tgt, $src5, (New-Object Text.ASCIIEncoding))
 
   $b3 = BlockAbove $tgt '^procedure Target3;'
   Check 'FIXTURE: Target3''s stored window ends at S6 (+1 more)' ($b3 -match 'uCallers2\.S6 \(uCallers2\.pas\) \(\+1 more\)') $b3
@@ -251,6 +303,18 @@ try {
   Check 'CASE-PUSHED-OUT a pushed-out window with a hidden loss is NOT fixable' ($t6 -notmatch '\[FIXABLE\]') $t6.Trim()
   Check 'CASE-PUSHED-OUT the fix is refused' ($t6 -match 'not auto-fixed') $t6.Trim()
 
+  # --- CASE-STORE-ORDER (M1, fix round 2) -------------------------------------
+  $t7 = (Run @('doc-drift', '--qname', 'uTarget.TTgt.GoMixed', '--db', $db)).Out
+  Check 'CASE-STORE-ORDER a store-order window with a hidden loss is reported' ($t7 -match 'ddFactsBlockStale') $t7.Trim()
+  Check 'CASE-STORE-ORDER a store-order window with a hidden loss is NOT fixable' ($t7 -notmatch '\[FIXABLE\]') $t7.Trim()
+  Check 'CASE-STORE-ORDER the fix is refused' ($t7 -match 'not auto-fixed') $t7.Trim()
+
+  # --- CASE-CONFIDENCE (M1, fix round 2) --------------------------------------
+  $t8 = (Run @('doc-drift', '--qname', 'uTarget.TTgt.GoFlat', '--db', $db)).Out
+  Check 'CASE-CONFIDENCE a confidence-only difference with a hidden loss is reported' ($t8 -match 'ddFactsBlockStale') $t8.Trim()
+  Check 'CASE-CONFIDENCE a confidence-only difference with a hidden loss is NOT fixable' ($t8 -notmatch '\[FIXABLE\]') $t8.Trim()
+  Check 'CASE-CONFIDENCE the fix is refused' ($t8 -match 'not auto-fixed') $t8.Trim()
+
   # --- end to end: --fix --apply repairs the vouched ones, preserves the rest -
   $null = Run @('lint-all', '--db', $db, '--rule', 'doc-drift', '--fix', '--apply')
   $after1 = BlockAbove $tgt '^procedure Target;'
@@ -259,12 +323,16 @@ try {
   $after4 = BlockAbove $tgt '^procedure Target4;'
   $after5 = BlockAbove $tgt '^procedure Target5;'
   $after6 = BlockAbove $tgt '^procedure Target6;'
+  $after7 = BlockAbove $tgt '^\s*procedure GoMixed;'
+  $after8 = BlockAbove $tgt '^\s*procedure GoFlat;'
   Check 'FIX --fix --apply rewrote Target''s window to (+2 more)' ($after1 -match '\(\+2 more\)') $after1
   Check 'FIX --fix --apply kept the foreign entry in Target2''s block' ($after2 -match 'uGone\.Lost') $after2
   Check 'FIX --fix --apply shifted Target3''s window to S1..S5 (+2 more)' (($after3 -match 'uCallers2\.S1 ') -and ($after3 -match 'uCallers2\.S5 \(uCallers2\.pas\) \(\+2 more\)')) $after3
   Check 'FIX --fix --apply kept Target4''s hidden window' ($after4 -match 'uCallers2\.H5 \(uCallers2\.pas\) \(\+2 more\)') $after4
   Check 'FIX --fix --apply closed Target5''s window on U2..U6' (($after5 -match 'uCallers2\.U6 \(uCallers2\.pas\)</para>') -and ($after5 -notmatch 'uCallers2\.U1 ')) $after5
   Check 'FIX --fix --apply kept Target6''s stored window' ($after6 -match 'uCallers2\.P6 \(uCallers2\.pas\) \(\+2 more\)') $after6
+  Check 'FIX --fix --apply kept GoMixed''s stored window' ($after7 -match 'uCallers3\.A1 \(uCallers3\.pas\), [^<]*uCallers3\.K4 \(uCallers3\.pas\) \(\+2 more\)') $after7
+  Check 'FIX --fix --apply kept GoFlat''s stored window' ($after8 -match 'uCallers3\.E2 \(uCallers3\.pas\) \(\+1 more\)') $after8
 }
 finally {
   Pop-Location

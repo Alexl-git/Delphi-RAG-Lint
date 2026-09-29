@@ -45,9 +45,15 @@ and a detailed INSTALL.md. Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha
   the stored count were never examined -- a caller from another project, sorted after the window in
   a block written from a wider index, could be removed by `--fix`. Before, such a block was refused
   only by the accident above. The fix is now also refused when the stored total (distinct visible + N)
-  exceeds the fresh total by more than the proven visible drops (entries naming a held unit that
-  could not merely have moved into the fresh window). Every observed case GREW in count, so they
-  stay `[FIXABLE]`. Guard: `CASE-HIDDEN-LOSS` in the same script (RED before this change).
+  exceeds the fresh total by more than the proven drops. A stored entry counts as a proven drop only
+  when the fresh list is WHOLE (not windowed), the entry is missing from it, and the entry names a held
+  unit. Against a windowed fresh list nothing is proven, because the engine caps in store order
+  (certain callers first) and sorts after the cap, so any entry may be hidden. Entries are compared
+  without their confidence marker (` ?`), and repeats count once. The fix is also refused when a
+  `(+N more)` count does not read as a number. Every observed case GREW in count, so they stay
+  `[FIXABLE]`. Guards in the same script, each RED before its change: `CASE-HIDDEN-LOSS`,
+  `CASE-PUSHED-OUT`, `CASE-STORE-ORDER` (an unverified caller hidden by the store-order cap) and
+  `CASE-CONFIDENCE` (a ` ?` that differs only in confidence).
 - **A dead store removed in `TFindUnitRefactoring.Build`** (`DRagLint.Refactor.TextEdit.pas`,
   H2077 / lint `overwrite-before-read`). No behaviour change.
 
@@ -77,9 +83,10 @@ and a detailed INSTALL.md. Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha
 - **`index --project <X.dpr>` with no `--db` can write into a SIBLING project's database** in the
   same folder and evict its rows (the folder-matched lookup is used for a write).
   `docs\INBOX-2026-09-29-engine-index-project-without-db-writes-sibling-db.md`. Always pass `--db`.
-- Entries hidden inside a stored `(+N more)` window are checked only by count: an entry that left
-  the hidden part while another joined still passes. `dl:shared` (an uncapped render) is the cure
-  for a block written by several indexes.
+- Entries hidden inside a stored `(+N more)` window are checked only by COUNT, never by identity.
+  If a hidden entry left while at least as many others joined (the total did not shrink beyond the
+  proven drops), `--fix` still offers the rewrite and the hidden entry is removed. `dl:shared` (an
+  uncapped render, whole lists on both sides) is the cure for a block written by several indexes.
 
 ## v1.20.2-alpha -- 2026-09-29
 
