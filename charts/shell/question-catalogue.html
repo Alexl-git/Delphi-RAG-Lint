@@ -1,0 +1,433 @@
+<title>Diagram Question Catalogue</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#F6F7F9; --panel:#FFFFFF; --ink:#131820; --muted:#5B6674;
+    --line:#DDE2E8; --line-soft:#EAEEF2;
+    --accent:#0F766E; --accent-soft:#E2F1EF;
+    --guard:#9A5408; --guard-soft:#FBF0E0;
+    --ok:#0F766E; --ok-bg:#E2F1EF;
+    --mid:#8A6D12; --mid-bg:#F7F0DA;
+    --no:#9A3412; --no-bg:#FAEBE3;
+    --code-bg:#FBFCFD; --band:#1B2430; --band-ink:#EAF0F6; --band-accent:#5EC8B8;
+    --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0E1319; --panel:#151C24; --ink:#E6EBF1; --muted:#96A2B1;
+      --line:#293441; --line-soft:#1E2833;
+      --accent:#4FD1C0; --accent-soft:#12312D;
+      --guard:#E0A458; --guard-soft:#33260F;
+      --ok:#4FD1C0; --ok-bg:#12312D;
+      --mid:#D9B65C; --mid-bg:#2E2814;
+      --no:#E8A17C; --no-bg:#33211A;
+      --code-bg:#111821; --band:#05090E; --band-accent:#4FD1C0;
+    }
+  }
+  :root[data-theme="dark"]{
+      --bg:#0E1319; --panel:#151C24; --ink:#E6EBF1; --muted:#96A2B1;
+      --line:#293441; --line-soft:#1E2833;
+      --accent:#4FD1C0; --accent-soft:#12312D;
+      --guard:#E0A458; --guard-soft:#33260F;
+      --ok:#4FD1C0; --ok-bg:#12312D;
+      --mid:#D9B65C; --mid-bg:#2E2814;
+      --no:#E8A17C; --no-bg:#33211A;
+      --code-bg:#111821; --band:#05090E; --band-accent:#4FD1C0;
+  }
+
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:16px;line-height:1.62;padding-inline:16px;}
+  .wrap{max-width:1040px;margin:0 auto;}
+  header.top{padding-block:40px 26px;border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;
+     text-transform:uppercase;color:var(--accent);margin:0 0 12px;}
+  h1{font-size:clamp(28px,5vw,42px);line-height:1.08;margin:0 0 14px;
+     font-weight:700;letter-spacing:-.02em;text-wrap:balance;}
+  .dek{font-size:18px;color:var(--muted);margin:0;max-width:64ch;}
+  section{padding-block:40px;border-bottom:1px solid var(--line-soft);}
+  section:last-of-type{border-bottom:0;}
+  h2{font-size:24px;font-weight:650;margin:0 0 6px;letter-spacing:-.01em;}
+  h3{font-size:16.5px;font-weight:650;margin:28px 0 10px;}
+  .sub{color:var(--muted);margin:0 0 22px;max-width:70ch;}
+  p{max-width:70ch;}
+  code{font-family:var(--mono);font-size:.9em;}
+
+  /* clickable-rows mockup */
+  .mock{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start;
+        background:var(--code-bg);border:1px solid var(--line);
+        border-radius:12px;padding:24px;}
+  .unit{border:2px solid var(--line);border-radius:10px;overflow:hidden;
+        min-width:330px;flex:1;background:var(--panel);}
+  .unit-hd{background:var(--band);color:var(--band-ink);padding:9px 14px;
+        font-family:var(--mono);font-size:12.5px;font-weight:700;
+        letter-spacing:.06em;display:flex;justify-content:space-between;gap:10px;}
+  .unit-hd .cnt{color:var(--band-accent);font-weight:600;}
+  .row{display:flex;gap:10px;padding:7px 14px;font-family:var(--mono);
+       font-size:13px;border-top:1px solid var(--line-soft);cursor:pointer;
+       text-decoration:none;color:var(--ink);}
+  .row:first-of-type{border-top:0;}
+  .row:hover{background:var(--accent-soft);}
+  .row .n{color:var(--accent);font-weight:700;min-width:2.4em;}
+  .row .g{color:var(--guard);font-weight:700;}
+  .row .ln{margin-left:auto;color:var(--muted);font-size:12px;}
+  .betw{align-self:center;text-align:center;font-family:var(--mono);
+        font-size:12px;color:var(--accent);min-width:90px;}
+  .betw .a{font-size:20px;letter-spacing:-2px;}
+
+  .note{border-left:4px solid var(--guard);background:var(--guard-soft);
+        padding:16px 20px;border-radius:0 8px 8px 0;margin:22px 0;font-size:15.5px;}
+  .note b{color:var(--guard);}
+  .note p{margin:0;max-width:none;}
+  .note.good{border-left-color:var(--accent);background:var(--accent-soft);}
+  .note.good b{color:var(--accent);}
+
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;
+      padding:18px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;
+      line-height:1.7;margin:0;}
+
+  .tbl-scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:0;
+        min-width:760px;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line-soft);
+        vertical-align:top;}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+     text-transform:uppercase;color:var(--muted);font-weight:500;
+     border-bottom:1px solid var(--line);position:sticky;top:0;
+     background:var(--bg);}
+  td.q{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink);
+       white-space:nowrap;}
+  .pill{font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 9px;
+        border-radius:999px;white-space:nowrap;display:inline-block;}
+  .p-ok{background:var(--ok-bg);color:var(--ok);}
+  .p-mid{background:var(--mid-bg);color:var(--mid);}
+  .p-no{background:var(--no-bg);color:var(--no);}
+  .p-nod{background:var(--guard-soft);color:var(--guard);}
+  tr.grp td{background:var(--line-soft);font-family:var(--mono);font-size:11.5px;
+        letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+        font-weight:600;}
+  ol li,ul li{margin-bottom:10px;max-width:70ch;}
+  footer{padding-block:28px 48px;color:var(--muted);font-size:13px;
+         font-family:var(--mono);}
+  a{color:var(--accent);}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">drag-lint &middot; archify-ir &middot; emitter roadmap</p>
+  <h1>What can you point at, and what can you ask it?</h1>
+  <p class="dek">drag-lint is not a model. It needs a closed set of questions, each one a
+  formal call with a selection and parameters. This is that set &mdash; and an honest
+  status for each, because roughly a third of it is not buildable today.</p>
+</header>
+
+<section>
+  <h2>Steps grouped into unit rectangles</h2>
+  <p class="sub">Your proposal, and it is the right one. Each rectangle is one unit, its
+  header is the unit name, and the steps are <em>text rows inside it</em> rather than
+  separate nodes. Every row is its own click target, carrying its own line.</p>
+
+  <div class="mock">
+    <div class="unit">
+      <div class="unit-hd"><span>Blueprint4.ViewModel.pas</span><span class="cn cnt">client</span></div>
+      <a class="row" href="#"><span class="n">01</span><span>USER EDITS grid cell</span><span class="ln">:99</span></a>
+      <a class="row" href="#"><span class="n">02</span><span>Post FIRES AfterPost</span><span class="ln">:639</span></a>
+      <a class="row" href="#"><span class="n">03</span><span>DoAfterPostOperation</span><span class="ln">:277</span></a>
+      <a class="row" href="#"><span class="n">&nbsp;</span><span class="g">GUARD FSuppressEvents</span><span class="ln">:277</span></a>
+      <a class="row" href="#"><span class="n">04</span><span>SendDeltaOperation</span><span class="ln">:279</span></a>
+      <a class="row" href="#"><span class="n">&nbsp;</span><span class="g">GUARD ChangeCount &gt; 0</span><span class="ln">:279</span></a>
+      <a class="row" href="#"><span class="n">06</span><span>PREFIXES "TABLE=OPERAT|"</span><span class="ln">:279</span></a>
+    </div>
+    <div class="betw">
+      <div class="a">&#9654;&#9654;&#9654;</div>
+      <div>named pipe</div>
+      <div style="color:var(--muted)">cmdDelta</div>
+    </div>
+    <div class="unit">
+      <div class="unit-hd"><span>uGenericTableRoute.pas</span><span class="cnt">server</span></div>
+      <a class="row" href="#"><span class="n">08</span><span>HandleDelta</span><span class="ln">:75</span></a>
+      <a class="row" href="#"><span class="n">10</span><span>EXTRACTS "OPERAT"</span><span class="ln">:75</span></a>
+      <a class="row" href="#"><span class="n">&nbsp;</span><span class="g">GUARD prefix present</span><span class="ln">:75</span></a>
+      <a class="row" href="#"><span class="n">13</span><span>ATTACHES OnUpdateRecord</span><span class="ln">:479</span></a>
+      <a class="row" href="#"><span class="n">15</span><span>HandleUpdateRecord</span><span class="ln">:63</span></a>
+      <a class="row" href="#"><span class="n">17</span><span>RUNS TFDCommand.Execute</span><span class="ln">:63</span></a>
+    </div>
+  </div>
+
+  <div class="note good">
+    <p><b>This changes my earlier claim, and for the better.</b> I said the chart is
+    lossy because Mermaid dropped every <code>OTHERWISE</code> clause. That was true of
+    a <em>node-per-step</em> chart. If the rows are the script lines, the guards are rows
+    too &mdash; so the chart stops being a lossy projection and becomes a
+    <em>layout</em> of the same text. The script stays the authority, but the picture no
+    longer throws information away. It also collapses 33 nodes into 6 rectangles, which
+    is the difference between a readable diagram and a hairball.</p>
+  </div>
+
+  <div class="note">
+    <p><b>UNVERIFIED, and it decides the implementation.</b> Graphviz HTML-like labels
+    support a <code>HREF</code> attribute per table cell, which should survive into the
+    SVG as a real <code>&lt;a&gt;</code> around each row. If it does, the clickable rows
+    cost nothing. If it does not, rows must be hit-tested from <code>-Tplain</code>
+    geometry, which gives rectangles per <em>node</em>, not per row &mdash; and we would
+    have to compute row bands ourselves from the font metrics. Settle this in the same
+    spike as the <code>-Tsvg</code> / <code>-Tplain</code> question.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The branching problem &mdash; do not take the longest</h2>
+  <p class="sub">You asked whether, when a method trace forks, we choose the longest
+  path. I would not. Longest is a proxy for &ldquo;interesting&rdquo; and it is a bad
+  one: a deep logging helper or a validation chain will out-run the real path every
+  time.</p>
+
+  <h3>Follow the payload, not the calls</h3>
+  <p>The question is about a <em>value</em>. So the trace is a data slice, not a call
+  tree: keep a branch only while it still carries the thing you selected. That prunes
+  most forks before ranking ever matters, and it is the reason the
+  <code>OPERAT.NAME</code> trace stayed at 33 steps instead of hundreds.</p>
+
+  <h3>A trace is defined by its endpoints, not its depth</h3>
+  <p>Declare a closed set of sinks and discard any path reaching none of them:</p>
+  <ul>
+    <li><b>UI</b> &mdash; a DFM control, a grid column, a displayed property</li>
+    <li><b>Database</b> &mdash; a SQL table or column</li>
+    <li><b>Process boundary</b> &mdash; pipe, socket, HTTP, serial</li>
+    <li><b>File or log</b></li>
+    <li><b>Dead end</b> &mdash; value consumed and discarded. Worth reporting as such;
+        it is often the answer someone wanted.</li>
+  </ul>
+
+  <h3>Rank the survivors, cap the display, and say what you hid</h3>
+  <p>Order by: crosses a process boundary &rarr; reaches the database &rarr; reaches the
+  UI &rarr; terminates internally. Show the top few in full, then collapse the rest as
+  an explicit row &mdash; <code>+ 17 other branches (not shown)</code> &mdash; that
+  expands on click.</p>
+
+  <div class="note">
+    <p><b>Never drop a branch silently.</b> This is the linter rule in a different
+    costume: a finding you hide teaches the reader to distrust every finding you show.
+    A trace that quietly omits the branch someone was looking for is worse than one that
+    admits it capped at five, because the first is indistinguishable from the value
+    genuinely not going there.</p>
+  </div>
+
+  <h3>When the payload cannot be followed</h3>
+  <p>Say so, in the artifact, at the step where it stopped. Mark each edge
+  <code>[certain]</code> or <code>[inferred]</code> and let the renderer draw inferred
+  edges dashed. A trace with three honest dashed edges is useful; a trace that presents
+  a guess as a fact is the thing this product exists to replace.</p>
+</section>
+
+<section>
+  <h2>The formal call</h2>
+  <p class="sub">The IDE should not hard-code the question list. It asks the engine what
+  can be asked about the thing under the caret, renders that as a menu, and sends back
+  an id.</p>
+
+<pre>drag-lint ask --list --at &lt;file&gt;:&lt;line&gt;:&lt;col&gt; --db &lt;db&gt; --json
+  -&gt; resolves the selection, returns ONLY the questions valid for its kind
+
+drag-lint ask --question protocol-trace \
+              --at Blueprint4.ViewModel.pas:1850:24 \
+              --db &lt;db&gt; [--depth 6] [--max-branches 5] [--sinks ui,db,boundary] \
+              --format dlgraph|script|svg|mermaid|json</pre>
+
+  <div class="note good">
+    <p><b>Half of this already exists.</b> <code>drag-lint typeat
+    &lt;file&gt;:&lt;line&gt;:&lt;col&gt;</code> already resolves a caret position to a
+    symbol. The selection half of &ldquo;point at something and choose a question&rdquo;
+    is solved &mdash; <code>ask</code> reuses that resolver and dispatches on the
+    resolved kind.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The catalogue</h2>
+  <p class="sub"><span class="pill p-ok">ship now</span> a verb already emits this, or
+  the facts and a serializer are all it needs &middot;
+  <span class="pill p-mid">assemble</span> facts exist, the emitter does not &middot;
+  <span class="pill p-nod">no data</span> the fact table exists in schema 23 but is
+  empty in every index measured &middot;
+  <span class="pill p-no">blocked</span> needs a fact the index does not have.</p>
+
+  <div class="note good">
+    <p><b>Corrected after reading the live schema.</b> <code>symbol_facts</code> turned
+    out to carry <code>sql_reads</code>, <code>sql_writes</code>,
+    <code>covered_by</code>, <code>effect_summary</code> and <code>ui_affinity</code>,
+    which I had not accounted for &mdash; so <code>touches-tables</code> moves up to
+    ship-now and two questions I had not thought of (<code>tested-by</code>,
+    <code>effects</code>) join the list. In the other direction,
+    <code>orm_links</code> and the <code>fb_*</code> tables exist but hold
+    <b>zero rows in all three indexes measured</b>, which demotes three questions from
+    assembly to no-data.</p>
+  </div>
+
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>question</th><th>select</th><th>produces</th><th>facts it stands on</th><th>status</th></tr>
+
+    <tr class="grp"><td colspan="5">A field, variable or property</td></tr>
+    <tr><td class="q">protocol-trace</td><td>field / property</td>
+        <td>The round trip: UI &rarr; memtable &rarr; boundary &rarr; server &rarr; DB and back</td>
+        <td><code>member_accesses</code> (mode), DFM bindings, SQL columns, <b>protocol enum binding</b></td>
+        <td><span class="pill p-no">blocked</span></td></tr>
+    <tr><td class="q">who-writes</td><td>field / property</td>
+        <td>Fan-in tree of every write site</td>
+        <td><code>member_accesses.mode = write</code> &mdash; shipped 2026-09-16</td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">who-reads</td><td>field / property</td>
+        <td>Fan-out tree of every read site</td>
+        <td><code>member_accesses.mode = read</code></td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">lands-where</td><td>field</td>
+        <td>Field &rarr; dataset &rarr; table.column, one lane per hop</td>
+        <td><code>orm_links</code> &mdash; <b>0 rows everywhere</b></td>
+        <td><span class="pill p-nod">no data</span></td></tr>
+    <tr><td class="q">shown-where</td><td>field / column</td>
+        <td>Which forms and controls display this value</td>
+        <td><code>symbol_facts.ui_affinity</code> + DFM props (partial)</td>
+        <td><span class="pill p-mid">assemble</span></td></tr>
+
+    <tr class="grp"><td colspan="5">A method</td></tr>
+    <tr><td class="q">protocol-trace</td><td>method</td>
+        <td>Call tree pruned to payload-carrying branches, followed across boundaries to a sink</td>
+        <td>everything above plus <code>call_edges</code> and branch ranking</td>
+        <td><span class="pill p-no">blocked</span></td></tr>
+    <tr><td class="q">who-calls</td><td>method</td>
+        <td>N-deep caller tree, cycle-guarded</td>
+        <td><code>reverse-calltree</code> already emits dot and mermaid</td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">what-it-calls</td><td>method</td>
+        <td>N-deep callee tree</td>
+        <td><code>callgraph --direction callees</code></td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">butterfly</td><td>method</td>
+        <td>Callers above, callees below, one chart</td>
+        <td><code>butterfly</code> verb exists, emits dot and mermaid</td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">change-impact</td><td>method / type</td>
+        <td>Everything a change here could break</td>
+        <td><code>impact</code> verb</td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">crosses-boundary</td><td>method</td>
+        <td>Whether and where this leaves the process</td>
+        <td><b>protocol enum binding</b></td>
+        <td><span class="pill p-no">blocked</span></td></tr>
+    <tr><td class="q">touches-tables</td><td>method</td>
+        <td>Which DB tables this reads and writes</td>
+        <td><code>symbol_facts.sql_reads</code> / <code>sql_writes</code></td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">tested-by</td><td>any symbol</td>
+        <td>Which tests cover this</td>
+        <td><code>symbol_facts.covered_by</code></td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">effects</td><td>method</td>
+        <td>What it mutates, what it owns, whether it is pure</td>
+        <td><code>effect_summary</code>, <code>effect_free</code>, <code>mutates_params</code>, <code>returns_owner</code></td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">exception-paths</td><td>method</td>
+        <td>What can be raised here and where it is handled</td>
+        <td>exception HANDLING fact &mdash; does not exist</td>
+        <td><span class="pill p-no">blocked</span></td></tr>
+
+    <tr class="grp"><td colspan="5">A class or interface</td></tr>
+    <tr><td class="q">class-surface</td><td>type</td>
+        <td>Members, visibility, inheritance</td>
+        <td><code>surface</code> verb</td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">wiring</td><td>interface / type</td>
+        <td>Spring4D registrations and DFM event edges</td>
+        <td><code>wiring</code> verb, <code>di_bindings</code></td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">hierarchy</td><td>type</td>
+        <td>Ancestors and descendants</td>
+        <td><code>query descendants</code> / ancestors</td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">lifecycle</td><td>form / type</td>
+        <td>Create &rarr; show &rarr; destroy, with the handlers on each</td>
+        <td><code>symbol_facts.dfm_event</code></td>
+        <td><span class="pill p-mid">assemble</span></td></tr>
+
+    <tr class="grp"><td colspan="5">A unit or project</td></tr>
+    <tr><td class="q">deps</td><td>unit</td>
+        <td>Dependency neighbourhood</td>
+        <td><code>graph</code> verb, already dot and mermaid</td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">cycles</td><td>unit / project</td>
+        <td>Circular dependencies, with a refactoring plan</td>
+        <td><code>cycles --plan</code></td>
+        <td><span class="pill p-ok">ship now</span></td></tr>
+    <tr><td class="q">architecture</td><td>project</td>
+        <td>Units, packages and DI as trust-zoned rectangles</td>
+        <td><code>graph</code> + <code>deps-report</code> + <code>di_bindings</code></td>
+        <td><span class="pill p-mid">assemble</span></td></tr>
+    <tr><td class="q">compare</td><td>two index runs</td>
+        <td>Before / delta / after &mdash; what a refactor changed</td>
+        <td>needs the IR; no new facts</td>
+        <td><span class="pill p-mid">assemble</span></td></tr>
+
+    <tr class="grp"><td colspan="5">A form or DFM component</td></tr>
+    <tr><td class="q">event-wiring</td><td>control</td>
+        <td>Which handler runs on which event</td>
+        <td><code>dfm_event</code></td>
+        <td><span class="pill p-mid">assemble</span></td></tr>
+    <tr><td class="q">feeds-from</td><td>control</td>
+        <td>Control &rarr; datasource &rarr; memtable &rarr; table</td>
+        <td><code>orm_links</code>, <code>fb_datasets</code> &mdash; <b>0 rows</b></td>
+        <td><span class="pill p-nod">no data</span></td></tr>
+
+    <tr class="grp"><td colspan="5">A SQL table or column</td></tr>
+    <tr><td class="q">consumers</td><td>table / column</td>
+        <td>Every unit that reads or writes it</td>
+        <td><code>fb_columns</code>, <code>fb_relations</code> &mdash; <b>0 rows</b></td>
+        <td><span class="pill p-nod">no data</span></td></tr>
+  </table>
+  </div>
+
+  <div class="note">
+    <p><b>The shape of that table is the finding.</b> Fourteen questions ship on facts
+    that already exist &mdash; days of serializer work, not weeks. Five are assembly.
+    Three have nowhere to read from. <b>Four are blocked, and three of those four are
+    blocked on one defect:</b> protocol command enum values are indexed but never bound
+    to their declaring symbol, so nothing joins a sender in one executable to its
+    handler in another. Sent to the engine team as
+    <code>docs\INBOX-URGENT-engine-facts-for-diagram-questions.md</code>, with the
+    measurement in <code>docs\INBOX-enum-value-refs-never-bound.md</code>.</p>
+  </div>
+
+  <div class="note">
+    <p><b>These artifacts are not autodocumentation.</b> They are large, slow to
+    produce and stable over time, so nothing generates them on a build. Someone asks a
+    question deliberately, and inserts a <em>reference</em> into the code or its
+    documentation. That means the volatility belongs in the FILE &mdash; a stable path
+    plus a regenerated artifact &mdash; and never in the comment, which also keeps the
+    autodoc rewriter entirely out of it.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What I would do first</h2>
+  <ol>
+    <li><b>Ship a <code>ship now</code> question end to end</b> &mdash; <code>who-calls</code>
+    or <code>butterfly</code>. The verb already emits dot. It proves script &rarr; unit
+    rectangles &rarr; clickable rows &rarr; SVG with nothing blocked, and it is days.</li>
+    <li><b>Run the one spike</b> that settles three unknowns at once: does a single
+    <code>dot</code> run emit <code>-Tsvg</code> and <code>-Tplain</code> together, does
+    <code>HREF</code> on an HTML-like table cell survive into the SVG, and can Skia
+    hit-test by point.</li>
+    <li><b>Then decide on the enum binding.</b> It unblocks three questions including the
+    one you actually want, but it moves <code>DRAGLINT_RESOLVER_VERSION</code> and
+    re-resolves every database &mdash; which the workstream plan promised would not
+    happen. That promise needs correcting either way.</li>
+  </ol>
+</section>
+
+<footer>
+  drag-lint 1.16.0-alpha &middot; catalogue drafted 2026-09-22 &middot;
+  companion to charts\shell\trace-operat-name.html
+</footer>
+
+</div>

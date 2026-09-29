@@ -1,0 +1,299 @@
+<#
+  Emit-Butterfly.ps1 -- prototype emitter for the `butterfly` diagram question.
+
+  Pipeline proved end to end:
+    drag-lint butterfly --format json
+      -> group symbols by UNIT
+      -> dot, one ROUNDED CLUSTER per unit, symbols as clickable TABLE ROWS
+      -> dot.exe -Tsvg -o .. -Tplain -o ..   (ONE run, verified 2026-09-22)
+      -> SVG whose rows are real <a xlink:href> anchors (verified 2026-09-22)
+
+  Rows carry PORTs so edges attach to the ROW, not to the whole unit box --
+  that is what keeps per-symbol precision while collapsing N nodes into one
+  rectangle per unit.
+
+  Provenance granularity is the ROW. Never the enclosing unit.
+#>
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory)][string] $Qname,
+  [Parameter(Mandatory)][string] $DbPath,   # NOT -Db: CmdletBinding aliases that to -Debug
+  [string] $OutDir,
+  [int]    $Depth      = 2,
+  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
+  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $FontMono   = 'Consolas',
+  [string] $FontSans   = 'Segoe UI'
+)
+
+$ErrorActionPreference = 'Stop'
+
+# This emitter predates Emit-Common and was the last one still self-contained,
+# which is precisely why it broke alone on 2026-09-23: its private copy of the
+# engine-output filter never learned the two rules Get-EngineText had gained.
+# Dot-sourced here for the ENGINE helpers. The three helpers it defines below
+# (ConvertTo-XmlText / Get-UnitName / Get-ShortName) shadow the shared ones,
+# because a later definition wins in PowerShell -- so this changes what the
+# emitter can CALL without changing anything it already does.
+. (Join-Path $PSScriptRoot 'Emit-Common.ps1')
+
+# Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
+$DbPath = Get-CloneDb $DbPath
+
+# ---- palette. Role-coded, because the butterfly's meaning IS the role. -------
+$PAL = @{
+  callerBorder = '#3B5BDB'; callerFill = '#EDF2FF'; callerHdr = '#3B5BDB'
+  focusBorder  = '#0F766E'; focusFill  = '#E2F1EF'; focusHdr  = '#0F766E'
+  calleeBorder = '#B45309'; calleeFill = '#FEF6EC'; calleeHdr = '#B45309'
+  rowInk       = '#1F2933'; lineInk    = '#8A94A6'; focusInk  = '#0B3F39'
+}
+
+function ConvertTo-XmlText([string] $s) {
+  if ($null -eq $s) { return '' }
+  $s.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;').Replace('"', '&quot;')
+}
+
+function Get-UnitName([string] $file) {
+  if ([string]::IsNullOrWhiteSpace($file)) { return '(unknown)' }
+  [IO.Path]::GetFileNameWithoutExtension($file)
+}
+
+function Get-ShortName([string] $qname, [string] $unit) {
+  if ($qname.StartsWith("$unit.", [StringComparison]::OrdinalIgnoreCase)) {
+    return $qname.Substring($unit.Length + 1)
+  }
+  $qname
+}
+
+# ---- flatten the tree the engine returns ------------------------------------
+# D6 (2026-09-23, reported by the engine session): this used to append EVERY
+# tree node as a row. The engine's tree repeats a symbol whenever a second
+# parent reaches it -- the repeat carries `cycle: true` and is not expanded --
+# so ResolveEnumValueRead at depth 2 drew GetTransitiveAncestors, GetSymbolById
+# and VisibleHere TWICE each, and the edge loop drew the same arrow twice onto
+# the one port the last duplicate had overwritten. The same flatten also threw
+# the PARENT away and drew every row as a direct call of the focus, so a
+# depth-2 callee was pictured as called BY the focus -- on the reference
+# SendDeltaOperation chart, 6 of its 8 callees.
+#
+# Both are one mistake: the tree was flattened into a list. So a node records
+# its PARENT (''= the focus); a ROW is one SYMBOL (first occurrence, i.e. the
+# shallowest hop); an EDGE is one distinct (parent, child) pair. A repeat adds
+# its edge -- that call is real -- and never a second row.
+function Flatten($node, [string] $parentQ, [System.Collections.ArrayList] $acc, [int] $lvl) {
+  if ($null -eq $node) { return }
+  $kids = $node.callers
+  if ($null -eq $kids) { return }
+  foreach ($k in @($kids)) {
+    [void]$acc.Add([pscustomobject]@{
+      Qname  = [string]$k.qname
+      File   = [string]$k.file
+      Line   = [int]$k.line
+      Level  = $lvl
+      Parent = $parentQ
+    })
+    if (-not [bool]$k.cycle) { Flatten $k ([string]$k.qname) $acc ($lvl + 1) }
+  }
+}
+
+# One row per symbol, at its SHALLOWEST hop. The focus itself never becomes a
+# row: a path back to it is an edge into the focus box.
+function Get-DistinctRows([System.Collections.ArrayList] $nodes, [string] $focusQ) {
+  $seen = @{}
+  $out  = New-Object System.Collections.ArrayList
+  # -Stable: rows keep the engine's order within a hop, so the chart is deterministic
+  foreach ($n in ($nodes | Sort-Object Level -Stable)) {
+    if ($n.Qname -eq $focusQ -or $seen.ContainsKey($n.Qname)) { continue }
+    $seen[$n.Qname] = $true
+    [void]$out.Add($n)
+  }
+  , $out
+}
+
+# ---- 1. ask the engine -------------------------------------------------------
+Write-Host "butterfly: $Qname (depth $Depth)"
+# Routed through Invoke-EngineJson like every other emitter. This call used to
+# roll its OWN inline filter, which predated Get-EngineText and never learned
+# two of its rules -- it did not drop ErrorRecords and did not bracket to the
+# first `{`. That was invisible until 2026-09-23, when the engine started
+# emitting a `  resolver: edges were derived by ...` line on stderr for an index
+# re-resolved by a NEWER build: the line joined the document and ConvertFrom-Json
+# died on "Path 'callees.summary.truncated' ... unexpected character: r".
+#
+# The lesson is the duplicate, not the message. A second copy of a filter cannot
+# be kept in step with the first, and this one silently fell behind for weeks.
+$bf = Invoke-EngineJson @('butterfly', '--qname', $Qname, '--depth', "$Depth",
+                          '--format', 'json', '--db', $DbPath)
+
+$callerNodes = New-Object System.Collections.ArrayList
+$calleeNodes = New-Object System.Collections.ArrayList
+# NOTE: schema reverse-calltree/1 nests children under "callers" on BOTH sides --
+# the callees tree reuses the field name. Reading 'callees' silently yields 0.
+$focusQ = [string]$bf.qname
+Flatten $bf.callers.root '' $callerNodes 1
+Flatten $bf.callees.root '' $calleeNodes 1
+$callers = Get-DistinctRows $callerNodes $focusQ
+$callees = Get-DistinctRows $calleeNodes $focusQ
+
+Write-Host ("  callers={0}  callees={1}  (tree nodes {2} / {3})" -f `
+            $callers.Count, $callees.Count, $callerNodes.Count, $calleeNodes.Count)
+
+# NO DISCLOSURE HERE, and that absence is deliberate.
+# On 2026-09-23 I added a warning claiming reverse-calltree silently drops
+# callers of unit-level routines. It was WRONG and is removed. What actually
+# happened: `--format json` splices a human staleness note INTO the JSON, my
+# parser returned -1, and I reported those -1s as zeros. Re-measured with the
+# note stripped: Pipes.Protocol.WriteString = 13 callers, MStreams.ReverseBytes
+# = 9. Both resolve correctly. The one real zero, BASICSF.ProcessMessages, is
+# also CORRECT -- its 63 "name-matched callers" are every `Application.ProcessMessages;`
+# in the codebase, i.e. Vcl.Forms.TApplication.ProcessMessages, a different
+# symbol that shares a name. Nobody calls BASICSF.ProcessMessages.
+# A caveat printed on every unit-level target for a defect that is not there
+# would be its own kind of wrong answer.
+$focusFile = [string]$bf.callers.root.file
+if ([string]::IsNullOrWhiteSpace($focusFile)) { $focusFile = [string]$bf.callees.root.file }
+$focusUnit = Get-UnitName $focusFile
+
+# ---- 2. build the dot --------------------------------------------------------
+$sb = New-Object System.Text.StringBuilder
+$nodeId = 0
+$portMap = @{}   # "<side>|<qname>" -> "nodeN:pM" (a symbol can be on BOTH sides)
+
+function Add-UnitCluster {
+  param([string] $Side, [string] $Unit, [int] $Level, $Rows, [string] $Border, [string] $Fill, [string] $Hdr)
+
+  $script:nodeId++
+  $nid = "n$script:nodeId"
+  $cid = "cluster_${Side}_$($script:nodeId)"
+
+  # The cluster supplies ROUNDED CORNERS and the fill; it carries NO label --
+  # Graphviz draws a cluster label inside the border and the rounded border cuts
+  # through it. The unit name is a HEADER ROW of the table instead, which is both
+  # the intended design and free of that artefact.
+  [void]$sb.AppendLine("  subgraph $cid {")
+  [void]$sb.AppendLine("    style=`"rounded,filled`"; color=`"$Border`"; fillcolor=`"$Fill`"; penwidth=2;")
+  [void]$sb.AppendLine('    label=""; margin=10;')
+
+  $tbl = New-Object System.Text.StringBuilder
+  [void]$tbl.Append('<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="3" CELLPADDING="5">')
+  # Clusters are (hop, unit), as in who-calls: a unit reached at two hops gets
+  # two boxes, and the second says so -- otherwise it reads as a duplicate unit.
+  $hop = if ($Level -gt 1) { " &#183; hop $Level" } else { '' }
+  [void]$tbl.Append("<TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$Hdr`"><FONT COLOR=`"#FFFFFF`" FACE=`"$FontSans`" POINT-SIZE=`"14`"><B> $(ConvertTo-XmlText $Unit)$hop </B></FONT></TD></TR>")
+  $p = 0
+  foreach ($r in $Rows) {
+    $p++
+    $short = ConvertTo-XmlText (Get-ShortName $r.Qname $Unit)
+    $href  = 'draglint://open?file=' + [uri]::EscapeDataString($r.File) + '&amp;line=' + $r.Line
+    $tip   = ConvertTo-XmlText ("$($r.Qname)  --  $([IO.Path]::GetFileName($r.File)):$($r.Line)")
+    [void]$tbl.Append("<TR><TD PORT=`"p$p`" ALIGN=`"LEFT`" HREF=`"$href`" TITLE=`"$tip`">")
+    [void]$tbl.Append("<FONT COLOR=`"$($PAL.rowInk)`">$short</FONT>")
+    [void]$tbl.Append("  <FONT COLOR=`"$($PAL.lineInk)`" POINT-SIZE=`"12`">:$($r.Line)</FONT>")
+    [void]$tbl.Append('</TD></TR>')
+    $portMap["$Side|$($r.Qname)"] = "${nid}:p$p"
+  }
+  [void]$tbl.Append('</TABLE>')
+
+  [void]$sb.AppendLine("    $nid [label=<$($tbl.ToString())>];")
+  [void]$sb.AppendLine('  }')
+}
+
+[void]$sb.AppendLine('digraph butterfly {')
+[void]$sb.AppendLine('  rankdir=LR; bgcolor="transparent"; compound=true;')
+[void]$sb.AppendLine('  nodesep=0.35; ranksep=1.1; splines=spline;')
+[void]$sb.AppendLine("  graph [fontname=`"$FontSans`"];")
+[void]$sb.AppendLine("  node  [shape=plaintext, fontname=`"$FontMono`", fontsize=14];")
+[void]$sb.AppendLine("  edge  [fontname=`"$FontMono`", fontsize=11, color=`"$($PAL.lineInk)`", penwidth=1.5, arrowsize=0.8];")
+[void]$sb.AppendLine('')
+
+foreach ($g in ($callers | Group-Object { "$($_.Level)|$(Get-UnitName $_.File)" } | Sort-Object Name)) {
+  $lu = @($g.Name -split '\|', 2)
+  Add-UnitCluster 'in' $lu[1] ([int]$lu[0]) $g.Group $PAL.callerBorder $PAL.callerFill $PAL.callerHdr
+}
+
+$focusShort = ConvertTo-XmlText (Get-ShortName ([string]$bf.qname) $focusUnit)
+[void]$sb.AppendLine('  subgraph cluster_focus {')
+[void]$sb.AppendLine("    style=`"rounded,filled`"; color=`"$($PAL.focusBorder)`"; fillcolor=`"$($PAL.focusFill)`"; penwidth=3;")
+[void]$sb.AppendLine('    label=""; margin=12;')
+$fhref = 'draglint://open?file=' + [uri]::EscapeDataString($focusFile) + '&amp;line=' + [int]$bf.callers.root.line
+$fhdr  = "<TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$($PAL.focusHdr)`"><FONT COLOR=`"#FFFFFF`" FACE=`"$FontSans`" POINT-SIZE=`"14`"><B> $(ConvertTo-XmlText $focusUnit) &#183; focus </B></FONT></TD></TR>"
+[void]$sb.AppendLine("    focus [label=<<TABLE BORDER=`"0`" CELLBORDER=`"0`" CELLSPACING=`"3`" CELLPADDING=`"7`">$fhdr<TR><TD HREF=`"$fhref`" TITLE=`"$(ConvertTo-XmlText ([string]$bf.qname))`"><FONT COLOR=`"$($PAL.focusInk)`" POINT-SIZE=`"18`"><B>$focusShort</B></FONT></TD></TR></TABLE>>];")
+[void]$sb.AppendLine('  }')
+
+foreach ($g in ($callees | Group-Object { "$($_.Level)|$(Get-UnitName $_.File)" } | Sort-Object Name)) {
+  $lu = @($g.Name -split '\|', 2)
+  Add-UnitCluster 'out' $lu[1] ([int]$lu[0]) $g.Group $PAL.calleeBorder $PAL.calleeFill $PAL.calleeHdr
+}
+
+[void]$sb.AppendLine('')
+# One arrow per distinct (parent, child) pair, drawn from the PARENT the engine
+# reached it through. The arrow means "calls": a caller calls its parent, and
+# walking callees the parent calls the child.
+function Get-Port([string] $side, [string] $q) {
+  if ([string]::IsNullOrEmpty($q) -or $q -eq $focusQ) { return 'focus' }
+  $portMap["$side|$q"]
+}
+$edgeSeen = @{}
+$focusIn = 0; $focusOut = 0
+foreach ($n in $callerNodes) {
+  $from = Get-Port 'in' $n.Qname; $to = Get-Port 'in' $n.Parent
+  if (-not $from -or -not $to -or $edgeSeen.ContainsKey("$from>$to")) { continue }
+  $edgeSeen["$from>$to"] = $true
+  if ($to -eq 'focus') { $focusIn++ }
+  [void]$sb.AppendLine("  $from -> $to [color=`"$($PAL.callerBorder)`"];")
+}
+foreach ($n in $calleeNodes) {
+  $from = Get-Port 'out' $n.Parent; $to = Get-Port 'out' $n.Qname
+  if (-not $from -or -not $to -or $edgeSeen.ContainsKey("$from>$to")) { continue }
+  $edgeSeen["$from>$to"] = $true
+  if ($from -eq 'focus') { $focusOut++ }
+  [void]$sb.AppendLine("  $from -> $to [color=`"$($PAL.calleeBorder)`"];")
+}
+[void]$sb.AppendLine('}')
+
+# ---- 3. write + lay out ------------------------------------------------------
+if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $PSScriptRoot '..\scratch' }
+New-Item -ItemType Directory -Force $OutDir | Out-Null
+$base   = ($Qname -replace '[^A-Za-z0-9]', '_')
+$dotOut = Join-Path $OutDir "$base.dot"
+$svgOut = Join-Path $OutDir "$base.svg"
+$plnOut = Join-Path $OutDir "$base.plain"
+$pngOut = Join-Path $OutDir "$base.png"
+$pdfOut = Join-Path $OutDir "$base.pdf"
+
+[IO.File]::WriteAllText($dotOut, ($sb.ToString() -replace "`r`n", "`n" -replace "`n", "`r`n"),
+                        (New-Object Text.UTF8Encoding($false)))
+
+# ONE layout run, four outputs. Verified 2026-09-22: the picture and the geometry
+# come from the SAME layout, so hit-test rectangles can never drift from the SVG.
+# Emit-Common: path-length check, stale-output clear, loud failure.
+Invoke-DotRun $dotOut $svgOut $plnOut $pngOut $pdfOut
+
+
+$svg     = [IO.File]::ReadAllText($svgOut)
+$anchors = ([regex]::Matches($svg, '<a[\s>]')).Count
+$rows    = $callers.Count + $callees.Count + 1
+function Get-FileSize([string] $f) { if (Test-Path $f) { (Get-Item $f).Length } else { 0 } }
+
+[pscustomobject]@{
+  Dot          = $dotOut
+  Svg          = $svgOut
+  Plain        = $plnOut
+  # Png/Pdf as PATHS, not just sizes: the bundler moves outputs BY PROPERTY, so
+  # it never has to guess that the raster is called "<slug>.png".
+  Png          = $pngOut
+  Pdf          = $pdfOut
+  Callers      = $callers.Count
+  Callees      = $callees.Count
+  # D6 pins: rows are distinct symbols, arrows distinct pairs, and only the
+  # engine's depth-1 children touch the focus box.
+  Edges        = $edgeSeen.Count
+  FocusIn      = $focusIn
+  FocusOut     = $focusOut
+  ClickTargets = $anchors
+  Expected     = $rows
+  AllClickable = ($anchors -ge $rows)
+  ExportSvg    = Get-FileSize $svgOut
+  ExportPng    = Get-FileSize $pngOut
+  ExportPdf    = Get-FileSize $pdfOut
+}

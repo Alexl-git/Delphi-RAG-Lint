@@ -1,0 +1,739 @@
+<title>Diagram Pipeline State</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{--bg:#F6F7F9;--panel:#FFFFFF;--ink:#131820;--muted:#5B6674;--line:#DDE2E8;
+    --line-soft:#EAEEF2;--accent:#0F766E;--accent-soft:#E2F1EF;--warn:#9A5408;
+    --warn-soft:#FBF0E0;--ok:#0F766E;--ok-bg:#E2F1EF;--no:#9A3412;--no-bg:#FAEBE3;
+    --mono:"IBM Plex Mono",Consolas,monospace;--sans:"IBM Plex Sans",system-ui,sans-serif;}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0E1319;--panel:#151C24;--ink:#E6EBF1;--muted:#96A2B1;--line:#293441;
+    --line-soft:#1E2833;--accent:#4FD1C0;--accent-soft:#12312D;--warn:#E0A458;
+    --warn-soft:#33260F;--ok:#4FD1C0;--ok-bg:#12312D;--no:#E8A17C;--no-bg:#33211A;}}
+  :root[data-theme="dark"]{--bg:#0E1319;--panel:#151C24;--ink:#E6EBF1;--muted:#96A2B1;
+    --line:#293441;--line-soft:#1E2833;--accent:#4FD1C0;--accent-soft:#12312D;
+    --warn:#E0A458;--warn-soft:#33260F;--ok:#4FD1C0;--ok-bg:#12312D;--no:#E8A17C;--no-bg:#33211A;}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;
+    line-height:1.6;padding-inline:16px;}
+  .wrap{max-width:1060px;margin:0 auto;}
+  header.top{padding-block:40px 26px;border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 12px;}
+  h1{font-size:clamp(28px,5vw,40px);line-height:1.1;margin:0 0 14px;font-weight:700;
+    letter-spacing:-.02em;text-wrap:balance;}
+  .dek{font-size:18px;color:var(--muted);margin:0;max-width:62ch;}
+  .facts{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px;
+    font-family:var(--mono);font-size:13px;color:var(--muted);}
+  .facts b{color:var(--ink);font-weight:600;}
+  section{padding-block:38px;border-bottom:1px solid var(--line-soft);}
+  section:last-of-type{border-bottom:0;}
+  h2{font-size:24px;font-weight:650;margin:0 0 6px;letter-spacing:-.01em;}
+  h3{font-size:16.5px;font-weight:650;margin:26px 0 8px;}
+  .sub{color:var(--muted);margin:0 0 20px;max-width:70ch;}
+  p{max-width:70ch;}
+  code{font-family:var(--mono);font-size:.88em;}
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:18px;overflow-x:auto;margin:0 0 10px;}
+  .stage svg{max-width:100%;height:auto;}
+  .cap{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin:0 0 28px;}
+  .note{border-left:4px solid var(--warn);background:var(--warn-soft);padding:16px 20px;
+    border-radius:0 8px 8px 0;margin:20px 0;font-size:15.5px;}
+  .note b{color:var(--warn);}
+  .note.good{border-left-color:var(--accent);background:var(--accent-soft);}
+  .note.good b{color:var(--accent);}
+  .note p{margin:0;max-width:none;}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:16px 0 0;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line-soft);
+    vertical-align:top;}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);font-weight:500;border-bottom:1px solid var(--line);}
+  td.q{font-family:var(--mono);font-size:13px;font-weight:600;white-space:nowrap;}
+  .pill{font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 9px;
+    border-radius:999px;white-space:nowrap;display:inline-block;}
+  .p-ok{background:var(--ok-bg);color:var(--ok);}
+  .p-no{background:var(--no-bg);color:var(--no);}
+  .tbl{overflow-x:auto;}
+  ol li{margin-bottom:12px;max-width:70ch;}
+  footer{padding-block:26px 46px;color:var(--muted);font-family:var(--mono);font-size:12.5px;}
+  a{color:var(--accent);}
+</style>
+<div class="wrap">
+<header class="top">
+  <p class="eyebrow">drag-lint &middot; archify-ir &middot; 2026-09-23</p>
+  <h1>Two questions run end to end. Here is what they look like.</h1>
+  <p class="dek">Both pictures below were generated from the index, laid out by Graphviz,
+  and every row in them opens that line in your running IDE.</p>
+  <div class="facts">
+    <span><b>7</b> commits</span><span><b>2</b> questions live</span>
+    <span><b>39</b> click targets</span><span><b>0</b> engine changes needed</span>
+  </div>
+</header>
+
+<section>
+  <h2>butterfly &mdash; one method</h2>
+  <p class="sub">Rows are methods, rectangles are units. Callers left, callees right.
+  9 + 8 + focus = 18 rows, 18 clickable.</p>
+  <div class="stage"><svg width="2076pt" height="794pt"
+ viewBox="0.00 0.00 2076.00 794.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1.52778 1.52778) rotate(0) translate(4 516)">
+<title>butterfly</title>
+<g id="clust1" class="cluster">
+<title>cluster_in_1</title>
+<path fill="#edf2ff" stroke="#3b5bdb" stroke-width="2" d="M20,-102C20,-102 419.25,-102 419.25,-102 425.25,-102 431.25,-108 431.25,-114 431.25,-114 431.25,-398 431.25,-398 431.25,-404 425.25,-410 419.25,-410 419.25,-410 20,-410 20,-410 14,-410 8,-404 8,-398 8,-398 8,-114 8,-114 8,-108 14,-102 20,-102"/>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_focus</title>
+<path fill="#e2f1ef" stroke="#0f766e" stroke-width="3" d="M500.25,-186C500.25,-186 916.5,-186 916.5,-186 922.5,-186 928.5,-192 928.5,-198 928.5,-198 928.5,-282 928.5,-282 928.5,-288 922.5,-294 916.5,-294 916.5,-294 500.25,-294 500.25,-294 494.25,-294 488.25,-288 488.25,-282 488.25,-282 488.25,-198 488.25,-198 488.25,-192 494.25,-186 500.25,-186"/>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_out_2</title>
+<path fill="#fef6ec" stroke="#b45309" stroke-width="2" d="M1073.25,-414C1073.25,-414 1255,-414 1255,-414 1261,-414 1267,-420 1267,-426 1267,-426 1267,-492 1267,-492 1267,-498 1261,-504 1255,-504 1255,-504 1073.25,-504 1073.25,-504 1067.25,-504 1061.25,-498 1061.25,-492 1061.25,-492 1061.25,-426 1061.25,-426 1061.25,-420 1067.25,-414 1073.25,-414"/>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_out_3</title>
+<path fill="#fef6ec" stroke="#b45309" stroke-width="2" d="M1072.88,-260C1072.88,-260 1255.38,-260 1255.38,-260 1261.38,-260 1267.38,-266 1267.38,-272 1267.38,-272 1267.38,-394 1267.38,-394 1267.38,-400 1261.38,-406 1255.38,-406 1255.38,-406 1072.88,-406 1072.88,-406 1066.88,-406 1060.88,-400 1060.88,-394 1060.88,-394 1060.88,-272 1060.88,-272 1060.88,-266 1066.88,-260 1072.88,-260"/>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_out_4</title>
+<path fill="#fef6ec" stroke="#b45309" stroke-width="2" d="M1091.25,-162C1091.25,-162 1237,-162 1237,-162 1243,-162 1249,-168 1249,-174 1249,-174 1249,-240 1249,-240 1249,-246 1243,-252 1237,-252 1237,-252 1091.25,-252 1091.25,-252 1085.25,-252 1079.25,-246 1079.25,-240 1079.25,-240 1079.25,-174 1079.25,-174 1079.25,-168 1085.25,-162 1091.25,-162"/>
+</g>
+<g id="clust6" class="cluster">
+<title>cluster_out_5</title>
+<path fill="#fef6ec" stroke="#b45309" stroke-width="2" d="M997.5,-8C997.5,-8 1330.75,-8 1330.75,-8 1336.75,-8 1342.75,-14 1342.75,-20 1342.75,-20 1342.75,-142 1342.75,-142 1342.75,-148 1336.75,-154 1330.75,-154 1330.75,-154 997.5,-154 997.5,-154 991.5,-154 985.5,-148 985.5,-142 985.5,-142 985.5,-20 985.5,-20 985.5,-14 991.5,-8 997.5,-8"/>
+</g>
+<!-- n1 -->
+<g id="node1" class="node">
+<title>n1</title>
+<polygon fill="#3b5bdb" stroke="none" points="29,-363.88 29,-393.38 410.25,-393.38 410.25,-363.88 29,-363.88"/>
+<text xml:space="preserve" text-anchor="start" x="34" y="-376.07" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> Blueprint4.ViewModel </text>
+<g id="a_node1_0"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=4099" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:4099">
+<text xml:space="preserve" text-anchor="start" x="34" y="-343.57" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.AddOperation</text>
+<text xml:space="preserve" text-anchor="start" x="281.5" y="-343.57" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="296.5" y="-343.57" font-family="Consolas" font-size="12.00" fill="#8a94a6">:4099</text>
+</a>
+</g>
+<g id="a_node1_1"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=3957" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.DoAfterDeleteOperation &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:3957">
+<text xml:space="preserve" text-anchor="start" x="34" y="-316.32" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.DoAfterDeleteOperation</text>
+<text xml:space="preserve" text-anchor="start" x="356.5" y="-316.32" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="371.5" y="-316.32" font-family="Consolas" font-size="12.00" fill="#8a94a6">:3957</text>
+</a>
+</g>
+<g id="a_node1_2"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=3951" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.DoAfterPostOperation &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:3951">
+<text xml:space="preserve" text-anchor="start" x="34" y="-289.07" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.DoAfterPostOperation</text>
+<text xml:space="preserve" text-anchor="start" x="341.5" y="-289.07" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="356.5" y="-289.07" font-family="Consolas" font-size="12.00" fill="#8a94a6">:3951</text>
+</a>
+</g>
+<g id="a_node1_3"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=1853" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.ImportJenVICI &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:1853">
+<text xml:space="preserve" text-anchor="start" x="34" y="-261.82" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.ImportJenVICI</text>
+<text xml:space="preserve" text-anchor="start" x="289" y="-261.82" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="304" y="-261.82" font-family="Consolas" font-size="12.00" fill="#8a94a6">:1853</text>
+</a>
+</g>
+<g id="a_node1_4"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=2175" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.ImportLK &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:2175">
+<text xml:space="preserve" text-anchor="start" x="34" y="-234.57" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.ImportLK</text>
+<text xml:space="preserve" text-anchor="start" x="251.5" y="-234.57" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="266.5" y="-234.57" font-family="Consolas" font-size="12.00" fill="#8a94a6">:2175</text>
+</a>
+</g>
+<g id="a_node1_5"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=2441" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.ImportNikon &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:2441">
+<text xml:space="preserve" text-anchor="start" x="34" y="-207.32" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.ImportNikon</text>
+<text xml:space="preserve" text-anchor="start" x="274" y="-207.32" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="289" y="-207.32" font-family="Consolas" font-size="12.00" fill="#8a94a6">:2441</text>
+</a>
+</g>
+<g id="a_node1_6"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=3124" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.ImportSheffield &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:3124">
+<text xml:space="preserve" text-anchor="start" x="34" y="-180.07" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.ImportSheffield</text>
+<text xml:space="preserve" text-anchor="start" x="304" y="-180.07" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="319" y="-180.07" font-family="Consolas" font-size="12.00" fill="#8a94a6">:3124</text>
+</a>
+</g>
+<g id="a_node1_7"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=3416" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.ImportZEISS &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:3416">
+<text xml:space="preserve" text-anchor="start" x="34" y="-152.82" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.ImportZEISS</text>
+<text xml:space="preserve" text-anchor="start" x="274" y="-152.82" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="289" y="-152.82" font-family="Consolas" font-size="12.00" fill="#8a94a6">:3416</text>
+</a>
+</g>
+<g id="a_node1_8"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=4273" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.VerifyAll &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:4273">
+<text xml:space="preserve" text-anchor="start" x="34" y="-125.58" font-family="Consolas" font-size="14.00" fill="#1f2933">TBlueprint_ViewModel.VerifyAll</text>
+<text xml:space="preserve" text-anchor="start" x="259" y="-125.58" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="274" y="-125.58" font-family="Consolas" font-size="12.00" fill="#8a94a6">:4273</text>
+</a>
+</g>
+</g>
+<!-- focus -->
+<g id="node2" class="node">
+<title>focus</title>
+<polygon fill="#0f766e" stroke="none" points="511.25,-241.12 511.25,-274.62 905.5,-274.62 905.5,-241.12 511.25,-241.12"/>
+<text xml:space="preserve" text-anchor="start" x="518.25" y="-255.32" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> Blueprint4.ViewModel · focus </text>
+<g id="a_node2_9"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=0" xlink:title="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation">
+<text xml:space="preserve" text-anchor="start" x="518.25" y="-215.03" font-family="Consolas" font-weight="bold" font-size="18.00" fill="#0b3f39">TBlueprint_ViewModel.SendDeltaOperation</text>
+</a>
+</g>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge1" class="edge">
+<title>n1:p1&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-348.75C488.32,-348.75 570.14,-315.89 628.2,-286.3"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="629.47,-288.79 635.29,-282.62 626.9,-283.81 629.47,-288.79"/>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge2" class="edge">
+<title>n1:p2&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-321.5C474.89,-321.5 543.55,-303.79 598.72,-284.88"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="599.38,-287.61 606.01,-282.33 597.54,-282.32 599.38,-287.61"/>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge3" class="edge">
+<title>n1:p3&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-294.25C449.92,-294.25 490.97,-289.72 529.79,-283.28"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="529.96,-286.09 537.37,-281.98 529.02,-280.57 529.96,-286.09"/>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge4" class="edge">
+<title>n1:p4&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-267C436.88,-267 463.72,-265.98 490.32,-264.35"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="490.43,-267.15 498.23,-263.84 490.07,-261.56 490.43,-267.15"/>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge5" class="edge">
+<title>n1:p5&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-239.75C436.78,-239.75 463.55,-239.76 490.11,-239.77"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="490,-242.57 498.01,-239.78 490.01,-236.97 490,-242.57"/>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge6" class="edge">
+<title>n1:p6&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-212.5C436.89,-212.5 463.72,-213.53 490.32,-215.2"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="490.07,-217.99 498.24,-215.72 490.44,-212.4 490.07,-217.99"/>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge7" class="edge">
+<title>n1:p7&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-185.25C450.65,-185.25 492.52,-189.99 531.98,-196.69"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="531.36,-199.42 539.73,-198.04 532.33,-193.91 531.36,-199.42"/>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge8" class="edge">
+<title>n1:p8&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-158C475.17,-158 544.12,-175.96 599.4,-195.07"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="598.23,-197.63 606.71,-197.65 600.09,-192.35 598.23,-197.63"/>
+</g>
+<!-- n1&#45;&gt;focus -->
+<g id="edge9" class="edge">
+<title>n1:p9&#45;&gt;focus</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M411.25,-130.75C488.65,-130.75 570.79,-164.01 628.87,-193.83"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="627.22,-196.12 635.61,-197.34 629.81,-191.16 627.22,-196.12"/>
+</g>
+<!-- n2 -->
+<g id="node3" class="node">
+<title>n2</title>
+<polygon fill="#b45309" stroke="none" points="1082.25,-457.88 1082.25,-487.38 1246,-487.38 1246,-457.88 1082.25,-457.88"/>
+<text xml:space="preserve" text-anchor="start" x="1087.25" y="-470.07" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> Blueprint4.ViewModel </text>
+<g id="a_node3_10"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=546" xlink:title="Blueprint4.ViewModel.PersistLog &#160;&#45;&#45; &#160;Blueprint4.ViewModel.pas:546">
+<text xml:space="preserve" text-anchor="start" x="1087.25" y="-437.57" font-family="Consolas" font-size="14.00" fill="#1f2933">PersistLog</text>
+<text xml:space="preserve" text-anchor="start" x="1162.25" y="-437.57" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="1177.25" y="-437.57" font-family="Consolas" font-size="12.00" fill="#8a94a6">:546</text>
+</a>
+</g>
+</g>
+<!-- focus&#45;&gt;n2 -->
+<g id="edge16" class="edge">
+<title>focus&#45;&gt;n2:p1</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M751.62,-281.52C814.99,-339.33 941.17,-437.6 1071.09,-442.56"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="1070.93,-445.35 1078.98,-442.71 1071.04,-439.75 1070.93,-445.35"/>
+</g>
+<!-- n3 -->
+<g id="node4" class="node">
+<title>n3</title>
+<polygon fill="#b45309" stroke="none" points="1081.88,-359.12 1081.88,-388.62 1246.38,-388.62 1246.38,-359.12 1081.88,-359.12"/>
+<text xml:space="preserve" text-anchor="start" x="1086.88" y="-371.32" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> Pipes.Protocol </text>
+<g id="a_node4_11"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCOMMON%5CPipes.Protocol.pas&amp;line=574" xlink:title="Pipes.Protocol.BuildHeader &#160;&#45;&#45; &#160;Pipes.Protocol.pas:574">
+<text xml:space="preserve" text-anchor="start" x="1086.88" y="-338.82" font-family="Consolas" font-size="14.00" fill="#1f2933">BuildHeader</text>
+<text xml:space="preserve" text-anchor="start" x="1169.38" y="-338.82" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="1184.38" y="-338.82" font-family="Consolas" font-size="12.00" fill="#8a94a6">:574</text>
+</a>
+</g>
+<g id="a_node4_12"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCOMMON%5CPipes.Protocol.pas&amp;line=579" xlink:title="Pipes.Protocol.CommandIDToStr &#160;&#45;&#45; &#160;Pipes.Protocol.pas:579">
+<text xml:space="preserve" text-anchor="start" x="1086.88" y="-311.57" font-family="Consolas" font-size="14.00" fill="#1f2933">CommandIDToStr</text>
+<text xml:space="preserve" text-anchor="start" x="1191.88" y="-311.57" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="1206.88" y="-311.57" font-family="Consolas" font-size="12.00" fill="#8a94a6">:579</text>
+</a>
+</g>
+<g id="a_node4_13"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCOMMON%5CPipes.Protocol.pas&amp;line=576" xlink:title="Pipes.Protocol.HeaderCommandID &#160;&#45;&#45; &#160;Pipes.Protocol.pas:576">
+<text xml:space="preserve" text-anchor="start" x="1086.88" y="-284.32" font-family="Consolas" font-size="14.00" fill="#1f2933">HeaderCommandID</text>
+<text xml:space="preserve" text-anchor="start" x="1199.38" y="-284.32" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="1214.38" y="-284.32" font-family="Consolas" font-size="12.00" fill="#8a94a6">:576</text>
+</a>
+</g>
+</g>
+<!-- focus&#45;&gt;n3 -->
+<g id="edge11" class="edge">
+<title>focus&#45;&gt;n3:p1</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M803.18,-281.55C874.58,-309.53 976.35,-341.72 1070.87,-343.88"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="1070.57,-346.68 1078.6,-343.97 1070.64,-341.08 1070.57,-346.68"/>
+</g>
+<!-- focus&#45;&gt;n3 -->
+<g id="edge12" class="edge">
+<title>focus&#45;&gt;n3:p2</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M843.86,-281.52C910.96,-298.86 994.05,-315.34 1071.03,-316.66"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="1070.58,-319.46 1078.6,-316.73 1070.63,-313.86 1070.58,-319.46"/>
+</g>
+<!-- focus&#45;&gt;n3 -->
+<g id="edge15" class="edge">
+<title>focus&#45;&gt;n3:p3</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M916.03,-277.39C966.19,-283.92 1020,-288.85 1070.77,-289.44"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="1070.59,-292.24 1078.6,-289.49 1070.62,-286.64 1070.59,-292.24"/>
+</g>
+<!-- n4 -->
+<g id="node5" class="node">
+<title>n4</title>
+<polygon fill="#b45309" stroke="none" points="1100.25,-205.88 1100.25,-235.38 1228,-235.38 1228,-205.88 1100.25,-205.88"/>
+<text xml:space="preserve" text-anchor="start" x="1105.25" y="-218.07" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> uLogPaths </text>
+<g id="a_node5_14"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCOMMON%5CuLogPaths.pas&amp;line=38" xlink:title="uLogPaths.LogFilePath &#160;&#45;&#45; &#160;uLogPaths.pas:38">
+<text xml:space="preserve" text-anchor="start" x="1105.25" y="-185.57" font-family="Consolas" font-size="14.00" fill="#1f2933">LogFilePath</text>
+<text xml:space="preserve" text-anchor="start" x="1187.75" y="-185.57" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="1202.75" y="-185.57" font-family="Consolas" font-size="12.00" fill="#8a94a6">:38</text>
+</a>
+</g>
+</g>
+<!-- focus&#45;&gt;n4 -->
+<g id="edge17" class="edge">
+<title>focus&#45;&gt;n4:p1</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M916.41,-204.05C971.97,-196.92 1032.37,-191.41 1089.08,-190.8"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="1088.99,-193.61 1096.98,-190.76 1088.96,-188.01 1088.99,-193.61"/>
+</g>
+<!-- n5 -->
+<g id="node6" class="node">
+<title>n5</title>
+<polygon fill="#b45309" stroke="none" points="1006.5,-107.12 1006.5,-136.62 1321.75,-136.62 1321.75,-107.12 1006.5,-107.12"/>
+<text xml:space="preserve" text-anchor="start" x="1011.5" y="-119.33" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> uPipeClientConnection </text>
+<g id="a_node6_15"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CuPipeClientConnection.pas&amp;line=75" xlink:title="uPipeClientConnection.TPipeClientConnection.ExecuteCommand &#160;&#45;&#45; &#160;uPipeClientConnection.pas:75">
+<text xml:space="preserve" text-anchor="start" x="1011.5" y="-86.83" font-family="Consolas" font-size="14.00" fill="#1f2933">TPipeClientConnection.ExecuteCommand</text>
+<text xml:space="preserve" text-anchor="start" x="1281.5" y="-86.83" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="1296.5" y="-86.83" font-family="Consolas" font-size="12.00" fill="#8a94a6">:75</text>
+</a>
+</g>
+<g id="a_node6_16"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CuPipeClientConnection.pas&amp;line=57" xlink:title="uPipeClientConnection.TPipeClientConnection.WriteMessage &#160;&#45;&#45; &#160;uPipeClientConnection.pas:57">
+<text xml:space="preserve" text-anchor="start" x="1011.5" y="-59.58" font-family="Consolas" font-size="14.00" fill="#1f2933">TPipeClientConnection.WriteMessage</text>
+<text xml:space="preserve" text-anchor="start" x="1266.5" y="-59.58" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="1281.5" y="-59.58" font-family="Consolas" font-size="12.00" fill="#8a94a6">:57</text>
+</a>
+</g>
+<g id="a_node6_17"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CuPipeClientConnection.pas&amp;line=59" xlink:title="uPipeClientConnection.TPipeClientConnection.ReadMessage &#160;&#45;&#45; &#160;uPipeClientConnection.pas:59">
+<text xml:space="preserve" text-anchor="start" x="1011.5" y="-32.33" font-family="Consolas" font-size="14.00" fill="#1f2933">TPipeClientConnection.ReadMessage</text>
+<text xml:space="preserve" text-anchor="start" x="1259" y="-32.33" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="1274" y="-32.33" font-family="Consolas" font-size="12.00" fill="#8a94a6">:59</text>
+</a>
+</g>
+</g>
+<!-- focus&#45;&gt;n5 -->
+<g id="edge10" class="edge">
+<title>focus&#45;&gt;n5:p1</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M757.56,-198.38C811.37,-156.14 903.07,-96.38 995.41,-92.23"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="995.3,-95.03 1003.23,-92.05 995.17,-89.43 995.3,-95.03"/>
+</g>
+<!-- focus&#45;&gt;n5 -->
+<g id="edge13" class="edge">
+<title>focus&#45;&gt;n5:p2</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M748.15,-198.47C799.26,-148.31 894.56,-70 995.41,-65"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="995.3,-67.81 1003.23,-64.81 995.16,-62.21 995.3,-67.81"/>
+</g>
+<!-- focus&#45;&gt;n5 -->
+<g id="edge14" class="edge">
+<title>focus&#45;&gt;n5:p3</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M741.29,-198.53C789.36,-141.08 886.35,-43.62 995.27,-37.78"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="995.31,-40.58 1003.23,-37.56 995.16,-34.98 995.31,-40.58"/>
+</g>
+</g>
+</svg>
+  </div>
+  <p class="cap">SendDeltaOperation, depth 2, from Micronite2027.sqlite</p>
+
+  <h2>deps &mdash; one unit</h2>
+  <p class="sub">A deliberately different shape: rows are units, rectangles are
+  directories. <b>Dashed edges are implementation-section uses</b> &mdash; the
+  distinction <code>uses-audit</code> exists to act on. 6 of these 18 are
+  implementation-only.</p>
+  <div class="stage"><svg width="1288pt" height="1100pt"
+ viewBox="0.00 0.00 1288.00 1100.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1.52778 1.52778) rotate(0) translate(4 716)">
+<title>deps</title>
+<g id="clust1" class="cluster">
+<title>cluster_in_1</title>
+<path fill="#edf2ff" stroke="#3b5bdb" stroke-width="2" d="M20,-318C20,-318 187.5,-318 187.5,-318 193.5,-318 199.5,-324 199.5,-330 199.5,-330 199.5,-452 199.5,-452 199.5,-458 193.5,-464 187.5,-464 187.5,-464 20,-464 20,-464 14,-464 8,-458 8,-452 8,-452 8,-330 8,-330 8,-324 14,-318 20,-318"/>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_root</title>
+<path fill="#e2f1ef" stroke="#0f766e" stroke-width="3" d="M275.5,-321C275.5,-321 506.5,-321 506.5,-321 512.5,-321 518.5,-327 518.5,-333 518.5,-333 518.5,-417 518.5,-417 518.5,-423 512.5,-429 506.5,-429 506.5,-429 275.5,-429 275.5,-429 269.5,-429 263.5,-423 263.5,-417 263.5,-417 263.5,-333 263.5,-333 263.5,-327 269.5,-321 275.5,-321"/>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_out_2</title>
+<path fill="#fef6ec" stroke="#b45309" stroke-width="2" d="M594.5,-396C594.5,-396 815.25,-396 815.25,-396 821.25,-396 827.25,-402 827.25,-408 827.25,-408 827.25,-692 827.25,-692 827.25,-698 821.25,-704 815.25,-704 815.25,-704 594.5,-704 594.5,-704 588.5,-704 582.5,-698 582.5,-692 582.5,-692 582.5,-408 582.5,-408 582.5,-402 588.5,-396 594.5,-396"/>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_out_3</title>
+<path fill="#fef6ec" stroke="#b45309" stroke-width="2" d="M605.38,-134C605.38,-134 804.38,-134 804.38,-134 810.38,-134 816.38,-140 816.38,-146 816.38,-146 816.38,-376 816.38,-376 816.38,-382 810.38,-388 804.38,-388 804.38,-388 605.38,-388 605.38,-388 599.38,-388 593.38,-382 593.38,-376 593.38,-376 593.38,-146 593.38,-146 593.38,-140 599.38,-134 605.38,-134"/>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_out_4</title>
+<path fill="#fef6ec" stroke="#b45309" stroke-width="2" d="M610.25,-8C610.25,-8 799.5,-8 799.5,-8 805.5,-8 811.5,-14 811.5,-20 811.5,-20 811.5,-114 811.5,-114 811.5,-120 805.5,-126 799.5,-126 799.5,-126 610.25,-126 610.25,-126 604.25,-126 598.25,-120 598.25,-114 598.25,-114 598.25,-20 598.25,-20 598.25,-14 604.25,-8 610.25,-8"/>
+</g>
+<!-- n1 -->
+<g id="node1" class="node">
+<title>n1</title>
+<polygon fill="#3b5bdb" stroke="none" points="29,-417.12 29,-446.62 178.5,-446.62 178.5,-417.12 29,-417.12"/>
+<text xml:space="preserve" text-anchor="start" x="34" y="-429.32" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> CLIENT &#160;(uses this) </text>
+<g id="a_node1_0"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.pas&amp;line=783" xlink:title="Blueprint4 &#160;&#45;&#45; &#160;uses clause at Blueprint4.pas:783 &#160;[implementation]">
+<text xml:space="preserve" text-anchor="start" x="34" y="-396.82" font-family="Consolas" font-size="14.00" fill="#1f2933">Blueprint4</text>
+<text xml:space="preserve" text-anchor="start" x="109" y="-396.82" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="124" y="-396.82" font-family="Consolas" font-size="12.00" fill="#8a94a6">:783</text>
+</a>
+</g>
+<g id="a_node1_1"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CMicronite2027.dpr&amp;line=536" xlink:title="Micronite2027 &#160;&#45;&#45; &#160;uses clause at Micronite2027.dpr:536 &#160;[program]">
+<text xml:space="preserve" text-anchor="start" x="34" y="-369.57" font-family="Consolas" font-size="14.00" fill="#1f2933">Micronite2027</text>
+<text xml:space="preserve" text-anchor="start" x="131.5" y="-369.57" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="146.5" y="-369.57" font-family="Consolas" font-size="12.00" fill="#8a94a6">:536</text>
+</a>
+</g>
+<g id="a_node1_2"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CuAutoTest.pas&amp;line=54" xlink:title="uAutoTest &#160;&#45;&#45; &#160;uses clause at uAutoTest.pas:54 &#160;[implementation]">
+<text xml:space="preserve" text-anchor="start" x="34" y="-342.32" font-family="Consolas" font-size="14.00" fill="#1f2933">uAutoTest</text>
+<text xml:space="preserve" text-anchor="start" x="101.5" y="-342.32" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="116.5" y="-342.32" font-family="Consolas" font-size="12.00" fill="#8a94a6">:54</text>
+</a>
+</g>
+</g>
+<!-- root -->
+<g id="node2" class="node">
+<title>root</title>
+<polygon fill="#0f766e" stroke="none" points="286.5,-376.12 286.5,-409.62 495.5,-409.62 495.5,-376.12 286.5,-376.12"/>
+<text xml:space="preserve" text-anchor="start" x="293.5" y="-390.32" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> unit · focus </text>
+<text xml:space="preserve" text-anchor="start" x="293.5" y="-350.02" font-family="Consolas" font-weight="bold" font-size="18.00" fill="#0b3f39">Blueprint4.ViewModel</text>
+</g>
+<!-- n1&#45;&gt;root -->
+<g id="edge1" class="edge">
+<title>n1:p1&#45;&gt;root</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" stroke-dasharray="5,2" d="M179.5,-402C207.51,-402 237.46,-399.62 265.71,-396.27"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="265.78,-399.08 273.38,-395.32 265.09,-393.52 265.78,-399.08"/>
+</g>
+<!-- n1&#45;&gt;root -->
+<g id="edge2" class="edge">
+<title>n1:p2&#45;&gt;root</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" d="M179.5,-374.75C207.37,-374.75 237.31,-374.77 265.62,-374.8"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="265.29,-377.6 273.29,-374.81 265.3,-372 265.29,-377.6"/>
+</g>
+<!-- n1&#45;&gt;root -->
+<g id="edge3" class="edge">
+<title>n1:p3&#45;&gt;root</title>
+<path fill="none" stroke="#3b5bdb" stroke-width="1.5" stroke-dasharray="5,2" d="M179.5,-347.5C207.52,-347.5 237.47,-349.93 265.72,-353.34"/>
+<polygon fill="#3b5bdb" stroke="#3b5bdb" stroke-width="1.5" points="265.1,-356.08 273.39,-354.3 265.8,-350.52 265.1,-356.08"/>
+</g>
+<!-- n2 -->
+<g id="node3" class="node">
+<title>n2</title>
+<polygon fill="#b45309" stroke="none" points="603.5,-657.88 603.5,-687.38 806.25,-687.38 806.25,-657.88 603.5,-657.88"/>
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-670.08" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> CLIENT &#160;(used by this) </text>
+<g id="a_node3_3"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=537" xlink:title="Blueprint4.CADImport &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:537 &#160;[implementation]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-637.58" font-family="Consolas" font-size="14.00" fill="#1f2933">Blueprint4.CADImport</text>
+<text xml:space="preserve" text-anchor="start" x="758.5" y="-637.58" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="773.5" y="-637.58" font-family="Consolas" font-size="12.00" fill="#8a94a6">:537</text>
+</a>
+</g>
+<g id="a_node3_4"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=538" xlink:title="Blueprint4.PDFImport &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:538 &#160;[implementation]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-610.33" font-family="Consolas" font-size="14.00" fill="#1f2933">Blueprint4.PDFImport</text>
+<text xml:space="preserve" text-anchor="start" x="758.5" y="-610.33" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="773.5" y="-610.33" font-family="Consolas" font-size="12.00" fill="#8a94a6">:538</text>
+</a>
+</g>
+<g id="a_node3_5"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=540" xlink:title="ControlPlan2 &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:540 &#160;[implementation]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-583.08" font-family="Consolas" font-size="14.00" fill="#1f2933">ControlPlan2</text>
+<text xml:space="preserve" text-anchor="start" x="698.5" y="-583.08" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="713.5" y="-583.08" font-family="Consolas" font-size="12.00" fill="#8a94a6">:540</text>
+</a>
+</g>
+<g id="a_node3_6"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=542" xlink:title="uMDIChildManager &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:542 &#160;[implementation]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-555.83" font-family="Consolas" font-size="14.00" fill="#1f2933">uMDIChildManager</text>
+<text xml:space="preserve" text-anchor="start" x="728.5" y="-555.83" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="743.5" y="-555.83" font-family="Consolas" font-size="12.00" fill="#8a94a6">:542</text>
+</a>
+</g>
+<g id="a_node3_7"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=48" xlink:title="BASICSF &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:48 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-528.58" font-family="Consolas" font-size="14.00" fill="#1f2933">BASICSF</text>
+<text xml:space="preserve" text-anchor="start" x="661" y="-528.58" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="676" y="-528.58" font-family="Consolas" font-size="12.00" fill="#8a94a6">:48</text>
+</a>
+</g>
+<g id="a_node3_8"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=46" xlink:title="Blueprint4.Interfaces &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:46 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-501.32" font-family="Consolas" font-size="14.00" fill="#1f2933">Blueprint4.Interfaces</text>
+<text xml:space="preserve" text-anchor="start" x="766" y="-501.32" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="781" y="-501.32" font-family="Consolas" font-size="12.00" fill="#8a94a6">:46</text>
+</a>
+</g>
+<g id="a_node3_9"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=43" xlink:title="uAppGlobals &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:43 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-474.07" font-family="Consolas" font-size="14.00" fill="#1f2933">uAppGlobals</text>
+<text xml:space="preserve" text-anchor="start" x="691" y="-474.07" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="706" y="-474.07" font-family="Consolas" font-size="12.00" fill="#8a94a6">:43</text>
+</a>
+</g>
+<g id="a_node3_10"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=45" xlink:title="uFieldsInfoFactory &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:45 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-446.82" font-family="Consolas" font-size="14.00" fill="#1f2933">uFieldsInfoFactory</text>
+<text xml:space="preserve" text-anchor="start" x="743.5" y="-446.82" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="758.5" y="-446.82" font-family="Consolas" font-size="12.00" fill="#8a94a6">:45</text>
+</a>
+</g>
+<g id="a_node3_11"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=42" xlink:title="uPipeClientConnection &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:42 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="608.5" y="-419.57" font-family="Consolas" font-size="14.00" fill="#1f2933">uPipeClientConnection</text>
+<text xml:space="preserve" text-anchor="start" x="766" y="-419.57" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="781" y="-419.57" font-family="Consolas" font-size="12.00" fill="#8a94a6">:42</text>
+</a>
+</g>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge4" class="edge">
+<title>root&#45;&gt;n2:p1</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,2" d="M403.51,-416.54C426.45,-489.47 485.12,-633.68 592.32,-642.34"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.13,-645.14 600.23,-642.66 592.35,-639.54 592.13,-645.14"/>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge5" class="edge">
+<title>root&#45;&gt;n2:p2</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,2" d="M406.48,-416.62C432.52,-483.23 493.92,-607.18 592.53,-615.1"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.13,-617.89 600.23,-615.41 592.35,-612.29 592.13,-617.89"/>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge6" class="edge">
+<title>root&#45;&gt;n2:p3</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,2" d="M410.12,-416.62C439.19,-476.44 502.26,-580.39 592.27,-587.83"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.12,-590.62 600.23,-588.16 592.35,-585.03 592.12,-590.62"/>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge9" class="edge">
+<title>root&#45;&gt;n2:p4</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,2" d="M414.54,-416.28C446.53,-468.94 510.44,-554.03 592.42,-560.6"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.13,-563.39 600.23,-560.91 592.35,-557.79 592.13,-563.39"/>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge11" class="edge">
+<title>root&#45;&gt;n2:p5</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M420.64,-416.3C455.43,-461.31 518.72,-527.74 592.5,-533.37"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.13,-536.16 600.23,-533.66 592.34,-530.56 592.13,-536.16"/>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge12" class="edge">
+<title>root&#45;&gt;n2:p6</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M429.52,-416.61C466.66,-453.25 527.27,-501.51 592.43,-506.14"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.14,-508.93 600.23,-506.42 592.34,-503.33 592.14,-508.93"/>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge18" class="edge">
+<title>root&#45;&gt;n2:p7</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M442.63,-416.5C480.98,-443.93 536.44,-475.45 592.42,-478.93"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.15,-481.73 600.23,-479.18 592.32,-476.13 592.15,-481.73"/>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge19" class="edge">
+<title>root&#45;&gt;n2:p8</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M466.11,-416.43C502.64,-433.37 548.27,-449.56 592.49,-451.75"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.16,-454.54 600.23,-451.94 592.3,-448.94 592.16,-454.54"/>
+</g>
+<!-- root&#45;&gt;n2 -->
+<g id="edge21" class="edge">
+<title>root&#45;&gt;n2:p9</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M506.39,-412.13C534,-418.6 563.8,-423.59 592.43,-424.57"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="592.18,-427.37 600.23,-424.71 592.28,-421.77 592.18,-427.37"/>
+</g>
+<!-- n3 -->
+<g id="node4" class="node">
+<title>n3</title>
+<polygon fill="#b45309" stroke="none" points="614.38,-341.62 614.38,-371.12 795.38,-371.12 795.38,-341.62 614.38,-341.62"/>
+<text xml:space="preserve" text-anchor="start" x="619.38" y="-353.82" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> COMMON &#160;(used by this) </text>
+<g id="a_node4_12"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=543" xlink:title="uLogPaths &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:543 &#160;[implementation]">
+<text xml:space="preserve" text-anchor="start" x="619.38" y="-321.32" font-family="Consolas" font-size="14.00" fill="#1f2933">uLogPaths</text>
+<text xml:space="preserve" text-anchor="start" x="686.88" y="-321.32" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="701.88" y="-321.32" font-family="Consolas" font-size="12.00" fill="#8a94a6">:543</text>
+</a>
+</g>
+<g id="a_node4_13"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=541" xlink:title="uLookupCache &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:541 &#160;[implementation]">
+<text xml:space="preserve" text-anchor="start" x="619.38" y="-294.07" font-family="Consolas" font-size="14.00" fill="#1f2933">uLookupCache</text>
+<text xml:space="preserve" text-anchor="start" x="709.38" y="-294.07" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="724.38" y="-294.07" font-family="Consolas" font-size="12.00" fill="#8a94a6">:541</text>
+</a>
+</g>
+<g id="a_node4_14"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=47" xlink:title="BASICS &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:47 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="619.38" y="-266.82" font-family="Consolas" font-size="14.00" fill="#1f2933">BASICS</text>
+<text xml:space="preserve" text-anchor="start" x="664.38" y="-266.82" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="679.38" y="-266.82" font-family="Consolas" font-size="12.00" fill="#8a94a6">:47</text>
+</a>
+</g>
+<g id="a_node4_15"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=51" xlink:title="FlexDateTime &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:51 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="619.38" y="-239.57" font-family="Consolas" font-size="14.00" fill="#1f2933">FlexDateTime</text>
+<text xml:space="preserve" text-anchor="start" x="709.38" y="-239.57" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="724.38" y="-239.57" font-family="Consolas" font-size="12.00" fill="#8a94a6">:51</text>
+</a>
+</g>
+<g id="a_node4_16"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=49" xlink:title="MSCTYPES &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:49 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="619.38" y="-212.32" font-family="Consolas" font-size="14.00" fill="#1f2933">MSCTYPES</text>
+<text xml:space="preserve" text-anchor="start" x="679.38" y="-212.32" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="694.38" y="-212.32" font-family="Consolas" font-size="12.00" fill="#8a94a6">:49</text>
+</a>
+</g>
+<g id="a_node4_17"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=44" xlink:title="Pipes.Protocol &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:44 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="619.38" y="-185.07" font-family="Consolas" font-size="14.00" fill="#1f2933">Pipes.Protocol</text>
+<text xml:space="preserve" text-anchor="start" x="724.38" y="-185.07" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="739.38" y="-185.07" font-family="Consolas" font-size="12.00" fill="#8a94a6">:44</text>
+</a>
+</g>
+<g id="a_node4_18"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=50" xlink:title="iSetupDefaults &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:50 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="619.38" y="-157.82" font-family="Consolas" font-size="14.00" fill="#1f2933">iSetupDefaults</text>
+<text xml:space="preserve" text-anchor="start" x="724.38" y="-157.82" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="739.38" y="-157.82" font-family="Consolas" font-size="12.00" fill="#8a94a6">:50</text>
+</a>
+</g>
+</g>
+<!-- root&#45;&gt;n3 -->
+<g id="edge7" class="edge">
+<title>root&#45;&gt;n3:p1</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,2" d="M506.43,-340.14C537.32,-333.15 571.13,-327.63 603.41,-326.65"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="603.15,-329.46 611.1,-326.53 603.06,-323.86 603.15,-329.46"/>
+</g>
+<!-- root&#45;&gt;n3 -->
+<g id="edge8" class="edge">
+<title>root&#45;&gt;n3:p2</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,2" d="M472.04,-333.47C510.35,-317.03 557.73,-301.52 603.36,-299.48"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="603.17,-302.28 611.11,-299.3 603.04,-296.68 603.17,-302.28"/>
+</g>
+<!-- root&#45;&gt;n3 -->
+<g id="edge10" class="edge">
+<title>root&#45;&gt;n3:p3</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M446.54,-333.4C487.14,-306.38 545.33,-275.58 603.32,-272.29"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="603.19,-275.09 611.11,-272.07 603.03,-269.5 603.19,-275.09"/>
+</g>
+<!-- root&#45;&gt;n3 -->
+<g id="edge13" class="edge">
+<title>root&#45;&gt;n3:p4</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M432.33,-333.43C471.87,-297.1 535.89,-249.46 603.39,-245.08"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="603.2,-247.88 611.11,-244.82 603.02,-242.29 603.2,-247.88"/>
+</g>
+<!-- root&#45;&gt;n3 -->
+<g id="edge14" class="edge">
+<title>root&#45;&gt;n3:p5</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M423.02,-333.62C460.28,-288.87 527.39,-223.16 603.55,-217.84"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="603.21,-220.66 611.11,-217.58 603.01,-215.06 603.21,-220.66"/>
+</g>
+<!-- root&#45;&gt;n3 -->
+<g id="edge15" class="edge">
+<title>root&#45;&gt;n3:p6</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M416.62,-333.54C451.09,-281.14 519.08,-196.97 603.3,-190.63"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="603.22,-193.43 611.11,-190.34 603.01,-187.84 603.22,-193.43"/>
+</g>
+<!-- root&#45;&gt;n3 -->
+<g id="edge17" class="edge">
+<title>root&#45;&gt;n3:p7</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M411.71,-333.62C443.18,-274.09 510.75,-170.6 603.17,-163.4"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="603.22,-166.2 611.11,-163.09 603,-160.6 603.22,-166.2"/>
+</g>
+<!-- n4 -->
+<g id="node5" class="node">
+<title>n4</title>
+<polygon fill="#b45309" stroke="none" points="619.25,-79.5 619.25,-109 790.5,-109 790.5,-79.5 619.25,-79.5"/>
+<text xml:space="preserve" text-anchor="start" x="624.25" y="-91.7" font-family="Segoe UI" font-weight="bold" font-size="14.00" fill="#ffffff"> OBJECTS &#160;(used by this) </text>
+<g id="a_node5_19"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=52" xlink:title="iMSCLIST &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:52 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="624.25" y="-59.2" font-family="Consolas" font-size="14.00" fill="#1f2933">iMSCLIST</text>
+<text xml:space="preserve" text-anchor="start" x="684.25" y="-59.2" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="699.25" y="-59.2" font-family="Consolas" font-size="12.00" fill="#8a94a6">:52</text>
+</a>
+</g>
+<g id="a_node5_20"><a xlink:href="draglint://open?file=C%3A%5CProjects%5CDB%5CORM3%5CCLIENT%5CBlueprint4.ViewModel.pas&amp;line=53" xlink:title="uMSCLIST &#160;&#45;&#45; &#160;uses clause at Blueprint4.ViewModel.pas:53 &#160;[interface]">
+<text xml:space="preserve" text-anchor="start" x="624.25" y="-31.95" font-family="Consolas" font-size="14.00" fill="#1f2933">uMSCLIST</text>
+<text xml:space="preserve" text-anchor="start" x="684.25" y="-31.95" font-family="Consolas" font-size="14.00"> &#160;</text>
+<text xml:space="preserve" text-anchor="start" x="699.25" y="-31.95" font-family="Consolas" font-size="12.00" fill="#8a94a6">:53</text>
+</a>
+</g>
+</g>
+<!-- root&#45;&gt;n4 -->
+<g id="edge16" class="edge">
+<title>root&#45;&gt;n4:p1</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M401.49,-333.43C422.97,-250.94 483.47,-73.68 608.36,-64.73"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="608.09,-67.54 615.98,-64.46 607.89,-61.94 608.09,-67.54"/>
+</g>
+<!-- root&#45;&gt;n4 -->
+<g id="edge20" class="edge">
+<title>root&#45;&gt;n4:p2</title>
+<path fill="none" stroke="#b45309" stroke-width="1.5" d="M399.47,-333.57C417.93,-245.55 474.22,-47.13 608.06,-37.49"/>
+<polygon fill="#b45309" stroke="#b45309" stroke-width="1.5" points="608.09,-40.29 615.98,-37.21 607.89,-34.69 608.09,-40.29"/>
+</g>
+</g>
+</svg>
+  </div>
+  <p class="cap">Blueprint4.ViewModel, from Micronite2027.sqlite &middot; each row clicks
+  through to its uses-clause line, not to the used unit's declaration</p>
+
+  <div class="note good">
+    <p><b>Clicks work.</b> Verified live against the running IDE: the plugin's pipe
+    server has existed since 2026-09-11, and a browser protocol handler now bridges
+    the gap. I was wrong when I said this was missing &mdash; a backlog note said so and
+    I repeated it without checking the code.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The next three, and why these three</h2>
+  <p class="sub">Chosen after checking which facts are actually POPULATED, not just
+  present in the schema. That check changed the shortlist twice.</p>
+
+  <div class="tbl">
+  <table>
+    <tr><th>command</th><th>select</th><th>shape</th><th>fact, measured</th><th>risk</th></tr>
+    <tr><td class="q">who-calls</td><td>a method</td>
+      <td>caller tree, N deep, cycle-guarded</td>
+      <td><code>call_edges</code> &mdash; 20,409 rows</td>
+      <td><span class="pill p-ok">none</span></td></tr>
+    <tr><td class="q">event-wiring</td><td>a form or control</td>
+      <td>NEW TIER: control &rarr; handler method</td>
+      <td><code>dfm_event</code> &mdash; 762 rows on CLIENT, clean <code>Component.OnEvent</code></td>
+      <td><span class="pill p-ok">none</span></td></tr>
+    <tr><td class="q">touches-tables</td><td>a method</td>
+      <td>NEW TIER: method &rarr; database table</td>
+      <td><code>sql_writes</code> 148, <code>sql_reads</code> 19 &mdash; <b>SERVER only</b></td>
+      <td><span class="pill p-no">scope</span></td></tr>
+  </table>
+  </div>
+
+  <div class="note">
+    <p><b>Two corrections to the catalogue, both found by checking population.</b>
+    <code>tested-by</code> was listed ship-now because <code>covered_by</code> exists in
+    the schema &mdash; it holds <b>zero rows in every index</b>, so it is not shippable
+    and has been demoted. And <code>touches-tables</code> is <b>SERVER-only by design</b>:
+    the client has no FireDAC connection at all, which is why its <code>sql_reads</code>
+    and <code>sql_writes</code> are 0/0. That is correct behaviour, not a gap, and the
+    command must say so rather than render an empty chart.</p>
+  </div>
+
+  <div class="note">
+    <p><b><code>effects</code> deferred, deliberately.</b> <code>effect_summary</code> is
+    the richest fact available (7,254 rows on CLIENT, 5,284 on SERVER) and was my first
+    pick &mdash; but its values are coded letters like <code>g,s,?</code> whose legend I
+    have not found. Decoding that is a research task, not an implementation task, and it
+    is the wrong thing to hand an unattended session. It moves to the front of the queue
+    once someone reads the encoder.</p>
+  </div>
+
+  <p>Together with the two already live, that spans four tiers: <b>code</b>
+  (butterfly, who-calls), <b>structure</b> (deps), <b>UI</b> (event-wiring) and
+  <b>database</b> (touches-tables) &mdash; which is exactly the span the blocked
+  <code>protocol-trace</code> will need once the engine team lands the enum binding.</p>
+</section>
+
+<section>
+  <h2>Still blocked, still with the engine team</h2>
+  <p class="sub">Unchanged and not worked around: <code>protocol-trace</code> (field and
+  method) and <code>crosses-boundary</code> wait on enum-value reference binding;
+  <code>exception-paths</code> waits on a raise/handle fact. The engine session confirmed
+  scope, corrected my cost estimate to ~6 min per project section and ~74 min per platform
+  library, and told us to design for the absence of <code>orm_links</code> because
+  populating it needs a live Firebird connection.</p>
+</section>
+
+<footer>
+  charts\shell\state-of-play.html &middot; regenerate any bundle with its own meta.json
+</footer>
+</div>
