@@ -257,10 +257,10 @@ type
       /// <para>Load does not raise on a bad file: a READ verb may carry on with
       /// what parsed. A WRITE verb must refuse when LoadError is not ''.</para>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+18 more)</para>
-      /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, SameText, Writeln</para>
+      /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+17 more)</para>
+      /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, FirstLoadWarning, SameText, Writeln</para>
       /// <para>Returns: Default(TIndexManifest); GlobalManifest; LocalManifest</para>
-      /// <para>Complexity: 26 (cyclomatic, outer body), 143 lines (full implementation)</para>
+      /// <para>Complexity: 26 (cyclomatic, outer body), 144 lines (full implementation)</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>

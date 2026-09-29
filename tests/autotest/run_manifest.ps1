@@ -260,6 +260,8 @@ try {
   $r = Invoke-Split @('compile-check', "$isoSrc\Iso.dpr")
   Check 'local bad: compile-check says it will not cache' ($r.Err -match 'manifest could not be parsed .*indexes: expected object, got array.*will not be cached') $r.Err
   Check 'local bad: compile-check left the owner DB untouched' ((Get-FileStamp $isoOwnerDb) -eq $ownerBefore)
+  # The generic "Pass --db to cache" line would be advice that cannot help here.
+  Check 'local bad: compile-check prints no generic --db advice' (-not ($r.Err -match 'Pass --db to cache')) $r.Err
 
   # THE .drag-lint.json DEFAULTS KEYS (LoadConfigDefaults reads the same file).
   Write-IsoAscii "$iso\.drag-lint.json" '{ "docs": { "captureLooseComments": "yes" } }'
@@ -269,6 +271,13 @@ try {
   $r = Invoke-Split @('index', '--all', '--dry-run')
   Check 'defaults bad bool: a writer REFUSES (exit 2)'    ($r.Code -eq 2) "exit=$($r.Code)"
   Check 'defaults bad bool: the refusal names the key'    ($r.Err -match 'refusing to write -- the manifest could not be parsed: .*docs\.captureLooseComments: expected boolean, got string') $r.Err
+  # compile-check on a broken defaults file: compiles, caches nothing EVEN WITH
+  # --db (the file may be what named the db), and so gives no "--db" advice.
+  $ownerBefore = Get-FileStamp $isoOwnerDb
+  $r = Invoke-Split @('compile-check', "$isoSrc\Iso.dpr", '--db', $isoOwnerDb)
+  Check 'defaults bad bool: compile-check says it will not cache' ($r.Err -match 'defaults could not be parsed .*docs\.captureLooseComments: expected boolean, got string.*will not be cached') $r.Err
+  Check 'defaults bad bool: compile-check gives no --db advice'   (-not ($r.Err -match 'Pass --db to cache')) $r.Err
+  Check 'defaults bad bool: compile-check left the DB untouched'  ((Get-FileStamp $isoOwnerDb) -eq $ownerBefore)
   Write-IsoAscii "$iso\.drag-lint.json" '{ "watch": { "interval": "fast" } }'
   $r = Invoke-Split @('resolve-dbs', '--platform', 'Win64')
   Check 'defaults bad number: a reader still runs (exit 0)' ($r.Code -eq 0) "exit=$($r.Code) $($r.Err)"

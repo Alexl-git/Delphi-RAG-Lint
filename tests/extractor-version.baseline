@@ -893,6 +893,15 @@
 #   it is config reading/writing; none of it changes what the parser extracts from a
 #   byte sequence. The rest of the diff is `///` managed facts. No stored parse differs.
 #   Superseded: 1.20.0-alpha|04c82b3bb96c5c43cc69b974703f7ec871f4d0edeef8ae30c1c44683114d942a
-1.20.0-alpha|3ed2c84c7deb9eea8cfed9702aacbe20c9989b13ee77a8f071079ad7d5c231be
+# 2026-09-29: hash re-pinned WITHIN 1.20.0-alpha (1.20.4 Task 4 fix round 2). NO extractor
+#   bump. `git diff -U0 HEAD` over the hashed roots lists two files:
+#   DRagLint.Index.Manifest.pas -- three `///` managed-fact lines of TManifestIO.Load
+#   ((+18 more) -> (+17 more), Calls gains FirstLoadWarning, 143 -> 144 lines); zero
+#   non-`///` lines differ. DRagLint.Index.ManifestWrite.pas -- RegisterProjectSection's
+#   ownership arms folded into one if/else-case with a single exit test (7 Exits -> 5,
+#   same outcomes) plus its `///` Complexity fact. The register-project manifest WRITER,
+#   never reached by extraction. No stored parse differs.
+#   Superseded: 1.20.0-alpha|3ed2c84c7deb9eea8cfed9702aacbe20c9989b13ee77a8f071079ad7d5c231be
+1.20.0-alpha|c693f2f776ba9869f037065b6deeddb43dfbb276b85dab200e55cc53d1fb22c7
 # superseded: 1.19.0-alpha|376c7143274119aa23760b9d41092862c6b7d24b426d7367cf5debb6286aa8b8
 #   2026-09-28 1.19.0 -> 1.20.0-alpha: Self.X := v emits a WRITE (Parser.Delphi13 assignment case); sql_column positioned on its own identifier (Parser.Sql FlushItem). Owner-scheduled batch; full re-parse run the same night.

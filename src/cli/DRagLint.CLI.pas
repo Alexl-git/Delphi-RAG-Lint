@@ -19540,7 +19540,7 @@ end; // function
   run took whatever DB Run had defaulted. Since 1.20.4: an explicit --db, else
   the unique owner of the project (a --project argument, else a .dproj/.dpr/.dpk
   target); otherwise the compile still runs and reports, and nothing is cached. }
-function ResolveCompileCheckDb(const AArgs: TArgs; const ATarget: string): string;
+function ResolveCompileCheckDb(const AArgs: TArgs; const ATarget: string; out AReasonPrinted: Boolean): string;
 var
   Manifest : TIndexManifest;
   Ext      : string        ;
@@ -19549,6 +19549,7 @@ var
   Claimants: TArray<string>;
 begin
   Result:= '';
+  AReasonPrinted:= False;
   { A HALF-READ CONFIG IS NOT WRITTEN THROUGH (1.20.4 Task 4). The compile
     still runs and reports -- the caller wants dcc's answer -- but nothing is
     cached: the defaults file may be the very thing that supplied --db, and a
@@ -19556,18 +19557,18 @@ begin
   if AArgs.ConfigError <> '' then
   begin
     Writeln(ErrOutput, 'compile-check: the .drag-lint.json defaults could not be parsed (', AArgs.ConfigError, ') -- findings will not be cached.');
+    AReasonPrinted:= True;
     Exit;
   end;
   if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPath); { an explicit --db always wins }
-  if ATarget = '' then Exit;
 
   Ext:= LowerCase(ExtractFileExt(ATarget));
   ProjArg:= '';
   if (Ext = '.dproj') or (Ext = '.dpr') or (Ext = '.dpk') then ProjArg:= ATarget;
   if AArgs.ProjectPath <> '' then ProjArg:= AArgs.ProjectPath;
-  { An editor file with no project names no owner. A FOLDER match would be a
-    guess, and a guess is not written to. }
-  if ProjArg = '' then Exit;
+  { No target, or an editor file with no project: no owner. A FOLDER match
+    would be a guess, and a guess is not written to. }
+  if (ATarget = '') or (ProjArg = '') then Exit;
 
   try
     if AArgs.WorkspaceConfig <> '' then
@@ -19581,12 +19582,14 @@ begin
     on E: Exception do
     begin
       Writeln(ErrOutput, Format('compile-check: could not load the manifest (%s: %s) -- findings will not be cached.', [E.ClassName, E.Message]));
+      AReasonPrinted:= True;
       Exit('');
     end;
   end;
   if Manifest.LoadError <> '' then
   begin
     Writeln(ErrOutput, 'compile-check: the manifest could not be parsed (', Manifest.LoadError, ') -- findings will not be cached.');
+    AReasonPrinted:= True;
     Exit;
   end;
 
@@ -19640,9 +19643,15 @@ begin
     asked what dcc says; it can be told that whether or not we can cache it.
     Failing here is fail-open in the worst way: the plugin read the empty output
     as zero errors. }
-  DbPath:= ResolveCompileCheckDb(AArgs, Target);
+  var NoCacheReasonPrinted: Boolean;
+  DbPath:= ResolveCompileCheckDb(AArgs, Target, NoCacheReasonPrinted);
+  { The generic line suggests --db, which cannot help when the reason was a
+    config that did not parse -- so it is printed only when no reason was. }
   if DbPath = '' then
-    Writeln(ErrOutput, 'compile-check: no database resolved for this target -- reporting findings without caching them. Pass --db to cache, or check "drag-lint resolve-dbs".')
+  begin
+    if not NoCacheReasonPrinted then
+      Writeln(ErrOutput, 'compile-check: no database resolved for this target -- reporting findings without caching them. Pass --db to cache, or check "drag-lint resolve-dbs".');
+  end
   else if TFile.Exists(DbPath) then
   begin
     Store:= TSQLiteSymbolStore.Create(DbPath);

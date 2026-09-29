@@ -107,7 +107,7 @@ type
 /// <para>Called from: DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Index.Manifest.ResolveProjectDb, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.ManifestWrite.AppendSectionToText, DRagLint.Index.ManifestWrite.BuildSectionJson, DRagLint.Index.ManifestWrite.FindManifestCopies</para>
 /// <para>Returns: Default(TRegisterResult)</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 99 lines (full implementation)</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 100 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
@@ -236,24 +236,25 @@ begin
   begin
     Result.Outcome:= roManifestUnparsed;
     Result.Message:= Manifest.LoadError;
-    Exit;
-  end;
-  case ResolveProjectDb(Manifest, ProjAbs, Db, Claim) of
-    pdmUnique:
-      begin
-        Result.Outcome  := roAlreadyOwned;
-        Result.Claimants:= Claim;
-        Result.Message  := 'already registered; nothing to do';
-        Exit;
-      end;
-    pdmAmbiguous:
-      begin
-        Result.Outcome  := roAmbiguous;
-        Result.Claimants:= Claim;
-        Result.Message  := 'several sections already claim this project -- fix the manifest by hand';
-        Exit;
-      end;
-  end;
+  end
+  else
+    case ResolveProjectDb(Manifest, ProjAbs, Db, Claim) of
+      pdmUnique:
+        begin
+          Result.Outcome  := roAlreadyOwned;
+          Result.Claimants:= Claim;
+          Result.Message  := 'already registered; nothing to do';
+        end;
+      pdmAmbiguous:
+        begin
+          Result.Outcome  := roAmbiguous;
+          Result.Claimants:= Claim;
+          Result.Message  := 'several sections already claim this project -- fix the manifest by hand';
+        end;
+    end;
+  { Every arm above that decided the outcome moved it off roAdded, the ordinal-0
+    value Default(TRegisterResult) left there; only "nobody owns it yet" goes on. }
+  if Result.Outcome <> roAdded then Exit;
 
   Copies:= FindManifestCopies(AEngineDir);
   if Length(Copies) = 0 then
