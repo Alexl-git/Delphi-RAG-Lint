@@ -3,6 +3,55 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.20.3-alpha -- 2026-09-29
+
+PATCH: two doc-drift false reports fixed, a parallel-battery race in the legacy fixtures removed,
+and a detailed INSTALL.md. Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha, resolver
+1.11.0-alpha and schema v23 are unchanged -- no index needs a re-parse or a re-resolve.
+
+### Fixed
+
+- **doc-drift reported a two-way var/out param as "documented as input-only".** The rule
+  (`DescReadsInputOnly`) fired whenever a var/out param's description LED with `input`/`in`, so a
+  description that documents both directions -- the converter's `TMappingForm` `ANodes`: "IN: the
+  current nodes ... OUT (only when the result is True): ... the caller now owns" -- was a finding.
+  It now also requires that no later WHOLE word marks an output direction (`out`, `output`,
+  `returns`, `returned`, `replaced`, `replaces`, `receives`, `updated`, `owns`, `filled`); a marker
+  inside another word (`without`, `layout`) does not count, a by-value param stays silent as before,
+  and an `out` param with a genuinely input-only description still fires. Reported by the converter
+  session: `docs\INBOX-2026-09-29-converter-to-engine-doc-drift-input-only-fp.md`. First guard for
+  this rule: `tests\autodoc\run_doc_drift_input_only.ps1` over
+  `tests\autodoc\fixtures\docinonly\uInOnly.pas` (the two defect shapes, three positive controls,
+  the by-value and leads-with-Out silences, and a non-vacuity count).
+- **doc-drift refused to auto-fix a facts block because of its own "(+N more)" window marker.** The
+  finding "names facts in unit(s) this index does not hold; not auto-fixed" was WRONG in every
+  observed case: all 12 in the convrules-editor and `DRagLint.Refactor.TextEdit.TTextEdit` in
+  drag-lint's own index. `TSharedFacts.RegenerationDropsUnvouchable` split the stored and fresh
+  inbound lists without `WithoutMoreSuffix`, so when only the count changed (`(+42 more)` ->
+  `(+43 more)`) the last visible entry carried the marker, matched nothing in the fresh set, and was
+  read as a unit called `+42 more` that no index holds. It now strips the marker like its sibling
+  readers (`BlockHoldsUnvouchable`, `ReconcileContent`, `ReconcileDropsUnvouchable`); all 13 are
+  `[FIXABLE]`. Guard: `tests\autodoc\run_doc_drift_window_marker.ps1` (RED on 1.20.2), with a
+  positive control: the same window shape whose last visible entry names an unheld unit is still
+  refused, and `--fix --apply` leaves it as found.
+
+### Tests
+
+- **The legacy fixtures T35/T37/T38/T39/T41 build private databases.** They read the shared
+  `tests\fixtures\t14.sqlite`, built only "if not exist", while `T14_impact.bat`
+  (`run_doctests_v021.ps1`) deletes and rebuilds that same file; the two runners run in parallel in
+  a battery, so a fixture could read a half-built or deleted DB (T41 "DUnitX scaffold missing" under
+  `-Jobs 4`, green alone). Each now builds its own `t<NN>.sqlite` fresh from the same `Calls.pas`;
+  assertions are unchanged. Also removed a dead store in `TFindUnitRefactoring.Build`
+  (`DRagLint.Refactor.TextEdit.pas`, H2077 / lint `overwrite-before-read`).
+
+### Docs
+
+- **INSTALL.md is a full installation guide:** Requirements, unpack and verify, the manifest, your
+  first project index, Charts, Troubleshooting and Uninstall, alongside the existing sections 1-6.
+  Every command was run against this engine in a staged release folder; the archive listing follows
+  `build\pack-lint-release.ps1`, and the Win32 archive is recorded as a known issue.
+
 ## v1.20.2-alpha -- 2026-09-29
 
 PATCH: a source-destroying autofix defect fixed, the plugin's click path hardened, charts merged.
