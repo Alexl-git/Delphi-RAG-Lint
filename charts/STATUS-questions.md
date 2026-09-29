@@ -4,10 +4,10 @@
 The live scoreboard for `charts\question-catalogue.md`. **27 catalogue rows**
 (`protocol-trace` appears twice -- field and method are different questions).
 
-Updated 2026-09-28. Branch `feat/archify-ir`, 75 commits ahead of `main` at 716ec8f9 (measured: `git rev-list --count <merge-base>..HEAD`), no remote branch, NOTHING PUSHED.
+Updated 2026-09-29. Branch `feat/archify-ir`, 92 commits ahead of its merge-base with `main` (4ccd1779) at 65e1419c, before this documentation commit (measured: `git rev-list --count <merge-base>..HEAD`), no remote branch, NOTHING PUSHED.
 
 ```
-SHIPPED                     26   emitters exist, tested; charts clickable (round-trip is TEXT: anchors are @file:line text, not clickable)
+SHIPPED                     26   emitters exist, tested; chart rows and round-trip @file:line anchors are draglint:// links
 PLANNED (ready to build)     0
 UNPLANNED, unblocked         0
 BLOCKED on data              0   consumers / feeds-from / lands-where ship DERIVED (path A)
@@ -60,7 +60,7 @@ interface / project / command constant / wire field / db column / any symbol.**
 | `consumers` | table / column | `Emit-Consumers.ps1` | CAUSFAIL (SERVER): 1 certain reader, 1 certain writer, 3 triggers; FOLDERS 3 inferred readers; FOLDERS 2 declarations, newest 79 columns |
 | `feeds-from` | control | `Emit-FeedsFrom.ps1` | colREASON: 5 graded hops to CAUSFAIL.REASON; 267 of 808 field-bound CLIENT controls reach one table |
 | `lands-where` | ORM property / field / control | `Emit-LandsWhere.ps1` | TmcCAUSFAIL.REASON: 4 server rows, 1 trigger, 1 client binding; convention 1,992 of 1,997 |
-| `round-trip` | control / field / TABLE.COLUMN | `Emit-RoundTrip.ps1` | OPERAT.NAME from frmBlueprint4.dxDBGrid1OperationVName: 17/17 golden nodes matched, 3 golden facts disclosed (READ [28]-[29], transport helpers at uPipeSessionBuilder.pas:533/:534/:538), 12/12 guards; 76 steps / 31 conditions / 4 crossings / 2 unresolved (the statement for the posted row and the SELECT STOPS, both E4); ALSO 9 (owner-accepted 2026-09-28: all callers count; dataset scope; anchors only). Limits: guards see the innermost enclosing `if` only (E1); OMITS tests every enclosing `if` up to a loop or case arm; statement texts are FIB$ rows the clones do not hold (E4). A direction that stops after the anchor notes its un-walked tiers and the title claims only the walked direction (`RT-NOWIRE`: frmAssignGroups.grdFtrsColNum, 33/10/2/2). TEXT bundle (`trace.dlgraph`), no chart yet |
+| `round-trip` | control / field / TABLE.COLUMN | `Emit-RoundTrip.ps1` | OPERAT.NAME from frmBlueprint4.dxDBGrid1OperationVName: 17/17 golden nodes matched, 3 golden facts disclosed (READ [28]-[29], transport helpers at uPipeSessionBuilder.pas:533/:534/:538), 12/12 guards; 76 steps / 31 conditions / 4 crossings / 2 unresolved (the statement for the posted row and the SELECT STOPS, both E4); ALSO 9 (owner-accepted 2026-09-28: all callers count; dataset scope; anchors only). Limits: guards see the innermost enclosing `if` only (E1); OMITS tests every enclosing `if` up to a loop or case arm; statement texts are FIB$ rows the clones do not hold (E4). A direction that stops after the anchor notes its un-walked tiers and the title claims only the walked direction (`RT-NOWIRE`: frmAssignGroups.grdFtrsColNum, 33/10/2/2). TEXT bundle (`trace.dlgraph`; the page links each anchor to the IDE, 126/126 here -- DOC-R1), no chart yet |
 | `round-trip` (holdout, AC-16) | control | `Emit-RoundTrip.ps1` | MSCLIST.NUM from frmBlueprint4.dxDBGrid1FtrsVNum through FMTFtrs / SendDeltaFtrs (a different dataset and sender than OPERAT.NAME; the re-point at Blueprint4.pas:2283 recovered from source, P29): 103 steps / 35 conditions / 4 crossings / 2 unresolved, pinned by gate `RT-HOLD`. Owner-accepted 2026-09-28: the owner checked the path's shape against the OPERAT.NAME trace and the golden, not every line. FtrName (the plan's default) was not used: it is one of 12 calculated fields added to FMTFtrs after BuildMemTable (Blueprint4.ViewModel.pas:748-761), no DB column -- its trace now OFFERS ITS SOURCES (calc-field brief, owner 2026-09-28) |
 | `round-trip` (calculated field) | control | `Emit-RoundTrip.ps1` | frmBlueprint4.dxDBGrid1FtrsVFtrName: a calculated field (written by FtrsOnCalcFields, Blueprint4.ViewModel.pas:986-993) -- the STOPS says so with its guards verbatim, and DERIVED offers its 18 source fields (17 TField variables + the local FtrType, one hop), each with a ready command; 27 steps / 2 conditions / 0 crossings / 1 unresolved. Tolerance: 4 source fields + 2 case selectors (fix round 1), 15/2/0/1. InspAsVarStr (every write a constant): the 2 fields its ifs test, 6/8/0/1; USLLSLName: 2 value fields + 3 that choose it + 1 unmappable local, 10/8/0/1 (fix round 2). Row commands are `& '<absolute path>\New-DiagramArtifact.ps1' ...`, runnable as written. The DimAbbr row's command run end to end: MSCLIST.DIMABBR, 98/35/4/2. Pinned by gate `RT-CALC` |
 
@@ -280,11 +280,33 @@ from 9 nodes to 4. Callers unaffected.
 
 ## Resume point
 
-**DONE 2026-09-28: the trace core shipped** (`round-trip`, plan Tasks 0-8, a TEXT bundle through `New-DiagramArtifact.ps1`); the holdout (Task 9, AC-16) is pinned as `RT-HOLD` on frmBlueprint4.dxDBGrid1FtrsVNum -> MSCLIST.NUM, owner-accepted 2026-09-28 by the path's shape. ALSO (AC-10) is owner-accepted 2026-09-28: all callers count, importers included; the scope stays the anchor DATASET; ALSO rows stay anchors only. **Next: the round-trip CHART drawn from the Form A text (spec step 3).**
+**As of 2026-09-29 (HEAD 65e1419c + this docs commit): the branch is complete pending the review of this documentation pass; then the engine team merges it and publishes.**
 
-**Follow-on verbs (owner, 2026-09-28), recorded, not designed:** (1) a generic TABLE.COLUMN trace -- round-trip traces one field INSTANCE, so tracing every dataset of a column is another verb; (2) a drill-down into a routine's details at its place in the protocol chain -- ALSO rows stay anchors, so expanding one is another verb.
+Shipped on this branch since the trace-core plan started (2026-09-27):
 
-**NEXT ACTION (2026-09-27): implement the Interface report trace core,
+* `round-trip` -- the trace core (plan Tasks 0-9): a TEXT bundle through `New-DiagramArtifact.ps1`; OPERAT.NAME 76/31/4/2, golden 17/17, guards 12/12, ALSO 9 (owner-accepted); holdout `RT-HOLD` MSCLIST.NUM 103/35/4/2 (owner-accepted by the path's shape).
+* The calc-field offer -- a calculated anchor field stops and offers its source fields and the fields that choose its value (`DERIVED`, grammar spec 8.5; gate `RT-CALC`, commits f1cd1eb8..e5cbb459).
+* Click-through (DOC-R1, c20fda3f) -- the chart page no longer cancels a `draglint://` click, and round-trip anchors are links (126/126 on OPERAT.NAME) -- plus the HARDENED handler (dc8217ba, 2a4915a1, 65e1419c: one argument only, local drive path and source extension only, Notepad fallback, capped log) and a registration that copies the handler to `%LOCALAPPDATA%\drag-lint` with a stable interpreter (`-DryRun`, worktree refusal).
+* `Ask-Report.ps1` (4587182c, d134a4da) -- one command for AI agents (README "For AI agents"), with the user skill `drag-lint-reports` (`C:\Users\alexanderl\.claude\skills\drag-lint-reports\SKILL.md`) that tells an agent when to run it.
+* Clones re-taken at `v=1.20.0-alpha / r=1.11.0-alpha` (99c540c8); the deployed engine is 1.20.1-alpha.
+
+Latest full gate: `Test-Emitters.ps1` PASS, 2026-09-28 23:56 - 2026-09-29 00:22, on the tree committed as 2a4915a1 (65e1419c touched no gated file; `Test-DragLintProtocol.ps1` PASS on it). Protected counts unmoved: 76/31/4/2, 17/17, 12/12, ALSO 9, 103/35/4/2, DimAbbr 98/35/4/2.
+
+Owner actions after the merge: re-register the protocol from `C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1` (this machine still runs the versioned 7.6.6.0 pwsh on the worktree's handler) and check one live click into RAD Studio -- never checked end to end.
+
+**Follow-ons, recorded, not designed (one line each):**
+
+1. **The round-trip CHART** drawn from the Form A text -- the next spec -- together with the owner's grammar decisions: drop the quotes around conditions (the parser takes `WHEN` / `UNLESS` ... up to the final `@File:line`); DocInsight-ready text is the default output, with an option for other docs.
+2. **A generic TABLE.COLUMN trace** (verb) -- round-trip traces one field INSTANCE; every dataset of a column is another verb.
+3. **A drill-down into a routine** at its place in the protocol chain (verb) -- ALSO rows stay anchors; expanding one is another verb.
+4. **Table-in-a-constant resolution** -- `colREASON`'s trace stops where the table name is a constant (`CAUSFAIL_TABLE`) rather than a literal.
+5. **Multi-assigned locals in calc fields** -- USLLSLName's local `Spec` (set at 5 places) is a named `not mapped` row; its inputs are not followed.
+6. **Audit emitter queries near the engine's 10 s `sql` cap** -- `Get-FieldVarWriteRows` ran 9-10 s before its rewrite (1.3 s); other correlated `JOIN ... OR` queries are unaudited.
+7. **Plugin-side pipe hardening (engine)** -- `DoOpenInIDE` opens any existing file a local process sends (UNC, `.dproj`); `CreateNamedPipe` has no security attributes and no `PIPE_REJECT_REMOTE_CLIENTS`.
+8. **An in-IDE chart viewer (engine)** -- charts open in a browser today.
+9. **For the owner, an APP bug, not a charts defect:** in Micronite, `frmAssignGroups` Num edits never reach the database -- the Save (`AssignGroups.ViewModel.pas:507-521`) sends deltas for TOOLASSG / TOOLS / TOOLDEF / TOOLGR12 but none for MSCLIST, and its `FMTFtrs` has no AfterPost (or other update) handler wired, so nothing sends the edit to the server (the `RT-NOWIRE` trace stops at [09] for exactly that reason).
+
+**HISTORY -- NEXT ACTION of 2026-09-27 (done: the trace core shipped 2026-09-28): implement the Interface report trace core,
 SUBAGENT-DRIVEN** (owner's choice). Local, gitignored (public repo):
 spec `docs\superpowers\specs\2026-09-27-interface-report-trace-core-design.md`,
 plan `docs\superpowers\plans\2026-09-27-interface-report-trace-core.md`
@@ -338,6 +360,8 @@ green (1072 s):
    (`fixtures\golden-operat-name-roundtrip.md`, "the acceptance target for the
    protocol-trace emitter"): 2 of 17 nodes, no guards, no failure edge, one DB
    per chart. "25 of 26 ship" is true of the catalogue, not of the golden.
+   (Answered 2026-09-28 by the new question `round-trip`, which matches 17 of 17
+   golden nodes and 12 of 12 guards; protocol-trace itself is unchanged.)
 2. **feeds-from / lands-where stop at a dangling designer datasource** and do
    not follow the runtime re-point (`Blueprint4.pas:2282`,
    `:= FBlueprint_ViewModel.pdsrOperation`) -- the one hop that would reach
@@ -353,7 +377,7 @@ who-writes "bound, not reported" workaround is dropped.
 **The earlier batches are all done.** 26 of 27 catalogue questions ship (`round-trip` 2026-09-28); only
 `compare` does not, parked by the owner.
 
-**THE SUITE IS GREEN (2026-09-28 18:59-19:26) on re-taken clones at `v=1.20.0-alpha / r=1.11.0-alpha`**
+**THE SUITE WAS GREEN (2026-09-28 18:59-19:26, the re-clone; the latest green run is in the Resume point) on re-taken clones at `v=1.20.0-alpha / r=1.11.0-alpha`**
 (engine 1.20.0-alpha; all 9 copied 18:17-18:18, DL first; the r=1.9 set kept as `*.sqlite.pre-1.10`; the CLIENT
 live DB had a 5-commit WAL rewriting only `schema_meta` with identical values, so its main file was copied and
 verified equal to the live DB by stamps and table counts -- ruling RC-R3). Moved pins, each traced:
@@ -366,6 +390,8 @@ verified equal to the live DB by stamps and table counts -- ruling RC-R3). Moved
 * RB-1 also moved the broadcast into the transport skip (a BOUND call into `uBroadcast%`): 76/31 -> 75/30 and
   golden 17 -> 16 until RC-R6 kept a transport callee whose body calls WriteFile (and kin) as a step, not
   descended. OPERAT.NAME 76/31/4/2, holdout 103/35/4/2, DimAbbr 98/35/4/2, golden 17/17, ALSO 9: unchanged.
+  The check that the rule does not over-trigger (RC-R5) was index-wide for the WriteFile callers (all pipe or
+  broadcast code) but only trace-scoped for the callees the walk skips or prunes.
 * AS OF stamps. `Self.X` writes (CLIENT 32,915) moved no pin; CLIENT / SERVER / SQL sources identical to the old
   clones (per-file sha).
 

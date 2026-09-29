@@ -82,6 +82,7 @@ or, for the TEXT question `round-trip`, `trace.dlgraph` shown in a `<pre>` --
 paths are the CLONES under `charts\scratch\db\`; `Get-CloneDb` refuses anything
 else.
 One command instead, on the live indexes: `src\Ask-Report.ps1 -Question <id> -Target <t> -Project <x.dproj>` (README "For AI agents").
+Every chart row and every linked `round-trip` anchor is a `draglint://` link that opens the line in RAD Studio once `src\Register-DragLintProtocol.ps1` has been run for the user (README "Click-to-source").
 
 ```
 New-DiagramArtifact.ps1 -Question exception-paths -Target <Unit.Class.Method> -DbPath <clone> [-Depth 3] [-Cap 20]
@@ -133,7 +134,8 @@ a validation chain out-runs the real path every time.
 
 1. **Follow the payload, not the calls.** A trace is a data slice; keep a branch
    only while it still carries the selected value. This is why the OPERAT.NAME
-   trace is 33 steps and not hundreds.
+   trace is 33 steps and not hundreds (the hand-written golden; the generated
+   `round-trip` trace of the same column is 76 steps -- still not hundreds).
 2. **A trace is defined by its endpoints, not its depth.** Closed sink set: UI
    control, SQL table/column, process boundary, file/log, and "consumed and
    discarded" -- which is a real answer, not a failure.
@@ -150,9 +152,9 @@ a validation chain out-runs the real path every time.
   TEXT ROWS inside it, not separate nodes. This collapses 33 nodes into 6
   rectangles AND makes the chart near-lossless -- guards become rows, so the
   `OTHERWISE` clauses that a node-per-step chart drops are preserved.
-  * UNVERIFIED: whether Graphviz `HREF` on an HTML-like table cell survives into
-    the SVG as a real anchor. If not, row bands must be computed from font
-    metrics against `-Tplain` geometry.
+  * VERIFIED 2026-09-22 against Graphviz 16.1.0 (README "The first two"): `HREF`
+    on an HTML-like table cell survives into the SVG as a real `<a xlink:href>`,
+    one anchor per row, so no font-metric row bands are needed.
 * **Provenance granularity is the STEP, never the enclosing routine.** Measured:
   steps 28-32 of the OPERAT.NAME trace all live inside `HandleTableLoad`
   (uPipeSessionBuilder.pas:533-597). Per-method provenance would have collapsed
@@ -181,7 +183,9 @@ ENRICHMENT, never as a source.**
   cannot depend on them today, and cannot tomorrow either unless someone runs
   `fb-snapshot` against a live Firebird and ships the resulting SQL index as an
   input. `lands-where`, `feeds-from` and `consumers` are therefore not near-term
-  work, and should not be planned as if they were.
+  work, and should not be planned as if they were. (Superseded 2026-09-23: all
+  three shipped DERIVED from DFM bindings, SQL literals and the SQL-script index,
+  with no `orm_links` / `fb_*` rows -- see the catalogue table.)
 
 **Cross-DB identity -- safe, with a caveat we had not considered.**
 

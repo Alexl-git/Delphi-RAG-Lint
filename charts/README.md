@@ -40,7 +40,7 @@ pwsh -NoProfile -File $ar -Question <id> -Target <t> -Project <x.dproj>   (or -I
 * It resolves the project index with the engine's `resolve-dbs`, takes the SERVER and SQL indexes from `charts\report-pairs.json`, and writes the bundle under `%TEMP%\drag-lint-reports`. A stale index stops it (exit 3) with the incremental `index` command printed; it never indexes.
 * Read stdout: `BUNDLE <folder>`, one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)` after the first), then the answer -- the whole Form A trace for `round-trip`, else a `CHART` header with the counts, `TARGET <name> @File.pas:line` for the chart's own selection, one `<name> @File.pas:line` line per result row, and `... +N more ... not shown (-Cap N; raise -Cap to see them)` whenever the chart drew fewer rows than its header counts. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
 * Give the target the way the verb takes it: `who-writes` wants `Blueprint4.ViewModel.TBlueprint_ViewModel.FSuppressEvents`, not `TBlueprint_ViewModel.FSuppressEvents`.
-* `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~80 s, not in the gate). Several of its cases read the clones under `scratch\db` and need them FRESH (Ask-Report checks freshness first and answers exit 3 once a source file they index changes -- re-take the clones); `AR-STALE` needs the DL clone to stay stale.
+* `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~70 s measured 2026-09-28, not in the gate). Several of its cases read the clones under `scratch\db` and need them FRESH (Ask-Report checks freshness first and answers exit 3 once a source file they index changes -- re-take the clones); `AR-STALE` needs the DL clone to stay stale.
 
 ## Graphviz -- present and verified 2026-09-22
 
@@ -98,8 +98,11 @@ not, parked by the owner. The scoreboard is `STATUS-questions.md`, the question
 set and each question's caveat is `question-catalogue.md`, the gate is
 `src\Test-Emitters.ps1`, and `src\New-ExampleGallery.ps1` renders worked
 examples into `docs\examples\index.html` -- 76 over the 25 shipped question
-names (26 rows; `protocol-trace` is two), three or four each, measured on the
-2026-09-28 run. `round-trip`'s three are TEXT bundles (the trace in a `<pre>`;
+names (26 rows; `protocol-trace` is two), three or four each, measured on a
+2026-09-28 run into a scratch `-OutRoot` (the copy under `docs\examples` on
+this machine is still from 2026-09-23/24, with no `round-trip` folder, until it
+is rebuilt).
+`round-trip`'s three are TEXT bundles (the trace in a `<pre>`;
 a bundle made since DOC-R1 links each `@file:line` anchor into the IDE); the rest are charts.
 
 ### The last four (PLAN-last-four-verbs.md)
@@ -270,7 +273,8 @@ FAIL on five mutations of the golden.
 
 `scratch\` and `artifacts\` are gitignored -- both are regenerable, and each
 bundle's `meta.json` carries the command that regenerates it.
-## Click-to-source WORKS (verified live 2026-09-23)
+
+## Click-to-source (pipe verified live 2026-09-23; browser hop fixed 2026-09-28)
 
 `docs\BACKLOG-archify-parity.md` calls the IDE plugin's pipe server "the one
 piece genuinely missing". **That was true when written on 2026-09-16 and is not
@@ -317,14 +321,24 @@ only the BROWSER hop, because a browser cannot write to a named pipe:
   folder). A source inside a `*-wt\` worktree needs `-Force`. `-DryRun` returns the
   value it would write and touches nothing; `-Unregister -DryRun` lists what it would
   remove and removes nothing. A registration made before 2026-09-28
-  points at the worktree's handler and the versioned pwsh path: re-run it (the owner
-  decides when).
+  points at the worktree's handler and the versioned pwsh path (this machine's still
+  does, read 2026-09-29): after the merge, re-run it once from the main checkout,
+  `C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1` (no `-Force`),
+  then check one live click -- the owner decides when.
 
 The bundle page itself must not stand in the way (DOC-R1, 2026-09-28). Its click
 handler used to call `preventDefault` and only toast "sent to the IDE", so no
 click on a chart row ever reached the handler. It now lets the browser hand the
 `draglint://` URI to the handler, and the toast names the file:line asked for and
 the registration to run if nothing opens. Gate: `A-DOC-R1-NAV`, `A-DOC-R1-TOAST`.
+Checked in headless Chrome (the click is no longer cancelled); a live browser click
+into RAD Studio has not been checked yet.
+
+The pipe server itself (engine code, not changed here) still opens ANY existing file
+a local process writes to it -- `DoOpenInIDE` runs `FileExists` and then opens it,
+UNC and `.dproj` included -- and `CreateNamedPipe` passes no security attributes and
+no `PIPE_REJECT_REMOTE_CLIENTS`. The handler closes the browser route only; the
+plugin-side checks are an engine item.
 ## Fact POPULATION, measured 2026-09-23, re-measured 2026-09-24 (1.19 clones) -- check this before planning a question
 
 A column EXISTING in schema 23 does not mean it holds rows. We made that mistake

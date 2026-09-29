@@ -28,7 +28,7 @@ What that means for this document:
 | Section 5 (35 EARS criteria) | **Stands as patterns.** Criteria quoting a COUNT or a LINE NUMBER must take their values from section 7: the block is lines 40..138 with 30 anchors, not 40..123 with 29. |
 | Section 6 (open questions) | **OQ-1, OQ-2, OQ-3 and OQ-4 are RESOLVED by the correction** -- counts recompute, numbering is contiguous from [01], `CROSSES` carries structured `FROM`/`TO`/`OVER`/`WITH`, and `TIERS` is present. The rest stand. |
 | Section 7 (verification walk) | **RE-RUN 2026-09-23 and PASSING.** Now executable: `charts\src\Test-FormA.ps1`, 99/99 lines classified, counts recomputed, verb set regenerated, and proven to FAIL on five mutations. |
-| Section 8 (round-trip amendments) | **Added 2026-09-28.** The GENERATED trace's additions: `ANCHOR` / `ALSO`, `FROM` / `REGENERATE`, `STOPS`, `WHEN` / `UNLESS` (with the marked `try` / `except` and `case` forms), `[by name]`, an OPEN owner question on pasting into DocInsight, the section note, the stopped-trace title, `OMITS`, and its measured 18-verb set (two verbs, `EMPTIES` and `OMITS`, are not in the golden's 27). |
+| Section 8 (round-trip amendments) | **Added 2026-09-28.** The GENERATED trace's additions: `ANCHOR` / `ALSO`, `FROM` / `REGENERATE`, `STOPS`, `WHEN` / `UNLESS` (with the marked `try` / `except` and `case` forms), `[by name]`, the DocInsight question (answered by the owner for the next spec), the section note, the stopped-trace title, `OMITS`, its measured 18-verb set (two verbs, `EMPTIES` and `OMITS`, are not in the golden's 27), and `DERIVED` (8.5). |
 
 The gate named in the original draft has been cleared: the verb set is
 regenerated and the walk has been re-run against the corrected block, by a
@@ -415,7 +415,8 @@ proposed as an amendment for owner review.
   anchor. Recommendation: render in the unit of the nearest anchored ancestor,
   without an HREF. Separately, "0 unresolved" has no construct; the branch
   policy's "say where it stopped" suggests a first-class `UNRESOLVED <text>`
-  item. Not added without a decision.
+  item. Not added without a decision. (Section 8 adds it for the generated trace
+  as the numbered `STOPS <reason> @anchor` step, counted as unresolved.)
 * **OQ-8 Escaping names that collide with keywords or connectives** (a method
   named `AT`, a column named `TO`). Recommendation: a string literal is accepted
   in subject and phrase position as an escaped name.
@@ -524,6 +525,9 @@ read from that code and MEASURED on the gate's trace
   Nothing is ever escaped: a condition that itself carries a double quote is
   refused by `New-TraceCond`, and the walk (the shim's `unknown` form) turns
   that hop into a `STOPS` naming E1 instead -- see the header of `Trace.FormA.ps1`.
+  **Owner decision for the next spec (the round-trip chart), not built yet:** drop
+  the quotes around conditions -- the parser takes `WHEN` / `UNLESS` ... up to the
+  final `@File:line`. This section describes the code as it is.
 * The `try` / `except` form (`Trace.Walk.ps1` shim, `:315-317` and `:526-532`): an Exit in an
   except handler is guarded by `UNLESS "<statements> raises"`. The statement texts are
   source text, verbatim; ` raises` is GENERATED. One statement is quoted whole
@@ -547,6 +551,8 @@ read from that code and MEASURED on the gate's trace
   invalid as XML doc-comment text, and every line of a paste needs a `///` prefix. The writer does neither today (no escaping, no
   prefix). Whether Form A gains a DocInsight rendering (escape `<` / `&`, prefix
   `///`) is the owner's call; the footer now says only `trace.dlgraph (Form A text)`.
+  **ANSWERED for the next spec (not built yet):** DocInsight-ready text becomes the
+  default output, with an option for other docs.
 * Certainty gains `[by name]` (a name match) beside `[certain]` / `[inferred]`; it is two tokens and the checker drops it as a phrase.
 * Gutters may be two OR three digits.
 * The canonical emitter (`Trace.FormA.ps1`) numbers every item, anchors every step INCLUDING `CROSSES` (at the send line), and never writes an epilogue. `Read-FormA` reads only the canonical layout; the golden stays hand-aligned and is checked, not parsed.
@@ -686,7 +692,7 @@ REGENERATE commands shortened here; fix round 1 wording):
 DERIVED
   -- FtrName is calculated from 18 fields -- trace one of them instead (every binding below: the TField variable via FF(dataset, literal), assumed to return ...):
 [10] FROM MSCLIST.NOTATION VIA FfFtrs_Notation [inferred] @Blueprint4.ViewModel.pas:987 -- in FtrsOnCalcFields; FfFtrs_Notation bound at :879 via FF; ask in-class-field-reads
-       REGENERATE & '<charts>\src\New-DiagramArtifact.ps1' -Question round-trip -Target Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation -DbPath "..." -ServerDbPath "..." -SqlDbPath "..." -Depth 4
+       REGENERATE & '<charts>\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation' -DbPath "..." -ServerDbPath "..." -SqlDbPath "..." -Depth 4
 ...
 [18] FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType [inferred] @Blueprint4.ViewModel.pas:990 -- in FtrsOnCalcFields; FtrType set at :978, FfFtrs_FtrType bound at :858 via FF; ask in-class-field-reads
 ```

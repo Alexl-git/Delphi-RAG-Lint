@@ -64,10 +64,15 @@ The twenty-sixth is a TEXT question (a `trace.dlgraph` bundle, no picture yet):
   The page is a document: each `@File.pas:line` anchor is a `draglint://` link that opens the line in the IDE (DOC-R1).
   A direction that stops after the anchor notes each tier it did not reach as `not walked`, and the title claims only the walked direction.
   ALSO is owner-accepted (2026-09-28): all callers count; the anchor dataset's scope; anchors only.
+  A selection bound to a CALCULATED field stops at its anchor and offers, in a `DERIVED` section, the fields it is computed from and the fields that choose its value (a `case` selector, an `if` around a write), each with a ready command to trace it instead (gate `RT-CALC`: FtrName 18 fields).
+
+Two helpers since 2026-09-28: `src\Ask-Report.ps1` asks any question in one command on the live indexes (README "For AI agents"), and a click on a chart row or a trace anchor reaches RAD Studio through `src\Register-DragLintProtocol.ps1` / `src\Open-DragLintUri.ps1`, a handler that opens only a local Delphi source file and falls back to Notepad (README "Click-to-source").
 
 Engine defects the charts disclosed -- D1 (parenless calls), D12 (effects), D13
 (who-writes), D18 (multi-line SQL.Add reads), D19 (quoted identifiers) -- are FIXED
 in extractor 1.19 / resolver 1.8 (re-baselined 2026-09-24); the detectors stay as
-guards. who-writes still lists writes BOUND to the member that find-callers does
-not report (the D13 fix gave them no member-access row). D6 (butterfly duplicate
-rows) is fixed in the emitter.
+guards. The who-writes "bound, not reported" disclosure the D13 fix needed is
+RETIRED (2026-09-27): engine 1.18 (D31) makes `find-callers --resolved` report those
+writes, so they are the writers wing; what stays unbound (a write in a `with` body,
+bare in-class reads) is listed by name. D6 (butterfly duplicate rows) is fixed in
+the emitter.
