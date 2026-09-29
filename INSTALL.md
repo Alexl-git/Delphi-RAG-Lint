@@ -126,7 +126,9 @@ look at your source files; edited sources are reported differently (section 8).
 | `unreadable` | the file exists but cannot be read as an index | check the path; rebuild it |
 
 The `remedy` field is present for `resolve-owed`, `reparse-owed` and
-`index-newer`, and absent otherwise.
+`index-newer`, and absent otherwise. Without `--json`, `info --db <index>`
+prints the same verdict as one `index: <path>  verdict: <v>` line per
+database, followed by an indented `remedy: ...` line when one is owed.
 
 **Always run the engine by full path, or as `.\drag-lint.exe` from its own
 folder.** When the Windows environment variable

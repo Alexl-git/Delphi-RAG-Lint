@@ -868,8 +868,9 @@ begin
   Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
-  Writeln('                               each --db adds an `indexes` entry: stored fingerprints, indexer_stale / resolver_stale, a verdict');
+  Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
   Writeln('                               (current | resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
+  Writeln('                               text form: one "index: <path>  verdict: <v>" line per --db, then "  remedy: ..." when one is owed.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
@@ -15629,12 +15630,126 @@ begin
   end;
 end;
 
+type
+  /// <summary>One `info --db` answer: the staleness verdict for one index and
+  /// the facts it was computed from. Filled by ComputeInfoIndexVerdict and read
+  /// by BOTH output forms of DoInfo, so the text and JSON verdicts cannot
+  /// disagree.</summary>
+  /// <remarks>Present=False means the file does not exist (verdict `missing`);
+  /// Readable=False means it exists but would not open (verdict `unreadable`).
+  /// The fingerprint and stale/newer fields are meaningful only when both are
+  /// True. Remedy is empty when the verdict owes nothing.</remarks>
+  TInfoIndexVerdict = record
+    Present         : Boolean;
+    Readable        : Boolean;
+    IndexerFp       : string;
+    ResolverFp      : string;
+    ResolverExpected: string;
+    IndexerStale    : Boolean;
+    ResolverStale   : Boolean;
+    IndexerNewer    : Boolean;
+    ResolverNewer   : Boolean;
+    Verdict         : string;
+    Remedy          : string;
+  end;
+
+/// <summary>Computes the `info --db` staleness verdict for one index file:
+/// `missing`, `unreadable`, `index-newer`, `reparse-owed`, `resolve-owed` or
+/// `current`, plus the remedy the owed verdicts carry.</summary>
+/// <param name="ADbPath">Index file to inspect; opened read-only and never
+/// written.</param>
+/// <returns>The verdict and the fingerprints it was computed from.</returns>
+/// <remarks>THE VERDICT IS COMPUTED HERE, NOT BY THE CALLER. Handing back two
+/// fingerprint strings and letting each consumer compare them is how the
+/// comparison drifts -- an absent stamp is the case that has already been got
+/// wrong once, in the engine itself, where `PrevRfp &lt;&gt; ''` treated a missing
+/// resolver stamp as fresh and cancelled the whole feature. The rule is stated
+/// once, here: MISSING IS STALE. Since 1.20.4 the text form of `info` reads this
+/// same routine; before it, only `--json` reported --db at all.
+///
+/// The two remedies are priced differently and the verdict says which, because
+/// conflating them is the mistake this reports on -- a re-parse is hours, a
+/// re-resolve is minutes.
+///
+/// CHEAP BY CONSTRUCTION: two keyed lookups in schema_meta, read-only, no
+/// COUNT. The IDE's About window has a stated contract against counting rows;
+/// the measurement it cites (38 s) belongs to `schema --format json`, which
+/// counts every table, while an indexed lookup on the same 3 GB file is
+/// 0.5 s.</remarks>
+function ComputeInfoIndexVerdict(const ADbPath: string): TInfoIndexVerdict;
+begin
+  Result:= Default(TInfoIndexVerdict);
+  Result.Present:= TFile.Exists(ADbPath);
+  if not Result.Present then
+  begin
+    Result.Verdict:= 'missing';
+    Exit;
+  end;
+  var Ok: Boolean;
+  var St: ISymbolStore:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
+  Result.Readable:= Ok and (St <> nil);
+  if not Result.Readable then
+  begin
+    Result.Verdict:= 'unreadable';
+    Exit;
+  end;
+  Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
+  Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
+  Result.ResolverExpected:= ResolverFingerprint(St);
+  { The stored indexer fingerprint is a compound
+    `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is compared,
+    because platform and preprocess differences are legitimate per-index facts,
+    not staleness. }
+  { C2 (2026-09-23): THE DIRECTION IS THE ADVICE. A stamp NEWER than this
+    engine is not owed anything -- re-parsing or re-resolving it here would be
+    the downgrade RefuseIfEngineOlderThanDb refuses (ENG-2), so advising it
+    named a command that fails. Compared with the refusal's own comparison,
+    semantically; an absent or unparseable stamp is never newer (MISSING IS
+    STALE). }
+  var IdxVer: string:= ExtractorVersionOfFingerprint(Result.IndexerFp);
+  var ResVer: string:= ResolverVersionOfFingerprint(Result.ResolverFp);
+  Result.IndexerNewer := (IdxVer <> '')
+    and (CompareDottedVersions(DRAGLINT_EXTRACTOR_VERSION, IdxVer) < 0);
+  Result.ResolverNewer:= (ResVer <> '')
+    and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, ResVer) < 0);
+  Result.IndexerStale := (not Result.IndexerNewer) and ((Result.IndexerFp = '')
+    or (Pos('v=' + DRAGLINT_EXTRACTOR_VERSION + ';', Result.IndexerFp) <> 1));
+  Result.ResolverStale:= (not Result.ResolverNewer)
+    and ((Result.ResolverFp = '') or (Result.ResolverFp <> Result.ResolverExpected));
+  { index-newer outranks both owed verdicts: this engine may not write the
+    index at all, so neither remedy is available to it. }
+  if Result.IndexerNewer or Result.ResolverNewer then
+  begin
+    Result.Verdict:= 'index-newer';
+    Result.Remedy := Format('use a newer engine: the index is at extractor %s / resolver %s, ' +
+      'this engine is extractor %s / resolver %s (drag-lint %s). Reads work; an index run ' +
+      'with this engine is refused (a writer never downgrades an index).',
+      [IdxVer, ResVer, DRAGLINT_EXTRACTOR_VERSION, DRAGLINT_RESOLVER_VERSION, DRAGLINT_VERSION]);
+  end
+  else if Result.IndexerStale then
+  begin
+    Result.Verdict:= 'reparse-owed';
+    Result.Remedy := IndexRemedyFor(St, ADbPath, {AResolveOnly=}False) + '   (a re-parse: hours across the box)';
+  end
+  else if Result.ResolverStale then
+  begin
+    Result.Verdict:= 'resolve-owed';
+    Result.Remedy := IndexRemedyFor(St, ADbPath, {AResolveOnly=}True) + '   (minutes, no parse becomes wrong)';
+  end
+  else
+    Result.Verdict:= 'current';
+end;
+
 /// <summary>drag-lint info [--json] -- prints engine self-info: version, build
 /// date (from the exe's own file timestamp), MIT license, description,
 /// tree-sitter ABI numbers AND the on-disk stamp of each loaded grammar DLL,
 /// capabilities (FTS5, CLI verb count), the exe path, and the build platform.
-/// Read-only; no DB, no side effects. --json emits the stable schema "info/1";
-/// without it, a human-readable block. Consumed by the IDE About box.</summary>
+/// Each repeatable --db adds that index's staleness verdict (see
+/// ComputeInfoIndexVerdict) -- an `indexes` array under --json, and an
+/// `index: <path>  verdict: <v>` line (plus an indented `remedy:` line when one
+/// is owed) in the text form. Read-only; no side effects. --json emits the
+/// stable schema "info/1"; without it, a human-readable block. Consumed by the
+/// IDE About box.</summary>
 /// <returns>0 always.</returns>
 /// <remarks>v(ADP3 T4f, register K20): the numbers under `tree_sitter` are ABI
 /// versions, not grammar versions, and the text form now says so. `dll_delphi13`
@@ -15714,102 +15829,35 @@ begin
 
       { `info --db <path>` (repeatable): per-index staleness, so a caller that
         already has a connection to this engine can ask the question in ONE
-        spawn instead of learning SQLite.
-
-        THE VERDICT IS COMPUTED HERE, NOT BY THE CALLER. Handing back two
-        fingerprint strings and letting each consumer compare them is how the
-        comparison drifts -- an absent stamp is the case that has already been
-        got wrong once, in the engine itself, where `PrevRfp <> ''` treated a
-        missing resolver stamp as fresh and cancelled the whole feature. The
-        rule is stated once, here: MISSING IS STALE.
-
-        The two remedies are priced differently and the verdict says which,
-        because conflating them is the mistake this reports on -- a re-parse is
-        hours, a re-resolve is minutes.
-
-        CHEAP BY CONSTRUCTION: two keyed lookups in schema_meta, read-only, no
-        COUNT. That matters because the IDE's About window has a stated contract
-        against counting rows -- and the measurement it cites (38 s) belongs to
-        `schema --format json`, which counts every table, while an indexed
-        lookup on the same 3 GB file is 0.5 s. Counting is what was forbidden;
-        this does not count. }
+        spawn instead of learning SQLite. The verdict rule lives in
+        ComputeInfoIndexVerdict, shared with the text form below. The key
+        order here is the info/1 contract and is unchanged from 1.20.3. }
       if Length(AArgs.DbPaths) > 0 then
       begin
         var JIdx: TJSONArray:= TJSONArray.Create;
+        JRoot.AddPair('indexes', JIdx);
         for var DbP: string in AArgs.DbPaths do
         begin
+          var V: TInfoIndexVerdict:= ComputeInfoIndexVerdict(DbP);
           var JOne: TJSONObject:= TJSONObject.Create;
-          JOne.AddPair('path', DbP);
-          if not TFile.Exists(DbP) then
-          begin
-            JOne.AddPair('present', TJSONBool.Create(False));
-            JOne.AddPair('verdict', 'missing');
-          end
-          else
-          begin
-            JOne.AddPair('present', TJSONBool.Create(True));
-            var Ok: Boolean;
-            var St: ISymbolStore:= OpenReadOnlyStore(DbP, Ok, {AQuiet=}True);
-            if (not Ok) or (St = nil) then
-            begin
-              JOne.AddPair('verdict', 'unreadable');
-            end
-            else
-            begin
-              var PrevIfp: string:= St.GetMetaValue(INDEXER_FP_KEY );
-              var PrevRfp: string:= St.GetMetaValue(RESOLVER_FP_KEY);
-              var CurRfp : string:= ResolverFingerprint(St);
-              JOne.AddPair('indexer_fingerprint' , PrevIfp);
-              JOne.AddPair('resolver_fingerprint', PrevRfp);
-              JOne.AddPair('extractor_expected'  , DRAGLINT_EXTRACTOR_VERSION);
-              JOne.AddPair('resolver_expected'   , CurRfp);
-              { The stored indexer fingerprint is a compound
-                `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is
-                compared, because platform and preprocess differences are
-                legitimate per-index facts, not staleness. }
-              { C2 (2026-09-23): THE DIRECTION IS THE ADVICE. A stamp NEWER than
-                this engine is not owed anything -- re-parsing or re-resolving
-                it here would be the downgrade RefuseIfEngineOlderThanDb refuses
-                (ENG-2), so advising it named a command that fails. Compared
-                with the refusal's own comparison, semantically; an absent or
-                unparseable stamp is never newer (MISSING IS STALE). }
-              var IdxVer: string:= ExtractorVersionOfFingerprint(PrevIfp);
-              var ResVer: string:= ResolverVersionOfFingerprint(PrevRfp);
-              var IdxNewer: Boolean:= (IdxVer <> '')
-                and (CompareDottedVersions(DRAGLINT_EXTRACTOR_VERSION, IdxVer) < 0);
-              var ResNewer: Boolean:= (ResVer <> '')
-                and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, ResVer) < 0);
-              var IdxStale: Boolean:= (not IdxNewer) and ((PrevIfp = '')
-                or (Pos('v=' + DRAGLINT_EXTRACTOR_VERSION + ';', PrevIfp) <> 1));
-              var ResStale: Boolean:= (not ResNewer) and ((PrevRfp = '') or (PrevRfp <> CurRfp));
-              JOne.AddPair('indexer_stale' , TJSONBool.Create(IdxStale));
-              JOne.AddPair('resolver_stale', TJSONBool.Create(ResStale));
-              JOne.AddPair('indexer_newer' , TJSONBool.Create(IdxNewer));
-              JOne.AddPair('resolver_newer', TJSONBool.Create(ResNewer));
-              { index-newer outranks both owed verdicts: this engine may not
-                write the index at all, so neither remedy is available to it. }
-              if IdxNewer or ResNewer then
-                JOne.AddPair('verdict', 'index-newer')
-              else if IdxStale then
-                JOne.AddPair('verdict', 'reparse-owed')
-              else if ResStale then
-                JOne.AddPair('verdict', 'resolve-owed')
-              else
-                JOne.AddPair('verdict', 'current');
-              if IdxNewer or ResNewer then
-                JOne.AddPair('remedy', Format('use a newer engine: the index is at extractor %s / resolver %s, ' +
-                  'this engine is extractor %s / resolver %s (drag-lint %s). Reads work; an index run ' +
-                  'with this engine is refused (a writer never downgrades an index).',
-                  [IdxVer, ResVer, DRAGLINT_EXTRACTOR_VERSION, DRAGLINT_RESOLVER_VERSION, DRAGLINT_VERSION]))
-              else if IdxStale then
-                JOne.AddPair('remedy', IndexRemedyFor(St, DbP, {AResolveOnly=}False) + '   (a re-parse: hours across the box)')
-              else if ResStale then
-                JOne.AddPair('remedy', IndexRemedyFor(St, DbP, {AResolveOnly=}True) + '   (minutes, no parse becomes wrong)');
-            end;
-          end;
           JIdx.AddElement(JOne);
+          JOne.AddPair('path', DbP);
+          JOne.AddPair('present', TJSONBool.Create(V.Present));
+          if V.Readable then
+          begin
+            JOne.AddPair('indexer_fingerprint' , V.IndexerFp);
+            JOne.AddPair('resolver_fingerprint', V.ResolverFp);
+            JOne.AddPair('extractor_expected'  , DRAGLINT_EXTRACTOR_VERSION);
+            JOne.AddPair('resolver_expected'   , V.ResolverExpected);
+            JOne.AddPair('indexer_stale' , TJSONBool.Create(V.IndexerStale));
+            JOne.AddPair('resolver_stale', TJSONBool.Create(V.ResolverStale));
+            JOne.AddPair('indexer_newer' , TJSONBool.Create(V.IndexerNewer));
+            JOne.AddPair('resolver_newer', TJSONBool.Create(V.ResolverNewer));
+          end;
+          JOne.AddPair('verdict', V.Verdict);
+          if V.Remedy <> '' then
+            JOne.AddPair('remedy', V.Remedy);
         end;
-        JRoot.AddPair('indexes', JIdx);
       end;
 
       Writeln(JRoot.ToJSON);
@@ -15831,6 +15879,15 @@ begin
     Writeln('  dfm      dll: ', TsDfmDll);
     Writeln('capabilities: FTS5=', BoolToStr(Fts5, True), ', CLI verbs=', CLI_VERB_COUNT);
     Writeln('exe: ', ExePath, '   platform: ', Plat);
+    { 1.20.4: --db was honoured by --json only, so the text form silently
+      dropped the question it was asked. Same routine, same verdict. }
+    for var DbP: string in AArgs.DbPaths do
+    begin
+      var V: TInfoIndexVerdict:= ComputeInfoIndexVerdict(DbP);
+      Writeln('index: ', DbP, '  verdict: ', V.Verdict);
+      if V.Remedy <> '' then
+        Writeln('  remedy: ', V.Remedy);
+    end;
   end;
 end; // function
 
