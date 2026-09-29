@@ -22,13 +22,17 @@
   --------------
     1  every verb the CLI ACCEPTS appears in `--help`
        (or in $UndocumentedOnPurpose below, WITH a reason)
-    2  every rule count stated in README.md / INSTALL.md equals the LIVE catalog
-       (`drag-lint rules --json`) -- total and fixable
+    2  every rule count stated in README.md / INSTALL.md / docs\INSTALL.md
+       equals the LIVE catalog (`drag-lint rules --json`) -- total and fixable
     3  no doc names a database path in the DEAD shared-project layout
        C:\Projects\.drag-lint\<project>.sqlite. That folder now holds ONLY
        library-Win32.sqlite / library-Win64.sqlite; a project's index moved to
        <project folder>\_D-RAG\<project file base name>.sqlite in 2026-08-11.
     4  no doc claims something is UNDOCUMENTED when `--help` documents it
+   11  docs\INSTALL.md (the IDE-side guide) is 7-bit ASCII. Checks 2-4 scan it
+       too since 2026-09-29; before that only the ROOT INSTALL.md was read, and
+       the IDE guide carried 74 non-ASCII bytes and a "shipped template" claim
+       the release packer disproves, unseen by any check.
 
   CHECK 4 EXISTS BECAUSE CHECKS 1-3 WATCHED THE DRIFT HAPPEN
   ----------------------------------------------------------
@@ -371,7 +375,7 @@ Check 'builtin + external accounts for every rule' (($builtin + $external) -eq $
 # is exactly as wrong as a README carrying one, and the wiki is the more likely
 # place for a count to rot because there are 125 pages of it.
 $countDocs = @(
-                @('README.md', 'INSTALL.md') | ForEach-Object { Join-Path $Repo $_ }
+                @('README.md', 'INSTALL.md', 'docs\INSTALL.md') | ForEach-Object { Join-Path $Repo $_ }
                 Get-ChildItem -LiteralPath (Join-Path $Repo 'docs\wiki') -Filter '*.md' -File -ErrorAction SilentlyContinue |
                   ForEach-Object { $_.FullName }
               ) | Where-Object { Test-Path -LiteralPath $_ }
@@ -483,7 +487,7 @@ foreach ($pat in @(
   Check ('claim pattern is live: ' + $pat.n) ($hits -gt 0) "$hits match(es) across $($countDocs.Count) doc(s)"
 }
 
-Check 'rule-count claims located' ($seenCount -gt 0) "($seenCount claim(s) in README.md + INSTALL.md)"
+Check 'rule-count claims located' ($seenCount -gt 0) "($seenCount claim(s) in README.md + INSTALL.md + docs\INSTALL.md + docs\wiki\)"
 Check 'every stated rule count matches the live catalog' ($badCount.Count -eq 0) "($($badCount.Count) mismatch(es))"
 foreach ($x in $badCount) { Write-Host "        $x" -ForegroundColor Red }
 if ($badCount.Count -gt 0) {
@@ -503,7 +507,7 @@ Write-Host '-- check 3: database paths' -ForegroundColor Cyan
 # 2026-08-11, and the union DBs that preceded that layout were deleted outright.
 $LiveInSharedFolder = @('library-Win32', 'library-Win64')
 
-$pathDocs = @(@('README.md', 'INSTALL.md') | ForEach-Object { Join-Path $Repo $_ }) +
+$pathDocs = @(@('README.md', 'INSTALL.md', 'docs\INSTALL.md') | ForEach-Object { Join-Path $Repo $_ }) +
             @(Get-ChildItem -LiteralPath (Join-Path $Repo 'docs') -File -Filter 'AI-*.md' -ErrorAction SilentlyContinue |
                 ForEach-Object { $_.FullName })
 $pathDocs = @($pathDocs | Where-Object { Test-Path -LiteralPath $_ })
@@ -574,7 +578,7 @@ Check '--help flag list parsed' ($helpFlags.Count -gt 20) "($($helpFlags.Count) 
 
 $claimDocs = @(Get-ChildItem -LiteralPath (Join-Path $Repo 'docs\wiki') -File -Filter '*.md' -ErrorAction SilentlyContinue |
                  ForEach-Object { $_.FullName }) +
-             @(@('README.md', 'INSTALL.md') | ForEach-Object { Join-Path $Repo $_ })
+             @(@('README.md', 'INSTALL.md', 'docs\INSTALL.md') | ForEach-Object { Join-Path $Repo $_ })
 $claimDocs = @($claimDocs | Where-Object { Test-Path -LiteralPath $_ })
 Check 'docs to scan for stale claims located' ($claimDocs.Count -ge 3) "($($claimDocs.Count) file(s))"
 
@@ -1497,6 +1501,55 @@ Check 'CONTROL S3 the derivation binds known subcommands to query' ($ctlQMiss.Co
 
 foreach ($verb in $subMap.VerbSubs.Keys) {
   Write-Host ("      [NOTE] {0}: {1}" -f $verb, ($subMap.VerbSubs[$verb] -join ' ')) -ForegroundColor DarkGray
+}
+
+# ---------------------------------------------------------------------------
+# CHECK 11 -- docs\INSTALL.md is 7-bit ASCII
+# ---------------------------------------------------------------------------
+# run_encoding_guard.ps1 does not scan .md, and the ROOT INSTALL.md / README.md
+# were already clean, so nothing noticed that the IDE-side guide carried 74
+# bytes above 0x7F (em dashes, arrows, an ellipsis, a multiplication sign).
+# BYTES, not chars: a UTF-8 decode would hide a stray Latin-1 byte behind a
+# replacement character, and the claim being policed is about the file.
+Write-Host ''
+Write-Host '-- check 11: docs\INSTALL.md is 7-bit ASCII' -ForegroundColor Cyan
+
+function Get-NonAsciiLines([byte[]]$Bytes) {
+  # Returns one "line N: K byte(s)" entry per line holding a byte > 0x7F.
+  $out  = New-Object System.Collections.Generic.List[string]
+  $line = 1; $hits = 0
+  for ($i = 0; $i -lt $Bytes.Length; $i++) {
+    if ($Bytes[$i] -eq 10) {
+      if ($hits -gt 0) { $out.Add(("line {0}: {1} byte(s)" -f $line, $hits)) }
+      $line++; $hits = 0
+    } elseif ($Bytes[$i] -gt 127) { $hits++ }
+  }
+  if ($hits -gt 0) { $out.Add(("line {0}: {1} byte(s)" -f $line, $hits)) }
+  return ,$out
+}
+
+# POSITIVE CONTROLS first: a scanner that returns nothing passes every file.
+# U+2014 in UTF-8 is E2 80 94, on line 2 of the planted buffer.
+$ctlPlanted = [byte[]](0x61, 0x0D, 0x0A, 0x62, 0xE2, 0x80, 0x94, 0x63)
+$ctlHits    = Get-NonAsciiLines $ctlPlanted
+Check 'CONTROL A1 a planted em dash is seen, on the right line' `
+  (($ctlHits.Count -eq 1) -and ($ctlHits[0] -eq 'line 2: 3 byte(s)')) "($($ctlHits -join '; '))"
+$ctlClean = Get-NonAsciiLines ([byte[]](0x61, 0x0D, 0x0A, 0x7E, 0x7F))
+Check 'CONTROL A2 a pure-ASCII buffer is clean' ($ctlClean.Count -eq 0) "($($ctlClean -join '; '))"
+
+foreach ($rel in @('docs\INSTALL.md')) {
+  $p = Join-Path $Repo $rel
+  Check ("{0} present" -f $rel) (Test-Path -LiteralPath $p) $p
+  if (-not (Test-Path -LiteralPath $p)) { continue }
+  $bytes = [System.IO.File]::ReadAllBytes($p)
+  $bad   = Get-NonAsciiLines $bytes
+  $nonAsciiTotal = @($bytes | Where-Object { $_ -gt 127 }).Count
+  Check ("{0} is 7-bit ASCII" -f $rel) ($bad.Count -eq 0) "($nonAsciiTotal byte(s) > 0x7F on $($bad.Count) line(s))"
+  foreach ($x in $bad) { Write-Host "        $rel $x" -ForegroundColor Red }
+  if ($bad.Count -gt 0) {
+    Write-Host '        ^ use the ASCII spelling: -- for a dash, ... for an ellipsis,' -ForegroundColor Yellow
+    Write-Host '          -> for an arrow, x for a multiplication sign.' -ForegroundColor Yellow
+  }
 }
 
 Write-Host ''

@@ -619,7 +619,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@1927 -- REVIEWED 2026-09-24: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@6496 -- REVIEWED 2026-09-29: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -696,7 +696,9 @@ begin
   Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
   Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
   Writeln('                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the');
-  Writeln('                               .drag-lint-ignore file, which is honoured by default. --no-sql-ms indexes EVERY');
+  Writeln('                               .gitignore / .hgignore pattern files, which are honoured by default. A folder');
+  Writeln('                               holding a .scanignore MARKER file (contents never read) is always pruned with');
+  Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
   Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
   Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
   Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
