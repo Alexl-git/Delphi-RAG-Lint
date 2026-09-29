@@ -1418,6 +1418,43 @@ begin
   Check('unitpick.multi.add.no.exclude', string.Join(',', R) = 'Forms', string.Join(',', R));
 end; // procedure
 
+{ TRuleBook.Snapshot is the unsaved-changes baseline (Task 3's guard): equal
+  snapshots = nothing Save would change. Dirty is NOT that signal -- it is a
+  per-node re-emit flag, never cleared by Save and blind to deletions. }
+procedure TestBookSnapshot;
+const
+  SRC     = '#useswap OldA -> NewA' + sLineBreak + '#unuse OldB' + sLineBreak;
+  SRC_DEL = '#useswap OldA -> NewA' + sLineBreak;
+  SRC_ADD = SRC + '#use NewC' + sLineBreak;
+var
+  Book : TRuleBook;
+  Other: TRuleBook;
+  Base : string;
+begin
+  Book := TRuleBook.Create;
+  Other:= TRuleBook.Create;
+  try
+    Book.LoadFromString(SRC);
+    Base:= Book.Snapshot;
+    Check('book.snapshot.stable', Book.Snapshot = Base, Base);
+    Check('book.snapshot.nonempty', Pos('#unuse OldB', Base) > 0, Base);
+
+    Other.LoadFromString(SRC_DEL);
+    Check('book.snapshot.delete.differs', Other.Snapshot <> Base, Other.Snapshot);
+
+    Other.LoadFromString(SRC_ADD);
+    Check('book.snapshot.add.differs', Other.Snapshot <> Base, Other.Snapshot);
+
+    // Edit in place: the same book, one node changed and marked for re-emit.
+    Book.UnitNodes[0].SwapNew:= ['NewA', 'NewD'];
+    Book.UnitNodes[0].Dirty  := True;
+    Check('book.snapshot.edit.differs', Book.Snapshot <> Base, Book.Snapshot);
+  finally
+    Other.Free;
+    Book.Free;
+  end; // try
+end; // procedure
+
 { ListUnits answers per DB SET, not per adapter: the picker's project column and
   library column come from separate calls, so a project DB must not surface an
   RTL unit and the library must. Hits the real exe + indexes; Skips without them. }
@@ -6645,6 +6682,7 @@ begin
     TestMissingUnitNodes;
     TestUnitPickFilter;
     TestUnitPickMulti;
+    TestBookSnapshot;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;

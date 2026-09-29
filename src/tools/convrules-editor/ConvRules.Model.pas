@@ -467,6 +467,16 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SaveCompleteToString(out ADroppedCount: Integer): string;
+      /// <summary>The text Save would write right now -- the editor's
+      /// unsaved-changes baseline.</summary>
+      /// <returns>SaveCompleteToString's text; the dropped-rule count is
+      /// discarded.</returns>
+      /// <remarks>Take one at load, at New and after every successful save;
+      /// "unsaved" is a later Snapshot that differs. A #convert with no #link is
+      /// not written by Save, so it never makes a book unsaved -- consistent with
+      /// what Save persists. TRuleNode.Dirty is not this signal: it is never
+      /// cleared by Save and a deleted node leaves no trace in it.</remarks>
+      function Snapshot: string;
   end;
 
 const
@@ -1129,6 +1139,13 @@ begin
     SB.Free;
   end; // try
 end; // function
+
+function TRuleBook.Snapshot: string;
+var
+  LDropped: Integer;
+begin
+  Result:= SaveCompleteToString(LDropped);
+end;
 
 function TRuleBook.ConvertHeaders: TArray<Integer>;
 var
