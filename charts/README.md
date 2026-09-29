@@ -27,6 +27,18 @@ charts\
   scratch\             throwaway output -- never committed
 ```
 
+## For AI agents -- one command
+
+```
+pwsh -NoProfile -File charts\src\Ask-Report.ps1 -Question <id> -Target <t> -Project <x.dproj>   (or -In <any .pas/.dfm of it>)
+```
+
+* Use it for a PATH or SET question (the ids in `question-catalogue.md`: `round-trip`, `who-writes`, `who-calls`, `lands-where`, `consumers` ...), not for one symbol's definition.
+* It resolves the project index with the engine's `resolve-dbs`, takes the SERVER and SQL indexes from `charts\report-pairs.json`, and writes the bundle under `%TEMP%\drag-lint-reports`. A stale index stops it (exit 3) with the incremental `index` command printed; it never indexes.
+* Read stdout: `BUNDLE <folder>`, then the answer -- the whole Form A trace for `round-trip`, else a `CHART` header and one `<name> @File.pas:line` line per chart row. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
+* Give the target the way the verb takes it: `who-writes` wants `Blueprint4.ViewModel.TBlueprint_ViewModel.FSuppressEvents`, not `TBlueprint_ViewModel.FSuppressEvents`.
+* `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~70 s, not in the gate).
+
 ## Graphviz -- present and verified 2026-09-22
 
 * `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` -- version 16.1.0
@@ -84,8 +96,8 @@ set and each question's caveat is `question-catalogue.md`, the gate is
 `src\Test-Emitters.ps1`, and `src\New-ExampleGallery.ps1` renders worked
 examples into `docs\examples\index.html` -- 76 over the 25 shipped question
 names (26 rows; `protocol-trace` is two), three or four each, measured on the
-2026-09-28 run. `round-trip`'s three are TEXT bundles (the trace in a `<pre>`,
-anchors as `@file:line` text, not click targets); the rest are charts.
+2026-09-28 run. `round-trip`'s three are TEXT bundles (the trace in a `<pre>`;
+a bundle made since DOC-R1 links each `@file:line` anchor into the IDE); the rest are charts.
 
 ### The last four (PLAN-last-four-verbs.md)
 
@@ -141,7 +153,9 @@ New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<
   `frmAssignGroups.grdFtrsColNum`, 33 steps / 10 conditions / 2 crossings / 2 unresolved;
   `RT-SRVSTOP` for a server that stops). The bundle is `trace.dlgraph` + `index.html` (the trace in a
   `<pre>`) + `meta.json` + `xref.txt`; no `graph.*`. The page is a document:
-  its anchors are `@File.pas:line` text, not click targets. Engine asks (E1-E4,
+  each `@File.pas:line` anchor is a `draglint://` link that opens the line in the IDE
+  (DOC-R1, 2026-09-28; a file leaf the three indexes hold at more than one path stays
+  plain text; gate `A-RT-ART-LINKS`: 126 of 126 on OPERAT.NAME). Engine asks (E1-E4,
   in-class-field-reads, receiver-typed-calls, type-use-binding) are named on the steps they
   would retire; a hop no engine fact would retire (the walk's own inference) names none.
 * A `TABLE.COLUMN` selection that is not loaded by exactly one dataset does not
@@ -277,7 +291,15 @@ only the BROWSER hop, because a browser cannot write to a named pipe:
   than rejecting (as the contract asks), and falls back to ShellExecute when no
   server answers, mirroring the standalone viewer.
 * `src\Register-DragLintProtocol.ps1` -- one HKCU key, no elevation,
-  `-Unregister` to undo. Nothing else on the machine is touched.
+  `-Unregister` to undo. Nothing else on the machine is touched. The key names
+  the handler script's path and the pwsh.exe path as they were at registration:
+  re-run it after the checkout moves or PowerShell updates.
+
+The bundle page itself must not stand in the way (DOC-R1, 2026-09-28). Its click
+handler used to call `preventDefault` and only toast "sent to the IDE", so no
+click on a chart row ever reached the handler. It now lets the browser hand the
+`draglint://` URI to the handler, and the toast names the file:line asked for and
+the registration to run if nothing opens. Gate: `A-DOC-R1-NAV`, `A-DOC-R1-TOAST`.
 ## Fact POPULATION, measured 2026-09-23, re-measured 2026-09-24 (1.19 clones) -- check this before planning a question
 
 A column EXISTING in schema 23 does not mean it holds rows. We made that mistake

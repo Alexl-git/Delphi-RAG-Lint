@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Ask-Report.ps1 reads this file: which SERVER index and which SQL-script index belong with a CLIENT",
+    "project index, for the questions that read more than one (round-trip, lands-where: server + SQL;",
+    "consumers, feeds-from: SQL; crosses-boundary: the other side, optional).",
+    "Each path was VERIFIED with the engine's resolve-dbs when written, never guessed:",
+    "  client  resolve-dbs --project C:\\Projects\\DB\\ORM3\\CLIENT\\Micronite2027.dproj",
+    "  server  resolve-dbs --project C:\\Projects\\DB\\ORM3\\SERVER\\MicroniteMW1Service.dproj",
+    "  sql     resolve-dbs --in C:\\Projects\\DB\\SQL\\MS1.SQL   (manifest section SQL)",
+    "Ask-Report re-checks at run time that the manifest still configures the server and SQL index named",
+    "here, and stops naming this file when it does not. sqlSection is the manifest section of the SQL",
+    "index, used only to print its reindex command when it is stale.",
+    "Add a project: one more object in pairs, each path checked with resolve-dbs first."
+  ],
+  "pairs": [
+    {
+      "name": "Micronite",
+      "client": "C:\\Projects\\DB\\ORM3\\CLIENT\\_D-RAG\\Micronite2027.sqlite",
+      "server": "C:\\Projects\\DB\\ORM3\\SERVER\\_D-RAG\\MicroniteMW1Service.sqlite",
+      "sql": "C:\\Projects\\DB\\SQL\\drag-lint-sql.sqlite",
+      "sqlSection": "SQL"
+    }
+  ]
+}

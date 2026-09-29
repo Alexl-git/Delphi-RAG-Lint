@@ -81,6 +81,7 @@ or, for the TEXT question `round-trip`, `trace.dlgraph` shown in a `<pre>` --
 `index.html`, `meta.json` with the regenerate command, and the xref). The
 paths are the CLONES under `charts\scratch\db\`; `Get-CloneDb` refuses anything
 else.
+One command instead, on the live indexes: `src\Ask-Report.ps1 -Question <id> -Target <t> -Project <x.dproj>` (README "For AI agents").
 
 ```
 New-DiagramArtifact.ps1 -Question exception-paths -Target <Unit.Class.Method> -DbPath <clone> [-Depth 3] [-Cap 20]
