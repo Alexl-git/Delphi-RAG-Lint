@@ -88,7 +88,7 @@ type
   /// line (as the CLI reports it, e.g. "line 4: link ToPath not found ...").</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.Engine.TEngineAdapter.ValidateText (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoValidate (ConvRules.MainForm.pas), declaration (ConvRules.Engine.pas)</para>
+  /// <para>Used by: ConvRules.Engine.TEngineAdapter.ValidateText (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.DoValidate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SaveBook (ConvRules.MainForm.pas), declaration (ConvRules.Engine.pas)</para>
   /// <para>Used in units: ConvRules.Engine, ConvRules.MainForm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -821,7 +821,7 @@ type
       /// <returns><!-- drag-lint:auto type -->TValidateResult</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoValidate (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoValidate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SaveBook (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Pos, Trim</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>

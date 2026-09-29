@@ -235,9 +235,8 @@ type
 
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas) ?, ConvRules.Model.TRuleBook.Clear (ConvRules.Model.pas) ?, ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas), ConvRules.Model.TRuleBook.SaveCompleteToString (ConvRules.Model.pas) ?</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas) ?, ConvRules.Model.TRuleBook.Clear (ConvRules.Model.pas) ?, ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas), ConvRules.Model.TRuleBook.SaveCompleteToString (ConvRules.Model.pas) ?</para>
       /// <para>Reads: FNodes</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
@@ -249,10 +248,9 @@ type
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.BlockOps.BlockLinks (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.RuleCatalog.CatalogFromText (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.CheckApplyIntegrity (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.MappingCatalogFromText (ConvRules.RuleCatalog.pas)</para>
+      /// <para>Called from: ConvRules.BlockOps.BlockLinks (ConvRules.BlockOps.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas), ConvRules.RuleCatalog.CatalogFromText (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.CheckApplyIntegrity (ConvRules.RuleCatalog.pas), ConvRules.RuleCatalog.MappingCatalogFromText (ConvRules.RuleCatalog.pas)</para>
       /// <para>Calls: ConvRules.Model.TRuleBook.Clear, ConvRules.Model.TRuleBook.ParseLine</para>
       /// <para>Reads: FNodes</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ParseLine"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
@@ -286,7 +284,7 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;Integer&gt; -- Observed: L.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.RuleCatalog.CatalogFromText (ConvRules.RuleCatalog.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas), ConvRules.RuleCatalog.CatalogFromText (ConvRules.RuleCatalog.pas)</para>
       /// <para>Reads: FNodes</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
@@ -351,7 +349,7 @@ type
       /// <returns><!-- drag-lint:auto -->TRuleNode -- Observed: ANode.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.BlockOps.DeleteBlocks (ConvRules.BlockOps.pas) ?, ConvRules.BlockOps.NormalizeIndexes (ConvRules.BlockOps.pas) ?, ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas) (+48 more)</para>
+      /// <para>Called from: ConvRules.BlockOps.DeleteBlocks (ConvRules.BlockOps.pas) ?, ConvRules.BlockOps.NormalizeIndexes (ConvRules.BlockOps.pas) ?, ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas) (+49 more)</para>
       /// <para>Reads: FNodes</para>
       /// <para>Owns returned: borrowed</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
@@ -455,7 +453,7 @@ type
       /// dropped. A #mapping-only, #default-only or #remove-only block is likewise still
       /// dropped -- pre-existing behaviour, deliberately left alone here.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.SaveBook (ConvRules.MainForm.pas), ConvRules.Model.TRuleBook.Snapshot (ConvRules.Model.pas)</para>
       /// <para>Calls: ConvRules.Model.TRuleBook.BlockMapsSomething</para>
       /// <para>Reads: FNodes</para>
       /// <para>Mutates: ADroppedCount (out)</para>
