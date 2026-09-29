@@ -13,6 +13,16 @@
     AR-ENV       DRAGLINT_CHARTS_ALLOW_LIVE_DB is restored -- to its old value, and to absent
     AR-RT        round-trip on the clones (overrides): stdout is BUNDLE, then the trace from `TRACE `
     AR-STALE     a stale index (the DL clone) stops with exit 3 before anything runs
+    AR-NOPAIRSFILE  a pairs file that does not exist is named as missing, not as "has no entry"
+    AR-JSON      a note line starting with '[' before the engine's JSON does not break resolution
+    AR-INDEX     every answer names the index(es) that answered, after BUNDLE
+    AR-TARGET    a chart's own focus row is marked TARGET, not listed like a result
+    AR-CAP       a capped chart prints its "+N more ... not shown" disclosure and the -Cap to raise
+
+  FRESH CLONES NEEDED: AR-OUTROOT, AR-CHART, AR-CAP and AR-RT read the CLIENT / SERVER / SQL clones under
+  charts\scratch\db, and Ask-Report checks freshness first -- once a source file those clones index changes
+  on disk, they stop with exit 3 (stale), which is Ask-Report working, not a regression; re-take the clones.
+  AR-STALE is the mirror image: it needs the DL clone to STAY stale (5 files on 2026-09-28).
 #>
 [CmdletBinding()]
 param(
@@ -92,8 +102,40 @@ Step 'AR-OUTROOT' {
   if (Test-Path (Join-Path $PSScriptRoot '..\artifacts\who-reads-Blueprint4_TfrmBlueprint4_FNoRecursion\meta.json') -NewerThan (Get-Date).AddMinutes(-5)) { Fail 'AR-OUTROOT' 'a bundle was written under charts\artifacts' }
   Chk 'AR-ENV' "$live1|$(if ($null -eq $live2) { 'absent' } else { "[$live2]" })|$e2" 'sentinel|absent|0'
   # the chart form of the text: a CHART header, then anchored rows
-  Chk 'AR-CHART' "$(@($o1)[1])" 'CHART who-reads Blueprint4.TfrmBlueprint4.FNoRecursion -- 0 resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas / 0 routines reported by find-callers'
+  Chk 'AR-INDEX' "$(@($o1)[1])" "INDEX $([IO.Path]::GetFullPath($DbCli))"
+  Chk 'AR-CHART' "$(@($o1)[2])" 'CHART who-reads Blueprint4.TfrmBlueprint4.FNoRecursion -- 0 resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas / 0 routines reported by find-callers'
   if (@($o1 | Where-Object { $_ -cmatch '^  \S.* @[A-Za-z0-9_.]+\.pas(:\d+)?( -- .*)?$' }).Count -lt 1) { Fail 'AR-CHART' "no anchored row in: $($o1 -join ' | ')" }
+  # AR-TARGET (same run): the focus row is marked, and only once
+  $tg = @($o1 | Where-Object { $_ -clike '  TARGET *' })
+  Chk 'AR-TARGET' "$($tg.Count)|$($tg -join '')" '1|  TARGET Blueprint4.TfrmBlueprint4.FNoRecursion @Blueprint4.pas:681'
+  if (@($o1 | Where-Object { $_ -clike '  Blueprint4.TfrmBlueprint4.FNoRecursion @*' }).Count) { Fail 'AR-TARGET' 'the focus row is also printed as a result row' }
+}
+
+Write-Host 'the cap disclosure ...'
+Step 'AR-CAP' {
+  # who-writes FNoRecursion: 26 routines, the chart draws 20 (-Cap 20) and says so in a cell with no link
+  $c = Invoke-Ask @('-Question', 'who-writes', '-Target', $Q_FNR, '-DbPath', $DbCli, '-OutRoot', (Join-Path $OutDir 'cap'))
+  Chk 'AR-CAP-EXIT' "$($c.Exit)|$($c.Err)" '0|'
+  $shown = @($c.Out | Where-Object { $_ -cmatch '^  TfrmBlueprint4\.' }).Count
+  $disc  = @($c.Out | Where-Object { $_ -clike '  ... *not shown*' })
+  Chk 'AR-CAP' "$shown|$($disc -join '')" '20|  ... +6 more routines (+6 more sites) not shown (-Cap 20; raise -Cap to see them)'
+}
+
+Write-Host 'resolution edge cases ...'
+Step 'AR-NOPAIRSFILE' {
+  $missing = Join-Path $OutDir 'missing-pairs.json'
+  $r = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-Project', $PROJ, '-PairsFile', $missing)
+  Chk 'AR-NOPAIRSFILE' $r.Exit 2
+  if ($r.Err -notlike "*missing-pairs.json not found at $missing*" -or $r.Err -like '*has no entry*') { Fail 'AR-NOPAIRSFILE' "stderr: $($r.Err)" }
+}
+Step 'AR-JSON' {
+  # a stand-in engine whose stdout starts with a '[note]' line, then the JSON document
+  $fakeEng = Join-Path $OutDir 'fake-engine.cmd'
+  $cmdLines = @('@echo off', 'echo [note] loaded defaults', 'echo {"project":"x","db":"C:\\fake\\_D-RAG\\a.sqlite"}')
+  [IO.File]::WriteAllText($fakeEng, (($cmdLines -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $proj = Join-Path $OutDir 'a.dproj'; Set-Content $proj 'x' -Encoding ascii
+  $r = Invoke-Ask @('-Question', 'who-writes', '-Target', 'X.Y', '-Project', $proj, '-Engine', $fakeEng, '-ResolveOnly')
+  Chk 'AR-JSON' "$($r.Exit)|$($r.Out -join '|')|$($r.Err)" '0|PROJECT C:\fake\_D-RAG\a.sqlite|'
 }
 
 Write-Host 'round-trip on the clones (about a minute) ...'
@@ -102,10 +144,11 @@ Step 'AR-RT' {
   Chk 'AR-RT-EXIT' "$($r.Exit)|$($r.Err)" '0|'
   $b = "$($r.Out[0])"
   if ($b -cnotlike 'BUNDLE *') { Fail 'AR-RT' "line 1 is not BUNDLE <folder>: $b" }
-  if ("$($r.Out[1])" -cnotlike 'TRACE *') { Fail 'AR-RT' "the text does not begin with TRACE: $($r.Out[1])" }
+  Chk 'AR-INDEX-RT' (($r.Out[1..3]) -join '|') ("INDEX $([IO.Path]::GetFullPath($DbCli))|INDEX $([IO.Path]::GetFullPath($DbSrv)) (server)|INDEX $([IO.Path]::GetFullPath($DbSql)) (sql)")
+  if ("$($r.Out[4])" -cnotlike 'TRACE *') { Fail 'AR-RT' "the text does not begin with TRACE: $($r.Out[4])" }
   $tr = Join-Path $b.Substring(7) 'trace.dlgraph'
   if (-not (Test-Path $tr)) { Fail 'AR-RT' "no trace.dlgraph in $b" }
-  elseif ((($r.Out | Select-Object -Skip 1) -join "`r`n") -cne [IO.File]::ReadAllText($tr).TrimEnd("`r", "`n")) { Fail 'AR-RT' 'stdout after BUNDLE is not the whole trace.dlgraph' }
+  elseif ((($r.Out | Select-Object -Skip 4) -join "`r`n") -cne [IO.File]::ReadAllText($tr).TrimEnd("`r", "`n")) { Fail 'AR-RT' 'stdout after BUNDLE is not the whole trace.dlgraph' }
 }
 
 Write-Host 'freshness ...'

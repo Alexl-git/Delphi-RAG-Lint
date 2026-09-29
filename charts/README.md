@@ -30,14 +30,17 @@ charts\
 ## For AI agents -- one command
 
 ```
-pwsh -NoProfile -File charts\src\Ask-Report.ps1 -Question <id> -Target <t> -Project <x.dproj>   (or -In <any .pas/.dfm of it>)
+$ar = @('C:\Projects\Delphi-RAG-lint\charts\src\Ask-Report.ps1', 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\Ask-Report.ps1') | Where-Object { Test-Path $_ } | Select-Object -First 1
+pwsh -NoProfile -File $ar -Question <id> -Target <t> -Project <x.dproj>   (or -In <any .pas/.dfm of it>)
 ```
+
+(The first path is the main checkout once `feat/archify-ir` merges; until then only the worktree has it.)
 
 * Use it for a PATH or SET question (the ids in `question-catalogue.md`: `round-trip`, `who-writes`, `who-calls`, `lands-where`, `consumers` ...), not for one symbol's definition.
 * It resolves the project index with the engine's `resolve-dbs`, takes the SERVER and SQL indexes from `charts\report-pairs.json`, and writes the bundle under `%TEMP%\drag-lint-reports`. A stale index stops it (exit 3) with the incremental `index` command printed; it never indexes.
-* Read stdout: `BUNDLE <folder>`, then the answer -- the whole Form A trace for `round-trip`, else a `CHART` header and one `<name> @File.pas:line` line per chart row. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
+* Read stdout: `BUNDLE <folder>`, one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)` after the first), then the answer -- the whole Form A trace for `round-trip`, else a `CHART` header with the counts, `TARGET <name> @File.pas:line` for the chart's own selection, one `<name> @File.pas:line` line per result row, and `... +N more ... not shown (-Cap N; raise -Cap to see them)` whenever the chart drew fewer rows than its header counts. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
 * Give the target the way the verb takes it: `who-writes` wants `Blueprint4.ViewModel.TBlueprint_ViewModel.FSuppressEvents`, not `TBlueprint_ViewModel.FSuppressEvents`.
-* `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~70 s, not in the gate).
+* `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~80 s, not in the gate). Several of its cases read the clones under `scratch\db` and need them FRESH (Ask-Report checks freshness first and answers exit 3 once a source file they index changes -- re-take the clones); `AR-STALE` needs the DL clone to stay stale.
 
 ## Graphviz -- present and verified 2026-09-22
 
@@ -287,13 +290,24 @@ So the viewer -> IDE path has been ready since 2026-09-11. What was missing is
 only the BROWSER hop, because a browser cannot write to a named pipe:
 
 * `src\Open-DragLintUri.ps1` -- parses `draglint://open?file=..&line=..[&col=..]`
-  and writes the contract payload. Degrades a garbled line number to 1 rather
-  than rejecting (as the contract asks), and falls back to ShellExecute when no
-  server answers, mirroring the standalone viewer.
+  and writes the contract payload. ANY web page can carry such a link, so it
+  VALIDATES first (fix round 1, 2026-09-28): no control character (a TAB/LF would
+  forge a pipe frame), a local drive path only (no UNC / WebDAV / `\\?\` / device
+  path -- a UNC `Test-Path` alone leaks NTLM), no `:` stream or wildcard, no reserved
+  device name, and a source extension from `.pas .dfm .dpr .dpk .inc .sql .fmx`
+  (never a project file); line and col digits only (line 0, a chart's focus box, opens
+  at 1). A rejection exits 2 with one line in `%LOCALAPPDATA%\drag-lint\uri-handler.log`.
+  When no IDE answers it opens the file in NOTEPAD, never by its default verb.
+  Tests: `src\Test-DragLintProtocol.ps1` (synthetic, launches nothing).
 * `src\Register-DragLintProtocol.ps1` -- one HKCU key, no elevation,
-  `-Unregister` to undo. Nothing else on the machine is touched. The key names
-  the handler script's path and the pwsh.exe path as they were at registration:
-  re-run it after the checkout moves or PowerShell updates.
+  `-Unregister` to undo. It copies the handler to `%LOCALAPPDATA%\drag-lint\` and
+  registers the COPY, with an interpreter path that survives an update
+  (`%ProgramFiles%\PowerShell\7\pwsh.exe`, else the `%LOCALAPPDATA%` Store alias as
+  REG_EXPAND_SZ, else Windows PowerShell 5.1 -- never the versioned WindowsApps
+  folder). A source inside a `*-wt\` worktree needs `-Force`. `-DryRun` returns the
+  value it would write and touches nothing. A registration made before 2026-09-28
+  points at the worktree's handler and the versioned pwsh path: re-run it (the owner
+  decides when).
 
 The bundle page itself must not stand in the way (DOC-R1, 2026-09-28). Its click
 handler used to call `preventDefault` and only toast "sent to the IDE", so no

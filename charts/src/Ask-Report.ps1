@@ -17,9 +17,12 @@
        reindex command. It never runs `index` itself.
     4. DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 is set for the bundler call only, and restored after.
     5. the bundle goes under $env:TEMP\drag-lint-reports unless -OutRoot says otherwise.
-    6. stdout is the answer: `BUNDLE <folder>`, then the TEXT to read -- the whole
-       trace.dlgraph for round-trip, else one line per anchored chart row (`<name> @File.pas:line`).
-       Nothing else is printed on stdout.
+    6. stdout is the answer: `BUNDLE <folder>`, one `INDEX <db>[ (server|sql|counterpart)]` line per
+       index read, then the TEXT to read -- the whole trace.dlgraph for round-trip, else a `CHART`
+       header (the counts), `TARGET <name> @File.pas:line` for the chart's own selection, one
+       `<name> @File.pas:line` line per anchored result row, and `... +N more ... not shown (-Cap N;
+       raise -Cap to see them)` for every row the chart itself left out -- a count in the header
+       is never silently larger than the rows printed. Nothing else is printed on stdout.
 
   Exit codes: 0 answered; 1 the question refused or failed (the reason on stderr);
   2 setup -- the indexes could not be resolved (stderr says what to pass or edit);
@@ -30,7 +33,7 @@
   would use and stops.
 
   Example (the one line to type):
-    pwsh -NoProfile -File charts\src\Ask-Report.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1FtrsVNum -Project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
+    pwsh -NoProfile -File C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\Ask-Report.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1FtrsVNum -Project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
 #>
 [CmdletBinding()]
 param(
@@ -68,11 +71,16 @@ function Invoke-Engine([string[]] $ArgList) {
   $o = & $Engine @ArgList 2>$null
   [pscustomobject]@{ Exit = $LASTEXITCODE; Text = (@($o) -join "`n") }
 }
-# the engine prints a JSON document on stdout; notes go to stderr, which Invoke-Engine drops
+# the engine prints a JSON document on stdout. Notes normally go to stderr (dropped above), but a
+# line such as `[note] ...` on stdout also starts with '[' -- so the document is the first LINE from
+# which the rest parses as JSON, not the first '{' or '[' character (fix round 1, M-4).
 function ConvertFrom-EngineJson([string] $Text) {
-  $i = $Text.IndexOfAny([char[]]'{[')
-  if ($i -lt 0) { return $null }
-  $Text.Substring($i) | ConvertFrom-Json
+  $lines = @($Text -split "\r?\n")
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i].TrimStart() -notmatch '^[\{\[]') { continue }
+    try { return (($lines[$i..($lines.Count - 1)] -join "`n") | ConvertFrom-Json -ErrorAction Stop) } catch { }
+  }
+  $null
 }
 function Test-SamePath([string] $A, [string] $B) {
   if (-not $A -or -not $B) { return $false }
@@ -111,7 +119,8 @@ try {
   $wantOther  = $Question -eq 'crosses-boundary'
 
   $pairs = @()
-  if (Test-Path -LiteralPath $PairsFile) { $pairs = @((Get-Content -LiteralPath $PairsFile -Raw | ConvertFrom-Json).pairs) }
+  $pairsFound = Test-Path -LiteralPath $PairsFile
+  if ($pairsFound) { $pairs = @((Get-Content -LiteralPath $PairsFile -Raw | ConvertFrom-Json).pairs) }
 
   # ---- 1. the project index -------------------------------------------------------------
   if (-not $DbPath) {
@@ -148,9 +157,13 @@ try {
     $pair = Find-Pair $DbPath
     if (-not $pair) {
       if ($needServer -or $needSql) {
+        $orPass = "or pass $(if ($needServer) { '-ServerDbPath and ' })-SqlDbPath"
+        if (-not $pairsFound) {
+          Stop-Ask 2 ("$Question also reads $(if ($needServer) { 'the SERVER index and ' })the SQL-script index, and " +
+                      "$([IO.Path]::GetFileName($PairsFile)) not found at $PairsFile -- restore it (charts\report-pairs.json), $orPass")
+        }
         Stop-Ask 2 ("$Question also reads $(if ($needServer) { 'the SERVER index and ' })the SQL-script index, and $PairsFile " +
-                    "has no entry for $DbPath -- add one (client, server, sql; check each with resolve-dbs), or pass " +
-                    "$(if ($needServer) { '-ServerDbPath and ' })-SqlDbPath")
+                    "has no entry for $DbPath -- add one (client, server, sql; check each with resolve-dbs), $orPass")
       }
       # crosses-boundary without a counterpart draws one side and says so (the bundler's own behaviour)
     } else {
@@ -222,6 +235,11 @@ try {
 
     # ---- 5. the text to read ----------------------------------------------------------------
     Write-Output "BUNDLE $($art.Bundle)"
+    # which index(es) answered (fix round 1, M-1): the project index, then any other the question read
+    Write-Output "INDEX $DbPath"
+    if ($needServer)                    { Write-Output "INDEX $ServerDbPath (server)" }
+    if ($needSql)                       { Write-Output "INDEX $SqlDbPath (sql)" }
+    if ($wantOther -and $CounterpartDb) { Write-Output "INDEX $CounterpartDb (counterpart)" }
     $tracePath = Join-Path $art.Bundle 'trace.dlgraph'
     $dotPath   = Join-Path $art.Bundle 'graph.dot'
     if (Test-Path -LiteralPath $tracePath) {
@@ -230,11 +248,28 @@ try {
       $meta = Get-Content -LiteralPath (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
       Write-Output "CHART $Question $Target -- $($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)"
       $rows = New-Object System.Collections.Generic.List[string]
-      if (Test-Path -LiteralPath $dotPath) {
-        $dot = [IO.File]::ReadAllText($dotPath)
+      $targets = New-Object System.Collections.Generic.List[string]
+      $notShown = New-Object System.Collections.Generic.List[string]
+      $inFocus = $false
+      foreach ($dl in $(if (Test-Path -LiteralPath $dotPath) { [IO.File]::ReadAllLines($dotPath) } else { @() })) {
+        # the chart's own selection lives in `subgraph cluster_focus...`: it is the TARGET, not a result (M-2)
+        if ($dl -match '^\s*subgraph cluster_focus') { $inFocus = $true }
+        elseif ($dl -match '^\s*\}\s*$') { $inFocus = $false }
+        # an UNANCHORED cell that says what the chart left out: the cap disclosure above all (I-2).
+        # A reader told "24 routines" and shown 20 rows must be told the other 4 exist.
+        foreach ($m in [regex]::Matches($dl, '<TD(?![^>]*HREF=)[^>]*>(.*?)</TD>')) {
+          $txt = ([Net.WebUtility]::HtmlDecode(($m.Groups[1].Value -replace '<[^>]+>', '')).Trim()) -replace '[^\x20-\x7E]', ' '
+          if ($txt -notmatch 'not shown') { continue }
+          if ($txt -match '^\+\d+ more') {
+            $cm = [regex]::Match("$($meta.regenerate)", ' -(SurfaceCap|Cap) (\d+)')
+            $capHow = $(if ($cm.Success) { " (-$($cm.Groups[1].Value) $($cm.Groups[2].Value); raise -$($cm.Groups[1].Value) to see them)" } else { ' (raise -Cap to see them)' })
+            $txt += $capHow
+          }
+          if (-not $notShown.Contains($txt)) { $notShown.Add($txt) }
+        }
         # one anchored row per <TD HREF=draglint://..>: the qualified name when the tooltip is
         # "<qname> -- <file>:<line>" (or a bare qname), else the row's label plus the tooltip as a note
-        foreach ($m in [regex]::Matches($dot, '<TD[^>]*?HREF="draglint://open\?file=([^"&]*)&amp;line=(\d+)"[^>]*?TITLE="([^"]*)"[^>]*>(.*?)</TD>')) {
+        foreach ($m in [regex]::Matches($dl, '<TD[^>]*?HREF="draglint://open\?file=([^"&]*)&amp;line=(\d+)"[^>]*?TITLE="([^"]*)"[^>]*>(.*?)</TD>')) {
           $tip   = [Net.WebUtility]::HtmlDecode($m.Groups[3].Value).Trim()
           $label = [Net.WebUtility]::HtmlDecode(([regex]::Match($m.Groups[4].Value, '<FONT[^>]*>(.*?)</FONT>').Groups[1].Value -replace '<[^>]+>', '')).Trim()
           $note  = ''
@@ -245,12 +280,15 @@ try {
           $row  = $(if ([int]$m.Groups[2].Value -gt 0) { "$name @${leaf}:$($m.Groups[2].Value)" } else { "$name @$leaf" })
           if ($note) { $row += " -- $note" }
           $row = $row -replace '[^\x20-\x7E]', ' '
-          if (-not $rows.Contains($row)) { $rows.Add($row) }
+          if ($inFocus) { if (-not $targets.Contains($row)) { $targets.Add($row) } }
+          elseif (-not $rows.Contains($row)) { $rows.Add($row) }
         }
       }
-      if ($rows.Count -eq 0) { Write-Output "(no anchored rows -- open $($art.Shell))" }
+      foreach ($row in $targets) { Write-Output "  TARGET $row" }
+      if ($rows.Count -eq 0) { Write-Output "  (no anchored result rows -- open $($art.Shell))" }
       foreach ($row in ($rows | Select-Object -First $MaxRows)) { Write-Output "  $row" }
-      if ($rows.Count -gt $MaxRows) { Write-Output "  ... $($rows.Count - $MaxRows) more row(s): $dotPath" }
+      foreach ($txt in $notShown) { Write-Output "  ... $txt" }
+      if ($rows.Count -gt $MaxRows) { Write-Output "  ... $($rows.Count - $MaxRows) more row(s) not printed here (-MaxRows $MaxRows): $dotPath" }
     }
   }
 } catch {

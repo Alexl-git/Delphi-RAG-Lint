@@ -461,6 +461,8 @@ Step 'E-MA-R26' {
   # navigation, and it still toasts what it asked for.
   if ($r26html -cmatch 'preventDefault') { Fail 'A-DOC-R1-NAV' 'the chart bundle page cancels draglint:// navigation (preventDefault): a click never reaches the IDE' }
   if ($r26html -cnotmatch "toast\('opening ' \+ what") { Fail 'A-DOC-R1-TOAST' 'the chart bundle page no longer toasts the file and line a click asked for' }
+  # fix round 1 (M-7): a malformed %-escape must not throw before the toast (navigation proceeds either way)
+  if ($r26html -cnotmatch 'try \{ what = decodeURIComponent\(m\[1\]\)') { Fail 'A-DOC-R1-DECODE' 'decodeURIComponent is not guarded: a malformed % in a link kills the toast' }
 }
 
 Note 'who-reads Connected at scale (602 sites, 598 routines, cap 25) ...'
@@ -2804,6 +2806,8 @@ Step 'RT-ART' {
   $rtBadLink = @($rtLinks | Where-Object { $lp = [uri]::UnescapeDataString($_.Groups[1].Value); -not (Test-Path -LiteralPath $lp) -or [IO.Path]::GetFileName($lp) -ne $_.Groups[3].Value -or $_.Groups[2].Value -ne $_.Groups[4].Value })
   if ($rtBadLink.Count) { Fail 'A-RT-ART-LINKS' "$($rtBadLink.Count) link(s) point at a missing file or a different leaf/line than their text, first: $($rtBadLink[0].Value)" }
   if ($html -cnotmatch '<span><b>126</b> of <b>126</b> @file:line anchors link to the IDE</span>') { Fail 'A-RT-ART-LINKS' 'the header does not say "126 of 126 @file:line anchors link to the IDE"' }
+  # fix round 1 (M-6): an unlinked anchor is a leaf the indexes hold at ZERO or several paths, not only several
+  if ($html -cnotmatch 'holds? at zero or several paths') { Fail 'A-RT-ART-NOTE' 'the page does not say an unlinked anchor names a file held at zero or several paths' }
   # DOC-R1: the page's click handler never cancels navigation (the same script as a chart page)
   if ($html -cmatch 'preventDefault' -or $html -cnotmatch "toast\('opening ' \+ what") { Fail 'A-DOC-R1-NAV' 'the text bundle page cancels draglint:// navigation, or lost its opening toast' }
   if ((Get-Content (Join-Path $art.Bundle 'trace.dlgraph') -Raw) -cne $rt0.RtText) { Fail 'A-RT-ART' 'trace.dlgraph in the bundle differs from the emitter output' }

@@ -311,7 +311,7 @@ if ($isText) {
           "    once is a <code class=`"k`">draglint://open?file=..&amp;line=..</code> link that opens the line in`n" +
           "    your running IDE, through the protocol handler`n" +
           "    (<code class=`"k`">charts\src\Register-DragLintProtocol.ps1</code>, once per user). An anchor left`n" +
-          "    as plain text names a file the indexes hold at more than one path. A chart drawn from this text is later work.</p>"
+          "    as plain text names a file the indexes hold at zero or several paths. A chart drawn from this text is later work.</p>"
   $footFiles = 'trace.dlgraph (Form A text) &middot; '
 } else {
   if (-not (Test-Path $svgPath)) { throw "$Question drew no chart: $svgPath is missing" }
@@ -331,8 +331,9 @@ if ($isText) {
     <code class="k">charts\src\Register-DragLintProtocol.ps1</code> (HKCU only,
     no elevation, <code class="k">-Unregister</code> to undo). A click also shows
     a short note naming the file and line it asked for; if nothing opens, the
-    handler is not registered on this machine. If the IDE is not running, the
-    handler falls back to ShellExecute, mirroring the standalone viewer.</p>
+    handler is not registered on this machine. The handler opens only a local
+    source file (.pas .dfm .dpr .dpk .inc .sql .fmx) and, when the IDE is not
+    running, shows it in Notepad.</p>
 '@
   $footFiles = 'graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry, same layout run) &middot; '
 }
@@ -414,7 +415,8 @@ $note
     var href = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
     if (href.indexOf('draglint://') !== 0) return;
     var m = /file=([^&]*)&(?:amp;)?line=(\d+)/.exec(href);
-    var what = m ? decodeURIComponent(m[1]) + ':' + m[2] : href;
+    var what = href;
+    if (m) { try { what = decodeURIComponent(m[1]) + ':' + m[2]; } catch (e) { what = m[1] + ':' + m[2]; } }
     toast('opening ' + what + ' in the IDE -- if nothing opens, register the handler once: charts\\src\\Register-DragLintProtocol.ps1');
   });
 })();
