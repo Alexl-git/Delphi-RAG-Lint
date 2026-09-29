@@ -189,7 +189,7 @@ documentation, CHANGELOG ENG-4).</li>
 <tr><td><code>cycle-participant-unit</code> (A.2)</td><td><span class="st st-ship">SHIPPED</span> 1.20.0, off by default</td></tr>
 <tr><td>Staleness note inside JSON (A.9)</td><td><span class="st st-ship">FIXED</span> per the 1.20.0 <code>--help</code>: the note is on stderr, never in a JSON document (not re-measured here)</td></tr>
 <tr><td>Data-path tracing (A.4)</td><td><span class="st st-prog">IN PROGRESS</span> -- the <code>round-trip</code> text trace ships in the chart tool-set (chapter 12); engine facts E1-E4 would retire its stated limits</td></tr>
-<tr><td>Charts into the main tree (A.6)</td><td><span class="st st-prop">OWNER DECISION</span> -- still on branch <code>feat/archify-ir</code>, not merged</td></tr>
+<tr><td>Charts into the main tree (A.6)</td><td><span class="st st-ship">SHIPPED</span> -- merged into <code>main</code> on 29 September (merge 0470d6ff)</td></tr>
 <tr><td>Every other roadmap row</td><td>Carried unchanged from the 23 September edition; not re-verified for this one</td></tr>
 </table>
 
@@ -724,7 +724,7 @@ today's <code>--help</code>.</p>
 <h3>A.6 Diagrams and charts: remaining work</h3>
 <table>
 <tr><th>Item</th><th>What it is</th><th>Status</th></tr>
-<tr><td>Charts into the main tree</td><td>The chart tool-set (26 of 27 questions) lives in <code>charts\</code> on branch <code>feat/archify-ir</code>, not merged; it moves into the engine as the <code>ask</code> verb (A.3) once proven.</td><td><span class="st st-prop">OWNER DECISION</span> (merge)</td></tr>
+<tr><td>Charts into the main tree</td><td>The chart tool-set (26 of 27 questions) lives in <code>charts\</code> on <code>main</code> (merged 29 September, merge 0470d6ff); it moves into the engine as the <code>ask</code> verb (A.3) once proven.</td><td><span class="st st-ship">SHIPPED</span> (merged)</td></tr>
 <tr><td><code>round-trip</code> as a chart</td><td>Draw the text trace as a picture: unit rectangles with the steps as clickable rows, guards kept as rows. The owner's stated next step after the trace core.</td><td><span class="st st-plan">PLANNED</span> <b>(new)</b></td></tr>
 <tr><td>Chart page click reaches the IDE</td><td>The chart page (<code>index.html</code>) used to catch a row click and only show the message it would send. Fixed 28 September: the click reaches the registered handler, <code>round-trip</code> anchors are links too, and the handler was hardened (chapter 12). A live browser click into RAD Studio is still to be checked on the owner's machine.</td><td><span class="st st-ship">FIXED</span> <b>(new)</b></td></tr>
 <tr><td>Link handler: the plugin side</td><td>The handler now refuses unsafe links, but the IDE plugin's pipe server opens any existing file a local process writes to it, including a network path or a project file, and creates the pipe without <code>PIPE_REJECT_REMOTE_CLIENTS</code>. The same checks belong in the plugin (engine code).</td><td><span class="st st-prop">PROPOSED</span> <b>(new)</b></td></tr>
@@ -776,7 +776,7 @@ today's <code>--help</code>.</p>
 <tr><th>Item</th><th>Status</th></tr>
 <tr><td>Library re-resolve under resolver 1.6.0 and re-parse under extractor 1.18.0 -- owner-gated runs of about 70 minutes per library and about 3 hours 17 minutes for the whole estate</td><td><span class="st st-plan">PLANNED</span></td></tr>
 <tr><td>Test whether a low-cost AI model can follow the cycle-fix playbook</td><td><span class="st st-plan">PLANNED</span></td></tr>
-<tr><td>Publishing the unpushed commits on <code>main</code>, and merging the charts branch (still not merged on 29 September)</td><td><span class="st st-prop">OWNER DECISION</span></td></tr>
+<tr><td>Publishing <code>main</code> (the charts branch is merged, 29 September; publishing waits for the owner to reload the rebuilt, hardened IDE plugin)</td><td><span class="st st-prop">OWNER DECISION</span></td></tr>
 </table>
 
 
