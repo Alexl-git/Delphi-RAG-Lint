@@ -32,7 +32,11 @@ procedure InputThenReturned(var ABuf: Integer);
 
 implementation
 
-function TwoWay(var ANodes: Integer): Boolean; begin ANodes := 1; Result := True; end;
+function TwoWay(var ANodes: Integer): Boolean;
+begin
+  ANodes := 1;
+  Result := True;
+end;
 procedure VarInputOnly(var AValue: Integer); begin AValue := AValue + 1; end;
 procedure OutInputOnly(out ACount: Integer); begin ACount := 0; end;
 procedure NotAMarker(var AMode: Integer); begin AMode := 0; end;

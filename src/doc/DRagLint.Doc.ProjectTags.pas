@@ -216,7 +216,7 @@ function AnyTagged(const AEntries: TArray<string>): Boolean;
 /// The marker is not an entry. Split in as one, `X (+3 more)` read as
 /// naming a unit called `+3 more` that no index holds.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable (DRagLint.Doc.SharedFacts.pas)</para>
+/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas)</para>
 /// <para>Calls: Copy, EndsText, TrimRight</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
