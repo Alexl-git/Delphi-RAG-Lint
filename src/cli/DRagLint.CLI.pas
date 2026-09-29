@@ -3820,6 +3820,64 @@ begin
   if AItem.Platform <> '' then Result:= Result + ' [' + AItem.Platform + ']';
 end;
 
+/// <summary>The distinct section names of APlan, sorted, as the "selectable"
+/// hint of `index --all --only` prints them.</summary>
+/// <param name="APlan">The plan after --platform filtering and before --only.</param>
+/// <returns>One entry per section NAME (case-insensitive). A name the plan
+/// expanded for more than one platform reads "Library (Win32, Win64)"; a name
+/// with one platform or none reads as the bare name, which is what --only takes.</returns>
+/// <remarks>ResolvePlan emits one item per platform for a library section, so
+/// listing Plan.Items verbatim printed "Library, Library" when no --platform
+/// narrowed it -- two entries for one selectable name. The count the hint
+/// prints is Length(Result), i.e. the number of distinct names.</remarks>
+function SelectableSectionLabels(const APlan: TIndexPlan): TArray<string>;
+var
+  Names: TArray<string>;
+  Plats: TArray<TArray<string>>;
+  PS   : TPlanSection;
+  Found: Integer;
+  i    : Integer;
+begin
+  Names:= nil;
+  Plats:= nil;
+  for PS in APlan.Items do
+  begin
+    Found:= -1;
+    for i:= 0 to High(Names) do
+      if (Found < 0) and SameText(Names[i], PS.Name) then Found:= i;
+    if Found < 0 then
+    begin
+      Names:= Names + [PS.Name];
+      SetLength(Plats, Length(Names));
+      Found:= High(Names);
+    end;
+    if PS.Platform <> '' then Plats[Found]:= Plats[Found] + [PS.Platform];
+  end;
+  SetLength(Result, Length(Names));
+  for i:= 0 to High(Names) do
+    Result[i]:= if Length(Plats[i]) > 1 then Format('%s (%s)', [Names[i], string.Join(', ', Plats[i])]) else Names[i];
+  TArray.Sort<string>(Result);
+end;
+
+/// <summary>The command that builds one plan section's database, as the
+/// resolve-dbs never-built NOTE advises it.</summary>
+/// <param name="AItem">The plan item whose DbPath has never been built.</param>
+/// <param name="AConfigPath">The --config the caller named, or '' for the
+/// default manifest lookup; carried into the advice so it reads the same manifest.</param>
+/// <returns>"drag-lint index --all --only &lt;Name&gt;", plus " --platform
+/// &lt;P&gt;" when the item is a per-platform (library) expansion and
+/// " --config &lt;path&gt;" when one was given.</returns>
+/// <remarks>--only matches the SECTION name. The advice used to guess it from the
+/// DB file's base name, which is wrong for a library ("library-Win64" vs the
+/// section "Library") and for a project section ("Foo" for a section "P-Foo"
+/// whose DB is _D-RAG\Foo.sqlite): both advised commands exited 2.</remarks>
+function IndexSectionCommand(const AItem: TPlanSection; const AConfigPath: string): string;
+begin
+  Result:= 'drag-lint index --all --only ' + (if AItem.Name.Contains(' ') then AnsiQuotedStr(AItem.Name, '"') else AItem.Name);
+  if AItem.Platform <> '' then Result:= Result + ' --platform ' + AItem.Platform;
+  if AConfigPath <> '' then Result:= Result + ' --config ' + AnsiQuotedStr(TPath.GetFullPath(AConfigPath), '"');
+end;
+
 // v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
 // validates it, resolves the build plan, optionally filters by --only / --platform,
@@ -3888,6 +3946,7 @@ begin
       exactly what matched, so there is nothing left to tell the user about. }
     var Selectable: TArray<string>:= nil;
     for i:= 0 to High(Plan.Items) do Selectable:= Selectable + [Plan.Items[i].Name];
+    var SelectableLabels: TArray<string>:= SelectableSectionLabels(Plan);
 
     var Filtered: TArray<TPlanSection>;
     for i:= 0 to High(Plan.Items) do
@@ -3928,9 +3987,11 @@ begin
     begin
       Writeln(ErrOutput, Format('ERROR: --only matched no configured section: %s',
         [string.Join(', ', Unmatched)]));
-      TArray.Sort<string>(Selectable);
-      Writeln(ErrOutput, Format('selectable for this platform (%d): %s',
-        [Length(Selectable), string.Join(', ', Selectable)]));
+      { "for this platform" only when --platform chose one: without it the plan
+        holds every platform, and the library is one entry naming them all. }
+      Writeln(ErrOutput, Format('%s (%d): %s',
+        [(if AArgs.CheckPlatform <> '' then 'selectable for this platform' else 'selectable'),
+         Length(SelectableLabels), string.Join(', ', SelectableLabels)]));
       Writeln(ErrOutput, 'nothing was indexed.');
       Exit(2);
     end;
@@ -26309,6 +26370,8 @@ var
   Platform  : string                                    ;
   Paths     : TArray<string>                            ;
   AllPaths  : TArray<string>                            ;
+  NotePlan  : TIndexPlan                                ;
+  PS        : TPlanSection                              ;
   P         : string                                    ;
   J         : TJSONArray                                ;
 begin
@@ -26485,6 +26548,11 @@ begin
           DBs (or from none) and nothing said so. Resolve again WITHOUT the
           existence filter and name the difference. }
         AllPaths:= TDbSelect.Resolve(Manifest, Platform, Resolver, False);
+        { The same plan TDbSelect walks, kept so a never-built DB can be mapped
+          back to the SECTION that builds it (its name and platform). }
+        var NoteFilter: TArray<string>:= nil;
+        if Platform <> '' then NoteFilter:= [Platform];
+        NotePlan:= ResolvePlan(Manifest, NoteFilter, Resolver);
       finally
         Resolver.Free;
       end;
@@ -26501,18 +26569,25 @@ begin
                                   [E.ClassName, E.Message]));
         Paths   := nil;
         AllPaths:= nil;
+        NotePlan:= Default(TIndexPlan);
       end;
     end; // try
 
+    { Advice keyed on the plan ITEM that owns the DB, never on the file name:
+      --only takes the section name, and a library item also needs --platform.
+      Guessing from the file name advised `--only library-Win64` and `--only Foo`
+      (for section P-Foo), both of which exit 2. }
     for P in AllPaths do
     begin
-      var Present: Boolean:= False;
-      for var Q: string in Paths do
-        if SameText(Q, P) then begin Present:= True; Break; end;
-      if (not Present) and (not TFile.Exists(P)) then
-        EmitStatusLine(AArgs, Format(
-          'NOTE: %s is configured in the manifest but has never been built -- run: drag-lint index --all --only %s',
-          [P, TPath.GetFileNameWithoutExtension(P)]));
+      if TFile.Exists(P) then Continue;
+      for PS in NotePlan.Items do
+        if SameText(ExpandFileName(PS.DbPath), ExpandFileName(P)) then
+        begin
+          EmitStatusLine(AArgs, Format(
+            'NOTE: %s is configured in the manifest but has never been built -- run: %s',
+            [P, IndexSectionCommand(PS, ConfigPath)]));
+          Break;
+        end;
     end;
 
     { Fallback: preserve pre-Task-9 default when no manifest is found -- but only
