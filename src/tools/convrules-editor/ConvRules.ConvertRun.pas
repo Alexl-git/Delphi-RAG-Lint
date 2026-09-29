@@ -190,9 +190,30 @@ var
       Found:= Found + [AFile];
   end;
 
-  procedure AddDpr(const ADpr: string);
+  // A locked or unreadable file becomes one AErrors line, never an exception:
+  // this runs on Explorer drops, and a bad project must not crash a drop.
+  function TryRead(const AFile: string; out AText: string): Boolean;
   begin
-    for var LMember: TDprMember in ReadDprMembers(TFile.ReadAllText(ADpr), ExtractFilePath(ADpr)) do
+    AText:= '';
+    try
+      AText:= TFile.ReadAllText(AFile);
+      Result:= True;
+    except
+      on E: Exception do
+      begin
+        AErrors:= AErrors + [Format('%s: cannot read (%s)', [ExtractFileName(AFile), E.Message])];
+        Result:= False;
+      end;
+    end; // try
+  end;
+
+  procedure AddDpr(const ADpr: string);
+  var
+    LText: string;
+  begin
+    if not TryRead(ADpr, LText) then
+      Exit;
+    for var LMember: TDprMember in ReadDprMembers(LText, ExtractFilePath(ADpr)) do
       if LMember.FilePath = '' then
         Continue // a plain entry (Vcl.Forms) is a library unit, not a member
       else if TFile.Exists(LMember.FilePath) then
@@ -223,11 +244,15 @@ begin
       AddDpr(P)
     else if Ext = '.dproj' then
     begin
-      var LMain: string:= MainSourceOf(TFile.ReadAllText(P), ExtractFilePath(P));
-      if (LMain <> '') and TFile.Exists(LMain) then
-        AddDpr(LMain)
-      else
-        AErrors:= AErrors + [ExtractFileName(P) + ': no MainSource .dpr found'];
+      var LProj: string;
+      if TryRead(P, LProj) then
+      begin
+        var LMain: string:= MainSourceOf(LProj, ExtractFilePath(P));
+        if (LMain <> '') and TFile.Exists(LMain) then
+          AddDpr(LMain)
+        else
+          AErrors:= AErrors + [ExtractFileName(P) + ': no MainSource .dpr found'];
+      end;
     end
     else
       AErrors:= AErrors + [P + ': not a .pas, .dpr, .dproj or folder'];

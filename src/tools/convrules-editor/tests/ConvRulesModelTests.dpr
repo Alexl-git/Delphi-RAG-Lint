@@ -1468,6 +1468,8 @@ var
   Errs    : TArray<string>;
   Dir     : string;
   Srcs    : TArray<string>;
+  Lock    : TFileStream;
+  Raised  : string;
 const
   BOOK_COUNT = 3; // convert-only, units-only, mixed
   JSON_EDITS = 3; // edits_count in the first apply/1 document
@@ -1559,6 +1561,21 @@ begin
     Check('convertrun.expand.folder', Length(Srcs) = 2, string.Join(' | ', Srcs));
     Srcs:= ExpandSources([TPath.Combine(Dir, 'Nope.pas')], Errs);
     Check('convertrun.expand.missing.error', (Length(Srcs) = 0) and (Length(Errs) = 1), string.Join(' | ', Errs));
+    // A locked / unreadable .dpr is one AErrors line, never an exception: this
+    // runs on Explorer drops, and a bad project must not crash a drop.
+    Raised:= '';
+    Lock:= TFileStream.Create(TPath.Combine(Dir, 'P.dpr'), fmOpenRead or fmShareExclusive);
+    try
+      try
+        Srcs:= ExpandSources([TPath.Combine(Dir, 'P.dpr')], Errs);
+      except  // dl:ok try-except-swallowed@aa6b -- not swallowed: the exception text lands in Raised and the next Check fails on it; catching keeps the rest of the run alive
+        on E: Exception do
+          Raised:= E.ClassName + ': ' + E.Message;
+      end; // try
+    finally
+      Lock.Free;
+    end; // try
+    Check('convertrun.expand.unreadable.error', (Raised = '') and (Length(Srcs) = 0) and (Length(Errs) = 1) and (Pos('P.dpr', string.Join(' ', Errs)) > 0), Raised + ' ' + string.Join(' | ', Errs));
   finally
     TDirectory.Delete(Dir, True);
   end; // try
