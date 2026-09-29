@@ -87,7 +87,16 @@ echo === T26: LSP publishDiagnostics ===
 call "%HERE%fixtures\T26_lsp_diagnostics.bat" || set FAILED=1
 
 echo === T27: LSP client standalone ===
+REM COMPILE GUARD (as in run_legacy_cli_fixtures.ps1). T27_lsp_client.bat only
+REM checks `if not exist <exe>` after dcc64, and a failed compile keeps the
+REM previous build's exe, which then runs and prints OK. So delete the exe and
+REM the build log first, and afterwards FAIL on any Error:/Fatal: line in the
+REM log, or on a log without dcc64's "N lines," summary (nothing compiled).
+if exist "%HERE%fixtures\T27_lsp_client.exe" del "%HERE%fixtures\T27_lsp_client.exe"
+if exist "%HERE%fixtures\t27_build.txt" del "%HERE%fixtures\t27_build.txt"
 call "%HERE%fixtures\T27_lsp_client.bat" || set FAILED=1
+findstr /c:"Error:" /c:"Fatal:" "%HERE%fixtures\t27_build.txt" >NUL 2>&1 && (echo FAIL: T27 compile failed, see tests\fixtures\t27_build.txt & set FAILED=1)
+findstr /r /c:"^[0-9][0-9]* lines, " "%HERE%fixtures\t27_build.txt" >NUL 2>&1 || (echo FAIL: T27 build log has no dcc64 summary line & set FAILED=1)
 
 echo.
 echo === Stop criteria: self-corpus doc coverage ===

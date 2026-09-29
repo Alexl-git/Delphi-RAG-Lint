@@ -16,7 +16,8 @@ if errorlevel 1 (
   exit /b 0
 )
 
-dcc64 -Q -B -E"%FIXTURES%" -U"%SRC%" -LUdesignide "%FIXTURES%\T57_usages_form.dpr" > "%FIXTURES%\t57_build.txt" 2>&1
+REM -DDRAGLINT_TEST_REGROOT: Settings then writes HKCU\...\DelphiPlugin.Test, never the owner's live key. -B so no stale DCU built without the define is reused.
+dcc64 -DDRAGLINT_TEST_REGROOT -Q -B -E"%FIXTURES%" -U"%SRC%" -LUdesignide "%FIXTURES%\T57_usages_form.dpr" > "%FIXTURES%\t57_build.txt" 2>&1
 
 if errorlevel 1 (
   echo FAIL: T57 compile failed

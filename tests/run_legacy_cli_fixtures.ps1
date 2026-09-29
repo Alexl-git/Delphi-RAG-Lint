@@ -44,6 +44,23 @@
   battery (the .dpr suites compile the engine from source), but it is the one
   fixture here that is not pure CLI.
 
+  COMPILED FIXTURES ARE JUDGED BY THEIR BUILD LOG, not only by the .bat's exit
+  code (see THE COMPILE GUARD below). A dcc64 fixture FAILS when its build log
+  has an `Error:` / `Fatal:` line, when the log has no dcc64 `N lines, ...`
+  summary (the compiler never received a project -- T61's trailing-backslash
+  quote made dcc64 print its usage and exit 0), or when there is no log at all.
+  The one exception: no log AND the .bat printed `SKIP:` (rsvars.bat missing,
+  no RAD Studio on the box) is reported as a SKIP, not a failure.
+
+  THE OWNER'S IDE SETTINGS ARE GUARDED. T29/T34/T54 (and anything else that
+  links DragLint.Plugin.Settings) round-trip SaveSettings and end with
+  SaveSettings(DefaultSettings). Their .bats compile with
+  -DDRAGLINT_TEST_REGROOT, which points the unit at
+  HKCU\Software\drag-lint\DelphiPlugin.Test instead of the live
+  ...\DelphiPlugin. This runner snapshots the LIVE key's values before the
+  fixtures and fails `owner plugin settings untouched` if any changed, then
+  deletes the .Test key (values only, no subkeys: not recursive).
+
   Usage: pwsh -File tests/run_legacy_cli_fixtures.ps1 [-Exe <path>]
 #>
 [CmdletBinding()]
@@ -130,6 +147,34 @@ $fixDir   = Join-Path $PSScriptRoot 'fixtures'
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $env:EXE = (Resolve-Path $Exe).Path   # every fixture defers to a pre-set EXE
 
+# OWNER SETTINGS GUARD (see the header). A snapshot is the sorted list of
+# `name=kind:value` strings under the key; a missing key snapshots as empty, so
+# missing-before and missing-after compare equal.
+$LiveRegKey = 'HKCU:\Software\drag-lint\DelphiPlugin'
+$TestRegKey = 'HKCU:\Software\drag-lint\DelphiPlugin.Test'
+function Get-RegSnapshot([string]$Path) {
+  if (-not (Test-Path $Path)) { return @() }
+  $k = Get-Item $Path
+  return @($k.GetValueNames() | Sort-Object | ForEach-Object {
+    '{0}={1}:{2}' -f $_, $k.GetValueKind($_), (@($k.GetValue($_, $null, 'DoNotExpandEnvironmentNames')) -join '|')
+  })
+}
+function Compare-RegSnapshot([string[]]$Before, [string[]]$After) {
+  $b = @($Before | Where-Object { $_ }); $a = @($After | Where-Object { $_ })
+  return @(@($b | Where-Object { $a -notcontains $_ } | ForEach-Object { "was $_" }) +
+           @($a | Where-Object { $b -notcontains $_ } | ForEach-Object { "now $_" }))
+}
+# SELF-TEST of the comparison on synthetic snapshots -- the live key is never
+# modified to prove the guard can fire.
+$stEqual   = Compare-RegSnapshot @('A=String:1', 'B=DWord:0') @('A=String:1', 'B=DWord:0')
+$stEmpty   = Compare-RegSnapshot @() @()
+$stChanged = Compare-RegSnapshot @('A=String:1', 'B=DWord:0') @('A=String:1', 'B=DWord:1')
+$stAdded   = Compare-RegSnapshot @() @('A=String:1')
+Check 'SELF-TEST: registry comparison (equal=pass, empty=pass, changed value=fail, added value=fail)' `
+  (($stEqual.Count -eq 0) -and ($stEmpty.Count -eq 0) -and ($stChanged.Count -eq 2) -and ($stAdded.Count -eq 1)) `
+  ("equal={0} empty={1} changed={2} added={3}" -f $stEqual.Count, $stEmpty.Count, $stChanged.Count, $stAdded.Count)
+$liveBefore = Get-RegSnapshot $LiveRegKey
+
 $ran = 0
 foreach ($name in ($Fixtures + $RootDrivers)) {
   $bat = if ($RootDrivers -contains $name) { Join-Path $PSScriptRoot "$name.bat" }
@@ -155,13 +200,19 @@ foreach ($name in ($Fixtures + $RootDrivers)) {
     $first  = ([regex]::Matches($txt, '(?m)^FAIL[^\r\n]*') | ForEach-Object { $_.Value } | Select-Object -First 1)
     $ok     = ($p.ExitCode -eq 0)
     $detail = if ($first) { $first } else { "exit=$($p.ExitCode)" }
+    $skip   = [regex]::Match($txt, '(?m)^SKIP:[^\r\n]*').Value
     if ($compiles) {
       if (-not $buildLog -or -not (Test-Path $buildLog)) {
-        $ok = $false; $detail = 'compile failed: no build log found for the dcc64 line'
+        if ($skip) { $detail = $skip }
+        else { $ok = $false; $detail = 'compile failed: no build log found for the dcc64 line' }
       }
       else {
-        $err = [regex]::Match((Get-Content $buildLog -Raw), '(?m)^[^\r\n]*\b(Error|Fatal):[^\r\n]*')
+        $blText = Get-Content $buildLog -Raw
+        $err = [regex]::Match($blText, '(?m)^[^\r\n]*\b(Error|Fatal):[^\r\n]*')
         if ($err.Success) { $ok = $false; $detail = 'compile failed: ' + $err.Value.Trim() }
+        elseif ($blText -notmatch '(?m)^\d+ lines, ') {
+          $ok = $false; $detail = 'compile failed: build log has no dcc64 "N lines" summary -- no project was compiled'
+        }
       }
     }
     if ($ExpectFail.ContainsKey($name)) {
@@ -173,6 +224,13 @@ foreach ($name in ($Fixtures + $RootDrivers)) {
   foreach ($f in @($lg, "$lg.err")) { if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue } }
 }
 Remove-Item Env:\EXE -ErrorAction SilentlyContinue
+
+$liveDiff = Compare-RegSnapshot $liveBefore (Get-RegSnapshot $LiveRegKey)
+Check 'owner plugin settings untouched' ($liveDiff.Count -eq 0) ($liveDiff -join '; ')
+if (Test-Path $TestRegKey) {
+  try   { Remove-Item -Path $TestRegKey -ErrorAction Stop }
+  catch { Check 'test settings key removed' $false $_.Exception.Message }
+}
 
 # POSITIVE CONTROL: an empty or truncated list would otherwise report a clean run.
 $want = $Fixtures.Count + $RootDrivers.Count

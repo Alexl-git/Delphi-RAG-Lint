@@ -9,6 +9,6 @@ program T67_compile_fail;
   stopped working. Do not "fix" the identifier. }
 {$APPTYPE CONSOLE}
 begin
-  WriteLn(DeliberatelyUndeclaredIdentifier);
-  WriteLn('OK');
+  WriteLn(DeliberatelyUndeclaredIdentifier);  // dl:ok writeln-in-source@b858 -- REVIEWED 2026-09-29: console fixture; stdout IS its result channel
+  WriteLn('OK');  // dl:ok writeln-in-source@3b93 -- REVIEWED 2026-09-29: console fixture; stdout IS its result channel
 end.

@@ -83,7 +83,16 @@ uses
   ;
 
 const
+  /// <summary>HKCU key every setting in this unit is read from and written to.</summary>
+  /// <remarks>DRAGLINT_TEST_REGROOT redirects it to a throwaway sibling key. The
+  /// compiled test fixtures (T29, T34, T54, ...) round-trip SaveSettings and end
+  /// with SaveSettings(DefaultSettings); built without the define they overwrite
+  /// the owner's live IDE plugin configuration. The plugin BPL never defines it.</remarks>
+  {$IFDEF DRAGLINT_TEST_REGROOT}
+  REG_KEY = 'Software\drag-lint\DelphiPlugin.Test';
+  {$ELSE}
   REG_KEY = 'Software\drag-lint\DelphiPlugin';
+  {$ENDIF}
 
 function DefaultSettings: TDragLintSettings;
 begin
