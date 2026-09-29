@@ -293,19 +293,28 @@ only the BROWSER hop, because a browser cannot write to a named pipe:
   and writes the contract payload. ANY web page can carry such a link, so it
   VALIDATES first (fix round 1, 2026-09-28): no control character (a TAB/LF would
   forge a pipe frame), a local drive path only (no UNC / WebDAV / `\\?\` / device
-  path -- a UNC `Test-Path` alone leaks NTLM), no `:` stream or wildcard, no reserved
-  device name, and a source extension from `.pas .dfm .dpr .dpk .inc .sql .fmx`
-  (never a project file); line and col digits only (line 0, a chart's focus box, opens
-  at 1). A rejection exits 2 with one line in `%LOCALAPPDATA%\drag-lint\uri-handler.log`.
-  When no IDE answers it opens the file in NOTEPAD, never by its default verb.
-  Tests: `src\Test-DragLintProtocol.ps1` (synthetic, launches nothing).
+  path -- a UNC `Test-Path` alone leaks NTLM), no `:` stream or wildcard, no segment
+  ending in a dot or space, no reserved device name, and a source extension from
+  `.pas .dfm .dpr .inc .sql .fmx` (never a project or package file -- `.dpk` dropped by
+  ruling SEC-R3); line and col ASCII digits only (line 0, a chart's focus box, opens at
+  1); each key at most once. A drive letter does not prove locality -- a mapped or
+  subst'ed drive can be SMB/WebDAV -- so the handler reaches only servers the user has
+  already mapped. It takes EXACTLY ONE argument, the URI (ruling SEC-R2: a launcher that
+  does not percent-encode `"` could otherwise append `-LogPath ...` through the
+  registered `"%1"`); test overrides come only from `DRAGLINT_URI_TEST_*` environment
+  variables. A rejection exits 2 with one line in the FIXED log
+  `%LOCALAPPDATA%\drag-lint\uri-handler.log`. When no IDE answers it opens the file in
+  NOTEPAD, never by its default verb.
+  Tests: `src\Test-DragLintProtocol.ps1` (synthetic, launches nothing; SEC-1 runs the
+  handler as the registry does, in a sandbox, under pwsh 7 and 5.1).
 * `src\Register-DragLintProtocol.ps1` -- one HKCU key, no elevation,
   `-Unregister` to undo. It copies the handler to `%LOCALAPPDATA%\drag-lint\` and
   registers the COPY, with an interpreter path that survives an update
   (`%ProgramFiles%\PowerShell\7\pwsh.exe`, else the `%LOCALAPPDATA%` Store alias as
   REG_EXPAND_SZ, else Windows PowerShell 5.1 -- never the versioned WindowsApps
   folder). A source inside a `*-wt\` worktree needs `-Force`. `-DryRun` returns the
-  value it would write and touches nothing. A registration made before 2026-09-28
+  value it would write and touches nothing; `-Unregister -DryRun` lists what it would
+  remove and removes nothing. A registration made before 2026-09-28
   points at the worktree's handler and the versioned pwsh path: re-run it (the owner
   decides when).
 

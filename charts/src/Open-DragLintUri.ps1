@@ -21,29 +21,42 @@
       pipe frame);
     * a rooted LOCAL DRIVE path only (`X:\...`): no UNC, no WebDAV, no \\?\ or \\.\
       device path, no relative or drive-less path, no ':' or wildcard after the drive
-      (an NTFS stream `a.exe:b.pas` reads like a .pas), no reserved device name;
-    * an allow-listed SOURCE extension: .pas .dfm .dpr .dpk .inc .sql .fmx -- never a
-      project file (.dproj/.groupproj: loading a project from a URL is worse than a unit);
-    * line and col are digits. line=0 (a chart's focus box) and a missing line open at 1.
+      (an NTFS stream `a.exe:b.pas` reads like a .pas), no segment ending in a dot or a
+      space (Windows strips them: `x.hta.` IS x.hta), no reserved device name. A drive
+      letter does not prove the file is local -- a mapped or subst'ed drive can be SMB or
+      WebDAV -- so this reaches only servers the user has ALREADY mapped, never one a
+      link names;
+    * an allow-listed SOURCE extension: .pas .dfm .dpr .inc .sql .fmx. Never a project or
+      package file (.dproj/.groupproj/.dpk: a link must not make the IDE load a project or
+      a package; ruling SEC-R3). .dpr stays: charts anchor project sources, and opening one
+      shows it -- nothing builds;
+    * line and col are ASCII digits (`[0-9]`, not `\d`, which takes any Unicode digit).
+      line=0 (a chart's focus box) and a missing line open at 1;
+    * every key at most once: a duplicate `file=` or `line=` is refused, never "last wins".
   IDE not running: the file opens in NOTEPAD, never by ShellExecute of its default verb.
   The default verb of an allow-listed extension is still whatever the machine associates
   with it (an IDE that loads the file's project, a SQL tool that connects); notepad only
   displays text, and a click still shows the code. The line is not positioned there.
 
+  ONE ARGUMENT, NOTHING ELSE (ruling SEC-R2, fix round 2). The registry runs
+  `... -File "<this file>" "%1"` with %1 substituted RAW; a launcher that does not
+  percent-encode `"` (a .url file, an Office or PDF hyperlink, a chat app, `start`) can
+  close the quote and append `-LogPath "<Startup>\a.cmd"`. So this script declares NO
+  parameters: whatever arrives lands in $args, and anything but exactly one argument that
+  starts with `draglint:` is refused (exit 2, logged). The log path is FIXED:
+  %LOCALAPPDATA%\drag-lint\uri-handler.log, whose folder is the only one ever created.
+  Test overrides come ONLY from the environment, never from the command line or the URI:
+    DRAGLINT_URI_TEST_WHATIF=1   validate + report an object; never the pipe, never a process
+    DRAGLINT_URI_TEST_LOG=<file> log there instead (its folder is NOT created)
+    DRAGLINT_URI_TEST_TIMEOUT=<ms> pipe connect timeout (default 1000)
+
   Dot-sourcing this file (`. .\Open-DragLintUri.ps1`) defines Test-DragLintTarget and does
   nothing else, so the validation is testable without launching anything
-  (Test-DragLintProtocol.ps1). -WhatIfOnly validates and reports, never the pipe, never a
-  process. Parses and runs under Windows PowerShell 5.1 as well as pwsh 7.
+  (Test-DragLintProtocol.ps1). Parses and runs under Windows PowerShell 5.1 as well as pwsh 7.
 #>
-[CmdletBinding()]
-param(
-  [Parameter(Position = 0)][string] $Uri,
-  [int]    $TimeoutMs = 1000,
-  [switch] $WhatIfOnly,          # validate + report, never touch the pipe or start a process
-  [string] $LogPath = (Join-Path $env:LOCALAPPDATA 'drag-lint\uri-handler.log')
-)
 
 $ErrorActionPreference = 'Stop'
+$argv = @($args)
 
 # The whole verdict on one (file, line, col) triple, already URL-decoded. Returns
 # Ok/Reason/File/Line/Col; never touches the file system.
@@ -57,32 +70,39 @@ function Test-DragLintTarget([string] $File, [string] $Line, [string] $Col) {
   if ($File -notmatch '^[A-Za-z]:\\')    { return (& $no 'not a local drive path') }
   if ($File.Substring(2) -match '[:*?"<>|/]') { return (& $no 'illegal character in path') }
   foreach ($seg in $File.Substring(3).Split('\')) {
+    if ($seg -match '[. ]$') { return (& $no 'trailing dot or space') }
     if ((($seg -split '\.')[0]).TrimEnd(' ') -match '^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$') { return (& $no 'reserved device name') }
   }
   $ext = [IO.Path]::GetExtension($File).ToLowerInvariant()
-  if (@('.pas', '.dfm', '.dpr', '.dpk', '.inc', '.sql', '.fmx') -notcontains $ext) {
+  if (@('.pas', '.dfm', '.dpr', '.inc', '.sql', '.fmx') -notcontains $ext) {
     return (& $no ('extension not allowed: ' + $(if ($ext) { $ext } else { '(none)' })))
   }
   $n = 1
   if (-not [string]::IsNullOrEmpty($Line)) {
-    if ($Line -notmatch '^\d{1,9}$') { return (& $no 'line is not a number') }
+    if ($Line -notmatch '^[0-9]{1,9}$') { return (& $no 'line is not a number') }
     $n = [Math]::Max(1, [int]$Line)
   }
-  if (-not [string]::IsNullOrEmpty($Col) -and $Col -notmatch '^\d{1,9}$') { return (& $no 'col is not a number') }
+  if (-not [string]::IsNullOrEmpty($Col) -and $Col -notmatch '^[0-9]{1,9}$') { return (& $no 'col is not a number') }
   [pscustomobject]@{ Ok = $true; Reason = ''; File = $File; Line = $n; Col = "$Col" }
 }
 
 if ($MyInvocation.InvocationName -eq '.') { return }
 
+# ---- the environment is the only override channel (SEC-R2) -------------------------
+$WhatIfOnly = ($env:DRAGLINT_URI_TEST_WHATIF -eq '1')
+$TimeoutMs  = $(if ("$env:DRAGLINT_URI_TEST_TIMEOUT" -match '^[0-9]{1,6}$') { [int]$env:DRAGLINT_URI_TEST_TIMEOUT } else { 1000 })
+$LogDir     = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'drag-lint' } else { '' })
+$LogPath    = $(if ($env:DRAGLINT_URI_TEST_LOG) { $env:DRAGLINT_URI_TEST_LOG } elseif ($LogDir) { Join-Path $LogDir 'uri-handler.log' } else { '' })
+
 function Write-Log([string] $m) {
   # the URI is attacker text: no control character reaches the log
-  $line = "{0}  {1}" -f (Get-Date).ToString('s'), ($m -replace '[\x00-\x1F\x7F]', '?')
+  $entry = "{0}  {1}" -f (Get-Date).ToString('s'), ($m -replace '[\x00-\x1F\x7F]', '?')
+  if (-not $LogPath) { return }
   try {
-    $dir = Split-Path -Parent $LogPath
-    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-    Add-Content -LiteralPath $LogPath -Value $line -Encoding utf8
+    # the ONE folder this script ever creates is its own fixed log folder
+    if (-not $env:DRAGLINT_URI_TEST_LOG -and -not (Test-Path -LiteralPath $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
+    Add-Content -LiteralPath $LogPath -Value $entry -Encoding utf8
   } catch { }
-  Write-Verbose $line
 }
 function Stop-Rejected([string] $Why, [string] $File = '') {
   Write-Log "rejected: $Why"
@@ -90,6 +110,12 @@ function Stop-Rejected([string] $Why, [string] $File = '') {
   exit 2
 }
 
+# exactly one argument, and it is the URI -- before anything else is looked at
+if ($argv.Count -ne 1) {
+  Write-Log ("args: " + (($argv | ForEach-Object { "[$_]" }) -join ' '))
+  Stop-Rejected "expected exactly one argument, the draglint:// uri (got $($argv.Count))"
+}
+$Uri = [string]$argv[0]
 if ([string]::IsNullOrWhiteSpace($Uri)) { Stop-Rejected 'no uri given' }
 Write-Log "uri: $Uri"
 
@@ -101,7 +127,11 @@ $q = $u -replace '^draglint://[^?]*\??', ''
 $parts = @{}
 foreach ($kv in ($q -split '&')) {
   $i = $kv.IndexOf('=')
-  if ($i -gt 0) { $parts[$kv.Substring(0, $i).ToLower()] = [uri]::UnescapeDataString($kv.Substring($i + 1)) }
+  if ($i -le 0) { continue }
+  $key = $kv.Substring(0, $i).ToLower()
+  # every key at most once: "last wins" would validate one value and a reader might see another
+  if ($parts.ContainsKey($key)) { Stop-Rejected "duplicate $key= in uri" }
+  $parts[$key] = [uri]::UnescapeDataString($kv.Substring($i + 1))
 }
 
 $v = Test-DragLintTarget -File $parts['file'] -Line $parts['line'] -Col $parts['col']

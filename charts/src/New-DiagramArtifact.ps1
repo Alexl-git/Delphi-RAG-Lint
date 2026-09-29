@@ -332,7 +332,7 @@ if ($isText) {
     no elevation, <code class="k">-Unregister</code> to undo). A click also shows
     a short note naming the file and line it asked for; if nothing opens, the
     handler is not registered on this machine. The handler opens only a local
-    source file (.pas .dfm .dpr .dpk .inc .sql .fmx) and, when the IDE is not
+    source file (.pas .dfm .dpr .inc .sql .fmx) and, when the IDE is not
     running, shows it in Notepad.</p>
 '@
   $footFiles = 'graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry, same layout run) &middot; '

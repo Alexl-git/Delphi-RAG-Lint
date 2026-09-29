@@ -28,8 +28,9 @@
   A handler SOURCE inside a *-wt\ worktree is refused without -Force: a worktree copy
   may be unmerged work. -DryRun returns what WOULD be written (Key, Kind, Interpreter,
   Command, HandlerSource, HandlerInstalled) and touches nothing -- no registry write,
-  no copy. -ProgramFilesRoot / -LocalAppDataRoot / -SystemRootDir only move where the
-  interpreter PROBE looks (tests).
+  no copy. With -Unregister, -DryRun returns what WOULD be removed (Action, RemoveKey,
+  RemoveCopy; empty when absent) and removes nothing. -ProgramFilesRoot /
+  -LocalAppDataRoot / -SystemRootDir only move where the interpreter PROBE looks (tests).
 
   To undo:  .\Register-DragLintProtocol.ps1 -Unregister   (removes the key and the copy)
   Or by hand: Remove-Item HKCU:\Software\Classes\draglint -Recurse
@@ -52,6 +53,14 @@ $root = 'HKCU:\Software\Classes\draglint'
 $installed = Join-Path $InstallDir 'Open-DragLintUri.ps1'
 
 if ($Unregister) {
+  if ($DryRun) {
+    # report, never remove (fix round 2, B-1)
+    return [pscustomobject]@{
+      Action     = 'Unregister'
+      RemoveKey  = $(if (Test-Path $root) { $root } else { '' })
+      RemoveCopy = $(if (Test-Path -LiteralPath $installed) { $installed } else { '' })
+    }
+  }
   if (Test-Path $root) {
     if ($PSCmdlet.ShouldProcess($root, 'Remove')) {
       Remove-Item $root -Recurse -Force
