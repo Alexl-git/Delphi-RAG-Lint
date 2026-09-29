@@ -151,7 +151,7 @@ type
     /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+26 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 57 (cyclomatic, outer body), 555 lines (full implementation)</para>
+    /// <para>Complexity: 57 (cyclomatic, outer body), 556 lines (full implementation)</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
@@ -370,14 +370,18 @@ begin
   Result:= False;
 end;
 
-// BOUNDED heuristic support: True when ADesc reads as INPUT-ONLY -- i.e. the
-// FIRST word of the description is exactly 'input' or 'in' (whole word,
-// case-insensitive). This is deliberately narrow: it fires on descriptions that
-// LEAD with an input claim (e.g. 'Input buffer ...', 'In value to ...') for a
-// param the signature marks var/out (which are output/by-reference), and stays
-// silent on ordinary prose that merely happens to contain the word 'in' later
-// (e.g. 'the value in the record'), because only the LEADING word is inspected.
+// BOUNDED heuristic support: True when ADesc reads as INPUT-ONLY -- the FIRST
+// word is exactly 'input' or 'in' (whole word, case-insensitive) AND no later
+// whole word marks an output direction ('out', 'output', 'returns', 'returned',
+// 'replaced', 'replaces', 'receives', 'updated', 'owns', 'filled').
+// v1.20.3: a two-way description ("IN: the current nodes. OUT (only when ...):
+// the replacement ...") was reported as input-only because only the first word
+// was read (converter INBOX 2026-09-29). Whole words only, so 'without' or
+// 'layout' is not a marker. Guard: tests\autodoc\run_doc_drift_input_only.ps1.
 function DescReadsInputOnly(const ADesc: string): Boolean;
+const
+  OUTPUT_MARKERS: array[0..9] of string = ('out', 'output', 'returns', 'returned',
+    'replaced', 'replaces', 'receives', 'updated', 'owns', 'filled');
 var
   S    : string ;
   I, J : Integer;
@@ -393,7 +397,18 @@ begin
   J:= I;
   while (J <= Length(S)) and IsIdentPart(S[J]) do Inc(J);
   First:= Copy(S, I, J - I);
-  Result:= SameText(First, 'input') or SameText(First, 'in');
+  if not (SameText(First, 'input') or SameText(First, 'in')) then Exit;
+  // Any later whole word that names an output direction makes it two-way.
+  I:= J;
+  while I <= Length(S) do
+  begin
+    while (I <= Length(S)) and not IsIdentStart(S[I]) do Inc(I);
+    J:= I;
+    while (J <= Length(S)) and IsIdentPart(S[J]) do Inc(J);
+    if (J > I) and MatchText(Copy(S, I, J - I), OUTPUT_MARKERS) then Exit;
+    I:= J + 1;
+  end;
+  Result:= True;
 end;
 
 // BOUNDED heuristic support: extracts EXACT type tokens explicitly named in a
@@ -783,7 +798,8 @@ begin
 
       // --- 3. ddParamVolatileMode: var/out param documented as input-only. ----
       // BOUNDED: fires ONLY when the param's ';'-group is var/out AND the <param>
-      // desc's FIRST word is 'input'/'in'. Any other desc leaves it silent.
+      // desc's FIRST word is 'input'/'in' and no later whole word marks an
+      // output (see DescReadsInputOnly). Any other desc leaves it silent.
       for var GIdx:= 0 to High(Groups) do
         if GroupIsVolatile(Groups[GIdx]) then
           for var GN in GroupParamNames(Groups[GIdx]) do
