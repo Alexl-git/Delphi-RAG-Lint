@@ -197,7 +197,11 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > supplies the set, dropping absent files itself. With `--project`, that set is
 > the project's OWN index (its exact manifest section, else
 > `<project dir>\_D-RAG\<base>.sqlite`) plus the platform library -- never
-> another project's DB, for reads and writes alike.
+> another project's DB. `index` (given `--project` or a `.dpr`/`.dproj`) and
+> `refresh-findings` write to that own index and refuse when two sections claim
+> the project; `compile-check` caches only into an explicit `--db` or the
+> project's unique manifest section. A `"db"` in `.drag-lint.json` counts as an
+> explicit `--db`.
 
 
 **The traps, because each one turns a correct command into a silent zero:**
@@ -916,7 +920,7 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | Command | What it does | Notable flags |
 |---|---|---|
 | `check-unit <unit.pas>` | Compile one unit in its project's context; real compiler errors | `--project`, `--platform`, `--shadow <dir>` (unsaved buffer), `--resolve-uses` |
-| `compile-check <target>` | Run msbuild/dcc and store diagnostics. With no `--db` it caches only into the project's unique manifest owner; otherwise it reports without caching | `--db`, `--project <dproj>`, `--format json\|text` |
+| `compile-check <target>` | Run msbuild/dcc and store diagnostics. With no `--db` it caches only into the project's unique manifest section (`--project`, else a project-file target); otherwise it reports without caching | `--db`, `--project <dproj>`, `--format json\|text` |
 | `refresh-findings --project <dproj> [--db <db>]` | Recompile only stale units and refresh stored findings (no `--db`: the project's own DB) | `--full` (force full build) |
 | [`ghost-check`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-check) `<dproj>` | Compile an **unsaved** editor buffer (single- or multi-unit overlay); restores files byte-for-byte | `--unit --buffer` or `--overlays <manifest>`, `--platform` |
 | [`ghost-recover`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-recover) `<dproj>` | Restore files left overlaid by an interrupted ghost-check | |

@@ -244,11 +244,17 @@ $db   = & $dl resolve-dbs --project $proj           # when the project is in the
 the `_D-RAG` path above. An explicit path is the only one you can read back
 from your own command line.
 
-Without `--db`, a `--project` run uses the project's OWN database and nothing
-else: its exact manifest section, else `<project dir>\_D-RAG\<project>.sqlite`.
-Two sections claiming the project is a refusal that names both. Before 1.20.4
+Without `--db` (and with no `"db"` in a `.drag-lint.json`, which counts as an
+explicit `--db`), a `--project` run -- or `index` given a `.dpr`/`.dproj`
+directly -- touches only the project's OWN database: its exact manifest
+section, else `<project dir>\_D-RAG\<project>.sqlite`. `index` and
+`refresh-findings` write there; readers open it plus the platform library and
+no other project's database. Two sections claiming the project make `index`
+and `refresh-findings` refuse, naming both. `compile-check` caches only into an
+explicit `--db` or the project's unique manifest section, and otherwise reports
+without caching. `purge-locals` always needs an explicit `--db`. Before 1.20.4
 an unregistered project could be indexed into the FIRST manifest section's
-database -- another project's. `purge-locals` always needs an explicit `--db`.
+database -- another project's.
 
 **What a project index holds.** The compile closure: the project members, the
 project-local units they use (transitively), each unit's sibling `.dfm`, its

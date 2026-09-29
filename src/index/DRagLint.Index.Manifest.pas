@@ -521,7 +521,6 @@ function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: strin
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Index.Manifest.ResolveFolderDb, DRagLint.Index.Manifest.ResolveProjectDb, SameText</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveFolderDb"/>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
 /// <!-- drag-lint:auto END -->

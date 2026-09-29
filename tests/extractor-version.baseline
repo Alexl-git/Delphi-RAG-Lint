@@ -857,6 +857,12 @@
 #   DRAGLINT_RESOLVER_VERSION per the 1.6.0-1.9.0 precedent. Resolve pass only;
 #   no stored parse differs.
 #   Superseded: 1.20.0-alpha|a8a621888c3d5f581293484e700437709400e5750cf620d7aaa64fa13bdba59f
-1.20.0-alpha|a8b9d66d61e735891535cf1d4cc9b9da14f9ad447f9d7605756a8f6c6d714b2e
+# 2026-09-29: hash re-pinned WITHIN 1.20.0-alpha (1.20.4 Task 1, defect "a project index
+#   writes only to its own DB"): comment-only edit on the hashed surface.
+#   DRagLint.Index.Manifest.pas: three drag-lint:auto managed "Called from" lines
+#   (TManifestIO.Load, ResolveProjectDb, ResolveReadDbs) regenerated because their CLI
+#   callers changed. Only `///` lines differ; no code token changed; no stored parse differs.
+#   Superseded: 1.20.0-alpha|a8b9d66d61e735891535cf1d4cc9b9da14f9ad447f9d7605756a8f6c6d714b2e
+1.20.0-alpha|51720cd4f7dd3f844032e857b340ebf9f933f456a5dfaf0598d272c1b3a8a287
 # superseded: 1.19.0-alpha|376c7143274119aa23760b9d41092862c6b7d24b426d7367cf5debb6286aa8b8
 #   2026-09-28 1.19.0 -> 1.20.0-alpha: Self.X := v emits a WRITE (Parser.Delphi13 assignment case); sql_column positioned on its own identifier (Parser.Sql FlushItem). Owner-scheduled batch; full re-parse run the same night.

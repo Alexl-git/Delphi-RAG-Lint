@@ -48,11 +48,15 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > exist is exit 2, never a narrower answer: the verb names the path and its
 > position on stderr and returns nothing. Match on the EXIT CODE, not the prose.
 > Omitting `--db` is always safe -- the manifest resolver drops absent files.
-> With `--project` and no `--db`, reads and writes use ONLY that project's own
-> index (its exact manifest section, else `<project dir>\_D-RAG\<base>.sqlite`)
-> plus the platform library; with no index of its own a reader says
-> `NOTE: no index owns ...` and consults no other project's DB. Two sections
-> claiming the project refuse, naming both.
+> With `--project` and no `--db` (a `"db"` in `.drag-lint.json` counts as an
+> explicit `--db`), readers open ONLY that project's own index (its exact
+> manifest section, else `<project dir>\_D-RAG\<base>.sqlite`) plus the platform
+> library; with no index of its own a reader prints `NOTE: no index owns ...`
+> (or names the claiming sections) and consults no other project's DB.
+> `index` (given `--project` or a `.dpr`/`.dproj`) and `refresh-findings` write
+> to that same own index and refuse, naming both, when two sections claim the
+> project. `compile-check` caches only into an explicit `--db` or the project's
+> unique manifest section, and otherwise reports without caching.
 >
 > **The same applies to a `--db` that exists but is at an OLD SCHEMA** (exit 2,
 > reason and both migrate commands on stderr). A stale index cannot answer, so it
@@ -592,7 +596,7 @@ pure-diagnostic verbs are broken out in 2b.
 | `lint-tree` | does an interface edit to a unit reach any dependent? `--unit B.pas --db <db>` fingerprints B's interface; `--write-baseline f.json` captures the OLD side once per edit episode, `--baseline f.json` diffs against it, `--buffer f` reads an unsaved buffer, `--with-rules` also harvests the dependents' lint findings, `--compile` also compiles the dependents in a shadow dir. Exit 0 whether or not anything was found; 2 = could not run. A baseline from a different extractor/schema is REFUSED, not diffed. |
 | `exceptions-sync` | materialise the project's derived exception classes into the exceptions unit (`--apply`; dry-run without it; `--json` emits one machine-readable document on stdout with the counts and the classes it would add, prose to stderr). Harvests every bare `raise Exception.Create('literal')` project-wide and declares ONE class per DISTINCT message inside a `drag-lint:auto` managed block. Opt in with an `"exceptions"` block in `drag-lint-lint.json` -- an empty one is enough; key `unit` names the unit (default `uExceptionDefinitions`, **created if absent**) and key `root` the ancestor (default `Exception`). **The same-line `//` comment after each declaration IS the key**, so renaming a generated class is safe and editing its comment makes the next run add a second class for the old message. It is a VERB and not a `--fix` because its input is project-wide and its output is one file |
 | `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`; `--shadow <dir>` compiles an unsaved buffer staged there instead of the file on disk) |
-| `compile-check <target>` | real compiler diagnostics for a `.dproj`/`.pas` |
+| `compile-check <target>` | real compiler diagnostics for a `.dproj`/`.pas`; caches them only into an explicit `--db` or the project's unique manifest section (`--project`, else a project-file target), otherwise reports without caching |
 | `refresh-findings --project X [--db D]` | recompile stale units (mtime > `files.last_compiled_unix`) + refresh `compiler_findings` per file; `>=2` stale -> full build, 1 stale -> incremental, `--full` forces full; feeds the IDE compiler overlay (surfaces DCC hints even for clean unchanged units). `--json` emits `mode` (full\|incremental\|noop) + counts; exit 1 if an Error survived, 2 = usage / no db. **Point `--db` at the project's OWN index, not a shared/library index** -- a full build clears + re-stamps `compiler_findings` for every indexed `.pas`/`.dpr`/`.dpk` file, so a shared index would lose findings for files outside this project |
 | `check-ast <file>` | syntax check without the compiler (`(line,col): error syntax-error`); `--rule <id>` narrows the report |
 | `todos [path]` | scan TODO/FIXME/HACK/XXX/REVIEW/NOTE |

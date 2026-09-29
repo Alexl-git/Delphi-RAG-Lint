@@ -233,6 +233,11 @@ type
     Path            : string        ;
     DbPath          : string        ;
     DbPaths         : TArray<string>;
+    { True while DbPaths holds ONLY a "db" key from a .drag-lint.json. That key
+      is an explicit --db (owner ruling 2026-08-13, recorded in Run), so it is
+      put in DbPaths; the first command-line --db then REPLACES it rather than
+      appending, because the command line beats the config file. }
+    DbFromConfig    : Boolean       ;
     { v21: --library-db, repeatable. Extra indexes consulted ONLY for calls the
       primary index cannot resolve; a hit is recorded as a qualified NAME on
       refs.external_target. Explicit rather than auto-opened from the manifest
@@ -1008,10 +1013,13 @@ begin
   Writeln('         manifest (see resolve-dbs); if none resolves it FAILS rather');
   Writeln('         than adopting or creating one in the current directory.');
   Writeln('         index with no --db writes to <target>\_D-RAG\<name>.sqlite');
-  Writeln('         --project with no --db: the project''s OWN database only -- its');
-  Writeln('         exact manifest owner, else <project dir>\_D-RAG\<base>.sqlite.');
-  Writeln('         Never another section''s DB; two sections claiming the project');
-  Writeln('         refuse. Destructive purge-locals always needs an explicit --db.');
+  Writeln('         --project (or index <x.dpr|.dproj>) with no --db: the project''s');
+  Writeln('         OWN database only -- its exact manifest owner, else');
+  Writeln('         <project dir>\_D-RAG\<base>.sqlite -- plus, for readers, the');
+  Writeln('         platform library. Never another project''s DB. index and');
+  Writeln('         refresh-findings refuse when two sections claim the project.');
+  Writeln('         A "db" in .drag-lint.json counts as an explicit --db.');
+  Writeln('         Destructive purge-locals always needs an explicit --db.');
 end; // procedure
 
 /// <summary>True when ASwitch appears verbatim on the command line.</summary>
@@ -1085,8 +1093,16 @@ begin
   end;
   if J = nil then Exit;
   try
+    { "db" is an EXPLICIT --db, so it goes into DbPaths too: every write verb
+      tells "explicit" from "defaulted" by DbPaths, and a config db left only
+      in DbPath would be ignored as if Run had guessed it. }
     V:= J.GetValue('db');
-    if (V <> nil) and (V.Value <> '') then AArgs.DbPath:= V.Value;
+    if (V <> nil) and (V.Value <> '') then
+    begin
+      AArgs.DbPath      := V.Value;
+      AArgs.DbPaths     := [V.Value];
+      AArgs.DbFromConfig:= True;
+    end;
     V:= J.GetValue('project');
     if (V <> nil) and (V.Value <> '') then AArgs.ProjectPath:= V.Value;
     V:= J.GetValue('path');
@@ -1317,6 +1333,12 @@ begin
         an extra. A single --db is unaffected in every verb.
 
         Guard: tests\autotest\run_doc_drift_extra_stores.ps1. }
+      if Result.DbFromConfig then
+      begin
+        { the command line replaces a .drag-lint.json "db"; it does not add to it }
+        Result.DbPaths     := nil;
+        Result.DbFromConfig:= False;
+      end;
       if Length(Result.DbPaths) = 0 then Result.DbPath:= ParamStr(i);
       SetLength(Result.DbPaths, Length(Result.DbPaths) + 1);
       Result.DbPaths[High(Result.DbPaths)]:= ParamStr(i);
@@ -4343,6 +4365,96 @@ begin
   Flush(ErrOutput);
 end;
 
+/// <summary>Every database a LIBRARY section of AManifest names, for every
+/// platform the section expands to, as expanded absolute paths.</summary>
+/// <param name="AManifest">The manifest this run loaded.</param>
+/// <returns>The library-section DB paths; empty when the manifest has none.</returns>
+/// <remarks>Keyed on the section KIND (ResolvePlan's smLibrary), not on a
+/// `library-` file-name prefix: a library section may name its DB anything,
+/// and a project DB may happen to start with that prefix.</remarks>
+function LibrarySectionDbs(const AManifest: TIndexManifest): TArray<string>;
+var
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  PS      : TPlanSection;
+begin
+  Result:= nil;
+  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    for PS in ResolvePlan(AManifest, nil, Resolver).Items do
+      if PS.Mode = smLibrary then Result:= Result + [ExpandFileName(PS.DbPath)];
+  finally
+    Resolver.Free;
+  end; // try
+end;
+
+/// <summary>True when ADb is one of ALibraryDbs (case-insensitive, after
+/// expansion).</summary>
+/// <param name="ALibraryDbs">From LibrarySectionDbs.</param>
+/// <param name="ADb">The database path to classify.</param>
+/// <returns>True for a library-section database.</returns>
+function IsLibrarySectionDb(const ALibraryDbs: TArray<string>; const ADb: string): Boolean;
+begin
+  Result:= False;
+  for var L: string in ALibraryDbs do
+    if SameText(L, ExpandFileName(ADb)) then Exit(True);
+end;
+
+/// <summary>Splits a consumer DB list into the PROJECT store and the platform
+/// LIBRARY store.</summary>
+/// <param name="AArgs">Parsed args; an explicit --db list changes the rule.</param>
+/// <param name="ADbs">The list, normally ResolveConsumerDbs(AArgs).</param>
+/// <param name="AProjectDb">Receives the project store, or '' when there is none.</param>
+/// <param name="ALibraryDb">Receives the first existing library-section DB, or ''.</param>
+/// <remarks>
+/// <para>Manifest-resolved list: the project store is the first EXISTING DB
+/// that is not a library section's. A --project with no index of its own gets
+/// a library-only list from ResolveConsumerDbs, and before 1.20.4 the "first
+/// existing" rule then took the platform library as the project store --
+/// exceptions-sync --apply would have harvested RTL/VCL raise sites into the
+/// user's unit.</para>
+/// <para>Explicit --db list: the first existing DB, whatever it is. The user
+/// named it; that is the documented meaning of `--db &lt;proj&gt; --db &lt;lib&gt;`.</para>
+/// <para>A manifest that fails to load classifies nothing as a library, and
+/// says so on stderr.</para>
+/// </remarks>
+procedure SplitConsumerDbs(const AArgs: TArgs; const ADbs: TArray<string>; out AProjectDb, ALibraryDb: string);
+var
+  LibDbs: TArray<string>;
+begin
+  AProjectDb:= '';
+  ALibraryDb:= '';
+  LibDbs    := nil;
+  try
+    LibDbs:= LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
+  except
+    on E: Exception do
+    begin
+      LibDbs:= nil;
+      Writeln(ErrOutput, Format('NOTE: could not load the manifest (%s: %s); no database is treated as the library.',
+                                [E.ClassName, E.Message]));
+    end;
+  end; // try
+  for var D: string in ADbs do
+  begin
+    if not TFile.Exists(D) then Continue;
+    var IsLib: Boolean:= IsLibrarySectionDb(LibDbs, D);
+    if (ALibraryDb = '') and IsLib then ALibraryDb:= D;
+    if (AProjectDb = '') and ((Length(AArgs.DbPaths) > 0) or not IsLib) then AProjectDb:= D;
+  end;
+end;
+
+/// <summary>The PROJECT store of a consumer DB list: see SplitConsumerDbs.</summary>
+/// <param name="AArgs">Parsed args.</param>
+/// <param name="ADbs">The list, normally ResolveConsumerDbs(AArgs).</param>
+/// <returns>The project store, or '' -- a verb that writes source from it must
+/// then refuse and name --db.</returns>
+function FirstProjectDb(const AArgs: TArgs; const ADbs: TArray<string>): string;
+var
+  LibDb: string;
+begin
+  SplitConsumerDbs(AArgs, ADbs, Result, LibDb);
+end;
+
 /// <summary>The WRITE rule's manifest half, shared by index --project and
 /// refresh-findings: the project's own DB, or '' (having said why on stderr)
 /// when the manifest will not load or two sections claim the project.</summary>
@@ -4378,16 +4490,20 @@ end;
 /// <returns>Absolute DB path, or '' when nothing defensible resolves (the
 /// caller refuses).</returns>
 /// <remarks>
-/// <para>THE WRITE RULE for a --project run: (1) an explicit --db, else (2) the
-/// exact manifest owner of the project file (pdmUnique, ExpandSectionDb naming),
-/// else (3) &lt;project dir&gt;\_D-RAG\&lt;project base name&gt;.sqlite. Two
-/// sections claiming the project (pdmAmbiguous) is a refusal naming both --
-/// never a pick. See ResolveOwnProjectDb.</para>
+/// <para>THE WRITE RULE for a --project run, and for a positional
+/// .dpr/.dproj/.dpk (the same project-scoped scan): (1) an explicit --db (the
+/// command line, or a "db" key in a .drag-lint.json), else (2) the exact
+/// manifest owner of the project file (pdmUnique, ExpandSectionDb naming), else
+/// (3) &lt;project dir&gt;\_D-RAG\&lt;project base name&gt;.sqlite -- even when
+/// the project sits under a FOLDER section. Two sections claiming the project
+/// (pdmAmbiguous) is a refusal naming both -- never a pick. See
+/// ResolveOwnProjectDb.</para>
 /// <para>AArgs.DbPath alone is NOT an explicit --db: Run may have defaulted it.
 /// Honouring a defaulted DbPath "as if explicit" is exactly how an unregistered
 /// project was indexed into the first manifest section's DB.</para>
-/// <para>Without --project: the longest manifest include prefixing AIndexPath
-/// (library sections skipped), else &lt;target&gt;\_D-RAG\&lt;name&gt;.sqlite.</para>
+/// <para>Any other target (a folder, a unit): the longest manifest include
+/// prefixing AIndexPath (library sections skipped), else
+/// &lt;target&gt;\_D-RAG\&lt;name&gt;.sqlite.</para>
 /// </remarks>
 function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
 var
@@ -4410,7 +4526,14 @@ begin
     manifest order or by a folder prefix. The folder loop below cannot name it
     anyway: a project include never prefixes a folder, and it names the DB with
     the pre-_D-RAG OutDir\<section>.sqlite rule rather than ExpandSectionDb. }
-  if AArgs.ProjectPath <> '' then Exit(ResolveProjectWriteDb('index', AArgs.ProjectPath, AIndexPath));
+  { A POSITIONAL project file is the same project-scoped scan (DoIndex treats a
+    bare .dpr/.dproj exactly like --project), so it takes the same rule. Through
+    the folder loop it got the dead OutDir\<Section>.sqlite name, resolved
+    includes against the process CWD, and a project under a FOLDER section
+    landed in that section's DB. }
+  var ProjFile: string:= AArgs.ProjectPath;
+  if (ProjFile = '') and MatchText(ExtractFileExt(AIndexPath), ['.dpr', '.dproj', '.dpk']) then ProjFile:= AIndexPath;
+  if ProjFile <> '' then Exit(ResolveProjectWriteDb('index', ProjFile, AIndexPath));
 
   BestLen:= -1;
   BestDb:= '';
@@ -4863,8 +4986,13 @@ begin
   var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget);
   if ResolvedDb = '' then
   begin
-    Writeln('ERROR: index: no --db given and no index location resolves for this target.');
-    Writeln('       Run "drag-lint resolve-dbs" or pass --db <file.sqlite>.');
+    { A project target's refusal (two claimants, or no manifest) was already
+      printed by ResolveProjectWriteDb; one message, not two. }
+    if (AArgs.ProjectPath = '') and not MatchText(ExtractFileExt(IndexTarget), ['.dpr', '.dproj', '.dpk']) then
+    begin
+      Writeln('ERROR: index: no --db given and no index location resolves for this target.');
+      Writeln('       Run "drag-lint resolve-dbs" or pass --db <file.sqlite>.');
+    end;
     Exit(2);
   end;
   Writeln('Database: ', ResolvedDb);
@@ -8875,7 +9003,6 @@ var
   JSites  : TJSONArray           ;
   Dbs     : TArray<string>       ;
   DbToUse : string               ;
-  D       : string               ;
 begin
   if not ExplicitDbsExist(AArgs, 'wiring') then Exit(2);
   { v8: resolve the DB like query/hover -- explicit --db if given, else
@@ -8883,10 +9010,12 @@ begin
     beside the .dproj (e.g. ORM3 -> C:\Projects\DB\ORM3\drag-lint.sqlite). Use the
     first existing resolved DB (the project/primary index). }
   Dbs:= ResolveConsumerDbs(AArgs);
-  DbToUse:= '';
-  for D in Dbs do
-    if TFile.Exists(D) then begin DbToUse:= D; Break; end;
-  if DbToUse = '' then begin Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs), ' resolved path(s)). Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  DbToUse:= FirstProjectDb(AArgs, Dbs); { a project's wiring, never the library's }
+  if DbToUse = '' then
+  begin
+    Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs), ' resolved path(s)). Pass --db <file.sqlite> or build the index first.');
+    Exit(2);
+  end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(DbToUse, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'wiring', DbToUse) then Exit(2);
@@ -17554,9 +17683,9 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'exceptions-sync') then Exit(2);
   Dbs:= ResolveConsumerDbs(AArgs);
-  ProjectDb:= '';
-  for var D in Dbs do
-    if TFile.Exists(D) then begin ProjectDb:= D; Break; end;
+  { The project store, never the platform library: this verb WRITES a unit
+    from what it harvests, and the library's raise sites are the RTL's. }
+  ProjectDb:= FirstProjectDb(AArgs, Dbs);
   if ProjectDb = '' then
   begin
     EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.');
@@ -17986,18 +18115,10 @@ begin
     sections put a project DB in second place on every single run.
     An explicit `--db <proj> --db <lib>` keeps its documented meaning. }
   Dbs:= ResolveConsumerDbs(AArgs);
-  ProjectDb:= '';
-  LibDb    := '';
-  for var D in Dbs do
-  begin
-    if not TFile.Exists(D) then Continue;
-    var IsLib: Boolean:= StartsText('library-', ExtractFileName(D));
-    { A --project run with no index of its own gets a library-only list from
-      ResolveConsumerDbs. The library is not that project's store: linting its
-      closure against it is "0 file(s) scanned", a silent zero. Refuse below. }
-    if (ProjectDb = '') and not (IsLib and (AArgs.ProjectPath <> '') and (Length(AArgs.DbPaths) = 0)) then ProjectDb:= D;
-    if (LibDb = '') and IsLib then LibDb:= D;
-  end;
+  { The library is never the project store: for a --project with no index of
+    its own, linting its closure against the library is "0 file(s) scanned", a
+    silent zero -- ProjectDb stays '' and the run refuses below. }
+  SplitConsumerDbs(AArgs, Dbs, ProjectDb, LibDb);
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
@@ -19542,8 +19663,10 @@ begin
     else its own <project dir>\_D-RAG\<base>.sqlite -- never a DB that Run or
     manifest order supplied. Two claimants refuse. }
   DbPath:= if Length(AArgs.DbPaths) > 0 then AArgs.DbPath
-           else ResolveProjectWriteDb('refresh-findings', AArgs.ProjectPath, GetCurrentDir);
-  if NoDbResolved(DbPath, 'refresh-findings') then Exit(2);
+           else ResolveProjectWriteDb('refresh-findings', AArgs.ProjectPath, AArgs.ProjectPath);
+  { '' only when two sections claim the project or the manifest would not load
+    -- ResolveProjectWriteDb has already said which, so say nothing more. }
+  if DbPath = '' then Exit(2);
   if not TFile.Exists(DbPath) then
   begin
     Writeln('ERROR: database not found: ', DbPath);
@@ -25664,9 +25787,8 @@ end; // function DetectPlatformFromDproj
 //      use that list.
 //   3. If no manifest is found or the resolved list is empty, fall back to the
 //      default .\drag-lint.sqlite so existing behaviour is preserved.
-//   4. --project names the ONE index that owns that project, so when it is given
-//      (and that DB exists) it is promoted to the FRONT of the list. When no
-//      such DB exists, only the platform library is kept (1.20.4).
+//   4. --project: the list is the project's OWN index (when it exists) plus the
+//      platform library, nothing else (owner ruling 2026-08-13; 1.20.4).
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
@@ -25676,12 +25798,15 @@ var
   Resolved : TArray<string>                            ;
   ProjDb   : string                                    ;
   Claimants: TArray<string>                            ;
+  LibDbs   : TArray<string>                            ;
   D        : string                                    ;
 begin
   // User supplied explicit --db: honour without modification.
   if Length(AArgs.DbPaths) > 0 then begin Result:= AArgs.DbPaths; Exit; end;
 
-  ProjDb:= '';
+  ProjDb   := '';
+  Claimants:= nil;
+  LibDbs   := nil;
   // Try manifest-driven selection.
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
@@ -25716,11 +25841,20 @@ begin
       else the project's own _D-RAG default. Two claimants name no owner: a
       guessed owner is worse than none. }
     if AArgs.ProjectPath <> '' then
+    begin
       if ResolveOwnProjectDb(Manifest, AArgs.ProjectPath, ProjDb, Claimants) = pdmAmbiguous then ProjDb:= '';
+      LibDbs:= LibrarySectionDbs(Manifest);
+    end;
   except
-    // Any manifest parse / IO error: fall through to default.
-    Resolved:= nil;
-    ProjDb  := '';
+    on E: Exception do
+    begin
+      // Any manifest parse / IO error: fall through to default -- and say so.
+      Resolved:= nil;
+      ProjDb  := '';
+      LibDbs  := nil;
+      Writeln(ErrOutput, Format('NOTE: could not load the manifest (%s: %s); falling back to the default database.',
+                                [E.ClassName, E.Message]));
+    end;
   end; // try
 
   if Length(Resolved) > 0 then Result:= Resolved
@@ -25730,38 +25864,36 @@ begin
     Result:= [AArgs.DbPath];
   end;
 
-  { Promote the owning index to the front. Consumers read the list as "the
-    project index first, everything else after" -- lint-all literally takes
-    Result[0] as its store -- so leaving the manifest's own section order in
-    charge meant `--project` opened whichever project happened to be declared
-    first. With --project scoping the FILE LIST to one closure and the store
-    coming from a different project, the intersection is empty: `0 finding(s),
-    0 file(s) scanned` on a correctly indexed project, which reads as success.
-    Promote rather than replace -- the library DB and the rest of the list are
-    still wanted, just not in front. }
-  if (ProjDb <> '') and TFile.Exists(ProjDb) then
+  { --project: THE PROJECT'S OWN INDEX, THEN THE PLATFORM LIBRARY, AND NOTHING
+    ELSE. Owner ruling 2026-08-13: the authoritative set is the platform library
+    plus the project DB; every other database -- another project's above all --
+    is noise and misleading, for reads as much as for writes.
+
+    This list used to be the manifest's sections with the owner PROMOTED to the
+    front and the siblings kept behind it. Consumers take Result[0] as their
+    store (lint-all, wiring, exceptions-sync), so an owner-less project then
+    opened whichever sibling was declared first; and multi-DB readers (query,
+    hover) answered by NAME from every sibling even when the owner was in
+    front. Library sections are recognised by section KIND (LibrarySectionDbs),
+    not by a file-name prefix.
+
+    With no index of its own (never built, or two sections claim it) only the
+    library is left, and that is SAID: an empty answer must not read as a
+    clean one. }
+  if AArgs.ProjectPath <> '' then
   begin
-    var Reordered: TArray<string>:= [ProjDb];
+    var Kept: TArray<string>:= nil;
+    if (ProjDb <> '') and TFile.Exists(ProjDb) then Kept:= [ProjDb]
+    else if Length(Claimants) > 1 then
+      Writeln(ErrOutput, Format('NOTE: %d manifest sections claim %s (%s) -- no index owns it, and other ' +
+                                'projects'' indexes are not consulted. Fix the manifest or pass --db.',
+                                [Length(Claimants), AArgs.ProjectPath, string.Join(', ', Claimants)]))
+    else
+      Writeln(ErrOutput, Format('NOTE: no index owns %s -- other projects'' indexes are not consulted. ' +
+                                'Build it: drag-lint index --project "%s"', [AArgs.ProjectPath, AArgs.ProjectPath]));
     for D in Result do
-      if not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Reordered:= Reordered + [D];
-    Result:= Reordered;
-  end
-  else if AArgs.ProjectPath <> '' then
-  begin
-    { --project names a project with NO index of its own (never built, or two
-      sections claim it). Without an owner in front, Result[0] is simply the
-      first manifest section whose DB exists -- another project's -- and every
-      "first DB is the project DB" consumer (lint-all, wiring, exceptions-sync,
-      Run's own DbPath default) read or wrote it as this project's. Owner ruling
-      2026-08-13: the authoritative set is the platform library plus the
-      project's own DB, nothing else. So keep the library, drop the rest, and
-      SAY so: an empty answer must not read as a clean one. }
-    var LibOnly: TArray<string>:= nil;
-    for D in Result do
-      if StartsText('library-', ExtractFileName(D)) then LibOnly:= LibOnly + [D];
-    Result:= LibOnly;
-    Writeln(ErrOutput, Format('NOTE: no index owns %s -- other projects'' indexes are not consulted. ' +
-                              'Build it: drag-lint index --project "%s"', [AArgs.ProjectPath, AArgs.ProjectPath]));
+      if IsLibrarySectionDb(LibDbs, D) and not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Kept:= Kept + [D];
+    Result:= Kept;
   end;
 
   { Then reorder by what the indexes ACTUALLY CONTAIN, when this run names a

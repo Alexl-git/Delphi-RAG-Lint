@@ -24,11 +24,17 @@
   that with resolve-dbs, and it runs no write verb at all if the proof fails.
 
   FIXTURE
-    eng\drag-lint.json   sections Hello (..\proj\Hello.dpr), Hello3 (..\proj\Hello3.dpr)
+    eng\drag-lint.json   sections Hello (..\proj\Hello.dpr), Hello3 (..\proj\Hello3.dpr),
+                         FolderSec (..\fold, a FOLDER section), Library
+                         (registry-libraries, db library-{platform}.sqlite, Win64)
     eng2\drag-lint.json  sections Hello, Hello2, Hello2a -- the last two both
                          claim Hello2.dpr (the ambiguity case)
-    proj\Hello.dpr / Hello2.dpr / Hello3.dpr / Hello4.dpr, each using uGreet.pas
-  Hello2 and Hello4 are NOT registered in eng\drag-lint.json.
+    proj\Hello*.dpr      each uses uGreet.pas; Hello ALSO uses uHelloOnly.pas, so
+                         Hello.sqlite holds a symbol no sibling closure has
+    fold\Orphan.dpr      an unregistered project under the FOLDER section
+    lib\uLibDecoy.pas    indexed into eng\library-Win64.sqlite (the "platform
+                         library"): LibOnlyProc and a raise site
+  Hello2, Hello4 and Hello5 are NOT registered in eng\drag-lint.json.
 #>
 [CmdletBinding()]
 param(
@@ -58,7 +64,10 @@ $root = (New-Item -ItemType Directory -Force -Path $WorkDir).FullName
 $eng  = Join-Path $root 'eng'
 $eng2 = Join-Path $root 'eng2'
 $proj = Join-Path $root 'proj'
-New-Item -ItemType Directory $eng, $eng2, $proj | Out-Null
+$fold = Join-Path $root 'fold'
+$lib  = Join-Path $root 'lib'
+$cfg  = Join-Path $root 'cfg'
+New-Item -ItemType Directory $eng, $eng2, $proj, $fold, $lib, $cfg | Out-Null
 
 # --- the engine copies: the exe, every dll beside it, and the rule catalogue ---
 foreach ($dst in @($eng, $eng2)) {
@@ -78,8 +87,10 @@ function Write-Manifest([string]$Dir, [object[]]$Sections) {
   Write-Ascii (Join-Path $Dir 'drag-lint.json') $m
 }
 Write-Manifest $eng  @(
-  @{ name = 'Hello';  include = @('..\proj\Hello.dpr')  },
-  @{ name = 'Hello3'; include = @('..\proj\Hello3.dpr') }
+  @{ name = 'Hello';     include = @('..\proj\Hello.dpr')  },
+  @{ name = 'Hello3';    include = @('..\proj\Hello3.dpr') },
+  @{ name = 'FolderSec'; include = @('..\fold') },
+  @{ name = 'Library';   db = 'library-{platform}.sqlite'; source = 'registry-libraries'; platforms = @('Win64') }
 )
 Write-Manifest $eng2 @(
   @{ name = 'Hello';   include = @('..\proj\Hello.dpr')  },
@@ -105,23 +116,91 @@ end;
 
 end.
 '@
-foreach ($app in 'Hello', 'Hello2', 'Hello3', 'Hello4') {
+Write-Ascii (Join-Path $proj 'uHelloOnly.pas') @'
+unit uHelloOnly;
+
+interface
+
+procedure HelloOnlyProc;
+
+implementation
+
+procedure HelloOnlyProc;
+begin
+end;
+
+end.
+'@
+foreach ($app in 'Hello', 'Hello2', 'Hello3', 'Hello4', 'Hello5') {
+  $extraUse = if ($app -eq 'Hello') { ",`r`n  uHelloOnly in 'uHelloOnly.pas'" } else { '' }
   Write-Ascii (Join-Path $proj "$app.dpr") @"
 program $app;
 
 uses
-  uGreet in 'uGreet.pas';
+  uGreet in 'uGreet.pas'$extraUse;
 
 begin
   SayHello;
 end.
 "@
 }
+Write-Ascii (Join-Path $fold 'uOrph.pas') @'
+unit uOrph;
+
+interface
+
+procedure OrphProc;
+
+implementation
+
+procedure OrphProc;
+begin
+end;
+
+end.
+'@
+Write-Ascii (Join-Path $fold 'Orphan.dpr') @'
+program Orphan;
+
+uses
+  uOrph in 'uOrph.pas';
+
+begin
+  OrphProc;
+end.
+'@
+Write-Ascii (Join-Path $lib 'uLibDecoy.pas') @'
+unit uLibDecoy;
+
+interface
+
+uses
+  System.SysUtils;
+
+procedure LibOnlyProc;
+
+implementation
+
+procedure LibOnlyProc;
+begin
+  raise Exception.Create('library decoy message');
+end;
+
+end.
+'@
+# An exceptions config at the fixture root, so exceptions-sync (section 6b) would
+# really WRITE if it picked a store -- "it refused" is then not vacuous.
+Write-Ascii (Join-Path $root 'drag-lint-lint.json') '{ "exceptions": {} }'
 
 $helloDb  = Join-Path $proj '_D-RAG\Hello.sqlite'
 $hello2Db = Join-Path $proj '_D-RAG\Hello2.sqlite'
 $hello3Db = Join-Path $proj '_D-RAG\Hello3.sqlite'
 $hello4Db = Join-Path $proj '_D-RAG\Hello4.sqlite'
+$hello5Db = Join-Path $proj '_D-RAG\Hello5.sqlite'
+$orphanDb = Join-Path $fold '_D-RAG\Orphan.sqlite'
+$folderDb = Join-Path $eng  'FolderSec.sqlite'
+$libDb    = Join-Path $eng  'library-Win64.sqlite'
+$cfgDb    = Join-Path $root 'x.sqlite'
 
 function Invoke-Engine([string]$ExePath, [string]$Cwd, [string[]]$Argv, [int]$TimeoutSec = 180) {
   $o = Join-Path $root 'out.txt'; $e = Join-Path $root 'err.txt'
@@ -155,7 +234,8 @@ function Get-Stamp([string]$Path) {
 }
 function Test-SamePath([string]$A, [string]$B) {
   if (($A -eq '') -or ($B -eq '')) { return $false }
-  return ([IO.Path]::GetFullPath($A).TrimEnd('\') -ieq [IO.Path]::GetFullPath($B).TrimEnd('\'))
+  # a relative path is the ENGINE's, and every engine run here starts in $root
+  return ([IO.Path]::GetFullPath($A, $root).TrimEnd('\') -ieq [IO.Path]::GetFullPath($B, $root).TrimEnd('\'))
 }
 
 $micronite = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite'
@@ -176,11 +256,31 @@ $isolated = ($foreign.Count -eq 0) -and ($rdAll.Text -notmatch 'loaded defaults 
             (Test-SamePath $rdProj.Text.Trim() $helloDb)
 Check 'resolve-dbs names only paths under the temp root, loads no global defaults, and resolves Hello to the fixture DB' `
   $isolated ("foreign=[{0}] project=[{1}]" -f ($foreign -join ' ; '), $rdProj.Text.Trim())
-if (-not $isolated) {
+# eng2 is a SECOND engine copy with its own manifest; it is isolated separately.
+$rd2All  = Invoke-Engine $exe2 $root @('resolve-dbs', '--platform', 'win64')
+$rd2Proj = Invoke-Engine $exe2 $root @('resolve-dbs', '--project', 'proj\Hello2.dpr')
+$foreign2 = @(($rd2All.Text + "`n" + $rd2Proj.Text) -split "`r?`n" |
+  Where-Object { $_ -match '[A-Za-z]:\\' -and $_ -notmatch [regex]::Escape($root) })
+$isolated2 = ($foreign2.Count -eq 0) -and ($rd2All.Text -notmatch 'loaded defaults from') -and
+             ($rd2Proj.Code -ne 0) -and ($rd2Proj.Text -match 'section: Hello2a')
+Check 'eng2: resolve-dbs names only temp-root paths, and sees ITS manifest (Hello2 claimed twice)' `
+  $isolated2 ("foreign=[{0}] project=[{1}]" -f ($foreign2 -join ' ; '), $rd2Proj.Text.Trim())
+if (-not ($isolated -and $isolated2)) {
   Write-Host 'ISOLATION FAILED -- no write verb was run.' -ForegroundColor Red
   Write-Host $rdAll.Text
+  Write-Host $rd2All.Text
   exit 1
 }
+
+# Fixture DBs built with an EXPLICIT --db (safe on any engine): the "platform
+# library" and the FOLDER section's DB.
+$null = Invoke-Engine $exe1 $root @('index', $lib,  '--db', $libDb)
+$null = Invoke-Engine $exe1 $root @('index', $fold, '--db', $folderDb)
+Check 'fixture: library-Win64.sqlite and FolderSec.sqlite exist' ((Test-Path $libDb) -and (Test-Path $folderDb))
+$rdLib = Invoke-Engine $exe1 $root @('resolve-dbs', '--platform', 'win64')
+Check 'fixture: the Library SECTION resolves to library-Win64.sqlite' ($rdLib.Text -match [regex]::Escape($libDb)) ($rdLib.Text.Trim())
+$libStamp    = Get-Stamp $libDb
+$folderStamp = Get-Stamp $folderDb
 
 # -------------------------------------------------------------------------------
 # 1) A REGISTERED project indexed for the FIRST time with no --db goes to its
@@ -253,6 +353,16 @@ $qc = Invoke-Engine $exe1 $root @('query', '--name', 'SayHello', '--project', 'p
 Check 'control: query --project Hello (registered) answers from Hello.sqlite' ($qc.Text -match 'uGreet\.SayHello') ($qc.Text.Trim())
 $qo = Invoke-Engine $exe1 $root @('query', '--name', 'SayHello', '--project', 'proj\Hello2.dpr')
 Check 'query --project Hello2 (unregistered, own DB exists) answers from its own DB' ($qo.Text -match 'uGreet\.SayHello') ($qo.Text.Trim())
+# OWN vs SIBLING: HelloOnlyProc lives only in Hello.sqlite. A reader that keeps
+# sibling DBs behind the owner still finds it; the ruling says it must not.
+$qhc = Invoke-Engine $exe1 $root @('query', '--name', 'HelloOnlyProc', '--project', 'proj\Hello.dpr')
+Check 'control: query --project Hello finds HelloOnlyProc (it is in Hello.sqlite)' ($qhc.Text -match 'uHelloOnly\.HelloOnlyProc') ($qhc.Text.Trim())
+$qhs = Invoke-Engine $exe1 $root @('query', '--name', 'HelloOnlyProc', '--project', 'proj\Hello2.dpr')
+Check 'query --project Hello2 does NOT find HelloOnlyProc (sibling Hello.sqlite is not read)' `
+  ($qhs.Text -notmatch 'uHelloOnly\.HelloOnlyProc') ($qhs.Text.Trim())
+$qlib = Invoke-Engine $exe1 $root @('query', '--name', 'LibOnlyProc', '--project', 'proj\Hello2.dpr')
+Check 'control: query --project Hello2 DOES find LibOnlyProc (the platform library stays in the set)' `
+  ($qlib.Text -match 'uLibDecoy\.LibOnlyProc') ($qlib.Text.Trim())
 $q4 = Invoke-Engine $exe1 $root @('query', '--name', 'SayHello', '--project', 'proj\Hello4.dpr')
 Check 'query --project Hello4 (unregistered, never indexed) does NOT answer from a sibling DB' `
   ($q4.Text -notmatch 'uGreet\.SayHello') ($q4.Text.Trim())
@@ -274,6 +384,59 @@ Check 'purge-locals --project Hello (no --db) refuses' (($pl.Code -ne 0) -and ($
 Check 'Hello.sqlite size+mtime unchanged by purge-locals' ($helloStamp -eq (Get-Stamp $helloDb)) "$helloStamp -> $(Get-Stamp $helloDb)"
 
 # -------------------------------------------------------------------------------
+# 6b) A SOURCE WRITER never takes the platform LIBRARY as the project store.
+#     Hello4 has no index; the consumer list is library-only. exceptions-sync
+#     --apply would otherwise harvest the library's raise site into a new unit.
+# -------------------------------------------------------------------------------
+Write-Host ''
+Write-Host '6b) exceptions-sync with an owner-less --project' -ForegroundColor Cyan
+$es = Invoke-Engine $exe1 $root @('exceptions-sync', '--project', 'proj\Hello4.dpr', '--apply')
+Check 'exceptions-sync --project Hello4 --apply (no --db) refuses, naming --db' `
+  (($es.Code -eq 2) -and ($es.Text -match 'no drag-lint index found') -and ($es.Text -match '--db')) "exit=$($es.Code) $($es.Text.Trim())"
+$written = @(Get-ChildItem -Path $root -Recurse -Filter 'uExceptionDefinitions.pas' -ErrorAction SilentlyContinue)
+Check 'no exceptions unit was written anywhere' ($written.Count -eq 0) (($written | ForEach-Object { $_.FullName }) -join ',')
+Check 'library-Win64.sqlite untouched' ($libStamp -eq (Get-Stamp $libDb)) "$libStamp -> $(Get-Stamp $libDb)"
+$wi = Invoke-Engine $exe1 $root @('wiring', '--qname', 'IGreeter', '--project', 'proj\Hello4.dpr')
+Check 'wiring --project Hello4 (no --db) refuses rather than reading the library as the project' `
+  (($wi.Code -eq 2) -and ($wi.Text -match 'no drag-lint index found')) "exit=$($wi.Code) $($wi.Text.Trim())"
+
+# -------------------------------------------------------------------------------
+# 6c) A POSITIONAL project file is the same project-scoped scan, so it takes the
+#     same rule -- no folder-prefix match, no OutDir\<Section>.sqlite name.
+# -------------------------------------------------------------------------------
+Write-Host ''
+Write-Host '6c) positional index <x.dpr>, no --db' -ForegroundColor Cyan
+# Run from the ENGINE dir with ABSOLUTE targets: that is the shape under which the
+# old folder-prefix loop (includes resolved against the process CWD) matched.
+$p5 = Invoke-Engine $exe1 $eng @('index', (Join-Path $proj 'Hello5.dpr'))
+Check 'positional Hello5 (unregistered) -> its own _D-RAG DB' (Test-SamePath (Get-DatabaseLine $p5.Text) $hello5Db) "exit=$($p5.Code) Database=[$(Get-DatabaseLine $p5.Text)]"
+$po = Invoke-Engine $exe1 $eng @('index', (Join-Path $fold 'Orphan.dpr'))
+Check 'positional Orphan.dpr under a FOLDER section -> its own _D-RAG DB, not the section''s' `
+  (Test-SamePath (Get-DatabaseLine $po.Text) $orphanDb) "exit=$($po.Code) Database=[$(Get-DatabaseLine $po.Text)]"
+Check 'FolderSec.sqlite untouched by the positional project index' ($folderStamp -eq (Get-Stamp $folderDb)) "$folderStamp -> $(Get-Stamp $folderDb)"
+Check 'Hello.sqlite untouched by the positional unregistered runs' ($helloStamp -eq (Get-Stamp $helloDb))
+$ph = Invoke-Engine $exe1 $eng @('index', (Join-Path $proj 'Hello.dpr'))
+Check 'positional Hello.dpr (registered) -> the section DB (ExpandSectionDb), not eng\Hello.sqlite' `
+  (Test-SamePath (Get-DatabaseLine $ph.Text) $helloDb) "exit=$($ph.Code) Database=[$(Get-DatabaseLine $ph.Text)]"
+Check 'no eng\Hello.sqlite (the dead OutDir name) was created' (-not (Test-Path (Join-Path $eng 'Hello.sqlite')))
+$helloStamp = Get-Stamp $helloDb   # the registered re-index legitimately touched it
+
+# -------------------------------------------------------------------------------
+# 6d) A "db" key in a .drag-lint.json IS an explicit --db (owner ruling in Run).
+# -------------------------------------------------------------------------------
+Write-Host ''
+Write-Host '6d) .drag-lint.json "db" counts as an explicit --db' -ForegroundColor Cyan
+Write-Ascii (Join-Path $cfg '.drag-lint.json') ((@{ db = $cfgDb } | ConvertTo-Json))
+$hello2Stamp = Get-Stamp $hello2Db
+$rc = Invoke-Engine $exe1 $cfg @('index', '--project', (Join-Path $proj 'Hello2.dpr'))
+Check 'index --project Hello2 from a folder with .drag-lint.json {db: x.sqlite} writes x.sqlite' `
+  ((Test-SamePath (Get-DatabaseLine $rc.Text) $cfgDb) -and (Test-Path $cfgDb)) "exit=$($rc.Code) Database=[$(Get-DatabaseLine $rc.Text)]"
+Check 'Hello2.sqlite untouched when the config names another db' ($hello2Stamp -eq (Get-Stamp $hello2Db)) "$hello2Stamp -> $(Get-Stamp $hello2Db)"
+$rcl = Invoke-Engine $exe1 $cfg @('index', '--project', (Join-Path $proj 'Hello2.dpr'), '--db', $hello2Db)
+Check 'control: a command-line --db REPLACES the config db' (Test-SamePath (Get-DatabaseLine $rcl.Text) $hello2Db) "Database=[$(Get-DatabaseLine $rcl.Text)]"
+$hello2Stamp = Get-Stamp $hello2Db
+
+# -------------------------------------------------------------------------------
 # 7) THE COMPILER-FINDINGS WRITERS (need a working dcc). uGreet carries an unused
 #    local, so every compile yields a hint and a cache write MOVES the DB file --
 #    which is what makes "Hello.sqlite unchanged" able to fail.
@@ -289,8 +452,12 @@ $cu = Invoke-Engine $exe1 $root @('compile-check', 'proj\uGreet.pas', '--format'
 Check 'compile-check <unit> with no project does not cache through a FOLDER match, and says so' ($cu.Text -match 'no database resolved for this target') ($cu.Text.Trim())
 Check 'compile-check left Hello.sqlite alone' ($helloStamp -eq (Get-Stamp $helloDb)) "$helloStamp -> $(Get-Stamp $helloDb)"
 $cr = Invoke-Engine $exe1 $root @('compile-check', 'proj\Hello.dpr', '--format', 'json') 300
-Check 'control: compile-check <registered .dpr> still caches into its own DB (no skip warning)' `
-  ($cr.Text -notmatch 'no database resolved for this target') ($cr.Text.Trim())
+# Not vacuous: the compile must have RUN (a JSON findings array came back) and the cache
+# write must have MOVED Hello.sqlite -- a run that failed before resolving a DB
+# prints no skip warning either.
+Check 'control: compile-check <registered .dpr> compiled, cached into Hello.sqlite, and printed no skip warning' `
+  (($cr.Out -match '(?m)^\s*\[') -and ($cr.Text -notmatch 'no database resolved for this target') -and
+   ($helloStamp -ne (Get-Stamp $helloDb))) "stamp $helloStamp -> $(Get-Stamp $helloDb); $($cr.Text.Trim())"
 
 $microAfter = Get-Stamp $micronite
 Write-Host ''
@@ -302,5 +469,5 @@ if ($script:Failed) { Write-Host 'INDEX --project NO-DB SIBLING GUARD: FAIL' -Fo
 Write-Host 'INDEX --project NO-DB SIBLING GUARD: PASS' -ForegroundColor Green
 exit 0
 } finally {
-  foreach ($d in @("$env:TEMP\drag-lint-nodb-$PID")) { if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue } }
+  if ($WorkDir -and (Test-Path -LiteralPath $WorkDir)) { Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
