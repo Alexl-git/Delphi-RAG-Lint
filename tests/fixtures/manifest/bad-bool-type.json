@@ -1,0 +1,10 @@
+{
+  "settings": { "defaultPlatform": "Win64" },
+  "indexes": {
+    "outDir": "OUT",
+    "sections": [
+      { "name": "Proj", "include": ["proj"], "useIgnoreFiles": true },
+      { "name": "SQL",  "include": ["sql"],  "sqlOnlyMS": "yes" }
+    ]
+  }
+}

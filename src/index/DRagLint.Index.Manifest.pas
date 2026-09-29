@@ -202,6 +202,14 @@ type
     Docs: TDocSettings;
     /// <summary>Ordered list of index sections.</summary>
     Sections: TArray<TIndexSection>;
+    /// <summary>Why TManifestIO.Load could not parse a config file it found, as
+    /// '&lt;file&gt;: &lt;message&gt;' (several joined by '; '); '' when every file
+    /// it found parsed. Never set by ParseText/ParseTextEx, which raise instead.</summary>
+    /// <remarks>Load keeps going past a bad file (the manifest then holds only
+    /// what DID parse) so a READ verb can still answer; a WRITE verb must test
+    /// this and refuse, because a bad local file leaves the global manifest in
+    /// force and a bad global leaves no sections at all.</remarks>
+    LoadError: string;
     /// <summary>Returns True and populates ASection if a section named AName exists (case-insensitive).</summary>
     /// <param name="AName">Section name to look up.</param>
     /// <param name="ASection">Receives a copy of the matched section.</param>
@@ -217,6 +225,15 @@ type
     /// </remarks>
     function FindSection(const AName: string; out ASection: TIndexSection): Boolean;
   end; // record
+
+  /// <summary>A manifest's JSON is not valid, or a key holds the wrong JSON type.</summary>
+  /// <remarks>The message names the key PATH and both types, e.g.
+  /// 'indexes: expected object, got array' or
+  /// 'indexes.sections[1].sqlOnlyMS: expected boolean, got string'; unparseable
+  /// text reads '(root): not valid JSON -- &lt;parser detail&gt;'. Raised by
+  /// TManifestIO.ParseText / ParseTextEx; TManifestIO.Load catches it and
+  /// records it in TIndexManifest.LoadError.</remarks>
+  EManifestError = class(Exception);
 
   /// <summary>Load, parse, validate and save drag-lint index manifests.</summary>
   /// <remarks>
@@ -234,21 +251,24 @@ type
       /// <param name="AEngineDir">Directory containing the drag-lint EXE (global config source).</param>
       /// <param name="AStartDir">Directory to begin the upward local-config search.</param>
       /// <returns>Merged TIndexManifest. RootDir is set to the local config dir if found,
-      /// else to AEngineDir.</returns>
+      /// else to AEngineDir. A file that fails to parse is left out of the merge,
+      /// named on stderr as a WARNING, and recorded in the result's LoadError.</returns>
       /// <remarks>
+      /// <para>Load does not raise on a bad file: a READ verb may carry on with
+      /// what parsed. A WRITE verb must refuse when LoadError is not ''.</para>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+18 more)</para>
-      /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, SameText, Writeln</para>
+      /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, SameText, Writeln</para>
       /// <para>Returns: Default(TIndexManifest); GlobalManifest; LocalManifest</para>
-      /// <para>Complexity: 26 (cyclomatic, outer body), 131 lines (full implementation)</para>
+      /// <para>Complexity: 26 (cyclomatic, outer body), 143 lines (full implementation)</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TDocSettings.Defaults"/>
       /// <seealso cref="DRagLint.Index.Manifest.TIndexSettings.Defaults"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.MergeSections"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Load(const AEngineDir, AStartDir: string): TIndexManifest; static;
@@ -256,7 +276,9 @@ type
       /// <summary>Parse a manifest from JSON text and set RootDir to ARootDir.</summary>
       /// <param name="AJson">Raw JSON string (UTF-8 or ASCII).</param>
       /// <param name="ARootDir">Absolute directory associated with this JSON (used for relative paths).</param>
-      /// <returns>Populated TIndexManifest.</returns>
+      /// <returns>Populated TIndexManifest. Empty or whitespace-only text gives the defaults.</returns>
+      /// <exception cref="EManifestError">The text is not valid JSON, or a key holds
+      /// the wrong JSON type; the message names the key path.</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas) (+6 more)</para>
@@ -278,20 +300,22 @@ type
       /// <param name="AJson">Raw JSON string (UTF-8 or ASCII).</param>
       /// <param name="ARootDir">Absolute directory associated with this JSON (used for relative paths).</param>
       /// <param name="ASettingsKeys">Receives the set of settings keys that were present.</param>
-      /// <returns>Populated TIndexManifest.</returns>
+      /// <returns>Populated TIndexManifest. Empty or whitespace-only text gives the defaults.</returns>
+      /// <exception cref="EManifestError">The text is not valid JSON, or a key holds
+      /// the wrong JSON type: '&lt;key path&gt;: expected &lt;type&gt;, got &lt;type&gt;'.</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas)</para>
-      /// <para>Calls: Default, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, Include, TJSONArray, TJSONObject, Trim</para>
+      /// <para>Calls: Default, DRagLint.Index.Manifest.GetArray, DRagLint.Index.Manifest.GetNumber, DRagLint.Index.Manifest.GetObject, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.JsonTypeName, DRagLint.Index.Manifest.ParseManifestRoot, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults (+6 more)</para>
       /// <para>Returns: Default(TIndexManifest)</para>
-      /// <para>Complexity: 29 (cyclomatic, outer body), 153 lines (full implementation)</para>
+      /// <para>Complexity: 30 (cyclomatic, outer body), 162 lines (full implementation)</para>
       /// <para>Mutates: ASettingsKeys (out)</para>
       /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.GetArray"/>
+      /// <seealso cref="DRagLint.Index.Manifest.GetNumber"/>
+      /// <seealso cref="DRagLint.Index.Manifest.GetObject"/>
       /// <seealso cref="DRagLint.Index.Manifest.JsonStrArr"/>
-      /// <seealso cref="DRagLint.Index.Manifest.ParseProjectsIndexing"/>
-      /// <seealso cref="DRagLint.Index.Manifest.ParseSection"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TDocSettings.Defaults"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TIndexSettings.Defaults"/>
+      /// <seealso cref="DRagLint.Index.Manifest.JsonTypeName"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ParseTextEx(const AJson, ARootDir: string; out ASettingsKeys: TSettingsKeySet): TIndexManifest; static;
@@ -602,10 +626,10 @@ function OrderDbsByMembership(const ACandidates: TArray<string>;
 /// out over a manifest problem.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, ParamStr</para>
 /// <para>Returns: 10; DocManifest.Docs.ComplexityMin</para>
 /// <para>Catches: Exception (swallowed)</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -622,10 +646,10 @@ function LoadDocComplexityMin: Integer;
 /// errors out over a manifest problem.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas) (+2 more)</para>
 /// <para>Calls: DRagLint.Core.Model.TDocHandlesOptions.Defaults, DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, ParamStr</para>
 /// <para>Returns: TDocHandlesOptions.Defaults; DocManifest.Docs.Handles</para>
 /// <para>Catches: Exception (swallowed)</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Model.TDocHandlesOptions.Defaults"/>
 /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
 /// <!-- drag-lint:auto END -->
@@ -689,7 +713,84 @@ begin
   end;
 end;
 
-function ParseSection(const AObj: TJSONObject): TIndexSection;
+{ TYPED GETTERS (1.20.4 Task 4). Every read of a typed manifest key goes
+  through one of these instead of an unchecked `as`: a wrong type used to raise
+  EInvalidCast, whose message ("Invalid class typecast") named neither the key
+  nor the file, so a user could not tell which line of their manifest was bad.
+  Each getter returns nil when the key is ABSENT (the caller keeps its default)
+  and raises EManifestError naming the key path and both types when it is
+  PRESENT with the wrong type -- JSON null included, exactly as the old cast
+  refused it. }
+
+{ The JSON type name of AValue, in JSON's own vocabulary. TJSONNumber derives
+  from TJSONString, so it is tested first. }
+function JsonTypeName(const AValue: TJSONValue): string;
+begin
+  if      AValue is TJSONObject then Result:= 'object'
+  else if AValue is TJSONArray  then Result:= 'array'
+  else if AValue is TJSONBool   then Result:= 'boolean'
+  else if AValue is TJSONNumber then Result:= 'number'
+  else if AValue is TJSONString then Result:= 'string'
+  else if AValue is TJSONNull   then Result:= 'null'
+  else Result:= AValue.ClassName;
+end;
+
+{ 'parent.key', or just 'key' at the root. }
+function KeyPath(const AParentPath, AKey: string): string;
+begin
+  Result:= if AParentPath = '' then AKey else AParentPath + '.' + AKey;
+end;
+
+{ The key's value, or nil when absent; raises unless it is an AClass. }
+function GetTyped(const AParent: TJSONObject; const AKey, AParentPath: string;
+  const AClass: TClass; const AExpected: string): TJSONValue;
+begin
+  Result:= AParent.GetValue(AKey);
+  if (Result <> nil) and not (Result is AClass) then
+    raise EManifestError.CreateFmt('%s: expected %s, got %s',
+      [KeyPath(AParentPath, AKey), AExpected, JsonTypeName(Result)]);
+end;
+
+function GetObject(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONObject;
+begin
+  Result:= TJSONObject(GetTyped(AParent, AKey, AParentPath, TJSONObject, 'object'));
+end;
+
+function GetArray(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONArray;
+begin
+  Result:= TJSONArray(GetTyped(AParent, AKey, AParentPath, TJSONArray, 'array'));
+end;
+
+function GetBool(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONBool;
+begin
+  Result:= TJSONBool(GetTyped(AParent, AKey, AParentPath, TJSONBool, 'boolean'));
+end;
+
+function GetNumber(const AParent: TJSONObject; const AKey, AParentPath: string): TJSONNumber;
+begin
+  Result:= TJSONNumber(GetTyped(AParent, AKey, AParentPath, TJSONNumber, 'number'));
+end;
+
+{ The manifest text parsed to its root VALUE, or nil for empty or
+  whitespace-only text (a blank file is "no settings", not malformed). Text that
+  is not JSON raises EManifestError: ParseJSONValue used to return nil for it
+  and ParseTextEx then yielded an EMPTY manifest in silence, so a local file
+  with a stray comma quietly handed the run to the global manifest. The caller
+  owns the result. }
+function ParseManifestRoot(const AJson: string): TJSONValue;
+begin
+  Result:= nil;
+  if Trim(AJson) = '' then Exit;
+  try
+    Result:= TJSONObject.ParseJSONValue(AJson, False, True);
+  except
+    on E: Exception do raise EManifestError.Create('(root): not valid JSON -- ' + E.Message);
+  end;
+  if Result = nil then raise EManifestError.Create('(root): not valid JSON');
+end;
+
+{ APath is this section's own key path ('indexes.sections[2]'), for messages. }
+function ParseSection(const AObj: TJSONObject; const APath: string): TIndexSection;
 var
   V: TJSONValue;
   B: TJSONBool ;
@@ -723,18 +824,18 @@ begin
   else if (V <> nil) then Result.IncludeOnly:= [V.Value];
 
   { useIgnoreFiles: accept also legacy 'useGitignore' key (back-compat) }
-  B:= AObj.GetValue('useIgnoreFiles') as TJSONBool;
+  B:= GetBool(AObj, 'useIgnoreFiles', APath);
   if B <> nil then Result.UseIgnoreFiles:= B.AsBoolean
   else
   begin
-    B:= AObj.GetValue('useGitignore') as TJSONBool;
+    B:= GetBool(AObj, 'useGitignore', APath);
     if B <> nil then Result.UseIgnoreFiles:= B.AsBoolean;
   end;
 
   V:= AObj.GetValue('dedupAgainst');
   if V <> nil then Result.DedupAgainst:= ParseStringOrArray(V);
 
-  B:= AObj.GetValue('sqlOnlyMS') as TJSONBool;
+  B:= GetBool(AObj, 'sqlOnlyMS', APath);
   if B <> nil then Result.SqlOnlyMS:= B.AsBoolean;
 end; // function
 
@@ -791,6 +892,7 @@ end;
 
 class function TManifestIO.ParseTextEx(const AJson, ARootDir: string; out ASettingsKeys: TSettingsKeySet): TIndexManifest;
 var
+  RootVal  : TJSONValue ;
   Root     : TJSONObject;
   JSettings: TJSONObject;
   JIndexes : TJSONObject;
@@ -805,11 +907,19 @@ begin
   Result.Docs:= TDocSettings.Defaults;
   ASettingsKeys:= [];
 
-  Root:= TJSONObject.ParseJSONValue(AJson) as TJSONObject;
-  if Root = nil then Exit;
+  { Parse into the base TJSONValue FIRST and free THAT: `ParseJSONValue(..) as
+    TJSONObject` raised EInvalidCast on a root that parses but is not an object
+    (e.g. `[]`) before the assignment completed, leaking the parsed value --
+    the same leak DRagLint.Project.OwnRoots fixed. }
+  RootVal:= ParseManifestRoot(AJson);
+  if RootVal = nil then Exit;
   try
+    if not (RootVal is TJSONObject) then
+      raise EManifestError.Create('(root): expected object, got ' + JsonTypeName(RootVal));
+    Root:= TJSONObject(RootVal);
+
     { -- settings block -- }
-    JSettings:= Root.GetValue('settings') as TJSONObject;
+    JSettings:= GetObject(Root, 'settings', '');
     if JSettings <> nil then
     begin
       V:= JSettings.GetValue('currentProjectsIndexing');
@@ -826,7 +936,7 @@ begin
         Include(ASettingsKeys, skDefaultPlatform);
       end;
 
-      N:= JSettings.GetValue('sizeGuardMB') as TJSONNumber;
+      N:= GetNumber(JSettings, 'sizeGuardMB', 'settings');
       if N <> nil then
       begin
         Result.Settings.SizeGuardMB:= N.AsInt;
@@ -840,14 +950,14 @@ begin
         Include(ASettingsKeys, skEnginePath);
       end;
 
-      N:= JSettings.GetValue('maxJobs') as TJSONNumber;
+      N:= GetNumber(JSettings, 'maxJobs', 'settings');
       if N <> nil then
       begin
         Result.Settings.MaxJobs:= N.AsInt;
         Include(ASettingsKeys, skMaxJobs);
       end;
 
-      N:= JSettings.GetValue('maxParseFileKB') as TJSONNumber;
+      N:= GetNumber(JSettings, 'maxParseFileKB', 'settings');
       if N <> nil then
       begin
         { 0 in JSON means "use default 2048"; a negative value disables the
@@ -861,17 +971,17 @@ begin
     end; // if
 
     { -- docs block -- }
-    var JDocs: TJSONObject:= Root.GetValue('docs') as TJSONObject;
+    var JDocs: TJSONObject:= GetObject(Root, 'docs', '');
     if JDocs <> nil then
     begin
-      var ND: TJSONNumber:= JDocs.GetValue('max_return_cases') as TJSONNumber;
+      var ND: TJSONNumber:= GetNumber(JDocs, 'max_return_cases', 'docs');
       if ND <> nil then
       begin
         Result.Docs.MaxReturnCases:= ND.AsInt;
         Include(ASettingsKeys, skMaxReturnCases);
       end;
 
-      var NC: TJSONNumber:= JDocs.GetValue('max_callers') as TJSONNumber;
+      var NC: TJSONNumber:= GetNumber(JDocs, 'max_callers', 'docs');
       if NC <> nil then
       begin
         Result.Docs.MaxCallers:= NC.AsInt;
@@ -881,7 +991,7 @@ begin
       // ADP1 T2: docs.accessor_trivial_max_lines -- OVERRIDES the code
       // default of 2 when present; absent leaves Result.Docs.AccessorTrivialMaxLines
       // at the Defaults() value already seeded above (the filter stays ON).
-      var NA: TJSONNumber:= JDocs.GetValue('accessor_trivial_max_lines') as TJSONNumber;
+      var NA: TJSONNumber:= GetNumber(JDocs, 'accessor_trivial_max_lines', 'docs');
       if NA <> nil then
       begin
         Result.Docs.AccessorTrivialMaxLines:= NA.AsInt;
@@ -891,7 +1001,7 @@ begin
       // ADP2 T3: docs.complexity_min -- OVERRIDES the code default of 10 when
       // present; absent leaves Result.Docs.ComplexityMin at the Defaults()
       // value already seeded above.
-      var NCx: TJSONNumber:= JDocs.GetValue('complexity_min') as TJSONNumber;
+      var NCx: TJSONNumber:= GetNumber(JDocs, 'complexity_min', 'docs');
       if NCx <> nil then
       begin
         Result.Docs.ComplexityMin:= NCx.AsInt;
@@ -903,7 +1013,7 @@ begin
       // switch, so the key is recorded as present even when it is empty --
       // the merge must carry "none" over the global default, not drop it.
       // A non-string element is skipped rather than failing the whole load.
-      var JDlg: TJSONArray:= JDocs.GetValue('dialog_routines') as TJSONArray;
+      var JDlg: TJSONArray:= GetArray(JDocs, 'dialog_routines', 'docs');
       if JDlg <> nil then
       begin
         Result.Docs.Handles.DialogRoutines:= nil;
@@ -913,7 +1023,7 @@ begin
         Include(ASettingsKeys, skDialogRoutines);
       end;
 
-      var NH: TJSONNumber:= JDocs.GetValue('max_handles') as TJSONNumber;
+      var NH: TJSONNumber:= GetNumber(JDocs, 'max_handles', 'docs');
       if NH <> nil then
       begin
         Result.Docs.Handles.MaxHandles:= NH.AsInt;
@@ -922,7 +1032,7 @@ begin
     end;
 
     { -- indexes block -- }
-    JIndexes:= Root.GetValue('indexes') as TJSONObject;
+    JIndexes:= GetObject(Root, 'indexes', '');
     if JIndexes <> nil then
     begin
       V:= JIndexes.GetValue('outDir');
@@ -931,16 +1041,16 @@ begin
       V:= JIndexes.GetValue('exclude');
       if V is TJSONArray then Result.GlobalExclude:= JsonStrArr(TJSONArray(V));
 
-      JSections:= JIndexes.GetValue('sections') as TJSONArray;
+      JSections:= GetArray(JIndexes, 'sections', 'indexes');
       if JSections <> nil then
       begin
         SetLength(Result.Sections, JSections.Count);
         for I:= 0 to JSections.Count - 1 do
-          if JSections.Items[I] is TJSONObject then Result.Sections[I]:= ParseSection(TJSONObject(JSections.Items[I]));
+          if JSections.Items[I] is TJSONObject then Result.Sections[I]:= ParseSection(TJSONObject(JSections.Items[I]), Format('indexes.sections[%d]', [I]));
       end;
     end; // if
   finally
-    Root.Free;
+    RootVal.Free;
   end; // try
 end; // function
 
@@ -971,6 +1081,16 @@ var
   HaveLocal     : Boolean        ;
   Dir           : string         ;
   Parent        : string         ;
+  Errors        : string         ;
+
+  { A bad file is WARNED about (a read verb carries on with what parsed) and
+    RECORDED, so a write verb can refuse -- see TIndexManifest.LoadError. }
+  procedure NoteLoadError(const APath, AMessage: string);
+  begin
+    Writeln(ErrOutput, 'WARNING: could not parse config at ', APath, ': ', AMessage);
+    if Errors <> '' then Errors:= Errors + '; ';
+    Errors:= Errors + APath + ': ' + AMessage;
+  end;
 
   procedure MergeSections(var ADest: TIndexManifest; const ASrc: TIndexManifest);
   var
@@ -1001,6 +1121,7 @@ begin
   HaveGlobal:= False;
   HaveLocal := False;
   LocalKeys:= [];
+  Errors:= '';
 
   { Try global: <AEngineDir>\drag-lint.json (no leading dot -- the EXE-side config) }
   GlobalPath:= TPath.Combine(AEngineDir, 'drag-lint.json');
@@ -1011,7 +1132,7 @@ begin
       GlobalManifest:= ParseText(Content, AEngineDir);
       HaveGlobal:= True;
     except
-      on E: Exception do Writeln(ErrOutput, 'WARNING: could not parse config at ', GlobalPath, ': ', E.Message);
+      on E: Exception do NoteLoadError(GlobalPath, E.Message);
     end;
   end;
 
@@ -1038,7 +1159,7 @@ begin
       LocalManifest:= ParseTextEx(Content, TPath.GetDirectoryName(LocalPath), LocalKeys);
       HaveLocal:= True;
     except
-      on E: Exception do Writeln(ErrOutput, 'WARNING: could not parse config at ', LocalPath, ': ', E.Message);
+      on E: Exception do NoteLoadError(LocalPath, E.Message);
     end;
   end;
 
@@ -1090,6 +1211,7 @@ begin
     Result.Docs:= TDocSettings.Defaults;
     Result.RootDir:= AStartDir;
   end;
+  Result.LoadError:= Errors;
 end; // begin
 
 { ---------------------------------------------------------------------- }

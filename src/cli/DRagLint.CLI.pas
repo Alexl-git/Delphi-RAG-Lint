@@ -725,6 +725,9 @@ begin
   Writeln('                               one "delete nothing" switch, and it is a DRY LOOK: both sweeps are still');
   Writeln('                               COMPUTED and REPORTED as "would remove" (count + a capped sample of paths),');
   Writeln('                               nothing is deleted. Take it before a big run. Applies to index --all too.');
+  Writeln('                               A MALFORMED MANIFEST REFUSES the write (exit 2) -- beside the exe, a local');
+  Writeln('                               .drag-lint.json, or --config -- naming the file, the key path and both types');
+  Writeln('                               ("indexes: expected object, got array"). Read verbs only warn.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -3879,6 +3882,26 @@ begin
   if AConfigPath <> '' then Result:= Result + ' --config ' + AnsiQuotedStr(TPath.GetFullPath(AConfigPath), '"');
 end;
 
+/// <summary>A WRITE verb's refusal of a manifest that TManifestIO.Load could not
+/// fully parse (1.20.4 Task 4).</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AManifest">What Load returned.</param>
+/// <returns>True (having said why on stderr) when AManifest.LoadError is set;
+/// the caller then exits 2.</returns>
+/// <remarks>Load keeps going past a bad file so a READ verb can still answer,
+/// but what it returns is then only the part that parsed: a bad LOCAL
+/// .drag-lint.json leaves the GLOBAL manifest in force, and a bad global leaves
+/// no sections. A write must never run on that silently.</remarks>
+function ManifestWriteRefused(const AVerb: string; const AManifest: TIndexManifest): Boolean;
+begin
+  Result:= AManifest.LoadError <> '';
+  if Result then
+  begin
+    Writeln(ErrOutput, 'ERROR: ', AVerb, ': refusing to write -- the manifest could not be parsed: ', AManifest.LoadError);
+    Writeln(ErrOutput, '       Fix that file and re-run. A write verb does not fall back to the manifest that did parse.');
+  end;
+end;
+
 // v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
 // validates it, resolves the build plan, optionally filters by --only / --platform,
@@ -3913,9 +3936,21 @@ begin
     if not TFile.Exists(ConfigPath) then begin Writeln('ERROR: config file not found: ', ConfigPath); Exit(2); end;
     var Content:= TFile.ReadAllText(ConfigPath);
     var RootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
-    Manifest:= TManifestIO.ParseText(Content, RootDir);
+    try
+      Manifest:= TManifestIO.ParseText(Content, RootDir);
+    except
+      on E: EManifestError do
+      begin
+        Writeln(ErrOutput, 'ERROR: manifest invalid: ', ConfigPath, ': ', E.Message);
+        Exit(2);
+      end;
+    end; // try
   end
-  else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+  else
+  begin
+    Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    if ManifestWriteRefused('index --all', Manifest) then Exit(2);
+  end;
 
   ErrMsg:= TManifestIO.Validate(Manifest);
   if ErrMsg <> '' then begin Writeln(ErrOutput, 'ERROR: manifest invalid: ', ErrMsg); Exit(2); end;
@@ -4533,6 +4568,9 @@ begin
   Result:= '';
   try
     Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), AStartDir);
+    { "will not load" includes a file Load had to skip: ownership asked of the
+      part that DID parse can miss the section that claims this project. }
+    if ManifestWriteRefused(AVerb, Manifest) then Exit;
     if ResolveOwnProjectDb(Manifest, AProjectFile, Result, Claimants) = pdmAmbiguous then
       ReportAmbiguousProject(AVerb, AProjectFile, Claimants);
   except
@@ -5045,6 +5083,13 @@ begin
   var IndexTarget: string:= AArgs.Path;
   if IndexTarget = '' then IndexTarget:= AArgs.ProjectPath;
   if IndexTarget = '' then IndexTarget:= GetCurrentDir;
+  { A WRITE REFUSES A MANIFEST IT COULD NOT PARSE (1.20.4 Task 4) -- even with
+    an explicit --db, because this run still reads the manifest (the size
+    guard) and a broken one is the user's to fix, not ours to half-read. BOTH
+    walks this verb makes are checked: from the target (DB selection, below)
+    and from the CWD (the size guard). }
+  if ManifestWriteRefused('index', TManifestIO.Load(ExtractFilePath(ParamStr(0)), IndexTarget)) then Exit(2);
+  if ManifestWriteRefused('index', TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir)) then Exit(2);
   var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget);
   if ResolvedDb = '' then
   begin

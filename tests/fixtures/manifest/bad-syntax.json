@@ -1,0 +1,6 @@
+{
+  "indexes": {
+    "sections": [
+      { "name": "Proj", "include": ["proj"], }
+    ]
+  

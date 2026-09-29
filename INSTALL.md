@@ -184,9 +184,14 @@ A minimal manifest (JSON: double every backslash):
 ```
 
 `indexes` is an OBJECT holding `outDir`, `exclude` and the `sections` array --
-not an array. Written as an array, the engine prints
-`WARNING: could not parse config at <path>: Invalid class typecast` and builds
-nothing.
+not an array. A key of the wrong JSON type is named, with its path and both
+types: `indexes: expected object, got array`, or
+`indexes.sections[1].sqlOnlyMS: expected boolean, got string`. Text that is not
+JSON at all reads `(root): not valid JSON -- <parser detail>`. A WRITE verb
+(`index`, `index --all`, `refresh-findings`) REFUSES such a manifest with exit
+2 -- a bad local `.drag-lint.json` never quietly hands the run to the global
+manifest. A read verb prints the same message as a `WARNING` and carries on
+with whatever did parse.
 
 What a section's target makes it, and where its database lands:
 
@@ -498,9 +503,11 @@ staleness. `--resolved` lists precise callers from the resolved call edges.
 ### `index --all` built nothing
 
 `Sections to build: 0` in the dry run means no manifest was found beside the
-exe (or at `--config`). A `WARNING: could not parse config` line means it was
-found but is malformed -- `indexes` must be an object (section 2a). Both still
-exit 0, so read the dry run.
+exe (or at `--config`); that still exits 0, so read the dry run. A malformed
+manifest (beside the exe, a local `.drag-lint.json`, or `--config`) makes
+`index` refuse with exit 2 and `ERROR: ... the manifest could not be parsed`,
+naming the file, the key path and the types -- e.g. `indexes: expected object,
+got array` (`indexes` must be an object, section 2a).
 
 ### No lint rules load
 

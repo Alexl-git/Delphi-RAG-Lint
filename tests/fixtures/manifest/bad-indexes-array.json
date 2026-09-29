@@ -1,0 +1,6 @@
+{
+  "settings": { "defaultPlatform": "Win64" },
+  "indexes": [
+    { "name": "Proj", "include": ["proj"] }
+  ]
+}

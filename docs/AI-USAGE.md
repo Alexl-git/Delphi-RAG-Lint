@@ -57,6 +57,11 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > to that same own index and refuse, naming both, when two sections claim the
 > project. `compile-check` caches only into an explicit `--db` or the project's
 > unique manifest section, and otherwise reports without caching.
+> A MALFORMED manifest (beside the exe, a local `.drag-lint.json`, or
+> `--config`) makes `index` / `index --all` exit 2, and `refresh-findings`
+> without `--db` too, with `ERROR: ... the manifest could not be parsed: <file>:
+> <key path>: expected <type>, got <type>` -- a write never falls back to the
+> manifest that did parse. Read verbs print it as a `WARNING` and carry on.
 >
 > **The same applies to a `--db` that exists but is at an OLD SCHEMA** (exit 2,
 > reason and both migrate commands on stderr). A stale index cannot answer, so it
