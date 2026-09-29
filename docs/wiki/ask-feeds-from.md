@@ -4,11 +4,13 @@
 
 ## Asking it
 
+**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+
 ```
 drag-lint ask --question feeds-from --target <Form>.<Control> --db <project.sqlite> --sql-db <sql-index.sqlite>
 ```
 
-The same question through the chart pipeline:
+Today, ask it through the chart pipeline:
 
 ```
 New-DiagramArtifact.ps1 -Question feeds-from -Target <Form>.<Control> -DbPath <Delphi project index> -SqlDbPath <SQL-script index>

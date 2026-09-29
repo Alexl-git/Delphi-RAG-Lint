@@ -4,11 +4,13 @@
 
 ## Asking it
 
+**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+
 ```
 drag-lint ask --question who-calls --at <file.pas>:<line>:<col> --db <project.sqlite>
 ```
 
-The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). The same question by name, through the chart pipeline:
+The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). Today, ask it by name through the chart pipeline:
 
 ```
 New-DiagramArtifact.ps1 -Question who-calls -Target MyApp.Orders.TOrderService.Post -DbPath <project.sqlite>

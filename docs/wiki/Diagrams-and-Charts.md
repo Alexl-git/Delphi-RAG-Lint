@@ -1,16 +1,19 @@
 # Diagrams and Charts
 
-**Ask the index a question, get a chart back.** The `ask` verb family turns
-one formal question about one selected symbol into a clickable diagram: who
-calls this, what breaks if I change it, which tests reach it, what does this
-form wire, where does this protocol command travel. It ships in the **charts
-release**; the chart pipeline behind it (`New-DiagramArtifact.ps1`) runs today.
+**Ask the index a question, get a chart back.** A chart question turns one
+formal question about one selected symbol into a clickable diagram: who calls
+this, what breaks if I change it, which tests reach it, what does this form
+wire, where does this protocol command travel. **Today the questions run
+through the chart pipeline** -- `charts\src\New-DiagramArtifact.ps1`, and
+`Ask-Report.ps1` for a text answer (see [Charts and the IDE](Charts-and-the-IDE)).
+A single engine verb, `drag-lint ask`, is **planned and not shipped yet**; its
+design is below.
 
 drag-lint is not a model, and these charts are not drawn from prose. Every
 diagram comes from a FORMAL CALL -- a question id, a selection and parameters
 -- and every row in it is a fact from the index with a file and a line.
 
-## The call
+## The call (planned engine verb -- not shipped yet)
 
 ```
 drag-lint ask --list --at <file.pas>:<line>:<col> --db <project.sqlite> --json
@@ -27,7 +30,7 @@ drag-lint ask --question <id> --at <file.pas>:<line>:<col> --db <project.sqlite>
 * `--db` is the project index, as everywhere else -- and the platform library
   index after it when an RTL/VCL ancestor or type should resolve.
 
-The same questions by NAME, through the chart pipeline:
+What runs TODAY -- the same questions by NAME, through the chart pipeline:
 
 ```
 New-DiagramArtifact.ps1 -Question <id> -Target <Unit.TType.Member | Unit | project> -DbPath <project.sqlite>

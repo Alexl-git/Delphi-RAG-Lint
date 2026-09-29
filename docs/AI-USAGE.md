@@ -973,3 +973,17 @@ An interactive symbol graph with drill-in, a left **Structure panel** (units ->
 interface/implementation -> types/consts/routines, initialization/finalization,
 uses / used-by), symbol search, and click-to-jump into a running RAD Studio (via
 a named pipe). Separate and even-more-experimental ? feedback welcome there too.
+
+## 7. Report questions (charts)
+
+The report verbs answer a PATH or a SET: what happens when a grid field is edited and saved, who
+writes or reads a field, who calls a routine, what a change breaks, which tables it touches. Each row
+of the answer is anchored `@File.pas:line`. They are PowerShell scripts under `charts\src`, not engine
+verbs; one command asks any of them, resolves every index itself and never reindexes (a stale index
+stops it, exit 3, with the reindex command on stderr):
+
+    pwsh -NoProfile -File C:\Projects\Delphi-RAG-lint\charts\src\Ask-Report.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1FtrsVNum -Project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
+
+A path or set across units, forms or processes -> the verb first. One member in one file -> `query` /
+`find-callers` or Grep. Question ids, target forms, output and exit codes: `charts\README.md`
+("For AI agents") and `charts\question-catalogue.md`.
