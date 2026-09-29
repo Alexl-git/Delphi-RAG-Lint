@@ -13,3 +13,13 @@ default-encoding-io 66
 # NOT suppress the finding -- string literals can never themselves be a
 # TEncoding argument.
 default-encoding-io 92
+# 2026-09-28 FP: LoadFromFile/SaveToFile on a receiver whose type is DECLARED in
+# this file and is not a string list (TdxPDFViewer, TPicture) is binary I/O with
+# no encoding overload -- field, Self.field and parameter receivers are quiet.
+!default-encoding-io 106
+!default-encoding-io 107
+!default-encoding-io 112
+# ...while a receiver whose type is not known here (Memo.Lines) or IS a string
+# list (TStrings) still fires.
+default-encoding-io 117
+default-encoding-io 118

@@ -190,10 +190,9 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses (+66 more)</para>
+    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses (+69 more)</para>
     /// <para>Returns: nil; Deduped.ToArray</para>
-    /// <para>Complexity: 18 (cyclomatic, outer body), 2480 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 2564 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectAddrTaken"/>
@@ -264,6 +263,11 @@ var
     unqualified name matches an entry here has a signature it does not control,
     so its unused parameters are not removable and are not reported. }
   AddrTaken      : TDictionary<string, Boolean>;
+  { Pass-1d result: lower-cased name -> lower-cased declared type text, for every
+    field, var and parameter declared in THIS file. A name declared twice with
+    DIFFERENT types maps to '' (unknown). Pure AST, no symbol store; used only by
+    default-encoding-io to tell a string-list receiver from a binary one. }
+  DeclTypes      : TDictionary<string, string >;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -448,7 +452,13 @@ var
     directives. In Delphi, virtual/override/message etc. appear ONLY on the
     interface-section declProc, NOT on the implementation defProc body.
     A declProc has procAttribute nodes as named children; each procAttribute
-    holds the actual keyword nodes. }
+    holds the actual keyword nodes.
+    An explicit calling convention other than the default register -- stdcall,
+    safecall, cdecl, winapi -- binds the signature just as hard: it marks an
+    OS/COM/C ABI boundary (IDropTarget.DragEnter, an EnumWindows callback), and
+    an interface implementation needs no virtual/override to carry it. Filed
+    2026-09-28 against ConvRules.DropTarget.pas; fixture
+    tests\lint\unused-parameter-callconv.pas. }
   procedure CollectContractDecls(const N: TTSNode);
   var
     I, J   : Integer;
@@ -469,8 +479,8 @@ var
         for J:= 0 to Attr.NamedChildCount - 1 do
         begin
           K:= Attr.NamedChild(J).NodeType;
-          if (K = 'kVirtual') or (K = 'kDynamic') or (K = 'kOverride')
-            or (K = 'kMessage') or (K = 'kAbstract') then
+          if MatchStr(K, ['kVirtual', 'kDynamic', 'kOverride', 'kMessage', 'kAbstract',
+                          'kStdcall', 'kSafecall', 'kCdecl', 'kWinapi']) then
           begin
             IsContr:= True;
             Break;
@@ -490,6 +500,45 @@ var
       Exit; { no nested declProc inside a declProc }
     end;
     for I:= 0 to N.NamedChildCount - 1 do CollectContractDecls(N.NamedChild(I));
+  end;
+
+  { PASS 1d: fill DeclTypes from every declVar / declField / declArg. The names
+    are the identifier children that start before the 'type' field -- the same
+    test CheckUnusedParams uses for declArg. }
+  procedure CollectDeclTypes(const N: TTSNode);
+  var
+    I       : Integer;
+    TypeN   : TTSNode;
+    IdN     : TTSNode;
+    TypeTxt : string ;
+    NameTxt : string ;
+    Prior   : string ;
+  begin
+    if N.IsNull then Exit;
+    if (N.NodeType = 'declVar') or (N.NodeType = 'declField')
+      or (N.NodeType = 'declArg') then
+    begin
+      TypeN:= N.ChildByField('type');
+      if not TypeN.IsNull then
+      begin
+        TypeTxt:= LowerCase(Trim(NodeStr(TypeN)));
+        for I:= 0 to N.NamedChildCount - 1 do
+        begin
+          IdN:= N.NamedChild(I);
+          if IdN.NodeType <> 'identifier' then Continue;
+          if IdN.StartByte >= TypeN.StartByte then Break;
+          NameTxt:= LowerCase(Trim(NodeStr(IdN)));
+          if NameTxt = '' then Continue;
+          if DeclTypes.TryGetValue(NameTxt, Prior) then
+          begin
+            if Prior <> TypeTxt then DeclTypes[NameTxt]:= '';
+          end
+          else
+            DeclTypes.Add(NameTxt, TypeTxt);
+        end;
+      end;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectDeclTypes(N.NamedChild(I));
   end;
 
   { PASS 1c: collect every bare name that is HANDED SOMEWHERE as a value rather
@@ -1238,6 +1287,35 @@ var
           or (Pos('tstreamreader', L) > 0) or (Pos('tstreamwriter', L) > 0);
   end;
 
+  { 2026-09-28: True when a default-encoding-io callee's RECEIVER is a name
+    declared in this file with a type that is not a string list -- a
+    TdxPDFViewer, a TPicture -- whose LoadFromFile/SaveToFile moves bytes and has
+    no TEncoding overload to recommend. The name match in IsDefaultEncodingApi
+    cannot tell those apart from TStrings.LoadFromFile. Receivers handled: `X.M`
+    and `Self.X.M`. Anything else -- an unknown name, a deeper chain like
+    Memo.Lines, a class reference like TFile -- is NOT known-binary and keeps
+    firing, so the rule loses nothing it caught before. Known blind spot: a
+    TStringList descendant whose type name lacks "string" is taken as binary.
+    Fixture: tests\lint\default-encoding-io.pas lines 106-118. }
+  function ReceiverIsKnownNonText(const AEnt: TTSNode): Boolean;
+  var
+    Recv   : TTSNode;
+    NameTxt: string ;
+    TypeTxt: string ;
+  begin
+    Result:= False;
+    if AEnt.IsNull or (AEnt.NodeType <> 'exprDot') then Exit;
+    Recv:= AEnt.ChildByField('lhs');
+    if Recv.IsNull then Exit;
+    if (Recv.NodeType = 'exprDot')
+      and SameText(Trim(NodeStr(Recv.ChildByField('lhs'))), 'Self') then
+      Recv:= Recv.ChildByField('rhs');
+    if Recv.IsNull or (Recv.NodeType <> 'identifier') then Exit;
+    NameTxt:= LowerCase(Trim(NodeStr(Recv)));
+    if not DeclTypes.TryGetValue(NameTxt, TypeTxt) then Exit;
+    Result:= (TypeTxt <> '') and (Pos('string', TypeTxt) = 0);
+  end;
+
   { v0.81 #9: True if none of an exprCall's arguments mentions TEncoding --
     i.e. the call used the default-encoding overload rather than passing an
     explicit TEncoding (TEncoding.UTF8, TEncoding.ANSI, a custom TEncoding
@@ -1886,7 +1964,8 @@ var
     if N.NodeType = 'exprCall' then
     begin
       var Ent: TTSNode:= N.ChildByField('entity');
-      if (not Ent.IsNull) and IsDefaultEncodingApi(Trim(NodeStr(Ent))) then
+      if (not Ent.IsNull) and IsDefaultEncodingApi(Trim(NodeStr(Ent)))
+        and not ReceiverIsKnownNonText(Ent) then
       begin
         var ArgsN: TTSNode:= N.ChildByField('args');
         if ArgsHaveNoEncoding(ArgsN) then
@@ -2607,6 +2686,7 @@ begin
   ContractMethods:= TDictionary<string, Boolean>.Create;
   LocalFunctions := TDictionary<string, Boolean>.Create;
   AddrTaken      := TDictionary<string, Boolean>.Create;
+  DeclTypes      := TDictionary<string, string >.Create;
   try
     { v0.74: unit-too-large (#6) -- one info finding when the unit exceeds
       AMaxUnitLines source lines (root node's last row). }
@@ -2692,6 +2772,8 @@ begin
     CollectAddrTaken(PF.Tree.RootNode);
     { Pass 1c-bis: and the ones the preprocessor blanked out of the tree. }
     CollectAddrTakenFromDeadBranches(PF.Src, PF.RawSrc);
+    { Pass 1d: declared types of fields/vars/params, for default-encoding-io. }
+    CollectDeclTypes(PF.Tree.RootNode);
     { Pass 2: walk defProc bodies, ifElse, exprParens, comments, exprCall. }
     Visit(PF.Tree.RootNode);
     { Pass 3: referenced-never-set field def-use. }
@@ -2704,6 +2786,7 @@ begin
     ContractMethods.Free;
     LocalFunctions.Free;
     AddrTaken.Free;
+    DeclTypes.Free;
   end;
   { De-duplicate by (RuleId, StartLine, StartCol). }
   Seen:= TDictionary<string, Boolean>.Create;

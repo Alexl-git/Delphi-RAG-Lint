@@ -1,0 +1,7 @@
+# stdcall / safecall / cdecl / winapi methods have an externally fixed signature (2026-09-28 FP)
+!unused-parameter 18
+!unused-parameter 19
+!unused-parameter 20
+!unused-parameter 21
+# positive control: plain method, same class, unused parameter still fires
+unused-parameter 22

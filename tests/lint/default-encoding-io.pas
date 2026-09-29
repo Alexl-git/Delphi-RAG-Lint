@@ -95,4 +95,27 @@ begin
   end;
 end;
 
+type
+  TViewerForm = class
+    PDFViewer: TdxPDFViewer;
+    procedure Show;
+  end;
+
+procedure TViewerForm.Show;
+begin
+  PDFViewer.LoadFromFile('x.pdf');
+  Self.PDFViewer.LoadFromFile('y.pdf');
+end;
+
+procedure PictureSave(Pic: TPicture);
+begin
+  Pic.SaveToFile('x.bmp');
+end;
+
+procedure MemoLinesLoad(Memo: TMemo; L: TStrings);
+begin
+  Memo.Lines.LoadFromFile('x.txt');
+  L.LoadFromFile('x.txt');
+end;
+
 end.
