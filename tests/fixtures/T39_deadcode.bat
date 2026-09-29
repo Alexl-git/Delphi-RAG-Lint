@@ -2,10 +2,9 @@
 setlocal
 set HERE=%~dp0
 if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
-set DB=%HERE%t14.sqlite
-if not exist "%DB%" (
-  "%EXE%" index "%HERE%Calls.pas" --db "%DB%" >NUL
-)
+set DB=%HERE%t39.sqlite
+del /q "%DB%" 2>NUL
+"%EXE%" index "%HERE%Calls.pas" --db "%DB%" >NUL
 "%EXE%" find-deadcode --db "%DB%" > "%HERE%t39_out.txt"
 type "%HERE%t39_out.txt"
 findstr /c:"dead-code candidate" "%HERE%t39_out.txt" >NUL || (echo FAIL: no summary line && exit /b 1)

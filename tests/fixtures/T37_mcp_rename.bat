@@ -2,6 +2,9 @@
 setlocal
 set HERE=%~dp0
 if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
+set DB=%HERE%t37.sqlite
+del /q "%DB%" 2>NUL
+"%EXE%" index "%HERE%Calls.pas" --db "%DB%" >NUL
 pushd "%HERE%..\.."
 type "%HERE%T37_mcp_rename.json" | "%EXE%" serve > "%HERE%t37_out.txt"
 popd

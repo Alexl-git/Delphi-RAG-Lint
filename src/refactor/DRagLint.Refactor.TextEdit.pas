@@ -187,7 +187,7 @@ type
     /// <para>Called from: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas), DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/5 (DRagLint.Refactor.TextEdit.pas)</para>
     /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, ExtractFileName, LowerCase, SameText, Trim</para>
     /// <para>Overload 2 of 2</para>
-    /// <para>Complexity: 29 (cyclomatic, outer body), 140 lines (full implementation)</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 139 lines (full implementation)</para>
     /// <para>Mutates: AResolvedUnit (out), AAlreadyUsed (out)</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: overload</para>
@@ -631,7 +631,6 @@ begin
     if UsedSet.ContainsKey(LowerCase(Best)) then begin AAlreadyUsed:= True; Exit; end;
 
     { 3. choose target section: implementation uses if present, else interface }
-    TargetSection:= uusImplementation;
     HaveLast:= False;
     var HasImpl: Boolean:= False; var HasIntf: Boolean:= False;
     for U in Uses_ do

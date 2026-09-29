@@ -2,10 +2,9 @@
 setlocal
 set HERE=%~dp0
 if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
-set DB=%HERE%t14.sqlite
-if not exist "%DB%" (
-  "%EXE%" index "%HERE%Calls.pas" --db "%DB%" >NUL
-)
+set DB=%HERE%t38.sqlite
+del /q "%DB%" 2>NUL
+"%EXE%" index "%HERE%Calls.pas" --db "%DB%" >NUL
 "%EXE%" generate-docs --qname Calls.TWidget.Compute --db "%DB%" > "%HERE%t38_out.txt"
 type "%HERE%t38_out.txt"
 findstr /c:"<summary>" "%HERE%t38_out.txt" >NUL || (echo FAIL: xmldoc summary missing && exit /b 1)
