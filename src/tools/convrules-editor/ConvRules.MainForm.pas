@@ -414,7 +414,7 @@ type
       /// curation window (which reads the file from DISK and can later force a reload
       /// over the editor's buffer) after a save the user asked for and did not get.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCurate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSaveClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCurate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSaveClick (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SaveBook</para>
       /// <para>Returns: SaveBook(False)</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveBook"/>
@@ -444,8 +444,11 @@ type
       /// starting at the current file. False: ask only for a never-saved book.</param>
       /// <returns>True once the bytes reached disk (a failed validation is a
       /// report, not a failure).</returns>
-      /// <remarks>A cancelled or failed save restores the previous path and title,
-      /// so a later Save never writes to a file the user abandoned.</remarks>
+      /// <remarks>A save cancelled or failed BEFORE the bytes reach disk restores the
+      /// previous path and title, so a later Save never writes to a file the user
+      /// abandoned. Once the write has succeeded the new path is kept and the
+      /// unsaved-changes snapshot is refreshed even when validation or the rescan
+      /// afterwards raises; that exception still propagates to the caller.</remarks>
       function SaveBook(APromptPath: Boolean): Boolean;
       /// <summary>File > Save As: SaveBook with the path always asked for.</summary>
       /// <param name="Sender">The menu item; unused.</param>
@@ -870,20 +873,22 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function OpenOwningRule(const ATypeName: string): Boolean;
-      /// <summary>Opens an ALREADY-CHOSEN catalog entry: the cross-book
-      /// save/discard prompt, then selects its block.</summary>
+      /// <summary>Opens an ALREADY-CHOSEN catalog entry: when it lives in another
+      /// book, the unsaved-changes guard (ConfirmDiscard) and that book's load; then
+      /// selects its block.</summary>
       /// <param name="AEntry">A catalog entry -- from FindRuleForType (the "first
       /// rule" case) or from the user's pick in TRuleChooserForm (the "several
       /// rules" case).</param>
       /// <returns>False when nothing was opened -- the user cancelled the
-      /// cross-book prompt, a save failed, or AEntry's book no longer has a
+      /// unsaved-changes prompt, a save failed, or AEntry's book no longer has a
       /// #convert for it (a stale index). The reason is already on the status bar.</returns>
       /// <remarks>
-      /// THE single implementation of the cross-book save/discard prompt.
+      /// A cross-book open is an Open, so it asks only when the book has unsaved
+      /// changes (ConfirmDiscard, as File > Open) -- a saved book switches silently.
       /// Extracted from OpenOwningRule's body (from the "is this a different book"
       /// test onward) so FormTypeDblClick's chooser path can open the entry the
       /// USER picked -- not necessarily FindRuleForType's first -- through the
-      /// exact same prompt, rather than a second copy of it. Displays
+      /// exact same guard, rather than a second copy of it. Displays
       /// BareTypeName(AEntry.FromType) rather than a caller-supplied string, since
       /// the caller may only have the entry.
       /// Whether the target block still needs loading is FActiveHdr = Hdr, not
@@ -893,11 +898,11 @@ type
       /// round 1, review-task-1.md Important 1).
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesDblClick (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, MessageDlg, SameText</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, SameText</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 93 lines (full implementation)</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>
       /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr   Writes: FPendingSelectEntry, FHasPendingSelectEntry</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ConfirmDiscard"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadGridForBlock"/>
@@ -4962,21 +4967,11 @@ begin
 
   if not SameText(AEntry.FilePath, FFilePath) then
   begin
-    if (FFilePath <> '') and (FBook.Nodes.Count > 0) then
-    case MessageDlg(
-        Format('Open %s to edit the %s rule?' + sLineBreak + sLineBreak + 'Yes = save %s first.' + sLineBreak + 'No  = DISCARD any unsaved edits in it and open the other book.', [ExtractFileName(AEntry.FilePath), TypeName, ExtractFileName(FFilePath)]),
-        mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
-      mrCancel: Exit;
-      mrYes   :
-        // Same reasoning as DoCurate: if the save failed, opening the other book
-        // would throw the edits away. DoSave has already said why -- do not
-        // overwrite its message.
-        if not DoSave(nil) then
-        begin
-          SetError('Not opened: the save failed, so your edits are still only in ' + 'this editor and nothing on disk changed.');
-          Exit;
-        end;
-    end; // case
+    // Opening another book is an Open: the same unsaved-changes guard as File >
+    // Open. A failed save returns False too, so the edits are never thrown away;
+    // SaveBook has already put the reason on the status bar.
+    if not ConfirmDiscard then
+      Exit;
     // Tell LoadFile's auto-select which row to pick (fix wave, Important 2) --
     // so it loads the TARGET block instead of row 0, avoiding a wasted proptree
     // fetch when the target is not first in the new book's FRules list.
@@ -6391,6 +6386,7 @@ begin
   Result:= False; // every early Exit below means nothing reached disk
   var LGuard: IInterface:= HourGlass;
   var LOldPath: string:= FFilePath;
+  var LBytesWritten: Boolean:= False;
   if APromptPath or (FFilePath = '') then
   begin
     var Dlg: TSaveDialog:= TSaveDialog.Create(Self);
@@ -6410,9 +6406,10 @@ begin
     finally Dlg.Free; end;
   end; // if
 
-  // Every Exit (and any exception) from here on with Result still False restores
+  // Every Exit (and any exception) from here on BEFORE the bytes reach disk restores
   // the path the book had before this save, so a later plain Save never writes to
-  // a file the user picked in a Save As that did not complete.
+  // a file the user picked in a Save As that did not complete. Once they are on disk,
+  // the new path stays and the snapshot is taken even if validation / rescan raises.
   try
     // 1) backup existing
     if TFile.Exists(FFilePath) then
@@ -6452,6 +6449,7 @@ begin
     end;
 
     TFile.WriteAllText(FFilePath, outText, TEncoding.ASCII);
+    LBytesWritten:= True;
 
     // 3) validate the saved file
     fromT:= '';
@@ -6492,10 +6490,11 @@ begin
       SetStatus(SaveMsg);
     end;
 
-    FSnapshot:= FBook.Snapshot;
     Result:= True; // the file IS on disk; a failed validation is a report, not a failure
   finally
-    if not Result then
+    if LBytesWritten then
+      FSnapshot:= FBook.Snapshot
+    else
     begin
       FFilePath:= LOldPath;
       if LOldPath <> '' then
