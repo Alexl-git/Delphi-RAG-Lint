@@ -213,7 +213,11 @@ $roots = [ordered]@{
   # report). It is OUR source, not vendored, so it is SCANNED rather than
   # excused -- the moment it appeared this guard went RED for an unaccounted
   # directory, which is exactly the accounting assertion working as intended.
-  '.ps1' = @('src', 'tests', 'build', 'stats', 'tools')
+  # 2026-09-29: charts\ arrived with the feat/archify-ir merge -- our own
+  # PowerShell (the chart emitters, Ask-Report, the draglint:// handler), all
+  # ASCII + CRLF at merge time, so it is scanned. Its generated output
+  # (scratch\, artifacts\, docs\examples\) is gitignored and holds no .ps1.
+  '.ps1' = @('src', 'tests', 'build', 'stats', 'tools', 'charts')
   '.pas' = @('src', 'tests', 'build', 'tools', 'circular-demo')
   '.dpr' = @('src', 'tests', 'build', 'tools', 'circular-demo')
   '.dpk' = @('src', 'tests', 'build', 'tools')
