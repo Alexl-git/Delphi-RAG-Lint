@@ -111,16 +111,16 @@ type
     /// iterating actual resolved rows (e.g. one per overload) should call
     /// BuildForSymbol directly instead (see its remarks).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Doc.Document.TDocumenter.BuildForSymbol</para>
     /// <para>Returns: Default(TDocumentResult)</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Pure</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string;
@@ -140,12 +140,12 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Calls: DRagLint.Core.Model.TDocHandlesOptions.Defaults, DRagLint.Doc.Document.TDocumenter.BuildFor/10</para>
     /// <para>Overload 2 of 2</para>
-    /// <para>Pure</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Model.TDocHandlesOptions.Defaults"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildFor(const AStore: ISymbolStore; const AQName: string): TDocumentResult; overload;
@@ -178,7 +178,7 @@ type
     /// on BuildFor's full overload (see its remarks). Result.QName is
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
     /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+20 more)</para>
     /// <para>Returns: Default(TDocumentResult)</para>
     /// <para>Complexity: 29 (cyclomatic, outer body), 504 lines (full implementation)</para>
@@ -209,20 +209,34 @@ type
     /// <returns>The parsed on-disk doc (Default/empty when AHasDoc is False).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.FindDocRegionAbove, DRagLint.Parser.DocComments.TDocCommentParser.Dispatch, DRagLint.Parser.DocComments.TDocCommentScanner.Scan, TDocCommentKind</para>
-    /// <para>Returns: Default(TParsedDoc); TDocCommentParser.Dispatch(Region)</para>
+    /// <para>Called from: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol</para>
+    /// <para>Returns: Default(TParsedDoc); ExistingDocForSymbol(AStore, ASym, AFound, AHasDoc)</para>
     /// <para>Mutates: ASym (out), AFound (out), AHasDoc (out)</para>
-    /// <para>Touches: file system</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Doc.Document.FindDocRegionAbove"/>
-    /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.Dispatch"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function ExistingDocFor(const AStore: ISymbolStore; const AQName: string;
       out ASym: TSymbol; out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
+    /// <summary>ExistingDocFor for an ALREADY-RESOLVED symbol row: the doc-comment
+    /// currently above ASym's OWN declaration line.</summary>
+    /// <param name="AStore">Open symbol store; not owned. Must not be nil.</param>
+    /// <param name="ASym">The symbol row whose declaration to read above.</param>
+    /// <param name="AFound">OUT: True when ASym's file exists on disk.</param>
+    /// <param name="AHasDoc">OUT: True when a doc-comment was found above the decl.</param>
+    /// <returns>The parsed on-disk doc (Default/empty when AHasDoc is False).</returns>
+    /// <remarks>Use this, not ExistingDocFor, whenever the caller already holds
+    /// the row. A name lookup returns the FIRST row, and overloads share one
+    /// qualified name: doc-drift's --fix resolved both overloads of a pair to
+    /// overload 1, emitted two delete+insert pairs over its span, and the second
+    /// delete removed overload 1's DECLARATION (9 lines lost on the
+    /// convrules-editor, 2026-09-29). BuildForSymbol is the matching writer.
+    /// Reads only; writes nothing.</remarks>
+    class function ExistingDocForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+      out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
   end;
 
 implementation
@@ -818,14 +832,7 @@ end;
 class function TDocumenter.ExistingDocFor(const AStore: ISymbolStore; const AQName: string;
   out ASym: TSymbol; out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
 var
-  Syms         : TArray<TSymbol>                                       ;
-  Path         : string                                               ;
-  Src          : string                                               ;
-  Regions      : System.Generics.Collections.TList<TDocCommentRegion> ;
-  Region       : TDocCommentRegion                                    ;
-  FileSyms     : TArray<TSymbol>                                      ;
-  SymStartLines: TArray<Integer>                                      ;
-  I            : Integer                                              ;
+  Syms: TArray<TSymbol>;
 begin
   Result := Default(TParsedDoc);
   ASym   := Default(TSymbol);
@@ -835,6 +842,23 @@ begin
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
   if Length(Syms) = 0 then Exit;
   ASym:= Syms[0];
+  Result:= ExistingDocForSymbol(AStore, ASym, AFound, AHasDoc);
+end;
+
+class function TDocumenter.ExistingDocForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+  out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
+var
+  Path         : string                                               ;
+  Src          : string                                               ;
+  Regions      : System.Generics.Collections.TList<TDocCommentRegion> ;
+  Region       : TDocCommentRegion                                    ;
+  FileSyms     : TArray<TSymbol>                                      ;
+  SymStartLines: TArray<Integer>                                      ;
+  I            : Integer                                              ;
+begin
+  Result := Default(TParsedDoc);
+  AFound := False;
+  AHasDoc:= False;
 
   Path:= AStore.GetFilePath(ASym.FileId);
   if (Path = '') or (not TFile.Exists(Path)) then Exit;

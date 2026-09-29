@@ -223,6 +223,39 @@ begin
       (Pos('/// new doc', After) > 0) and (Pos('/// old doc', After) = 0)
       and (Skipped = 0) and (Touched = 1));
 
+    { 2026-09-29: the doc-drift fixer emitted the SAME delete+insert pair twice
+      for an overload pair (both rows resolved to overload 1 by name). Applied
+      back-to-front, the second delete ran past the doc block and removed the
+      DECLARATION below it. Overlapping deletes in one file are never a valid
+      plan: the file's edits are refused whole and it is left as found. }
+    TFile.WriteAllText(P, 'unit u;'#13#10'/// old doc'#13#10'procedure Ping;'#13#10'procedure Pong;'#13#10, TEncoding.ANSI);
+    Edits:= [Mk(P, tekDeleteLines, 2, 0, 2, ''), Mk(P, tekInsertLines, 1, 0, 0, '/// new doc'),
+             Mk(P, tekDeleteLines, 2, 0, 2, ''), Mk(P, tekInsertLines, 1, 0, 0, '/// new doc')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('a DUPLICATED delete+insert pair is refused whole -- the declaration survives',
+      (Pos('procedure Ping;', After) > 0) and (Pos('/// old doc', After) > 0)
+      and (Pos('/// new doc', After) = 0) and (Skipped = 4) and (Touched = 0));
+
+    { Overlapping but not identical delete ranges: refused the same way. }
+    TFile.WriteAllText(P, 'a'#13#10'b'#13#10'c'#13#10'd'#13#10, TEncoding.ANSI);
+    Edits:= [Mk(P, tekDeleteLines, 1, 0, 2, ''), Mk(P, tekDeleteLines, 2, 0, 3, '')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('overlapping delete ranges are refused -- file left as found',
+      (After = 'a'#13#10'b'#13#10'c'#13#10'd'#13#10) and (Skipped = 2) and (Touched = 0));
+
+    { Positive control: ADJACENT, non-overlapping deletes still apply. }
+    TFile.WriteAllText(P, 'a'#13#10'b'#13#10'c'#13#10'd'#13#10, TEncoding.ANSI);
+    Edits:= [Mk(P, tekDeleteLines, 1, 0, 1, ''), Mk(P, tekDeleteLines, 2, 0, 3, '')];
+    Skipped:= -1;
+    Touched:= TTextEditApplier.Apply(Edits, False, Skipped);
+    After:= TFile.ReadAllText(P, TEncoding.ANSI);
+    Check('adjacent non-overlapping deletes still apply (de-vacuator)',
+      (After = 'd'#13#10) and (Skipped = 0) and (Touched = 1));
+
     if TFile.Exists(P) then TFile.Delete(P);
     if TFile.Exists(P + '.bak') then TFile.Delete(P + '.bak');
   except

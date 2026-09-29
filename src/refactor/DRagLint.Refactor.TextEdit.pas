@@ -107,18 +107,18 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/2 (DRagLint.Refactor.TextEdit.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Refactor.TextEdit.AnchorIsValid, DRagLint.Refactor.TextEdit.EditTopLine, DRagLint.Refactor.TextEdit.ReplaceEditIsValid</para>
+    /// <para>Calls: Copy, DRagLint.Refactor.TextEdit.AnchorIsValid, DRagLint.Refactor.TextEdit.DeletesOverlap, DRagLint.Refactor.TextEdit.EditTopLine, DRagLint.Refactor.TextEdit.ReplaceEditIsValid, Format, Writeln</para>
     /// <para>Returns: Touched</para>
     /// <para>Overload 2 of 2</para>
-    /// <para>Complexity: 33 (cyclomatic, outer body), 162 lines (full implementation)</para>
+    /// <para>Complexity: 34 (cyclomatic, outer body), 174 lines (full implementation)</para>
     /// <para>Mutates: ASkippedEdits (out)</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.AnchorIsValid"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.DeletesOverlap"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.EditTopLine"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.ReplaceEditIsValid"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
-    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
@@ -330,6 +330,35 @@ begin
   Result:= ContainsWholeWord(S, E.ExpectText);
 end;
 
+{ True when two tekDeleteLines edits in AEdits (one file's edits) cover a
+  common line. Overlapping deletes are never a valid plan: applied back-to-front
+  the second one lands on lines the first has already shifted into place, and
+  deletes whatever sits BELOW its intended span. That is how a duplicated
+  doc-repair pair removed nine declarations on 2026-09-29 (both overloads of a
+  pair re-resolved by name to the first). Adjacent ranges do not overlap. }
+function DeletesOverlap(AEdits: TList<TTextEdit>): Boolean;
+var
+  Ranges: TList<TTextEdit>;
+  E     : TTextEdit       ;
+  I     : Integer         ;
+begin
+  Result:= False;
+  Ranges:= TList<TTextEdit>.Create;
+  try
+    for E in AEdits do
+      if E.Kind = tekDeleteLines then Ranges.Add(E);
+    Ranges.Sort(TComparer<TTextEdit>.Construct(
+      function(const A, B: TTextEdit): Integer
+      begin
+        Result:= A.Line - B.Line;
+      end));
+    for I:= 1 to Ranges.Count - 1 do
+      if Ranges[I].Line <= Ranges[I - 1].EndLine then Exit(True);
+  finally
+    Ranges.Free;
+  end;
+end;
+
 class function TTextEditApplier.Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer;
 var
   Skipped: Integer;
@@ -407,6 +436,18 @@ begin
           for E in Group do
             if AnchorIsValid(E, Lines) then Kept.Add(E)
             else Inc(ASkippedEdits);
+
+          { 2026-09-29: an engine that plans overlapping deletes has a defect,
+            and applying its plan destroys lines it never meant to touch. Refuse
+            the file's edits WHOLE -- a partial application is how a repair
+            becomes a loss -- and say so, since the file is left as found. }
+          if DeletesOverlap(Kept) then
+          begin
+            Writeln(ErrOutput, Format('drag-lint: refused %d edit(s) to %s -- overlapping delete ranges ' +
+              '(an engine defect; the file is left unchanged)', [Kept.Count, Pair.Key]));
+            Inc(ASkippedEdits, Kept.Count);
+            Kept.Clear;
+          end;
 
         for E in Kept do
         begin

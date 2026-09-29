@@ -106,15 +106,14 @@ type
     /// per-symbol failures are swallowed so one bad decl cannot abort the sweep.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Lint.DocRules.DocumentedPublicDecls, Flush, Format, GetEnvironmentVariable, Writeln</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Doc.Facts.DocFactsBuildProfile, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift.Tick, Flush, Format, GetEnvironmentVariable, Writeln</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Catches: Exception (empty)</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks"/>
-    /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
+    /// <seealso cref="DRagLint.Doc.Facts.DocFactsBuildProfile"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RunDocDrift(const AStore: ISymbolStore;
@@ -167,14 +166,13 @@ type
     /// Never raises; per-symbol failures are swallowed.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildFor/10, DRagLint.Doc.Document.TDocumenter.ExistingDocFor, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, Format, GetEnvironmentVariable, LowerCase, Writeln</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, Format, GetEnvironmentVariable, LowerCase, Writeln</para>
     /// <para>Returns: nil; Edits.ToArray</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 127 lines (full implementation)</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 134 lines (full implementation)</para>
     /// <para>Catches: Exception (swallowed)</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
-    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocFor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
     /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
     /// <!-- drag-lint:auto END -->
@@ -239,11 +237,10 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Document.TDocumenter.BuildFor/10, LowerCase, SameText</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, IntToStr, LowerCase, SameText</para>
     /// <para>Catches: Exception (empty)</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
-    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildFor"/>
+    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift"/>
     /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift"/>
     /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc"/>
@@ -446,7 +443,10 @@ begin
           decls whose live comment cannot be re-anchored -- there is nothing to
           diff there. }
         T0:= Tick;
-        Live:= TDocumenter.ExistingDocFor(AStore, Sym.QualifiedName, ResSym, Found, HasDoc);
+        { By ROW, not by name: overloads share a qualified name, and a name
+          lookup graded every overload against the FIRST one's doc. }
+        Live:= TDocumenter.ExistingDocForSymbol(AStore, Sym, Found, HasDoc);
+        ResSym:= Sym;
         Inc(TExisting, Tick - T0);
         if (not Found) or (not HasDoc) then Continue;
         Inc(NDiff);
@@ -618,7 +618,14 @@ begin
         if not Reported.ContainsKey(SymPath + '|' + LowerCase(Sym.Name)) then Continue;
         ReportTrace('considering', Sym.QualifiedName);
 
-        Live:= TDocumenter.ExistingDocFor(AStore, Sym.QualifiedName, ResSym, Found, HasDoc);
+        { By ROW, never by name -- read AND write. Resolving Sym.QualifiedName
+          returned the first overload for BOTH rows of a pair, so each emitted a
+          delete+insert over overload 1's doc span and the second delete ran on
+          past it, removing overload 1's DECLARATION: 9 declarations lost on the
+          convrules-editor, 2026-09-29. Guard:
+          tests\autodoc\run_doc_drift_fix_overloads.ps1. }
+        Live:= TDocumenter.ExistingDocForSymbol(AStore, Sym, Found, HasDoc);
+        ResSym:= Sym;
         if (not Found) or (not HasDoc) then
         begin
           ReportTrace(Format('DROP not-found=%d no-doc=%d', [Ord(not Found), Ord(not HasDoc)]), Sym.QualifiedName);
@@ -658,9 +665,9 @@ begin
         { The caps must match what the CHECKER just compared against, or the
           repairer regenerates a block the checker will call stale again -- the
           same divergence, one step further along. See TDocDrift.Analyze. }
-        DocRes:= TDocumenter.BuildFor(AStore, ResSym.QualifiedName, AOpts.Handles, AOpts.IncludeSeeAlso,
-                                      {AIncludeSince=}False, {ABaseDir=}'',
-                                      AOpts.ExtraStores, AOpts.MaxReturnCases, AOpts.MaxCallers);
+        DocRes:= TDocumenter.BuildForSymbol(AStore, Sym, AOpts.Handles, AOpts.IncludeSeeAlso,
+                                            {AIncludeSince=}False, {ABaseDir=}'',
+                                            AOpts.ExtraStores, AOpts.MaxReturnCases, AOpts.MaxCallers);
         if Length(DocRes.Edits) = 0 then ReportTrace('DROP BuildFor-0-edits', ResSym.QualifiedName)
                                      else ReportTrace(Format('OK %d edit(s)', [Length(DocRes.Edits)]), ResSym.QualifiedName);
         for E in DocRes.Edits do Edits.Add(E);
@@ -687,7 +694,8 @@ var
   F     : TLintFinding    ;
   Syms  : TArray<TSymbol> ;
   Sym   : TSymbol         ;
-  QName : string          ;
+  Target: TSymbol         ;
+  DeclKey: string         ;
   DocRes: TDocumentResult ;
   E     : TTextEdit       ;
   Seen  : TDictionary<string, Boolean>;
@@ -720,19 +728,26 @@ begin
           -- and unlike a column check it is immune to StartCol pointing at the
           `procedure` keyword rather than the identifier. A finding with no name
           resolves to NOTHING: refusing beats guessing. }
-        QName:= '';
+        DeclKey:= '';
+        Target := Default(TSymbol);
         if F.SymbolName <> '' then
         begin
           Syms := AStore.FindSymbolsByFile(F.FilePath);
           for Sym in Syms do
             if (Sym.StartLine = F.StartLine) and SameText(Sym.Name, F.SymbolName) then
-            begin QName:= Sym.QualifiedName; Break; end;
+            begin
+              Target := Sym;
+              DeclKey:= LowerCase(Sym.QualifiedName) + '|' + IntToStr(Sym.StartLine);
+              Break;
+            end;
         end;
-        if QName = '' then Continue;
-        { Two findings could resolve to the same decl (defensive) -- BuildFor once
-          per decl so we never emit overlapping insert edits for one span. }
-        if Seen.ContainsKey(LowerCase(QName)) then Continue;
-        Seen.Add(LowerCase(QName), True);
+        if DeclKey = '' then Continue;
+        { Two findings could resolve to the same decl (defensive) -- build once
+          per decl so we never emit overlapping insert edits for one span. Keyed
+          by the ROW (name + line): an overload pair shares the name, and keying
+          on it alone dropped the second overload. }
+        if Seen.ContainsKey(DeclKey) then Continue;
+        Seen.Add(DeclKey, True);
 
         { Explicit caps -- see the declaration's comment. The fully-defaulted
           2-arg overload was used here, so a freshly CREATED block could be
@@ -744,9 +759,11 @@ begin
           checker's default True, NOT something this change introduced, and
           flipping it would alter every created block -- left alone deliberately
           and recorded on the declaration. }
-        DocRes:= TDocumenter.BuildFor(AStore, QName, AOpts.Handles, {AIncludeSeeAlso=}False,
-                                      {AIncludeSince=}False, {ABaseDir=}'',
-                                      AOpts.ExtraStores, AOpts.MaxReturnCases, AOpts.MaxCallers);
+        { BuildForSymbol on the confirmed ROW: BuildFor(QName) would re-resolve to
+          the FIRST overload and document the wrong declaration. }
+        DocRes:= TDocumenter.BuildForSymbol(AStore, Target, AOpts.Handles, {AIncludeSeeAlso=}False,
+                                            {AIncludeSince=}False, {ABaseDir=}'',
+                                            AOpts.ExtraStores, AOpts.MaxReturnCases, AOpts.MaxCallers);
         for E in DocRes.Edits do Edits.Add(E);
       except
         { A single malformed decl must not abort the whole fix sweep. }
