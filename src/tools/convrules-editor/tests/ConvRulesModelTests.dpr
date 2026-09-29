@@ -32,6 +32,7 @@ uses
   , ConvRules.UsesHarvest in '..\ConvRules.UsesHarvest.pas'
   , ConvRules.UnitStatus in '..\ConvRules.UnitStatus.pas'
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
+  , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   ;
 
 var
@@ -1452,6 +1453,114 @@ begin
   finally
     Other.Free;
     Book.Free;
+  end; // try
+end; // procedure
+
+{ ConvRules.ConvertRun -- every decision the Convert tab makes before or after
+  an engine call. The tab and the runner only execute what these return. }
+procedure TestConvertRun;
+var
+  Existing: TArray<string>;
+  Probe   : TFileProbe;
+  Books   : TArray<TBookEntry>;
+  Pre     : TPreflight;
+  Row     : TApplyRow;
+  Errs    : TArray<string>;
+  Dir     : string;
+  Srcs    : TArray<string>;
+const
+  BOOK_COUNT = 3; // convert-only, units-only, mixed
+  JSON_EDITS = 3; // edits_count in the first apply/1 document
+begin
+  // --- NextBackupPath: one above the highest existing N; gaps not reused ---
+  Existing:= [];
+  Probe:= function(const APath: string): Boolean
+    begin
+      Result:= MatchText(APath, Existing);
+    end;
+  Check('convertrun.bck.first', NextBackupPath('x\A.pas', Probe) = 'x\A.pas.BCK1', NextBackupPath('x\A.pas', Probe));
+  Existing:= ['x\A.pas.BCK1', 'x\A.pas.BCK3'];
+  Check('convertrun.bck.above.highest', NextBackupPath('x\A.pas', Probe) = 'x\A.pas.BCK4', NextBackupPath('x\A.pas', Probe));
+  Check('convertrun.bck.per.file', NextBackupPath('x\A.dfm', Probe) = 'x\A.dfm.BCK1', NextBackupPath('x\A.dfm', Probe));
+
+  // --- BookKindOfText ---
+  Check('convertrun.kind.empty'   , BookKindOfText('// only a comment') = bkEmpty);
+  Check('convertrun.kind.convert' , BookKindOfText('#convert A.TX -> B.TY, B' + sLineBreak + '#link P <- P') = bkConvertOnly);
+  Check('convertrun.kind.units'   , BookKindOfText('#useswap Forms -> Vcl.Forms') = bkUnitsOnly);
+  Check('convertrun.kind.mixed'   , BookKindOfText('#unuse Bde.DBTables' + sLineBreak + '#convert A.TX -> B.TY, B' + sLineBreak + '#link P <- P') = bkMixed);
+
+  // --- MoveEntry: order is application order ---
+  SetLength(Books, BOOK_COUNT);
+  Books[0].Path:= 'a';
+  Books[1].Path:= 'b';
+  Books[2].Path:= 'c';
+  Books:= MoveEntry(Books, 2, -1);
+  Check('convertrun.move.up', (Books[1].Path = 'c') and (Books[2].Path = 'b'), Books[0].Path + Books[1].Path + Books[2].Path);
+  Books:= MoveEntry(Books, 0, -1);
+  Check('convertrun.move.clamped', Books[0].Path = 'a', Books[0].Path);
+
+  // --- Preflight ---
+  SetLength(Books, BOOK_COUNT);
+  Books[0].Path:= 'Conv.rules';
+  Books[0].Checked:= True;
+  Books[0].Kind:= bkConvertOnly;
+  Books[1].Path:= 'Units.rules';
+  Books[1].Checked:= True;
+  Books[1].Kind:= bkUnitsOnly;
+  Books[2].Path:= 'Mixed.rules';
+  Books[2].Checked:= True;
+  Books[2].Kind:= bkMixed;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['U1'], False);
+  Check('convertrun.pre.ok', Pre.Ok, string.Join(' | ', Pre.Problems));
+  Check('convertrun.pre.units.only.skipped', string.Join(',', Pre.Runnable) = 'Conv.rules,Mixed.rules', string.Join(',', Pre.Runnable));
+  Check('convertrun.pre.notes', Length(Pre.Notes) = 2, string.Join(' | ', Pre.Notes));
+  Pre:= Preflight(Books, ['p\U1.pas'], ['U1'], True);
+  Check('convertrun.pre.units.supported', Length(Pre.Runnable) = BOOK_COUNT, string.Join(',', Pre.Runnable));
+  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['u1'], False);
+  Check('convertrun.pre.unindexed.refused', (not Pre.Ok) and (Pos('Loose', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
+  Check('convertrun.pre.index.nocase', Pos('U1', string.Join(' ', Pre.Problems)) = 0, string.Join(' | ', Pre.Problems));
+  Books[0].Checked:= False;
+  Books[1].Checked:= False;
+  Books[2].Checked:= False;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['U1'], False);
+  Check('convertrun.pre.no.book', not Pre.Ok, string.Join(' | ', Pre.Problems));
+  Books[0].Checked:= True;
+  Pre:= Preflight(Books, [], ['U1'], False);
+  Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
+
+  // --- ParseApplyJson (schema apply/1) ---
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":3,' +
+    '"converted":["Label1: TLabel -> TStaticText"],"access_sites":[],"creator_sites":[],' +
+    '"todos":["t1"],"reemit_notes":["n1"],"warnings":["w1"],"items":[]}');
+  Check('convertrun.json.ok', Row.Ok and (Row.EditsCount = JSON_EDITS) and (Length(Row.Converted) = 1));
+  Check('convertrun.json.remainder', string.Join(',', Row.Remainder) = 't1,n1,w1', string.Join(',', Row.Remainder));
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[{"line":7,"message":"link ToPath not found"}],' +
+    '"edits_count":0,"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}');
+  Check('convertrun.json.rule.error', (not Row.Ok) and (Pos('line 7', Row.Error) > 0) and (Row.RuleErrorCount = 1), Row.Error);
+  Row:= ParseApplyJson('FATAL: something');
+  Check('convertrun.json.unparseable', (not Row.Ok) and (Pos('FATAL', Row.Error) > 0), Row.Error);
+  // The engine prints "(loaded defaults from ...)" on stderr, and RunCapture merges
+  // stderr into the same pipe: the document starts at the first '{'.
+  Row:= ParseApplyJson('(loaded defaults from C:\x.json)' + sLineBreak + '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,' +
+    '"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}');
+  Check('convertrun.json.leading.noise', Row.Ok and (Row.EditsCount = 2), Row.Error);
+
+  // --- ExpandSources: .pas / folder / .dpr, deduped case-insensitively ---
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrun-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'U1.pas'), 'unit U1; interface implementation end.', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'U2.pas'), 'unit U2; interface implementation end.', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'P.dpr'), 'program P; uses U1 in ''U1.pas'', U2 in ''U2.pas''; begin end.', TEncoding.ASCII);
+    Srcs:= ExpandSources([TPath.Combine(Dir, 'U1.pas'), TPath.Combine(Dir, 'P.dpr'), UpperCase(TPath.Combine(Dir, 'u1.pas'))], Errs);
+    Check('convertrun.expand.dedupe.nocase', Length(Srcs) = 2, string.Join(' | ', Srcs));
+    Check('convertrun.expand.order', SameText(ExtractFileName(Srcs[0]), 'U1.pas') and SameText(ExtractFileName(Srcs[1]), 'U2.pas'), string.Join(' | ', Srcs));
+    Srcs:= ExpandSources([Dir], Errs);
+    Check('convertrun.expand.folder', Length(Srcs) = 2, string.Join(' | ', Srcs));
+    Srcs:= ExpandSources([TPath.Combine(Dir, 'Nope.pas')], Errs);
+    Check('convertrun.expand.missing.error', (Length(Srcs) = 0) and (Length(Errs) = 1), string.Join(' | ', Errs));
+  finally
+    TDirectory.Delete(Dir, True);
   end; // try
 end; // procedure
 
@@ -6683,6 +6792,7 @@ begin
     TestUnitPickFilter;
     TestUnitPickMulti;
     TestBookSnapshot;
+    TestConvertRun;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;
