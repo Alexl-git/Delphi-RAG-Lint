@@ -346,14 +346,7 @@ function Get-FieldVarSiteGrade($Site, [string] $DsName) {
 # TABLE.COLUMN: the dataset fields whose unit names the table beside them. Exactly
 # one proceeds; several is a named stop (Review Focus 2), never a guess.
 function Resolve-AnchorFromColumn([string] $Table, [string] $Col, $R, $SqlSet, [hashtable] $SourceOverride) {
-  $cands = Invoke-IndexQuery @"
-SELECT DISTINCT s.id AS id, s.name AS name, s.qualified_name AS q, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid
-  FROM string_literals sl JOIN refs r ON r.file_id = sl.file_id AND r.start_line = sl.start_line AND r.kind = 'read'
-  JOIN symbols s ON s.name = r.name_text AND s.file_id = sl.file_id AND s.kind = 'field'
-  JOIN files f ON f.id = s.file_id
- WHERE sl.kind = 'literal' AND sl.text = '$(ConvertTo-SqlText $Table)' AND $(Get-DataSetTypeSql 's')
- ORDER BY s.qualified_name
-"@ 'round-trip (datasets of a table)'
+  $cands = Get-TableDataSetRows $Table
   if ($cands.Count -ne 1) {
     $R.Stop = "$Table.$Col`: $($cands.Count) datasets load $Table in this index ($((@($cands | ForEach-Object { [string]$_.q })) -join ', ')) -- pass the control or the dataset field"
     $R.StopAnchor = $(if ($cands.Count) { Get-TraceAnchorText ([string]$cands[0].path) ([int]$cands[0].line) } else { Get-TraceAnchorText ([string]$SqlSet.Tables[$Table].File) ([int]$SqlSet.Tables[$Table].Line) })
@@ -362,6 +355,19 @@ SELECT DISTINCT s.id AS id, s.name AS name, s.qualified_name AS q, s.signature A
   }
   $d = $cands[0]
   Complete-AnchorFromDataSet $R ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) $Col $SqlSet $SourceOverride
+}
+
+# The dataset fields whose unit names $Table beside them -- the TABLE.COLUMN anchor's candidates, and (calc-field
+# fix round 1, I2) whether a TABLE.COLUMN target resolves to one dataset. Assign directly (Invoke-IndexQuery contract).
+function Get-TableDataSetRows([string] $Table) {
+  Invoke-IndexQuery @"
+SELECT DISTINCT s.id AS id, s.name AS name, s.qualified_name AS q, s.signature AS sig, s.start_line AS line, f.path AS path, s.file_id AS fid, s.parent_id AS pid
+  FROM string_literals sl JOIN refs r ON r.file_id = sl.file_id AND r.start_line = sl.start_line AND r.kind = 'read'
+  JOIN symbols s ON s.name = r.name_text AND s.file_id = sl.file_id AND s.kind = 'field'
+  JOIN files f ON f.id = s.file_id
+ WHERE sl.kind = 'literal' AND sl.text = '$(ConvertTo-SqlText $Table)' AND $(Get-DataSetTypeSql 's')
+ ORDER BY s.qualified_name
+"@ 'round-trip (datasets of a table)'
 }
 
 # The four -Target forms of spec section 3. A dotted target of three or more
@@ -1899,6 +1905,7 @@ function Get-SelectStop($ServerItems, $Ctx) {
 # among the dataset's class methods (E3: the assignment is not bound). $Events: the event names
 # to read ($RtEvents, the write events, unless the caller asks for others -- the calc-field
 # check asks for OnCalcFields and for every other On*/After*/Before* event, Part 6).
+# RETURNS ITS ARRAY WHOLE (Sort-RtWiring's unary comma): assign it before piping -- `Get-EventWiring .. | Sort-Object` sorts ONE item.
 function Get-EventWiring($Ds, [string[]] $Events = $script:RtEvents) {
   $rows = Get-AllIndexRows @"
 SELECT r.start_line AS line, r.id AS rid, r.name_text AS ev, e.qualified_name AS routine,
@@ -2098,8 +2105,8 @@ function Find-CalcWrites($H, [string[]] $Vars, [string] $Field) {
 
 # The guards of the computation, VERBATIM (P16): every Exit of the handler before its first write (the Exit
 # guard's own UNLESS / WHEN, from Get-GuardConditionFromLines, the note `else Exit at :N`), then each write's
-# chain of enclosing ifs (Get-EnclosingChainFromLines: WHEN "C" in a then branch; if-forms only, as the walk). A shape the shim cannot read
-# is not guessed: its generated reason is returned in Unknown for the STOPS note. Pure.
+# chain of enclosing ifs (WHEN "C" in a then branch; if-forms only, as the walk), read past a case (Cases: the selectors).
+# A shape the shim cannot read is not guessed: its generated reason is returned in Unknown for the STOPS note. Pure.
 function Get-CalcConditions($H, $Writes) {
   $out = New-Object System.Collections.ArrayList; $unk = New-Object System.Collections.ArrayList; $seen = @{}
   $first = @($Writes | Sort-Object Line, Col)[0]
@@ -2110,54 +2117,124 @@ function Get-CalcConditions($H, $Writes) {
     if ($g.Form -eq 'unknown') { [void]$unk.Add($g.Reason); continue }
     & $add $g.Keyword $g.Condition $g.IfLine "else Exit at :$xl"
   }
-  # the if-forms only, as Walk-Routine writes them (a case arm or an except handler is not a branch condition);
-  # when the field is written by several statements, each condition names the writes it encloses
-  $around = [ordered]@{}
+  # fix round 1 (I1): each write's chain of enclosing statements, read OUTWARDS past a case. A case arm (or a case
+  # else arm) is not a branch CONDITION -- the shim does not quote an arm label -- so the case is recorded as a
+  # SELECTOR of the formula (its `case X of` span; its reads become DERIVED rows) and the chain continues from the
+  # case token, so an if that encloses the whole case (Assigned(...)) is still written for the writes inside it.
+  # Any other shape the shim cannot place ends the chain and its generated reason goes to Unknown (the STOPS note).
+  # A condition names the writes it encloses only when it does not enclose them all.
+  $tok = Get-ShimTokens $H.Stripped $H.ImplStart $H.ImplEnd
+  $around = [ordered]@{}; $cases = [ordered]@{}
+  $wlines = @($Writes | ForEach-Object { $_.Line } | Sort-Object -Unique)
+  $addCase = { param($ct, $wl)
+    $k = "$($ct.L):$($ct.C)"
+    if (-not $cases.Contains($k)) {
+      $of = @(foreach ($q in $tok) { if (($q.L -gt $ct.L -or ($q.L -eq $ct.L -and $q.C -gt $ct.C)) -and $q.T -eq 'of') { $q; break } })
+      $cases[$k] = [pscustomobject]@{ L = $ct.L; C = $ct.C; E = $ct.E; OfL = $(if ($of.Count) { $of[0].L } else { 0 }); OfC = $(if ($of.Count) { $of[0].C } else { 0 }); Lines = (New-Object System.Collections.ArrayList) }
+    }
+    if (-not $cases[$k].Lines.Contains($wl)) { [void]$cases[$k].Lines.Add($wl) } }
   foreach ($w in $Writes) {
-    foreach ($e in @(Get-EnclosingChainFromLines $H.Raw $H.Stripped $w.Line $w.Col $H.ImplStart | ForEach-Object { $_ } | Where-Object { $_.Form -in 'inline', 'block' })) {
-      $k = "$($e.Keyword)|$($e.Condition)|$($e.IfLine)"
-      if (-not $around.Contains($k)) { $around[$k] = [pscustomobject]@{ E = $e; Lines = (New-Object System.Collections.ArrayList) } }
-      if (-not $around[$k].Lines.Contains($w.Line)) { [void]$around[$k].Lines.Add($w.Line) }
+    $l = $w.Line; $c = $w.Col
+    for ($i = 0; $i -lt 16; $i++) {
+      $e = Get-EnclosingConditionFromLines $H.Raw $H.Stripped $l $c $H.ImplStart $tok
+      if ($e.Form -eq 'unknown') {
+        if ($e.Reason -match 'sits in a case arm') {
+          $ct = Find-EnclosingCase $tok $l $c
+          if ($ct) { & $addCase $ct $w.Line; $l = $ct.L; $c = $ct.C; continue }
+        }
+        if ($e.Reason -notmatch 'is not inside a branch') { [void]$unk.Add($e.Reason) }
+        break
+      }
+      if ($e.Form -eq 'case') {
+        $ct = @($tok | Where-Object { $_.L -eq $e.StmtLine -and $_.C -eq $e.StmtCol -and $_.T -eq 'case' })
+        if ($ct.Count) { & $addCase $ct[0] $w.Line }
+      } elseif ($e.Form -in 'inline', 'block') {
+        $k = "$($e.Keyword)|$($e.Condition)|$($e.IfLine)"
+        if (-not $around.Contains($k)) { $around[$k] = [pscustomobject]@{ E = $e; Lines = (New-Object System.Collections.ArrayList) } }
+        if (-not $around[$k].Lines.Contains($w.Line)) { [void]$around[$k].Lines.Add($w.Line) }
+      }
+      if (-not $e.StmtLine -or ($e.StmtLine -eq $l -and $e.StmtCol -ge $c)) { break }
+      $l = $e.StmtLine; $c = $e.StmtCol
     }
   }
   foreach ($a in $around.Values) {
-    & $add $a.E.Keyword $a.E.Condition $a.E.IfLine $(if (@($Writes).Count -gt 1) { "around the write$(if ($a.Lines.Count -gt 1) { 's' }) at $((@($a.Lines | ForEach-Object { ":$_" })) -join ', ')" } else { '' })
+    $all = $a.Lines.Count -ge $wlines.Count
+    & $add $a.E.Keyword $a.E.Condition $a.E.IfLine $(if ($all) { '' } else { "around the write$(if ($a.Lines.Count -gt 1) { 's' }) at $((@($a.Lines | Sort-Object | ForEach-Object { ":$_" })) -join ', ')" })
   }
-  [pscustomobject]@{ Conds = $out.ToArray(); Unknown = $unk.ToArray() }
+  [pscustomobject]@{ Conds = $out.ToArray(); Unknown = $unk.ToArray(); Cases = @($cases.Values | Sort-Object L, C) }
 }
 
+# The `case` token that opens the case whose arm holds the statement at ($Line, 0-based $Col): back over balanced
+# blocks to the first unclosed opener; $null when that opener is not a case. $Tok: Get-ShimTokens. Pure.
+function Find-EnclosingCase($Tok, [int] $Line, [int] $Col) {
+  $d = 0
+  for ($q = $Tok.Count - 1; $q -ge 0; $q--) {
+    $k = $Tok[$q]
+    if ($k.L -gt $Line -or ($k.L -eq $Line -and $k.E -gt $Col)) { continue }
+    if ($k.T -in $script:ShimClosers) { $d++; continue }
+    if ($k.T -in $script:ShimOpeners) {
+      if ($d -gt 0) { $d--; continue }
+      return $(if ($k.T -eq 'case') { $k } else { $null })
+    }
+  }
+  $null
+}
+
+# Unknown reasons that differ only in their line (`the statement at :N <rest>`) merged into one. Pure.
+function Join-CalcReasons([string[]] $Reasons) {
+  $g = [ordered]@{}; $other = @()
+  foreach ($r in $Reasons) {
+    if ($r -match '^the (\w+) at :(\d+) (.+)$') { $k = "$($Matches[1])|$($Matches[3])"; if (-not $g.Contains($k)) { $g[$k] = @() }; $g[$k] += $Matches[2] }
+    elseif ($other -notcontains $r) { $other += $r }
+  }
+  @(foreach ($k in $g.Keys) { $w, $rest = $k -split '\|', 2; $ls = @($g[$k] | Select-Object -Unique)
+    $(if ($ls.Count -gt 1) { "the $($w)s at $((@($ls | ForEach-Object { ":$_" })) -join ', ') $($rest -replace '^sits ', 'sit ')" } else { "the $w at :$($ls[0]) $rest" }) }) + $other
+}
 # What one read on a computation's right-hand side is: a TField variable of the class (Kind var), a LOCAL of
 # the handler resolved ONE hop -- its one assignment before the read names exactly one TField variable (Kind
-# local) -- or something the walk cannot map (Kind unmapped, with Why). $null: a constant (a bound enum value,
-# type or routine), which is not a source. Locals shadow class fields, as in Pascal. Pure.
+# local) -- a `<ds>.FieldByName('<lit>')` read on the handler's dataset parameter or the anchor dataset (Kind fbn,
+# fix round 1 I2: the literal is read from the fresh line), a TField variable the walk cannot bind (Kind unmapped,
+# IsField), or a value it cannot place (Kind unmapped, with Why). $null: a constant -- a bound enum value, type
+# or routine, or (fix round 1 M3, NAME SHAPE, no library index is read: the charts read clones only) an unbound
+# name that is a receiver or call head (`TTktVerd.FromInteger`, `Integer(...)`) or has the Delphi enum/type shape
+# (`dsInsert`, `ffFixed`, `TSpecType`). Locals shadow class fields, as in Pascal. Pure.
 function Resolve-CalcRead($F, $H, $R) {
-  $nm = [string]$R.nm
+  $nm = [string]$R.nm; $ln = [int]$R.line
   if ($nm -eq 'Self') { return $null }
+  $fb = @($H.Refs | Where-Object { [string]$_.kind -eq 'member-access' -and [string]$_.nm -eq 'FieldByName' -and [string]$_.recv -eq $nm -and [int]$_.line -eq $ln -and [int]$_.col -gt [int]$R.col } | Sort-Object { [int]$_.col } | Select-Object -First 1)
+  if ($fb.Count -and (($H.Locals.ContainsKey($nm) -and $H.Locals[$nm] -eq 'param') -or $nm -eq $F.DsName)) {
+    $c0 = [int]$fb[0].col - 1; $raw = $H.Raw[$ln - 1]
+    $m = $(if ($c0 -lt $raw.Length) { [regex]::Match($raw.Substring($c0), "^FieldByName\s*\(\s*'((?:[^']|'')*)'\s*\)") } else { $null })
+    if (-not $m -or -not $m.Success) { return [pscustomobject]@{ Kind = 'unmapped'; IsField = $true; Name = "$nm.FieldByName"; Why = 'its argument is not a string literal' } }
+    return [pscustomobject]@{ Kind = 'fbn'; Name = "$nm.FieldByName"; Recv = $nm; Literal = $m.Groups[1].Value.Replace("''", "'"); IsParam = ($nm -ne $F.DsName) }
+  }
   if ($H.Locals.ContainsKey($nm)) {
-    if ($H.Locals[$nm] -ne 'local_var') { return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a parameter of $($H.Name)" } }
-    $pos = [int]$R.line * 100000 + [int]$R.col
+    if ($H.Locals[$nm] -ne 'local_var') { return [pscustomobject]@{ Kind = 'unmapped'; IsField = $false; Name = $nm; Why = "a parameter of $($H.Name)" } }
+    $pos = $ln * 100000 + [int]$R.col
     $ws = @($H.Refs | Where-Object { [string]$_.kind -eq 'write' -and [string]$_.nm -eq $nm -and ([int]$_.line * 100000 + [int]$_.col) -lt $pos })
-    if ($ws.Count -ne 1) { return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a local of $($H.Name) set at $($ws.Count) places before this read" } }
+    if ($ws.Count -ne 1) { return [pscustomobject]@{ Kind = 'unmapped'; IsField = $false; Name = $nm; Why = "a local of $($H.Name) set at $($ws.Count) places before this read" } }
     $w = $ws[0]
     $sp = Get-StatementSpan $H.Stripped ([int]$w.line) ([int]$w.col - 1) $H.ImplEnd
     $vs = @($H.Refs | Where-Object { [string]$_.kind -eq 'read' -and (Test-InStatementRhs $sp ([int]$_.line) ([int]$_.col - 1)) -and -not $H.Locals.ContainsKey([string]$_.nm) -and
                                      $F.ClassFields.ContainsKey([string]$_.nm) -and ([string]$F.ClassFields[[string]$_.nm]) -match '^T\w*Field$' } |
              ForEach-Object { [string]$_.nm } | Sort-Object -Unique)
-    if ($vs.Count -ne 1) { return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a local of $($H.Name) set at :$([int]$w.line) from $($vs.Count) TField variables" } }
+    if ($vs.Count -ne 1) { return [pscustomobject]@{ Kind = 'unmapped'; IsField = $false; Name = $nm; Why = "a local of $($H.Name) set at :$([int]$w.line) from $($vs.Count) TField variables" } }
     return [pscustomobject]@{ Kind = 'local'; Name = $nm; Var = $vs[0]; SetLine = [int]$w.line }
   }
   if ($F.ClassFields.ContainsKey($nm)) {
     $sig = [string]$F.ClassFields[$nm]
     if ($sig -match '^T\w*Field$') { return [pscustomobject]@{ Kind = 'var'; Name = $nm; Var = $nm } }
-    return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a field of $($F.ClassName) of type $sig, not a TField variable" }
+    return [pscustomobject]@{ Kind = 'unmapped'; IsField = $false; Name = $nm; Why = "a field of $($F.ClassName) of type $sig, not a TField variable" }
   }
   if ($R.tid) {
     if ([string]$R.tkind -in $script:CalcConstKinds) { return $null }
-    return [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "a $([string]$R.tkind) outside $($F.ClassName), not a TField variable" }
+    return [pscustomobject]@{ Kind = 'unmapped'; IsField = $false; Name = $nm; Why = "a $([string]$R.tkind) outside $($F.ClassName), not a TField variable" }
   }
-  [pscustomobject]@{ Kind = 'unmapped'; Name = $nm; Why = "not a field, local or parameter the walk can place" }
+  $s = $H.Stripped[$ln - 1]; $e = [int]$R.ecol - 1
+  if ($e -le $s.Length -and $s.Substring($e) -match '^\s*[.(]') { return $null }
+  if ($nm -cmatch '^[a-z]{2,4}[A-Z]\w*$' -or $nm -cmatch '^[TE][A-Z]\w*$') { return $null }
+  [pscustomobject]@{ Kind = 'unmapped'; IsField = $false; Name = $nm; Why = "not a field, local or parameter the walk can place" }
 }
-
 # The decision, PURE over the facts of Get-CalcFieldFacts (or synthetic ones). $F: Field (as the selection
 # names it), DsName, Table, ClassName, Vars (the TField variables bound to the field), Bindings (var ->
 # Get-CalcBinding result), ClassFields (name -> declared type), Wirings (Event, Line, Handler, WirePath, H),
@@ -2187,18 +2264,30 @@ function Resolve-CalcField($F) {
 function New-CalcInfo($F, $Wire, $Writes) {
   $H = $Wire.H
   $cd = Get-CalcConditions $H $Writes
-  # the reads on every write's right-hand side, in source order; one row per variable (or name)
+  # the reads on every write's right-hand side, in source order, then (fix round 1 I1) the reads in the SELECTOR of
+  # every case that picks among the writes; one row per source -- a TField variable and a FieldByName read of the
+  # same column are one source (I2), keyed by the column
   $rhs = @($H.Refs | Where-Object { [string]$_.kind -eq 'read' } | Where-Object { $r = $_; @($Writes | Where-Object { Test-InStatementRhs $_.Span ([int]$r.line) ([int]$r.col - 1) }).Count } |
            Sort-Object { [int]$_.line }, { [int]$_.col })
   $src = New-Object System.Collections.ArrayList; $have = @{}
-  foreach ($r in $rhs) {
-    if ($F.Vars -contains [string]$r.nm) { continue }
+  $take = { param($r, $sel)
+    if ($F.Vars -contains [string]$r.nm) { return }
     $x = Resolve-CalcRead $F $H $r
-    if (-not $x) { continue }
-    $key = $(if ($x.Kind -eq 'unmapped') { "?$($x.Name)" } else { $x.Var })
-    if ($have.ContainsKey($key)) { continue }
+    if (-not $x) { return }
+    $b = $(if ($x.Kind -in 'var', 'local') { $F.Bindings[$x.Var] } else { $null })
+    $key = $(if ($x.Kind -eq 'unmapped') { "?$($x.Name)" } elseif ($x.Kind -eq 'fbn') { "#$($x.Literal.ToUpperInvariant())" }
+             elseif ($b -and -not $b.Why -and $b.DataSet -eq $F.DsName) { "#$($b.Literal.ToUpperInvariant())" } else { $x.Var })
+    if ($have.ContainsKey($key)) { return }
     $have[$key] = 1
-    [void]$src.Add((New-CalcSourceRow $F $H $r $x))
+    [void]$src.Add((New-CalcSourceRow $F $H $r $x $sel))
+  }
+  foreach ($r in $rhs) { & $take $r '' }
+  foreach ($cs in $cd.Cases) {
+    if (-not $cs.OfL) { continue }
+    $sp = [pscustomobject]@{ AssignLine = $cs.L; AssignCol = $cs.E - 2; L2 = $cs.OfL; C2 = $cs.OfC }
+    foreach ($r in @($H.Refs | Where-Object { [string]$_.kind -eq 'read' -and (Test-InStatementRhs $sp ([int]$_.line) ([int]$_.col - 1)) } | Sort-Object { [int]$_.line }, { [int]$_.col })) {
+      & $take $r "case at $(Get-TraceNoteLocator $H.Path $H.Path $cs.L)"
+    }
   }
   # the call that computes the value: the first token of a right-hand side, when it is a call; the others named
   $calls = @($H.Refs | Where-Object { [string]$_.kind -eq 'call' } | Where-Object { $r = $_; @($Writes | Where-Object { Test-InStatementRhs $_.Span ([int]$r.line) ([int]$r.col - 1) }).Count } |
@@ -2223,39 +2312,44 @@ function New-CalcInfo($F, $Wire, $Writes) {
   }
   $first = @($Writes | Sort-Object Line, Col)[0]
   $anchor = Get-TraceAnchorText $H.Path $first.Line
-  $created = $(if ($F.Creating) { "created at $(Get-TraceNoteLocator $H.Path $F.Creating.Path $F.Creating.Line), " } else { '' })
-  $kindNote = $(if ($F.Creating -and $F.Creating.Kind) { ", $($F.Creating.Call) at $(Get-TraceNoteLocator $H.Path $F.Creating.Path $F.Creating.Line) sets FieldKind $($F.Creating.Kind) at $(Get-TraceNoteLocator $H.Path $F.Creating.KindPath $F.Creating.KindLine)" } else { '' })
-  $unkNote = $(if ($cd.Unknown.Count) { ", not read as a guard: $((@($cd.Unknown | ForEach-Object { ConvertTo-TraceNoteText $_ })) -join ', ')" } else { '' })
+  # fix round 1 (M1): "created" only when the creating call's body sets FieldKind exactly once; otherwise the line
+  # only NAMES the field beside its dataset
+  $cloc = $(if ($F.Creating) { Get-TraceNoteLocator $H.Path $F.Creating.Path $F.Creating.Line } else { '' })
+  $created = $(if (-not $F.Creating) { '' } elseif ($F.Creating.Kind) { "created (FieldKind $($F.Creating.Kind)) at $cloc, " } else { "named at $cloc, " })
+  $kindNote = $(if ($F.Creating -and $F.Creating.Kind) { ", $($F.Creating.Call) sets FieldKind $($F.Creating.Kind) at $(Get-TraceNoteLocator $H.Path $F.Creating.KindPath $F.Creating.KindLine)" } else { '' })
+  $unkNote = $(if ($cd.Unknown.Count) { ", not read as a guard: $((@(Join-CalcReasons $cd.Unknown | ForEach-Object { ConvertTo-TraceNoteText $_ })) -join ', ')" } else { '' })
+  # fix round 1 (I1): the cases that pick the formula are not guards -- say which writes each picks among
+  $caseNote = $(if ($cd.Cases.Count) { ", the formula is chosen by $((@($cd.Cases | ForEach-Object { "the case at $(Get-TraceNoteLocator $H.Path $H.Path $_.L) (writes at $((@($_.Lines | Sort-Object | ForEach-Object { ":$_" })) -join ', '))" })) -join ' and '), $(if ($cd.Cases.Count -gt 1) { 'their selectors are' } else { 'its selector is' }) offered below" } else { '' })
   [pscustomobject]@{
     Kind = 'calculated'; Field = $F.Field; DsName = $F.DsName; Table = $F.Table; Handler = $Wire; Writes = $Writes; Anchor = $anchor
     Conds = $cd.Conds; CondUnknown = $cd.Unknown; Sources = $src.ToArray(); HeadCall = $hcall
     StopText = "$($F.Field) is a calculated field of $($F.DsName) (${created}computed in $($Wire.Handler) at $(Get-TraceNoteLocator $H.Path $H.Path $H.ImplStart)-$($H.ImplEnd)), not a column of $($F.Table) in the SQL index"
-    StopNote = "wired as $($F.DsName).OnCalcFields at $(Get-TraceNoteLocator $H.Path $Wire.WirePath $Wire.Line), the handler matched by name$kindNote$unkNote"
+    StopNote = "wired as $($F.DsName).OnCalcFields at $(Get-TraceNoteLocator $H.Path $Wire.WirePath $Wire.Line), the handler matched by name$kindNote$caseNote$unkNote"
   }
 }
 
-# One offered source as row data: Text, Line (the read on the statement), Grade, Note, Ask, Target (the
-# -Target that traces it instead, '' when there is none) and Mapped (a field, not an unmapped value). Pure.
-function New-CalcSourceRow($F, $H, $R, $X) {
-  $row = [pscustomobject]@{ Text = ''; Line = [int]$R.line; Grade = ''; Note = ''; Ask = ''; Target = ''; Mapped = $false; Name = $X.Name }
-  if ($X.Kind -eq 'unmapped') { $row.Text = ConvertTo-TraceStopText "FROM $($X.Name), not mapped: $($X.Why)"; return $row }
+# One offered source as row data: Text, Line (the read), Grade, Note (without the binding reason), Reason (the
+# binding's Task 3 reason, which New-CalcFieldItems states ONCE when every row shares it -- fix round 1 M4), Ask,
+# Target (the -Target that traces it instead, '' when there is none), IsField (a field, mapped or not -- not an
+# other value) and Selector ('' or `case at :N`: the read picks the formula, fix round 1 I1). Pure.
+function New-CalcSourceRow($F, $H, $R, $X, [string] $Sel = '') {
+  $row = [pscustomobject]@{ Text = ''; Line = [int]$R.line; Grade = ''; Note = ''; Reason = ''; Ask = ''; Target = ''; IsField = $true; Selector = $Sel; Name = $X.Name }
+  $selText = $(if ($Sel) { ", selects the formula ($Sel)" } else { '' })
+  if ($X.Kind -eq 'unmapped') { $row.IsField = [bool]$X.IsField; $row.Text = ConvertTo-TraceStopText "FROM $($X.Name), not mapped: $($X.Why)$selText"; return $row }
+  if ($X.Kind -eq 'fbn') { return (New-CalcFieldByNameRow $F $H $R $X $row $selText) }
   $b = $F.Bindings[$X.Var]
   if (-not $b -or $b.Why) {
     $why = $(if ($b) { $b.Why } else { 'no binding line of it is in the index' })
-    $row.Text = ConvertTo-TraceStopText "FROM $($X.Name), not mapped: $($X.Var) $why"; return $row
+    $row.Text = ConvertTo-TraceStopText "FROM $($X.Name), not mapped: $($X.Var) $why$selText"; return $row
   }
-  $row.Mapped = $true; $row.Target = $b.Qname
-  $mark = ''
-  if ($b.DataSet -ne $F.DsName) { $label = "$($b.Literal) of $($b.DataSet)" }
-  elseif ((Find-CalcWrites $H @($X.Var) $b.Literal).Count) { $label = $b.Literal; $mark = ' (calculated)' }
-  elseif (& $F.IsColumn $F $b.Literal) { $label = "$($F.Table).$($b.Literal.ToUpperInvariant())" }
-  else { $label = $b.Literal; $mark = " (not a column of $($F.Table))" }
+  $row.Target = $b.Qname
+  $label = Get-CalcColumnLabel $F $H @($X.Var) $b.Literal $b.DataSet
   $via = $(if ($X.Kind -eq 'local') { "$($X.Name), set from $($X.Var)" } else { $X.Var })
-  $row.Text = ConvertTo-TraceStopText "FROM $label$mark VIA $via"
-  $bound = "$($X.Var) bound at $(Get-TraceNoteLocator $H.Path $b.Path $b.Line): $($b.Reason)"
+  $row.Text = ConvertTo-TraceStopText "FROM $label VIA $via$selText"
   $pre = $(if ($X.Kind -eq 'local') { "$($X.Name) set at :$($X.SetLine), " } else { '' })
-  $calc = $(if ($mark -eq ' (calculated)') { "itself calculated in $($H.Name), not expanded, " } else { '' })
-  $row.Note = ConvertTo-TraceNoteText "$calc$pre$bound"
+  $calc = $(if ($label -like '* (calculated)') { "itself calculated in $($H.Name), not expanded, " } else { '' })
+  $row.Note = ConvertTo-TraceNoteText "$calc$pre$($X.Var) bound at $(Get-TraceNoteLocator $H.Path $b.Path $b.Line) $($b.Via)"
+  $row.Reason = ConvertTo-TraceNoteText $b.Reason
   # the read of an in-class field is unbound in this index: matched by name among the class's fields
   $unbound = -not $R.tid
   $row.Grade = $(if ($b.Grade) { $b.Grade } elseif ($unbound) { 'by name' } else { '' })
@@ -2263,19 +2357,55 @@ function New-CalcSourceRow($F, $H, $R, $X) {
   $row
 }
 
+# The label of a source column: `<TABLE>.<COL>` for a column of the anchor's table, `<lit> (calculated)` when the
+# same handler writes it (marked, not expanded), `<lit> (not a column of <TABLE>)`, `<lit> of <DataSet>` for another
+# dataset's field. $Vars: the TField variables bound to it. Pure (IsColumn is the facts' scriptblock).
+function Get-CalcColumnLabel($F, $H, [string[]] $Vars, [string] $Lit, [string] $DataSet) {
+  if ($DataSet -ne $F.DsName) { return "$Lit of $DataSet" }
+  if ((Find-CalcWrites $H $Vars $Lit).Count) { return "$Lit (calculated)" }
+  if (& $F.IsColumn $F $Lit) { return "$($F.Table).$($Lit.ToUpperInvariant())" }
+  "$Lit (not a column of $($F.Table))"
+}
+
+# fix round 1 (I2): `<ds>.FieldByName('<lit>')` read on the right-hand side -- the canonical OnCalcFields idiom. The
+# column is the literal on the anchor's dataset (the handler's dataset parameter is TAKEN as it: [inferred]). The
+# -Target that resolves to THIS dataset: a TField variable bound to the same column; else TABLE.COLUMN when exactly one
+# dataset loads the table (Resolve-AnchorFromColumn stops otherwise); else none, and the row says why.
+function New-CalcFieldByNameRow($F, $H, $R, $X, $Row, [string] $SelText) {
+  $lit = $X.Literal
+  $bv = @($F.Bindings.Values | Where-Object { -not $_.Why -and $_.DataSet -eq $F.DsName -and $_.Literal -ieq $lit } | Sort-Object Var)
+  $label = Get-CalcColumnLabel $F $H @($bv | ForEach-Object { $_.Var }) $lit $F.DsName
+  $Row.Text = ConvertTo-TraceStopText "FROM $label VIA $($X.Recv).FieldByName$SelText"
+  $who = $(if ($X.IsParam) { "$($X.Recv) is a parameter of $($H.Name), taken as $($F.DsName)" } else { "on $($F.DsName)" })
+  if ($bv.Count) {
+    $Row.Target = $bv[0].Qname
+    $how = "traced through $($bv[0].Var), bound at $(Get-TraceNoteLocator $H.Path $bv[0].Path $bv[0].Line) $($bv[0].Via)"
+  } elseif ($label -notmatch ' \(' -and [int]$F.TableDataSets -eq 1) {
+    $Row.Target = "$($F.Table).$($lit.ToUpperInvariant())"
+    $how = "traced as $($Row.Target), the one dataset that loads $($F.Table)"
+  } else {
+    $how = "no -Target resolves to $($F.DsName): $([int]$F.TableDataSets) datasets load $($F.Table) and no TField variable is bound to '$lit'"
+  }
+  $Row.Note = ConvertTo-TraceNoteText "$who, $how"
+  $Row.Grade = $(if ($X.IsParam) { 'inferred' } elseif (-not $R.tid) { 'by name' } else { '' })
+  $Row.Ask = $(if (-not $X.IsParam -and -not $R.tid) { 'in-class-field-reads' } else { '' })
+  $Row
+}
+
 # A TField variable's binding from its write rows (Get-FieldVarWriteRows): exactly ONE (dataset field, column
-# literal) pair binds it -- DataSet, Literal, Line, Path, Qname and the Task 3 grade -- else Why says what the
-# rows name instead. Pure.
+# literal) pair binds it -- DataSet, Literal, Line, Path, Qname, Via (`via FF` / `by FieldByName`, the row's short
+# form) and the Task 3 grade -- else Why says what the rows name instead. Pure.
 function Get-CalcBinding([string] $Var, $Rows) {
   $fp = Get-FieldVarPairs $Rows
   if ($fp.Pairs.Count -ne 1) { return [pscustomobject]@{ Var = $Var; Why = "is written on $(@($Rows).Count) line(s) naming $($fp.Pairs.Count) (dataset field, column literal) pairs" } }
   $ds, $lit = $fp.Pairs[0] -split '\|'
   $site = $fp.Ok[0]
   $g = Get-FieldVarSiteGrade $site $ds
+  $cl = @(([string]$site.calls) -split ',' | Where-Object { $_ -and $_ -ne 'FieldByName' } | Sort-Object -Unique)
+  $via = $(if ([int]$(if ($site.fbn) { $site.fbn } else { 0 }) -gt 0) { 'by FieldByName' } elseif ($cl.Count -eq 1) { "via $($cl[0])" } elseif ($cl.Count) { "via one of $($cl -join ', ')" } else { 'with no call on the line' })
   [pscustomobject]@{ Var = $Var; Why = ''; DataSet = $ds; Literal = $lit; Line = [int]$site.line; Path = [string]$site.path; Qname = [string]$site.vq
-                     Grade = $g.Grade; Reason = $g.Reason; Ask = $g.Ask }
+                     Grade = $g.Grade; Reason = $g.Reason; Ask = $g.Ask; Via = $via }
 }
-
 # One handler's facts: its refs (nested routines' left out, as Get-RoutineFacts does), its locals and
 # parameters, and its FRESH source (Get-TraceSource refuses a stale file).
 function Get-CalcHandler($Wiring, [hashtable] $SourceOverride) {
@@ -2332,17 +2462,20 @@ SELECT sl.start_line AS line FROM string_literals sl
     $call = Invoke-IndexQuery "SELECT r.name_text AS nm, COALESCE((SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = r.id), r.symbol_id) AS tid FROM refs r WHERE r.file_id = $($Ds.Fid) AND r.start_line = $ln AND r.kind = 'call' ORDER BY r.start_col LIMIT 1"
     $creating = [pscustomobject]@{ Line = $ln; Path = $Ds.File; Call = $(if ($call.Count) { [string]$call[0].nm } else { '' }); Kind = ''; KindLine = 0; KindPath = '' }
     if ($call.Count -and $call[0].tid) {
+      # fix round 1 (M1): the kind only when the body sets FieldKind on exactly ONE line (a helper that sets it on
+      # several, by branch, proves no kind for this field)
       $fk = Invoke-IndexQuery @"
 SELECT r.name_text AS k, r.start_line AS line, f.path AS path FROM refs r JOIN files f ON f.id = r.file_id
  WHERE r.enclosing_symbol_id = $([int]$call[0].tid) AND r.kind = 'read' AND r.name_text IN ($(ConvertTo-SqlInList $script:CalcFkKinds))
    AND EXISTS (SELECT 1 FROM refs m WHERE m.file_id = r.file_id AND m.start_line = r.start_line AND m.kind = 'member-access' AND m.name_text = 'FieldKind')
- ORDER BY r.start_line LIMIT 1
+ ORDER BY r.start_line LIMIT 5
 "@
-      if ($fk.Count) { $creating.Kind = [string]$fk[0].k; $creating.KindLine = [int]$fk[0].line; $creating.KindPath = [string]$fk[0].path }
+      if ($fk.Count -eq 1) { $creating.Kind = [string]$fk[0].k; $creating.KindLine = [int]$fk[0].line; $creating.KindPath = [string]$fk[0].path }
     }
   }
+  $tds = Get-TableDataSetRows $Table     # assigned directly: @(...) would nest it (Invoke-IndexQuery contract)
   [pscustomobject]@{ Field = $Col; DsName = $Ds.Name; Table = $Table; ClassName = $(if ($cls.Count) { [string]$cls[0].name } else { '' })
-                     Vars = $vars; Bindings = $bind; ClassFields = $fields; Wirings = $wir.ToArray(); Creating = $creating
+                     Vars = $vars; Bindings = $bind; ClassFields = $fields; Wirings = $wir.ToArray(); Creating = $creating; TableDataSets = $tds.Count
                      SqlSet = $SqlSet; SourceOverride = $SourceOverride; IsColumn = { param($F, $lit) (Get-SqlColumnState $F.SqlSet $F.Table $lit $F.SourceOverride).IsColumn } }
 }
 
@@ -2359,18 +2492,28 @@ function New-CalcFieldItems($Info, [scriptblock] $CmdFor) {
   $stop = New-TraceStep 'stops' (ConvertTo-TraceStopText $Info.StopText) $Info.Anchor '' $H.Name (ConvertTo-TraceNoteText $Info.StopNote) 'E3'
   foreach ($c in $Info.Conds) { [void]$stop.Children.Add((New-TraceCond $c.Keyword $c.Condition (Get-TraceAnchorText $H.Path $c.Line) $c.Note)) }
   if ($Info.HeadCall) { [void]$stop.Children.Add((New-TraceFacet 'VIA' $Info.HeadCall.Name $Info.HeadCall.Anchor $Info.HeadCall.Note)) }
+  # fix round 1 (M4): a binding reason every row shares is stated ONCE, in the note; a row keeps `bound at :N via FF`
+  $rs = @($Info.Sources | Where-Object { $_.Reason } | ForEach-Object { $_.Reason } | Select-Object -Unique)
+  $shared = $(if ($rs.Count -eq 1) { $rs[0] } else { '' })
   $rows = New-Object System.Collections.ArrayList
   foreach ($s in $Info.Sources) {
-    $st = New-TraceStep 'step' $s.Text (Get-TraceAnchorText $H.Path $s.Line) $s.Grade $H.Name $s.Note $s.Ask
+    $nt = $(if ($s.Reason -and -not $shared) { "$($s.Note): $($s.Reason)" } else { $s.Note })
+    $st = New-TraceStep 'step' $s.Text (Get-TraceAnchorText $H.Path $s.Line) $s.Grade $H.Name $nt $s.Ask
     if ($s.Target) { [void]$st.Children.Add((New-TraceFacet 'REGENERATE' (& $CmdFor $s.Target))) }
     [void]$rows.Add($st)
   }
-  $n = @($Info.Sources | Where-Object { $_.Mapped }).Count; $u = @($Info.Sources).Count - $n
-  $fw = $(if ($n -eq 1) { 'field' } else { 'fields' })
-  $which = $(if ($n -eq 1) { 'it' } elseif ($u) { 'one of the fields' } else { 'one of them' })
-  $note = $(if ($n -and -not $u) { "$($Info.Field) is calculated from $n $fw -- trace $which instead:" }
-            elseif ($n) { "$($Info.Field) is calculated from $n $fw and $u value(s) the walk cannot map -- trace $which instead:" }
-            elseif ($u) { "$($Info.Field) is calculated from $u value(s) the walk cannot map -- no field to trace instead" }
-            else { "$($Info.Field) is calculated from no field -- nothing to trace instead" })
-  [pscustomobject]@{ Stop = $stop; Rows = $rows.ToArray(); Note = $note }
+  # the lead-in counts FIELDS the value is computed from, the fields that SELECT the formula (a case selector, I1), and
+  # other values the walk cannot map (M3: a constant is none of these) -- each row says which it is
+  $n = @($Info.Sources | Where-Object { $_.IsField -and -not $_.Selector }).Count
+  $sN = @($Info.Sources | Where-Object { $_.Selector }).Count
+  $u = @($Info.Sources | Where-Object { -not $_.IsField -and -not $_.Selector }).Count
+  $cmd = @($Info.Sources | Where-Object { $_.Target }).Count
+  $cases = @($Info.Sources | Where-Object { $_.Selector } | ForEach-Object { $_.Selector -replace '^case at ', '' } | Select-Object -Unique)
+  $lead = "$($Info.Field) is calculated from $(if ($n) { "$n field$(if ($n -ne 1) { 's' })" } else { 'no field' })"
+  if ($sN) { $lead += ", and the formula is chosen by $sN $(if ($n) { 'more' } else { "field$(if ($sN -ne 1) { 's' })" }) (case at $($cases -join ', '))" }
+  if ($u) { $lead += ", and $u other value$(if ($u -ne 1) { 's' }) the walk cannot map" }
+  $tail = $(if (-not $cmd) { ' -- nothing to trace instead' } elseif ($cmd -eq 1) { ' -- trace it instead' } else { ' -- trace one of them instead' })
+  $nb = @($Info.Sources | Where-Object { $_.Reason }).Count
+  $note = "$lead$tail$(if ($cmd -and $shared) { " ($(if ($nb -eq 1) { 'the binding' } else { 'every binding' }) below: $shared)" }):"
+  if (-not $cmd) { $note = "$lead$tail" }  [pscustomobject]@{ Stop = $stop; Rows = $rows.ToArray(); Note = $note }
 }

@@ -80,8 +80,11 @@ function Get-IndexStamp([string] $Db) {
   $(if ($r.Count -and "$($r[0].v)" -match '^\d+$') { [DateTimeOffset]::FromUnixTimeSeconds([long]$r[0].v).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm'Z'") } else { 'unstamped' })
 }
 $asOf = (@($DbPath, $ServerDbPath, $SqlDbPath) | ForEach-Object { Get-IndexStamp $_ }) -join '/'
-# the command that traces a target on these three indexes at this depth: the header's REGENERATE, and each DERIVED row's (8.5)
-function Get-RegenerateCommand([string] $For) { "New-DiagramArtifact.ps1 -Question round-trip -Target $For -DbPath `"$DbPath`" -ServerDbPath `"$ServerDbPath`" -SqlDbPath `"$SqlDbPath`" -Depth $Depth" }
+# the command that traces a target on these three indexes at this depth: the header's REGENERATE, and each DERIVED row's (8.5).
+# Calc-field fix round 1 (M5): RUNNABLE as written -- the call operator and the bundler's ABSOLUTE path (a bare
+# `New-DiagramArtifact.ps1 ...` is not found by PowerShell from any other folder)
+$bundler = (Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1') -replace "'", "''"
+function Get-RegenerateCommand([string] $For) { "& '$bundler' -Question round-trip -Target $For -DbPath `"$DbPath`" -ServerDbPath `"$ServerDbPath`" -SqlDbPath `"$SqlDbPath`" -Depth $Depth" }
 $regen = Get-RegenerateCommand $Target
 
 # ---- 1. the anchor -------------------------------------------------------------------

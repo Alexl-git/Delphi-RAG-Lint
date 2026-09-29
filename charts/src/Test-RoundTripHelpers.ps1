@@ -1051,16 +1051,21 @@ $rcF = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmBlueprint4.d
 $pF = Get-CalcTraceParts $rcF
 $res.CalcFtrTitle = $pF.Title; $res.CalcFtrStop = $pF.Stop; $res.CalcFtrChildren = $pF.Children; $res.CalcFtrNote = $pF.Note
 $res.CalcFtrRows = $pF.Rows; $res.CalcFtrCounts = $pF.Counts; $res.CalcFtrCheck = $pF.Check
+# fix round 1 (M4): a row keeps `bound at :N via FF`, the shared reason is in the note -- the FtrType row, whole
+$res.CalcFtrRowLine = @(($rcF.Text -split "\r\n") | Where-Object { $_ -cmatch '^\[\d+\] FROM MSCLIST\.FTRTYPE ' })[0] -replace '^\[\d+\] ', ''
+# fix round 1 (M5): every REGENERATE (header and rows) is `& '<absolute path to New-DiagramArtifact.ps1>' ...`
+$res.CalcCmdHeads = (@(($rcF.Text -split "\r\n") | Where-Object { $_ -cmatch '^( {2}| {7})REGENERATE ' } | ForEach-Object { if ($_ -cmatch "^\s+REGENERATE (& '[^']+' -Question round-trip -Target )") { $Matches[1] } else { 'OTHER' } } | Group-Object | ForEach-Object { "$($_.Count)x $($_.Name)" })) -join ' | '
 # the second corpus case: Tolerance (:760) -- five writes in a nested case, four source fields
 $rcT = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmBlueprint4.dxDBGrid1FtrsVTolerance' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null
 $pT = Get-CalcTraceParts $rcT
 $res.CalcTolTitle = $pT.Title; $res.CalcTolStop = $pT.Stop; $res.CalcTolChildren = $pT.Children; $res.CalcTolNote = $pT.Note
 $res.CalcTolRows = $pT.Rows; $res.CalcTolCounts = $pT.Counts; $res.CalcTolCheck = $pT.Check
-# ONE candidate's command, run END TO END exactly as the row writes it (New-DiagramArtifact.ps1 from this folder,
-# the bundle under $work): the DimAbbr row -> MSCLIST.DIMABBR through FMTFtrs and SendDeltaFtrs
+# ONE candidate's command, run END TO END exactly AS WRITTEN (fix round 1 M5: the row carries `& '<absolute path>'`, so
+# the string itself is run, head and all; the bundle lands in the bundler's default charts\artifacts, gitignored):
+# the DimAbbr row -> MSCLIST.DIMABBR through FMTFtrs and SendDeltaFtrs
 $res.CalcE2E = $(try {
   $cmd = @($rcF.DerivedCommands | Where-Object { $_ -match '-Target \S+\.FfFtrs_DimAbbr ' })[0]
-  $art = Invoke-Expression ("& '$(Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1')'" + $cmd.Substring('New-DiagramArtifact.ps1'.Length) + " -OutRoot '$(Join-Path $work 'calc-e2e')'") 6>$null
+  $art = Invoke-Expression $cmd 6>$null
   $et = [IO.File]::ReadAllText((Join-Path $art.Bundle 'trace.dlgraph'))
   $end = @($et -split "\r\n" | Where-Object { $_ -clike 'END TRACE*' })[0]
   $ttl = $(if ($et -cmatch '(?m)^  TITLE "([^"]*)"\r$') { $Matches[1] } else { '' })
@@ -1083,37 +1088,40 @@ function New-SynthCalcRefs([string[]] $Src, [hashtable] $Spec) {
     }
   }
 }
-function New-SynthCalcFacts([string] $Name, [string[]] $Src, [hashtable] $Spec, [string] $Field = 'A', [string[]] $Vars = @('FfA'), [string] $Event = 'OnCalcFields', $Creating = $null) {
+function New-SynthCalcFacts([string] $Name, [string[]] $Src, [hashtable] $Spec, [string] $Field = 'A', [string[]] $Vars = @('FfA'), [string] $Event = 'OnCalcFields', $Creating = $null, [int] $TableDataSets = 2) {
   $p = Join-Path $work "$Name.pas"
   [IO.File]::WriteAllText($p, (($Src -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
   $H = [pscustomobject]@{ Name = 'CalcH'; Path = $p; ImplStart = 1; ImplEnd = $Src.Count; Refs = @(New-SynthCalcRefs $Src $Spec)
                           Locals = @{ L = 'local_var'; DataSet = 'param' }; Raw = $Src; Stripped = (Get-StrippedSourceLines $p) }
   $bind = @{}
   foreach ($v in 'FfA', 'FfB', 'FfC', 'FfK') {
-    $bind[$v] = [pscustomobject]@{ Var = $v; Why = ''; DataSet = 'FMT'; Literal = $v.Substring(2); Line = 30; Path = $p; Qname = "uSynth.TSynth.$v"; Grade = 'inferred'; Reason = 'via FF'; Ask = '' }
+    $bind[$v] = [pscustomobject]@{ Var = $v; Why = ''; DataSet = 'FMT'; Literal = $v.Substring(2); Line = 30; Path = $p; Qname = "uSynth.TSynth.$v"; Grade = 'inferred'; Reason = 'FF assumed to return the named field'; Ask = ''; Via = 'via FF' }
   }
   $bind['FfZ'] = [pscustomobject]@{ Var = 'FfZ'; Why = 'is written on 2 line(s) naming 2 (dataset field, column literal) pairs' }
   [pscustomobject]@{ Field = $Field; DsName = 'FMT'; Table = 'T'; ClassName = 'TSynth'; Vars = $Vars; Bindings = $bind
                      ClassFields = @{ FfA = 'TField'; FfB = 'TField'; FfC = 'TField'; FfK = 'TField'; FfZ = 'TField'; FNum = 'Integer'; FMT = 'TFDMemTable' }
                      Wirings = @($(if ($Event) { [pscustomobject]@{ Event = $Event; Line = 20; Handler = 'CalcH'; WirePath = $p; H = $H } }))
-                     Creating = $Creating; IsColumn = { param($F, $l) $l -in 'B', 'K' } }
+                     Creating = $Creating; TableDataSets = $TableDataSets; IsColumn = { param($F, $l) $l -in 'B', 'K', 'W' } }
 }
-# a calculated result as one string: kind | stop text | conditions and facets | the DERIVED note | rows `<text> => <target>`
+# a calculated result as one string: kind | stop text -- stop note | conditions and facets | the DERIVED note | rows `<text> [grade] -- <note> => <target>`
 function Format-SynthCalc($Info) {
   if (-not $Info) { return 'not calculated' }
   if ($Info.Kind -ne 'calculated') { return "$($Info.Kind) | $($Info.StopText) @$($Info.Anchor)" }
   $it = New-CalcFieldItems $Info { param($t) "CMD $t" }
   $ch = @($it.Stop.Children | ForEach-Object { if ($_.Kind -eq 'cond') { "$($_.Keyword) $($_.Condition)$(if ($_.Note) { " -- $($_.Note)" })" } else { "$($_.Head) $($_.Text) -- $($_.Note)" } })
-  $rw = @($it.Rows | ForEach-Object { "$($_.Text)$(if ($_.Grade) { " [$($_.Grade)]" }) => $(@($_.Children | ForEach-Object { $_.Text }) -join '')" })
-  "calculated | $($it.Stop.Text) @$($it.Stop.Anchor) | $($ch -join ' / ') | $($it.Note) | $($rw -join ' ## ')"
+  $rw = @($it.Rows | ForEach-Object { "$($_.Text)$(if ($_.Grade) { " [$($_.Grade)]" })$(if ($_.Note) { " -- $($_.Note)" }) => $(@($_.Children | ForEach-Object { $_.Text }) -join '')" })
+  "calculated | $($it.Stop.Text) @$($it.Stop.Anchor) -- $($it.Stop.Note) | $($ch -join ' / ') | $($it.Note) | $($rw -join ' ## ')"
 }
 $synSrc = @('procedure TSynth.CalcH(DataSet: TDataSet);', 'var', '  L: Integer;', 'begin', '  if DataSet.State = dsInsert then Exit;', '  L:= TagOf(FfK);',
-            '  if Assigned(FfA) then', '    FfA.AsString:= Fmt(FfB.AsString, L, FfC.AsFloat, Zz, FNum, FfZ.AsString);', '  FfC.AsFloat:= FfB.AsFloat * 2;', 'end;')
+            '  if Assigned(FfA) then', '    FfA.AsString:= Fmt(FfB.AsString, L, FfC.AsFloat, Zz, FNum, FfZ.AsString, ffFixed, TKind.Name);', '  FfC.AsFloat:= FfB.AsFloat * 2;', 'end;')
 $synSpec = @{ 5 = @('read:DataSet', 'member-access:State:DataSet', 'read:dsInsert:!enum_value', 'call:Exit'); 6 = @('write:L', 'call:TagOf', 'read:FfK')
               7 = @('call:Assigned', 'read:FfA'); 8 = @('read:FfA', 'member-access:AsString:FfA', 'call:Fmt', 'read:FfB', 'member-access:AsString:FfB', 'read:L', 'read:FfC',
-              'member-access:AsFloat:FfC', 'read:Zz', 'read:FNum', 'read:FfZ', 'member-access:AsString:FfZ'); 9 = @('read:FfC', 'member-access:AsFloat:FfC', 'read:FfB', 'member-access:AsFloat:FfB') }
+              'member-access:AsFloat:FfC', 'read:Zz', 'read:FNum', 'read:FfZ', 'member-access:AsString:FfZ', 'read:ffFixed', 'read:TKind', 'member-access:Name:TKind')
+              9 = @('read:FfC', 'member-access:AsFloat:FfC', 'read:FfB', 'member-access:AsFloat:FfB') }
 # the positive: the Exit guard and the enclosing if, verbatim; B a column, L one hop to K, C itself calculated (marked,
-# not expanded), Zz / FNum / FfZ named and NOT guessed; the head call Fmt named once
+# not expanded), FfZ a FIELD it cannot bind, Zz / FNum other values -- named, NOT guessed; the unbound constant-shaped
+# ffFixed and the receiver TKind are constants, not values (fix round 1 M3); the head call Fmt named once; one shared
+# binding reason stated once in the note, each row keeps `bound at :N via FF` (M4)
 $res.CalcSynOffer = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-syn' $synSrc $synSpec)) } catch { "threw: $($_.Exception.Message)" })
 # negative 1: a field CREATED calculated (its creating call sets fkCalculated) whose dataset has NO OnCalcFields wiring ->
 # not calculated by this rule (the caller keeps today's stop): the FieldKind alone offers nothing
@@ -1131,5 +1139,35 @@ $res.CalcSynEvent = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFa
 $res.CalcSynLookup = $(try {
   $lk = [pscustomobject]@{ Line = 12; Path = (Join-Path $work 'calc-lookup.pas'); Call = 'MakeLookup'; Kind = 'fkLookup'; KindLine = 40; KindPath = (Join-Path $work 'calc-lookup.pas') }
   Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-lookup' $synSrc $synSpec -Event '' -Creating $lk)) } catch { "threw: $($_.Exception.Message)" })
+
+# fix round 1 (I2): `DataSet.FieldByName('<lit>')` READS on the right-hand side -- one row per literal (a repeat is one
+# source), the parameter taken as the anchor dataset [inferred]; B is traced through its bound TField variable, W has no
+# variable: with 2 datasets loading T no -Target resolves to FMT (named, no command), with 1 it is T.W
+$fbrSrc = @('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', "  FfA.AsString:= DataSet.FieldByName('B').AsString + DataSet.FieldByName('W').AsString + DataSet.FieldByName('B').AsString;", 'end;')
+$fbrSpec = @{ 3 = @('read:FfA', 'member-access:AsString:FfA', 'read:DataSet', 'member-access:FieldByName:DataSet', 'member-access:AsString', 'read:DataSet', 'member-access:FieldByName:DataSet',
+                    'member-access:AsString', 'read:DataSet', 'member-access:FieldByName:DataSet', 'member-access:AsString') }
+$res.CalcSynFbnRead = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-fbr' $fbrSrc $fbrSpec)) } catch { "threw: $($_.Exception.Message)" })
+$res.CalcSynFbnReadOne = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-fbr1' $fbrSrc $fbrSpec -TableDataSets 1)) } catch { "threw: $($_.Exception.Message)" })
+# fix round 1 (I1): writes in the arms of a case -- the case is NOT a guard: its selector's reads are offered as rows that
+# select the formula, the STOPS note names the case and the writes it picks among, and the if around the WHOLE case is
+# still written (with no `around` note: it encloses every write)
+$caseSrc = @('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', '  if Assigned(FfA) then', '  begin', '    case TagOf(FfK) of', '      1: FfA.AsFloat:= FfB.AsFloat;',
+             '      else FfA.AsFloat:= 0;', '    end;', '  end;', 'end;')
+$caseSpec = @{ 3 = @('call:Assigned', 'read:FfA'); 5 = @('call:TagOf', 'read:FfK'); 6 = @('read:FfA', 'member-access:AsFloat:FfA', 'read:FfB', 'member-access:AsFloat:FfB')
+               7 = @('read:FfA', 'member-access:AsFloat:FfA') }
+$res.CalcSynCase = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-case' $caseSrc $caseSpec)) } catch { "threw: $($_.Exception.Message)" })
+# fix round 1 (I1a): a write under a shape the shim cannot place (a while loop) -- its reason reaches the STOPS note,
+# never silently dropped
+$loopSrc = @('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', '  while N > 0 do', '    FfA.AsFloat:= FfB.AsFloat;', 'end;')
+$loopSpec = @{ 3 = @('read:N'); 4 = @('read:FfA', 'member-access:AsFloat:FfA', 'read:FfB', 'member-access:AsFloat:FfB') }
+$res.CalcSynLoop = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-loop' $loopSrc $loopSpec)) } catch { "threw: $($_.Exception.Message)" })
+# fix round 1 (M1): "created (FieldKind <k>)" only with the kind proven (one FieldKind line in the creating call's body);
+# a creating line without it is "named at"
+$res.CalcSynCreating = $(try {
+  (@('fkCalculated', '') | ForEach-Object {
+    $ck = [pscustomobject]@{ Line = 12; Path = (Join-Path $work 'calc-creating.pas'); Call = 'C'; Kind = $_; KindLine = $(if ($_) { 40 } else { 0 }); KindPath = $(if ($_) { (Join-Path $work 'calc-creating.pas') } else { '' }) }
+    $i = Resolve-CalcField (New-SynthCalcFacts 'calc-creating' $loopSrc $loopSpec -Creating $ck)
+    "$($i.StopText) -- $($i.StopNote)" }) -join ' ## '
+} catch { "threw: $($_.Exception.Message)" })
 
 [pscustomobject]$res

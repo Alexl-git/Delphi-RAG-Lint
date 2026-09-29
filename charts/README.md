@@ -159,10 +159,10 @@ New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<
   instead:`, then one numbered row per SOURCE field the computation reads (a local
   set from one TField variable is followed one hop; a source that is itself
   calculated is marked `(calculated)`, not expanded; a value the walk cannot map is
-  named, never guessed), each with a `REGENERATE` facet holding the ready command
+  named, never guessed; a `DataSet.FieldByName('<lit>')` read is one row per literal; constants are not values), each with a `REGENERATE` facet holding the ready command
   that traces that field instead. Title: `Why <selection> cannot be traced -- it is
   calculated`. Gate `RT-CALC`: `frmBlueprint4.dxDBGrid1FtrsVFtrName` -> 18 rows,
-  27 steps / 2 conditions / 0 crossings / 1 unresolved; Tolerance -> 4 rows, 13/2/0/1;
+  27 steps / 2 conditions / 0 crossings / 1 unresolved; Tolerance -> 4 value fields + the 2 case selectors that pick its formula (the cases are named, not guards), 15/2/0/1;
   the DimAbbr row's command run end to end -> `MSCLIST.DIMABBR`, 98/35/4/2 (the Num
   holdout's 103 minus the 5 control-side anchor hops a TField-variable target does
   not walk). A field set only in another event's handler, or created as a lookup

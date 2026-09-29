@@ -675,57 +675,79 @@ field's name (the Task 3 FF / FieldByName rule), or `FieldByName('<name>')...:=`
 Anything else keeps the anchor's ordinary `STOPS`.
 
 The construct, measured on gate `RT-CALC` (`frmBlueprint4.dxDBGrid1FtrsVFtrName`,
-REGENERATE commands shortened here):
+REGENERATE commands shortened here; fix round 1 wording):
 
 ```
-[09] STOPS FtrName is a calculated field of FMTFtrs (created at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index @Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C at :756 sets FieldKind fkCalculated at :735; ask E3
+[09] STOPS FtrName is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index @Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735; ask E3
        UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973
        WHEN "Assigned(FfFtrs_FtrName)" @Blueprint4.ViewModel.pas:985
        VIA FtrNameString @MSCTYPES.PAS:840 -- computed by this call at :986, its body is not walked, nor are those of TagOf
 
 DERIVED
-  -- FtrName is calculated from 18 fields -- trace one of them instead:
-[10] FROM MSCLIST.NOTATION VIA FfFtrs_Notation [inferred] @Blueprint4.ViewModel.pas:987 -- in FtrsOnCalcFields; FfFtrs_Notation bound at :879: ...; ask in-class-field-reads
-       REGENERATE New-DiagramArtifact.ps1 -Question round-trip -Target Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation -DbPath "..." -ServerDbPath "..." -SqlDbPath "..." -Depth 4
+  -- FtrName is calculated from 18 fields -- trace one of them instead (every binding below: the TField variable via FF(dataset, literal), assumed to return ...):
+[10] FROM MSCLIST.NOTATION VIA FfFtrs_Notation [inferred] @Blueprint4.ViewModel.pas:987 -- in FtrsOnCalcFields; FfFtrs_Notation bound at :879 via FF; ask in-class-field-reads
+       REGENERATE & '<charts>\src\New-DiagramArtifact.ps1' -Question round-trip -Target Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation -DbPath "..." -ServerDbPath "..." -SqlDbPath "..." -Depth 4
 ...
-[18] FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType [inferred] @Blueprint4.ViewModel.pas:990 -- in FtrsOnCalcFields; FtrType set at :978, FfFtrs_FtrType bound at :858: ...
+[18] FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType [inferred] @Blueprint4.ViewModel.pas:990 -- in FtrsOnCalcFields; FtrType set at :978, FfFtrs_FtrType bound at :858 via FF; ask in-class-field-reads
 ```
 
 * **The `STOPS` stays the ONE unresolved step.** Its text names the field, its
-  dataset, the creating line when one names the field beside the dataset, and the
-  handler's range; its conditions are the handler's own guards, VERBATIM (P16): an
-  Exit before the first write (`UNLESS ... -- else Exit at :N`), then the
-  if-forms enclosing each write (`WHEN` in a then branch; a case arm or an except
-  handler is not a branch condition, as in the walk; with several writes each
-  condition names the writes it encloses, `-- around the write at :N`). A `VIA`
-  facet names the call that computes the value (the first token of the
-  right-hand side) ONCE: its body is not walked.
+  dataset, the line that creates it -- `created (FieldKind <k>) at :N` only when
+  the call on that line has a body that sets `FieldKind` on exactly ONE line;
+  otherwise `named at :N` (the line only names the field beside the dataset) --
+  and the handler's range. Its conditions are the handler's own guards, VERBATIM
+  (P16): an Exit before the first write (`UNLESS ... -- else Exit at :N`), then the
+  if-forms enclosing the writes (`WHEN` in a then branch). The chain is read
+  OUTWARDS past a `case`: a case arm (or its else arm) is not a branch condition
+  -- the shim quotes no arm label -- so the case is named in the STOPS note (`the
+  formula is chosen by the case at :1043 (writes at :1045, ...)`) and its SELECTOR
+  is offered as rows (below), and an if that encloses the whole case is still
+  written. A condition that does not enclose EVERY write names the ones it does
+  (`-- around the write at :N`). Any other shape the shim cannot place (a loop, a
+  `with`) ends the chain, and its generated reason is written in the note -- `not
+  read as a guard: the statement at :N sits under a while statement, ...` --
+  never dropped. A `VIA` facet names the call that computes the value (the first
+  token of the right-hand side) ONCE: its body is not walked.
 * **`DERIVED`** is a new section, written right after `ANCHOR` and only for a
   calculated anchor. It is the one section whose NOTE stands above its rows (8.1):
-  `-- <Field> is calculated from <N> fields -- trace one of them instead:` (`trace
-  it instead` for one field; `... and <U> value(s) the walk cannot map -- trace one
-  of the fields instead` when some cannot be mapped; `-- ... from no field --
-  nothing to trace instead` with no rows). `Write-FormA` refuses a note with rows
-  in any OTHER section; `Read-FormA` reads the note before the rows.
+  `-- <Field> is calculated from <N> fields[, and the formula is chosen by <S> more
+  (case at :L, ...)][, and <U> other values the walk cannot map] -- trace one of
+  them instead[ (every binding below: <reason>)]:` -- `trace it instead` when one
+  row carries a command, `-- nothing to trace instead` when none does. A binding
+  reason that every row shares is stated ONCE there; each row keeps `bound at :N
+  via FF`. `Write-FormA` refuses a note with rows in any OTHER section;
+  `Read-FormA` reads the note before the rows.
 * **A row is a numbered step** (counted in steps, never unresolved -- a true
-  anchored fact: the read of the source on the write statement) whose text opens
-  with `FROM`: `FROM <TABLE.COLUMN> VIA <var>` for a TField variable bound to a
-  column of the anchor's table; `VIA <local>, set from <var>` for a local assigned
-  ONCE before the read from exactly one TField variable (one hop, never more);
-  `FROM <name> (calculated) VIA <var>` for a source the same handler writes (marked,
-  not expanded); `(not a column of <TABLE>)` for a bound literal the SQL index does
-  not hold; `FROM <name>, not mapped: <why>` for a value the walk cannot map (a
-  parameter, a non-TField field, a local set at several places, a name it cannot
-  place) -- named, never guessed, and with no command. The grade and ask are the
-  binding's (Task 3: `[inferred]` via FF) and the unbound in-class read's
-  (`in-class-field-reads`).
+  anchored fact: the read of the source) whose text opens with `FROM`:
+  `FROM <TABLE.COLUMN> VIA <var>` for a TField variable bound to a column of the
+  anchor's table; `VIA <local>, set from <var>` for a local assigned ONCE before
+  the read from exactly one TField variable (one hop, never more);
+  `VIA <param>.FieldByName` for a `FieldByName('<lit>')` read on the handler's
+  dataset parameter (taken as the anchor dataset, `[inferred]`) or on the anchor
+  dataset -- one row per literal, traced through a TField variable bound to the
+  same column, else as `TABLE.COLUMN` when exactly one dataset loads the table,
+  else with no command and the reason in its note; `FROM <name> (calculated) VIA
+  <var>` for a source the same handler writes (marked, not expanded); `(not a
+  column of <TABLE>)` for a bound literal the SQL index does not hold; `, selects
+  the formula (case at :N)` for a read in a case selector; `FROM <name>, not
+  mapped: <why>` for a field or value the walk cannot map (a TField variable it
+  cannot bind -- counted as a field -- a parameter, a non-TField field, a local
+  set at several places, a name it cannot place) -- named, never guessed, and with
+  no command. A CONSTANT is no row and no value: a bound enum value, type or
+  routine, or -- by NAME SHAPE, since the charts read clones only and no library
+  index -- an unbound name that is a receiver or call head (`TTktVerd.FromInteger`,
+  `Integer(...)`) or has the Delphi enum/type shape (`dsInsert`, `ffFixed`,
+  `TSpecType`). The grade and ask are the binding's (Task 3: `[inferred]` via FF)
+  and the unbound in-class read's (`in-class-field-reads`).
 * **`REGENERATE` is also a FACET** (7-space indent) under a row: the ready
   command that traces that field instead -- the header's command with `-Target`
-  set to the TField variable (`<Unit>.<TClass>.<FfVar>`, a form the anchor resolver
-  accepts). The header attribute keeps its 2-space indent, so the two never meet.
-  `Test-FormA.ps1` classifies it by `HEADERKW` (no verb); a row's `FROM` head
-  likewise, so neither adds to the verb set of 8.4.
-* **Why a section and not rows under the STOPS.** The owner's words are a
+  set to the row's target (`<Unit>.<TClass>.<FfVar>` or `TABLE.COLUMN`, forms the
+  anchor resolver accepts). Every round-trip REGENERATE command, header and rows,
+  is RUNNABLE AS WRITTEN from any folder: `& '<absolute path>\New-DiagramArtifact.ps1'
+  -Question round-trip ...` (calc-field fix round 1 M5; gate `A-RTC-E2E` runs the
+  row's string unchanged). The header attribute keeps its 2-space indent, so the
+  two never meet. `Test-FormA.ps1` classifies it by `HEADERKW` (no verb); a row's
+  `FROM` head likewise, so neither adds to the verb set of 8.4.* **Why a section and not rows under the STOPS.** The owner's words are a
   question -- "calculated from X, Y, Z: trace X, Y or Z instead?" -- and each
   answer needs its own anchor and its own command line. Facets under the STOPS
   would carry neither a number nor a count; a section keeps every candidate a

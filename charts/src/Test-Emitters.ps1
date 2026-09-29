@@ -2825,52 +2825,93 @@ Step 'RT-HOLD' {
 # (:978, one hop to FfFtrs_FtrType) = 18 rows, each with a REGENERATE command. Rule: Trace.Walk Part 6 (generic).
 # Measured 2026-09-28 on the 1.19 / 1.9 clones with the 1.20.0-alpha exe; red on HEAD f1cd1eb8 first (old stop, 9/0/0/1,
 # no DERIVED; the synthetic ones threw: no Resolve-CalcField). Pins move at the re-clone only with a named mechanism.
+# FIX ROUND 1 (calcfield-fix1-findings.md, red on HEAD 99c540c8 first; measured on the v=1.20 / r=1.11 clones). Moved,
+# each by its mechanism: -STOP (M1 `created (FieldKind <k>) at`; I1 the cases that pick the formula in the note),
+# -NOTE / -CHECK (M4 the shared binding reason stated once), -TOL-GUARDS (I1c the Assigned if encloses EVERY write, so no
+# `around` note), -TOL-OFFER / -TOL-COUNTS 13 -> 15 (I1b the two case selectors are rows), the synthetic strings (M3 a
+# constant-shaped name is no value, FfZ is a field; M4 row notes; the stop note is now in the string). New: -ROWNOTE,
+# -CMD (M5), -SYN-FBNREAD (I2), -SYN-CASE (I1), -SYN-LOOP (I1a), -SYN-CREATING (M1).
 Note 'round-trip: calculated fields ...'
 Step 'RT-CALC' {
+  $bindWhy = "the TField variable via FF(dataset, literal), assumed to return the dataset's field named by the literal, and FMTFtrs matched by name among the class's dataset fields"
   Chk 'A-RTC-FTR-TITLE'  $rt0.CalcFtrTitle 'Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calculated'
-  Chk 'A-RTC-FTR-STOP'   $rt0.CalcFtrStop ('STOPS FtrName is a calculated field of FMTFtrs (created at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
-                                           '@Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C at :756 sets FieldKind fkCalculated at :735; ask E3')
+  Chk 'A-RTC-FTR-STOP'   $rt0.CalcFtrStop ('STOPS FtrName is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
+                                           '@Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735; ask E3')
   Chk 'A-RTC-FTR-GUARDS' $rt0.CalcFtrChildren ('UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_FtrName)" @Blueprint4.ViewModel.pas:985 | ' +
                                                'VIA FtrNameString @MSCTYPES.PAS:840 -- computed by this call at :986, its body is not walked, nor are those of TagOf')
-  Chk 'A-RTC-FTR-NOTE'   $rt0.CalcFtrNote 'FtrName is calculated from 18 fields -- trace one of them instead:'
+  Chk 'A-RTC-FTR-NOTE'   $rt0.CalcFtrNote "FtrName is calculated from 18 fields -- trace one of them instead (every binding below: $bindWhy):"
   # every candidate and its column, in source order (:987-993, FtrType's row at its read :990); each target is the TField variable
   $vm = 'Blueprint4.ViewModel.TBlueprint_ViewModel'
   $ftrRows = @('NOTATION:Notation', 'SPECTYPE:SpecType', 'USL:USL', 'LSL:LSL', 'DECIMALS:Decimals', 'NOMINAL:Nominal', 'UPPERTOL:UpperTol', 'LOWERTOL:LowerTol', 'FTRTYPE:*FtrType',
                'MATHLINE:MathLine', 'DIMABBR:DimAbbr', 'DIMNAME:DimName', 'FTRSUFFIX:FtrSuffix', 'ATTRNAME:AttrName', 'ATTRTYPE:AttrType', 'ATTRCODE:AttrCode', 'ID:ID', 'MASTERID:MasterID') |
              ForEach-Object { $c, $v = $_ -split ':'; if ($v -like '*FtrType') { "FROM MSCLIST.$c VIA FtrType, set from FfFtrs_FtrType => $vm.FfFtrs_FtrType" } else { "FROM MSCLIST.$c VIA FfFtrs_$v => $vm.FfFtrs_$v" } }
   Chk 'A-RTC-FTR-ROWS'   $rt0.CalcFtrRows ($ftrRows -join ' ## ')
+  # M4: the row keeps `bound at :N via FF`; the ~150-char reason is the note's, once
+  Chk 'A-RTC-FTR-ROWNOTE' $rt0.CalcFtrRowLine 'FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType [inferred] @Blueprint4.ViewModel.pas:990 -- in FtrsOnCalcFields; FtrType set at :978, FfFtrs_FtrType bound at :858 via FF; ask in-class-field-reads'
+  # M5: the header and all 18 row commands are runnable as written -- the call operator and the bundler's absolute path
+  $bundler = [IO.Path]::GetFullPath((Join-Path $SRC 'New-DiagramArtifact.ps1'))
+  Chk 'A-RTC-CMD'        $rt0.CalcCmdHeads "19x & '$bundler' -Question round-trip -Target "
   # the rows are anchored facts: counted in steps (9 + 18), never unresolved; the ONE unresolved is the STOPS
   Chk 'A-RTC-FTR-COUNTS' $rt0.CalcFtrCounts '27/2/0/1'
-  Chk 'A-RTC-FTR-CHECK'  $rt0.CalcFtrCheck ('0|identical|True|ANCHOR,DERIVED,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|DERIVED=FtrName is calculated from 18 fields -- trace one of them instead: | ' +
+  Chk 'A-RTC-FTR-CHECK'  $rt0.CalcFtrCheck ("0|identical|True|ANCHOR,DERIVED,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|DERIVED=FtrName is calculated from 18 fields -- trace one of them instead (every binding below: $bindWhy): | " +
                                             ((@('WRITE', 'SERVER', 'DATABASE', 'RESPONSE', 'READ', 'ALSO') | ForEach-Object { "$_=not walked: the trace stopped at [09]" }) -join ' | '))
-  # the second case: Tolerance (:760), five writes in a nested case; the case arms are not branch conditions (the walk's
-  # rule), the enclosing if is reached from the else-arm write at :1050 and says so
+  # the second case: Tolerance (:760), five writes in a nested case (:1043 on SpecType, :1044 on Notation). I1: the cases
+  # are not guards -- the STOPS note names each case and the writes it picks among, their selectors are rows; the
+  # Assigned if encloses every write, so it carries no `around` note (it read as guarding :1050 only)
   Chk 'A-RTC-TOL-TITLE'  $rt0.CalcTolTitle 'Why frmBlueprint4.dxDBGrid1FtrsVTolerance cannot be traced -- it is calculated'
-  Chk 'A-RTC-TOL-STOP'   $rt0.CalcTolStop ('STOPS Tolerance is a calculated field of FMTFtrs (created at :760, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
-                                           '@Blueprint4.ViewModel.pas:1045 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C at :760 sets FieldKind fkCalculated at :735; ask E3')
-  Chk 'A-RTC-TOL-GUARDS' $rt0.CalcTolChildren 'UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_Tolerance)" @Blueprint4.ViewModel.pas:1041 -- around the write at :1050'
-  Chk 'A-RTC-TOL-OFFER'  "$($rt0.CalcTolNote)|$($rt0.CalcTolRows)" ('Tolerance is calculated from 4 fields -- trace one of them instead:|' +
-                                                                    ((@('USL', 'LSL', 'UpperTol', 'LowerTol') | ForEach-Object { "FROM MSCLIST.$($_.ToUpperInvariant()) VIA FfFtrs_$_ => $vm.FfFtrs_$_" }) -join ' ## '))
-  Chk 'A-RTC-TOL-COUNTS' "$($rt0.CalcTolCounts)|$(($rt0.CalcTolCheck -split '\|')[0..2] -join '|')" '13/2/0/1|0|identical|True'
-  # ONE candidate's REGENERATE command run end to end, as written: DimAbbr -> MSCLIST.DIMABBR through FMTFtrs and
-  # SendDeltaFtrs. 98 = the owner-accepted Num holdout's 103 minus the 5 control-side anchor hops (DFM binding,
-  # re-point, accessor, datasource) a TField-variable target does not walk: write/read/also 38/24/32 are Num's
+  Chk 'A-RTC-TOL-STOP'   $rt0.CalcTolStop ('STOPS Tolerance is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :760, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
+                                           '@Blueprint4.ViewModel.pas:1045 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735, ' +
+                                           'the formula is chosen by the case at :1043 (writes at :1045, :1046, :1047, :1049, :1050) and the case at :1044 (writes at :1045, :1046, :1047), their selectors are offered below; ask E3')
+  Chk 'A-RTC-TOL-GUARDS' $rt0.CalcTolChildren 'UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_Tolerance)" @Blueprint4.ViewModel.pas:1041'
+  Chk 'A-RTC-TOL-OFFER'  "$($rt0.CalcTolNote)|$($rt0.CalcTolRows)" ("Tolerance is calculated from 4 fields, and the formula is chosen by 2 more (case at :1043, :1044) -- trace one of them instead (every binding below: $bindWhy):|" +
+                                                                    ((@(@('USL', 'LSL', 'UpperTol', 'LowerTol') | ForEach-Object { "FROM MSCLIST.$($_.ToUpperInvariant()) VIA FfFtrs_$_ => $vm.FfFtrs_$_" }) +
+                                                                      "FROM MSCLIST.SPECTYPE VIA FfFtrs_SpecType, selects the formula (case at :1043) => $vm.FfFtrs_SpecType" +
+                                                                      "FROM MSCLIST.NOTATION VIA FfFtrs_Notation, selects the formula (case at :1044) => $vm.FfFtrs_Notation") -join ' ## '))
+  Chk 'A-RTC-TOL-COUNTS' "$($rt0.CalcTolCounts)|$(($rt0.CalcTolCheck -split '\|')[0..2] -join '|')" '15/2/0/1|0|identical|True'
+  # ONE candidate's REGENERATE command run end to end, AS WRITTEN (M5: the string itself, head and all): DimAbbr ->
+  # MSCLIST.DIMABBR through FMTFtrs and SendDeltaFtrs. 98 = the owner-accepted Num holdout's 103 minus the 5
+  # control-side anchor hops (DFM binding, re-point, accessor, datasource) a TField-variable target does not walk
   Chk 'A-RTC-E2E'        $rt0.CalcE2E "How MSCLIST.DIMABBR reaches $vm.FfFtrs_DimAbbr and goes back|END TRACE  98 steps, 35 conditions, 4 crossings, 2 unresolved."
   # synthetic facts, NO index (Resolve-CalcField is pure): the positive names every value it cannot map and marks a
   # calculated source without expanding it; the negatives keep today's stop or name the kind, never an offer
-  Chk 'A-RTC-SYN-OFFER'  $rt0.CalcSynOffer ('calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-syn.pas:8 | ' +
+  $wired = 'wired as FMT.OnCalcFields at :20, the handler matched by name'
+  $ffWhy = 'FF assumed to return the named field'
+  Chk 'A-RTC-SYN-OFFER'  $rt0.CalcSynOffer ("calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-syn.pas:8 -- $wired | " +
                                            'UNLESS DataSet.State = dsInsert -- else Exit at :5 / WHEN Assigned(FfA) / VIA Fmt -- computed by this call at :8, its body is not walked | ' +
-                                           'A is calculated from 3 fields and 3 value(s) the walk cannot map -- trace one of the fields instead: | ' +
-                                           'FROM T.B VIA FfB [inferred] => CMD uSynth.TSynth.FfB ## FROM T.K VIA L, set from FfK [inferred] => CMD uSynth.TSynth.FfK ## ' +
-                                           'FROM C (calculated) VIA FfC [inferred] => CMD uSynth.TSynth.FfC ## FROM Zz, not mapped: not a field, local or parameter the walk can place =>  ## ' +
+                                           "A is calculated from 4 fields, and 2 other values the walk cannot map -- trace one of them instead (every binding below: $ffWhy): | " +
+                                           'FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB ## FROM T.K VIA L, set from FfK [inferred] -- L set at :6, FfK bound at :30 via FF => CMD uSynth.TSynth.FfK ## ' +
+                                           'FROM C (calculated) VIA FfC [inferred] -- itself calculated in CalcH, not expanded, FfC bound at :30 via FF => CMD uSynth.TSynth.FfC ## ' +
+                                           'FROM Zz, not mapped: not a field, local or parameter the walk can place =>  ## ' +
                                            'FROM FNum, not mapped: a field of TSynth of type Integer, not a TField variable =>  ## ' +
                                            'FROM FfZ, not mapped: FfZ is written on 2 line(s) naming 2 (dataset field, column literal) pairs => ')
   Chk 'A-RTC-SYN-NOWIRE' "$($rt0.CalcSynNoWire)|$($rt0.CalcSynNoWrite)" 'not calculated|not calculated'
-  Chk 'A-RTC-SYN-FBN'    $rt0.CalcSynFieldByName 'calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-fbn.pas:3 |  | A is calculated from 1 field -- trace it instead: | FROM T.B VIA FfB [inferred] => CMD uSynth.TSynth.FfB'
+  Chk 'A-RTC-SYN-FBN'    $rt0.CalcSynFieldByName ("calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-fbn.pas:3 -- $wired |  | " +
+                                                  "A is calculated from 1 field -- trace it instead (the binding below: $ffWhy): | FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB")
   Chk 'A-RTC-SYN-EVENT'  $rt0.CalcSynEvent 'event | A is not a column of T in the SQL index: it is set in CalcH, wired as FMT.AfterScroll at :20, not in an OnCalcFields handler, so no source fields are offered @calc-event.pas:8'
   Chk 'A-RTC-SYN-LOOKUP' $rt0.CalcSynLookup 'lookup | A is a lookup field of FMT: MakeLookup sets FieldKind fkLookup at :40, not a column of T in the SQL index, so no source fields are offered @calc-lookup.pas:12'
-}
-# ---- output sweep: no escaped entity printed as text -------------------------
+  # I2: DataSet.FieldByName('B') / ('W') / ('B') READ -> 2 rows, not one "DataSet, a parameter"; B through its bound
+  # variable, W named with why no -Target resolves (2 datasets load T) -- and T.W when exactly one does
+  $fbrHead = "calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-fbr{0}.pas:3 -- $wired |  | "
+  $fbrB = 'FROM T.B VIA DataSet.FieldByName [inferred] -- DataSet is a parameter of CalcH, taken as FMT, traced through FfB, bound at :30 via FF => CMD uSynth.TSynth.FfB'
+  Chk 'A-RTC-SYN-FBNREAD' "$($rt0.CalcSynFbnRead) || $($rt0.CalcSynFbnReadOne)" (($fbrHead -f '') + "A is calculated from 2 fields -- trace it instead: | $fbrB ## " +
+                                                                               "FROM T.W VIA DataSet.FieldByName [inferred] -- DataSet is a parameter of CalcH, taken as FMT, no -Target resolves to FMT: 2 datasets load T and no TField variable is bound to 'W' =>  || " +
+                                                                               ($fbrHead -f '1') + "A is calculated from 2 fields -- trace one of them instead: | $fbrB ## " +
+                                                                               'FROM T.W VIA DataSet.FieldByName [inferred] -- DataSet is a parameter of CalcH, taken as FMT, traced as T.W, the one dataset that loads T => CMD T.W')
+  # I1: writes in the arms of `case TagOf(FfK) of` inside `if Assigned(FfA)` -- the if is written for both writes (no
+  # `around`), the case is no guard: named in the stop note, its selector FfK a row that selects the formula
+  Chk 'A-RTC-SYN-CASE'   $rt0.CalcSynCase ("calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-case.pas:6 -- $wired, " +
+                                           'the formula is chosen by the case at :5 (writes at :6, :7), its selector is offered below | WHEN Assigned(FfA) | ' +
+                                           "A is calculated from 1 field, and the formula is chosen by 1 more (case at :5) -- trace one of them instead (every binding below: $ffWhy): | " +
+                                           'FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB ## FROM T.K VIA FfK, selects the formula (case at :5) [inferred] -- FfK bound at :30 via FF => CMD uSynth.TSynth.FfK')
+  # I1a: a shape the shim cannot place (a while loop) reaches the stop note with the shim's reason -- never silently dropped
+  Chk 'A-RTC-SYN-LOOP'   $rt0.CalcSynLoop ("calculated | A is a calculated field of FMT (computed in CalcH at :1-5), not a column of T in the SQL index @calc-loop.pas:4 -- $wired, " +
+                                           'not read as a guard: the statement at :4 sits under a while statement, a shape the source shim does not read |  | ' +
+                                           "A is calculated from 1 field -- trace it instead (the binding below: $ffWhy): | FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB")
+  # M1: `created (FieldKind <k>)` only with the kind proven; otherwise the line only `named` the field
+  $loopWhy = 'not read as a guard: the statement at :4 sits under a while statement, a shape the source shim does not read'
+  Chk 'A-RTC-SYN-CREATING' $rt0.CalcSynCreating ("A is a calculated field of FMT (created (FieldKind fkCalculated) at :12, computed in CalcH at :1-5), not a column of T in the SQL index -- $wired, C sets FieldKind fkCalculated at :40, $loopWhy ## " +
+                                                 "A is a calculated field of FMT (named at :12, computed in CalcH at :1-5), not a column of T in the SQL index -- $wired, $loopWhy")
+}# ---- output sweep: no escaped entity printed as text -------------------------
 # Add-DisclosureRow escapes its text, and nine call sites in seven emitters
 # passed a '&#183;' separator into it -- so each of those charts printed the six
 # literal characters "&#183;" instead of a middle dot. Swept over EVERY .dot this
