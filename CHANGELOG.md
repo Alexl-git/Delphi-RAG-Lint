@@ -3,6 +3,51 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.20.1-alpha -- 2026-09-28
+
+PATCH: one rule default flipped by owner ruling, three false positives and one false negative fixed.
+Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha, resolver 1.11.0-alpha and schema v23 are
+unchanged -- no index needs a re-parse or a re-resolve. 189 rules, now **159 on by default**.
+
+### Changed
+
+- **`discarded-effect-free-result` is ON by default** (owner ruling DEC-7). Measured 3/3 real on ORM3: the
+  three `TAttrPlan.Describe;` statements that do nothing, a latent bug. Known caveat, unchanged: the rule
+  does not consider virtual overrides, so a call dispatched to an override that has effects can still be
+  reported. `--disable discarded-effect-free-result` or a config `"disabled"` entry still turns it off.
+  Guard: `tests\lint-project\purity-rules\run_purity_rules.ps1` (a bare `lint-all` reports it once,
+  `--disable` removes it, `query-name-with-effect` stays OFF).
+
+### Fixed
+
+- **doc-drift did not grade private and protected members, although `document` writes their blocks.**
+  The batch writer (`document --unit/--project`, `document-all`) documents every interface-section symbol,
+  so a form's private method gets a managed facts block. doc-drift also dropped private/protected
+  members, so once such a method's callees changed its block went stale and nothing reported it:
+  `TConvRulesForm.RefreshUnitList` kept a `Calls:` line naming a deleted routine through a whole review.
+  The checker and its `--fix` now use the writer's own scope (interface section, any visibility).
+  Implementation-section routines stay out, as before. **Expect new doc-drift findings on any
+  autodocumented project**, almost all "managed facts block is out of date" and fixable with
+  `lint-all --fix --apply`. Measured, old -> new: drag-lint 153 -> 205, ConvRulesEditor 69 -> 165,
+  DataCopy 140 -> 199, YADF 42 -> 42. Guard: `tests\autodoc\run_doc_drift_private_member.ps1`.
+- **`unused-parameter` fired on COM/OS interface implementations.** A method with an explicit
+  `stdcall`, `safecall`, `cdecl` or `winapi` convention (`IDropTarget.DragEnter`, an `EnumWindows`
+  callback) has a signature fixed from outside, but the contract exemption only knew
+  `virtual`/`override`/`dynamic`/`message`/`abstract`, and an interface implementation needs neither.
+  Guard: `tests\lint\unused-parameter-callconv.pas` (a plain method in the same class still fires).
+- **`default-encoding-io` fired on binary `LoadFromFile`/`SaveToFile`** -- `TdxPDFViewer`, `TPicture` --
+  which have no `TEncoding` overload to recommend. The rule matched the method NAME only. It now stays
+  quiet when the receiver (`X.` or `Self.X.`) is a field, variable or parameter declared in the same file
+  with a type whose name does not contain `string`. Unknown receivers (`Memo.Lines`, `TFile`) still fire.
+  Known blind spot: a `TStringList` descendant whose type name lacks "string" is taken as binary. The
+  rule is still OFF by default. Guard: `tests\lint\default-encoding-io.pas` lines 106-118.
+- **`sql-injection-concat` fired on UI prose** --
+  `Format('Delete %d unit rule(s) and dismiss %d unit(s)?' + sLineBreak + ...)`. "Delete" satisfied the
+  verb anchor and the bare `(` in "rule(s)" satisfied the clause test. The bare `(` arm is replaced by the
+  keywords it stood in for, ` into ` and ` values` (so `VALUES(` still counts). Guards:
+  `tests\lint\sql-injection-concat-prose.pas`, plus two INSERT positive controls in
+  `tests\lint\sql-injection-concat.pas`.
+
 ## v1.20.0-alpha -- 2026-09-28
 
 MINOR: resolver batch. `DRAGLINT_RESOLVER_VERSION` 1.10.0-alpha -> **1.11.0-alpha** (every index owes a
