@@ -27,13 +27,29 @@ and a detailed INSTALL.md. Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha
   finding "names facts in unit(s) this index does not hold; not auto-fixed" was WRONG in every
   observed case: all 12 in the convrules-editor and `DRagLint.Refactor.TextEdit.TTextEdit` in
   drag-lint's own index. `TSharedFacts.RegenerationDropsUnvouchable` split the stored and fresh
-  inbound lists without `WithoutMoreSuffix`, so when only the count changed (`(+42 more)` ->
-  `(+43 more)`) the last visible entry carried the marker, matched nothing in the fresh set, and was
-  read as a unit called `+42 more` that no index holds. It now strips the marker like its sibling
-  readers (`BlockHoldsUnvouchable`, `ReconcileContent`, `ReconcileDropsUnvouchable`); all 13 are
-  `[FIXABLE]`. Guard: `tests\autodoc\run_doc_drift_window_marker.ps1` (RED on 1.20.2), with a
+  inbound lists without `WithoutMoreSuffix`, so whenever the marker-carrying last visible entry did
+  not reappear verbatim in the fresh render, it matched nothing in the fresh set and was read as a
+  unit called `+42 more` that no index holds. Of the five blocks inspected, two changed only the
+  count (`(+42 more)` -> `(+43 more)`); in three the visible window also shifted (a different last
+  entry, or visible entries pushed out). The other eight were inferred from all twelve turning
+  `[FIXABLE]`. It now strips the marker like its sibling readers (`BlockHoldsUnvouchable`,
+  `ReconcileContent`, `ReconcileDropsUnvouchable`); all 13 are `[FIXABLE]`. **For the converter
+  team:** `--fix` on those blocks now also DROPS visible entries that name units the index holds
+  and that are genuinely gone (by design -- the index can vouch for that absence), not only bumps
+  the count. Guard: `tests\autodoc\run_doc_drift_window_marker.ps1` (RED on 1.20.2), with a
   positive control: the same window shape whose last visible entry names an unheld unit is still
-  refused, and `--fix --apply` leaves it as found.
+  refused, and `--fix --apply` leaves it as found; plus a window-shift case and a stored window
+  whose fresh render is no longer windowed.
+- **...and entries hidden inside a stored "(+N more)" window are now checked by count.** The fix
+  above made a windowed block fixable when its VISIBLE entries vouch, but the entries hidden inside
+  the stored count were never examined -- a caller from another project, sorted after the window in
+  a block written from a wider index, could be removed by `--fix`. Before, such a block was refused
+  only by the accident above. The fix is now also refused when the stored total (visible + N)
+  exceeds the fresh total by more than the proven visible drops (entries naming a held unit that
+  could not merely have moved into the fresh window). Every observed case GREW in count, so they
+  stay `[FIXABLE]`. Guard: `CASE-HIDDEN-LOSS` in the same script (RED before this change).
+- **A dead store removed in `TFindUnitRefactoring.Build`** (`DRagLint.Refactor.TextEdit.pas`,
+  H2077 / lint `overwrite-before-read`). No behaviour change.
 
 ### Tests
 
@@ -42,15 +58,28 @@ and a detailed INSTALL.md. Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha
   (`run_doctests_v021.ps1`) deletes and rebuilds that same file; the two runners run in parallel in
   a battery, so a fixture could read a half-built or deleted DB (T41 "DUnitX scaffold missing" under
   `-Jobs 4`, green alone). Each now builds its own `t<NN>.sqlite` fresh from the same `Calls.pas`;
-  assertions are unchanged. Also removed a dead store in `TFindUnitRefactoring.Build`
-  (`DRagLint.Refactor.TextEdit.pas`, H2077 / lint `overwrite-before-read`).
+  assertions are unchanged, and each run also deletes that DB's `-wal`/`-shm` sidecars.
 
 ### Docs
 
 - **INSTALL.md is a full installation guide:** Requirements, unpack and verify, the manifest, your
   first project index, Charts, Troubleshooting and Uninstall, alongside the existing sections 1-6.
-  Every command was run against this engine in a staged release folder; the archive listing follows
+  The commands were checked against this engine in a staged release folder, except `shutdown` /
+  `shutdown --dry-run`, `Ask-Report.ps1`, `index --all --only Library --platform win64` and the
+  registering forms of `Register-DragLintProtocol.ps1` (only `-DryRun` / `-Unregister -DryRun` ran),
+  whose text comes from `--help` and the scripts' parameters. The archive listing follows
   `build\pack-lint-release.ps1`, and the Win32 archive is recorded as a known issue.
+- **`--help` banner:** the `info` verdict list now includes `index-newer` (the code emits it), and
+  `--rebuild` is listed on the `index --project` / `index --all` usage lines.
+
+### Known issues
+
+- **`index --project <X.dpr>` with no `--db` can write into a SIBLING project's database** in the
+  same folder and evict its rows (the folder-matched lookup is used for a write).
+  `docs\INBOX-2026-09-29-engine-index-project-without-db-writes-sibling-db.md`. Always pass `--db`.
+- Entries hidden inside a stored `(+N more)` window are checked only by count: an entry that left
+  the hidden part while another joined still passes. `dl:shared` (an uncapped render) is the cure
+  for a block written by several indexes.
 
 ## v1.20.2-alpha -- 2026-09-29
 

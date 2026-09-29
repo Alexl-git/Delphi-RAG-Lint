@@ -3,7 +3,7 @@ setlocal
 set HERE=%~dp0
 if not defined EXE set EXE=%HERE%..\..\third_party\dll-win64\drag-lint.exe
 set DB=%HERE%t35.sqlite
-del /q "%DB%" 2>NUL
+del /q "%DB%" "%DB%-wal" "%DB%-shm" 2>NUL
 "%EXE%" index "%HERE%Calls.pas" --db "%DB%" >NUL
 "%EXE%" rename --qname Calls.TWidget.Compute --to Calc --db "%DB%" --dry-run > "%HERE%t35_out.txt"
 type "%HERE%t35_out.txt"
