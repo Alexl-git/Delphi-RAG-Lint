@@ -1,3 +1,6 @@
 # SQL literal + var (11) fires; non-SQL literal + var (12) must not
 sql-injection-concat 11
-!sql-injection-concat 12
+# INSERT..VALUES( with no space before the paren (13, 14) still fires once the
+# bare '(' clause arm is gone -- it is carried by ' into ' / ' values'
+sql-injection-concat 13
+sql-injection-concat 14

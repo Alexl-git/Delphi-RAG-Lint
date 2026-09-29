@@ -32,10 +32,22 @@
 ; The verb is anchored to the start of the literal (allowing leading whitespace)
 ; because that is where a statement begins; a sentence that merely mentions
 ; "update" mid-prose no longer qualifies.
+; TIGHTENED A THIRD TIME 2026-09-28 -- A BARE '(' IS NOT A CLAUSE KEYWORD.
+; The clause alternation used to accept any '(' so INSERT INTO T(A) VALUES(
+; would qualify. But an English plural marker is a '(' too:
+;
+;   Format('Delete %d unit rule(s) and dismiss %d unit(s)?' + sLineBreak + ...)
+;
+; -- a MessageDlg confirmation, reported as SQL injection because "Delete"
+; is a verb and "rule(s)" holds a paren. The arm is replaced by the keywords it
+; stood in for: ' into ' (every INSERT, MERGE INTO) and ' values' with no
+; trailing space (so VALUES( still counts). Fixtures:
+; tests\lint\sql-injection-concat.pas (13, 14 still fire) and
+; tests\lint\sql-injection-concat-prose.pas (must not).
 ((exprBinary
   lhs: (literalString) @sql
   operator: (kAdd)
   rhs: (identifier)) @warn
   (#match? @sql "(?i)^'\\s*(select|insert|update|delete|merge|with)\\b")
-  (#match? @sql "(?i)( from | where | values | set |\\(| join )")
+  (#match? @sql "(?i)( from | where | values| set | into | join )")
   (#not-match? @sql "[\"\\[`]\\s*'$"))

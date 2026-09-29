@@ -1,0 +1,2 @@
+# English prose that starts with a SQL verb and holds a '(' is not SQL (2026-09-28 FP)
+!sql-injection-concat
