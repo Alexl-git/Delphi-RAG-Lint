@@ -67,15 +67,21 @@ function Test-DragLintTarget([string] $File, [string] $Line, [string] $Col) {
   if ("$Line" -match '[\x00-\x1F\x7F]')  { return (& $no 'control character in line') }
   if ("$Col" -match '[\x00-\x1F\x7F]')   { return (& $no 'control character in col') }
   if ($File -match '^[\\/][\\/]')        { return (& $no 'network or device path') }
-  if ($File -notmatch '^[A-Za-z]:\\')    { return (& $no 'not a local drive path') }
+  # CASE-SENSITIVE on purpose (fix round 3, SEC-R4): -match folds U+212A (Kelvin) to k and U+0130 to i
+  if ($File -cnotmatch '^[A-Za-z]:\\')   { return (& $no 'not a local drive path') }
   if ($File.Substring(2) -match '[:*?"<>|/]') { return (& $no 'illegal character in path') }
+  # Windows also reserves COM/LPT followed by a SUPERSCRIPT 1, 2 or 3 (U+00B9, U+00B2, U+00B3), and
+  # CONIN$ / CONOUT$. Written as [char] codes: this file stays 7-bit ASCII.
+  $sup = [string][char]0x00B9 + [char]0x00B2 + [char]0x00B3
+  $dev = '^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[0-9' + $sup + ']|LPT[0-9' + $sup + '])$'
   foreach ($seg in $File.Substring(3).Split('\')) {
     if ($seg -match '[. ]$') { return (& $no 'trailing dot or space') }
-    if ((($seg -split '\.')[0]).TrimEnd(' ') -match '^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$') { return (& $no 'reserved device name') }
+    if ((($seg -split '\.')[0]).TrimEnd(' ') -match $dev) { return (& $no 'reserved device name') }
   }
+  # ordinal after lowering: a case-insensitive -contains could fold `.pa<U+017F>` (long s) into `.pas`
   $ext = [IO.Path]::GetExtension($File).ToLowerInvariant()
-  if (@('.pas', '.dfm', '.dpr', '.inc', '.sql', '.fmx') -notcontains $ext) {
-    return (& $no ('extension not allowed: ' + $(if ($ext) { $ext } else { '(none)' })))
+  if (@('.pas', '.dfm', '.dpr', '.inc', '.sql', '.fmx') -cnotcontains $ext) {
+    return (& $no ('extension not allowed: ' + $(if ($ext) { $ext -replace '[^\x20-\x7E]', '?' } else { '(none)' })))
   }
   $n = 1
   if (-not [string]::IsNullOrEmpty($Line)) {
@@ -95,7 +101,9 @@ $LogDir     = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'drag-lint'
 $LogPath    = $(if ($env:DRAGLINT_URI_TEST_LOG) { $env:DRAGLINT_URI_TEST_LOG } elseif ($LogDir) { Join-Path $LogDir 'uri-handler.log' } else { '' })
 
 function Write-Log([string] $m) {
-  # the URI is attacker text: no control character reaches the log
+  # the URI is attacker text: capped at 512 chars (fix round 3, SEC-R4: a 30 KB line per click was
+  # observed) and no control character reaches the log
+  if ($m.Length -gt 512) { $m = $m.Substring(0, 512) + "...(+$($m.Length - 512) chars)" }
   $entry = "{0}  {1}" -f (Get-Date).ToString('s'), ($m -replace '[\x00-\x1F\x7F]', '?')
   if (-not $LogPath) { return }
   try {

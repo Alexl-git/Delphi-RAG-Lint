@@ -302,7 +302,9 @@ only the BROWSER hop, because a browser cannot write to a named pipe:
   already mapped. It takes EXACTLY ONE argument, the URI (ruling SEC-R2: a launcher that
   does not percent-encode `"` could otherwise append `-LogPath ...` through the
   registered `"%1"`); test overrides come only from `DRAGLINT_URI_TEST_*` environment
-  variables. A rejection exits 2 with one line in the FIXED log
+  variables. A drive letter must be ASCII A-Z (compared case-sensitively: U+212A and U+0130 fold to K / I),
+  and COM/LPT with a superscript 1-3 count as device names. A rejection exits 2 with one line (attacker text
+  capped at 512 chars) in the FIXED log
   `%LOCALAPPDATA%\drag-lint\uri-handler.log`. When no IDE answers it opens the file in
   NOTEPAD, never by its default verb.
   Tests: `src\Test-DragLintProtocol.ps1` (synthetic, launches nothing; SEC-1 runs the

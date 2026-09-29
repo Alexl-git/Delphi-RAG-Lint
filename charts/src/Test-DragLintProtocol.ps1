@@ -83,6 +83,16 @@ $hostile = [ordered]@{
   'UH-DUPFILE'  = @(('draglint://open?file=C%3A%5CP%5Ca.pas&line=1&file=%5C%5Chost%5Cx.pas'), 'duplicate file= in uri')
   'UH-DUPFILE2' = @(('draglint://open?file=%5C%5Chost%5Cx.pas&line=1&file=C%3A%5CP%5Ca.pas'), 'duplicate file= in uri')
   'UH-DUPLINE'  = @(('draglint://open?file=C%3A%5CP%5Ca.pas&line=1&line=2'), 'duplicate line= in uri')
+  # fix round 3 (SEC-R4): a non-ASCII "drive letter" that folds to A-Z case-insensitively (U+212A Kelvin -> k,
+  # U+0130 dotted I -> i), and the superscript device names Windows also reserves (COM/LPT + U+00B9/00B2/00B3)
+  'UH-KELVIN'   = @('draglint://open?file=%E2%84%AA%3A%5CP%5Cx.pas&line=1', 'not a local drive path')
+  'UH-DOTTEDI'  = @('draglint://open?file=%C4%B0%3A%5CP%5Cx.pas&line=1', 'not a local drive path')
+  'UH-COMSUP1'  = @('draglint://open?file=C%3A%5CP%5CCOM%C2%B9.pas&line=1', 'reserved device name')
+  'UH-COMSUP2'  = @('draglint://open?file=C%3A%5CP%5CCOM%C2%B2.pas&line=1', 'reserved device name')
+  'UH-LPTSUP3'  = @('draglint://open?file=C%3A%5CP%5Clpt%C2%B3.pas&line=1', 'reserved device name')
+  'UH-LPTSUP1'  = @('draglint://open?file=C%3A%5CP%5CLPT%C2%B9%5Cx.pas&line=1', 'reserved device name')
+  # the same fold on the extension: `.pa<U+017F>` (long s) is not `.pas`
+  'UH-LONGS'    = @('draglint://open?file=C%3A%5CP%5Cx.pa%C5%BF&line=1', 'extension not allowed: .pa?')
 }
 foreach ($k in $hostile.Keys) {
   Step $k {
@@ -117,6 +127,18 @@ Step 'UH-LINE0' {
 Step 'UH-SLASHEND' {
   $r = Invoke-Handler ((U 'C:\P\a.pas' '3') + '/')
   Chk 'UH-SLASHEND' "$($r.Exit)|$($r.Result.Line)" '0|3'
+}
+# fix round 3 (SEC-R4): attacker text reaches the log capped (~512 chars + "...(+N chars)"), one line per event:
+# a 30 KB URI (the `uri:` line) and a 30 KB extra argument (the `args:` line)
+Step 'UH-LOGCAP' {
+  $big = 'draglint://open?file=' + ('a' * 30000)
+  $before = $(if (Test-Path $log) { @(Get-Content $log).Count } else { 0 })
+  $null = & $H $big
+  $null = & $H $big 'second'
+  $added = @(Get-Content $log | Select-Object -Skip $before)
+  $longest = ($added | Measure-Object -Property Length -Maximum).Maximum
+  $marked = @($added | Where-Object { $_ -match '\.\.\.\(\+\d+ chars\)' }).Count
+  Chk 'UH-LOGCAP' "lines=$($added.Count) longest<=600=$($longest -le 600) marked=$marked" 'lines=4 longest<=600=True marked=2'
 }
 
 Write-Host 'handler: the validation function and Windows PowerShell 5.1 ...'
@@ -205,7 +227,10 @@ Step 'RG-UNREG-DRY' {
   $inst = Join-Path $sbInst 'Open-DragLintUri.ps1'
   New-Item -ItemType Directory -Force $sbInst | Out-Null
   Set-Content $inst 'installed' -Encoding ascii
-  $d = & $REG -Unregister -DryRun -InstallDir $sbInst
+  # fix round 3 (SEC-R4): -WhatIf as well -- the real key EXISTS (the owner's live registration). If the
+  # -DryRun branch ever regressed, ShouldProcess answers "no" under -WhatIf, so nothing is removed and this
+  # check still goes red (no plan comes back); it can never delete the real key.
+  $d = & $REG -Unregister -DryRun -WhatIf -InstallDir $sbInst
   $keyNow = $(if (Test-Path 'HKCU:\Software\Classes\draglint') { 'HKCU:\Software\Classes\draglint' } else { '' })
   Chk 'RG-UNREG-DRY' "$($d.Action)|$($d.RemoveKey)|$($d.RemoveCopy)" "Unregister|$keyNow|$inst"
   if (-not (Test-Path $inst)) { Fail 'RG-UNREG-DRY' '-Unregister -DryRun deleted the installed copy' }
