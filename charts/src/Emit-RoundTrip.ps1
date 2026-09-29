@@ -21,7 +21,8 @@
   same-line name match (E3); the UPDATE / SELECT texts live in FIB$ rows the
   clones do not hold (E4); the accessor's field read is unbound (INBOX-in-class-
   field-reads-unbound); a member call on a unit-level var is resolved through the
-  var's declared type (receiver-typed-calls, filed as INBOX-charts-receiver-typed-calls-unbound);
+  var's declared type while it is unbound (receiver-typed-calls, filed as INBOX-charts-receiver-typed-calls-unbound;
+  resolver 1.11 RB-1 binds the GDatasetsDef / GBroadcastServer calls, so those hops are now certain);
   a field's declared type is matched to its class by name (type-use-binding, INBOX-charts-type-use-unbound).
   Every such step names its ask; a hop that is the walk's own inference names none (final-review M2).
 

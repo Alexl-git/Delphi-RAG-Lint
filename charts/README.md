@@ -66,9 +66,10 @@ and edge must be a fact with a file and a line.
 
 * PowerShell only, never Bash. Wait by BLOCKING, never polling.
 * Engine by path: the SHARED deployed engine
-  `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (1.18.x-1.19.x
-  over this branch; reads on the r=1.9 clones measured byte-identical between
-  them), never this worktree's own build. Run `--version` for the one deployed now.
+  `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (1.18.x-1.20.x
+  over this branch; the clones under `scratch\db` were re-taken 2026-09-28 at
+  `v=1.20.0-alpha / r=1.11.0-alpha`), never this worktree's own build. Run
+  `--version` for the one deployed now.
 * Self-index only as
   `index --project src\cli\drag-lint.dproj --db src\cli\_D-RAG\drag-lint.sqlite`.
 * Strict 7-bit ASCII, CRLF, no BOM in every `.pas` / `.ps1` / `.bat`.

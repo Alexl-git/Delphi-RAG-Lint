@@ -64,8 +64,8 @@ function New-RowHref([string] $File, [int] $Line) {
 # 2026-09-27 the charts run the SHARED engine
 # (C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe -- 1.18.x-1.19.x over the
 # trace-core branch; reads on the r=1.9 clones measured byte-identical between them), and the clones under scratch\db were re-taken on
-# 2026-09-27 23:15 (DL at 23:50) and carry v=1.19.0-alpha / r=1.9.0-alpha (schema_meta,
-# checked at the resolver-1.9 re-baseline).
+# 2026-09-28 18:17-18:18 (DL first) and carry v=1.20.0-alpha / r=1.11.0-alpha (schema_meta,
+# checked at the resolver-1.11 re-baseline).
 #
 # This guard is NOT about corruption. Reads are proven safe: only `index`
 # re-resolves, and a full day of reads left both DBs still on r=1.6.0-alpha.
@@ -90,9 +90,10 @@ function New-RowHref([string] $File, [int] $Line) {
 # by habit, and "by habit" is precisely what is being guarded against.
 #
 # THE SUFFIX RULE (N35, controller ruling R3, 2026-09-23). The clone root also
-# holds HISTORY: `*.sqlite.pre-1.9`, `*.sqlite.pre-1.19`, `*.sqlite.pre-1.18` and
+# holds HISTORY: `*.sqlite.pre-1.10`, `*.sqlite.pre-1.9`, `*.sqlite.pre-1.19`, `*.sqlite.pre-1.18` and
 # `*.sqlite.pre-reindex-0530` are byte-for-byte older clones kept for comparison
-# (`pre-1.9` = the resolver-1.8 set, before the 2026-09-27 re-take), plus
+# (`pre-1.10` = the v=1.19 / r=1.9 set, before the 2026-09-28 re-take;
+# `pre-1.9` = the resolver-1.8 set, before the 2026-09-27 re-take), plus
 # `DL-drag-lint.sqlite.withheld-2145` (a first DL copy whose resolver had
 # withheld every call edge of the 20 units edited since their parse). They sit
 # under the root, so the whitelist alone ACCEPTS them -- and a 562-file pre-1.18 CLIENT answers every
@@ -111,7 +112,7 @@ function Get-CloneDb([string] $Path) {
 
   if (-not $full.EndsWith('.sqlite', [StringComparison]::OrdinalIgnoreCase)) {
     throw ("refusing a database whose name does not end in .sqlite: $full -- the clone root keeps " +
-           'history copies (*.sqlite.pre-1.9, *.sqlite.pre-1.19, *.sqlite.pre-1.18, *.sqlite.pre-reindex-0530) beside the live clones, and ' +
+           'history copies (*.sqlite.pre-1.10, *.sqlite.pre-1.9, *.sqlite.pre-1.19, *.sqlite.pre-1.18, *.sqlite.pre-reindex-0530) beside the live clones, and ' +
            'they answer with an OLDER parse. Point at the *.sqlite clone itself.')
   }
 
@@ -126,7 +127,7 @@ function Get-CloneDb([string] $Path) {
 
   throw ("refusing a non-clone database: $full -- charts run against the clones in $root. " +
          'A live DB can be re-indexed mid-run, so an asserted count would not be reproducible; ' +
-         'the clones (v=1.19.0-alpha / r=1.9.0-alpha) freeze it. Set DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 ' +
+         'the clones (v=1.20.0-alpha / r=1.11.0-alpha) freeze it. Set DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 ' +
          'to override deliberately.')
 }
 
@@ -908,11 +909,11 @@ SELECT c.parent_id AS tid, GROUP_CONCAT(c.name, ',') AS cols
 # `quoted` state stays as a guard (R25): no real column reaches it on the 1.19
 # clones, and the gate drives it with a hand-made table set (A-COLSTATE-QUOTED).
 #
-# THE `yes` ANCHOR IS THE ENGINE'S sql_column start_line, which is ONE LINE
-# EARLY for a column on its own line: the extracted node starts right after the
-# previous token (CAUSFAIL.REASON at 1410:45 is declared on :1411;
-# FOLDERCOUNT.TABLE at 3847:27 on :3848). Pre-existing, identical on the 1.18
-# and 1.19 clones -- reported as a finding at the 1.19 re-baseline, not fixed here.
+# THE `yes` ANCHOR IS THE ENGINE'S sql_column start_line -- since extractor 1.20
+# the column's own declaring line (CAUSFAIL.REASON :1411, FOLDERCOUNT.TABLE
+# :3848). On the 1.18 and 1.19 clones it was ONE LINE EARLY for a column on its
+# own line (the node started right after the previous token: 1410:45, 3847:27);
+# reported at the 1.19 re-baseline, fixed by the engine, re-pinned 2026-09-28.
 #
 # States, in precedence order:
 #   yes         extracted as a column of the NEWEST declaration   [certain]

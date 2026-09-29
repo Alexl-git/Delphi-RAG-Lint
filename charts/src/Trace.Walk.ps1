@@ -49,7 +49,7 @@ function New-AnchorResult {
 # The note of a column step (final-review I7): what the SQL index says about the column, as GENERATED
 # text, never truncated (T3-M2). It states the SQL fact on its own terms -- the step's [inferred] grade is
 # the dataset -> table hop, and the note must not read as grading the column. An extracted column reads
-# `NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2808)`; any other state
+# `NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2809)`; any other state
 # (quoted, older declaration, server SQL) keeps Get-SqlColumnState's label, made safe for a note.
 function Get-ColumnFactNote($Cs, $SqlSet) {
   $n = [int]$SqlSet.Tables[[string]$Cs.Table].DeclCount
@@ -995,6 +995,9 @@ function Get-StreamFormat([string] $RawLine) {
 # is INBOX-in-class-field-reads-unbound; any other ('receiver-typed-calls': a member
 # call on a unit var such as GDatasetsDef, D22 did not bind it) is filed as
 # C:\Projects\Delphi-RAG-lint\docs\INBOX-charts-receiver-typed-calls-unbound.md (T5-R4).
+# Resolver 1.11 (RB-1) binds those unit-var calls, so on the 1.20 / 1.11 clones the
+# GDatasetsDef / GBroadcastServer sites no longer reach this by-name path; it stays for
+# any receiver the index still leaves unbound.
 # Cached per index + routine + receiver + name: the same `FConn.X` repeats in a body.
 function Resolve-ImplByName([string] $Recv, [string] $Name, $F) {
   $segs = @(($Recv -replace '^Self\.', '') -split '\.')

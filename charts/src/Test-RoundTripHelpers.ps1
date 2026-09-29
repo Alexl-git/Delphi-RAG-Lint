@@ -413,7 +413,8 @@ foreach ($ln in $lines) {
   if ($secOf -in 'WRITE', 'SERVER', 'DATABASE' -and $ln -match '^\[\d+\] STOPS ') { $stopsW += (($ln -replace '^\[\d+\] STOPS ', '') -replace ' @.*$', '') }
 }
 $res.RtStops = $stopsW -join '|'
-$res.RtColumn = (LinesLike 'WRITES OPERAT\.NAME \[inferred\] @MS1\.SQL:2808').Count
+# RE-PINNED 2026-09-28 (extractor 1.20: sql_column on its declaring line): MS1.SQL:2808 -> 2809
+$res.RtColumn = (LinesLike 'WRITES OPERAT\.NAME \[inferred\] @MS1\.SQL:2809').Count
 $res.RtRspOk = (LinesLike '^\[\d+\] RECEIVES rspOK @Blueprint4\.ViewModel\.pas:3990').Count + (LinesLike 'APPLIES FMTOperation\.CommitUpdates @Blueprint4\.ViewModel\.pas:4010').Count
 # the rebinding really switched indexes: file counts differ (CLIENT 625, SERVER 471)
 $res.RtOnDb = $rt.OnDbProof

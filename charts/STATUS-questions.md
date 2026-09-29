@@ -250,9 +250,9 @@ GAP 2 (raise/handle) is NOT touched by this change and they declined to guess.
 
 **Superseded.** Since 2026-09-27 (Task 0 of the trace-core plan) every emitter runs the
 SHARED deployed engine `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`
-(1.18.x-1.19.x over the trace-core branch; reads on the r=1.9 clones measured
-byte-identical between them -- run `--version` for the one deployed now), and the
-clones carry `v=1.19.0-alpha / r=1.9.0-alpha`. What follows is the 2026-09-23 record,
+(1.18.x-1.20.x over the trace-core branch -- run `--version` for the one deployed
+now), and the clones carry `v=1.20.0-alpha / r=1.11.0-alpha` (re-taken 2026-09-28;
+the r=1.9 set is kept as `*.sqlite.pre-1.10`). What follows is the 2026-09-23 record,
 kept because it is why the clones and the version guard exist.
 
 **2026-09-23 05:30 -- the engine team reindexed the whole corpus** (CLIENT,
@@ -353,7 +353,23 @@ who-writes "bound, not reported" workaround is dropped.
 **The earlier batches are all done.** 26 of 27 catalogue questions ship (`round-trip` 2026-09-28); only
 `compare` does not, parked by the owner.
 
-**THE SUITE IS GREEN (2026-09-28 14:33-15:00, after the round-trip final fix wave) on the shared deployed engine
+**THE SUITE IS GREEN (2026-09-28 18:59-19:26) on re-taken clones at `v=1.20.0-alpha / r=1.11.0-alpha`**
+(engine 1.20.0-alpha; all 9 copied 18:17-18:18, DL first; the r=1.9 set kept as `*.sqlite.pre-1.10`; the CLIENT
+live DB had a 5-commit WAL rewriting only `schema_meta` with identical values, so its main file was copied and
+verified equal to the live DB by stamps and table counts -- ruling RC-R3). Moved pins, each traced:
+* extractor 1.20, sql_column on its own identifier line (+1): IPCHART.ACTION 2242 -> 2243, FOLDERCOUNT.TABLE
+  3847 -> 3848, CAUSFAIL.REASON 1410 -> 1411, OPERAT.NAME 2808 -> 2809 (MScript2 1640 -> 1641, IPCHART.ACTION's
+  older 1902 -> 1903). `INBOX-sql-column-start-line-one-early.md` is fixed. A-LW-N31-QUOTED's old 3847 still
+  passed only through the table node's CREATE TABLE line; it now pins 3848.
+* resolver 1.11 RB-1 (unit-var receiver calls bind): GetTable x4 and PushTableChanged now bound; EnsureLoaded /
+  GetTable / PushTableChanged lose `[by name]` and `ask receiver-typed-calls` in every round-trip.
+* RB-1 also moved the broadcast into the transport skip (a BOUND call into `uBroadcast%`): 76/31 -> 75/30 and
+  golden 17 -> 16 until RC-R6 kept a transport callee whose body calls WriteFile (and kin) as a step, not
+  descended. OPERAT.NAME 76/31/4/2, holdout 103/35/4/2, DimAbbr 98/35/4/2, golden 17/17, ALSO 9: unchanged.
+* AS OF stamps. `Self.X` writes (CLIENT 32,915) moved no pin; CLIENT / SERVER / SQL sources identical to the old
+  clones (per-file sha).
+
+**THE SUITE WAS GREEN (2026-09-28 14:33-15:00, after the round-trip final fix wave) on the shared deployed engine
 (`--version`: 1.19.1-alpha) and the same r=1.9 clones.** OPERAT.NAME 76/31/4/2 and the holdout 103/35/4/2 did not move;
 the wave's own pins are listed in its commits.
 

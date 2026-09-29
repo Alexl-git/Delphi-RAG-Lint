@@ -1671,15 +1671,15 @@ Step 'E-CO' {
   # RE-BASELINED at 1.19 (engine D19 fixed; R25): MS1.SQL's "ACTION" is now
   # EXTRACTED (newest IPCHART 136 -> 137 columns, matching live Firebird), so the
   # state is `yes`, [certain], and no quoted / older wording may appear. The line
-  # is the engine's sql_column start, 2242 -- ONE LINE EARLY, as for every
-  # extracted column (A-LW1-HREF pins REASON at 1410; it is declared on 1411):
-  # the node starts after the previous token. An ENGINE defect (SQL extractor),
-  # pre-existing and identical on the 1.18 clone, filed as
-  # C:\Projects\Delphi-RAG-lint\docs\INBOX-sql-column-start-line-one-early.md. When the engine
-  # fixes it, this pin (2242), A-CO-QUOTED / A-LW-N31-QUOTED (3847) and
-  # A-LW1-HREF (1410) each move by +1 -- that move is the fix, not a regression.
+  # is the engine's sql_column start, 2243 -- the column's own declaring line.
+  # RE-PINNED 2026-09-28 (re-clone at extractor 1.20 / resolver 1.11): was 2242,
+  # ONE LINE EARLY for every extracted column (the node started after the
+  # previous token; INBOX-sql-column-start-line-one-early.md). Extractor 1.20
+  # puts each sql_column row on its own identifier line, so this pin,
+  # A-CO-QUOTED / A-LW-N31-QUOTED (3847 -> 3848) and A-LW1-HREF / A-FF1-HREF
+  # (1410 -> 1411) each moved +1 -- the fix, not a regression.
   $script:co5 = & "$SRC\Emit-Consumers.ps1" -Column 'IPCHART.ACTION' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
-  Chk 'A-CO5-OLDER'     "$($co5.ColumnState):$($co5.ColumnLine):$($co5.ColumnOlderOnly)" 'yes:MS1.SQL:2242:False'
+  Chk 'A-CO5-OLDER'     "$($co5.ColumnState):$($co5.ColumnLine):$($co5.ColumnOlderOnly)" 'yes:MS1.SQL:2243:False'
   $tc5 = Dot $co5
   if ($tc5 -notmatch '\[certain\] a column of the newest of 2 declaration\(s\), MS1\.SQL') { Fail 'A-CO5-OLDER' 'the [certain] column label is missing' }
   if ($tc5 -match 'QUOTED|extracts it unquoted') { Fail 'A-CO5-OLDER' 'the quoted / older-copy wording still fires on an extracted column' }
@@ -1688,11 +1688,11 @@ Step 'E-CO' {
   # item 1: a QUOTED column consumers used to REFUSE ("no column TABLE in
   # FOLDERCOUNT") while lands-where anchored it -- now the same state, same line.
   # RE-BASELINED at 1.19 (D19 fixed): an ordinary extracted column, `yes`, at the
-  # engine's sql_column line 3847 -- an ENGINE defect, one line early (declared on
-  # 3848; INBOX-sql-column-start-line-one-early.md, see A-CO5-OLDER): moves to 3848 when fixed.
+  # engine's sql_column line. RE-PINNED 2026-09-28 (extractor 1.20, see A-CO5-OLDER):
+  # 3847 -> 3848, the line `"TABLE"` is declared on (it was one line early).
   $script:coq = & "$SRC\Emit-Consumers.ps1" -Column 'FOLDERCOUNT.TABLE' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
-  Chk 'A-CO-QUOTED'     "$($coq.ColumnState):$($coq.ColumnLine):$($coq.ServerRoutines)" 'yes:MS1.SQL:3847:2'
-  if (-not (HasLine (Dot $coq) 3847)) { Fail 'A-CO-QUOTED' 'the focus is not anchored on the extracted column (MS1.SQL:3847)' }
+  Chk 'A-CO-QUOTED'     "$($coq.ColumnState):$($coq.ColumnLine):$($coq.ServerRoutines)" 'yes:MS1.SQL:3848:2'
+  if (-not (HasLine (Dot $coq) 3848)) { Fail 'A-CO-QUOTED' 'the focus is not anchored on the extracted column (MS1.SQL:3848)' }
   if ((Dot $coq) -match 'QUOTED') { Fail 'A-CO-QUOTED' 'the quoted wording still fires on an extracted column' }
 
   # R25: the QUOTED state has no real input left, so it is driven on a HAND-MADE
@@ -1726,7 +1726,9 @@ Step 'E-CO' {
   # was not extracted
   if ($cqs.L1 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:3848) that the SQL index did not extract as a column') {
     Fail 'A-COLSTATE-QUOTED' "the quoted label moved: $($cqs.L1)" }
-  if ($cqs.L2 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:2243) that the SQL index did not extract as a column; an older declaration (MScript2.SQL:1902) extracts it unquoted') {
+  # RE-PINNED 2026-09-28 (extractor 1.20, see A-CO5-OLDER): the older declaration's sql_column line
+  # MScript2.SQL:1902 -> 1903, the line `ACTION` is declared on (it was one line early)
+  if ($cqs.L2 -ne '[inferred -- source scan] a QUOTED identifier in the newest declaration (MS1.SQL:2243) that the SQL index did not extract as a column; an older declaration (MScript2.SQL:1903) extracts it unquoted') {
     Fail 'A-COLSTATE-QUOTED' "the quoted-plus-older label moved: $($cqs.L2)" }
   Chk 'A-FF-QUOTED' $cqs.Hop 'column "TABLE" / column REASON'
   # The quoted state RENDERED through the emitters (fix round 1, item 7). A doctored
@@ -1864,8 +1866,9 @@ Step 'E-FF' {
   $tf1 = Dot $ff1
   # colREASON FieldName (.dfm:60), dsrCausFail (.dfm:88), the assignment
   # (uCausFailForm.pas:125, FormActivate), the CAUSFAIL literal
-  # (uCausFail.ViewModel.pas:37), the REASON column (MS1.SQL:1410)
-  foreach ($ln in 60, 88, 125, 37, 1410) { if (-not (HasLine $tf1 $ln)) { Fail 'A-FF1-HREF' "no row anchored on line $ln" } }
+  # (uCausFail.ViewModel.pas:37), the REASON column (MS1.SQL:1411 -- RE-PINNED 2026-09-28
+  # from 1410, extractor 1.20 puts sql_column on its declaring line; see A-CO5-OLDER)
+  foreach ($ln in 60, 88, 125, 37, 1411) { if (-not (HasLine $tf1 $ln)) { Fail 'A-FF1-HREF' "no row anchored on line $ln" } }
   if ($tf1 -notmatch 'TfrmCausFail\.FormActivate') { Fail 'A-FF1-ROUTINE' 'the assignment row does not name FormActivate' }
   if ($tf1 -notmatch 'cluster_hop_\d+ \{\s*style="rounded,filled,dashed"') { Fail 'A-FF1-DASHED' 'no dashed hop' }
 
@@ -2008,10 +2011,10 @@ Step 'E-LW' {
   Chk 'A-LW1-PROCS'     $lw1.Procedures 0
   Chk 'A-LW1-CLICK'     "$($lw1.ClickTargets)/$($lw1.Expected)" '9/9'
   $tl1 = Dot $lw1
-  # 1410 is CAUSFAIL.REASON's column anchor: the engine's sql_column start, ONE LINE
-  # EARLY (declared on 1411) -- an ENGINE defect, INBOX-sql-column-start-line-one-early.md;
-  # it moves to 1411 when the engine fixes it (see A-CO5-OLDER).
-  foreach ($ln in 81, 124, 109, 229, 159, 1410, 15, 60) { if (-not (HasLine $tl1 $ln)) { Fail 'A-LW1-HREF' "no row anchored on line $ln" } }
+  # 1411 is CAUSFAIL.REASON's column anchor: the engine's sql_column start, its declaring
+  # line. RE-PINNED 2026-09-28 from 1410 (one line early until extractor 1.20;
+  # INBOX-sql-column-start-line-one-early.md, see A-CO5-OLDER).
+  foreach ($ln in 81, 124, 109, 229, 159, 1411, 15, 60) { if (-not (HasLine $tl1 $ln)) { Fail 'A-LW1-HREF' "no row anchored on line $ln" } }
   # RE-WORDED in the final wave (item 2): the count is what the SQL index EXTRACTS.
   # At 1.19 (D19 fixed) the quoted FOLDERCOUNT.TABLE is extracted, so the grade is
   # 1,992 with NO "+1 a QUOTED column" and the coverage line names no quoted column.
@@ -2071,13 +2074,15 @@ Step 'LW-N31-SRVSQL' {
 # FINDING (1.18): FOLDERCOUNT."TABLE" was a QUOTED column (MS1.SQL:3848) the SQL
 # index dropped. RE-BASELINED at 1.19 (engine D19 fixed; R25): it is EXTRACTED,
 # so lands-where draws an ordinary [certain] column anchored on the engine's
-# sql_column line 3847 -- an ENGINE defect, one line early (INBOX-sql-column-start-line-one-early.md;
-# see A-CO5-OLDER): moves to 3848 when fixed -- and says nothing quoted.
+# sql_column line 3848 -- and says nothing quoted. RE-PINNED 2026-09-28 from 3847
+# (extractor 1.20, see A-CO5-OLDER). The old 3847 pin still PASSED on the new clone,
+# because the FOLDERCOUNT table node anchors CREATE TABLE on :3847 -- it no longer
+# proved the column's anchor.
 # The quoted state itself is driven synthetically by A-COLSTATE-QUOTED.
 Step 'LW-N31-QUOTED' {
   $script:lw31q = & "$SRC\Emit-LandsWhere.ps1" -Field 'uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-LW-N31-QUOTED' "$($lw31q.ColumnState):$($lw31q.TableColumn)" 'yes:FOLDERCOUNT.TABLE'
-  if (-not (HasLine (Dot $lw31q) 3847)) { Fail 'A-LW-N31-QUOTED' 'the extracted column is not anchored on its sql_column line MS1.SQL:3847' }
+  if (-not (HasLine (Dot $lw31q) 3848)) { Fail 'A-LW-N31-QUOTED' 'the extracted column is not anchored on its sql_column line MS1.SQL:3848' }
   if ((Dot $lw31q) -match 'QUOTED') { Fail 'A-LW-N31-QUOTED' 'the quoted wording still fires on an extracted column' }
   # The quoted state RENDERED through lands-where (fix round 1, item 7): the same
   # hook as A-CO-QUOTED-RENDER. This also drives the convention wording branches
@@ -2212,16 +2217,23 @@ NegTest 'LW-ART-N' 'lands-where needs -ServerDbPath' 'never' {
 # Every string below was MEASURED 2026-09-27 on the 1.19 / 1.8 clones and is PINNED.
 # RE-MEASURED 2026-09-28 on the 1.19 / 1.9 clones Task 0 re-took: the helper returns the
 # SAME 23 values on both, so the re-clone (D22, D31, resolver 1.9) moved none of these facts.
+# RE-MEASURED 2026-09-28 on the 1.20 / 1.11 clones: 3 moved, each traced -- GETTABLE / PUSH (resolver
+# 1.11 RB-1: calls on a unit-level var receiver bind) and TABLELIT (extractor 1.20: sql_column on its
+# own line, +1).
 # A drift is a FINDING about the index (or about a helper), never a number to edit.
 Note 'round-trip: the re-measure ...'
 Step 'E-RT0' {
   $script:rt0 = & "$SRC\Test-RoundTripHelpers.ps1" -DbCli $DbCli -DbSrv $DbSrv -DbSql $DbSql -OutDir $OutDir
-  # GetTable is UNBOUND at every call site and has one implementation: the walk resolves it BY NAME
-  Chk 'A-RT0-GETTABLE'  $rt0.GetTableCalls 'uGenericTableRoute.pas:431:-1,uPipeSessionBuilder.pas:525:-1,uPipeSessionBuilder.pas:649:-1,uPipeSessionBuilder.pas:1301:-1'
+  # GetTable has one implementation. RE-PINNED 2026-09-28 (resolver 1.11, RB-1): every call site on the
+  # unit var GDatasetsDef now BINDS to TDatasetsDef.GetTable (151229) -- was -1 (unbound) at all four,
+  # which the walk resolved BY NAME (ask receiver-typed-calls)
+  Chk 'A-RT0-GETTABLE'  $rt0.GetTableCalls 'uGenericTableRoute.pas:431:151229,uPipeSessionBuilder.pas:525:151229,uPipeSessionBuilder.pas:649:151229,uPipeSessionBuilder.pas:1301:151229'
   Chk 'A-RT0-GETIMPL'   $rt0.GetTableImpls 'uDatasetsDef.TDatasetsDef.GetTable:199'
   Chk 'A-RT0-GLOBALS'   $rt0.GlobalVars 'var:TBroadcastServer:136,var:TDatasetsDef:66'
-  # the post-commit broadcast: one unbound call in HandleDelta, one implementation (golden node 13 cites :120, the declaration area)
-  Chk 'A-RT0-PUSH'      $rt0.PushCalls 'uGenericTableRoute.pas:507:-1:HandleDelta'
+  # the post-commit broadcast: one call in HandleDelta, one implementation (golden node 13 cites :120, the declaration area).
+  # RE-PINNED 2026-09-28 (resolver 1.11, RB-1): the call on the unit var GBroadcastServer now BINDS to
+  # TBroadcastServer.PushTableChanged (151569) -- was -1 (unbound)
+  Chk 'A-RT0-PUSH'      $rt0.PushCalls 'uGenericTableRoute.pas:507:151569:HandleDelta'
   Chk 'A-RT0-PUSHIMPL'  $rt0.PushImpl 'uBroadcastServer.TBroadcastServer.PushTableChanged:401:decl124'
   # the Exit lines the 12 golden guards hang on (plus 4004, 193 and 612, which are branch ends, not golden guards;
   # 612 is HandleTableLoad's except-handler Exit after Rollback -- the plan's probe read 515-560 only, and 612 is on the 1.8 clone too)
@@ -2232,7 +2244,9 @@ Step 'E-RT0' {
   Chk 'A-RT0-REPOINT'   $rt0.RePointMember '2282:FBlueprint_ViewModel:property:Blueprint4.Interfaces.IBlueprint_ViewModel.pdsrOperation:171:ro'
   Chk 'A-RT0-ACCESSOR'  "$($rt0.AccessorImpls)|$($rt0.AccessorReads)" 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetpdsrOperation:1263|FDsrOperation:-1'
   Chk 'A-RT0-DSSITE'    "$($rt0.DataSetSites)|$($rt0.AnchorFields)" '657:Create|FDsrOperation:TDataSource:99,FMTOperation:TFDMemTable:78'
-  Chk 'A-RT0-TABLELIT'  "$($rt0.TableLiterals)|$($rt0.SqlColumn)" '769:BuildSchema,1207:LoadAllForFolder,4306:VerifyAll|MS1.SQL:2808,MScript2.SQL:1640'
+  # RE-PINNED 2026-09-28 (extractor 1.20, see A-CO5-OLDER): OPERAT.NAME's sql_column lines MS1.SQL:2808 -> 2809
+  # and MScript2.SQL:1640 -> 1641, the lines NAME is declared on (they were one line early)
+  Chk 'A-RT0-TABLELIT'  "$($rt0.TableLiterals)|$($rt0.SqlColumn)" '769:BuildSchema,1207:LoadAllForFolder,4306:VerifyAll|MS1.SQL:2809,MScript2.SQL:1641'
   # the ALSO basis (AC-10): 9 bound callers of the sender, 3 fill lines (B is not a route -- it never crosses)
   Chk 'A-RT0-CALLERS'   $rt0.SenderCallers 'ImportJenVICI:1853,ImportLK:2175,ImportNikon:2441,ImportSheffield:3124,ImportZEISS:3416,DoAfterPostOperation:3951,DoAfterDeleteOperation:3957,AddOperation:4099,VerifyAll:4273'
   Chk 'A-RT0-FILLS'     $rt0.FillLines '769:BuildSchema->B,1207:LoadAllForFolder->LoadOneTable,4306:VerifyAll->LoadOneTable'
@@ -2296,7 +2310,8 @@ Step 'E-RT0' {
   Chk 'A-RT3-WORD-INDEXER' $rt0.TraceWordIndexer 'X.Fields[0].DataSet (by name]'
   # RE-PINNED by final-review I7 (generated text is never truncated, T3-M2; the note states the SQL fact, not a grade
   # set against the hop's [inferred]): was 'column NAME of OPERAT: (certain) a column of the newest of 2 declarat...'
-  Chk 'A-RT3-COLNOTE'    $rt0.ColumnNote 'NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2808)'
+  # RE-PINNED 2026-09-28 (extractor 1.20, see A-RT0-TABLELIT): MS1.SQL:2808 -> 2809
+  Chk 'A-RT3-COLNOTE'    $rt0.ColumnNote 'NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2809)'
   # Review Focus 5: the stale file named is the FORM unit
   Chk 'A-RT3-STALE-FORM' $rt0.Anchor5Stale 'Blueprint4.pas:'
   # Task 4: the 12 golden guards quoted verbatim (form:keyword:if-line:ok:<the EXACT condition> -- ruling T4-R2);
@@ -2355,14 +2370,18 @@ Step 'E-RT0' {
   # SplitPayload (:409, kept for its own `BarPos < 0` guard), EnsureLoaded [by name] (:429, the FIB$ reads sit
   # under it, so GetTable's by-name unit scan finds them Seen and adds none), LoadFromInternal (bound, under
   # EnsureLoaded) and BindParams (under HandleUpdateRecord, one LoadFromStream). GetTable / EnsureLoaded /
-  # PushTableChanged are [by name] (ask receiver-typed-calls: member calls on the unit vars GDatasetsDef /
-  # GBroadcastServer stay unbound, D22). MOVED by T5-R1: CoerceMSCLISTPlanIds (:469) is gone -- its enclosing
-  # condition `TableName = 'MSCLIST'` names another table, so the call is in the OMITS disclosure, not the path
+  # PushTableChanged WERE [by name] on the r=1.9 clones (ask receiver-typed-calls: member calls on the unit vars
+  # GDatasetsDef / GBroadcastServer stayed unbound, D22). MOVED by T5-R1: CoerceMSCLISTPlanIds (:469) is gone -- its enclosing
+  # condition `TableName = 'MSCLIST'` names another table, so the call is in the OMITS disclosure, not the path.
+  # RE-PINNED 2026-09-28 (resolver 1.11, RB-1): the member calls on the unit vars GDatasetsDef / GBroadcastServer
+  # now BIND, so EnsureLoaded / GetTable / PushTableChanged lost their [by name] grade (and their receiver-typed-calls
+  # ask); same steps, same order. PushTableChanged binds into a transport-convention unit (uBroadcast%), which the
+  # walk skips unless the callee makes an outward I/O call -- it does (WriteFile), so it stays a step (RC-R6)
   Chk 'A-RT5-SERVER'    $rt0.RtServer ('ROUTES cmdDelta TO IPipeSessionBuilder.HandleDelta|CALLS TPipeSessionBuilder.HandleDelta [by name]|' +
-                                       'CALLS TGenericTableRoute.HandleDelta|CALLS SplitPayload|CALLS TDatasetsDef.EnsureLoaded [by name]|' +
-                                       'CALLS TDatasetsDef.LoadFromInternal|CALLS TDatasetsDef.GetTable [by name]|' +
+                                       'CALLS TGenericTableRoute.HandleDelta|CALLS SplitPayload|CALLS TDatasetsDef.EnsureLoaded|' +
+                                       'CALLS TDatasetsDef.LoadFromInternal|CALLS TDatasetsDef.GetTable|' +
                                        'CALLS TGenericApplyContext.HandleUpdateRecord|CALLS TGenericApplyContext.BindParams|' +
-                                       'CALLS TBroadcastServer.PushTableChanged [by name]')
+                                       'CALLS TBroadcastServer.PushTableChanged')
   # the FIB$DATASETS_INFO SQL literal, once per direction (a message that merely NAMES the table, :433/:434, is not
   # SQL). READ SECTION ADDED (Task 6): 1 -> 2 -- the READ server walk runs EnsureLoaded -> LoadFromInternal too, and
   # each direction walks with its own Seen, so the read at :130 is a step of both paths
@@ -2488,10 +2507,12 @@ Step 'E-RT0' {
   # FIX ROUND 1 moved it: T6-R1 -- EmptyDataSet's verb is EMPTIES (was LOADS: it empties the dataset); M4 -- the two
   # DATABASE steps stand right after the RUNS that executes the query (Qry.Open :594), in source order, no longer after
   # SENDS rspData :618
+  # RE-PINNED 2026-09-28 (resolver 1.11, RB-1): EnsureLoaded and GetTable are BOUND (calls on the unit var
+  # GDatasetsDef), so their [by name] grade is gone; same steps, same order (HandleTableLoad stays [by name], ask E2)
   Chk 'A-RT6-READ'      $rt0.RtRead ("LOADS FMTOperation VIA TBlueprint_ViewModel.LoadOneTable 'OPERAT'|CALLS TBlueprint_ViewModel.LoadOneTable 'OPERAT'|CROSSES process boundary|" +
                                      'SERVER ROUTES cmdTableLoad TO IPipeSessionBuilder.HandleTableLoad|SERVER CALLS TPipeSessionBuilder.HandleTableLoad [by name]|' +
-                                     'SERVER CALLS TDatasetsDef.EnsureLoaded [by name]|SERVER CALLS TDatasetsDef.LoadFromInternal|SERVER READS FROM FIB$DATASETS_INFO [inferred]|' +
-                                     'SERVER RUNS Q.Open|SERVER READS FROM FIB$FIELDS_INFO [inferred]|SERVER RUNS Q.Open|SERVER CALLS TDatasetsDef.GetTable [by name]|' +
+                                     'SERVER CALLS TDatasetsDef.EnsureLoaded|SERVER CALLS TDatasetsDef.LoadFromInternal|SERVER READS FROM FIB$DATASETS_INFO [inferred]|' +
+                                     'SERVER RUNS Q.Open|SERVER READS FROM FIB$FIELDS_INFO [inferred]|SERVER RUNS Q.Open|SERVER CALLS TDatasetsDef.GetTable|' +
                                      'SERVER CALLS TryBuildSafeWhere|SERVER OPENS AThreadStorage.Transaction.StartTransaction|SERVER RUNS Qry.Open|DATABASE STOPS|DATABASE READS OPERAT.NAME [inferred]|' +
                                      'SERVER SERIALIZES Qry.SaveToStream|SERVER RUNS AThreadStorage.Transaction.Commit|SERVER SENDS rspData|CROSSES process boundary|' +
                                      'CLIENT RECEIVES rspData|CLIENT EMPTIES AMT.EmptyDataSet|CLIENT DESERIALIZES AMT.LoadFromStream')
@@ -2590,9 +2611,10 @@ Step 'E-RT' {
   # (RE-PINNED 6=14/facet@55 -> 6=14/facet@392 by the doc-line rule: the TCommandID.cmdDelta constant at :55 is the
   # command id, a different fact, and no longer matches); 13 is PushTableChanged's body @:401, the implementation of
   # the :124 declaration its :120 comment sits above (unchanged)
+  # RE-PINNED 2026-09-28 (extractor 1.20, see A-RT0-TABLELIT): node 12's column row MS1.SQL:2808 -> 2809
   Chk 'A-RT7-NODES'     "$($rt0.GoldenMatched)/$($rt0.GoldenDisclosed)/$($rt0.GoldenMissing)" '17//'
   Chk 'A-RT7-NODESBY'   $rt0.GoldenMatchedBy ('1=07@78,2=05@99,3=10@639,4=11@3948,5=12@3960,6=14/facet@392,7=16@1209,8=17@389,9=25@199,' +
-                                              '10=21@130,11=31@183,12=09@2808,13=37@401,14=44@1207,15=45@1123,16=46/facet@57,17=48@502')
+                                              '10=21@130,11=31@183,12=09@2809,13=37@401,14=44@1207,15=45@1123,16=46/facet@57,17=48@502')
   # I1: the golden lines that are a line of the comment block directly above a declaration, from INDEX facts only
   # (`comment` string_literals covering every line down to the next symbol, nothing indexed between; symbol_docs
   # first): `<file>:<golden>=<decl>-<decl end>/<impl>-<impl end>`, every clone that indexes the file agreeing
@@ -2665,7 +2687,9 @@ Step 'E-RTF' {
   Chk 'A-RTF-M2-ASKS'   $rt0.FinM2Asks '01=-,02=-,03=-,04=in-class-field-reads,05=in-class-field-reads,06=-,07=-,08=-,09=E4 || 01=-,02=-,03=-,04=type-use-binding,05=-,06=-,07=-'
   # M3: AS OF is each index's own schema_meta indexed_at_unix (CLIENT / SERVER / SQL, UTC to the minute) -- it was the
   # CLIENT clone FILE's UTC date, 2026-09-28, a stamp the header did not read
-  Chk 'A-RTF-M3-ASOF'   $rt0.FinM3AsOf '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-09-28T02:46Z/2026-09-28T02:46Z/2026-09-28T02:45Z'
+  # RE-PINNED 2026-09-28 (re-clone): the new clones' indexed_at_unix 1790633987 / 1790633975 / 1790633871 (was
+  # 02:46Z / 02:46Z / 02:45Z on the r=1.9 clones)
+  Chk 'A-RTF-M3-ASOF'   $rt0.FinM3AsOf '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-09-28T22:19Z/2026-09-28T22:19Z/2026-09-28T22:17Z'
 }
 
 Note 'round-trip negatives ...'
