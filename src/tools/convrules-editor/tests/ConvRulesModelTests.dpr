@@ -32,6 +32,8 @@ uses
   , ConvRules.UsesHarvest in '..\ConvRules.UsesHarvest.pas'
   , ConvRules.UnitStatus in '..\ConvRules.UnitStatus.pas'
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
+  , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
+  , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   ;
 
 var
@@ -1416,6 +1418,495 @@ begin
   // Positive control: with no old unit to exclude, the same name is accepted.
   R:= AddPickedUnit(nil, 'Forms', '');
   Check('unitpick.multi.add.no.exclude', string.Join(',', R) = 'Forms', string.Join(',', R));
+end; // procedure
+
+{ TRuleBook.Snapshot is the unsaved-changes baseline (Task 3's guard): equal
+  snapshots = nothing Save would change. Dirty is NOT that signal -- it is a
+  per-node re-emit flag, never cleared by Save and blind to deletions. }
+procedure TestBookSnapshot;
+const
+  SRC     = '#useswap OldA -> NewA' + sLineBreak + '#unuse OldB' + sLineBreak;
+  SRC_DEL = '#useswap OldA -> NewA' + sLineBreak;
+  SRC_ADD = SRC + '#use NewC' + sLineBreak;
+var
+  Book : TRuleBook;
+  Other: TRuleBook;
+  Base : string;
+begin
+  Book := TRuleBook.Create;
+  Other:= TRuleBook.Create;
+  try
+    Book.LoadFromString(SRC);
+    Base:= Book.Snapshot;
+    Check('book.snapshot.stable', Book.Snapshot = Base, Base);
+    Check('book.snapshot.nonempty', Pos('#unuse OldB', Base) > 0, Base);
+
+    Other.LoadFromString(SRC_DEL);
+    Check('book.snapshot.delete.differs', Other.Snapshot <> Base, Other.Snapshot);
+
+    Other.LoadFromString(SRC_ADD);
+    Check('book.snapshot.add.differs', Other.Snapshot <> Base, Other.Snapshot);
+
+    // Edit in place: the same book, one node changed and marked for re-emit.
+    Book.UnitNodes[0].SwapNew:= ['NewA', 'NewD'];
+    Book.UnitNodes[0].Dirty  := True;
+    Check('book.snapshot.edit.differs', Book.Snapshot <> Base, Book.Snapshot);
+  finally
+    Other.Free;
+    Book.Free;
+  end; // try
+end; // procedure
+
+{ ConvRules.ConvertRun -- every decision the Convert tab makes before or after
+  an engine call. The tab and the runner only execute what these return. }
+procedure TestConvertRun;
+var
+  Existing: TArray<string>;
+  Probe   : TFileProbe;
+  Books   : TArray<TBookEntry>;
+  Pre     : TPreflight;
+  Row     : TApplyRow;
+  Errs    : TArray<string>;
+  Dir     : string;
+  Srcs    : TArray<string>;
+  Lock    : TFileStream;
+  Raised  : string;
+const
+  BOOK_COUNT = 3; // convert-only, units-only, mixed
+  JSON_EDITS = 3; // edits_count in the first apply/1 document
+begin
+  // --- SharedBackupPaths: one above the highest existing N; gaps not reused ---
+  Existing:= [];
+  Probe:= function(const APath: string): Boolean
+    begin
+      Result:= MatchText(APath, Existing);
+    end;
+  Srcs:= SharedBackupPaths(['x\A.pas'], Probe);
+  Check('convertrun.bck.first', string.Join(',', Srcs) = 'x\A.pas.BCK1', string.Join(',', Srcs));
+  Existing:= ['x\A.pas.BCK1', 'x\A.pas.BCK3'];
+  Srcs:= SharedBackupPaths(['x\A.pas'], Probe);
+  Check('convertrun.bck.above.highest', string.Join(',', Srcs) = 'x\A.pas.BCK4', string.Join(',', Srcs));
+  // Another unit's backups never count.
+  Srcs:= SharedBackupPaths(['x\B.pas', 'x\B.dfm'], Probe);
+  Check('convertrun.bck.per.file', string.Join(',', Srcs) = 'x\B.pas.BCK1,x\B.dfm.BCK1', string.Join(',', Srcs));
+  // One N per UNIT: its .pas and .dfm restore points pair up by number.
+  Existing:= ['x\X.pas.BCK1', 'x\X.dfm.BCK3'];
+  Srcs:= SharedBackupPaths(['x\X.pas', 'x\X.dfm'], Probe);
+  Check('convertrun.bck.shared.n', string.Join(',', Srcs) = 'x\X.pas.BCK4,x\X.dfm.BCK4', string.Join(',', Srcs));
+
+  // --- BookKindOfText ---
+  Check('convertrun.kind.empty'   , BookKindOfText('// only a comment') = bkEmpty);
+  Check('convertrun.kind.convert' , BookKindOfText('#convert A.TX -> B.TY, B' + sLineBreak + '#link P <- P') = bkConvertOnly);
+  Check('convertrun.kind.units'   , BookKindOfText('#useswap Forms -> Vcl.Forms') = bkUnitsOnly);
+  Check('convertrun.kind.mixed'   , BookKindOfText('#unuse Bde.DBTables' + sLineBreak + '#convert A.TX -> B.TY, B' + sLineBreak + '#link P <- P') = bkMixed);
+
+  // --- MoveEntry: order is application order ---
+  SetLength(Books, BOOK_COUNT);
+  Books[0].Path:= 'a';
+  Books[1].Path:= 'b';
+  Books[2].Path:= 'c';
+  Books:= MoveEntry(Books, 2, -1);
+  Check('convertrun.move.up', (Books[1].Path = 'c') and (Books[2].Path = 'b'), Books[0].Path + Books[1].Path + Books[2].Path);
+  Books:= MoveEntry(Books, 0, -1);
+  Check('convertrun.move.clamped', Books[0].Path = 'a', Books[0].Path);
+
+  // --- Preflight ---
+  SetLength(Books, BOOK_COUNT);
+  Books[0].Path:= 'Conv.rules';
+  Books[0].Checked:= True;
+  Books[0].Kind:= bkConvertOnly;
+  Books[1].Path:= 'Units.rules';
+  Books[1].Checked:= True;
+  Books[1].Kind:= bkUnitsOnly;
+  Books[2].Path:= 'Mixed.rules';
+  Books[2].Checked:= True;
+  Books[2].Kind:= bkMixed;
+  // The index is a list of FILE PATHS (the project DB's files table).
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
+  Check('convertrun.pre.ok', Pre.Ok, string.Join(' | ', Pre.Problems));
+  Check('convertrun.pre.units.only.skipped', string.Join(',', Pre.Runnable) = 'Conv.rules,Mixed.rules', string.Join(',', Pre.Runnable));
+  Check('convertrun.pre.notes', Length(Pre.Notes) = 2, string.Join(' | ', Pre.Notes));
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True);
+  Check('convertrun.pre.units.supported', Length(Pre.Runnable) = BOOK_COUNT, string.Join(',', Pre.Runnable));
+  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['P\u1.PAS'], False);
+  Check('convertrun.pre.unindexed.refused', (not Pre.Ok) and (Pos('Loose', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
+  Check('convertrun.pre.index.nocase', Pos('U1', string.Join(' ', Pre.Problems)) = 0, string.Join(' | ', Pre.Problems));
+  // The migration case: the project indexes ITS OWN U1.pas; a same-named unit
+  // from another tree is not indexed -- the engine finds the .dfm by path.
+  Pre:= Preflight(Books, ['m2022\U1.pas'], ['p\U1.pas'], False);
+  Check('convertrun.pre.same.name.foreign.path', (not Pre.Ok) and (Pos('U1.pas', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
+  Books[0].Checked:= False;
+  Books[1].Checked:= False;
+  Books[2].Checked:= False;
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
+  Check('convertrun.pre.no.book', not Pre.Ok, string.Join(' | ', Pre.Problems));
+  Books[0].Checked:= True;
+  Pre:= Preflight(Books, [], ['p\U1.pas'], False);
+  Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
+
+  // --- ParseApplyJson (schema apply/1) ---
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":3,' +
+    '"converted":["Label1: TLabel -> TStaticText"],"access_sites":[],"creator_sites":[],' +
+    '"todos":["t1"],"reemit_notes":["n1"],"warnings":["w1"],"items":[]}');
+  Check('convertrun.json.ok', Row.Ok and (Row.EditsCount = JSON_EDITS) and (Length(Row.Converted) = 1));
+  Check('convertrun.json.remainder', string.Join(',', Row.Remainder) = 't1,n1,w1', string.Join(',', Row.Remainder));
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[{"line":7,"message":"link ToPath not found"}],' +
+    '"edits_count":0,"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}');
+  Check('convertrun.json.rule.error', (not Row.Ok) and (Pos('line 7', Row.Error) > 0) and (Row.RuleErrorCount = 1), Row.Error);
+  Row:= ParseApplyJson('FATAL: something');
+  Check('convertrun.json.unparseable', (not Row.Ok) and (Pos('FATAL', Row.Error) > 0), Row.Error);
+  // The engine prints "(loaded defaults from ...)" on stderr, and RunCapture merges
+  // stderr into the same pipe: the document starts at the first '{'.
+  Row:= ParseApplyJson('(loaded defaults from C:\x.json)' + sLineBreak + '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,' +
+    '"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}');
+  Check('convertrun.json.leading.noise', Row.Ok and (Row.EditsCount = 2), Row.Error);
+  // Measured 2026-09-29: the real engine writes that line AFTER the document, so
+  // the parse must also stop at the last '}'.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"conversion rules failed validation","rule_errors":[{"line":2,"message":"link ToPath not found"}],' +
+    '"edits_count":0,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}' + sLineBreak + '(loaded defaults from C:\x.json)' + sLineBreak);
+  Check('convertrun.json.trailing.noise', (not Row.Ok) and (Row.RuleErrorCount = 1) and (Pos('line 2', Row.Error) > 0), Row.Error);
+
+  // --- ExpandSources: .pas / folder / .dpr, deduped case-insensitively ---
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrun-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'U1.pas'), 'unit U1; interface implementation end.', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'U2.pas'), 'unit U2; interface implementation end.', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'P.dpr'), 'program P; uses U1 in ''U1.pas'', U2 in ''U2.pas''; begin end.', TEncoding.ASCII);
+    Srcs:= ExpandSources([TPath.Combine(Dir, 'U1.pas'), TPath.Combine(Dir, 'P.dpr'), UpperCase(TPath.Combine(Dir, 'u1.pas'))], Errs);
+    Check('convertrun.expand.dedupe.nocase', Length(Srcs) = 2, string.Join(' | ', Srcs));
+    Check('convertrun.expand.order', SameText(ExtractFileName(Srcs[0]), 'U1.pas') and SameText(ExtractFileName(Srcs[1]), 'U2.pas'), string.Join(' | ', Srcs));
+    Srcs:= ExpandSources([Dir], Errs);
+    Check('convertrun.expand.folder', Length(Srcs) = 2, string.Join(' | ', Srcs));
+    Srcs:= ExpandSources([TPath.Combine(Dir, 'Nope.pas')], Errs);
+    Check('convertrun.expand.missing.error', (Length(Srcs) = 0) and (Length(Errs) = 1), string.Join(' | ', Errs));
+    // A locked / unreadable .dpr is one AErrors line, never an exception: this
+    // runs on Explorer drops, and a bad project must not crash a drop.
+    Raised:= '';
+    Lock:= TFileStream.Create(TPath.Combine(Dir, 'P.dpr'), fmOpenRead or fmShareExclusive);
+    try
+      try
+        Srcs:= ExpandSources([TPath.Combine(Dir, 'P.dpr')], Errs);
+      except  // dl:ok try-except-swallowed@aa6b -- not swallowed: the exception text lands in Raised and the next Check fails on it; catching keeps the rest of the run alive
+        on E: Exception do
+          Raised:= E.ClassName + ': ' + E.Message;
+      end; // try
+    finally
+      Lock.Free;
+    end; // try
+    Check('convertrun.expand.unreadable.error', (Raised = '') and (Length(Srcs) = 0) and (Length(Errs) = 1) and (Pos('P.dpr', string.Join(' ', Errs)) > 0), Raised + ' ' + string.Join(' | ', Errs));
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end; // procedure
+
+{ The Convert tab's source rows: an unindexed unit is flagged in the DISPLAY
+  only, and an unreadable index flags nothing (unknown is not "indexed"). }
+procedure TestConvertSourceRow;
+var
+  Flagged: Boolean;
+  Text   : string;
+begin
+  // By FULL PATH (ExpandFileName'd, any case), never by unit name.
+  Check('unitinindex.nocase', UnitInIndex('src\dmCPData.pas', ['X.pas', 'SRC\DMCPDATA.PAS']));
+  Check('unitinindex.normalised', UnitInIndex('src\sub\..\My.Unit.pas', ['src\my.unit.pas']));
+  Check('unitinindex.absent', not UnitInIndex('src\Foo.pas', ['src\Bar.pas', 'src\FooX.pas']));
+  Check('unitinindex.foreign.path', not UnitInIndex('m2022\DM1.pas', ['client\DM1.pas']));
+  Text:= SourceRowText('src\Foo.pas', ['src\Bar.pas'], True, Flagged);
+  Check('sourcerow.flagged', Flagged and (Text = 'src\Foo.pas -- not in the project index'), Text);
+  Text:= SourceRowText('src\dmCPData.pas', ['SRC\DMCPDATA.PAS'], True, Flagged);
+  Check('sourcerow.indexed.plain', (not Flagged) and (Text = 'src\dmCPData.pas'), Text);
+  Text:= SourceRowText('src\Foo.pas', nil, False, Flagged);
+  Check('sourcerow.unknown.notflagged', (not Flagged) and (Text = 'src\Foo.pas'), Text);
+end; // procedure
+
+{ ConvertRunner paths that need no engine answer: a missing unit, a cancel
+  between units. The engine adapter points at a non-existent exe, so any call
+  that DID reach the engine would fail loudly rather than pass silently. }
+procedure TestConvertRunner;
+var
+  Job   : TConvertJob;
+  Rows  : TArray<TConvertRow>;
+  Eng   : TEngineAdapter;
+  Calls : Integer;
+begin
+  Eng:= TEngineAdapter.Create('C:\nowhere\drag-lint.exe', []);  // dl:ok hardcoded-absolute-path@4127 -- REVIEWED 2026-09-29 deliberately non-existent exe: any engine call must fail loudly
+  try
+    Job:= Default(TConvertJob);
+    Job.Books:= [];            // no book survives validation -> nothing may run
+    Job.Units:= ['C:\nowhere\Gone.pas'];  // dl:ok hardcoded-absolute-path@1575 -- REVIEWED 2026-09-29 deliberately non-existent unit (missing-unit row)
+    Rows:= RunConversion(Job, Eng, nil, nil);
+    Check('runner.no.books.nothing.runs', Length(Rows) = 0, IntToStr(Length(Rows)));
+
+    Calls:= 0;
+    Rows:= RunConversionUnits(Job.Units, ['Book.rules'], Job, Eng,
+      procedure(const ARow: TConvertRow; ADone, ATotal: Integer) begin Inc(Calls); end, nil);
+    var LNote: string:= '(no row)';
+    if Length(Rows) > 0 then
+      LNote:= Rows[0].Note;
+    Check('runner.missing.unit.row', (Length(Rows) = 1) and (Rows[0].Status = csUnitSkipped) and (Pos('not found', LNote) > 0), LNote);
+    Check('runner.missing.unit.progress', Calls = 1, IntToStr(Calls));
+
+    Rows:= RunConversionUnits(['C:\nowhere\A.pas', 'C:\nowhere\B.pas'], ['Book.rules'], Job, Eng, nil,  // dl:ok hardcoded-absolute-path@7c72 -- REVIEWED 2026-09-29 deliberately non-existent units; cancel fires before either is probed
+      function: Boolean begin Result:= True; end);
+    Check('runner.cancel.between.units', Length(Rows) = 0, IntToStr(Length(Rows)));
+  finally
+    Eng.Free;
+  end; // try
+end; // procedure
+
+{ ConvertRunner row integrity and file-I/O faults, with the engine calls faked
+  (review fix round 1): a later book's failure rolls back an earlier book's rows
+  (and they reach AProgress only in their final status); a backup that cannot
+  be taken skips the unit; a restore that cannot be done says so. None of these
+  may raise out of RunConversionUnits. }
+procedure TestConvertRunnerFaults;
+const
+  OK_JSON   = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  FAIL_JSON = '{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[],"edits_count":0}';
+  ORIG      = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+  TWO_ROWS  = 2;
+var
+  Dir, PasR, PasL, PasF, Seen, Raised: string;
+  PasI, PasJ, PasK, PasS, DfmS, Log: string;
+  Rows : TArray<TConvertRow>;
+  Calls: Integer;
+  Index: TIndexFn;
+  Lock : TFileStream;
+
+  function Describe(const ARows: TArray<TConvertRow>): string;
+  begin
+    Result:= Format('%d rows', [Length(ARows)]);
+    for var LRow: TConvertRow in ARows do
+      Result:= Result + ' | ' + ExtractFileName(LRow.Book) + '=' + ConvertStatusText(LRow.Status) + ': ' + LRow.Note + ' [' + ExtractFileName(LRow.Backup) + ' ' + ExtractFileName(LRow.BackupDfm) + ']';
+  end;
+
+  // A writes into the unit and succeeds; B runs AOnB, then fails without rule_errors.
+  function ApplyAThenFailB(const AOnB: TProc<string>): TApplyFn;
+  begin
+    Result:= function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        if SameText(ExtractFileName(ARulesFile), 'A.rules') then
+        begin
+          TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+          AJson := OK_JSON;
+          Result:= 0;
+          Exit;
+        end;
+        if Assigned(AOnB) then
+          AOnB(AUnitPas);
+        AJson := FAIL_JSON;
+        Result:= 1;
+      end;
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-faults-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end;
+
+    // --- a later book fails: the earlier book's row is rolled back ---
+    PasR:= TPath.Combine(Dir, 'R.pas');
+    TFile.WriteAllText(PasR, ORIG, TEncoding.ASCII);
+    Seen:= '';
+    Rows:= RunConversionUnits([PasR], ['A.rules', 'B.rules'], ApplyAThenFailB(nil), Index,
+      procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
+      begin
+        Seen:= Seen + ExtractFileName(ARow.Book) + '=' + ConvertStatusText(ARow.Status) + ';';
+      end, nil);
+    Check('runner.rollback.row', (Length(Rows) = TWO_ROWS) and (Rows[0].Status = csRolledBack) and (Pos('B.rules', Rows[0].Note) > 0)
+      and (Rows[1].Status = csFailedRestored) and (TFile.ReadAllText(PasR) = ORIG), Describe(Rows) + ' | pas=' + TFile.ReadAllText(PasR));
+    Check('runner.rollback.progress.order', Seen = 'A.rules=rolled back;B.rules=FAILED -- restored;', Seen);
+
+    // --- the backup cannot be taken: the unit is skipped, nothing left behind ---
+    PasL:= TPath.Combine(Dir, 'L.pas');
+    TFile.WriteAllText(PasL, ORIG, TEncoding.ASCII);
+    Calls := 0;
+    Raised:= '';
+    Rows  := nil;  // dl:ok overwrite-before-read@05a7 -- REVIEWED 2026-09-29 read when the call below raises: the check must not report the previous case's rows
+    Lock:= TFileStream.Create(PasL, fmOpenRead or fmShareExclusive);
+    try
+      try
+        Rows:= RunConversionUnits([PasL], ['A.rules'],
+          function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+          begin
+            Inc(Calls);
+            AJson := OK_JSON;
+            Result:= 0;
+          end, Index, nil, nil);
+      except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-29 not swallowed: the text lands in Raised and the next Check fails on it
+        on E: Exception do
+          Raised:= E.ClassName + ': ' + E.Message;
+      end; // try
+    finally
+      Lock.Free;
+    end; // try
+    var LSkipRow  : Boolean:= (Length(Rows) = 1) and (Rows[0].Status = csUnitSkipped) and (Pos('backup failed', Rows[0].Note) > 0);
+    var LNoLeftBck: Boolean:= Length(TDirectory.GetFiles(Dir, 'L.pas.BCK*')) = 0;
+    Check('runner.backup.failure', (Raised = '') and LSkipRow and (Calls = 0) and LNoLeftBck, Raised + ' ' + Describe(Rows) + Format(' calls=%d', [Calls]));
+
+    // --- the restore itself fails: say so, keep the backup, do not raise ---
+    PasF:= TPath.Combine(Dir, 'F.pas');
+    TFile.WriteAllText(PasF, ORIG, TEncoding.ASCII);
+    Raised:= '';
+    Rows  := nil;  // dl:ok overwrite-before-read@05a7 -- REVIEWED 2026-09-29 read when the call below raises: the check must not report the previous case's rows
+    try
+      try
+        Rows:= RunConversionUnits([PasF], ['A.rules', 'B.rules'],
+          ApplyAThenFailB(procedure(AUnitPas: string) begin FileSetAttr(AUnitPas, faReadOnly); end), Index, nil, nil);
+      except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-29 not swallowed: the text lands in Raised and the next Check fails on it
+        on E: Exception do
+          Raised:= E.ClassName + ': ' + E.Message;
+      end; // try
+      Check('runner.restore.failure', (Raised = '') and (Length(Rows) = TWO_ROWS) and (Rows[1].Status = csRestoreFailed)
+        and (Pos(PasF + '.BCK1', Rows[1].Note) > 0) and TFile.Exists(PasF + '.BCK1'), Raised + ' ' + Describe(Rows));
+    finally
+      FileSetAttr(PasF, faNormal);
+    end; // try
+
+    // --- the index is refreshed BEFORE the unit's first book, not only after ---
+    // convert-apply patches the .dfm at the index's line ranges; a unit edited
+    // since the last index would be patched in the wrong place.
+    PasI:= TPath.Combine(Dir, 'I.pas');
+    TFile.WriteAllText(PasI, ORIG, TEncoding.ASCII);
+    Log:= '';
+    RunConversionUnits([PasI], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Log   := Log + 'apply;';
+        AJson := OK_JSON;
+        Result:= 0;
+      end,
+      function(out AOutput: string): Integer
+      begin
+        Log    := Log + 'index;';
+        AOutput:= '';
+        Result := 0;
+      end, nil, nil);
+    Check('runner.reindex.before.first.book', Log = 'index;apply;index;', Log);
+
+    // --- that reindex fails: the unit is skipped untouched, the next one still runs ---
+    PasJ:= TPath.Combine(Dir, 'J.pas');
+    PasK:= TPath.Combine(Dir, 'K.pas');
+    TFile.WriteAllText(PasJ, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(PasK, ORIG, TEncoding.ASCII);
+    Calls:= 0;
+    Rows:= RunConversionUnits([PasJ, PasK], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Inc(Calls);
+        AJson := OK_JSON;
+        Result:= 0;
+      end,
+      function(out AOutput: string): Integer
+      begin
+        AOutput:= 'index-boom';
+        Result := 1;
+      end, nil, nil);
+    var LBothSkipped: Boolean:= (Length(Rows) = TWO_ROWS) and (Rows[0].Status = csUnitSkipped) and (Rows[1].Status = csUnitSkipped)
+      and (Pos('reindex before apply failed: index-boom', Rows[0].Note) > 0) and SameText(Rows[1].UnitPas, PasK);
+    var LNoBck: Boolean:= Length(TDirectory.GetFiles(Dir, 'J.*.BCK*')) + Length(TDirectory.GetFiles(Dir, 'K.*.BCK*')) = 0;
+    Check('runner.reindex.before.failure', LBothSkipped and (Calls = 0) and LNoBck and (TFile.ReadAllText(PasJ) = ORIG),
+      Describe(Rows) + Format(' calls=%d', [Calls]));
+
+    // --- one backup NUMBER per unit, shared by .pas and .dfm, named on the rows ---
+    PasS:= TPath.Combine(Dir, 'S.pas');
+    DfmS:= TPath.Combine(Dir, 'S.dfm');
+    TFile.WriteAllText(PasS, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(DfmS, 'object S: TS' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(DfmS + '.BCK2', 'an older .dfm backup', TEncoding.ASCII);
+    Rows:= RunConversionUnits([PasS], ['A.rules', 'B.rules'], ApplyAThenFailB(nil), Index, nil, nil);
+    Check('runner.backup.shared.n', (Length(Rows) = TWO_ROWS) and SameText(Rows[1].Backup, PasS + '.BCK3') and SameText(Rows[1].BackupDfm, DfmS + '.BCK3')
+      and TFile.Exists(PasS + '.BCK3') and TFile.Exists(DfmS + '.BCK3'), Describe(Rows));
+    Check('runner.rollback.names.both.backups', (Length(Rows) = TWO_ROWS) and (Pos('S.pas.BCK3', Rows[0].Note) > 0) and (Pos('S.dfm.BCK3', Rows[0].Note) > 0), Describe(Rows));
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end; // procedure
+
+{ The real engine on a 3-file fixture (one TLabel, a one-#convert book) -- the
+  shape measured converting on 2026-09-29 (dry run 106 s; the bad book 93 s).
+  Two jobs, one apply each -- the slowest test in the runner:
+    1. ONLY an invalid book: a book-skip row, the unit untouched, and NO .BCK
+       left behind (the run's own fresh backup is dropped when nothing changed);
+    2. the good book: converted in place, .BCK1 for .pas and .dfm, .dfm still text. }
+procedure TestConvertRunnerLive;
+const
+  LIB64 = 'C:\Projects\.drag-lint\library-Win64.sqlite';  // dl:ok hardcoded-absolute-path@6fd2 -- REVIEWED 2026-09-29 the real Win64 library index; the test Skip()s when it is absent
+  DFM_HEAD_CHARS = 40;
+var
+  Exe, Dir, Db, Dpr, Pas, Dfm, Book, Bad, Output: string;
+  Eng : TEngineAdapter;
+  Job : TConvertJob;
+  Rows: TArray<TConvertRow>;
+begin
+  Exe:= ResolveExe;
+  if (Exe = '') or not TFile.Exists(LIB64) then
+  begin
+    Skip('runner.live', 'exe or library-Win64 absent');
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Dpr := TPath.Combine(Dir, 'Fix.dpr');
+    Pas := TPath.Combine(Dir, 'FixUnit.pas');
+    Dfm := TPath.Combine(Dir, 'FixUnit.dfm');
+    Book:= TPath.Combine(Dir, 'Fix.rules');
+    Bad := TPath.Combine(Dir, 'Bad.rules');
+    Db  := TPath.Combine(Dir, 'Fix.sqlite');
+    TFile.WriteAllText(Dpr, 'program Fix;' + sLineBreak + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak +
+      '  FixUnit in ''FixUnit.pas'' {FixForm};' + sLineBreak + sLineBreak + 'begin' + sLineBreak + '  Application.Initialize;' + sLineBreak +
+      '  Application.Run;' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Pas, 'unit FixUnit;' + sLineBreak + sLineBreak + 'interface' + sLineBreak + sLineBreak + 'uses' + sLineBreak +
+      '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak + sLineBreak + 'type' + sLineBreak +
+      '  TFixForm = class(TForm)' + sLineBreak + '    Label1: TLabel;' + sLineBreak + '  end;' + sLineBreak + sLineBreak + 'var' + sLineBreak +
+      '  FixForm: TFixForm;' + sLineBreak + sLineBreak + 'implementation' + sLineBreak + sLineBreak + '{$R *.dfm}' + sLineBreak + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Dfm, 'object FixForm: TFixForm' + sLineBreak + '  Left = 0' + sLineBreak + '  Top = 0' + sLineBreak + '  Caption = ''Fix''' + sLineBreak +
+      '  object Label1: TLabel' + sLineBreak + '    Left = 8' + sLineBreak + '    Top = 8' + sLineBreak + '    Caption = ''Hello''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Book, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link Caption <- Caption' + sLineBreak +
+      '#link Left <- Left' + sLineBreak + '#link Top <- Top' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Bad, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link NoSuchProp <- AlsoNoSuchProp' + sLineBreak, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(Exe, [Db, LIB64]);
+    try
+      Check('runner.live.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      // The Convert tab's pre-flight source: the files table, by PATH. The
+      // fixture unit must be listed; a same-named file elsewhere must not match.
+      var LFiles: TArray<string>;
+      var LListed: Boolean:= Eng.ListIndexedFiles([Db], LFiles, Output);
+      Check('runner.live.indexed.files', LListed and UnitInIndex(Pas, LFiles) and not UnitInIndex(TPath.Combine(TPath.GetTempPath, 'FixUnit.pas'), LFiles),
+        Format('listed=%s n=%d %s', [BoolToStr(LListed, True), Length(LFiles), Output]));
+      Job:= Default(TConvertJob);
+      Job.Units      := [Pas];
+      Job.Dbs        := [Db, LIB64];
+      Job.ProjectDb  := Db;
+      Job.ProjectFile:= Dpr;
+
+      var LBefore: string:= TFile.ReadAllText(Pas);
+      Job.Books:= [Bad];
+      Rows:= RunConversion(Job, Eng, nil, nil);
+      Check('runner.invalid.book.skipped', (Length(Rows) = 1) and (Rows[0].Status = csBookSkipped) and SameText(Rows[0].Book, Bad), Format('%d rows', [Length(Rows)]));
+      Check('runner.invalid.book.unit.untouched', TFile.ReadAllText(Pas) = LBefore);
+      Check('runner.invalid.book.no.backup', not TFile.Exists(Pas + '.BCK1') and not TFile.Exists(Dfm + '.BCK1'));
+
+      Job.Books:= [Book];
+      Rows:= RunConversion(Job, Eng, nil, nil);
+      Check('runner.live.converted', (Length(Rows) = 1) and (Rows[0].Status = csConverted), Format('%d rows', [Length(Rows)]));
+      Check('runner.live.pas.changed', Pos('TStaticText', TFile.ReadAllText(Pas)) > 0);
+      Check('runner.live.bck1', TFile.Exists(Pas + '.BCK1') and (Pos('TLabel', TFile.ReadAllText(Pas + '.BCK1')) > 0));
+      Check('runner.live.dfm.bck1', TFile.Exists(Dfm + '.BCK1'));
+      Check('runner.live.dfm.still.text', TFile.ReadAllText(Dfm).StartsWith('object '), Copy(TFile.ReadAllText(Dfm), 1, DFM_HEAD_CHARS));
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
 end; // procedure
 
 { ListUnits answers per DB SET, not per adapter: the picker's project column and
@@ -6645,6 +7136,12 @@ begin
     TestMissingUnitNodes;
     TestUnitPickFilter;
     TestUnitPickMulti;
+    TestBookSnapshot;
+    TestConvertRun;
+    TestConvertSourceRow;
+    TestConvertRunner;
+    TestConvertRunnerFaults;
+    TestConvertRunnerLive;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;

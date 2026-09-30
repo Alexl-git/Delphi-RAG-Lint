@@ -455,7 +455,7 @@ type
   /// WriteTextWithBackup aborts the whole write. That is deliberate -- a full backup
   /// history must fail loudly rather than silently overwrite the 99th backup.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.WorkingSet.WriteTextWithBackup (ConvRules.WorkingSet.pas)</para>
+  /// <para>Called from: ConvRules.MainForm.TConvRulesForm.SaveBook (ConvRules.MainForm.pas), ConvRules.WorkingSet.WriteTextWithBackup (ConvRules.WorkingSet.pas)</para>
   /// <para>Calls: IntToStr</para>
   /// <para>Touches: file system</para>
   /// <!-- drag-lint:auto END -->

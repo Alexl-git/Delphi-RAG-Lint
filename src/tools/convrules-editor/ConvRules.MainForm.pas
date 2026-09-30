@@ -20,6 +20,7 @@ uses
   , System.IOUtils
   , System.Generics.Collections
   , Winapi.Windows
+  , Winapi.Messages // TMessage, WM_ENTERMENULOOP: message-method signatures
   , Winapi.ActiveX // IDropTarget: a field's type, so INTERFACE-visible
   , Vcl.Forms
   , Vcl.Controls
@@ -50,6 +51,7 @@ uses
   , ConvRules.UsesHarvest // THarvestedUnit: a field's type, so INTERFACE-visible
   , ConvRules.UnitStatus  // dl:unit ConvRules.UnitStatus accepted -- TDestinationResolver types a field; STATUS_MISSING_TEXT travels with StatusText so the bold-MISSING draw cannot drift from the text it matches
   , ConvRules.UnitMask    // TUnitRow: a field's type
+  , ConvRules.ConvertTab  // TConvertTab: a field's type
   ;
 
 const
@@ -59,6 +61,11 @@ const
   /// (see ConvRules.Theme.ThemePrefToStr). The .dpr reads it at start-up; the
   /// View &gt; Theme menu writes it back.</summary>
   EDITOR_REG_THEME = 'Theme';
+  /// <summary>Name of the registered window message the main form answers with its
+  /// main menu's HMENU (see TConvRulesForm.WndProc). A GUI driver registers the
+  /// same name to reach the menu while a VCL style has detached it from the
+  /// window.</summary>
+  MAIN_MENU_QUERY_MSG = 'ConvRulesEditor.MainMenuHandle';
   /// <summary>Value under EDITOR_REG_KEY holding the folder the form-file Open
   /// dialog last started in, so browsing resumes where the user left off rather
   /// than at the process working directory.</summary>
@@ -83,6 +90,7 @@ type
       FBook     : TRuleBook     ;
       FEngine   : TEngineAdapter;
       FFilePath : string        ;
+      FSnapshot : string        ; // FBook.Snapshot at load / New / last successful save
       FActiveHdr: Integer       ; // index of the selected #convert node (-1 none)
       { Set by OpenOwningRuleEntry immediately before a cross-book LoadFile call,
         cleared in a finally right after -- tells LoadFile's auto-select-first-rule
@@ -109,6 +117,8 @@ type
       FPickW32Loaded : Boolean       ;
       FPickW64Loaded : Boolean       ;
       FTabUnits      : TTabSheet             ; // the Unit Rules page; "is it active?" checks
+      FTabConvert    : TTabSheet             ; // the Convert page; drops go to FConvertTab while it is active
+      FConvertTab    : TConvertTab           ; // checked rule books x source units
       FHarvestStrip  : TPanel                ; // the control strip above FUnitList
       FHarvestBtnRow : TFlowPanel            ; // Add source / Paste / Clear row (Task 7 adds none; Task 6 adds rows below)
       FDropTarget    : IDropTarget           ; // OLE target on the form's window; re-registered by CreateWnd
@@ -136,25 +146,30 @@ type
       FMnuTheme     : array[TThemePref] of TMenuItem; // View > Theme radio items
       FStatusIsError: Boolean                       ; // last status was SetError (red bold)
 
-      // action toolbar -- ONE grouped TToolBar owns every action that used to be a
-      // loose TButton scattered over the top panel, the pool panel, the grid filter
-      // bar and the Unit Rules tab. Only the buttons UpdateToolbarEnabled gates, or
-      // whose caption flips at runtime, need a field; the rest are wired and dropped.
-      FToolbar       : TToolBar   ;
-      FTbAssign      : TToolButton; // mapping: assign the pool leaf to the grid row
-      FTbUnassign    : TToolButton; // mapping: drop the selected row's assignment
-      FTbFindInFrom  : TToolButton; // mapping: select the same-named From row
-      FTbOnlyType    : TToolButton; // mapping: pool type-narrowing toggle (caption flips)
-      FTbMappings    : TToolButton; // mapping: open the conditional #mapping editor
-      FTbScopeRenames: TToolButton; // unit rules: #useswap Name -> Scope.Name for "via scope" rows
+      // main menu -- every action in this window, grouped File / Conversion / Mapping /
+      // Uses Units / View. Only the items UpdateMenuEnabled gates, or whose check mark
+      // flips at runtime, need a field; the rest are wired and dropped.
+      FMnuFile       : TMenuItem  ; // File menu
+      FMnuConversion : TMenuItem  ; // Conversion menu -- Task 6 appends Convert...
+      FMiFileSave    : TMenuItem  ; // File > Save / Save As / Curate: disabled while a
+      FMiFileSaveAs  : TMenuItem  ; //   Convert run is in progress (the run's later units
+      FMiFileCurate  : TMenuItem  ; //   would otherwise see a changed book)
+      FMiAssign      : TMenuItem  ; // Mapping: gated by UpdateMenuEnabled
+      FMiUnassign    : TMenuItem  ;
+      FMiFindInFrom  : TMenuItem  ;
+      FMiOnlyType    : TMenuItem  ; // Mapping: CHECKED while the pool shows only one type
+      FMiMappings    : TMenuItem  ;
+      FMiScopeRenames: TMenuItem  ; // Uses Units: #useswap Name -> Scope.Name for "via scope" rows
+      FMiExamine     : TMenuItem  ;
+      FMiClearExamine: TMenuItem  ;
+      FMenuOpen      : Boolean    ; // a main-menu loop is running: Application hints are menu hints
+      FStatusBefore  : string     ; // status text to restore when the menu loop ends
       FUnitPopup     : TPopupMenu ; // unit rules: right-click menu on a row (the row IS the Old unit)
       FPopupItem     : TListItem  ; // the row under the cursor when FUnitPopup opened; nil = empty space
       FMiSwap        : TMenuItem  ; // "Swap <Old> with..."
       FMiScope       : TMenuItem  ; // "Accept scope rename"
       FMiUnuse       : TMenuItem  ; // "Remove unit (#unuse)"
       FMiDelete      : TMenuItem  ; // "Delete"
-      FTbExamine     : TToolButton; // examine: pick .dfm/.pas, mark used From props
-      FTbClearExamine: TToolButton; // examine: drop the current examination
       FPanelTop      : TPanel     ;
       FLblFile       : TLabel     ;
       FLblStatus     : TLabel     ;
@@ -287,38 +302,16 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildToolbar, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, TLabel</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+25 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+28 more)</para>
+      /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+6 more)</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+31 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+30 more)</para>
+      /// <seealso cref="ConvRules.ConvertTab.TConvertTab.Create"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddPopupItem"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildToolbar"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildTypePopup"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure BuildUI;
-      { Builds the single top-aligned action toolbar. Called from BuildUI right after
-      the menu, so its strip is claimed before the panels below take the client
-      area. Every TToolButton.OnClick points at the SAME handler the loose TButton
-      it replaced used -- no handler body was copied. }
-      /// <summary><!-- drag-lint:auto sum -->Builds the single top-aligned action
-      /// toolbar. Called from BuildUI right after the menu, so its strip is claimed
-      /// before the panels below take the client area. Every TToolButton.OnClick points
-      /// at the SAME handler the loose TButton it replaced used -- no handler body was
-      /// copied.</summary>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.BuildToolbar.AddBtn, ConvRules.MainForm.TConvRulesForm.BuildToolbar.AddSep</para>
-      /// <para>Reads: FToolbar   Writes: FToolbar, FTbAssign, FTbUnassign, FTbFindInFrom, FTbOnlyType, FTbMappings, FTbExamine, FTbClearExamine (+1 more)</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildToolbar.AddBtn"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildToolbar.AddSep"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
-      procedure BuildToolbar;
       { Enables only what the current selection supports; see the implementation for
       why the always-enabled-then-complain behaviour was worth replacing. }
       /// <summary><!-- drag-lint:auto sum -->Enables only what the current selection
@@ -329,7 +322,7 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoDeleteUnit (ConvRules.MainForm.pas) (+7 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SelectedUnitRows</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
-      /// <para>Reads: FTbAssign, FActiveHdr, FGrid, FPool, FTbUnassign, FTbFindInFrom, FTbExamine, FTbClearExamine (+5 more)</para>
+      /// <para>Reads: FMiAssign, FActiveHdr, FGrid, FPool, FMiUnassign, FMiFindInFrom, FMiExamine, FMiClearExamine (+5 more)</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedUnitRows"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
@@ -337,10 +330,10 @@ type
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure UpdateToolbarEnabled;
-      { FGrid.OnSelectCell -- re-gates the toolbar when the grid row changes. Never
+      procedure UpdateMenuEnabled;
+      { FGrid.OnSelectCell -- re-gates the menu when the grid row changes. Never
       vetoes (CanSelect is left alone). }
-      /// <summary><!-- drag-lint:auto sum -->FGrid.OnSelectCell -- re-gates the toolbar
+      /// <summary><!-- drag-lint:auto sum -->FGrid.OnSelectCell -- re-gates the menu
       /// when the grid row changes. Never vetoes (CanSelect is left alone).</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
@@ -348,10 +341,10 @@ type
       /// <param name="CanSelect"><!-- drag-lint:auto type -->var Boolean</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshConvOptions, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshConvOptions, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled</para>
       /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshConvOptions"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
@@ -376,14 +369,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure RefreshConvOptions(ARow: Integer);
-      { FPool.OnClick -- re-gates the toolbar when the pool highlight changes. }
-      /// <summary><!-- drag-lint:auto sum -->FPool.OnClick -- re-gates the toolbar when
+      { FPool.OnClick -- re-gates the menu when the pool highlight changes. }
+      /// <summary><!-- drag-lint:auto sum -->FPool.OnClick -- re-gates the menu when
       /// the pool highlight changes.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
@@ -408,12 +401,12 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadFile</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.LoadFile</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ConfirmDiscard"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoLoad(Sender: TObject);
@@ -427,18 +420,14 @@ type
       /// curation window (which reads the file from DISK and can later force a reload
       /// over the editor's buffer) after a save the user asked for and did not get.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCurate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSaveClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ValidateText, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.SaveCompleteToString, ConvRules.Units.NormalizeUnitSets, ConvRules.WorkingSet.BackupPath, ExtractFileName, Format, Trim</para>
-      /// <para>Returns: False; True</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 93 lines (full implementation)</para>
-      /// <para>Reads: FFilePath, FLblFile, FBook, FActiveHdr, FEngine, FFormTypeRows, FLblStatus   Writes: FFilePath</para>
-      /// <para>Catches: Exception (swallowed)</para>
-      /// <para>Touches: file system</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ValidateText"/>
-      /// <seealso cref="ConvRules.MainForm.HourGlass"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RescanRulesFolder"/>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoCurate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSaveClick (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SaveBook</para>
+      /// <para>Returns: SaveBook(False)</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveBook"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DoSave(Sender: TObject): Boolean;
@@ -456,6 +445,37 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoSaveClick(Sender: TObject);
+      /// <summary>Saves the book (.bak backup, write, validate, rescan).</summary>
+      /// <param name="APromptPath">True for Save As: always ask for the path,
+      /// starting at the current file. False: ask only for a never-saved book.</param>
+      /// <returns>True once the bytes reached disk (a failed validation is a
+      /// report, not a failure).</returns>
+      /// <remarks>A save cancelled or failed BEFORE the bytes reach disk restores the
+      /// previous path and title, so a later Save never writes to a file the user
+      /// abandoned. Once the write has succeeded the new path is kept and the
+      /// unsaved-changes snapshot is refreshed even when validation or the rescan
+      /// afterwards raises; that exception still propagates to the caller.</remarks>
+      function SaveBook(APromptPath: Boolean): Boolean;
+      /// <summary>File > Save As: SaveBook with the path always asked for.</summary>
+      /// <param name="Sender">The menu item; unused.</param>
+      procedure DoSaveAsClick(Sender: TObject);
+      /// <summary>File > New: after the unsaved-changes guard, opens an empty, unnamed book.</summary>
+      /// <param name="Sender">The menu item; unused.</param>
+      procedure DoNew(Sender: TObject);
+      /// <summary>File > Exit: closes the form; FormCloseQueryHandler runs the guard.</summary>
+      /// <param name="Sender">The menu item; unused.</param>
+      /// <remarks>Named DoExitClick, not DoExit: TWinControl.DoExit is a dynamic
+      /// method, and a same-named handler would hide it (W1010).</remarks>
+      procedure DoExitClick(Sender: TObject);
+      /// <summary>The unsaved-changes guard: when the book differs from its last
+      /// load / New / save snapshot, asks Save / Don't Save / Cancel.</summary>
+      /// <returns>True when the caller may proceed: nothing unsaved, the user saved
+      /// successfully, or chose not to save; False on Cancel or a failed save.</returns>
+      function ConfirmDiscard: Boolean;
+      /// <summary>OnCloseQuery: the window closes only when ConfirmDiscard allows it.</summary>
+      /// <param name="Sender">The form; unused.</param>
+      /// <param name="CanClose">Set to ConfirmDiscard's answer.</param>
+      procedure FormCloseQueryHandler(Sender: TObject; var CanClose: Boolean);
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -519,10 +539,10 @@ type
       /// created and no file is written -- the unchanged save path does that.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.RuleCatalog.FindRuleForType, ConvRules.RuleCatalog.RuleFileNameFor (+7 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.Model.TRuleBook.Snapshot, ConvRules.RuleCatalog.FindRuleForType (+8 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 118 lines (full implementation)</para>
-      /// <para>Reads: FCatalog, FFilePath, FCbFrom, FRulesFolder, FBook, FLblFile   Writes: FFilePath, FActiveHdr</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 119 lines (full implementation)</para>
+      /// <para>Reads: FCatalog, FFilePath, FCbFrom, FRulesFolder, FBook, FLblFile   Writes: FSnapshot, FFilePath, FActiveHdr</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRule"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
@@ -604,8 +624,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesSelectItem (ConvRules.MainForm.pas) (+1 more)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, Default, Format, Trim</para>
-      /// <para>Reads: FTbOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+3 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, Default, Format, Trim</para>
+      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+3 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
@@ -715,7 +735,7 @@ type
       /// TypeIsExcluded filter pass lives on the Apply button (ApplyNamedFilterClick);
       /// this only tallies RowState.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ClassSearchChange (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeCheckClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas) (+4 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ClassSearchChange (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FormTypeCheckClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas) (+4 more)</para>
       /// <para>Calls: ConvRules.FormTypes.CountRows, ConvRules.FormTypes.FormTypesProgressCaption, ConvRules.FormTypes.VisibleRowIndexes, ConvRules.MainForm.TConvRulesForm.ClassSearchText, ConvRules.RuleCatalog.RulesForType, ExtractFileName</para>
       /// <para>Complexity: 12 (cyclomatic, outer body), 66 lines (full implementation)</para>
       /// <para>Reads: FFormTypeList, FFilterMemo, FFormTypeRows, FVisualSet, FComponentSet, FPersistentSet, FCatalog, FVisibleRows (+2 more)   Writes: FFormTypeRows, FVisibleRows</para>
@@ -774,16 +794,16 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoSave (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadSkipList, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.CatalogToIndexText, ConvRules.RuleCatalog.FindDuplicates, ConvRules.RuleCatalog.SameBookDups, ConvRules.RuleCatalog.ScanRulesFolder, ExtractFileName, ExtractFilePath, Format, Trim</para>
-      /// <para>Reads: FRulesFolder, FFilePath, FCatalog, FSkipMarksDirty, FLastSkipLoadFailed, FCatalogDups   Writes: FCatalog, FCatalogDups, FRulesFolder</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SaveBook (ConvRules.MainForm.pas)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadSkipList, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.CatalogToIndexText, ConvRules.RuleCatalog.FindDuplicates, ConvRules.RuleCatalog.SameBookDups, ConvRules.RuleCatalog.ScanRulesFolder, ExtractFileName, Format</para>
+      /// <para>Reads: FCatalog, FSkipMarksDirty, FLastSkipLoadFailed, FCatalogDups   Writes: FCatalog, FCatalogDups, FRulesFolder</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadSkipList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RulesFolderNow"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveSkipList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RescanRulesFolder(Sender: TObject);
@@ -814,7 +834,7 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// With no rule yet for the class, only From is set -- the user picks a
-      /// To class and presses "+ New Conversion". With exactly ONE rule, that rule
+      /// To class and chooses Conversion &gt; New Conversion. With exactly ONE rule, that rule
       /// opens directly, via OpenOwningRuleEntry. With SEVERAL (RulesForType,
       /// ConvRules.RuleCatalog.pas), TRuleChooserForm.Execute
       /// (ConvRules.RuleChooser.pas) lets the user pick which one to open, or say
@@ -859,20 +879,22 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function OpenOwningRule(const ATypeName: string): Boolean;
-      /// <summary>Opens an ALREADY-CHOSEN catalog entry: the cross-book
-      /// save/discard prompt, then selects its block.</summary>
+      /// <summary>Opens an ALREADY-CHOSEN catalog entry: when it lives in another
+      /// book, the unsaved-changes guard (ConfirmDiscard) and that book's load; then
+      /// selects its block.</summary>
       /// <param name="AEntry">A catalog entry -- from FindRuleForType (the "first
       /// rule" case) or from the user's pick in TRuleChooserForm (the "several
       /// rules" case).</param>
       /// <returns>False when nothing was opened -- the user cancelled the
-      /// cross-book prompt, a save failed, or AEntry's book no longer has a
+      /// unsaved-changes prompt, a save failed, or AEntry's book no longer has a
       /// #convert for it (a stale index). The reason is already on the status bar.</returns>
       /// <remarks>
-      /// THE single implementation of the cross-book save/discard prompt.
+      /// A cross-book open is an Open, so it asks only when the book has unsaved
+      /// changes (ConfirmDiscard, as File > Open) -- a saved book switches silently.
       /// Extracted from OpenOwningRule's body (from the "is this a different book"
       /// test onward) so FormTypeDblClick's chooser path can open the entry the
       /// USER picked -- not necessarily FindRuleForType's first -- through the
-      /// exact same prompt, rather than a second copy of it. Displays
+      /// exact same guard, rather than a second copy of it. Displays
       /// BareTypeName(AEntry.FromType) rather than a caller-supplied string, since
       /// the caller may only have the entry.
       /// Whether the target block still needs loading is FActiveHdr = Hdr, not
@@ -882,11 +904,11 @@ type
       /// round 1, review-task-1.md Important 1).
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesDblClick (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, MessageDlg, SameText</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, SameText</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 93 lines (full implementation)</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>
       /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr   Writes: FPendingSelectEntry, FHasPendingSelectEntry</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ConfirmDiscard"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadGridForBlock"/>
@@ -1044,11 +1066,11 @@ type
       /// conversion is selected -- marks its used From properties.</summary>
       /// <param name="AFiles">Absolute paths; unreadable ones are reported, not fatal.</param>
       /// <remarks>
-      /// The single load path. The toolbar's Examine, the panel's Open form
+      /// The single load path. The Conversion menu's Examine, the panel's Open form
       /// button and --form all funnel through here, so none of them can drift.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoExamine (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoOpenForm (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.HarvestFormTypes, ConvRules.MainForm.TConvRulesForm.HarvestUsedUnits, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.ShowUsageReport, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.Usage.ComputeUsage, Copy, ExtractFileExt, ExtractFileName, Format, LastDelimiter, SameText</para>
+      /// <para>Calls: ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.HarvestFormTypes, ConvRules.MainForm.TConvRulesForm.HarvestUsedUnits, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.ShowUsageReport, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, ConvRules.Usage.ComputeUsage, Copy, ExtractFileExt, ExtractFileName, Format, LastDelimiter, SameText</para>
       /// <para>Complexity: 10 (cyclomatic, outer body), 104 lines (full implementation)</para>
       /// <para>Reads: FUsedFiles, FActiveHdr, FFormTypeRows, FExamineInfo, FFromTree, FBook, FUnitCandidates, FGrid   Writes: FUsedFiles, FExamineInfo, FUsedProps</para>
       /// <para>Catches: Exception (swallowed)</para>
@@ -1148,12 +1170,12 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled</para>
       /// <para>Reads: FGrid   Writes: FUsedProps, FUsedFiles, FUnitCandidates, FUsedUnitRefs, FExamineInfo, FSelectedFormType</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
@@ -1197,23 +1219,40 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure GridDrawCell(Sender: TObject; ACol, ARow: Integer; Rect: TRect; State: TGridDrawState);
-      { Builds the main menu (View > Theme). Called first from BuildUI so the menu bar
-      is in place before the panels claim the client area. }
-      /// <summary><!-- drag-lint:auto sum -->Builds the main menu (View &gt; Theme).
-      /// Called first from BuildUI so the menu bar is in place before the panels claim
-      /// the client area.</summary>
+      { Builds the main menu (File / Conversion / Mapping / Uses Units / View). Called
+      first from BuildUI so the menu bar is in place before the panels claim the
+      client area. }
+      /// <summary><!-- drag-lint:auto sum -->Builds the main menu (File / Conversion /
+      /// Mapping / Uses Units / View). Called first from BuildUI so the menu bar is in
+      /// place before the panels claim the client area.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas)</para>
-      /// <para>Reads: FMnuTheme   Writes: FMnuTheme</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.AddMenuCmd, ConvRules.MainForm.TConvRulesForm.BuildMenu.Top, ShortCut</para>
+      /// <para>Reads: FMnuFile, FMnuConversion, FMnuTheme   Writes: FMnuFile, FMiFileSave, FMiFileSaveAs, FMiFileCurate, FMnuConversion, FMiExamine, FMiClearExamine, FMiAssign (+6 more)</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddMenuCmd"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu.Top"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure BuildMenu;
+      /// <summary>Appends a command item to a main-menu group.</summary>
+      /// <param name="AParent">The top-level menu (File, Mapping, ...).</param>
+      /// <param name="ACaption">Item caption; '-' makes a separator.</param>
+      /// <param name="AHint">Shown on the status line while the item is highlighted.</param>
+      /// <param name="AHandler">OnClick; nil for a separator.</param>
+      /// <param name="AShortCut">0 for none. Never a bare key -- it would fire in every edit.</param>
+      /// <returns>The item, owned by the form.</returns>
+      function AddMenuCmd(AParent: TMenuItem; const ACaption, AHint: string; AHandler: TNotifyEvent; AShortCut: TShortCut = 0): TMenuItem;
+      procedure WMEnterMenuLoop(var Msg: TMessage); message WM_ENTERMENULOOP;
+      procedure WMExitMenuLoop(var Msg: TMessage); message WM_EXITMENULOOP;
+      /// <summary>Application.OnHint: shows a menu item's hint on the status line
+      /// only while a menu is open, so control tooltips never overwrite status
+      /// messages.</summary>
+      /// <param name="Sender">The Application; unused.</param>
+      procedure AppHint(Sender: TObject);
       { View > Theme item handler; the item's Tag is Ord(TThemePref). }
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
@@ -1341,7 +1380,7 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled</para>
+      /// <para>Calls: ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled</para>
       /// <para>Reads: FActiveHdr, FGrid, FBook</para>
       /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.PathOfGridCell"/>
@@ -1391,7 +1430,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TypeOfCell, Format</para>
-      /// <para>Reads: FActiveHdr, FPoolTypeFilter, FTbOnlyType, FPool   Writes: FPoolTypeFilter</para>
+      /// <para>Reads: FActiveHdr, FPoolTypeFilter, FMiOnlyType, FPool   Writes: FPoolTypeFilter</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshPool"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TypeOfCell"/>
@@ -1559,7 +1598,7 @@ type
       /// takes effect on the next harvest. See
       /// ConvRules.FormTypes.StampSkipMarks for the pure stamping logic.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestUnitClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RescanRulesFolder (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.FormTypes.StampSkipMarks</para>
       /// <para>Reads: FFormTypeRows, FSkipList   Writes: FFormTypeRows</para>
       /// <seealso cref="ConvRules.FormTypes.StampSkipMarks"/>
@@ -1696,7 +1735,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure InsertUnitNode(ANode: TRuleNode);
-      /// <summary><!-- drag-lint:auto sum -->Toolbar + Swap. The selected row IS the Old
+      /// <summary><!-- drag-lint:auto sum -->Uses Units menu: Swap. The selected row IS the Old
       /// unit when exactly one row is selected -- any kind but #use -- so only the
       /// replacement picker opens. With no such row the Old unit is asked for first. The
       /// list is rebuilt after every rule change, which drops the selection: asking for
@@ -1779,13 +1818,13 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.UsesHarvest.WithoutUnit, Format, MatchText, MessageDlg, TRuleNode</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, ConvRules.UsesHarvest.WithoutUnit, Format, MatchText, MessageDlg, TRuleNode</para>
       /// <para>Complexity: 14 (cyclomatic, outer body), 80 lines (full implementation)</para>
       /// <para>Reads: FUnitList, FActiveHdr, FBook, FUnitCandidates, FHarvest   Writes: FActiveHdr, FUnitCandidates, FHarvest</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SyncRawFromModel"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled"/>
       /// <seealso cref="ConvRules.UsesHarvest.WithoutUnit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
@@ -1846,7 +1885,23 @@ type
       /// and sets FDestWarn; errors are reported, never raised -- the caller puts
       /// FDestNote on the status line.</remarks>
       procedure ReclassifyHarvest;
-      procedure AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string);
+      /// <summary>Merges AAdded into the harvest, reclassifies and reports.</summary>
+      /// <param name="AAdded">Harvested units.</param>
+      /// <param name="AErrors">Files that could not be read.</param>
+      /// <param name="AWhat">Where they came from, for the status line.</param>
+      /// <param name="AActivate">False = stay on the current tab (the Convert
+      /// tab feeds its sources in the background).</param>
+      procedure AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string; AActivate: Boolean = True);
+      /// <summary>The rules folder as of now: FRulesFolder once known, else the
+      /// open book's folder.</summary>
+      /// <returns>The folder, or '' when neither is known.</returns>
+      function RulesFolderNow: string;
+      /// <summary>The Convert tab became visible: re-list its books and re-read which listed units are indexed.</summary>
+      /// <param name="Sender">FTabConvert.</param>
+      procedure ConvertTabShow(Sender: TObject);
+      /// <summary>Conversion &gt; Convert...: shows the Convert tab.</summary>
+      /// <param name="Sender">The menu item.</param>
+      procedure DoShowConvertTab(Sender: TObject);
       procedure AddSourceFiles(const APaths: TArray<string>);
       procedure AddSourceText(const AText: string);
       procedure DoAddSource(Sender: TObject);
@@ -1915,7 +1970,7 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbUnitSelected (ConvRules.MainForm.pas) (+40 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+43 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
@@ -1931,7 +1986,7 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas) (+18 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+20 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
@@ -2010,7 +2065,7 @@ type
       /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.FromDbSet, ConvRules.MainForm.TConvRulesForm.ToDbSet, LowerCase</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.FromDbSet"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ToDbSet"/>
@@ -2251,6 +2306,17 @@ type
       /// calls DestroyWindowHandle directly, so a DestroyWnd override would miss the
       /// form's final teardown and leave the target registered on a dying window.</remarks>
       procedure DestroyWindowHandle; override;
+      /// <summary>Answers the registered message MAIN_MENU_QUERY_MSG with the main
+      /// menu's HMENU (0 when there is no menu); every other message goes to the
+      /// inherited WndProc.</summary>
+      /// <param name="Message">The window message.</param>
+      /// <remarks>An automation hook for the driven GUI checks. While a VCL style is
+      /// active, TFormStyleHook detaches the native menu (SetMenu(Handle, 0)) and
+      /// paints its own bar, so GetMenu on this window returns 0 and a driver has no
+      /// other way to reach the menu's item IDs. The HMENU itself stays valid: the
+      /// styled bar drops down its sub-menus with TrackPopupMenu, and a WM_COMMAND
+      /// with an item ID dispatches through Menu.DispatchCommand either way.</remarks>
+      procedure WndProc(var Message: TMessage); override;
     public
       { Application.CreateForm calls this standard Create(AOwner); we route it to
       CreateNew (no .dfm) and build the UI in code. Being created via CreateForm
@@ -2266,9 +2332,10 @@ type
       /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Create (+6 more)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Create (+7 more)</para>
       /// <para>constructor</para>
-      /// <para>Reads: FEdDest   Writes: FBook, FFromPlatform, FToPlatform, FEngine, FActiveHdr, FSurfaceMinVis, FCastDefs, FEnumDefs (+1 more)</para>
+      /// <para>Reads: FBook, FEdDest   Writes: FBook, FSnapshot, FFromPlatform, FToPlatform, FEngine, FActiveHdr, FSurfaceMinVis, FCastDefs (+2 more)</para>
+      /// <para>UI thread only -- touches Application</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: override</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
@@ -2281,7 +2348,9 @@ type
       constructor Create(AOwner: TComponent); override;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: TMethod</para>
       /// <para>Reads: FEngine, FBook, FVisualSet, FComponentSet, FPersistentSet, FDeclUnits, FResolver</para>
+      /// <para>UI thread only -- touches Application</para>
       /// <para>Directives: override</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
@@ -2295,17 +2364,22 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoCurate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoad (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), declaration (ConvRulesEditor.dpr) ?</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MainForm.TConvRulesForm.UpdateToolbarEnabled, ConvRules.Model.TRuleBook.ConvertHeaders, ConvRules.Model.TRuleBook.LoadFromString, ConvRules.RuleCatalog.HeaderIndexFor, Format, Integer</para>
-      /// <para>Reads: FBook, FLblFile, FGrid, FPool, FHasPendingSelectEntry, FPendingSelectEntry, FRules, FFormTypeRows (+1 more)   Writes: FFilePath, FActiveHdr</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadText, ConvRules.MainForm.TConvRulesForm.SetStatus</para>
       /// <para>Touches: file system</para>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RescanRulesFolder"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadText"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LoadFile(const APath: string);
+      /// <summary>Makes AText the open book: parses it, resets grid / pool /
+      /// lists / Raw DSL exactly as a file load does, and takes the unsaved-
+      /// changes snapshot.</summary>
+      /// <param name="AText">Rules text; '' is an empty (New) book.</param>
+      /// <param name="APath">The file it came from; '' for a New book.</param>
+      procedure LoadText(const AText, APath: string);
 
       /// <summary>Switches the application to the light or dark VCL style and
       /// repaints the owner-drawn grid in that mode.</summary>
@@ -2475,6 +2549,7 @@ begin
   // Route the standard constructor to CreateNew (no DFM); GlobalNameSpace-free.
   inherited CreateNew(AOwner);
   FBook:= TRuleBook.Create;
+  FSnapshot:= FBook.Snapshot; // the start-up book is an empty, unnamed one
   FFromPlatform:= GEditorFromPlatform;
   FToPlatform  := GEditorToPlatform;
   FEngine:= TEngineAdapter.Create(GEditorExe, EngineDbSet);
@@ -2490,6 +2565,8 @@ begin
   // After BuildUI: ApplyTheme repaints FGrid, which BuildUI creates.
   ApplyTheme(ResolveThemeMode(GEditorThemePref, GEditorIdeTheme));
   OnClose:= FormCloseHandler;
+  OnCloseQuery:= FormCloseQueryHandler;
+  Application.OnHint:= AppHint;
   Visible:= True; // ensure the CreateNew form is shown by Run
 
   // Where the Open-form dialog resumes. --form's own folder wins over the stored
@@ -2512,7 +2589,7 @@ begin
       SetError(Format('--form "%s" does not exist.', [GEditorFormPath]));
   end
   else
-    SetStatus('Ready. Open a .rules file, or pick From/To classes and press ' + '"+ New Conversion".');
+    SetStatus('Ready. Open a .rules file, or pick From/To classes and choose ' + '"Conversion > New Conversion".');
 end; // constructor
 
 procedure TConvRulesForm.FormCloseHandler(Sender: TObject; var Action: TCloseAction);
@@ -2523,6 +2600,9 @@ end;
 
 destructor TConvRulesForm.Destroy;
 begin
+  // Application outlives this form: a hint after the free must not call AppHint.
+  if TMethod(Application.OnHint).Data = Self then
+    Application.OnHint:= nil;
   FEngine.Free;
   FBook.Free;
   // Both are lazily created (FVisualSet only if the engine answered, FDeclUnits on
@@ -2539,21 +2619,66 @@ procedure TConvRulesForm.BuildMenu;
 const { Indexed by TThemePref -- keep in step with ConvRules.Theme's declaration order. }
   CAPTIONS: array[TThemePref] of string = ('Follow &IDE', '&Light', '&Dark');
 var
-  LMenu : TMainMenu ;
-  LView : TMenuItem ;
-  LTheme: TMenuItem ;
-  P     : TThemePref;
+  LMenu   : TMainMenu ;
+  LMapping: TMenuItem ;
+  LUnits  : TMenuItem ;
+  LView   : TMenuItem ;
+  LTheme  : TMenuItem ;
+  P       : TThemePref;
+
+  function Top(const ACaption: string): TMenuItem;
+  begin
+    Result:= TMenuItem.Create(Self);
+    Result.Caption:= ACaption;
+    LMenu.Items.Add(Result);
+  end;
+
 begin
   LMenu:= TMainMenu.Create(Self);
 
-  LView:= TMenuItem.Create(Self);
-  LView.Caption:= '&View';
-  LMenu.Items.Add(LView);
+  FMnuFile:= Top('&File');
+  AddMenuCmd(FMnuFile, '&New'       , 'Start an empty rule book', DoNew, ShortCut(Ord('N'), [ssCtrl]));
+  AddMenuCmd(FMnuFile, '&Open...'   , 'Open a conversion .rules file', DoLoad, ShortCut(Ord('O'), [ssCtrl]));
+  FMiFileSave  := AddMenuCmd(FMnuFile, '&Save'      , 'Write the canonical DSL back (.bak backup, then validate)', DoSaveClick, ShortCut(Ord('S'), [ssCtrl]));
+  FMiFileSaveAs:= AddMenuCmd(FMnuFile, 'Save &As...', 'Save the rule book under a new name', DoSaveAsClick, ShortCut(Ord('S'), [ssCtrl, ssShift]));
+  AddMenuCmd(FMnuFile, '-', '', nil);
+  AddMenuCmd(FMnuFile, '&Validate'  , 'Run convert-validate over the current model', DoValidate);
+  FMiFileCurate:= AddMenuCmd(FMnuFile, '&Curate...' , 'Split / copy / delete / merge blocks across several rule-books, or compose them into one file for the engine', DoCurate);
+  AddMenuCmd(FMnuFile, '-', '', nil);
+  AddMenuCmd(FMnuFile, 'E&xit'      , 'Close the editor (asks first if there are unsaved changes)', DoExitClick);
 
+  FMnuConversion:= Top('&Conversion');
+  AddMenuCmd(FMnuConversion, '&New Conversion'   , 'Create a #convert block from the From/To pickers above', DoNewConversion);
+  AddMenuCmd(FMnuConversion, '&Fill From-classes', 'Add a From-only conversion per component class on the picked unit''s form (pick the unit in the "From Unit" box first)', DoLoadUnit);
+  AddMenuCmd(FMnuConversion, '-', '', nil);
+  FMiExamine     := AddMenuCmd(FMnuConversion, '&Examine...' , 'Pick .dfm/.pas files and mark the From properties they actually use (green)', DoExamine);
+  FMiClearExamine:= AddMenuCmd(FMnuConversion, '&Clear marks', 'Drop the current examination and unmark all rows', DoClearExamine);
+  AddMenuCmd(FMnuConversion, '-', '', nil);
+  AddMenuCmd(FMnuConversion, 'Con&vert...', 'Open the Convert tab: apply checked rule books to a list of source units', DoShowConvertTab);
+
+  LMapping:= Top('&Mapping');
+  AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
+  FMiAssign    := AddMenuCmd(LMapping, '&Assign'      , 'Assign the highlighted To leaf (pool, right) to the selected From row', DoAssign);
+  FMiUnassign  := AddMenuCmd(LMapping, '&Unassign'    , 'Drop the selected From row''s assignment', DoUnassign);
+  FMiFindInFrom:= AddMenuCmd(LMapping, '&Find in From', 'Select the From-grid row whose property has the SAME name as the highlighted To leaf', DoFindInFrom);
+  FMiOnlyType  := AddMenuCmd(LMapping, '&Only this type', 'Show only pool leaves whose TYPE matches the highlighted leaf (toggle)', DoOnlyType);
+  AddMenuCmd(LMapping, '-', '', nil);
+  FMiMappings  := AddMenuCmd(LMapping, 'Ma&ppings...' , 'Author a conditional #mapping -- one enum VALUE sets several target properties -- and #apply it to this conversion', DoMappings);
+
+  LUnits:= Top('&Uses Units');
+  AddMenuCmd(LUnits, '&Swap...'         , 'Add #useswap Old -> New1[, New2 ...] (the selected row is the Old unit)', DoAddSwap);
+  AddMenuCmd(LUnits, '&Add unit...'     , 'Add #use <unit> -- a unit to ADD to the uses clause', DoAddUse);
+  AddMenuCmd(LUnits, '&Remove unit'     , 'Add #unuse <unit> -- a unit to REMOVE from the uses clause', DoAddUnuse);
+  AddMenuCmd(LUnits, '&Delete unit rule', 'Delete the unit rule selected on the Unit Rules tab (or dismiss the candidate / harvested row selected there)', DoDeleteUnit);
+  AddMenuCmd(LUnits, '-', '', nil);
+  AddMenuCmd(LUnits, 'D&erive units'    , 'Add #use/#unuse from every #convert To/From type (deduped)', DoDeriveUnits);
+  AddMenuCmd(LUnits, '&Check units'     , 'Report #use/#unuse conflicts (ADD wins)', DoCheckUnits);
+  FMiScopeRenames:= AddMenuCmd(LUnits, 'Accept scope re&names', 'Add #useswap Name -> Scope.Name for every selected "via scope" row', DoAcceptScopeRenames);
+
+  LView:= Top('&View');
   LTheme:= TMenuItem.Create(Self);
   LTheme.Caption:= '&Theme';
   LView.Add(LTheme);
-
   for P:= Low(TThemePref) to High(TThemePref) do
   begin
     FMnuTheme[P]:= TMenuItem.Create(Self);
@@ -2571,6 +2696,53 @@ end; // procedure
 procedure TConvRulesForm.ThemeMenuClick(Sender: TObject);
 begin
   SetThemePref(TThemePref((Sender as TMenuItem).Tag));
+end;
+
+function TConvRulesForm.AddMenuCmd(AParent: TMenuItem; const ACaption, AHint: string; AHandler: TNotifyEvent; AShortCut: TShortCut): TMenuItem;
+begin
+  Result:= TMenuItem.Create(Self);
+  Result.Caption := ACaption;
+  Result.Hint    := AHint;
+  Result.OnClick := AHandler;
+  Result.ShortCut:= AShortCut;
+  AParent.Add(Result);
+end;
+
+procedure TConvRulesForm.WMEnterMenuLoop(var Msg: TMessage);
+begin
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-09-29 a message method has no named ancestor method; bare inherited is how the message reaches the ancestor handler / DefaultHandler
+  FStatusBefore:= FLblStatus.Caption;
+  FMenuOpen    := True;
+end;
+
+procedure TConvRulesForm.WMExitMenuLoop(var Msg: TMessage);
+begin
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-09-29 a message method has no named ancestor method; bare inherited is how the message reaches the ancestor handler / DefaultHandler
+  FMenuOpen:= False;
+  FLblStatus.Caption:= FStatusBefore;
+end;
+
+procedure TConvRulesForm.AppHint(Sender: TObject);
+begin
+  if FMenuOpen then
+    FLblStatus.Caption:= GetLongHint(Application.Hint);
+end;
+
+var
+  GMainMenuQueryMsg: Cardinal = 0; // RegisterWindowMessage(MAIN_MENU_QUERY_MSG), on first use
+
+procedure TConvRulesForm.WndProc(var Message: TMessage);
+begin
+  if GMainMenuQueryMsg = 0 then
+    GMainMenuQueryMsg:= RegisterWindowMessage(MAIN_MENU_QUERY_MSG);
+  if (GMainMenuQueryMsg <> 0) and (Message.Msg = GMainMenuQueryMsg) then
+  begin
+    Message.Result:= 0;
+    if Menu <> nil then
+      Message.Result:= LRESULT(Menu.Handle);
+    Exit;
+  end;
+  inherited WndProc(Message);
 end;
 
 procedure TConvRulesForm.SetThemePref(APref: TThemePref);
@@ -2626,133 +2798,33 @@ begin
     SetError('Theme style "' + LStyle + '" is not linked into this build -- ' + 'fell back to the system style.');
 end; // procedure
 
-{ ONE grouped toolbar for every action in this window, in the order a session
-  actually runs: file/working-set | mapping | examine | unit rules, each group
-  closed by a tbsSeparator. It replaces 19 loose TButtons that were spread over
-  four different parents (top panel, pool panel, grid filter bar, Unit Rules tab),
-  where the same action's discoverability depended on which tab happened to be up.
-
-  Every OnClick points at the handler the button it replaced already used -- no
-  handler body was copied, so there is exactly one implementation of each action.
-
-  Two buttons deliberately did NOT move: the grid filter bar's two "Clear"
-  buttons. They are affordances of the TEdit they sit beside, not free-standing
-  actions -- they belong to none of the four groups, and two toolbar buttons both
-  captioned "Clear" would be unreadable.
-
-  Layout notes that are easy to get wrong on a code-built TToolBar:
-   * there is no Add method -- insertion order is decided by the button's Left/Top
-     AT THE MOMENT Parent is assigned (TToolBar.ButtonIndex picks the row nearest
-     Top, then the slot at Left). Both are therefore parked out past the strip so
-     each new button appends to the end of the last row; the real bounds are
-     overwritten by the toolbar immediately afterwards.
-   * per-button AutoSize is REQUIRED: without it a text-only button keeps the
-     toolbar's 23px ButtonWidth and the caption is clipped.
-   * Wrapable + the toolbar's own AutoSize let a narrow window wrap to a second
-     row and grow, rather than hiding the tail of the strip. }
-procedure TConvRulesForm.BuildToolbar;
-const
-  PARK = 30000; // past the right/bottom edge of any real strip -- see above
-
-  function AddBtn(const ACaption, AHint: string; AHandler: TNotifyEvent): TToolButton;
-  begin
-    Result:= TToolButton.Create(Self);
-    Result.Caption:= ACaption;
-    Result.OnClick:= AHandler;
-    if AHint <> '' then
-    begin
-      Result.Hint    := AHint;
-      Result.ShowHint:= True;
-    end;
-    Result.Left:= PARK; Result.Top:= PARK;
-    Result.Parent  := FToolbar;
-    Result.AutoSize:= True;
-  end; // function
-
-  procedure AddSep;
-  var
-    LSep: TToolButton;
-  begin
-    LSep:= TToolButton.Create(Self);
-    LSep.Style:= tbsSeparator;
-    LSep.Width:= 10;
-    LSep.Left:= PARK; LSep.Top:= PARK;
-    LSep.Parent:= FToolbar;
-  end;
-
-begin
-  FToolbar:= TToolBar.Create(Self);
-  FToolbar.Parent      := Self;
-  FToolbar.Top         := 0; // sorts above FPanelTop in the alTop band
-  FToolbar.Align       := alTop;
-  FToolbar.ShowCaptions:= True;
-  FToolbar.Wrapable    := True;
-  FToolbar.AutoSize    := True;
-  FToolbar.Flat        := True;
-  FToolbar.ShowHint    := True;
-
-  // --- file / working set ---
-  AddBtn('Open...' , 'Open a conversion .rules file'                            , DoLoad     );
-  AddBtn('Save'    , 'Write the canonical DSL back (.bak backup, then validate)', DoSaveClick);
-  AddBtn('Validate', 'Run convert-validate over the current model'              , DoValidate );
-  AddBtn('Curate...', 'Split / copy / delete / merge blocks across several rule-books, ' + 'or compose them into one file for the engine', DoCurate);
-  AddSep;
-
-  // --- mapping: acts on the top pickers, the selected grid row and the pool ---
-  AddBtn('+ New Conversion', 'Create a #convert block from the From/To pickers above', DoNewConversion);
-  AddBtn(
-    'Fill From-classes', 'Add a From-only conversion per component class on the picked unit''s form ' + '(optional -- pick the unit in the "From Unit" box above first)', DoLoadUnit
-  );
-  AddBtn('Auto-Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
-  FTbAssign  := AddBtn('<- Assign'  , 'Assign the highlighted To leaf (pool, right) to the selected From row', DoAssign  );
-  FTbUnassign:= AddBtn('Unassign ->', 'Drop the selected From row''s assignment'                             , DoUnassign);
-  FTbFindInFrom:= AddBtn('Find in From', 'Select the From-grid row whose property has the SAME name as the highlighted ' + 'To leaf', DoFindInFrom);
-  FTbOnlyType:= AddBtn('Only this type', 'Show only pool leaves whose TYPE matches the highlighted leaf (toggle)', DoOnlyType);
-  FTbMappings:= AddBtn('Mappings...', 'Author a conditional #mapping -- one enum VALUE sets several target properties -- ' + 'and #apply it to this conversion', DoMappings);
-  AddSep;
-
-  // --- examine ---
-  FTbExamine     := AddBtn('Examine...' , 'Pick .dfm/.pas files and mark the From properties they actually use (green)', DoExamine     );
-  FTbClearExamine:= AddBtn('Clear marks', 'Drop the current examination and unmark all rows'                           , DoClearExamine);
-  AddSep;
-
-  // --- unit rules: the Unit Rules TAB keeps its list; only its buttons moved ---
-  AddBtn('+ Swap'       , 'Add #useswap Old -> New1[, New2 ...]'                      , DoAddSwap );
-  AddBtn('+ Add unit'   , 'Add #use <unit> -- a unit to ADD to the uses clause'       , DoAddUse  );
-  AddBtn('+ Remove unit', 'Add #unuse <unit> -- a unit to REMOVE from the uses clause', DoAddUnuse);
-  AddBtn('Delete unit rule', 'Delete the unit rule selected on the Unit Rules tab ' + '(or dismiss the Examine candidate or harvested row selected there)', DoDeleteUnit);
-  AddBtn('Derive units', 'Add #use/#unuse from every #convert To/From type (deduped)', DoDeriveUnits);
-  AddBtn('Check units' , 'Report #use/#unuse conflicts (ADD wins)'                   , DoCheckUnits );
-  FTbScopeRenames:= AddBtn('Accept scope renames', 'Add #useswap Name -> Scope.Name for every selected "via scope" row', DoAcceptScopeRenames);
-end; // begin
-
 { Enables only what the current selection supports. Several actions were previously always
   enabled and reported an error only when pressed; that is a worse experience than a
   disabled button, and it hid which state each action actually requires. }
-procedure TConvRulesForm.UpdateToolbarEnabled;
+procedure TConvRulesForm.UpdateMenuEnabled;
 begin
-  FTbAssign.Enabled:= (FActiveHdr >= 0) and (FGrid.Row > 0) and (FPool.ItemIndex >= 0);
-  FTbUnassign.Enabled:= (FActiveHdr >= 0) and (FGrid.Row > 0);
-  FTbFindInFrom.Enabled:= (FActiveHdr >= 0) and (FPool.ItemIndex >= 0);
-  FTbExamine.Enabled:= (FActiveHdr >= 0);
-  FTbClearExamine.Enabled:= (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
-  FTbMappings.Enabled:= (FActiveHdr >= 0);
-  if (FTbScopeRenames <> nil) and (FUnitList <> nil) then
+  FMiAssign.Enabled:= (FActiveHdr >= 0) and (FGrid.Row > 0) and (FPool.ItemIndex >= 0);
+  FMiUnassign.Enabled:= (FActiveHdr >= 0) and (FGrid.Row > 0);
+  FMiFindInFrom.Enabled:= (FActiveHdr >= 0) and (FPool.ItemIndex >= 0);
+  FMiExamine.Enabled:= (FActiveHdr >= 0);
+  FMiClearExamine.Enabled:= (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
+  FMiMappings.Enabled:= (FActiveHdr >= 0);
+  if (FMiScopeRenames <> nil) and (FUnitList <> nil) then
   begin
     var LScope: Boolean:= False;
     for var LItem: TListItem in SelectedUnitRows do
       if (LItem.Caption = HARVEST_CAPTION) and (LItem.SubItems.Count > 1) and (LItem.SubItems[1] <> '') then
         LScope:= True;
-    FTbScopeRenames.Enabled:= LScope;
+    FMiScopeRenames.Enabled:= LScope;
   end;
 end;
 
 { FGrid.OnSelectCell -- the grid row is half of the Assign/Unassign gate, so the
-  toolbar has to be re-evaluated whenever it moves. CanSelect is left untouched:
+  menu has to be re-evaluated whenever it moves. CanSelect is left untouched:
   this hook only observes. }
 procedure TConvRulesForm.GridSelectCell(Sender: TObject; ACol, ARow: Integer; var CanSelect: Boolean);
 begin
-  UpdateToolbarEnabled;
+  UpdateMenuEnabled;
   { ARow, not FGrid.Row: OnSelectCell fires BEFORE the grid commits the move, so
     FGrid.Row is still the OLD row here and the catalog would trail one selection
     behind -- visibly wrong, and wrong in the direction that looks like it works. }
@@ -2763,7 +2835,7 @@ end;
   all of the Find-in-From gate). }
 procedure TConvRulesForm.PoolSelectionChanged(Sender: TObject);
 begin
-  UpdateToolbarEnabled;
+  UpdateMenuEnabled;
 end;
 
 procedure TConvRulesForm.BuildUI;
@@ -2793,21 +2865,16 @@ begin
 
   // --- bottom status bar (created first so it reserves the bottom edge; the top
   //     status label stays too, but this makes the current message visible even
-  //     when the window is short and the top toolbar scrolls off) ---
+  //     when the window is short and the top panel scrolls off) ---
   FStatusBar:= TStatusBar.Create(Self);
   FStatusBar.Parent     := Self;
   FStatusBar.SimplePanel:= True;
   FStatusBar.SimpleText := 'Ready.';
 
-  // --- the one action toolbar (all four groups); claims its strip before the
-  //     picker panel below it ---
-  BuildToolbar;
-
   // --- top panel: status line / class builder / project-unit helper / path.
-  //     Its four file-action buttons moved to the toolbar, so row 0 is now the
+  //     Its four file-action buttons moved to the menu, so row 0 is now the
   //     status line alone and gets the full width. ---
   FPanelTop:= TPanel.Create(Self);
-  FPanelTop.Top:= 200; // sorts BELOW FToolbar in the alTop band
   FPanelTop.Parent:= Self; FPanelTop.Align:= alTop; FPanelTop.Height:= 122;
   FPanelTop.BevelOuter:= bvNone;
 
@@ -2833,7 +2900,7 @@ begin
   // with only OnDropDown wired, Browse... + a pick left the tab empty and the
   // operator read that as "6cfaa158 does not work".
   FCbUnit.OnSelect:= CbUnitSelected;
-  // Its "Fill From-classes" trigger is the toolbar button of that name.
+  // Its "Fill From-classes" trigger is the Conversion menu item of that name.
 
   // A unit worth converting is often NOT a project member yet -- that is the
   // normal state of legacy code being migrated INTO a project. The combo lists
@@ -2892,7 +2959,7 @@ begin
   FCbTo.AutoComplete:= True; FCbTo.DropDownCount:= 24;
   FCbTo.Hint:= 'Target controls (Win64) -- type to filter (TcxTextEdit, TcxGrid, ...)';
   FCbTo.ShowHint:= True; FCbTo.OnDropDown:= CbLoadClasses;
-  // The pair's trigger is the toolbar's "+ New Conversion" button.
+  // The pair's trigger is the Conversion menu's "New Conversion" item.
 
   // --- platform selectors: FROM platform / TO platform (re-scope the pickers) ---
   // Combo item order (Win32,Win64,Both) matches TConvPlatform (cpWin32,cpWin64,
@@ -3089,7 +3156,7 @@ begin
   FTabUnits:= TabUnits;
   BuildHarvestStrip(TabUnits);
   // The six authoring buttons that used to sit on a 64px panel here are now the
-  // toolbar's "unit rules" group; the tab keeps the list they act on.
+  // Uses Units menu; the tab keeps the list they act on.
   FUnitList:= TListView.Create(Self);
   FUnitList.Parent   := TabUnits; FUnitList.Align        := alClient;
   FUnitList.ViewStyle:= vsReport; FUnitList.ReadOnly     := True;
@@ -3117,6 +3184,70 @@ begin
   FMiDelete:= AddPopupItem(FUnitPopup, 'Delete'              , DoDeleteUnit        );
   FUnitList.PopupMenu:= FUnitPopup;
 
+  // --- Convert tab: checked rule books x listed source units, in place ---
+  FTabConvert:= TTabSheet.Create(FTabs);
+  FTabConvert.PageControl:= FTabs;
+  FTabConvert.Caption:= 'Convert';
+  var LHost: TConvertHost;
+  LHost.ExePath:= GEditorExe;
+  // The engine's FIRST --db is its primary: the project DB leads, and the
+  // copy of it inside EngineDbSet is dropped.
+  LHost.GetDbs:= function: TArray<string>
+    begin
+      Result:= [GEditorProjectDb];
+      for var LDb: string in EngineDbSet do
+        if not SameText(LDb, GEditorProjectDb) then
+          Result:= Result + [LDb];
+    end;
+  LHost.GetProjectDb:= function: string
+    begin
+      Result:= GEditorProjectDb;
+    end;
+  // The DB's OWN project file, never the Unit Rules Destination: the runner
+  // runs `index --project` on it, and another project's file would re-scope
+  // the editor's project DB. Destination only classifies harvested units.
+  LHost.GetProjectFile:= function: string
+    begin
+      Result:= ProjectFileForDb(GEditorProjectDb);
+    end;
+  LHost.GetRulesFolder:= function: string
+    begin
+      Result:= RulesFolderNow;
+    end;
+  LHost.GetOpenBook:= function: string
+    begin
+      Result:= FFilePath;
+    end;
+  LHost.ConfirmOpenBookSaved:= function: Boolean
+    begin
+      Result:= ConfirmDiscard;
+    end;
+  LHost.FeedHarvest:= procedure(APaths: TArray<string>)
+    var
+      LErrs: TArray<string>;
+    begin
+      AddHarvest(HarvestFiles(APaths, LErrs), LErrs, 'Convert sources', False);
+    end;
+  LHost.SetStatus:= procedure(AText: string; AIsError: Boolean)
+    begin
+      if AIsError then
+        SetError(AText)
+      else
+        SetStatus(AText);
+    end;
+  // A book saved mid-run changes the rules the run's LATER units get; Open and
+  // New stay enabled -- the run captured its books, units and folders.
+  LHost.RunStateChanged:= procedure(ARunning: Boolean)
+    begin
+      FMiFileSave.Enabled  := not ARunning;
+      FMiFileSaveAs.Enabled:= not ARunning;
+      FMiFileCurate.Enabled:= not ARunning;
+    end;
+  FConvertTab:= TConvertTab.Create(Self, LHost);
+  FConvertTab.Parent:= FTabConvert;
+  FConvertTab.Align := alClient;
+  FTabConvert.OnShow:= ConvertTabShow;
+
   // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
   // than relying on "index 0 happens to be first created", which TabRules.
   // Visible:= False used to make untrue for a sighted user even though it was
@@ -3133,7 +3264,7 @@ begin
   PoolPanel.BevelOuter:= bvNone;
 
   // Auto-Match / Find in From / Only this type / Assign / Unassign all moved to
-  // the toolbar's "mapping" group; the pool keeps only its search box and list,
+  // the Mapping menu; the pool keeps only its search box and list,
   // which is what the freed 140px of height goes to.
   var LblPool: TLabel:= TLabel.Create(Self);
   LblPool.Parent:= PoolPanel; LblPool.SetBounds(6, 8, 388, 15);
@@ -3153,12 +3284,12 @@ begin
   FPool.Parent:= PoolPanel; FPool.SetBounds(6, 56, 388, 438);
   FPool.Anchors:= [akLeft, akTop, akRight, akBottom];
   FPool.OnClick:= PoolSelectionChanged;
-  // Double-click a To leaf = press "<- Assign". The three-part gesture (grid row +
-  // pool leaf + toolbar button) is not discoverable: clicking the obvious thing did
+  // Double-click a To leaf = Mapping > Assign. The three-part gesture (grid row +
+  // pool leaf + menu item) is not discoverable: clicking the obvious thing did
   // nothing at all, because the grid carries no OnDblClick and the pool carried only
   // OnClick. DoAssign is a TNotifyEvent and already reports every precondition it
   // needs via SetStatus, so wiring it directly adds a shortcut without a second copy
-  // of the rules -- and without changing what the toolbar button does.
+  // of the rules -- and without changing what the menu item does.
   FPool.OnDblClick:= DoAssign;
 
   { --- conversion catalog: "what can the selected From property become?" ---
@@ -3226,7 +3357,7 @@ begin
   FLblGridMatch.Parent:= GridFilterPanel; FLblGridMatch.SetBounds(626, 9, 160, 15);
   FLblGridMatch.Caption:= '';
 
-  // Examine / Clear marks moved to the toolbar's "examine" group; the second row
+  // Examine / Clear marks moved to the Conversion menu; the second row
   // of this filter bar went with them.
 
   FGrid:= TStringGrid.Create(Self);
@@ -3244,7 +3375,7 @@ begin
   // marking all go through it) -- required for OnDrawCell to own the cell colour.
   FGrid.DefaultDrawing:= False;
   FGrid.OnDrawCell    := GridDrawCell;
-  FGrid.OnSelectCell  := GridSelectCell; // re-gates the toolbar as the row moves
+  FGrid.OnSelectCell  := GridSelectCell; // re-gates the menu as the row moves
 
   // Needs both FGrid and FPool, so it goes after the grid, not next to the pool.
   BuildTypePopup;
@@ -3261,7 +3392,7 @@ begin
 
   // Nothing is selected yet: start the selection-dependent actions disabled
   // rather than enabled-and-complaining.
-  UpdateToolbarEnabled;
+  UpdateMenuEnabled;
 end; // procedure
 
 { Re-assert FLblStatus's font for the current message kind. FLblStatus opts out of
@@ -3906,6 +4037,8 @@ procedure TConvRulesForm.DoLoad(Sender: TObject);
 var
   Dlg: TOpenDialog;
 begin
+  if not ConfirmDiscard then
+    Exit;
   Dlg:= TOpenDialog.Create(Self);
   try
     Dlg.Filter:= 'Conversion rules (*.rules;*.txt)|*.rules;*.txt|All files (*.*)|*.*';
@@ -3923,6 +4056,11 @@ begin
     SetStatus('File not found: ' + APath);
     Exit;
   end;
+  LoadText(TFile.ReadAllText(APath), APath);
+end; // procedure
+
+procedure TConvRulesForm.LoadText(const AText, APath: string);
+begin
   FFilePath:= APath;
   // FSelectedFormType is deliberately NOT cleared here (A4, 2026-09-20
   // whole-branch review, finding 13). OpenOwningRuleEntry calls LoadFile to
@@ -3932,8 +4070,11 @@ begin
   // RefreshRulesList below recomputes against the NEW book's catalog regardless,
   // so a plain manual Load of an unrelated book just shows whatever (if
   // anything) that class name has there -- never stale data from the old book.
-  FBook.LoadFromString(TFile.ReadAllText(APath));
-  FLblFile.Caption:= APath;
+  FBook.LoadFromString(AText);
+  if APath <> '' then
+    FLblFile.Caption:= APath
+  else
+    FLblFile.Caption:= '(new rule book)';
   RefreshRulesList;
   RefreshUnitList;
   SyncRawFromModel;
@@ -3944,9 +4085,9 @@ begin
   SetStatus(Format('Loaded %d line(s), %d rule(s). Select a rule to edit its mapping.', [FBook.Nodes.Count, Length(FBook.ConvertHeaders)]));
   // Re-gate BEFORE the auto-select below, not after: a file with no #convert rules
   // skips that branch entirely, so LoadGridForBlock's re-gate never runs and the
-  // toolbar would still be showing the PREVIOUS file's enabled state over an empty
+  // menu would still be showing the PREVIOUS file's enabled state over an empty
   // grid. When there IS a rule the auto-select re-gates again a moment later.
-  UpdateToolbarEnabled;
+  UpdateMenuEnabled;
   // Auto-select the first rule so the grid shows content immediately (also makes
   // the tool usable if a click ever fails to register). Selecting fires
   // OnSelectItem -> LoadGridForBlock. When OpenOwningRuleEntry is mid-way through
@@ -4004,6 +4145,7 @@ begin
     ApplySkipMarks;
     RefreshFormTypes;
   end;
+  FSnapshot:= FBook.Snapshot;
 end; // procedure
 
 { The rules that convert the selected class. Retired on 2026-09-16 when the tab
@@ -4123,8 +4265,8 @@ begin
   FActiveHdr:= AHdrIdx;
   // A fresh block: drop any pool type-narrowing carried over from the last selection.
   FPoolTypeFilter:= '';
-  if FTbOnlyType <> nil then
-    FTbOnlyType.Caption:= 'Only this type';
+  if FMiOnlyType <> nil then
+    FMiOnlyType.Checked:= False;
   Node:= FBook.Nodes[AHdrIdx];
   // Mirror the rule's From/To into the top pickers, so a From-only rule can have a
   // To assigned there (there is otherwise no way to set the To for a picked rule).
@@ -4179,7 +4321,7 @@ begin
   // A rule is now active: the actions that needed one become reachable. Every
   // "a rule was selected" path (RulesSelectItem, LoadFile's auto-select,
   // DoNewConversion, SurfaceChanged) lands here, so this is the single hook.
-  UpdateToolbarEnabled;
+  UpdateMenuEnabled;
 end; // procedure
 
 { Refill the grid from FFromTree.Leaves, keeping only rows that pass the active
@@ -4723,9 +4865,7 @@ var
   Errs  : TArray<string>;
   Folder: string        ;
 begin
-  Folder:= Trim(FRulesFolder);
-  if Folder = '' then
-    Folder:= ExtractFilePath(FFilePath);
+  Folder:= RulesFolderNow;
   if Folder = '' then
   begin
     SetStatus('No rules folder yet -- open a rule book first, then Rescan rules.');
@@ -4851,7 +4991,7 @@ begin
   if Length(Entries) = 0 then
   begin
     FCbTo.Text:= '';
-    SetStatus(Format('From set to %s. Pick a To class, then "+ New Conversion".', [FFormTypeRows[i].TypeName]));
+    SetStatus(Format('From set to %s. Pick a To class, then "Conversion > New Conversion".', [FFormTypeRows[i].TypeName]));
     Exit;
   end;
 
@@ -4865,7 +5005,7 @@ begin
       crNew   :
       begin
         FCbTo.Text:= '';
-        SetStatus(Format('From set to %s. Pick a different To class, then "+ New Conversion".', [FFormTypeRows[i].TypeName]));
+        SetStatus(Format('From set to %s. Pick a different To class, then "Conversion > New Conversion".', [FFormTypeRows[i].TypeName]));
         Exit;
       end;
     end; // case
@@ -4913,21 +5053,11 @@ begin
 
   if not SameText(AEntry.FilePath, FFilePath) then
   begin
-    if (FFilePath <> '') and (FBook.Nodes.Count > 0) then
-    case MessageDlg(
-        Format('Open %s to edit the %s rule?' + sLineBreak + sLineBreak + 'Yes = save %s first.' + sLineBreak + 'No  = DISCARD any unsaved edits in it and open the other book.', [ExtractFileName(AEntry.FilePath), TypeName, ExtractFileName(FFilePath)]),
-        mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
-      mrCancel: Exit;
-      mrYes   :
-        // Same reasoning as DoCurate: if the save failed, opening the other book
-        // would throw the edits away. DoSave has already said why -- do not
-        // overwrite its message.
-        if not DoSave(nil) then
-        begin
-          SetError('Not opened: the save failed, so your edits are still only in ' + 'this editor and nothing on disk changed.');
-          Exit;
-        end;
-    end; // case
+    // Opening another book is an Open: the same unsaved-changes guard as File >
+    // Open. A failed save returns False too, so the edits are never thrown away;
+    // SaveBook has already put the reason on the status bar.
+    if not ConfirmDiscard then
+      Exit;
     // Tell LoadFile's auto-select which row to pick (fix wave, Important 2) --
     // so it loads the TARGET block instead of row 0, avoiding a wasted proptree
     // fetch when the target is not first in the new book's FRules list.
@@ -5009,7 +5139,7 @@ begin
   FSelectedFormType:= FFormTypeRows[i].TypeName;
   RefreshRulesList;
   FCbTo.Text:= '';
-  SetStatus(Format('From set to %s. Pick a To class, then "+ New Conversion".', [FFormTypeRows[i].TypeName]));
+  SetStatus(Format('From set to %s. Pick a To class, then "Conversion > New Conversion".', [FFormTypeRows[i].TypeName]));
 end; // procedure
 
 procedure TConvRulesForm.ToggleFormTypeSkip(Sender: TObject);
@@ -5354,7 +5484,7 @@ begin
   SetStatus(FExamineInfo);
   FGrid.Invalidate;
   RefreshUnitList; // draws the harvested units as candidate rows
-  UpdateToolbarEnabled; // "Clear marks" is gated on there BEING an examination
+  UpdateMenuEnabled; // "Clear marks" is gated on there BEING an examination
 
   if (Length(U.Missing) > 0) or (Length(U.Loose) > 0) then
     ShowUsageReport(U.Missing, U.Loose);
@@ -5374,7 +5504,7 @@ begin
   FGrid.Invalidate;
   RefreshUnitList; // takes the candidate rows back off the Unit Rules tab
   RefreshRulesList; // refresh to show all rules again (no type filter)
-  UpdateToolbarEnabled; // nothing left to clear -> "Clear marks" goes back down
+  UpdateMenuEnabled; // nothing left to clear -> "Clear marks" goes back down
   SetStatus('Examination cleared.');
 end;
 
@@ -5519,7 +5649,7 @@ begin
   if FPoolTypeFilter <> '' then
   begin
     FPoolTypeFilter:= '';
-    FTbOnlyType.Caption:= 'Only this type';
+    FMiOnlyType.Checked:= False;
     RefreshPool;
     SetStatus('Pool type filter cleared.');
     Exit;
@@ -5529,7 +5659,7 @@ begin
   T:= TypeOfCell(FPool.Items[FPool.ItemIndex]);
   if T = '' then begin SetStatus('That leaf has no resolved type to filter by.'); Exit; end;
   FPoolTypeFilter:= T;
-  FTbOnlyType.Caption:= 'Show all types';
+  FMiOnlyType.Checked:= True;
   RefreshPool;
   SetStatus(Format('Pool narrowed to type "%s".', [T]));
 end; // procedure
@@ -5813,8 +5943,8 @@ begin
   RefreshRulesList;
   // RefreshPool consumed the highlighted leaf, so FPool.ItemIndex is now -1 -- but
   // rebuilding the list does NOT fire FPool.OnClick, so nothing else re-gates and
-  // "<- Assign" would stay enabled over a selection that no longer exists.
-  UpdateToolbarEnabled;
+  // "Assign" would stay enabled over a selection that no longer exists.
+  UpdateMenuEnabled;
   SetStatus(Format('Assigned %s <- %s%s', [ToPath, FromPath, IfThen(FindLinkForFrom(FromPath).Cast <> '', ' : ' + FindLinkForFrom(FromPath).Cast, '')]));
 end; // procedure
 
@@ -6060,6 +6190,7 @@ begin
       // colliding name would silently replace a sibling rule file.
       NewPath:= UniqueRulePath(Folder, RuleFileName);
       FBook.Clear;
+      FSnapshot:= FBook.Snapshot; // the new book starts clean: only the rule about to be added makes it dirty
       FFilePath:= NewPath;
       FLblFile.Caption:= NewPath;
       FActiveHdr:= -1;
@@ -6206,7 +6337,7 @@ begin
   RefreshPool;
   SyncRawFromModel;
   RefreshRulesList;
-  UpdateToolbarEnabled; // same reason as DoAssign: the pool list was rebuilt
+  UpdateMenuEnabled; // same reason as DoAssign: the pool list was rebuilt
   SetStatus('Unassigned ' + FromPath);
 end; // procedure
 
@@ -6286,6 +6417,60 @@ begin
 end;
 
 function TConvRulesForm.DoSave(Sender: TObject): Boolean;
+begin
+  Result:= SaveBook(False);
+end;
+
+procedure TConvRulesForm.DoSaveAsClick(Sender: TObject);
+begin
+  SaveBook(True);
+end;
+
+procedure TConvRulesForm.DoNew(Sender: TObject);
+begin
+  if not ConfirmDiscard then
+    Exit;
+  FFilePath:= '';
+  LoadText('', '');
+  SetStatus('New rule book -- File > Save As... to give it a name.');
+end;
+
+procedure TConvRulesForm.DoExitClick(Sender: TObject);
+begin
+  Close; // FormCloseQueryHandler runs the unsaved-changes guard
+end;
+
+function TConvRulesForm.ConfirmDiscard: Boolean;
+var
+  LName: string;
+begin
+  if FBook.Snapshot = FSnapshot then
+    Exit(True);
+  if FFilePath <> '' then
+    LName:= ExtractFileName(FFilePath)
+  else
+    LName:= 'the new rule book';
+  case MessageDlg(Format('Save changes to %s?', [LName]), mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
+    mrYes: Result:= SaveBook(False);
+    mrNo : Result:= True;
+    else   Result:= False;
+  end; // case
+end; // function
+
+procedure TConvRulesForm.FormCloseQueryHandler(Sender: TObject; var CanClose: Boolean);
+begin
+  // Closing mid-run would end the process while a convert-apply is writing a
+  // unit, with no restore and no report (TConvertTab's remarks).
+  if (FConvertTab <> nil) and FConvertTab.Running then
+  begin
+    SetError('A conversion is running -- press Cancel on the Convert tab and wait for the current unit to finish before closing.');
+    CanClose:= False;
+    Exit;
+  end;
+  CanClose:= ConfirmDiscard;
+end;
+
+function TConvRulesForm.SaveBook(APromptPath: Boolean): Boolean;
 var
   bak  : string         ;
   res  : TValidateResult;
@@ -6295,12 +6480,20 @@ var
 begin
   Result:= False; // every early Exit below means nothing reached disk
   var LGuard: IInterface:= HourGlass;
-  if FFilePath = '' then
+  var LOldPath: string:= FFilePath;
+  var LBytesWritten: Boolean:= False;
+  if APromptPath or (FFilePath = '') then
   begin
     var Dlg: TSaveDialog:= TSaveDialog.Create(Self);
     try
       Dlg.Filter    := 'Conversion rules (*.rules)|*.rules';
       Dlg.DefaultExt:= 'rules';
+      if FFilePath <> '' then
+      begin
+        Dlg.InitialDir:= ExtractFilePath(FFilePath);
+        Dlg.FileName  := ExtractFileName(FFilePath);
+      end;
+      Dlg.Options:= Dlg.Options + [ofOverwritePrompt];
       if not Dlg.Execute then
         Exit;
       FFilePath:= Dlg.FileName;
@@ -6308,76 +6501,106 @@ begin
     finally Dlg.Free; end;
   end; // if
 
-  // 1) backup existing
-  if TFile.Exists(FFilePath) then
-  begin
-    bak:= BackupPath(FFilePath);
-    try TFile.Copy(FFilePath, bak); except on E: Exception do
-      begin SetStatus('Backup failed: ' + E.Message); Exit; end; end;
-  end;
+  // Every Exit (and any exception) from here on BEFORE the bytes reach disk restores
+  // the path the book had before this save, so a later plain Save never writes to
+  // a file the user picked in a Save As that did not complete. Once they are on disk,
+  // the new path stays and the snapshot is taken even if validation / rescan raises.
+  try
+    // 1) backup existing
+    if TFile.Exists(FFilePath) then
+    begin
+      bak:= BackupPath(FFilePath);
+      try
+        TFile.Copy(FFilePath, bak);
+      except
+        on E: Exception do
+        begin
+          SetStatus('Backup failed: ' + E.Message);
+          Exit;
+        end;
+      end; // try
+    end;
 
-  // 2) write canonical DSL (ASCII/CRLF) -- only COMPLETE rules (a #convert block
-  //    with at least one #link). A From/To pair with nothing mapped yet is scratch
-  //    and is not persisted.
-  var dropped: Integer                                     ;
-  var outText: string:= FBook.SaveCompleteToString(dropped);
+    // 2) write canonical DSL (ASCII/CRLF) -- only COMPLETE rules (a #convert block
+    //    with at least one #link). A From/To pair with nothing mapped yet is scratch
+    //    and is not persisted.
+    var dropped: Integer                                     ;
+    var outText: string:= FBook.SaveCompleteToString(dropped);
 
-  { A BRAND-NEW rule file with nothing complete would be created EMPTY.
-    SaveCompleteToString drops a #convert that has no #link yet, so "new file AND
-    everything dropped" writes a 0-byte .rules -- a file the folder scan picks up,
-    the catalog cannot explain, and no backup exists to undo (step 1 only backs up
-    a file that already existed).
+    { A BRAND-NEW rule file with nothing complete would be created EMPTY.
+      SaveCompleteToString drops a #convert that has no #link yet, so "new file AND
+      everything dropped" writes a 0-byte .rules -- a file the folder scan picks up,
+      the catalog cannot explain, and no backup exists to undo (step 1 only backs up
+      a file that already existed).
 
-    Refused NARROWLY, on both conditions. Saving an EXISTING book down to empty is a
-    different act -- deliberate deletion -- and it keeps its .bak. }
-  if (Trim(outText) = '') and (dropped > 0) and (not TFile.Exists(FFilePath)) then
-  begin
-    SetError(Format(
-        'Nothing saved and %s was NOT created: it has no completed rule ' + 'yet. A #convert needs at least one #link -- assign a property, then Save.',
-        [ExtractFileName(FFilePath)]));
-    Exit;
-  end;
+      Refused NARROWLY, on both conditions. Saving an EXISTING book down to empty is a
+      different act -- deliberate deletion -- and it keeps its .bak. }
+    if (Trim(outText) = '') and (dropped > 0) and (not TFile.Exists(FFilePath)) then
+    begin
+      SetError(Format(
+          'Nothing saved and %s was NOT created: it has no completed rule ' + 'yet. A #convert needs at least one #link -- assign a property, then Save.',
+          [ExtractFileName(FFilePath)]));
+      Exit;
+    end;
 
-  TFile.WriteAllText(FFilePath, outText, TEncoding.ASCII);
+    TFile.WriteAllText(FFilePath, outText, TEncoding.ASCII);
+    LBytesWritten:= True;
 
-  // 3) validate the saved file
-  fromT:= ''; toT:= '';
-  if FActiveHdr >= 0 then
-  begin
-    Node:= FBook.Nodes[FActiveHdr];
-    fromT:= Node.FromType; toT:= Node.ToType;
-  end;
-  res:= FEngine.ValidateText(outText, fromT, toT);
-  var droppedMsg: string:= '';
-  if dropped > 0 then
-    droppedMsg:= Format(' (%d empty rule(s) not saved)', [dropped]);
-  if res.OK then
-    SetStatus(Format('Saved %s (backup %s)%s. Validate: OK', [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg]))
-  else
-    SetStatus(Format('Saved %s (backup %s)%s. Validate: %s', [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg, res.FirstError]));
+    // 3) validate the saved file
+    fromT:= '';
+    toT  := '';
+    if FActiveHdr >= 0 then
+    begin
+      Node := FBook.Nodes[FActiveHdr];
+      fromT:= Node.FromType;
+      toT  := Node.ToType;
+    end;
+    res:= FEngine.ValidateText(outText, fromT, toT);
+    var droppedMsg: string:= '';
+    if dropped > 0 then
+      droppedMsg:= Format(' (%d empty rule(s) not saved)', [dropped]);
+    if res.OK then
+      SetStatus(Format('Saved %s (backup %s)%s. Validate: OK', [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg]))
+    else
+      SetStatus(Format('Saved %s (backup %s)%s. Validate: %s', [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg, res.FirstError]));
 
-  // Surface unit-rule conflicts (ADD wins) after every save, non-blocking.
-  RefreshUnitList;
-  var us: TUnitSets:= NormalizeUnitSets(FBook);
-  if Length(us.Conflicts) > 0 then
-    SetError(Format('Note: unit conflicts (ADD wins): %s', [string.Join(', ', us.Conflicts)]));
+    // Surface unit-rule conflicts (ADD wins) after every save, non-blocking.
+    RefreshUnitList;
+    var us: TUnitSets:= NormalizeUnitSets(FBook);
+    if Length(us.Conflicts) > 0 then
+      SetError(Format('Note: unit conflicts (ADD wins): %s', [string.Join(', ', us.Conflicts)]));
 
-  { The folder just changed on disk, so the catalog is now one save out of date. Any
-    type this save has newly ruled would keep painting as UN-RULED -- inviting a
-    second rule for it -- until something else happened to rescan.
+    { The folder just changed on disk, so the catalog is now one save out of date. Any
+      type this save has newly ruled would keep painting as UN-RULED -- inviting a
+      second rule for it -- until something else happened to rescan.
 
-    Only when a form has been examined: with no type list there is nothing to re-mark
-    and this would be an engine call for no reason. RescanRulesFolder writes its own
-    status, so preserve the save message the user is actually waiting for. }
-  if Length(FFormTypeRows) > 0 then
-  begin
-    var SaveMsg: string:= FLblStatus.Caption;
-    RescanRulesFolder(nil);
-    RefreshFormTypes;
-    SetStatus(SaveMsg);
-  end;
+      Only when a form has been examined: with no type list there is nothing to re-mark
+      and this would be an engine call for no reason. RescanRulesFolder writes its own
+      status, so preserve the save message the user is actually waiting for. }
+    if Length(FFormTypeRows) > 0 then
+    begin
+      var SaveMsg: string:= FLblStatus.Caption;
+      RescanRulesFolder(nil);
+      RefreshFormTypes;
+      SetStatus(SaveMsg);
+    end;
+    // The saved book may be new to the folder, or changed kind (convert / unit rules).
+    if FConvertTab <> nil then
+      FConvertTab.RefreshBooks;
 
-  Result:= True; // the file IS on disk; a failed validation is a report, not a failure
+    Result:= True; // the file IS on disk; a failed validation is a report, not a failure
+  finally
+    if LBytesWritten then
+      FSnapshot:= FBook.Snapshot
+    else
+    begin
+      FFilePath:= LOldPath;
+      if LOldPath <> '' then
+        FLblFile.Caption:= LOldPath
+      else
+        FLblFile.Caption:= '(new rule book)';
+    end;
+  end; // try
 end; // function
 
 { ---- Unit Rules tab ---- }
@@ -6599,7 +6822,7 @@ end;
 { FUnitList.OnSelectItem -- the selection is the whole of the Accept scope renames gate. }
 procedure TConvRulesForm.UnitListSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
 begin
-  UpdateToolbarEnabled;
+  UpdateMenuEnabled;
 end;
 
 { One #useswap Name -> Scope.Name per selected "via scope" harvested row; the rule
@@ -6629,7 +6852,7 @@ begin
   end;
   RefreshUnitList;
   SyncRawFromModel;
-  UpdateToolbarEnabled;
+  UpdateMenuEnabled;
   SetStatus(Format('Added %d #useswap: %s', [Length(Added), string.Join(', ', Added)]));
 end; // procedure
 
@@ -6950,12 +7173,31 @@ begin
   RefreshUnitList;
 end;
 
-procedure TConvRulesForm.AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string);
+function TConvRulesForm.RulesFolderNow: string;
+begin
+  Result:= Trim(FRulesFolder);
+  if Result = '' then
+    Result:= ExtractFilePath(FFilePath);
+end;
+
+procedure TConvRulesForm.ConvertTabShow(Sender: TObject);
+begin
+  FConvertTab.RefreshBooks;
+  FConvertTab.RefreshIndex;
+end;
+
+procedure TConvRulesForm.DoShowConvertTab(Sender: TObject);
+begin
+  FTabs.ActivePage:= FTabConvert;
+end;
+
+procedure TConvRulesForm.AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string; AActivate: Boolean);
 var
   Before: Integer;
   Msg   : string;
 begin
-  FTabs.ActivePage:= FTabUnits;
+  if AActivate then
+    FTabs.ActivePage:= FTabUnits;
   Before  := Length(FHarvest);
   FHarvest:= MergeHarvest(FHarvest, AAdded);
   ReclassifyHarvest;
@@ -7064,7 +7306,10 @@ begin
     FDropTarget:= TFormDropTarget.Create(
       procedure(const AFiles: TArray<string>)
       begin
-        AddSourceFiles(AFiles);
+        if FTabs.ActivePage = FTabConvert then
+          FConvertTab.AddSources(AFiles)
+        else
+          AddSourceFiles(AFiles);
       end,
       procedure(const AText: string)
       begin
@@ -7163,7 +7408,7 @@ begin
   DefaultDraw:= True;
 end;
 
-{ Toolbar + Swap. The selected row IS the Old unit when exactly one row is
+{ Uses Units menu: Swap. The selected row IS the Old unit when exactly one row is
   selected -- any kind but #use -- so only the replacement picker opens. With no
   such row the Old unit is asked for first. The list is rebuilt after every rule
   change, which drops the selection: asking for Old from a pre-filled picker that
@@ -7424,7 +7669,7 @@ begin
   // The rule book changed only when a rule row was deleted.
   if Length(Nodes) > 0 then
     SyncRawFromModel;
-  UpdateToolbarEnabled;
+  UpdateMenuEnabled;
   SetStatus(Format('Deleted %d unit rule(s); dismissed %d unit(s) (no rule written).', [Length(Nodes), Length(UsedNames) + Length(CandNames)]));
 end; // procedure
 

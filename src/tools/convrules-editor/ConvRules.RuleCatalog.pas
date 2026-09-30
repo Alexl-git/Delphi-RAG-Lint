@@ -394,7 +394,7 @@ function CheckApplyIntegrity(const AText: string): TApplyIntegrity;
 /// <para>An out-of-range LineNo is a stale index, not a fault: it falls back like any
 /// other miss and never raises.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadFile (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas)</para>
+/// <para>Called from: ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshRulesList (ConvRules.MainForm.pas)</para>
 /// <para>Calls: ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor.HeaderMatches, SameText</para>
 /// <para>Returns: -1; Hint; i</para>
 /// <seealso cref="ConvRules.RuleCatalog.BareTypeName"/>
