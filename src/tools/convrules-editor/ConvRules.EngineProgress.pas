@@ -87,6 +87,9 @@ type
 /// <param name="AProgress">The parsed values; Default when False.</param>
 /// <returns>True only for a JSON object whose single key is "progress" holding an
 /// object. Anything else is ordinary stderr text and returns False. Never raises.</returns>
+/// <remarks>A field that is missing or of the wrong JSON type (a string or null where
+/// an integer belongs, a number or array where a string belongs, a fraction, an
+/// integer out of range) reads as 0 / '' and the line is still accepted (True).</remarks>
 function TryParseProgressLine(const ALine: string; out AProgress: TEngineProgress): Boolean;
 
 /// <summary>The one-line display, e.g. "TFDQuery -- depth 3 of 5 -- 41 done, 28 queued -- 15 s".</summary>
@@ -142,6 +145,31 @@ begin
   AOnLine(Line);
 end;
 
+{ Type-checked field readers. Neither goes through an RTL conversion, so neither
+  can raise: a missing or wrong-typed value (string, null, array, object, a
+  fraction, an out-of-range integer) reads as 0 / ''. TJSONNumber descends from
+  TJSONString, so StrField excludes it explicitly. }
+function IntField(const AObj: TJSONObject; const AName: string): Integer;
+var
+  V: TJSONValue;
+begin
+  V:= AObj.Values[AName];
+  if (V is TJSONNumber) and TryStrToInt(V.Value, Result) then
+    Exit;
+  Result:= 0;
+end;
+
+function StrField(const AObj: TJSONObject; const AName: string): string;
+var
+  V: TJSONValue;
+begin
+  V:= AObj.Values[AName];
+  if (V is TJSONString) and (V is not TJSONNumber) then
+    Result:= V.Value
+  else
+    Result:= '';
+end;
+
 function TryParseProgressLine(const ALine: string; out AProgress: TEngineProgress): Boolean;
 var
   Root: TJSONValue ;
@@ -158,14 +186,14 @@ begin
     if not (Root is TJSONObject) or (TJSONObject(Root).Count <> 1)
        or not TJSONObject(Root).TryGetValue<TJSONObject>('progress', P) then
       Exit;
-    AProgress.ElapsedS     := P.GetValue<Integer>('elapsed_s', 0);
-    AProgress.Verb         := P.GetValue<string>('verb', '');
-    AProgress.QName        := P.GetValue<string>('class', '');
-    AProgress.Depth        := P.GetValue<Integer>('depth', 0);
-    AProgress.MaxDepth     := P.GetValue<Integer>('max_depth', 0);
-    AProgress.ClassesDone  := P.GetValue<Integer>('classes_done', 0);
-    AProgress.ClassesQueued:= P.GetValue<Integer>('classes_queued', 0);
-    AProgress.Nodes        := P.GetValue<Integer>('nodes', 0);
+    AProgress.ElapsedS     := IntField(P, 'elapsed_s');
+    AProgress.Verb         := StrField(P, 'verb');
+    AProgress.QName        := StrField(P, 'class');
+    AProgress.Depth        := IntField(P, 'depth');
+    AProgress.MaxDepth     := IntField(P, 'max_depth');
+    AProgress.ClassesDone  := IntField(P, 'classes_done');
+    AProgress.ClassesQueued:= IntField(P, 'classes_queued');
+    AProgress.Nodes        := IntField(P, 'nodes');
     Result:= True;
   finally
     Root.Free;

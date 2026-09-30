@@ -7135,15 +7135,18 @@ const
   TWO      = 2;
   THREE    = 3;
   FOUR     = 4;
+  LINE_WRONG_TYPES = '{"progress":{"depth":"x","verb":7,"elapsed_s":null,"class":[]}}';
 var
-  Sp    : TLineSplitter;
-  Lines : string;
-  P     : TEngineProgress;
-  Tok   : TCancelToken;
-  Sink  : TProc<string>;
-  Parsed: Boolean;
-  Names : Boolean;
-  Counts: Boolean;
+  Sp      : TLineSplitter;
+  Lines   : string;
+  P       : TEngineProgress;
+  Tok     : TCancelToken;
+  Sink    : TProc<string>;
+  Parsed  : Boolean;
+  Names   : Boolean;
+  Counts  : Boolean;
+  Defaults: Boolean;
+  Raised  : string;
 begin
   Lines:= '';
   Sink:= procedure(ALine: string)
@@ -7166,6 +7169,17 @@ begin
     Sp.Free;
   end;
 
+  Lines:= '';
+  Sp:= TLineSplitter.Create;
+  try
+    Sp.Feed('abc'#13, Sink);
+    Sp.Feed(#10, Sink);
+    Sp.Flush(Sink);
+    Check('split.crlf.across.feeds', Lines = '[abc]', Lines);
+  finally
+    Sp.Free;
+  end;
+
   Parsed:= TryParseProgressLine(LINE_A, P);
   Names:= (P.ElapsedS = ELAPSED) and (P.Verb = 'proptree') and (P.QName = 'FireDAC.Comp.Client.TFDQuery');
   Counts:= (P.Depth = DEPTH) and (P.MaxDepth = MAXDEPTH) and (P.ClassesDone = DONE)
@@ -7178,6 +7192,19 @@ begin
   Check('progress.reject.extra.key', not TryParseProgressLine('{"progress":{"depth":1},"x":1}', P));
   Check('progress.reject.empty', not TryParseProgressLine('', P));
   Check('progress.reject.broken.json', not TryParseProgressLine('{"progress":{"depth":', P));
+
+  Raised:= '';
+  Parsed:= False;
+  try
+    Parsed:= TryParseProgressLine(LINE_WRONG_TYPES, P);
+  except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-30 not swallowed: the text lands in Raised and the progress.wrong.type.no.raise Check fails on it
+    on E: Exception do
+      Raised:= E.ClassName + ': ' + E.Message;
+  end;
+  Defaults:= (P.Depth = 0) and (P.Verb = '') and (P.ElapsedS = 0) and (P.QName = '');
+  Check('progress.wrong.type.no.raise', (Raised = '') and Parsed and Defaults,
+    Format('raised=[%s] parsed=%s depth=%d verb=[%s] elapsed=%d class=[%s]',
+      [Raised, BoolToStr(Parsed, True), P.Depth, P.Verb, P.ElapsedS, P.QName]));
 
   TryParseProgressLine(LINE_A, P);
   Check('progress.text', ProgressText(P) = 'TFDQuery -- depth 3 of 5 -- 41 done, 28 queued -- 15 s', ProgressText(P));
