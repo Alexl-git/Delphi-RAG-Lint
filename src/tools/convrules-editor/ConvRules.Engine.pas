@@ -49,6 +49,9 @@ const
   /// Note also that RunCapture drains on the calling thread, so this bound is also
   /// the longest the UI can be frozen.</remarks>
   ENGINE_TIMEOUT_MS = 180000;
+  /// <summary>Watchdog for ONE conversion-path call (convert-apply, index
+  /// --project), in milliseconds.</summary>
+  CONVERT_TIMEOUT_MS = 600000; // conversions: a 3-file fixture dry-run measured 106 s (2026-09-29)
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -869,6 +872,44 @@ type
       function OutlineClasses(const APasFile: string; out AClasses: TArray<string>;
         out AIndexedNow: Boolean; out AError: string): Boolean;
 
+      /// <summary>Runs `drag-lint AArgs` with its own watchdog; RunCapture is this
+      /// with ENGINE_TIMEOUT_MS.</summary>
+      /// <param name="AArgs">The command line after the exe path.</param>
+      /// <param name="ATimeoutMs">Watchdog; on expiry the child is terminated.</param>
+      /// <param name="AOutput">stdout AND stderr, merged into one pipe.</param>
+      /// <returns>The engine's exit code; -1 when it could not be started; 3 on
+      /// timeout.</returns>
+      /// <remarks>Drains on the calling thread: from the UI thread the UI is
+      /// frozen for up to ATimeoutMs.</remarks>
+      function RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;
+      /// <summary>`convert-apply --unit AUnitPas --rules ARulesFile --apply
+      /// --no-backup --format json` against ADbs, bounded by CONVERT_TIMEOUT_MS.</summary>
+      /// <param name="AUnitPas">The .pas to convert in place (its .dfm goes with it).</param>
+      /// <param name="ARulesFile">The .rules book.</param>
+      /// <param name="ADbs">--db list; the unit must be indexed in one of them.</param>
+      /// <param name="AJson">The engine's output (apply/1 JSON, plus any stderr
+      /// line such as a FATAL: message) -- feed it to ParseApplyJson.</param>
+      /// <returns>The engine's exit code (see RunCaptureTimed).</returns>
+      /// <remarks>--no-backup: the caller (ConvRules.ConvertRunner) owns the
+      /// .BCK&lt;N&gt; restore point.</remarks>
+      function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer;
+      /// <summary>`index --project AProjectFile --db AProjectDb` (incremental),
+      /// bounded by CONVERT_TIMEOUT_MS.</summary>
+      /// <param name="AProjectFile">The .dpr / .dproj that owns AProjectDb.</param>
+      /// <param name="AProjectDb">The project index to refresh.</param>
+      /// <param name="AOutput">The engine's output.</param>
+      /// <returns>The engine's exit code (see RunCaptureTimed).</returns>
+      /// <remarks>Never a folder target: that widens a project DB into a
+      /// directory DB.</remarks>
+      function IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer;
+      /// <summary>True when `info --json` reports capabilities.AName = true.</summary>
+      /// <param name="AName">Capability key, e.g. apply_unit_rules.</param>
+      /// <returns>False when the engine fails, the output is unparseable, the key
+      /// is absent or not a boolean true.</returns>
+      /// <remarks>The JSON is sliced from the first '{' to the last '}': the
+      /// engine's "(loaded defaults from ...)" stderr line shares the pipe.</remarks>
+      function HasCapability(const AName: string): Boolean;
+
       property ExePath: string read FExePath;
   end;
 
@@ -1063,8 +1104,51 @@ begin
   Result:= DbArgsFor(FDbList);
 end;
 
-{$IFDEF MSWINDOWS}
 function TEngineAdapter.RunCapture(const AArgs: string; out AOutput: string): Integer;
+begin
+  Result:= RunCaptureTimed(AArgs, ENGINE_TIMEOUT_MS, AOutput);
+end;
+
+function TEngineAdapter.ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer;
+begin
+  Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s --apply --no-backup --format json',
+    [AUnitPas, ARulesFile, DbArgsFor(ADbs)]), CONVERT_TIMEOUT_MS, AJson);
+end;
+
+function TEngineAdapter.IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer;
+begin
+  // --project, never a folder: a folder target widens a project DB into a directory DB.
+  Result:= RunCaptureTimed(Format('index --project "%s" --db "%s"', [AProjectFile, AProjectDb]), CONVERT_TIMEOUT_MS, AOutput);
+end;
+
+function TEngineAdapter.HasCapability(const AName: string): Boolean;
+var
+  Output: string     ;
+  Root  : TJSONValue ;
+  Caps  : TJSONObject;
+begin
+  Result:= False;
+  if RunCapture('info --json', Output) <> 0 then
+    Exit;
+  // The "(loaded defaults from ...)" stderr line shares the pipe, before or after.
+  var LFirst: Integer:= Pos('{', Output);
+  var LLast : Integer:= LastDelimiter('}', Output);
+  if (LFirst = 0) or (LLast < LFirst) then
+    Exit;
+  Root:= TJSONObject.ParseJSONValue(Copy(Output, LFirst, LLast - LFirst + 1));
+  try
+    if (Root is TJSONObject) and TJSONObject(Root).TryGetValue<TJSONObject>('capabilities', Caps) then
+      Result:= Caps.GetValue(AName) is TJSONTrue;
+  finally
+    Root.Free;
+  end; // try
+end;
+
+const
+  MS_PER_SECOND = 1000;
+
+{$IFDEF MSWINDOWS}
+function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;  // dl:ok deep-nesting@dc47 -- REVIEWED 2026-09-29 pre-existing RunCapture body, only renamed + parameterised; flattening the drain loop is out of scope
 var
   SA       : TSecurityAttributes       ;
   ReadPipe : THandle                   ;
@@ -1110,7 +1194,7 @@ begin
     var TimedOut: Boolean:= False;
     SB:= TStringBuilder.Create;
     try
-      var Deadline: UInt64:= GetTickCount64 + ENGINE_TIMEOUT_MS;
+      var Deadline: UInt64:= GetTickCount64 + ATimeoutMs;
       var Avail: DWORD:= 0                                     ;
       repeat
         if PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) then
@@ -1148,7 +1232,7 @@ begin
 
     if TimedOut then
     begin
-      AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ENGINE_TIMEOUT_MS div 1000]);
+      AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
       Result:= 3; // distinct code: timed out (not 0/1/2)
     end
     else if GetExitCodeProcess(PI.hProcess, ExitCode) then
@@ -1163,7 +1247,7 @@ begin
   end; // try
 end; // function
 {$ELSE}
-function TEngineAdapter.RunCapture(const AArgs: string; out AOutput: string): Integer;
+function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;
 begin
   // Editor is Windows-only (VCL); non-Windows stub keeps the unit compilable.
   AOutput:= '';

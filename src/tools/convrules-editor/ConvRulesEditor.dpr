@@ -39,6 +39,7 @@ uses
   , ConvRules.UnitStatus in 'ConvRules.UnitStatus.pas'
   , ConvRules.UnitMask in 'ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in 'ConvRules.ConvertRun.pas'
+  , ConvRules.ConvertRunner in 'ConvRules.ConvertRunner.pas'
   , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;

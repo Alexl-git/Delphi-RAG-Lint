@@ -104,7 +104,8 @@ function ExpandSources(const APaths: TArray<string>; out AErrors: TArray<string>
 function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedUnits: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
 
 /// <summary>Reads convert-apply's --format json output (schema apply/1).</summary>
-/// <param name="AJson">The engine's stdout.</param>
+/// <param name="AJson">The engine's merged stdout+stderr; text before the first
+/// '{' and after the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
 /// <returns>See TApplyRow; never raises.</returns>
 function ParseApplyJson(const AJson: string): TApplyRow;
 
@@ -327,10 +328,14 @@ var
 begin
   Result:= Default(TApplyRow);
   Errs:= nil;
-  // stderr is merged into the pipe: skip anything before the document.
+  // stderr is merged into the pipe: skip anything before the document, and --
+  // measured 2026-09-29, the engine's "(loaded defaults ...)" line lands AFTER
+  // it -- anything after the last '}' (ParseJSONValue rejects trailing text).
   Text:= Trim(AJson);
   if (Text <> '') and (Text[1] <> '{') and (Pos('{', Text) > 0) then
     Text:= Copy(Text, Pos('{', Text), MaxInt);
+  if (Text <> '') and (Text[1] = '{') then
+    Text:= Copy(Text, 1, LastDelimiter('}', Text));
   Root:= TJSONObject.ParseJSONValue(Text);
   try
     if not (Root is TJSONObject) then

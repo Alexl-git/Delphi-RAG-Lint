@@ -33,6 +33,7 @@ uses
   , ConvRules.UnitStatus in '..\ConvRules.UnitStatus.pas'
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
+  , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   ;
 
 var
@@ -1546,6 +1547,11 @@ begin
   Row:= ParseApplyJson('(loaded defaults from C:\x.json)' + sLineBreak + '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,' +
     '"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}');
   Check('convertrun.json.leading.noise', Row.Ok and (Row.EditsCount = 2), Row.Error);
+  // Measured 2026-09-29: the real engine writes that line AFTER the document, so
+  // the parse must also stop at the last '}'.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"conversion rules failed validation","rule_errors":[{"line":2,"message":"link ToPath not found"}],' +
+    '"edits_count":0,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}' + sLineBreak + '(loaded defaults from C:\x.json)' + sLineBreak);
+  Check('convertrun.json.trailing.noise', (not Row.Ok) and (Row.RuleErrorCount = 1) and (Pos('line 2', Row.Error) > 0), Row.Error);
 
   // --- ExpandSources: .pas / folder / .dpr, deduped case-insensitively ---
   Dir:= TPath.Combine(TPath.GetTempPath, 'convrun-' + TPath.GetGUIDFileName);
@@ -1576,6 +1582,115 @@ begin
       Lock.Free;
     end; // try
     Check('convertrun.expand.unreadable.error', (Raised = '') and (Length(Srcs) = 0) and (Length(Errs) = 1) and (Pos('P.dpr', string.Join(' ', Errs)) > 0), Raised + ' ' + string.Join(' | ', Errs));
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end; // procedure
+
+{ ConvertRunner paths that need no engine answer: a missing unit, a cancel
+  between units. The engine adapter points at a non-existent exe, so any call
+  that DID reach the engine would fail loudly rather than pass silently. }
+procedure TestConvertRunner;
+var
+  Job   : TConvertJob;
+  Rows  : TArray<TConvertRow>;
+  Eng   : TEngineAdapter;
+  Calls : Integer;
+begin
+  Eng:= TEngineAdapter.Create('C:\nowhere\drag-lint.exe', []);  // dl:ok hardcoded-absolute-path@4127 -- REVIEWED 2026-09-29 deliberately non-existent exe: any engine call must fail loudly
+  try
+    Job:= Default(TConvertJob);
+    Job.Books:= [];            // no book survives validation -> nothing may run
+    Job.Units:= ['C:\nowhere\Gone.pas'];  // dl:ok hardcoded-absolute-path@1575 -- REVIEWED 2026-09-29 deliberately non-existent unit (missing-unit row)
+    Rows:= RunConversion(Job, Eng, nil, nil);
+    Check('runner.no.books.nothing.runs', Length(Rows) = 0, IntToStr(Length(Rows)));
+
+    Calls:= 0;
+    Rows:= RunConversionUnits(Job.Units, ['Book.rules'], Job, Eng,
+      procedure(const ARow: TConvertRow; ADone, ATotal: Integer) begin Inc(Calls); end, nil);
+    var LNote: string:= '(no row)';
+    if Length(Rows) > 0 then
+      LNote:= Rows[0].Note;
+    Check('runner.missing.unit.row', (Length(Rows) = 1) and (Rows[0].Status = csUnitSkipped) and (Pos('not found', LNote) > 0), LNote);
+    Check('runner.missing.unit.progress', Calls = 1, IntToStr(Calls));
+
+    Rows:= RunConversionUnits(['C:\nowhere\A.pas', 'C:\nowhere\B.pas'], ['Book.rules'], Job, Eng, nil,  // dl:ok hardcoded-absolute-path@7c72 -- REVIEWED 2026-09-29 deliberately non-existent units; cancel fires before either is probed
+      function: Boolean begin Result:= True; end);
+    Check('runner.cancel.between.units', Length(Rows) = 0, IntToStr(Length(Rows)));
+  finally
+    Eng.Free;
+  end; // try
+end; // procedure
+
+{ The real engine on a 3-file fixture (one TLabel, a one-#convert book) -- the
+  shape measured converting on 2026-09-29 (dry run 106 s; the bad book 93 s).
+  Two jobs, one apply each -- the slowest test in the runner:
+    1. ONLY an invalid book: a book-skip row, the unit untouched, and NO .BCK
+       left behind (the run's own fresh backup is dropped when nothing changed);
+    2. the good book: converted in place, .BCK1 for .pas and .dfm, .dfm still text. }
+procedure TestConvertRunnerLive;
+const
+  LIB64 = 'C:\Projects\.drag-lint\library-Win64.sqlite';  // dl:ok hardcoded-absolute-path@6fd2 -- REVIEWED 2026-09-29 the real Win64 library index; the test Skip()s when it is absent
+  DFM_HEAD_CHARS = 40;
+var
+  Exe, Dir, Db, Dpr, Pas, Dfm, Book, Bad, Output: string;
+  Eng : TEngineAdapter;
+  Job : TConvertJob;
+  Rows: TArray<TConvertRow>;
+begin
+  Exe:= ResolveExe;
+  if (Exe = '') or not TFile.Exists(LIB64) then
+  begin
+    Skip('runner.live', 'exe or library-Win64 absent');
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Dpr := TPath.Combine(Dir, 'Fix.dpr');
+    Pas := TPath.Combine(Dir, 'FixUnit.pas');
+    Dfm := TPath.Combine(Dir, 'FixUnit.dfm');
+    Book:= TPath.Combine(Dir, 'Fix.rules');
+    Bad := TPath.Combine(Dir, 'Bad.rules');
+    Db  := TPath.Combine(Dir, 'Fix.sqlite');
+    TFile.WriteAllText(Dpr, 'program Fix;' + sLineBreak + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak +
+      '  FixUnit in ''FixUnit.pas'' {FixForm};' + sLineBreak + sLineBreak + 'begin' + sLineBreak + '  Application.Initialize;' + sLineBreak +
+      '  Application.Run;' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Pas, 'unit FixUnit;' + sLineBreak + sLineBreak + 'interface' + sLineBreak + sLineBreak + 'uses' + sLineBreak +
+      '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak + sLineBreak + 'type' + sLineBreak +
+      '  TFixForm = class(TForm)' + sLineBreak + '    Label1: TLabel;' + sLineBreak + '  end;' + sLineBreak + sLineBreak + 'var' + sLineBreak +
+      '  FixForm: TFixForm;' + sLineBreak + sLineBreak + 'implementation' + sLineBreak + sLineBreak + '{$R *.dfm}' + sLineBreak + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Dfm, 'object FixForm: TFixForm' + sLineBreak + '  Left = 0' + sLineBreak + '  Top = 0' + sLineBreak + '  Caption = ''Fix''' + sLineBreak +
+      '  object Label1: TLabel' + sLineBreak + '    Left = 8' + sLineBreak + '    Top = 8' + sLineBreak + '    Caption = ''Hello''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Book, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link Caption <- Caption' + sLineBreak +
+      '#link Left <- Left' + sLineBreak + '#link Top <- Top' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Bad, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link NoSuchProp <- AlsoNoSuchProp' + sLineBreak, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(Exe, [Db, LIB64]);
+    try
+      Check('runner.live.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      Job:= Default(TConvertJob);
+      Job.Units      := [Pas];
+      Job.Dbs        := [Db, LIB64];
+      Job.ProjectDb  := Db;
+      Job.ProjectFile:= Dpr;
+
+      var LBefore: string:= TFile.ReadAllText(Pas);
+      Job.Books:= [Bad];
+      Rows:= RunConversion(Job, Eng, nil, nil);
+      Check('runner.invalid.book.skipped', (Length(Rows) = 1) and (Rows[0].Status = csBookSkipped) and SameText(Rows[0].Book, Bad), Format('%d rows', [Length(Rows)]));
+      Check('runner.invalid.book.unit.untouched', TFile.ReadAllText(Pas) = LBefore);
+      Check('runner.invalid.book.no.backup', not TFile.Exists(Pas + '.BCK1') and not TFile.Exists(Dfm + '.BCK1'));
+
+      Job.Books:= [Book];
+      Rows:= RunConversion(Job, Eng, nil, nil);
+      Check('runner.live.converted', (Length(Rows) = 1) and (Rows[0].Status = csConverted), Format('%d rows', [Length(Rows)]));
+      Check('runner.live.pas.changed', Pos('TStaticText', TFile.ReadAllText(Pas)) > 0);
+      Check('runner.live.bck1', TFile.Exists(Pas + '.BCK1') and (Pos('TLabel', TFile.ReadAllText(Pas + '.BCK1')) > 0));
+      Check('runner.live.dfm.bck1', TFile.Exists(Dfm + '.BCK1'));
+      Check('runner.live.dfm.still.text', TFile.ReadAllText(Dfm).StartsWith('object '), Copy(TFile.ReadAllText(Dfm), 1, DFM_HEAD_CHARS));
+    finally
+      Eng.Free;
+    end; // try
   finally
     TDirectory.Delete(Dir, True);
   end; // try
@@ -6810,6 +6925,8 @@ begin
     TestUnitPickMulti;
     TestBookSnapshot;
     TestConvertRun;
+    TestConvertRunner;
+    TestConvertRunnerLive;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;
