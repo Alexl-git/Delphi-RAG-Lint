@@ -603,6 +603,7 @@ type
     RulesFile     : string ; // --rules <file>  (conversion-rules DSL)
     CastLibFile   : string ; // --castlib <file>  (class + enum cast library)
     NoWarnUnlinked: Boolean; // --no-warn-unlinked  (convert-apply: keep the unlinked count, drop the warnings)
+    ValidateAllBlocks: Boolean; // --validate-all-blocks (convert-apply: validate + freshness-check EVERY #convert block)
     PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
     // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
     // is the --from-block path (one F DFM `object` block, verbatim text).
@@ -951,8 +952,10 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees, and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
-    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added)');
+  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--validate-all-blocks] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
+    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added; ' +
+    'the book is validated and freshness-checked for the #convert blocks this unit converts through -- each against its own From/To types, plus the #mappings they #apply; every other block is listed as "block <line> (<From> -> <To>): not validated here (no instances in this unit)" (json blocks_not_validated[] {line,from,to,unresolved[]}), ' +
+    'and --validate-all-blocks checks every block; a validated block whose type resolves in no --db is an error on its #convert line; json trees_built counts the property trees built; a .dfm holding an inherited/inline object of a From type is refused whole, unit rules included (exit 1))');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
@@ -1554,6 +1557,7 @@ begin
       Result.CastLibFile:= ParamStr(i);
     end
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
+    else if A = '--validate-all-blocks' then Result.ValidateAllBlocks:= True // convert-apply: every block, not only the ones this unit converts through
     else if A = '--no-warn-unlinked' then Result.NoWarnUnlinked:= True // convert-apply: silence the per-(type,property) unlinked warnings; the json count stays
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
     else if (A = '--task') and (i < ParamCount) then
@@ -24186,6 +24190,17 @@ type
   /// <remarks>Populated on the SUCCESS path and on both failure paths (rule
   /// validation, and BuildApplyPlan returning Ok=False), so a JSON consumer gets
   /// a parseable document with ok=false rather than nothing at all.</remarks>
+  /// <summary>One #convert block a convert-apply run did not validate.</summary>
+  /// <remarks>Line is the block's #convert line; FromType/ToType are the header
+  /// as written; Unresolved names each of the two that no --db resolves (empty
+  /// when both do). Reported as text and as apply/1 blocks_not_validated[].</remarks>
+  TBlockNotValidated = record
+    Line      : Integer;
+    FromType  : string;
+    ToType    : string;
+    Unresolved: TArray<string>;
+  end;
+
   TApplyJsonCtx = record
     Report    : TApplyReport;
     UnitPas   : string;
@@ -24202,6 +24217,10 @@ type
       'skipped-no-instances' (the last three: the book's unit rules ran alone);
       '' when the run stopped before planning. }
     ComponentPart: string;
+    { 1.20.6: the blocks this run did not validate (not in scope), and how
+      many property trees it built (validation and plan share one cache). }
+    BlocksNotValidated: TArray<TBlockNotValidated>;
+    TreesBuilt        : Integer;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24383,6 +24402,22 @@ begin
     JRoot.AddPair('uses_removed', TJSONNumber.Create(UsesRemoved));
     JRoot.AddPair('uses_added'  , TJSONNumber.Create(UsesAdded));
 
+    { 1.20.6 -- validation scope. One row per #convert block NOT validated on
+      this unit (no instance converts through it; --validate-all-blocks makes
+      it []), and the number of property trees built. }
+    var JNotVal: TJSONArray:= TJSONArray.Create;
+    for var NV: TBlockNotValidated in ACtx.BlocksNotValidated do
+    begin
+      var JNV: TJSONObject:= TJSONObject.Create;
+      JNV.AddPair('line', TJSONNumber.Create(NV.Line));
+      JNV.AddPair('from', NV.FromType);
+      JNV.AddPair('to'  , NV.ToType);
+      JNV.AddPair('unresolved', ArrOf(NV.Unresolved));
+      JNotVal.AddElement(JNV);
+    end;
+    JRoot.AddPair('blocks_not_validated', JNotVal);
+    JRoot.AddPair('trees_built', TJSONNumber.Create(ACtx.TreesBuilt));
+
     Writeln(JRoot.ToJSON);
   finally
     JRoot.Free;
@@ -24414,57 +24449,108 @@ begin
     Result:= 'skipped-no-instances';
 end;
 
-{ 1.20.6 (Task 2): the From/To property trees of EVERY #convert block of a
-  convert-apply book, index-aligned for ValidateConversionRulesPerBlock ([0] =
-  the region before the first #convert, left empty). A type is resolved across
-  AStores in order, first store whose BuildPropTree resolves it wins -- the
-  same convention as convert-validate/convert-reemit's TreeFor. Trees are
-  CACHED by type name (case-insensitive, as written in the header): a type
-  several blocks name is built once, because each build walks a library index
-  of several GB. An unresolved type caches its empty tree too, so it is not
-  retried per block. }
-function BuildBlockTrees(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet;
-  const AOpts: TPropTreeOptions): TArray<TBlockTrees>;
+{ 1.20.6 (Task 2): the From/To property trees of the #convert blocks in AScope,
+  index-aligned for ValidateConversionRulesPerBlock ([0] = the region before
+  the first #convert, and every out-of-scope block, left empty -- empty means
+  "not checked here"). Trees come from ATrees, shared with BuildApplyPlan, so
+  each type is resolved and built once per run.
+  A block in scope whose From or To type resolves in no --db is an ERROR on its
+  #convert line (added to AErrors) -- an empty tree there would skip every
+  check of the block and pass it silently. A block out of scope is added to
+  ANotValidated, naming whichever of its types do not resolve (a name lookup,
+  no tree is built). }
+function BuildBlockTrees(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
+  const AScope: TArray<Boolean>; AErrors: TList<TRuleError>;
+  ANotValidated: TList<TBlockNotValidated>): TArray<TBlockTrees>;
 var
-  Cache: TDictionary<string, TPropTree>;
   R    : TConversionRule;
   Block: Integer;
+  NV   : TBlockNotValidated;
 
-  function TreeFor(const AQName: string): TPropTree;
+  procedure RequireResolved(const AConv: TConversionRule; const ASide, AType: string);
   var
-    St: ISymbolStore;
+    E: TRuleError;
   begin
-    Result:= Default(TPropTree);
-    if AQName = '' then Exit;
-    if Cache.TryGetValue(UpperCase(AQName), Result) then Exit;
-    for St in AStores do
-    begin
-      Result:= BuildPropTree(St, AQName, AOpts);
-      if Result.RootType <> '' then Break;
-    end;
-    Cache.Add(UpperCase(AQName), Result);
+    if (AType = '') or (ATrees.ResolveType(AType) <> '') then Exit;
+    E.LineNo := AConv.LineNo;
+    E.Message:= Format('#convert %s type not found in any --db: %s', [ASide, AType]);
+    AErrors.Add(E);
   end;
 
 begin
   SetLength(Result, 1);
   Block:= 0;
-  Cache:= TDictionary<string, TPropTree>.Create;
-  try
-    for R in ARules.Rules do
-      if R.Kind = rkConvert then
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then
+    begin
+      Inc(Block);
+      SetLength(Result, Block + 1);
+      if (Block <= High(AScope)) and AScope[Block] then
       begin
-        Inc(Block);
-        SetLength(Result, Block + 1);
-        Result[Block].FromTree:= TreeFor(R.FromType);
-        Result[Block].ToTree  := TreeFor(R.ToType);
+        RequireResolved(R, 'From', R.FromType);
+        RequireResolved(R, 'To', R.ToType);
+        Result[Block].FromTree:= ATrees.TreeFor(R.FromType);
+        Result[Block].ToTree  := ATrees.TreeFor(R.ToType);
+        Continue;
       end;
-  finally
-    Cache.Free;
-  end;
+      NV:= Default(TBlockNotValidated);
+      NV.Line    := R.LineNo;
+      NV.FromType:= R.FromType;
+      NV.ToType  := R.ToType;
+      if ATrees.ResolveType(R.FromType) = '' then NV.Unresolved:= NV.Unresolved + [R.FromType];
+      if ATrees.ResolveType(R.ToType) = '' then NV.Unresolved:= NV.Unresolved + [R.ToType];
+      ANotValidated.Add(NV);
+    end;
 end;
 
+{ 1.20.6: reads the unit's .dfm (when there is one) and answers the two
+  questions convert-apply must settle BEFORE building any tree: which #convert
+  blocks this unit converts through (ConvertBlockScope over the instances
+  FindConvertInstances finds, after --only; every block when AAllBlocks), and
+  which From types the .dfm holds as inherited/inline objects (AInherited --
+  a refusal, ruling R6). No .dfm: no instances, no inherited objects. }
+function ConvertApplyScope(const ARules: TConversionRuleSet; const ADfmPath: string;
+  const AOnly: TArray<string>; AAllBlocks: Boolean; out AInherited: TArray<string>): TArray<Boolean>;
+var
+  DfmText  : string;
+  Instances: TArray<TConvertInstance>;
+begin
+  AInherited:= nil;
+  Instances := nil;
+  if TFile.Exists(ADfmPath) then
+  begin
+    DfmText   := TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+    AInherited:= FindInheritedConvertTypes(DfmText, ARules);
+    Instances := FindConvertInstances(DfmText, ARules, AOnly);
+  end;
+  Result:= ConvertBlockScope(ARules, Instances, AAllBlocks);
+end;
+
+{ 1.20.6: convert-apply's rule check. The blocks in AScope are validated
+  against their own trees (ValidateConversionRulesPerBlock, trees from ATrees),
+  a block in scope whose type resolves nowhere is an error on its #convert line
+  (BuildBlockTrees), and a #link carrying a glyph expression is refused
+  (UnrealisedGlyphLinks). ANotValidated receives every block out of scope. }
+function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
+  const AScope: TArray<Boolean>; out ANotValidated: TArray<TBlockNotValidated>): TArray<TRuleError>;
+var
+  TypeErrs: TList<TRuleError>;
+  NotVal  : TList<TBlockNotValidated>;
+  Trees   : TArray<TBlockTrees>;
+begin
+  TypeErrs:= TList<TRuleError>.Create;
+  NotVal  := TList<TBlockNotValidated>.Create;
+  try
+    Trees        := BuildBlockTrees(ATrees, ARules, AScope, TypeErrs, NotVal);
+    ANotValidated:= NotVal.ToArray;
+    Result       := ValidateConversionRulesPerBlock(ARules, Trees) + TypeErrs.ToArray + UnrealisedGlyphLinks(ARules);
+  finally
+    NotVal.Free;
+    TypeErrs.Free;
+  end;
+end;
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
-/// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
+/// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--validate-all-blocks] [--format json] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
 /// (#1 declaration retype, #2 uses-add, #3 .dfm re-emit, #4 property/event access-site
 /// rewrite via ref-gap G's member-access index, #5 runtime-creator retype + TODO markers).
@@ -24483,10 +24569,12 @@ end;
 /// <param name="AArgs">GhostUnit=--unit (the .pas file to convert); RulesFile=--rules;
 /// OnlySections=--only (comma-split instance-name allow-list); Apply=--apply; NoBackup=
 /// --no-backup; NoWarnUnlinked=--no-warn-unlinked (silences the per-(source type, property)
-/// unlinked warnings; the json count and unlinked[] stay); DbPath/DbPaths=index(es).</param>
+/// unlinked warnings; the json count and unlinked[] stay); ValidateAllBlocks=--validate-all-blocks
+/// (validate and freshness-check every #convert block); DbPath/DbPaths=index(es).</param>
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
-/// hard error (missing .dfm when rules need it, invalid rules, BuildApplyPlan Ok=False, or
-/// --apply refused by the freshness guard -- a stale or unindexed type of ANY block); 2 on bad args (missing --unit/--rules, file not
+/// hard error (missing .dfm when rules need it, invalid rules, a validated block whose type resolves in
+/// no --db, an inherited/inline .dfm object of a From type, BuildApplyPlan Ok=False, or
+/// --apply refused by the freshness guard -- a stale or unindexed type of a block in scope); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
 /// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
 /// missing .dfm is a hard error (exit 1) for a book with NO unit rules, since every #convert
@@ -24496,14 +24584,18 @@ end;
 /// otherwise folded into BuildApplyPlan's plan; a unit whose entry to remove sits in a
 /// conditional region is refused (exit 1, nothing written). Every readable --db is opened
 /// up front into Stores (not just the first; a stale explicit --db exits 2 here, before
-/// any rule is checked). Rules are then read + parsed + validated
-/// (ValidateConversionRulesPerBlock) BEFORE BuildApplyPlan runs -- EVERY #convert block
-/// against its OWN From/To property trees, and a #mapping against the block(s) that #apply
-/// it (1.20.6; it used to be the whole book against the first block's pair) -- and a rules
-/// error refuses (exit 1) rather than attempting a plan from a broken rule set. The trees
-/// are built by BuildBlockTrees, first-store-that-resolves-wins as in
-/// convert-validate/convert-reemit, each distinct type once. The freshness guard
-/// (CheckFreshness, every block's types) and BuildApplyPlan both
+/// any rule is checked). The .dfm is then read (ConvertApplyScope): a unit whose .dfm holds
+/// an inherited/inline object of a From type is REFUSED whole, unit rules included (exit 1,
+/// ruling R6), and the blocks in SCOPE are settled before any tree is built -- the blocks
+/// the unit's instances convert through, or every block under --validate-all-blocks (ruling
+/// R5; every other block is listed, text and json blocks_not_validated[]). Rules are then
+/// validated (ValidateConvertBook) BEFORE BuildApplyPlan runs -- each block in scope against
+/// its OWN From/To property trees, and a #mapping against the block(s) that #apply it; a
+/// block in scope whose type resolves in no --db is an error on its #convert line (R7) --
+/// and a rules error refuses (exit 1) rather than attempting a plan from a broken rule set.
+/// Validation and BuildApplyPlan share one TConvertTreeCache, so each type is resolved and
+/// built once per run (json trees_built). The freshness guard (CheckFreshness, the blocks in
+/// scope) and BuildApplyPlan both
 /// resolve From/To TYPES across ALL of Stores (first-that-resolves-wins), while unit/
 /// instance-scoped lookups use whichever store actually has --unit/the .dfm indexed -- the
 /// From type, To type, and the form's own instances may each live in a DIFFERENT --db. On
@@ -24519,8 +24611,9 @@ var
   Rules     : TConversionRuleSet;
   RuleErrors: TArray<TRuleError>;
   RE        : TRuleError        ;
-  Opts      : TPropTreeOptions  ;
-  Depth     : Integer           ;
+  Trees     : TConvertTreeCache ; { one per run: validation and BuildApplyPlan share its trees }
+  Scope     : TArray<Boolean>   ; { the #convert blocks this run validates -- ConvertApplyScope }
+  InhTypes  : TArray<string>    ; { From types the .dfm holds as inherited/inline objects }
   Dbs       : TArray<string>    ;
   Stores    : TArray<ISymbolStore>;
   RoOk      : Boolean           ;
@@ -24586,6 +24679,15 @@ var
     end;
   end;
 
+  // 1.20.6: one line per #convert block this run did not validate -- never a
+  // silent skip. Text mode only -- JSON carries blocks_not_validated[].
+  procedure PrintBlocksNotValidated;
+  begin
+    for var NV: TBlockNotValidated in JCtx.BlocksNotValidated do
+      Writeln(Format('block %d (%s -> %s): not validated here (no instances in this unit)', [NV.Line, NV.FromType, NV.ToType]) +
+        (if Length(NV.Unresolved) > 0 then ' -- unresolved: ' + String.Join(', ', NV.Unresolved) else ''));
+  end;
+
   // 1.20.6: one line saying the component part was skipped, and why; nothing
   // when it ran. Text mode only -- JSON carries component_part.
   procedure PrintComponentPart;
@@ -24608,7 +24710,7 @@ begin
 
   if (AArgs.GhostUnit = '') or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--validate-all-blocks] [--format json]');
     Exit(2);
   end;
   UnitPas:= AArgs.GhostUnit;
@@ -24641,12 +24743,6 @@ begin
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
 
-  Depth:= AArgs.Depth;
-  if Depth <= 0 then Depth:= 6;
-  Opts:= Default(TPropTreeOptions);
-  Opts.Depth       := Depth;
-  Opts.ToPersistent:= AArgs.ToPersistent;
-
   // Open EVERY readable --db up front (not just the first) -- Bug 2: the
   // From type, To type, and the form's own instances may each live in a
   // DIFFERENT --db, so rule validation, the freshness guard and BuildApplyPlan
@@ -24674,127 +24770,154 @@ begin
   end;
   if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
 
-  { Every #convert block is validated against its OWN From/To trees (1.20.6,
-    Task 2) -- driven from the rules file's own #convert headers rather than
-    --from/--to (convert-apply has neither). It used to take the first block's
-    pair for the whole book, so every link of blocks 2..N failed.
-    A valid G-expression passes validation, but nothing realises it yet (CV-2):
-    refuse through the same path rather than carry the source image whole. }
-  RuleErrors:= ValidateConversionRulesPerBlock(Rules, BuildBlockTrees(Stores, Rules, Opts)) +
-    UnrealisedGlyphLinks(Rules);
-  if Length(RuleErrors) > 0 then
+  { 1.20.6 -- ruling R6. convert-apply does not convert inherited / inline .dfm
+    objects. A unit whose .dfm holds one of a From type is refused WHOLE, unit
+    rules included: converting its other parts (say '#unuse BDE.DBTables')
+    would leave those components behind and break the compile.
+    Ruling R5: which #convert blocks this run validates is settled BEFORE any
+    tree is built -- the blocks the unit's instances convert through, or every
+    block under --validate-all-blocks -- so a default run builds only the trees
+    it will use. }
+  Scope:= ConvertApplyScope(Rules, DfmPath, AArgs.OnlySections, AArgs.ValidateAllBlocks, InhTypes);
+  JCtx.UnitPas:= UnitPas;
+  JCtx.DfmPath:= DfmPath;
+  if Length(InhTypes) > 0 then
   begin
-    { A JSON consumer gets a parseable ok=false document naming every rule
-      error, rather than prose on stdout that its parser would choke on. }
-    if UseJson then
-    begin
-      JCtx.UnitPas   := UnitPas;
-      JCtx.DfmPath   := DfmPath;
-      JCtx.Ok        := False;
-      JCtx.Error     := 'conversion rules failed validation';
-      JCtx.RuleErrors:= RuleErrors;
-      EmitApplyJson(JCtx);
-      Exit(1);
-    end;
-    Writeln('ERROR: conversion rules failed validation:');
-    for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
-    Exit(1);
-  end;
-
-  // Freshness guard (Task 4): before trusting the index-derived property
-  // trees, verify every block's F and T types are indexed and current. Covers two
-  // failure modes -- "stale" (indexed but the source file changed on disk
-  // since) and "not indexed at all" (ResolveClassQName-equivalent lookup
-  // fails, which would otherwise silently hand BuildPropTree an empty tree).
-  // dry-run: WARN and continue (so a user can still preview a plan while
-  // reindexing). --apply: REFUSE outright -- writing a conversion built from
-  // a stale/empty property tree could silently drop or mis-map properties.
-  Freshness:= CheckFreshness(Stores, Rules);
-  JCtx.UnitPas  := UnitPas;
-  JCtx.DfmPath  := DfmPath;
-  JCtx.Freshness:= Freshness;
-  if not Freshness.Fresh then
-  begin
-    if AArgs.Apply then
-    begin
-      { --apply refuses. Under JSON the reasons ride in freshness.reasons, so
-        the consumer sees WHY without parsing prose. }
-      if UseJson then
-      begin
-        JCtx.Ok   := False;
-        JCtx.Error:= 'freshness guard failed -- refusing to --apply';
-        EmitApplyJson(JCtx);
-        Exit(1);
-      end;
-      Writeln('ERROR: freshness guard failed -- refusing to --apply:');
-      for S in Freshness.Reasons do Writeln('  ' + S);
-      Exit(1);
-    end
-    else if not UseJson then
-    begin
-      { dry-run only warns. Under JSON the warning is NOT printed -- it is
-        already carried structurally by freshness.fresh=false + reasons. }
-      Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
-      for S in Freshness.Reasons do Writeln('  ' + S);
-    end;
-  end;
-
-  { 1.20.6: which parts of the book run on this unit. A book WITH unit rules
-    runs them alone when its component part has nothing to act on -- no .dfm,
-    no #convert block, or no .dfm instance a block matches; everywhere else
-    BuildApplyPlan runs the whole book (its unit rules folded in). A book with
-    no unit rules takes the old path unchanged, errors included. }
-  JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections);
-  if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
-  if JCtx.ComponentPart = 'applied' then
-    PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections,
-      ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
-  else
-    PlanRes:= BuildUnitRulesOnlyPlan(UnitPas, Rules);
-  if not PlanRes.Ok then
-  begin
+    S:= Format('inherited instances of %s are not converted yet -- unit not changed', [String.Join(', ', InhTypes)]);
     if UseJson then
     begin
       JCtx.Ok   := False;
-      JCtx.Error:= PlanRes.Error;
+      JCtx.Error:= S;
       EmitApplyJson(JCtx);
       Exit(1);
     end;
-    Writeln('ERROR: ' + PlanRes.Error);
+    Writeln('ERROR: ' + S);
     Exit(1);
   end;
 
-  JCtx.Ok       := True;
-  JCtx.Report   := PlanRes.Report;
-  JCtx.EditCount:= Length(PlanRes.Edits);
-
-  if not AArgs.Apply then
-  begin
-    // DRY-RUN: writes nothing.
-    if UseJson then
+  Trees:= TConvertTreeCache.Create(Stores);
+  try
+    { Every block in Scope is validated against its OWN From/To trees (1.20.6,
+      Task 2) -- driven from the rules file's own #convert headers rather than
+      --from/--to (convert-apply has neither). It used to take the first block's
+      pair for the whole book, so every link of blocks 2..N failed. A valid
+      G-expression passes validation, but nothing realises it yet (CV-2):
+      refuse through the same path rather than carry the source image whole. }
+    RuleErrors:= ValidateConvertBook(Trees, Rules, Scope, JCtx.BlocksNotValidated);
+    JCtx.TreesBuilt:= Trees.Builds;
+    if Length(RuleErrors) > 0 then
     begin
-      { RenderDryRun and the summary are BOTH suppressed -- the edit plan is
-        reported as edits_count, and the summary as the six arrays + items. }
-      EmitApplyJson(JCtx);
+      { A JSON consumer gets a parseable ok=false document naming every rule
+        error, rather than prose on stdout that its parser would choke on. }
+      if UseJson then
+      begin
+        JCtx.Ok        := False;
+        JCtx.Error     := 'conversion rules failed validation';
+        JCtx.RuleErrors:= RuleErrors;
+        EmitApplyJson(JCtx);
+        Exit(1);
+      end;
+      Writeln('ERROR: conversion rules failed validation:');
+      for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
+      PrintBlocksNotValidated;
+      Exit(1);
+    end;
+    if not UseJson then PrintBlocksNotValidated;
+    // Freshness guard (Task 4): before trusting the index-derived property
+    // trees, verify the F and T types of every block in Scope are indexed and current. Covers two
+    // failure modes -- "stale" (indexed but the source file changed on disk
+    // since) and "not indexed at all" (ResolveClassQName-equivalent lookup
+    // fails, which would otherwise silently hand BuildPropTree an empty tree).
+    // dry-run: WARN and continue (so a user can still preview a plan while
+    // reindexing). --apply: REFUSE outright -- writing a conversion built from
+    // a stale/empty property tree could silently drop or mis-map properties.
+    Freshness:= CheckFreshness(Stores, Rules, Scope);
+    JCtx.Freshness:= Freshness;
+    if not Freshness.Fresh then
+    begin
+      if AArgs.Apply then
+      begin
+        { --apply refuses. Under JSON the reasons ride in freshness.reasons, so
+          the consumer sees WHY without parsing prose. }
+        if UseJson then
+        begin
+          JCtx.Ok   := False;
+          JCtx.Error:= 'freshness guard failed -- refusing to --apply';
+          EmitApplyJson(JCtx);
+          Exit(1);
+        end;
+        Writeln('ERROR: freshness guard failed -- refusing to --apply:');
+        for S in Freshness.Reasons do Writeln('  ' + S);
+        Exit(1);
+      end
+      else if not UseJson then
+      begin
+        { dry-run only warns. Under JSON the warning is NOT printed -- it is
+          already carried structurally by freshness.fresh=false + reasons. }
+        Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
+        for S in Freshness.Reasons do Writeln('  ' + S);
+      end;
+    end;
+
+    { 1.20.6: which parts of the book run on this unit. A book WITH unit rules
+      runs them alone when its component part has nothing to act on -- no .dfm,
+      no #convert block, or no .dfm instance a block matches; everywhere else
+      BuildApplyPlan runs the whole book (its unit rules folded in). A book with
+      no unit rules takes the old path unchanged, errors included. }
+    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections);
+    if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
+    if JCtx.ComponentPart = 'applied' then
+      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, Rules, AArgs.OnlySections,
+        ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
+    else
+      PlanRes:= BuildUnitRulesOnlyPlan(UnitPas, Rules);
+    JCtx.TreesBuilt:= Trees.Builds;
+    if not PlanRes.Ok then
+    begin
+      if UseJson then
+      begin
+        JCtx.Ok   := False;
+        JCtx.Error:= PlanRes.Error;
+        EmitApplyJson(JCtx);
+        Exit(1);
+      end;
+      Writeln('ERROR: ' + PlanRes.Error);
+      Exit(1);
+    end;
+
+    JCtx.Ok       := True;
+    JCtx.Report   := PlanRes.Report;
+    JCtx.EditCount:= Length(PlanRes.Edits);
+
+    if not AArgs.Apply then
+    begin
+      // DRY-RUN: writes nothing.
+      if UseJson then
+      begin
+        { RenderDryRun and the summary are BOTH suppressed -- the edit plan is
+          reported as edits_count, and the summary as the six arrays + items. }
+        EmitApplyJson(JCtx);
+        Exit(0);
+      end;
+      Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
+      Writeln('');
+      PrintComponentPart;
+      PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'planned');
       Exit(0);
     end;
-    Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
-    Writeln('');
-    PrintComponentPart;
-    PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'planned');
-    Exit(0);
+
+    PerformApplyWrites;
+
+    if UseJson then
+      EmitApplyJson(JCtx)
+    else
+    begin
+      PrintComponentPart;
+      PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
+    end;
+  finally
+    Trees.Free;
   end;
-
-  PerformApplyWrites;
-
-  if UseJson then
-    EmitApplyJson(JCtx)
-  else
-  begin
-    PrintComponentPart;
-    PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
-  end;
-
   Result:= 0;
 end; // function
 

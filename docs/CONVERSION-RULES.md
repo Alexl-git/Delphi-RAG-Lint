@@ -503,6 +503,26 @@ Without `--apply`, `convert-apply` is dry-run only: it prints the planned edits
 for real. `--only Name1,Name2,...` restricts the run to specific `.dfm` instance
 names; `--db` may repeat for a multi-DB index.
 
+**Which blocks are validated (1.20.6).** Before planning, `convert-apply`
+validates the book: each `#convert` block against its OWN From/To property
+trees, and each `#mapping` against the block(s) that `#apply` it. By default
+only the blocks this unit's `.dfm` instances convert through are validated and
+freshness-checked, so a ten-block book costs only the trees the unit uses.
+Every other block is listed, never skipped silently:
+`block <line> (<From> -> <To>): not validated here (no instances in this unit)`
+(json `blocks_not_validated[]` with `line`, `from`, `to`, `unresolved[]`).
+`--validate-all-blocks` validates and freshness-checks EVERY block -- use it
+when authoring a book or in CI. A validated block whose From or To type
+resolves in no `--db` is an error on its `#convert` line. Validation and the
+plan share one tree per type (json `trees_built`). A path error ends with the
+block it was checked in: `(#convert line N: From -> To)`.
+
+**Inherited forms.** `convert-apply` does not convert `inherited` / `inline`
+`.dfm` objects yet. If the unit's `.dfm` holds one whose class is a From type
+of the book, the whole unit is refused (exit 1, nothing written, unit rules
+included): `inherited instances of <Type> are not converted yet -- unit not
+changed`.
+
 `convert-apply` locates every `.dfm` component instance whose class matches a
 `#convert FromType` rule, then rewrites all **5 conversion surfaces** for each:
 

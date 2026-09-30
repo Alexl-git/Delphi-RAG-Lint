@@ -106,7 +106,7 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildBlockTrees (DRagLint.CLI.pas), DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas) (+26 more)</para>
+  /// <para>Used by: DRagLint.CLI.BuildBlockTrees (DRagLint.CLI.pas), DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.Convert.Apply.ConvertBlockScope (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas) (+27 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -156,7 +156,7 @@ type
   /// ASCII-only description (e.g. 'unknown directive: #frobnicate' or
   /// 'link ToPath not found in --to tree: Bogus.Path').
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) (+7 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.BuildBlockTrees.RequireResolved (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -190,8 +190,10 @@ type
   /// ValidateConversionRulesPerBlock consumes them.</summary>
   /// <remarks>
   /// An empty tree (RootType='') skips the checks against that side, exactly as
-  /// in ValidateConversionRules -- an unresolved type is the freshness guard's
-  /// finding, not a path error. Callers build one per block, index-aligned with
+  /// in ValidateConversionRules. It means "not checked here", never "checked
+  /// and fine": a caller that WANTS a block checked and cannot resolve its type
+  /// must report that itself (convert-apply's BuildBlockTrees raises an error on
+  /// the block's #convert line). Callers build one per block, index-aligned with
   /// the book's blocks: [0] is the region before the first #convert (no block,
   /// normally both trees empty), [N] the Nth #convert in source order.
   /// </remarks>
@@ -337,7 +339,7 @@ function ConversionRuleWarnings(const ARules: TConversionRuleSet): TArray<TRuleE
 /// owner's ruling forbids ("never fall back to carry-whole"). CV-2 retires this
 /// function when it realises the links. Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas)</para>
 /// <para>Calls: Format</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

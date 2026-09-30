@@ -68,8 +68,8 @@ type
   /// (To), per the matching #convert rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.SummarizeUnlinked (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas)</para>
-  /// <para>Used in units: DRagLint.Convert.Apply</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.ConvertApplyScope (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ConvertBlockScope (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConvertInstance = record
@@ -349,6 +349,61 @@ type
     Fresh  : Boolean;
     Reasons: TArray<string>;
   end;
+  /// <summary>The property trees one convert-apply run works from, each type
+  /// resolved and built ONCE and shared by rule validation and
+  /// BuildApplyPlan.</summary>
+  /// <remarks>
+  /// A type name (a #convert header or a .dfm object's class) is resolved to a
+  /// qualified class name across Stores in order, first store that resolves it
+  /// wins: a BARE name through ResolveClassQName (the first class of that
+  /// name), a QUALIFIED name only to a class whose qualified name is exactly
+  /// that, so 'LibX.TNope' never resolves to another unit's TNope. Trees are
+  /// cached by the resolved qualified name, so a bare and a qualified spelling
+  /// of one type share one tree. Every tree is built with Options -- Depth 6,
+  /// ancestor climb stopped at TPersistent, referenced components as leaves --
+  /// the options BuildApplyPlan has always used; validation uses the same trees
+  /// (1.20.6), so a path it accepts is a path the plan can apply. Builds counts
+  /// the trees actually built (apply/1 trees_built). The cache does not own
+  /// Stores; the caller keeps them alive. Not thread-safe.
+  /// </remarks>
+  TConvertTreeCache = class
+  private type
+    TResolved = record
+      QName: string;
+      Store: Integer;
+    end;
+  private
+    FStores  : TArray<ISymbolStore>;
+    FResolved: TDictionary<string, TResolved>;
+    FTrees   : TDictionary<string, TPropTree>;
+    FBuilds  : Integer;
+    FOptions : TPropTreeOptions;
+    function Lookup(const ATypeName: string): TResolved;
+  public
+    /// <summary>Creates an empty cache over AStores.</summary>
+    /// <param name="AStores">The indexes to resolve and build against, in
+    /// --db order. Not owned.</param>
+    constructor Create(const AStores: TArray<ISymbolStore>);
+    /// <summary>Frees the cached trees.</summary>
+    destructor Destroy; override;
+    /// <summary>The qualified class name ATypeName resolves to.</summary>
+    /// <param name="ATypeName">A bare or qualified class name.</param>
+    /// <returns>The qualified name, or '' when no store has such a
+    /// class.</returns>
+    /// <remarks>Cheap (a name lookup, no tree build); cached.</remarks>
+    function ResolveType(const ATypeName: string): string;
+    /// <summary>The property tree of ATypeName, built on first use.</summary>
+    /// <param name="ATypeName">A bare or qualified class name.</param>
+    /// <returns>The tree; an empty tree (RootType='') when the type does not
+    /// resolve.</returns>
+    /// <remarks>Increments Builds once per distinct resolved type.</remarks>
+    function TreeFor(const ATypeName: string): TPropTree;
+    /// <summary>The stores this cache resolves against, in --db order.</summary>
+    property Stores: TArray<ISymbolStore> read FStores;
+    /// <summary>How many trees this cache has built.</summary>
+    property Builds: Integer read FBuilds;
+  end;
+
 
 /// <summary>Verifies the F and T component types named by EVERY #convert
 /// block of ARules are indexed and current before BuildApplyPlan trusts
@@ -358,8 +413,14 @@ type
 /// (see CheckTypeFreshness's remarks) -- the From and To types, and the
 /// form's own instances, may live in DIFFERENT --db files.</param>
 /// <param name="ARules">The conversion rule set; the FromType/ToType of every
-/// rkConvert rule are checked, each distinct type once (1.20.6: it used to be
-/// the first block's pair only, so a stale unit behind block 2..N passed).</param>
+/// rkConvert block in AScope are checked, each distinct type once (1.20.6: it
+/// used to be the first block's pair only, so a stale unit behind block 2..N
+/// passed).</param>
+/// <param name="AScope">Which blocks to check, index-aligned as
+/// ConvertBlockScope returns it ([N] = the Nth #convert). A block past its end
+/// is out of scope. convert-apply passes the blocks this unit converts through
+/// (every block under --validate-all-blocks), so a unit-rules run is never
+/// refused over a stale type nothing in the unit uses.</param>
 /// <returns>A TFreshnessResult. Fresh=True when every such type resolves to an
 /// indexed class in SOME store AND its declaring file is up to date on
 /// disk. Fresh=False with one or more human-readable Reasons entries
@@ -380,18 +441,55 @@ type
 /// <seealso cref="DRagLint.Convert.Apply.CheckFreshness.CheckOnce"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
+function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet;
+  const AScope: TArray<Boolean>): TFreshnessResult;
+/// <summary>Which #convert blocks of a book one convert-apply run validates
+/// and freshness-checks.</summary>
+/// <param name="ARules">The parsed rule book.</param>
+/// <param name="AInstances">The .dfm instances this run converts
+/// (FindConvertInstances, after --only).</param>
+/// <param name="AAllBlocks">True (--validate-all-blocks) puts every block in
+/// scope.</param>
+/// <returns>Index-aligned with the book's blocks: [0] (before the first
+/// #convert) is always False; [N] is True when block N is in scope.</returns>
+/// <remarks>
+/// By default a block is in scope when it is the block an instance converts
+/// through -- the FIRST block whose From type (bare tail) is the instance's
+/// class, as FindConvertRuleFor picks it. A later block with the same From type
+/// is never used on this unit, so it is out of scope too. Why: validating every
+/// block builds every type's tree; for convrules\BDE-to-FireDAC.rules that was
+/// ~25 min per unit (controller ruling R5, 2026-09-30). Pure.
+/// </remarks>
+function ConvertBlockScope(const ARules: TConversionRuleSet; const AInstances: TArray<TConvertInstance>;
+  AAllBlocks: Boolean): TArray<Boolean>;
+
+/// <summary>The From types of a book that a .dfm holds as INHERITED or INLINE
+/// objects -- instances convert-apply does not convert.</summary>
+/// <param name="ADfmText">The .dfm text.</param>
+/// <param name="ARules">The parsed rule book.</param>
+/// <returns>Each such class name once (as the .dfm spells it), in the order
+/// first found; empty when there is none.</returns>
+/// <remarks>
+/// FindConvertInstances only matches 'object' headers, so an inherited
+/// component of a From type is silently left unconverted while the book's
+/// unit rules (e.g. '#unuse BDE.DBTables') still act on the unit -- which can
+/// break its compile. convert-apply refuses such a unit whole (ruling R6,
+/// 2026-09-30). Pure.
+/// </remarks>
+function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConversionRuleSet): TArray<string>;
 
 /// <summary>Builds the full convert-apply plan for one unit: locates the
 /// component instances to convert in ADfmPath (via FindConvertInstances),
 /// rewrites all five surfaces per ARules, and returns the combined edit set
 /// plus report.</summary>
-/// <param name="AStores">The symbol indexes to resolve against, in the order
-/// given (one per --db). TYPE resolution (From/To property trees, ctor-name
-/// lookups) tries every store in order, first-that-resolves-wins -- the
-/// From/To types may live in a DIFFERENT --db than the unit/instance being
-/// converted (Bug 2). Unit-scoped lookups (the .pas/.dfm's own symbols and
-/// refs) use whichever store actually has AUnitPas/ADfmPath indexed.</param>
+/// <param name="ATrees">The run's shared tree cache; its Stores are the symbol
+/// indexes to resolve against, in the order given (one per --db). TYPE
+/// resolution (From/To property trees, ctor-name lookups) tries every store in
+/// order, first-that-resolves-wins -- the From/To types may live in a
+/// DIFFERENT --db than the unit/instance being converted (Bug 2). Unit-scoped
+/// lookups (the .pas/.dfm's own symbols and refs) use whichever store actually
+/// has AUnitPas/ADfmPath indexed. A tree rule validation already built is
+/// reused, not rebuilt (1.20.6).</param>
 /// <param name="AUnitPas">Path to the .pas file that declares/uses the
 /// instances being converted.</param>
 /// <param name="ADfmPath">Path to the .dfm file containing the instances'
@@ -441,9 +539,9 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
-/// <para>Calls: BookHasUnitRules, BuildPropTree, CompareText, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype (+30 more)</para>
+/// <para>Calls: BookHasUnitRules, CompareText, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (+28 more)</para>
 /// <para>Returns: Default(TApplyResult)</para>
-/// <para>Complexity: 16 (cyclomatic, outer body), 966 lines (full implementation)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 921 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>
@@ -452,7 +550,7 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
 
@@ -494,7 +592,7 @@ function BuildUnitRulesOnlyPlan(const AUnitPas: string; const ARules: TConversio
 /// scan only, not a full DFM parse (Task 3's ParseDfmBlock/ReemitComponent do
 /// the real per-instance re-emit). Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.ConvertApplyScope (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.Apply.FindConvertRuleFor, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.TryParseObjectHeader, Trim</para>
 /// <para>Returns: nil; List.ToArray</para>
 /// <seealso cref="DRagLint.Convert.Apply.FindConvertRuleFor"/>
@@ -627,17 +725,17 @@ end;
 // + Name/ClassName_ on a match; False for any other line shape (property
 // lines, 'end', 'object Name' with no class -- a nested Font/inherited-shape
 // sub-object, which has no type to convert and is correctly skipped).
-function TryParseObjectHeader(const ATrimmedLine: string; out AName, AClassName: string): Boolean;
-const
-  KW = 'object ';
+// AKeyword is the header keyword WITH its trailing space: 'object ',
+// 'inherited ' or 'inline '.
+function TryParseHeaderAfter(const ATrimmedLine, AKeyword: string; out AName, AClassName: string): Boolean;
 var
   Rest   : string;
   ColonAt: Integer;
   NamePart, ClassPart: string;
 begin
   AName:= ''; AClassName:= '';
-  if not StartsText(KW, ATrimmedLine) then Exit(False);
-  Rest:= Trim(Copy(ATrimmedLine, Length(KW) + 1, MaxInt));
+  if not StartsText(AKeyword, ATrimmedLine) then Exit(False);
+  Rest:= Trim(Copy(ATrimmedLine, Length(AKeyword) + 1, MaxInt));
   ColonAt:= Pos(':', Rest);
   if ColonAt = 0 then Exit(False); { 'object Name' with no class -- e.g. a Font sub-object }
   NamePart := Trim(Copy(Rest, 1, ColonAt - 1));
@@ -650,6 +748,11 @@ begin
   if (NamePart = '') or (ClassPart = '') then Exit(False);
   AName:= NamePart; AClassName:= ClassPart;
   Result:= True;
+end;
+
+function TryParseObjectHeader(const ATrimmedLine: string; out AName, AClassName: string): Boolean;
+begin
+  Result:= TryParseHeaderAfter(ATrimmedLine, 'object ', AName, AClassName);
 end;
 
 function FindConvertInstances(const ADfmText: string; const ARules: TConversionRuleSet;
@@ -759,6 +862,150 @@ begin
   for S in Cands do
     if S.Kind = skClass then Exit(S.QualifiedName);
 end;
+// The qualified name of the class named exactly AQName ('Unit.TType') in
+// AStore, or '' -- unlike ResolveClassQName, never a same-named class of
+// another unit.
+function QualifiedClassIn(const AStore: ISymbolStore; const AQName: string): string;
+var
+  S: TSymbol;
+begin
+  Result:= '';
+  for S in AStore.FindSymbolsByExactName(BareTypeTail(AQName)) do
+    if (S.Kind = skClass) and SameText(S.QualifiedName, AQName) then Exit(S.QualifiedName);
+end;
+
+const
+  { The class-recursion depth of every convert-apply property tree -- the value
+    BuildApplyPlan has always used. }
+  CONVERT_TREE_DEPTH = 6;
+
+constructor TConvertTreeCache.Create(const AStores: TArray<ISymbolStore>);
+begin
+  inherited Create;
+  FStores  := AStores;
+  FResolved:= TDictionary<string, TResolved>.Create;
+  FTrees   := TDictionary<string, TPropTree>.Create;
+  FOptions := Default(TPropTreeOptions);
+  FOptions.Depth       := CONVERT_TREE_DEPTH;
+  FOptions.ToPersistent:= True;
+  { A REFERENCED COMPONENT IS NOT AN OWNED SUB-OBJECT, and expanding one walks
+    the whole form's component graph. Left at the legacy default (False) this is
+    the entire reason convert-apply did not finish on a large form.
+
+    MEASURED 2026-09-08 on ORM3 CLIENT\VARINSP (942 KB .dfm, 1,454 object
+    blocks), TOvcTable against the Win32 library index:
+
+      default (expand refs)   103.2 s   32,224 properties
+      TreatRefsAsLeaves       6.1 s        928 properties
+
+    Owned TPersistent sub-objects (TFont, TStrings, the grid's own view
+    objects) still expand -- those ARE part of the block being re-emitted. What
+    stops is following a property that merely POINTS at another component,
+    which the DFM records as a name reference and which the re-emit never needs
+    to descend into. Rule validation shares these trees since 1.20.6; before,
+    it built its own with references expanded, which is what made validating
+    every block of the BDE book take ~25 min. }
+  FOptions.TreatRefsAsLeaves:= True;
+end;
+
+destructor TConvertTreeCache.Destroy;
+begin
+  FTrees.Free;
+  FResolved.Free;
+  inherited Destroy;
+end;
+
+function TConvertTreeCache.Lookup(const ATypeName: string): TResolved;
+var
+  Name: string;
+  Key : string;
+  I   : Integer;
+begin
+  Name:= Trim(ATypeName);
+  Key := UpperCase(Name);
+  if FResolved.TryGetValue(Key, Result) then Exit;
+  Result.QName:= '';
+  Result.Store:= -1;
+  if Name <> '' then
+    for I:= 0 to High(FStores) do
+    begin
+      Result.QName:= if Pos('.', Name) > 0 then QualifiedClassIn(FStores[I], Name)
+                     else ResolveClassQName(FStores[I], Name);
+      if Result.QName <> '' then
+      begin
+        Result.Store:= I;
+        Break;
+      end;
+    end;
+  FResolved.Add(Key, Result);
+end;
+
+function TConvertTreeCache.ResolveType(const ATypeName: string): string;
+begin
+  Result:= Lookup(ATypeName).QName;
+end;
+
+function TConvertTreeCache.TreeFor(const ATypeName: string): TPropTree;
+var
+  R: TResolved;
+begin
+  R:= Lookup(ATypeName);
+  if R.Store < 0 then Exit(Default(TPropTree));
+  if FTrees.TryGetValue(UpperCase(R.QName), Result) then Exit;
+  Result:= BuildPropTree(FStores[R.Store], R.QName, FOptions);
+  Inc(FBuilds);
+  FTrees.Add(UpperCase(R.QName), Result);
+end;
+
+function ConvertBlockScope(const ARules: TConversionRuleSet; const AInstances: TArray<TConvertInstance>;
+  AAllBlocks: Boolean): TArray<Boolean>;
+var
+  Froms: TArray<string>;
+  R    : TConversionRule;
+  Inst : TConvertInstance;
+  I    : Integer;
+begin
+  Froms:= nil;
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then Froms:= Froms + [BareTypeTail(R.FromType)];
+  SetLength(Result, Length(Froms) + 1);
+  Result[0]:= False;
+  for I:= 1 to High(Result) do Result[I]:= AAllBlocks;
+  if AAllBlocks then Exit;
+  for Inst in AInstances do
+    for I:= 0 to High(Froms) do
+      if SameText(Froms[I], Inst.FromType) then
+      begin
+        Result[I + 1]:= True;
+        Break; { the first matching block is the one FindConvertRuleFor uses }
+      end;
+end;
+
+function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConversionRuleSet): TArray<string>;
+var
+  L        : string;
+  Trimmed  : string;
+  ObjName  : string;
+  ObjClass : string;
+  ToType   : string;
+  Found    : TList<string>;
+begin
+  Found:= TList<string>.Create;
+  try
+    for L in ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]) do
+    begin
+      Trimmed:= Trim(L);
+      if not (TryParseHeaderAfter(Trimmed, 'inherited ', ObjName, ObjClass) or
+              TryParseHeaderAfter(Trimmed, 'inline ', ObjName, ObjClass)) then Continue;
+      if FindConvertRuleFor(ARules, ObjClass, ToType) and not Found.Contains(ObjClass) then
+        Found.Add(ObjClass);
+    end;
+    Result:= Found.ToArray;
+  finally
+    Found.Free;
+  end;
+end;
+
 
 // One construction site: 'AFromType.<ctor>(' found as a whole-word AFromType
 // token immediately followed (ignoring intervening whitespace) by '.' and a
@@ -1027,11 +1274,13 @@ begin
   Result:= True;
 end;
 
-function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
+function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet;
+  const AScope: TArray<Boolean>): TFreshnessResult;
 var
   R       : TConversionRule;
   Reasons : TList<string>;
   Seen    : TList<string>;
+  Block   : Integer;
 
   // BareTypeTail: a rule's #convert header may name either type qualified
   // ('LibA.TSrcBtn') -- FindSymbolsByExactName (inside CheckTypeFreshness)
@@ -1055,10 +1304,13 @@ begin
 
   Reasons:= TList<string>.Create;
   Seen   := TList<string>.Create;
+  Block  := 0;
   try
     for R in ARules.Rules do
       if R.Kind = rkConvert then
       begin
+        Inc(Block);
+        if (Block > High(AScope)) or not AScope[Block] then Continue;
         if not CheckOnce(R.FromType) then Result.Fresh:= False;
         if not CheckOnce(R.ToType)   then Result.Fresh:= False;
       end;
@@ -1234,10 +1486,11 @@ begin
   end;
 end;
 
-function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
 var
+  Stores      : TArray<ISymbolStore>; { ATrees.Stores, in --db order }
   DfmText     : string;
   DfmLines    : TArray<string>;
   DfmFileSyms : TArray<TSymbol>;
@@ -1262,13 +1515,12 @@ var
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   E           : TTextEdit;
   It          : TApplyItem; { scratch for the main body's own Emit calls }
-  TreeCache   : TDictionary<string, TPropTree>; { qname -> tree, built once per distinct type }
-  Opts        : TPropTreeOptions;
 
-  // Resolves the store (from AStores, in order) that actually has APath
+
+  // Resolves the store (from Stores, in order) that actually has APath
   // indexed (FindSymbolsByFile non-empty, trying both the given and the
   // fully-qualified path) -- the .pas/.dfm pair being converted may live in a
-  // DIFFERENT --db than the From/To types (Bug 2). Falls back to AStores[0]
+  // DIFFERENT --db than the From/To types (Bug 2). Falls back to Stores[0]
   // when no store has APath indexed, preserving the prior single-db error
   // paths (a subsequent Length(...)=0 still produces the existing "could not
   // locate" warnings rather than a new failure mode).
@@ -1277,39 +1529,16 @@ var
     St  : ISymbolStore;
     Syms: TArray<TSymbol>;
   begin
-    for St in AStores do
+    for St in Stores do
     begin
       Syms:= St.FindSymbolsByFile(APath);
       if Length(Syms) = 0 then Syms:= St.FindSymbolsByFile(TPath.GetFullPath(APath));
       if Length(Syms) > 0 then Exit(St);
     end;
-    if Length(AStores) > 0 then Exit(AStores[0]);
+    if Length(Stores) > 0 then Exit(Stores[0]);
     Result:= nil;
   end;
 
-  // F/T property trees are the same for every instance sharing a (FromType,
-  // ToType) rule pair -- cache by resolved qname so a form with N instances of
-  // the same F type only builds each tree once. Bug 2: tries every store in
-  // AStores, in order (first-that-resolves-wins) -- the From/To type may live
-  // in a DIFFERENT --db than the unit/instance being converted, mirroring
-  // DoConvertApply's own cross-db TreeFor (used earlier for rule validation).
-  function TreeFor(const AClassName: string): TPropTree;
-  var
-    QName: string;
-    Cand : TPropTree;
-    St   : ISymbolStore;
-  begin
-    Result:= Default(TPropTree);
-    for St in AStores do
-    begin
-      QName:= ResolveClassQName(St, AClassName);
-      if QName = '' then Continue;
-      if TreeCache.TryGetValue(QName, Cand) then Exit(Cand);
-      Cand:= BuildPropTree(St, QName, Opts);
-      TreeCache.Add(QName, Cand);
-      Exit(Cand);
-    end;
-  end;
 
   // Appends ONE report line: the prose to whichever legacy array AItem.Field
   // names, and the typed item to Items. EVERY report line in this routine goes
@@ -1565,8 +1794,8 @@ var
     E : TTextEdit;
     It: TApplyItem;
   begin
-    var Sites: TArray<TCreatorSite>:= FindConstructionSites(AStores, PasStore, PasFileId, PasLines, Inst.FromType);
-    var HasGenericCreate: Boolean:= ToTypeHasGenericCreate(AStores, Inst.ToType);
+    var Sites: TArray<TCreatorSite>:= FindConstructionSites(Stores, PasStore, PasFileId, PasLines, Inst.FromType);
+    var HasGenericCreate: Boolean:= ToTypeHasGenericCreate(Stores, Inst.ToType);
     for var Site in Sites do
     begin
       var CtorName: string:= Site.CtorName;
@@ -1824,7 +2053,7 @@ var
         var ResolvedUnit: string;
         var AlreadyUsed : Boolean;
         var UseEdits: TArray<TTextEdit>;
-        for var St in AStores do
+        for var St in Stores do
         begin
           UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
           if AlreadyUsed or (Length(UseEdits) > 0) then Break;
@@ -1956,12 +2185,13 @@ var
 begin
   Result:= Default(TApplyResult);
   Result.Ok:= False;
+  Stores:= ATrees.Stores;
 
   if not TFile.Exists(AUnitPas) then
   begin Result.Error:= Format('unit .pas not found: %s', [AUnitPas]); Exit; end;
   if not TFile.Exists(ADfmPath) then
   begin Result.Error:= Format('.dfm not found: %s', [ADfmPath]); Exit; end;
-  if Length(AStores) = 0 then
+  if Length(Stores) = 0 then
   begin Result.Error:= 'no symbol store available (empty AStores)'; Exit; end;
 
   DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
@@ -1996,30 +2226,9 @@ begin
   if Length(DfmFileSyms) = 0 then
     DfmFileSyms:= DfmStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
 
-  Opts:= Default(TPropTreeOptions);
-  Opts.Depth       := 6;
-  Opts.ToPersistent:= True;
-  { A REFERENCED COMPONENT IS NOT AN OWNED SUB-OBJECT, and expanding one walks
-    the whole form's component graph. Left at the legacy default (False) this is
-    the entire reason convert-apply does not finish on a large form.
-
-    MEASURED 2026-09-08 on ORM3 CLIENT\VARINSP (942 KB .dfm, 1,454 object
-    blocks), TOvcTable against the Win32 library index:
-
-      default (expand refs)   103.2 s   32,224 properties
-      TreatRefsAsLeaves       6.1 s        928 properties
-
-    35x fewer leaves, 17x faster, for the F tree alone. One instance of the
-    conversion took 1,077 s before this line existed. The INBOX note that filed
-    the slowness sized TOvcTable at "192+ published leaves" -- the real figure
-    was 32,224, so every estimate built on it was out by 168x.
-
-    Owned TPersistent sub-objects (TFont, TStrings, the grid's own view
-    objects) still expand -- those ARE part of the block being re-emitted. What
-    stops is following a property that merely POINTS at another component,
-    which the DFM records as a name reference and which the re-emit never needs
-    to descend into. }
-  Opts.TreatRefsAsLeaves:= True;
+  { F/T property trees come from ATrees, shared with rule validation and built
+    once per type -- see TConvertTreeCache for the build options and why
+    referenced components are leaves. }
 
   PasLines:= TStringList.Create;
   Edits    := TList<TTextEdit>.Create;
@@ -2034,7 +2243,6 @@ begin
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
   ConvertedInstNames:= TList<string>.Create;
-  TreeCache:= TDictionary<string, TPropTree>.Create;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
 
@@ -2112,8 +2320,8 @@ begin
       end;
 
       var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
-      var FromTree: TPropTree:= TreeFor(Inst.FromType);
-      var ToTree  : TPropTree:= TreeFor(Inst.ToType);
+      var FromTree: TPropTree:= ATrees.TreeFor(Inst.FromType);
+      var ToTree  : TPropTree:= ATrees.TreeFor(Inst.ToType);
       var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ARules, FromTree, ToTree, ACastLib);
       if not ReemitRes.Ok then
       begin
@@ -2198,7 +2406,6 @@ begin
     DoneUnits.Free;
     ToTypesSeen.Free;
     ConvertedInstNames.Free;
-    TreeCache.Free;
   end;
 end;
 
