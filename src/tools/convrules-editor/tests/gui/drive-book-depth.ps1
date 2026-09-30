@@ -244,6 +244,14 @@ $tmp = Join-Path $env:TEMP ('bookdepth-' + [guid]::NewGuid().ToString('N').Subst
 $d3 = Join-Path $tmp 'Depth3.rules';  [IO.File]::WriteAllText($d3, "#depth 3`r`n#unuse OldUnitZ`r`n", [Text.Encoding]::ASCII)
 $nd = Join-Path $tmp 'NoDepth.rules'; [IO.File]::WriteAllText($nd, "#unuse OldUnitZ`r`n", [Text.Encoding]::ASCII)
 
+# --- 0. start-up WITHOUT a book never runs LoadText: the combo is still gated ---
+$p = Start-Process $Exe -PassThru
+try {
+  $main = WaitCls $p.Id 'TConvRulesForm' 30
+  Start-Sleep -Seconds 1
+  $cb = DepthCombo $main
+  Check 'depth.nobook.enabled.matches.capability' (($cb -ne [IntPtr]::Zero) -and ([W]::IsWindowEnabled($cb) -eq $hasDepth) -and ((Sel $cb) -eq 4)) ("enabled=" + [W]::IsWindowEnabled($cb) + " sel=" + (Sel $cb))
+} finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 # --- 1. a book's #depth shows; the control is gated on the capability ---
 $p = Start-Process $Exe -ArgumentList "`"$d3`"" -PassThru
 try {
@@ -273,18 +281,60 @@ try {
 
 # --- 2. a book WITHOUT #depth shows the default and does not gain one on save ---
 $before = [IO.File]::ReadAllText($nd)
+# Back-date the file so the save below is VISIBLE: without a write, "not added"
+# would also pass for a Save that never ran.
+$stamp = [DateTime]::UtcNow.AddHours(-2)
+[IO.File]::SetLastWriteTimeUtc($nd, $stamp)
 $p = Start-Process $Exe -ArgumentList "`"$nd`"" -PassThru
 try {
   $main = WaitCls $p.Id 'TConvRulesForm' 30
   $cb = DepthCombo $main
   Check 'depth.absent.shows.default' ((Sel $cb) -eq 4) ("sel=" + (Sel $cb))
-  [void][W]::InvokeMenu($main, 'File|Save')
-  Start-Sleep -Milliseconds 800
+  $invoked = [W]::InvokeMenu($main, 'File|Save')
+  $t0 = Get-Date; while ([IO.File]::GetLastWriteTimeUtc($nd) -eq $stamp -and ((Get-Date) - $t0).TotalSeconds -lt 10) { Start-Sleep -Milliseconds 200 }
+  $wrote = [IO.File]::GetLastWriteTimeUtc($nd) -ne $stamp
+  Check 'depth.absent.saved' ($invoked -and $wrote) ("invoked=$invoked wrote=$wrote")
   $after = [IO.File]::ReadAllText($nd)
-  Check 'depth.absent.not.added' (($after -notmatch '#depth') -and ($after -eq $before)) $after
+  Check 'depth.absent.not.added' ($wrote -and ($after -notmatch '#depth') -and ($after -eq $before)) $after
+  # Loading and saving must leave the book CLEAN: Exit closes with no prompt.
   [void][W]::InvokeMenu($main, 'File|Exit')
+  $prompt = WaitCls $p.Id 'TMessageForm' 3
+  Check 'depth.absent.exit.no.prompt' (($prompt -eq [IntPtr]::Zero) -and $p.WaitForExit(10000)) ("prompt=" + ($prompt -ne [IntPtr]::Zero))
 } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 
+# --- 3. New Conversion -> "start a NEW file" clears the book WITHOUT LoadText: the
+#        combo must follow the new, empty book (default), not keep the old book's 3.
+#        TBevel / TShape: small VCL classes that resolve; each proptree still costs
+#        ~30 s on the shared build box (measured 2026-09-30), hence the long waits.
+$SLOW_SEC = 600
+function WaitMsg($procId, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq 'TMessageForm') { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+function ClickIn($dlg, $cap) { $b = @(Find $dlg 'TButton' $cap); if ($b.Count -gt 0) { Click $b[0]; return $true }; return $false }
+[IO.File]::WriteAllText($d3, "#depth 3`r`n#unuse OldUnitZ`r`n", [Text.Encoding]::ASCII)
+$p = Start-Process $Exe -ArgumentList "`"$d3`"" -PassThru
+try {
+  $main = WaitCls $p.Id 'TConvRulesForm' 30
+  Start-Sleep -Seconds 2
+  $cb = DepthCombo $main
+  $pick = @(Find $main 'TButton' 'Pick...')[0]
+  $row2 = @(Find $main 'TComboBox' $null | Where-Object { [W]::Top($_) -gt [W]::Top($pick) + 20 -and [W]::Top($_) -lt [W]::Top($pick) + 45 } | Sort-Object { [W]::Left($_) })
+  SetText $row2[0] 'Vcl.ExtCtrls.TBevel'
+  SetText $row2[1] 'Vcl.ExtCtrls.TShape'
+  [void][W]::InvokeMenu($main, 'Conversion|New Conversion')
+  # "Where should the rule go?" -- No = start a NEW file.
+  $m1 = WaitMsg $p.Id $SLOW_SEC
+  $where = ($m1 -ne [IntPtr]::Zero) -and (ClickIn $m1 '&No')
+  # The click is POSTED: wait for this box to close, or the next wait finds it again.
+  $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 10 -and (@([W]::Tops($p.Id)) -contains $m1)) { Start-Sleep -Milliseconds 100 }
+  # "Start <file>?" (the open book is not empty) -- No = discard it.
+  $m2 = WaitMsg $p.Id 30
+  $start = ($m2 -ne [IntPtr]::Zero) -and (ClickIn $m2 '&No')
+  Check 'depth.newfile.prompts' ($where -and $start) ("where=$where start=$start")
+  # The rest of New Conversion (proptree + grid load) runs on; the combo is set
+  # right after the clear, so wait for the engine to finish before reading it.
+  $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $SLOW_SEC -and ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' })) { Start-Sleep -Milliseconds 500 }
+  Start-Sleep -Seconds 1
+  Check 'depth.newfile.shows.default' ((Sel $cb) -eq 4) ("sel=" + (Sel $cb))
+} finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 [IO.Directory]::Delete($tmp, $true)
 "RESULT pass=$script:pass fail=$script:fail"
 if ($script:fail -gt 0) { exit 1 }

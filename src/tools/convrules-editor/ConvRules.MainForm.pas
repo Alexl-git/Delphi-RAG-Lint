@@ -542,15 +542,15 @@ type
       /// created and no file is written -- the unchanged save path does that.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.Model.TRuleBook.Snapshot, ConvRules.RuleCatalog.FindRuleForType (+8 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshDepthControl, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.Model.TRuleBook.Snapshot (+9 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 119 lines (full implementation)</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 120 lines (full implementation)</para>
       /// <para>Reads: FCatalog, FFilePath, FCbFrom, FRulesFolder, FBook, FLblFile   Writes: FSnapshot, FFilePath, FActiveHdr</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRule"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshDepthControl"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshUnitList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RescanRulesFolder"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ChooseTargetForNewRule(const AFrom, ATo: string; ACompletingStub: Boolean): Boolean;
@@ -2343,7 +2343,7 @@ type
       /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.CapabilityNames, ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus (+9 more)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.CapabilityNames, ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.RefreshDepthControl, ConvRules.MainForm.TConvRulesForm.SetError (+10 more)</para>
       /// <para>constructor</para>
       /// <para>Reads: FBook, FEngine, FEdDest   Writes: FBook, FSnapshot, FFromPlatform, FToPlatform, FEngine, FBookDepthOk, FActiveHdr, FSurfaceMinVis (+3 more)</para>
       /// <para>UI thread only -- touches Application</para>
@@ -2583,6 +2583,10 @@ begin
   BuildUI;
   // After BuildUI: ApplyTheme repaints FGrid, which BuildUI creates.
   ApplyTheme(ResolveThemeMode(GEditorThemePref, GEditorIdeTheme));
+  // Start-up without a book never reaches LoadText: gate the combo on the probe
+  // and show the empty book's default here (after ApplyTheme -- the note's colour
+  // is resolved through the active style).
+  RefreshDepthControl;
   OnClose:= FormCloseHandler;
   OnCloseQuery:= FormCloseQueryHandler;
   Application.OnHint:= AppHint;
@@ -6308,6 +6312,7 @@ begin
       // colliding name would silently replace a sibling rule file.
       NewPath:= UniqueRulePath(Folder, RuleFileName);
       FBook.Clear;
+      RefreshDepthControl; // bypasses LoadText: the combo still shows the OLD book's depth otherwise
       FSnapshot:= FBook.Snapshot; // the new book starts clean: only the rule about to be added makes it dirty
       FFilePath:= NewPath;
       FLblFile.Caption:= NewPath;

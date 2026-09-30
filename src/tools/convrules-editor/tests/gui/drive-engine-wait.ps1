@@ -297,6 +297,13 @@ $p = Start-Process $Exe -ArgumentList "`"$fast`" --form `"$dfm`"" -PassThru
 try {
   $main = WaitCls $p.Id 'TConvRulesForm' 30
   Start-Sleep -Seconds 2
+  # The editor's own start-up engine calls (the class lists: three `query
+  # descendants` runs, ~1 s each on the shared box, started AFTER the window shows)
+  # must be finished first: overlapping them made the fast load take >400 ms and
+  # counted a third child (measured 2026-09-30, Task 5 fix round 1).
+  $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt 60 -and @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.Id)").Count -gt 0) { Start-Sleep -Milliseconds 200 }
+  Start-Sleep -Milliseconds 500
   [ChildWatch]::Start($engineExe)
   $e = OpenClass $main 'TNoSuchClassXyz'
   # No StatusText inside the loop: WM_GETTEXT blocks while the editor's UI thread

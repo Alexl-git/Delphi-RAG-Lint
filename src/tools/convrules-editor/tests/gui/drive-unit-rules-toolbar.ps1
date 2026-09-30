@@ -175,9 +175,17 @@ public static class W {
 '@
 $script:pass = 0; $script:fail = 0
 function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
-function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
-function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
-function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+# TEngineWaitForm (Task 4, 2026-09-30) is the editor's progress window for slow
+# property-tree loads: correct behaviour, never the dialog a step waits for. Forms
+# leaves it out, and WaitFor / WaitCls first wait for it to close (WaitEngineIdle),
+# so a slow engine delays a step instead of being mistaken for its dialog.
+# ENGINE_IDLE_SEC: the TcxButton proptree alone measured 37.5-60+ s on the shared
+# build box (2026-09-30); a New Conversion runs up to four such calls.
+$ENGINE_IDLE_SEC = 900
+function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow', 'TEngineWaitForm' }) }
+function WaitEngineIdle($procId) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $ENGINE_IDLE_SEC) { if (-not ([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' })) { return $true }; Start-Sleep -Milliseconds 250 }; return $false }
+function WaitFor($procId, $caption, $sec) { [void](WaitEngineIdle $procId); $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+function WaitCls($procId, $cls, $sec) { [void](WaitEngineIdle $procId); $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 function SetText($h, $s) { [void][W]::SendS($h, 0x000C, [IntPtr]::Zero, $s) }
@@ -238,7 +246,7 @@ try {
   SetText $row2[1] 'cxCheckListBox.TcxCheckListBox'
   Check 'invoke.new-conversion' ([W]::InvokeMenu($main, 'Conversion|New Conversion'))
   $t0 = Get-Date; $raw = ''
-  while (((Get-Date) - $t0).TotalSeconds -lt 300 -and ($raw -notmatch '(?m)^#link ')) { Start-Sleep -Seconds 1; $raw = Raw $main; if ((Forms $p.Id).Count -gt 1) { break } }
+  while (((Get-Date) - $t0).TotalSeconds -lt $ENGINE_IDLE_SEC -and ($raw -notmatch '(?m)^#link ')) { Start-Sleep -Seconds 1; $raw = Raw $main; if ((Forms $p.Id).Count -gt 1) { break } }
   "  debug: waited {0:N0}s, forms=[{1}], memos={2}, raw.len={3}" -f ((Get-Date)-$t0).TotalSeconds, (TopsNow $p.Id), (@(Find $main 'TMemo' $null).Count), $raw.Length
   (Find $main 'TMemo' $null | ForEach-Object { '  memo: ' + ([W]::Txt($_) -replace '\s+',' ').Substring(0, [Math]::Min(80, ([W]::Txt($_)).Length)) })
   Check 'derive.unuse.from.unit' ($raw -match '(?m)^#unuse Vcl\.CheckLst\s*$')
