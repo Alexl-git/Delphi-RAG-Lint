@@ -20,6 +20,7 @@ uses
 , ConvRules.ConvCatalog in 'ConvRules.ConvCatalog.pas'
   , DRagLint.Convert.CastLib in '..\..\report\DRagLint.Convert.CastLib.pas'
   , ConvRules.Engine in 'ConvRules.Engine.pas'
+  , ConvRules.EngineProgress in 'ConvRules.EngineProgress.pas'
   , ConvRules.Platform in 'ConvRules.Platform.pas'
   , ConvRules.BlockFile in 'ConvRules.BlockFile.pas'
   , ConvRules.BlockOps in 'ConvRules.BlockOps.pas'

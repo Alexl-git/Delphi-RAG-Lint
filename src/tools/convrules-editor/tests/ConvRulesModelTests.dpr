@@ -34,6 +34,7 @@ uses
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
+  , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_EXIT_TIMEOUT / ENGINE_EXIT_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   ;
 
 var
@@ -7122,6 +7123,79 @@ begin
   end;
 end;
 
+procedure TestEngineProgress;
+const
+  LINE_A   = '{"progress":{"elapsed_s":15,"verb":"proptree","class":"FireDAC.Comp.Client.TFDQuery","depth":3,"max_depth":5,"classes_done":41,"classes_queued":28,"nodes":9120}}';
+  ELAPSED  = 15;
+  DEPTH    = 3;
+  MAXDEPTH = 5;
+  DONE     = 41;
+  QUEUED   = 28;
+  NODES    = 9120;
+  TWO      = 2;
+  THREE    = 3;
+  FOUR     = 4;
+var
+  Sp    : TLineSplitter;
+  Lines : string;
+  P     : TEngineProgress;
+  Tok   : TCancelToken;
+  Sink  : TProc<string>;
+  Parsed: Boolean;
+  Names : Boolean;
+  Counts: Boolean;
+begin
+  Lines:= '';
+  Sink:= procedure(ALine: string)
+    begin
+      Lines:= Lines + '[' + ALine + ']';
+    end;
+  Sp:= TLineSplitter.Create;
+  try
+    Sp.Feed('ab', Sink);
+    Check('split.partial.held', Lines = '', Lines);
+    Sp.Feed('c'#13#10'de', Sink);
+    Check('split.crlf', Lines = '[abc]', Lines);
+    Sp.Feed(#10#10'f', Sink);
+    Check('split.lf.and.empty', Lines = '[abc][de][]', Lines);
+    Sp.Flush(Sink);
+    Check('split.flush.tail', Lines = '[abc][de][][f]', Lines);
+    Sp.Flush(Sink);
+    Check('split.flush.twice.noop', Lines = '[abc][de][][f]', Lines);
+  finally
+    Sp.Free;
+  end;
+
+  Parsed:= TryParseProgressLine(LINE_A, P);
+  Names:= (P.ElapsedS = ELAPSED) and (P.Verb = 'proptree') and (P.QName = 'FireDAC.Comp.Client.TFDQuery');
+  Counts:= (P.Depth = DEPTH) and (P.MaxDepth = MAXDEPTH) and (P.ClassesDone = DONE)
+    and (P.ClassesQueued = QUEUED) and (P.Nodes = NODES);
+  Check('progress.parse.accept', Parsed and Names and Counts);
+  Check('progress.parse.padded', TryParseProgressLine('  ' + LINE_A + '  ', P));
+  Check('progress.reject.text', not TryParseProgressLine('(loaded defaults from C:\x.json)', P));
+  Check('progress.reject.fatal', not TryParseProgressLine('FATAL: Exception: Unknown argument: --depth', P));
+  Check('progress.reject.other.json', not TryParseProgressLine('{"schema":"apply/1","ok":true}', P));
+  Check('progress.reject.extra.key', not TryParseProgressLine('{"progress":{"depth":1},"x":1}', P));
+  Check('progress.reject.empty', not TryParseProgressLine('', P));
+  Check('progress.reject.broken.json', not TryParseProgressLine('{"progress":{"depth":', P));
+
+  TryParseProgressLine(LINE_A, P);
+  Check('progress.text', ProgressText(P) = 'TFDQuery -- depth 3 of 5 -- 41 done, 28 queued -- 15 s', ProgressText(P));
+  P.QName:= '';
+  Check('progress.text.no.class', ProgressText(P) = 'proptree -- depth 3 of 5 -- 41 done, 28 queued -- 15 s', ProgressText(P));
+
+  Tok:= TCancelToken.Create;
+  try
+    Check('cancel.initially.clear', not Tok.IsCancelled);
+    Tok.Cancel;
+    Tok.Cancel;
+    Check('cancel.set.idempotent', Tok.IsCancelled);
+  finally
+    Tok.Free;
+  end;
+  Check('exit.codes.distinct', (ENGINE_EXIT_TIMEOUT = THREE) and (ENGINE_EXIT_CANCELLED = FOUR) and (PROGRESS_INTERVAL_S = TWO));
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -7267,6 +7341,7 @@ begin
     TestUnitMask;
     TestFilterHarvestRows;
     TestDestPlatformLabel;
+    TestEngineProgress;
 
     FreeAndNil(GParseBook);
 
