@@ -15,7 +15,9 @@ function Assert($n,$c){ if($c){Write-Host "PASS  $n"}else{Write-Host "FAIL  $n" 
 function Test-Compiles($PasFile) {
     $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
     $fileDir = Split-Path -Parent $PasFile
-    $out = cmd /c "call `"$rs`" && cd /d `"$fileDir`" && dcc64 -B `"$PasFile`"" 2>&1
+    # Private DCU dir (-NU): a bare dcc64 writes each unit's DCU beside its source, i.e. under src\, where a battery-parallel run_legacy_cli_fixtures sees it.
+    New-Item -ItemType Directory -Force (Join-Path $fileDir '_dcu') | Out-Null
+    $out = cmd /c "call `"$rs`" && cd /d `"$fileDir`" && dcc64 -B -NU`"$fileDir\_dcu`" `"$PasFile`"" 2>&1
     $err = $out | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
     return -not $err
 }

@@ -79,7 +79,9 @@ $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 # they are staged beside the exe or it dies at load.
 . (Join-Path $PSScriptRoot '..\autotest\lib\CliBuildPaths.ps1')
 $cli = Get-CliDcc64Args
-$buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B $($cli.Args) -E`"$PSScriptRoot`" `"$PSScriptRoot\EnumHelperTests.dpr`"" 2>&1
+# Private DCU dir (-NU): a bare dcc64 writes each unit's DCU beside its source, i.e. under src\, where a battery-parallel run_legacy_cli_fixtures sees it.
+New-Item -ItemType Directory -Force (Join-Path $PSScriptRoot '_dcu') | Out-Null
+$buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B -NU`"$PSScriptRoot\_dcu`" $($cli.Args) -E`"$PSScriptRoot`" `"$PSScriptRoot\EnumHelperTests.dpr`"" 2>&1
 $err = $buildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($err) { Write-Host "BUILD FAILED:"; $err | Select-Object -First 12; exit 1 }
 Copy-TreeSitterDlls -Dest $PSScriptRoot | Out-Null
@@ -98,7 +100,9 @@ function Assert($n,$c){ if($c){Write-Host "PASS  $n"}else{Write-Host "FAIL  $n" 
 function Test-Compiles($PasFile) {
     $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
     $fileDir = Split-Path -Parent $PasFile
-    $out = cmd /c "call `"$rs`" && cd /d `"$fileDir`" && dcc64 -B `"$PasFile`"" 2>&1
+    # Private DCU dir (-NU): a bare dcc64 writes each unit's DCU beside its source, i.e. under src\, where a battery-parallel run_legacy_cli_fixtures sees it.
+    New-Item -ItemType Directory -Force (Join-Path $fileDir '_dcu') | Out-Null
+    $out = cmd /c "call `"$rs`" && cd /d `"$fileDir`" && dcc64 -B -NU`"$fileDir\_dcu`" `"$PasFile`"" 2>&1
     $err = $out | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
     return -not $err
 }
@@ -328,7 +332,9 @@ Assert "case8 gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
 Assert "case8 gate: applied simple.pas compiles standalone (dcc64)" (Test-Compiles $gatePas)
 
 $rsPath = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$gateBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$gateDir`" && dcc64 -B `"RoundTripSimple.dpr`"" 2>&1
+# Private DCU dir (-NU): a bare dcc64 writes each unit's DCU beside its source, i.e. under src\, where a battery-parallel run_legacy_cli_fixtures sees it.
+New-Item -ItemType Directory -Force (Join-Path $gateDir '_dcu') | Out-Null
+$gateBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$gateDir`" && dcc64 -B -NU`"$gateDir\_dcu`" `"RoundTripSimple.dpr`"" 2>&1
 $gateBuildErr = $gateBuildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($gateBuildErr) {
     Write-Host "FAIL  case8 gate: RoundTripSimple.dpr compiles" -ForegroundColor Red
@@ -372,7 +378,9 @@ Assert "has_impl_uses gate: exactly ONE implementation uses clause (no duplicate
     (([regex]::Matches($implUsesApplied, '(?m)^uses\s*$')).Count -eq 1)
 Assert "has_impl_uses gate: applied unit compiles standalone (dcc64)" (Test-Compiles $implUsesPas)
 
-$implUsesBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$implUsesDir`" && dcc64 -B `"RoundTripImplUses.dpr`"" 2>&1
+# Private DCU dir (-NU): a bare dcc64 writes each unit's DCU beside its source, i.e. under src\, where a battery-parallel run_legacy_cli_fixtures sees it.
+New-Item -ItemType Directory -Force (Join-Path $implUsesDir '_dcu') | Out-Null
+$implUsesBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$implUsesDir`" && dcc64 -B -NU`"$implUsesDir\_dcu`" `"RoundTripImplUses.dpr`"" 2>&1
 $implUsesBuildErr = $implUsesBuildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($implUsesBuildErr) {
     Write-Host "FAIL  has_impl_uses gate: RoundTripImplUses.dpr compiles (no E2029)" -ForegroundColor Red
@@ -420,7 +428,9 @@ Assert "ordinals-default gate: no System.TypInfo uses clause added (NeedsTypInfo
     (-not ($ordinalsDefaultApplied -match 'System\.TypInfo'))
 Assert "ordinals-default gate: applied result compiles (dcc64)" (Test-Compiles $ordinalsDefaultPas)
 
-$ordinalsDefaultBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$ordinalsDefaultDir`" && dcc64 -B `"RoundTripOrdinalsDefault.dpr`"" 2>&1
+# Private DCU dir (-NU): a bare dcc64 writes each unit's DCU beside its source, i.e. under src\, where a battery-parallel run_legacy_cli_fixtures sees it.
+New-Item -ItemType Directory -Force (Join-Path $ordinalsDefaultDir '_dcu') | Out-Null
+$ordinalsDefaultBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$ordinalsDefaultDir`" && dcc64 -B -NU`"$ordinalsDefaultDir\_dcu`" `"RoundTripOrdinalsDefault.dpr`"" 2>&1
 $ordinalsDefaultBuildErr = $ordinalsDefaultBuildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($ordinalsDefaultBuildErr) {
     Write-Host "FAIL  ordinals-default gate: RoundTripOrdinalsDefault.dpr compiles" -ForegroundColor Red
@@ -470,7 +480,9 @@ Assert "multiline-default gate: no System.TypInfo uses clause added (NeedsTypInf
     (-not ($multiLineDefaultApplied -match 'System\.TypInfo'))
 Assert "multiline-default gate: applied result compiles (dcc64)" (Test-Compiles $multiLineDefaultPas)
 
-$multiLineDefaultBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$multiLineDefaultDir`" && dcc64 -B `"RoundTripMultiLine.dpr`"" 2>&1
+# Private DCU dir (-NU): a bare dcc64 writes each unit's DCU beside its source, i.e. under src\, where a battery-parallel run_legacy_cli_fixtures sees it.
+New-Item -ItemType Directory -Force (Join-Path $multiLineDefaultDir '_dcu') | Out-Null
+$multiLineDefaultBuildOut = cmd /c "call `"$rsPath`" && cd /d `"$multiLineDefaultDir`" && dcc64 -B -NU`"$multiLineDefaultDir\_dcu`" `"RoundTripMultiLine.dpr`"" 2>&1
 $multiLineDefaultBuildErr = $multiLineDefaultBuildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($multiLineDefaultBuildErr) {
     Write-Host "FAIL  multiline-default gate: RoundTripMultiLine.dpr compiles" -ForegroundColor Red

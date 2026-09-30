@@ -25,7 +25,7 @@
   Usage:
     . (Join-Path $PSScriptRoot '..\autotest\lib\CliBuildPaths.ps1')
     $cli = Get-CliDcc64Args
-    "dcc64 -B $($cli.Args) ..."
+    "dcc64 -B -NU<private dcu dir> $($cli.Args) ..."   (never omit -NU: without it every DCU lands beside its source, under src\)
     Copy-TreeSitterDlls -Dest $exeDir
 #>
 

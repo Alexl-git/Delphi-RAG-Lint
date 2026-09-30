@@ -178,7 +178,7 @@ $iso = Join-Path $env:TEMP "drag-lint-manifest-err-$PID"
 if (Test-Path $iso) { Remove-Item -Recurse -Force $iso }
 $isoEng = "$iso\eng"; $isoSrc = "$iso\src"; $isoCwd = "$iso\work"; $isoOut = "$iso\out"
 New-Item -ItemType Directory $isoEng, $isoSrc, $isoCwd, $isoOut | Out-Null
-Copy-Item $Exe "$isoEng\drag-lint.exe" -Force
+Copy-Item $Exe (Join-Path $isoEng 'drag-lint.exe') -Force
 Get-ChildItem -Path (Split-Path $Exe) -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName (Join-Path $isoEng $_.Name) -Force }
 if (Test-Path "$(Split-Path $Exe)\rules") { Copy-Item "$(Split-Path $Exe)\rules" "$isoEng\rules" -Recurse -Force }
 function Write-IsoAscii([string]$Path, [string]$Body) {
@@ -198,7 +198,7 @@ function Get-FileStamp([string]$Path) {
   $i = Get-Item $Path
   '{0}|{1}|{2}' -f $i.Length, $i.LastWriteTimeUtc.Ticks, (Get-FileHash $Path -Algorithm SHA256).Hash
 }
-$ExeSaved = $Exe; $Exe = "$isoEng\drag-lint.exe"
+$ExeSaved = $Exe; $Exe = Join-Path $isoEng 'drag-lint.exe'
 Push-Location $isoCwd
 try {
   # SETUP, while NO local file exists yet: the owner's DB (through the manifest)
@@ -305,7 +305,7 @@ Write-Host '1.20.4 T4: register-project against a manifest with a wrong-typed le
 $reg = Join-Path $env:TEMP "drag-lint-manifest-reg-$PID"
 if (Test-Path $reg) { Remove-Item -Recurse -Force $reg }
 New-Item -ItemType Directory "$reg\eng", "$reg\src", "$reg\work" | Out-Null
-Copy-Item "$isoEng\drag-lint.exe" "$reg\eng\drag-lint.exe" -Force
+Copy-Item (Join-Path $isoEng 'drag-lint.exe') (Join-Path (Join-Path $reg 'eng') 'drag-lint.exe') -Force
 Get-ChildItem -Path $isoEng -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName (Join-Path "$reg\eng" $_.Name) -Force }
 Write-IsoAscii "$reg\src\UIso.pas" "unit UIso;`ninterface`nimplementation`nend."
 Write-IsoAscii "$reg\src\Iso.dpr"  "program Iso;`nuses UIso in 'UIso.pas';`nbegin`nend."
@@ -316,7 +316,7 @@ Write-IsoAscii "$reg\eng\drag-lint.json" (@{
     @{ name = 'Other';    include = @("$reg\src"); sqlOnlyMS = 'yes' }) }
 } | ConvertTo-Json -Depth 6)
 $manBefore = Get-FileStamp "$reg\eng\drag-lint.json"
-$ExeSaved = $Exe; $Exe = "$reg\eng\drag-lint.exe"
+$ExeSaved = $Exe; $Exe = Join-Path (Join-Path $reg 'eng') 'drag-lint.exe'
 Push-Location "$reg\work"
 try {
   $r = Invoke-Split @('register-project', "$reg\src\Iso.dpr", '--apply')
