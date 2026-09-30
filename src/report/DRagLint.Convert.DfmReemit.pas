@@ -334,6 +334,14 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// segment by segment on the DFM surface (TPropMemberCache.ResolvePath, psDfm).</param>
 /// <param name="ATo">The T class, likewise.</param>
 /// <param name="ACastLib"><!-- drag-lint:auto type -->const TCastLib</param>
+/// <param name="AUnreachable">The book's UNREACHABLE rule paths (validation's
+/// records; empty = none). The block's own #convert is picked exactly as the
+/// header gate below picks it, and the rules are run through
+/// WithoutUnreachableRules for THAT block (owner ruling R12, T2h fix round 1):
+/// an unreachable #link / #default is never applied, a #mapping target is
+/// stripped from its branch without changing branch order, and a mapping whose
+/// #when source is unreachable is skipped whole. An owned part re-enters with
+/// the full book and picks its OWN block.</param>
 /// <returns>A TReemitResult: on success, the emitted T block in DfmText plus the
 /// structured Report; on hard failure, Ok=False with Error set.</returns>
 /// <remarks>
@@ -363,7 +371,7 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// </remarks>
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
   const AFrom, ATo: TClassRef;
-  const ACastLib: TCastLib): TReemitResult;
+  const ACastLib: TCastLib; const AUnreachable: TArray<TUnreachablePath>): TReemitResult;
 
 /// <summary>The declared `default` value of the leaf named <paramref name="AName"/>
 /// in a property tree.</summary>
@@ -836,9 +844,33 @@ begin
     if (Q.Kind = rkNote) and SameText(Trim(Q.Text), 'owned:' + AClass) then Exit(True);
 end;
 
-function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
-  const AFrom, ATo: TClassRef;
-  const ACastLib: TCastLib): TReemitResult;
+// The #convert block (ConvertBlocks numbering, 1 = the first #convert) that
+// ReemitBlock's header gate picks for a .dfm object of class AClassName: the
+// first #convert whose FromType's bare tail matches, else the first #convert;
+// 0 when the book has none.
+function ConvertBlockFor(const ARules: TConversionRuleSet; const AClassName: string): Integer;
+var
+  R    : TConversionRule;
+  Block: Integer;
+begin
+  Result:= 0;
+  Block := 0;
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then
+    begin
+      Inc(Block);
+      if Result = 0 then Result:= Block; // the fallback: the first #convert
+      if SameText(BareTypeTail(R.FromType), AClassName) then Exit(Block);
+    end;
+end;
+
+{ The re-emit itself (ReemitComponent's documented behaviour). ARules is the
+  rule set THIS block runs -- already through WithoutUnreachableRules;
+  AAllRules / AUnreachable are the whole book and its records, handed on
+  unchanged when an owned part re-enters ReemitComponent for its own block. }
+function ReemitBlock(const AFromBlock: string; const ARules: TConversionRuleSet;
+  const AFrom, ATo: TClassRef; const ACastLib: TCastLib;
+  const AAllRules: TConversionRuleSet; const AUnreachable: TArray<TUnreachablePath>): TReemitResult;
 var
   FRoot, TRoot: TDfmNode;
   R           : TConversionRule;
@@ -1582,7 +1614,7 @@ var
     begin
       // OWNED part with a rule -> recurse. Re-emit the part block by round-
       // tripping it: emit the sub-object as its own block, re-run ReemitComponent.
-      PartResult:= ReemitComponent(EmitBlock(ASub, 0), ARules, AFrom, ATo, ACastLib);
+      PartResult:= ReemitComponent(EmitBlock(ASub, 0), AAllRules, AFrom, ATo, ACastLib, AUnreachable);
       if PartResult.Ok then
       begin
         // Re-parse the converted part text back into a node and graft it.
@@ -1880,4 +1912,22 @@ begin
   end;
 end;
 
+function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
+  const AFrom, ATo: TClassRef;
+  const ACastLib: TCastLib; const AUnreachable: TArray<TUnreachablePath>): TReemitResult;
+var
+  Root : TDfmNode;
+  Block: Integer;
+begin
+  Block:= 0;
+  Root := nil;
+  try
+    if (Length(AUnreachable) > 0) and ParseDfmBlock(AFromBlock, Root) then
+      Block:= ConvertBlockFor(ARules, Root.ClassName_);
+  finally
+    Root.Free;
+  end;
+  Result:= ReemitBlock(AFromBlock, WithoutUnreachableRules(ARules, AUnreachable, Block), AFrom, ATo, ACastLib,
+    ARules, AUnreachable);
+end;
 end.

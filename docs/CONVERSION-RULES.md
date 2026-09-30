@@ -274,15 +274,21 @@ same cycle guard `proptree` applies).
 differently:
 
 - **NOT FOUND** -- some segment names no member at all on its hop (a typo, a
-  member of another class, a hop through a scalar, a field or a referenced
-  component). This is an **error**: `line N: link FromPath not found in --from
-  tree: <path>`, exit 1.
+  member of another class), or an intermediate hop has no children to name: a
+  scalar or other NON-class-typed hop, a field, or a referenced component --
+  whatever its visibility. This is an **error**: `line N: link FromPath not
+  found in --from tree: <path>`, exit 1.
 - **UNREACHABLE** -- every segment names a member that EXISTS, but one of them
   is inaccessible on the `.dfm` surface: private or strict private anywhere,
-  protected anywhere, a public LEAF, a public hop that is not class-typed, or a
-  field. A private member is recorded as existing but never expanded, so a
-  path running into one stops there. This is a **warning**, the rule is KEPT in
-  the book, and exit stays 0.
+  protected anywhere (a class-typed hop included), or a public LEAF (a public
+  field leaf too). This is a **warning**, the rule is KEPT in the book, and
+  exit stays 0.
+
+A path that runs INTO a private member stops there: the private member's type
+is never expanded, so nothing after it is checked. `FPriv.Typo` is therefore
+UNREACHABLE naming `FPriv`, not NOT FOUND -- the misspelled tail is not looked
+at. (A protected or public hop is still descended, so `ProtPart.Typo` IS NOT
+FOUND.)
 
 The warning text, exactly (one line, printed on **stdout** beside the errors):
 
@@ -303,10 +309,24 @@ the same rule applies to that descendant. The BDE book's 16 `FieldOptions.*` and
 `Constraints.Items.*` links (protected in `Data.DB.TDataSet`) are exactly this
 case.
 
-`convert-apply` and the hidden `convert-reemit` SKIP an unreachable `#link`,
-`#default` or `#mapping` line (the whole line; a `#mapping` with one
-unreachable target sets none of them), keep converting everything else, and
-report it: text mode prints the same `line N: warning: ...` line under
+`convert-apply` and the hidden `convert-reemit` SKIP what is unreachable, per
+`#convert` block (the block of the component being converted), keep
+converting everything else, and report it:
+
+- a `#link` or `#default` line with an unreachable path is not applied;
+- a `#mapping` line keeps its place (branches are still tried in order, first
+  match wins) and loses only its unreachable TARGETS: a value matching that
+  branch sets the branch's reachable targets and never falls through to a
+  later `#when` or `#else`;
+- a `#mapping` whose `#when` SOURCE path is unreachable is skipped WHOLE for
+  that block -- no branch and no `#else` fires (the conservative reading: that
+  branch can never match, and letting another branch write in its place would
+  set a value nobody chose);
+- a mapping applied by two blocks is judged per block: reachable in one and
+  unreachable in the other, it still applies in the first, and the warning
+  names the second block's class only.
+
+Reporting: text mode prints the same `line N: warning: ...` line under
 `Warnings:`; apply/1 JSON appends the same text to the string array
 `warnings[]`, mirrors it in `items[]` as kind `rule-path-unreachable`, and adds
 one object per path to `unreachable[]` (always present, `[]` when none):

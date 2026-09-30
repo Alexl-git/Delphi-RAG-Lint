@@ -35,6 +35,12 @@
        unreachable[] objects (exact key set), the same message appended to the
        string warnings[] and to items[] as rule-path-unreachable, text lines on
        stdout.
+    M  (fix round 1) a #mapping keeps its branch order: an unreachable target
+       is stripped and the branch still wins over #else (M1/M2); an unreachable
+       #when source skips the whole mapping, #else included (M3); a mapping two
+       blocks apply is judged per block -- applied where reachable, warned
+       naming only the other block's class (M4/M5).
+    B6 a path INTO a private member stops there (Secret.Typo is UNREACHABLE).
     E  convert-apply resolves an absent, defaulted 3-segment .dfm leaf
        (P1.P2.Leaf2, default 5) -- resolved_defaults names it.
     F  owned-part recursion: the nested part's absent leaf is NOT answered from
@@ -256,6 +262,46 @@ type
     property Color;
   end;
 
+  // Fix round 1: #mapping branches with an unreachable target / source.
+  TMapSrc = class(TPersistent)
+  private
+    FKind: Integer;
+    FPKind: Integer;
+  protected
+    property PKind: Integer read FPKind write FPKind;
+  published
+    property Kind: Integer read FKind write FKind;
+  end;
+
+  TMapSrc2 = class(TPersistent)
+  private
+    FKind: Integer;
+  published
+    property Kind: Integer read FKind write FKind;
+  end;
+
+  TMapDst = class(TPersistent)
+  private
+    FA: Integer;
+    FB: Integer;
+    FC: Integer;
+    FPubT: Integer;
+  public
+    property PubT: Integer read FPubT write FPubT;
+  published
+    property A: Integer read FA write FA;
+    property B: Integer read FB write FB;
+    property C: Integer read FC write FC;
+  end;
+
+  // The same member names as TMapDst, but A is only PUBLIC here.
+  TMapDst2 = class(TPersistent)
+  private
+    FA: Integer;
+  public
+    property A: Integer read FA write FA;
+  end;
+
   TUnrDst = class(TPersistent)
   private
     FTitle: Integer;
@@ -289,6 +335,38 @@ implementation
 {$R *.dfm}
 
 end.
+'@
+
+Write-Ascii (Join-Path $fx 'MapForm.pas') @'
+unit MapForm;
+
+interface
+
+uses
+  Classes, LibLazy;
+
+type
+  TMapForm = class(TForm)
+    m1: TMapSrc;
+    m2: TMapSrc2;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+
+Write-Ascii (Join-Path $fx 'MapForm.dfm') @'
+object MapForm: TMapForm
+  object m1: TMapSrc
+    Kind = 1
+  end
+  object m2: TMapSrc2
+    Kind = 1
+  end
+end
 '@
 
 Write-Ascii (Join-Path $fx 'LazyForm.dfm') @'
@@ -325,6 +403,11 @@ function Apply([string]$Rules, [string[]]$Extra = @()) {
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 $Hdr = '#convert LibLazy.TLazySrc -> LibLazy.TLazyDst, LibLazy'
+
+# ---- R15: a path INTO a private member stops there ------------------------
+$r = ValidateOut (Book 'privtail.rules' "#link Title <- Secret.Typo`n")
+Check 'B6 Secret.Typo: UNREACHABLE naming Secret (the tail past a private member is not checked)' `
+  (($r.Code -eq 0) -and (HasLine $r.Out (UnrMsg 1 'Secret.Typo' 'Secret' 'private' 'LibLazy.TLazySrc'))) $r.Out
 
 # ---- A: depth is no limit -------------------------------------------------
 $r = Validate (Book 'a4.rules' "#link Title <- P1.P2.P3.Leaf3`n")
@@ -442,6 +525,45 @@ $ej = Json $o
 Check 'U8 convert-reemit skips the unreachable #default (no PubTo) and lists it in unreachable[]; Title = 7 still carried' `
   (($null -ne $ej) -and $ej.ok -and -not ([string]$ej.dfm -match 'PubTo') -and ([string]$ej.dfm -match '(?m)^  Title = 7\r?$') -and `
    (@($ej.unreachable | Where-Object { $_.line -eq 3 -and $_.message -ceq $UMsg3 }).Count -eq 1)) $o
+
+# ---- M: #mapping branch order survives an unreachable path (fix round 1) ---
+$MHdr = '#convert LibLazy.TMapSrc -> LibLazy.TMapDst, LibLazy'
+function Reemit([string]$Dfm, [string]$Rules, [string]$From = 'LibLazy.TMapSrc', [string]$To = 'LibLazy.TMapDst') {
+  $o = (& $Exe convert-reemit --from-block $Dfm --rules $Rules --from $From --to $To --db $db 2>$null) -join "`n"
+  return (Json $o)
+}
+Write-Ascii (P 'k1.dfm') "object s1: TMapSrc`n  Kind = 1`nend`n"
+Write-Ascii (P 'k2.dfm') "object s1: TMapSrc`n  Kind = 2`nend`n"
+$mb = Book 'kmap.rules' "$MHdr`n#apply KMap`n#mapping KMap`n#mapping KMap #when Kind = 1 -> A = 11, PubT = 12`n#mapping KMap #when Kind = 2 -> B = 22`n#mapping KMap #else -> C = 99`n"
+$j = Reemit (P 'k1.dfm') $mb
+$d = if ($j) { [string]$j.dfm } else { '' }
+Check 'M1 branch 1 matches: its REACHABLE target is set (A = 11), the unreachable one is not (no PubT), and #else does NOT fire (no C)' `
+  (($null -ne $j) -and $j.ok -and ($d -match '(?m)^  A = 11\r?$') -and -not ($d -match 'PubT') -and -not ($d -match 'C = 99') -and -not ($d -match 'B = 22') -and `
+   (@($j.unreachable | Where-Object { $_.line -eq 4 -and $_.path -eq 'PubT' -and $_.class -eq 'LibLazy.TMapDst' }).Count -eq 1)) ($d -replace "`r`n", '|')
+$j = Reemit (P 'k2.dfm') $mb
+$d = if ($j) { [string]$j.dfm } else { '' }
+Check 'M2 control: branch 2 still matches its own value (B = 22), nothing else' `
+  (($null -ne $j) -and ($d -match '(?m)^  B = 22\r?$') -and -not ($d -match 'A = 11') -and -not ($d -match 'C = 99')) ($d -replace "`r`n", '|')
+$wb = Book 'wmap.rules' "$MHdr`n#apply WMap`n#mapping WMap`n#mapping WMap #when PKind = 1 -> A = 11`n#mapping WMap #else -> C = 99`n"
+$j = Reemit (P 'k1.dfm') $wb
+$d = if ($j) { [string]$j.dfm } else { '' }
+Check 'M3 unreachable #when SOURCE: the WHOLE mapping is skipped -- no branch, NO #else (no A, no C); warned naming PKind' `
+  (($null -ne $j) -and $j.ok -and -not ($d -match 'A = 11') -and -not ($d -match 'C = 99') -and `
+   (@($j.unreachable | Where-Object { $_.line -eq 4 -and $_.member -eq 'PKind' -and $_.visibility -eq 'protected' }).Count -eq 1)) ($d -replace "`r`n", '|')
+# Two blocks share ONE mapping line: reachable in block 1 (TMapDst.A published),
+# unreachable in block 2 (TMapDst2.A public).
+$sb = Book 'smap.rules' ("#convert LibLazy.TMapSrc -> LibLazy.TMapDst, LibLazy`n#apply SMap`n" +
+  "#convert LibLazy.TMapSrc2 -> LibLazy.TMapDst2, LibLazy`n#apply SMap`n#mapping SMap`n#mapping SMap #when Kind = 1 -> A = 5`n")
+$o = (& $Exe convert-apply --unit (Join-Path $fx 'MapForm.pas') --rules $sb --db $db --format json 2>$null) -join "`n"
+$sj = Json $o
+Check 'M4 shared mapping, JSON: exit 0; exactly ONE unreachable record, naming block 2''s class (LibLazy.TMapDst2) only' `
+  (($LASTEXITCODE -eq 0) -and ($null -ne $sj) -and $sj.ok -and (@($sj.unreachable).Count -eq 1) -and ($sj.unreachable[0].line -eq 6) -and `
+   ($sj.unreachable[0].class -eq 'LibLazy.TMapDst2') -and ($sj.unreachable[0].message -ceq (UnrMsg 6 'A' 'A' 'public' 'LibLazy.TMapDst2'))) $o
+$o = (& $Exe convert-apply --unit (Join-Path $fx 'MapForm.pas') --rules $sb --db $db 2>$null) -join "`n"
+$b1 = [regex]::Match($o, '(?s)object m1: TMapDst\r?\n(.*?)\bend\b')
+$b2 = [regex]::Match($o, '(?s)object m2: TMapDst2\r?\n(.*?)\bend\b')
+Check 'M5 shared mapping, dry-run plan: block 1 still applies it (m1 gets A = 5); block 2 does not (m2 has no A)' `
+  ($b1.Success -and ($b1.Groups[1].Value -match 'A = 5') -and $b2.Success -and -not ($b2.Groups[1].Value -match 'A = 5')) $o
 
 # ---- E + G: resolved default through a 3-segment path; classes_built -------
 $r = Apply (Book 'deep.rules' "$Hdr`n#link Deep <- P1.P2.Leaf2`n") @('--format', 'json')

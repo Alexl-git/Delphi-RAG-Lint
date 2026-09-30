@@ -23607,7 +23607,7 @@ begin
   { Warnings never change the exit code: the book is valid, just suspicious.
     T2h (owner ruling R12): a path through an inaccessible member first, each
     its whole 'line N: warning: ...' text, on stdout beside the errors. }
-  for U in Unreach do
+  for U in DistinctUnreachable(Unreach) do
     Writeln(U.Message);
   for E in ConversionRuleWarnings(RuleSet) do
     Writeln(Format('line %d: warning: %s', [E.LineNo, E.Message]));
@@ -23728,8 +23728,7 @@ begin
     unreachable half of the validation is used here -- this verb never refused
     on a missing path, and does not start to. }
   ValidateConversionRules(Rules, FromCls, ToCls, Unreach);
-  Res:= ReemitComponent(BlockText, WithoutUnreachableRules(Rules, Unreach), FromCls, ToCls,
-    ParseCastLib(AArgs.CastLibFile));
+  Res:= ReemitComponent(BlockText, Rules, FromCls, ToCls, ParseCastLib(AArgs.CastLibFile), Unreach);
   finally
     Caches.Free;
   end;
@@ -23812,7 +23811,7 @@ begin
     JReport.AddPair('notes',      ArrJson(Res.Report.Stubs + Res.Report.Relocated +
                                           Res.Report.MappingNotes + Res.Report.Notes));
     JRoot.AddPair('report', JReport);
-    JRoot.AddPair('unreachable', UnreachableJson(Unreach)); { T2h -- same objects as apply/1 }
+    JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(Unreach))); { T2h -- same objects as apply/1 }
     Writeln(JRoot.ToJSON);
   finally
     JRoot.Free;
@@ -24463,7 +24462,7 @@ begin
       (see UnreachableJson for the keys). ALWAYS present, [] when none.
       warnings[] above stays an array of STRINGS and carries each object's
       message too, so a consumer reading only warnings[] still sees them. }
-    JRoot.AddPair('unreachable', UnreachableJson(ACtx.Unreachable));
+    JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(ACtx.Unreachable)));
 
     Writeln(JRoot.ToJSON);
   finally
@@ -24551,7 +24550,8 @@ end;
   (BuildBlockClasses), and a #link carrying a glyph expression is refused
   (UnrealisedGlyphLinks). A path through a member that exists but is
   inaccessible is not an error: it comes back in AUnreachable (T2h, owner
-  ruling R12). }
+  ruling R12), one record per block it is unreachable in -- print through
+  DistinctUnreachable, filter per block through WithoutUnreachableRules. }
 function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
   out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
 var
@@ -24611,8 +24611,10 @@ end;
 /// against the block(s) that #apply it; a block whose type resolves in no --db is an error on
 /// its #convert line (R7) -- and a rules error refuses (exit 1) rather than attempting a plan
 /// from a broken rule set. A #link / #default / #mapping path whose members all exist but one
-/// is inaccessible on the .dfm surface is NOT an error (T2h, owner ruling R12): the line is
-/// skipped (WithoutUnreachableRules), the unit converts everything else, and each is reported
+/// is inaccessible on the .dfm surface is NOT an error (T2h, owner ruling R12): it is skipped
+/// per block (WithoutUnreachableRules, inside each re-emit -- a #link / #default line is dropped,
+/// a #mapping keeps its branch order and loses only the unreachable targets, and a mapping whose
+/// #when source is unreachable is skipped whole), the unit converts everything else, and each is reported
 /// -- apply/1 unreachable[] objects, the same text in warnings[] / items[]
 /// (rule-path-unreachable), and a text-mode 'line N: warning: ...' line under Warnings. Validation and BuildApplyPlan share one TConvertTreeCache, so each
 /// class's members are resolved once per run (json classes_built). The freshness guard
@@ -24708,7 +24710,7 @@ var
     It: TApplyItem;
     U : TUnreachablePath;
   begin
-    for U in JCtx.Unreachable do
+    for U in DistinctUnreachable(JCtx.Unreachable) do
     begin
       It         := Default(TApplyItem);
       It.Kind    := aikRulePathUnreachable;
@@ -24902,7 +24904,7 @@ begin
     JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     if JCtx.ComponentPart = 'applied' then
-      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, WithoutUnreachableRules(Rules, JCtx.Unreachable),
+      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
         AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
     else
       PlanRes:= BuildUnitRulesOnlyPlan(UnitPas, Rules);

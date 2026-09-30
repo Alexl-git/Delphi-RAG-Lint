@@ -32,7 +32,6 @@ interface
 
 uses
   System.SysUtils,
-  DRagLint.Convert.PropTree,
   DRagLint.Convert.PropCache;
 
 type
@@ -223,6 +222,12 @@ type
   /// exactly: 'line N: warning: &lt;Path&gt;: &lt;Member&gt; is
   /// &lt;Visibility&gt; in &lt;DeclaringClass&gt;; never applied unless a
   /// descendant class changes its visibility'.
+  /// Block is the #convert block (ConvertBlocks numbering) whose class made the
+  /// path unreachable, and IsWhen marks a #mapping line's #when SOURCE path (as
+  /// opposed to a target it sets); both drive WithoutUnreachableRules and are
+  /// never emitted. A #mapping line checked in several blocks has one record
+  /// per block it is unreachable in, so one message can appear more than once
+  /// -- print through DistinctUnreachable.
   /// </remarks>
   TUnreachablePath = record
     LineNo        : Integer;
@@ -231,6 +236,8 @@ type
     Visibility    : string;
     DeclaringClass: string;
     Message       : string;
+    Block         : Integer;
+    IsWhen        : Boolean;
   end;
 
 /// <summary>Parses the reFind-superset conversion-rules DSL text into a rule set.
@@ -350,21 +357,42 @@ function ValidateConversionRules(const ARules: TConversionRuleSet;
 function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
   const ABlockClasses: TArray<TBlockClasses>; out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
 
-/// <summary>The rule set minus every #link, #default and #mapping line that
-/// has an UNREACHABLE path -- what convert-apply and convert-reemit actually
-/// run (owner ruling R12: such a rule is skipped, never applied).</summary>
+/// <summary>The rule set one #convert block actually RUNS: its UNREACHABLE
+/// paths taken out (owner ruling R12: such a rule is skipped, never applied)
+/// without disturbing any #mapping's branch order.</summary>
 /// <param name="ARules">The parsed rule set.</param>
 /// <param name="AUnreachable">What validation reported
 /// (ValidateConversionRules / ValidateConversionRulesPerBlock).</param>
-/// <returns>A copy of ARules without those lines; every other rule, its
-/// order and its LineNo unchanged. ParseErrors are kept.</returns>
-/// <remarks>The whole LINE is skipped: a #mapping line with one unreachable
-/// target among several sets none of them, and a #link with one unreachable
-/// side carries nothing. Only rkLink, rkDefault and rkMapping lines are ever
-/// removed -- the #convert headers, #apply and the unit rules stay, so block
-/// numbering is unchanged. Pure.</remarks>
+/// <param name="ABlock">The #convert block being run (ConvertBlocks
+/// numbering: 1 = the first #convert); 0 or less = no block (only the
+/// #link / #default removal applies -- the .pas access-site pass).</param>
+/// <returns>A copy of ARules; every kept rule's order and LineNo unchanged,
+/// ParseErrors kept.</returns>
+/// <remarks>
+/// #link / #default: a line with an unreachable path is removed. Each such
+/// line is validated in exactly ONE block (its own), so this is already
+/// per-block; it is removed whatever ABlock is -- a dead rule stays dead in
+/// the book-wide leak ReemitComponent has for #link too.
+/// #mapping (per block, only records with Block = ABlock): an unreachable
+/// TARGET is stripped from that line's set list and the line is KEPT, so a
+/// value matching that branch still sets its reachable targets and never
+/// falls through to a later #when or #else. An unreachable #when SOURCE
+/// (IsWhen) removes EVERY line of that mapping (declaration, every #when, the
+/// #else) for this block: the branch can never match, and letting a later
+/// branch or #else fire in its place would write a value nobody chose -- the
+/// conservative reading (controller fix round 1). Its #apply stays and finds
+/// nothing to evaluate. The #convert headers, #apply and the unit rules are
+/// never touched, so block numbering is unchanged. Pure.
+/// </remarks>
 function WithoutUnreachableRules(const ARules: TConversionRuleSet;
-  const AUnreachable: TArray<TUnreachablePath>): TConversionRuleSet;
+  const AUnreachable: TArray<TUnreachablePath>; ABlock: Integer): TConversionRuleSet;
+
+/// <summary>AUnreachable with each message once, in first-seen order -- what
+/// every surface prints and emits.</summary>
+/// <param name="AUnreachable">Validation's records (several per message
+/// when a #mapping line is unreachable in several blocks).</param>
+/// <returns>The first record of each distinct Message. Pure.</returns>
+function DistinctUnreachable(const AUnreachable: TArray<TUnreachablePath>): TArray<TUnreachablePath>;
 
 /// <summary>Non-fatal findings on a parsed rule set: things that validate but
 /// are almost certainly not what the author meant.</summary>
@@ -1084,16 +1112,24 @@ var
     Result:= Format(' (#convert line %d: %s -> %s)', [C.LineNo, C.FromType, C.ToType]);
   end;
 
-  // Records an UNREACHABLE path once per (line, path, offending member and its
-  // class) -- a #mapping line can be checked in several blocks; a #link naming
-  // the same path on both sides warns once per side whose class blocks it.
-  procedure AddUnreachable(ALineNo: Integer; const APath: string; const ARes: TPathResolution);
+  // Records an UNREACHABLE path once per (line, block, #when-or-target, path,
+  // offending member and its class): a #mapping line checked in several blocks
+  // gets one record per block (WithoutUnreachableRules filters per block;
+  // DistinctUnreachable prints each message once), and a #link naming the same
+  // path on both sides warns once per side whose class blocks it.
+  procedure AddUnreachable(ALineNo, ABlock: Integer; AIsWhen: Boolean; const APath: string;
+    const ARes: TPathResolution);
   var
     U: TUnreachablePath;
   begin
     for U in Unr do
-      if (U.LineNo = ALineNo) and SameText(U.Path, APath) and SameText(U.Member, ARes.Member) and
-         SameText(U.DeclaringClass, ARes.DeclaringClass) then Exit;
+    begin
+      var SameRule: Boolean:= (U.LineNo = ALineNo) and (U.Block = ABlock) and (U.IsWhen = AIsWhen);
+      var SameHit : Boolean:= SameText(U.Path, APath) and SameText(U.Member, ARes.Member);
+      if SameRule and SameHit and SameText(U.DeclaringClass, ARes.DeclaringClass) then Exit;
+    end;
+    U.Block         := ABlock;
+    U.IsWhen        := AIsWhen;
     U.LineNo        := ALineNo;
     U.Path          := APath;
     U.Member        := ARes.Member;
@@ -1107,8 +1143,10 @@ var
   // real (not empty, not the '???' stub) and some segment names NO member
   // (TPropMemberCache.ResolvePathEx on the DFM surface -- ruling R8; see
   // TPropSurface). A path whose members all exist but fail R8 is not missing:
-  // it is recorded as UNREACHABLE (owner ruling R12) for rule line ALineNo.
-  function Missing(const AClass: TClassRef; const APath: string; ALineNo: Integer): Boolean;
+  // it is recorded as UNREACHABLE (owner ruling R12) for rule line ALineNo,
+  // checked in block ABlock; AIsWhen marks a #mapping #when source path.
+  function Missing(const AClass: TClassRef; const APath: string; ALineNo, ABlock: Integer;
+    AIsWhen: Boolean): Boolean;
   var
     Res: TPathResolution;
   begin
@@ -1117,7 +1155,7 @@ var
     Res:= AClass.ResolvePathEx(APath, psDfm);
     case Res.Outcome of
       poNotFound   : Result:= True;
-      poUnreachable: AddUnreachable(ALineNo, APath, Res);
+      poUnreachable: AddUnreachable(ALineNo, ABlock, AIsWhen, APath, Res);
     end;
   end;
 
@@ -1160,11 +1198,11 @@ var
     SP: TMappingSetPair;
   begin
     T:= ClassesOf(ABlock);
-    if Missing(T.FromClass, AMap.WhenFrom, AMap.LineNo) then
+    if Missing(T.FromClass, AMap.WhenFrom, AMap.LineNo, ABlock, True) then
       Add(AMap.LineNo, Format('mapping %s #when path not found in --from tree: %s',
         [AMap.MapName, AMap.WhenFrom]) + Where(ABlock));
     for SP in AMap.Sets do
-      if Missing(T.ToClass, SP.ToPath, AMap.LineNo) then
+      if Missing(T.ToClass, SP.ToPath, AMap.LineNo, ABlock, False) then
         Add(AMap.LineNo, Format('mapping %s target path not found in --to tree: %s',
           [AMap.MapName, SP.ToPath]) + Where(ABlock));
   end;
@@ -1176,13 +1214,13 @@ var
     T:= ClassesOf(ABlock);
     if ARule.Kind = rkDefault then
     begin
-      if Missing(T.ToClass, ARule.ToPath, ARule.LineNo) then
+      if Missing(T.ToClass, ARule.ToPath, ARule.LineNo, ABlock, False) then
         Add(ARule.LineNo, Format('default ToPath not found in --to tree: %s', [ARule.ToPath]) + Where(ABlock));
       Exit;
     end;
-    if Missing(T.ToClass, ARule.ToPath, ARule.LineNo) then
+    if Missing(T.ToClass, ARule.ToPath, ARule.LineNo, ABlock, False) then
       Add(ARule.LineNo, Format('link ToPath not found in --to tree: %s', [ARule.ToPath]) + Where(ABlock));
-    if Missing(T.FromClass, ARule.FromPath, ARule.LineNo) then
+    if Missing(T.FromClass, ARule.FromPath, ARule.LineNo, ABlock, False) then
       Add(ARule.LineNo, Format('link FromPath not found in --from tree: %s', [ARule.FromPath]) + Where(ABlock));
   end;
 
@@ -1292,25 +1330,86 @@ begin
 end;
 
 function WithoutUnreachableRules(const ARules: TConversionRuleSet;
-  const AUnreachable: TArray<TUnreachablePath>): TConversionRuleSet;
+  const AUnreachable: TArray<TUnreachablePath>; ABlock: Integer): TConversionRuleSet;
 var
-  Skip: TDictionary<Integer, Boolean>;
-  U   : TUnreachablePath;
-  R   : TConversionRule;
-  Kept: TList<TConversionRule>;
+  U       : TUnreachablePath;
+  R       : TConversionRule;
+  Kept    : TList<TConversionRule>;
+  DeadLine: TDictionary<Integer, Boolean>; // #link / #default lines, any block
+  DeadMap : TDictionary<string, Boolean>;  // UPPER(mapping name): #when source unreachable in ABlock
+  Stripped: TList<TMappingSetPair>;
+
+  // True when ABlock's records name ASet's target on the #mapping line ALineNo.
+  function TargetDead(ALineNo: Integer; const ASet: TMappingSetPair): Boolean;
+  var
+    V: TUnreachablePath;
+  begin
+    for V in AUnreachable do
+      if (V.Block = ABlock) and (not V.IsWhen) and (V.LineNo = ALineNo) and SameText(V.Path, ASet.ToPath) then
+        Exit(True);
+    Result:= False;
+  end;
+
 begin
   Result:= ARules;
   if Length(AUnreachable) = 0 then Exit;
-  Skip:= TDictionary<Integer, Boolean>.Create;
-  Kept:= TList<TConversionRule>.Create;
+  DeadLine:= TDictionary<Integer, Boolean>.Create;
+  DeadMap := TDictionary<string, Boolean>.Create;
+  Kept    := TList<TConversionRule>.Create;
+  Stripped:= TList<TMappingSetPair>.Create;
   try
-    for U in AUnreachable do Skip.AddOrSetValue(U.LineNo, True);
+    for U in AUnreachable do
+      if U.IsWhen and (U.Block = ABlock) and (ABlock > 0) then
+      begin
+        for R in ARules.Rules do
+          if (R.Kind = rkMapping) and (R.LineNo = U.LineNo) then DeadMap.AddOrSetValue(UpperCase(R.MapName), True);
+      end
+      else if not U.IsWhen then
+        DeadLine.AddOrSetValue(U.LineNo, True);
     for R in ARules.Rules do
-      if not ((R.Kind in [rkLink, rkDefault, rkMapping]) and Skip.ContainsKey(R.LineNo)) then Kept.Add(R);
+    begin
+      if (R.Kind in [rkLink, rkDefault]) and DeadLine.ContainsKey(R.LineNo) then Continue;
+      if R.Kind <> rkMapping then
+      begin
+        Kept.Add(R);
+        Continue;
+      end;
+      if DeadMap.ContainsKey(UpperCase(R.MapName)) then Continue;
+      var M: TConversionRule:= R;
+      if ABlock > 0 then
+      begin
+        Stripped.Clear;
+        for var SP: TMappingSetPair in R.Sets do
+          if not TargetDead(R.LineNo, SP) then Stripped.Add(SP);
+        M.Sets:= Stripped.ToArray;
+      end;
+      Kept.Add(M);
+    end;
     Result.Rules:= Kept.ToArray;
   finally
+    Stripped.Free;
     Kept.Free;
-    Skip.Free;
+    DeadMap.Free;
+    DeadLine.Free;
+  end;
+end;
+
+function DistinctUnreachable(const AUnreachable: TArray<TUnreachablePath>): TArray<TUnreachablePath>;
+var
+  Seen: TDictionary<string, Boolean>;
+  U   : TUnreachablePath;
+begin
+  Result:= nil;
+  Seen  := TDictionary<string, Boolean>.Create;
+  try
+    for U in AUnreachable do
+      if not Seen.ContainsKey(U.Message) then
+      begin
+        Seen.Add(U.Message, True);
+        Result:= Result + [U];
+      end;
+  finally
+    Seen.Free;
   end;
 end;
 

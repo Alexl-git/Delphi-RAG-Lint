@@ -330,6 +330,21 @@ type
     Error : string;
   end;
 
+  /// <summary>The rule book convert-apply runs: the parsed rules and what
+  /// validation found UNREACHABLE in them (owner ruling R12, T2h).</summary>
+  /// <remarks>A record so BuildApplyPlan keeps within the parameter limit;
+  /// the two halves always travel together.</remarks>
+  TApplyBook = record
+    Rules      : TConversionRuleSet;
+    Unreachable: TArray<TUnreachablePath>;
+    /// <summary>Pairs a rule set with its unreachable records.</summary>
+    /// <param name="ARules">The parsed, validated rules.</param>
+    /// <param name="AUnreachable">ValidateConversionRulesPerBlock's records.</param>
+    /// <returns>The pair.</returns>
+    class function Create(const ARules: TConversionRuleSet;
+      const AUnreachable: TArray<TUnreachablePath>): TApplyBook; static;
+  end;
+
   /// <summary>Outcome of CheckFreshness: whether the F and T types' indexed
   /// source is safe to trust for this convert-apply run.</summary>
   /// <remarks>
@@ -487,9 +502,13 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// instances being converted.</param>
 /// <param name="ADfmPath">Path to the .dfm file containing the instances'
 /// component blocks.</param>
-/// <param name="ARules">The validated conversion rule set (see
+/// <param name="ABook">The validated conversion rule set (ABook.Rules, see
 /// DRagLint.Convert.Rules) describing which From types convert to which To
-/// types and how each property/event maps.</param>
+/// types and how each property/event maps, with validation's UNREACHABLE rule
+/// paths (ABook.Unreachable, owner ruling R12, T2h): each instance's re-emit
+/// runs its own block's rules through WithoutUnreachableRules (inside
+/// ReemitComponent), and the .pas access-site pass skips every unreachable
+/// #link.</param>
 /// <param name="AOnly">Optional allow-list of instance names to restrict the
 /// plan to; empty means convert every instance that matches a rule.</param>
 /// <param name="ACastLib"><!-- drag-lint:auto type -->const TCastLib</param>
@@ -544,7 +563,7 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AOnly: TArray<string>;
+  const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
 
 /// <summary>The convert-apply plan for a unit whose COMPONENT part is skipped
@@ -1461,8 +1480,15 @@ begin
   end;
 end;
 
+class function TApplyBook.Create(const ARules: TConversionRuleSet;
+  const AUnreachable: TArray<TUnreachablePath>): TApplyBook;
+begin
+  Result.Rules      := ARules;
+  Result.Unreachable:= AUnreachable;
+end;
+
 function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AOnly: TArray<string>;
+  const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
 var
   Stores      : TArray<ISymbolStore>; { ATrees.Stores, in --db order }
@@ -1845,7 +1871,8 @@ var
     E : TTextEdit;
     It: TApplyItem;
   begin
-    for var LinkRule in ARules.Rules do
+    { T2h: an UNREACHABLE #link is never applied -- on the .pas side either. }
+    for var LinkRule in WithoutUnreachableRules(ABook.Rules, ABook.Unreachable, 0).Rules do
     begin
       if LinkRule.Kind <> rkLink then Continue;
       if (LinkRule.ToPath = '') or (LinkRule.FromPath = '') then Continue;
@@ -2020,7 +2047,7 @@ var
     E : TTextEdit;
     It: TApplyItem;
   begin
-    var UnitRules  : Boolean      := BookHasUnitRules(ARules);
+    var UnitRules  : Boolean      := BookHasUnitRules(ABook.Rules);
     var ConvertAdds: TList<string>:= TList<string>.Create;
     try
       for var ToType_ in ToTypesSeen do
@@ -2051,7 +2078,7 @@ var
       AUses.Ok:= True;
       if UnitRules then
       begin
-        AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules,
+        AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
           ConvertAdds.ToArray);
         if AUses.Ok then
           for E in AUses.Edits do Edits.Add(E);
@@ -2170,7 +2197,7 @@ begin
   begin Result.Error:= 'no symbol store available (empty AStores)'; Exit; end;
 
   DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
-  Instances:= FindConvertInstances(DfmText, ARules, AOnly);
+  Instances:= FindConvertInstances(DfmText, ABook.Rules, AOnly);
   if Length(Instances) = 0 then
   begin
     Result.Error:= 'no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)';
@@ -2295,8 +2322,8 @@ begin
       end;
 
       var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
-      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ARules, ATrees.ClassFor(Inst.FromType),
-        ATrees.ClassFor(Inst.ToType), ACastLib);
+      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ABook.Rules, ATrees.ClassFor(Inst.FromType),
+        ATrees.ClassFor(Inst.ToType), ACastLib, ABook.Unreachable);
       if not ReemitRes.Ok then
       begin
         It:= InstItem(aikInstanceSkipped, afWarnings,
