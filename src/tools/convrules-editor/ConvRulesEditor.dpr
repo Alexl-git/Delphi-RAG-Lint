@@ -41,6 +41,7 @@ uses
   , ConvRules.ConvertRun in 'ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in 'ConvRules.ConvertRunner.pas'
   , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
+  , ConvRules.ConvertTab in 'ConvRules.ConvertTab.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

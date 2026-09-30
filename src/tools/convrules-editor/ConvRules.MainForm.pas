@@ -51,6 +51,7 @@ uses
   , ConvRules.UsesHarvest // THarvestedUnit: a field's type, so INTERFACE-visible
   , ConvRules.UnitStatus  // dl:unit ConvRules.UnitStatus accepted -- TDestinationResolver types a field; STATUS_MISSING_TEXT travels with StatusText so the bold-MISSING draw cannot drift from the text it matches
   , ConvRules.UnitMask    // TUnitRow: a field's type
+  , ConvRules.ConvertTab  // TConvertTab: a field's type
   ;
 
 const
@@ -116,6 +117,8 @@ type
       FPickW32Loaded : Boolean       ;
       FPickW64Loaded : Boolean       ;
       FTabUnits      : TTabSheet             ; // the Unit Rules page; "is it active?" checks
+      FTabConvert    : TTabSheet             ; // the Convert page; drops go to FConvertTab while it is active
+      FConvertTab    : TConvertTab           ; // checked rule books x source units
       FHarvestStrip  : TPanel                ; // the control strip above FUnitList
       FHarvestBtnRow : TFlowPanel            ; // Add source / Paste / Clear row (Task 7 adds none; Task 6 adds rows below)
       FDropTarget    : IDropTarget           ; // OLE target on the form's window; re-registered by CreateWnd
@@ -1879,7 +1882,23 @@ type
       /// and sets FDestWarn; errors are reported, never raised -- the caller puts
       /// FDestNote on the status line.</remarks>
       procedure ReclassifyHarvest;
-      procedure AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string);
+      /// <summary>Merges AAdded into the harvest, reclassifies and reports.</summary>
+      /// <param name="AAdded">Harvested units.</param>
+      /// <param name="AErrors">Files that could not be read.</param>
+      /// <param name="AWhat">Where they came from, for the status line.</param>
+      /// <param name="AActivate">False = stay on the current tab (the Convert
+      /// tab feeds its sources in the background).</param>
+      procedure AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string; AActivate: Boolean = True);
+      /// <summary>The rules folder as of now: FRulesFolder once known, else the
+      /// open book's folder.</summary>
+      /// <returns>The folder, or '' when neither is known.</returns>
+      function RulesFolderNow: string;
+      /// <summary>The Convert tab became visible: re-list its books.</summary>
+      /// <param name="Sender">FTabConvert.</param>
+      procedure ConvertTabShow(Sender: TObject);
+      /// <summary>Conversion &gt; Convert...: shows the Convert tab.</summary>
+      /// <param name="Sender">The menu item.</param>
+      procedure DoShowConvertTab(Sender: TObject);
       procedure AddSourceFiles(const APaths: TArray<string>);
       procedure AddSourceText(const AText: string);
       procedure DoAddSource(Sender: TObject);
@@ -2631,6 +2650,8 @@ begin
   AddMenuCmd(FMnuConversion, '-', '', nil);
   FMiExamine     := AddMenuCmd(FMnuConversion, '&Examine...' , 'Pick .dfm/.pas files and mark the From properties they actually use (green)', DoExamine);
   FMiClearExamine:= AddMenuCmd(FMnuConversion, '&Clear marks', 'Drop the current examination and unmark all rows', DoClearExamine);
+  AddMenuCmd(FMnuConversion, '-', '', nil);
+  AddMenuCmd(FMnuConversion, 'Con&vert...', 'Open the Convert tab: apply checked rule books to a list of source units', DoShowConvertTab);
 
   LMapping:= Top('&Mapping');
   AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
@@ -3159,6 +3180,61 @@ begin
   AddPopupItem(FUnitPopup, '-', nil);
   FMiDelete:= AddPopupItem(FUnitPopup, 'Delete'              , DoDeleteUnit        );
   FUnitList.PopupMenu:= FUnitPopup;
+
+  // --- Convert tab: checked rule books x listed source units, in place ---
+  FTabConvert:= TTabSheet.Create(FTabs);
+  FTabConvert.PageControl:= FTabs;
+  FTabConvert.Caption:= 'Convert';
+  var LHost: TConvertHost;
+  LHost.ExePath:= GEditorExe;
+  // The engine's FIRST --db is its primary: the project DB leads, and the
+  // copy of it inside EngineDbSet is dropped.
+  LHost.GetDbs:= function: TArray<string>
+    begin
+      Result:= [GEditorProjectDb];
+      for var LDb: string in EngineDbSet do
+        if not SameText(LDb, GEditorProjectDb) then
+          Result:= Result + [LDb];
+    end;
+  LHost.GetProjectDb:= function: string
+    begin
+      Result:= GEditorProjectDb;
+    end;
+  LHost.GetProjectFile:= function: string
+    begin
+      Result:= Trim(FEdDest.Text);
+      if Result = '' then
+        Result:= ProjectFileForDb(GEditorProjectDb);
+    end;
+  LHost.GetRulesFolder:= function: string
+    begin
+      Result:= RulesFolderNow;
+    end;
+  LHost.GetOpenBook:= function: string
+    begin
+      Result:= FFilePath;
+    end;
+  LHost.ConfirmOpenBookSaved:= function: Boolean
+    begin
+      Result:= ConfirmDiscard;
+    end;
+  LHost.FeedHarvest:= procedure(APaths: TArray<string>)
+    var
+      LErrs: TArray<string>;
+    begin
+      AddHarvest(HarvestFiles(APaths, LErrs), LErrs, 'Convert sources', False);
+    end;
+  LHost.SetStatus:= procedure(AText: string; AIsError: Boolean)
+    begin
+      if AIsError then
+        SetError(AText)
+      else
+        SetStatus(AText);
+    end;
+  FConvertTab:= TConvertTab.Create(Self, LHost);
+  FConvertTab.Parent:= FTabConvert;
+  FConvertTab.Align := alClient;
+  FTabConvert.OnShow:= ConvertTabShow;
 
   // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
   // than relying on "index 0 happens to be first created", which TabRules.
@@ -4777,9 +4853,7 @@ var
   Errs  : TArray<string>;
   Folder: string        ;
 begin
-  Folder:= Trim(FRulesFolder);
-  if Folder = '' then
-    Folder:= ExtractFilePath(FFilePath);
+  Folder:= RulesFolderNow;
   if Folder = '' then
   begin
     SetStatus('No rules folder yet -- open a rule book first, then Rescan rules.');
@@ -6372,6 +6446,14 @@ end; // function
 
 procedure TConvRulesForm.FormCloseQueryHandler(Sender: TObject; var CanClose: Boolean);
 begin
+  // Closing mid-run would end the process while a convert-apply is writing a
+  // unit, with no restore and no report (TConvertTab's remarks).
+  if (FConvertTab <> nil) and FConvertTab.Running then
+  begin
+    SetError('A conversion is running -- press Cancel on the Convert tab and wait for the current unit to finish before closing.');
+    CanClose:= False;
+    Exit;
+  end;
   CanClose:= ConfirmDiscard;
 end;
 
@@ -6489,6 +6571,9 @@ begin
       RefreshFormTypes;
       SetStatus(SaveMsg);
     end;
+    // The saved book may be new to the folder, or changed kind (convert / unit rules).
+    if FConvertTab <> nil then
+      FConvertTab.RefreshBooks;
 
     Result:= True; // the file IS on disk; a failed validation is a report, not a failure
   finally
@@ -7075,12 +7160,30 @@ begin
   RefreshUnitList;
 end;
 
-procedure TConvRulesForm.AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string);
+function TConvRulesForm.RulesFolderNow: string;
+begin
+  Result:= Trim(FRulesFolder);
+  if Result = '' then
+    Result:= ExtractFilePath(FFilePath);
+end;
+
+procedure TConvRulesForm.ConvertTabShow(Sender: TObject);
+begin
+  FConvertTab.RefreshBooks;
+end;
+
+procedure TConvRulesForm.DoShowConvertTab(Sender: TObject);
+begin
+  FTabs.ActivePage:= FTabConvert;
+end;
+
+procedure TConvRulesForm.AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string; AActivate: Boolean);
 var
   Before: Integer;
   Msg   : string;
 begin
-  FTabs.ActivePage:= FTabUnits;
+  if AActivate then
+    FTabs.ActivePage:= FTabUnits;
   Before  := Length(FHarvest);
   FHarvest:= MergeHarvest(FHarvest, AAdded);
   ReclassifyHarvest;
@@ -7189,7 +7292,10 @@ begin
     FDropTarget:= TFormDropTarget.Create(
       procedure(const AFiles: TArray<string>)
       begin
-        AddSourceFiles(AFiles);
+        if FTabs.ActivePage = FTabConvert then
+          FConvertTab.AddSources(AFiles)
+        else
+          AddSourceFiles(AFiles);
       end,
       procedure(const AText: string)
       begin
