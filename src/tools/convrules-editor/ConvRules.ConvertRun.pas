@@ -63,12 +63,15 @@ type
     Notes   : TArray<string>;
   end;
 
-/// <summary>The backup path for AFile: AFile + '.BCK' + N, N one above the
-/// highest existing N (gaps are not reused, so N orders backups in time).</summary>
-/// <param name="AFile">The file about to be changed.</param>
+/// <summary>The backup paths for ONE unit's files, sharing one number: N is one
+/// above the highest existing .BCK&lt;N&gt; over ALL of AFiles, so a unit's .pas
+/// and .dfm restore points pair up by number (X.pas.BCK1 + X.dfm.BCK3 -> both
+/// get .BCK4). Gaps are not reused, so N orders backups in time.</summary>
+/// <param name="AFiles">The unit's files (its .pas and its .dfm), whether or
+/// not each exists -- a stale X.dfm.BCK&lt;N&gt; still counts.</param>
 /// <param name="AExists">File-existence probe (injected for tests).</param>
-/// <returns>A path that does not exist yet.</returns>
-function NextBackupPath(const AFile: string; const AExists: TFileProbe): string;
+/// <returns>AFiles[i] + '.BCK' + N, in AFiles order; none of them exists yet.</returns>
+function SharedBackupPaths(const AFiles: TArray<string>; const AExists: TFileProbe): TArray<string>;
 
 /// <summary>Classifies a rule book by the directives it holds.</summary>
 /// <param name="ARulesText">The .rules text.</param>
@@ -92,33 +95,38 @@ function MoveEntry(const AEntries: TArray<TBookEntry>; AIndex, ADelta: Integer):
 /// (Vcl.Forms) is a library unit, neither expanded nor reported.</remarks>
 function ExpandSources(const APaths: TArray<string>; out AErrors: TArray<string>): TArray<string>;
 
-/// <summary>True when the unit AUnitPas declares (its file name without the
-/// extension) is one of AIndexedUnits, compared case-insensitively.</summary>
+/// <summary>True when the FILE AUnitPas is one of AIndexedFiles: both sides
+/// ExpandFileName'd, compared case-insensitively.</summary>
 /// <param name="AUnitPas">A .pas path.</param>
-/// <param name="AIndexedUnits">Unit names in the project index (any case).</param>
+/// <param name="AIndexedFiles">File paths in the project index (its `files`
+/// table, TEngineAdapter.ListIndexedFiles).</param>
 /// <returns>True = indexed.</returns>
-function UnitInIndex(const AUnitPas: string; const AIndexedUnits: TArray<string>): Boolean;
+/// <remarks>By PATH, never by unit name: convert-apply locates a unit's .dfm
+/// block by its path, and the migration case is a same-named unit in another
+/// tree (M2022\DM1.pas beside the project's own DM1.pas) -- a name match would
+/// pass a unit the engine then cannot find.</remarks>
+function UnitInIndex(const AUnitPas: string; const AIndexedFiles: TArray<string>): Boolean;
 
 /// <summary>The Convert tab's DISPLAYED text for one source row.</summary>
 /// <param name="AUnitPas">The listed .pas path. It stays the item string --
 /// the job and Preflight consume it -- so only the display changes.</param>
-/// <param name="AIndexedUnits">Unit names in the project index (any case).</param>
+/// <param name="AIndexedFiles">File paths in the project index (see UnitInIndex).</param>
 /// <param name="AIndexKnown">False when the index could not be read: then
 /// nothing is flagged -- unknown is never reported as indexed OR unindexed.</param>
 /// <param name="AFlagged">True = the unit is known NOT to be in the index.</param>
 /// <returns>AUnitPas, plus ' -- not in the project index' when AFlagged.</returns>
-function SourceRowText(const AUnitPas: string; const AIndexedUnits: TArray<string>; AIndexKnown: Boolean; out AFlagged: Boolean): string;
+function SourceRowText(const AUnitPas: string; const AIndexedFiles: TArray<string>; AIndexKnown: Boolean; out AFlagged: Boolean): string;
 
 /// <summary>Decides whether a Convert run may start, and which books run.</summary>
 /// <param name="ABooks">The checklist.</param>
 /// <param name="AUnits">The source units (.pas paths).</param>
-/// <param name="AIndexedUnits">Unit names in the project index (any case).</param>
+/// <param name="AIndexedFiles">File paths in the project index (see UnitInIndex).</param>
 /// <param name="AUnitRulesSupported">The engine reports apply_unit_rules.</param>
-/// <returns>Ok=False when no book is checked, no unit is listed, or a unit is
-/// not in the index (convert-apply would report a FALSE "could not locate .dfm
-/// object block" for it); Runnable = checked books minus empty ones and minus
-/// unit-rules-only ones while unsupported.</returns>
-function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedUnits: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
+/// <returns>Ok=False when no book is checked, no unit is listed, or a unit's
+/// FILE is not in the index (convert-apply would report a FALSE "could not
+/// locate .dfm object block" for it); Runnable = checked books minus empty ones
+/// and minus unit-rules-only ones while unsupported.</returns>
+function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
 
 /// <summary>Reads convert-apply's --format json output (schema apply/1).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; text before the first
@@ -132,6 +140,7 @@ uses
   System.Generics.Collections
   , System.IOUtils
   , System.JSON
+  , System.Math
   , System.StrUtils
   , ConvRules.Model
   , ConvRules.UsesHarvest
@@ -142,22 +151,34 @@ const
   ERR_HEAD_CHARS   = 200;
   BCK_PROBE_WINDOW = 50;
 
-function NextBackupPath(const AFile: string; const AExists: TFileProbe): string;
+// The highest N with AFile + '.BCK' + N present; 0 when there is none.
+function HighestBackupN(const AFile: string; const AExists: TFileProbe): Integer;
 var
   N: Integer;
-  Highest: Integer;
 begin
-  Highest:= 0;
+  Result:= 0;
   N:= 1;
   // Probe upward until a run of misses longer than any plausible gap; the
   // convention in ORM3\CLIENT stays in single digits.
-  while N <= Highest + BCK_PROBE_WINDOW do
+  while N <= Result + BCK_PROBE_WINDOW do
   begin
     if AExists(AFile + BCK_TAG + IntToStr(N)) then
-      Highest:= N;
+      Result:= N;
     Inc(N);
   end;
-  Result:= AFile + BCK_TAG + IntToStr(Highest + 1);
+end;
+
+
+function SharedBackupPaths(const AFiles: TArray<string>; const AExists: TFileProbe): TArray<string>;
+var
+  Highest: Integer;
+begin
+  Highest:= 0;
+  for var LFile: string in AFiles do
+    Highest:= Max(Highest, HighestBackupN(LFile, AExists));
+  Result:= nil;
+  for var LFile: string in AFiles do
+    Result:= Result + [LFile + BCK_TAG + IntToStr(Highest + 1)];
 end;
 
 function BookKindOfText(const ARulesText: string): TBookKind;
@@ -278,20 +299,26 @@ begin
   Result:= Found;
 end;
 
-function UnitInIndex(const AUnitPas: string; const AIndexedUnits: TArray<string>): Boolean;
+function UnitInIndex(const AUnitPas: string; const AIndexedFiles: TArray<string>): Boolean;
+var
+  LFull: string;
 begin
-  Result:= MatchText(ChangeFileExt(ExtractFileName(AUnitPas), ''), AIndexedUnits);
+  LFull:= ExpandFileName(AUnitPas);
+  for var LPath: string in AIndexedFiles do
+    if SameText(ExpandFileName(LPath), LFull) then
+      Exit(True);
+  Result:= False;
 end;
 
-function SourceRowText(const AUnitPas: string; const AIndexedUnits: TArray<string>; AIndexKnown: Boolean; out AFlagged: Boolean): string;
+function SourceRowText(const AUnitPas: string; const AIndexedFiles: TArray<string>; AIndexKnown: Boolean; out AFlagged: Boolean): string;
 begin
-  AFlagged:= AIndexKnown and not UnitInIndex(AUnitPas, AIndexedUnits);
+  AFlagged:= AIndexKnown and not UnitInIndex(AUnitPas, AIndexedFiles);
   Result  := AUnitPas;
   if AFlagged then
     Result:= Result + ' -- not in the project index';
 end;
 
-function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedUnits: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
+function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
 var
   B       : TBookEntry;
   U       : string;
@@ -329,7 +356,7 @@ begin
     Result.Problems:= Result.Problems + ['No source unit is listed.'];
   Missing:= nil;
   for U in AUnits do
-    if not UnitInIndex(U, AIndexedUnits) then
+    if not UnitInIndex(U, AIndexedFiles) then
       Missing:= Missing + [ExtractFileName(U)];
   if Length(Missing) > 0 then
     Result.Problems:= Result.Problems + [Format('Not in the project index (index the project first): %s', [string.Join(', ', Missing)])];

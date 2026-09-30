@@ -36,10 +36,13 @@ type
     /// <summary>The --db list: project DB FIRST (the engine's primary), then
     /// the libraries.</summary>
     GetDbs        : TFunc<TArray<string>>;
-    /// <summary>The project index the units must be in, reindexed between books.</summary>
+    /// <summary>The project index the units must be in, reindexed before each
+    /// unit and after each book.</summary>
     GetProjectDb  : TFunc<string>;
-    /// <summary>The .dproj / .dpr that owns the project index (the Unit Rules
-    /// Destination).</summary>
+    /// <summary>The .dproj that owns the project index -- ProjectFileForDb of
+    /// it, NEVER the Unit Rules Destination (an `index --project` of another
+    /// project would re-scope the editor's project DB). Convert refuses when
+    /// the file does not exist.</summary>
     GetProjectFile: TFunc<string>;
     /// <summary>The folder whose *.rules files are the book list.</summary>
     GetRulesFolder: TFunc<string>;
@@ -51,6 +54,10 @@ type
     FeedHarvest   : TProc<TArray<string>>;
     /// <summary>Writes the status line: (text, is-error).</summary>
     SetStatus     : TProc<string, Boolean>;
+    /// <summary>Called with True when a run starts and False when its results
+    /// are in; may be nil. The host disables what must not change mid-run
+    /// (File > Save / Save As / Curate).</summary>
+    RunStateChanged: TProc<Boolean>;
   end;
 
   /// <summary>The Convert tab: a checklist of rule books, a list of source
@@ -77,7 +84,7 @@ type
       FNotes          : TArray<string>;     // the current run's pre-flight notes (for the report)
       FRunRows        : TArray<TConvertRow>;// the current run's rows as they arrived
       FRunRulesFolder : string;             // the rules folder when Convert was pressed: the report goes THERE
-      FIndexed        : TArray<string>;     // unit names in the project index (valid while FIndexKnown)
+      FIndexed        : TArray<string>;     // file paths in the project index (valid while FIndexKnown)
       FIndexKnown     : Boolean;            // False = the index could not be read: flag nothing
       FLockable       : TArray<TControl>;   // disabled while a run is in progress
       FTopPanel       : TPanel;
@@ -109,7 +116,9 @@ type
       procedure ConvertClick(Sender: TObject);
       procedure CancelClick(Sender: TObject);
       procedure SetRunning(ARunning: Boolean);
-      procedure AddResultRow(const ABook, AUnit, AStatus, AEdits, ARemaining, ABackup, ANote: string);
+      /// <summary>Appends one results-grid row.</summary>
+      /// <param name="ACells">Book, Unit, Status, Edits, Remaining, Backup, Backup .dfm, Note -- the grid's columns in order.</param>
+      procedure AddResultRow(const ACells: array of string);
       procedure AddRow(const ARow: TConvertRow);
       /// <summary>Worker thread: hands one finished row to the UI thread.</summary>
       /// <param name="ARow">The row, copied into the queued call.</param>
@@ -119,9 +128,19 @@ type
       /// summary status.</summary>
       /// <param name="AJob">The job that ran (books x units, for the totals).</param>
       /// <param name="AProblem">'' or what went wrong outside the rows.</param>
-      procedure RunFinished(const AJob: TConvertJob; const AProblem: string);
-      function WriteReport(out APath, AError: string): Boolean;
-      /// <summary>Re-reads the project index's unit names into FIndexed and
+      /// <param name="AStopAt">Index into AJob.Units of the first unit a cancel
+      /// kept from running; -1 when every unit was reached.</param>
+      /// <param name="AFinalIndex">The closing reindex: 'ok', 'FAILED: ...', or
+      /// 'not run' when the worker stopped before it.</param>
+      procedure RunFinished(const AJob: TConvertJob; const AProblem: string; AStopAt: Integer; const AFinalIndex: string);
+      /// <summary>Writes the run report (UTF-8, no BOM) beside the books that ran.</summary>
+      /// <param name="ANotReached">Units a cancel kept from running.</param>
+      /// <param name="AFinalIndex">The closing reindex's outcome (see RunFinished).</param>
+      /// <param name="APath">The report's path.</param>
+      /// <param name="AError">'' or why it was not written.</param>
+      /// <returns>True when written.</returns>
+      function WriteReport(const ANotReached: TArray<string>; const AFinalIndex: string; out APath, AError: string): Boolean;
+      /// <summary>Re-reads the project index's file paths into FIndexed and
       /// repaints the source list.</summary>
       /// <param name="AError">'' on success, else why the index could not be read.</param>
       /// <returns>False = FIndexKnown is now False and no row is flagged.</returns>
@@ -151,7 +170,8 @@ type
       /// only; the Refresh button re-probes.</remarks>
       procedure RefreshBooks;
       /// <summary>Adds the .pas files APaths stand for (see ExpandSources) to the
-      /// source list, once each, and feeds them to the Unit Rules harvest.</summary>
+      /// source list, once each, and feeds them to the Unit Rules harvest.
+      /// Refused, with an error status, while a run is in progress.</summary>
       /// <param name="APaths">Dropped or picked .pas / .dpr / .dproj / folder paths.</param>
       procedure AddSources(const APaths: TArray<string>);
       /// <summary>Re-reads which listed units are in the project index and
@@ -184,12 +204,13 @@ const
   COL_UNIT_W      = 110;
   COL_STATUS_W    = 120;
   COL_NUMBER_W    = 50;
-  COL_BACKUP_W    = 120;
+  COL_BACKUP_W    = 120;  // Backup and Backup .dfm
   COL_NOTE_W      = 300;
   PROBLEM_HEAD    = 200;  // chars of engine output quoted in a status line
   TEXT_INSET_X    = 2;    // source row text inset, px
   CAP_CANCEL      = 'Cancel';
   CAP_CANCELLING  = 'Cancelling after this unit...';
+  STATUS_NOT_REACHED = 'not reached (cancelled)'; // a unit a cancel kept from running
   CAPABILITY_UNIT_RULES = 'apply_unit_rules';
 
 { TConvertTab }
@@ -353,6 +374,9 @@ begin
   LCol.Width  := COL_NUMBER_W;
   LCol:= FResults.Columns.Add;
   LCol.Caption:= 'Backup';
+  LCol.Width  := COL_BACKUP_W;
+  LCol:= FResults.Columns.Add;
+  LCol.Caption:= 'Backup .dfm';
   LCol.Width  := COL_BACKUP_W;
   LCol:= FResults.Columns.Add;
   LCol.Caption:= 'Note';
@@ -531,6 +555,13 @@ var
   Errs : TArray<string>;
   Added: TArray<string>;
 begin
+  // The job holds its own copy of the units, but a list that changes under a
+  // running conversion misreports what ran (drops arrive whatever is enabled).
+  if FRunning then
+  begin
+    FHost.SetStatus('A conversion is running -- sources cannot be added until it finishes.', True);
+    Exit;
+  end;
   Added:= ExpandSources(APaths, Errs);
   for var LPath: string in Added do
     if FSources.Items.IndexOf(LPath) < 0 then  // TListBox.IndexOf is case-insensitive
@@ -561,7 +592,8 @@ function TConvertTab.ReadIndex(out AError: string): Boolean;
 var
   LNames: TArray<string>;
 begin
-  Result:= FEngineProbe.ListUnits([FHost.GetProjectDb()], LNames, AError);
+  // By PATH: convert-apply finds the .dfm through the files table (UnitInIndex).
+  Result:= FEngineProbe.ListIndexedFiles([FHost.GetProjectDb()], LNames, AError);
   // Unknown is never "indexed": on failure nothing is flagged, and says so.
   FIndexKnown:= Result;
   FIndexed   := if Result then LNames else nil;
@@ -631,18 +663,14 @@ begin
   FHost.SetStatus(SourcesSummary, False);
 end;
 
-procedure TConvertTab.AddResultRow(const ABook, AUnit, AStatus, AEdits, ARemaining, ABackup, ANote: string);
+procedure TConvertTab.AddResultRow(const ACells: array of string);
 var
   LItem: TListItem;
 begin
   LItem:= FResults.Items.Add;
-  LItem.Caption:= ABook;
-  LItem.SubItems.Add(AUnit);
-  LItem.SubItems.Add(AStatus);
-  LItem.SubItems.Add(AEdits);
-  LItem.SubItems.Add(ARemaining);
-  LItem.SubItems.Add(ABackup);
-  LItem.SubItems.Add(ANote);
+  LItem.Caption:= ACells[0];
+  for var I: Integer:= 1 to High(ACells) do
+    LItem.SubItems.Add(ACells[I]);
 end;
 
 procedure TConvertTab.AddRow(const ARow: TConvertRow);
@@ -652,10 +680,10 @@ begin
   FRunRows:= FRunRows + [ARow];
   // Edit counts belong to a book that actually changed the unit.
   LRan:= ARow.Status in [csConverted, csRolledBack];
-  AddResultRow(ExtractFileName(ARow.Book), ExtractFileName(ARow.UnitPas), ConvertStatusText(ARow.Status),
+  AddResultRow([ExtractFileName(ARow.Book), ExtractFileName(ARow.UnitPas), ConvertStatusText(ARow.Status),
     if LRan then IntToStr(ARow.Apply.EditsCount) else '',
     if LRan then IntToStr(Length(ARow.Apply.Remainder)) else '',
-    ExtractFileName(ARow.Backup), ARow.Note);
+    ExtractFileName(ARow.Backup), ExtractFileName(ARow.BackupDfm), ARow.Note]);
 end;
 
 procedure TConvertTab.QueueRow(const ARow: TConvertRow; ADone: Integer);
@@ -680,6 +708,8 @@ begin
     LCtl.Enabled:= not ARunning;
   FBtnCancel.Caption:= CAP_CANCEL;
   FBtnCancel.Enabled:= ARunning;
+  if Assigned(FHost.RunStateChanged) then
+    FHost.RunStateChanged(ARunning);
 end;
 
 procedure TConvertTab.CancelClick(Sender: TObject);
@@ -702,13 +732,13 @@ begin
   // The open book on disk is what runs: make the user decide about unsaved edits first.
   var LOpen: string:= FHost.GetOpenBook();
   for var E: TBookEntry in FEntries do
-    if E.Checked and (LOpen <> '') and SameText(E.Path, LOpen) then
+    if E.Checked and (LOpen <> '') and SameText(ExpandFileName(E.Path), ExpandFileName(LOpen)) then
     begin
       if not FHost.ConfirmOpenBookSaved() then
         Exit;
       Break;
     end;
-  if not FEngineProbe.ListUnits([FHost.GetProjectDb()], Idx, Err) then
+  if not FEngineProbe.ListIndexedFiles([FHost.GetProjectDb()], Idx, Err) then
   begin
     FIndexKnown:= False;
     FIndexed   := nil;
@@ -725,7 +755,7 @@ begin
   FRunRows:= nil;
   FNotes  := Pre.Notes;
   for var LNote: string in Pre.Notes do
-    AddResultRow('', '', 'note', '', '', '', LNote);
+    AddResultRow(['', '', 'note', '', '', '', '', LNote]);
   if not Pre.Ok then
   begin
     FHost.SetStatus('Convert refused: ' + string.Join(' ', Pre.Problems), True);
@@ -736,11 +766,13 @@ begin
   Job.Dbs        := FHost.GetDbs();
   Job.ProjectDb  := FHost.GetProjectDb();
   Job.ProjectFile:= FHost.GetProjectFile();
-  // Every book is followed by `index --project`: without the owning project
-  // file each apply would "fail" and every unit would be restored.
+  // Every unit and every book is followed by `index --project` on the DB's OWN
+  // project file: without it each apply would "fail" and every unit would be
+  // restored; another project's file would re-scope the DB.
   if (Job.ProjectFile = '') or not TFile.Exists(Job.ProjectFile) then
   begin
-    FHost.SetStatus(Format('Convert refused: no destination project file ("%s") -- set the Unit Rules Destination to the .dproj that owns the project index.', [Job.ProjectFile]), True);
+    FHost.SetStatus(Format('Convert refused: the project index %s has no project file on disk -- expected %s.',
+      [Job.ProjectDb, if Job.ProjectFile = '' then '<Project>.dproj beside its _D-RAG folder (the DB is not in one)' else Job.ProjectFile]), True);
     Exit;
   end;
   LExe:= FHost.ExePath;
@@ -758,8 +790,14 @@ begin
       LEng    : TEngineAdapter;
       LOut    : string;
       LProblem: string;
+      LPolls  : Integer;
+      LStopAt : Integer;
+      LFinal  : string;
     begin
       LProblem:= '';
+      LPolls  := 0;
+      LStopAt := -1;
+      LFinal  := 'not run';
       // Defence in depth: RunConversion reports its own failures as rows, but
       // anything that still escapes must reach the UI, not end the thread silently.
       try
@@ -773,11 +811,21 @@ begin
             end,
             function: Boolean
             begin
+              // Polled once per unit, just before it (RunConversionUnits): the
+              // poll that first answers True names the first unit never reached.
               Result:= FCancelRequested;
+              if Result and (LStopAt < 0) then
+                LStopAt:= LPolls;
+              Inc(LPolls);
             end);
           // Final refresh: restored units are back to their old text.
-          if LEng.IndexProject(Job.ProjectFile, Job.ProjectDb, LOut) <> 0 then
+          if LEng.IndexProject(Job.ProjectFile, Job.ProjectDb, LOut) = 0 then
+            LFinal:= 'ok'
+          else
+          begin
+            LFinal  := 'FAILED: ' + Copy(Trim(LOut), 1, PROBLEM_HEAD);
             LProblem:= 'the final reindex failed: ' + Copy(Trim(LOut), 1, PROBLEM_HEAD);
+          end;
         finally
           LEng.Free;
         end;
@@ -788,12 +836,12 @@ begin
       TThread.Queue(nil,
         procedure
         begin
-          RunFinished(Job, LProblem);
+          RunFinished(Job, LProblem, LStopAt, LFinal);
         end);
     end).Start;
 end;
 
-function TConvertTab.WriteReport(out APath, AError: string): Boolean;
+function TConvertTab.WriteReport(const ANotReached: TArray<string>; const AFinalIndex: string; out APath, AError: string): Boolean;
 var
   LLines: TStringList;
 begin
@@ -808,19 +856,29 @@ begin
   APath:= TPath.Combine(LFolder, Format('convert-run-%s.txt', [FormatDateTime('yyyymmdd-hhnnss', Now)]));
   LLines:= TStringList.Create;
   try
-    LLines.Add(string.Join(#9, ['Book', 'Unit', 'Status', 'Edits', 'Remaining', 'Backup', 'Note']));
+    LLines.Add(string.Join(#9, ['Book', 'Unit', 'Status', 'Edits', 'Remaining', 'Backup', 'Backup .dfm', 'Note']));
     for var LNote: string in FNotes do
-      LLines.Add(string.Join(#9, ['', '', 'note', '', '', '', LNote]));
+      LLines.Add(string.Join(#9, ['', '', 'note', '', '', '', '', LNote]));
     for var LRow: TConvertRow in FRunRows do
     begin
       var LRan: Boolean:= LRow.Status in [csConverted, csRolledBack];
       LLines.Add(string.Join(#9, [LRow.Book, LRow.UnitPas, ConvertStatusText(LRow.Status),
         if LRan then IntToStr(LRow.Apply.EditsCount) else '',
         if LRan then IntToStr(Length(LRow.Apply.Remainder)) else '',
-        LRow.Backup, LRow.Note]));
+        LRow.Backup, LRow.BackupDfm, LRow.Note]));
     end;
+    for var LUnit: string in ANotReached do
+      LLines.Add(string.Join(#9, ['', LUnit, STATUS_NOT_REACHED, '', '', '', '', '']));
+    LLines.Add('');
+    if FCancelRequested then
+      LLines.Add(Format('Run'#9'cancelled -- %d unit(s) not reached', [Length(ANotReached)]))
+    else
+      LLines.Add('Run'#9'completed');
+    LLines.Add('Final reindex'#9 + AFinalIndex);
     try
-      TFile.WriteAllText(APath, LLines.Text, TEncoding.ASCII);
+      // UTF-8 without a BOM: engine text (a rule error, a path) may be non-ASCII,
+      // and an ASCII write would turn it into '?'.
+      TFile.WriteAllBytes(APath, TEncoding.UTF8.GetBytes(LLines.Text));
       Result:= True;
     except
       on E: Exception do
@@ -834,7 +892,7 @@ begin
   end; // try
 end;
 
-procedure TConvertTab.RunFinished(const AJob: TConvertJob; const AProblem: string);
+procedure TConvertTab.RunFinished(const AJob: TConvertJob; const AProblem: string; AStopAt: Integer; const AFinalIndex: string);
 var
   Converted : Integer;
   Restored  : Integer;
@@ -842,6 +900,7 @@ var
   BookSkips : Integer;
   UnitSkips : Integer;
   NotRestored: TArray<string>;
+  NotReached: TArray<string>;
   Msg       : string;
   Report    : string;
   RepErr    : string;
@@ -854,6 +913,11 @@ begin
   BookSkips := 0;
   UnitSkips := 0;
   NotRestored:= nil;
+  NotReached := nil;
+  if (AStopAt >= 0) and (AStopAt < Length(AJob.Units)) then
+    NotReached:= Copy(AJob.Units, AStopAt, Length(AJob.Units) - AStopAt);
+  for var LUnit: string in NotReached do
+    AddResultRow(['', ExtractFileName(LUnit), STATUS_NOT_REACHED, '', '', '', '', '']);
   for var LRow: TConvertRow in FRunRows do
     case LRow.Status of
       csConverted     : Inc(Converted);
@@ -871,13 +935,13 @@ begin
   if UnitSkips > 0 then
     Msg:= Msg + Format(' %d unit(s) skipped.', [UnitSkips]);
   if FCancelRequested then
-    Msg:= Msg + ' Cancelled.';
+    Msg:= Msg + Format(' Cancelled: %d unit(s) not reached.', [Length(NotReached)]);
   // The most severe outcome leads: a unit that may be half-converted.
   if Length(NotRestored) > 0 then
-    Msg:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backup its row names. ', [string.Join(', ', NotRestored)]) + Msg;
+    Msg:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backups its row names. ', [string.Join(', ', NotRestored)]) + Msg;
   if AProblem <> '' then
     Msg:= Msg + ' Also: ' + AProblem + '.';
-  if WriteReport(Report, RepErr) then
+  if WriteReport(NotReached, AFinalIndex, Report, RepErr) then
     Msg:= Msg + ' Report: ' + Report
   else
     Msg:= Msg + ' Report NOT written (' + RepErr + ').';

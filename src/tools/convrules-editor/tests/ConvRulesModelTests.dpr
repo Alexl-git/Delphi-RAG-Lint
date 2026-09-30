@@ -1475,16 +1475,24 @@ const
   BOOK_COUNT = 3; // convert-only, units-only, mixed
   JSON_EDITS = 3; // edits_count in the first apply/1 document
 begin
-  // --- NextBackupPath: one above the highest existing N; gaps not reused ---
+  // --- SharedBackupPaths: one above the highest existing N; gaps not reused ---
   Existing:= [];
   Probe:= function(const APath: string): Boolean
     begin
       Result:= MatchText(APath, Existing);
     end;
-  Check('convertrun.bck.first', NextBackupPath('x\A.pas', Probe) = 'x\A.pas.BCK1', NextBackupPath('x\A.pas', Probe));
+  Srcs:= SharedBackupPaths(['x\A.pas'], Probe);
+  Check('convertrun.bck.first', string.Join(',', Srcs) = 'x\A.pas.BCK1', string.Join(',', Srcs));
   Existing:= ['x\A.pas.BCK1', 'x\A.pas.BCK3'];
-  Check('convertrun.bck.above.highest', NextBackupPath('x\A.pas', Probe) = 'x\A.pas.BCK4', NextBackupPath('x\A.pas', Probe));
-  Check('convertrun.bck.per.file', NextBackupPath('x\A.dfm', Probe) = 'x\A.dfm.BCK1', NextBackupPath('x\A.dfm', Probe));
+  Srcs:= SharedBackupPaths(['x\A.pas'], Probe);
+  Check('convertrun.bck.above.highest', string.Join(',', Srcs) = 'x\A.pas.BCK4', string.Join(',', Srcs));
+  // Another unit's backups never count.
+  Srcs:= SharedBackupPaths(['x\B.pas', 'x\B.dfm'], Probe);
+  Check('convertrun.bck.per.file', string.Join(',', Srcs) = 'x\B.pas.BCK1,x\B.dfm.BCK1', string.Join(',', Srcs));
+  // One N per UNIT: its .pas and .dfm restore points pair up by number.
+  Existing:= ['x\X.pas.BCK1', 'x\X.dfm.BCK3'];
+  Srcs:= SharedBackupPaths(['x\X.pas', 'x\X.dfm'], Probe);
+  Check('convertrun.bck.shared.n', string.Join(',', Srcs) = 'x\X.pas.BCK4,x\X.dfm.BCK4', string.Join(',', Srcs));
 
   // --- BookKindOfText ---
   Check('convertrun.kind.empty'   , BookKindOfText('// only a comment') = bkEmpty);
@@ -1513,22 +1521,27 @@ begin
   Books[2].Path:= 'Mixed.rules';
   Books[2].Checked:= True;
   Books[2].Kind:= bkMixed;
-  Pre:= Preflight(Books, ['p\U1.pas'], ['U1'], False);
+  // The index is a list of FILE PATHS (the project DB's files table).
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
   Check('convertrun.pre.ok', Pre.Ok, string.Join(' | ', Pre.Problems));
   Check('convertrun.pre.units.only.skipped', string.Join(',', Pre.Runnable) = 'Conv.rules,Mixed.rules', string.Join(',', Pre.Runnable));
   Check('convertrun.pre.notes', Length(Pre.Notes) = 2, string.Join(' | ', Pre.Notes));
-  Pre:= Preflight(Books, ['p\U1.pas'], ['U1'], True);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True);
   Check('convertrun.pre.units.supported', Length(Pre.Runnable) = BOOK_COUNT, string.Join(',', Pre.Runnable));
-  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['u1'], False);
+  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['P\u1.PAS'], False);
   Check('convertrun.pre.unindexed.refused', (not Pre.Ok) and (Pos('Loose', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
   Check('convertrun.pre.index.nocase', Pos('U1', string.Join(' ', Pre.Problems)) = 0, string.Join(' | ', Pre.Problems));
+  // The migration case: the project indexes ITS OWN U1.pas; a same-named unit
+  // from another tree is not indexed -- the engine finds the .dfm by path.
+  Pre:= Preflight(Books, ['m2022\U1.pas'], ['p\U1.pas'], False);
+  Check('convertrun.pre.same.name.foreign.path', (not Pre.Ok) and (Pos('U1.pas', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
   Books[0].Checked:= False;
   Books[1].Checked:= False;
   Books[2].Checked:= False;
-  Pre:= Preflight(Books, ['p\U1.pas'], ['U1'], False);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
   Check('convertrun.pre.no.book', not Pre.Ok, string.Join(' | ', Pre.Problems));
   Books[0].Checked:= True;
-  Pre:= Preflight(Books, [], ['U1'], False);
+  Pre:= Preflight(Books, [], ['p\U1.pas'], False);
   Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
 
   // --- ParseApplyJson (schema apply/1) ---
@@ -1594,12 +1607,14 @@ var
   Flagged: Boolean;
   Text   : string;
 begin
-  Check('unitinindex.nocase', UnitInIndex('src\dmCPData.pas', ['X', 'DMCPDATA']));
-  Check('unitinindex.dotted', UnitInIndex('src\My.Unit.pas', ['my.unit']));
-  Check('unitinindex.absent', not UnitInIndex('src\Foo.pas', ['Bar', 'FooX']));
-  Text:= SourceRowText('src\Foo.pas', ['Bar'], True, Flagged);
+  // By FULL PATH (ExpandFileName'd, any case), never by unit name.
+  Check('unitinindex.nocase', UnitInIndex('src\dmCPData.pas', ['X.pas', 'SRC\DMCPDATA.PAS']));
+  Check('unitinindex.normalised', UnitInIndex('src\sub\..\My.Unit.pas', ['src\my.unit.pas']));
+  Check('unitinindex.absent', not UnitInIndex('src\Foo.pas', ['src\Bar.pas', 'src\FooX.pas']));
+  Check('unitinindex.foreign.path', not UnitInIndex('m2022\DM1.pas', ['client\DM1.pas']));
+  Text:= SourceRowText('src\Foo.pas', ['src\Bar.pas'], True, Flagged);
   Check('sourcerow.flagged', Flagged and (Text = 'src\Foo.pas -- not in the project index'), Text);
-  Text:= SourceRowText('src\dmCPData.pas', ['DMCPDATA'], True, Flagged);
+  Text:= SourceRowText('src\dmCPData.pas', ['SRC\DMCPDATA.PAS'], True, Flagged);
   Check('sourcerow.indexed.plain', (not Flagged) and (Text = 'src\dmCPData.pas'), Text);
   Text:= SourceRowText('src\Foo.pas', nil, False, Flagged);
   Check('sourcerow.unknown.notflagged', (not Flagged) and (Text = 'src\Foo.pas'), Text);
@@ -1653,6 +1668,7 @@ const
   TWO_ROWS  = 2;
 var
   Dir, PasR, PasL, PasF, Seen, Raised: string;
+  PasI, PasJ, PasK, PasS, DfmS, Log: string;
   Rows : TArray<TConvertRow>;
   Calls: Integer;
   Index: TIndexFn;
@@ -1662,7 +1678,7 @@ var
   begin
     Result:= Format('%d rows', [Length(ARows)]);
     for var LRow: TConvertRow in ARows do
-      Result:= Result + ' | ' + ExtractFileName(LRow.Book) + '=' + ConvertStatusText(LRow.Status) + ': ' + LRow.Note;
+      Result:= Result + ' | ' + ExtractFileName(LRow.Book) + '=' + ConvertStatusText(LRow.Status) + ': ' + LRow.Note + ' [' + ExtractFileName(LRow.Backup) + ' ' + ExtractFileName(LRow.BackupDfm) + ']';
   end;
 
   // A writes into the unit and succeeds; B runs AOnB, then fails without rule_errors.
@@ -1752,6 +1768,62 @@ begin
     finally
       FileSetAttr(PasF, faNormal);
     end; // try
+
+    // --- the index is refreshed BEFORE the unit's first book, not only after ---
+    // convert-apply patches the .dfm at the index's line ranges; a unit edited
+    // since the last index would be patched in the wrong place.
+    PasI:= TPath.Combine(Dir, 'I.pas');
+    TFile.WriteAllText(PasI, ORIG, TEncoding.ASCII);
+    Log:= '';
+    RunConversionUnits([PasI], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Log   := Log + 'apply;';
+        AJson := OK_JSON;
+        Result:= 0;
+      end,
+      function(out AOutput: string): Integer
+      begin
+        Log    := Log + 'index;';
+        AOutput:= '';
+        Result := 0;
+      end, nil, nil);
+    Check('runner.reindex.before.first.book', Log = 'index;apply;index;', Log);
+
+    // --- that reindex fails: the unit is skipped untouched, the next one still runs ---
+    PasJ:= TPath.Combine(Dir, 'J.pas');
+    PasK:= TPath.Combine(Dir, 'K.pas');
+    TFile.WriteAllText(PasJ, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(PasK, ORIG, TEncoding.ASCII);
+    Calls:= 0;
+    Rows:= RunConversionUnits([PasJ, PasK], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Inc(Calls);
+        AJson := OK_JSON;
+        Result:= 0;
+      end,
+      function(out AOutput: string): Integer
+      begin
+        AOutput:= 'index-boom';
+        Result := 1;
+      end, nil, nil);
+    var LBothSkipped: Boolean:= (Length(Rows) = TWO_ROWS) and (Rows[0].Status = csUnitSkipped) and (Rows[1].Status = csUnitSkipped)
+      and (Pos('reindex before apply failed: index-boom', Rows[0].Note) > 0) and SameText(Rows[1].UnitPas, PasK);
+    var LNoBck: Boolean:= Length(TDirectory.GetFiles(Dir, 'J.*.BCK*')) + Length(TDirectory.GetFiles(Dir, 'K.*.BCK*')) = 0;
+    Check('runner.reindex.before.failure', LBothSkipped and (Calls = 0) and LNoBck and (TFile.ReadAllText(PasJ) = ORIG),
+      Describe(Rows) + Format(' calls=%d', [Calls]));
+
+    // --- one backup NUMBER per unit, shared by .pas and .dfm, named on the rows ---
+    PasS:= TPath.Combine(Dir, 'S.pas');
+    DfmS:= TPath.Combine(Dir, 'S.dfm');
+    TFile.WriteAllText(PasS, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(DfmS, 'object S: TS' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(DfmS + '.BCK2', 'an older .dfm backup', TEncoding.ASCII);
+    Rows:= RunConversionUnits([PasS], ['A.rules', 'B.rules'], ApplyAThenFailB(nil), Index, nil, nil);
+    Check('runner.backup.shared.n', (Length(Rows) = TWO_ROWS) and SameText(Rows[1].Backup, PasS + '.BCK3') and SameText(Rows[1].BackupDfm, DfmS + '.BCK3')
+      and TFile.Exists(PasS + '.BCK3') and TFile.Exists(DfmS + '.BCK3'), Describe(Rows));
+    Check('runner.rollback.names.both.backups', (Length(Rows) = TWO_ROWS) and (Pos('S.pas.BCK3', Rows[0].Note) > 0) and (Pos('S.dfm.BCK3', Rows[0].Note) > 0), Describe(Rows));
   finally
     TDirectory.Delete(Dir, True);
   end; // try
@@ -1803,6 +1875,12 @@ begin
     Eng:= TEngineAdapter.Create(Exe, [Db, LIB64]);
     try
       Check('runner.live.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      // The Convert tab's pre-flight source: the files table, by PATH. The
+      // fixture unit must be listed; a same-named file elsewhere must not match.
+      var LFiles: TArray<string>;
+      var LListed: Boolean:= Eng.ListIndexedFiles([Db], LFiles, Output);
+      Check('runner.live.indexed.files', LListed and UnitInIndex(Pas, LFiles) and not UnitInIndex(TPath.Combine(TPath.GetTempPath, 'FixUnit.pas'), LFiles),
+        Format('listed=%s n=%d %s', [BoolToStr(LListed, True), Length(LFiles), Output]));
       Job:= Default(TConvertJob);
       Job.Units      := [Pas];
       Job.Dbs        := [Db, LIB64];

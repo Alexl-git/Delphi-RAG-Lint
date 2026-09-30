@@ -151,6 +151,9 @@ type
       // flips at runtime, need a field; the rest are wired and dropped.
       FMnuFile       : TMenuItem  ; // File menu
       FMnuConversion : TMenuItem  ; // Conversion menu -- Task 6 appends Convert...
+      FMiFileSave    : TMenuItem  ; // File > Save / Save As / Curate: disabled while a
+      FMiFileSaveAs  : TMenuItem  ; //   Convert run is in progress (the run's later units
+      FMiFileCurate  : TMenuItem  ; //   would otherwise see a changed book)
       FMiAssign      : TMenuItem  ; // Mapping: gated by UpdateMenuEnabled
       FMiUnassign    : TMenuItem  ;
       FMiFindInFrom  : TMenuItem  ;
@@ -299,8 +302,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+7 more)</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+29 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+30 more)</para>
+      /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+6 more)</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+31 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+30 more)</para>
       /// <seealso cref="ConvRules.ConvertTab.TConvertTab.Create"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddPopupItem"/>
@@ -536,10 +539,10 @@ type
       /// created and no file is written -- the unchanged save path does that.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.RuleCatalog.FindRuleForType, ConvRules.RuleCatalog.RuleFileNameFor (+7 more)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.Model.TRuleBook.Snapshot, ConvRules.RuleCatalog.FindRuleForType (+8 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 118 lines (full implementation)</para>
-      /// <para>Reads: FCatalog, FFilePath, FCbFrom, FRulesFolder, FBook, FLblFile   Writes: FFilePath, FActiveHdr</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 119 lines (full implementation)</para>
+      /// <para>Reads: FCatalog, FFilePath, FCbFrom, FRulesFolder, FBook, FLblFile   Writes: FSnapshot, FFilePath, FActiveHdr</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRule"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
@@ -1226,7 +1229,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.AddMenuCmd, ConvRules.MainForm.TConvRulesForm.BuildMenu.Top, ShortCut</para>
-      /// <para>Reads: FMnuFile, FMnuConversion, FMnuTheme   Writes: FMnuFile, FMnuConversion, FMiExamine, FMiClearExamine, FMiAssign, FMiUnassign, FMiFindInFrom, FMiOnlyType (+3 more)</para>
+      /// <para>Reads: FMnuFile, FMnuConversion, FMnuTheme   Writes: FMnuFile, FMiFileSave, FMiFileSaveAs, FMiFileCurate, FMnuConversion, FMiExamine, FMiClearExamine, FMiAssign (+6 more)</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddMenuCmd"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu.Top"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
@@ -2636,11 +2639,11 @@ begin
   FMnuFile:= Top('&File');
   AddMenuCmd(FMnuFile, '&New'       , 'Start an empty rule book', DoNew, ShortCut(Ord('N'), [ssCtrl]));
   AddMenuCmd(FMnuFile, '&Open...'   , 'Open a conversion .rules file', DoLoad, ShortCut(Ord('O'), [ssCtrl]));
-  AddMenuCmd(FMnuFile, '&Save'      , 'Write the canonical DSL back (.bak backup, then validate)', DoSaveClick, ShortCut(Ord('S'), [ssCtrl]));
-  AddMenuCmd(FMnuFile, 'Save &As...', 'Save the rule book under a new name', DoSaveAsClick, ShortCut(Ord('S'), [ssCtrl, ssShift]));
+  FMiFileSave  := AddMenuCmd(FMnuFile, '&Save'      , 'Write the canonical DSL back (.bak backup, then validate)', DoSaveClick, ShortCut(Ord('S'), [ssCtrl]));
+  FMiFileSaveAs:= AddMenuCmd(FMnuFile, 'Save &As...', 'Save the rule book under a new name', DoSaveAsClick, ShortCut(Ord('S'), [ssCtrl, ssShift]));
   AddMenuCmd(FMnuFile, '-', '', nil);
   AddMenuCmd(FMnuFile, '&Validate'  , 'Run convert-validate over the current model', DoValidate);
-  AddMenuCmd(FMnuFile, '&Curate...' , 'Split / copy / delete / merge blocks across several rule-books, or compose them into one file for the engine', DoCurate);
+  FMiFileCurate:= AddMenuCmd(FMnuFile, '&Curate...' , 'Split / copy / delete / merge blocks across several rule-books, or compose them into one file for the engine', DoCurate);
   AddMenuCmd(FMnuFile, '-', '', nil);
   AddMenuCmd(FMnuFile, 'E&xit'      , 'Close the editor (asks first if there are unsaved changes)', DoExitClick);
 
@@ -3200,11 +3203,12 @@ begin
     begin
       Result:= GEditorProjectDb;
     end;
+  // The DB's OWN project file, never the Unit Rules Destination: the runner
+  // runs `index --project` on it, and another project's file would re-scope
+  // the editor's project DB. Destination only classifies harvested units.
   LHost.GetProjectFile:= function: string
     begin
-      Result:= Trim(FEdDest.Text);
-      if Result = '' then
-        Result:= ProjectFileForDb(GEditorProjectDb);
+      Result:= ProjectFileForDb(GEditorProjectDb);
     end;
   LHost.GetRulesFolder:= function: string
     begin
@@ -3230,6 +3234,14 @@ begin
         SetError(AText)
       else
         SetStatus(AText);
+    end;
+  // A book saved mid-run changes the rules the run's LATER units get; Open and
+  // New stay enabled -- the run captured its books, units and folders.
+  LHost.RunStateChanged:= procedure(ARunning: Boolean)
+    begin
+      FMiFileSave.Enabled  := not ARunning;
+      FMiFileSaveAs.Enabled:= not ARunning;
+      FMiFileCurate.Enabled:= not ARunning;
     end;
   FConvertTab:= TConvertTab.Create(Self, LHost);
   FConvertTab.Parent:= FTabConvert;
@@ -6178,6 +6190,7 @@ begin
       // colliding name would silently replace a sibling rule file.
       NewPath:= UniqueRulePath(Folder, RuleFileName);
       FBook.Clear;
+      FSnapshot:= FBook.Snapshot; // the new book starts clean: only the rule about to be added makes it dirty
       FFilePath:= NewPath;
       FLblFile.Caption:= NewPath;
       FActiveHdr:= -1;

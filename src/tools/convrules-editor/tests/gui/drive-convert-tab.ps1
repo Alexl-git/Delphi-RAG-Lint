@@ -4,12 +4,12 @@
 #        editor finds its engine the same way), never with a live dll-win64 build another session may be
 #        redeploying. Its Win64 library index must answer (the conversion resolves TLabel/TStaticText there).
 # Builds a fixture project in a fresh temp folder, in the _D-RAG layout the editor derives the project file
-# from (ProjectFileForDb: <dir>\_D-RAG\Fix.sqlite -> <dir>\Fix.dproj, the Destination default):
+# from (ProjectFileForDb: <dir>\_D-RAG\Fix.sqlite -> <dir>\Fix.dproj -- the run's project file, whatever the Destination):
 #   Fix.dpr / Fix.dproj / FixUnit.pas + FixUnit.dfm (one TLabel) / Loose.pas (NOT in the .dpr) /
 #   rules\Fix.rules (one #convert TLabel -> TStaticText) / _D-RAG\Fix.sqlite (index --project Fix.dproj).
 # Then: Conversion > Convert..., Check all, Add Loose.pas -> Convert is REFUSED (unindexed) and nothing is
-# backed up; delete it; Add FixUnit.pas -> Convert converts it in place (.BCK1 for .pas and .dfm, a run
-# report in the rules folder). One convert-apply on this fixture takes ~90-110 s; the wait is 600 s.
+# backed up; delete it; Add FixUnit.pas -> Convert converts it in place (.BCK1 for .pas and .dfm, both named
+# in the grid and the report; the report is UTF-8 without a BOM and records the final reindex). One convert-apply on this fixture takes ~90-110 s; the wait is 600 s.
 # -ProofNoIndex skips the index step: the conversion checks must then FAIL, which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
 param([string]$Exe, [switch]$ProofNoIndex)
@@ -174,6 +174,19 @@ public static class W {
       m = GetSubMenu(m, hit);
     }
     return false;
+  }
+  /* "Top|Item" -> 1 enabled, 0 grayed/disabled, -1 not found (the native item
+     state VCL keeps in step with TMenuItem.Enabled). */
+  public static int MenuEnabled(IntPtr main, string path) {
+    var parts = path.Split('|'); IntPtr m = MenuOf(main);
+    for (int p = 0; p < parts.Length; p++) {
+      int n = GetMenuItemCount(m), hit = -1;
+      for (int i = 0; i < n; i++) if (Clean(m, i) == parts[p]) { hit = i; break; }
+      if (hit < 0) return -1;
+      if (p == parts.Length - 1) return (GetMenuState(m, (uint)hit, 0x400) & 0x3) != 0 ? 0 : 1;
+      m = GetSubMenu(m, hit);
+    }
+    return -1;
   }
   public static string MenuCaptions(IntPtr main) {
     var sb = new StringBuilder(); IntPtr bar = MenuOf(main);
@@ -456,13 +469,23 @@ try {
   Check 'fixunit.added' (($e -eq '') -and ($items -contains $pas)) ("$e items: " + ($items -join ' | ') + '; status: ' + (Status $main))
   $before = Status $main
   Click $conv
+  # --- 7a. mid-run: File > Save / Save As / Curate are locked, Open is not ---
+  $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 20 -and (Status $main) -notlike 'Converting *') { Start-Sleep -Milliseconds 250 }
+  $lockPaths = 'File|Save', 'File|Save As...', 'File|Curate...', 'File|Open...'
+  $midRun = @($lockPaths | ForEach-Object { [W]::MenuEnabled($main, $_) })
+  Check 'run.locks.file.menu' ((Status $main) -like 'Converting *' -and ($midRun -join ',') -eq '0,0,0,1') ("Save,SaveAs,Curate,Open = " + ($midRun -join ',') + "; status: " + (Status $main))
   $st = WaitStatus $main $before 600
-  # Results grid: Book / Unit / Status / Edits / Remaining / Backup / Note.
-  $cols = @(0..6 | ForEach-Object { , @([W]::Column($lv, $_)) })
+  $afterRun = @($lockPaths | ForEach-Object { [W]::MenuEnabled($main, $_) })
+  Check 'run.unlocks.file.menu' (($afterRun -join ',') -eq '1,1,1,1') ("Save,SaveAs,Curate,Open = " + ($afterRun -join ','))
+  # Results grid: Book / Unit / Status / Edits / Remaining / Backup / Backup .dfm / Note.
+  $cols = @(0..7 | ForEach-Object { , @([W]::Column($lv, $_)) })
   "  run: {0:N0}s; status: {1}" -f $script:waited, $st
-  for ($i = 0; $i -lt $cols[0].Count; $i++) { '  row: ' + ((0..6 | ForEach-Object { $cols[$_][$i] }) -join ' / ') }
+  for ($i = 0; $i -lt $cols[0].Count; $i++) { '  row: ' + ((0..7 | ForEach-Object { $cols[$_][$i] }) -join ' / ') }
   Check 'convert.converted' (@([W]::Column($lv, 2)) -contains 'converted') "$(if ($dlg) { "editor dialog: $dlg" })"
   Check 'convert.summary' ($st -like 'Converted 1 of 1 unit x book pair(s); 0 failed and were restored.*Report: *') $st
+  # Both restore points are named, with ONE shared number (.pas in col 5, .dfm in col 6).
+  Check 'convert.grid.dfm.backup' ((@([W]::Column($lv, 5)) -contains 'FixUnit.pas.BCK1') -and (@([W]::Column($lv, 6)) -contains 'FixUnit.dfm.BCK1')) `
+    ("Backup: " + (@([W]::Column($lv, 5)) -join ',') + "; Backup .dfm: " + (@([W]::Column($lv, 6)) -join ','))
 
   # --- 8. the files on disk ---
   Check 'convert.pas.changed' ((Get-Content -LiteralPath $pas -Raw) -match 'TStaticText')
@@ -472,6 +495,14 @@ try {
   Check 'convert.dfm.still.text' ((Get-Content -LiteralPath $dfm -Raw).StartsWith('object ')) ((Get-Content -LiteralPath $dfm -TotalCount 2) -join ' / ')
   $reports = @([IO.Directory]::GetFiles($rulesDir, 'convert-run-*.txt'))
   Check 'convert.report' ($reports.Count -eq 1) (($reports | ForEach-Object { [IO.Path]::GetFileName($_) }) -join ', ')
+  # The report names the .dfm backup, records the closing reindex and the run's end, and is UTF-8 WITHOUT a BOM.
+  # (An if-expression would unroll an empty byte[] to $null and GetString would throw.)
+  [byte[]]$repBytes = [byte[]]::new(0)
+  if ($reports.Count -eq 1) { $repBytes = [IO.File]::ReadAllBytes($reports[0]) }
+  $repText = [Text.Encoding]::UTF8.GetString($repBytes)
+  $bom = ($repBytes.Length -ge 3) -and ($repBytes[0] -eq 0xEF) -and ($repBytes[1] -eq 0xBB) -and ($repBytes[2] -eq 0xBF)
+  Check 'convert.report.content' ((-not $bom) -and ($repText -match 'FixUnit\.dfm\.BCK1') -and ($repText -match "Final reindex`tok") -and ($repText -match "Run`tcompleted")) `
+    ("bom=$bom bytes=$($repBytes.Length) dfmBackup=$($repText -match 'FixUnit\.dfm\.BCK1') final=$($repText -match "Final reindex`t\S+")")
 }
 finally {
   if ($null -ne $p -and -not $p.HasExited) { $p.Kill($true); [void]$p.WaitForExit(15000) }

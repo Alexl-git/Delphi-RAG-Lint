@@ -1,8 +1,10 @@
 unit ConvRules.ConvertRunner;
 
-{ Executes a Convert run (spec 2026-09-29, part 2, "Run flow"): back every
-  unit up ONCE, apply each runnable book in order, reindex between books
-  (convert-apply finds .dfm blocks through the index), and restore a unit from
+{ Executes a Convert run (spec 2026-09-29, part 2, "Run flow"): reindex the
+  project before a unit's first book and after every book (convert-apply finds
+  and patches .dfm blocks at the index's line ranges), back every unit up ONCE
+  (.pas and .dfm share one .BCK<N> number), apply each runnable book in order,
+  and restore a unit from
   its backup the moment a unit-level step fails -- a unit is never left
   half-converted, and the rows say so. A book whose rules fail the engine's
   own validation (its rule_errors) is skipped for the rest of the run:
@@ -26,12 +28,15 @@ type
   ///   remaining books did not run.
   /// csBookSkipped: the book failed the engine's validation (rule_errors); the
   ///   unit is untouched by it and the book is not tried on any later unit.
-  /// csUnitSkipped: the unit was not run at all -- not found on disk, or its
-  ///   backup could not be taken (any .BCK already made for it is removed).
+  /// csUnitSkipped: the unit was not run at all -- not found on disk, the
+  ///   reindex before its first book failed (no backup is taken, the engine is
+  ///   not called), or its backup could not be taken (any .BCK already made for
+  ///   it is removed).
   /// csRolledBack: the book HAD converted the unit, but a later book failed on
   ///   the same unit and the restore undid this book's change too.
   /// csRestoreFailed: a book failed AND the restore from the backup raised; the
-  ///   unit may be half-converted, the Note names the backup to restore by hand.
+  ///   unit may be half-converted, the Note names the backups (.pas and .dfm)
+  ///   to restore by hand.
   /// </remarks>
   TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed);
 
@@ -45,6 +50,10 @@ type
     /// <summary>The .pas backup this run made; '' when none, and '' on a
     /// csBookSkipped row (the book did not touch the unit).</summary>
     Backup : string;
+    /// <summary>The .dfm backup this run made, numbered like Backup (one shared
+    /// N per unit, SharedBackupPaths); '' when the unit has no .dfm, and
+    /// wherever Backup is ''.</summary>
+    BackupDfm: string;
     /// <summary>Human-readable reason / summary. Also records an unneeded
     /// backup that could not be deleted (it is then kept).</summary>
     Note   : string;
@@ -62,9 +71,11 @@ type
     Units      : TArray<string>;
     /// <summary>--db list: project DB FIRST, then the libraries.</summary>
     Dbs        : TArray<string>;
-    /// <summary>The project DB reindexed between books.</summary>
+    /// <summary>The project DB reindexed before each unit and after each book.</summary>
     ProjectDb  : string;
-    /// <summary>The .dproj/.dpr that owns ProjectDb.</summary>
+    /// <summary>The .dproj/.dpr that owns ProjectDb -- always the DB's own
+    /// project file (ProjectFileForDb), never the Unit Rules Destination: an
+    /// `index --project` of another project would re-scope this DB.</summary>
     ProjectFile: string;
   end;
 
@@ -84,7 +95,7 @@ type
 /// <param name="AJob">The job.</param>
 /// <param name="AEngine">An adapter owned by the caller's thread.</param>
 /// <param name="AProgress">May be nil.</param>
-/// <param name="ACancelled">May be nil; polled BETWEEN units only.</param>
+/// <param name="ACancelled">May be nil; polled exactly once just before each unit (never between two books of one unit); True stops the run there.</param>
 /// <returns>One row per unit x book attempted; an invalid book yields one
 /// csBookSkipped row (on the first unit that tried it) and is not tried again.</returns>
 function RunConversion(const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
@@ -96,7 +107,7 @@ function RunConversion(const AJob: TConvertJob; AEngine: TEngineAdapter; const A
 /// <param name="AJob">Supplies Dbs, ProjectDb, ProjectFile.</param>
 /// <param name="AEngine">Engine adapter.</param>
 /// <param name="AProgress">May be nil.</param>
-/// <param name="ACancelled">May be nil; True stops before the NEXT unit.</param>
+/// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
 /// <returns>See the TApplyFn overload.</returns>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>; overload;
 
@@ -104,14 +115,18 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// <param name="AUnits">Source units.</param>
 /// <param name="ABooks">Validated books, application order.</param>
 /// <param name="AApply">Applies one book to one unit.</param>
-/// <param name="AIndex">Reindexes after each successful apply.</param>
+/// <param name="AIndex">Reindexes before each unit's first book and after each
+/// successful apply.</param>
 /// <param name="AProgress">May be nil.</param>
-/// <param name="ACancelled">May be nil; True stops before the NEXT unit.</param>
-/// <returns>One row per unit x book attempted (a missing or un-backed-up unit:
-/// one csUnitSkipped row); a unit whose books were all found invalid on
-/// earlier units gets no row and no backup.</returns>
-/// <remarks>Each unit gets ONE .BCK&lt;N&gt; restore point (and one for its
-/// .dfm) before its first book, deleted again when no book changed the unit.
+/// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
+/// <returns>One row per unit x book attempted (a missing, not-reindexed or
+/// un-backed-up unit: one csUnitSkipped row); a unit whose books were all found
+/// invalid on earlier units gets no row, no reindex and no backup.</returns>
+/// <remarks>Before a unit's first book the index is refreshed (a .dfm edited
+/// since the last index would otherwise be patched at stale line ranges); a
+/// failed refresh skips the unit untouched and the run continues. Each unit
+/// then gets ONE restore point, .BCK&lt;N&gt; for the .pas and the SAME N for
+/// its .dfm (SharedBackupPaths), deleted again when no book changed the unit.
 /// A failed apply or reindex restores the unit, rewrites its earlier
 /// csConverted rows to csRolledBack and stops its remaining books. Never
 /// raises: file I/O failures and exceptions from AApply / AIndex become row
@@ -236,6 +251,15 @@ var
     Result:= DropBackup(BakPas) + DropBackup(BakDfm);
   end;
 
+  // The unit's backups for a Note: both when it has a .dfm; file names only
+  // unless AFullPaths.
+  function BackupNames(AFullPaths: Boolean): string;
+  begin
+    Result:= if AFullPaths then BakPas else ExtractFileName(BakPas);
+    if BakDfm <> '' then
+      Result:= Result + ' and ' + (if AFullPaths then BakDfm else ExtractFileName(BakDfm));
+  end;
+
   // BakPas / BakDfm are set only once their copy has been made, so a failure
   // leaves them naming exactly the backups DropBackups must remove.
   function TakeBackups(out AError: string): Boolean;
@@ -245,14 +269,14 @@ var
     BakDfm:= '';
     Dfm   := ChangeFileExt(CurUnit, '.dfm');
     try
-      var LPath: string:= NextBackupPath(CurUnit, FileProbe());
-      TFile.Copy(CurUnit, LPath);
-      BakPas:= LPath;
+      // ONE number for the unit: a stale X.dfm.BCK<N> counts even when the .dfm is gone.
+      var LPaths: TArray<string>:= SharedBackupPaths([CurUnit, Dfm], FileProbe());
+      TFile.Copy(CurUnit, LPaths[0]);
+      BakPas:= LPaths[0];
       if TFile.Exists(Dfm) then
       begin
-        LPath:= NextBackupPath(Dfm, FileProbe());
-        TFile.Copy(Dfm, LPath);
-        BakDfm:= LPath;
+        TFile.Copy(Dfm, LPaths[1]);
+        BakDfm:= LPaths[1];
       end;
       Result:= True;
     except
@@ -291,7 +315,7 @@ var
     begin
       // Earlier csConverted rows stay: their change may still be on disk.
       Row.Status:= csRestoreFailed;
-      Row.Note  := Format('restore failed: %s; the unit may be half-converted -- backup at %s', [LError, BakPas]);
+      Row.Note  := Format('restore failed: %s; the unit may be half-converted -- backup at %s', [LError, BackupNames(True)]);
       Add;
       Exit;
     end;
@@ -299,25 +323,44 @@ var
       if UnitRows[I].Status = csConverted then
       begin
         UnitRows[I].Status:= csRolledBack;
-        UnitRows[I].Note  := Format('undone: %s failed on this unit; restored from %s', [ExtractFileName(Row.Book), ExtractFileName(BakPas)]);
+        UnitRows[I].Note  := Format('undone: %s failed on this unit; restored from %s', [ExtractFileName(Row.Book), BackupNames(False)]);
       end;
     Row.Status:= csFailedRestored;
     Row.Note  := AReason;
     Add;
   end;
 
-  // False = the unit failed; its remaining books must not run.
-  function RunBook(const ABook: string): Boolean;
+  // True = AIndex reported success; else AError is the head of its output.
+  function TryReindex(out AError: string): Boolean;
   var
-    LJson  : string;
     LOutput: string;
     LCode  : Integer;
   begin
+    try
+      LCode:= AIndex(LOutput);
+    except  // dl:ok try-except-swallowed@6298 -- REVIEWED 2026-09-29 not swallowed: becomes a failed reindex, so the unit is restored (or skipped) and the row carries the message
+      on E: Exception do
+      begin
+        LOutput:= 'reindex raised: ' + E.Message;
+        LCode  := -1;
+      end;
+    end; // try
+    AError:= Copy(Trim(LOutput), 1, OUTPUT_HEAD_CHARS);
+    Result:= LCode = 0;
+  end;
+
+  // False = the unit failed; its remaining books must not run.
+  function RunBook(const ABook: string): Boolean;
+  var
+    LJson : string;
+    LError: string;
+  begin
     Result:= True;
     Row:= Default(TConvertRow);
-    Row.UnitPas:= CurUnit;
-    Row.Book   := ABook;
-    Row.Backup := BakPas;
+    Row.UnitPas  := CurUnit;
+    Row.Book     := ABook;
+    Row.Backup   := BakPas;
+    Row.BackupDfm:= BakDfm;
     try
       // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson.
       AApply(CurUnit, ABook, LJson);
@@ -331,7 +374,8 @@ var
       // The BOOK is invalid; the engine validates before writing, so this unit
       // is untouched by it. Skip the book for the rest of the run.
       Invalid:= Invalid + [ABook];
-      Row.Backup:= ''; // the book made no change; the backup may yet be dropped
+      Row.Backup   := ''; // the book made no change; the backups may yet be dropped
+      Row.BackupDfm:= '';
       Row.Status:= csBookSkipped;
       Row.Note  := 'rules failed the engine''s validation: ' + Row.Apply.Error;
       Add;
@@ -342,18 +386,9 @@ var
       FailUnit(Row.Apply.Error);
       Exit(False);
     end;
-    try
-      LCode:= AIndex(LOutput);
-    except  // dl:ok try-except-swallowed@6298 -- REVIEWED 2026-09-29 not swallowed: becomes a failed reindex, so the unit is restored and the row carries the message
-      on E: Exception do
-      begin
-        LOutput:= 'reindex raised: ' + E.Message;
-        LCode  := -1;
-      end;
-    end; // try
-    if LCode <> 0 then
+    if not TryReindex(LError) then
     begin
-      FailUnit('reindex after apply failed: ' + Copy(LOutput, 1, OUTPUT_HEAD_CHARS));
+      FailUnit('reindex after apply failed: ' + LError);
       Exit(False);
     end;
     Changed   := True;
@@ -377,6 +412,16 @@ var
     end;
     if AllInvalid then
       Exit; // every book already failed validation on an earlier unit: nothing to run, no backup
+    // convert-apply patches the .dfm at the index's line ranges: a unit edited
+    // (in the IDE, say) since the last index must be re-read first. A failed
+    // refresh touches nothing -- no backup, no apply -- and the run goes on.
+    if not TryReindex(LError) then
+    begin
+      Row.Status:= csUnitSkipped;
+      Row.Note  := 'reindex before apply failed: ' + LError;
+      Add;
+      Exit;
+    end;
     // One restore point per unit per run, taken before the first book touches it.
     if not TakeBackups(LError) then
     begin
