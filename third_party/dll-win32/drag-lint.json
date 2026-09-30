@@ -158,6 +158,14 @@
         "sqlOnlyMS": true
       },
       {
+        "name": "DragLint-Config",
+        "include": [
+          "C:\\Projects\\Delphi-RAG-lint\\src\\config\\drag-lint-config.dproj"
+        ],
+        "useIgnoreFiles": true,
+        "sqlOnlyMS": true
+      },
+      {
         "name": "DragLintGraph-Viewer",
         "include": [
           "C:\\Projects\\Delphi-RAG-Lint-Graph\\src\\viewer\\drag_lint_graph.dproj"

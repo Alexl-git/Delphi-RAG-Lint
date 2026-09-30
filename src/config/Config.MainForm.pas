@@ -2,7 +2,8 @@ unit Config.MainForm;
 
 /// <summary>Main application form for drag-lint-config. Hosts a TPageControl
 /// with Indexes and Settings tabs; owns the working TIndexManifest and
-/// drives load / validate / save via TManifestIO.</summary>
+/// drives load / validate / save through Config.ManifestSession, which
+/// refuses to write back a file that did not load.</summary>
 
 interface
 
@@ -18,6 +19,7 @@ uses
   Vcl.StdCtrls,
   Vcl.Dialogs,
   DRagLint.Index.Manifest,
+  Config.ManifestSession,
   Config.IndexesFrame,
   Config.SettingsFrame;
 
@@ -41,6 +43,9 @@ type
   private
     FManifest:       TIndexManifest;
     FConfigPath:     string;
+    /// <summary>Why the loaded file could not be used; '' when it loaded
+    /// cleanly -- while set, nothing is written.</summary>
+    FLoadError:      string;
     FIndexFrame:     TIndexesFrame;
     FSettingsFrame:  TSettingsFrame;
     FOpenDialog:     TOpenDialog;
@@ -49,10 +54,12 @@ type
     /// <returns>Resolved absolute path, or empty string if not found by arg/default.</returns>
     function ResolveConfigPath: string;
     /// <summary>Load the manifest from FConfigPath (or by TManifestIO discovery when
-    /// FConfigPath is empty) and push the result into FManifest and FIndexFrame.</summary>
+    /// FConfigPath is empty) and push the result into FManifest and FIndexFrame.
+    /// Records the load error in FLoadError and tells the user when it is set.</summary>
     procedure LoadManifest;
     /// <summary>Push the current FManifest into the frame so its controls reflect
-    /// the newly loaded data.</summary>
+    /// the newly loaded data. Disables Save and marks the path caption while
+    /// FLoadError is set.</summary>
     procedure PopulateFrame;
   public
     /// <summary>The working manifest. Updated by the frame on each edit.</summary>
@@ -108,29 +115,13 @@ var
   ExeDir: string;
 begin
   ExeDir := TPath.GetDirectoryName(ParamStr(0));
-  if FConfigPath <> '' then
-  begin
-    try
-      FManifest := TManifestIO.ParseText(
-        TFile.ReadAllText(FConfigPath),
-        TPath.GetDirectoryName(FConfigPath));
-    except
-      on E: Exception do
-      begin
-        ShowMessage('Error loading config: ' + E.Message);
-        FManifest := Default(TIndexManifest);
-        FManifest.Settings := TIndexSettings.Defaults;
-        FManifest.RootDir  := TPath.GetDirectoryName(FConfigPath);
-      end;
-    end;
-  end
-  else
-  begin
-    FManifest := TManifestIO.Load(ExeDir, GetCurrentDir);
-    { If still no config path, derive one beside the EXE for Save operations }
-    if FConfigPath = '' then
-      FConfigPath := TPath.Combine(ExeDir, 'drag-lint.json');
-  end;
+  FLoadError := LoadConfigManifest(FConfigPath, ExeDir, GetCurrentDir, FManifest);
+  { If still no config path, derive one beside the EXE for Save operations }
+  if FConfigPath = '' then
+    FConfigPath := TPath.Combine(ExeDir, 'drag-lint.json');
+  if FLoadError <> '' then
+    ShowMessage('Error loading config: ' + FLoadError + sLineBreak +
+      'Saving is disabled until the file loads cleanly (fix it, then Reload).');
   PopulateFrame;
 end;
 
@@ -143,7 +134,10 @@ begin
   end;
   if FSettingsFrame <> nil then
     FSettingsFrame.BindManifest(PIndexManifest(@FManifest));
-  if FConfigPath <> '' then
+  btnSave.Enabled := FLoadError = '';
+  if FLoadError <> '' then
+    lblConfigPath.Caption := FConfigPath + '  [NOT LOADED -- saving disabled]'
+  else if FConfigPath <> '' then
     lblConfigPath.Caption := FConfigPath
   else
     lblConfigPath.Caption := '(no config file)';
@@ -160,17 +154,18 @@ begin
     FIndexFrame.OnSaveNeeded :=
       procedure
       var
-        ErrMsg: string;
+        Reason: string;
       begin
-        if FIndexFrame <> nil then FIndexFrame.FlushToManifest;
-        if FSettingsFrame <> nil then FSettingsFrame.FlushToManifest;
-        ErrMsg := TManifestIO.Validate(FManifest);
-        if (ErrMsg = '') and (FConfigPath <> '') then
-        try
-          TManifestIO.Save(FManifest, FConfigPath);
-        except
-          { swallow; build will use whatever is on disk }
-        end;
+        if FIndexFrame <> nil then
+          FIndexFrame.FlushToManifest;
+        if FSettingsFrame <> nil then
+          FSettingsFrame.FlushToManifest;
+        { A validation or write failure stays silent (the engine reports it
+          against whatever is on disk); a file that did not load is SAID,
+          because the Build then runs against the file as it is, unsaved. }
+        if not TrySaveConfigManifest(FManifest, FLoadError, FConfigPath, Reason)
+          and (FLoadError <> '') then
+          ShowMessage(Reason);
       end;
   end;
 
@@ -188,34 +183,16 @@ end;
 
 procedure TMainForm.btnSaveClick(Sender: TObject);
 var
-  ErrMsg: string;
+  Reason: string;
 begin
   { Pull edits back from frames into FManifest }
   if FIndexFrame <> nil then
     FIndexFrame.FlushToManifest;
   if FSettingsFrame <> nil then
     FSettingsFrame.FlushToManifest;
-
-  ErrMsg := TManifestIO.Validate(FManifest);
-  if ErrMsg <> '' then
-  begin
-    ShowMessage('Validation error: ' + ErrMsg);
-    Exit;
-  end;
-
-  if FConfigPath = '' then
-  begin
-    ShowMessage('No config path set. Use Open... to choose a file first.');
-    Exit;
-  end;
-
-  try
-    TManifestIO.Save(FManifest, FConfigPath);
-    ShowMessage('Saved to ' + FConfigPath);
-  except
-    on E: Exception do
-      ShowMessage('Save failed: ' + E.Message);
-  end;
+  { Saved or refused, Reason says which; the Boolean is for the autosave. }
+  TrySaveConfigManifest(FManifest, FLoadError, FConfigPath, Reason);
+  ShowMessage(Reason);
 end;
 
 procedure TMainForm.btnReloadClick(Sender: TObject);

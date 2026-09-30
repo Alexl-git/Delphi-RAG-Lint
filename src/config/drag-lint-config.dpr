@@ -12,13 +12,14 @@ uses
   DRagLint.Index.Coverage in '..\index\DRagLint.Index.Coverage.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
+  Config.ManifestSession in 'Config.ManifestSession.pas',
   Config.MainForm in 'Config.MainForm.pas' {MainForm},
   Config.IndexesFrame in 'Config.IndexesFrame.pas' {IndexesFrame: TFrame},
   Config.SettingsFrame in 'Config.SettingsFrame.pas' {SettingsFrame: TFrame},
   Config.EngineRunner in 'Config.EngineRunner.pas';
 
 const
-  VERSION = '0.45.0-alpha';
+  VERSION = '0.45.1-alpha';
 
 begin
   if FindCmdLineSwitch('version') or (ParamStr(1) = '--version') then

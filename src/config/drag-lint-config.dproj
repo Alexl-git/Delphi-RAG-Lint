@@ -88,6 +88,7 @@
         <DCCReference Include="..\index\DRagLint.Index.Coverage.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
+        <DCCReference Include="Config.ManifestSession.pas"/>
         <DCCReference Include="Config.MainForm.pas">
             <Form>MainForm</Form>
         </DCCReference>
