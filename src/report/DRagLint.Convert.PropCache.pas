@@ -114,6 +114,8 @@ type
     FById     : TDictionary<Int64, TClassMembers>;  // class id -> its members
     FSymById  : TDictionary<Int64, TSymbol>;        // class id -> its symbol, for descending
     FBuilt    : Integer;
+    FOnProgress: TProc<TPropTreeProgress>; // AOpts.OnProgress; nil = none (T2e)
+    FProgressMs: Integer;                  // AOpts.ProgressIntervalMs
     function MembersOfSym(const AClass: TSymbol): TClassMembers;
     function MembersOfId(AClassId: Int64): TClassMembers;
   public
@@ -191,6 +193,10 @@ type
     /// subtree right after it, then fields). The expand phase can resolve a
     /// class the emit phase never reaches (one reachable only through a type
     /// name already on the path); that costs a resolution, never a node.
+    /// PROGRESS (T2e): when the options this cache was created with carry an
+    /// OnProgress and a ProgressIntervalMs &gt; 0, both phases hand it a
+    /// TPropTreeProgress snapshot at most once per interval (the first after
+    /// one full interval), on this thread; the tree itself is unaffected.
     /// </remarks>
     function BuildTree(const AClassQName: string; ADepth: Integer): TPropTree;
     /// <summary>How many classes this cache has resolved (apply/1
@@ -327,6 +333,9 @@ function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
 
 implementation
 
+uses
+  System.Diagnostics;
+
 { TPropMemberCache }
 
 constructor TPropMemberCache.Create(const AStore: ISymbolStore; const AOpts: TPropTreeOptions);
@@ -336,6 +345,8 @@ begin
   FIdByQName:= TDictionary<string, Int64>.Create;
   FById     := TDictionary<Int64, TClassMembers>.Create;
   FSymById  := TDictionary<Int64, TSymbol>.Create;
+  FOnProgress:= AOpts.OnProgress;
+  FProgressMs:= AOpts.ProgressIntervalMs;
 end;
 
 destructor TPropMemberCache.Destroy;
@@ -525,6 +536,26 @@ var
   Nodes    : TList<TPropNode>;
   Visited  : TDictionary<string, Boolean>;
   Truncated: Boolean;
+  Clock    : TStopwatch;
+  LastTick : Int64;
+
+  // PROGRESS (T2e): hand a snapshot to FOnProgress once ProgressMs has passed
+  // since the last call (or since the build began). Cheap when off.
+  procedure Tick(ALevel, AQueued, ANodes: Integer);
+  var
+    Snap: TPropTreeProgress;
+  begin
+    if (FProgressMs <= 0) or not Assigned(FOnProgress) then Exit;
+    if Clock.ElapsedMilliseconds - LastTick < FProgressMs then Exit;
+    LastTick          := Clock.ElapsedMilliseconds;
+    Snap.RootQName    := AClassQName;
+    Snap.Level        := ALevel;
+    Snap.MaxDepth     := ADepth;
+    Snap.ClassesDone  := FBuilt;
+    Snap.ClassesQueued:= AQueued;
+    Snap.Nodes        := ANodes;
+    FOnProgress(Snap);
+  end;
 
   // EXPAND: resolve every class within ADepth hops once, level by level. A
   // class at distance D is resolved when D <= ADepth -- exactly the classes the
@@ -540,6 +571,7 @@ var
     M     : TClassMembers;
     D     : Integer;
     I     : Integer;
+    Done  : Integer; // classes of this level already taken from Level
   begin
     Level := TList<Int64>.Create;
     Next  := TList<Int64>.Create;
@@ -551,9 +583,12 @@ var
       while Level.Count > 0 do
       begin
         Next.Clear;
+        Done:= 0;
         for Id in Level do
         begin
           M:= MembersOfId(Id);
+          Inc(Done);
+          Tick(D, Level.Count - Done + Next.Count, 0);
           if D >= ADepth then Continue;
           for I:= 0 to High(M.Members) do
             if IsDescendable(M, I) and not Queued.ContainsKey(M.TypeId[I]) then
@@ -588,6 +623,7 @@ var
       Node     := AMembers.Members[Idx];
       Node.Path:= APrefix + Node.Path;
       Nodes.Add(Node);
+      Tick(ADepth, 0, Nodes.Count);
       { Only a class-typed PROPERTY recurses; a field leaf is flat even when
         class-typed (R4), and a reference leaf is not class-typed. }
       if not IsDescendable(AMembers, Idx) then Continue;
@@ -604,8 +640,10 @@ var
   end;
 
 begin
-  Result:= Default(TPropTree);
-  Root  := MembersOf(AClassQName);
+  Result  := Default(TPropTree);
+  Clock   := TStopwatch.StartNew;
+  LastTick:= 0;
+  Root    := MembersOf(AClassQName);
   if Root.RootType = '' then Exit; // unresolved class -> empty tree, RootType=''
   Expand;
   Nodes    := TList<TPropNode>.Create;

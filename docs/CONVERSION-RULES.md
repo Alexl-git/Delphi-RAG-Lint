@@ -77,7 +77,8 @@ directly (not the index) and treats `--db` as optional per-class enrichment.
 ### 1. `proptree` -- deep property enumerator
 
 ```
-drag-lint proptree --qname <TClass> [--depth N] [--rules <file>] [--no-to-persistent]
+drag-lint proptree --qname <TClass> [--depth N] [--rules <file>] [--progress-interval S]
+                    [--no-to-persistent]
                     [--min-visibility published|public]
                     [--format text|json] --db PATH [--db ...]
 ```
@@ -93,11 +94,46 @@ The depth is `--depth N` (an integer >= 1), else the `#depth N` of the book name
 by `--rules <file>`, else **5** (1.20.6; before that the documented default was
 6, but a run with no `--depth` actually used the global parse default 3). A
 non-numeric `--depth`, `--depth 0` / negative, a missing `--rules` file, or a
-book whose `#depth` is invalid or repeated is a usage error (exit 2).
+book whose `#depth` is invalid or repeated is a usage error (exit 2); so is a
+`--depth` that is not plain decimal digits (`+3`, `$A` -- the check `#depth`
+uses).
 `convert-scaffold` takes the same `--depth` / `--rules` with the same rule. Each
 visited class's own **fields** and class-scoped **consts** are also walked and
 emitted as flat leaves (`member_kind: "field"` -- see below; never recursed into,
 even when class-typed).
+
+**Progress (1.20.6).** A deep tree can take a while (FireDAC `TFDQuery` at depth
+4 is ~66 classes and ~26k nodes). `--progress-interval S` (decimal seconds, the
+same digits-only check as `--depth`; `x`, `-1`, `+3`, `1.5` exit 2) makes
+`proptree` and `convert-scaffold` write ONE JSON line to **STDERR** at most every
+`S` seconds while the tree is expanded and emitted -- never to stdout, so the
+verb's own output is byte-identical with or without it:
+
+```
+{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"FireDAC.Comp.Client.TFDQuery","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}}
+```
+
+`elapsed_s` counts from the start of the verb (one decimal, `.` in every locale);
+`depth` is the breadth-first level being expanded (`max_depth` once expansion is
+over and the nodes are being emitted); `classes_done` is the number of classes
+resolved into the member cache so far; `classes_queued` the classes still waiting
+at this or a deeper level (0 while emitting); `nodes` the nodes emitted so far (0
+while expanding). `class` is the tree's root (`convert-scaffold` builds the FROM
+tree, then the TO tree). The key set and order are fixed; `elapsed_s`,
+`classes_done` and `nodes` never decrease. The first line comes after one full
+interval, so a run shorter than `S` prints none. Note that the JSON writer that
+runs AFTER the tree is built prints no progress (on `TFDQuery --depth 4 --json`
+it is most of the wall time).
+
+**Default 0 = OFF.** A caller that merges stdout and stderr (the rules editor
+does, then parses from the first `{` to the last `}`) must leave it off.
+`convert-apply` / `convert-validate` never build a tree and never emit progress:
+they reject `--progress-interval` as an unknown argument (exit 3).
+**Cancel = kill the process.** That is safe with the default write-back: each
+type the ancestry-bridge recovers is memoised by its own SQLite statement, so a
+killed run leaves the index consistent (pinned by a kill test and
+`PRAGMA integrity_check`); `--no-write-back` never writes at all. `info --json`
+advertises the flag as `capabilities.progress_lines: true`.
 
 A re-declared / inherited property (for example `property Color;`, which the index
 stores with an empty signature) resolves its type from the first ancestor
@@ -189,7 +225,8 @@ usage error / an explicit `--db` that does not exist / invalid `--min-visibility
 ```
 drag-lint convert-scaffold --from <FromType> --to <ToType>
                            [--out <file>] [--surface dfm|pas]
-                           [--depth N] [--rules <file>] --db PATH [--db ...]
+                           [--depth N] [--rules <file>] [--progress-interval S]
+                           --db PATH [--db ...]
 ```
 
 Enumerates BOTH deep property trees (via `proptree`'s engine) and emits a VALID,
@@ -716,6 +753,10 @@ autotests (run each individually; there is no aggregating runner):
 - `tests/autotest/run_convert_scaffold.ps1` -- the `convert-scaffold` generator.
 - `tests/autotest/run_convert_book_depth.ps1` -- the `#depth` directive and the
   `--depth` > `#depth` > 5 precedence of `proptree` / `convert-scaffold`.
+- `tests/autotest/run_proptree_progress.ps1` -- `--progress-interval` progress
+  lines (off by default, stderr only, the line format, exit 2 / exit 3 cases, the
+  `info` capability keys, kill-safety of the write-back; the `TFDQuery` arms need
+  `-LibDb <scratch library copy>`).
 - `tests/autotest/run_dfm_reemit.ps1` -- the Batch 2a-i DFM re-emit engine (via the
   hidden `convert-reemit` verb): 1:1 rename, moved-depth, events, `#ignore`,
   unmapped-drop, `#default`, collection relocate, binary same-type/mismatch,

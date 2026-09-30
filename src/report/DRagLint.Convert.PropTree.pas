@@ -129,6 +129,27 @@ type
     DefaultValue: string;
   end;
 
+  /// <summary>One progress snapshot of a tree build (engine 1.20.6, T2e):
+  /// what TPropTreeOptions.OnProgress receives.</summary>
+  /// <remarks>
+  /// RootQName is the class the tree is being built for (the qualified name as
+  /// the caller passed it). Level is the BFS level being expanded (0 = the
+  /// root's own members); once expansion is over and the nodes are being
+  /// emitted it is MaxDepth. ClassesDone is how many classes the member cache
+  /// has resolved (cumulative over the cache's life, so non-decreasing across
+  /// two trees built from one cache). ClassesQueued is how many classes wait to
+  /// be resolved at this or a deeper level (0 while emitting). Nodes is how many
+  /// nodes have been emitted so far (0 while expanding).
+  /// </remarks>
+  TPropTreeProgress = record
+    RootQName    : string;
+    Level        : Integer;
+    MaxDepth     : Integer;
+    ClassesDone  : Integer;
+    ClassesQueued: Integer;
+    Nodes        : Integer;
+  end;
+
   /// <summary>Tuning knobs for BuildPropTree.</summary>
   /// <remarks>
   /// Depth caps recursion into class-typed properties (the caller applies
@@ -137,8 +158,9 @@ type
   /// when True (the CLI default), stops the ancestor climb at a class named
   /// 'TPersistent' or 'TObject' so the enumerator does not surface TObject's
   /// non-published noise -- pragmatic, name-based, no RTTI.
-  /// No field is a managed type, so a local variable of this record is raw,
-  /// UNINITIALISED stack memory in Delphi -- nothing zeroes it. Every caller
+  /// Only OnProgress is a managed type, so every other field of a local
+  /// variable of this record is raw, UNINITIALISED stack memory in Delphi --
+  /// nothing zeroes it. Every caller
   /// MUST start with `Opts:= Default(TPropTreeOptions);` before assigning any
   /// field, so a field the caller does not explicitly set (today or after a
   /// future field is added) is deterministically False/0/'' rather than
@@ -157,6 +179,17 @@ type
     /// still expand. Default False (unchanged legacy behavior); the proptree verb
     /// sets it from --refs-as-leaves.</summary>
     TreatRefsAsLeaves: Boolean;
+    /// <summary>Called with a progress snapshot while a tree is built (engine
+    /// 1.20.6, T2e); nil (the default) = no progress. proptree and
+    /// convert-scaffold set it from --progress-interval.</summary>
+    /// <remarks>Called on the walker's own thread (no timer thread), at most
+    /// once per ProgressIntervalMs, never before the first interval has
+    /// elapsed. Only TPropMemberCache.BuildTree calls it; lazy path
+    /// resolution (convert-apply / convert-validate) never does.</remarks>
+    OnProgress: TProc<TPropTreeProgress>;
+    /// <summary>The minimum gap between two OnProgress calls, in
+    /// milliseconds; &lt;= 0 = no progress even when OnProgress is set.</summary>
+    ProgressIntervalMs: Integer;
   end;
 
   /// <summary>The flattened deep-property tree of a class.</summary>

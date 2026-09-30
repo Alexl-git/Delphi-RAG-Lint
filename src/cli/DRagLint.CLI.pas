@@ -341,6 +341,13 @@ type
     // parse default 3, nor "--depth x" from a number (see ResolveTreeDepth).
     DepthGiven    : Boolean;
     DepthRaw      : string ;
+    // 1.20.6 (T2e): --progress-interval S was given, and its raw text (not
+    // given = 0 = off).
+    // Parsed only for proptree / convert-scaffold (any other verb rejects the
+    // flag as an unknown argument, exit 3); validated by
+    // ResolveProgressInterval (not decimal digits = exit 2).
+    ProgressIntervalGiven: Boolean;
+    ProgressIntervalRaw  : string ;
     IncludeImpl   : Boolean;
     AllVisibility : Boolean;
     WiringCoverage: Boolean; // v8: --coverage for the wiring command
@@ -954,13 +961,17 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
-  Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; ' +
-    'depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
+  Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; ' +
+    'depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2; ' +
+    '--progress-interval S: see PROGRESS below)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error; ' +
     'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; ' +
     'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); no JSON mode)');
-  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
-    'expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
+  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
+    'expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
+  Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (decimal seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
+    '{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) exits 2; ' +
+    'convert-apply / convert-validate never emit progress and reject the flag as an unknown argument (exit 3); cancel = kill the process (the default write-back is kill-safe: each memoized type is its own SQLite statement)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
     'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added; ' +
@@ -1554,6 +1565,16 @@ begin
       Result.Depth     := StrToIntDef(ParamStr(i), Result.Depth); { unparsable keeps the default }
       Result.DepthGiven:= True;
       Result.DepthRaw  := ParamStr(i);
+    end
+    // 1.20.6 (T2e): progress lines on stderr -- ONLY the two tree-expanding
+    // verbs take it; on every other verb (convert-apply / convert-validate
+    // above all) it falls through to the Unknown-argument raise, exit 3.
+    else if (A = '--progress-interval') and (i < ParamCount) and
+      ((Result.Command = 'proptree') or (Result.Command = 'convert-scaffold')) then
+    begin
+      Inc(i);
+      Result.ProgressIntervalGiven:= True;
+      Result.ProgressIntervalRaw  := ParamStr(i);
     end
     else if A = '--include-impl'   then Result.IncludeImpl   := True
     else if A = '--full-surface'   then Result.FullSurface   := True
@@ -15945,6 +15966,14 @@ begin
         literal TRUE (its HasCapability tests `is TJSONTrue`), so it is always
         emitted, and never as a string or a number. }
       JCap.AddPair('apply_unit_rules', TJSONBool.Create(True));
+      { 1.20.6 (T2e), same JSON-literal-true contract: book_depth = a --rules
+        book's '#depth N' sets proptree / convert-scaffold depth;
+        progress_lines = those two verbs take --progress-interval S (stderr
+        JSON lines, off by default); lazy_validate = convert-validate /
+        convert-apply resolve rule paths segment by segment and build no tree. }
+      JCap.AddPair('book_depth'    , TJSONBool.Create(True));
+      JCap.AddPair('progress_lines', TJSONBool.Create(True));
+      JCap.AddPair('lazy_validate' , TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -23207,8 +23236,9 @@ end; // function
 /// <param name="ADepth">The depth to expand to (&gt;= 1); only meaningful when the
 /// result is True.</param>
 /// <returns>True when ADepth is set; False on a usage error, already printed
-/// as one 'ERROR: ...' line (the caller exits 2): --depth that is not an integer
-/// or is &lt; 1; a --rules file that is missing or unreadable; a book whose
+/// as one 'ERROR: ...' line (the caller exits 2): --depth that is not decimal
+/// digits ('+3', '$A' and '-1' included -- the IsDecimalDigits check '#depth'
+/// uses) or is &lt; 1; a --rules file that is missing or unreadable; a book whose
 /// '#depth' is invalid or repeated (named by file and line).</returns>
 /// <remarks>The book is read whenever --rules is given, even beside --depth, so
 /// a broken '#depth' never goes unnoticed; its other parse errors are ignored
@@ -23241,7 +23271,7 @@ begin
     end;
     Bad:= False;
     for E in Book.ParseErrors do
-      if E.Message.StartsWith('#depth ') or E.Message.StartsWith('duplicate #depth ') then
+      if E.IsDepthError then
       begin
         Writeln(Format('ERROR: %s line %d: %s', [AArgs.RulesFile, E.LineNo, E.Message]));
         Bad:= True;
@@ -23250,7 +23280,10 @@ begin
   end;
   if AArgs.DepthGiven then
   begin
-    if not TryStrToInt(AArgs.DepthRaw, ADepth) or (ADepth < MIN_BOOK_DEPTH) then
+    // Decimal digits only, exactly like '#depth': TryStrToInt alone takes '+3'
+    // and '$A' (hex).
+    if not IsDecimalDigits(AArgs.DepthRaw) or not TryStrToInt(AArgs.DepthRaw, ADepth) or
+      (ADepth < MIN_BOOK_DEPTH) then
     begin
       Writeln(Format('ERROR: --depth must be an integer >= 1 (got "%s")', [AArgs.DepthRaw]));
       Exit;
@@ -23259,6 +23292,81 @@ begin
   else if Book.Depth > 0 then
     ADepth:= Book.Depth;
   Result:= True;
+end;
+
+const
+  MS_PER_SECOND           = 1000;
+  MAX_PROGRESS_INTERVAL_S = 86400; // one day; keeps S * 1000 inside an Integer
+
+/// <summary>The progress interval of proptree / convert-scaffold, from
+/// --progress-interval S (engine 1.20.6, T2e).</summary>
+/// <param name="AArgs">ProgressIntervalGiven/ProgressIntervalRaw.</param>
+/// <param name="AMs">The interval in milliseconds; 0 = off -- the default
+/// (flag absent) and S = 0 alike. Only meaningful when the result is
+/// True.</param>
+/// <returns>True when AMs is set; False on a usage error, already printed as
+/// one 'ERROR: ...' line (the caller exits 2): S that is not decimal digits
+/// (a sign, a '$' hex prefix, a decimal point -- the IsDecimalDigits check
+/// '#depth' and --depth use) or is above 86400.</returns>
+function ResolveProgressInterval(const AArgs: TArgs; out AMs: Integer): Boolean;
+var
+  Secs: Integer;
+begin
+  AMs:= 0;
+  if not AArgs.ProgressIntervalGiven then Exit(True);
+  if not IsDecimalDigits(AArgs.ProgressIntervalRaw) or not TryStrToInt(AArgs.ProgressIntervalRaw, Secs) or
+    (Secs > MAX_PROGRESS_INTERVAL_S) then
+  begin
+    Writeln(Format('ERROR: --progress-interval must be an integer 0..%d (seconds; got "%s")',
+      [MAX_PROGRESS_INTERVAL_S, AArgs.ProgressIntervalRaw]));
+    Exit(False);
+  end;
+  AMs   := Secs * MS_PER_SECOND;
+  Result:= True;
+end;
+
+// S as a quoted JSON string ("..."), escaped, non-ASCII as \u -- for the
+// progress line, which is built by hand to fix its key order and number format.
+function ProgressJsonStr(const S: string): string;
+var
+  J: TJSONString;
+begin
+  J:= TJSONString.Create(S);
+  try
+    Result:= J.ToJSON;
+  finally
+    J.Free;
+  end;
+end;
+
+/// <summary>The TPropTreeOptions.OnProgress handler of a tree-expanding verb:
+/// writes each snapshot as ONE JSON line to STDERR (engine 1.20.6, T2e).</summary>
+/// <param name="AVerb">'proptree' or 'convert-scaffold' (the line's "verb").</param>
+/// <returns>A handler that writes
+/// {"progress":{"elapsed_s":12.3,"verb":"proptree","class":"Unit.TX","depth":2,
+/// "max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}}
+/// -- keys in exactly that order, no blanks, 7-bit ASCII (the class name is
+/// JSON-escaped, non-ASCII as \u), elapsed_s with one decimal and a '.' in
+/// every locale.</returns>
+/// <remarks>elapsed_s counts from THIS call (the verb's arguments are valid by
+/// then), so it is non-decreasing across convert-scaffold's two trees; the
+/// other fields are TPropTreeProgress's. STDOUT is never written, so the
+/// verb's own output is byte-identical with or without progress; a caller
+/// that merges the streams (the editor slices the first '{' .. the last '}')
+/// must leave progress OFF, which is the default.</remarks>
+function MakeProgressWriter(const AVerb: string): TProc<TPropTreeProgress>;
+var
+  Clock: TStopwatch;
+begin
+  Clock:= TStopwatch.StartNew;
+  Result:= procedure(P: TPropTreeProgress)
+  begin
+    Writeln(ErrOutput, Format('{"progress":{"elapsed_s":%s,"verb":%s,"class":%s,"depth":%d,' +
+      '"max_depth":%d,"classes_done":%d,"classes_queued":%d,"nodes":%d}}',
+      [FormatFloat('0.0', Clock.ElapsedMilliseconds / MS_PER_SECOND, TFormatSettings.Invariant),
+       ProgressJsonStr(AVerb), ProgressJsonStr(P.RootQName), P.Level, P.MaxDepth, P.ClassesDone, P.ClassesQueued, P.Nodes]));
+    Flush(ErrOutput);
+  end;
 end;
 
 /// <summary>drag-lint proptree --qname X [--depth N] [--rules FILE] [--no-to-persistent]
@@ -23287,7 +23395,11 @@ end;
 /// unresolved/type-alias ancestor edge) is memoized back onto the property row
 /// (next query is a plain hit; self-limiting). A writable open that fails falls
 /// back to read-only (resolution still works; memoization skipped). --no-write-back
-/// forces a read-only (query_only) open that never mutates the DB.</summary>
+/// forces a read-only (query_only) open that never mutates the DB; killing the
+/// process mid-run is safe (each memoized type is its own SQLite statement).
+/// --progress-interval S (default 0 = off) writes one JSON progress line to
+/// STDERR at most every S seconds while the tree is built (MakeProgressWriter);
+/// stdout is unchanged.</summary>
 /// <param name="AArgs">QName=class, DepthGiven/DepthRaw=--depth and
 /// RulesFile=--rules (recursion cap, see ResolveTreeDepth; default 5),
 /// ToPersistent=ancestor-stop, RefsAsLeaves=--refs-as-leaves (TComponent-typed
@@ -23297,7 +23409,7 @@ end;
 /// DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok; 1 qname not resolved to a class in any DB; 2 usage error / no
 /// readable db / invalid --min-visibility value / invalid --depth or --rules
-/// book depth.</returns>
+/// book depth / invalid --progress-interval.</returns>
 function DoPropTree(const AArgs: TArgs): Integer;
 var
   Dbs   : TArray<string>  ;
@@ -23309,6 +23421,7 @@ var
   Fmt   : string          ;
   Opts  : TPropTreeOptions;
   MinVis: string          ;
+  ProgMs: Integer         ;
 
   function KindLabel(const ANode: TPropNode): string;
   begin
@@ -23343,7 +23456,7 @@ begin
   if not ExplicitDbsExist(AArgs, 'proptree') then Exit(2);
   if AArgs.QName = '' then
   begin
-    Writeln('Usage: drag-lint proptree --qname X [--depth N] [--rules FILE] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]');
+    Writeln('Usage: drag-lint proptree --qname X [--depth N] [--rules FILE] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]');
     Exit(2);
   end;
 
@@ -23359,11 +23472,14 @@ begin
   // whose parse default is 3, so a proptree with no --depth ran at 3, not the
   // documented 6.
   if not ResolveTreeDepth(AArgs, Depth) then Exit(2);
+  if not ResolveProgressInterval(AArgs, ProgMs) then Exit(2);
 
   Opts:= Default(TPropTreeOptions);
   Opts.Depth            := Depth;
   Opts.ToPersistent     := AArgs.ToPersistent;
   Opts.TreatRefsAsLeaves:= AArgs.RefsAsLeaves;
+  Opts.ProgressIntervalMs:= ProgMs;
+  if ProgMs > 0 then Opts.OnProgress:= MakeProgressWriter('proptree');
 
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
@@ -23945,9 +24061,13 @@ end; // function
 /// <param name="AArgs">CallFrom=--from (FromType qname), RenameTo=--to (ToType
 /// qname), Output=--output (file; empty=stdout), Surface=--surface dfm|pas ('' =
 /// default 'dfm'), DepthGiven/DepthRaw=--depth and RulesFile=--rules (tree
-/// depth, see ResolveTreeDepth), DbPath/DbPaths=index(es).</param>
+/// depth, see ResolveTreeDepth), ProgressIntervalGiven/ProgressIntervalRaw=
+/// --progress-interval S (default 0 = off; one JSON line on STDERR at most every
+/// S seconds while the two trees are built, see MakeProgressWriter; stdout is
+/// unchanged), DbPath/DbPaths=index(es).</param>
 /// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
-/// --from/--to, invalid --surface value, invalid --depth or book #depth) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
+/// --from/--to, invalid --surface value, invalid --depth or book #depth, invalid
+/// --progress-interval) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
 /// <remarks>Output is DETERMINISTIC (paths sorted case-insensitively) so the
 /// emitted text is stable across runs. Emission order: (1) a '#convert From -&gt;
 /// To' header with a best-guess ', unit' uses-add taken from the qname unit
@@ -23977,6 +24097,7 @@ var
   Sb       : TStringBuilder  ;
   OutText  : string          ;
   Surface  : string          ;
+  ProgMs   : Integer         ;
 
   // Bare leaf (last dotted segment) of a path, lowercased for matching.
   function LeafLower(const APath: string): string;
@@ -24130,7 +24251,7 @@ begin
   if not ExplicitDbsExist(AArgs, 'convert-scaffold') then Exit(2);
   if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
   begin
-    Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--output FILE] [--surface dfm|pas] [--depth N] [--rules FILE] --db PATH [--db ...]');
+    Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--output FILE] [--surface dfm|pas] [--depth N] [--rules FILE] [--progress-interval S] --db PATH [--db ...]');
     Exit(2);
   end;
 
@@ -24148,9 +24269,12 @@ begin
   begin Writeln(Format('ERROR: --surface must be dfm|pas (got "%s")', [AArgs.Surface])); Exit(2); end;
 
   if not ResolveTreeDepth(AArgs, Depth) then Exit(2); // --depth > #depth > 5
+  if not ResolveProgressInterval(AArgs, ProgMs) then Exit(2);
   Opts:= Default(TPropTreeOptions);
   Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
+  Opts.ProgressIntervalMs:= ProgMs;
+  if ProgMs > 0 then Opts.OnProgress:= MakeProgressWriter('convert-scaffold');
 
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
@@ -24609,6 +24733,7 @@ var
     E: TRuleError;
   begin
     if (AType = '') or (ATrees.ResolveType(AType) <> '') then Exit;
+    E        := Default(TRuleError);
     E.LineNo := AConv.LineNo;
     E.Message:= Format('#convert %s type not found in any --db: %s', [ASide, AType]);
     AErrors.Add(E);

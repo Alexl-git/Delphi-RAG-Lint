@@ -27,7 +27,7 @@
        (5) reaches the 4-segment leaf the book cuts off
     g  convert-validate / convert-apply ignore it: `#depth 1` still validates and
        dry-runs a 3-segment #link
-    u  usage: --depth x / 0 / -1 exit 2 (proptree and convert-scaffold); a missing
+    u  usage: --depth x / 0 / -1 / +3 / $A exit 2 (decimal digits only, like #depth) (proptree and convert-scaffold); a missing
        --rules file exits 2; a book whose #depth is invalid exits 2 naming the
        line; an unknown flag still exits 3
 
@@ -305,7 +305,7 @@ Check 'g2 convert-apply dry run: #depth 1 book with a 3-segment #link is ok, exi
 # ---- u: usage errors ------------------------------------------------------------------
 Write-Host ''
 Write-Host 'u  usage errors' -ForegroundColor Cyan
-foreach ($v in @('x', '0', '-1')) {
+foreach ($v in @('x', '0', '-1', '+3', '$A')) {
   $r = Run @('proptree', '--qname', 'DeepFix.TDeep', '--no-write-back', '--depth', $v, '--db', $db)
   Check "u1 proptree --depth $v -> exit 2 naming --depth" (($r.Code -eq 2) -and ($r.Out -match '--depth')) "exit=$($r.Code) $($r.Out)"
   $r = Run ($sc + @('--depth', $v))

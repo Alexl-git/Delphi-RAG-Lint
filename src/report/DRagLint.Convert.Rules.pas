@@ -182,6 +182,11 @@ type
   TRuleError = record
     LineNo : Integer;
     Message: string;
+    /// <summary>True when the error is about the book's '#depth' (invalid
+    /// value, or a second '#depth'). proptree / convert-scaffold key on it to
+    /// refuse a broken book (exit 2) while ignoring its other parse errors --
+    /// a structural signal, never a match on Message text.</summary>
+    IsDepthError: Boolean;
   end;
 
   /// <summary>The full parsed rule set: the recognised rules plus any parse
@@ -264,6 +269,17 @@ type
     Block         : Integer;
     IsWhen        : Boolean;
   end;
+
+/// <summary>True when S is one or more ASCII decimal digits and nothing
+/// else.</summary>
+/// <param name="S">The text to test, untrimmed.</param>
+/// <returns>False for '', a sign ('+3', '-1'), a '$' hex prefix ('$A'), a
+/// blank, a decimal point -- every form StrToInt / TryStrToInt alone would
+/// accept or half-accept.</returns>
+/// <remarks>The one strict integer check shared by '#depth N', the CLI's
+/// --depth (proptree / convert-scaffold) and --progress-interval, so the
+/// three can never disagree about what a number is.</remarks>
+function IsDecimalDigits(const S: string): Boolean;
 
 /// <summary>Parses the reFind-superset conversion-rules DSL text into a rule set.
 /// TOTAL: never raises -- an unknown '#directive' becomes a captured ParseError,
@@ -473,8 +489,6 @@ const
   ARROW_LINK    = ' <- ';  // #link separator (reversed)
   STUB_MARKER   = '???';   // explicit-unfilled path stub (skip validation)
 
-// True when S is one or more ASCII decimal digits and nothing else -- no sign,
-// no '$' hex prefix, no blanks (StrToIntDef alone would accept '+3' and '$A').
 function IsDecimalDigits(const S: string): Boolean;
 var
   C: Char;
@@ -624,12 +638,14 @@ var
   BookDepth    : Integer;
   BookDepthLine: Integer;
 
-  procedure AddError(const AMsg: string);
+  procedure AddError(const AMsg: string; AIsDepth: Boolean = False);
   var
     E: TRuleError;
   begin
-    E.LineNo := LineNo;
-    E.Message:= AMsg;
+    E             := Default(TRuleError);
+    E.LineNo      := LineNo;
+    E.Message     := AMsg;
+    E.IsDepthError:= AIsDepth;
     Errs.Add(E);
   end;
 
@@ -1022,9 +1038,9 @@ begin
           makes no rule, so Depth stays 0 and the caller's default applies. }
         R.Depth:= if IsDecimalDigits(Arg) then StrToIntDef(Arg, 0) else 0;
         if BookDepthLine > 0 then
-          AddError(Format('duplicate #depth (first on line %d) -- one #depth per book', [BookDepthLine]))
+          AddError(Format('duplicate #depth (first on line %d) -- one #depth per book', [BookDepthLine]), True)
         else if (R.Depth < MIN_BOOK_DEPTH) or (R.Depth > MAX_BOOK_DEPTH) then
-          AddError(Format('#depth must be an integer %d..%d', [MIN_BOOK_DEPTH, MAX_BOOK_DEPTH]))
+          AddError(Format('#depth must be an integer %d..%d', [MIN_BOOK_DEPTH, MAX_BOOK_DEPTH]), True)
         else
         begin
           R.Kind       := rkDepth;
@@ -1149,6 +1165,7 @@ var
   var
     E: TRuleError;
   begin
+    E        := Default(TRuleError);
     E.LineNo := ALineNo;
     E.Message:= AMsg;
     Errs.Add(E);
@@ -1516,6 +1533,7 @@ begin
   for R in ARules.Rules do
   begin
     if (R.Kind <> rkLink) or (R.GlyphExpr = '') then Continue;
+    E        := Default(TRuleError);
     E.LineNo := R.LineNo;
     E.Message:= Format('link %s <- %s %s: glyph-expression links are validated but not yet realised ' +
       'by convert-apply (CV-2) -- refusing rather than carrying the source image whole',
