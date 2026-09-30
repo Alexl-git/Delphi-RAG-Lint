@@ -7101,6 +7101,9 @@ begin
 
     B.LoadFromString('#depth 2' + CRLF + '#depth 9' + CRLF + BOOK_NO_DEPTH);
     Check('depth.duplicate.first.wins', (B.Depth = DEPTH_LOW) and (B.DepthState = bdsDuplicate));
+    B.SetDepth(DEPTH_HIGH);
+    S:= B.Snapshot;
+    Check('depth.set.duplicate.updates.first', (B.Depth = DEPTH_HIGH) and (B.DepthState = bdsDuplicate) and (Pos('#depth 7', S) = 1) and (Pos('#depth 9', S) > 0) and (Occurrences('#depth', S) = 2), S);
 
     Raised:= False;
     try

@@ -738,7 +738,7 @@ begin
   Result:= ANode;
 end;
 
-function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@cedc -- REVIEWED 2026-09-30: a flat one-arm-per-directive dispatcher; the #depth arm took it from 247 to 256 lines, and splitting the arms apart is a refactor outside this change
+function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@cedc, too-many-exit-points@94ac, cyclomatic-complexity@6a20, cognitive-complexity@c54c -- REVIEWED 2026-09-30: a flat one-arm-per-directive dispatcher (each arm sets Kind and Exits); every new directive necessarily adds one arm, one branch and one exit -- #depth took it to 256 lines / 20 exits / cyclomatic 43 / cognitive 102 -- and splitting the arms apart is a refactor outside this change
 var
   N     : TRuleNode;
   T     : string   ;
