@@ -513,7 +513,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel (+6 more)</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 109 lines (full implementation)</para>
+      /// <para>Complexity: 22 (cyclomatic, outer body), 115 lines (full implementation)</para>
       /// <para>Reads: FCbFrom, FCbTo, FEngine, FActiveHdr, FBook, FRules</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
@@ -625,6 +625,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesSelectItem (ConvRules.MainForm.pas) (+1 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, Default, Format, Trim</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 74 lines (full implementation)</para>
       /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+3 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
@@ -845,7 +846,7 @@ type
       /// cross-book save/discard prompt.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SelectedRowIndex, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.RulesForType, ConvRules.RuleChooser.TRuleChooserForm.Execute, ExtractFileName, Format</para>
-      /// <para>Reads: FCbFrom, FFormTypeRows, FCatalog, FCbTo   Writes: FSelectedFormType</para>
+      /// <para>Reads: FCbFrom, FFormTypeRows, FCatalog, FCbTo, FEngine   Writes: FSelectedFormType</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedRowIndex"/>
@@ -906,8 +907,8 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesDblClick (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, SameText</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>
-      /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr   Writes: FPendingSelectEntry, FHasPendingSelectEntry</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 84 lines (full implementation)</para>
+      /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr, FEngine   Writes: FPendingSelectEntry, FHasPendingSelectEntry</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ConfirmDiscard"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
@@ -2334,7 +2335,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Create (+7 more)</para>
       /// <para>constructor</para>
-      /// <para>Reads: FBook, FEdDest   Writes: FBook, FSnapshot, FFromPlatform, FToPlatform, FEngine, FActiveHdr, FSurfaceMinVis, FCastDefs (+2 more)</para>
+      /// <para>Reads: FBook, FEngine, FEdDest   Writes: FBook, FSnapshot, FFromPlatform, FToPlatform, FEngine, FActiveHdr, FSurfaceMinVis, FCastDefs (+2 more)</para>
       /// <para>UI thread only -- touches Application</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: override</para>
@@ -2472,6 +2473,7 @@ uses
   , Vcl.FileCtrl       // SelectDirectory for the mask folder
   , Winapi.ShellAPI    // HDROP for a pasted Explorer file list
   , ConvRules.DropTarget
+  , ConvRules.EngineWait // RunWithProgressDialog: proptree behind a cancellable window
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2553,6 +2555,7 @@ begin
   FFromPlatform:= GEditorFromPlatform;
   FToPlatform  := GEditorToPlatform;
   FEngine:= TEngineAdapter.Create(GEditorExe, EngineDbSet);
+  FEngine.LongCallRunner:= RunWithProgressDialog; // proptree runs behind a cancellable window
   FActiveHdr:= -1;
   FSurfaceMinVis:= 'published'; // default target surface = DFM-streamable
   { ParseCastLib, not LoadCastLib: the latter returns only the casts and drops the
@@ -4284,13 +4287,16 @@ begin
     SetStatus('From tree: ' + Err);
     FFromTree:= Default(TProptree);
   end;
-  if Trim(Node.ToType) = '' then
+  if FEngine.LastCancelled then
+    FToTree:= Default(TProptree) // one Cancel stops the whole load, not just the From half
+  else if Trim(Node.ToType) = '' then
     FToTree:= Default(TProptree) // From-only rule: no To tree yet
   else if not FEngine.GetProptree(Node.ToType, FToTree, Err, ToNote, FSurfaceMinVis) then
   begin
     SetStatus('To tree: ' + Err);
     FToTree:= Default(TProptree);
   end;
+  var LCancelled: Boolean:= FEngine.LastCancelled;
   // A bare class name that several units declare resolved by row order alone, so the
   // tree on screen may belong to the wrong framework. Say which one was used -- this
   // rides on the SUCCESS path, so it has to be carried down to the final SetStatus
@@ -4318,6 +4324,8 @@ begin
     SetStatus(FExamineInfo + Notes)
   else
     SetStatus(Format('%s -> %s : %d From leaves, %d To leaves.', [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)]) + Notes);
+  if LCancelled then
+    SetStatus(Format('Property-tree load cancelled for %s -> %s. Lower the book depth, or select the rule again to retry.', [Node.FromType, Node.ToType]));
   // A rule is now active: the actions that needed one become reachable. Every
   // "a rule was selected" path (RulesSelectItem, LoadFile's auto-select,
   // DoNewConversion, SurfaceChanged) lands here, so this is the single hook.
@@ -5019,7 +5027,8 @@ begin
   if not OpenOwningRuleEntry(Entry) then
     Exit;
   FCbTo.Text:= Entry.ToType;
-  SetStatus(Format('Loaded %s -> %s from %s.', [Entry.FromType, Entry.ToType, ExtractFileName(Entry.FilePath)]));
+  if not FEngine.LastCancelled then // keep LoadGridForBlock's "load cancelled" on screen
+    SetStatus(Format('Loaded %s -> %s from %s.', [Entry.FromType, Entry.ToType, ExtractFileName(Entry.FilePath)]));
 end; // procedure
 
 function TConvRulesForm.OpenOwningRule(const ATypeName: string): Boolean;
@@ -5120,7 +5129,8 @@ begin
     Extra:= Format(' -- %d rules convert %s; this is the first. Double-click the class to choose.', [Sites, TypeName])
   else
     Extra:= '';
-  SetStatus(Format('Opened the rule for %s -- %s, line %d.', [TypeName, ExtractFileName(AEntry.FilePath), AEntry.LineNo]) + Extra);
+  if not FEngine.LastCancelled then // keep LoadGridForBlock's "load cancelled" on screen
+    SetStatus(Format('Opened the rule for %s -- %s, line %d.', [TypeName, ExtractFileName(AEntry.FilePath), AEntry.LineNo]) + Extra);
   Result:= True;
 end; // function
 
@@ -6232,12 +6242,18 @@ begin
   tree:= Default(TProptree);
   if not FEngine.GetProptree(fromT, tree, Err, FromNote) or (Length(tree.Leaves) = 0) then
   begin
-    SetError(Format('From class "%s" is not indexed (no properties found). %s', [fromT, Err]));
+    if FEngine.LastCancelled then // a cancel is not an unindexed class
+      SetStatus('New conversion cancelled -- no class was checked.')
+    else
+      SetError(Format('From class "%s" is not indexed (no properties found). %s', [fromT, Err]));
     Exit;
   end;
   if not FEngine.GetProptree(toT, tree, Err, ToNote) or (Length(tree.Leaves) = 0) then
   begin
-    SetError(Format('To class "%s" is not indexed (no properties found). %s', [toT, Err]));
+    if FEngine.LastCancelled then // a cancel is not an unindexed class
+      SetStatus('New conversion cancelled -- no class was checked.')
+    else
+      SetError(Format('To class "%s" is not indexed (no properties found). %s', [toT, Err]));
     Exit;
   end;
 
