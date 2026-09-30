@@ -1013,7 +1013,7 @@ type
 // converted, so every candidate store in AStores is tried in order --
 // first store that resolves AClassName to an indexed skClass wins -- and
 // FindAllChildSymbols(ClassSym.Id) runs against that SAME store (an id is
-// only meaningful within the store that produced it), mirroring TreeFor's
+// only meaningful within the store that produced it), mirroring TConvertTreeCache.ClassFor's
 // own cross-db convention.
 function GetConstructorNames(const AStores: TArray<ISymbolStore>; const AClassName: string): TArray<string>;
 var
@@ -1153,7 +1153,7 @@ end;
 // result -- args are NEVER auto-fixed, so a False here does not block anything.
 // Bug 2: AToType may live in a DIFFERENT --db than the unit being converted,
 // so every candidate store in AStores is tried in order (first-resolve-wins),
-// same convention as GetConstructorNames/TreeFor.
+// same convention as GetConstructorNames/TConvertTreeCache.ClassFor.
 function ToTypeHasGenericCreate(const AStores: TArray<ISymbolStore>; const AToType: string): Boolean;
 var
   Cands   : TArray<TSymbol>;
@@ -1185,8 +1185,8 @@ end;
 
 // Checks one class name's freshness across every candidate store, in order --
 // FIRST STORE THAT RESOLVES AClassName TO AN INDEXED skClass WINS, mirroring
-// the cross-db convention DoConvertApply's own TreeFor/BuildApplyPlan's TreeFor
-// already use (Bug 2 fix: the From/To type may live in a DIFFERENT --db than
+// the cross-db convention TConvertTreeCache.ClassFor (DoConvertApply,
+// BuildApplyPlan) already uses (Bug 2 fix: the From/To type may live in a DIFFERENT --db than
 // the form's own instances, so a single store can't always resolve both).
 // Once a store resolves the class (via FindSymbolsByExactName, same lookup
 // ResolveClassQName uses), ALL of the remaining freshness work -- GetFilePath,

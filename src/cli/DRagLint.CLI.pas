@@ -950,10 +950,12 @@ begin
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
-  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never), and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code)');
+  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth is ignored here (and by the hidden convert-reemit), ' +
+    'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
-    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added; ' +
+    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
+    'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added; ' +
     'EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each #mapping against the blocks that #apply it -- ' +
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
     'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
@@ -24042,8 +24044,17 @@ begin
       Continue; { manifest-resolved: stale DB reported, scan the rest }
     end;
     HaveStore:= True;
-    var CF: TPropTree:= BuildPropTree(CandStore, AArgs.CallFrom, Opts);
-    var CT: TPropTree:= BuildPropTree(CandStore, AArgs.RenameTo, Opts);
+    // One member cache per store for BOTH trees (1.20.6 T2c): a class the two
+    // sides share (TStrings, TParams, ...) is resolved once.
+    var CF: TPropTree;
+    var CT: TPropTree;
+    var TreeCache: TPropMemberCache:= TPropMemberCache.Create(CandStore, Opts);
+    try
+      CF:= TreeCache.BuildTree(AArgs.CallFrom, Opts.Depth);
+      CT:= TreeCache.BuildTree(AArgs.RenameTo, Opts.Depth);
+    finally
+      TreeCache.Free;
+    end;
     if (CF.RootType <> '') and (CT.RootType <> '') then
     begin FromTree:= CF; ToTree:= CT; Break; end;
     // Keep the first db's partial trees so we can report which type failed.
@@ -24496,7 +24507,9 @@ begin
   finally
     TypeErrs.Free;
   end;
-end;/// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
+end;
+
+/// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
 /// (#1 declaration retype, #2 uses-add, #3 .dfm re-emit, #4 property/event access-site

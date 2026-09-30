@@ -25,6 +25,12 @@ unit DRagLint.Convert.PropTree;
   That write is a NO-OP on a read-only (query_only) store, so every read verb that
   passes a read-only store still never mutates the index. All lookups are through
   ISymbolStore.
+
+  Engine 1.20.6 (T2c): BuildPropTree itself moved to DRagLint.Convert.PropCache,
+  where it expands the tree through the per-class member cache (each class
+  resolved once, breadth-first, then emitted depth-first). This unit keeps the
+  node/tree records and TPropMemberResolver, the one-class resolution that the
+  cache and the tree share.
 }
 
 interface
@@ -185,6 +191,12 @@ type
   /// PRIVATE and STRICT PRIVATE members are never returned (owner ruling
   /// 2026-09-30): they are invisible outside their unit, so no rule and no .dfm
   /// can name them, and pruning them also prunes their subtrees.
+  /// A private REDECLARATION SHADOWS (ruling R11, 2026-09-30): when a class
+  /// redeclares an ancestor's member in a private section, neither the
+  /// redeclaration nor the ancestor's member is returned -- the most-derived
+  /// declaration wins first, exactly as for every other member, and is then
+  /// pruned. This keeps the node set equal to the pre-1.20.6 walk's minus
+  /// private (in that walk the private redeclaration won and was emitted).
   /// Holds two per-object memo tables -- the resolved ancestor chain per class
   /// id, and the scope-aware name -&gt; class lookup per (name, scope file) --
   /// plus a declaring-line reader that caches each source file once. All three
@@ -243,7 +255,9 @@ type
     /// <param name="AMembers">Receives the property members (most-derived
     /// declaration wins) followed by the field / class-constant members, each
     /// with Path = its BARE name and every other TPropNode field filled as
-    /// BuildPropTree fills it. Private members are absent.</param>
+    /// BuildPropTree fills it. Private members are absent, and a private
+    /// redeclaration hides the ancestor's member of that name (ruling
+    /// R11).</param>
     /// <param name="ATypes">Index-aligned with AMembers: the class a
     /// property's type resolved to (a reference leaf included); Id = 0 for a
     /// scalar, an unknown type, or a field.</param>
@@ -256,107 +270,6 @@ type
     procedure ResolveMembers(const AClass: TSymbol; out AMembers: TArray<TPropNode>;
       out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>);
   end;
-
-/// <summary>Enumerates the deep (recursively flattened) property tree of a class,
-/// resolving each property's type from the index and recursing into class-typed
-/// property types.</summary>
-/// <param name="AStore">Open symbol store (ids are per-DB). Read-only for every
-/// lookup; the sole write is the lazy MemoizePropertyType write-back described in
-/// the remarks, which is itself a no-op when the store was opened read-only.</param>
-/// <param name="AClassQName">Fully-qualified class name, e.g. 'Unit.TOuter'.
-/// Resolved via FindSymbolsByQualifiedName; the first class-kind match is the
-/// root.</param>
-/// <param name="AOpts">Depth cap and the ToPersistent ancestor-stop switch.</param>
-/// <returns>The flattened tree. RootType='' with empty Nodes when AClassQName
-/// resolves to no class-kind symbol.</returns>
-/// <remarks>
-/// Own properties come from FindAllChildSymbols(classId) filtered to
-/// property-kind; inherited properties are gathered by walking the ancestor
-/// closure (GetTransitiveAncestors) and enumerating each ancestor class's
-/// property children. An ancestor edge the INDEXER left UNRESOLVED (it declines
-/// rather than guess a same-named ancestor) no longer ends the climb: the
-/// ancestor NAME is bridged at QUERY time via ISymbolStore.ResolveTypeNameToClass
-/// -- same shared scope rule (same unit -&gt; unique uses hit -&gt; unique leading
-/// dotted-namespace segment -&gt; decline), but matched textually, so it repairs
-/// indexes already on disk without a re-index. The name is resolved in the unit
-/// of the class whose own heritage declares it; only when NO class in the
-/// closure declares it (the declaring symbol is an interface, say) does it fall
-/// back to the unit of the class that hop is climbing from -- which, at the
-/// outermost hop, is the queried root. Only a class-kind result is accepted, so
-/// an ancestor that resolves to an interface symbol is never placed in the
-/// chain (this does NOT claim to detect a same-named CLASS standing in for what
-/// was written as an interface entry). A decline still stops the climb (never a
-/// guess). A bridge is refused outright when the inheriting class and the
-/// candidate sit in the two CONFLICTING GUI FRAMEWORK namespaces -- one 'Vcl.*',
-/// the other 'FMX.*' -- enforced in the climb itself, because the shared scope
-/// rule is bypassed when a name has only one candidate. That refusal is narrow
-/// and deliberately so: it is Vcl-vs-FMX ONLY, never a general
-/// different-namespace veto, so a 'Vcl.*' class still reaches 'System.*',
-/// 'Winapi.*', 'Data.*', a project namespace or an undotted unit normally
-/// (refusing those would veto the whole RTL surface a GUI unit legitimately
-/// references). Stated precisely, the guarantee is also PER HOP, not transitive:
-/// each individual hop is checked, but an intermediate class in an UNDOTTED unit
-/// (cxButtons, Abcbtn) belongs to NEITHER framework, so a chain may still pass
-/// through one and reach the other side -- deliberately, since that is exactly
-/// what lets real third-party roots bridge into Vcl.* at all.
-/// The bridged climb is bounded by a visited-class-id set and a depth cap, and
-/// performs NO writes, so a read-only
-/// (--no-write-back) store is unaffected. Leaf names are deduped -- a redeclared property
-/// shadows the ancestor's, and the most-derived declaration wins for DeclaredIn.
-/// The type is parsed from the property Signature (a leading ':' + whitespace is
-/// trimmed, then the first type token is taken up to whitespace / ';' / 'read' /
-/// 'write'); an EMPTY Signature (a bare 'property Color;' redeclaration) is
-/// resolved by finding the same-named property in an ancestor that carries a
-/// non-empty Signature. As a LAST resort before 'unknown' the type is recovered by
-/// BRIDGING an unresolved ancestor edge (e.g. a type-alias ancestor the index left
-/// unlinked) up to the class that really declares the property (scope-aware,
-/// alias-following via ISymbolStore.ResolveTypeNameToClass); a type found that way
-/// is memoized back onto the property via MemoizePropertyType (no-op on a read-only
-/// store). If still unresolved, TypeName='unknown', Kind='unknown',
-/// and there is NO recursion (a type is never fabricated).
-/// The resulting type TOKEN is then resolved to a class through the SAME shared
-/// scope rule, scoped PER PROPERTY to the unit of the class that DECLARES that
-/// property (not the queried root's unit), and alias-following; a class-kind
-/// result is recursed into (Kind='class', IsClassTyped=True, child paths
-/// prefixed with '&lt;prop&gt;.'), and the same per-hop Vcl-vs-FMX refusal
-/// described above is applied between the declaring class and the candidate --
-/// so a VCL class's 'System.*'-typed property (TBasicAction, TList, TComponent,
-/// ...) expands normally, and only a genuine cross-GUI-framework candidate is
-/// refused. Anything else -- a non-class, a refused candidate, or a decline by
-/// the scope rule -- yields Kind='scalar' with TypeName still the token as
-/// written, and no recursion; a decline is never retried with a scope-unaware
-/// lookup, so the tree may be SMALLER than a careless resolver's but never
-/// carries the other GUI framework's property surface. Recursion is bounded by
-/// BOTH AOpts.Depth AND a
-/// visited-TYPE-name set (keyed by the type NAME as written, so two differently
-/// scoped properties naming the same type expand only once per path), so a
-/// back-reference (e.g. 'Parent: TWinControl') always terminates. When
-/// ToPersistent is True the ancestor climb stops at a class named 'TPersistent'
-/// or 'TObject'.
-/// R4 (Task 4): each visited class's OWN kind='field' and kind='const'
-/// (class-scoped constant) children are ALSO emitted, as FLAT leaves
-/// (member_kind='field', never recursed into even when class-typed -- out of
-/// scope for this task). IsWritable is True for a field, False for a class
-/// const. A field's Modifiers (visibility) is read directly (the parser
-/// always stamps it); a const's Modifiers is never stamped by the parser, so
-/// its effective visibility is recovered from the nearest visibility-bearing
-/// sibling (see ResolveConstVisibilityByProximity) rather than left blank or
-/// guessed outright. A field leaf's Kind ('class' vs 'scalar') is still decided
-/// by a scope-UNAWARE name lookup -- deliberately, see Walk's field loop.
-/// Borrows AStore; performs no I/O of its own.
-/// Not thread-safe with respect to concurrent mutation of the store.
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.TreeFor (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree (DRagLint.CLI.pas) (+2 more)</para>
-/// <para>Calls: AddId, BodyOf, CharInSet, ClassChain, ClassifyDefaultClause, Climb, ClimbFrom, ClosureClassIds, CollectFields, CollectProps (+30 more)</para>
-/// <para>Returns: List.ToArray; Climb(AClass); Ids.ToArray; Default(TPropTree)</para>
-/// <para>Pure</para>
-/// <seealso cref="DRagLint.Convert.PropTree.BuildPropTree.ResolveClassByQName"/>
-/// <seealso cref="DRagLint.Convert.PropTree.BuildPropTree.Walk"/>
-/// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Create"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
-  const AOpts: TPropTreeOptions): TPropTree;
 
 implementation
 
@@ -1370,10 +1283,12 @@ begin
       for Kid in Kids do
       begin
         if Kid.Kind <> skProperty then Continue;
-        if IsPrivateModifiers(Kid.Modifiers) then Continue; // never resolves (owner ruling 2026-09-30)
         Key:= LowerCase(Kid.Name);
         if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
         Seen.Add(Key, True);
+        // Ruling R11: AFTER Seen.Add, so a private redeclaration still shadows
+        // the ancestor's member -- and is itself never emitted.
+        if IsPrivateModifiers(Kid.Modifiers) then Continue;
         OL.Add(Kid);
         DL.Add(Cls);
       end;
@@ -1420,10 +1335,10 @@ begin
       for Kid in Kids do
       begin
         if not (Kid.Kind in [skField, skConstDecl]) then Continue;
-        if IsPrivateModifiers(Kid.Modifiers) then Continue; // never resolves (owner ruling 2026-09-30)
         Key:= LowerCase(Kid.Name);
         if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
         Seen.Add(Key, True);
+        if IsPrivateModifiers(Kid.Modifiers) then Continue; // ruling R11, as in CollectProps
         OL.Add(Kid);
         DL.Add(Cls.QualifiedName);
       end;
@@ -1713,83 +1628,6 @@ begin
     CompRefs.Free;
     Types   .Free;
     Nodes   .Free;
-  end;
-end;
-
-function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
-  const AOpts: TPropTreeOptions): TPropTree;
-var
-  Resolver : TPropMemberResolver;
-  Nodes    : TList<TPropNode>   ;
-  Truncated: Boolean            ;
-
-  // Recursive walk. APrefix is the dotted path down to (and including a trailing
-  // '.') the current class; AVisited holds lowercased TYPE names already expanded
-  // on this path (cycle guard). ADepthLeft is the remaining class-recursion budget.
-  // Each level's members come from Resolver.ResolveMembers; a class-typed
-  // PROPERTY's subtree is emitted immediately after it, then the class's fields.
-  procedure Walk(const AClass: TSymbol; const APrefix: string;
-    ADepthLeft: Integer; AVisited: TDictionary<string, Boolean>);
-  var
-    Members : TArray<TPropNode>;
-    Types   : TArray<TSymbol>  ;
-    CompRefs: TArray<Boolean>  ;
-    Idx     : Integer          ;
-    Node    : TPropNode        ;
-    LowType : string           ;
-  begin
-    Resolver.ResolveMembers(AClass, Members, Types, CompRefs);
-    for Idx:= 0 to High(Members) do
-    begin
-      Node     := Members[Idx];
-      Node.Path:= APrefix + Node.Path;
-      Nodes.Add(Node);
-      { Only a class-typed PROPERTY recurses; a field leaf is flat even when
-        class-typed (R4), and a reference leaf is not class-typed. }
-      if (Node.MemberKind <> 'property') or not Node.IsClassTyped then Continue;
-      LowType:= LowerCase(Node.TypeName);
-      if ADepthLeft <= 0 then
-        Truncated:= True                 // depth cap stopped this expansion
-      else if AVisited.ContainsKey(LowType) then
-        // back-reference on this path -> terminate (already expanded above)
-      else
-      begin
-        AVisited.Add(LowType, True);
-        Walk(Types[Idx], Node.Path + '.', ADepthLeft - 1, AVisited);
-        AVisited.Remove(LowType);
-      end;
-    end;
-  end;
-
-var
-  Root   : TSymbol                    ;
-  Visited: TDictionary<string, Boolean>;
-begin
-  Result          := Default(TPropTree);
-  Result.RootType := '';
-  Result.Truncated:= False;
-  SetLength(Result.Nodes, 0);
-
-  Resolver:= TPropMemberResolver.Create(AStore, AOpts);
-  try
-    Root:= Resolver.ResolveClassByQName(AClassQName);
-    if Root.Id = 0 then Exit; // unresolved class -> empty tree, RootType=''
-
-    Nodes    := TList<TPropNode>.Create;
-    Visited  := TDictionary<string, Boolean>.Create;
-    Truncated:= False;
-    try
-      Result.RootType:= Root.Name;
-      Visited.Add(LowerCase(Root.Name), True); // guard against direct self-reference
-      Walk(Root, '', AOpts.Depth, Visited);
-      Result.Nodes    := Nodes.ToArray;
-      Result.Truncated:= Truncated;
-    finally
-      Nodes  .Free;
-      Visited.Free;
-    end;
-  finally
-    Resolver.Free;
   end;
 end;
 

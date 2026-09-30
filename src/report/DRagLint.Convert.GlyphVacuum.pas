@@ -124,7 +124,8 @@ uses
   DRagLint.Convert.DfmReemit,
   DRagLint.Convert.GlyphExpr,
   DRagLint.Convert.GlyphStrip,
-  DRagLint.Convert.PropTree;
+  DRagLint.Convert.PropTree,
+  DRagLint.Convert.PropCache; { BuildPropTree -- through the per-class member cache (1.20.6 T2c) }
 
 const
   InstancesHeader =
@@ -223,9 +224,14 @@ type
   end;
 
 const
-  // Matches DRagLint.Convert.Apply.pas's own PropTreeOptions.Depth for the
-  // same tree -- deep enough to recurse into a DevExpress-style Options:
-  // TFooOptions sub-object and find a dotted default like 'Options.NumGlyphs'.
+  // Deep enough to recurse into a DevExpress-style Options: TFooOptions
+  // sub-object and find a dotted default like 'Options.NumGlyphs'. It was the
+  // depth convert-apply's trees used (that verb builds no tree since 1.20.6).
+  // Kept at 6 in T2c although only the count fallback reads the tree: that
+  // fallback (AddRow) scans EVERY node for a count-named leaf with a default and
+  // takes the FIRST in tree order, so a shallower tree could pick a different
+  // node. The tree is built through the member cache, so each class is still
+  // resolved only once.
   PropTreeDepthForCountFallback = 6;
 
 // The first scalar sibling on the same object whose name is a known count
@@ -297,9 +303,8 @@ begin
         Opts:= Default(TPropTreeOptions);
         // Recurse into class-typed properties (e.g. a DevExpress-style
         // Options: TFooOptions holding NumGlyphs) so the count-tree fallback
-        // in AddRow can find a dotted default like 'Options.NumGlyphs'; 6
-        // matches the depth DRagLint.Convert.Apply.pas already uses for the
-        // same tree.
+        // in AddRow can find a dotted default like 'Options.NumGlyphs' (see
+        // PropTreeDepthForCountFallback).
         Opts.Depth:= PropTreeDepthForCountFallback;
         Result.Tree:= BuildPropTree(S, Sym.QualifiedName, Opts);
         Break;
