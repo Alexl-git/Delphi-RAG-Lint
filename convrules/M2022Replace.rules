@@ -1,0 +1,3 @@
+#useswap FtrDefs -> iMSCLIST
+#useswap FldrDefs -> iFOLDERS
+#useswap insprslt -> iINSPRSLT
