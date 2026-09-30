@@ -299,13 +299,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, TLabel</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+25 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+28 more)</para>
+      /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+7 more)</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+29 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+30 more)</para>
+      /// <seealso cref="ConvRules.ConvertTab.TConvertTab.Create"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddPopupItem"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildTypePopup"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure BuildUI;
@@ -792,15 +792,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.HarvestFormTypes (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SaveBook (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadSkipList, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.CatalogToIndexText, ConvRules.RuleCatalog.FindDuplicates, ConvRules.RuleCatalog.SameBookDups, ConvRules.RuleCatalog.ScanRulesFolder, ExtractFileName, ExtractFilePath, Format, Trim</para>
-      /// <para>Reads: FRulesFolder, FFilePath, FCatalog, FSkipMarksDirty, FLastSkipLoadFailed, FCatalogDups   Writes: FCatalog, FCatalogDups, FRulesFolder</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ApplySkipMarks, ConvRules.MainForm.TConvRulesForm.LoadSkipList, ConvRules.MainForm.TConvRulesForm.RefreshFormTypes, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SaveSkipList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.CatalogToIndexText, ConvRules.RuleCatalog.FindDuplicates, ConvRules.RuleCatalog.SameBookDups, ConvRules.RuleCatalog.ScanRulesFolder, ExtractFileName, Format</para>
+      /// <para>Reads: FCatalog, FSkipMarksDirty, FLastSkipLoadFailed, FCatalogDups   Writes: FCatalog, FCatalogDups, FRulesFolder</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplySkipMarks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadSkipList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshFormTypes"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RulesFolderNow"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SaveSkipList"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RescanRulesFolder(Sender: TObject);
@@ -1967,7 +1967,7 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbUnitSelected (ConvRules.MainForm.pas) (+42 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+43 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
@@ -1983,7 +1983,7 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas) (+18 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+20 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
@@ -2062,7 +2062,7 @@ type
       /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.PlatformChanged (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.FromDbSet, ConvRules.MainForm.TConvRulesForm.ToDbSet, LowerCase</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.FromDbSet"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ToDbSet"/>
