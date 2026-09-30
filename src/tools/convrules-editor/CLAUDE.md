@@ -466,15 +466,19 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 ### Convert tab
 
 * **Three layers.** Pure decisions in `ConvRules.ConvertRun` (model-tested:
-  `NextBackupPath`, `BookKindOfText`, `MoveEntry`, `ExpandSources`, `Preflight`,
-  `ParseApplyJson`, `UnitInIndex`, `SourceRowText`); execution in
+  `SharedBackupPaths`, `BookKindOfText`, `MoveEntry`,
+  `ExpandSources`, `Preflight`, `ParseApplyJson`, `UnitInIndex`, `SourceRowText`);
+  execution in
   `ConvRules.ConvertRunner` (`RunConversion` / `RunConversionUnits`); UI in
   `ConvRules.ConvertTab` (`TConvertTab`, a code-built `TPanel`, editor-only --
   not in the tests' closure). `Conversion > Convert...` shows the tab.
-* **Backups:** full file name + `.BCK<N>`, N = one above the highest existing N
-  for that file (gaps are not reused; the probe window is 50). `.pas` and
-  `.dfm` each get their own. A unit that no VALID book touched keeps no `.BCK`.
-  The results grid's Backup column names only the `.pas` backup (deferred).
+* **Backups:** full file name + `.BCK<N>`, ONE N per unit shared by its `.pas`
+  and `.dfm` (`SharedBackupPaths`): one above the highest existing N over BOTH
+  `X.pas.BCK*` and `X.dfm.BCK*`, so `X.pas.BCK1` + `X.dfm.BCK3` give both
+  `.BCK4` (gaps are not reused; the probe window is 50). `TConvertRow` carries
+  `Backup` and `BackupDfm`; the grid has a `Backup .dfm` column, and the report
+  and every Note that names a backup (`rolled back`, `FAILED -- NOT restored`)
+  name both. A unit that no VALID book touched keeps no `.BCK`.
 * **Cancel is honoured between UNITS only**, never between two books of one
   unit. A unit listed twice (file + `.dproj`, any case) is converted once
   (`ExpandSources` dedupes). A listed unit gone from disk gets a
@@ -484,8 +488,9 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   `ConvertStatusText`): `converted`; `FAILED -- restored` (the unit was copied
   back from its `.BCK`); `rolled back` (an earlier book on this unit converted,
   a later one failed, the restore undid it); `book skipped` (invalid book --
-  reported once, skipped for every unit); `unit skipped` (missing, or the backup
-  copy failed); `FAILED -- NOT restored` (the restore itself failed; backup kept
+  reported once, skipped for every unit); `unit skipped` (missing, the reindex
+  before its first book failed, or the backup copy failed); `FAILED -- NOT
+  restored` (the restore itself failed; backups kept
   and named -- the summary LEADS with these). File I/O exceptions are handled
   per unit; nothing escapes the runner.
 * **Book validity comes from convert-apply's own `rule_errors`.** A separate
@@ -500,16 +505,45 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   `TEngineAdapter` overload binds `ApplyConversion` / `IndexProject`. The fault
   checks (`runner.rollback.*`, `runner.backup.failure`,
   `runner.restore.failure`) use fakes; `runner.live.*` uses the real engine.
+* **The index is refreshed BEFORE each unit's first book** as well as after
+  every book: convert-apply patches the `.dfm` at the index's line ranges, so a
+  unit edited in the IDE since the last index would be patched in the wrong
+  place. A failed refresh gives `unit skipped` with `reindex before apply
+  failed: <output>` -- no backup, no engine apply -- and the run continues with
+  the next unit (`runner.reindex.before.*`).
+* **The project file is ALWAYS the DB's own** -- `ProjectFileForDb(
+  GEditorProjectDb)`, i.e. `<dir>\<Name>.dproj` for `<dir>\_D-RAG\<Name>.sqlite`
+  -- never the Unit Rules Destination: `index --project <other.dproj> --db
+  <editor's DB>` would re-scope the editor's project DB to another project.
+  Convert refuses (`Convert refused: the project index <db> has no project file
+  on disk -- expected <path>.`) when it does not exist. The Destination field
+  only classifies harvested units.
 * **Captured at Convert time:** units, books, project file / DB and the rules
   folder (`FRunRulesFolder`) -- File > Open / New during a run cannot move the
-  report (`convert-run-yyyymmdd-hhnnss.txt`, tab-separated, in that folder).
+  report (`convert-run-yyyymmdd-hhnnss.txt`, tab-separated, UTF-8 WITHOUT a BOM
+  so non-ASCII engine text survives, in that folder). After the rows it lists
+  every unit a cancel kept from running (`not reached (cancelled)`, also added
+  to the grid), then `Run<TAB>completed` or `Run<TAB>cancelled -- N unit(s) not
+  reached`, then `Final reindex<TAB>ok` / `FAILED: ...` / `not run`. The
+  never-reached set comes from counting cancel polls: `RunConversionUnits`
+  polls `ACancelled` exactly once just before each unit (documented contract).
+* **Mid-run locks:** File > Save / Save As / Curate are disabled while a run is
+  in progress (`TConvertHost.RunStateChanged`, fired from `SetRunning`) -- a
+  book saved mid-run would change the rules the run's later units get. Open and
+  New stay enabled. A drop (or any `AddSources` call) during a run is refused
+  with `A conversion is running -- sources cannot be added until it finishes.`
 * **Unindexed source units are flagged on their row:** owner-drawn, bold red,
   display text + ` -- not in the project index`; the ITEM text stays the raw
-  path (the job consumes it). The index set is refreshed on add, on tab show
-  (skipped when the list is empty; ~0.9 s otherwise) and after a run. Convert
-  refuses while any listed unit is unindexed (`Preflight`, same `UnitInIndex`),
-  and refuses without a project file on disk (every book is followed by
-  `index --project`).
+  path (the job consumes it). "Indexed" means the unit's FULL PATH is in the
+  project DB's `files` table (`TEngineAdapter.ListIndexedFiles`, one `sql
+  SELECT path FROM files` with `--limit 1000000`; `UnitInIndex` compares
+  `ExpandFileName`'d paths case-insensitively) -- NOT the unit name: the engine
+  finds the `.dfm` by path, and `M2022\DM1.pas` must be refused when the
+  project indexes its own `DM1.pas` (`convertrun.pre.same.name.foreign.path`).
+  The index set is refreshed on add, on tab show (skipped when the list is
+  empty) and after a run. Convert refuses while any listed unit is unindexed
+  (`Preflight`, same `UnitInIndex`), and refuses without the project file on
+  disk (see above).
 * **The form refuses to close while a run is in progress** (File > Exit and the
   window X). `Application.Terminate` or a Windows shutdown still bypasses it.
 * **Measured cost:** a 3-file fixture takes ~94-106 s per engine call
@@ -542,7 +576,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 
 ### Verification kit
 
-* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1235 pass / 5 fail**;
+* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1243 pass / 5 fail**;
   the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
   `.has.TOvcTable`). A full run is ~6 min (the live runner test is ~3 min of
@@ -559,10 +593,10 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   | `drive-unit-harvest.ps1` | 21 | Unit Rules harvest (`-ProofNoDestination` control) |
   | `drive-file-menu.ps1` | 19 | New / Save As / Exit, the guard, delete-in-place makes dirty |
   | `drive-owning-open.ps1` | 6 | cross-book double-click goes through `ConfirmDiscard` |
-  | `drive-convert-tab.ps1` | 16 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, in-place convert, `.BCK1` for `.pas` and `.dfm`, report file |
+  | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line |
 
-  `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 9 pass / 6
-  fail is the proof the conversion checks can fail. It stops at "Cannot read
+  `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
+  fail is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
   the project index" (no DB), not at the unindexed refusal; that refusal is
   proven by `Loose.pas` in the normal run.
 * **Driver traps recorded on this branch:** `LB_GETTEXT` is system-marshalled
