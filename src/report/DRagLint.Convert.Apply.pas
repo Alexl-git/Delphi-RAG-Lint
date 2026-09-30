@@ -59,6 +59,7 @@ uses
   DRagLint.Convert.DfmReemit,
   DRagLint.Convert.CastLib,
   DRagLint.Convert.PropTree,
+  DRagLint.Convert.UnitRules,
   DRagLint.Refactor.TextEdit;
 
 type
@@ -291,6 +292,11 @@ type
     { Disjoint likewise -- see invariant 3. One entry per (source type, property)
       no #link carries; always populated, whether or not it was also warned. }
     Unlinked        : TArray<TApplyUnlinked>;
+    { Disjoint likewise. The uses-clause changes the book's UNIT rules (#unuse /
+      #use / #useswap) make to the unit -- one row per removed or added name
+      (see DRagLint.Convert.UnitRules.TUsesChange). Empty when the book has no
+      unit rules; the #convert blocks' own uses-add never appears here. }
+    UsesChanges     : TArray<TUsesChange>;
   end;
 
   /// <summary>The outcome of BuildApplyPlan: the full set of text edits to
@@ -300,13 +306,14 @@ type
   /// <remarks>
   /// Ok=False means no edits were computed (e.g. the .pas/.dfm file
   /// was not found, or no instance matched a #convert rule -- possibly because
-  /// --only filtered everything out); Error then carries an ASCII diagnostic
+  /// --only filtered everything out, or the book's unit rules refused the unit);
+  /// Error then carries an ASCII diagnostic
   /// message. Ok=True does not imply every instance converted cleanly --
   /// per-instance problems are surfaced via Report.Todos / Report.Warnings
   /// even when Ok=True (e.g. a field declaration that could not be located, or
   /// a ToType whose unit could not be resolved for the uses-add).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildUnitRulesOnlyPlan (DRagLint.Convert.Apply.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -424,15 +431,20 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// tekReplaceInLine edit swapping FromMember for ToMember at that access
 /// site; Report.AccessSites lists each rewrite. An access on a receiver that
 /// is NOT a converted instance is left untouched -- see FindMemberAccessSites.
-/// Ok=False only on a hard failure (missing .pas/.dfm, or zero instances
-/// matched); Ok=True with per-instance problems noted in Report.Warnings
+/// Ok=False only on a hard failure (missing .pas/.dfm, zero instances
+/// matched, or -- 1.20.6 -- the book's unit rules refusing the unit, e.g. an
+/// entry to remove inside a conditional region: then NOTHING is planned, the
+/// #convert edits included). When the book has unit rules (#unuse / #use /
+/// #useswap), surface #2's resolved units are handed to PlanUnitRules, which
+/// then plans every uses change to the unit (Report.UsesChanges). Ok=True
+/// with per-instance problems noted in Report.Warnings
 /// otherwise (including every instance skipped by a re-emit failure).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
-/// <para>Calls: BuildPropTree, CompareText, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (+27 more)</para>
+/// <para>Calls: BookHasUnitRules, BuildPropTree, CompareText, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype (+30 more)</para>
 /// <para>Returns: Default(TApplyResult)</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 932 lines (full implementation)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 966 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>
@@ -444,6 +456,22 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
+
+/// <summary>The convert-apply plan for a unit whose COMPONENT part is skipped
+/// -- no sibling .dfm, no #convert block in the book, or no .dfm instance any
+/// block matches -- so only the book's unit rules (#unuse / #use / #useswap)
+/// act on it.</summary>
+/// <param name="AUnitPas">The unit to change; read from disk as it is now.</param>
+/// <param name="ARules">The parsed, validated rule book; its #convert blocks
+/// only count toward the ADD-wins normalisation (see PlanUnitRules).</param>
+/// <returns>Ok=True with the uses-clause edits in Edits and one row per
+/// change in Report.UsesChanges (both empty when the book changes nothing
+/// here); every other report array empty. Ok=False with Error when the unit
+/// does not exist or PlanUnitRules refuses it (e.g. an entry to remove sits in
+/// a conditional region) -- then nothing is planned.</returns>
+/// <remarks>Reads the unit; writes nothing. Needs no index: the uses clauses
+/// are lexed from the unit's own bytes.</remarks>
+function BuildUnitRulesOnlyPlan(const AUnitPas: string; const ARules: TConversionRuleSet): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
 /// returns the instances that should be converted: those whose class matches
@@ -467,10 +495,9 @@ function BuildApplyPlan(const AStores: TArray<ISymbolStore>; const AUnitPas, ADf
 /// scan only, not a full DFM parse (Task 3's ParseDfmBlock/ReemitComponent do
 /// the real per-instance re-emit). Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.Apply.FindConvertRuleFor, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.TryParseObjectHeader, Trim</para>
 /// <para>Returns: nil; List.ToArray</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.Apply.FindConvertRuleFor"/>
 /// <seealso cref="DRagLint.Convert.Apply.InOnlyList"/>
 /// <seealso cref="DRagLint.Convert.Apply.TryParseObjectHeader"/>
@@ -1766,32 +1793,57 @@ var
   // order, keeping PasStore fixed as the UNIT store (whose uses clause is what
   // actually gets edited), first store that resolves (AlreadyUsed or a
   // non-empty edit set) wins.
-  procedure PlanUsesAdditions;
+  //
+  // 1.20.6: when the book also has UNIT rules (#unuse / #use / #useswap), the
+  // resolved units are NOT edited in here. They are handed to PlanUnitRules
+  // instead, which then owns every uses change to the unit: two planners
+  // editing one clause could add a unit twice, or append after an entry the
+  // other one deletes. A unit already used is handed over too, so a #unuse of
+  // it is overruled (ADD wins) rather than breaking the converted unit.
+  // AUses is the unit-rule plan (Ok=True and empty when the book has none).
+  procedure PlanUsesAdditions(out AUses: TUsesPlan);
   var
     E : TTextEdit;
     It: TApplyItem;
   begin
-    for var ToType_ in ToTypesSeen do
-    begin
-      var ResolvedUnit: string;
-      var AlreadyUsed : Boolean;
-      var UseEdits: TArray<TTextEdit>;
-      for var St in AStores do
+    var UnitRules  : Boolean      := BookHasUnitRules(ARules);
+    var ConvertAdds: TList<string>:= TList<string>.Create;
+    try
+      for var ToType_ in ToTypesSeen do
       begin
-        UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
-        if AlreadyUsed or (Length(UseEdits) > 0) then Break;
+        var ResolvedUnit: string;
+        var AlreadyUsed : Boolean;
+        var UseEdits: TArray<TTextEdit>;
+        for var St in AStores do
+        begin
+          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
+          if AlreadyUsed or (Length(UseEdits) > 0) then Break;
+        end;
+        if UnitRules and (AlreadyUsed or (Length(UseEdits) > 0)) then ConvertAdds.Add(ResolvedUnit);
+        if AlreadyUsed then Continue;
+        if Length(UseEdits) = 0 then
+        begin
+          It:= PlainItem(aikUsesUnitUnresolved, afWarnings,
+            Format('could not resolve a unit declaring "%s" to add to uses', [ToType_]));
+          It.ToType  := ToType_;
+          It.FilePath:= AUnitPas;
+          Emit(It);
+          Continue;
+        end;
+        if not UnitRules then
+          for E in UseEdits do Edits.Add(E);
       end;
-      if AlreadyUsed then Continue;
-      if Length(UseEdits) = 0 then
+      AUses:= Default(TUsesPlan);
+      AUses.Ok:= True;
+      if UnitRules then
       begin
-        It:= PlainItem(aikUsesUnitUnresolved, afWarnings,
-          Format('could not resolve a unit declaring "%s" to add to uses', [ToType_]));
-        It.ToType  := ToType_;
-        It.FilePath:= AUnitPas;
-        Emit(It);
-        Continue;
+        AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules,
+          ConvertAdds.ToArray);
+        if AUses.Ok then
+          for E in AUses.Edits do Edits.Add(E);
       end;
-      for E in UseEdits do Edits.Add(E);
+    finally
+      ConvertAdds.Free;
     end;
   end;
 
@@ -2100,7 +2152,16 @@ begin
     end;
 
     PlanAccessSites;
-    PlanUsesAdditions;
+    var UsesPlan: TUsesPlan;
+    PlanUsesAdditions(UsesPlan);
+    { a unit the unit rules refuse (a conditional entry) is refused WHOLE --
+      its #convert edits included -- so nothing is half-applied }
+    if not UsesPlan.Ok then
+    begin
+      Result.Error:= UsesPlan.Error;
+      Exit;
+    end;
+    Result.Report.UsesChanges:= UsesPlan.Changes;
     Result.Report.Unlinked:= SummarizeUnlinked;
 
     Result.Edits          := Edits.ToArray;
@@ -2129,6 +2190,23 @@ begin
     ConvertedInstNames.Free;
     TreeCache.Free;
   end;
+end;
+
+function BuildUnitRulesOnlyPlan(const AUnitPas: string; const ARules: TConversionRuleSet): TApplyResult;
+var
+  UsesPlan: TUsesPlan;
+begin
+  Result:= Default(TApplyResult);
+  if not TFile.Exists(AUnitPas) then
+  begin
+    Result.Error:= Format('unit .pas not found: %s', [AUnitPas]);
+    Exit;
+  end;
+  UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, nil);
+  Result.Ok                := UsesPlan.Ok;
+  Result.Error             := UsesPlan.Error;
+  Result.Edits             := UsesPlan.Edits;
+  Result.Report.UsesChanges:= UsesPlan.Changes;
 end;
 
 end.

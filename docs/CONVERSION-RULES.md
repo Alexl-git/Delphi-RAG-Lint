@@ -423,8 +423,15 @@ apply path) is:
 - add each ADD unit only if not already present; a unit in both sets -> **ADD wins**
   (it is needed), reported as a conflict.
 
-_Status:_ **recognized by the parser now (parse-only -- they validate clean and
-round-trip);** executed by `convert-apply` in a later phase.
+_Status:_ **executed by `convert-apply` since 1.20.6** (`info --json` ->
+`capabilities.apply_unit_rules: true`). Per unit: remove Old from whichever clause
+holds it; add each New once (case-insensitive, never a duplicate in either section)
+into the section Old was in -- `#use`, and a `#useswap` whose Old the unit does not
+use, add to the **implementation** uses (a clause is created when there is none). An
+entry to remove inside a `{$IF...}` region refuses the whole unit (exit 1, nothing
+written). A unit with no `.dfm`, a book with no `#convert` block, or a `.dfm` no
+block matches, gets its unit rules alone. The `apply/1` JSON reports them as
+`uses[]` / `uses_removed` / `uses_added` plus `component_part`.
 
 ## End-to-end workflow
 

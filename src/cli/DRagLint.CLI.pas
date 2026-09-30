@@ -223,6 +223,7 @@ uses
   , DRagLint.Convert   .DfmReemit
   , DRagLint.Convert   .Apply
   , DRagLint.Convert   .Backup
+  , DRagLint.Convert   .UnitRules
   , DRagLint.Query     .Callers    { v(hover bundle): shared with the LSP -- find-callers renders from it }
   , DRagLint.Query     .HoverModel { v(hover bundle): shared with the LSP -- hover --format json builds from it }
   ;
@@ -951,7 +952,7 @@ begin
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees, and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
-    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count)');
+    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (implementation when Old is absent) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added)');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
@@ -15915,6 +15916,11 @@ begin
       JCap:= TJSONObject.Create;
       JCap.AddPair('fts5', TJSONBool.Create(Fts5));
       JCap.AddPair('cli_verbs', TJSONNumber.Create(CLI_VERB_COUNT));
+      { 1.20.6: convert-apply applies a book's #unuse / #use / #useswap. The
+        converter/editor greys a unit-rules book out unless this is the JSON
+        literal TRUE (its HasCapability tests `is TJSONTrue`), so it is always
+        emitted, and never as a string or a number. }
+      JCap.AddPair('apply_unit_rules', TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -24146,7 +24152,19 @@ begin
   Block('Todos',        AReport.Todos);
   Block('ReemitNotes',  AReport.ReemitNotes);
   Block('Warnings',     AReport.Warnings);
-  { ResolvedDefaults -- a COUNT, not a listing, and that asymmetry is deliberate.
+  { 1.20.6 -- one line per uses-clause change a unit rule made, e.g.
+      remove OldU (interface, line 6) -- #useswap OldU -> NewU1, NewU2
+    under a heading carrying the two counts; nothing when there are none. }
+  if Length(AReport.UsesChanges) > 0 then
+  begin
+    var NRemoved: Integer:= 0;
+    for var UC: TUsesChange in AReport.UsesChanges do
+      if UC.Action = 'remove' then Inc(NRemoved);
+    Writeln('');
+    Writeln(Format('Uses: %d removed, %d added', [NRemoved, Length(AReport.UsesChanges) - NRemoved]));
+    for var UC: TUsesChange in AReport.UsesChanges do
+      Writeln(Format('  %s %s (%s, line %d) -- %s', [UC.Action, UC.UnitName, UC.Section, UC.Line, UC.Rule]));
+  end;  { ResolvedDefaults -- a COUNT, not a listing, and that asymmetry is deliberate.
     Text mode used to print one line per resolved default under ReemitNotes,
     which on a real form is ~2,000 lines of "this worked" ahead of the handful
     that did not. A human reading the terminal needs to know the carries
@@ -24179,6 +24197,11 @@ type
     Freshness : TFreshnessResult;
     EditCount : Integer;
     Ok        : Boolean;
+    { 1.20.6: what happened to the COMPONENT (#convert / .dfm) part --
+      'applied', 'skipped-no-dfm', 'skipped-no-convert-rules' or
+      'skipped-no-instances' (the last three: the book's unit rules ran alone);
+      '' when the run stopped before planning. }
+    ComponentPart: string;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24334,6 +24357,32 @@ begin
     JRoot.AddPair('unlinked_source_property_sites', TJSONNumber.Create(UnlinkedTotal));
     JRoot.AddPair('unlinked', JUnlinked);
 
+    { 1.20.6 -- the unit rules. component_part says whether the #convert /
+      .dfm part ran; uses[] has one row per uses-clause change a unit rule
+      made (action remove|add, unit, section interface|implementation, line in
+      the unit as read, rule as normalised from the book), and the two counts
+      sum it by action. Always present, [] / 0 when the book has no unit
+      rules, like every other array here. The #convert blocks' own uses-add is
+      NOT a row: it is surface #2 and is counted in edits_count as before. }
+    JRoot.AddPair('component_part', ACtx.ComponentPart);
+    var UsesRemoved: Integer:= 0;
+    var UsesAdded  : Integer:= 0;
+    var JUses: TJSONArray:= TJSONArray.Create;
+    for var UC: TUsesChange in ACtx.Report.UsesChanges do
+    begin
+      if UC.Action = 'remove' then Inc(UsesRemoved) else Inc(UsesAdded);
+      var JUC: TJSONObject:= TJSONObject.Create;
+      JUC.AddPair('action' , UC.Action);
+      JUC.AddPair('unit'   , UC.UnitName);
+      JUC.AddPair('section', UC.Section);
+      JUC.AddPair('line'   , TJSONNumber.Create(UC.Line));
+      JUC.AddPair('rule'   , UC.Rule);
+      JUses.AddElement(JUC);
+    end;
+    JRoot.AddPair('uses', JUses);
+    JRoot.AddPair('uses_removed', TJSONNumber.Create(UsesRemoved));
+    JRoot.AddPair('uses_added'  , TJSONNumber.Create(UsesAdded));
+
     Writeln(JRoot.ToJSON);
   finally
     JRoot.Free;
@@ -24366,8 +24415,12 @@ end; // procedure
 /// --apply refused by the freshness guard); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
 /// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
-/// missing .dfm is a hard error (exit 1) since every #convert rule needs DFM instances to
-/// locate. Rules are read + parsed + validated (ValidateConversionRules) against the
+/// missing .dfm is a hard error (exit 1) for a book with NO unit rules, since every #convert
+/// rule needs DFM instances to locate. A book with unit rules (#unuse / #use / #useswap,
+/// 1.20.6) applies them to the unit's uses clauses (PlanUnitRules) -- alone when there is no
+/// .dfm, no #convert block or no matching instance (json component_part says which),
+/// otherwise folded into BuildApplyPlan's plan; a unit whose entry to remove sits in a
+/// conditional region is refused (exit 1, nothing written). Rules are read + parsed + validated (ValidateConversionRules) against the
 /// From/To property trees BEFORE BuildApplyPlan runs -- a rules error refuses (exit 1)
 /// rather than attempting a plan from a broken rule set. From/To trees are built the same
 /// first-DB-that-resolves-wins way as convert-validate/convert-scaffold/convert-reemit
@@ -24380,6 +24433,31 @@ end; // procedure
 /// REFUSES (exit 1) before any write is attempted. A book whose #link carries a glyph
 /// expression validates but is REFUSED here (exit 1, through the rule-error path) until
 /// CV-2 realises G-links (UnrealisedGlyphLinks) -- never carried whole.</remarks>
+{ 1.20.6: which part of a convert-apply book runs on a unit -- the value of
+  apply/1's component_part. 'applied' (BuildApplyPlan runs the whole book)
+  unless the book has UNIT rules and its component part has nothing to act
+  on: 'skipped-no-dfm', 'skipped-no-convert-rules' (no #convert block) or
+  'skipped-no-instances' (no .dfm instance a block matches, after --only). A
+  book with no unit rules is always 'applied', so its old errors stand. }
+function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
+  const AOnly: TArray<string>): string;
+var
+  R         : TConversionRule;
+  HasConvert: Boolean;
+begin
+  Result:= 'applied';
+  if not BookHasUnitRules(ARules) then Exit;
+  HasConvert:= False;
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then HasConvert:= True;
+  if not TFile.Exists(ADfmPath) then
+    Result:= 'skipped-no-dfm'
+  else if not HasConvert then
+    Result:= 'skipped-no-convert-rules'
+  else if Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0 then
+    Result:= 'skipped-no-instances';
+end;
+
 function DoConvertApply(const AArgs: TArgs): Integer;
 var
   UnitPas   : string            ;
@@ -24451,6 +24529,11 @@ var
     Timestamp   : string;
     Mappings    : TArray<string>;
   begin
+    { 1.20.6: a unit-rules-only run that changes nothing writes nothing -- no
+      backup, no recovery record, no provenance stamp on an untouched unit, so
+      a book run over many units leaves the ones it does not touch
+      byte-identical. The component path keeps its historical behaviour. }
+    if (JCtx.ComponentPart <> 'applied') and (Length(PlanRes.Edits) = 0) then Exit;
     // 1. Collect the distinct touched file paths from the edit set.
     TouchedFiles:= TList<string>.Create;
     TouchedSet  := TDictionary<string, Boolean>.Create;
@@ -24485,6 +24568,18 @@ var
     end;
   end;
 
+  // 1.20.6: one line saying the component part was skipped, and why; nothing
+  // when it ran. Text mode only -- JSON carries component_part.
+  procedure PrintComponentPart;
+  begin
+    if JCtx.ComponentPart = 'skipped-no-dfm' then
+      Writeln('dfm: none -- component part skipped, unit rules only')
+    else if JCtx.ComponentPart = 'skipped-no-convert-rules' then
+      Writeln('no #convert block in the book -- component part skipped, unit rules only')
+    else if JCtx.ComponentPart = 'skipped-no-instances' then
+      Writeln('no .dfm instance matches a #convert block -- component part skipped, unit rules only');
+  end;
+
 begin
   if not ExplicitDbsExist(AArgs, 'convert-apply') then Exit(2);
   UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
@@ -24506,8 +24601,6 @@ begin
 
   // Sibling .dfm: same base name + '.dfm', same folder as --unit.
   DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
-  if not TFile.Exists(DfmPath) then
-  begin Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath])); Exit(1); end;
 
   try
     RulesText:= TFile.ReadAllText(AArgs.RulesFile);
@@ -24516,6 +24609,16 @@ begin
     begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
   end;
   Rules:= ParseConversionRules(RulesText);
+
+  { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
+    #convert blocks have nothing to locate. A book with #unuse / #use /
+    #useswap still has the unit's uses clauses to change, so it runs them and
+    reports the component part as skipped (component_part skipped-no-dfm). }
+  if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) then
+  begin
+    Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]));
+    Exit(1);
+  end;
 
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
@@ -24621,8 +24724,18 @@ begin
     end;
   end;
 
-  PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections,
-    ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked);
+  { 1.20.6: which parts of the book run on this unit. A book WITH unit rules
+    runs them alone when its component part has nothing to act on -- no .dfm,
+    no #convert block, or no .dfm instance a block matches; everywhere else
+    BuildApplyPlan runs the whole book (its unit rules folded in). A book with
+    no unit rules takes the old path unchanged, errors included. }
+  JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections);
+  if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
+  if JCtx.ComponentPart = 'applied' then
+    PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections,
+      ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
+  else
+    PlanRes:= BuildUnitRulesOnlyPlan(UnitPas, Rules);
   if not PlanRes.Ok then
   begin
     if UseJson then
@@ -24652,6 +24765,7 @@ begin
     end;
     Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
     Writeln('');
+    PrintComponentPart;
     PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'planned');
     Exit(0);
   end;
@@ -24661,7 +24775,10 @@ begin
   if UseJson then
     EmitApplyJson(JCtx)
   else
+  begin
+    PrintComponentPart;
     PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
+  end;
 
   Result:= 0;
 end; // function

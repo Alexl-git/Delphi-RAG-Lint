@@ -532,7 +532,14 @@ auto-drafts a validated reFind-superset rules file from both trees;
 typos that reFind's blind PCRE cannot -- and checks any `G[I/N]` glyph expression on a
 `#link` (syntax, ranges, one alternative per N; see `docs\CONVERSION-RULES.md`); and `convert-apply` rewrites the real
 `.pas` + `.dfm` files (dry-run by default, `--apply` to write for real, with
-automatic `.BCK<n>` backups + a `recovery.txt` unless `--no-backup`). The usual
+automatic `.BCK<n>` backups + a `recovery.txt` unless `--no-backup`). The book's
+unit rules act on the unit's uses clauses in the same run: `#unuse Old` removes Old,
+`#use New` adds New to the implementation uses, `#useswap Old -> New1, New2` removes
+Old and adds each New once into the section Old was in -- never a duplicate, a unit
+both added and removed is kept, and an entry inside a `{$IF...}` region refuses the
+unit rather than guess. A unit with no `.dfm` (or nothing a `#convert` block
+matches) gets its unit rules alone; `info --json` advertises this as
+`capabilities.apply_unit_rules: true`. The usual
 workflow: `convert-scaffold` -> `convert-validate` -> `convert-apply` (dry-run,
 review the plan) -> `convert-apply --apply`. Before a glyph rule, `glyph-vacuum`
 measures every streamed graphic in the legacy tree (class, property, strip
@@ -899,7 +906,7 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | [`proptree`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/proptree) `--qname <T>` | Recursive deep-property enumerator (foundation for component conversion) | `--depth N`, `--no-to-persistent` (climb past the `TPersistent`/`TObject` stop), `--refs-as-leaves`, `--no-write-back` (read-only: types the ancestry-bridge recovers are otherwise memoised back into the index), `--min-visibility published\|public`, `--format text\|json` |
 | [`convert-scaffold`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-scaffold) `--from F --to T` | Auto-draft a valid conversion-rules file from the real F/T property trees | `--output <f>`, `--surface dfm\|pas` |
 | [`convert-validate`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-validate) `--rules <f>` | Validate a conversion-rules file against the real property trees | `--print-parsed` |
-| [`convert-apply`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-apply) `--unit F.pas --rules <f> --db <db>` | Rewrite all 5 conversion surfaces (dry-run unless `--apply`) | `--only Name1,Name2`, `--no-backup`, `--castlib <f>`, `--no-warn-unlinked` (keep the json unlinked count, drop the per-(source type, property) warnings), `--format json` (schema `apply/1`) |
+| [`convert-apply`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-apply) `--unit F.pas --rules <f> --db <db>` | Rewrite all 5 conversion surfaces (dry-run unless `--apply`) | `--only Name1,Name2`, `--no-backup`, `--castlib <f>`, `--no-warn-unlinked` (keep the json unlinked count, drop the per-(source type, property) warnings), `--format json` (schema `apply/1`; `uses[]`, `uses_removed`, `uses_added`, `component_part` for the unit rules). Also applies the book's unit rules `#unuse` / `#use` / `#useswap` to the unit's uses clauses -- alone when there is no `.dfm` or nothing to convert |
 | `glyph-vacuum --root <dir> --output <dir>` | Measure every streamed graphic (Picture.Data / Glyph.Data) under the roots before writing a glyph rule: decodes each blob (binary `.dfm` converted in memory), pairs it with its count property, and writes `instances.tsv`, `classes.tsv`, `skipped.tsv`, the images and a `gallery.html` | `--root` (repeatable), `--append` (merge a rescan; idempotent), `--db` (qualify class units and runtime refs) |
 
 #### Graphs
@@ -959,7 +966,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 |---|---|---|
 | [`schema`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/schema) `--db <db>` | Self-documenting live index schema: tables, columns, row counts | `--format text\|json`, `--output <f>` |
 | [`sql`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/sql) `--query "SELECT ..."` / `--file <q.sql>` `--db <db>` | **Guarded read-only SQL over the index** -- one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, plus a row cap and a wall-clock cap | `--limit N` (default 200), `--timeout-ms N` (default 10000), `--format text\|json`, `--output <f>` |
-| [`info`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Engine self-info: version, build date, tree-sitter versions, capabilities; with `--db`, per-index freshness (`current` / `resolve-owed` / `reparse-owed` / `index-newer`) -- an `indexes` array under `--json`, an `index: <path>  verdict: <v>` line (plus `remedy:` when owed) in text | `--json`, `--db <index>` (repeatable) |
+| [`info`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Engine self-info: version, build date, tree-sitter versions, capabilities (`fts5`, `cli_verbs`, `apply_unit_rules`); with `--db`, per-index freshness (`current` / `resolve-owed` / `reparse-owed` / `index-newer`) -- an `indexes` array under `--json`, an `index: <path>  verdict: <v>` line (plus `remedy:` when owed) in text | `--json`, `--db <index>` (repeatable) |
 | [`ide-release`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ide-release) | Ask a running Delphi IDE plugin not to respawn `drag-lint.exe` while a hold lasts, so the engine can be **rebuilt while the IDE stays open**. Frees nothing by itself -- `build\stage-engine.ps1` kills the holder. Expires on its own | `--seconds N` (default 120), `--resume`, `--status`, `--json` |
 | `shutdown` | **Maintenance stand-down.** Ask every running engine of this user and logon session that was started in `lsp` mode (an editor's language server -- the process that lingers and holds an index) to close its stores and exit 0, so an index can be re-parsed or the engine re-staged without `TerminateProcess` and the `-wal`/`-shm` sidecars a kill leaves. Transport is a Windows **named pipe** with an explicit per-user DACL (`\\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>`), never a TCP port; the channel answers only `status` and `shutdown`. An engine mid-request answers **BUSY** and keeps running; every honoured or refused request is audited on the engine's stderr and in `%LOCALAPPDATA%\drag-lint\control-channel-audit.log` | `--db <f>` (only engines holding it), `--dry-run`, `--wait <sec>` (default 5), `--all` (default), `--force` (TerminateProcess **only** after a refusal, said loudly) |
 | [`dump-refs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-refs) `<file> --db <db>` | Diagnostic: refs + enclosing-symbol attribution | |
