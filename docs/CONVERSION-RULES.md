@@ -77,7 +77,7 @@ directly (not the index) and treats `--db` as optional per-class enrichment.
 ### 1. `proptree` -- deep property enumerator
 
 ```
-drag-lint proptree --qname <TClass> [--depth N] [--no-to-persistent]
+drag-lint proptree --qname <TClass> [--depth N] [--rules <file>] [--no-to-persistent]
                     [--min-visibility published|public]
                     [--format text|json] --db PATH [--db ...]
 ```
@@ -86,7 +86,15 @@ Walks a class's `property` symbols (own **and** inherited), parses each property
 type from its indexed signature, and recurses into class-typed property types --
 producing flattened dotted paths (`Font.Color`, `Sub.Color`). By default it stops
 the ancestor climb at `TPersistent`/`TObject`; `--no-to-persistent` climbs past.
-Recursion is depth-capped (default **6**) with a visited-type cycle guard. Each
+Recursion is depth-capped with a visited-type cycle guard. **Depth** is the
+class-recursion budget: root members are 1-segment paths, and a K-segment path
+needs depth >= K-1 (depth 2 already holds `Constraints.Items.CustomConstraint`).
+The depth is `--depth N` (an integer >= 1), else the `#depth N` of the book named
+by `--rules <file>`, else **5** (1.20.6; before that the documented default was
+6, but a run with no `--depth` actually used the global parse default 3). A
+non-numeric `--depth`, `--depth 0` / negative, a missing `--rules` file, or a
+book whose `#depth` is invalid or repeated is a usage error (exit 2).
+`convert-scaffold` takes the same `--depth` / `--rules` with the same rule. Each
 visited class's own **fields** and class-scoped **consts** are also walked and
 emitted as flat leaves (`member_kind: "field"` -- see below; never recursed into,
 even when class-typed).
@@ -180,7 +188,8 @@ usage error / an explicit `--db` that does not exist / invalid `--min-visibility
 
 ```
 drag-lint convert-scaffold --from <FromType> --to <ToType>
-                           [--out <file>] [--surface dfm|pas] --db PATH [--db ...]
+                           [--out <file>] [--surface dfm|pas]
+                           [--depth N] [--rules <file>] --db PATH [--db ...]
 ```
 
 Enumerates BOTH deep property trees (via `proptree`'s engine) and emits a VALID,
@@ -258,7 +267,8 @@ crux reFind cannot do: reFind is blind PCRE text; we know the real properties, s
 **How a path is resolved (1.20.6).** No property tree is built. Each path is
 resolved SEGMENT BY SEGMENT against a per-class member cache (`proptree`'s own
 per-member resolution, each class resolved once per run), so there is no depth
-limit and `--depth` does not apply -- a 9-segment path validates as readily as a
+limit and neither `--depth` nor a book's `#depth` applies (a bad `#depth` is still
+reported as a `line N:` error) -- a 9-segment path validates as readily as a
 1-segment one, and the BDE book's TQuery block checks in seconds (the old depth-6
 tree of `FireDAC.Comp.Client.TFDQuery` did not finish in 20 minutes). A rule path
 names a `.dfm`-streamed property, so the `.dfm` rule applies: the LEAF must be a
@@ -474,6 +484,7 @@ Real reFind sample lines (from the BDE2FD sample):
 | `#note <text>` | a human comment carried in the rule (the scaffolder emits `candidates:` and `DROPPED` notes) |
 | `#use <unit>` | add a unit to the PAS `uses` clause (the companion to reFind's `#unuse`) |
 | `#useswap <Old> -> <New1> [, <New2> ...]` | replace unit `<Old>` with one-or-more `<New>` units. Sugar for `#unuse Old` + `#use New1` + `#use New2` ... |
+| `#depth <N>` | the book's property-tree depth for `proptree --rules` / `convert-scaffold --rules` (1.20.6). `N` is decimal digits 1..10, at most one per book; anything else (`#depth 11`, `#depth x`, a bare `#depth`, a second `#depth`) is a `line N:` error in `convert-validate` and a usage error (exit 2) in `proptree`/`convert-scaffold`. Precedence: `--depth N` > `#depth N` > 5. `convert-validate`/`convert-apply` resolve paths lazily and ignore it. `--print-parsed` shows it as `line L: depth N`. |
 
 Example superset block:
 
@@ -703,6 +714,8 @@ autotests (run each individually; there is no aggregating runner):
 - `tests/autotest/run_convert_rules.ps1` -- the DSL parser + `convert-validate`
   (including the Batch 2a-i `#ignore` directive).
 - `tests/autotest/run_convert_scaffold.ps1` -- the `convert-scaffold` generator.
+- `tests/autotest/run_convert_book_depth.ps1` -- the `#depth` directive and the
+  `--depth` > `#depth` > 5 precedence of `proptree` / `convert-scaffold`.
 - `tests/autotest/run_dfm_reemit.ps1` -- the Batch 2a-i DFM re-emit engine (via the
   hidden `convert-reemit` verb): 1:1 rename, moved-depth, events, `#ignore`,
   unmapped-drop, `#default`, collection relocate, binary same-type/mismatch,

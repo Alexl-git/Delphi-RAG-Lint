@@ -336,6 +336,11 @@ type
     Docs: TDocConfig;
     // v0.17: blast-radius pack
     Depth         : Integer;
+    // 1.20.6 (T2d): --depth was given at all, and its raw text. proptree and
+    // convert-scaffold need both: Depth alone cannot tell "--depth 3" from the
+    // parse default 3, nor "--depth x" from a number (see ResolveTreeDepth).
+    DepthGiven    : Boolean;
+    DepthRaw      : string ;
     IncludeImpl   : Boolean;
     AllVisibility : Boolean;
     WiringCoverage: Boolean; // v8: --coverage for the wiring command
@@ -581,8 +586,8 @@ type
     EnumMethodsStr: string; // --methods tobyte,frombyte,...
     EnumToString  : string; // --tostring rtti|case
     // Track 3 Batch 1 (Task 1): proptree deep-property enumerator. Depth reuses
-    // Depth (--depth; proptree applies its own default 6 inside DoPropTree when
-    // Depth<=0). ToPersistent defaults ON (stop the ancestor climb at
+    // Depth (--depth; proptree / convert-scaffold resolve --depth > the --rules
+    // book's #depth > 5 in ResolveTreeDepth). ToPersistent defaults ON (stop the ancestor climb at
     // TPersistent/TObject); --no-to-persistent turns it OFF.
     ToPersistent  : Boolean; // proptree: stop ancestor climb at TPersistent/TObject (default True)
     RefsAsLeaves  : Boolean; // proptree: TComponent-typed props are reference leaves, not expanded (default False)
@@ -949,11 +954,13 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
-  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
-  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth is ignored here (and by the hidden convert-reemit), ' +
+  Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; ' +
+    'depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
+  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error; ' +
     'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; ' +
     'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); no JSON mode)');
-  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
+  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
+    'expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
     'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added; ' +
@@ -1541,7 +1548,13 @@ begin
     else if (A = '--no-docs') then Result.NoDocs:= True
     else if (A = '--kind') and (i < ParamCount) then begin Inc(i); Result.Kind:= ParamStr(i); end
     else if (A = '--public') then Result.PublicOnly:= True
-    else if (A = '--depth') and (i < ParamCount) then begin Inc(i); Result.Depth:= StrToIntDef(ParamStr(i), 3); end
+    else if (A = '--depth') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Depth     := StrToIntDef(ParamStr(i), Result.Depth); { unparsable keeps the default }
+      Result.DepthGiven:= True;
+      Result.DepthRaw  := ParamStr(i);
+    end
     else if A = '--include-impl'   then Result.IncludeImpl   := True
     else if A = '--full-surface'   then Result.FullSurface   := True
     else if A = '--all-visibility' then Result.AllVisibility := True
@@ -23188,14 +23201,75 @@ begin
   Result:= 0;
 end; // function
 
-/// <summary>drag-lint proptree --qname X [--depth N] [--no-to-persistent]
+/// <summary>The tree-expansion depth of proptree / convert-scaffold:
+/// --depth N &gt; the --rules book's '#depth N' &gt; DEFAULT_TREE_DEPTH (5).</summary>
+/// <param name="AArgs">DepthGiven/DepthRaw=--depth; RulesFile=--rules.</param>
+/// <param name="ADepth">The depth to expand to (&gt;= 1); only meaningful when the
+/// result is True.</param>
+/// <returns>True when ADepth is set; False on a usage error, already printed
+/// as one 'ERROR: ...' line (the caller exits 2): --depth that is not an integer
+/// or is &lt; 1; a --rules file that is missing or unreadable; a book whose
+/// '#depth' is invalid or repeated (named by file and line).</returns>
+/// <remarks>The book is read whenever --rules is given, even beside --depth, so
+/// a broken '#depth' never goes unnoticed; its other parse errors are ignored
+/// here (convert-validate reports them). Depth is the class-recursion budget:
+/// a K-segment path needs depth &gt;= K-1.</remarks>
+function ResolveTreeDepth(const AArgs: TArgs; out ADepth: Integer): Boolean;
+var
+  Book: TConversionRuleSet;
+  E   : TRuleError        ;
+  Bad : Boolean           ;
+begin
+  Result:= False;
+  ADepth:= DEFAULT_TREE_DEPTH;
+  Book  := Default(TConversionRuleSet);
+  if AArgs.RulesFile <> '' then
+  begin
+    if not TFile.Exists(AArgs.RulesFile) then
+    begin
+      Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile]));
+      Exit;
+    end;
+    try
+      Book:= ParseConversionRules(TFile.ReadAllText(AArgs.RulesFile));
+    except
+      on Ex: Exception do
+      begin
+        Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message]));
+        Exit;
+      end;
+    end;
+    Bad:= False;
+    for E in Book.ParseErrors do
+      if E.Message.StartsWith('#depth ') or E.Message.StartsWith('duplicate #depth ') then
+      begin
+        Writeln(Format('ERROR: %s line %d: %s', [AArgs.RulesFile, E.LineNo, E.Message]));
+        Bad:= True;
+      end;
+    if Bad then Exit;
+  end;
+  if AArgs.DepthGiven then
+  begin
+    if not TryStrToInt(AArgs.DepthRaw, ADepth) or (ADepth < MIN_BOOK_DEPTH) then
+    begin
+      Writeln(Format('ERROR: --depth must be an integer >= 1 (got "%s")', [AArgs.DepthRaw]));
+      Exit;
+    end;
+  end
+  else if Book.Depth > 0 then
+    ADepth:= Book.Depth;
+  Result:= True;
+end;
+
+/// <summary>drag-lint proptree --qname X [--depth N] [--rules FILE] [--no-to-persistent]
 /// [--refs-as-leaves] [--min-visibility published|public] [--format text|json] [--json] --db PATH
 /// [--db ...] -- Track 3 Batch 1: the index-driven RECURSIVE deep-property
 /// enumerator. Resolves class X, walks its own + inherited kind='property'
 /// children, parses each property's type from its Signature, and recurses into
 /// class-typed property types (depth-capped + a visited-TYPE-name cycle guard) to
-/// produce flattened dotted paths (Font.Color, Inner.Shade). --depth defaults to 6
-/// (applied here when Depth&lt;=0). ToPersistent (default ON) stops the ancestor
+/// produce flattened dotted paths (Font.Color, Inner.Shade). Depth is --depth N,
+/// else the --rules book's '#depth N', else 5 (ResolveTreeDepth; a bad --depth,
+/// --depth &lt; 1 or a bad '#depth' is exit 2). ToPersistent (default ON) stops the ancestor
 /// climb at TPersistent/TObject; --no-to-persistent climbs past. --refs-as-leaves
 /// (TreatRefsAsLeaves, default OFF) emits a property whose type descends from
 /// TComponent as a REFERENCE LEAF instead of recursing into it -- a referenced
@@ -23214,14 +23288,16 @@ end; // function
 /// (next query is a plain hit; self-limiting). A writable open that fails falls
 /// back to read-only (resolution still works; memoization skipped). --no-write-back
 /// forces a read-only (query_only) open that never mutates the DB.</summary>
-/// <param name="AArgs">QName=class, Depth=recursion cap (default 6),
+/// <param name="AArgs">QName=class, DepthGiven/DepthRaw=--depth and
+/// RulesFile=--rules (recursion cap, see ResolveTreeDepth; default 5),
 /// ToPersistent=ancestor-stop, RefsAsLeaves=--refs-as-leaves (TComponent-typed
 /// properties are reference leaves, not expanded), NoWriteBack=force read-only
 /// (no memoization),
 /// MinVisibility=--min-visibility filter ('' = all), Format/AsJson=output,
 /// DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok; 1 qname not resolved to a class in any DB; 2 usage error / no
-/// readable db / invalid --min-visibility value.</returns>
+/// readable db / invalid --min-visibility value / invalid --depth or --rules
+/// book depth.</returns>
 function DoPropTree(const AArgs: TArgs): Integer;
 var
   Dbs   : TArray<string>  ;
@@ -23266,7 +23342,10 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'proptree') then Exit(2);
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint proptree --qname X [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]'); Exit(2); end;
+  begin
+    Writeln('Usage: drag-lint proptree --qname X [--depth N] [--rules FILE] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]');
+    Exit(2);
+  end;
 
   Fmt:= LowerCase(Trim(AArgs.Format));
 
@@ -23276,10 +23355,10 @@ begin
   if (MinVis <> '') and (MinVis <> 'published') and (MinVis <> 'public') then
   begin Writeln(Format('ERROR: --min-visibility must be published|public (got "%s")', [AArgs.MinVisibility])); Exit(2); end;
 
-  // proptree's own default depth is 6 (deeper than the global --depth default of
-  // 3), applied here so the shared parse default is untouched.
-  Depth:= AArgs.Depth;
-  if Depth <= 0 then Depth:= 6;
+  // --depth > the --rules book's #depth > 5. Before 1.20.6 this read AArgs.Depth,
+  // whose parse default is 3, so a proptree with no --depth ran at 3, not the
+  // documented 6.
+  if not ResolveTreeDepth(AArgs, Depth) then Exit(2);
 
   Opts:= Default(TPropTreeOptions);
   Opts.Depth            := Depth;
@@ -23485,6 +23564,7 @@ var
       rkUseSwap: Result:= 'useswap';
       rkMapping: Result:= 'mapping';
       rkApply  : Result:= 'apply';
+      rkDepth  : Result:= 'depth';
     else        Result:= '?';
     end;
   end;
@@ -23546,6 +23626,7 @@ var
                  else
                    Result:= Format('mapping %s', [R.MapName]);
       rkApply  : Result:= Format('apply %s', [R.MapName]);
+      rkDepth  : Result:= Format('depth %d', [R.Depth]);
     else        Result:= KindStr(R.Kind);
     end;
   end;
@@ -23831,7 +23912,8 @@ end; // function
 /// are BOTH required (missing -&gt; usage + exit 2). --output (reuses Output) writes
 /// an ASCII/CRLF file; omitted -&gt; stdout. Multiple --db are tried in order; the
 /// FIRST db that resolves BOTH types is used (ids are per-DB). If either type is
-/// unresolved the verb names it and exits 1.
+/// unresolved the verb names it and exits 1. Both trees expand to --depth N, else
+/// the --rules book's '#depth N', else 5 (ResolveTreeDepth; a bad value exits 2).
 /// proptree assignability engine (Task 5): auto-'#link' TARGETS (the To side
 /// only -- From remains an unrestricted candidate SOURCE pool) are restricted to
 /// leaves that are actually valid assignment targets, using the is_writable/
@@ -23862,9 +23944,10 @@ end; // function
 /// neither linked nor noted.</summary>
 /// <param name="AArgs">CallFrom=--from (FromType qname), RenameTo=--to (ToType
 /// qname), Output=--output (file; empty=stdout), Surface=--surface dfm|pas ('' =
-/// default 'dfm'), DbPath/DbPaths=index(es).</param>
+/// default 'dfm'), DepthGiven/DepthRaw=--depth and RulesFile=--rules (tree
+/// depth, see ResolveTreeDepth), DbPath/DbPaths=index(es).</param>
 /// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
-/// --from/--to, invalid --surface value) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
+/// --from/--to, invalid --surface value, invalid --depth or book #depth) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
 /// <remarks>Output is DETERMINISTIC (paths sorted case-insensitively) so the
 /// emitted text is stable across runs. Emission order: (1) a '#convert From -&gt;
 /// To' header with a best-guess ', unit' uses-add taken from the qname unit
@@ -24047,7 +24130,7 @@ begin
   if not ExplicitDbsExist(AArgs, 'convert-scaffold') then Exit(2);
   if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
   begin
-    Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--output FILE] [--surface dfm|pas] --db PATH [--db ...]');
+    Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--output FILE] [--surface dfm|pas] [--depth N] [--rules FILE] --db PATH [--db ...]');
     Exit(2);
   end;
 
@@ -24064,8 +24147,7 @@ begin
   if (Surface <> 'dfm') and (Surface <> 'pas') then
   begin Writeln(Format('ERROR: --surface must be dfm|pas (got "%s")', [AArgs.Surface])); Exit(2); end;
 
-  Depth:= AArgs.Depth;
-  if Depth <= 0 then Depth:= 6;
+  if not ResolveTreeDepth(AArgs, Depth) then Exit(2); // --depth > #depth > 5
   Opts:= Default(TPropTreeOptions);
   Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;

@@ -34,6 +34,17 @@ uses
   System.SysUtils,
   DRagLint.Convert.PropCache;
 
+const
+  /// <summary>The smallest value '#depth N' accepts.</summary>
+  MIN_BOOK_DEPTH = 1;
+  /// <summary>The largest value '#depth N' accepts.</summary>
+  MAX_BOOK_DEPTH = 10;
+  /// <summary>The tree-expansion depth proptree and convert-scaffold use when
+  /// neither --depth nor a --rules book's '#depth' names one.</summary>
+  /// <remarks>Precedence: --depth N &gt; '#depth N' &gt; this. Depth is the
+  /// class-recursion budget: a K-segment path needs depth &gt;= K-1.</remarks>
+  DEFAULT_TREE_DEPTH = 5;
+
 type
   /// <summary>The kind of a single parsed conversion rule.</summary>
   /// <remarks>
@@ -53,12 +64,14 @@ type
   /// rkMapping=#mapping (one line of a named, reusable conditional value map --
   /// a declaration, a #when branch, or a #else branch); rkApply=#apply (apply a
   /// named mapping within the enclosing #convert block's scope).
+  /// rkDepth=#depth (the book's property-tree expansion depth for proptree and
+  /// convert-scaffold; Depth holds the value; conversion ignores it).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.Rules.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore, rkUse, rkUseSwap,
-               rkMapping, rkApply);
+               rkMapping, rkApply, rkDepth);
 
   /// <summary>One '&lt;ToPath&gt; = &lt;Value&gt;' assignment from a #mapping
   /// branch's set list.</summary>
@@ -150,6 +163,10 @@ type
     IsElse   : Boolean;
     /// <summary>rkMapping #when/#else: the assignments right of '-&gt;'.</summary>
     Sets     : TArray<TMappingSetPair>;
+    /// <summary>rkDepth only: the '#depth N' value, always 1..10 (an
+    /// out-of-range or non-integer value is a parse error and makes no
+    /// rule).</summary>
+    Depth    : Integer;
   end;
 
   /// <summary>One parse-or-validation error, anchored to a source line.</summary>
@@ -178,6 +195,12 @@ type
   /// the validator sees parse + validation problems together. (ADDED FIELD vs the
   /// Task-2 brief's minimal shape -- documented as acceptable there; Task 3 reads
   /// Rules and may inspect ParseErrors but is not broken by its presence.)
+  /// Depth is the book's '#depth N' (1..10), 0 when the book has none or its
+  /// only '#depth' line was invalid; DepthLine is that line (0 = none). It is
+  /// the tree-expansion depth for proptree / convert-scaffold --rules, below an
+  /// explicit --depth and above the default 5. Conversion and validation
+  /// resolve paths lazily and never read it. At most one '#depth' per book: a
+  /// second one is a parse error on its own line and the first one stands.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules</para>
@@ -186,6 +209,8 @@ type
   TConversionRuleSet = record
     Rules      : TArray<TConversionRule>;
     ParseErrors: TArray<TRuleError>;
+    Depth      : Integer;
+    DepthLine  : Integer;
   end;
 
   /// <summary>The From and To classes of one #convert block, as
@@ -259,7 +284,10 @@ type
 /// off first, then the glyph expression at the first ' G[' -- see
 /// TConversionRule.GlyphExpr); '#default &lt;ToPath&gt; = &lt;value&gt;';
 /// '#note &lt;text&gt;'; '#ignore &lt;FromPath&gt;' (acknowledge an F property is
-/// intentionally unmapped -- suppresses its unmapped-non-default warning).
+/// intentionally unmapped -- suppresses its unmapped-non-default warning);
+/// '#depth &lt;N&gt;' (the book's tree-expansion depth, decimal digits 1..10,
+/// one per book -- out of range, non-numeric or a second '#depth' is a
+/// ParseError on that line; see TConversionRuleSet.Depth).
 /// A NON-'#' line containing ' -&gt; ' is a raw PCRE
 /// rule (Search -&gt; Replace). Any other '#word' is an unknown directive
 /// recorded in ParseErrors. Pure; deterministic; no I/O.
@@ -445,6 +473,17 @@ const
   ARROW_LINK    = ' <- ';  // #link separator (reversed)
   STUB_MARKER   = '???';   // explicit-unfilled path stub (skip validation)
 
+// True when S is one or more ASCII decimal digits and nothing else -- no sign,
+// no '$' hex prefix, no blanks (StrToIntDef alone would accept '+3' and '$A').
+function IsDecimalDigits(const S: string): Boolean;
+var
+  C: Char;
+begin
+  Result:= S <> '';
+  for C in S do
+    if not CharInSet(C, ['0'..'9']) then Exit(False);
+end;
+
 // Split raw text into lines on CRLF or LF (a total, allocation-light splitter).
 function SplitLines(const AText: string): TArray<string>;
 var
@@ -581,6 +620,9 @@ var
     #convert block, so a '#tag' before the first one is an error rather than a
     silent no-op -- see the '#tag' arm below. }
   SeenConvert: Boolean;
+  { The book's '#depth N' and its line (0 = none yet); see TConversionRuleSet. }
+  BookDepth    : Integer;
+  BookDepthLine: Integer;
 
   procedure AddError(const AMsg: string);
   var
@@ -822,6 +864,8 @@ begin
   Rules:= TList<TConversionRule>.Create;
   Errs := TList<TRuleError>.Create;
   SeenConvert:= False;
+  BookDepth    := 0;
+  BookDepthLine:= 0;
   try
     Lines:= SplitLines(AText);
     for LineNo:= 1 to Length(Lines) do
@@ -970,6 +1014,25 @@ begin
         R.MapName:= Arg;
         AddRule(R);
       end
+      else if Directive('#depth', Arg) then
+      begin
+        { '#depth N' -- the book's tree-expansion depth for proptree /
+          convert-scaffold (TConversionRuleSet.Depth). One per book: a second
+          one is an error on ITS line and the first stands. An invalid value
+          makes no rule, so Depth stays 0 and the caller's default applies. }
+        R.Depth:= if IsDecimalDigits(Arg) then StrToIntDef(Arg, 0) else 0;
+        if BookDepthLine > 0 then
+          AddError(Format('duplicate #depth (first on line %d) -- one #depth per book', [BookDepthLine]))
+        else if (R.Depth < MIN_BOOK_DEPTH) or (R.Depth > MAX_BOOK_DEPTH) then
+          AddError(Format('#depth must be an integer %d..%d', [MIN_BOOK_DEPTH, MAX_BOOK_DEPTH]))
+        else
+        begin
+          R.Kind       := rkDepth;
+          BookDepth    := R.Depth;
+          BookDepthLine:= LineNo;
+          AddRule(R);
+        end;
+      end
       else if Directive('#tag', Arg) then
       begin
         { '#tag <Ident>' -- TOLERATED, and deliberately nothing more. The rule
@@ -1019,6 +1082,8 @@ begin
 
     Result.Rules      := Rules.ToArray;
     Result.ParseErrors:= Errs.ToArray;
+    Result.Depth      := BookDepth;
+    Result.DepthLine  := BookDepthLine;
   finally
     Rules.Free;
     Errs.Free;
