@@ -18,7 +18,7 @@
        class-typed property with a public subtree, a strict private field, a
        self-referencing class, a TComponent-typed reference, and ruling R11:
        a descendant redeclaring an ancestor's PUBLISHED property as PRIVATE
-       shadows it (neither appears; convert-validate says "not found").
+       shadows it (neither appears; convert-validate warns UNREACHABLE naming TRoot -- T2h).
        The new JSON equals the OLD engine's JSON with every private node and
        every node under a private node removed -- node for node, in ORDER, in
        every key -- and truncated is equal; text mode equal line for line.
@@ -343,8 +343,11 @@ Check 'a10 --refs-as-leaves: Ref is a reference leaf (kind=class, is_class_typed
 $bk = P 'r11.rules'
 Write-Ascii $bk "#link Title <- Color`n"
 $o = (& $Exe convert-validate --rules $bk --from CacheFix.TRoot --to CacheFix.TDst --db $db 2>&1) -join "`n"
-Check 'a11 R11: ResolvePath on the shadowed Color says not found' `
-  (($LASTEXITCODE -eq 1) -and ($o -match 'link FromPath not found in --from tree: Color')) $o
+# T2h (owner ruling 2026-09-30, R12): the path EXISTS but is private -- an
+# unreachable WARNING naming the descendant's private redeclaration, exit 0.
+Check 'a11 R11: ResolvePath on the shadowed Color is UNREACHABLE, naming TRoot''s private Color (warning, exit 0)' `
+  (($LASTEXITCODE -eq 0) -and ($o -match '(?m)^line 1: warning: Color: Color is private in CacheFix\.TRoot; never applied unless a descendant class changes its visibility\r?$') -and `
+   -not ($o -match 'not found')) $o
 $o = (& $Exe convert-validate --rules $bk --from CacheFix.TBase --to CacheFix.TDst --db $db 2>&1) -join "`n"
 Check 'a12 R11 positive control: on TBase (no redeclaration) Color resolves' (($LASTEXITCODE -eq 0) -and ($o -match '(?m)^OK')) $o
 

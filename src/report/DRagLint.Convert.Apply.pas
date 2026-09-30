@@ -133,9 +133,14 @@ type
                                instances. The per-instance 'dropped' lines above
                                are the sites; this is the rule-book gap they
                                share. Row 6 step 3, 2026-09-16. }
-    aikSubLeafCarried);      { a sub-leaf carried IMPLICITLY under an identity
+    aikSubLeafCarried,       { a sub-leaf carried IMPLICITLY under an identity
                                #link (Font <- Font, both TFont) -- nobody typed
                                it, and the report says so (info). }
+    aikRulePathUnreachable); { a #link / #default / #mapping line whose path
+                               names members that exist but are inaccessible on
+                               the .dfm surface -- skipped, never applied (owner
+                               ruling R12, T2h). Path and RuleLine are set; the
+                               structured facts are apply/1 unreachable[]. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -643,7 +648,7 @@ const
     'cast-not-applied', 'cast-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
-    'unlinked-source-property', 'sub-leaf-carried');
+    'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable');
 begin
   Result:= NAMES[AKind];
 end;

@@ -36,8 +36,10 @@ type
   /// default 'Items', which a .dfm streams as item blocks rather than as a
   /// published hop). Fields never pass on psDfm.
   /// psPas (Pascal source): published, public or protected, on every hop.
-  /// Private and strict private never resolve on either surface -- they are not
-  /// even cached. Controller ruling R8, 2026-09-30.
+  /// Private and strict private never resolve on either surface -- their
+  /// subtrees are never cached; only their names are kept (TClassMembers.Hidden)
+  /// so that a path naming one is UNREACHABLE, not NOT FOUND (owner ruling R12,
+  /// T2h). Controller ruling R8, 2026-09-30.
   /// </remarks>
   TPropSurface = (psDfm, psPas);
 
@@ -52,6 +54,10 @@ type
   /// marks a TComponent-typed property under TreatRefsAsLeaves -- a reference
   /// leaf, IsClassTyped False, never descended into. RootType is the class's
   /// bare name, '' when the qualified name resolved to no class.
+  /// Hidden (T2h, owner ruling R12) names the private / strict private members
+  /// left out of Members -- a private redeclaration that hides an ancestor's
+  /// member included (R11). They are never expanded and never emitted; they
+  /// exist only so ResolvePathEx can answer UNREACHABLE rather than NOT FOUND.
   /// </remarks>
   TClassMembers = record
     ClassId  : Int64;
@@ -61,6 +67,35 @@ type
     TypeQName: TArray<string>;
     TypeId   : TArray<Int64>;
     IsCompRef: TArray<Boolean>;
+    Hidden   : TArray<TPropHiddenMember>;
+  end;
+
+  /// <summary>What resolving a rule path found (owner ruling R12,
+  /// 2026-09-30).</summary>
+  /// <remarks>
+  /// poFound: every segment is a member that passes the surface.
+  /// poNotFound: some segment names no member at all on its hop, the root
+  /// class does not resolve, or a hop cannot be descended into (a scalar, a
+  /// field, a referenced component under TreatRefsAsLeaves, a cycle).
+  /// poUnreachable: every segment names an existing member, but at least one
+  /// fails the surface's visibility rule -- or the path runs INTO a private
+  /// member, which stops it there (its type is never expanded).
+  /// </remarks>
+  TPathOutcome = (poFound, poNotFound, poUnreachable);
+
+  /// <summary>The outcome of TPropMemberCache.ResolvePathEx.</summary>
+  /// <remarks>Node is the leaf, Path := the path as given, for poFound only.
+  /// Member, Visibility and DeclaringClass name the FIRST offending segment
+  /// (bare member name, its visibility as reported -- 'private', 'strict
+  /// private', 'protected', 'public' or 'published' -- and the qualified name
+  /// of the class that declares it) for poUnreachable only; '' otherwise.
+  /// </remarks>
+  TPathResolution = record
+    Outcome       : TPathOutcome;
+    Node          : TPropNode;
+    Member        : string;
+    Visibility    : string;
+    DeclaringClass: string;
   end;
 
   /// <summary>The unfolded cache: one TClassMembers per class id, built on
@@ -118,6 +153,26 @@ type
     /// </remarks>
     function ResolvePath(const ARootQName, APath: string; ASurface: TPropSurface;
       out ANode: TPropNode): Boolean;
+    /// <summary>Resolves a dotted member path like ResolvePath, and says WHY
+    /// it does not resolve: NOT FOUND or UNREACHABLE (owner ruling R12).</summary>
+    /// <param name="ARootQName">The fully-qualified root class.</param>
+    /// <param name="APath">The dotted path; segments compare
+    /// case-insensitively.</param>
+    /// <param name="ASurface">Which visibility rule applies.</param>
+    /// <returns>poFound exactly when ResolvePath returns True. Otherwise
+    /// poUnreachable when every segment names an existing member of the class
+    /// its hop reached but one fails ASurface -- on psDfm a private or
+    /// protected member anywhere, a public LEAF, a field; on psPas a private
+    /// or strict private member only -- naming the FIRST such segment; a path
+    /// into a private member stops there (a private redeclaration of an
+    /// ancestor's member is named, not the ancestor's). Else
+    /// poNotFound.</returns>
+    /// <remarks>Structural checks come first: a hop that cannot be descended
+    /// (not a class-typed property, a TreatRefsAsLeaves component reference,
+    /// the per-path cycle guard) is poNotFound whatever its visibility, so a
+    /// path through a referenced component stays "not a path" (R12). Reads the
+    /// cache only.</remarks>
+    function ResolvePathEx(const ARootQName, APath: string; ASurface: TPropSurface): TPathResolution;
     /// <summary>The flattened property tree of a class, expanded through this
     /// cache (proptree, convert-scaffold, glyph-vacuum).</summary>
     /// <param name="AClassQName">The fully-qualified root class.</param>
@@ -161,6 +216,12 @@ type
     /// <returns>False when unset, or when the path does not resolve.</returns>
     function ResolvePath(const APath: string; ASurface: TPropSurface;
       out ANode: TPropNode): Boolean;
+    /// <summary>TPropMemberCache.ResolvePathEx from this class.</summary>
+    /// <param name="APath">The dotted path.</param>
+    /// <param name="ASurface">The visibility rule.</param>
+    /// <returns>Outcome poNotFound when unset; otherwise the cache's
+    /// answer.</returns>
+    function ResolvePathEx(const APath: string; ASurface: TPropSurface): TPathResolution;
   end;
 
 /// <summary>Enumerates the deep (recursively flattened) property tree of a class,
@@ -296,7 +357,7 @@ begin
   Result.ClassId := AClass.Id;
   Result.QName   := AClass.QualifiedName;
   Result.RootType:= AClass.Name;
-  FResolver.ResolveMembers(AClass, Result.Members, Types, Result.IsCompRef);
+  FResolver.ResolveMembers(AClass, Result.Members, Types, Result.IsCompRef, Result.Hidden);
   SetLength(Result.TypeQName, Length(Result.Members));
   SetLength(Result.TypeId   , Length(Result.Members));
   for I:= 0 to High(Types) do
@@ -365,8 +426,28 @@ begin
            (AMembers.TypeId[AIdx] > 0);
 end;
 
+// Index of the private member named AName in AMembers.Hidden, -1 if none.
+function IndexOfHidden(const AMembers: TClassMembers; const AName: string): Integer;
+var
+  J: Integer;
+begin
+  for J:= 0 to High(AMembers.Hidden) do
+    if SameText(AMembers.Hidden[J].Name, AName) then Exit(J);
+  Result:= -1;
+end;
+
 function TPropMemberCache.ResolvePath(const ARootQName, APath: string; ASurface: TPropSurface;
   out ANode: TPropNode): Boolean;
+var
+  Res: TPathResolution;
+begin
+  Res   := ResolvePathEx(ARootQName, APath, ASurface);
+  ANode := Res.Node;
+  Result:= Res.Outcome = poFound;
+end;
+
+function TPropMemberCache.ResolvePathEx(const ARootQName, APath: string;
+  ASurface: TPropSurface): TPathResolution;
 var
   Segs   : TArray<string>;
   Cur    : TClassMembers;
@@ -374,11 +455,23 @@ var
   I      : Integer;
   Idx    : Integer;
   IsLeaf : Boolean;
+  Blocked: Boolean; // an earlier segment failed the surface (the first is named)
+
+  procedure Offend(const AMember, AVisibility, ADeclaredIn: string);
+  begin
+    if Blocked then Exit;
+    Blocked                := True;
+    Result.Member          := AMember;
+    Result.Visibility      := AVisibility;
+    Result.DeclaringClass  := ADeclaredIn;
+  end;
+
 begin
-  Result:= False;
-  ANode := Default(TPropNode);
-  Segs  := Trim(APath).Split(['.']);
-  Cur   := MembersOf(ARootQName);
+  Result        := Default(TPathResolution);
+  Result.Outcome:= poNotFound;
+  Blocked       := False;
+  Segs          := Trim(APath).Split(['.']);
+  Cur           := MembersOf(ARootQName);
   if (Length(Segs) = 0) or (Cur.RootType = '') then Exit;
   Visited:= TList<string>.Create;
   try
@@ -387,19 +480,39 @@ begin
     begin
       IsLeaf:= I = High(Segs);
       Idx   := IndexOfMember(Cur, Trim(Segs[I]));
-      if (Idx < 0) or not PassesSurface(Cur.Members[Idx], ASurface, IsLeaf) then Exit;
+      if Idx < 0 then
+      begin
+        { Not a returned member: private (it exists -- UNREACHABLE, and the path
+          stops here, its type never expanded) or nothing at all (NOT FOUND). }
+        Idx:= IndexOfHidden(Cur, Trim(Segs[I]));
+        if Idx >= 0 then
+        begin
+          Offend(Cur.Hidden[Idx].Name, Cur.Hidden[Idx].Visibility, Cur.Hidden[Idx].DeclaredIn);
+          Result.Outcome:= poUnreachable;
+        end;
+        Break;
+      end;
+      if not PassesSurface(Cur.Members[Idx], ASurface, IsLeaf) then
+        Offend(Cur.Members[Idx].Path, Cur.Members[Idx].Visibility, Cur.Members[Idx].DeclaredIn);
       if IsLeaf then
       begin
-        ANode     := Cur.Members[Idx];
-        ANode.Path:= APath;
-        Exit(True);
+        if Blocked then
+          Result.Outcome:= poUnreachable
+        else
+        begin
+          Result.Outcome  := poFound;
+          Result.Node     := Cur.Members[Idx];
+          Result.Node.Path:= APath;
+        end;
+        Break;
       end;
       { A hop: a class-typed property, not a type already passed through on this
-        path (BuildPropTree's per-path cycle guard). }
-      if (not IsDescendable(Cur, Idx)) or Visited.Contains(LowerCase(Cur.Members[Idx].TypeName)) then Exit;
+        path (BuildPropTree's per-path cycle guard). Structural, so NOT FOUND
+        whatever the visibility of the segments before it. }
+      if (not IsDescendable(Cur, Idx)) or Visited.Contains(LowerCase(Cur.Members[Idx].TypeName)) then Break;
       Visited.Add(LowerCase(Cur.Members[Idx].TypeName));
       Cur:= MembersOfId(Cur.TypeId[Idx]);
-      if Cur.RootType = '' then Exit;
+      if Cur.RootType = '' then Break;
     end;
   finally
     Visited.Free;
@@ -537,6 +650,17 @@ begin
   ANode:= Default(TPropNode);
   if (QName = '') or (Cache = nil) then Exit(False);
   Result:= Cache.ResolvePath(QName, APath, ASurface, ANode);
+end;
+
+function TClassRef.ResolvePathEx(const APath: string; ASurface: TPropSurface): TPathResolution;
+begin
+  if (QName = '') or (Cache = nil) then
+  begin
+    Result        := Default(TPathResolution);
+    Result.Outcome:= poNotFound;
+    Exit;
+  end;
+  Result:= Cache.ResolvePathEx(QName, APath, ASurface);
 end;
 
 end.

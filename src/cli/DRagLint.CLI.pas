@@ -951,7 +951,8 @@ begin
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth is ignored here (and by the hidden convert-reemit), ' +
-    'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code)');
+    'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; ' +
+    'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); no JSON mode)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
@@ -959,6 +960,7 @@ begin
     'EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each #mapping against the blocks that #apply it -- ' +
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
     'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
+    'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
     'a .dfm holding an inherited/inline object of a From type is refused whole, unit rules included (exit 1))');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
@@ -23436,8 +23438,12 @@ end;
 /// STUB marker (the scaffolder emits these) and is NOT a path error. A #link
 /// glyph expression (G[I/N] grammar) is checked in either mode, and a problem
 /// names the column inside the expression. Prints 'line N: message' per error,
-/// then 'line N: warning: message' per warning (ConversionRuleWarnings), then
-/// 'OK' when there were no errors; warnings never change the exit code.</summary>
+/// then 'line N: warning: message' per warning -- first each UNREACHABLE path
+/// (T2h, owner ruling R12: every segment exists but one fails the .dfm surface,
+/// 'line N: warning: &lt;path&gt;: &lt;Member&gt; is &lt;visibility&gt; in
+/// &lt;Class&gt;; never applied unless a descendant class changes its
+/// visibility'), then ConversionRuleWarnings -- all on stdout, then 'OK' when
+/// there were no errors; warnings never change the exit code. No JSON mode.</summary>
 /// <param name="AArgs">RulesFile=--rules; CallFrom=--from (FromType qname),
 /// RenameTo=--to (ToType qname); PrintParsed=--print-parsed; ToPersistent=--no-to-persistent;
 /// DbPath/DbPaths=index(es) the from/to classes are resolved in.</param>
@@ -23458,6 +23464,8 @@ var
   { ClassFor returns a TClassRef, so it cannot Exit(2) on a stale explicit --db.
     It raises this flag instead and the body refuses right after the calls. }
   StaleExplicitDb: Boolean      ;
+  Unreach  : TArray<TUnreachablePath>; { T2h: paths through inaccessible members -- warnings }
+  U        : TUnreachablePath   ;
 
   function KindStr(const AKind: TRuleKind): string;
   begin
@@ -23589,14 +23597,18 @@ begin
     refusal it could only flag is enforced here. }
   if StaleExplicitDb then Exit(2);
 
-  Errors:= ValidateConversionRules(RuleSet, FromCls, ToCls);
+  Errors:= ValidateConversionRules(RuleSet, FromCls, ToCls, Unreach);
   finally
     Caches.Free;
   end;
 
   for E in Errors do
     Writeln(Format('line %d: %s', [E.LineNo, E.Message]));
-  { Warnings never change the exit code: the book is valid, just suspicious. }
+  { Warnings never change the exit code: the book is valid, just suspicious.
+    T2h (owner ruling R12): a path through an inaccessible member first, each
+    its whole 'line N: warning: ...' text, on stdout beside the errors. }
+  for U in Unreach do
+    Writeln(U.Message);
   for E in ConversionRuleWarnings(RuleSet) do
     Writeln(Format('line %d: warning: %s', [E.LineNo, E.Message]));
 
@@ -23604,6 +23616,30 @@ begin
   if not AArgs.PrintParsed then Writeln('OK');
   Result:= 0;
 end; // function
+
+{ T2h (owner ruling R12): apply/1 unreachable[] and convert-reemit's -- one
+  object per UNREACHABLE rule path, keys line, path, member, visibility,
+  class, reason (always 'unreachable') and message (the exact text line), in
+  that order. The caller owns the array. }
+function UnreachableJson(const AItems: TArray<TUnreachablePath>): TJSONArray;
+var
+  U : TUnreachablePath;
+  JU: TJSONObject;
+begin
+  Result:= TJSONArray.Create;
+  for U in AItems do
+  begin
+    JU:= TJSONObject.Create;
+    JU.AddPair('line'      , TJSONNumber.Create(U.LineNo));
+    JU.AddPair('path'      , U.Path);
+    JU.AddPair('member'    , U.Member);
+    JU.AddPair('visibility', U.Visibility);
+    JU.AddPair('class'     , U.DeclaringClass);
+    JU.AddPair('reason'    , 'unreachable');
+    JU.AddPair('message'   , U.Message);
+    Result.AddElement(JU);
+  end;
+end;
 
 /// <summary>drag-lint convert-reemit --from-block FILE --rules FILE --from FromType
 /// --to ToType --db PATH -- HIDDEN test verb driving the pure ReemitComponent
@@ -23633,6 +23669,7 @@ var
   { ConvertClassIn cannot Exit(2) on a stale explicit --db. It raises this flag
     instead and the body refuses right after the calls. }
   StaleExplicitDb: Boolean      ;
+  Unreach  : TArray<TUnreachablePath>; { T2h: skipped, and listed in unreachable[] }
 
   function ArrJson(const A: TArray<string>): TJSONArray;
   var S: string;
@@ -23686,7 +23723,13 @@ begin
   ToCls   := ConvertClassIn(AArgs, 'convert-reemit', Dbs, AArgs.RenameTo, Opts, Caches, StaleExplicitDb); // --to   reuses RenameTo
   if StaleExplicitDb then Exit(2);
 
-  Res:= ReemitComponent(BlockText, Rules, FromCls, ToCls, ParseCastLib(AArgs.CastLibFile));
+  { T2h (owner ruling R12): a #link / #default / #mapping path through a member
+    that exists but is inaccessible is skipped, as in convert-apply. Only the
+    unreachable half of the validation is used here -- this verb never refused
+    on a missing path, and does not start to. }
+  ValidateConversionRules(Rules, FromCls, ToCls, Unreach);
+  Res:= ReemitComponent(BlockText, WithoutUnreachableRules(Rules, Unreach), FromCls, ToCls,
+    ParseCastLib(AArgs.CastLibFile));
   finally
     Caches.Free;
   end;
@@ -23769,6 +23812,7 @@ begin
     JReport.AddPair('notes',      ArrJson(Res.Report.Stubs + Res.Report.Relocated +
                                           Res.Report.MappingNotes + Res.Report.Notes));
     JRoot.AddPair('report', JReport);
+    JRoot.AddPair('unreachable', UnreachableJson(Unreach)); { T2h -- same objects as apply/1 }
     Writeln(JRoot.ToJSON);
   finally
     JRoot.Free;
@@ -24225,6 +24269,10 @@ type
     { 1.20.6 (T2b): how many classes' members the run resolved (validation and
       plan share one cache per store) -- apply/1 classes_built. }
     ClassesBuilt: Integer;
+    { 1.20.6 (T2h, owner ruling R12): the rule paths through members that exist
+      but are inaccessible -- skipped, never applied -- apply/1 unreachable[].
+      Their messages are ALSO in Report.Warnings / Report.Items. }
+    Unreachable: TArray<TUnreachablePath>;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24410,6 +24458,13 @@ begin
       the --db stores. No property tree is built; this is the whole cost. }
     JRoot.AddPair('classes_built', TJSONNumber.Create(ACtx.ClassesBuilt));
 
+    { 1.20.6 (T2h, owner ruling R12, JSON shape R13) -- one OBJECT per rule path
+      through a member that exists but is inaccessible on the .dfm surface
+      (see UnreachableJson for the keys). ALWAYS present, [] when none.
+      warnings[] above stays an array of STRINGS and carries each object's
+      message too, so a consumer reading only warnings[] still sees them. }
+    JRoot.AddPair('unreachable', UnreachableJson(ACtx.Unreachable));
+
     Writeln(JRoot.ToJSON);
   finally
     JRoot.Free;
@@ -24494,8 +24549,11 @@ end;
   reverted ruling R5's per-unit scope, because resolving a path no longer costs
   a tree), a block whose type resolves nowhere is an error on its #convert line
   (BuildBlockClasses), and a #link carrying a glyph expression is refused
-  (UnrealisedGlyphLinks). }
-function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet): TArray<TRuleError>;
+  (UnrealisedGlyphLinks). A path through a member that exists but is
+  inaccessible is not an error: it comes back in AUnreachable (T2h, owner
+  ruling R12). }
+function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
+  out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
 var
   TypeErrs: TList<TRuleError>;
   Classes : TArray<TBlockClasses>;
@@ -24503,7 +24561,8 @@ begin
   TypeErrs:= TList<TRuleError>.Create;
   try
     Classes:= BuildBlockClasses(ATrees, ARules, TypeErrs);
-    Result := ValidateConversionRulesPerBlock(ARules, Classes) + TypeErrs.ToArray + UnrealisedGlyphLinks(ARules);
+    Result := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable) + TypeErrs.ToArray +
+              UnrealisedGlyphLinks(ARules);
   finally
     TypeErrs.Free;
   end;
@@ -24551,7 +24610,11 @@ end;
 /// cheap and ruling R5's per-unit scope and --validate-all-blocks are gone), and a #mapping
 /// against the block(s) that #apply it; a block whose type resolves in no --db is an error on
 /// its #convert line (R7) -- and a rules error refuses (exit 1) rather than attempting a plan
-/// from a broken rule set. Validation and BuildApplyPlan share one TConvertTreeCache, so each
+/// from a broken rule set. A #link / #default / #mapping path whose members all exist but one
+/// is inaccessible on the .dfm surface is NOT an error (T2h, owner ruling R12): the line is
+/// skipped (WithoutUnreachableRules), the unit converts everything else, and each is reported
+/// -- apply/1 unreachable[] objects, the same text in warnings[] / items[]
+/// (rule-path-unreachable), and a text-mode 'line N: warning: ...' line under Warnings. Validation and BuildApplyPlan share one TConvertTreeCache, so each
 /// class's members are resolved once per run (json classes_built). The freshness guard
 /// (CheckFreshness, every block) and BuildApplyPlan both
 /// resolve From/To TYPES across ALL of Stores (first-that-resolves-wins), while unit/
@@ -24633,6 +24696,30 @@ var
     finally
       TouchedFiles.Free;
       TouchedSet.Free;
+    end;
+  end;
+
+  // 1.20.6 (T2h, owner ruling R12): each UNREACHABLE rule path becomes one more
+  // warnings[] line -- its whole 'line N: warning: ...' text -- and its items[]
+  // mirror (kind rule-path-unreachable, the rules file and line), so Report
+  // invariant 1 holds. The structured facts are JCtx.Unreachable.
+  procedure MergeUnreachable(var AReport: TApplyReport);
+  var
+    It: TApplyItem;
+    U : TUnreachablePath;
+  begin
+    for U in JCtx.Unreachable do
+    begin
+      It         := Default(TApplyItem);
+      It.Kind    := aikRulePathUnreachable;
+      It.Field   := afWarnings;
+      It.FilePath:= AArgs.RulesFile;
+      It.Path    := U.Path;
+      It.Text    := U.Message;
+      It.Line    := U.LineNo;
+      It.RuleLine:= U.LineNo;
+      AReport.Warnings:= AReport.Warnings + [U.Message];
+      AReport.Items   := AReport.Items + [It];
     end;
   end;
 
@@ -24748,8 +24835,12 @@ begin
       pair for the whole book, so every link of blocks 2..N failed. A valid
       G-expression passes validation, but nothing realises it yet (CV-2):
       refuse through the same path rather than carry the source image whole. }
-    RuleErrors:= ValidateConvertBook(Trees, Rules);
+    RuleErrors:= ValidateConvertBook(Trees, Rules, JCtx.Unreachable);
     JCtx.ClassesBuilt:= Trees.ClassesBuilt;
+    { T2h: an UNREACHABLE path warns and its rule is skipped (BuildApplyPlan
+      below gets the book without those lines); it never fails the unit. On
+      every JSON exit from here on, warnings[] carries the messages too. }
+    MergeUnreachable(JCtx.Report);
     if Length(RuleErrors) > 0 then
     begin
       { A JSON consumer gets a parseable ok=false document naming every rule
@@ -24764,6 +24855,7 @@ begin
       end;
       Writeln('ERROR: conversion rules failed validation:');
       for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
+      for var UW: string in JCtx.Report.Warnings do Writeln('  ' + UW);
       Exit(1);
     end;
     // Freshness guard (Task 4): before trusting the index-derived class
@@ -24810,8 +24902,8 @@ begin
     JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     if JCtx.ComponentPart = 'applied' then
-      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, Rules, AArgs.OnlySections,
-        ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
+      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, WithoutUnreachableRules(Rules, JCtx.Unreachable),
+        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
     else
       PlanRes:= BuildUnitRulesOnlyPlan(UnitPas, Rules);
     JCtx.ClassesBuilt:= Trees.ClassesBuilt;
@@ -24829,6 +24921,7 @@ begin
     end;
 
     JCtx.Ok       := True;
+    MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
     JCtx.Report   := PlanRes.Report;
     JCtx.EditCount:= Length(PlanRes.Edits);
 

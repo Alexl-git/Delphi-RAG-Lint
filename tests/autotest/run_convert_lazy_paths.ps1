@@ -15,16 +15,26 @@
     A  a 4-segment path validates; a 9-segment path through eight owned
        TPersistent parts validates with NO --depth anywhere (RED on the old
        engine: its depth-6 tree lacks it).
-    B  a path through a PRIVATE property is "not found" (RED on the old engine,
-       whose tree carried private members), and proptree no longer lists a
-       private member (owner ruling 2026-09-30).
+    B  a path through a PRIVATE property is an UNREACHABLE warning on stdout,
+       exit 0 (owner ruling 2026-09-30, T2h R12 -- was "not found" in T2b),
+       and proptree no longer lists a private member. A misspelled member is
+       still NOT FOUND, an error, on the FROM and the TO side (B4/B5).
     C  a path THROUGH a referenced component (Conn.Params.Name, Conn a
        TComponent) fails in convert-apply, where references are leaves, and
        still passes convert-validate, which expands them -- as before.
     D  ruling R8 on the .dfm surface: a public class-typed hop (Items.Name,
        a collection's public Items) passes; a public LEAF and a protected hop
-       fail (RED on the old engine). The PAS surface (psPas) has no CLI consumer
-       in T2b; it is pinned where convert-scaffold adopts the cache (T2c).
+       are UNREACHABLE warnings naming the offending member (T2h), and a
+       protected hop to a misspelled leaf is still NOT FOUND (D4). The PAS
+       surface (psPas) has no CLI consumer.
+    K  ruling R11: a descendant's private redeclaration of the ancestor's
+       published property AND of its public field hides both (proptree), and
+       a path to either warns naming the DESCENDANT's private member.
+    U  convert-apply (json + text) and convert-reemit skip an unreachable
+       #link / #default, keep converting the rest, and report it: apply/1
+       unreachable[] objects (exact key set), the same message appended to the
+       string warnings[] and to items[] as rule-path-unreachable, text lines on
+       stdout.
     E  convert-apply resolves an absent, defaulted 3-segment .dfm leaf
        (P1.P2.Leaf2, default 5) -- resolved_defaults names it.
     F  owned-part recursion: the nested part's absent leaf is NOT answered from
@@ -39,12 +49,14 @@
   library-Win64.sqlite (-LibDb) and DMTEST.sqlite (-DmDb). A synthetic TQuery
   unit is written and indexed here; then
     R1 convert-validate of the book's TQuery block --from TQuery --to TFDQuery
-       in < 30 s: the only errors are the 4 FieldOptions.* links, which ruling R8
-       rejects (a protected hop); with those commented out, exit 0;
-    R2 convert-apply dry run of the WHOLE book (every block validated) on the
-       TQuery unit in < 60 s: the only rule errors are the 16 R8-rejected links
-       (lines 274-277, 374-377, 478-485); with those commented out (a scratch
-       copy -- the book itself is not edited), exit 0, ok=true, qry1 converted;
+       in < 30 s: exit 0, no errors, exactly 4 unreachable warnings on the
+       FieldOptions.* links (a protected hop, ruling R8 + owner ruling T2h);
+       with those commented out, exit 0;
+    R2 convert-apply dry run of the WHOLE, UNEDITED book (every block
+       validated) on the TQuery unit in < 60 s: exit 0, ok=true, qry1
+       converted, no rule errors, exactly 16 unreachable warnings (lines
+       274-277, 374-377, 478-485); with those commented out (a scratch copy --
+       the book itself is not edited), exit 0, ok=true, qry1 converted;
     R3 (with -OldDumpDir: the old engine's `proptree --depth 6|4|2
        --refs-as-leaves --no-write-back --json` dumps, one file per type,
        '<qname>.d<N>.json') for EVERY #link/#default/#mapping path of the book,
@@ -227,6 +239,33 @@ type
     property Hue: Integer read FHue write FHue;
   end;
 
+  // Ruling R11 / T2h: a descendant's PRIVATE redeclaration shadows the
+  // ancestor's member -- a published property AND a public field.
+  TShBase = class(TPersistent)
+  private
+    FColor: Integer;
+  public
+    FPubF: Integer;
+  published
+    property Color: Integer read FColor write FColor;
+  end;
+
+  TShDesc = class(TShBase)
+  private
+    FPubF: Integer;
+    property Color;
+  end;
+
+  TUnrDst = class(TPersistent)
+  private
+    FTitle: Integer;
+    FPubTo: Integer;
+  public
+    property PubTo: Integer read FPubTo write FPubTo;
+  published
+    property Title: Integer read FTitle write FTitle;
+  end;
+
 implementation
 
 end.
@@ -264,10 +303,20 @@ $idx = & $Exe index $fx --db $db 2>&1
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 
 function Book([string]$Name, [string]$Body) { Write-Ascii (P $Name) $Body; return (P $Name) }
-function Validate([string]$Rules) {
-  $o = (& $Exe convert-validate --rules $Rules --from LibLazy.TLazySrc --to LibLazy.TLazyDst --db $db 2>&1) -join "`n"
+function Validate([string]$Rules, [string]$From = 'LibLazy.TLazySrc', [string]$To = 'LibLazy.TLazyDst') {
+  $o = (& $Exe convert-validate --rules $Rules --from $From --to $To --db $db 2>&1) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
+# T2h: STDOUT only -- pins the stream the unreachable warnings are printed on.
+function ValidateOut([string]$Rules, [string]$From = 'LibLazy.TLazySrc', [string]$To = 'LibLazy.TLazyDst') {
+  $o = (& $Exe convert-validate --rules $Rules --from $From --to $To --db $db 2>$null) -join "`n"
+  return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
+}
+# The one warning text (owner ruling 2026-09-30, R12), for a rule on line $L.
+function UnrMsg([int]$L, [string]$Path, [string]$Member, [string]$Vis, [string]$Cls) {
+  return ('line {0}: warning: {1}: {2} is {3} in {4}; never applied unless a descendant class changes its visibility' -f $L, $Path, $Member, $Vis, $Cls)
+}
+function HasLine([string]$Out, [string]$Line) { return (@($Out -split "`r?`n" | Where-Object { $_.Trim() -ceq $Line }).Count -eq 1) }
 # JSON is read from STDOUT only: the engine's stderr preamble can land inside the
 # document when the two streams are merged.
 function Apply([string]$Rules, [string[]]$Extra = @()) {
@@ -287,9 +336,18 @@ Check 'A3 control: a 9-segment path with a bogus leaf fails' `
   (($r.Code -eq 1) -and ($r.Out -match 'link FromPath not found in --from tree: P1\.P2\.P3\.P4\.P5\.P6\.P7\.P8\.NoLeaf')) $r.Out
 
 # ---- B: private never resolves --------------------------------------------
-$r = Validate (Book 'priv.rules' "#link Title <- Secret`n")
-Check 'B1 a path to a PRIVATE property is not found' `
-  (($r.Code -eq 1) -and ($r.Out -match 'link FromPath not found in --from tree: Secret')) $r.Out
+# T2h (owner ruling 2026-09-30, R12): a path through a member that EXISTS but is
+# inaccessible is a WARNING, on STDOUT, exit 0 -- no longer "not found".
+$r = ValidateOut (Book 'priv.rules' "#link Title <- Secret`n")
+Check 'B1 a path to a PRIVATE property warns (stdout), exit 0, OK -- not "not found"' `
+  (($r.Code -eq 0) -and (HasLine $r.Out (UnrMsg 1 'Secret' 'Secret' 'private' 'LibLazy.TLazySrc')) -and ($r.Out -match '(?m)^OK') -and `
+   -not ($r.Out -match 'not found')) $r.Out
+$r = Validate (Book 'nf-from.rules' "#link Title <- Secrett`n")
+Check 'B4 NOT-FOUND control, FROM side: a misspelled member is still an error (exit 1)' `
+  (($r.Code -eq 1) -and ($r.Out -match 'link FromPath not found in --from tree: Secrett') -and -not ($r.Out -match 'warning:')) $r.Out
+$r = Validate (Book 'nf-to.rules' "#link Titel <- Shade`n")
+Check 'B5 NOT-FOUND control, TO side: a misspelled member is still an error (exit 1)' `
+  (($r.Code -eq 1) -and ($r.Out -match 'link ToPath not found in --to tree: Titel') -and -not ($r.Out -match 'warning:')) $r.Out
 $pt = (& $Exe proptree --qname LibLazy.TLazySrc --refs-as-leaves --no-write-back --json --db $db 2>$null) -join "`n"
 $pj = Json $pt
 $paths = @($pj.properties | ForEach-Object { $_.path })
@@ -312,12 +370,78 @@ Check 'C3 control: the reference itself (Conn) is a leaf and resolves' (-not ($r
 # ---- D: ruling R8 on the .dfm surface --------------------------------------
 $r = Validate (Book 'coll.rules' "#link Name <- Items.Name`n")
 Check 'D1 a public class-typed hop to a published leaf (Items.Name) passes' (($r.Code -eq 0) -and ($r.Out -match '(?m)^OK')) $r.Out
-$r = Validate (Book 'pub.rules' "#link Title <- PubLeaf`n")
-Check 'D2 a public LEAF fails on the .dfm surface' `
-  (($r.Code -eq 1) -and ($r.Out -match 'link FromPath not found in --from tree: PubLeaf')) $r.Out
-$r = Validate (Book 'prot.rules' "#link Name <- ProtPart.Name`n")
-Check 'D3 a protected hop fails on the .dfm surface' `
-  (($r.Code -eq 1) -and ($r.Out -match 'link FromPath not found in --from tree: ProtPart\.Name')) $r.Out
+$r = ValidateOut (Book 'pub.rules' "#link Title <- PubLeaf`n")
+Check 'D2 a public LEAF on the .dfm surface warns (unreachable), exit 0' `
+  (($r.Code -eq 0) -and (HasLine $r.Out (UnrMsg 1 'PubLeaf' 'PubLeaf' 'public' 'LibLazy.TLazySrc')) -and -not ($r.Out -match 'not found')) $r.Out
+$r = ValidateOut (Book 'prot.rules' "#link Name <- ProtPart.Name`n")
+Check 'D3 a protected hop on the .dfm surface warns, naming the hop, exit 0' `
+  (($r.Code -eq 0) -and (HasLine $r.Out (UnrMsg 1 'ProtPart.Name' 'ProtPart' 'protected' 'LibLazy.TLazySrc')) -and -not ($r.Out -match 'not found')) $r.Out
+$r = Validate (Book 'prot-nf.rules' "#link Name <- ProtPart.Nme`n")
+Check 'D4 NOT-FOUND wins: a protected hop to a misspelled leaf is an error, not a warning' `
+  (($r.Code -eq 1) -and ($r.Out -match 'link FromPath not found in --from tree: ProtPart\.Nme') -and -not ($r.Out -match 'warning:')) $r.Out
+
+# ---- K: ruling R11 -- a private redeclaration shadows; the warning names it --
+$pt = (& $Exe proptree --qname LibLazy.TShDesc --refs-as-leaves --no-write-back --json --db $db 2>$null) -join "`n"
+$kj = Json $pt
+$kp = @($kj.properties | ForEach-Object { $_.path })
+Check 'K1 proptree TShDesc: neither Color nor FPubF (the private redeclarations shadow the ancestor''s)' `
+  (($null -ne $kj) -and -not ($kp -contains 'Color') -and -not ($kp -contains 'FPubF')) ($kp -join ',')
+$pt = (& $Exe proptree --qname LibLazy.TShBase --refs-as-leaves --no-write-back --json --db $db 2>$null) -join "`n"
+$bp = @((Json $pt).properties | ForEach-Object { $_.path })
+Check 'K2 positive control: proptree TShBase lists Color and the public field FPubF' `
+  (($bp -contains 'Color') -and ($bp -contains 'FPubF')) ($bp -join ',')
+$r = ValidateOut (Book 'r11p.rules' "#link Title <- Color`n") 'LibLazy.TShDesc' 'LibLazy.TLazyDst'
+Check 'K3 R11 property: a path to the shadowed Color warns, naming the DESCENDANT''s private member' `
+  (($r.Code -eq 0) -and (HasLine $r.Out (UnrMsg 1 'Color' 'Color' 'private' 'LibLazy.TShDesc'))) $r.Out
+$r = ValidateOut (Book 'r11f.rules' "#link Title <- FPubF`n") 'LibLazy.TShDesc' 'LibLazy.TLazyDst'
+Check 'K4 R11 FIELD: a path to the shadowed public field warns, naming the DESCENDANT''s private field' `
+  (($r.Code -eq 0) -and (HasLine $r.Out (UnrMsg 1 'FPubF' 'FPubF' 'private' 'LibLazy.TShDesc'))) $r.Out
+$r = ValidateOut (Book 'r11fb.rules' "#link Title <- FPubF`n") 'LibLazy.TShBase' 'LibLazy.TLazyDst'
+Check 'K5 control: on TShBase the same field is the ancestor''s PUBLIC field (a public leaf on the .dfm surface)' `
+  (($r.Code -eq 0) -and (HasLine $r.Out (UnrMsg 1 'FPubF' 'FPubF' 'public' 'LibLazy.TShBase'))) $r.Out
+
+# ---- U: convert-apply / convert-reemit skip an unreachable rule and say so --
+$UHdr = '#convert LibLazy.TLazySrc -> LibLazy.TUnrDst, LibLazy'
+$ub = Book 'unr.rules' "$UHdr`n#link Title <- Secret`n#default PubTo = 4`n#link Title <- Shade`n"
+$r = Apply $ub @('--format', 'json')
+$uj = Json $r.Out
+$UMsg2 = UnrMsg 2 'Secret' 'Secret' 'private' 'LibLazy.TLazySrc'
+$UMsg3 = UnrMsg 3 'PubTo' 'PubTo' 'public' 'LibLazy.TUnrDst'
+$UKeys = 'class,line,member,message,path,reason,visibility'
+Check 'U1 convert-apply --format json: exit 0, ok=true, the unit still converts (src1), stdout is ONE JSON document' `
+  (($r.Code -eq 0) -and ($null -ne $uj) -and $uj.ok -and (@($uj.converted | Where-Object { $_ -match '^src1: ' }).Count -eq 1) -and `
+   $r.Out.Trim().StartsWith('{') -and $r.Out.Trim().EndsWith('}')) $r.Out
+$un = @($uj.unreachable)
+Check 'U2 apply/1 unreachable[]: 2 objects, keys EXACTLY line,path,member,visibility,class,reason,message' `
+  (($un.Count -eq 2) -and (@($un | Where-Object { ((@($_.PSObject.Properties.Name) | Sort-Object) -join ',') -ne $UKeys }).Count -eq 0)) ($un | ConvertTo-Json -Compress)
+$u2 = @($un | Where-Object { $_.line -eq 2 })
+$u3 = @($un | Where-Object { $_.line -eq 3 })
+Check 'U3 unreachable[] values: line 2 Secret private in TLazySrc; line 3 PubTo public in TUnrDst; reason=unreachable; message = the text line' `
+  (($u2.Count -eq 1) -and ($u2[0].path -eq 'Secret') -and ($u2[0].member -eq 'Secret') -and ($u2[0].visibility -eq 'private') -and `
+   ($u2[0].class -eq 'LibLazy.TLazySrc') -and ($u2[0].reason -eq 'unreachable') -and ($u2[0].message -ceq $UMsg2) -and `
+   ($u3.Count -eq 1) -and ($u3[0].path -eq 'PubTo') -and ($u3[0].visibility -eq 'public') -and ($u3[0].class -eq 'LibLazy.TUnrDst') -and ($u3[0].message -ceq $UMsg3)) `
+  ($un | ConvertTo-Json -Compress)
+$uw = @($uj.warnings)
+Check 'U4 apply/1 warnings[] stays an array of STRINGS and carries each unreachable message' `
+  (($uw.Count -ge 2) -and (@($uw | Where-Object { $_ -isnot [string] }).Count -eq 0) -and ($uw -ccontains $UMsg2) -and ($uw -ccontains $UMsg3)) ($uw | ConvertTo-Json -Compress)
+Check 'U5 items[] mirrors them as kind rule-path-unreachable (field warnings, rule_line)' `
+  ((@($uj.items | Where-Object { $_.kind -eq 'rule-path-unreachable' -and $_.field -eq 'warnings' -and @(2, 3) -contains $_.rule_line }).Count -eq 2)) ($uj.items | ConvertTo-Json -Compress -Depth 4)
+Check 'U6 the reachable rule on line 4 still ran (Shade default 3 carried to Title)' `
+  (@($uj.resolved_defaults | Where-Object { $_.from_path -eq 'Shade' -and $_.to_path -eq 'Title' -and $_.value -eq '3' }).Count -eq 1) ($uj.resolved_defaults | ConvertTo-Json -Compress -Depth 4)
+$r = (& $Exe convert-apply --unit (Join-Path $fx 'LazyForm.pas') --rules $ub --db $db 2>$null) -join "`n"
+$uc = $LASTEXITCODE
+Check 'U7 text mode: exit 0; each warning is a line on STDOUT; the skipped #default wrote nothing (no PubTo in the plan)' `
+  (($uc -eq 0) -and (HasLine $r $UMsg2) -and (HasLine $r $UMsg3) -and -not ($r -match 'PubTo = 4')) $r
+Write-Ascii (P 'unr.dfm') @'
+object src1: TLazySrc
+  Shade = 7
+end
+'@
+$o = (& $Exe convert-reemit --from-block (P 'unr.dfm') --rules $ub --from LibLazy.TLazySrc --to LibLazy.TUnrDst --db $db 2>$null) -join "`n"
+$ej = Json $o
+Check 'U8 convert-reemit skips the unreachable #default (no PubTo) and lists it in unreachable[]; Title = 7 still carried' `
+  (($null -ne $ej) -and $ej.ok -and -not ([string]$ej.dfm -match 'PubTo') -and ([string]$ej.dfm -match '(?m)^  Title = 7\r?$') -and `
+   (@($ej.unreachable | Where-Object { $_.line -eq 3 -and $_.message -ceq $UMsg3 }).Count -eq 1)) $o
 
 # ---- E + G: resolved default through a 3-segment path; classes_built -------
 $r = Apply (Book 'deep.rules' "$Hdr`n#link Deep <- P1.P2.Leaf2`n") @('--format', 'json')
@@ -436,9 +560,11 @@ end
     $code = $LASTEXITCODE; $sw.Stop()
     $el = ErrLines $o
     Write-Host ("  convert-validate (TQuery block, {0} lines): {1:N1} s, {2} error(s)" -f $blk.Count, $sw.Elapsed.TotalSeconds, $el.Count)
-    Check 'R1a TQuery block: < 30 s; the ONLY errors are the 4 FieldOptions.* links (a protected hop, ruling R8)' `
-      (($code -eq 1) -and ($sw.Elapsed.TotalSeconds -lt 30) -and ($el.Count -eq 4) -and `
-       (@($el | Where-Object { $_ -match 'link FromPath not found in --from tree: FieldOptions\.' }).Count -eq 4)) $o
+    $wl = @($o -split "`r?`n" | Where-Object { $_ -match '^line \d+: warning: FieldOptions\.\S+: FieldOptions is protected in Data\.DB\.TDataSet; never applied unless a descendant class changes its visibility$' })
+    Write-Host ("  ... {0} unreachable warning(s)" -f $wl.Count)
+    Check 'R1a TQuery block (unedited): < 30 s; exit 0, NO errors, exactly 4 unreachable warnings on the FieldOptions.* links (protected in TDataSet; owner ruling T2h)' `
+      (($code -eq 0) -and ($sw.Elapsed.TotalSeconds -lt 30) -and ($el.Count -eq 0) -and ($wl.Count -eq 4) -and `
+       (@($o -split "`r?`n" | Where-Object { $_ -match 'warning: .* never applied unless' }).Count -eq 4)) $o
     $qb2 = Join-Path $real 'tquery-block-r8.rules'
     Write-Ascii $qb2 ((R8Stripped $blk ($start + 1)) -join "`n")
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -452,12 +578,15 @@ end
     $o = (& $Exe convert-apply --unit (Join-Path $real 'QryUnit.pas') --rules (Resolve-Path $Book).Path @dbArgs --format json 2>$null) -join "`n"
     $code = $LASTEXITCODE; $sw.Stop()
     $aj = Json $o
-    $errLines = @($aj.rule_errors | ForEach-Object { [int]$_.line } | Sort-Object -Unique)
-    Write-Host ("  convert-apply dry run (whole book, every block validated): {0:N1} s, classes_built={1}, rule errors on lines {2}" -f `
-      $sw.Elapsed.TotalSeconds, $(if ($aj) { $aj.classes_built } else { '?' }), ($errLines -join ','))
-    Check 'R2a whole book: < 60 s; the ONLY rule errors are the 16 R8-rejected links' `
-      (($code -eq 1) -and ($null -ne $aj) -and ($sw.Elapsed.TotalSeconds -lt 60) -and (@($aj.rule_errors).Count -eq 16) -and `
-       ((Compare-Object $errLines $R8Rejected | Measure-Object).Count -eq 0)) $o
+    $unrLines = @($aj.unreachable | ForEach-Object { [int]$_.line } | Sort-Object -Unique)
+    Write-Host ("  convert-apply dry run (whole book, every block validated): {0:N1} s, classes_built={1}, rule errors={2}, unreachable on lines {3}" -f `
+      $sw.Elapsed.TotalSeconds, $(if ($aj) { $aj.classes_built } else { '?' }), @($aj.rule_errors).Count, ($unrLines -join ','))
+    Check 'R2a whole book (unedited): < 60 s; exit 0, ok=true, qry1 converted, 0 rule errors, exactly 16 unreachable warnings on the R8 lines' `
+      (($code -eq 0) -and ($null -ne $aj) -and $aj.ok -and ($sw.Elapsed.TotalSeconds -lt 60) -and (@($aj.rule_errors).Count -eq 0) -and `
+       (@($aj.unreachable).Count -eq 16) -and ((Compare-Object $unrLines $R8Rejected | Measure-Object).Count -eq 0) -and `
+       (@($aj.unreachable | Where-Object { $_.reason -ne 'unreachable' -or $_.visibility -ne 'protected' }).Count -eq 0) -and `
+       (@($aj.warnings | Where-Object { $_ -match '^line \d+: warning: .* never applied unless' }).Count -eq 16) -and `
+       (@($aj.converted | Where-Object { $_ -match '^qry1: TQuery -> TFDQuery' }).Count -eq 1)) $o
     $bk2 = Join-Path $real 'BDE-to-FireDAC-r8.rules'
     Write-Ascii $bk2 ((R8Stripped $lines 1) -join "`n")
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -477,6 +606,15 @@ end
       foreach ($m in [regex]::Matches($txt, '(?m)^\s*line (\d+): (?:link|default|mapping \S+) (?:#when path|target path|ToPath|FromPath) not found in --(from|to) tree: (.+?)(?: \(#convert line \d+:.*\))?\s*$')) {
         $newMiss["$($m.Groups[1].Value)|$($m.Groups[2].Value)|$($m.Groups[3].Value)"] = $true
       }
+      # T2h: an unreachable path is a WARNING now, and is never applied. The
+      # warning names no side (every R8 line in this book spells the SAME path
+      # on both sides), so a warned (line, path) is judged as a group below: it
+      # agrees when the old tree fails R8 on at least one of its sides.
+      $warned = @{}
+      foreach ($m in [regex]::Matches($txt, '(?m)^\s*line (\d+): warning: (\S+): \S+ is \S+(?: \S+)? in \S+; never applied unless')) {
+        $warned["$($m.Groups[1].Value)|$($m.Groups[2].Value)"] = $true
+      }
+      $warnGroups = @{}
       $trees = @{}
       function OldTree([string]$q) {
         if ($trees.ContainsKey($q)) { return $trees[$q] }
@@ -541,11 +679,21 @@ end
           $map = OldTree $q
           if ($null -eq $map) { $noDump[$q] = $true; continue }
           $old = OldFound $map $c[2]
+          if ((OldFoundRaw $map $c[2]) -ne $old) { $rawDiff++ }
+          $wk = "$($c[0])|$($c[2])"
+          if ($warned.ContainsKey($wk)) {
+            if (-not $warnGroups.ContainsKey($wk)) { $warnGroups[$wk] = @() }
+            $warnGroups[$wk] += $old
+            continue
+          }
           $new = -not $newMiss.ContainsKey("$($c[0])|$($c[1])|$($c[2])")
           if ($old -eq $new) { $agree++ } else { $disagree += "line $($c[0]) $($c[1]) $($c[2]) in $q : old=$old new=$new" }
-          if ((OldFoundRaw $map $c[2]) -ne $old) { $rawDiff++ }
         }
       }
+      foreach ($wk in $warnGroups.Keys) {
+        if (@($warnGroups[$wk] | Where-Object { -not $_ }).Count -gt 0) { $agree++ } else { $disagree += "warned $wk but the old tree passes R8 on every side" }
+      }
+      Write-Host ("  equivalence: {0} warned (line, path) group(s)" -f $warnGroups.Count)
       Write-Host ("  equivalence: {0} path check(s) agree, {1} disagree; {2} differ from the plain minus-private tree only by ruling R8; no dump for: {3}" -f `
         $agree, $disagree.Count, $rawDiff, (($noDump.Keys | Sort-Object) -join ', '))
       Check 'R3 every book path: new found/not-found == old depth-6/4/2 tree minus private, under R8' `

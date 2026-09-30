@@ -177,6 +177,25 @@ type
     Truncated: Boolean;
   end;
 
+  /// <summary>A private or strict private member of a class: it EXISTS, but is
+  /// never cached, expanded or emitted.</summary>
+  /// <remarks>
+  /// Recorded only so a rule path naming it can be told apart from a path
+  /// naming nothing at all (owner ruling 2026-09-30, R12: UNREACHABLE is a
+  /// warning, NOT FOUND an error). Its type is never resolved, so a path
+  /// through it stops there. When a class redeclares an ancestor's member in a
+  /// private section (ruling R11) the record names the REDECLARATION -- the
+  /// descendant and its private visibility -- not the ancestor's member.
+  /// </remarks>
+  TPropHiddenMember = record
+    /// <summary>The member's bare name, as declared.</summary>
+    Name      : string;
+    /// <summary>'private' or 'strict private', lowercased as declared.</summary>
+    Visibility: string;
+    /// <summary>The qualified name of the class that declares it.</summary>
+    DeclaredIn: string;
+  end;
+
   /// <summary>Resolves the members of ONE class -- own + inherited properties,
   /// then own + inherited fields and class constants -- exactly as one level of
   /// BuildPropTree's walk emits them, without recursing.</summary>
@@ -228,9 +247,9 @@ type
     function ClosureClassIds(const AClass: TSymbol): TArray<Int64>;
     function PropagateBareType(const AClassIds: TArray<Int64>;
       const APropName, ATypeTok: string): Integer;
-    procedure CollectProps(const AClass: TSymbol;
+    procedure CollectMembers(const AClass: TSymbol; AFields: Boolean; AHidden: TList<TPropHiddenMember>;
       out AOrder: TArray<TSymbol>; out ADeclaredBy: TArray<TSymbol>);
-    procedure CollectFields(const AClass: TSymbol;
+    procedure CollectFields(const AClass: TSymbol; AHidden: TList<TPropHiddenMember>;
       out AOrder: TArray<TSymbol>; out ADeclaredIn: TArray<string>);
     function IsComponentType(const ASym: TSymbol): Boolean;
   public
@@ -264,11 +283,17 @@ type
     /// <param name="AIsCompRef">Index-aligned with AMembers: True for a
     /// TComponent-typed property under TreatRefsAsLeaves -- a reference leaf,
     /// Kind='class' with IsClassTyped=False, never descended into.</param>
+    /// <param name="AHidden">Receives the private / strict private members
+    /// AMembers leaves out, one per name that is not otherwise returned, in
+    /// the order met (properties, then fields) -- including a private
+    /// redeclaration that hides an ancestor's member (R11). Never expanded;
+    /// see TPropHiddenMember.</param>
     /// <remarks>A member is descended into only when MemberKind='property'
     /// and IsClassTyped is True. May memoize a recovered property type into
     /// the store (see BuildPropTree).</remarks>
     procedure ResolveMembers(const AClass: TSymbol; out AMembers: TArray<TPropNode>;
-      out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>);
+      out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>;
+      out AHidden: TArray<TPropHiddenMember>);
   end;
 
 implementation
@@ -500,7 +525,7 @@ const
 // True for a member whose own declared section is private or strict private.
 // Owner ruling 2026-09-30: such a member is NEVER resolved, cached or expanded,
 // on any surface -- it is invisible outside its unit, so no conversion rule and
-// no .dfm can name it. Applied where CollectProps / CollectFields admit a member,
+// no .dfm can name it. Applied where CollectMembers / CollectFields admit a member,
 // and again (ResolveMembers) after a blank Modifiers was recovered.
 function IsPrivateModifiers(const AModifiers: string): Boolean;
 var
@@ -508,6 +533,14 @@ var
 begin
   Vis   := LowerCase(Trim(AModifiers));
   Result:= (Vis = 'private') or (Vis = 'strict private');
+end;
+
+// A TPropHiddenMember for a member left out as private (owner ruling R12).
+function HiddenOf(const AName, AModifiers, ADeclaredIn: string): TPropHiddenMember;
+begin
+  Result.Name      := AName;
+  Result.Visibility:= LowerCase(Trim(AModifiers));
+  Result.DeclaredIn:= ADeclaredIn;
 end;
 
 { TPropMemberResolver }
@@ -938,7 +971,7 @@ end;
 // walk reaches the queried class's real base -- a wrong-CLASS type leaking
 // in from outside the class hierarchy entirely (worse than the covariance
 // "collapse to base" case: this is collapse to an unrelated type). Mirrors
-// ClassChain's own (A.Kind = 'class') filter, which is why CollectProps'
+// ClassChain's own (A.Kind = 'class') filter, which is why CollectMembers'
 // shadowing/DeclaredIn never suffers this -- only this ancestor-only-typed
 // fallback walk did.
 function TPropMemberResolver.ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
@@ -1250,8 +1283,10 @@ begin
   end;
 end;
 
-// The distinct property leaves visible on AClass (own + inherited), each
-// paired with the most-derived class that declares it. Dedupe by leaf name.
+// The distinct property leaves (AFields False) or field / class-const leaves
+// (AFields True, R4 -- see CollectFields) visible on AClass (own + inherited),
+// each paired with the most-derived class that declares it. Dedupe by leaf
+// name, one Seen set per call, so the two kinds never shadow each other.
 //
 // ADeclaredBy hands back that class as a SYMBOL, not merely its qualified
 // name: the caller needs its FileId to resolve the property's TYPE in the
@@ -1260,8 +1295,8 @@ end;
 // in Vcl.Controls, not in whatever unit the queried root happens to live in),
 // and its QualifiedName for the cross-namespace refusal. Both come from the
 // one symbol, so the two can never disagree about which class is meant.
-procedure TPropMemberResolver.CollectProps(const AClass: TSymbol;
-  out AOrder: TArray<TSymbol>; out ADeclaredBy: TArray<TSymbol>);
+procedure TPropMemberResolver.CollectMembers(const AClass: TSymbol; AFields: Boolean;
+  AHidden: TList<TPropHiddenMember>; out AOrder: TArray<TSymbol>; out ADeclaredBy: TArray<TSymbol>);
 var
   Chain: TArray<TSymbol> ;
   Cls  : TSymbol         ;
@@ -1282,13 +1317,18 @@ begin
       Kids:= FStore.FindAllChildSymbols(Cls.Id);
       for Kid in Kids do
       begin
-        if Kid.Kind <> skProperty then Continue;
+        if (AFields and not (Kid.Kind in [skField, skConstDecl])) or ((not AFields) and (Kid.Kind <> skProperty)) then Continue;
         Key:= LowerCase(Kid.Name);
         if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
         Seen.Add(Key, True);
         // Ruling R11: AFTER Seen.Add, so a private redeclaration still shadows
-        // the ancestor's member -- and is itself never emitted.
-        if IsPrivateModifiers(Kid.Modifiers) then Continue;
+        // the ancestor's member -- and is itself never emitted, only recorded
+        // as existing (R12).
+        if IsPrivateModifiers(Kid.Modifiers) then
+        begin
+          AHidden.Add(HiddenOf(Kid.Name, Kid.Modifiers, Cls.QualifiedName));
+          Continue;
+        end;
         OL.Add(Kid);
         DL.Add(Cls);
       end;
@@ -1304,52 +1344,24 @@ end;
 
 // R4 (Task 4): the distinct FIELD/CONST leaves visible on AClass (own +
 // inherited), each paired with the most-derived class that declares it.
-// Dedupe by leaf name. Mirrors CollectProps exactly (same ClassChain,
+// Dedupe by leaf name. Mirrors CollectMembers exactly (same ClassChain,
 // most-derived-first shadowing) but filters skField/skConstDecl instead of
 // skProperty, and is kept as a SEPARATE walk with its OWN Seen set --
-// deliberately NOT folded into CollectProps -- so the property engine's
+// deliberately NOT folded into the property walk (T2h: the one CollectMembers
+// routine, called with AFields = True) -- so the property engine's
 // already class-accurate (Task 3) behavior is never disturbed by this
 // addition. skConstDecl (a class-scoped `const X: T = v;`) is included
 // alongside skField because a typed class const is a required PAS-surface
 // leaf too (read-only; see Walk's field loop).
-procedure TPropMemberResolver.CollectFields(const AClass: TSymbol;
+procedure TPropMemberResolver.CollectFields(const AClass: TSymbol; AHidden: TList<TPropHiddenMember>;
   out AOrder: TArray<TSymbol>; out ADeclaredIn: TArray<string>);
 var
-  Chain: TArray<TSymbol> ;
-  Cls  : TSymbol         ;
-  Kids : TArray<TSymbol> ;
-  Kid  : TSymbol         ;
-  Seen : TDictionary<string, Boolean>;
-  OL   : TList<TSymbol>  ;
-  DL   : TList<string>   ;
-  Key  : string          ;
+  DeclBy: TArray<TSymbol>;
+  I     : Integer;
 begin
-  Seen:= TDictionary<string, Boolean>.Create;
-  OL  := TList<TSymbol>.Create;
-  DL  := TList<string >.Create;
-  try
-    Chain:= ClassChain(AClass); // most-derived first -> shadowing is automatic
-    for Cls in Chain do
-    begin
-      Kids:= FStore.FindAllChildSymbols(Cls.Id);
-      for Kid in Kids do
-      begin
-        if not (Kid.Kind in [skField, skConstDecl]) then Continue;
-        Key:= LowerCase(Kid.Name);
-        if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
-        Seen.Add(Key, True);
-        if IsPrivateModifiers(Kid.Modifiers) then Continue; // ruling R11, as in CollectProps
-        OL.Add(Kid);
-        DL.Add(Cls.QualifiedName);
-      end;
-    end;
-    AOrder     := OL.ToArray;
-    ADeclaredIn:= DL.ToArray;
-  finally
-    Seen.Free;
-    OL.Free;
-    DL.Free;
-  end;
+  CollectMembers(AClass, True, AHidden, AOrder, DeclBy);
+  SetLength(ADeclaredIn, Length(DeclBy));
+  for I:= 0 to High(DeclBy) do ADeclaredIn[I]:= DeclBy[I].QualifiedName;
 end;
 
 // True when ASym is (or descends from) TComponent -- a REFERENCE type, not an
@@ -1371,11 +1383,13 @@ end;
 // Truncated flag) stays with the caller -- BuildPropTree's Walk, or
 // TPropMemberCache, which descends one path segment at a time.
 procedure TPropMemberResolver.ResolveMembers(const AClass: TSymbol; out AMembers: TArray<TPropNode>;
-  out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>);
+  out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>;
+  out AHidden: TArray<TPropHiddenMember>);
 var
   Nodes      : TList<TPropNode>;
   Types      : TList<TSymbol>  ; // index-aligned with Nodes: the member's resolved class
   CompRefs   : TList<Boolean>  ; // index-aligned with Nodes: a TreatRefsAsLeaves reference leaf
+  Hidden     : TList<TPropHiddenMember>; // private members left out (R12)
   Order      : TArray<TSymbol>;
   DeclaredBy : TArray<TSymbol>; // the class declaring Order[i] -- its scope
   idx        : Integer        ;
@@ -1408,9 +1422,10 @@ begin
   Nodes   := TList<TPropNode>.Create;
   Types   := TList<TSymbol  >.Create;
   CompRefs:= TList<Boolean  >.Create;
+  Hidden  := TList<TPropHiddenMember>.Create;
   try
   ClosureDone:= False;
-  CollectProps(AClass, Order, DeclaredBy);
+  CollectMembers(AClass, False, Hidden, Order, DeclaredBy);
   for idx:= 0 to High(Order) do
   begin
     Prop:= Order[idx];
@@ -1420,7 +1435,7 @@ begin
 
     // proptree/2 (Task 2, R2): EFFECTIVE visibility -- the most-derived
     // declaration's own Modifiers (Prop is already the most-derived symbol
-    // per CollectProps' shadowing), so a published redeclaration of a
+    // per CollectMembers' shadowing), so a published redeclaration of a
     // protected/public ancestor property RAISES the effective visibility to
     // published without any extra logic. Only when the own Modifiers is
     // empty (defensive; not reachable via the current parser) do we fall
@@ -1430,7 +1445,7 @@ begin
       Node.Visibility:= ResolveInheritedVisibility(AClass, Prop.Name);
 
     { The `default` clause, read from the declaring line. Prop is already the
-      most-derived declaration (CollectProps shadowing), so this is the default
+      most-derived declaration (CollectMembers shadowing), so this is the default
       that actually governs streaming for this class. A redeclaration without a
       clause deliberately yields HasDefault=False rather than inheriting the
       ancestor's: Delphi treats a bare redeclaration as reasserting the
@@ -1450,13 +1465,17 @@ begin
     if Node.Visibility = 'strict private'   then Node.Visibility:= 'private'
     else if Node.Visibility = 'strict protected' then Node.Visibility:= 'protected';
     // Owner ruling 2026-09-30: a private member never resolves (see
-    // IsPrivateModifiers). CollectProps already refuses a stamped one; this
+    // IsPrivateModifiers). CollectMembers already refuses a stamped one; this
     // catches the defensive blank-Modifiers case recovered up-tree.
-    if Node.Visibility = 'private' then Continue;
+    if Node.Visibility = 'private' then
+    begin
+      Hidden.Add(HiddenOf(Prop.Name, Node.Visibility, Node.DeclaredIn));
+      Continue;
+    end;
 
     // R1 (Task 6): REAL property writability from the resolved read/write
     // accessor shape (prop_access). Prop is already the most-derived
-    // declaration (CollectProps shadowing), so Prop.PropAccess is its OWN
+    // declaration (CollectMembers shadowing), so Prop.PropAccess is its OWN
     // accessor clause; when empty (a bare 'property Color;' redeclaration)
     // resolve it up-tree from the nearest CLASS ancestor with a non-empty
     // clause -- MIRRORS the Signature/type resolution above (own decl else
@@ -1560,7 +1579,7 @@ begin
   // depth. Flat leaves only -- unlike class-typed PROPERTIES, a class-typed
   // FIELD is never recursed into (out of scope for this task; the field
   // itself is the assignment target).
-  CollectFields(AClass, FieldOrder, FieldDeclaredIn);
+  CollectFields(AClass, Hidden, FieldOrder, FieldDeclaredIn);
   for FIdx:= 0 to High(FieldOrder) do
   begin
     Fld  := FieldOrder[FIdx];
@@ -1579,7 +1598,11 @@ begin
       FVis:= ResolveConstVisibilityByProximity(AClass, Fld);
     if FVis = 'strict private'        then FVis:= 'private'
     else if FVis = 'strict protected' then FVis:= 'protected';
-    if FVis = 'private' then Continue; // e.g. a const whose recovered section is private
+    if FVis = 'private' then // e.g. a const whose recovered section is private
+    begin
+      Hidden.Add(HiddenOf(Fld.Name, FVis, FNode.DeclaredIn));
+      Continue;
+    end;
     FNode.Visibility:= FVis;
 
     // Field-scoped writability (Task 4) -- independent of, and does not
@@ -1624,7 +1647,9 @@ begin
   AMembers  := Nodes.ToArray;
   ATypes    := Types.ToArray;
   AIsCompRef:= CompRefs.ToArray;
+  AHidden   := Hidden.ToArray;
   finally
+    Hidden  .Free;
     CompRefs.Free;
     Types   .Free;
     Nodes   .Free;

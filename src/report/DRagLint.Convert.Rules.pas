@@ -209,6 +209,30 @@ type
     ToClass  : TClassRef;
   end;
 
+  /// <summary>A rule path that names members which EXIST but are inaccessible
+  /// on the .dfm surface -- a WARNING, never an error (owner ruling R12,
+  /// 2026-09-30).</summary>
+  /// <remarks>
+  /// Like `if 1 > 2 then`: such a rule can never execute, because no .dfm
+  /// streams the member, unless a descendant class (e.g. `TMyTable =
+  /// class(TTable)`) raises its visibility. The rule is KEPT in the book and
+  /// skipped when converting (WithoutUnreachableRules).
+  /// LineNo is the rule's book line; Path the path as written; Member,
+  /// Visibility and DeclaringClass name the first offending segment (see
+  /// TPathResolution). Message is the whole text line every surface prints,
+  /// exactly: 'line N: warning: &lt;Path&gt;: &lt;Member&gt; is
+  /// &lt;Visibility&gt; in &lt;DeclaringClass&gt;; never applied unless a
+  /// descendant class changes its visibility'.
+  /// </remarks>
+  TUnreachablePath = record
+    LineNo        : Integer;
+    Path          : string;
+    Member        : string;
+    Visibility    : string;
+    DeclaringClass: string;
+    Message       : string;
+  end;
+
 /// <summary>Parses the reFind-superset conversion-rules DSL text into a rule set.
 /// TOTAL: never raises -- an unknown '#directive' becomes a captured ParseError,
 /// never an exception.</summary>
@@ -254,15 +278,20 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// skip source-path checks.</param>
 /// <param name="ATo">The ToType. May be unset or unresolved to skip target-path
 /// checks.</param>
+/// <param name="AUnreachable">Receives the paths that EXIST but fail the
+/// surface (TUnreachablePath), in source order, at most one per (line, path,
+/// offending member, declaring class); never errors.</param>
 /// <returns>Zero-length array = valid. Otherwise one TRuleError per problem, in
 /// source order (parse errors first, then validation errors).</returns>
 /// <remarks>
 /// Checks performed: for each rkLink, ToPath must resolve from ATo and FromPath
 /// from AFrom; for each rkDefault, ToPath must resolve from ATo. A path resolves
-/// segment by segment on the DFM surface (TPropMemberCache.ResolvePath, psDfm --
+/// segment by segment on the DFM surface (TPropMemberCache.ResolvePathEx, psDfm --
 /// ruling R8: a published leaf; each hop published, or public and class-typed;
 /// never private), with no depth limit (1.20.6: no property tree is built, so
-/// --depth no longer applies). A path equal to the literal
+/// --depth no longer applies). A path whose every segment exists but fails R8
+/// is UNREACHABLE (owner ruling R12): it goes to AUnreachable, not to the
+/// errors; only a segment naming nothing is a "not found" error. A path equal to the literal
 /// '???' is an explicit-unfilled STUB marker (emitted by the Batch-1 scaffolder)
 /// and is SKIPPED -- never a hard error -- so scaffolder output validates clean.
 /// When a side does not resolve (RootType=''), the checks against it are skipped
@@ -284,7 +313,7 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ValidateConversionRules(const ARules: TConversionRuleSet;
-  const AFrom, ATo: TClassRef): TArray<TRuleError>;
+  const AFrom, ATo: TClassRef; out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
 
 /// <summary>Validates a parsed rule set BLOCK BY BLOCK: each #convert block's
 /// #link and #default paths against that block's own From/To classes, and each
@@ -296,6 +325,10 @@ function ValidateConversionRules(const ARules: TConversionRuleSet;
 /// the book: [0] is the region before the first #convert, [N] the Nth #convert
 /// block in source order. An index past the end counts as two unset sides
 /// (checks skipped).</param>
+/// <param name="AUnreachable">Receives the UNREACHABLE paths (owner ruling
+/// R12), in source order, at most one per (line, path, offending member,
+/// declaring class) however many blocks check that line; the message carries
+/// no block suffix.</param>
 /// <returns>Zero-length array = valid. Otherwise one TRuleError per problem:
 /// parse errors first, then validation errors in source order. Each path error
 /// carries ValidateConversionRules' message followed by the block it was
@@ -315,7 +348,23 @@ function ValidateConversionRules(const ARules: TConversionRuleSet;
 /// Deterministic; reads the index through the classes' caches; writes nothing.
 /// </remarks>
 function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
-  const ABlockClasses: TArray<TBlockClasses>): TArray<TRuleError>;
+  const ABlockClasses: TArray<TBlockClasses>; out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
+
+/// <summary>The rule set minus every #link, #default and #mapping line that
+/// has an UNREACHABLE path -- what convert-apply and convert-reemit actually
+/// run (owner ruling R12: such a rule is skipped, never applied).</summary>
+/// <param name="ARules">The parsed rule set.</param>
+/// <param name="AUnreachable">What validation reported
+/// (ValidateConversionRules / ValidateConversionRulesPerBlock).</param>
+/// <returns>A copy of ARules without those lines; every other rule, its
+/// order and its LineNo unchanged. ParseErrors are kept.</returns>
+/// <remarks>The whole LINE is skipped: a #mapping line with one unreachable
+/// target among several sets none of them, and a #link with one unreachable
+/// side carries nothing. Only rkLink, rkDefault and rkMapping lines are ever
+/// removed -- the #convert headers, #apply and the unit rules stay, so block
+/// numbering is unchanged. Pure.</remarks>
+function WithoutUnreachableRules(const ARules: TConversionRuleSet;
+  const AUnreachable: TArray<TUnreachablePath>): TConversionRuleSet;
 
 /// <summary>Non-fatal findings on a parsed rule set: things that validate but
 /// are almost certainly not what the author meant.</summary>
@@ -948,13 +997,11 @@ begin
   end;
 end;
 
-// True when APath resolves from AClass on the DFM surface (a rule path names a
-// .dfm-streamed property -- ruling R8; see TPropSurface).
-function PathExists(const AClass: TClassRef; const APath: string): Boolean;
-var
-  N: TPropNode;
+// The one warning text of an UNREACHABLE rule path -- see TUnreachablePath.
+function UnreachableMessage(ALineNo: Integer; const APath, AMember, AVisibility, AClass: string): string;
 begin
-  Result:= AClass.ResolvePath(APath, psDfm, N);
+  Result:= Format('line %d: warning: %s: %s is %s in %s; never applied unless a descendant class changes its visibility',
+    [ALineNo, APath, AMember, AVisibility, AClass]);
 end;
 
 // The #convert block of every rule, index-aligned with ARules.Rules: 0 before
@@ -993,8 +1040,10 @@ end;
   for every block, so that is the one pair); True = the per-block contract
   documented on ValidateConversionRulesPerBlock. }
 function ValidateBlocks(const ARules: TConversionRuleSet;
-  const ABlockClasses: TArray<TBlockClasses>; APerBlock: Boolean): TArray<TRuleError>;
+  const ABlockClasses: TArray<TBlockClasses>; APerBlock: Boolean;
+  out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
 var
+  Unr    : TList<TUnreachablePath>;
   Errs   : TList<TRuleError>;
   R      : TConversionRule ;
   PE     : TRuleError      ;
@@ -1035,12 +1084,41 @@ var
     Result:= Format(' (#convert line %d: %s -> %s)', [C.LineNo, C.FromType, C.ToType]);
   end;
 
-  // A path is missing when the class was supplied and resolves, the path is
-  // real (not empty, not the '???' stub) and it does not resolve from it.
-  function Missing(const AClass: TClassRef; const APath: string): Boolean;
+  // Records an UNREACHABLE path once per (line, path, offending member and its
+  // class) -- a #mapping line can be checked in several blocks; a #link naming
+  // the same path on both sides warns once per side whose class blocks it.
+  procedure AddUnreachable(ALineNo: Integer; const APath: string; const ARes: TPathResolution);
+  var
+    U: TUnreachablePath;
   begin
-    Result:= (APath <> '') and (not IsStub(APath)) and (AClass.RootType <> '') and
-             (not PathExists(AClass, APath));
+    for U in Unr do
+      if (U.LineNo = ALineNo) and SameText(U.Path, APath) and SameText(U.Member, ARes.Member) and
+         SameText(U.DeclaringClass, ARes.DeclaringClass) then Exit;
+    U.LineNo        := ALineNo;
+    U.Path          := APath;
+    U.Member        := ARes.Member;
+    U.Visibility    := ARes.Visibility;
+    U.DeclaringClass:= ARes.DeclaringClass;
+    U.Message       := UnreachableMessage(ALineNo, APath, ARes.Member, ARes.Visibility, ARes.DeclaringClass);
+    Unr.Add(U);
+  end;
+
+  // A path is missing when the class was supplied and resolves, the path is
+  // real (not empty, not the '???' stub) and some segment names NO member
+  // (TPropMemberCache.ResolvePathEx on the DFM surface -- ruling R8; see
+  // TPropSurface). A path whose members all exist but fail R8 is not missing:
+  // it is recorded as UNREACHABLE (owner ruling R12) for rule line ALineNo.
+  function Missing(const AClass: TClassRef; const APath: string; ALineNo: Integer): Boolean;
+  var
+    Res: TPathResolution;
+  begin
+    Result:= False;
+    if (APath = '') or IsStub(APath) or (AClass.RootType = '') then Exit;
+    Res:= AClass.ResolvePathEx(APath, psDfm);
+    case Res.Outcome of
+      poNotFound   : Result:= True;
+      poUnreachable: AddUnreachable(ALineNo, APath, Res);
+    end;
   end;
 
   // True when some rkMapping line declares AName. Case-insensitive, matching
@@ -1082,11 +1160,11 @@ var
     SP: TMappingSetPair;
   begin
     T:= ClassesOf(ABlock);
-    if Missing(T.FromClass, AMap.WhenFrom) then
+    if Missing(T.FromClass, AMap.WhenFrom, AMap.LineNo) then
       Add(AMap.LineNo, Format('mapping %s #when path not found in --from tree: %s',
         [AMap.MapName, AMap.WhenFrom]) + Where(ABlock));
     for SP in AMap.Sets do
-      if Missing(T.ToClass, SP.ToPath) then
+      if Missing(T.ToClass, SP.ToPath, AMap.LineNo) then
         Add(AMap.LineNo, Format('mapping %s target path not found in --to tree: %s',
           [AMap.MapName, SP.ToPath]) + Where(ABlock));
   end;
@@ -1098,13 +1176,13 @@ var
     T:= ClassesOf(ABlock);
     if ARule.Kind = rkDefault then
     begin
-      if Missing(T.ToClass, ARule.ToPath) then
+      if Missing(T.ToClass, ARule.ToPath, ARule.LineNo) then
         Add(ARule.LineNo, Format('default ToPath not found in --to tree: %s', [ARule.ToPath]) + Where(ABlock));
       Exit;
     end;
-    if Missing(T.ToClass, ARule.ToPath) then
+    if Missing(T.ToClass, ARule.ToPath, ARule.LineNo) then
       Add(ARule.LineNo, Format('link ToPath not found in --to tree: %s', [ARule.ToPath]) + Where(ABlock));
-    if Missing(T.FromClass, ARule.FromPath) then
+    if Missing(T.FromClass, ARule.FromPath, ARule.LineNo) then
       Add(ARule.LineNo, Format('link FromPath not found in --from tree: %s', [ARule.FromPath]) + Where(ABlock));
   end;
 
@@ -1140,6 +1218,7 @@ var
 
 begin
   Errs:= TList<TRuleError>.Create;
+  Unr := TList<TUnreachablePath>.Create;
   try
     // 1. Fold in any parse errors first (source order preserved by LineNo).
     for PE in ARules.ParseErrors do
@@ -1182,14 +1261,16 @@ begin
       end;
     end;
 
-    Result:= Errs.ToArray;
+    Result      := Errs.ToArray;
+    AUnreachable:= Unr.ToArray;
   finally
+    Unr.Free;
     Errs.Free;
   end;
 end;
 
 function ValidateConversionRules(const ARules: TConversionRuleSet;
-  const AFrom, ATo: TClassRef): TArray<TRuleError>;
+  const AFrom, ATo: TClassRef; out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
 var
   Classes: TArray<TBlockClasses>;
   I      : Integer;
@@ -1201,13 +1282,36 @@ begin
     Classes[I].FromClass:= AFrom;
     Classes[I].ToClass  := ATo;
   end;
-  Result:= ValidateBlocks(ARules, Classes, False);
+  Result:= ValidateBlocks(ARules, Classes, False, AUnreachable);
 end;
 
 function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
-  const ABlockClasses: TArray<TBlockClasses>): TArray<TRuleError>;
+  const ABlockClasses: TArray<TBlockClasses>; out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
 begin
-  Result:= ValidateBlocks(ARules, ABlockClasses, True);
+  Result:= ValidateBlocks(ARules, ABlockClasses, True, AUnreachable);
+end;
+
+function WithoutUnreachableRules(const ARules: TConversionRuleSet;
+  const AUnreachable: TArray<TUnreachablePath>): TConversionRuleSet;
+var
+  Skip: TDictionary<Integer, Boolean>;
+  U   : TUnreachablePath;
+  R   : TConversionRule;
+  Kept: TList<TConversionRule>;
+begin
+  Result:= ARules;
+  if Length(AUnreachable) = 0 then Exit;
+  Skip:= TDictionary<Integer, Boolean>.Create;
+  Kept:= TList<TConversionRule>.Create;
+  try
+    for U in AUnreachable do Skip.AddOrSetValue(U.LineNo, True);
+    for R in ARules.Rules do
+      if not ((R.Kind in [rkLink, rkDefault, rkMapping]) and Skip.ContainsKey(R.LineNo)) then Kept.Add(R);
+    Result.Rules:= Kept.ToArray;
+  finally
+    Kept.Free;
+    Skip.Free;
+  end;
 end;
 
 function ConversionRuleWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;

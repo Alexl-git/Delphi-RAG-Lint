@@ -264,10 +264,60 @@ tree of `FireDAC.Comp.Client.TFDQuery` did not finish in 20 minutes). A rule pat
 names a `.dfm`-streamed property, so the `.dfm` rule applies: the LEAF must be a
 published property; each INTERMEDIATE hop must be published, or public AND
 class-typed (a collection's public `Items`, which a `.dfm` streams as `item`
-blocks); a protected hop, a public leaf or a field fails. **Private and strict
-private members never resolve** (and `proptree` no longer lists them). A hop may
-not pass through a type already passed through on the same path (the same cycle
-guard `proptree` applies).
+blocks); a protected hop, a public leaf or a field does not pass. **Private and
+strict private members never resolve** (and `proptree` no longer lists them). A
+hop may not pass through a type already passed through on the same path (the
+same cycle guard `proptree` applies).
+
+**Unreachable paths are warnings, not errors (1.20.6, owner ruling
+2026-09-30).** A path can fail in two different ways, and they are reported
+differently:
+
+- **NOT FOUND** -- some segment names no member at all on its hop (a typo, a
+  member of another class, a hop through a scalar, a field or a referenced
+  component). This is an **error**: `line N: link FromPath not found in --from
+  tree: <path>`, exit 1.
+- **UNREACHABLE** -- every segment names a member that EXISTS, but one of them
+  is inaccessible on the `.dfm` surface: private or strict private anywhere,
+  protected anywhere, a public LEAF, a public hop that is not class-typed, or a
+  field. A private member is recorded as existing but never expanded, so a
+  path running into one stops there. This is a **warning**, the rule is KEPT in
+  the book, and exit stays 0.
+
+The warning text, exactly (one line, printed on **stdout** beside the errors):
+
+```
+line N: warning: <path>: <Member> is <visibility> in <DeclaringClass>; never applied unless a descendant class changes its visibility
+```
+
+`<Member>` is the FIRST offending segment, `<visibility>` its visibility as
+declared (`private`, `strict private`, `protected`, `public`, `published` for a
+field), and `<DeclaringClass>` the qualified class that declares it. When a
+class redeclares an ancestor's member in a private section, the warning names
+the REDECLARATION (the descendant, `private`), not the ancestor's member.
+
+Why a warning: such a rule is like `if 1 > 2 then ...` -- no `.dfm` can stream
+the member, so the rule never fires. It can still be right to keep it: a
+descendant class (`TMyTable = class(TTable)`) may republish the member, and then
+the same rule applies to that descendant. The BDE book's 16 `FieldOptions.*` and
+`Constraints.Items.*` links (protected in `Data.DB.TDataSet`) are exactly this
+case.
+
+`convert-apply` and the hidden `convert-reemit` SKIP an unreachable `#link`,
+`#default` or `#mapping` line (the whole line; a `#mapping` with one
+unreachable target sets none of them), keep converting everything else, and
+report it: text mode prints the same `line N: warning: ...` line under
+`Warnings:`; apply/1 JSON appends the same text to the string array
+`warnings[]`, mirrors it in `items[]` as kind `rule-path-unreachable`, and adds
+one object per path to `unreachable[]` (always present, `[]` when none):
+
+```
+{ "line": 274, "path": "FieldOptions.AutoCreateMode", "member": "FieldOptions",
+  "visibility": "protected", "class": "Data.DB.TDataSet", "reason": "unreachable",
+  "message": "line 274: warning: FieldOptions.AutoCreateMode: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility" }
+```
+
+`convert-validate` has no JSON mode; its warnings are text lines only.
 
 - Without `--from`/`--to` it is **parse-only**: only unknown-directive parse
   errors surface; path checks are skipped.
