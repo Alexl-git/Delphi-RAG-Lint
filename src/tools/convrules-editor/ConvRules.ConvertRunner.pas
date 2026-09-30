@@ -37,8 +37,11 @@ type
   /// csRestoreFailed: a book failed AND the restore from the backup raised; the
   ///   unit may be half-converted, the Note names the backups (.pas and .dfm)
   ///   to restore by hand.
+  /// csRefused: the engine refused this book on the unit (TApplyRow.Refused);
+  ///   the unit was restored like a failure -- earlier books on it rolled back,
+  ///   its remaining books not run -- so it is unchanged.
   /// </remarks>
-  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed);
+  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused);
 
   /// <summary>One results-grid row: a book x unit, or a unit-level skip.</summary>
   TConvertRow = record
@@ -127,7 +130,7 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// failed refresh skips the unit untouched and the run continues. Each unit
 /// then gets ONE restore point, .BCK&lt;N&gt; for the .pas and the SAME N for
 /// its .dfm (SharedBackupPaths), deleted again when no book changed the unit.
-/// A failed apply or reindex restores the unit, rewrites its earlier
+/// A failed or refused apply, or a failed reindex, restores the unit, rewrites its earlier
 /// csConverted rows to csRolledBack and stops its remaining books. Never
 /// raises: file I/O failures and exceptions from AApply / AIndex become row
 /// outcomes (see TConvertStatus).</remarks>
@@ -136,7 +139,7 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// <summary>Display text for a status.</summary>
 /// <param name="AStatus">The status.</param>
 /// <returns>'converted', 'FAILED -- restored', 'book skipped', 'unit skipped',
-/// 'rolled back', 'FAILED -- NOT restored'.</returns>
+/// 'rolled back', 'FAILED -- NOT restored', 'refused -- not changed'.</returns>
 function ConvertStatusText(AStatus: TConvertStatus): string;
 
 implementation
@@ -158,6 +161,8 @@ begin
     csBookSkipped   : Result:= 'book skipped';
     csUnitSkipped   : Result:= 'unit skipped';
     csRolledBack    : Result:= 'rolled back';
+    csRestoreFailed : Result:= 'FAILED -- NOT restored';
+    csRefused       : Result:= 'refused -- not changed';
     else              Result:= 'FAILED -- NOT restored';
   end;
 end;
@@ -306,9 +311,11 @@ var
   end;
 
   // Row is the failing book's row; restore the unit and account for its earlier rows.
-  procedure FailUnit(const AReason: string);
+  // AStatus is the failing row's status: csFailedRestored, or csRefused.
+  procedure FailUnit(const AReason: string; AStatus: TConvertStatus);
   var
     LError: string;
+    LVerb : string;
   begin
     Changed:= True; // the backup is the restore point the rows name -- keep it
     if not TryRestore(LError) then
@@ -319,13 +326,14 @@ var
       Add;
       Exit;
     end;
+    LVerb:= if AStatus = csRefused then 'was refused' else 'failed';
     for var I: Integer:= 0 to High(UnitRows) do
       if UnitRows[I].Status = csConverted then
       begin
         UnitRows[I].Status:= csRolledBack;
-        UnitRows[I].Note  := Format('undone: %s failed on this unit; restored from %s', [ExtractFileName(Row.Book), BackupNames(False)]);
+        UnitRows[I].Note  := Format('undone: %s %s on this unit; restored from %s', [ExtractFileName(Row.Book), LVerb, BackupNames(False)]);
       end;
-    Row.Status:= csFailedRestored;
+    Row.Status:= AStatus;
     Row.Note  := AReason;
     Add;
   end;
@@ -383,12 +391,12 @@ var
     end;
     if not Row.Apply.Ok then
     begin
-      FailUnit(Row.Apply.Error);
+      FailUnit(Row.Apply.Error, if Row.Apply.Refused then csRefused else csFailedRestored);
       Exit(False);
     end;
     if not TryReindex(LError) then
     begin
-      FailUnit('reindex after apply failed: ' + LError);
+      FailUnit('reindex after apply failed: ' + LError, csFailedRestored);
       Exit(False);
     end;
     Changed   := True;

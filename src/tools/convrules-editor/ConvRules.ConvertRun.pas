@@ -34,8 +34,14 @@ type
   TApplyRow = record
     /// <summary>The engine's own ok flag; False also for unparseable output.</summary>
     Ok        : Boolean;
-    /// <summary>'' when Ok; else the engine error, the first rule error
-    /// ("line N: message") or the head of the unparseable output.</summary>
+    /// <summary>The engine declined the unit (apply/1 "refused": true -- inherited
+    /// instances, an {$IFDEF} in a uses clause, a stale .dfm span) and did not touch
+    /// it. A known limitation, not a fault. Ok is False; Error holds the engine's
+    /// "reason".</summary>
+    Refused   : Boolean;
+    /// <summary>'' when Ok; else the engine's refusal reason, the engine error,
+    /// the first rule error ("line N: message") or the head of the unparseable
+    /// output.</summary>
     Error     : string;
     /// <summary>edits_count.</summary>
     EditsCount: Integer;
@@ -407,7 +413,14 @@ begin
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + Strings(Obj, 'warnings');
     if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
       Result.RuleErrorCount:= Errs.Count;
-    if not Result.Ok then
+    Result.Refused:= (not Result.Ok) and Obj.GetValue<Boolean>('refused', False);
+    if Result.Refused then
+    begin
+      Result.Error:= Obj.GetValue<string>('reason', '');
+      if Result.Error = '' then
+        Result.Error:= 'convert-apply refused the unit and gave no reason';
+    end
+    else if not Result.Ok then
     begin
       // The first rule error is more useful than the generic "conversion rules
       // failed validation" the engine puts in 'error'.

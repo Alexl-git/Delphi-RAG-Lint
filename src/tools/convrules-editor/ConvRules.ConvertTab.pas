@@ -899,6 +899,7 @@ var
   RolledBack: Integer;
   BookSkips : Integer;
   UnitSkips : Integer;
+  Refused   : Integer;
   NotRestored: TArray<string>;
   NotReached: TArray<string>;
   Msg       : string;
@@ -912,6 +913,7 @@ begin
   RolledBack:= 0;
   BookSkips := 0;
   UnitSkips := 0;
+  Refused   := 0;
   NotRestored:= nil;
   NotReached := nil;
   if (AStopAt >= 0) and (AStopAt < Length(AJob.Units)) then
@@ -926,10 +928,13 @@ begin
       csBookSkipped   : Inc(BookSkips);
       csUnitSkipped   : Inc(UnitSkips);
       csRestoreFailed : NotRestored:= NotRestored + [ExtractFileName(LRow.UnitPas)];
+      csRefused       : Inc(Refused);
     end; // case
   Msg:= Format('Converted %d of %d unit x book pair(s); %d failed and were restored.', [Converted, Length(AJob.Books) * Length(AJob.Units), Restored]);
   if RolledBack > 0 then
     Msg:= Msg + Format(' %d earlier conversion(s) were rolled back with them.', [RolledBack]);
+  if Refused > 0 then
+    Msg:= Msg + Format(' %d unit(s) refused by the engine and left unchanged (a known limitation -- see each row''s note).', [Refused]);
   if BookSkips > 0 then
     Msg:= Msg + Format(' %d book(s) failed the engine''s validation and were skipped.', [BookSkips]);
   if UnitSkips > 0 then

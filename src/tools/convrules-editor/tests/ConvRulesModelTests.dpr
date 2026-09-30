@@ -1566,6 +1566,19 @@ begin
   Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"conversion rules failed validation","rule_errors":[{"line":2,"message":"link ToPath not found"}],' +
     '"edits_count":0,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}' + sLineBreak + '(loaded defaults from C:\x.json)' + sLineBreak);
   Check('convertrun.json.trailing.noise', (not Row.Ok) and (Row.RuleErrorCount = 1) and (Pos('line 2', Row.Error) > 0), Row.Error);
+  // engine 1.20.6 refusal: ok=false, refused=true, reason, file untouched
+  // (unreachable[] is always present in 1.20.6 apply/1 and must not disturb the parse)
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":true,"reason":"inherited instances of TTable are not converted yet -- unit not changed","rule_errors":[],"edits_count":0,"unreachable":[]}');
+  Check('apply.refused.flag', (not Row.Ok) and Row.Refused);
+  Check('apply.refused.reason', Row.Error = 'inherited instances of TTable are not converted yet -- unit not changed', Row.Error);
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":true,"rule_errors":[]}');
+  Check('apply.refused.no.reason', Row.Refused and (Row.Error = 'convert-apply refused the unit and gave no reason'), Row.Error);
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}');
+  Check('apply.failed.not.refused', (not Row.Ok) and (not Row.Refused) and (Row.Error = 'boom'), Row.Error);
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":false,"error":"boom"}');
+  Check('apply.refused.false.is.failure', not Row.Refused);
+  Check('status.text.refused', ConvertStatusText(csRefused) = 'refused -- not changed');
+  Check('status.text.restore.failed.unchanged', ConvertStatusText(csRestoreFailed) = 'FAILED -- NOT restored');
 
   // --- ExpandSources: .pas / folder / .dpr, deduped case-insensitively ---
   Dir:= TPath.Combine(TPath.GetTempPath, 'convrun-' + TPath.GetGUIDFileName);
@@ -1665,6 +1678,7 @@ procedure TestConvertRunnerFaults;
 const
   OK_JSON   = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
   FAIL_JSON = '{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[],"edits_count":0}';
+  REFUSED_JSON = '{"schema":"apply/1","ok":false,"refused":true,"reason":"inherited instances of TTable are not converted yet -- unit not changed","rule_errors":[],"edits_count":0}';
   ORIG      = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
   TWO_ROWS  = 2;
 var
@@ -1701,6 +1715,46 @@ var
       end;
   end;
 
+  // Engine 1.20.6 refusals (apply/1 "refused": true), kept out of the main body
+  // so its cyclomatic complexity stays under the lint limit.
+  procedure CheckRefusals;
+  var
+    LPas : string;
+    LRows: TArray<TConvertRow>;
+  begin
+    // --- the FIRST book is refused: restored (a no-op), status refused, reason kept ---
+    LPas:= TPath.Combine(Dir, 'F1.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := REFUSED_JSON;
+        Result:= 1;
+      end, Index, nil, nil);
+    Check('runner.refused.first', (Length(LRows) = 1) and (LRows[0].Status = csRefused)
+      and (Pos('inherited instances', LRows[0].Note) > 0) and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
+
+    // --- a LATER book is refused: the earlier book's change is rolled back ---
+    LPas:= TPath.Combine(Dir, 'F2.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        if SameText(ExtractFileName(ARulesFile), 'A.rules') then
+        begin
+          TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+          AJson := OK_JSON;
+          Result:= 0;
+          Exit;
+        end;
+        AJson := REFUSED_JSON;
+        Result:= 1;
+      end, Index, nil, nil);
+    Check('runner.refused.rolls.back', (Length(LRows) = TWO_ROWS) and (LRows[0].Status = csRolledBack)
+      and (Pos('B.rules was refused', LRows[0].Note) > 0) and (LRows[1].Status = csRefused)
+      and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows) + ' | pas=' + TFile.ReadAllText(LPas));
+  end;
+
 begin
   Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-faults-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -1723,6 +1777,8 @@ begin
     Check('runner.rollback.row', (Length(Rows) = TWO_ROWS) and (Rows[0].Status = csRolledBack) and (Pos('B.rules', Rows[0].Note) > 0)
       and (Rows[1].Status = csFailedRestored) and (TFile.ReadAllText(PasR) = ORIG), Describe(Rows) + ' | pas=' + TFile.ReadAllText(PasR));
     Check('runner.rollback.progress.order', Seen = 'A.rules=rolled back;B.rules=FAILED -- restored;', Seen);
+
+    CheckRefusals;
 
     // --- the backup cannot be taken: the unit is skipped, nothing left behind ---
     PasL:= TPath.Combine(Dir, 'L.pas');
