@@ -134,16 +134,18 @@ published while `modifiers` says `public` for both.
 1. Download `drag-lint.exe` + the three `tree-sitter*.dll` files from
    [Releases](https://github.com/Alexl-git/Delphi-RAG-Lint/releases) and keep
    them in the same folder (put it on PATH for convenience).
-2. Build an index. **Prefer one DB per project** -- point `index` at the
+2. Build an index. **Prefer one DB per project** -- `index --project` the
    `.dproj`, and it stores exactly that project's compile closure:
    ```
-   drag-lint index C:\path\to\MyApp.dproj --db C:\path\to\MyApp.sqlite
+   drag-lint index --project C:\path\to\MyApp.dproj --db C:\path\to\MyApp.sqlite
    ```
-   - The **target declares the scan type**: a `.dpr`/`.dproj` gives a *project*
-     scan (compile closure -- members + transitively-used project-local units +
-     sibling `.dfm` + `{$I}` includes + the project file; Library/Browsing-path
-     units and loose unreferenced files are excluded), a **folder** gives a
-     *library* scan of the whole tree.
+   - The **target declares the scan type**: `--project <.dpr|.dproj>` gives a
+     *project* scan (compile closure -- members + transitively-used
+     project-local units + sibling `.dfm` + `{$I}` includes + the project file;
+     Library/Browsing-path units and loose unreferenced files are excluded), a
+     **folder** gives a *library* scan of the whole tree. A POSITIONAL
+     `index <X.dproj>` (no `--project`) is NOT a closure scan: it refreshes only
+     that one file, with no project defines.
    - The **mode is chosen per run**: `--recompile` (default, incremental) or
      `--rebuild` (from scratch).
    - `--scan-libraries` to index the installed RTL/VCL/DevExpress/Spring4D.

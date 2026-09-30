@@ -256,7 +256,7 @@ Add `--json` to any query for machine-readable output.
 2. Put them in the same directory.
 3. Index a Delphi project:
    ```
-   drag-lint index C:\Projects\MyApp\MyApp.dproj --db myapp.sqlite
+   drag-lint index --project C:\Projects\MyApp\MyApp.dproj --db myapp.sqlite
    ```
 4. Query symbols:
    ```

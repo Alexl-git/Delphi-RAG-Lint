@@ -137,7 +137,9 @@ manifest-loader changes under `src\index`; each re-pin carries a dated note.)
   (the platform built-ins, default Win64) and stamps that default fingerprint -- and it still stamps
   the database as a project scan. Use `index --project <X.dproj>` for the compile closure. The
   1.20.3 docs said a `.dpr`/`.dproj` target was a closure scan; `--help`, `README.md`,
-  `INSTALL.md`, `docs\INSTALL.md` and `docs\AI-USAGE.md` now say what it does.
+  `INSTALL.md`, `docs\INSTALL.md`, `docs\AI-USAGE.md`, `docs\AI-INDEX-FIRST.md`,
+  `docs\SCAN-DATABASES.md` and `docs\INDEXING-AND-DB-ARCHITECTURE.md` now say what it does, and
+  their examples use `index --project`.
 - `info --db <file that is not SQLite>` dies with `FATAL` exit 3 and loses every other `--db` in the
   call; the `unreadable` verdict is unreachable (pre-existing; filed for a later release).
 - `lint --fix --fix-rule doc-drift` renders some managed "Used by" lines uncapped (1005 to 2566
