@@ -178,6 +178,7 @@ uses
   DRagLint.Convert.UnitRules in '..\report\DRagLint.Convert.UnitRules.pas',
   DRagLint.Convert.DfmReemit in '..\report\DRagLint.Convert.DfmReemit.pas',
   DRagLint.Convert.PropTree in '..\report\DRagLint.Convert.PropTree.pas',
+  DRagLint.Convert.PropCache in '..\report\DRagLint.Convert.PropCache.pas',
   DRagLint.Convert.Rules in '..\report\DRagLint.Convert.Rules.pas',
   DRagLint.Convert.GlyphExpr in '..\report\DRagLint.Convert.GlyphExpr.pas',
   DRagLint.Convert.GlyphStrip in '..\report\DRagLint.Convert.GlyphStrip.pas',

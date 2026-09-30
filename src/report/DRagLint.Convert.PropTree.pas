@@ -31,7 +31,8 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces;
+  DRagLint.Core.Model, DRagLint.Core.Interfaces,
+  DRagLint.Core.DeclText; { TDeclTextReader -- the shared declaring-line reader }
 
 type
   /// <summary>One flattened property of the enumerated tree.</summary>
@@ -170,6 +171,92 @@ type
     Truncated: Boolean;
   end;
 
+  /// <summary>Resolves the members of ONE class -- own + inherited properties,
+  /// then own + inherited fields and class constants -- exactly as one level of
+  /// BuildPropTree's walk emits them, without recursing.</summary>
+  /// <remarks>
+  /// This is BuildPropTree's per-member resolution (type, default, accessor,
+  /// visibility, component-ness, the lazy ancestry bridge and its memoized
+  /// write-back), lifted out of the walk so that TPropMemberCache
+  /// (DRagLint.Convert.PropCache) can resolve a class once and descend a rule
+  /// path one segment at a time. BuildPropTree uses it too, so there is one
+  /// definition of what a member is. See BuildPropTree's remarks for every
+  /// resolution rule; they are unchanged.
+  /// PRIVATE and STRICT PRIVATE members are never returned (owner ruling
+  /// 2026-09-30): they are invisible outside their unit, so no rule and no .dfm
+  /// can name them, and pruning them also prunes their subtrees.
+  /// Holds two per-object memo tables -- the resolved ancestor chain per class
+  /// id, and the scope-aware name -&gt; class lookup per (name, scope file) --
+  /// plus a declaring-line reader that caches each source file once. All three
+  /// are pure derivations of the index and live as long as the object.
+  /// Borrows the store (not owned). Not thread-safe.
+  /// </remarks>
+  TPropMemberResolver = class  // dl:ok high-response@e41c -- BuildPropTree's per-member resolution moved out of its nested walk unchanged (T2b); the helpers were nested routines of one function before, the response set is the same code's
+  private
+    FStore     : ISymbolStore;
+    FOpts      : TPropTreeOptions;
+    FChainCache: TDictionary<Int64 , TArray<TSymbol>>; // class id -> its resolved chain
+    FTypeCache : TDictionary<string, TSymbol        >; // 'lowername|scopefileid' -> resolved class
+    // Reads a declaring source line, caching each file once. The `default`
+    // clause is not indexed (storing it would change extraction and cost an
+    // extractor-version bump, which re-parses every database), so it is read
+    // from the declaring source line -- the same trick GetClassSurface uses.
+    FDeclText  : TDeclTextReader;
+    function DeclTextOf(const ASym: TSymbol): string;
+    function BodyOf(const ASym: TSymbol): TSymbol;
+    function ResolveDefaultFor(const AClass, AProp: TSymbol; const APropName: string;
+      out AValue: string): Boolean;
+    function ResolveTypeInScope(const AName: string; AScopeFileId: Int64): TSymbol;
+    function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
+    function ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
+    function ResolveInheritedVisibility(const AClass: TSymbol; const APropName: string): string;
+    function ResolveInheritedPropAccess(const AClass: TSymbol; const APropName: string): string;
+    function ResolveConstVisibilityByProximity(const AClass: TSymbol; const AConst: TSymbol): string;
+    function ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string): string;
+    function ClosureClassIds(const AClass: TSymbol): TArray<Int64>;
+    function PropagateBareType(const AClassIds: TArray<Int64>;
+      const APropName, ATypeTok: string): Integer;
+    procedure CollectProps(const AClass: TSymbol;
+      out AOrder: TArray<TSymbol>; out ADeclaredBy: TArray<TSymbol>);
+    procedure CollectFields(const AClass: TSymbol;
+      out AOrder: TArray<TSymbol>; out ADeclaredIn: TArray<string>);
+    function IsComponentType(const ASym: TSymbol): Boolean;
+  public
+    /// <summary>Creates a resolver over one index.</summary>
+    /// <param name="AStore">The open symbol store. Borrowed, not owned; the
+    /// only write is the lazy MemoizePropertyType write-back (a no-op on a
+    /// read-only store).</param>
+    /// <param name="AOpts">ToPersistent (stop the ancestor climb at
+    /// TPersistent/TObject) and TreatRefsAsLeaves apply; Depth is ignored --
+    /// the resolver never recurses.</param>
+    constructor Create(const AStore: ISymbolStore; const AOpts: TPropTreeOptions);
+    /// <summary>Frees the memo tables and the declaring-line reader.</summary>
+    destructor Destroy; override;
+    /// <summary>The class-kind symbol a qualified class name names.</summary>
+    /// <param name="AQName">Fully-qualified class name, e.g. 'Unit.TOuter'.</param>
+    /// <returns>The defining body (a forward-declaration stub only when no
+    /// body is indexed); Id = 0 when no class of that qualified name
+    /// exists.</returns>
+    function ResolveClassByQName(const AQName: string): TSymbol;
+    /// <summary>The members of AClass, one level deep.</summary>
+    /// <param name="AClass">A class-kind symbol of this resolver's store.</param>
+    /// <param name="AMembers">Receives the property members (most-derived
+    /// declaration wins) followed by the field / class-constant members, each
+    /// with Path = its BARE name and every other TPropNode field filled as
+    /// BuildPropTree fills it. Private members are absent.</param>
+    /// <param name="ATypes">Index-aligned with AMembers: the class a
+    /// property's type resolved to (a reference leaf included); Id = 0 for a
+    /// scalar, an unknown type, or a field.</param>
+    /// <param name="AIsCompRef">Index-aligned with AMembers: True for a
+    /// TComponent-typed property under TreatRefsAsLeaves -- a reference leaf,
+    /// Kind='class' with IsClassTyped=False, never descended into.</param>
+    /// <remarks>A member is descended into only when MemberKind='property'
+    /// and IsClassTyped is True. May memoize a recovered property type into
+    /// the store (see BuildPropTree).</remarks>
+    procedure ResolveMembers(const AClass: TSymbol; out AMembers: TArray<TPropNode>;
+      out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>);
+  end;
+
 /// <summary>Enumerates the deep (recursively flattened) property tree of a class,
 /// resolving each property's type from the index and recursing into class-typed
 /// property types.</summary>
@@ -275,8 +362,7 @@ implementation
 
 uses
   System.IOUtils,  { TFile -- still used elsewhere in this unit }
-  System.StrUtils, { PosEx }
-  DRagLint.Core.DeclText; { TDeclTextReader -- the shared declaring-line reader }
+  System.StrUtils; { PosEx }
 
 type
   /// <summary>What a property declaration says about its `default`.</summary>
@@ -498,1109 +584,1180 @@ const
   // 64-hop BFS bound (DRagLint.Storage.SQLite.pas).
   CMaxBridgedChainDepth = 64;
 
+// True for a member whose own declared section is private or strict private.
+// Owner ruling 2026-09-30: such a member is NEVER resolved, cached or expanded,
+// on any surface -- it is invisible outside its unit, so no conversion rule and
+// no .dfm can name it. Applied where CollectProps / CollectFields admit a member,
+// and again (ResolveMembers) after a blank Modifiers was recovered.
+function IsPrivateModifiers(const AModifiers: string): Boolean;
+var
+  Vis: string;
+begin
+  Vis   := LowerCase(Trim(AModifiers));
+  Result:= (Vis = 'private') or (Vis = 'strict private');
+end;
+
+{ TPropMemberResolver }
+
+constructor TPropMemberResolver.Create(const AStore: ISymbolStore; const AOpts: TPropTreeOptions);
+begin
+  inherited Create;
+  FStore     := AStore;
+  FOpts      := AOpts;
+  FChainCache:= TDictionary<Int64 , TArray<TSymbol>>.Create;
+  FTypeCache := TDictionary<string, TSymbol        >.Create;
+  FDeclText  := TDeclTextReader.Create(AStore);
+end;
+
+destructor TPropMemberResolver.Destroy;
+begin
+  FDeclText  .Free;
+  FTypeCache .Free;
+  FChainCache.Free;
+  inherited Destroy;
+end;
+
+// The declaring source text of ASym, StartLine..EndLine joined with a space.
+// Empty when the file is unreadable or the range is nonsense -- an empty
+// result means "unknown", never "no default".
+function TPropMemberResolver.DeclTextOf(const ASym: TSymbol): string;
+begin
+  Result:= FDeclText.TextOf(ASym);
+end;
+
+// True when ALow_ has AWord as a whole word starting at APos (so 'default'
+// inside 'nodefault' or 'DefaultDrawing' does not match).
+function IsWholeWordAt(const ALow: string; APos, ALen: Integer): Boolean;
+begin
+  Result:= ((APos = 1) or (not CharInSet(ALow[APos - 1], ['a'..'z', '0'..'9', '_']))) and
+           ((APos + ALen > Length(ALow)) or
+            (not CharInSet(ALow[APos + ALen], ['a'..'z', '0'..'9', '_'])));
+end;
+
+function HasWholeWord(const ALow, AWord: string): Boolean;
+var P: Integer;
+begin
+  Result:= False;
+  P:= 1;
+  repeat
+    P:= PosEx(AWord, ALow, P);
+    if P = 0 then Exit(False);
+    if IsWholeWordAt(ALow, P, Length(AWord)) then Exit(True);
+    Inc(P, Length(AWord));
+  until False;
+end;
+
+// Classifies a property declaration's `default` clause. THREE outcomes, not
+// two -- collapsing them is what made bare redeclarations report no default:
+//
+//   dcValue    -- `default <X>`; AValue is the raw token, verbatim.
+//   dcNoDefault-- `nodefault`. An EXPLICIT cancellation of an inherited
+//                 default (real and common: `property Color nodefault;`).
+//                 It must STOP the ancestor walk, not continue it.
+//   dcAbsent   -- no clause at all. For a BARE REDECLARATION
+//                 (`property AutoSize;`, used to raise visibility) Delphi
+//                 keeps the ancestor's default, so the caller walks UP.
+//                 A bare `default;` lands here too: that is the default-ARRAY-
+//                 PROPERTY directive and carries no value; array properties
+//                 are not DFM-streamed, so walking up is harmless.
+function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;
+var
+  LowText: string ;
+  P, i, j: Integer;
+  Depth  : Integer; { bracket nesting while capturing a SET default }
+  Tok    : string ;
+begin
+  AValue := '';
+  LowText:= LowerCase(ADeclText);
+  if ADeclText = '' then Exit(dcAbsent);
+  if HasWholeWord(LowText, 'nodefault') then Exit(dcNoDefault);
+
+  { A `stored` clause other than `stored True` DESTROYS the sparse-DFM premise,
+    so there is no usable default here even when a `default` clause is present.
+
+    "absent ==> the value equals the declared default" holds only for a
+    property that is streamed unconditionally. The VCL's own Color is the
+    case that matters -- Vcl.Controls.pas:1996 declares it
+
+      property Color: TColor read FColor write SetColor
+        stored IsColorStored default clWindow;
+
+    With ParentColor=True, IsColorStored is False and Color is omitted
+    REGARDLESS of its value. Reading that absence as clWindow and then writing
+    it across is doubly wrong: the value may be different, and TControl.SetColor
+    clears FParentColor, so the converted control silently stops inheriting its
+    parent's colour. DevExpress carries many `stored IsXStored` pairs too.
+
+    dcAbsent is the honest answer -- "cannot tell" -- and the caller already
+    treats that as unknown and reports it rather than inventing a value.
+    `stored True` is the explicit form of the default and stays usable. }
+  P:= 1;
+  repeat
+    P:= PosEx('stored', LowText, P);
+    if P = 0 then Break;
+    if IsWholeWordAt(LowText, P, 6) then
+    begin
+      i:= P + 6;
+      while (i <= Length(LowText)) and CharInSet(LowText[i], [' ', #9]) do Inc(i);
+      j:= i;
+      while (j <= Length(LowText)) and (not CharInSet(LowText[j], [' ', #9, ';'])) do Inc(j);
+      if not SameText(Copy(ADeclText, i, j - i), 'True') then Exit(dcAbsent);
+      Break;
+    end;
+    Inc(P, 6);
+  until False;
+
+  P:= 1;
+  repeat
+    P:= PosEx('default', LowText, P);
+    if P = 0 then Exit(dcAbsent);
+    if IsWholeWordAt(LowText, P, 7) then Break;
+    Inc(P, 7);
+  until False;
+
+  i:= P + 7;
+  while (i <= Length(ADeclText)) and CharInSet(ADeclText[i], [' ', #9]) do Inc(i);
+
+  { A SET default is a bracketed list and contains spaces:
+    `property Anchors: TAnchors ... default [akLeft, akTop];`. Stopping at the
+    first space truncated it to `[akLeft,` -- harmless while nothing emitted
+    the value, and a MALFORMED .dfm once D3 started writing it out. Set
+    defaults are pervasive in the VCL (Anchors, BorderIcons, Options...), so
+    this is the common case, not an exotic one.
+
+    An UNBALANCED bracket yields dcAbsent rather than a partial token: an
+    unreadable declaration is unknown, and inventing half a value is the one
+    outcome worse than admitting we cannot tell. }
+  if (i <= Length(ADeclText)) and (ADeclText[i] = '[') then
+  begin
+    Depth:= 0;
+    j:= i;
+    while j <= Length(ADeclText) do
+    begin
+      if ADeclText[j] = '[' then Inc(Depth)
+      else if ADeclText[j] = ']' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Break;
+      end;
+      Inc(j);
+    end;
+    if (Depth <> 0) or (j > Length(ADeclText)) then Exit(dcAbsent);
+    AValue:= Trim(Copy(ADeclText, i, j - i + 1));
+    Exit(dcValue);
+  end;
+
+  j:= i;
+  while (j <= Length(ADeclText)) and (not CharInSet(ADeclText[j], [' ', #9, ';'])) do Inc(j);
+  Tok:= Trim(Copy(ADeclText, i, j - i));
+  if Tok = '' then Exit(dcAbsent); { bare `default;` -- array-property directive }
+  AValue:= Tok;
+  Result:= dcValue;
+end;
+
+// True when a class symbol is a mere forward declaration ('TFoo = class;')
+// rather than the real body. A forward decl spans a single line and carries no
+// heritage; the parser emits it as a separate skClass symbol with no property
+// children. DevExpress forward-declares nearly every class, so resolving a
+// qname to the stub yields 0 properties -- ResolveClassByQName must skip it.
+function IsForwardDeclClass(const S: TSymbol): Boolean;
+begin
+  Result:= (S.Heritage.Trim = '') and (S.EndLine <= S.StartLine);
+end;
+
+// Resolve a class qname/name to its class-kind defining symbol; Id=0 if none.
+// Prefers the real body over a forward-declaration stub (both are indexed as
+// separate skClass symbols for a forward-declared class); falls back to the
+// first skClass if only stubs exist.
+function TPropMemberResolver.ResolveClassByQName(const AQName: string): TSymbol;
+var
+  Cands   : TArray<TSymbol>;
+  S       : TSymbol         ;
+  FirstAny: TSymbol         ;
+  HaveAny : Boolean         ;
+begin
+  Result  := Default(TSymbol);
+  FirstAny:= Default(TSymbol);
+  HaveAny := False;
+  Cands   := FStore.FindSymbolsByQualifiedName(AQName);
+  for S in Cands do
+    if S.Kind = skClass then
+    begin
+      if not HaveAny then begin FirstAny:= S; HaveAny:= True; end;
+      if not IsForwardDeclClass(S) then Exit(S); // the real body -- prefer it
+    end;
+  if HaveAny then Result:= FirstAny; // only forward stubs found -- best effort
+end;
+
+// If ASym is a forward-declaration stub, re-resolve to the defining body by
+// qname (the body carries the property children); otherwise return ASym as-is.
+// type_ancestors / GetSymbolById can hand back the stub for a forward-declared
+// ancestor, so every place that reads an ancestor's children must go via this.
+function TPropMemberResolver.BodyOf(const ASym: TSymbol): TSymbol;
+var
+  Body: TSymbol;
+begin
+  Result:= ASym;
+  if (ASym.Id > 0) and (ASym.Kind = skClass) and IsForwardDeclClass(ASym) then
+  begin
+    Body:= ResolveClassByQName(ASym.QualifiedName);
+    if (Body.Id > 0) and not IsForwardDeclClass(Body) then Result:= Body;
+  end;
+end;
+
+// The default that actually governs streaming for APropName on AClass.
+//
+// Starts at the most-derived declaration and walks the ancestor chain while
+// each declaration is a bare redeclaration -- MIRRORS ResolveInheritedType /
+// ResolveInheritedVisibility / the prop_access resolution, which resolve the
+// same way for the same reason. `nodefault` anywhere on the way down stops the
+// walk with "no default", because that is exactly what it means.
+function TPropMemberResolver.ResolveDefaultFor(const AClass, AProp: TSymbol; const APropName: string;
+  out AValue: string): Boolean;
+var
+  Anc   : TArray<TTypeAncestor>;
+  A     : TTypeAncestor        ;
+  AncSym: TSymbol              ;
+  Child : TSymbol              ;
+  Cls   : TDefaultClause       ;
+begin
+  AValue:= '';
+  Cls:= ClassifyDefaultClause(DeclTextOf(AProp), AValue);
+  if Cls = dcValue     then Exit(True);
+  if Cls = dcNoDefault then Exit(False);
+
+  Anc:= FStore.GetTransitiveAncestors(AClass.Id);
+  for A in Anc do
+  begin
+    if not (A.Resolved and (A.SymbolId > 0)) then Continue;
+    AncSym:= BodyOf(FStore.GetSymbolById(A.SymbolId));
+    if AncSym.Id <= 0 then Continue;
+    Child:= FStore.FindChildSymbolByName(AncSym.Id, APropName);
+    if (Child.Id <= 0) or (Child.Kind <> skProperty) then Continue;
+    Cls:= ClassifyDefaultClause(DeclTextOf(Child), AValue);
+    if Cls = dcValue     then Exit(True);
+    if Cls = dcNoDefault then Exit(False);
+    { dcAbsent: another bare redeclaration -- keep climbing. }
+  end;
+  AValue:= '';
+  Result:= False;
+end;
+
+// THE scope-aware name -> class step. One definition, three callers: the
+// ancestor climb bridging an unresolved heritage entry (ClassChain), the
+// bare-property-type bridge (ResolveViaBridgedAncestry), and Walk's
+// property-type classification.
+//
+// Delegates to ISymbolStore.ResolveTypeNameToClass, which applies the SHARED
+// scope rule (PickAncestorCandidateByScope: same unit -> unique uses hit ->
+// unique leading dotted-namespace segment -> decline) and chases type
+// ALIASES; the result is then reduced to the defining body via BodyOf, so a
+// forward-declaration stub never reaches a caller (a stub has no property
+// children -- the DevExpress forward-decl case).
+//
+// AScopeFileId must be the FileId of the class doing the referencing AT THIS
+// HOP -- the class that inherits the name, or the class that DECLARES the
+// property whose type this is -- never the FileId of the class the query was
+// rooted at (design criterion 7).
+//
+// Memoized per (name, scope) for the lifetime of ONE query. The cache is a
+// pure derivation of the index and performs no writes, so a --no-write-back
+// (read-only) store is unaffected.
+//
+// Id = 0 means the scope rule DECLINED, which is a correct outcome and never
+// a reason to retry the name with a scope-unaware lookup.
+function TPropMemberResolver.ResolveTypeInScope(const AName: string; AScopeFileId: Int64): TSymbol;
+var
+  Key: string;
+begin
+  Key:= LowerCase(AName) + '|' + IntToStr(AScopeFileId);
+  if FTypeCache.TryGetValue(Key, Result) then Exit;
+  Result:= BodyOf(FStore.ResolveTypeNameToClass(AName, AScopeFileId));
+  FTypeCache.AddOrSetValue(Key, Result);
+end;
+
+// Ordered list of the class + its ancestor classes (most-derived first).
+// Stops climbing at TPersistent/TObject when FOpts.ToPersistent.
+//
+// TWO sources feed the chain:
+//  (a) the ancestor edges the INDEXER already resolved -- read in one shot
+//      via GetTransitiveAncestors, exactly as before this change;
+//  (b) QUERY-TIME FALLBACK (design 2026-07-29-proptree-ancestor-scope,
+//      section 3.1, criteria 6-7). ResolveAncestry writes an UNRESOLVED row
+//      (ancestor_kind='?', ancestor_symbol_id=NULL) whenever it cannot
+//      disambiguate a same-named ancestor -- "when unsure, don't claim". This
+//      function used to SKIP those rows, so the climb stopped dead at the
+//      first one and EVERY inherited property above it vanished (the measured
+//      symptom: Vcl.StdCtrls.TEdit and cxButtons.TcxButton expose no Name /
+//      Tag / Left / Top). Each such row is now BRIDGED to its defining class
+//      by FStore.ResolveTypeNameToClass, which applies the SAME shared scope
+//      rule (PickAncestorCandidateByScope: same unit -> unique uses hit ->
+//      unique first-dotted-namespace-segment -> decline) but matches unit
+//      names TEXTUALLY, so -- unlike the index-time resolver -- it does NOT
+//      need unit_uses.target_file_id and therefore repairs indexes that are
+//      ALREADY ON DISK, with no re-index. A decline (Id=0) stays a decline:
+//      the chain simply stops there, exactly as it does today. Nothing here
+//      writes, so a --no-write-back (read-only) store is unaffected.
+//
+// SCOPE, per criterion 7: an unresolved row surfaced by
+// GetTransitiveAncestors' BFS may have been declared by ANY class in the
+// closure, not by the class the walk started from. The name is therefore
+// resolved in the unit of the class whose OWN heritage actually lists it --
+// ScopeSymbolFor over the most-derived-first Known list, which also documents
+// precisely what its last resort falls back to.
+//
+// GUARDS, in the order they apply to an unresolved row:
+//  * IsIndistinguishableFromClassRef -- refuse to bridge FROM a declaration
+//    the index cannot tell apart from a 'class of X' class reference;
+//  * Kind = skClass -- an ancestor that resolves to an INTERFACE symbol is
+//    never placed in the class chain. (This rejects interface SYMBOLS; it
+//    does not detect a same-named CLASS standing in for what was written as
+//    an interface heritage entry.)
+//  * CrossesGuiFramework -- criterion 5, enforced here rather than delegated,
+//    because the shared scope rule is skipped entirely for a single-candidate
+//    name (Vcl-vs-FMX only: a Vcl.* class reaching a System.* ancestor is
+//    legitimate and still bridges);
+//  * a visited-class-id set (each class is placed, and climbed FROM, at most
+//    once, so a self-referential or cyclic index terminates instead of
+//    spinning) plus a CMaxBridgedChainDepth cap on bridged recursion.
+function TPropMemberResolver.ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
+var
+  List   : TList<TSymbol>             ;
+  SeenIds: TDictionary<Int64, Boolean>;
+
+  // Place ASym in the chain unless it is not a class or is already there.
+  // Doubles as the cycle guard: False also means "do not climb from it".
+  function TryAdd(const ASym: TSymbol): Boolean;
+  begin
+    Result:= (ASym.Id > 0) and (ASym.Kind = skClass) and not SeenIds.ContainsKey(ASym.Id);
+    if not Result then Exit;
+    SeenIds.Add(ASym.Id, True);
+    List.Add(ASym);
+  end;
+
+  procedure ClimbFrom(const AFrom: TSymbol; ADepthLeft: Integer);
+  var
+    Anc  : TArray<TTypeAncestor>;
+    A    : TTypeAncestor        ;
+    Known: TList<TSymbol>       ; // AFrom + the resolved classes of its closure
+    Sym  : TSymbol              ;
+    Brid : TSymbol              ;
+    Decl : TSymbol              ; // the class whose OWN heritage lists A.Name
+  begin
+    if (AFrom.Id <= 0) or (ADepthLeft <= 0) then Exit;
+    Known:= TList<TSymbol>.Create;
+    try
+      Known.Add(AFrom);
+      Anc:= FStore.GetTransitiveAncestors(AFrom.Id);
+      for A in Anc do
+      begin
+        // When ToPersistent is on, do not enumerate the props of TPersistent /
+        // TObject themselves (and everything above is unreachable anyway).
+        { Both names -- an ALIAS of TPersistent must stop a --to-persistent
+          climb exactly as the written name does (A.ResolvedName carries the
+          class a late-resolved type alias landed on). }
+        if FOpts.ToPersistent and
+           (IsStopClass(A.Name) or ((A.ResolvedName <> '') and IsStopClass(A.ResolvedName))) then Break;
+        if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
+        begin
+          Sym:= BodyOf(FStore.GetSymbolById(A.SymbolId));
+          if (Sym.Id > 0) and (Sym.Kind = skClass) then
+          begin
+            Known.Add(Sym); // a later unresolved row may be ITS heritage entry
+            TryAdd(Sym);
+          end;
+        end
+        else if not A.Resolved then
+        begin
+          // Resolve in the scope of the class that actually inherits this
+          // name (criterion 7); AFrom itself only as a last resort -- see
+          // ScopeSymbolFor for exactly what that last resort does.
+          Decl:= ScopeSymbolFor(Known, AFrom, A.Name);
+          // Never bridge FROM something the index cannot tell apart from a
+          // 'class of X' class reference -- it has no instance surface to
+          // inherit. See IsIndistinguishableFromClassRef.
+          if IsIndistinguishableFromClassRef(Decl) then Continue;
+          // Bridge the unresolved ancestor NAME to its defining class in that
+          // class's unit scope (memoized -- the same broken edge is re-visited
+          // by every descendant walked in one query).
+          Brid:= ResolveTypeInScope(A.Name, Decl.FileId);
+          if (Brid.Id <= 0) or (Brid.Kind <> skClass) then Continue;
+          // Criterion 5, enforced HERE and not left to the scope rule: that
+          // rule is skipped entirely when the name has a single candidate.
+          // Vcl-vs-FMX ONLY -- a Vcl.* class reaching a System.* ancestor
+          // through an alias is legitimate and must still bridge. See
+          // CrossesGuiFramework.
+          if CrossesGuiFramework(Decl, Brid) then Continue;
+          if not (FOpts.ToPersistent and IsStopClass(Brid.Name)) and TryAdd(Brid) then
+            ClimbFrom(Brid, ADepthLeft - 1); // the bridged class's own chain
+        end;
+      end;
+    finally
+      Known.Free;
+    end;
+  end;
+
+begin
+  if (ARoot.Id > 0) and FChainCache.TryGetValue(ARoot.Id, Result) then Exit;
+  List   := TList<TSymbol>.Create;
+  SeenIds:= TDictionary<Int64, Boolean>.Create;
+  try
+    List.Add(ARoot);
+    if ARoot.Id > 0 then SeenIds.Add(ARoot.Id, True);
+    ClimbFrom(ARoot, CMaxBridgedChainDepth);
+    Result:= List.ToArray;
+    if ARoot.Id > 0 then FChainCache.AddOrSetValue(ARoot.Id, Result);
+  finally
+    SeenIds.Free;
+    List.Free;
+  end;
+end;
+
+// Resolve an empty-signature (redeclared) property's type by finding the
+// same-named property that DOES carry a signature in an ancestor class.
+// CLASS-ONLY (R3, Task 3): the ancestor closure returned by
+// GetTransitiveAncestors is unfiltered -- it also contains any INTERFACE
+// ancestors a class implements, in BFS (nearest-first) order alongside the
+// real class ancestors. An implemented interface can independently declare
+// a same-named property (Delphi interfaces support `property X: T read
+// GetX;`) with a COMPLETELY UNRELATED type. Without the (A.Kind = 'class')
+// guard, such an interface property can be found and returned BEFORE the
+// walk reaches the queried class's real base -- a wrong-CLASS type leaking
+// in from outside the class hierarchy entirely (worse than the covariance
+// "collapse to base" case: this is collapse to an unrelated type). Mirrors
+// ClassChain's own (A.Kind = 'class') filter, which is why CollectProps'
+// shadowing/DeclaredIn never suffers this -- only this ancestor-only-typed
+// fallback walk did.
+function TPropMemberResolver.ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
+var
+  Anc   : TArray<TTypeAncestor>;
+  A     : TTypeAncestor        ;
+  AncSym: TSymbol              ;
+  Child : TSymbol              ;
+  Tok   : string               ;
+begin
+  Result:= '';
+  Anc:= FStore.GetTransitiveAncestors(AClass.Id);
+  for A in Anc do
+  begin
+    if not (A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class')) then Continue;
+    // Re-resolve a forward-decl stub to its body before reading children.
+    AncSym:= BodyOf(FStore.GetSymbolById(A.SymbolId));
+    if AncSym.Id <= 0 then Continue;
+    Child:= FStore.FindChildSymbolByName(AncSym.Id, APropName);
+    if (Child.Id > 0) and (Child.Kind = skProperty) then
+    begin
+      Tok:= ParseTypeToken(Child.Signature);
+      if Tok <> '' then Exit(Tok);
+    end;
+  end;
+end;
+
+// Resolve an empty-modifiers property's EFFECTIVE visibility by finding the
+// same-named property that DOES carry a non-empty Modifiers in an ancestor
+// class. Mirrors ResolveInheritedType exactly, but over Modifiers instead of
+// Signature. Defensive: the current parser always stamps a non-empty
+// Modifiers (VisibilityOfSection defaults to 'public'), so this path is not
+// reachable via today's indexer output -- kept so a future/foreign producer
+// of blank Modifiers rows still resolves a visibility instead of the row
+// being dropped from a --min-visibility filter.
+function TPropMemberResolver.ResolveInheritedVisibility(const AClass: TSymbol; const APropName: string): string;
+var
+  Anc   : TArray<TTypeAncestor>;
+  A     : TTypeAncestor        ;
+  AncSym: TSymbol              ;
+  Child : TSymbol              ;
+  Vis   : string               ;
+begin
+  Result:= '';
+  Anc:= FStore.GetTransitiveAncestors(AClass.Id);
+  for A in Anc do
+  begin
+    if not (A.Resolved and (A.SymbolId > 0)) then Continue;
+    AncSym:= BodyOf(FStore.GetSymbolById(A.SymbolId));
+    if AncSym.Id <= 0 then Continue;
+    Child:= FStore.FindChildSymbolByName(AncSym.Id, APropName);
+    if (Child.Id > 0) and (Child.Kind = skProperty) then
+    begin
+      Vis:= Trim(Child.Modifiers);
+      if Vis <> '' then Exit(Vis);
+    end;
+  end;
+end;
+
+// R1 (Task 6): resolve a property's EFFECTIVE read/write accessor shape
+// (prop_access) for the case where its OWN declaration carries NO accessor
+// clause -- a bare 'property Color;' redeclaration whose stored prop_access is
+// '' (NULL). Finds the same-named property that DOES carry a non-empty
+// prop_access in the nearest ancestor. Mirrors ResolveInheritedType EXACTLY
+// (same class-only ancestor walk, nearest-first) but over PropAccess instead
+// of Signature -- so a bare redeclaration inherits the ancestor's ro/rw/wo.
+// CLASS-ONLY (R3, Task 3): the (A.Kind = 'class') guard excludes any
+// implemented INTERFACE that independently redeclares a same-named property
+// (Delphi interfaces support `property X: T read GetX;`) with an UNRELATED
+// accessor shape from interposing before the real class base -- identical to
+// the interface-filter rationale documented on ResolveInheritedType. Returns
+// '' when nothing up-tree carries an accessor clause either (the caller then
+// treats '' as writable -- the back-compat default).
+function TPropMemberResolver.ResolveInheritedPropAccess(const AClass: TSymbol; const APropName: string): string;
+var
+  Anc   : TArray<TTypeAncestor>;
+  A     : TTypeAncestor        ;
+  AncSym: TSymbol              ;
+  Child : TSymbol              ;
+  PA    : string               ;
+begin
+  Result:= '';
+  Anc:= FStore.GetTransitiveAncestors(AClass.Id);
+  for A in Anc do
+  begin
+    if not (A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class')) then Continue;
+    AncSym:= BodyOf(FStore.GetSymbolById(A.SymbolId));
+    if AncSym.Id <= 0 then Continue;
+    Child:= FStore.FindChildSymbolByName(AncSym.Id, APropName);
+    if (Child.Id > 0) and (Child.Kind = skProperty) then
+    begin
+      PA:= Trim(Child.PropAccess);
+      if PA <> '' then Exit(PA);
+    end;
+  end;
+end;
+
+// R4 (Task 4): a class CONST's (skConstDecl) effective visibility, for the
+// (common) case where its OWN Modifiers is blank. INVESTIGATED empirically
+// (indexed a throwaway fixture, inspected the `symbols` rows directly): the
+// parser's 'declConst' branch (DRagLint.Parser.Delphi13.pas, inside the
+// recursive Walk dispatcher, ~line 1238) calls Emit WITHOUT the
+// ASignature/AModifiers arguments at all -- unlike the 'declField'/
+// 'declProp' branches, which both pass AState.CurrentVisibility -- so a
+// class const's Modifiers column is '' UNCONDITIONALLY, regardless
+// of which visibility section it was actually declared under. Fixing the
+// parser is out of scope here (Task 4 is PropTree.pas-only, no re-index),
+// so the effective visibility is instead recovered from data already IN the
+// index: Delphi visibility sections are purely textual/linear -- every
+// member between one visibility keyword and the next shares that keyword's
+// Modifiers -- so the nearest PRECEDING sibling (by StartLine, among ALL
+// child kinds; fields/properties/methods all DO carry accurate Modifiers)
+// shares the const's real section. Falls back to 'public' -- Delphi's own
+// default for an unspecified/first class section -- only when no earlier
+// sibling carries any visibility info at all (the const is the class's
+// very first member). This is a best-effort reconstruction from real
+// sibling data, not a blind guess; it is NOT expected to be 100% correct on
+// every real corpus (e.g. a const that is the sole member of its own
+// section, preceded only by an EARLIER section's members, could inherit
+// the wrong section) -- documented as a known limitation.
+function TPropMemberResolver.ResolveConstVisibilityByProximity(const AClass: TSymbol; const AConst: TSymbol): string;
+var
+  Kids     : TArray<TSymbol>;
+  Kid      : TSymbol        ;
+  Best     : TSymbol        ;
+  HaveBest : Boolean        ;
+begin
+  HaveBest:= False;
+  Best    := Default(TSymbol);
+  Kids    := FStore.FindAllChildSymbols(AClass.Id);
+  for Kid in Kids do
+  begin
+    if Kid.Id = AConst.Id then Continue;
+    if Trim(Kid.Modifiers) = '' then Continue;         // no visibility signal on this sibling
+    if Kid.StartLine > AConst.StartLine then Continue; // must precede the const textually
+    if (not HaveBest) or (Kid.StartLine > Best.StartLine) or
+       ((Kid.StartLine = Best.StartLine) and (Kid.StartCol > Best.StartCol)) then
+    begin
+      Best    := Kid;
+      HaveBest:= True;
+    end;
+  end;
+  if HaveBest then Result:= Trim(Best.Modifiers)
+  else Result:= 'public'; // no earlier sibling at all -- Delphi's own implicit-section default
+end;
+
+// RESIDUAL resolver -- the lazy ancestry BRIDGE. Runs only when ParseTypeToken
+// AND ResolveInheritedType both failed, i.e. proptree is about to emit 'unknown'
+// for a bare-redeclared (empty-signature) property whose ancestry is broken by
+// an UNRESOLVED edge. The classic case: a TYPE-ALIAS ancestor
+// ('cxButtons.TcxBaseButton = Vcl.StdCtrls.TCustomButton') -- ResolveAncestry's
+// candidate set is class/interface only, so it never links an alias ancestor and
+// the whole VCL-inherited property surface (Align, Caption, Anchors, ...) loses
+// its type. This walks UP the chain BRIDGING each unresolved ancestor NAME to its
+// defining class via the scope-aware, alias-following FStore.ResolveTypeNameToClass
+// (scope = the unit of the class that actually INHERITS that name at that hop,
+// whose uses-clause / namespace prefix disambiguates e.g. Vcl from FMX -- see
+// Climb's rule below), and returns the first KNOWN type declared for APropName
+// above the break. '' when the walk still finds nothing (never fabricates a type).
+function TPropMemberResolver.ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string): string;
+var
+  Visited: TDictionary<string, Boolean>;
+
+  // Declared type of APropName directly on ASym (parseable signature), or ''.
+  function PropTypeOn(const ASym: TSymbol): string;
+  var Child: TSymbol;
+  begin
+    Result:= '';
+    if ASym.Id <= 0 then Exit;
+    Child:= FStore.FindChildSymbolByName(ASym.Id, APropName);
+    if (Child.Id > 0) and (Child.Kind = skProperty) then
+      Result:= ParseTypeToken(Child.Signature);
+  end;
+
+  function Climb(const ASym: TSymbol): string;
+  var
+    Anc  : TArray<TTypeAncestor>;
+    A    : TTypeAncestor        ;
+    Nxt  : TSymbol              ;
+    Tok  : string               ;
+    Key  : string               ;
+    Known: TList<TSymbol>       ; // ASym + the resolved classes of its closure
+    Sym  : TSymbol              ;
+    Decl : TSymbol              ; // the class whose OWN heritage lists A.Name
+  begin
+    Result:= '';
+    Anc:= FStore.GetTransitiveAncestors(ASym.Id);
+    Known:= TList<TSymbol>.Create;
+    try
+      Known.Add(ASym);
+      // (a) any already-RESOLVED CLASS ancestor that declares the property with
+      // a type. CLASS-ONLY (R3, Task 3, mirrors ResolveInheritedType's guard
+      // above): an implemented interface can appear in this same closure and
+      // independently redeclare a same-named property with an unrelated type --
+      // excluded so the bridge never resolves to a wrong-class type either.
+      for A in Anc do
+        if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
+        begin
+          Sym:= BodyOf(FStore.GetSymbolById(A.SymbolId));
+          // Same admission test ClimbFrom applies, so both Known lists hold
+          // real classes only and a zero-Id BodyOf result can never become a
+          // scope candidate.
+          if (Sym.Id > 0) and (Sym.Kind = skClass) then
+            Known.Add(Sym); // a later unresolved row may be ITS heritage entry
+          Tok:= PropTypeOn(Sym);
+          if Tok <> '' then Exit(Tok);
+        end;
+      // (b) bridge each UNRESOLVED ancestor name, then keep climbing from it.
+      // SCOPE (design criterion 7): resolve the name in the unit of the class
+      // that actually INHERITS it -- found by matching the name against each
+      // known class's own heritage, most-derived first -- falling back to the
+      // class this hop is climbing FROM. It used to pass AClass.FileId, the
+      // file of the ROOT class the whole query started from, at every hop;
+      // that contradicts ResolveTypeNameToClass's AScopeFileId contract and
+      // silently mis-scopes any break that occurs above a unit boundary.
+      for A in Anc do
+      begin
+        if A.Resolved then Continue;
+        Key:= LowerCase(A.Name);
+        if (Key = '') or Visited.ContainsKey(Key) then Continue;
+        Visited.Add(Key, True);
+        Decl:= ScopeSymbolFor(Known, ASym, A.Name);
+        Nxt := ResolveTypeInScope(A.Name, Decl.FileId);
+        if Nxt.Id <= 0 then Continue;
+        // Criterion 5, enforced HERE as well as in ClassChain.ClimbFrom: this
+        // walk reaches the very same single-candidate PickCandidate
+        // short-circuit, so without the guard a bare-redeclared property on a
+        // Vcl.* class could take its TYPE from a lone FMX-declared homonym
+        // with no scope check having run at all. Vcl-vs-FMX ONLY; see
+        // CrossesGuiFramework.
+        if CrossesGuiFramework(Decl, Nxt) then Continue;
+        Tok:= PropTypeOn(Nxt);   // declared directly on the bridged class?
+        if Tok <> '' then Exit(Tok);
+        Tok:= Climb(Nxt);        // else climb the bridged class's own chain
+        if Tok <> '' then Exit(Tok);
+      end;
+    finally
+      Known.Free;
+    end;
+  end;
+
+begin
+  Visited:= TDictionary<string, Boolean>.Create;
+  try
+    Visited.Add(LowerCase(AClass.Name), True);
+    Result:= Climb(AClass);
+  finally
+    Visited.Free;
+  end;
+end;
+
+// Known limitation: descendants are enumerated by NAME (FindDescendantNames ->
+// FindSymbolByExactNameAnywhere returns one homonym) and the recovered type is
+// derived from the querying class's file scope. A shared bare property reachable
+// from two differently-scoped subtrees (e.g. VCL TAlign vs FMX TAlignLayout) can
+// receive a scope-ambiguous type, last-writer-wins. Bounded by the bare-only
+// safety rule: the worst case is unknown -> maybe-wrong, NEVER correct -> wrong.
+// Follow-up: scope-aware descendant resolution.
+//
+// Class ids of AClass + its transitive (resolved) ancestors + transitive
+// descendants -- the connected tree reachable via RESOLVED edges. Used to
+// propagate a recovered property type onto every bare same-named occurrence.
+// Computed once per walked class (cached by the caller).
+function TPropMemberResolver.ClosureClassIds(const AClass: TSymbol): TArray<Int64>;
+var
+  Ids : TList<Int64>;
+  Seen: TDictionary<Int64, Boolean>;
+  A   : TTypeAncestor;
+  Nm  : string;
+  Sym : TSymbol;
+  procedure AddId(AId: Int64);
+  begin
+    if (AId > 0) and not Seen.ContainsKey(AId) then begin Seen.Add(AId, True); Ids.Add(AId); end;
+  end;
+begin
+  Ids  := TList<Int64>.Create;
+  Seen := TDictionary<Int64, Boolean>.Create;
+  try
+    AddId(AClass.Id);
+    for A in FStore.GetTransitiveAncestors(AClass.Id) do
+      if A.Resolved and (A.SymbolId > 0) then AddId(A.SymbolId);
+    for Nm in FStore.FindDescendantNames(AClass.Name) do
+    begin
+      Sym := BodyOf(FStore.FindSymbolByExactNameAnywhere(Nm));
+      if (Sym.Id > 0) and (Sym.Kind = skClass) then AddId(Sym.Id);
+    end;
+    Result := Ids.ToArray;
+  finally
+    Ids.Free;
+    Seen.Free;
+  end;
+end;
+
+// Stamp ATypeTok onto every class in AClassIds whose child property APropName
+// exists AND is bare (empty signature). Best-effort; never overwrites an
+// explicit type (the safety rule). Returns the number of rows updated.
+function TPropMemberResolver.PropagateBareType(const AClassIds: TArray<Int64>;
+  const APropName, ATypeTok: string): Integer;
+var
+  Cid  : Int64;
+  Child: TSymbol;
+begin
+  Result := 0;
+  for Cid in AClassIds do
+  begin
+    Child := FStore.FindChildSymbolByName(Cid, APropName);
+    if (Child.Id > 0) and (Child.Kind = skProperty) and (ParseTypeToken(Child.Signature) = '') then
+      if FStore.MemoizePropertyType(Child.Id, ATypeTok) then Inc(Result);
+  end;
+end;
+
+// The distinct property leaves visible on AClass (own + inherited), each
+// paired with the most-derived class that declares it. Dedupe by leaf name.
+//
+// ADeclaredBy hands back that class as a SYMBOL, not merely its qualified
+// name: the caller needs its FileId to resolve the property's TYPE in the
+// right unit scope (criterion 7, one layer below the ancestor climb -- a
+// property inherited from Vcl.Controls.TControl must have its type resolved
+// in Vcl.Controls, not in whatever unit the queried root happens to live in),
+// and its QualifiedName for the cross-namespace refusal. Both come from the
+// one symbol, so the two can never disagree about which class is meant.
+procedure TPropMemberResolver.CollectProps(const AClass: TSymbol;
+  out AOrder: TArray<TSymbol>; out ADeclaredBy: TArray<TSymbol>);
+var
+  Chain: TArray<TSymbol> ;
+  Cls  : TSymbol         ;
+  Kids : TArray<TSymbol> ;
+  Kid  : TSymbol         ;
+  Seen : TDictionary<string, Boolean>;
+  OL   : TList<TSymbol>  ;
+  DL   : TList<TSymbol>  ;
+  Key  : string          ;
+begin
+  Seen:= TDictionary<string, Boolean>.Create;
+  OL  := TList<TSymbol>.Create;
+  DL  := TList<TSymbol>.Create;
+  try
+    Chain:= ClassChain(AClass); // most-derived first -> shadowing is automatic
+    for Cls in Chain do
+    begin
+      Kids:= FStore.FindAllChildSymbols(Cls.Id);
+      for Kid in Kids do
+      begin
+        if Kid.Kind <> skProperty then Continue;
+        if IsPrivateModifiers(Kid.Modifiers) then Continue; // never resolves (owner ruling 2026-09-30)
+        Key:= LowerCase(Kid.Name);
+        if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
+        Seen.Add(Key, True);
+        OL.Add(Kid);
+        DL.Add(Cls);
+      end;
+    end;
+    AOrder     := OL.ToArray;
+    ADeclaredBy:= DL.ToArray;
+  finally
+    Seen.Free;
+    OL.Free;
+    DL.Free;
+  end;
+end;
+
+// R4 (Task 4): the distinct FIELD/CONST leaves visible on AClass (own +
+// inherited), each paired with the most-derived class that declares it.
+// Dedupe by leaf name. Mirrors CollectProps exactly (same ClassChain,
+// most-derived-first shadowing) but filters skField/skConstDecl instead of
+// skProperty, and is kept as a SEPARATE walk with its OWN Seen set --
+// deliberately NOT folded into CollectProps -- so the property engine's
+// already class-accurate (Task 3) behavior is never disturbed by this
+// addition. skConstDecl (a class-scoped `const X: T = v;`) is included
+// alongside skField because a typed class const is a required PAS-surface
+// leaf too (read-only; see Walk's field loop).
+procedure TPropMemberResolver.CollectFields(const AClass: TSymbol;
+  out AOrder: TArray<TSymbol>; out ADeclaredIn: TArray<string>);
+var
+  Chain: TArray<TSymbol> ;
+  Cls  : TSymbol         ;
+  Kids : TArray<TSymbol> ;
+  Kid  : TSymbol         ;
+  Seen : TDictionary<string, Boolean>;
+  OL   : TList<TSymbol>  ;
+  DL   : TList<string>   ;
+  Key  : string          ;
+begin
+  Seen:= TDictionary<string, Boolean>.Create;
+  OL  := TList<TSymbol>.Create;
+  DL  := TList<string >.Create;
+  try
+    Chain:= ClassChain(AClass); // most-derived first -> shadowing is automatic
+    for Cls in Chain do
+    begin
+      Kids:= FStore.FindAllChildSymbols(Cls.Id);
+      for Kid in Kids do
+      begin
+        if not (Kid.Kind in [skField, skConstDecl]) then Continue;
+        if IsPrivateModifiers(Kid.Modifiers) then Continue; // never resolves (owner ruling 2026-09-30)
+        Key:= LowerCase(Kid.Name);
+        if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
+        Seen.Add(Key, True);
+        OL.Add(Kid);
+        DL.Add(Cls.QualifiedName);
+      end;
+    end;
+    AOrder     := OL.ToArray;
+    ADeclaredIn:= DL.ToArray;
+  finally
+    Seen.Free;
+    OL.Free;
+    DL.Free;
+  end;
+end;
+
+// True when ASym is (or descends from) TComponent -- a REFERENCE type, not an
+// owned sub-object. Name-based over the ancestor closure (no RTTI), same
+// pragmatic style as IsStopClass. Used to leave referenced components unexpanded.
+function TPropMemberResolver.IsComponentType(const ASym: TSymbol): Boolean;
+var A: TTypeAncestor;
+begin
+  Result := SameText(ASym.Name, 'TComponent');
+  if Result then Exit;
+  for A in FStore.GetTransitiveAncestors(ASym.Id) do
+    if A.MatchesName('TComponent') then Exit(True); { alias AND its target }
+end;
+
+// One level of what used to be BuildPropTree's recursive Walk: the members of
+// AClass with their type, default, accessor, visibility and component-ness
+// decided exactly as the walk decided them, but with Path = the BARE member
+// name and no recursion. The recursion (and its depth budget, cycle guard and
+// Truncated flag) stays with the caller -- BuildPropTree's Walk, or
+// TPropMemberCache, which descends one path segment at a time.
+procedure TPropMemberResolver.ResolveMembers(const AClass: TSymbol; out AMembers: TArray<TPropNode>;
+  out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>);
+var
+  Nodes      : TList<TPropNode>;
+  Types      : TList<TSymbol>  ; // index-aligned with Nodes: the member's resolved class
+  CompRefs   : TList<Boolean>  ; // index-aligned with Nodes: a TreatRefsAsLeaves reference leaf
+  Order      : TArray<TSymbol>;
+  DeclaredBy : TArray<TSymbol>; // the class declaring Order[i] -- its scope
+  idx        : Integer        ;
+  Prop       : TSymbol        ;
+  Node       : TPropNode      ;
+  Tok        : string         ;
+  OwnTok     : string         ;
+  TypeSym    : TSymbol        ;
+  ClosureIds : TArray<Int64>  ;
+  ClosureDone: Boolean        ;
+  // R4 (Task 4): field/const leaves -- separate variable set, mirrors the
+  // property loop's shape but is a flat (non-recursive) emission.
+  FieldOrder     : TArray<TSymbol>;
+  FieldDeclaredIn: TArray<string> ;
+  FIdx           : Integer        ;
+  Fld            : TSymbol        ;
+  FNode          : TPropNode      ;
+  FVis           : string         ;
+  FTok           : string         ;
+  FTypeSym       : TSymbol        ;
+
+  procedure Add(const ANode: TPropNode; const AType: TSymbol; AIsRef: Boolean);
+  begin
+    Nodes   .Add(ANode );
+    Types   .Add(AType );
+    CompRefs.Add(AIsRef);
+  end;
+
+begin
+  Nodes   := TList<TPropNode>.Create;
+  Types   := TList<TSymbol  >.Create;
+  CompRefs:= TList<Boolean  >.Create;
+  try
+  ClosureDone:= False;
+  CollectProps(AClass, Order, DeclaredBy);
+  for idx:= 0 to High(Order) do
+  begin
+    Prop:= Order[idx];
+    Node:= Default(TPropNode);
+    Node.Path      := Prop.Name;
+    Node.DeclaredIn:= DeclaredBy[idx].QualifiedName;
+
+    // proptree/2 (Task 2, R2): EFFECTIVE visibility -- the most-derived
+    // declaration's own Modifiers (Prop is already the most-derived symbol
+    // per CollectProps' shadowing), so a published redeclaration of a
+    // protected/public ancestor property RAISES the effective visibility to
+    // published without any extra logic. Only when the own Modifiers is
+    // empty (defensive; not reachable via the current parser) do we fall
+    // back to the ancestor walk instead of leaving it blank.
+    Node.Visibility:= Trim(Prop.Modifiers);
+    if Node.Visibility = '' then
+      Node.Visibility:= ResolveInheritedVisibility(AClass, Prop.Name);
+
+    { The `default` clause, read from the declaring line. Prop is already the
+      most-derived declaration (CollectProps shadowing), so this is the default
+      that actually governs streaming for this class. A redeclaration without a
+      clause deliberately yields HasDefault=False rather than inheriting the
+      ancestor's: Delphi treats a bare redeclaration as reasserting the
+      ancestor's default, but proving that needs an ancestor walk this pass does
+      not do, and inventing a value is the one thing worse than reporting none. }
+    Node.HasDefault:= ResolveDefaultFor(AClass, Prop, Prop.Name, Node.DefaultValue);
+
+    // Normalize at the single point where the effective value is finalized
+    // (covers BOTH the own-declaration and the ancestor-walk paths above):
+    // the parser's Modifiers carries a 'strict ' prefix for 'strict private'/
+    // 'strict protected' sections (unit-scoped access, Delphi's `strict`
+    // keyword), but the documented proptree/2 consumer contract is the
+    // 5-value domain 'published'|'public'|'protected'|'private'|''. The
+    // strict/non-strict distinction is same-unit-only and irrelevant to
+    // cross-unit assignability (what proptree exists to answer), so
+    // collapsing it is semantically lossless.
+    if Node.Visibility = 'strict private'   then Node.Visibility:= 'private'
+    else if Node.Visibility = 'strict protected' then Node.Visibility:= 'protected';
+    // Owner ruling 2026-09-30: a private member never resolves (see
+    // IsPrivateModifiers). CollectProps already refuses a stamped one; this
+    // catches the defensive blank-Modifiers case recovered up-tree.
+    if Node.Visibility = 'private' then Continue;
+
+    // R1 (Task 6): REAL property writability from the resolved read/write
+    // accessor shape (prop_access). Prop is already the most-derived
+    // declaration (CollectProps shadowing), so Prop.PropAccess is its OWN
+    // accessor clause; when empty (a bare 'property Color;' redeclaration)
+    // resolve it up-tree from the nearest CLASS ancestor with a non-empty
+    // clause -- MIRRORS the Signature/type resolution above (own decl else
+    // nearest class ancestor, interface-filtered). is_writable is then
+    // (resolved <> 'ro'): 'rw'/'wo' -> writable, 'ro' -> not. An empty
+    // resolved value (no accessor clause anywhere up-tree, or a pre-v17 /
+    // un-re-indexed DB whose prop_access is NULL) defaults TRUE -- today's
+    // back-compat behaviour. 'wo' (write-only) is writable: a valid assignment
+    // TARGET (the editor handles source-vs-target direction separately).
+    var PropAcc: string:= Trim(Prop.PropAccess);
+    if PropAcc = '' then PropAcc:= ResolveInheritedPropAccess(AClass, Prop.Name);
+    Node.IsWritable:= (PropAcc = '') or (PropAcc <> 'ro');
+    Node.MemberKind:= 'property';
+
+    // Parse the type from this property's own signature; if empty (a bare
+    // redeclaration) resolve it from an ancestor that carries a signature, and
+    // -- as a last resort before 'unknown' -- BRIDGE across an unresolved
+    // (typically type-alias) ancestor edge to the class that really declares it.
+    OwnTok   := ParseTypeToken(Prop.Signature);
+    Tok      := OwnTok;
+    if Tok = '' then Tok:= ResolveInheritedType(AClass, Prop.Name);
+    if Tok = '' then
+      Tok:= ResolveViaBridgedAncestry(AClass, Prop.Name);
+
+    if Tok = '' then
+    begin
+      Node.TypeName    := 'unknown';
+      Node.Kind        := 'unknown';
+      Node.IsClassTyped:= False;
+      Add(Node, Default(TSymbol), False);
+      Continue; // no type -> no recursion
+    end;
+
+    // Persist a RECOVERED type (own signature was empty, resolved up-tree) for
+    // BOTH recovery paths -- not just the bridge -- then propagate it DOWN/UP
+    // across the queried class's connected tree onto every bare occurrence.
+    if (OwnTok = '') and (Tok <> '') then
+    begin
+      if not ClosureDone then begin ClosureIds:= ClosureClassIds(AClass); ClosureDone:= True; end;
+      PropagateBareType(ClosureIds, Prop.Name, Tok);
+      // Ensure the queried row itself is stamped even if the closure walk
+      // somehow missed it (e.g. name-lookup ambiguity): direct memoize.
+      if Prop.Id > 0 then FStore.MemoizePropertyType(Prop.Id, Tok);
+    end;
+
+    Node.TypeName:= Tok;
+
+    // Classify: resolve the type name IN THE UNIT SCOPE OF THE CLASS THAT
+    // DECLARES THIS PROPERTY -- criterion 7 one layer below the ancestor
+    // climb. This used to be FStore.FindSymbolByExactNameAnywhere(Tok), which
+    // takes whichever same-named symbol the index yields first and so gave
+    // Vcl.Controls.TControl.Parent (declared ': TWinControl') the type
+    // FMX.Controls.Win.TWinControl, then recursed into it -- a Vcl class
+    // reporting an FMX property surface. ResolveTypeInScope applies the shared
+    // scope rule against the DECLARING class's unit and reduces a forward-decl
+    // stub to its body, so a nested class still never enumerates 0 properties
+    // (the DevExpress forward-decl case the old stub re-resolution existed for).
+    TypeSym:= ResolveTypeInScope(Tok, DeclaredBy[idx].FileId);
+    // Criterion 5, enforced HERE for the same reason the ancestor climb
+    // enforces it rather than delegating: PickCandidate short-circuits on a
+    // lone candidate, so the scope rule never runs for a type name with
+    // exactly one -- possibly wrong-framework -- definition. Vcl-vs-FMX ONLY:
+    // a VCL class's 'System.*'-typed property (TBasicAction, TList,
+    // TComponent, ...) is an ordinary RTL reference and must still expand.
+    // See CrossesGuiFramework (and note its guarantee is PER HOP: an undotted
+    // declaring unit is not a GUI framework and is never refused).
+    if (TypeSym.Id > 0) and CrossesGuiFramework(DeclaredBy[idx], TypeSym) then
+      TypeSym:= Default(TSymbol);
+    // A DECLINE (Id = 0) leaves the leaf exactly where an unresolvable type
+    // leaves it today -- Kind='scalar', not recursed into, TypeName still the
+    // token as written. It is never retried with a scope-unaware lookup: a
+    // fuller tree bought by a wrong type is a defect, not a feature.
+    if (TypeSym.Id > 0) and (TypeSym.Kind = skClass) then
+    begin
+      // A referenced TComponent (PopupMenu, Action, a nested control) is NOT an
+      // owned sub-object. With TreatRefsAsLeaves it is a REFERENCE LEAF -- emitted
+      // but not recursed into -- so the tree is not flooded by TComponent's whole
+      // surface (.Components/.Owner/.Observers/...). Owned TPersistent sub-objects
+      // (TFont, ...) are unaffected and still expand.
+      if FOpts.TreatRefsAsLeaves and IsComponentType(TypeSym) then
+      begin
+        Node.Kind        := 'class';
+        Node.IsClassTyped:= False;   // a reference; not recursed into
+        Add(Node, TypeSym, True);
+        Continue;
+      end;
+
+      Node.Kind        := 'class';
+      Node.IsClassTyped:= True;
+      Add(Node, TypeSym, False); // the caller decides whether to descend
+    end
+    else
+    begin
+      Node.Kind        := 'scalar';
+      Node.IsClassTyped:= False;
+      Add(Node, Default(TSymbol), False);
+    end;
+  end;
+
+  // R4 (Task 4): own field/const leaves for THIS class, at the SAME prefix
+  // depth. Flat leaves only -- unlike class-typed PROPERTIES, a class-typed
+  // FIELD is never recursed into (out of scope for this task; the field
+  // itself is the assignment target).
+  CollectFields(AClass, FieldOrder, FieldDeclaredIn);
+  for FIdx:= 0 to High(FieldOrder) do
+  begin
+    Fld  := FieldOrder[FIdx];
+    FNode:= Default(TPropNode);
+    FNode.Path      := Fld.Name;
+    FNode.DeclaredIn:= FieldDeclaredIn[FIdx];
+    FNode.MemberKind:= 'field';
+
+    // Effective visibility. A plain field's Modifiers is always populated
+    // by the parser (declField stamps AState.CurrentVisibility, same as
+    // declProp) -- read directly. A class CONST's Modifiers is NEVER
+    // populated (verified empirically -- see ResolveConstVisibilityByProximity's
+    // comment) -- recovered from the nearest visibility-bearing sibling.
+    FVis:= Trim(Fld.Modifiers);
+    if (FVis = '') and (Fld.Kind = skConstDecl) then
+      FVis:= ResolveConstVisibilityByProximity(AClass, Fld);
+    if FVis = 'strict private'        then FVis:= 'private'
+    else if FVis = 'strict protected' then FVis:= 'protected';
+    if FVis = 'private' then Continue; // e.g. a const whose recovered section is private
+    FNode.Visibility:= FVis;
+
+    // Field-scoped writability (Task 4) -- independent of, and does not
+    // touch, the staged property IsWritable path above. A plain field is
+    // writable; a class CONST is a compile-time constant (typed or not) --
+    // never assignable.
+    FNode.IsWritable:= Fld.Kind <> skConstDecl;
+
+    FTok:= ParseTypeToken(Fld.Signature);
+    if FTok = '' then
+    begin
+      FNode.TypeName    := 'unknown';
+      FNode.Kind        := 'unknown';
+      FNode.IsClassTyped:= False;
+    end
+    else
+    begin
+      FNode.TypeName:= FTok;
+      // DELIBERATELY still the scope-unaware lookup, unlike the property loop
+      // above. A field leaf is FLAT -- never recursed into -- so the resolved
+      // symbol is not stored, not climbed, and cannot splice another
+      // framework's surface into the tree; its only observable effect is the
+      // 'class' vs 'scalar' label, and "is there a class of this name" is a
+      // question no scope changes the answer to in practice. Routing it
+      // through the scope rule would only let a DECLINE downgrade a genuinely
+      // class-typed field to 'scalar' -- losing information to buy no
+      // correctness. Revisit if/when field leaves ever recurse.
+      FTypeSym:= FStore.FindSymbolByExactNameAnywhere(FTok);
+      if (FTypeSym.Id > 0) and (FTypeSym.Kind = skClass) then
+      begin
+        FNode.Kind        := 'class';
+        FNode.IsClassTyped:= True; // NOT recursed into -- flat leaf (R4 scope)
+      end
+      else
+      begin
+        FNode.Kind        := 'scalar';
+        FNode.IsClassTyped:= False;
+      end;
+    end;
+    Add(FNode, Default(TSymbol), False);
+  end;
+  AMembers  := Nodes.ToArray;
+  ATypes    := Types.ToArray;
+  AIsCompRef:= CompRefs.ToArray;
+  finally
+    CompRefs.Free;
+    Types   .Free;
+    Nodes   .Free;
+  end;
+end;
+
 function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
   const AOpts: TPropTreeOptions): TPropTree;
 var
-  Nodes    : TList<TPropNode>;
-  Truncated: Boolean         ;
-  // Per-QUERY memoization for the two scope-aware lookups (each hits the DB
-  // several times, and both are re-asked constantly: ClassChain is called at
-  // least twice per walked class -- CollectProps + CollectFields -- plus once
-  // more for every path a class-typed property is re-expanded on, and a type
-  // name is re-resolved for every property leaf that names it). Both caches are
-  // pure query-scoped derivations of the index; nothing here writes to the
-  // store, so --no-write-back (a read-only store handle) is unaffected.
-  ChainCache: TDictionary<Int64 , TArray<TSymbol>>; // class id -> its resolved chain
-  TypeCache : TDictionary<string, TSymbol        >; // 'lowername|scopefileid' -> resolved class
-  // Reads a declaring source line, caching each file once per query. The
-  // `default` clause is not indexed (storing it would change extraction and
-  // cost an extractor-version bump, which re-parses every database), so it is
-  // read from the declaring source line -- the same trick GetClassSurface uses.
-  //
-  // v(A2): the reader itself now lives in DRagLint.Core.DeclText, because
-  // `query find --decl-contains` needs the identical thing. It was lifted
-  // rather than copied: the T3j defect in the doc path was a THIRD copy of a
-  // window predicate that had quietly stopped matching the comment describing
-  // it. Behaviour here is unchanged -- same per-file cache, same span join,
-  // same '' -means-unknown contract.
-  DeclText  : TDeclTextReader;
-
-  // The declaring source text of ASym, StartLine..EndLine joined with a space.
-  // Empty when the file is unreadable or the range is nonsense -- an empty
-  // result means "unknown", never "no default".
-  function DeclTextOf(const ASym: TSymbol): string;
-  begin
-    Result:= DeclText.TextOf(ASym);
-  end;
-
-  // True when ALow_ has AWord as a whole word starting at APos (so 'default'
-  // inside 'nodefault' or 'DefaultDrawing' does not match).
-  function IsWholeWordAt(const ALow: string; APos, ALen: Integer): Boolean;
-  begin
-    Result:= ((APos = 1) or (not CharInSet(ALow[APos - 1], ['a'..'z', '0'..'9', '_']))) and
-             ((APos + ALen > Length(ALow)) or
-              (not CharInSet(ALow[APos + ALen], ['a'..'z', '0'..'9', '_'])));
-  end;
-
-  function HasWholeWord(const ALow, AWord: string): Boolean;
-  var P: Integer;
-  begin
-    Result:= False;
-    P:= 1;
-    repeat
-      P:= PosEx(AWord, ALow, P);
-      if P = 0 then Exit(False);
-      if IsWholeWordAt(ALow, P, Length(AWord)) then Exit(True);
-      Inc(P, Length(AWord));
-    until False;
-  end;
-
-  // Classifies a property declaration's `default` clause. THREE outcomes, not
-  // two -- collapsing them is what made bare redeclarations report no default:
-  //
-  //   dcValue    -- `default <X>`; AValue is the raw token, verbatim.
-  //   dcNoDefault-- `nodefault`. An EXPLICIT cancellation of an inherited
-  //                 default (real and common: `property Color nodefault;`).
-  //                 It must STOP the ancestor walk, not continue it.
-  //   dcAbsent   -- no clause at all. For a BARE REDECLARATION
-  //                 (`property AutoSize;`, used to raise visibility) Delphi
-  //                 keeps the ancestor's default, so the caller walks UP.
-  //                 A bare `default;` lands here too: that is the default-ARRAY-
-  //                 PROPERTY directive and carries no value; array properties
-  //                 are not DFM-streamed, so walking up is harmless.
-  function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;
-  var
-    LowText: string ;
-    P, i, j: Integer;
-    Depth  : Integer; { bracket nesting while capturing a SET default }
-    Tok    : string ;
-  begin
-    AValue := '';
-    LowText:= LowerCase(ADeclText);
-    if ADeclText = '' then Exit(dcAbsent);
-    if HasWholeWord(LowText, 'nodefault') then Exit(dcNoDefault);
-
-    { A `stored` clause other than `stored True` DESTROYS the sparse-DFM premise,
-      so there is no usable default here even when a `default` clause is present.
-
-      "absent ==> the value equals the declared default" holds only for a
-      property that is streamed unconditionally. The VCL's own Color is the
-      case that matters -- Vcl.Controls.pas:1996 declares it
-
-        property Color: TColor read FColor write SetColor
-          stored IsColorStored default clWindow;
-
-      With ParentColor=True, IsColorStored is False and Color is omitted
-      REGARDLESS of its value. Reading that absence as clWindow and then writing
-      it across is doubly wrong: the value may be different, and TControl.SetColor
-      clears FParentColor, so the converted control silently stops inheriting its
-      parent's colour. DevExpress carries many `stored IsXStored` pairs too.
-
-      dcAbsent is the honest answer -- "cannot tell" -- and the caller already
-      treats that as unknown and reports it rather than inventing a value.
-      `stored True` is the explicit form of the default and stays usable. }
-    P:= 1;
-    repeat
-      P:= PosEx('stored', LowText, P);
-      if P = 0 then Break;
-      if IsWholeWordAt(LowText, P, 6) then
-      begin
-        i:= P + 6;
-        while (i <= Length(LowText)) and CharInSet(LowText[i], [' ', #9]) do Inc(i);
-        j:= i;
-        while (j <= Length(LowText)) and (not CharInSet(LowText[j], [' ', #9, ';'])) do Inc(j);
-        if not SameText(Copy(ADeclText, i, j - i), 'True') then Exit(dcAbsent);
-        Break;
-      end;
-      Inc(P, 6);
-    until False;
-
-    P:= 1;
-    repeat
-      P:= PosEx('default', LowText, P);
-      if P = 0 then Exit(dcAbsent);
-      if IsWholeWordAt(LowText, P, 7) then Break;
-      Inc(P, 7);
-    until False;
-
-    i:= P + 7;
-    while (i <= Length(ADeclText)) and CharInSet(ADeclText[i], [' ', #9]) do Inc(i);
-
-    { A SET default is a bracketed list and contains spaces:
-      `property Anchors: TAnchors ... default [akLeft, akTop];`. Stopping at the
-      first space truncated it to `[akLeft,` -- harmless while nothing emitted
-      the value, and a MALFORMED .dfm once D3 started writing it out. Set
-      defaults are pervasive in the VCL (Anchors, BorderIcons, Options...), so
-      this is the common case, not an exotic one.
-
-      An UNBALANCED bracket yields dcAbsent rather than a partial token: an
-      unreadable declaration is unknown, and inventing half a value is the one
-      outcome worse than admitting we cannot tell. }
-    if (i <= Length(ADeclText)) and (ADeclText[i] = '[') then
-    begin
-      Depth:= 0;
-      j:= i;
-      while j <= Length(ADeclText) do
-      begin
-        if ADeclText[j] = '[' then Inc(Depth)
-        else if ADeclText[j] = ']' then
-        begin
-          Dec(Depth);
-          if Depth = 0 then Break;
-        end;
-        Inc(j);
-      end;
-      if (Depth <> 0) or (j > Length(ADeclText)) then Exit(dcAbsent);
-      AValue:= Trim(Copy(ADeclText, i, j - i + 1));
-      Exit(dcValue);
-    end;
-
-    j:= i;
-    while (j <= Length(ADeclText)) and (not CharInSet(ADeclText[j], [' ', #9, ';'])) do Inc(j);
-    Tok:= Trim(Copy(ADeclText, i, j - i));
-    if Tok = '' then Exit(dcAbsent); { bare `default;` -- array-property directive }
-    AValue:= Tok;
-    Result:= dcValue;
-  end;
-
-  // True when a class symbol is a mere forward declaration ('TFoo = class;')
-  // rather than the real body. A forward decl spans a single line and carries no
-  // heritage; the parser emits it as a separate skClass symbol with no property
-  // children. DevExpress forward-declares nearly every class, so resolving a
-  // qname to the stub yields 0 properties -- ResolveClassByQName must skip it.
-  function IsForwardDeclClass(const S: TSymbol): Boolean;
-  begin
-    Result:= (S.Heritage.Trim = '') and (S.EndLine <= S.StartLine);
-  end;
-
-  // Resolve a class qname/name to its class-kind defining symbol; Id=0 if none.
-  // Prefers the real body over a forward-declaration stub (both are indexed as
-  // separate skClass symbols for a forward-declared class); falls back to the
-  // first skClass if only stubs exist.
-  function ResolveClassByQName(const AQName: string): TSymbol;
-  var
-    Cands   : TArray<TSymbol>;
-    S       : TSymbol         ;
-    FirstAny: TSymbol         ;
-    HaveAny : Boolean         ;
-  begin
-    Result  := Default(TSymbol);
-    FirstAny:= Default(TSymbol);
-    HaveAny := False;
-    Cands   := AStore.FindSymbolsByQualifiedName(AQName);
-    for S in Cands do
-      if S.Kind = skClass then
-      begin
-        if not HaveAny then begin FirstAny:= S; HaveAny:= True; end;
-        if not IsForwardDeclClass(S) then Exit(S); // the real body -- prefer it
-      end;
-    if HaveAny then Result:= FirstAny; // only forward stubs found -- best effort
-  end;
-
-  // If ASym is a forward-declaration stub, re-resolve to the defining body by
-  // qname (the body carries the property children); otherwise return ASym as-is.
-  // type_ancestors / GetSymbolById can hand back the stub for a forward-declared
-  // ancestor, so every place that reads an ancestor's children must go via this.
-  function BodyOf(const ASym: TSymbol): TSymbol;
-  var
-    Body: TSymbol;
-  begin
-    Result:= ASym;
-    if (ASym.Id > 0) and (ASym.Kind = skClass) and IsForwardDeclClass(ASym) then
-    begin
-      Body:= ResolveClassByQName(ASym.QualifiedName);
-      if (Body.Id > 0) and not IsForwardDeclClass(Body) then Result:= Body;
-    end;
-  end;
-
-  // The default that actually governs streaming for APropName on AClass.
-  //
-  // Starts at the most-derived declaration and walks the ancestor chain while
-  // each declaration is a bare redeclaration -- MIRRORS ResolveInheritedType /
-  // ResolveInheritedVisibility / the prop_access resolution, which resolve the
-  // same way for the same reason. `nodefault` anywhere on the way down stops the
-  // walk with "no default", because that is exactly what it means.
-  function ResolveDefaultFor(const AClass, AProp: TSymbol; const APropName: string;
-    out AValue: string): Boolean;
-  var
-    Anc   : TArray<TTypeAncestor>;
-    A     : TTypeAncestor        ;
-    AncSym: TSymbol              ;
-    Child : TSymbol              ;
-    Cls   : TDefaultClause       ;
-  begin
-    AValue:= '';
-    Cls:= ClassifyDefaultClause(DeclTextOf(AProp), AValue);
-    if Cls = dcValue     then Exit(True);
-    if Cls = dcNoDefault then Exit(False);
-
-    Anc:= AStore.GetTransitiveAncestors(AClass.Id);
-    for A in Anc do
-    begin
-      if not (A.Resolved and (A.SymbolId > 0)) then Continue;
-      AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
-      if AncSym.Id <= 0 then Continue;
-      Child:= AStore.FindChildSymbolByName(AncSym.Id, APropName);
-      if (Child.Id <= 0) or (Child.Kind <> skProperty) then Continue;
-      Cls:= ClassifyDefaultClause(DeclTextOf(Child), AValue);
-      if Cls = dcValue     then Exit(True);
-      if Cls = dcNoDefault then Exit(False);
-      { dcAbsent: another bare redeclaration -- keep climbing. }
-    end;
-    AValue:= '';
-    Result:= False;
-  end;
-
-  // THE scope-aware name -> class step. One definition, three callers: the
-  // ancestor climb bridging an unresolved heritage entry (ClassChain), the
-  // bare-property-type bridge (ResolveViaBridgedAncestry), and Walk's
-  // property-type classification.
-  //
-  // Delegates to ISymbolStore.ResolveTypeNameToClass, which applies the SHARED
-  // scope rule (PickAncestorCandidateByScope: same unit -> unique uses hit ->
-  // unique leading dotted-namespace segment -> decline) and chases type
-  // ALIASES; the result is then reduced to the defining body via BodyOf, so a
-  // forward-declaration stub never reaches a caller (a stub has no property
-  // children -- the DevExpress forward-decl case).
-  //
-  // AScopeFileId must be the FileId of the class doing the referencing AT THIS
-  // HOP -- the class that inherits the name, or the class that DECLARES the
-  // property whose type this is -- never the FileId of the class the query was
-  // rooted at (design criterion 7).
-  //
-  // Memoized per (name, scope) for the lifetime of ONE query. The cache is a
-  // pure derivation of the index and performs no writes, so a --no-write-back
-  // (read-only) store is unaffected.
-  //
-  // Id = 0 means the scope rule DECLINED, which is a correct outcome and never
-  // a reason to retry the name with a scope-unaware lookup.
-  function ResolveTypeInScope(const AName: string; AScopeFileId: Int64): TSymbol;
-  var
-    Key: string;
-  begin
-    Key:= LowerCase(AName) + '|' + IntToStr(AScopeFileId);
-    if TypeCache.TryGetValue(Key, Result) then Exit;
-    Result:= BodyOf(AStore.ResolveTypeNameToClass(AName, AScopeFileId));
-    TypeCache.AddOrSetValue(Key, Result);
-  end;
-
-  // Ordered list of the class + its ancestor classes (most-derived first).
-  // Stops climbing at TPersistent/TObject when AOpts.ToPersistent.
-  //
-  // TWO sources feed the chain:
-  //  (a) the ancestor edges the INDEXER already resolved -- read in one shot
-  //      via GetTransitiveAncestors, exactly as before this change;
-  //  (b) QUERY-TIME FALLBACK (design 2026-07-29-proptree-ancestor-scope,
-  //      section 3.1, criteria 6-7). ResolveAncestry writes an UNRESOLVED row
-  //      (ancestor_kind='?', ancestor_symbol_id=NULL) whenever it cannot
-  //      disambiguate a same-named ancestor -- "when unsure, don't claim". This
-  //      function used to SKIP those rows, so the climb stopped dead at the
-  //      first one and EVERY inherited property above it vanished (the measured
-  //      symptom: Vcl.StdCtrls.TEdit and cxButtons.TcxButton expose no Name /
-  //      Tag / Left / Top). Each such row is now BRIDGED to its defining class
-  //      by AStore.ResolveTypeNameToClass, which applies the SAME shared scope
-  //      rule (PickAncestorCandidateByScope: same unit -> unique uses hit ->
-  //      unique first-dotted-namespace-segment -> decline) but matches unit
-  //      names TEXTUALLY, so -- unlike the index-time resolver -- it does NOT
-  //      need unit_uses.target_file_id and therefore repairs indexes that are
-  //      ALREADY ON DISK, with no re-index. A decline (Id=0) stays a decline:
-  //      the chain simply stops there, exactly as it does today. Nothing here
-  //      writes, so a --no-write-back (read-only) store is unaffected.
-  //
-  // SCOPE, per criterion 7: an unresolved row surfaced by
-  // GetTransitiveAncestors' BFS may have been declared by ANY class in the
-  // closure, not by the class the walk started from. The name is therefore
-  // resolved in the unit of the class whose OWN heritage actually lists it --
-  // ScopeSymbolFor over the most-derived-first Known list, which also documents
-  // precisely what its last resort falls back to.
-  //
-  // GUARDS, in the order they apply to an unresolved row:
-  //  * IsIndistinguishableFromClassRef -- refuse to bridge FROM a declaration
-  //    the index cannot tell apart from a 'class of X' class reference;
-  //  * Kind = skClass -- an ancestor that resolves to an INTERFACE symbol is
-  //    never placed in the class chain. (This rejects interface SYMBOLS; it
-  //    does not detect a same-named CLASS standing in for what was written as
-  //    an interface heritage entry.)
-  //  * CrossesGuiFramework -- criterion 5, enforced here rather than delegated,
-  //    because the shared scope rule is skipped entirely for a single-candidate
-  //    name (Vcl-vs-FMX only: a Vcl.* class reaching a System.* ancestor is
-  //    legitimate and still bridges);
-  //  * a visited-class-id set (each class is placed, and climbed FROM, at most
-  //    once, so a self-referential or cyclic index terminates instead of
-  //    spinning) plus a CMaxBridgedChainDepth cap on bridged recursion.
-  function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
-  var
-    List   : TList<TSymbol>             ;
-    SeenIds: TDictionary<Int64, Boolean>;
-
-    // Place ASym in the chain unless it is not a class or is already there.
-    // Doubles as the cycle guard: False also means "do not climb from it".
-    function TryAdd(const ASym: TSymbol): Boolean;
-    begin
-      Result:= (ASym.Id > 0) and (ASym.Kind = skClass) and not SeenIds.ContainsKey(ASym.Id);
-      if not Result then Exit;
-      SeenIds.Add(ASym.Id, True);
-      List.Add(ASym);
-    end;
-
-    procedure ClimbFrom(const AFrom: TSymbol; ADepthLeft: Integer);
-    var
-      Anc  : TArray<TTypeAncestor>;
-      A    : TTypeAncestor        ;
-      Known: TList<TSymbol>       ; // AFrom + the resolved classes of its closure
-      Sym  : TSymbol              ;
-      Brid : TSymbol              ;
-      Decl : TSymbol              ; // the class whose OWN heritage lists A.Name
-    begin
-      if (AFrom.Id <= 0) or (ADepthLeft <= 0) then Exit;
-      Known:= TList<TSymbol>.Create;
-      try
-        Known.Add(AFrom);
-        Anc:= AStore.GetTransitiveAncestors(AFrom.Id);
-        for A in Anc do
-        begin
-          // When ToPersistent is on, do not enumerate the props of TPersistent /
-          // TObject themselves (and everything above is unreachable anyway).
-          { Both names -- an ALIAS of TPersistent must stop a --to-persistent
-            climb exactly as the written name does (A.ResolvedName carries the
-            class a late-resolved type alias landed on). }
-          if AOpts.ToPersistent and
-             (IsStopClass(A.Name) or ((A.ResolvedName <> '') and IsStopClass(A.ResolvedName))) then Break;
-          if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
-          begin
-            Sym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
-            if (Sym.Id > 0) and (Sym.Kind = skClass) then
-            begin
-              Known.Add(Sym); // a later unresolved row may be ITS heritage entry
-              TryAdd(Sym);
-            end;
-          end
-          else if not A.Resolved then
-          begin
-            // Resolve in the scope of the class that actually inherits this
-            // name (criterion 7); AFrom itself only as a last resort -- see
-            // ScopeSymbolFor for exactly what that last resort does.
-            Decl:= ScopeSymbolFor(Known, AFrom, A.Name);
-            // Never bridge FROM something the index cannot tell apart from a
-            // 'class of X' class reference -- it has no instance surface to
-            // inherit. See IsIndistinguishableFromClassRef.
-            if IsIndistinguishableFromClassRef(Decl) then Continue;
-            // Bridge the unresolved ancestor NAME to its defining class in that
-            // class's unit scope (memoized -- the same broken edge is re-visited
-            // by every descendant walked in one query).
-            Brid:= ResolveTypeInScope(A.Name, Decl.FileId);
-            if (Brid.Id <= 0) or (Brid.Kind <> skClass) then Continue;
-            // Criterion 5, enforced HERE and not left to the scope rule: that
-            // rule is skipped entirely when the name has a single candidate.
-            // Vcl-vs-FMX ONLY -- a Vcl.* class reaching a System.* ancestor
-            // through an alias is legitimate and must still bridge. See
-            // CrossesGuiFramework.
-            if CrossesGuiFramework(Decl, Brid) then Continue;
-            if not (AOpts.ToPersistent and IsStopClass(Brid.Name)) and TryAdd(Brid) then
-              ClimbFrom(Brid, ADepthLeft - 1); // the bridged class's own chain
-          end;
-        end;
-      finally
-        Known.Free;
-      end;
-    end;
-
-  begin
-    if (ARoot.Id > 0) and ChainCache.TryGetValue(ARoot.Id, Result) then Exit;
-    List   := TList<TSymbol>.Create;
-    SeenIds:= TDictionary<Int64, Boolean>.Create;
-    try
-      List.Add(ARoot);
-      if ARoot.Id > 0 then SeenIds.Add(ARoot.Id, True);
-      ClimbFrom(ARoot, CMaxBridgedChainDepth);
-      Result:= List.ToArray;
-      if ARoot.Id > 0 then ChainCache.AddOrSetValue(ARoot.Id, Result);
-    finally
-      SeenIds.Free;
-      List.Free;
-    end;
-  end;
-
-  // Resolve an empty-signature (redeclared) property's type by finding the
-  // same-named property that DOES carry a signature in an ancestor class.
-  // CLASS-ONLY (R3, Task 3): the ancestor closure returned by
-  // GetTransitiveAncestors is unfiltered -- it also contains any INTERFACE
-  // ancestors a class implements, in BFS (nearest-first) order alongside the
-  // real class ancestors. An implemented interface can independently declare
-  // a same-named property (Delphi interfaces support `property X: T read
-  // GetX;`) with a COMPLETELY UNRELATED type. Without the (A.Kind = 'class')
-  // guard, such an interface property can be found and returned BEFORE the
-  // walk reaches the queried class's real base -- a wrong-CLASS type leaking
-  // in from outside the class hierarchy entirely (worse than the covariance
-  // "collapse to base" case: this is collapse to an unrelated type). Mirrors
-  // ClassChain's own (A.Kind = 'class') filter, which is why CollectProps'
-  // shadowing/DeclaredIn never suffers this -- only this ancestor-only-typed
-  // fallback walk did.
-  function ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
-  var
-    Anc   : TArray<TTypeAncestor>;
-    A     : TTypeAncestor        ;
-    AncSym: TSymbol              ;
-    Child : TSymbol              ;
-    Tok   : string               ;
-  begin
-    Result:= '';
-    Anc:= AStore.GetTransitiveAncestors(AClass.Id);
-    for A in Anc do
-    begin
-      if not (A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class')) then Continue;
-      // Re-resolve a forward-decl stub to its body before reading children.
-      AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
-      if AncSym.Id <= 0 then Continue;
-      Child:= AStore.FindChildSymbolByName(AncSym.Id, APropName);
-      if (Child.Id > 0) and (Child.Kind = skProperty) then
-      begin
-        Tok:= ParseTypeToken(Child.Signature);
-        if Tok <> '' then Exit(Tok);
-      end;
-    end;
-  end;
-
-  // Resolve an empty-modifiers property's EFFECTIVE visibility by finding the
-  // same-named property that DOES carry a non-empty Modifiers in an ancestor
-  // class. Mirrors ResolveInheritedType exactly, but over Modifiers instead of
-  // Signature. Defensive: the current parser always stamps a non-empty
-  // Modifiers (VisibilityOfSection defaults to 'public'), so this path is not
-  // reachable via today's indexer output -- kept so a future/foreign producer
-  // of blank Modifiers rows still resolves a visibility instead of the row
-  // being dropped from a --min-visibility filter.
-  function ResolveInheritedVisibility(const AClass: TSymbol; const APropName: string): string;
-  var
-    Anc   : TArray<TTypeAncestor>;
-    A     : TTypeAncestor        ;
-    AncSym: TSymbol              ;
-    Child : TSymbol              ;
-    Vis   : string               ;
-  begin
-    Result:= '';
-    Anc:= AStore.GetTransitiveAncestors(AClass.Id);
-    for A in Anc do
-    begin
-      if not (A.Resolved and (A.SymbolId > 0)) then Continue;
-      AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
-      if AncSym.Id <= 0 then Continue;
-      Child:= AStore.FindChildSymbolByName(AncSym.Id, APropName);
-      if (Child.Id > 0) and (Child.Kind = skProperty) then
-      begin
-        Vis:= Trim(Child.Modifiers);
-        if Vis <> '' then Exit(Vis);
-      end;
-    end;
-  end;
-
-  // R1 (Task 6): resolve a property's EFFECTIVE read/write accessor shape
-  // (prop_access) for the case where its OWN declaration carries NO accessor
-  // clause -- a bare 'property Color;' redeclaration whose stored prop_access is
-  // '' (NULL). Finds the same-named property that DOES carry a non-empty
-  // prop_access in the nearest ancestor. Mirrors ResolveInheritedType EXACTLY
-  // (same class-only ancestor walk, nearest-first) but over PropAccess instead
-  // of Signature -- so a bare redeclaration inherits the ancestor's ro/rw/wo.
-  // CLASS-ONLY (R3, Task 3): the (A.Kind = 'class') guard excludes any
-  // implemented INTERFACE that independently redeclares a same-named property
-  // (Delphi interfaces support `property X: T read GetX;`) with an UNRELATED
-  // accessor shape from interposing before the real class base -- identical to
-  // the interface-filter rationale documented on ResolveInheritedType. Returns
-  // '' when nothing up-tree carries an accessor clause either (the caller then
-  // treats '' as writable -- the back-compat default).
-  function ResolveInheritedPropAccess(const AClass: TSymbol; const APropName: string): string;
-  var
-    Anc   : TArray<TTypeAncestor>;
-    A     : TTypeAncestor        ;
-    AncSym: TSymbol              ;
-    Child : TSymbol              ;
-    PA    : string               ;
-  begin
-    Result:= '';
-    Anc:= AStore.GetTransitiveAncestors(AClass.Id);
-    for A in Anc do
-    begin
-      if not (A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class')) then Continue;
-      AncSym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
-      if AncSym.Id <= 0 then Continue;
-      Child:= AStore.FindChildSymbolByName(AncSym.Id, APropName);
-      if (Child.Id > 0) and (Child.Kind = skProperty) then
-      begin
-        PA:= Trim(Child.PropAccess);
-        if PA <> '' then Exit(PA);
-      end;
-    end;
-  end;
-
-  // R4 (Task 4): a class CONST's (skConstDecl) effective visibility, for the
-  // (common) case where its OWN Modifiers is blank. INVESTIGATED empirically
-  // (indexed a throwaway fixture, inspected the `symbols` rows directly): the
-  // parser's 'declConst' branch (DRagLint.Parser.Delphi13.pas, inside the
-  // recursive Walk dispatcher, ~line 1238) calls Emit WITHOUT the
-  // ASignature/AModifiers arguments at all -- unlike the 'declField'/
-  // 'declProp' branches, which both pass AState.CurrentVisibility -- so a
-  // class const's Modifiers column is '' UNCONDITIONALLY, regardless
-  // of which visibility section it was actually declared under. Fixing the
-  // parser is out of scope here (Task 4 is PropTree.pas-only, no re-index),
-  // so the effective visibility is instead recovered from data already IN the
-  // index: Delphi visibility sections are purely textual/linear -- every
-  // member between one visibility keyword and the next shares that keyword's
-  // Modifiers -- so the nearest PRECEDING sibling (by StartLine, among ALL
-  // child kinds; fields/properties/methods all DO carry accurate Modifiers)
-  // shares the const's real section. Falls back to 'public' -- Delphi's own
-  // default for an unspecified/first class section -- only when no earlier
-  // sibling carries any visibility info at all (the const is the class's
-  // very first member). This is a best-effort reconstruction from real
-  // sibling data, not a blind guess; it is NOT expected to be 100% correct on
-  // every real corpus (e.g. a const that is the sole member of its own
-  // section, preceded only by an EARLIER section's members, could inherit
-  // the wrong section) -- documented as a known limitation.
-  function ResolveConstVisibilityByProximity(const AClass: TSymbol; const AConst: TSymbol): string;
-  var
-    Kids     : TArray<TSymbol>;
-    Kid      : TSymbol        ;
-    Best     : TSymbol        ;
-    HaveBest : Boolean        ;
-  begin
-    HaveBest:= False;
-    Best    := Default(TSymbol);
-    Kids    := AStore.FindAllChildSymbols(AClass.Id);
-    for Kid in Kids do
-    begin
-      if Kid.Id = AConst.Id then Continue;
-      if Trim(Kid.Modifiers) = '' then Continue;         // no visibility signal on this sibling
-      if Kid.StartLine > AConst.StartLine then Continue; // must precede the const textually
-      if (not HaveBest) or (Kid.StartLine > Best.StartLine) or
-         ((Kid.StartLine = Best.StartLine) and (Kid.StartCol > Best.StartCol)) then
-      begin
-        Best    := Kid;
-        HaveBest:= True;
-      end;
-    end;
-    if HaveBest then Result:= Trim(Best.Modifiers)
-    else Result:= 'public'; // no earlier sibling at all -- Delphi's own implicit-section default
-  end;
-
-  // RESIDUAL resolver -- the lazy ancestry BRIDGE. Runs only when ParseTypeToken
-  // AND ResolveInheritedType both failed, i.e. proptree is about to emit 'unknown'
-  // for a bare-redeclared (empty-signature) property whose ancestry is broken by
-  // an UNRESOLVED edge. The classic case: a TYPE-ALIAS ancestor
-  // ('cxButtons.TcxBaseButton = Vcl.StdCtrls.TCustomButton') -- ResolveAncestry's
-  // candidate set is class/interface only, so it never links an alias ancestor and
-  // the whole VCL-inherited property surface (Align, Caption, Anchors, ...) loses
-  // its type. This walks UP the chain BRIDGING each unresolved ancestor NAME to its
-  // defining class via the scope-aware, alias-following AStore.ResolveTypeNameToClass
-  // (scope = the unit of the class that actually INHERITS that name at that hop,
-  // whose uses-clause / namespace prefix disambiguates e.g. Vcl from FMX -- see
-  // Climb's rule below), and returns the first KNOWN type declared for APropName
-  // above the break. '' when the walk still finds nothing (never fabricates a type).
-  function ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string): string;
-  var
-    Visited: TDictionary<string, Boolean>;
-
-    // Declared type of APropName directly on ASym (parseable signature), or ''.
-    function PropTypeOn(const ASym: TSymbol): string;
-    var Child: TSymbol;
-    begin
-      Result:= '';
-      if ASym.Id <= 0 then Exit;
-      Child:= AStore.FindChildSymbolByName(ASym.Id, APropName);
-      if (Child.Id > 0) and (Child.Kind = skProperty) then
-        Result:= ParseTypeToken(Child.Signature);
-    end;
-
-    function Climb(const ASym: TSymbol): string;
-    var
-      Anc  : TArray<TTypeAncestor>;
-      A    : TTypeAncestor        ;
-      Nxt  : TSymbol              ;
-      Tok  : string               ;
-      Key  : string               ;
-      Known: TList<TSymbol>       ; // ASym + the resolved classes of its closure
-      Sym  : TSymbol              ;
-      Decl : TSymbol              ; // the class whose OWN heritage lists A.Name
-    begin
-      Result:= '';
-      Anc:= AStore.GetTransitiveAncestors(ASym.Id);
-      Known:= TList<TSymbol>.Create;
-      try
-        Known.Add(ASym);
-        // (a) any already-RESOLVED CLASS ancestor that declares the property with
-        // a type. CLASS-ONLY (R3, Task 3, mirrors ResolveInheritedType's guard
-        // above): an implemented interface can appear in this same closure and
-        // independently redeclare a same-named property with an unrelated type --
-        // excluded so the bridge never resolves to a wrong-class type either.
-        for A in Anc do
-          if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
-          begin
-            Sym:= BodyOf(AStore.GetSymbolById(A.SymbolId));
-            // Same admission test ClimbFrom applies, so both Known lists hold
-            // real classes only and a zero-Id BodyOf result can never become a
-            // scope candidate.
-            if (Sym.Id > 0) and (Sym.Kind = skClass) then
-              Known.Add(Sym); // a later unresolved row may be ITS heritage entry
-            Tok:= PropTypeOn(Sym);
-            if Tok <> '' then Exit(Tok);
-          end;
-        // (b) bridge each UNRESOLVED ancestor name, then keep climbing from it.
-        // SCOPE (design criterion 7): resolve the name in the unit of the class
-        // that actually INHERITS it -- found by matching the name against each
-        // known class's own heritage, most-derived first -- falling back to the
-        // class this hop is climbing FROM. It used to pass AClass.FileId, the
-        // file of the ROOT class the whole query started from, at every hop;
-        // that contradicts ResolveTypeNameToClass's AScopeFileId contract and
-        // silently mis-scopes any break that occurs above a unit boundary.
-        for A in Anc do
-        begin
-          if A.Resolved then Continue;
-          Key:= LowerCase(A.Name);
-          if (Key = '') or Visited.ContainsKey(Key) then Continue;
-          Visited.Add(Key, True);
-          Decl:= ScopeSymbolFor(Known, ASym, A.Name);
-          Nxt := ResolveTypeInScope(A.Name, Decl.FileId);
-          if Nxt.Id <= 0 then Continue;
-          // Criterion 5, enforced HERE as well as in ClassChain.ClimbFrom: this
-          // walk reaches the very same single-candidate PickCandidate
-          // short-circuit, so without the guard a bare-redeclared property on a
-          // Vcl.* class could take its TYPE from a lone FMX-declared homonym
-          // with no scope check having run at all. Vcl-vs-FMX ONLY; see
-          // CrossesGuiFramework.
-          if CrossesGuiFramework(Decl, Nxt) then Continue;
-          Tok:= PropTypeOn(Nxt);   // declared directly on the bridged class?
-          if Tok <> '' then Exit(Tok);
-          Tok:= Climb(Nxt);        // else climb the bridged class's own chain
-          if Tok <> '' then Exit(Tok);
-        end;
-      finally
-        Known.Free;
-      end;
-    end;
-
-  begin
-    Visited:= TDictionary<string, Boolean>.Create;
-    try
-      Visited.Add(LowerCase(AClass.Name), True);
-      Result:= Climb(AClass);
-    finally
-      Visited.Free;
-    end;
-  end;
-
-  // Known limitation: descendants are enumerated by NAME (FindDescendantNames ->
-  // FindSymbolByExactNameAnywhere returns one homonym) and the recovered type is
-  // derived from the querying class's file scope. A shared bare property reachable
-  // from two differently-scoped subtrees (e.g. VCL TAlign vs FMX TAlignLayout) can
-  // receive a scope-ambiguous type, last-writer-wins. Bounded by the bare-only
-  // safety rule: the worst case is unknown -> maybe-wrong, NEVER correct -> wrong.
-  // Follow-up: scope-aware descendant resolution.
-  //
-  // Class ids of AClass + its transitive (resolved) ancestors + transitive
-  // descendants -- the connected tree reachable via RESOLVED edges. Used to
-  // propagate a recovered property type onto every bare same-named occurrence.
-  // Computed once per walked class (cached by the caller).
-  function ClosureClassIds(const AClass: TSymbol): TArray<Int64>;
-  var
-    Ids : TList<Int64>;
-    Seen: TDictionary<Int64, Boolean>;
-    A   : TTypeAncestor;
-    Nm  : string;
-    Sym : TSymbol;
-    procedure AddId(AId: Int64);
-    begin
-      if (AId > 0) and not Seen.ContainsKey(AId) then begin Seen.Add(AId, True); Ids.Add(AId); end;
-    end;
-  begin
-    Ids  := TList<Int64>.Create;
-    Seen := TDictionary<Int64, Boolean>.Create;
-    try
-      AddId(AClass.Id);
-      for A in AStore.GetTransitiveAncestors(AClass.Id) do
-        if A.Resolved and (A.SymbolId > 0) then AddId(A.SymbolId);
-      for Nm in AStore.FindDescendantNames(AClass.Name) do
-      begin
-        Sym := BodyOf(AStore.FindSymbolByExactNameAnywhere(Nm));
-        if (Sym.Id > 0) and (Sym.Kind = skClass) then AddId(Sym.Id);
-      end;
-      Result := Ids.ToArray;
-    finally
-      Ids.Free;
-      Seen.Free;
-    end;
-  end;
-
-  // Stamp ATypeTok onto every class in AClassIds whose child property APropName
-  // exists AND is bare (empty signature). Best-effort; never overwrites an
-  // explicit type (the safety rule). Returns the number of rows updated.
-  function PropagateBareType(const AClassIds: TArray<Int64>;
-    const APropName, ATypeTok: string): Integer;
-  var
-    Cid  : Int64;
-    Child: TSymbol;
-  begin
-    Result := 0;
-    for Cid in AClassIds do
-    begin
-      Child := AStore.FindChildSymbolByName(Cid, APropName);
-      if (Child.Id > 0) and (Child.Kind = skProperty) and (ParseTypeToken(Child.Signature) = '') then
-        if AStore.MemoizePropertyType(Child.Id, ATypeTok) then Inc(Result);
-    end;
-  end;
-
-  // The distinct property leaves visible on AClass (own + inherited), each
-  // paired with the most-derived class that declares it. Dedupe by leaf name.
-  //
-  // ADeclaredBy hands back that class as a SYMBOL, not merely its qualified
-  // name: the caller needs its FileId to resolve the property's TYPE in the
-  // right unit scope (criterion 7, one layer below the ancestor climb -- a
-  // property inherited from Vcl.Controls.TControl must have its type resolved
-  // in Vcl.Controls, not in whatever unit the queried root happens to live in),
-  // and its QualifiedName for the cross-namespace refusal. Both come from the
-  // one symbol, so the two can never disagree about which class is meant.
-  procedure CollectProps(const AClass: TSymbol;
-    out AOrder: TArray<TSymbol>; out ADeclaredBy: TArray<TSymbol>);
-  var
-    Chain: TArray<TSymbol> ;
-    Cls  : TSymbol         ;
-    Kids : TArray<TSymbol> ;
-    Kid  : TSymbol         ;
-    Seen : TDictionary<string, Boolean>;
-    OL   : TList<TSymbol>  ;
-    DL   : TList<TSymbol>  ;
-    Key  : string          ;
-  begin
-    Seen:= TDictionary<string, Boolean>.Create;
-    OL  := TList<TSymbol>.Create;
-    DL  := TList<TSymbol>.Create;
-    try
-      Chain:= ClassChain(AClass); // most-derived first -> shadowing is automatic
-      for Cls in Chain do
-      begin
-        Kids:= AStore.FindAllChildSymbols(Cls.Id);
-        for Kid in Kids do
-        begin
-          if Kid.Kind <> skProperty then Continue;
-          Key:= LowerCase(Kid.Name);
-          if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
-          Seen.Add(Key, True);
-          OL.Add(Kid);
-          DL.Add(Cls);
-        end;
-      end;
-      AOrder     := OL.ToArray;
-      ADeclaredBy:= DL.ToArray;
-    finally
-      Seen.Free;
-      OL.Free;
-      DL.Free;
-    end;
-  end;
-
-  // R4 (Task 4): the distinct FIELD/CONST leaves visible on AClass (own +
-  // inherited), each paired with the most-derived class that declares it.
-  // Dedupe by leaf name. Mirrors CollectProps exactly (same ClassChain,
-  // most-derived-first shadowing) but filters skField/skConstDecl instead of
-  // skProperty, and is kept as a SEPARATE walk with its OWN Seen set --
-  // deliberately NOT folded into CollectProps -- so the property engine's
-  // already class-accurate (Task 3) behavior is never disturbed by this
-  // addition. skConstDecl (a class-scoped `const X: T = v;`) is included
-  // alongside skField because a typed class const is a required PAS-surface
-  // leaf too (read-only; see Walk's field loop).
-  procedure CollectFields(const AClass: TSymbol;
-    out AOrder: TArray<TSymbol>; out ADeclaredIn: TArray<string>);
-  var
-    Chain: TArray<TSymbol> ;
-    Cls  : TSymbol         ;
-    Kids : TArray<TSymbol> ;
-    Kid  : TSymbol         ;
-    Seen : TDictionary<string, Boolean>;
-    OL   : TList<TSymbol>  ;
-    DL   : TList<string>   ;
-    Key  : string          ;
-  begin
-    Seen:= TDictionary<string, Boolean>.Create;
-    OL  := TList<TSymbol>.Create;
-    DL  := TList<string >.Create;
-    try
-      Chain:= ClassChain(AClass); // most-derived first -> shadowing is automatic
-      for Cls in Chain do
-      begin
-        Kids:= AStore.FindAllChildSymbols(Cls.Id);
-        for Kid in Kids do
-        begin
-          if not (Kid.Kind in [skField, skConstDecl]) then Continue;
-          Key:= LowerCase(Kid.Name);
-          if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
-          Seen.Add(Key, True);
-          OL.Add(Kid);
-          DL.Add(Cls.QualifiedName);
-        end;
-      end;
-      AOrder     := OL.ToArray;
-      ADeclaredIn:= DL.ToArray;
-    finally
-      Seen.Free;
-      OL.Free;
-      DL.Free;
-    end;
-  end;
-
-  // True when ASym is (or descends from) TComponent -- a REFERENCE type, not an
-  // owned sub-object. Name-based over the ancestor closure (no RTTI), same
-  // pragmatic style as IsStopClass. Used to leave referenced components unexpanded.
-  function IsComponentType(const ASym: TSymbol): Boolean;
-  var A: TTypeAncestor;
-  begin
-    Result := SameText(ASym.Name, 'TComponent');
-    if Result then Exit;
-    for A in AStore.GetTransitiveAncestors(ASym.Id) do
-      if A.MatchesName('TComponent') then Exit(True); { alias AND its target }
-  end;
+  Resolver : TPropMemberResolver;
+  Nodes    : TList<TPropNode>   ;
+  Truncated: Boolean            ;
 
   // Recursive walk. APrefix is the dotted path down to (and including a trailing
   // '.') the current class; AVisited holds lowercased TYPE names already expanded
   // on this path (cycle guard). ADepthLeft is the remaining class-recursion budget.
+  // Each level's members come from Resolver.ResolveMembers; a class-typed
+  // PROPERTY's subtree is emitted immediately after it, then the class's fields.
   procedure Walk(const AClass: TSymbol; const APrefix: string;
     ADepthLeft: Integer; AVisited: TDictionary<string, Boolean>);
   var
-    Order      : TArray<TSymbol>;
-    DeclaredBy : TArray<TSymbol>; // the class declaring Order[i] -- its scope
-    idx        : Integer        ;
-    Prop       : TSymbol        ;
-    Node       : TPropNode      ;
-    Tok        : string         ;
-    OwnTok     : string         ;
-    TypeSym    : TSymbol        ;
-    LowType    : string         ;
-    ClosureIds : TArray<Int64>  ;
-    ClosureDone: Boolean        ;
-    // R4 (Task 4): field/const leaves -- separate variable set, mirrors the
-    // property loop's shape but is a flat (non-recursive) emission.
-    FieldOrder     : TArray<TSymbol>;
-    FieldDeclaredIn: TArray<string> ;
-    FIdx           : Integer        ;
-    Fld            : TSymbol        ;
-    FNode          : TPropNode      ;
-    FVis           : string         ;
-    FTok           : string         ;
-    FTypeSym       : TSymbol        ;
+    Members : TArray<TPropNode>;
+    Types   : TArray<TSymbol>  ;
+    CompRefs: TArray<Boolean>  ;
+    Idx     : Integer          ;
+    Node    : TPropNode        ;
+    LowType : string           ;
   begin
-    ClosureDone:= False;
-    CollectProps(AClass, Order, DeclaredBy);
-    for idx:= 0 to High(Order) do
+    Resolver.ResolveMembers(AClass, Members, Types, CompRefs);
+    for Idx:= 0 to High(Members) do
     begin
-      Prop:= Order[idx];
-      Node:= Default(TPropNode);
-      Node.Path      := APrefix + Prop.Name;
-      Node.DeclaredIn:= DeclaredBy[idx].QualifiedName;
-
-      // proptree/2 (Task 2, R2): EFFECTIVE visibility -- the most-derived
-      // declaration's own Modifiers (Prop is already the most-derived symbol
-      // per CollectProps' shadowing), so a published redeclaration of a
-      // protected/public ancestor property RAISES the effective visibility to
-      // published without any extra logic. Only when the own Modifiers is
-      // empty (defensive; not reachable via the current parser) do we fall
-      // back to the ancestor walk instead of leaving it blank.
-      Node.Visibility:= Trim(Prop.Modifiers);
-      if Node.Visibility = '' then
-        Node.Visibility:= ResolveInheritedVisibility(AClass, Prop.Name);
-
-      { The `default` clause, read from the declaring line. Prop is already the
-        most-derived declaration (CollectProps shadowing), so this is the default
-        that actually governs streaming for this class. A redeclaration without a
-        clause deliberately yields HasDefault=False rather than inheriting the
-        ancestor's: Delphi treats a bare redeclaration as reasserting the
-        ancestor's default, but proving that needs an ancestor walk this pass does
-        not do, and inventing a value is the one thing worse than reporting none. }
-      Node.HasDefault:= ResolveDefaultFor(AClass, Prop, Prop.Name, Node.DefaultValue);
-
-      // Normalize at the single point where the effective value is finalized
-      // (covers BOTH the own-declaration and the ancestor-walk paths above):
-      // the parser's Modifiers carries a 'strict ' prefix for 'strict private'/
-      // 'strict protected' sections (unit-scoped access, Delphi's `strict`
-      // keyword), but the documented proptree/2 consumer contract is the
-      // 5-value domain 'published'|'public'|'protected'|'private'|''. The
-      // strict/non-strict distinction is same-unit-only and irrelevant to
-      // cross-unit assignability (what proptree exists to answer), so
-      // collapsing it is semantically lossless.
-      if Node.Visibility = 'strict private'   then Node.Visibility:= 'private'
-      else if Node.Visibility = 'strict protected' then Node.Visibility:= 'protected';
-
-      // R1 (Task 6): REAL property writability from the resolved read/write
-      // accessor shape (prop_access). Prop is already the most-derived
-      // declaration (CollectProps shadowing), so Prop.PropAccess is its OWN
-      // accessor clause; when empty (a bare 'property Color;' redeclaration)
-      // resolve it up-tree from the nearest CLASS ancestor with a non-empty
-      // clause -- MIRRORS the Signature/type resolution above (own decl else
-      // nearest class ancestor, interface-filtered). is_writable is then
-      // (resolved <> 'ro'): 'rw'/'wo' -> writable, 'ro' -> not. An empty
-      // resolved value (no accessor clause anywhere up-tree, or a pre-v17 /
-      // un-re-indexed DB whose prop_access is NULL) defaults TRUE -- today's
-      // back-compat behaviour. 'wo' (write-only) is writable: a valid assignment
-      // TARGET (the editor handles source-vs-target direction separately).
-      var PropAcc: string:= Trim(Prop.PropAccess);
-      if PropAcc = '' then PropAcc:= ResolveInheritedPropAccess(AClass, Prop.Name);
-      Node.IsWritable:= (PropAcc = '') or (PropAcc <> 'ro');
-      Node.MemberKind:= 'property';
-
-      // Parse the type from this property's own signature; if empty (a bare
-      // redeclaration) resolve it from an ancestor that carries a signature, and
-      // -- as a last resort before 'unknown' -- BRIDGE across an unresolved
-      // (typically type-alias) ancestor edge to the class that really declares it.
-      OwnTok   := ParseTypeToken(Prop.Signature);
-      Tok      := OwnTok;
-      if Tok = '' then Tok:= ResolveInheritedType(AClass, Prop.Name);
-      if Tok = '' then
-        Tok:= ResolveViaBridgedAncestry(AClass, Prop.Name);
-
-      if Tok = '' then
-      begin
-        Node.TypeName    := 'unknown';
-        Node.Kind        := 'unknown';
-        Node.IsClassTyped:= False;
-        Nodes.Add(Node);
-        Continue; // no type -> no recursion
-      end;
-
-      // Persist a RECOVERED type (own signature was empty, resolved up-tree) for
-      // BOTH recovery paths -- not just the bridge -- then propagate it DOWN/UP
-      // across the queried class's connected tree onto every bare occurrence.
-      if (OwnTok = '') and (Tok <> '') then
-      begin
-        if not ClosureDone then begin ClosureIds:= ClosureClassIds(AClass); ClosureDone:= True; end;
-        PropagateBareType(ClosureIds, Prop.Name, Tok);
-        // Ensure the queried row itself is stamped even if the closure walk
-        // somehow missed it (e.g. name-lookup ambiguity): direct memoize.
-        if Prop.Id > 0 then AStore.MemoizePropertyType(Prop.Id, Tok);
-      end;
-
-      Node.TypeName:= Tok;
-
-      // Classify: resolve the type name IN THE UNIT SCOPE OF THE CLASS THAT
-      // DECLARES THIS PROPERTY -- criterion 7 one layer below the ancestor
-      // climb. This used to be AStore.FindSymbolByExactNameAnywhere(Tok), which
-      // takes whichever same-named symbol the index yields first and so gave
-      // Vcl.Controls.TControl.Parent (declared ': TWinControl') the type
-      // FMX.Controls.Win.TWinControl, then recursed into it -- a Vcl class
-      // reporting an FMX property surface. ResolveTypeInScope applies the shared
-      // scope rule against the DECLARING class's unit and reduces a forward-decl
-      // stub to its body, so a nested class still never enumerates 0 properties
-      // (the DevExpress forward-decl case the old stub re-resolution existed for).
-      TypeSym:= ResolveTypeInScope(Tok, DeclaredBy[idx].FileId);
-      // Criterion 5, enforced HERE for the same reason the ancestor climb
-      // enforces it rather than delegating: PickCandidate short-circuits on a
-      // lone candidate, so the scope rule never runs for a type name with
-      // exactly one -- possibly wrong-framework -- definition. Vcl-vs-FMX ONLY:
-      // a VCL class's 'System.*'-typed property (TBasicAction, TList,
-      // TComponent, ...) is an ordinary RTL reference and must still expand.
-      // See CrossesGuiFramework (and note its guarantee is PER HOP: an undotted
-      // declaring unit is not a GUI framework and is never refused).
-      if (TypeSym.Id > 0) and CrossesGuiFramework(DeclaredBy[idx], TypeSym) then
-        TypeSym:= Default(TSymbol);
-      // A DECLINE (Id = 0) leaves the leaf exactly where an unresolvable type
-      // leaves it today -- Kind='scalar', not recursed into, TypeName still the
-      // token as written. It is never retried with a scope-unaware lookup: a
-      // fuller tree bought by a wrong type is a defect, not a feature.
-      if (TypeSym.Id > 0) and (TypeSym.Kind = skClass) then
-      begin
-        // A referenced TComponent (PopupMenu, Action, a nested control) is NOT an
-        // owned sub-object. With TreatRefsAsLeaves it is a REFERENCE LEAF -- emitted
-        // but not recursed into -- so the tree is not flooded by TComponent's whole
-        // surface (.Components/.Owner/.Observers/...). Owned TPersistent sub-objects
-        // (TFont, ...) are unaffected and still expand.
-        if AOpts.TreatRefsAsLeaves and IsComponentType(TypeSym) then
-        begin
-          Node.Kind        := 'class';
-          Node.IsClassTyped:= False;   // a reference; not recursed into
-          Nodes.Add(Node);
-          Continue;
-        end;
-
-        Node.Kind        := 'class';
-        Node.IsClassTyped:= True;
-        Nodes.Add(Node);
-
-        LowType:= LowerCase(Tok);
-        if ADepthLeft <= 0 then
-          Truncated:= True                 // depth cap stopped this expansion
-        else if AVisited.ContainsKey(LowType) then
-          // back-reference on this path -> terminate (already expanded above)
-        else
-        begin
-          AVisited.Add(LowType, True);
-          Walk(TypeSym, Node.Path + '.', ADepthLeft - 1, AVisited);
-          AVisited.Remove(LowType);
-        end;
-      end
+      Node     := Members[Idx];
+      Node.Path:= APrefix + Node.Path;
+      Nodes.Add(Node);
+      { Only a class-typed PROPERTY recurses; a field leaf is flat even when
+        class-typed (R4), and a reference leaf is not class-typed. }
+      if (Node.MemberKind <> 'property') or not Node.IsClassTyped then Continue;
+      LowType:= LowerCase(Node.TypeName);
+      if ADepthLeft <= 0 then
+        Truncated:= True                 // depth cap stopped this expansion
+      else if AVisited.ContainsKey(LowType) then
+        // back-reference on this path -> terminate (already expanded above)
       else
       begin
-        Node.Kind        := 'scalar';
-        Node.IsClassTyped:= False;
-        Nodes.Add(Node);
+        AVisited.Add(LowType, True);
+        Walk(Types[Idx], Node.Path + '.', ADepthLeft - 1, AVisited);
+        AVisited.Remove(LowType);
       end;
-    end;
-
-    // R4 (Task 4): own field/const leaves for THIS class, at the SAME prefix
-    // depth. Flat leaves only -- unlike class-typed PROPERTIES, a class-typed
-    // FIELD is never recursed into (out of scope for this task; the field
-    // itself is the assignment target).
-    CollectFields(AClass, FieldOrder, FieldDeclaredIn);
-    for FIdx:= 0 to High(FieldOrder) do
-    begin
-      Fld  := FieldOrder[FIdx];
-      FNode:= Default(TPropNode);
-      FNode.Path      := APrefix + Fld.Name;
-      FNode.DeclaredIn:= FieldDeclaredIn[FIdx];
-      FNode.MemberKind:= 'field';
-
-      // Effective visibility. A plain field's Modifiers is always populated
-      // by the parser (declField stamps AState.CurrentVisibility, same as
-      // declProp) -- read directly. A class CONST's Modifiers is NEVER
-      // populated (verified empirically -- see ResolveConstVisibilityByProximity's
-      // comment) -- recovered from the nearest visibility-bearing sibling.
-      FVis:= Trim(Fld.Modifiers);
-      if (FVis = '') and (Fld.Kind = skConstDecl) then
-        FVis:= ResolveConstVisibilityByProximity(AClass, Fld);
-      if FVis = 'strict private'        then FVis:= 'private'
-      else if FVis = 'strict protected' then FVis:= 'protected';
-      FNode.Visibility:= FVis;
-
-      // Field-scoped writability (Task 4) -- independent of, and does not
-      // touch, the staged property IsWritable path above. A plain field is
-      // writable; a class CONST is a compile-time constant (typed or not) --
-      // never assignable.
-      FNode.IsWritable:= Fld.Kind <> skConstDecl;
-
-      FTok:= ParseTypeToken(Fld.Signature);
-      if FTok = '' then
-      begin
-        FNode.TypeName    := 'unknown';
-        FNode.Kind        := 'unknown';
-        FNode.IsClassTyped:= False;
-      end
-      else
-      begin
-        FNode.TypeName:= FTok;
-        // DELIBERATELY still the scope-unaware lookup, unlike the property loop
-        // above. A field leaf is FLAT -- never recursed into -- so the resolved
-        // symbol is not stored, not climbed, and cannot splice another
-        // framework's surface into the tree; its only observable effect is the
-        // 'class' vs 'scalar' label, and "is there a class of this name" is a
-        // question no scope changes the answer to in practice. Routing it
-        // through the scope rule would only let a DECLINE downgrade a genuinely
-        // class-typed field to 'scalar' -- losing information to buy no
-        // correctness. Revisit if/when field leaves ever recurse.
-        FTypeSym:= AStore.FindSymbolByExactNameAnywhere(FTok);
-        if (FTypeSym.Id > 0) and (FTypeSym.Kind = skClass) then
-        begin
-          FNode.Kind        := 'class';
-          FNode.IsClassTyped:= True; // NOT recursed into -- flat leaf (R4 scope)
-        end
-        else
-        begin
-          FNode.Kind        := 'scalar';
-          FNode.IsClassTyped:= False;
-        end;
-      end;
-      Nodes.Add(FNode);
     end;
   end;
 
@@ -1613,27 +1770,26 @@ begin
   Result.Truncated:= False;
   SetLength(Result.Nodes, 0);
 
-  Root:= ResolveClassByQName(AClassQName);
-  if Root.Id = 0 then Exit; // unresolved class -> empty tree, RootType=''
-
-  Nodes     := TList<TPropNode>.Create;
-  Visited   := TDictionary<string, Boolean>.Create;
-  ChainCache:= TDictionary<Int64 , TArray<TSymbol>>.Create;
-  TypeCache := TDictionary<string, TSymbol        >.Create;
-  DeclText  := TDeclTextReader.Create(AStore);
-  Truncated := False;
+  Resolver:= TPropMemberResolver.Create(AStore, AOpts);
   try
-    Result.RootType:= Root.Name;
-    Visited.Add(LowerCase(Root.Name), True); // guard against direct self-reference
-    Walk(Root, '', AOpts.Depth, Visited);
-    Result.Nodes    := Nodes.ToArray;
-    Result.Truncated:= Truncated;
+    Root:= Resolver.ResolveClassByQName(AClassQName);
+    if Root.Id = 0 then Exit; // unresolved class -> empty tree, RootType=''
+
+    Nodes    := TList<TPropNode>.Create;
+    Visited  := TDictionary<string, Boolean>.Create;
+    Truncated:= False;
+    try
+      Result.RootType:= Root.Name;
+      Visited.Add(LowerCase(Root.Name), True); // guard against direct self-reference
+      Walk(Root, '', AOpts.Depth, Visited);
+      Result.Nodes    := Nodes.ToArray;
+      Result.Truncated:= Truncated;
+    finally
+      Nodes  .Free;
+      Visited.Free;
+    end;
   finally
-    DeclText  .Free;
-    TypeCache .Free;
-    ChainCache.Free;
-    Nodes     .Free;
-    Visited   .Free;
+    Resolver.Free;
   end;
 end;
 

@@ -251,10 +251,23 @@ drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>]
 ```
 
 Parses a rules file and, when `--from`/`--to` types are supplied, validates its
-`#link`/`#default` **paths** against the REAL property trees of those types (built
-with `proptree`'s engine). This is the crux reFind cannot do: reFind is blind PCRE
-text; we know the real properties, so a `#link` target/source typo is a validation
-error, not a silent no-op.
+`#link`/`#default` **paths** against the REAL members of those types. This is the
+crux reFind cannot do: reFind is blind PCRE text; we know the real properties, so a
+`#link` target/source typo is a validation error, not a silent no-op.
+
+**How a path is resolved (1.20.6).** No property tree is built. Each path is
+resolved SEGMENT BY SEGMENT against a per-class member cache (`proptree`'s own
+per-member resolution, each class resolved once per run), so there is no depth
+limit and `--depth` does not apply -- a 9-segment path validates as readily as a
+1-segment one, and the BDE book's TQuery block checks in seconds (the old depth-6
+tree of `FireDAC.Comp.Client.TFDQuery` did not finish in 20 minutes). A rule path
+names a `.dfm`-streamed property, so the `.dfm` rule applies: the LEAF must be a
+published property; each INTERMEDIATE hop must be published, or public AND
+class-typed (a collection's public `Items`, which a `.dfm` streams as `item`
+blocks); a protected hop, a public leaf or a field fails. **Private and strict
+private members never resolve** (and `proptree` no longer lists them). A hop may
+not pass through a type already passed through on the same path (the same cycle
+guard `proptree` applies).
 
 - Without `--from`/`--to` it is **parse-only**: only unknown-directive parse
   errors surface; path checks are skipped.
@@ -504,18 +517,18 @@ for real. `--only Name1,Name2,...` restricts the run to specific `.dfm` instance
 names; `--db` may repeat for a multi-DB index.
 
 **Which blocks are validated (1.20.6).** Before planning, `convert-apply`
-validates the book: each `#convert` block against its OWN From/To property
-trees, and each `#mapping` against the block(s) that `#apply` it. By default
-only the blocks this unit's `.dfm` instances convert through are validated and
-freshness-checked, so a ten-block book costs only the trees the unit uses.
-Every other block is listed, never skipped silently:
-`block <line> (<From> -> <To>): not validated here (no instances in this unit)`
-(json `blocks_not_validated[]` with `line`, `from`, `to`, `unresolved[]`).
-`--validate-all-blocks` validates and freshness-checks EVERY block -- use it
-when authoring a book or in CI. A validated block whose From or To type
-resolves in no `--db` is an error on its `#convert` line. Validation and the
-plan share one tree per type (json `trees_built`). A path error ends with the
-block it was checked in: `(#convert line N: From -> To)`.
+validates the WHOLE book: every `#convert` block against its OWN From/To types,
+and each `#mapping` against the block(s) that `#apply` it -- each path resolved
+segment by segment as in `convert-validate` above (the `.dfm` rule; private
+never; no depth limit), except that a referenced component (a `TComponent`-typed
+property such as `Connection`) is a leaf here, so a path THROUGH it
+(`Connection.Params.X`) is not found -- the plan could not apply it either.
+Every block is also freshness-checked: a stale type behind ANY block warns on a
+dry run and refuses `--apply`, a unit-rules-only run included. A block whose
+From or To type resolves in no `--db` is an error on its `#convert` line.
+Validation and the plan share one member cache per `--db` (json
+`classes_built` = the classes whose members were resolved). A path error ends
+with the block it was checked in: `(#convert line N: From -> To)`.
 
 **Inherited forms.** `convert-apply` does not convert `inherited` / `inline`
 `.dfm` objects yet. If the unit's `.dfm` holds one whose class is a From type

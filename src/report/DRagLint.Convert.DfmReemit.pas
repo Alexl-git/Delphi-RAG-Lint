@@ -26,7 +26,8 @@ uses
   System.Generics.Collections,
   DRagLint.Convert.Rules,
   DRagLint.Convert.CastLib,
-  DRagLint.Convert.PropTree;
+  DRagLint.Convert.PropTree,
+  DRagLint.Convert.PropCache;
 
 type
   /// <summary>The kind of one leaf or sub-node of a parsed DFM object: a scalar
@@ -324,12 +325,14 @@ type
 function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 
 /// <summary>Re-emit an F component's DFM object block as the T equivalent, driven
-/// by a validated 1:1 rule set and the F/T property trees. Pure: no I/O.</summary>
+/// by a validated 1:1 rule set and the F/T classes' members. No file I/O.</summary>
 /// <param name="AFromBlock">The raw F DFM `object` block text.</param>
 /// <param name="ARules">The parsed+validated conversion rule set (must contain a
 /// #convert F -&gt; T header; #link/#default/#ignore/#remove drive the remap).</param>
-/// <param name="AFromTree">The F type's flattened property tree (BuildPropTree).</param>
-/// <param name="AToTree">The T type's flattened property tree (BuildPropTree).</param>
+/// <param name="AFrom">The F class and the member cache of the store it resolved in.
+/// Every leaf lookup (type, class-typedness, default) resolves a dotted path from it
+/// segment by segment on the DFM surface (TPropMemberCache.ResolvePath, psDfm).</param>
+/// <param name="ATo">The T class, likewise.</param>
 /// <param name="ACastLib"><!-- drag-lint:auto type -->const TCastLib</param>
 /// <returns>A TReemitResult: on success, the emitted T block in DfmText plus the
 /// structured Report; on hard failure, Ok=False with Error set.</returns>
@@ -343,7 +346,8 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// when F/T leaf types resolve to the same type, else Report.Mismatched (not
 /// copied). A nested owned part (a non-Controls/Components child) without its own
 /// #convert rules is left unconverted + Report.OwnedParts. A nested Controls/
-/// Components child is left ALONE. Pure; deterministic; no I/O.
+/// Components child is left ALONE. Deterministic; no file I/O -- the index is read
+/// through the caches (1.20.6, T2b: no property tree is built).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: ApplyInScope, ApplySets, Byte, CarryLinkFor, CharInSet, ClassCastUnderPath, CloneNode, CompatHas, Copy, Default (+38 more)</para>
@@ -358,7 +362,7 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
-  const AFromTree, AToTree: TPropTree;
+  const AFrom, ATo: TClassRef;
   const ACastLib: TCastLib): TReemitResult;
 
 /// <summary>The declared `default` value of the leaf named <paramref name="AName"/>
@@ -378,7 +382,7 @@ function ReemitComponent(const AFromBlock: string; const ARules: TConversionRule
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function LeafDefaultOf(const ATree: TPropTree; const AName: string;
-  out AValue: string): Boolean;
+  out AValue: string): Boolean; overload;
 
 implementation
 
@@ -775,24 +779,22 @@ begin
     if (Q.Kind = rkConvert) and SameText(BareTypeTail(Q.FromType), AFromType) then Exit(True);
 end;
 
-// Resolve a leaf's declared type from a property tree by its top-level name.
-function LeafTypeOf(const ATree: TPropTree; const AName: string): string;
+// A leaf's declared type, resolved from AClass by its dotted path (psDfm); ''
+// when the path does not resolve.
+function LeafTypeOf(const AClass: TClassRef; const AName: string): string;
 var N: TPropNode;
 begin
   Result:= '';
-  for N in ATree.Nodes do
-    if SameText(N.Path, AName) then Exit(N.TypeName);
+  if AClass.ResolvePath(AName, psDfm, N) then Result:= N.TypeName;
 end;
 
 // True when the property at AName is CLASS-TYPED on ATree (Font: TFont). Such a
 // property is a container: the .dfm never streams it as a leaf, only its
 // sub-leaves, so 'absent from the block' says nothing about it.
-function LeafIsClassTyped(const ATree: TPropTree; const AName: string): Boolean;
+function LeafIsClassTyped(const AClass: TClassRef; const AName: string): Boolean;
 var N: TPropNode;
 begin
-  Result:= False;
-  for N in ATree.Nodes do
-    if SameText(N.Path, AName) then Exit(N.IsClassTyped);
+  Result:= AClass.ResolvePath(AName, psDfm, N) and N.IsClassTyped;
 end;
 
 function LeafDefaultOf(const ATree: TPropTree; const AName: string;
@@ -810,6 +812,18 @@ begin
     end;
 end;
 
+// LeafDefaultOf over a class: the dotted path is resolved from AClass (psDfm), any
+// segment count; False when it does not resolve or has no usable default.
+function LeafDefaultOf(const AClass: TClassRef; const AName: string;
+  out AValue: string): Boolean; overload;
+var N: TPropNode;
+begin
+  AValue:= '';
+  if not (AClass.ResolvePath(AName, psDfm, N) and N.HasDefault) then Exit(False);
+  AValue:= N.DefaultValue;
+  Result:= True;
+end;
+
 // 2a-i deterministic owned-part signal: a `#note owned:<ClassName>` in the rules
 // declares a nested class as an OWNED part (a field/column) that needs its own
 // #convert. Without the full class graph, this is the explicit, testable marker;
@@ -823,7 +837,7 @@ begin
 end;
 
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
-  const AFromTree, AToTree: TPropTree;
+  const AFrom, ATo: TClassRef;
   const ACastLib: TCastLib): TReemitResult;
 var
   FRoot, TRoot: TDfmNode;
@@ -839,9 +853,9 @@ var
     ApplyEnumCast cannot reach the function Result; folded into the report at
     the end with Created/Dropped/Ignored. }
   EnumUnmapped : TArray<TReemitEnumUnmapped>;
-  { True when AFromTree/AToTree actually describe THIS block's class pair.
+  { True when AFrom/ATo actually describe THIS block's class pair.
     HandleNested re-enters this function for an owned part with the PARENT's
-    trees, and a default read from the wrong class is a wrong VALUE, not a
+    classes, and a default read from the wrong class is a wrong VALUE, not a
     missing one -- so every default-resolution path is gated on this. Declared
     here, ahead of the nested routines, because ResolveLeafValue reads it. }
   TreesDescribeThisBlock: Boolean;
@@ -902,8 +916,8 @@ var
     begin
       if (Q.Kind <> rkLink) or (Q.Cast <> '') or not SameText(Q.FromPath, AFromPrefix) then Continue;
       if Trim(Q.ToPath) = '???' then Exit(False);
-      SrcT:= LeafTypeOf(AFromTree, Q.FromPath);
-      DstT:= LeafTypeOf(AToTree, Q.ToPath);
+      SrcT:= LeafTypeOf(AFrom, Q.FromPath);
+      DstT:= LeafTypeOf(ATo, Q.ToPath);
       if (SrcT = '') or (DstT = '') then Exit(False);
       if not SameText(BareTypeTail(SrcT), BareTypeTail(DstT)) then Exit(False);
       AToPrefix:= Q.ToPath;
@@ -1229,12 +1243,12 @@ var
   function ResolveLeafValue(const ADottedPath: string; out AValue: string): Boolean;
   begin
     if FindLeafValue(ADottedPath, AValue) then Exit(True);
-    { Same gate as step 4b: in the owned-part recursion AFromTree describes the
+    { Same gate as step 4b: in the owned-part recursion AFrom describes the
       PARENT, so resolving a default from it would answer with another class's
       value. Falling back to "absent" there is correct -- it is what the engine
       did before D2, and it reports rather than invents. }
     if not TreesDescribeThisBlock then Exit(False);
-    Result:= LeafDefaultOf(AFromTree, ADottedPath, AValue);
+    Result:= LeafDefaultOf(AFrom, ADottedPath, AValue);
   end;
 
   // True when ANY #link/#ignore/#remove rule's FromPath/PropName references a
@@ -1444,8 +1458,8 @@ var
         // same type; else WARN and do not copy (cross-type conversion is the
         // interpreter stage, deferred past 2a).
         var FType: string; var TType: string;
-        FType:= LeafTypeOf(AFromTree, AFromPath);
-        TType:= LeafTypeOf(AToTree, ToPath);
+        FType:= LeafTypeOf(AFrom, AFromPath);
+        TType:= LeafTypeOf(ATo, ToPath);
         if (FType <> '') and (TType <> '') and (not SameText(FType, TType)) then
         begin
           Result.Report.Mismatched:= Result.Report.Mismatched +
@@ -1568,7 +1582,7 @@ var
     begin
       // OWNED part with a rule -> recurse. Re-emit the part block by round-
       // tripping it: emit the sub-object as its own block, re-run ReemitComponent.
-      PartResult:= ReemitComponent(EmitBlock(ASub, 0), ARules, AFromTree, AToTree, ACastLib);
+      PartResult:= ReemitComponent(EmitBlock(ASub, 0), ARules, AFrom, ATo, ACastLib);
       if PartResult.Ok then
       begin
         // Re-parse the converted part text back into a node and graft it.
@@ -1683,8 +1697,8 @@ begin
       block's own DFM class, which is always bare. An empty RootType means the
       class never resolved, and answering from an empty tree is no better than
       answering from the wrong one. }
-    TreesDescribeThisBlock:= (AFromTree.RootType <> '') and
-      SameText(BareTypeTail(AFromTree.RootType), BareTypeTail(FRoot.ClassName_));
+    TreesDescribeThisBlock:= (AFrom.RootType <> '') and
+      SameText(BareTypeTail(AFrom.RootType), BareTypeTail(FRoot.ClassName_));
 
     // 3b. Apply #mapping/#apply BEFORE the leaf loop. Order is load-bearing:
     // RemapLeaf below would already have recorded a mapped source leaf as
@@ -1756,7 +1770,7 @@ begin
         as a leaf, has no default clause, and its sub-leaves were carried (or
         dropped, and said so) in step 4 -- so it is neither resolvable nor
         unknown here, and listing it under 'defaults may diverge' was noise. }
-      if LeafIsClassTyped(AFromTree, R.FromPath) then Continue;
+      if LeafIsClassTyped(AFrom, R.FromPath) then Continue;
       if FindLeafValue(R.FromPath, ResolvedVal) then Continue; // present -> step 4 handled it
       { The TARGET must be a real property of T. A rule set carries every
         #convert in the book and #link has no per-rule scoping, so a rule
@@ -1765,8 +1779,8 @@ begin
         have, which is an EReadError when the form loads. Step 4 was shielded
         from this by needing the property to be streamed; 4b needs only that it
         be defaulted, so it must check for itself. }
-      if LeafTypeOf(AToTree, R.ToPath) = '' then Continue;
-      if not LeafDefaultOf(AFromTree, R.FromPath, ResolvedVal) then
+      if LeafTypeOf(ATo, R.ToPath) = '' then Continue;
+      if not LeafDefaultOf(AFrom, R.FromPath, ResolvedVal) then
       begin
         // Absent AND no `default` clause: such a property is ALWAYS streamed,
         // so its absence is genuinely unknown. Do NOT invent a value -- record
@@ -1779,7 +1793,7 @@ begin
         // about this block, and counting them would make the divergence note
         // list a child's every property while converting the parent.
         // LeafTypeOf returns '' only when the path is not on F at all.
-        if LeafTypeOf(AFromTree, R.FromPath) <> '' then
+        if LeafTypeOf(AFrom, R.FromPath) <> '' then
           Unresolved:= Unresolved + [R.FromPath];
         Continue;
       end;
@@ -1851,7 +1865,7 @@ begin
     if Length(Unresolved) > 0 then
       Result.Report.Notes:= Result.Report.Notes +
         [Format('property defaults may diverge between %s and %s -- %s absent from the F DFM with no default clause to resolve, so the T default applies (verify)',
-          [AFromTree.RootType, AToTree.RootType, string.Join(', ', Unresolved)])];
+          [AFrom.RootType, ATo.RootType, string.Join(', ', Unresolved)])];
 
     // Fold the local accumulators into the report (do NOT clobber Task-6 appends).
     Result.Report.Created:= Result.Report.Created + Created;

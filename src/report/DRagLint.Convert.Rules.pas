@@ -18,19 +18,22 @@ unit DRagLint.Convert.Rules;
       (unknown '#directive'). Parse errors ride on the ruleset's ParseErrors
       field; the validator surfaces them.
     * ValidateConversionRules -- the "we know the REAL properties" check reFind
-      cannot do: #link / #default target/source paths are checked against the
-      supplied from/to property trees (TPropTree from Task 1). A literal '???'
+      cannot do: #link / #default target/source paths are resolved, segment by
+      segment, against the supplied From/To classes (TClassRef -- 1.20.6: a
+      per-class member cache, no property tree is built). A literal '???'
       path is an explicit-unfilled STUB marker (the Batch-1 scaffolder emits
       these) and is NOT a hard error.
 
-  READ-ONLY / PURE: no store, no files, no globals. Deterministic.
+  READ-ONLY: no files, no globals, and no writes. Validation reads the index
+  through the caller's TPropMemberCache; parsing touches nothing. Deterministic.
 }
 
 interface
 
 uses
   System.SysUtils,
-  DRagLint.Convert.PropTree;
+  DRagLint.Convert.PropTree,
+  DRagLint.Convert.PropCache;
 
 type
   /// <summary>The kind of a single parsed conversion rule.</summary>
@@ -186,20 +189,24 @@ type
     ParseErrors: TArray<TRuleError>;
   end;
 
-  /// <summary>The From and To property trees of one #convert block, as
+  /// <summary>The From and To classes of one #convert block, as
   /// ValidateConversionRulesPerBlock consumes them.</summary>
   /// <remarks>
-  /// An empty tree (RootType='') skips the checks against that side, exactly as
+  /// Each side is a qualified class name plus the member cache of the store it
+  /// resolved in (the two may be different --db stores). A side that is unset
+  /// or does not resolve (RootType='') skips the checks against it, exactly as
   /// in ValidateConversionRules. It means "not checked here", never "checked
   /// and fine": a caller that WANTS a block checked and cannot resolve its type
-  /// must report that itself (convert-apply's BuildBlockTrees raises an error on
-  /// the block's #convert line). Callers build one per block, index-aligned with
-  /// the book's blocks: [0] is the region before the first #convert (no block,
-  /// normally both trees empty), [N] the Nth #convert in source order.
+  /// must report that itself (convert-apply's BuildBlockClasses raises an error
+  /// on the block's #convert line). Callers build one per block, index-aligned
+  /// with the book's blocks: [0] is the region before the first #convert (no
+  /// block, normally both sides unset), [N] the Nth #convert in source order.
+  /// 1.20.6 (T2b): replaced TBlockTrees -- no property tree is built; each path
+  /// is resolved segment by segment (TPropMemberCache.ResolvePath, psDfm).
   /// </remarks>
-  TBlockTrees = record
-    FromTree: TPropTree;
-    ToTree  : TPropTree;
+  TBlockClasses = record
+    FromClass: TClassRef;
+    ToClass  : TClassRef;
   end;
 
 /// <summary>Parses the reFind-superset conversion-rules DSL text into a rule set.
@@ -238,24 +245,27 @@ type
 /// </remarks>
 function ParseConversionRules(const AText: string): TConversionRuleSet;
 
-/// <summary>Validates a parsed rule set against the real property trees of the
-/// From and To types, catching path typos reFind cannot -- plus folding in any
-/// parse errors from ParseConversionRules.</summary>
+/// <summary>Validates a parsed rule set against the real members of the From and
+/// To classes, catching path typos reFind cannot -- plus folding in any parse
+/// errors from ParseConversionRules.</summary>
 /// <param name="ARules">The parsed rule set (its ParseErrors are included in the
 /// result).</param>
-/// <param name="AFromTree">The FromType's flattened property tree (Task 1's
-/// BuildPropTree). May be empty (RootType='') to skip source-path checks.</param>
-/// <param name="AToTree">The ToType's flattened property tree. May be empty to
-/// skip target-path checks.</param>
+/// <param name="AFrom">The FromType. May be unset or unresolved (RootType='') to
+/// skip source-path checks.</param>
+/// <param name="ATo">The ToType. May be unset or unresolved to skip target-path
+/// checks.</param>
 /// <returns>Zero-length array = valid. Otherwise one TRuleError per problem, in
 /// source order (parse errors first, then validation errors).</returns>
 /// <remarks>
-/// Checks performed: for each rkLink, ToPath must exist as some
-/// AToTree.Nodes[].Path and FromPath must exist as some AFromTree.Nodes[].Path;
-/// for each rkDefault, ToPath must exist in AToTree. A path equal to the literal
+/// Checks performed: for each rkLink, ToPath must resolve from ATo and FromPath
+/// from AFrom; for each rkDefault, ToPath must resolve from ATo. A path resolves
+/// segment by segment on the DFM surface (TPropMemberCache.ResolvePath, psDfm --
+/// ruling R8: a published leaf; each hop published, or public and class-typed;
+/// never private), with no depth limit (1.20.6: no property tree is built, so
+/// --depth no longer applies). A path equal to the literal
 /// '???' is an explicit-unfilled STUB marker (emitted by the Batch-1 scaffolder)
 /// and is SKIPPED -- never a hard error -- so scaffolder output validates clean.
-/// When a tree is empty (RootType=''), the checks against THAT tree are skipped
+/// When a side does not resolve (RootType=''), the checks against it are skipped
 /// (parse-only / tree-less mode). rkConvert type pairs are informational and are
 /// NEVER hard-failed (a rename mismatch is not a path error). Other kinds
 /// (rkUnuse/rkRemove/rkMigrate/rkNote/rkPcre) are not path-checked in Batch 1.
@@ -264,27 +274,27 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// A #link carrying a glyph expression is checked by ParseGlyphExpr and
 /// ValidateGlyphExpr (errors name the expression column), and a 'G[count]' link
 /// must have exactly one image link from the same FromPath in its #convert
-/// block. These checks need no tree, so they also run in parse-only mode.
-/// Pure; deterministic; no I/O.
+/// block. These checks need no class, so they also run in parse-only mode.
+/// Deterministic; reads the index through the classes' caches; writes nothing.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Convert.Rules.ValidateBlocks</para>
-/// <para>Returns: ValidateBlocks(ARules, Trees, False)</para>
+/// <para>Returns: ValidateBlocks(ARules, Classes, False)</para>
 /// <seealso cref="DRagLint.Convert.Rules.ValidateBlocks"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ValidateConversionRules(const ARules: TConversionRuleSet;
-  const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
+  const AFrom, ATo: TClassRef): TArray<TRuleError>;
 
 /// <summary>Validates a parsed rule set BLOCK BY BLOCK: each #convert block's
-/// #link and #default paths against that block's own From/To trees, and each
-/// #mapping line against the trees of the block(s) that #apply it -- plus the
-/// tree-less checks and parse errors ValidateConversionRules reports.</summary>
+/// #link and #default paths against that block's own From/To classes, and each
+/// #mapping line against the classes of the block(s) that #apply it -- plus the
+/// class-less checks and parse errors ValidateConversionRules reports.</summary>
 /// <param name="ARules">The parsed rule set (its ParseErrors are included in the
 /// result).</param>
-/// <param name="ABlockTrees">One TBlockTrees per block, index-aligned with the
-/// book: [0] is the region before the first #convert, [N] the Nth #convert
-/// block in source order. An index past the end counts as two empty trees
+/// <param name="ABlockClasses">One TBlockClasses per block, index-aligned with
+/// the book: [0] is the region before the first #convert, [N] the Nth #convert
+/// block in source order. An index past the end counts as two unset sides
 /// (checks skipped).</param>
 /// <returns>Zero-length array = valid. Otherwise one TRuleError per problem:
 /// parse errors first, then validation errors in source order. Each path error
@@ -292,19 +302,20 @@ function ValidateConversionRules(const ARules: TConversionRuleSet;
 /// checked in, ' (#convert line N: From -&gt; To)'.</returns>
 /// <remarks>
 /// Why it exists: convert-apply used to check a whole multi-block book against
-/// the FIRST block's two trees, so every link of blocks 2..N failed
+/// the FIRST block's two types, so every link of blocks 2..N failed
 /// (convrules\BDE-to-FireDAC.rules: 540 errors). convert-validate, which takes
 /// one --from/--to pair, keeps ValidateConversionRules.
 /// Mapping scope: an #apply belongs to the nearest #convert above it. A #mapping
 /// line is checked against every block that applies its name (and may report
 /// once per such block); a mapping no block applies is checked against the
 /// block it sits in, and is NOT tree-checked when it sits before the first
-/// #convert -- there is no tree it could be checked against. A #link or
-/// #default before the first #convert is checked against ABlockTrees[0].
-/// Pure; deterministic; no I/O.
+/// #convert -- there is no class it could be checked against. A #link or
+/// #default before the first #convert is checked against ABlockClasses[0].
+/// Paths resolve as in ValidateConversionRules (psDfm, ruling R8).
+/// Deterministic; reads the index through the classes' caches; writes nothing.
 /// </remarks>
 function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
-  const ABlockTrees: TArray<TBlockTrees>): TArray<TRuleError>;
+  const ABlockClasses: TArray<TBlockClasses>): TArray<TRuleError>;
 
 /// <summary>Non-fatal findings on a parsed rule set: things that validate but
 /// are almost certainly not what the author meant.</summary>
@@ -937,14 +948,13 @@ begin
   end;
 end;
 
-// True when APath exists as some node's Path in ATree.
-function PathExists(const ATree: TPropTree; const APath: string): Boolean;
+// True when APath resolves from AClass on the DFM surface (a rule path names a
+// .dfm-streamed property -- ruling R8; see TPropSurface).
+function PathExists(const AClass: TClassRef; const APath: string): Boolean;
 var
   N: TPropNode;
 begin
-  Result:= False;
-  for N in ATree.Nodes do
-    if SameText(N.Path, APath) then Exit(True);
+  Result:= AClass.ResolvePath(APath, psDfm, N);
 end;
 
 // The #convert block of every rule, index-aligned with ARules.Rules: 0 before
@@ -976,14 +986,14 @@ begin
 end;
 
 { The one validator behind ValidateConversionRules and
-  ValidateConversionRulesPerBlock. ABlockTrees is index-aligned with
+  ValidateConversionRulesPerBlock. ABlockClasses is index-aligned with
   ConvertBlocks' numbering. APerBlock selects the mapping scope and the message
   suffix: False = the single-pair contract (every mapping line against the
-  trees of the block it sits in, no suffix -- the caller passes the same pair
+  classes of the block it sits in, no suffix -- the caller passes the same pair
   for every block, so that is the one pair); True = the per-block contract
   documented on ValidateConversionRulesPerBlock. }
 function ValidateBlocks(const ARules: TConversionRuleSet;
-  const ABlockTrees: TArray<TBlockTrees>; APerBlock: Boolean): TArray<TRuleError>;
+  const ABlockClasses: TArray<TBlockClasses>; APerBlock: Boolean): TArray<TRuleError>;
 var
   Errs   : TList<TRuleError>;
   R      : TConversionRule ;
@@ -1007,10 +1017,10 @@ var
     Result:= Trim(APath) = STUB_MARKER;
   end;
 
-  function TreesOf(ABlock: Integer): TBlockTrees;
+  function ClassesOf(ABlock: Integer): TBlockClasses;
   begin
-    if (ABlock >= 0) and (ABlock <= High(ABlockTrees)) then Result:= ABlockTrees[ABlock]
-    else Result:= Default(TBlockTrees);
+    if (ABlock >= 0) and (ABlock <= High(ABlockClasses)) then Result:= ABlockClasses[ABlock]
+    else Result:= Default(TBlockClasses);
   end;
 
   // ' (#convert line N: From -> To)' naming the block a path was checked in;
@@ -1025,12 +1035,12 @@ var
     Result:= Format(' (#convert line %d: %s -> %s)', [C.LineNo, C.FromType, C.ToType]);
   end;
 
-  // A path is missing when the tree was supplied, the path is real (not empty,
-  // not the '???' stub) and no node carries it.
-  function Missing(const ATree: TPropTree; const APath: string): Boolean;
+  // A path is missing when the class was supplied and resolves, the path is
+  // real (not empty, not the '???' stub) and it does not resolve from it.
+  function Missing(const AClass: TClassRef; const APath: string): Boolean;
   begin
-    Result:= (ATree.RootType <> '') and (APath <> '') and (not IsStub(APath)) and
-             (not PathExists(ATree, APath));
+    Result:= (APath <> '') and (not IsStub(APath)) and (AClass.RootType <> '') and
+             (not PathExists(AClass, APath));
   end;
 
   // True when some rkMapping line declares AName. Case-insensitive, matching
@@ -1068,33 +1078,33 @@ var
     declaration. }
   procedure CheckMapping(const AMap: TConversionRule; ABlock: Integer);
   var
-    T : TBlockTrees;
+    T : TBlockClasses;
     SP: TMappingSetPair;
   begin
-    T:= TreesOf(ABlock);
-    if Missing(T.FromTree, AMap.WhenFrom) then
+    T:= ClassesOf(ABlock);
+    if Missing(T.FromClass, AMap.WhenFrom) then
       Add(AMap.LineNo, Format('mapping %s #when path not found in --from tree: %s',
         [AMap.MapName, AMap.WhenFrom]) + Where(ABlock));
     for SP in AMap.Sets do
-      if Missing(T.ToTree, SP.ToPath) then
+      if Missing(T.ToClass, SP.ToPath) then
         Add(AMap.LineNo, Format('mapping %s target path not found in --to tree: %s',
           [AMap.MapName, SP.ToPath]) + Where(ABlock));
   end;
 
   procedure CheckLinkOrDefault(const ARule: TConversionRule; ABlock: Integer);
   var
-    T: TBlockTrees;
+    T: TBlockClasses;
   begin
-    T:= TreesOf(ABlock);
+    T:= ClassesOf(ABlock);
     if ARule.Kind = rkDefault then
     begin
-      if Missing(T.ToTree, ARule.ToPath) then
+      if Missing(T.ToClass, ARule.ToPath) then
         Add(ARule.LineNo, Format('default ToPath not found in --to tree: %s', [ARule.ToPath]) + Where(ABlock));
       Exit;
     end;
-    if Missing(T.ToTree, ARule.ToPath) then
+    if Missing(T.ToClass, ARule.ToPath) then
       Add(ARule.LineNo, Format('link ToPath not found in --to tree: %s', [ARule.ToPath]) + Where(ABlock));
-    if Missing(T.FromTree, ARule.FromPath) then
+    if Missing(T.FromClass, ARule.FromPath) then
       Add(ARule.LineNo, Format('link FromPath not found in --from tree: %s', [ARule.FromPath]) + Where(ABlock));
   end;
 
@@ -1179,25 +1189,25 @@ begin
 end;
 
 function ValidateConversionRules(const ARules: TConversionRuleSet;
-  const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
+  const AFrom, ATo: TClassRef): TArray<TRuleError>;
 var
-  Trees: TArray<TBlockTrees>;
-  I    : Integer;
+  Classes: TArray<TBlockClasses>;
+  I      : Integer;
 begin
   // One pair for every block, the region before the first #convert included.
-  SetLength(Trees, Length(ARules.Rules) + 1);
-  for I:= 0 to High(Trees) do
+  SetLength(Classes, Length(ARules.Rules) + 1);
+  for I:= 0 to High(Classes) do
   begin
-    Trees[I].FromTree:= AFromTree;
-    Trees[I].ToTree  := AToTree;
+    Classes[I].FromClass:= AFrom;
+    Classes[I].ToClass  := ATo;
   end;
-  Result:= ValidateBlocks(ARules, Trees, False);
+  Result:= ValidateBlocks(ARules, Classes, False);
 end;
 
 function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
-  const ABlockTrees: TArray<TBlockTrees>): TArray<TRuleError>;
+  const ABlockClasses: TArray<TBlockClasses>): TArray<TRuleError>;
 begin
-  Result:= ValidateBlocks(ARules, ABlockTrees, True);
+  Result:= ValidateBlocks(ARules, ABlockClasses, True);
 end;
 
 function ConversionRuleWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;

@@ -19,8 +19,8 @@ unit DRagLint.Convert.Apply;
   ran, so StartLine/EndLine already span the whole 'object Name: Class ...
   end' block, nesting and all; no separate text-based bracket-matching is
   needed), re-emitted via the 2a-i engine (DRagLint.Convert.DfmReemit.
-  ReemitComponent) driven by the F/T property trees (BuildPropTree, same
-  Depth=6/ToPersistent=True convention as convert-validate/convert-reemit),
+  ReemitComponent) driven by the F/T classes' members (TPropMemberCache via
+  TConvertTreeCache, ToPersistent=True, references as leaves; 1.20.6 -- no tree),
   and replaces the original lines via a tekDeleteLines + tekInsertLines pair
   that preserves the block's original indentation. A ReemitComponent failure
   (Ok=False) skips the WHOLE instance -- no .pas retype/uses edits either --
@@ -59,6 +59,7 @@ uses
   DRagLint.Convert.DfmReemit,
   DRagLint.Convert.CastLib,
   DRagLint.Convert.PropTree,
+  DRagLint.Convert.PropCache,
   DRagLint.Convert.UnitRules,
   DRagLint.Refactor.TextEdit;
 
@@ -349,22 +350,26 @@ type
     Fresh  : Boolean;
     Reasons: TArray<string>;
   end;
-  /// <summary>The property trees one convert-apply run works from, each type
-  /// resolved and built ONCE and shared by rule validation and
-  /// BuildApplyPlan.</summary>
+  /// <summary>The classes one convert-apply run works from: each type name
+  /// resolved ONCE, and one member cache per --db store, shared by rule
+  /// validation and BuildApplyPlan.</summary>
   /// <remarks>
   /// A type name (a #convert header or a .dfm object's class) is resolved to a
   /// qualified class name across Stores in order, first store that resolves it
   /// wins: a BARE name through ResolveClassQName (the first class of that
   /// name), a QUALIFIED name only to a class whose qualified name is exactly
-  /// that, so 'LibX.TNope' never resolves to another unit's TNope. Trees are
-  /// cached by the resolved qualified name, so a bare and a qualified spelling
-  /// of one type share one tree. Every tree is built with Options -- Depth 6,
-  /// ancestor climb stopped at TPersistent, referenced components as leaves --
-  /// the options BuildApplyPlan has always used; validation uses the same trees
-  /// (1.20.6), so a path it accepts is a path the plan can apply. Builds counts
-  /// the trees actually built (apply/1 trees_built). The cache does not own
-  /// Stores; the caller keeps them alive. Not thread-safe.
+  /// that, so 'LibX.TNope' never resolves to another unit's TNope. ClassFor
+  /// pairs that name with the TPropMemberCache of its store, so a bare and a
+  /// qualified spelling of one type share one cache entry. 1.20.6 (T2b): no
+  /// property tree is built any more -- every rule path and every dotted .dfm
+  /// path is resolved segment by segment, each class's members once per run
+  /// (the old depth-6 trees took hours on FireDAC.Comp.Client.TFDQuery). Every
+  /// cache uses the options BuildApplyPlan has always used: ancestor climb
+  /// stopped at TPersistent, referenced components as leaves; validation uses
+  /// the same caches, so a path it accepts is a path the plan can apply.
+  /// ClassesBuilt counts the classes resolved (apply/1 classes_built). The
+  /// object owns its caches, not Stores; the caller keeps them alive. Not
+  /// thread-safe.
   /// </remarks>
   TConvertTreeCache = class
   private type
@@ -375,16 +380,16 @@ type
   private
     FStores  : TArray<ISymbolStore>;
     FResolved: TDictionary<string, TResolved>;
-    FTrees   : TDictionary<string, TPropTree>;
-    FBuilds  : Integer;
+    FCaches  : TArray<TPropMemberCache>; { index-aligned with FStores; nil until first used }
     FOptions : TPropTreeOptions;
     function Lookup(const ATypeName: string): TResolved;
+    function GetClassesBuilt: Integer;
   public
     /// <summary>Creates an empty cache over AStores.</summary>
-    /// <param name="AStores">The indexes to resolve and build against, in
-    /// --db order. Not owned.</param>
+    /// <param name="AStores">The indexes to resolve against, in --db order.
+    /// Not owned.</param>
     constructor Create(const AStores: TArray<ISymbolStore>);
-    /// <summary>Frees the cached trees.</summary>
+    /// <summary>Frees the member caches.</summary>
     destructor Destroy; override;
     /// <summary>The qualified class name ATypeName resolves to.</summary>
     /// <param name="ATypeName">A bare or qualified class name.</param>
@@ -392,35 +397,38 @@ type
     /// class.</returns>
     /// <remarks>Cheap (a name lookup, no tree build); cached.</remarks>
     function ResolveType(const ATypeName: string): string;
-    /// <summary>The property tree of ATypeName, built on first use.</summary>
+    /// <summary>The member cache of one store, created on first use.</summary>
+    /// <param name="AStore">An index into Stores.</param>
+    /// <returns>The cache; nil when AStore is out of range.</returns>
+    function CacheFor(AStore: Integer): TPropMemberCache;
+    /// <summary>ATypeName as one side of a conversion.</summary>
     /// <param name="ATypeName">A bare or qualified class name.</param>
-    /// <returns>The tree; an empty tree (RootType='') when the type does not
-    /// resolve.</returns>
-    /// <remarks>Increments Builds once per distinct resolved type.</remarks>
-    function TreeFor(const ATypeName: string): TPropTree;
+    /// <returns>Its qualified name and the cache of the store it resolved in;
+    /// an unset TClassRef (QName='', Cache=nil) when no store has such a
+    /// class.</returns>
+    /// <remarks>Cheap: a name lookup. Members are resolved lazily, when a path
+    /// is asked for.</remarks>
+    function ClassFor(const ATypeName: string): TClassRef;
     /// <summary>The stores this cache resolves against, in --db order.</summary>
     property Stores: TArray<ISymbolStore> read FStores;
-    /// <summary>How many trees this cache has built.</summary>
-    property Builds: Integer read FBuilds;
+    /// <summary>How many classes the member caches have resolved, summed over
+    /// the stores (apply/1 classes_built).</summary>
+    property ClassesBuilt: Integer read GetClassesBuilt;
   end;
 
 
 /// <summary>Verifies the F and T component types named by EVERY #convert
 /// block of ARules are indexed and current before BuildApplyPlan trusts
-/// their property trees.</summary>
+/// their members.</summary>
 /// <param name="AStores">The symbol indexes to check against, in the order
 /// given (one per --db); the first store that resolves a given type wins
 /// (see CheckTypeFreshness's remarks) -- the From and To types, and the
 /// form's own instances, may live in DIFFERENT --db files.</param>
-/// <param name="ARules">The conversion rule set; the FromType/ToType of every
-/// rkConvert block in AScope are checked, each distinct type once (1.20.6: it
-/// used to be the first block's pair only, so a stale unit behind block 2..N
-/// passed).</param>
-/// <param name="AScope">Which blocks to check, index-aligned as
-/// ConvertBlockScope returns it ([N] = the Nth #convert). A block past its end
-/// is out of scope. convert-apply passes the blocks this unit converts through
-/// (every block under --validate-all-blocks), so a unit-rules run is never
-/// refused over a stale type nothing in the unit uses.</param>
+/// <param name="ARules">The conversion rule set; the FromType/ToType of EVERY
+/// rkConvert block are checked, each distinct type once (1.20.6: it used to be
+/// the first block's pair only, so a stale unit behind block 2..N passed; T2b
+/// dropped the short-lived per-unit block scope, so a stale type of any block
+/// warns on a dry run and refuses --apply, a unit-rules-only run included).</param>
 /// <returns>A TFreshnessResult. Fresh=True when every such type resolves to an
 /// indexed class in SOME store AND its declaring file is up to date on
 /// disk. Fresh=False with one or more human-readable Reasons entries
@@ -441,27 +449,7 @@ type
 /// <seealso cref="DRagLint.Convert.Apply.CheckFreshness.CheckOnce"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet;
-  const AScope: TArray<Boolean>): TFreshnessResult;
-/// <summary>Which #convert blocks of a book one convert-apply run validates
-/// and freshness-checks.</summary>
-/// <param name="ARules">The parsed rule book.</param>
-/// <param name="AInstances">The .dfm instances this run converts
-/// (FindConvertInstances, after --only).</param>
-/// <param name="AAllBlocks">True (--validate-all-blocks) puts every block in
-/// scope.</param>
-/// <returns>Index-aligned with the book's blocks: [0] (before the first
-/// #convert) is always False; [N] is True when block N is in scope.</returns>
-/// <remarks>
-/// By default a block is in scope when it is the block an instance converts
-/// through -- the FIRST block whose From type (bare tail) is the instance's
-/// class, as FindConvertRuleFor picks it. A later block with the same From type
-/// is never used on this unit, so it is out of scope too. Why: validating every
-/// block builds every type's tree; for convrules\BDE-to-FireDAC.rules that was
-/// ~25 min per unit (controller ruling R5, 2026-09-30). Pure.
-/// </remarks>
-function ConvertBlockScope(const ARules: TConversionRuleSet; const AInstances: TArray<TConvertInstance>;
-  AAllBlocks: Boolean): TArray<Boolean>;
+function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 
 /// <summary>The From types of a book that a .dfm holds as INHERITED or INLINE
 /// objects -- instances convert-apply does not convert.</summary>
@@ -484,12 +472,12 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// plus report.</summary>
 /// <param name="ATrees">The run's shared tree cache; its Stores are the symbol
 /// indexes to resolve against, in the order given (one per --db). TYPE
-/// resolution (From/To property trees, ctor-name lookups) tries every store in
+/// resolution (From/To classes, ctor-name lookups) tries every store in
 /// order, first-that-resolves-wins -- the From/To types may live in a
 /// DIFFERENT --db than the unit/instance being converted (Bug 2). Unit-scoped
 /// lookups (the .pas/.dfm's own symbols and refs) use whichever store actually
-/// has AUnitPas/ADfmPath indexed. A tree rule validation already built is
-/// reused, not rebuilt (1.20.6).</param>
+/// has AUnitPas/ADfmPath indexed. Class members rule validation already
+/// resolved are reused, not resolved again (1.20.6).</param>
 /// <param name="AUnitPas">Path to the .pas file that declares/uses the
 /// instances being converted.</param>
 /// <param name="ADfmPath">Path to the .dfm file containing the instances'
@@ -515,7 +503,7 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// Task 3 implements surface #3 (.dfm object-block re-emit): each located
 /// instance's .dfm object block is replaced (tekDeleteLines + tekInsertLines,
 /// same original indentation) with the T block from ReemitComponent, driven by
-/// the F/T property trees (BuildPropTree, Depth=6/ToPersistent=True). A
+/// the F/T classes' members (ATrees.ClassFor; each dotted path resolved lazily). A
 /// ReemitComponent Ok=False (hard re-emit failure) SKIPS THE WHOLE INSTANCE --
 /// its .pas retype/uses edits (surfaces #1/#2) are also withheld, and
 /// Report.Warnings gets an entry -- rather than leave a component converted in
@@ -874,19 +862,13 @@ begin
     if (S.Kind = skClass) and SameText(S.QualifiedName, AQName) then Exit(S.QualifiedName);
 end;
 
-const
-  { The class-recursion depth of every convert-apply property tree -- the value
-    BuildApplyPlan has always used. }
-  CONVERT_TREE_DEPTH = 6;
-
 constructor TConvertTreeCache.Create(const AStores: TArray<ISymbolStore>);
 begin
   inherited Create;
   FStores  := AStores;
   FResolved:= TDictionary<string, TResolved>.Create;
-  FTrees   := TDictionary<string, TPropTree>.Create;
+  SetLength(FCaches, Length(AStores));
   FOptions := Default(TPropTreeOptions);
-  FOptions.Depth       := CONVERT_TREE_DEPTH;
   FOptions.ToPersistent:= True;
   { A REFERENCED COMPONENT IS NOT AN OWNED SUB-OBJECT, and expanding one walks
     the whole form's component graph. Left at the legacy default (False) this is
@@ -902,15 +884,16 @@ begin
     objects) still expand -- those ARE part of the block being re-emitted. What
     stops is following a property that merely POINTS at another component,
     which the DFM records as a name reference and which the re-emit never needs
-    to descend into. Rule validation shares these trees since 1.20.6; before,
-    it built its own with references expanded, which is what made validating
-    every block of the BDE book take ~25 min. }
+    to descend into. A path THROUGH a referenced component (Connection.Params.X)
+    therefore does not resolve, in validation as in the plan. }
   FOptions.TreatRefsAsLeaves:= True;
 end;
 
 destructor TConvertTreeCache.Destroy;
+var
+  C: TPropMemberCache;
 begin
-  FTrees.Free;
+  for C in FCaches do C.Free;
   FResolved.Free;
   inherited Destroy;
 end;
@@ -945,40 +928,32 @@ begin
   Result:= Lookup(ATypeName).QName;
 end;
 
-function TConvertTreeCache.TreeFor(const ATypeName: string): TPropTree;
+function TConvertTreeCache.CacheFor(AStore: Integer): TPropMemberCache;
+begin
+  if (AStore < 0) or (AStore > High(FStores)) then Exit(nil);
+  if FCaches[AStore] = nil then
+    FCaches[AStore]:= TPropMemberCache.Create(FStores[AStore], FOptions);
+  Result:= FCaches[AStore];
+end;
+
+function TConvertTreeCache.ClassFor(const ATypeName: string): TClassRef;
 var
   R: TResolved;
 begin
+  Result:= Default(TClassRef);
   R:= Lookup(ATypeName);
-  if R.Store < 0 then Exit(Default(TPropTree));
-  if FTrees.TryGetValue(UpperCase(R.QName), Result) then Exit;
-  Result:= BuildPropTree(FStores[R.Store], R.QName, FOptions);
-  Inc(FBuilds);
-  FTrees.Add(UpperCase(R.QName), Result);
+  if R.Store < 0 then Exit;
+  Result.QName:= R.QName;
+  Result.Cache:= CacheFor(R.Store);
 end;
 
-function ConvertBlockScope(const ARules: TConversionRuleSet; const AInstances: TArray<TConvertInstance>;
-  AAllBlocks: Boolean): TArray<Boolean>;
+function TConvertTreeCache.GetClassesBuilt: Integer;
 var
-  Froms: TArray<string>;
-  R    : TConversionRule;
-  Inst : TConvertInstance;
-  I    : Integer;
+  C: TPropMemberCache;
 begin
-  Froms:= nil;
-  for R in ARules.Rules do
-    if R.Kind = rkConvert then Froms:= Froms + [BareTypeTail(R.FromType)];
-  SetLength(Result, Length(Froms) + 1);
-  Result[0]:= False;
-  for I:= 1 to High(Result) do Result[I]:= AAllBlocks;
-  if AAllBlocks then Exit;
-  for Inst in AInstances do
-    for I:= 0 to High(Froms) do
-      if SameText(Froms[I], Inst.FromType) then
-      begin
-        Result[I + 1]:= True;
-        Break; { the first matching block is the one FindConvertRuleFor uses }
-      end;
+  Result:= 0;
+  for C in FCaches do
+    if C <> nil then Inc(Result, C.ClassesBuilt);
 end;
 
 function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConversionRuleSet): TArray<string>;
@@ -1274,13 +1249,11 @@ begin
   Result:= True;
 end;
 
-function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet;
-  const AScope: TArray<Boolean>): TFreshnessResult;
+function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 var
   R       : TConversionRule;
   Reasons : TList<string>;
   Seen    : TList<string>;
-  Block   : Integer;
 
   // BareTypeTail: a rule's #convert header may name either type qualified
   // ('LibA.TSrcBtn') -- FindSymbolsByExactName (inside CheckTypeFreshness)
@@ -1304,13 +1277,10 @@ begin
 
   Reasons:= TList<string>.Create;
   Seen   := TList<string>.Create;
-  Block  := 0;
   try
     for R in ARules.Rules do
       if R.Kind = rkConvert then
       begin
-        Inc(Block);
-        if (Block > High(AScope)) or not AScope[Block] then Continue;
         if not CheckOnce(R.FromType) then Result.Fresh:= False;
         if not CheckOnce(R.ToType)   then Result.Fresh:= False;
       end;
@@ -2226,9 +2196,9 @@ begin
   if Length(DfmFileSyms) = 0 then
     DfmFileSyms:= DfmStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
 
-  { F/T property trees come from ATrees, shared with rule validation and built
-    once per type -- see TConvertTreeCache for the build options and why
-    referenced components are leaves. }
+  { F/T classes come from ATrees, shared with rule validation: each class's
+    members are resolved once per run -- see TConvertTreeCache for the options
+    and why referenced components are leaves. }
 
   PasLines:= TStringList.Create;
   Edits    := TList<TTextEdit>.Create;
@@ -2320,9 +2290,8 @@ begin
       end;
 
       var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
-      var FromTree: TPropTree:= ATrees.TreeFor(Inst.FromType);
-      var ToTree  : TPropTree:= ATrees.TreeFor(Inst.ToType);
-      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ARules, FromTree, ToTree, ACastLib);
+      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ARules, ATrees.ClassFor(Inst.FromType),
+        ATrees.ClassFor(Inst.ToType), ACastLib);
       if not ReemitRes.Ok then
       begin
         It:= InstItem(aikInstanceSkipped, afWarnings,

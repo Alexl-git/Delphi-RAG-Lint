@@ -226,9 +226,15 @@ Check 'pas: KMax (read-only) STILL NOT mentioned at all' ($pasRaw -notmatch 'KMa
 Check 'pas: FThing (writable field) NOW INCLUDED with a concrete #link' ($pasRaw -match '#link\s+FThing\s+<-\s+FThing') "raw=$pasRaw"
 
 # ---------------------------------------------------------------------------
-# (4) Round-trip: the pas-surface emitted file must still validate clean
-#     (every concrete path emitted is real, even though the tree used for
-#     validation is the FULL unfiltered tree).
+# (4) Round-trip of the pas-surface emitted file through convert-validate.
+#     1.20.6 (T2b, ruling R8): convert-validate resolves every path on the
+#     .dfm surface -- a published leaf, each hop published or public-and-
+#     class-typed, never a field -- because a #link drives the .dfm re-emit.
+#     The pas surface deliberately emits PUBLIC targets (Caption) and a public
+#     FIELD (FThing), so exactly those three paths now fail; every published
+#     path still validates. (Was: exits 0 against the full unfiltered tree.)
+#     If the owner wants PAS-surface books to validate clean, convert-validate
+#     needs a surface switch -- raised in the T2b report, not decided here.
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'convert-scaffold --surface pas --out (write file), then convert-validate round-trip' -ForegroundColor Cyan
@@ -243,7 +249,12 @@ try {
   $valOut = (& $Exe convert-validate --rules $emitted --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --db $db) -join "`n"
   $valExit = $LASTEXITCODE
 } finally { Pop-Location }
-Check 'round-trip convert-validate exits 0' ($valExit -eq 0) "exit=$valExit; out=$valOut"
+$valErr = @($valOut -split "`n" | Where-Object { $_ -match '^\s*line \d+: ' })
+Check 'round-trip convert-validate: exit 1 with ONLY the R8 .dfm-surface rejections (ToPath Caption, ToPath FThing, FromPath FThing)' `
+  (($valExit -eq 1) -and ($valErr.Count -eq 3) -and `
+   (@($valErr | Where-Object { $_ -match 'link ToPath not found in --to tree: Caption$' }).Count -eq 1) -and `
+   (@($valErr | Where-Object { $_ -match 'link ToPath not found in --to tree: FThing$' }).Count -eq 1) -and `
+   (@($valErr | Where-Object { $_ -match 'link FromPath not found in --from tree: FThing$' }).Count -eq 1)) "exit=$valExit; out=$valOut"
 
 # ---------------------------------------------------------------------------
 # (5) Bad --surface value -> usage error exit 2.
