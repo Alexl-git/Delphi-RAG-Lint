@@ -594,14 +594,19 @@ begin
   // the display carries the flag.
   LText:= SourceRowText(FSources.Items[Index], FIndexed, FIndexKnown, LFlagged);
   FSources.Canvas.FillRect(Rect);
+  // Every row sets its own font state, flagged or not. The colour a clean or
+  // selected row needs is already on the canvas: TCustomListBox.CNDrawItem
+  // copies Font and then the THEMED list-item colour (normal / selected) before
+  // each row, so it is kept as is rather than re-derived here -- only a flagged,
+  // unselected row overrides it.
   if LFlagged then
-  begin
-    FSources.Canvas.Font.Style:= [fsBold];
-    // SetError's colour (MainForm.RefreshStatusColor: clRed in both themes);
-    // a selected row keeps the highlight text colour so it stays readable.
-    if not (odSelected in State) then
-      FSources.Canvas.Font.Color:= clRed;
-  end;
+    FSources.Canvas.Font.Style:= [fsBold]
+  else
+    FSources.Canvas.Font.Style:= [];
+  // SetError's colour (MainForm.RefreshStatusColor: clRed in both themes); a
+  // selected flagged row keeps the selection text colour so it stays readable.
+  if LFlagged and not (odSelected in State) then
+    FSources.Canvas.Font.Color:= clRed;
   FSources.Canvas.TextOut(Rect.Left + TEXT_INSET_X, Rect.Top, LText);
 end;
 
