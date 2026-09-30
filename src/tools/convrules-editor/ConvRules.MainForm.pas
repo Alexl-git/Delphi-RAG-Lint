@@ -33,9 +33,9 @@ uses
   , Vcl.Menus
   , Vcl.Graphics
   , Vcl.Themes
-  , ConvRules.Model
+  , ConvRules.Model  // dl:unit ConvRules.Model accepted -- TRuleBook types a field; BOOK_DEPTH_MIN/MAX/DEFAULT travel with TRuleBook.Depth so the depth combo's 1..10 range cannot drift from the parser's
   , ConvRules.Casts
-  , ConvRules.Engine
+  , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- TEngineAdapter types a field; CAPABILITY_BOOK_DEPTH/PROGRESS_LINES travel with CapabilityNames, the one call that answers them
   , ConvRules.Platform
   , DRagLint.Convert.CastLib
   , ConvRules.ConvCatalog
@@ -182,6 +182,9 @@ type
       FCbToPlat     : TComboBox       ; // TO platform
       FCbSurface    : TComboBox       ; // target surface: DFM (published) | PAS (public + fields)
       FSurfaceMinVis: string          ; // '' | 'published' | 'public' -- proptree --min-visibility
+      FCbDepth      : TComboBox       ; // book #depth, 1..10 (engine 1.20.6 book_depth)
+      FLblDepthNote : TLabel          ; // "(default)" / "(from book)" / invalid / duplicate
+      FBookDepthOk  : Boolean         ; // engine reports book_depth
       FCastDefs     : TArray<TCastDef>; // shipped class-cast library (.castlib)
     { The ENUM half of the same file. LoadCastLib returns only the casts, so the
       enum blocks were parsed and thrown away; the conversion catalog needs them
@@ -302,8 +305,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+6 more)</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+31 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbFrom, FCbTo, FCbFromPlat (+30 more)</para>
+      /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+7 more)</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FLblDepthNote, FCbFrom (+33 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FLblDepthNote, FCbFrom (+32 more)</para>
       /// <seealso cref="ConvRules.ConvertTab.TConvertTab.Create"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddPopupItem"/>
@@ -319,7 +322,7 @@ type
       /// behaviour was worth replacing.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoDeleteUnit (ConvRules.MainForm.pas) (+7 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas) (+8 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SelectedUnitRows</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
       /// <para>Reads: FMiAssign, FActiveHdr, FGrid, FPool, FMiUnassign, FMiFindInFrom, FMiExamine, FMiClearExamine (+5 more)</para>
@@ -512,8 +515,8 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel (+6 more)</para>
-      /// <para>Complexity: 24 (cyclomatic, outer body), 121 lines (full implementation)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus (+7 more)</para>
+      /// <para>Complexity: 24 (cyclomatic, outer body), 122 lines (full implementation)</para>
       /// <para>Reads: FCbFrom, FCbTo, FEngine, FActiveHdr, FBook, FRules</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
@@ -578,7 +581,7 @@ type
       /// recover the full entry for a row whose header index is -1 (a cross-book rule).</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddRuleForSelectedClass (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas) (+9 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddRuleForSelectedClass (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas) (+10 more)</para>
       /// <para>Calls: ConvRules.RuleCatalog.HeaderIndexFor, ConvRules.RuleCatalog.RulesForType, ExtractFileName, NativeInt, Pointer</para>
       /// <para>Reads: FRules, FSelectedFormType, FCatalog, FBook   Writes: FRulesEntries</para>
       /// <seealso cref="ConvRules.RuleCatalog.HeaderIndexFor"/>
@@ -623,16 +626,16 @@ type
       /// <param name="AHdrIdx"><!-- drag-lint:auto type -->Integer</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesSelectItem (ConvRules.MainForm.pas) (+1 more)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, Default, Format, Trim</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 89 lines (full implementation)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas) (+2 more)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, Default, Format, Trim</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 90 lines (full implementation)</para>
       /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+5 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshGrid"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshPool"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LoadGridForBlock(AHdrIdx: Integer);
@@ -1500,7 +1503,7 @@ type
       function ActiveConditionals: TArray<TConditionalFrom>;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas) (+8 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUnuse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddUse (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas) (+9 more)</para>
       /// <para>Calls: ConvRules.Model.TRuleBook.SaveToString</para>
       /// <para>Reads: FRaw, FBook</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.SaveToString"/>
@@ -1971,7 +1974,7 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+43 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+44 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
@@ -2110,6 +2113,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SurfaceChanged(Sender: TObject);
+      /// <summary>Depth combo changed: writes the book's #depth (SetDepth) and reloads the active block's trees once.</summary>
+      /// <param name="Sender">The depth combo.</param>
+      procedure DepthChanged(Sender: TObject);
+      /// <summary>Shows the book's depth, its state note and the capability gate on the depth combo.</summary>
+      procedure RefreshDepthControl;
+      /// <summary>Sets the engine's --depth for the next proptree calls: the book's depth, or 0 (omit) on an engine without book_depth.</summary>
+      procedure PrepareEngineForTrees;
       /// <summary><!-- drag-lint:auto sum -->Lazy-load the class list the first time a
       /// picker is dropped down (enumerating every indexed class is slow, so we defer it
       /// until actually needed).</summary>
@@ -2333,17 +2343,17 @@ type
       /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Create (+7 more)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.CapabilityNames, ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus (+9 more)</para>
       /// <para>constructor</para>
-      /// <para>Reads: FBook, FEngine, FEdDest   Writes: FBook, FSnapshot, FFromPlatform, FToPlatform, FEngine, FActiveHdr, FSurfaceMinVis, FCastDefs (+2 more)</para>
+      /// <para>Reads: FBook, FEngine, FEdDest   Writes: FBook, FSnapshot, FFromPlatform, FToPlatform, FEngine, FBookDepthOk, FActiveHdr, FSurfaceMinVis (+3 more)</para>
       /// <para>UI thread only -- touches Application</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: override</para>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <seealso cref="ConvRules.MainForm.ReadLastFormDir"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildUI"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.EngineDbSet"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(AOwner: TComponent); override;
@@ -2484,6 +2494,8 @@ const { VCL style names as they are recorded INSIDE the .vsf files linked by
   HARVEST_CAPTION     = '(used)'; // Kind column of a harvested (not-yet-ruled) row
   UNIT_STATUS_SUBITEM = 3;        // SubItems index of the Status column
   UNIT_STATUS_COL_W   = 170;
+  DEPTH_HINT = 'Property-tree depth for this book. Deeper = slower; the loading window shows progress.';
+  DEPTH_HINT_UNSUPPORTED = 'Engine does not support book depth (needs drag-lint 1.20.6 or later).';
 
   { ---- helpers ---- }
 
@@ -2556,6 +2568,10 @@ begin
   FToPlatform  := GEditorToPlatform;
   FEngine:= TEngineAdapter.Create(GEditorExe, EngineDbSet);
   FEngine.LongCallRunner:= RunWithProgressDialog; // proptree runs behind a cancellable window
+  // One `info --json` call gates both 1.20.6 features for the whole session.
+  var LCaps: TArray<string>:= FEngine.CapabilityNames;
+  FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
+  FEngine.ProgressLines:= MatchText(CAPABILITY_PROGRESS_LINES, LCaps);
   FActiveHdr:= -1;
   FSurfaceMinVis:= 'published'; // default target surface = DFM-streamable
   { ParseCastLib, not LoadCastLib: the latter returns only the casts and drops the
@@ -2941,6 +2957,27 @@ begin
     + 'PAS = public props + public fields. Read-only leaves are always hidden.';
   FCbSurface.ShowHint:= True;
   FCbSurface.OnChange:= SurfaceChanged;
+
+  // Book tree depth (#depth): read from the book, written back by DepthChanged.
+  // A drop-down, not a spin edit -- one change = one (possibly slow) reload.
+  var LblDepth: TLabel:= TLabel.Create(Self);
+  LblDepth.Parent:= FPanelTop;
+  LblDepth.SetBounds(780, 42, 40, 15);  // dl:ok magic-literal@1596, large-magic-number@1596 -- Task 5; same unnamed SetBounds coordinate idiom used by every control in BuildUI
+  LblDepth.Caption:= 'Depth:';
+  FCbDepth:= TComboBox.Create(Self);
+  FCbDepth.Parent:= FPanelTop;
+  FCbDepth.SetBounds(822, 39, 56, 23);  // dl:ok magic-literal@68e4, large-magic-number@68e4 -- Task 5; same unnamed SetBounds coordinate idiom used by every control in BuildUI
+  FCbDepth.Style:= csDropDownList;
+  for var D: Integer:= BOOK_DEPTH_MIN to BOOK_DEPTH_MAX do
+    FCbDepth.Items.Add(IntToStr(D));
+  FCbDepth.ItemIndex:= BOOK_DEPTH_DEFAULT - BOOK_DEPTH_MIN;
+  FCbDepth.ShowHint:= True;
+  FCbDepth.OnChange:= DepthChanged;
+  FLblDepthNote:= TLabel.Create(Self);
+  FLblDepthNote.Parent:= FPanelTop;
+  FLblDepthNote.SetBounds(884, 42, 200, 15);  // dl:ok magic-literal@5670, large-magic-number@5670 -- Task 5; same unnamed SetBounds coordinate idiom used by every control in BuildUI
+  // Without seFont the VCL style repaints the caption in the style colour and red is lost.
+  FLblDepthNote.StyleElements:= [seClient, seBorder];
 
   // --- row 2: From [v]  ->  To [v]  [New Conversion] ---
   // FROM holds all source components (TComponent desc, Win32+Win64 union); TO holds
@@ -4074,6 +4111,7 @@ begin
   // so a plain manual Load of an unrelated book just shows whatever (if
   // anything) that class name has there -- never stale data from the old book.
   FBook.LoadFromString(AText);
+  RefreshDepthControl;
   if APath <> '' then
     FLblFile.Caption:= APath
   else
@@ -4282,6 +4320,7 @@ begin
   // rule still shows its flattened property list); the To tree loads only once a
   // To class has been assigned.
   FromNote:= ''; ToNote:= '';
+  PrepareEngineForTrees;
   if not FEngine.GetProptree(Node.FromType, FFromTree, Err, FromNote, FSurfaceMinVis) then
   begin
     SetStatus('From tree: ' + Err);
@@ -5812,6 +5851,60 @@ begin
     SetStatus('Surface: DFM -- published (DFM-streamable) props only.');
 end; // procedure
 
+procedure TConvRulesForm.RefreshDepthControl;
+begin
+  FCbDepth.ItemIndex:= FBook.Depth - BOOK_DEPTH_MIN;
+  FCbDepth.Enabled  := FBookDepthOk;
+  FCbDepth.Hint     := if FBookDepthOk then DEPTH_HINT else DEPTH_HINT_UNSUPPORTED;
+  FLblDepthNote.Font.Color:= clRed;
+  case FBook.DepthState of
+    bdsAbsent:
+    begin
+      FLblDepthNote.Caption   := '(default)';
+      FLblDepthNote.Font.Color:= StyleServices.GetSystemColor(clWindowText); // seFont is off: resolve the style's text colour here
+    end;
+    bdsValid:
+    begin
+      FLblDepthNote.Caption   := '(from book)';
+      FLblDepthNote.Font.Color:= StyleServices.GetSystemColor(clWindowText); // seFont is off: resolve the style's text colour here
+    end;
+    bdsInvalid:
+      FLblDepthNote.Caption:= Format('(book value invalid -- using %d)', [BOOK_DEPTH_DEFAULT]);
+    bdsDuplicate:
+      FLblDepthNote.Caption:= '(several #depth lines -- the first is used)';
+  end; // case
+end; // procedure
+
+procedure TConvRulesForm.PrepareEngineForTrees;
+begin
+  // --depth only for an engine that understands it: an older one rejects the flag.
+  FEngine.TreeDepth:= if FBookDepthOk then FBook.Depth else 0;
+end;
+
+procedure TConvRulesForm.DepthChanged(Sender: TObject);
+var
+  D  : Integer  ;
+  Hdr: TRuleNode;
+begin
+  D:= FCbDepth.ItemIndex + BOOK_DEPTH_MIN;
+  if (FBook.DepthState in [bdsValid, bdsDuplicate]) and (FBook.Depth = D) then
+    Exit;
+  // Capture the active block's NODE: an inserted #depth shifts every #convert index.
+  Hdr:= nil;
+  if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
+    Hdr:= FBook.Nodes[FActiveHdr];
+  FBook.SetDepth(D);
+  if Hdr <> nil then
+    FActiveHdr:= FBook.Nodes.IndexOf(Hdr);
+  RefreshRulesList; // FRules' Item.Data header indices are stale after an insert
+  SyncRawFromModel;
+  RefreshDepthControl;
+  UpdateMenuEnabled;
+  if FActiveHdr >= 0 then
+    LoadGridForBlock(FActiveHdr);
+  SetStatus(Format('Tree depth %d for this book -- unsaved; File > Save keeps it.', [D]));
+end; // procedure
+
 { Create or update the #link mapping ToPath <- FromPath in the active block,
   choosing a default cast from the leaf types (identity when same type). Shared by
   the manual Assign and the Auto-Match pass. Does NOT touch the grid/UI -- callers
@@ -6255,6 +6348,7 @@ begin
   SetStatus(Format('Resolving %s and %s ...', [fromT, toT]));
   Application.ProcessMessages;
   tree:= Default(TProptree);
+  PrepareEngineForTrees;
   if not FEngine.GetProptree(fromT, tree, Err, FromNote) or (Length(tree.Leaves) = 0) then
   begin
     if FEngine.LastCancelled then // a cancel is not an unindexed class
