@@ -7223,6 +7223,107 @@ begin
   Check('exit.codes.distinct', (ENGINE_EXIT_TIMEOUT = THREE) and (ENGINE_EXIT_CANCELLED = FOUR) and (PROGRESS_INTERVAL_S = TWO));
 end;
 
+procedure TestEngineArgsAndCaps;
+const
+  INFO = '(loaded defaults from C:\x.json)' + #13#10
+    + '{"version":"1.20.6-alpha","capabilities":{"apply_unit_rules":true,"book_depth":true,"progress_lines":false,"lazy_validate":"true"}}' + #13#10;
+  DEPTH_THREE = 3;
+var
+  Caps: TArray<string>;
+begin
+  Check('args.none', DepthArgs(0, False) = '');
+  Check('args.depth', DepthArgs(DEPTH_THREE, False) = ' --depth 3', DepthArgs(DEPTH_THREE, False));
+  Check('args.progress', DepthArgs(0, True) = ' --progress-interval 2', DepthArgs(0, True));
+  Check('args.both', DepthArgs(DEPTH_THREE, True) = ' --depth 3 --progress-interval 2', DepthArgs(DEPTH_THREE, True));
+  Caps:= ParseCapabilityNames(INFO);
+  Check('caps.true.only', (Length(Caps) = 2) and MatchText('apply_unit_rules', Caps) and MatchText('book_depth', Caps), string.Join(',', Caps));
+  Check('caps.string.true.is.not.true', not MatchText('lazy_validate', Caps));
+  Check('caps.garbage', Length(ParseCapabilityNames('FATAL: no')) = 0);
+  Check('caps.no.block', Length(ParseCapabilityNames('{"version":"1"}')) = 0);
+  Check('caps.consts', (CAPABILITY_BOOK_DEPTH = 'book_depth') and (CAPABILITY_PROGRESS_LINES = 'progress_lines'));
+end;
+
+{ RunCaptureStreaming against a pwsh stand-in for the engine. SKIPs when pwsh.exe
+  is not on PATH (it is on the dev box: PowerShell 7). }
+procedure TestRunCaptureStreaming;
+const
+  SCRIPT =
+      '[Console]::Error.WriteLine(''{"progress":{"elapsed_s":1,"verb":"proptree","class":"A.TX","depth":1,"max_depth":5,"classes_done":1,"classes_queued":2,"nodes":10}}'')' + #13#10
+    + '[Console]::Error.WriteLine(''(loaded defaults from test)'')' + #13#10
+    + '[Console]::Out.WriteLine(''{"qname":"A.TX"}'')' + #13#10
+    + '[Console]::Error.WriteLine(''{"progress":{"elapsed_s":2,"verb":"proptree","class":"A.TX","depth":2,"max_depth":5,"classes_done":3,"classes_queued":0,"nodes":20}}'')' + #13#10
+    + 'if ($args[0] -eq ''sleep'') { Start-Sleep -Seconds 4; Set-Content -LiteralPath $args[1] -Value survived }' + #13#10
+    + 'exit 0' + #13#10;
+  LONG_MS       = 60000;
+  SHORT_MS      = 1500;
+  CANCEL_MAX_MS = 1500;
+  SURVIVE_WAIT  = 6000;
+  TWO           = 2;
+var
+  Pwsh, Dir, Ps1, Marker, Output: string;
+  Eng  : TEngineAdapter;
+  Seen : Integer;
+  Last : TEngineProgress;
+  Tok  : TCancelToken;
+  Code : Integer;
+  TCancel, TBack: UInt64;
+begin
+  Pwsh:= FileSearch('pwsh.exe', GetEnvironmentVariable('PATH'));
+  if Pwsh = '' then
+  begin
+    Skip('stream.*', 'pwsh.exe not on PATH');
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'stream-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Eng:= TEngineAdapter.Create(Pwsh, []);
+  try
+    Ps1:= TPath.Combine(Dir, 'fake.ps1');
+    TFile.WriteAllText(Ps1, SCRIPT, TEncoding.ASCII);
+    Marker:= TPath.Combine(Dir, 'survived.txt');
+
+    Seen:= 0;
+    Code:= Eng.RunCaptureStreaming(Format('-NoProfile -NonInteractive -File "%s"', [Ps1]), LONG_MS,
+      procedure(const AProgress: TEngineProgress)
+      begin
+        Inc(Seen);
+        Last:= AProgress;
+      end, nil, Output);
+    Check('stream.exit0', Code = 0, IntToStr(Code) + ' ' + Output);
+    Check('stream.stdout.kept', Pos('{"qname":"A.TX"}', Output) > 0, Output);
+    Check('stream.stderr.kept', Pos('(loaded defaults from test)', Output) > 0, Output);
+    Check('stream.progress.not.in.output', Pos('"progress"', Output) = 0, Output);
+    Check('stream.progress.seen', (Seen = TWO) and (Last.Depth = TWO) and (Last.QName = 'A.TX'), IntToStr(Seen));
+
+    Tok:= TCancelToken.Create;
+    try
+      TCancel:= 0;
+      Code:= Eng.RunCaptureStreaming(Format('-NoProfile -NonInteractive -File "%s" sleep "%s"', [Ps1, Marker]), LONG_MS,
+        procedure(const AProgress: TEngineProgress)
+        begin
+          if not Tok.IsCancelled then
+          begin
+            TCancel:= GetTickCount64;
+            Tok.Cancel;
+          end;
+        end, Tok, Output);
+      TBack:= GetTickCount64;
+      Check('stream.cancel.code', Code = ENGINE_EXIT_CANCELLED, IntToStr(Code));
+      Check('stream.cancel.fast', (TCancel > 0) and (TBack - TCancel < CANCEL_MAX_MS), Format('%d ms', [TBack - TCancel]));
+      Sleep(SURVIVE_WAIT);  // dl:ok sleep-in-vcl@d144 -- REVIEWED 2026-09-30 console test runner, no VCL message loop: waits past the killed stand-in's would-be write
+      Check('stream.cancel.killed', not TFile.Exists(Marker), 'the sleeping stand-in finished after Cancel');
+    finally
+      Tok.Free;
+    end;
+
+    Code:= Eng.RunCaptureStreaming(Format('-NoProfile -NonInteractive -File "%s" sleep "%s"', [Ps1, Marker]), SHORT_MS, nil, nil, Output);
+    Check('stream.timeout.code', Code = ENGINE_EXIT_TIMEOUT, IntToStr(Code));
+  finally
+    Eng.Free;
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -7369,6 +7470,8 @@ begin
     TestFilterHarvestRows;
     TestDestPlatformLabel;
     TestEngineProgress;
+    TestEngineArgsAndCaps;
+    TestRunCaptureStreaming;
 
     FreeAndNil(GParseBook);
 

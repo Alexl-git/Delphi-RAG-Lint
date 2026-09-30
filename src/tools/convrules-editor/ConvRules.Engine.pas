@@ -21,6 +21,7 @@ uses
   , System.Classes
   , System.JSON
   , System.Generics.Collections
+  , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- the exit codes and PROGRESS_INTERVAL_S are the engine-call contract this adapter implements, so they travel with it
   ;
 
 const
@@ -52,6 +53,12 @@ const
   /// <summary>Watchdog for ONE conversion-path call (convert-apply, index
   /// --project), in milliseconds.</summary>
   CONVERT_TIMEOUT_MS = 600000; // conversions: a 3-file fixture dry-run measured 106 s (2026-09-29)
+  /// <summary>info --json capability: the #depth book directive plus --depth on
+  /// proptree / convert-scaffold (engine 1.20.6).</summary>
+  CAPABILITY_BOOK_DEPTH = 'book_depth';
+  /// <summary>info --json capability: --progress-interval and the stderr progress
+  /// lines (engine 1.20.6). An engine WITHOUT it exits 3 on the flag.</summary>
+  CAPABILITY_PROGRESS_LINES = 'progress_lines';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -248,19 +255,23 @@ type
     private
       FExePath: string        ;
       FDbList : TArray<string>;
+      FTreeDepth     : Integer        ;
+      FProgressLines : Boolean        ;
+      FLongCallRunner: TLongCallRunner;
+      FLastCancelled : Boolean        ;
       /// <param name="AArgs"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: RunCaptureTimed(AArgs,
       /// ENGINE_TIMEOUT_MS, AOutput).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.HasCapability (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas) (+5 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.CapabilityNames (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas) (+4 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCaptureTimed</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCaptureTimed"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function RunCapture(const AArgs: string; out AOutput: string): Integer;
@@ -281,7 +292,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean; overload;
@@ -318,8 +329,8 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgsFor(const ADbs: TArray<string>): string; overload;
@@ -334,7 +345,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgs: string; overload;
@@ -354,7 +365,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string): string; overload;
@@ -421,7 +432,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer): string; overload;
@@ -471,8 +482,8 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgsFor"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AExePath: string; const ADbList: TArray<string>);
@@ -489,8 +500,8 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetDbs(const ADbs: TArray<string>);
@@ -504,8 +515,8 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbList: TArray<string>;
@@ -513,8 +524,11 @@ type
       /// <summary>proptree --qname X [--min-visibility V] --refs-as-leaves --format
       /// json. AMinVisibility ('published'|'public'|'') selects the target surface
       /// (engine schema v17); '' emits every leaf. Returns False + empty tree if the
-      /// type does not resolve (exit 1), the exe/db is unusable (exit 2), or the call
-      /// exceeded ENGINE_TIMEOUT_MS (exit 3).</summary>
+      /// type does not resolve (exit 1), the exe/db is unusable (exit 2), the call
+      /// exceeded CONVERT_TIMEOUT_MS (ENGINE_EXIT_TIMEOUT), or the user cancelled it
+      /// (ENGINE_EXIT_CANCELLED; LastCancelled is then True). Appends
+      /// DepthArgs(TreeDepth, ProgressLines) and runs through LongCallRunner when one is
+      /// set (inline, uncancellable, otherwise).</summary>
       /// <param name="AQname">Bare ('TcxButton') or unit-qualified
       /// ('cxButtons.TcxButton'); a bare name is qualified first via
       /// ResolveClassQName.</param>
@@ -538,14 +552,15 @@ type
       /// True even for a bounded call on a large DevExpress control.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.ParseProptreeJson, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.ResolveClassQName/3, ConvRules.Engine.TEngineAdapter.RunCapture, Default, Format, Trim</para>
+      /// <para>Calls: ConvRules.Engine.DepthArgs, ConvRules.Engine.ParseProptreeJson, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.ResolveClassQName/3, ConvRules.Engine.TEngineAdapter.RunCaptureStreaming, Default, FLongCallRunner, Format, LWork, Trim</para>
+      /// <para>Reads: FTreeDepth, FProgressLines, FLongCallRunner   Writes: FLastCancelled</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Mutates: AError (out), ANote (out), ATree (out)</para>
+      /// <seealso cref="ConvRules.Engine.DepthArgs"/>
       /// <seealso cref="ConvRules.Engine.ParseProptreeJson"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ResolveClassQName"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCaptureStreaming"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetProptree(const AQname: string; out ATree: TProptree; out AError: string; out ANote: string; const AMinVisibility: string = ''): Boolean;
@@ -565,7 +580,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DeclaringUnitOf(const ATypeName: string): string;
@@ -590,7 +605,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>; out AError: string): Boolean; overload;
@@ -636,7 +651,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListProjectUnits(out ANames: TArray<string>; out AError: string): Boolean;
@@ -692,7 +707,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListControlTypesInUnit(const AUnit: string; const AControlSet: TArray<string>; out ATypes: TArray<string>; out AError: string): Boolean;
@@ -722,7 +737,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveTypeLocation(const AType: string; out AFile: string; out ALine: Integer; out AError: string): Boolean; overload;
@@ -780,7 +795,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EnumMembersOf(const AType: string; out AMembers: TArray<string>; out AError: string): Boolean; overload;
@@ -827,13 +842,14 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Trim</para>
+      /// <para>Calls: ConvRules.Engine.DepthArgs, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Trim</para>
+      /// <para>Reads: FTreeDepth</para>
       /// <para>Mutates: AError (out), ARules (out)</para>
+      /// <seealso cref="ConvRules.Engine.DepthArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Scaffold(const AFrom, ATo: string; out ARules: string; out AError: string): Boolean;
@@ -931,9 +947,48 @@ type
       /// <remarks>The JSON is sliced from the first '{' to the last '}': the
       /// engine's "(loaded defaults from ...)" stderr line shares the pipe.</remarks>
       function HasCapability(const AName: string): Boolean;
+      /// <summary>One `info --json` call: every capability the engine reports as true.</summary>
+      /// <returns>[] when the engine fails or its output is unparseable.</returns>
+      function CapabilityNames: TArray<string>;
+      /// <summary>Runs `exe AArgs` with stdout and stderr on SEPARATE pipes, both drained
+      /// while it runs. Progress lines on stderr go to AOnProgress; everything else on
+      /// stderr is appended to AOutput after stdout.</summary>
+      /// <param name="AArgs">The command line after the exe path.</param>
+      /// <param name="ATimeoutMs">Watchdog; on expiry the child is terminated.</param>
+      /// <param name="AOnProgress">Progress sink, called on THIS thread; may be nil.</param>
+      /// <param name="ACancel">Polled every ~40 ms; when set the child is terminated; may be nil.</param>
+      /// <param name="AOutput">stdout, then the non-progress stderr lines.</param>
+      /// <returns>The exit code; -1 when it could not start; ENGINE_EXIT_TIMEOUT;
+      /// ENGINE_EXIT_CANCELLED.</returns>
+      /// <remarks>Blocks the calling thread. Run it on a worker (LongCallRunner) to keep
+      /// the UI alive.</remarks>
+      function RunCaptureStreaming(const AArgs: string; ATimeoutMs: Cardinal; const AOnProgress: TProgressProc; const ACancel: TCancelToken; out AOutput: string): Integer;
 
       property ExePath: string read FExePath;
+      /// <summary>--depth for proptree / convert-scaffold; 0 = omit (engine without book_depth).</summary>
+      property TreeDepth: Integer read FTreeDepth write FTreeDepth;
+      /// <summary>True = pass --progress-interval on proptree (engine reports progress_lines).</summary>
+      property ProgressLines: Boolean read FProgressLines write FProgressLines;
+      /// <summary>Runs proptree behind a progress window; nil = run inline, no cancel
+      /// (the model tests, and any caller without a UI).</summary>
+      property LongCallRunner: TLongCallRunner read FLongCallRunner write FLongCallRunner;
+      /// <summary>True when the LAST GetProptree was cancelled by the user.</summary>
+      property LastCancelled: Boolean read FLastCancelled;
   end;
+
+/// <summary>PURE: the engine flags for tree depth and progress.</summary>
+/// <param name="ADepth">--depth value; 0 or less omits the flag.</param>
+/// <param name="AProgress">True adds --progress-interval PROGRESS_INTERVAL_S.</param>
+/// <returns>'' or a string starting with a space, ready to append to a command line.</returns>
+/// <remarks>Pass ADepth &gt; 0 only when the engine reports book_depth and AProgress only
+/// when it reports progress_lines: an older engine rejects either flag.</remarks>
+function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
+
+/// <summary>PURE: the capability keys whose value is the JSON literal true.</summary>
+/// <param name="AInfoOutput">Raw `info --json` output; text before the first '{' and after
+/// the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
+/// <returns>The keys, in document order; [] when unparseable or no capabilities object.</returns>
+function ParseCapabilityNames(const AInfoOutput: string): TArray<string>;
 
 /// <summary>PURE: the distinct class names in a `drag-lint outline --format json`
 /// payload, in document order.</summary>
@@ -983,6 +1038,7 @@ implementation
 
 uses
   System.IOUtils
+  , System.StrUtils
         {$IFDEF MSWINDOWS}
   , Winapi.Windows {$ENDIF}
   ;
@@ -1143,45 +1199,86 @@ begin
   Result:= RunCaptureTimed(Format('index --project "%s" --db "%s"', [AProjectFile, AProjectDb]), CONVERT_TIMEOUT_MS, AOutput);
 end;
 
-function TEngineAdapter.HasCapability(const AName: string): Boolean;
-var
-  Output: string     ;
-  Root  : TJSONValue ;
-  Caps  : TJSONObject;
+function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
 begin
-  Result:= False;
-  if RunCapture('info --json', Output) <> 0 then
-    Exit;
+  Result:= '';
+  if ADepth > 0 then
+    Result:= Format(' --depth %d', [ADepth]);
+  if AProgress then
+    Result:= Result + Format(' --progress-interval %d', [PROGRESS_INTERVAL_S]);
+end;
+
+function ParseCapabilityNames(const AInfoOutput: string): TArray<string>;
+var
+  Root: TJSONValue ;
+  Caps: TJSONObject;
+begin
+  Result:= nil;
   // The "(loaded defaults from ...)" stderr line shares the pipe, before or after.
-  var LFirst: Integer:= Pos('{', Output);
-  var LLast : Integer:= LastDelimiter('}', Output);
+  var LFirst: Integer:= Pos('{', AInfoOutput);
+  var LLast : Integer:= LastDelimiter('}', AInfoOutput);
   if (LFirst = 0) or (LLast < LFirst) then
     Exit;
-  Root:= TJSONObject.ParseJSONValue(Copy(Output, LFirst, LLast - LFirst + 1));
+  Root:= TJSONObject.ParseJSONValue(Copy(AInfoOutput, LFirst, LLast - LFirst + 1));
   try
     if (Root is TJSONObject) and TJSONObject(Root).TryGetValue<TJSONObject>('capabilities', Caps) then
-      Result:= Caps.GetValue(AName) is TJSONTrue;
+      for var LPair: TJSONPair in Caps do
+        if LPair.JsonValue is TJSONTrue then
+          Result:= Result + [LPair.JsonString.Value];
   finally
     Root.Free;
   end; // try
+end; // function
+
+function TEngineAdapter.HasCapability(const AName: string): Boolean;
+begin
+  Result:= MatchText(AName, CapabilityNames);
+end;
+
+function TEngineAdapter.CapabilityNames: TArray<string>;
+var
+  Output: string;
+begin
+  Result:= nil;
+  if RunCapture('info --json', Output) = 0 then
+    Result:= ParseCapabilityNames(Output);
 end;
 
 const
   MS_PER_SECOND = 1000;
 
 {$IFDEF MSWINDOWS}
+// Starts ACmdLine hidden with AStdOut / AStdErr as its output handles (pass the same
+// handle twice for one merged pipe). Handles are inherited, so the caller closes its
+// copies of the write ends once this returns True, and API's two handles when done.
+function StartHiddenProcess(const ACmdLine: string; AStdOut, AStdErr: THandle; out API: TProcessInformation): Boolean;
+var
+  SI  : TStartupInfoW    ;
+  CmdW: array of WideChar;
+begin
+  FillChar(SI, SizeOf(SI), 0);
+  SI.cb:= SizeOf(SI);
+  SI.dwFlags:= STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+  SI.wShowWindow:= SW_HIDE;
+  SI.hStdOutput:= AStdOut;
+  SI.hStdError := AStdErr;
+  SI.hStdInput := GetStdHandle(STD_INPUT_HANDLE);
+  // CreateProcessW may write into its command-line buffer: hand it a private copy.
+  SetLength(CmdW, Length(ACmdLine) + 1);
+  Move(PChar(ACmdLine)^, CmdW[0], (Length(ACmdLine) + 1) * SizeOf(WideChar));
+  FillChar(API, SizeOf(API), 0);
+  Result:= CreateProcessW(nil, @CmdW[0], nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, API);
+end;
+
 function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;  // dl:ok deep-nesting@dc47 -- REVIEWED 2026-09-29 pre-existing RunCapture body, only renamed + parameterised; flattening the drain loop is out of scope
 var
   SA       : TSecurityAttributes       ;
   ReadPipe : THandle                   ;
   WritePipe: THandle                   ;
-  SI       : TStartupInfoW             ;
   PI       : TProcessInformation       ;
   Buf      : array[0..4095] of AnsiChar;
   BytesRead: DWORD                     ;
   ExitCode : DWORD                     ;
-  CmdLine  : string                    ;
-  CmdW     : array of WideChar         ;
   SB       : TStringBuilder            ;
 begin
   Result:= -1;
@@ -1192,20 +1289,7 @@ begin
   if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then
     Exit;
   try
-    FillChar(SI, SizeOf(SI), 0);
-    SI.cb:= SizeOf(SI);
-    SI.dwFlags:= STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
-    SI.wShowWindow:= SW_HIDE;
-    SI.hStdOutput := WritePipe;
-    SI.hStdError  := WritePipe;
-    SI.hStdInput:= GetStdHandle(STD_INPUT_HANDLE);
-
-    CmdLine:= Format('"%s" %s', [FExePath, AArgs]);
-    SetLength(CmdW, Length(CmdLine) + 1);
-    Move(PChar(CmdLine)^, CmdW[0], (Length(CmdLine) + 1) * SizeOf(WideChar));
-
-    FillChar(PI, SizeOf(PI), 0);
-    if not CreateProcessW(nil, @CmdW[0], nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
+    if not StartHiddenProcess(Format('"%s" %s', [FExePath, AArgs]), WritePipe, WritePipe, PI) then
       Exit;
     CloseHandle(WritePipe);
     WritePipe:= 0;
@@ -1268,8 +1352,154 @@ begin
       CloseHandle(WritePipe);
   end; // try
 end; // function
+
+function TEngineAdapter.RunCaptureStreaming(const AArgs: string; ATimeoutMs: Cardinal; const AOnProgress: TProgressProc; const ACancel: TCancelToken; out AOutput: string): Integer;
+const
+  POLL_MS   = 40;
+  REAP_MS   = 2000;
+  BUF_BYTES = 4096;
+var
+  SA       : TSecurityAttributes;
+  OutRead  : THandle;
+  OutWrite : THandle;
+  ErrRead  : THandle;
+  ErrWrite : THandle;
+  PI       : TProcessInformation;
+  ExitCode : DWORD;
+  StdOut   : TStringBuilder;
+  ErrText  : TStringBuilder;
+  Splitter : TLineSplitter;
+  OnErrLine: TProc<string>;
+  Outcome  : Integer;
+
+  // Reads everything APipe has ready right now; True when anything was read.
+  function Drain(APipe: THandle; const AInto: TProc<string>): Boolean;
+  var
+    Buf      : array[0..BUF_BYTES - 1] of AnsiChar;
+    Avail    : DWORD;
+    BytesRead: DWORD;
+  begin
+    Result:= False;
+    Avail:= 0;
+    while PeekNamedPipe(APipe, nil, 0, nil, @Avail, nil) and (Avail > 0) do
+    begin
+      BytesRead:= 0;
+      if not ReadFile(APipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
+        Exit;
+      AInto(string(AnsiString(Copy(Buf, 0, BytesRead))));
+      Result:= True;
+    end;
+  end;
+
+  // Closes AHandle when it is open and zeroes it, so the finally can call it on all four.
+  procedure CloseIfOpen(var AHandle: THandle);
+  begin
+    if AHandle <> 0 then
+      CloseHandle(AHandle);
+    AHandle:= 0;
+  end;
+
+begin
+  Result:= -1;
+  AOutput:= '';
+  OutRead:= 0;
+  OutWrite:= 0;
+  ErrRead:= 0;
+  ErrWrite:= 0;
+  FillChar(SA, SizeOf(SA), 0);
+  SA.nLength:= SizeOf(SA);
+  SA.bInheritHandle:= True;
+  StdOut  := TStringBuilder.Create;
+  ErrText := TStringBuilder.Create;
+  Splitter:= TLineSplitter.Create;
+  try
+    if not CreatePipe(OutRead, OutWrite, @SA, 0) or not CreatePipe(ErrRead, ErrWrite, @SA, 0) then
+      Exit;
+    // The child inherits only the WRITE ends; an inherited read end keeps a pipe
+    // open after the child exits and the drain never sees EOF.
+    SetHandleInformation(OutRead, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(ErrRead, HANDLE_FLAG_INHERIT, 0);
+    if not StartHiddenProcess(Format('"%s" %s', [FExePath, AArgs]), OutWrite, ErrWrite, PI) then
+      Exit;
+    CloseIfOpen(OutWrite);
+    CloseIfOpen(ErrWrite);
+
+    OnErrLine:= procedure(ALine: string)
+      var
+        LP: TEngineProgress;
+      begin
+        if TryParseProgressLine(ALine, LP) then
+        begin
+          if Assigned(AOnProgress) then
+            AOnProgress(LP);
+        end
+        else
+          ErrText.Append(ALine).Append(sLineBreak);
+      end;
+    var ToOut: TProc<string>:= procedure(S: string)
+      begin
+        StdOut.Append(S);
+      end;
+    var ToErr: TProc<string>:= procedure(S: string)
+      begin
+        Splitter.Feed(S, OnErrLine);
+      end;
+
+    Outcome:= 0;
+    var Deadline: UInt64:= GetTickCount64 + ATimeoutMs;
+    repeat
+      var Got: Boolean:= Drain(OutRead, ToOut);
+      Got:= Drain(ErrRead, ToErr) or Got;
+      if WaitForSingleObject(PI.hProcess, if Got then 0 else POLL_MS) = WAIT_OBJECT_0 then
+      begin
+        Drain(OutRead, ToOut);
+        Drain(ErrRead, ToErr);
+        Break;
+      end;
+      if (ACancel <> nil) and ACancel.IsCancelled then
+        Outcome:= ENGINE_EXIT_CANCELLED
+      else if GetTickCount64 >= Deadline then
+        Outcome:= ENGINE_EXIT_TIMEOUT;
+      if Outcome <> 0 then
+      begin
+        TerminateProcess(PI.hProcess, DWORD(-1));
+        WaitForSingleObject(PI.hProcess, REAP_MS);
+        Break;
+      end;
+    until False;
+    Splitter.Flush(OnErrLine);
+    AOutput:= StdOut.ToString + ErrText.ToString;
+    case Outcome of
+      ENGINE_EXIT_TIMEOUT:
+        AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
+      ENGINE_EXIT_CANCELLED:
+        AOutput:= AOutput + sLineBreak + '[cancelled by the user]';
+    end;
+    if Outcome <> 0 then
+      Result:= Outcome
+    else if GetExitCodeProcess(PI.hProcess, ExitCode) then
+      Result:= Integer(ExitCode);
+    CloseHandle(PI.hProcess);
+    CloseHandle(PI.hThread );
+  finally
+    CloseIfOpen(OutRead);
+    CloseIfOpen(OutWrite);
+    CloseIfOpen(ErrRead);
+    CloseIfOpen(ErrWrite);
+    Splitter.Free;
+    ErrText.Free;
+    StdOut.Free;
+  end; // try
+end; // function
 {$ELSE}
 function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;
+begin
+  // Editor is Windows-only (VCL); non-Windows stub keeps the unit compilable.
+  AOutput:= '';
+  Result:= -1;
+end;
+
+function TEngineAdapter.RunCaptureStreaming(const AArgs: string; ATimeoutMs: Cardinal; const AOnProgress: TProgressProc; const ACancel: TCancelToken; out AOutput: string): Integer;
 begin
   // Editor is Windows-only (VCL); non-Windows stub keeps the unit compilable.
   AOutput:= '';
@@ -1325,16 +1555,30 @@ begin
   VisArg:= '';
   if AMinVisibility <> '' then
     VisArg:= ' --min-visibility ' + AMinVisibility;
-  Code:= RunCapture(Format('proptree --qname "%s"%s --refs-as-leaves --format json%s', [QN, VisArg, DbArgs]), Output);
-  if Code = 3 then
+  FLastCancelled:= False;
+  var LArgs: string:= Format('proptree --qname "%s"%s --refs-as-leaves --format json%s%s',
+    [QN, VisArg, DepthArgs(FTreeDepth, FProgressLines), DbArgs]);
+  var LWork: TStreamingWork:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
+    begin
+      // CONVERT_TIMEOUT_MS: the user can Cancel now, so the watchdog is a backstop only.
+      Result:= RunCaptureStreaming(LArgs, CONVERT_TIMEOUT_MS, AOnProgress, ACancel, Output);
+    end;
+  if Assigned(FLongCallRunner) then
+    Code:= FLongCallRunner(Format('Loading property tree for %s', [QN]), LWork)
+  else
+    Code:= LWork(nil, nil);
+  if Code = ENGINE_EXIT_CANCELLED then
+  begin
+    FLastCancelled:= True;
+    AError:= Format('proptree cancelled for %s -- no tree loaded.', [AQname]);
+    Exit(False);
+  end;
+  if Code = ENGINE_EXIT_TIMEOUT then
   begin
     AError:= Format(
-      'proptree TIMED OUT for %s after %d s -- the property tree is '
-        + 'too large to enumerate. The call already passes --refs-as-leaves, which '
-        + 'bounds reference expansion, so a timeout here means the walk is genuinely '
-        + 'pathological (or the index is being written by another process). Try a '
-        + 'different class, and report the qname.',
-      [AQname, ENGINE_TIMEOUT_MS div 1000]);
+      'proptree TIMED OUT for %s after %d s. Lower the book''s depth (Depth box, top '
+        + 'right) or report the qname; the index may also be being written by another process.',
+      [AQname, CONVERT_TIMEOUT_MS div MS_PER_SECOND]);
     Exit(False);
   end;
   if Code <> 0 then
@@ -2307,7 +2551,7 @@ var
   Code: Integer;
 begin
   AError:= '';
-  Code:= RunCapture(Format('convert-scaffold --from "%s" --to "%s"%s', [AFrom, ATo, DbArgs]), ARules);
+  Code:= RunCapture(Format('convert-scaffold --from "%s" --to "%s"%s%s', [AFrom, ATo, DepthArgs(FTreeDepth, False), DbArgs]), ARules);
   if Code <> 0 then
   begin
     AError:= Format('convert-scaffold failed (exit %d): %s', [Code, Trim(ARules)]);
