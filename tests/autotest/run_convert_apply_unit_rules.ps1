@@ -150,6 +150,30 @@ $r  = Apply 'Ifdef.pas' 'swap.rules' @('--apply', '--no-backup')
 Check 'F1 a conditional entry REFUSES the unit (exit 1)' ($r.Code -eq 1) $r.Out
 Check 'F2 the refusal names the reason' ($r.Out -match '(?i)conditional') $r.Out
 Check 'F3 the file is unchanged' ((Hash 'Ifdef.pas') -eq $hF)
+# T2f: the refusal is uniform -- apply/1 refused (JSON bool) + reason, and one
+# 'REFUSED: <reason>' text line carrying the same reason.
+$j  = Json (Apply 'Ifdef.pas' 'swap.rules' @('--apply', '--no-backup', '--format', 'json')).Out
+Check 'F6 json --apply: ok=false, refused is the JSON literal true, reason names the conditional region' `
+  (($null -ne $j) -and (-not $j.ok) -and ($j.refused -is [bool]) -and ($j.refused -eq $true) -and ($j.reason -match 'conditional') -and `
+   ($j.reason -eq $j.error)) ($j | ConvertTo-Json -Compress -Depth 3)
+Check 'F7 text: exactly one line, "REFUSED: " + that same reason, and no ERROR: line' `
+  (($null -ne $j) -and ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape([string]$j.reason) + '\r?$')) -and `
+   (@($r.Out -split "`n" | Where-Object { $_ -match '^REFUSED: ' }).Count -eq 1) -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
+Check 'F8 the file is still unchanged after the json --apply' ((Hash 'Ifdef.pas') -eq $hF)
+# the same refusal inside a MIXED book (#convert + unit rules, unit WITH a .dfm):
+# the unit is refused whole, .pas and .dfm untouched.
+$hMp = Hash 'MixIfdef.pas'; $hMd = Hash 'MixIfdef.dfm'
+$r  = Apply 'MixIfdef.pas' 'mixifdef.rules' @('--apply', '--no-backup', '--format', 'json')
+$j  = Json $r.Out
+Check 'F9 mixed book, conditional #unuse entry: exit 1, ok=false, refused=true, reason names it' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -eq $true) -and ($j.reason -match 'conditional')) $r.Out
+Check 'F10 ... MixIfdef.pas and MixIfdef.dfm are byte-identical' (((Hash 'MixIfdef.pas') -eq $hMp) -and ((Hash 'MixIfdef.dfm') -eq $hMd))
+$r  = Apply 'MixIfdef.pas' 'mixifdef.rules' @('--apply', '--no-backup')
+Check 'F11 ... text mode prints the REFUSED line' (($r.Code -eq 1) -and ($r.Out -match '(?m)^REFUSED: .*conditional')) $r.Out
+# control: a unit rules-only SUCCESS carries refused=false and reason ''
+$j  = Json (Apply 'NoOld.pas' 'swap.rules' @('--format', 'json')).Out
+Check 'F12 control: success has refused=false (a [bool]) and reason ''''' `
+  (($null -ne $j) -and $j.ok -and ($j.refused -is [bool]) -and ($j.refused -eq $false) -and ($j.reason -eq '')) ($j | ConvertTo-Json -Compress -Depth 3)
 
 # ---- an UNCONDITIONAL Old beside a conditional neighbour is removed safely --
 # The comma Old takes is the one after {$ENDIF} (depth 0); the adds go after

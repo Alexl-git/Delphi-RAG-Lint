@@ -71,7 +71,10 @@ type
   /// <summary>The outcome of PlanUnitRules for one unit.</summary>
   /// <remarks>
   /// Ok=False means the unit is REFUSED: Error names the reason, and Edits and
-  /// Changes are both empty -- nothing is planned for the unit at all. Ok=True
+  /// Changes are both empty -- nothing is planned for the unit at all. Refused
+  /// is True for every such deliberate refusal (the unit cannot be rewritten
+  /// safely -- apply/1 refused=true) and False only for the planner's own
+  /// internal defect (an edit it failed to produce). Ok=True
   /// with no Edits is the normal answer for a unit the book does not touch.
   /// Edits target the unit only, in the whole-line shape TTextEditApplier
   /// applies (a tekDeleteLines of each changed clause's lines plus a
@@ -79,6 +82,7 @@ type
   /// </remarks>
   TUsesPlan = record
     Ok     : Boolean;
+    Refused: Boolean;
     Error  : string;
     Edits  : TArray<TTextEdit>;
     Changes: TArray<TUsesChange>;
@@ -477,6 +481,7 @@ type
     FAddSet    : TDictionary<string, Boolean>;
     FAdds      : array[0..1] of TList<TUsesChange>;
     FError     : string;
+    FRefused   : Boolean;
     function ReadUnit: Boolean;
     procedure Normalise(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>);
     function IsPresent(const AName: string): Boolean;
@@ -580,10 +585,13 @@ begin
   Result:= IsBlank(Copy(FText, FLineStarts[ALine - 1], LineStop(ALine) - FLineStarts[ALine - 1]));
 end;
 
+{ A deliberate refusal: the unit cannot be rewritten safely (apply/1
+  refused=true). Always returns False, for Exit(Refuse(...)). }
 function TUnitRulePlanner.Refuse(const AMsg: string): Boolean;
 begin
-  FError:= Format('%s: %s -- unit rules not applied to this unit', [ExtractFileName(FUnitPas), AMsg]);
-  Result:= False;
+  FError  := Format('%s: %s -- unit rules not applied to this unit', [ExtractFileName(FUnitPas), AMsg]);
+  FRefused:= True;
+  Result  := False;
 end;
 
 { Finds 'unit', 'interface', 'implementation' and the uses clause straight
@@ -886,7 +894,12 @@ var
   A : TUsesChange;
 begin
   if AEmitted = 0 then
-    Exit(Refuse(Format('internal: the %s uses change produced no edit', [AC.Section])));
+  begin
+    { a planner defect, NOT a refusal: the message is Refuse's, the flag is not }
+    Result  := Refuse(Format('internal: the %s uses change produced no edit', [AC.Section]));
+    FRefused:= False;
+    Exit;
+  end;
   for I:= 0 to High(AC.Entries) do
     if ARemoved[I] then
     begin
@@ -1018,7 +1031,8 @@ begin
       Exit;
     end;
   end;
-  Result.Error:= FError;
+  Result.Error  := FError;
+  Result.Refused:= FRefused;
 end;
 
 function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;

@@ -622,7 +622,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@cca2 -- REVIEWED 2026-09-29: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@9903 -- REVIEWED 2026-09-30: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -961,7 +961,9 @@ begin
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
     'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
-    'a .dfm holding an inherited/inline object of a From type is refused whole, unit rules included (exit 1))');
+    'a .dfm holding an inherited/inline object of a From type is refused whole, unit rules included (exit 1); ' +
+    'a deliberate refusal (that one, or a uses entry to change inside a {$IF...} region) writes nothing and prints one ''REFUSED: <reason>'' line; ' +
+    'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
@@ -24272,6 +24274,13 @@ type
       but are inaccessible -- skipped, never applied -- apply/1 unreachable[].
       Their messages are ALSO in Report.Warnings / Report.Items. }
     Unreachable: TArray<TUnreachablePath>;
+    { 1.20.6 (T2f): True for a DELIBERATE refusal -- the unit cannot be
+      converted safely and nothing was written (ruling R6 inherited instances,
+      a unit-rules conditional-uses refusal, and any TApplyResult.Refusal) --
+      apply/1 refused / reason. False for every other outcome, success and
+      genuine failure alike. Reason is '' unless Refused. }
+    Refused: Boolean;
+    Reason : string;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24337,6 +24346,10 @@ begin
     JRoot.AddPair('rules_file', ACtx.RulesFile);
     JRoot.AddPair('ok', TJSONBool.Create(ACtx.Ok));
     JRoot.AddPair('error', ACtx.Error);
+    { T2f: always emitted; the editor keys its 'refused -- not changed' row on
+      refused == true. reason is '' unless refused. }
+    JRoot.AddPair('refused', TJSONBool.Create(ACtx.Refused));
+    JRoot.AddPair('reason', ACtx.Reason);
 
     JRuleErrors:= TJSONArray.Create;
     for RE in ACtx.RuleErrors do
@@ -24592,7 +24605,10 @@ end;
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
 /// hard error (missing .dfm when rules need it, invalid rules, a block whose type resolves in
 /// no --db, an inherited/inline .dfm object of a From type, BuildApplyPlan Ok=False, or
-/// --apply refused by the freshness guard -- a stale or unindexed type of any block); 2 on bad args (missing --unit/--rules, file not
+/// --apply refused by the freshness guard -- a stale or unindexed type of any block; a deliberate
+/// refusal -- the inherited/inline object, a unit-rules {$IF...} uses entry, any
+/// TApplyResult.Refusal -- goes through RefuseUnit: 'REFUSED: <reason>', apply/1 refused=true,
+/// reason, nothing written); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
 /// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
 /// missing .dfm is a hard error (exit 1) for a book with NO unit rules, since every #convert
@@ -24725,6 +24741,24 @@ var
     end;
   end;
 
+  // 1.20.6 (T2f): the ONE exit for a deliberate refusal. JSON: ok=false,
+  // refused=true, reason (and error) = AReason. Text: one 'REFUSED: ' line.
+  // Nothing has been written when this is called. Exit(RefuseUnit(S)).
+  function RefuseUnit(const AReason: string): Integer;
+  begin
+    if UseJson then
+    begin
+      JCtx.Ok     := False;
+      JCtx.Error  := AReason;
+      JCtx.Refused:= True;
+      JCtx.Reason := AReason;
+      EmitApplyJson(JCtx);
+    end
+    else
+      Writeln('REFUSED: ' + AReason);
+    Result:= 1;
+  end;
+
   // 1.20.6: one line saying the component part was skipped, and why; nothing
   // when it ran. Text mode only -- JSON carries component_part.
   procedure PrintComponentPart;
@@ -24818,15 +24852,7 @@ begin
   if Length(InhTypes) > 0 then
   begin
     S:= Format('inherited instances of %s are not converted yet -- unit not changed', [String.Join(', ', InhTypes)]);
-    if UseJson then
-    begin
-      JCtx.Ok   := False;
-      JCtx.Error:= S;
-      EmitApplyJson(JCtx);
-      Exit(1);
-    end;
-    Writeln('ERROR: ' + S);
-    Exit(1);
+    Exit(RefuseUnit(S));
   end;
 
   Trees:= TConvertTreeCache.Create(Stores);
@@ -24909,6 +24935,7 @@ begin
     else
       PlanRes:= BuildUnitRulesOnlyPlan(UnitPas, Rules);
     JCtx.ClassesBuilt:= Trees.ClassesBuilt;
+    if PlanRes.Refused then Exit(RefuseUnit(PlanRes.Error));
     if not PlanRes.Ok then
     begin
       if UseJson then

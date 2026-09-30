@@ -328,6 +328,17 @@ type
     Report: TApplyReport;
     Ok    : Boolean;
     Error : string;
+    /// <summary>True when Ok=False is a DELIBERATE refusal -- the unit cannot
+    /// be converted safely, so nothing was planned and nothing may be written
+    /// -- rather than a failure. convert-apply reports it as apply/1
+    /// refused=true, reason=Error, and prints 'REFUSED: ' + Error.</summary>
+    Refused: Boolean;
+    /// <summary>A refused result: Ok=False, Refused=True, Error=AReason, no
+    /// edits. The one call a planner makes to refuse a unit.</summary>
+    /// <param name="AReason">Why the unit is refused; one ASCII line, shown
+    /// verbatim to the user and to the editor.</param>
+    /// <returns>The refused result.</returns>
+    class function Refusal(const AReason: string): TApplyResult; static;
   end;
 
   /// <summary>The rule book convert-apply runs: the parsed rules and what
@@ -2377,7 +2388,8 @@ begin
       its #convert edits included -- so nothing is half-applied }
     if not UsesPlan.Ok then
     begin
-      Result.Error:= UsesPlan.Error;
+      if UsesPlan.Refused then Result:= TApplyResult.Refusal(UsesPlan.Error)
+      else Result.Error:= UsesPlan.Error;
       Exit;
     end;
     Result.Report.UsesChanges:= UsesPlan.Changes;
@@ -2410,6 +2422,13 @@ begin
   end;
 end;
 
+class function TApplyResult.Refusal(const AReason: string): TApplyResult;
+begin
+  Result        := Default(TApplyResult);
+  Result.Refused:= True;
+  Result.Error  := AReason;
+end;
+
 function BuildUnitRulesOnlyPlan(const AUnitPas: string; const ARules: TConversionRuleSet): TApplyResult;
 var
   UsesPlan: TUsesPlan;
@@ -2422,6 +2441,7 @@ begin
   end;
   UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, nil);
   Result.Ok                := UsesPlan.Ok;
+  Result.Refused           := UsesPlan.Refused;
   Result.Error             := UsesPlan.Error;
   Result.Edits             := UsesPlan.Edits;
   Result.Report.UsesChanges:= UsesPlan.Changes;

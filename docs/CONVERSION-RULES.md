@@ -513,9 +513,24 @@ into the section Old was in; a `#useswap` whose Old the unit does not use makes 
 edit. `#use` adds to the **implementation** uses (a clause is created when there is
 none). An
 entry to remove inside a `{$IF...}` region refuses the whole unit (exit 1, nothing
-written). A unit with no `.dfm`, a book with no `#convert` block, or a `.dfm` no
+written; see *Refusals* below). A unit with no `.dfm`, a book with no `#convert` block, or a `.dfm` no
 block matches, gets its unit rules alone. The `apply/1` JSON reports them as
 `uses[]` / `uses_removed` / `uses_added` plus `component_part`.
+
+### Refusals (`refused` / `reason`, 1.20.6)
+
+Some units `convert-apply` will not touch at all, because no safe rewrite
+exists: a `.dfm` holding an `inherited`/`inline` object of a From type
+(`inherited instances of <Type> are not converted yet -- unit not changed`), and
+a unit whose uses entry to change sits in a `{$IF...}` region (the message
+names the entry and the clause). Every such refusal behaves the same way: exit
+1, NOTHING written (neither `.pas` nor `.dfm`), one text line
+`REFUSED: <reason>`, and in `apply/1` JSON `"ok": false`, `"refused": true`,
+`"reason": "<reason>"` (`error` holds the same text). `refused` (a JSON bool)
+and `reason` are always present: `false` and `""` on success and on every
+genuine failure -- rule errors, the freshness guard, a missing file. The editor
+keys its "refused -- not changed" row on `refused == true`. An unreachable-path
+warning is not a refusal. Schema stays `apply/1` (additive).
 
 ## End-to-end workflow
 

@@ -470,15 +470,42 @@ Check 'C3 both instances converted' (($null -ne $j) -and (@($j.converted).Count 
 # ---- I: R6 -- an inherited object of a From type refuses the unit ---------
 $hp = (Get-FileHash (P 'InhForm.pas')).Hash
 $hd = (Get-FileHash (P 'InhForm.dfm')).Hash
+$R6 = 'inherited instances of TSrcA are not converted yet -- unit not changed'
 $r = ApplyTo 'InhForm.pas' 'inh.rules' @('--apply', '--no-backup')
-Check 'I1 --apply refuses: exit 1 with the R6 reason' `
-  (($r.Code -eq 1) -and ($r.Out -match [regex]::Escape('ERROR: inherited instances of TSrcA are not converted yet -- unit not changed'))) $r.Out
+# T2f: a deliberate refusal prints ONE 'REFUSED: <reason>' line, not 'ERROR:'.
+Check 'I1 --apply refuses: exit 1, one "REFUSED: <R6 reason>" line, no ERROR: line' `
+  (($r.Code -eq 1) -and (@($r.Out -split "`n" | Where-Object { $_ -match '^REFUSED: ' }).Count -eq 1) -and `
+   ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($R6) + '\r?$')) -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
 Check 'I2 InhForm.pas and InhForm.dfm are byte-identical (the #unuse did not run)' `
   (((Get-FileHash (P 'InhForm.pas')).Hash -eq $hp) -and ((Get-FileHash (P 'InhForm.dfm')).Hash -eq $hd))
 $r = ApplyTo 'InhForm.pas' 'inh.rules' @('--format', 'json')
 $j = Json $r.Out
 Check 'I3 json: ok=false, error names the inherited type' `
-  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.error -eq 'inherited instances of TSrcA are not converted yet -- unit not changed')) $r.Out
+  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.error -eq $R6)) $r.Out
+# T2f: apply/1 refused (JSON bool, always emitted) + reason (the text line's reason).
+Check 'I4 json: refused is the JSON literal true and reason equals the R6 text' `
+  (($null -ne $j) -and ($j.refused -is [bool]) -and ($j.refused -eq $true) -and ($j.reason -eq $R6)) ($j | ConvertTo-Json -Compress -Depth 3)
+$r = ApplyTo 'InhForm.pas' 'inh.rules' @('--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+Check 'I5 json --apply: exit 1, ok=false, refused=true, both files byte-identical' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -eq $true) -and ($j.reason -eq $R6) -and `
+   ((Get-FileHash (P 'InhForm.pas')).Hash -eq $hp) -and ((Get-FileHash (P 'InhForm.dfm')).Hash -eq $hd)) $r.Out
+# Controls: a genuine failure and a success are NOT refusals.
+$r = Apply 'bare.rules' @('--format', 'json')
+$j = Json $r.Out
+Check 'I6 control: a rule-validation failure is ok=false with refused=false (a [bool]) and reason ''''' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -is [bool]) -and ($j.refused -eq $false) -and ($j.reason -eq '')) $r.Out
+$r = Apply 'bare.rules'
+Check 'I7 control: text mode keeps "ERROR: conversion rules failed validation:" and prints no REFUSED line' `
+  (($r.Code -eq 1) -and ($r.Out -match '(?m)^ERROR: conversion rules failed validation:') -and -not ($r.Out -match 'REFUSED')) $r.Out
+$r = Apply 'shared.rules' @('--format', 'json')
+$j = Json $r.Out
+Check 'I8 control: a successful run has refused=false (a [bool]) and reason ''''' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.refused -is [bool]) -and ($j.refused -eq $false) -and ($j.reason -eq '')) $r.Out
+$fsLock = [IO.File]::Open((P 'shared.rules'), 'Open', 'Read', 'None')
+try { $r = Apply 'shared.rules' @('--format', 'json') } finally { $fsLock.Dispose() }
+Check 'I9 control: an unreadable rules file is an ERROR (exit 2), never a refusal' `
+  (($r.Code -eq 2) -and ($r.Out -match 'ERROR: cannot read rules file') -and -not ($r.Out -match 'REFUSED') -and -not ($r.Out -match '"refused"\s*:\s*true')) $r.Out
 
 # ---- G: freshness covers every block ------------------------------------
 Add-Content -LiteralPath (P 'LibG.pas') -Value '{ edited after indexing }' -Encoding ascii
