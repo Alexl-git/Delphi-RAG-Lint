@@ -14,7 +14,9 @@
     * per unit: remove Old, add each New once (case-insensitive, never a
       duplicate in either section), keep the section Old was in.
     * #use N adds into the IMPLEMENTATION uses (a clause is created if none).
-    * #useswap with Old absent adds its News into the implementation uses.
+    * #useswap with Old absent makes NO edit (controller ruling R4, 2026-09-30:
+      a swap depends on Old); #use stays unconditional.
+    * INVARIANT: no uses[] row without an edit that realises it.
     * a unit named both added and removed is KEPT (ADD wins, as the editor's
       ConvRules.Units.NormalizeUnitSets does).
     * an entry inside a {$IF...} region REFUSES the unit (exit 1, file untouched).
@@ -162,13 +164,68 @@ $r = Apply 'NoOld.pas' 'convertonly.rules'
 Check 'G1 #convert-only book on a unit with no .dfm: exit 1' ($r.Code -eq 1) $r.Out
 Check 'G2 ... with the unchanged message' ($r.Out -match 'sibling \.dfm not found') $r.Out
 
-# ---- Old absent -> the News go into the implementation uses (created) ------
+# ---- R4: Old absent -> the swap makes NO edit ------------------------------
+$hN = Hash 'NoOld.pas'
+$j  = Json (Apply 'NoOld.pas' 'swap.rules' @('--format', 'json')).Out
+Check 'N1 swap on a unit without Old: dry run plans nothing (uses_added=0, edits_count=0)' `
+  (($null -ne $j) -and $j.ok -and ($j.uses_added -eq 0) -and ($j.uses_removed -eq 0) -and ($j.edits_count -eq 0)) ($j | ConvertTo-Json -Compress -Depth 4)
 $r = Apply 'NoOld.pas' 'swap.rules' @('--apply', '--no-backup')
-$t = Text 'NoOld.pas'
-Check 'N1 --apply exits 0' ($r.Code -eq 0) $r.Out
-Check 'N2 an implementation uses clause is created holding both News' `
-  ($t.Contains("implementation$CRLF$CRLF" + "uses NewU1, NewU2;$CRLF$CRLF" + "end.")) $t
-Check 'N3 interface untouched' ($t.Contains("uses$CRLF  KeepU;$CRLF")) $t
+Check 'N2 --apply exits 0' ($r.Code -eq 0) $r.Out
+Check 'N3 the file is byte-identical' ((Hash 'NoOld.pas') -eq $hN)
+
+# ---- #use on a unit with NO implementation uses creates the clause ---------
+$r = Apply 'UseNew.pas' 'use.rules' @('--apply', '--no-backup')
+$t = Text 'UseNew.pas'
+Check 'U1 --apply exits 0' ($r.Code -eq 0) $r.Out
+Check 'U2 an implementation uses clause is created holding the #use unit' `
+  ($t.Contains("implementation$CRLF$CRLF" + "uses NewU1;$CRLF$CRLF" + "end.")) $t
+Check 'U3 interface untouched' ($t.Contains("uses$CRLF  KeepU;$CRLF")) $t
+
+# ---- I2: a whole-clause removal on a SHARED line is performed, not only reported
+# The invariant first, on a dry run: a uses[] row always has an edit behind it.
+foreach ($shape in @(@('TrailComment.pas','unuse.rules'), @('OneLine.pas','unuse.rules'), @('SwapPresent.pas','swap.rules'))) {
+  $j = Json (Apply $shape[0] $shape[1] @('--format', 'json')).Out
+  Check "V1 $($shape[0]): uses_removed=1 is backed by at least one edit (no phantom row)" `
+    (($null -ne $j) -and $j.ok -and ($j.uses_removed -eq 1) -and ($j.edits_count -ge 1)) ($j | ConvertTo-Json -Compress -Depth 4)
+}
+$r = Apply 'TrailComment.pas' 'unuse.rules' @('--apply', '--no-backup')
+$t = Text 'TrailComment.pas'
+Check 'V2 clause with a trailing comment: exit 0, OldU gone, the comment kept' `
+  (($r.Code -eq 0) -and -not ($t -match '\bOldU\b') -and $t.Contains("implementation$CRLF$CRLF // legacy$CRLF")) $t
+$r = Apply 'OneLine.pas' 'unuse.rules' @('--apply', '--no-backup')
+$t = Text 'OneLine.pas'
+Check 'V3 "implementation uses OldU;" on one line: the clause goes, the keyword stays' `
+  (($r.Code -eq 0) -and $t.Contains("implementation$CRLF$CRLF" + "end.") -and -not ($t -match '\bOldU\b')) $t
+$r = Apply 'SwapPresent.pas' 'swap.rules' @('--apply', '--no-backup')
+$t = Text 'SwapPresent.pas'
+Check 'V4 swap whose News are all present: the Old-only clause is removed, nothing added' `
+  (($r.Code -eq 0) -and -not ($t -match '\bOldU\b') -and (([regex]::Matches($t, '\bNewU1\b')).Count -eq 1) -and `
+   $t.Contains("implementation$CRLF$CRLF // retired$CRLF"))  $t
+
+# ---- I3: quote literals and a multi-line string before the uses clause -----
+$r = Apply 'Quotes.pas' 'unuse.rules' @('--apply', '--no-backup')
+$t = Text 'Quotes.pas'
+Check "Q1 '''' / '''' + '''' / '''''' and a multi-line string holding 'implementation uses OldU;': exit 0" ($r.Code -eq 0) $r.Out
+Check 'Q2 the REAL implementation clause lost OldU; the string content is untouched' `
+  ($t.Contains("uses$CRLF  OtherU;$CRLF") -and $t.Contains("    implementation uses OldU;$CRLF")) $t
+
+$r = Apply 'Quote1.pas' 'unuse.rules' @('--apply', '--no-backup')
+$t = Text 'Quote1.pas'
+Check "Q3 the reviewer's repro: const Q = '''''''' alone before the uses -- exit 0, OldU removed" (($r.Code -eq 0) -and $t.Contains("uses$CRLF  OtherU;$CRLF")) ($r.Out + $t)
+
+# ---- lexer / layout shapes -------------------------------------------------
+$r = Apply 'DotSpace.pas' 'dotunuse.rules' @('--apply', '--no-backup')
+$t = Text 'DotSpace.pas'
+Check 'S1 a space-padded dotted entry (Dot   .OldD) matches #unuse Dot.OldD and is removed' `
+  (($r.Code -eq 0) -and $t.Contains("uses$CRLF  KeepU, OtherU;$CRLF")) $t
+$r = Apply 'ParenComments.pas' 'swap.rules' @('--apply', '--no-backup')
+$t = Text 'ParenComments.pas'
+Check 'S2 (* *) comments between entries survive a removal (pinned exact text)' `
+  (($r.Code -eq 0) -and $t.Contains("uses$CRLF  KeepU (* a *),  (* b *)OtherU, NewU1, NewU2;$CRLF")) $t
+$hT = Hash 'Truncated.pas'
+$r  = Apply 'Truncated.pas' 'unuse.rules' @('--apply', '--no-backup')
+Check 'S3 a uses clause cut off at EOF is REFUSED (exit 1, "could not read"), file unchanged' `
+  (($r.Code -eq 1) -and ($r.Out -match 'could not read the interface uses clause') -and ((Hash 'Truncated.pas') -eq $hT)) $r.Out
 
 # ---- ADD wins: a unit both added and removed is kept, not duplicated -------
 $hW = Hash 'AddWins.pas'
@@ -187,13 +244,13 @@ Check 'M2 LibA swapped out, LibB present EXACTLY once (not added by both the blo
 Check 'M3 the declaration was retyped by the #convert block' ($t -match 'btnTop: TDstBtn;') $t
 
 # ---- the backup path (default --apply) still works on a unit-rules-only run -
-$r = Apply 'Keep2U.pas' 'swap.rules' @('--apply')
+$r = Apply 'Keep2U.pas' 'use.rules' @('--apply')
 Check 'K1 default --apply (backup + provenance stamp) exits 0' ($r.Code -eq 0) $r.Out
 Check 'K2 a .BCK backup was written' (@(Get-ChildItem $WorkDir -Filter 'Keep2U.pas.BCK*').Count -ge 1)
 
 # ---- (j) the converted units compile against the stubs --------------------
 [IO.File]::WriteAllText((P 'P.dpr'), (@(
-  'program P;', '', 'uses', '  SwapIntf, SwapImpl, AlreadyHas, Multiline, LastEntry, NoOld, AddWins, Keep2U, IfdefNeighbour;', '',
+  'program P;', '', 'uses', '  SwapIntf, SwapImpl, AlreadyHas, Multiline, LastEntry, NoOld, AddWins, Keep2U, IfdefNeighbour,', '  UseNew, TrailComment, OneLine, SwapPresent, Quotes, Quote1, DotSpace, ParenComments;', '',
   'begin', 'end.') -join $CRLF) + $CRLF, [Text.Encoding]::ASCII)
 New-Item -ItemType Directory (P 'bin'), (P 'dcu') -Force | Out-Null
 $bat = P 'compile.bat'; $log = P 'compile.log'

@@ -952,7 +952,7 @@ begin
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees, and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
-    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (implementation when Old is absent) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added)');
+    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added)');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
@@ -24389,6 +24389,31 @@ begin
   end;
 end; // procedure
 
+{ 1.20.6: which part of a convert-apply book runs on a unit -- the value of
+  apply/1's component_part. 'applied' (BuildApplyPlan runs the whole book)
+  unless the book has UNIT rules and its component part has nothing to act
+  on: 'skipped-no-dfm', 'skipped-no-convert-rules' (no #convert block) or
+  'skipped-no-instances' (no .dfm instance a block matches, after --only). A
+  book with no unit rules is always 'applied', so its old errors stand. }
+function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
+  const AOnly: TArray<string>): string;
+var
+  R         : TConversionRule;
+  HasConvert: Boolean;
+begin
+  Result:= 'applied';
+  if not BookHasUnitRules(ARules) then Exit;
+  HasConvert:= False;
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then HasConvert:= True;
+  if not TFile.Exists(ADfmPath) then
+    Result:= 'skipped-no-dfm'
+  else if not HasConvert then
+    Result:= 'skipped-no-convert-rules'
+  else if Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0 then
+    Result:= 'skipped-no-instances';
+end;
+
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
@@ -24433,31 +24458,6 @@ end; // procedure
 /// REFUSES (exit 1) before any write is attempted. A book whose #link carries a glyph
 /// expression validates but is REFUSED here (exit 1, through the rule-error path) until
 /// CV-2 realises G-links (UnrealisedGlyphLinks) -- never carried whole.</remarks>
-{ 1.20.6: which part of a convert-apply book runs on a unit -- the value of
-  apply/1's component_part. 'applied' (BuildApplyPlan runs the whole book)
-  unless the book has UNIT rules and its component part has nothing to act
-  on: 'skipped-no-dfm', 'skipped-no-convert-rules' (no #convert block) or
-  'skipped-no-instances' (no .dfm instance a block matches, after --only). A
-  book with no unit rules is always 'applied', so its old errors stand. }
-function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
-  const AOnly: TArray<string>): string;
-var
-  R         : TConversionRule;
-  HasConvert: Boolean;
-begin
-  Result:= 'applied';
-  if not BookHasUnitRules(ARules) then Exit;
-  HasConvert:= False;
-  for R in ARules.Rules do
-    if R.Kind = rkConvert then HasConvert:= True;
-  if not TFile.Exists(ADfmPath) then
-    Result:= 'skipped-no-dfm'
-  else if not HasConvert then
-    Result:= 'skipped-no-convert-rules'
-  else if Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0 then
-    Result:= 'skipped-no-instances';
-end;
-
 function DoConvertApply(const AArgs: TArgs): Integer;
 var
   UnitPas   : string            ;

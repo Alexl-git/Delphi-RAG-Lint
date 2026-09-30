@@ -15,9 +15,10 @@ unit DRagLint.Convert.UnitRules;
     * #use New                       -- add New to the IMPLEMENTATION uses when it
                                         is absent from BOTH clauses (a clause is
                                         created when the unit has none);
-    * #useswap Old -> New1[, New2]   -- remove Old; add each New that is absent
-                                        from both clauses, into the section Old
-                                        was in (implementation when Old is absent).
+    * #useswap Old -> New1[, New2]   -- when the unit uses Old: remove Old and add
+                                        each New that is absent from both clauses,
+                                        into the section Old was in. A unit that
+                                        does not use Old gets NO edit from the swap.
   Names compare case-insensitively. A unit the book both adds and removes is
   KEPT (ADD wins), the same normalisation the editor's
   ConvRules.Units.NormalizeUnitSets applies, #convert block units included.
@@ -187,6 +188,7 @@ type
     procedure Directive(AStart, ABodyStart: Integer; const ACloser: string);
     procedure SkipTo(const ACloser: string);
     procedure SkipTrivia;
+    function IsMultiLineOpener: Boolean;
     procedure ReadString;
   public
     constructor Create(const AText: string);
@@ -282,9 +284,23 @@ begin
   end;
 end;
 
+{ A Delphi 12+ multi-line string opens with three quotes and NOTHING but
+  blanks after them on the line. Four quotes ('''') is the ordinary literal
+  holding one quote, and '''abc' a literal starting with one -- neither opens
+  a multi-line string. }
+function TUsesLexer.IsMultiLineOpener: Boolean;
+var
+  P: Integer;
+begin
+  if Copy(FText, FPos, Length(TRIPLE_QUOTE)) <> TRIPLE_QUOTE then Exit(False);
+  P:= FPos + Length(TRIPLE_QUOTE);
+  while (P <= Length(FText)) and CharInSet(FText[P], [' ', #9]) do Inc(P);
+  Result:= (P > Length(FText)) or (FText[P] = LF);
+end;
+
 procedure TUsesLexer.ReadString;
 begin
-  if Copy(FText, FPos, Length(TRIPLE_QUOTE)) = TRIPLE_QUOTE then
+  if IsMultiLineOpener then
   begin
     { Delphi 12+ multi-line string: runs to the next triple quote. }
     Inc(FPos, Length(TRIPLE_QUOTE));
@@ -440,8 +456,8 @@ type
     function LineOf(AOfs: Integer): Integer;
     function LineStop(ALine: Integer): Integer;
     function LineIsBlank(ALine: Integer): Boolean;
-    procedure EmitRegion(const AC: TUsesClause; ASpans: TList<TSpan>; AInsAt: Integer;
-      const AInsText: string; AWhole: Boolean; AEdits: TList<TTextEdit>);
+    function EmitRegion(const AC: TUsesClause; ASpans: TList<TSpan>; AInsAt: Integer;
+      const AInsText: string; AWhole: Boolean; AEdits: TList<TTextEdit>): Integer;
     property Text: string read FText;
   end;
 
@@ -472,6 +488,8 @@ type
       AClaimed: TList<Integer>; ASpans: TList<TSpan>): Boolean;
     function MarkRemovals(const AC: TUsesClause; out ARemoved: TArray<Boolean>;
       out ALastKept: Integer): Boolean;
+    function RecordChanges(const AC: TUsesClause; const ARemoved: TArray<Boolean>;
+      AAdds: TList<TUsesChange>; AAddLine, AEmitted: Integer): Boolean;
     function PlanClause(AIdx: Integer): Boolean;
   public
     constructor Create(const AUnitPas, AText: string);
@@ -680,8 +698,9 @@ begin
       rkUse: RequestAdd(R.UnitName, 1, '#use ' + R.UnitName);
       rkUseSwap:
       begin
+        { a swap depends on Old: a unit that does not use it is not touched }
         S:= SectionOf(R.UnitName);
-        if S < 0 then S:= 1;
+        if S < 0 then Continue;
         for U in R.UnitsAdd do RequestAdd(U, S, SwapRuleText(R));
       end;
     end;
@@ -761,8 +780,8 @@ end;
   AInsAt (0 = none), then emits one delete + insert pair for those lines. A
   line whose every non-blank character was deleted is dropped whole. AWhole:
   the whole clause goes; when it owns its lines they are simply deleted. }
-procedure TUnitText.EmitRegion(const AC: TUsesClause; ASpans: TList<TSpan>; AInsAt: Integer;
-  const AInsText: string; AWhole: Boolean; AEdits: TList<TTextEdit>);
+function TUnitText.EmitRegion(const AC: TUsesClause; ASpans: TList<TSpan>; AInsAt: Integer;
+  const AInsText: string; AWhole: Boolean; AEdits: TList<TTextEdit>): Integer;
 var
   FirstLine, LastLine, RegStart, RegStop, L, P, LS, LE, Kept: Integer;
   Mask   : TArray<Boolean>;
@@ -772,6 +791,7 @@ var
   E      : TTextEdit;
   AllGone: Boolean;
 begin
+  Result   := AEdits.Count;
   FirstLine:= LineOf(AC.Start);
   LastLine := LineOf(AC.Stop - 1);
   RegStart := FLineStarts[FirstLine - 1];
@@ -785,7 +805,7 @@ begin
     E.EndLine:= LastLine;
     if LineIsBlank(FirstLine - 1) and LineIsBlank(LastLine + 1) then E.EndLine:= LastLine + 1;
     AEdits.Add(E);
-    Exit;
+    Exit(AEdits.Count - Result);
   end;
   SetLength(Mask, RegStop - RegStart + 1);
   for Sp in ASpans do
@@ -813,20 +833,25 @@ begin
       Inc(Kept);
       if (L < LastLine) and not Mask[LE - RegStart] then SB.Append(LF);
     end;
-    if SB.ToString = Copy(FText, RegStart, RegStop - RegStart) then Exit;
-    E.Kind   := tekDeleteLines;
-    E.Line   := FirstLine;
-    E.EndLine:= LastLine;
-    AEdits.Add(E);
-    if Kept = 0 then Exit;
-    E.Kind   := tekInsertLines;
-    E.Line   := FirstLine - 1;
-    E.EndLine:= 0;
-    E.Text   := SB.ToString.Replace(LF, CRLF);
-    AEdits.Add(E);
+    if SB.ToString <> Copy(FText, RegStart, RegStop - RegStart) then
+    begin
+      E.Kind   := tekDeleteLines;
+      E.Line   := FirstLine;
+      E.EndLine:= LastLine;
+      AEdits.Add(E);
+      if Kept > 0 then
+      begin
+        E.Kind   := tekInsertLines;
+        E.Line   := FirstLine - 1;
+        E.EndLine:= 0;
+        E.Text   := SB.ToString.Replace(LF, CRLF);
+        AEdits.Add(E);
+      end;
+    end;
   finally
     SB.Free;
   end;
+  Result:= AEdits.Count - Result;
 end;
 
 { Marks the clause's entries the book removes and finds the last KEPT one
@@ -850,6 +875,39 @@ begin
   Result:= True;
 end;
 
+{ Records the clause's change rows. THE INVARIANT: a row never exists without
+  an edit that realises it -- AEmitted = 0 with rows to report is a planner
+  defect, so the unit is refused rather than reported with a phantom change. }
+function TUnitRulePlanner.RecordChanges(const AC: TUsesClause; const ARemoved: TArray<Boolean>;
+  AAdds: TList<TUsesChange>; AAddLine, AEmitted: Integer): Boolean;
+var
+  I : Integer;
+  Ch: TUsesChange;
+  A : TUsesChange;
+begin
+  if AEmitted = 0 then
+    Exit(Refuse(Format('internal: the %s uses change produced no edit', [AC.Section])));
+  for I:= 0 to High(AC.Entries) do
+    if ARemoved[I] then
+    begin
+      Ch:= Default(TUsesChange);
+      Ch.Action  := 'remove';
+      Ch.UnitName:= AC.Entries[I].Name;
+      Ch.Section := AC.Section;
+      Ch.Line    := FUnit.LineOf(AC.Entries[I].Start);
+      Ch.Rule    := FRemoveRule[AC.Entries[I].Name];
+      FChanges.Add(Ch);
+    end;
+  for Ch in AAdds do
+    if Ch.Rule <> '' then
+    begin
+      A:= Ch;
+      A.Line:= AAddLine;
+      FChanges.Add(A);
+    end;
+  Result:= True;
+end;
+
 function TUnitRulePlanner.PlanClause(AIdx: Integer): Boolean;
 var
   C       : TUsesClause;
@@ -860,8 +918,8 @@ var
   I, LastKept, Anchor, AddLine: Integer;
   Removed   : TArray<Boolean>;
   AnyRemoved: Boolean;
+  Emitted   : Integer;  { edits EmitRegion / the clause insert produced }
   Ch        : TUsesChange;
-  A         : TUsesChange;
   E         : TTextEdit;
   Sp        : TSpan;
 begin
@@ -888,13 +946,25 @@ begin
       E.Line    := C.KwLine;
       E.Text    := CRLF + 'uses ' + String.Join(', ', Names.ToArray) + ';';
       FEdits.Add(E);
+      Emitted:= 1;
     end
     else if LastKept < 0 then
     begin
       if FLex.DirectiveIn(C.Start, C.Stop) then
         Exit(Refuse(Format('the %s uses clause holds a compiler directive, so it cannot be rewritten whole', [C.Section])));
       if Adds.Count = 0 then
-        FUnit.EmitRegion(C, Spans, 0, '', True, FEdits)
+      begin
+        { the whole 'uses ... ;' goes. When it owns its lines EmitRegion deletes
+          them; when it shares a line (a trailing comment, 'implementation
+          uses X;') this span removes it and the rest of the line stays. }
+        Sp.Start:= C.Start;
+        Sp.Stop := C.Stop;
+        I:= C.Start;
+        while (I > 1) and CharInSet(FText[I - 1], [' ', #9]) do Dec(I);
+        if (I > 1) and (FText[I - 1] <> LF) then Sp.Start:= I;  { 'implementation uses X;' }
+        Spans.Add(Sp);
+        Emitted:= FUnit.EmitRegion(C, Spans, 0, '', True, FEdits);
+      end
       else
       begin
         { every entry goes and the adds take their place }
@@ -902,7 +972,7 @@ begin
         Sp.Stop := C.Entries[High(C.Entries)].Stop;
         Spans.Add(Sp);
         AddLine:= FUnit.LineOf(Sp.Start);
-        FUnit.EmitRegion(C, Spans, Sp.Start, String.Join(', ', Names.ToArray), False, FEdits);
+        Emitted:= FUnit.EmitRegion(C, Spans, Sp.Start, String.Join(', ', Names.ToArray), False, FEdits);
       end;
     end
     else
@@ -919,30 +989,13 @@ begin
       if Adds.Count > 0 then
       begin
         AddLine:= FUnit.LineOf(C.Entries[Anchor].Start);
-        FUnit.EmitRegion(C, Spans, C.Entries[Anchor].Stop, ', ' + String.Join(', ', Names.ToArray), False, FEdits);
+        Emitted:= FUnit.EmitRegion(C, Spans, C.Entries[Anchor].Stop, ', ' + String.Join(', ', Names.ToArray), False, FEdits);
       end
       else
-        FUnit.EmitRegion(C, Spans, 0, '', False, FEdits);
+        Emitted:= FUnit.EmitRegion(C, Spans, 0, '', False, FEdits);
     end;
 
-    for I:= 0 to High(C.Entries) do
-      if Removed[I] then
-      begin
-        Ch:= Default(TUsesChange);
-        Ch.Action  := 'remove';
-        Ch.UnitName:= C.Entries[I].Name;
-        Ch.Section := C.Section;
-        Ch.Line    := FUnit.LineOf(C.Entries[I].Start);
-        Ch.Rule    := FRemoveRule[C.Entries[I].Name];
-        FChanges.Add(Ch);
-      end;
-    for Ch in Adds do
-      if Ch.Rule <> '' then
-      begin
-        A:= Ch;
-        A.Line:= AddLine;
-        FChanges.Add(A);
-      end;
+    Result:= RecordChanges(C, Removed, Adds, AddLine, Emitted);
   finally
     Claimed.Free;
     Spans.Free;
