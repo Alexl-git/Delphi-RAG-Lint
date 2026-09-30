@@ -513,7 +513,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel (+6 more)</para>
-      /// <para>Complexity: 22 (cyclomatic, outer body), 115 lines (full implementation)</para>
+      /// <para>Complexity: 24 (cyclomatic, outer body), 121 lines (full implementation)</para>
       /// <para>Reads: FCbFrom, FCbTo, FEngine, FActiveHdr, FBook, FRules</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
@@ -625,8 +625,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesSelectItem (ConvRules.MainForm.pas) (+1 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, Default, Format, Trim</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 74 lines (full implementation)</para>
-      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+3 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 89 lines (full implementation)</para>
+      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+5 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
@@ -4325,7 +4325,22 @@ begin
   else
     SetStatus(Format('%s -> %s : %d From leaves, %d To leaves.', [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)]) + Notes);
   if LCancelled then
-    SetStatus(Format('Property-tree load cancelled for %s -> %s. Lower the book depth, or select the rule again to retry.', [Node.FromType, Node.ToType]));
+  begin
+    SetStatus(Format('Property-tree load cancelled for %s -> %s. Lower the book depth, or select the rule (or double-click its class) again to retry.', [Node.FromType, Node.ToType]));
+    // Leave the block NOT loaded, or the retry is a no-op: OpenOwningRuleEntry
+    // skips a block that FActiveHdr says is already on screen.
+    FActiveHdr:= -1;
+    // VCL does not refire OnSelectItem for an unchanged selection, so a click on
+    // the same rule row would load nothing. Queued: this may be running inside
+    // that row's own selection notification. FRules is single-select, so
+    // ItemIndex -1 deselects its row.
+    TThread.ForceQueue(nil,
+      procedure
+      begin
+        if FActiveHdr < 0 then
+          FRules.ItemIndex:= -1;
+      end);
+  end;
   // A rule is now active: the actions that needed one become reachable. Every
   // "a rule was selected" path (RulesSelectItem, LoadFile's auto-select,
   // DoNewConversion, SurfaceChanged) lands here, so this is the single hook.
@@ -6243,7 +6258,7 @@ begin
   if not FEngine.GetProptree(fromT, tree, Err, FromNote) or (Length(tree.Leaves) = 0) then
   begin
     if FEngine.LastCancelled then // a cancel is not an unindexed class
-      SetStatus('New conversion cancelled -- no class was checked.')
+      SetStatus(Format('New conversion cancelled while checking the From class %s -- nothing was created.', [fromT]))
     else
       SetError(Format('From class "%s" is not indexed (no properties found). %s', [fromT, Err]));
     Exit;
@@ -6251,7 +6266,7 @@ begin
   if not FEngine.GetProptree(toT, tree, Err, ToNote) or (Length(tree.Leaves) = 0) then
   begin
     if FEngine.LastCancelled then // a cancel is not an unindexed class
-      SetStatus('New conversion cancelled -- no class was checked.')
+      SetStatus(Format('New conversion cancelled while checking the To class %s -- nothing was created.', [toT]))
     else
       SetError(Format('To class "%s" is not indexed (no properties found). %s', [toT, Err]));
     Exit;
@@ -6315,9 +6330,12 @@ begin
   end
   else
     LoadGridForBlock(newHdrIdx);
+  // A cancelled load leaves no trees to match against (and no active block).
+  var LLoadCancelled: Boolean:= FEngine.LastCancelled;
 
   // pre-fill the obvious matches
-  DoAutoMatch(nil);
+  if not LLoadCancelled then
+    DoAutoMatch(nil);
   SyncRawFromModel;
   // This is where a bare class name typed into a picker is first resolved, so it is
   // also where an FMX-vs-VCL tie has to be said out loud -- the tree behind every
@@ -6329,7 +6347,10 @@ begin
     Notes:= Notes + '  ' + ToNote;
   if Length(UnitRules) > 0 then
     Notes:= Notes + '  Unit rules added: ' + string.Join(', ', UnitRules) + '.';
-  SetStatus(Format('Conversion %s -> %s set and auto-matched. Review, then Save.', [fromT, toT]) + Notes);
+  if LLoadCancelled then
+    SetStatus(Format('Conversion %s -> %s set, but its property-tree load was cancelled, so nothing was auto-matched. Select the rule to load it.', [fromT, toT]) + Notes)
+  else
+    SetStatus(Format('Conversion %s -> %s set and auto-matched. Review, then Save.', [fromT, toT]) + Notes);
 end; // procedure
 
 procedure TConvRulesForm.DoUnassign(Sender: TObject);

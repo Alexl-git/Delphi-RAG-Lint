@@ -550,6 +550,10 @@ type
       /// through owned TPersistent sub-objects ('Colors.Button.FormattedText.*') are
       /// still returned in full. ATree.Truncated reports the engine's own cap and is
       /// True even for a bounded call on a large DevExpress control.
+      /// LastCancelled is reset at the START of every call, so it never carries a
+      /// previous cancel through a later failure. An exception from LongCallRunner
+      /// (the progress window re-raises its worker's) is returned as False with the
+      /// message in AError, never raised to the caller.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Engine.DepthArgs, ConvRules.Engine.ParseProptreeJson, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.ResolveClassQName/3, ConvRules.Engine.TEngineAdapter.RunCaptureStreaming, Default, FLongCallRunner, Format, LWork, Trim</para>
@@ -1549,6 +1553,9 @@ begin
   AError:= '';
   ANote := '';
   ATree:= Default(TProptree);
+  // First, before any early Exit: LastCancelled describes THIS call only. A reset
+  // further down left a previous cancel standing through a resolve failure.
+  FLastCancelled:= False;
   // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
   // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
   // qualified or not resolvable).
@@ -1585,7 +1592,6 @@ begin
   VisArg:= '';
   if AMinVisibility <> '' then
     VisArg:= ' --min-visibility ' + AMinVisibility;
-  FLastCancelled:= False;
   var LArgs: string:= Format('proptree --qname "%s"%s --refs-as-leaves --format json%s%s',
     [QN, VisArg, DepthArgs(FTreeDepth, FProgressLines), DbArgs]);
   var LWork: TStreamingWork:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
@@ -1593,10 +1599,20 @@ begin
       // CONVERT_TIMEOUT_MS: the user can Cancel now, so the watchdog is a backstop only.
       Result:= RunCaptureStreaming(LArgs, CONVERT_TIMEOUT_MS, AOnProgress, ACancel, Output);
     end;
-  if Assigned(FLongCallRunner) then
-    Code:= FLongCallRunner(Format('Loading property tree for %s', [QN]), LWork)
-  else
-    Code:= LWork(nil, nil);
+  try
+    if Assigned(FLongCallRunner) then
+      Code:= FLongCallRunner(Format('Loading property tree for %s', [QN]), LWork)
+    else
+      Code:= LWork(nil, nil);
+  except
+    // A proptree failure is a status message, not the application's crash dialog:
+    // RunWithProgressDialog re-raises the worker's exception on this thread.
+    on E: Exception do
+    begin
+      AError:= Format('proptree failed for %s: %s', [AQname, E.Message]);
+      Exit(False);
+    end;
+  end; // try
   if Code = ENGINE_EXIT_CANCELLED then
   begin
     FLastCancelled:= True;

@@ -7340,6 +7340,51 @@ begin
   end; // try
 end;
 
+{ GetProptree's LastCancelled describes the LAST call only, and a runner that
+  raises comes back as an error, not an exception. The engine exe is a path that
+  does not exist: a QUALIFIED name skips resolution, so the fake runner's answer
+  is what that call sees; a BARE name then fails at resolution (the query process
+  cannot start) before any runner call is made. }
+procedure TestProptreeCancelState;
+var
+  Eng   : TEngineAdapter;
+  Tree  : TProptree;
+  Err   : string;
+  Note  : string;
+  Ok    : Boolean;
+  Raised: Boolean;
+begin
+  Eng:= TEngineAdapter.Create(TPath.Combine(TPath.GetTempPath, 'no-such-engine-' + TPath.GetGUIDFileName + '.exe'), []);
+  try
+    Eng.LongCallRunner:=
+      function(const ATitle: string; const AWork: TStreamingWork): Integer
+      begin
+        Result:= ENGINE_EXIT_CANCELLED;
+      end;
+    Ok:= Eng.GetProptree('U.TFoo', Tree, Err, Note);
+    Check('engine.lastcancelled.set', (not Ok) and Eng.LastCancelled, Err);
+    Ok:= Eng.GetProptree('TFoo', Tree, Err, Note);
+    Check('engine.lastcancelled.reset.on.resolve.error', (not Ok) and (not Eng.LastCancelled) and (Pos('cannot resolve', Err) > 0), Err);
+
+    Eng.LongCallRunner:=
+      function(const ATitle: string; const AWork: TStreamingWork): Integer
+      begin
+        raise EInOutError.Create('worker failed');
+      end;
+    Raised:= False;
+    Ok    := True;
+    try
+      Ok:= Eng.GetProptree('U.TFoo', Tree, Err, Note);
+    except  // dl:ok try-except-swallowed@ee67 -- not swallowed: Raised is asserted by engine.proptree.runner.raise.is.error just below
+      on Exception do
+        Raised:= True;
+    end;
+    Check('engine.proptree.runner.raise.is.error', (not Raised) and (not Ok) and (Pos('worker failed', Err) > 0), Err);
+  finally
+    Eng.Free;
+  end; // try
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -7488,6 +7533,7 @@ begin
     TestEngineProgress;
     TestEngineArgsAndCaps;
     TestRunCaptureStreaming;
+    TestProptreeCancelState;
 
     FreeAndNil(GParseBook);
 

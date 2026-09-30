@@ -210,13 +210,17 @@ begin
     begin
       Form:= TEngineWaitForm.CreateFor(ATitle, Worker, Token, Watch);
       try
-        // The caller holds an hourglass; the Cancel button must look clickable.
-        Saved:= Screen.Cursor;
-        Screen.Cursor:= crDefault;
-        try
-          Form.ShowModal;
-        finally
-          Screen.Cursor:= Saved;
+        // Finished while the form was being built: showing it now would only flash it.
+        if not Worker.Finished then
+        begin
+          // The caller holds an hourglass; the Cancel button must look clickable.
+          Saved:= Screen.Cursor;
+          Screen.Cursor:= crDefault;
+          try
+            Form.ShowModal;
+          finally
+            Screen.Cursor:= Saved;
+          end;
         end;
       finally
         Form.Free;
@@ -225,8 +229,12 @@ begin
     Worker.WaitFor;
     Result:= Worker.FResult;
     if Worker.FFailed then
-      raise Exception.Create(Worker.FError); // dl:ok raise-bare-exception@65c1 -- the worker's exception object cannot cross threads, so its class name rides in the message; the one caller (TEngineAdapter.GetProptree) catches Exception
+      raise Exception.Create(Worker.FError); // dl:ok raise-bare-exception@65c1 -- the worker's exception object cannot cross threads, so its class name rides in the message; the one caller, TEngineAdapter.GetProptree, catches Exception around its runner call and returns it as AError (test engine.proptree.runner.raise.is.error)
   finally
+    // Leaving early (a raise in CreateFor/ShowModal, Application.Terminate): stop the
+    // engine, or Worker.Free waits out the whole proptree backstop.
+    if not Worker.Finished then
+      Token.Cancel;
     Worker.Free;
     Token.Free;
   end; // try

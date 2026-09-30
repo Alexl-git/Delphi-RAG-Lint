@@ -199,6 +199,31 @@ function DblClickRow($lb, $idx) {
   [void][W]::PostMessage($lb, 0x0203, [IntPtr]1, $lp); [void][W]::PostMessage($lb, 0x0202, [IntPtr]::Zero, $lp)
 }
 
+# Engine children started by the editor, counted by a background thread that
+# polls every millisecond or so: a proptree on an unknown class lives ~60 ms, which
+# a PowerShell polling loop missed in 1 of 3 runs. Only processes whose image is
+# the drag-lint.exe beside the editor count, so other sessions' engines do not.
+Add-Type -TypeDefinition @"
+using System; using System.Text; using System.Threading; using System.Diagnostics;
+using System.Collections.Generic; using System.Runtime.InteropServices;
+public static class ChildWatch {
+  [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint a, bool i, int pid);
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern bool QueryFullProcessImageNameW(IntPtr h, int f, StringBuilder s, ref int n);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+  static volatile bool run; static Thread th; static HashSet<int> seen, hits;
+  static string Image(int pid) {
+    IntPtr h = OpenProcess(0x1000, false, pid); if (h == IntPtr.Zero) return "";
+    try { var s = new StringBuilder(1024); int n = 1024; return QueryFullProcessImageNameW(h, 0, s, ref n) ? s.ToString() : ""; } finally { CloseHandle(h); }
+  }
+  static int[] Ids() { var ps = Process.GetProcessesByName("drag-lint"); var r = new int[ps.Length]; for (int i = 0; i < ps.Length; i++) { r[i] = ps[i].Id; ps[i].Dispose(); } return r; }
+  public static void Start(string exe) {
+    seen = new HashSet<int>(Ids()); hits = new HashSet<int>(); run = true;
+    th = new Thread(() => { while (run) { foreach (int id in Ids()) if (seen.Add(id) && string.Equals(Image(id), exe, StringComparison.OrdinalIgnoreCase)) hits.Add(id); Thread.Sleep(1); } });
+    th.IsBackground = true; th.Start();
+  }
+  public static int Stop() { run = false; th.Join(); return hits.Count; }
+}
+"@
 $tmp = Join-Path $env:TEMP ('enginewait-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 [IO.Directory]::CreateDirectory($tmp) | Out-Null
 $slow = Join-Path $tmp 'Slow.rules'
@@ -252,26 +277,39 @@ try {
   Check 'wait.cancel.stops.to.tree' (($dlg -ne [IntPtr]::Zero) -and ($again -eq [IntPtr]::Zero)) 'a second progress window appeared after Cancel (or none appeared at all)'
   $st = StatusText $main
   Check 'wait.cancel.status' ($st -match 'load cancelled') $st
+  # The retry the status names must really load: a cancelled block is left NOT
+  # loaded, so the same double-click starts the engine (and the window) again.
+  $e = OpenClass $main 'TcxButton'
+  $dlg2 = WaitCls $p.Id 'TEngineWaitForm' 20
+  Check 'wait.retry.after.cancel' ($dlg2 -ne [IntPtr]::Zero) $e
+  $btn2 = @(Find $dlg2 'TButton' 'Cancel')[0]
+  if ($btn2 -ne $null) { Click $btn2 }
+  $t0 = Get-Date
+  while ((((Get-Date) - $t0).TotalSeconds -lt 3) -and (@([W]::Tops($p.Id)) -contains $dlg2)) { Start-Sleep -Milliseconds 100 }
 } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 
 # --- 2. fast load: no window flashes ---
-# Positive control: the load must actually RUN (status 'Loaded TNoSuchClassXyz'),
-# or "no window" would pass on an editor that never called the engine at all.
+# Positive control: the ENGINE must actually run. The load's two engine children
+# (the class-name query, then proptree) are counted by PID from the drag-lint.exe
+# beside the editor; and the open path must finish (status 'Loaded TNoSuchClassXyz').
+$engineExe = Join-Path (Split-Path $Exe) 'drag-lint.exe'
 $p = Start-Process $Exe -ArgumentList "`"$fast`" --form `"$dfm`"" -PassThru
 try {
   $main = WaitCls $p.Id 'TConvRulesForm' 30
   Start-Sleep -Seconds 2
+  [ChildWatch]::Start($engineExe)
   $e = OpenClass $main 'TNoSuchClassXyz'
-  $t0 = Get-Date; $seen = $false; $loaded = $false; $st = ''
+  # No StatusText inside the loop: WM_GETTEXT blocks while the editor's UI thread
+  # waits on the engine, which would stall the window poll for the whole call.
+  $t0 = Get-Date; $seen = $false; $loaded = $false
   while (((Get-Date) - $t0).TotalSeconds -lt 5) {
     if ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }) { $seen = $true }
-    $st = StatusText $main
-    if ($st -match 'Loaded TNoSuchClassXyz') { $loaded = $true }
-    Start-Sleep -Milliseconds 50
+    Start-Sleep -Milliseconds 10
   }
-  Check 'wait.fast.no.window' ($loaded -and -not $seen) ("load ran: $loaded; window seen: $seen; $e $st")
+  $kids = [ChildWatch]::Stop()
+  $st = StatusText $main; if ($st -match 'Loaded TNoSuchClassXyz') { $loaded = $true }
+  Check 'wait.fast.no.window' ($loaded -and ($kids -ge 2) -and -not $seen) ("load ran: $loaded; engine children: $kids; window seen: $seen; $e $st")
 } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-
 [IO.Directory]::Delete($tmp, $true)
 "RESULT pass=$script:pass fail=$script:fail"
 if ($script:fail -gt 0) { exit 1 }
