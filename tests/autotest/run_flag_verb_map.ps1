@@ -257,6 +257,18 @@ foreach ($f in $map.Global) {
 }
 Write-Host ("      [NOTE] cross-verb (pre-dispatch) flags, excluded: " + (($globalFlags | Sort-Object) -join ' ')) -ForegroundColor DarkGray
 
+# THE CROSS-VERB SET IS PINNED. Every flag in it is exempted from every verb's
+# gap count, so a flag that JOINS it silently -- ResolveConsumerDbs reading one
+# more TArgs field, say -- would lower the gap without a line of --help changing,
+# and a flag that LEAVES it (1.20.4: Run stopped calling the resolver before
+# dispatch) inflates the gap for a reason no banner edit can fix. Either is a
+# change to the classification, so it must be made here, deliberately.
+$ExpectedGlobalFlags = @('--db', '--dir', '--file', '--in', '--platform', '--project')
+$globalDiff = @(Compare-Object -ReferenceObject $ExpectedGlobalFlags -DifferenceObject @($globalFlags | Sort-Object) |
+                ForEach-Object { '{0}{1}' -f $(if ($_.SideIndicator -eq '=>') { '+' } else { '-' }), $_.InputObject })
+Check 'cross-verb flag set is exactly the pinned set (--db --dir --file --in --platform --project)' ($globalDiff.Count -eq 0) `
+  ("difference: " + ($globalDiff -join ' ') + " -- update `$ExpectedGlobalFlags only as a deliberate reclassification")
+
 # check 9 of run_docs_sync_guard.ps1 owns "accepted but in --help nowhere" (F1)
 # and its exemption table. This axis asks only WHERE a documented flag is
 # documented, so a flag the banner does not carry at all is not counted twice.

@@ -620,7 +620,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@6496 -- REVIEWED 2026-09-29: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@cca2 -- REVIEWED 2026-09-29: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -1026,11 +1026,16 @@ begin
   Writeln('         index with no --db writes to <target>\_D-RAG\<name>.sqlite');
   Writeln('         --project (or index <x.dpr|.dproj>) with no --db: the project''s');
   Writeln('         OWN database only -- its exact manifest owner, else');
-  Writeln('         <project dir>\_D-RAG\<base>.sqlite -- plus, for readers, the');
-  Writeln('         platform library. Never another project''s DB. index and');
+  Writeln('         <project dir>\_D-RAG\<base>.sqlite -- plus, for readers that use');
+  Writeln('         the consumer DB list, the platform library; no sibling project DB.');
+  Writeln('         Exceptions: outline --file also opens DBs that hold or folder-match');
+  Writeln('         the file, and lint''s dl:shared check opens the sibling projects a');
+  Writeln('         unit declares. index <x.dpr|.dproj> refreshes ONLY that one file');
+  Writeln('         (use --project for the compile-closure scan). index and');
   Writeln('         refresh-findings refuse when two sections claim the project.');
   Writeln('         A "db" in .drag-lint.json counts as an explicit --db.');
-  Writeln('         Destructive purge-locals always needs an explicit --db.');
+  Writeln('         Destructive purge-locals always needs an explicit --db');
+  Writeln('         (on the command line or a .drag-lint.json "db").');
 end; // procedure
 
 /// <summary>True when ASwitch appears verbatim on the command line.</summary>
@@ -4634,7 +4639,8 @@ end;
 /// caller refuses).</returns>
 /// <remarks>
 /// <para>THE WRITE RULE for a --project run, and for a positional
-/// .dpr/.dproj/.dpk (the same project-scoped scan): (1) an explicit --db (the
+/// .dpr/.dproj/.dpk (a SINGLE-FILE refresh, not a closure scan, but the file
+/// belongs to the same project's database): (1) an explicit --db (the
 /// command line, or a "db" key in a .drag-lint.json), else (2) the exact
 /// manifest owner of the project file (pdmUnique, ExpandSectionDb naming), else
 /// (3) &lt;project dir&gt;\_D-RAG\&lt;project base name&gt;.sqlite -- even when
@@ -4667,11 +4673,14 @@ begin
     manifest order or by a folder prefix. The folder loop below cannot name it
     anyway: a project include never prefixes a folder, and it names the DB with
     the pre-_D-RAG OutDir\<section>.sqlite rule rather than ExpandSectionDb. }
-  { A POSITIONAL project file is the same project-scoped scan (DoIndex treats a
-    bare .dpr/.dproj exactly like --project), so it takes the same rule. Through
-    the folder loop it got the dead OutDir\<Section>.sqlite name, resolved
-    includes against the process CWD, and a project under a FOLDER section
-    landed in that section's DB. }
+  { A POSITIONAL project file is NOT a --project run: DoIndex walks just that
+    one file (Folders:= [AArgs.Path]) with no project defines, because only
+    --project (or a .drag-lint.json "project" key) sets ProjectPath. The file
+    still belongs to that project, so it is written into the project's OWN
+    database by the same rule. Through the folder loop it got the dead
+    OutDir\<Section>.sqlite name, resolved includes against the process CWD,
+    and a project under a FOLDER section landed in that section's DB.
+    `index --project X` is the closure scan. }
   var ProjFile: string:= AArgs.ProjectPath;
   if (ProjFile = '') and MatchText(ExtractFileExt(AIndexPath), ['.dpr', '.dproj', '.dpk']) then ProjFile:= AIndexPath;
   if ProjFile <> '' then Exit(ResolveProjectWriteDbIn('index', ProjFile, AManifest));
@@ -5364,10 +5373,12 @@ begin
   end
   else Folders:= [AArgs.Path];
 
-  { PROJECT-scoped means the scope came from a project's compile closure, not
-    from a folder walk. `--project` is the explicit form; a bare .dpr/.dproj
-    path reaches the same arm, so both count. Everything else -- an explicit
-    folder, --scan-libraries-* -- is a LIBRARY scan. }
+  { PROJECT-scoped: `--project` (the compile-closure scan above) or a bare
+    .dpr/.dproj path. The bare path does NOT reach the closure arm -- it walks
+    only that one file (Folders:= [AArgs.Path]) with the platform built-in
+    defines -- but it is counted here, so it stamps the scope and the project
+    tag as a --project run does. Everything else -- an explicit folder,
+    --scan-libraries-* -- is a LIBRARY scan. }
   var IsProjectScopedTarget: Boolean:=
     (AArgs.ProjectPath <> '') or
     SameText(ExtractFileExt(AArgs.Path), '.dpr') or

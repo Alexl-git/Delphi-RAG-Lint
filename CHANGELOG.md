@@ -38,15 +38,19 @@ manifest-loader changes under `src\index`; each re-pin carries a dated note.)
   the project refuse, naming both. `index` (`--project` or a positional project file) and
   `refresh-findings` follow it (`--db` is now optional for `refresh-findings`). `compile-check`
   caches only into an explicit `--db` or the project's unique manifest owner, and otherwise compiles
-  and reports without caching. `purge-locals` refuses unless `--db` is typed. `exceptions-sync` and
+  and reports without caching. `purge-locals` refuses unless a database is given explicitly (a
+  `--db` on the command line or a `.drag-lint.json` `"db"`). `exceptions-sync` and
   `wiring` refuse (exit 2, naming `--db`) when the project has no database of its own; a
   Library-section DB is never taken as a project store (recognised by section kind, not by a
   `library-` file-name prefix). Guard: `tests\autotest\run_index_project_nodb_sibling_guard.ps1`
   (isolated engine copy with its own manifest; RED on 1.20.3 and on the first fix).
 - **`--project` READERS no longer see sibling project databases** (owner ruling 2026-08-13: the
-  authoritative set is the platform library plus the project's own DB). With `--project`,
-  `query`, `lint`, `lint-all` and the other readers open the project's own DB (if it exists) plus
-  the platform library, and nothing else; siblings are no longer kept behind the owner. With no own
+  authoritative set is the platform library plus the project's own DB). With `--project`, the
+  readers resolved through the consumer DB list (`query`, `lint`, `lint-all` and most others) open
+  the project's own DB (if it exists) plus the platform library; siblings are no longer kept behind
+  the owner. Two readers are exceptions and still open other projects' DBs: `outline --file F
+  --project P` also opens the DBs that hold or folder-match `F` (`ResolveReadDbsForFile`), and
+  `lint`'s `dl:shared` check opens the sibling projects a shared unit declares, on purpose. With no own
   DB, stderr says `NOTE: no index owns <project> -- other projects' indexes are not consulted` (an
   ambiguous project names its claimants), and `lint-all --project` refuses instead of linting
   against a sibling or the library. **A cross-project answer now needs an explicit `--db`.**
@@ -105,10 +109,9 @@ manifest-loader changes under `src\index`; each re-pin carries a dated note.)
   that link the unit pass (with `-B`); the shipped BPL does not define it, so its behaviour is
   unchanged. The runner snapshots the live key before and after and fails "owner plugin settings
   untouched" on any difference, then removes the `.Test` key.
-- **Each compiling fixture has a private DCU folder** (`-NU tests\fixtures\_dcu\<name>`, gitignored).
-  Before, the `-B` fixtures left DCUs beside the sources -- among them a `Settings.dcu` built with
-  the test define that a plugin build could have reused. The runner fails "no fixture wrote a DCU
-  under src\" on any change there.
+- **Each compiling fixture has a private DCU folder** (`-NU tests\fixtures\_dcu\<name>`, gitignored),
+  and so does every other test script that runs dcc64, so no test writes a DCU beside its source.
+  The runner fails "no fixture wrote a DCU under src\" on any change there.
 
 ### Docs
 
@@ -129,6 +132,12 @@ manifest-loader changes under `src\index`; each re-pin carries a dated note.)
 
 ### Known issues
 
+- **A positional `index <X.dpr|.dproj>` is NOT a closure scan.** It writes into the project's own
+  database (the rule above), but it walks ONLY that one file, parses it with no project defines
+  (the platform built-ins, default Win64) and stamps that default fingerprint -- and it still stamps
+  the database as a project scan. Use `index --project <X.dproj>` for the compile closure. The
+  1.20.3 docs said a `.dpr`/`.dproj` target was a closure scan; `--help`, `README.md`,
+  `INSTALL.md`, `docs\INSTALL.md` and `docs\AI-USAGE.md` now say what it does.
 - `info --db <file that is not SQLite>` dies with `FATAL` exit 3 and loses every other `--db` in the
   call; the `unreadable` verdict is unreachable (pre-existing; filed for a later release).
 - `lint --fix --fix-rule doc-drift` renders some managed "Used by" lines uncapped (1005 to 2566

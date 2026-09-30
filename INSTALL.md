@@ -262,11 +262,18 @@ Without `--db` (and with no `"db"` in a `.drag-lint.json`, which counts as an
 explicit `--db`), a `--project` run -- or `index` given a `.dpr`/`.dproj`
 directly -- touches only the project's OWN database: its exact manifest
 section, else `<project dir>\_D-RAG\<project>.sqlite`. `index` and
-`refresh-findings` write there; readers open it plus the platform library and
-no other project's database. Two sections claiming the project make `index`
+`refresh-findings` write there; readers resolved through the consumer DB list
+open it plus the platform library and no other project's database. Two readers
+are exceptions: `outline --file F --project P` also opens the databases that
+hold or folder-match `F`, and `lint`'s `dl:shared` check opens the sibling
+projects a shared unit declares. Two sections claiming the project make `index`
 and `refresh-findings` refuse, naming both. `compile-check` caches only into an
 explicit `--db` or the project's unique manifest section, and otherwise reports
-without caching. `purge-locals` always needs an explicit `--db`. Before 1.20.4
+without caching. `purge-locals` always needs a database given explicitly (on
+the command line or as a `.drag-lint.json` `"db"`). A positional
+`index <X.dproj>` refreshes ONLY that one file, with no project defines, into
+the project's own database; `index --project` is the compile-closure scan.
+Before 1.20.4
 an unregistered project could be indexed into the FIRST manifest section's
 database -- another project's.
 

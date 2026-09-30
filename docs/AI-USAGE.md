@@ -49,10 +49,14 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > position on stderr and returns nothing. Match on the EXIT CODE, not the prose.
 > Omitting `--db` is always safe -- the manifest resolver drops absent files.
 > With `--project` and no `--db` (a `"db"` in `.drag-lint.json` counts as an
-> explicit `--db`), readers open ONLY that project's own index (its exact
-> manifest section, else `<project dir>\_D-RAG\<base>.sqlite`) plus the platform
-> library; with no index of its own a reader prints `NOTE: no index owns ...`
-> (or names the claiming sections) and consults no other project's DB.
+> explicit `--db`), readers resolved through the consumer DB list open ONLY that
+> project's own index (its exact manifest section, else
+> `<project dir>\_D-RAG\<base>.sqlite`) plus the platform library; with no index
+> of its own such a reader prints `NOTE: no index owns ...` (or names the
+> claiming sections) and consults no other project's DB. Two exceptions:
+> `outline --file F --project P` also opens the DBs that hold or folder-match
+> `F` (siblings included), and `lint`'s `dl:shared` check opens the sibling
+> projects a shared unit declares, on purpose.
 > `index` (given `--project` or a `.dpr`/`.dproj`) and `refresh-findings` write
 > to that same own index and refuse, naming both, when two sections claim the
 > project. `compile-check` caches only into an explicit `--db` or the project's
@@ -616,7 +620,7 @@ pure-diagnostic verbs are broken out in 2b.
 **Index / DB management**
 | Verb | What it does |
 |------|--------------|
-| `index <path>` | build/refresh an index; a `.dpr`/`.dproj` target = project (compile-closure) scan, a folder = library scan. `--recompile` (default) / `--rebuild`; also `--project`, `--watch`, `--deep`. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform. After the walk every run resolves in this order: `uses-targets`, `ancestry`, **`facts-inherited`** (v23 -- inherited fields into `symbol_facts.reads_fields`/`writes_fields`; runs only when the run parsed files, so a no-change run does nothing here), `helpers`, `calls` (skipped when no file changed and the edges already hold), **`purity`** (purity v2: the interprocedural `Effect-free (proven)` verdict into `symbol_facts.effect_free` / `effect_summary` / `effect_witness`; runs whenever `calls` ran or any routine lacks a verdict) |
+| `index <path>` | build/refresh an index; `--project <.dpr/.dproj>` = project (compile-closure) scan, a folder = library scan. A POSITIONAL `.dpr`/`.dproj` refreshes ONLY that one file (no project defines, into the project's own DB) -- not a closure scan. `--recompile` (default) / `--rebuild`; also `--project`, `--watch`, `--deep`. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform. After the walk every run resolves in this order: `uses-targets`, `ancestry`, **`facts-inherited`** (v23 -- inherited fields into `symbol_facts.reads_fields`/`writes_fields`; runs only when the run parsed files, so a no-change run does nothing here), `helpers`, `calls` (skipped when no file changed and the edges already hold), **`purity`** (purity v2: the interprocedural `Effect-free (proven)` verdict into `symbol_facts.effect_free` / `effect_summary` / `effect_witness`; runs whenever `calls` ran or any routine lacks a verdict) |
 | any `index` run | mode and sweep: `--force-reparse` (alias `--no-skip`) re-parses every walked file even when path+mtime+sha are unchanged -- once per DB after an engine upgrade that extracts something new; `--no-prune` is the one "delete nothing" switch (a dry look: both sweeps are computed and reported, nothing deleted), `--prune` forces the sweep for a single-FILE walk. Walk scoping: `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` skips any file larger than N KB, `--no-use-ignore` opts out of the `.gitignore` / `.hgignore` pattern files honoured by default (a folder holding a `.scanignore` marker file is always pruned), `--no-sql-ms` indexes EVERY `.sql` file rather than only the `MS*.sql` migration scripts, `--shallow` (default) vs `--deep` (also records usage refs) |
 | any verb that opens a DB | `--size-guard-mb N` / `--force32` (`index`, `query`, `lsp`, `serve`): the 32-bit build refuses a database larger than the guard because it would run out of address space mid-answer; the first moves the threshold, the second overrides the refusal. Neither is normally needed on Win64 |
 | `index <path> --resolve-only` | re-derive call edges / ancestry / helper targets and purity verdicts from the STORED parses, skipping the walk. Use when `schema_meta.resolver_fingerprint` shows the edges predate the current resolver -- minutes, against the hours a re-parse costs, because no parse became wrong. It writes edges INSIDE that one index only: **no cross-store edges are written** (0 `refs.external_target` in every project DB, measured 2026-09-22; a library re-resolve added 13 intra-library edges per platform). Do not expect it to bind project calls to the platform library |

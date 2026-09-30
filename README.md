@@ -194,10 +194,13 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > names it (with its position, `--db #2 of 3`) on stderr and exits 2 -- it never
 > answers from the databases that happened to open. A narrowed answer is
 > indistinguishable from a complete one. Omit `--db` and the manifest resolver
-> supplies the set, dropping absent files itself. With `--project`, that set is
-> the project's OWN index (its exact manifest section, else
-> `<project dir>\_D-RAG\<base>.sqlite`) plus the platform library -- never
-> another project's DB. `index` (given `--project` or a `.dpr`/`.dproj`) and
+> supplies the set, dropping absent files itself. With `--project`, a reader
+> resolved through the consumer DB list opens the project's OWN index (its exact
+> manifest section, else `<project dir>\_D-RAG\<base>.sqlite`) plus the platform
+> library -- no sibling project's DB. Two readers are exceptions: `outline --file
+> F --project P` also opens the DBs that hold or folder-match `F` (siblings
+> included), and `lint`'s `dl:shared` check opens the sibling projects a shared
+> unit declares, on purpose. `index` (given `--project` or a `.dpr`/`.dproj`) and
 > `refresh-findings` write to that own index and refuse when two sections claim
 > the project; `compile-check` caches only into an explicit `--db` or the
 > project's unique manifest section. A `"db"` in `.drag-lint.json` counts as an
@@ -270,6 +273,10 @@ Add `--json` to any query for machine-readable output.
 |---|---|---|
 | `.dpr` / `.dproj` | **Project** | exactly the **compile closure** - the project's members, the project-local units they use transitively, each unit's sibling `.dfm`, the `{$I}` include files, and the project file. Units resolved through a Delphi **Library/Browsing** path are excluded (they belong to the library index), and loose unreferenced files in the project folder are excluded. |
 | a folder | **Library** | every scannable file under the tree (subject to excludes). |
+
+The project row means `index --project <file>` or a manifest `include` naming the
+project file. A POSITIONAL `index <file.dproj>` is not a closure scan: it refreshes
+only that one file, with no project defines, into the project's own database.
 
 **MODE is chosen per run, independently of type:**
 

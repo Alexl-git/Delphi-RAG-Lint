@@ -96,13 +96,15 @@ drag-lint queries one or more `.sqlite` files. Two scopes matter:
 
 ### a) Per-project DB (deep -- enables Find Usages of variables)
 ```
-drag-lint index "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db "C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite" --deep
+drag-lint index --project "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db "C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite" --deep
 ```
-- **The target declares the scan type.** A `.dpr`/`.dproj` target indexes exactly
+- **The target declares the scan type.** `--project <.dpr|.dproj>` indexes exactly
   that project's **compile closure** (members + transitively-used project-local
   units + sibling `.dfm` + `{$I}` includes + the project file); units resolved
   through a Delphi Library/Browsing path and loose unreferenced files in the
-  folder are excluded. A **folder** target indexes the whole tree instead.
+  folder are excluded. A **folder** target indexes the whole tree instead. A
+  POSITIONAL `index <X.dproj>` (no `--project`) is NOT a closure scan: it
+  refreshes only that one file, with no project defines.
 - **Mode is separate from type:** `--recompile` (default, incremental) or
   `--rebuild` (from scratch).
 - One DB per project is the current layout on this machine, and (since
