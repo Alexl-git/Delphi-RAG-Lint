@@ -27629,6 +27629,29 @@ begin
   else begin Writeln('STUDIOROOT-FAIL: ', Failure); Result:= 1; end;
 end; // function
 
+// selftest fact-wrap: the TDocRegions.WrapFactLine / FoldFactLine / FactLinePrefix
+// contract (1.20.5) -- a managed-block fact line over DOC_FACT_MAX_COLS is broken
+// at entry boundaries, and every reader folds it back. The cases live in
+// TDocRegions.SelfTestFactWrap beside the code they pin.
+//
+// Prints FACTWRAP-FAIL: <case> and returns 1 on the first failed case;
+// FACTWRAP-OK and 0 on success.
+function DoSelfTestFactWrap: Integer;
+var
+  Failure: string;
+begin
+  if TDocRegions.SelfTestFactWrap(Failure) then
+  begin
+    Writeln('FACTWRAP-OK');
+    Result:= 0;
+  end
+  else
+  begin
+    Writeln('FACTWRAP-FAIL: ', Failure);
+    Result:= 1;
+  end;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -27646,10 +27669,11 @@ begin
   else if AArgs.SubCommand = 'manifest-save-atomic' then Result:= DoSelfTestManifestSaveAtomic
   else if AArgs.SubCommand = 'own-roots'     then Result:= DoSelfTestOwnRoots     (AArgs)
   else if AArgs.SubCommand = 'studio-root'   then Result:= DoSelfTestStudioRoot
+  else if AArgs.SubCommand = 'fact-wrap'     then Result:= DoSelfTestFactWrap
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root, fact-wrap');
     Result:= 2;
   end;
 end; // function

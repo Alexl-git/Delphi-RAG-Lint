@@ -64,6 +64,18 @@ const
   // matters far less than having one. Hand-written text is never measured
   // against this -- see WrapEngineProse's ownership note.
   DOC_WRAP_COLS = 100;
+  /// <summary>The widest physical line the engine may write for ONE fact of a
+  /// managed block, prefix included.</summary>
+  /// <remarks>
+  /// dcc rejects a source line longer than 1023 characters (F2069), and a
+  /// comment line counts. The inbound lists of a reconciliation block are
+  /// uncapped by design (a window onto a list is not the list), so they can
+  /// exceed it. 1000 leaves room for a CR and a later hand edit. A fact line at
+  /// or under this width is written as ONE line, byte-identical to before; only
+  /// a longer one is broken, at entry boundaries (TDocRegions.WrapFactLine).
+  /// Unrelated to DOC_WRAP_COLS, which budgets engine PROSE for readability.
+  /// </remarks>
+  DOC_FACT_MAX_COLS = 1000;
   /// Legacy trailing param marker TEXT. DECLARATION-ONLY as of v(ADP3 T1): no
   /// code reads or writes this constant anymore (the engine never emits it;
   /// IsManagedText/IsManagedDesc never test for it). A pre-v(ADP3) file still
@@ -178,8 +190,8 @@ const
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas) (+9 more)</para>
-  /// <para>Used in units: DRagLint.Context.Bundler, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Regions, DRagLint.Hover.Renderer, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
+  /// <para>Used by: DRagLint.CLI.DoSelfTestFactWrap (DRagLint.CLI.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas) (+18 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.ProjectTags, DRagLint.Doc.Regions, DRagLint.Doc.SharedFacts, DRagLint.Hover.Renderer, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocRegions = class
@@ -195,12 +207,11 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: Copy, Pos, PosEx</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripManagedBlock(const S: string): string;
@@ -223,12 +234,11 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Doc.Regions.ContainerLoosePattern</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.ContainerLoosePattern"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripElement(const S, ATagName: string): string;
@@ -262,12 +272,11 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripElement, DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc, SameText</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripElement"/>
     /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
@@ -566,7 +575,7 @@ type
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
@@ -654,12 +663,11 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas) ?</para>
     /// <para>Calls: StartsStr, TrimLeft</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsManagedText(const S: string): Boolean;
@@ -685,12 +693,11 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.IsEngineOwnedRegardlessOfContent (DRagLint.Doc.Regions.pas) ?</para>
     /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.IsManagedText, SameText, Trim</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsEngineOwnedTagText(const S: string): Boolean;
@@ -714,12 +721,11 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: StartsStr, TrimLeft</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsEngineSummaryBody(const S: string): Boolean;
@@ -735,12 +741,11 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.StripForDisplay (DRagLint.Doc.Regions.pas) (+1 more)</para>
     /// <para>Calls: Copy, StartsStr, TrimLeft</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripMark(const S: string): string;
@@ -763,12 +768,11 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.IsManagedText, SameText, Trim</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsManagedDesc(const S: string): Boolean;
@@ -793,15 +797,77 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas) (+5 more)</para>
     /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripMark, StringReplace, Trim</para>
-    /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripMark"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripForDisplay(const S: string): string;
+    /// <summary>Splits one managed-block fact line into the physical lines the
+    /// engine writes: one line when it fits DOC_FACT_MAX_COLS, else several,
+    /// broken at entry boundaries.</summary>
+    /// <param name="APrefix">The comment prefix up to and including '/// ', e.g.
+    /// '  /// '. Repeated at the start of every emitted line.</param>
+    /// <param name="AText">The fact text after the prefix, e.g.
+    /// '&lt;para&gt;Used by: A (a.pas), B (b.pas)&lt;/para&gt;'.</param>
+    /// <returns>[APrefix + AText] when Length(APrefix) + Length(AText) &lt;=
+    /// DOC_FACT_MAX_COLS (byte-identical to an unwrapped write). Otherwise lines
+    /// APrefix + Chunk[i] whose chunks satisfy string.Join(' ', Chunks) = AText:
+    /// exactly one blank is dropped at each break.</returns>
+    /// <remarks>
+    /// Each break is the RIGHTMOST blank inside the budget that follows ',' or
+    /// ';' (an entry boundary); failing that, the rightmost blank at position 2
+    /// or later; failing that, nothing can be broken without changing the text,
+    /// so the rest is emitted whole -- over the limit -- and the loop ends. A
+    /// single token longer than the budget is therefore never split and never
+    /// loops. Inverse: FoldFactLine.
+    /// </remarks>
+    class function WrapFactLine(const APrefix, AText: string): TArray<string>; static;
+    /// <summary>The LOGICAL fact line that starts at ALines[AStart]: a
+    /// &lt;para&gt; the writer split over several '///' lines, joined back into
+    /// one.</summary>
+    /// <param name="ALines">Physical lines; a trailing #13 on any of them is
+    /// ignored and stripped from the result.</param>
+    /// <param name="AStart">Index of the line the fact starts on.</param>
+    /// <param name="ALast">Receives the index of the fact's last physical line
+    /// (AStart when the fact is one line).</param>
+    /// <returns>The first line (stripped of #13) when it holds no &lt;para&gt;
+    /// or already holds &lt;/para&gt;. Otherwise that line followed, for each
+    /// next line up to and including the one holding &lt;/para&gt;, by ' ' plus
+    /// the text after its first '///' with leading blanks removed -- the exact
+    /// inverse of WrapFactLine.</returns>
+    /// <remarks>
+    /// FAIL-SAFE: when a continuation candidate holds AUTO_END, AUTO_BEGIN or a
+    /// new &lt;para&gt;, or does not start (after leading blanks) with '///', or
+    /// the array ends before &lt;/para&gt; appears, the fold is abandoned:
+    /// ALast := AStart and the result is the first line alone. A hand-broken,
+    /// unterminated &lt;para&gt; therefore never swallows the fence END or the
+    /// facts after it. A legacy line without &lt;para&gt; is always one line.
+    /// </remarks>
+    class function FoldFactLine(const ALines: TArray<string>; AStart: Integer;
+      out ALast: Integer): string; static;
+    /// <summary>The part of a physical fact line that WrapFactLine repeats on
+    /// every line it emits.</summary>
+    /// <param name="ALine">One fact line, e.g. '    /// &lt;para&gt;Calls: X&lt;/para&gt;'.</param>
+    /// <returns>Everything before '&lt;para&gt;' when the line holds one; else
+    /// everything up to and including the first '/// ' (or '///' when no blank
+    /// follows it); else ''.</returns>
+    /// <remarks>Used by every rewriter to split a line into (prefix, text)
+    /// before handing it to WrapFactLine.</remarks>
+    class function FactLinePrefix(const ALine: string): string; static;
+    /// <summary>The executable contract of WrapFactLine, FoldFactLine and
+    /// FactLinePrefix, run by `selftest fact-wrap`.</summary>
+    /// <param name="AFailure">Receives the first failed case, '' on success.</param>
+    /// <returns>True when every case holds.</returns>
+    /// <remarks>Cases: a short line stays one line; a 200-entry list wraps at
+    /// ', ' with every line within DOC_FACT_MAX_COLS and round-trips through
+    /// FoldFactLine; a blank-free 1500-character token is returned whole; a
+    /// '; '-separated list breaks after ';'; an unterminated or interrupted
+    /// &lt;para&gt; folds to its first line; trailing CRs are stripped;
+    /// FactLinePrefix with and without &lt;para&gt;.</remarks>
+    class function SelfTestFactWrap(out AFailure: string): Boolean; static;
   end;
 
 /// <summary>XML-escapes S for use as ELEMENT TEXT content: ampersand, less-than
@@ -1971,6 +2037,225 @@ begin
   Result:= StringReplace(Result, AUTO_BEGIN, '', [rfReplaceAll]);
   Result:= StringReplace(Result, AUTO_END,   '', [rfReplaceAll]);
   Result:= Trim(Result);
+end;
+
+const
+  FACT_PARA_OPEN  = '<para>';
+  FACT_PARA_CLOSE = '</para>';
+  FACT_SLASHES    = '///';
+
+// v(1.20.5): the RIGHTMOST blank at or before AUpTo (and at position 2 or later)
+// in S, optionally only one that follows ',' or ';' -- an entry boundary. 0 when
+// there is none.
+function LastBreakBlank(const S: string; AUpTo: Integer; AEntryBoundary: Boolean): Integer;
+var
+  K, Top: Integer;
+begin
+  Top:= if AUpTo < Length(S) then AUpTo else Length(S);
+  for K:= Top downto 2 do
+    if (S[K] = ' ') and ((not AEntryBoundary) or CharInSet(S[K - 1], [',', ';'])) then Exit(K);
+  Result:= 0;
+end;
+
+// v(1.20.5, owner ruling 2026-09-29): break ONLY a line that would exceed the
+// limit, and only at a blank; every line at or under it stays byte-identical.
+class function TDocRegions.WrapFactLine(const APrefix, AText: string): TArray<string>;
+var
+  Rest  : string;
+  Budget: Integer;
+  B     : Integer;
+  L     : TList<string>;
+begin
+  Result:= [APrefix + AText];
+  if Length(APrefix) + Length(AText) <= DOC_FACT_MAX_COLS then Exit;
+  L:= TList<string>.Create;
+  try
+    Rest  := AText;
+    Budget:= DOC_FACT_MAX_COLS - Length(APrefix);
+    while Length(Rest) > Budget do
+    begin
+      { Budget + 1: a blank AT Budget + 1 leaves a chunk of exactly Budget. }
+      B:= LastBreakBlank(Rest, Budget + 1, True);
+      if B = 0 then B:= LastBreakBlank(Rest, Budget + 1, False);
+      { no blank inside the window: one token longer than the budget. Emitting
+        it whole is the only option that does not change the text. }
+      if B = 0 then Break;
+      L.Add(APrefix + Copy(Rest, 1, B - 1));
+      Rest:= Copy(Rest, B + 1, MaxInt);
+    end;
+    L.Add(APrefix + Rest);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+class function TDocRegions.FoldFactLine(const ALines: TArray<string>; AStart: Integer;
+  out ALast: Integer): string;
+var
+  K     : Integer;
+  S, C  : string;
+  Joined: string;
+  P     : Integer;
+begin
+  ALast := AStart;
+  Result:= ALines[AStart].TrimRight([#13]);
+  if (Pos(FACT_PARA_OPEN, Result) = 0) or (Pos(FACT_PARA_CLOSE, Result) > 0) then Exit;
+  Joined:= Result;
+  for K:= AStart + 1 to High(ALines) do
+  begin
+    S:= ALines[K].TrimRight([#13]);
+    { FAIL-SAFE: anything that is not a plain continuation abandons the fold,
+      so an unterminated <para> never swallows the fence or the next fact. }
+    if (Pos(AUTO_END, S) > 0) or (Pos(AUTO_BEGIN, S) > 0) or (Pos(FACT_PARA_OPEN, S) > 0) then Exit;
+    C:= TrimLeft(S);
+    if not C.StartsWith(FACT_SLASHES) then Exit;
+    P     := Pos(FACT_SLASHES, S);
+    Joined:= Joined + ' ' + TrimLeft(Copy(S, P + Length(FACT_SLASHES), MaxInt));
+    if Pos(FACT_PARA_CLOSE, S) > 0 then
+    begin
+      ALast := K;
+      Result:= Joined;
+      Exit;
+    end;
+  end;
+end;
+
+class function TDocRegions.FactLinePrefix(const ALine: string): string;
+var
+  P: Integer;
+begin
+  P:= Pos(FACT_PARA_OPEN, ALine);
+  if P > 0 then Exit(Copy(ALine, 1, P - 1));
+  P:= Pos(FACT_SLASHES, ALine);
+  if P = 0 then Exit('');
+  Result:= Copy(ALine, 1, P + Length(FACT_SLASHES) - 1);
+  if Copy(ALine, P + Length(FACT_SLASHES), 1) = ' ' then Result:= Result + ' ';
+end;
+
+class function TDocRegions.SelfTestFactWrap(out AFailure: string): Boolean;
+const
+  PFX         = '  /// ';
+  ENTRY_COUNT = 200;
+  CASE_COUNT  = 150;
+  TOKEN_LEN   = 1500;
+  LIST_FMT    = 'U%0:.3d.P%0:.3d (U%0:.3d.pas)';
+  CASE_FMT    = 'Result:= Value%d';
+var
+  Text   : string;
+  Lines  : TArray<string>;
+  CrLines: TArray<string>;
+  I, L   : Integer;
+  Folded : string;
+
+  { Records the FIRST failed case only; later cases still run but cannot
+    overwrite it, so the report names where the contract first broke. }
+  procedure Expect(AOk: Boolean; const AWhy: string);
+  begin
+    if (not AOk) and (AFailure = '') then AFailure:= AWhy;
+  end;
+
+  function Joined(ACount: Integer; const AFmt, ASep: string): string;
+  var
+    Parts: TArray<string>;
+    K    : Integer;
+  begin
+    SetLength(Parts, ACount);
+    for K:= 0 to ACount - 1 do Parts[K]:= Format(AFmt, [K]);
+    Result:= string.Join(ASep, Parts);
+  end;
+
+  { every line fits, starts with PFX, and every line but the last ends with AEnd }
+  function WellWrapped(const ALines: TArray<string>; AEnd: Char): Boolean;
+  var
+    K: Integer;
+  begin
+    Result:= True;
+    for K:= 0 to High(ALines) do
+      Result:= Result and (Length(ALines[K]) <= DOC_FACT_MAX_COLS) and ALines[K].StartsWith(PFX)
+        and ((K = High(ALines)) or ALines[K].EndsWith(AEnd));
+  end;
+
+  { the chunks after the prefix, rejoined by one blank }
+  function Rejoined(const ALines: TArray<string>): string;
+  var
+    K    : Integer;
+    Parts: TArray<string>;
+  begin
+    SetLength(Parts, Length(ALines));
+    for K:= 0 to High(ALines) do Parts[K]:= Copy(ALines[K], Length(PFX) + 1, MaxInt);
+    Result:= string.Join(' ', Parts);
+  end;
+
+begin
+  AFailure:= '';
+
+  { case 1: a short line is one line, byte-identical }
+  Text := '<para>Called from: A (a.pas)</para>';
+  Lines:= WrapFactLine(PFX, Text);
+  Expect((Length(Lines) = 1) and (Lines[0] = PFX + Text), 'case 1 short line not returned as one identical line');
+
+  { case 2: a 200-entry ', ' list wraps at entry boundaries }
+  Text := FACT_PARA_OPEN + 'Used by: ' + Joined(ENTRY_COUNT, LIST_FMT, ', ') + FACT_PARA_CLOSE;
+  Lines:= WrapFactLine(PFX, Text);
+  Expect(Length(Lines) > 1, 'case 2 long list was not wrapped');
+  Expect(WellWrapped(Lines, ','), 'case 2 a line is over the limit, lacks the prefix, or ends mid-entry');
+  Expect(Lines[0].StartsWith(PFX + FACT_PARA_OPEN + 'Used by: '), 'case 2 line 1 lost the label');
+  Expect(Rejoined(Lines) = Text, 'case 2 chunks do not rejoin to the text');
+
+  { case 3: round trip through the fold }
+  Folded:= FoldFactLine(Lines, 0, L);
+  Expect((Folded = PFX + Text) and (L = High(Lines)), 'case 3 fold of a wrapped list is not the text on its last line');
+
+  { case 7: trailing CRs are stripped from every physical line (case 2's list) }
+  SetLength(CrLines, Length(Lines));
+  for I:= 0 to High(Lines) do CrLines[I]:= Lines[I] + #13;
+  Folded:= FoldFactLine(CrLines, 0, L);
+  Expect((Pos(#13, Folded) = 0) and (Folded = PFX + Text), 'case 7 fold with CRs kept a CR or differs from the text');
+
+  { case 4: one blank-free token over the limit is returned whole }
+  Text := FACT_PARA_OPEN + StringOfChar('X', TOKEN_LEN) + FACT_PARA_CLOSE;
+  Lines:= WrapFactLine(PFX, Text);
+  Expect((Length(Lines) = 1) and (Lines[0] = PFX + Text), 'case 4 an unbreakable token was split or changed');
+
+  { case 5: a '; ' list breaks after ';' and round-trips }
+  Text := FACT_PARA_OPEN + 'Returns: ' + Joined(CASE_COUNT, CASE_FMT, '; ') + FACT_PARA_CLOSE;
+  Lines:= WrapFactLine(PFX, Text);
+  Expect((Length(Lines) > 1) and WellWrapped(Lines, ';'), 'case 5 long ; list not wrapped after ;');
+  Folded:= FoldFactLine(Lines, 0, L);
+  Expect((Folded = PFX + Text) and (L = High(Lines)), 'case 5 round trip failed');
+
+  { case 6: an unterminated <para> must not swallow the fence END }
+  Lines := ['  /// <para>Used by: A,', '  /// ' + AUTO_END];
+  Folded:= FoldFactLine(Lines, 0, L);
+  Expect((L = 0) and (Folded = Lines[0]), 'case 6 unterminated para swallowed the fence END');
+  { ...and each stop condition holds on its own, even when a '</para>' follows
+    it: without that line the array's end would stop the fold and mask them. }
+  Lines := ['  /// <para>Used by: A,', '  /// ' + AUTO_END, '  /// B</para>'];
+  Folded:= FoldFactLine(Lines, 0, L);
+  Expect((L = 0) and (Folded = Lines[0]), 'case 6b fold ran through the fence END');
+  Lines := ['  /// <para>Used by: A,', '  /// ' + AUTO_BEGIN, '  /// B</para>'];
+  Folded:= FoldFactLine(Lines, 0, L);
+  Expect((L = 0) and (Folded = Lines[0]), 'case 6c fold ran through a fence BEGIN');
+  Lines := ['  /// <para>Used by: A,', '  procedure X;', '  /// B</para>'];
+  Folded:= FoldFactLine(Lines, 0, L);
+  Expect((L = 0) and (Folded = Lines[0]), 'case 6d fold ran through a non-/// line');
+
+  { case 8: a single-line <para>...</para> folds to itself }
+  Lines := ['  /// <para>Calls: X</para>', '  /// <para>Pure</para>'];
+  Folded:= FoldFactLine(Lines, 0, L);
+  Expect((L = 0) and (Folded = Lines[0]), 'case 8 single-line para did not fold to itself');
+
+  { case 9: the next line opening a new <para> stops the fold }
+  Lines := ['  /// <para>Used by: A,', '  /// <para>Calls: X</para>'];
+  Folded:= FoldFactLine(Lines, 0, L);
+  Expect((L = 0) and (Folded = Lines[0]), 'case 9 fold ran into the next para');
+
+  { case 10: FactLinePrefix with and without <para> }
+  Expect(FactLinePrefix('    /// <para>Calls: X</para>') = '    /// ', 'case 10 FactLinePrefix with para');
+  Expect(FactLinePrefix('  /// Calls: X') = '  /// ', 'case 10 FactLinePrefix without para');
+
+  Result:= AFailure = '';
 end;
 
 // v(ADP2 T9): the DOC/HOVER CONSISTENCY LOCK -- see this function's own

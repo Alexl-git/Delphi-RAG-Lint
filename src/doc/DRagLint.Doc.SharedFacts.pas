@@ -1,4 +1,4 @@
-unit DRagLint.Doc.SharedFacts;
+unit DRagLint.Doc.SharedFacts;  // dl:ok unit-too-large@b176 -- REVIEWED 2026-09-29: sat at 1999 lines; the 1.20.5 logical-line merge (F2069 wrap) adds ~60 that belong beside MergeInboundFacts. Splitting TSharedFacts is its own change, not a HIGH fix's
 
 { Shared-unit facts: the ONE place that knows how an inbound fact line is split
   into entries, which entries a project cannot see, and how two projects' views
@@ -168,16 +168,21 @@ type
     /// the preserved entry appends after A's own entries under A and after B's
     /// under B, so each project would rewrite the line the other just wrote.
     /// Order changes only on marked units.
+    /// v(1.20.5): reads and writes LOGICAL fact lines. A fact the writer split
+    /// over several `///` lines (TDocRegions.WrapFactLine, over
+    /// DOC_FACT_MAX_COLS) is folded back into one before it is merged, and the
+    /// merged line -- rewritten or re-inserted -- is written through the same
+    /// wrap, so it is one physical line again whenever it fits.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileContent, DRagLint.Doc.SharedFacts.ReinsertAt, DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody, EndsText, Pos, Trim, TrimRight</para>
+    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.InsertFactLines, DRagLint.Doc.SharedFacts.MergeFactLines, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileContent, DRagLint.Doc.SharedFacts.ReinsertAt, DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody, Pos</para>
     /// <para>Returns: ADocText; Lines.Text</para>
-    /// <para>Complexity: 22 (cyclomatic, outer body), 139 lines (full implementation)</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 98 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.FenceBounds"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.InsertFactLines"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.MergeFactLines"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MergeInboundFacts(const ADocText, AStoredRemarks: string;
@@ -720,6 +725,9 @@ end;
   block carries and the fresh render does not: directly after the fence line
   holding the nearest label that PRECEDED ALabel in the stored block, or directly
   after BEGIN when none of those survives (or the stored fact is unwrapped).
+  v(1.20.5): "after the fence line" means after the predecessor's LAST physical
+  line -- a fact over DOC_FACT_MAX_COLS is written over several `///` lines, and
+  inserting after its first one would split its <para> in two.
 
   WHY NOT ALWAYS AFTER BEGIN, which is what the re-insert did until D28. That is
   right for 'Called from:'/'Used by:', the first lines RenderFactsBlock emits,
@@ -733,10 +741,12 @@ function ReinsertAt(const ALines: TStrings; const AStoredBody, ALabel: string): 
 var
   BeginAt, EndAt: Integer;
   LabAt, BestAt : Integer;
-  I, P          : Integer;
+  I, P, Last    : Integer;
   L             : string;
+  Arr           : TArray<string>;
 begin
   FenceBounds(ALines, BeginAt, EndAt);
+  Arr:= ALines.ToStringArray;
   Result:= BeginAt + 1;
   LabAt := Pos(PARA_OPEN + ALabel, AStoredBody);
   if (LabAt = 0) or (BeginAt < 0) then Exit;
@@ -750,7 +760,8 @@ begin
       if (P > BestAt) and (P < LabAt) then
       begin
         BestAt:= P;
-        Result:= I + 1;
+        TDocRegions.FoldFactLine(Arr, I, Last);
+        Result:= Last + 1;
       end;
       Break;
     end;
@@ -1543,6 +1554,130 @@ begin
   end;
 end;
 
+{ v(1.20.5): replaces physical lines AFirst..ALast of ALines -- one LOGICAL fact
+  line, possibly wrapped -- with ANewText written through
+  TDocRegions.WrapFactLine, and returns how many physical lines now hold it.
+  AChanged is set only when the written lines differ from the replaced ones, so
+  a list that still fits stays byte-identical and is not reported as an edit. }
+function ReplaceFactLines(const ALines: TStrings; AFirst, ALast: Integer;
+  const ANewText: string; var AChanged: Boolean): Integer;
+var
+  Prefix : string;
+  Wrapped: TArray<string>;
+  Old    : TArray<string>;
+  K      : Integer;
+begin
+  Prefix := TDocRegions.FactLinePrefix(ANewText);
+  Wrapped:= TDocRegions.WrapFactLine(Prefix, Copy(ANewText, Length(Prefix) + 1, MaxInt));
+  Result := Length(Wrapped);
+  SetLength(Old, ALast - AFirst + 1);
+  for K:= AFirst to ALast do Old[K - AFirst]:= ALines[K];
+  if string.Join(#10, Old) = string.Join(#10, Wrapped) then Exit;
+  AChanged:= True;
+  for K:= ALast downto AFirst do ALines.Delete(K);
+  for K:= 0 to High(Wrapped) do ALines.Insert(AFirst + K, Wrapped[K]);
+end;
+
+{ v(1.20.5): inserts APrefix + AText at AAt as the physical lines
+  TDocRegions.WrapFactLine makes of it -- one line unless it is too long. }
+procedure InsertFactLines(const ALines: TStrings; AAt: Integer; const APrefix, AText: string);
+var
+  Wrapped: TArray<string>;
+  K      : Integer;
+begin
+  Wrapped:= TDocRegions.WrapFactLine(APrefix, AText);
+  for K:= 0 to High(Wrapped) do ALines.Insert(AAt + K, Wrapped[K]);
+end;
+
+{ v(1.20.5): ONE logical fact line ALine merged with the stored entries -- the
+  line to write back, or '' when there is nothing to write (no inbound label, a
+  label the stored block does not carry, or a truncated fresh window). Marks the
+  label it met in AHandled. Unit-level, with MergeFactLines, so TSharedFacts'
+  response set stays inside the high-response limit (1.20.3 fix wave). }
+function MergedFactLine(const ALine: string; const ASIn: TFactMap;
+  const AHandled: TDictionary<string, Byte>; const AStore: ISymbolStore): string;
+var
+  Lab, SC: string;
+  Body   : string;
+  Prefix : string;
+  Suffix : string;   { the fact line's closing </para>, if P8 wrapped it }
+  P      : Integer;
+begin
+  Result:= '';
+  for Lab in INBOUND_LABELS do
+  begin
+    P:= Pos(Lab, ALine);
+    if P = 0 then Continue;
+    AHandled.AddOrSetValue(Lab, 1);
+    if not ASIn.TryGetValue(Lab, SC) then Exit;
+
+    Body  := Trim(Copy(ALine, P + Length(Lab), MaxInt));
+    Prefix:= Copy(ALine, 1, P + Length(Lab) - 1);
+
+    { v(P8, 2026-08-24): everything after the label is treated as the entry
+      list, so a wrapped line handed '</para>' to SplitEntries as part of
+      the last entry -- and the rebuilt line put the merged-in entry AFTER
+      the closing tag:
+
+        /// <para>Called from: A.CallFromA (A.pas)</para>, B.CallFromB (B.pas)
+
+      which differs from the stored text on every run, so `document` edited
+      the same unit forever. The closing tag is held aside and restored
+      after the join; a line without one yields '' and is unaffected. }
+    Suffix:= '';
+    if EndsText(PARA_CLOSE, Body) then
+    begin
+      Suffix:= PARA_CLOSE;
+      Body  := TrimRight(Copy(Body, 1, Length(Body) - Length(Suffix)));
+    end;
+
+    { Never merge INTO a truncated fresh window. A STORED window is merged
+      on its visible entries since 2026-09-23 -- see ReconcileContent; the
+      caller renders whole lists for every block that gets this far. }
+    if IsTruncated(Body) then Exit;
+
+    Exit(Prefix + ' ' + ReconcileContent(AStore, SC, Body) + Suffix);
+  end;
+end;
+
+{ v(1.20.5): rewrites every inbound fact line in ALines[AFirstAt..ALastAt] to
+  the union MergedFactLine computes; AChanged is set on a real edit.
+
+  The walk is over LOGICAL fact lines, not physical ones. A fact over
+  DOC_FACT_MAX_COLS is written over several `///` lines (F2069), and the
+  per-line walk this replaces rewrote the FIRST of them with the whole merged
+  list while the continuation lines stayed -- every entry on them twice, and the
+  long line back. So each fact is folded (FoldFactLine), merged as one line,
+  written back through the wrap over exactly the physical range it came from
+  (ReplaceFactLines), and the walk resumes after what was written. }
+procedure MergeFactLines(const ALines: TStrings; AFirstAt, ALastAt: Integer; const ASIn: TFactMap;
+  const AHandled: TDictionary<string, Byte>; const AStore: ISymbolStore; var AChanged: Boolean);
+var
+  Arr    : TArray<string>;   { ALines as an array, for FoldFactLine }
+  I, Last: Integer;
+  Span   : Integer;          { physical lines the logical line at I occupies }
+  Written: Integer;
+  LastAt : Integer;
+  NewLine: string;
+begin
+  Arr   := ALines.ToStringArray;
+  LastAt:= ALastAt;
+  I     := AFirstAt;
+  while I <= LastAt do
+  begin
+    NewLine:= MergedFactLine(TDocRegions.FoldFactLine(Arr, I, Last), ASIn, AHandled, AStore);
+    Span   := Last - I + 1;
+    if NewLine <> '' then
+    begin
+      Written:= ReplaceFactLines(ALines, I, Last, NewLine, AChanged);
+      Inc(LastAt, Written - Span);
+      Span:= Written;
+      Arr := ALines.ToStringArray;
+    end;
+    Inc(I, Span);
+  end;
+end;
+
 class function TSharedFacts.MergeInboundFacts(const ADocText, AStoredRemarks: string;
   const AStore: ISymbolStore; const AUnitPath: string): string;
 var
@@ -1550,11 +1685,10 @@ var
   SRes      : string;
   Lines     : TStringList;
   Handled   : TDictionary<string, Byte>;
-  I, J, P   : Integer;
-  Line, Body: string;
+  J         : Integer;
+  Body      : string;
   Lab, SC   : string;
   Prefix    : string;
-  Suffix    : string;   { the fact line's closing </para>, if P8 wrapped it }
   Changed   : Boolean;
   BeginAt   : Integer;
   EndAt     : Integer;
@@ -1563,7 +1697,8 @@ var
 
   { The per-label merge is ReconcileContent -- the SAME function BlockDrifted
     compares against, so the writer cannot rewrite a block the checker just
-    called current (incident five on this seam). }
+    called current (incident five on this seam). It runs in MergedFactLine,
+    one logical fact line at a time (MergeFactLines). }
 
 begin
   Result:= ADocText;
@@ -1606,48 +1741,7 @@ begin
       else if BeginAt >= 0 then LastAt:= Lines.Count - 1
       else LastAt:= -1;
 
-      for I:= FirstAt to LastAt do
-      begin
-        Line:= Lines[I];
-
-        for J:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
-        begin
-          Lab:= INBOUND_LABELS[J];
-          P  := Pos(Lab, Line);
-          if P = 0 then Continue;
-          Handled.AddOrSetValue(Lab, 1);
-          if not SIn.TryGetValue(Lab, SC) then Break;
-
-          Body  := Trim(Copy(Line, P + Length(Lab), MaxInt));
-          Prefix:= Copy(Line, 1, P + Length(Lab) - 1);
-
-          { v(P8, 2026-08-24): everything after the label is treated as the entry
-            list, so a wrapped line handed '</para>' to SplitEntries as part of
-            the last entry -- and the rebuilt line put the merged-in entry AFTER
-            the closing tag:
-
-              /// <para>Called from: A.CallFromA (A.pas)</para>, B.CallFromB (B.pas)
-
-            which differs from the stored text on every run, so `document` edited
-            the same unit forever. The closing tag is held aside and restored
-            after the join; a line without one yields '' and is unaffected. }
-          Suffix:= '';
-          if EndsText('</para>', Body) then
-          begin
-            Suffix:= '</para>';
-            Body  := TrimRight(Copy(Body, 1, Length(Body) - Length(Suffix)));
-          end;
-
-          { Never merge INTO a truncated fresh window. A STORED window is merged
-            on its visible entries since 2026-09-23 -- see ReconcileContent; the
-            caller renders whole lists for every block that gets this far. }
-          if IsTruncated(Body) then Break;
-
-          Lines[I]:= Prefix + ' ' + ReconcileContent(AStore, SC, Body) + Suffix;
-          if Lines[I] <> Line then Changed:= True;
-          Break;
-        end;
-      end;
+      MergeFactLines(Lines, FirstAt, LastAt, SIn, Handled, AStore, Changed);
 
       { A label the stored block carries and this project does not render AT ALL
         -- every caller of this symbol lives in another project. Without this the
@@ -1669,8 +1763,8 @@ begin
             DataCopy alone, written wrapped by the whole-label carry-over this
             replaces -- and an unwrapped re-insert would rewrite each of them on
             the first run. }
-          Lines.Insert(ReinsertAt(Lines, StoredBlockBody(AStoredRemarks), Lab),
-            Prefix + PARA_OPEN + Lab + ' ' + Body + PARA_CLOSE);
+          InsertFactLines(Lines, ReinsertAt(Lines, StoredBlockBody(AStoredRemarks), Lab),
+            Prefix, PARA_OPEN + Lab + ' ' + Body + PARA_CLOSE);
           Changed:= True;
         end;
 
