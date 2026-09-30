@@ -7318,6 +7318,22 @@ begin
 
     Code:= Eng.RunCaptureStreaming(Format('-NoProfile -NonInteractive -File "%s" sleep "%s"', [Ps1, Marker]), SHORT_MS, nil, nil, Output);
     Check('stream.timeout.code', Code = ENGINE_EXIT_TIMEOUT, IntToStr(Code));
+
+    // A progress sink that raises must not orphan the engine: the child is killed
+    // on the way out, so the sleeping stand-in never writes its marker.
+    var Raised: Boolean:= False;
+    try
+      Eng.RunCaptureStreaming(Format('-NoProfile -NonInteractive -File "%s" sleep "%s"', [Ps1, Marker]), LONG_MS,
+        procedure(const AProgress: TEngineProgress)
+        begin
+          raise EAbort.Create('sink failed');
+        end, nil, Output);
+    except  // dl:ok try-except-swallowed@ab61 -- REVIEWED 2026-09-30 not swallowed: Raised is asserted by stream.raise.kills just below
+      on EAbort do
+        Raised:= True;
+    end;
+    Sleep(SURVIVE_WAIT);  // dl:ok sleep-in-vcl@d144 -- REVIEWED 2026-09-30 console test runner, no VCL message loop: waits past the killed stand-in's would-be write
+    Check('stream.raise.kills', Raised and not TFile.Exists(Marker), Format('raised=%s marker=%s', [BoolToStr(Raised, True), BoolToStr(TFile.Exists(Marker), True)]));
   finally
     Eng.Free;
     TDirectory.Delete(Dir, True);

@@ -940,8 +940,9 @@ type
       /// <remarks>Never a folder target: that widens a project DB into a
       /// directory DB.</remarks>
       function IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer;
-      /// <summary>True when `info --json` reports capabilities.AName = true.</summary>
-      /// <param name="AName">Capability key, e.g. apply_unit_rules.</param>
+      /// <summary>True when `info --json` reports capabilities.AName = true. The key
+      /// is matched case-insensitively (MatchText over CapabilityNames).</summary>
+      /// <param name="AName">Capability key, e.g. apply_unit_rules; any letter case.</param>
       /// <returns>False when the engine fails, the output is unparseable, the key
       /// is absent or not a boolean true.</returns>
       /// <remarks>The JSON is sliced from the first '{' to the last '}': the
@@ -961,7 +962,10 @@ type
       /// <returns>The exit code; -1 when it could not start; ENGINE_EXIT_TIMEOUT;
       /// ENGINE_EXIT_CANCELLED.</returns>
       /// <remarks>Blocks the calling thread. Run it on a worker (LongCallRunner) to keep
-      /// the UI alive.</remarks>
+      /// the UI alive. Every exit -- normal, cancel, timeout or an exception raised by
+      /// AOnProgress -- leaves no child running: a live child is terminated and its
+      /// handles closed before the call returns or the exception propagates. On cancel
+      /// or timeout an unterminated last stderr line is dropped, not appended.</remarks>
       function RunCaptureStreaming(const AArgs: string; ATimeoutMs: Cardinal; const AOnProgress: TProgressProc; const ACancel: TCancelToken; out AOutput: string): Integer;
 
       property ExePath: string read FExePath;
@@ -1358,6 +1362,9 @@ const
   POLL_MS   = 40;
   REAP_MS   = 2000;
   BUF_BYTES = 4096;
+  // Reads per Drain call: a child that writes without pause cannot keep the loop
+  // from reaching the cancel / deadline check (16 x 4 KB per pipe per turn).
+  MAX_READS_PER_DRAIN = 16;
 var
   SA       : TSecurityAttributes;
   OutRead  : THandle;
@@ -1365,6 +1372,7 @@ var
   ErrRead  : THandle;
   ErrWrite : THandle;
   PI       : TProcessInformation;
+  Started  : Boolean;
   ExitCode : DWORD;
   StdOut   : TStringBuilder;
   ErrText  : TStringBuilder;
@@ -1372,23 +1380,39 @@ var
   OnErrLine: TProc<string>;
   Outcome  : Integer;
 
-  // Reads everything APipe has ready right now; True when anything was read.
+  // Reads what APipe has ready right now, at most MAX_READS_PER_DRAIN chunks;
+  // True when anything was read.
   function Drain(APipe: THandle; const AInto: TProc<string>): Boolean;
   var
     Buf      : array[0..BUF_BYTES - 1] of AnsiChar;
     Avail    : DWORD;
     BytesRead: DWORD;
+    Reads    : Integer;
   begin
     Result:= False;
     Avail:= 0;
-    while PeekNamedPipe(APipe, nil, 0, nil, @Avail, nil) and (Avail > 0) do
+    Reads:= 0;
+    while (Reads < MAX_READS_PER_DRAIN) and PeekNamedPipe(APipe, nil, 0, nil, @Avail, nil) and (Avail > 0) do
     begin
+      Inc(Reads);
       BytesRead:= 0;
       if not ReadFile(APipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
         Exit;
       AInto(string(AnsiString(Copy(Buf, 0, BytesRead))));
       Result:= True;
     end;
+  end;
+
+  // Terminates the child when it is still running, then closes both of its handles.
+  procedure ReapChild(const AInfo: TProcessInformation);
+  begin
+    if WaitForSingleObject(AInfo.hProcess, 0) <> WAIT_OBJECT_0 then
+    begin
+      TerminateProcess(AInfo.hProcess, DWORD(-1));
+      WaitForSingleObject(AInfo.hProcess, REAP_MS);
+    end;
+    CloseHandle(AInfo.hProcess);
+    CloseHandle(AInfo.hThread);
   end;
 
   // Closes AHandle when it is open and zeroes it, so the finally can call it on all four.
@@ -1406,6 +1430,8 @@ begin
   OutWrite:= 0;
   ErrRead:= 0;
   ErrWrite:= 0;
+  Started:= False;
+  PI:= Default(TProcessInformation);
   FillChar(SA, SizeOf(SA), 0);
   SA.nLength:= SizeOf(SA);
   SA.bInheritHandle:= True;
@@ -1421,6 +1447,7 @@ begin
     SetHandleInformation(ErrRead, HANDLE_FLAG_INHERIT, 0);
     if not StartHiddenProcess(Format('"%s" %s', [FExePath, AArgs]), OutWrite, ErrWrite, PI) then
       Exit;
+    Started:= True;
     CloseIfOpen(OutWrite);
     CloseIfOpen(ErrWrite);
 
@@ -1452,22 +1479,22 @@ begin
       Got:= Drain(ErrRead, ToErr) or Got;
       if WaitForSingleObject(PI.hProcess, if Got then 0 else POLL_MS) = WAIT_OBJECT_0 then
       begin
-        Drain(OutRead, ToOut);
-        Drain(ErrRead, ToErr);
+        // Exited: its output is finite now, so drain both pipes until both are empty.
+        var More: Boolean;
+        repeat
+          More:= Drain(OutRead, ToOut);
+          More:= Drain(ErrRead, ToErr) or More;
+        until not More;
         Break;
       end;
       if (ACancel <> nil) and ACancel.IsCancelled then
         Outcome:= ENGINE_EXIT_CANCELLED
       else if GetTickCount64 >= Deadline then
         Outcome:= ENGINE_EXIT_TIMEOUT;
-      if Outcome <> 0 then
-      begin
-        TerminateProcess(PI.hProcess, DWORD(-1));
-        WaitForSingleObject(PI.hProcess, REAP_MS);
-        Break;
-      end;
-    until False;
-    Splitter.Flush(OnErrLine);
+    until Outcome <> 0; // the finally terminates a child that is still running
+    // A cancelled or timed-out run's last stderr line may be cut mid-write: drop it.
+    if Outcome = 0 then
+      Splitter.Flush(OnErrLine);
     AOutput:= StdOut.ToString + ErrText.ToString;
     case Outcome of
       ENGINE_EXIT_TIMEOUT:
@@ -1479,9 +1506,12 @@ begin
       Result:= Outcome
     else if GetExitCodeProcess(PI.hProcess, ExitCode) then
       Result:= Integer(ExitCode);
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
   finally
+    // Every way out -- cancel, timeout, or an exception from a sink, the splitter or
+    // an Append -- kills a child that is still running and releases its handles, so
+    // no orphaned engine is left holding the index.
+    if Started then
+      ReapChild(PI);
     CloseIfOpen(OutRead);
     CloseIfOpen(OutWrite);
     CloseIfOpen(ErrRead);
