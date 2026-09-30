@@ -12,7 +12,7 @@ uses
   , System.Classes
   , System.StrUtils
   , Winapi.Windows
-  , ConvRules.Model in '..\ConvRules.Model.pas'
+  , ConvRules.Model in '..\ConvRules.Model.pas'  // dl:unit ConvRules.Model accepted -- the tests read BOOK_DEPTH_DEFAULT to pin the model's own default, so the const travels with the unit under test
   , ConvRules.Mappings in '..\ConvRules.Mappings.pas'
   , ConvRules.Units in '..\ConvRules.Units.pas'
   , ConvRules.Casts in '..\ConvRules.Casts.pas'
@@ -7011,6 +7011,114 @@ begin
   Check('destplatform.both', DestPlatformLabel(cpBoth) = 'Platform: Both -> Win64', DestPlatformLabel(cpBoth));
 end;
 
+{ Occurrences of ASub in S (non-overlapping). }
+function Occurrences(const ASub, S: string): Integer;
+var
+  P: Integer;
+begin
+  Result:= 0;
+  P:= Pos(ASub, S);
+  while P > 0 do
+  begin
+    Inc(Result);
+    P:= PosEx(ASub, S, P + Length(ASub));
+  end;
+end;
+
+procedure TestBookDepth;
+const
+  CRLF          = #13#10;
+  BOOK_NO_DEPTH = '// header' + CRLF + '#unuse OldU' + CRLF + '#convert TA -> TB' + CRLF + '#link Caption <- Caption' + CRLF;
+  DEPTH_LOW     = 2;
+  DEPTH_MID     = 3;
+  DEPTH_FOUR    = 4;
+  DEPTH_HIGH    = 7;
+  DEPTH_OVER    = 11;
+var
+  B     : TRuleBook;
+  N     : TRuleNode;
+  S     : string;
+  Hdr   : TRuleNode;
+  Raised: Boolean;
+begin
+  B:= TRuleBook.Create;
+  try
+    N:= B.ParseLine('#depth 3');
+    try
+      Check('depth.parse.valid', (N.Kind = rnkDepth) and N.DepthValid and (N.DepthValue = DEPTH_MID));
+    finally
+      N.Free;
+    end;
+    // Directive names are case-insensitive (ParseLine lower-cases Dir). A TRAILING
+    // comment is NOT stripped by ParseLine (StripComment only detects whole-line
+    // comments), so '#depth 3 // x' is invalid -- deliberately not tested as valid.
+    N:= B.ParseLine('#DEPTH 3');
+    try
+      Check('depth.parse.case', (N.Kind = rnkDepth) and N.DepthValid and (N.DepthValue = DEPTH_MID));
+    finally
+      N.Free;
+    end;
+    N:= B.ParseLine('#depth x');
+    try
+      Check('depth.parse.nonint', (N.Kind = rnkDepth) and not N.DepthValid);
+    finally
+      N.Free;
+    end;
+    N:= B.ParseLine('#depth 11');
+    try
+      Check('depth.parse.range.high', (N.Kind = rnkDepth) and not N.DepthValid);
+    finally
+      N.Free;
+    end;
+    N:= B.ParseLine('#depth 0');
+    try
+      Check('depth.parse.range.low', (N.Kind = rnkDepth) and not N.DepthValid);
+    finally
+      N.Free;
+    end;
+
+    B.LoadFromString(BOOK_NO_DEPTH);
+    Check('depth.absent.default', (B.Depth = BOOK_DEPTH_DEFAULT) and (B.DepthState = bdsAbsent));
+    Check('depth.absent.roundtrip', B.Snapshot = BOOK_NO_DEPTH, B.Snapshot);
+
+    Hdr:= B.Nodes[B.ConvertHeaders[0]];
+    B.SetDepth(DEPTH_MID);
+    S:= B.Snapshot;
+    Check('depth.set.inserts', (B.Depth = DEPTH_MID) and (B.DepthState = bdsValid) and (Pos('#depth 3', S) > 0) and (Pos('#depth 3', S) < Pos('#convert', S)), S);
+    Check('depth.set.header.found.by.node', B.Nodes.IndexOf(Hdr) = B.ConvertHeaders[0]);
+
+    B.SetDepth(DEPTH_HIGH);
+    S:= B.Snapshot;
+    Check('depth.set.updates', (B.Depth = DEPTH_HIGH) and (Occurrences('#depth', S) = 1) and (Pos('#depth 7', S) > 0), S);
+
+    B.LoadFromString('#depth 4' + CRLF + BOOK_NO_DEPTH);
+    Check('depth.load.valid', (B.Depth = DEPTH_FOUR) and (B.DepthState = bdsValid));
+    Check('depth.roundtrip.verbatim', B.Snapshot = '#depth 4' + CRLF + BOOK_NO_DEPTH, B.Snapshot);
+
+    B.LoadFromString('#depth deep' + CRLF + BOOK_NO_DEPTH);
+    Check('depth.invalid.default', (B.Depth = BOOK_DEPTH_DEFAULT) and (B.DepthState = bdsInvalid));
+    Check('depth.invalid.verbatim', Pos('#depth deep', B.Snapshot) = 1, B.Snapshot);
+
+    B.LoadFromString('#depth 2' + CRLF + '#depth 9' + CRLF + BOOK_NO_DEPTH);
+    Check('depth.duplicate.first.wins', (B.Depth = DEPTH_LOW) and (B.DepthState = bdsDuplicate));
+
+    Raised:= False;
+    try
+      B.SetDepth(DEPTH_OVER);
+    except  // dl:ok try-except-swallowed@af95 -- REVIEWED 2026-09-30 not swallowed: the catch sets Raised and the next Check fails when it is not set
+      on EArgumentOutOfRangeException do
+        Raised:= True;
+    end;
+    Check('depth.set.range.raises', Raised);
+
+    B.LoadFromString('#unuse OldU' + CRLF);
+    B.SetDepth(DEPTH_LOW);
+    Check('depth.set.no.convert', Pos('#depth 2', B.Snapshot) > 0, B.Snapshot);
+  finally
+    B.Free;
+  end;
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -7081,6 +7189,7 @@ begin
     TestProptreeNoise;
     TestProptree2Fields;
     TestSaveComplete;
+    TestBookDepth;
     TestPickerDatasource;
     TestFillFromUnit;
     TestProptreeBareClass;

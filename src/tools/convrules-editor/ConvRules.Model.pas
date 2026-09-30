@@ -28,6 +28,12 @@ const
   /// three call sites drifting apart is exactly how a corpus ends up carrying a
   /// directive nothing reads.</remarks>
   DIRECTIVE_TAG = '#tag';
+  /// <summary>Property-tree depth used when a book has no valid #depth (engine default).</summary>
+  BOOK_DEPTH_DEFAULT = 5;
+  /// <summary>Smallest legal #depth value.</summary>
+  BOOK_DEPTH_MIN = 1;
+  /// <summary>Largest legal #depth value.</summary>
+  BOOK_DEPTH_MAX = 10;
 
 type
   /// <summary>Kind of one parsed DSL line.</summary>
@@ -53,8 +59,15 @@ type
     rnkMapping, // #mapping Name from Type to Classes  |  #mapping Name #when/#else -> sets
     rnkApply, // #apply Name  (pull a #mapping into this #convert block)
     rnkTag, // #tag Name    (label the enclosing #convert, for job selection)
+    // #depth N  (book-scope property-tree depth, before the first #convert)
+    rnkDepth,
     rnkUnknown // anything else (kept verbatim, never dropped)
   );
+
+  /// <summary>What a book says about its property-tree depth.</summary>
+  /// <remarks>bdsInvalid wins over bdsDuplicate: the FIRST #depth line is the one the
+  /// engine reads, so a bad first value is the fact that matters.</remarks>
+  TBookDepthState = (bdsAbsent, bdsValid, bdsInvalid, bdsDuplicate);
 
   /// <summary>One 'ToPath = Value' assignment from a #mapping clause's set list.</summary>
   /// <remarks>
@@ -79,7 +92,7 @@ type
   /// (byte-faithful round-trip for untouched lines).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.ActiveLinks (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FindLinkForFrom (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas) (+53 more)</para>
+  /// <para>Used by: ConvRules.MainForm.TConvRulesForm.ActiveLinks (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.FindLinkForFrom (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadGridForBlock (ConvRules.MainForm.pas), declaration (ConvRules.MainForm.pas) (+57 more)</para>
   /// <para>Used in units: ConvRules.MainForm, ConvRules.MappingForm, ConvRules.Mappings, ConvRules.Model, ConvRules.RuleCatalog, ConvRules.Units</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -156,14 +169,21 @@ type
       /// model does not invent a name for it.</remarks>
       TagName : string;
 
+      // rnkDepth
+      /// <summary>The #depth value; meaningful only when DepthValid.</summary>
+      DepthValue: Integer;  // dl:ok public-field@db18 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+      /// <summary>True when the #depth body is an integer BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.
+      /// An invalid line keeps its Raw text verbatim; the engine's validator names it.</summary>
+      DepthValid: Boolean;  // dl:ok public-field@85bc -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+
       /// <summary><!-- drag-lint:auto sum -->TRuleNode</summary>
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MappingForm.TMappingForm.Signature (ConvRules.MappingForm.pas), ConvRules.Model.TRuleBook.SaveToString (ConvRules.Model.pas)</para>
       /// <para>Calls: ConvRules.Model.EmitSetList, Format</para>
-      /// <para>Complexity: 19 (cyclomatic, outer body), 52 lines (full implementation)</para>
-      /// <para>Reads: Dirty, Raw, Kind, FromType, ToType, Units, LinkTo, LinkFrom (+20 more)</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 54 lines (full implementation)</para>
+      /// <para>Reads: Dirty, Raw, Kind, FromType, ToType, Units, LinkTo, LinkFrom (+21 more)</para>
       /// <seealso cref="ConvRules.Model.EmitSetList"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
@@ -179,9 +199,10 @@ type
   /// <para>Used in units: ConvRules.BlockOps, ConvRules.ConvertRun, ConvRules.MainForm, ConvRules.RuleCatalog, ConvRules.Units</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TRuleBook = class
+  TRuleBook = class  // dl:ok high-response@74c0 -- REVIEWED 2026-09-30: RFC 53 is the book model's whole query surface; Depth/DepthState/SetDepth belong with the nodes they read
     private
       FNodes: TObjectList<TRuleNode>;
+      function DepthNodes: TArray<TRuleNode>;
     public
       /// <summary><!-- drag-lint:auto sum -->TRuleBook</summary>
       /// <remarks>
@@ -193,7 +214,7 @@ type
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.Destroy"/>
+      /// <seealso cref="ConvRules.Model.TRuleBook.Depth"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create;
@@ -220,10 +241,10 @@ type
       /// Never raises. Public so the model can be spec'd line-by-line without
       /// round-tripping a whole file.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas)</para>
-      /// <para>Calls: ConvRules.Model.ParseSetList, ConvRules.Model.SplitTopLevelCommas, ConvRules.Model.StripComment, ConvRules.Model.TRuleBook.ParseLine.SplitArrow, ConvRules.Model.TRuleBook.ParseLine.SplitBareArrow, Copy, LowerCase, Pos, Trim</para>
+      /// <para>Called from: ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas), ConvRules.Model.TRuleBook.SetDepth (ConvRules.Model.pas)</para>
+      /// <para>Calls: ConvRules.Model.ParseSetList, ConvRules.Model.SplitTopLevelCommas, ConvRules.Model.StripComment, ConvRules.Model.TRuleBook.ParseLine.SplitArrow, ConvRules.Model.TRuleBook.ParseLine.SplitBareArrow, Copy, LowerCase, Pos, Trim, TryStrToInt</para>
       /// <para>Returns: N</para>
-      /// <para>Complexity: 39 (cyclomatic, outer body), 285 lines (full implementation)</para>
+      /// <para>Complexity: 43 (cyclomatic, outer body), 294 lines (full implementation)</para>
       /// <seealso cref="ConvRules.Model.ParseSetList"/>
       /// <seealso cref="ConvRules.Model.SplitTopLevelCommas"/>
       /// <seealso cref="ConvRules.Model.StripComment"/>
@@ -241,7 +262,7 @@ type
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.Destroy"/>
+      /// <seealso cref="ConvRules.Model.TRuleBook.Depth"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure Clear;
@@ -284,13 +305,13 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;Integer&gt; -- Observed: L.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.ConvertRun.BookKindOfText (ConvRules.ConvertRun.pas), ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas) (+1 more)</para>
+      /// <para>Called from: ConvRules.ConvertRun.BookKindOfText (ConvRules.ConvertRun.pas), ConvRules.MainForm.TConvRulesForm.DoDeriveUnits (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas) (+2 more)</para>
       /// <para>Reads: FNodes</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.Destroy"/>
+      /// <seealso cref="ConvRules.Model.TRuleBook.Depth"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ConvertHeaders: TArray<Integer>;
@@ -349,14 +370,14 @@ type
       /// <returns><!-- drag-lint:auto -->TRuleNode -- Observed: ANode.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.BlockOps.DeleteBlocks (ConvRules.BlockOps.pas) ?, ConvRules.BlockOps.NormalizeIndexes (ConvRules.BlockOps.pas) ?, ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas) (+50 more)</para>
+      /// <para>Called from: ConvRules.BlockOps.DeleteBlocks (ConvRules.BlockOps.pas) ?, ConvRules.BlockOps.NormalizeIndexes (ConvRules.BlockOps.pas) ?, ConvRules.MainForm.TConvRulesForm.DoLoadUnit (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.InsertUnitNode (ConvRules.MainForm.pas) (+52 more)</para>
       /// <para>Reads: FNodes</para>
       /// <para>Owns returned: borrowed</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.Destroy"/>
+      /// <seealso cref="ConvRules.Model.TRuleBook.Depth"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Add(ANode: TRuleNode): TRuleNode;
@@ -436,7 +457,7 @@ type
       /// <seealso cref="ConvRules.Model.TRuleBook.Clear"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ConvertHeaders"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.Create"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.Destroy"/>
+      /// <seealso cref="ConvRules.Model.TRuleBook.Depth"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BlockMapsSomething(const ANodes: TArray<TRuleNode>): Boolean; static;
@@ -475,6 +496,21 @@ type
       /// what Save persists. TRuleNode.Dirty is not this signal: it is never
       /// cleared by Save and a deleted node leaves no trace in it.</remarks>
       function Snapshot: string;
+      /// <summary>The effective property-tree depth: the FIRST #depth line's value when
+      /// it is valid, else BOOK_DEPTH_DEFAULT.</summary>
+      /// <returns>BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.</returns>
+      function Depth: Integer;
+      /// <summary>Absent / valid / invalid / duplicate -- what the depth control shows.</summary>
+      /// <returns>See TBookDepthState.</returns>
+      function DepthState: TBookDepthState;
+      /// <summary>Set the book's depth: updates the first #depth line, or inserts
+      /// '#depth N' before the first #convert (appends when there is none).</summary>
+      /// <param name="AValue">BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.</param>
+      /// <returns>The #depth node, owned by the book.</returns>
+      /// <exception cref="EArgumentOutOfRangeException">AValue outside the range.</exception>
+      /// <remarks>An insert shifts every #convert index by one: a caller holding a
+      /// header index must re-find it BY NODE (Nodes.IndexOf), as InsertUnitNode does.</remarks>
+      function SetDepth(AValue: Integer): TRuleNode;
   end;
 
 const
@@ -669,6 +705,8 @@ begin
       Result:= Format('#apply %s', [ApplyName]);
     rnkTag:
       Result:= DIRECTIVE_TAG + ' ' + TagName;
+    rnkDepth:
+      Result:= Format('#depth %d', [DepthValue]);
     else
       // rnkMigrate, rnkPcre, rnkComment, rnkBlank, rnkUnknown: edited via Raw.
       Result:= Raw;
@@ -700,7 +738,7 @@ begin
   Result:= ANode;
 end;
 
-function TRuleBook.ParseLine(const ALine: string): TRuleNode;
+function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@cedc -- REVIEWED 2026-09-30: a flat one-arm-per-directive dispatcher; the #depth arm took it from 247 to 256 lines, and splitting the arms apart is a refactor outside this change
 var
   N     : TRuleNode;
   T     : string   ;
@@ -973,6 +1011,15 @@ begin
       Exit(N);
     end;
 
+    if Dir = '#depth' then
+    begin
+      N.Kind:= rnkDepth;
+      N.DepthValid:= TryStrToInt(Body, N.DepthValue) and (N.DepthValue >= BOOK_DEPTH_MIN) and (N.DepthValue <= BOOK_DEPTH_MAX);
+      if not N.DepthValid then
+        N.DepthValue:= 0;
+      Exit(N);
+    end;
+
     // unknown '#directive'
     N.Kind:= rnkUnknown;
     Exit(N);
@@ -1144,6 +1191,75 @@ var
 begin
   Result:= SaveCompleteToString(LDropped);
 end;
+
+function TRuleBook.DepthNodes: TArray<TRuleNode>;
+var
+  L: TList<TRuleNode>;
+  N: TRuleNode       ;
+begin
+  L:= TList<TRuleNode>.Create;
+  try
+    for N in FNodes do
+      if N.Kind = rnkDepth then
+        L.Add(N);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end; // function
+
+function TRuleBook.Depth: Integer;
+var
+  L: TArray<TRuleNode>;
+begin
+  L:= DepthNodes;
+  if (Length(L) > 0) and L[0].DepthValid then
+    Result:= L[0].DepthValue
+  else
+    Result:= BOOK_DEPTH_DEFAULT;
+end;
+
+function TRuleBook.DepthState: TBookDepthState;
+var
+  L: TArray<TRuleNode>;
+begin
+  L:= DepthNodes;
+  if Length(L) = 0 then
+    Exit(bdsAbsent);
+  if not L[0].DepthValid then
+    Exit(bdsInvalid);
+  if Length(L) > 1 then
+    Exit(bdsDuplicate);
+  Result:= bdsValid;
+end; // function
+
+function TRuleBook.SetDepth(AValue: Integer): TRuleNode;  // dl:ok function-result-not-set@f2d5 -- REVIEWED 2026-09-30 false positive: both branches assign Result; the rule counts the leading range-check raise as a path that skips it (probe: same body without the raise guard reports 0)
+var
+  L    : TArray<TRuleNode>;
+  Heads: TArray<Integer>  ;
+begin
+  if (AValue < BOOK_DEPTH_MIN) or (AValue > BOOK_DEPTH_MAX) then
+    raise EArgumentOutOfRangeException.CreateFmt('#depth %d is outside %d..%d', [AValue, BOOK_DEPTH_MIN, BOOK_DEPTH_MAX]);
+  L:= DepthNodes;
+  if Length(L) > 0 then
+  begin
+    Result:= L[0];
+    Result.DepthValue:= AValue;
+    Result.DepthValid:= True;
+    Result.Dirty     := True;
+  end
+  else
+  begin
+    // Book scope, before the first #convert -- the only place the engine reads it,
+    // and the section SaveCompleteToString always keeps.
+    Result:= ParseLine(Format('#depth %d', [AValue]));
+    Heads:= ConvertHeaders;
+    if Length(Heads) = 0 then
+      FNodes.Add(Result)
+    else
+      FNodes.Insert(Heads[0], Result);
+  end;
+end; // function
 
 function TRuleBook.ConvertHeaders: TArray<Integer>;
 var

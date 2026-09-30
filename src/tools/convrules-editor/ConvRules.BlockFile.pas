@@ -443,8 +443,9 @@ const { Directives that are FILE-scope: they belong to the BOOK, not to any one
     only #apply / #ignore / #link / #note, and the 43-line tail carries only
     #migrate. #use / #useswap set a unit name like #unuse, so they are file-scope
     too. #default is deliberately ABSENT -- convrules\sample.rules:7 has it inside
-    a #convert body, so it is body-scope and must not open a trailing block. }
-  FILE_SCOPE_DIRECTIVES: array[0..5] of string = ( '#migrate', '#remove', '#unuse', '#use', '#useswap', '#mapping');
+    a #convert body, so it is body-scope and must not open a trailing block.
+    #depth (engine 1.20.6) is a book setting, top level before the first #convert. }
+  FILE_SCOPE_DIRECTIVES: array[0..6] of string = ( '#migrate', '#remove', '#unuse', '#use', '#useswap', '#mapping', '#depth');
 
 function IsFileScopeDirective(const ALine: string): Boolean;
 var
