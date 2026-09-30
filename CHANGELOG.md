@@ -3,6 +3,89 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.20.5-alpha -- 2026-09-30
+
+PATCH: the Config tool no longer overwrites a `drag-lint.json` it could not load, and the doc
+engine no longer writes a `///` line the compiler can reject. Only `DRAGLINT_VERSION` moves;
+extractor 1.20.0-alpha, resolver 1.11.0-alpha and schema v23 are unchanged -- no index needs a
+re-parse or a re-resolve. Nothing under `src\parser`, `src\preprocess` or `src\index` was edited.
+
+### Fixed
+
+- **The Config tool could overwrite `drag-lint.json` with an EMPTY manifest** when the file did
+  not load (bad JSON, a wrong-typed key). The parse failure replaced the in-memory manifest with an
+  empty default, `Validate` accepts zero sections, and two writers then saved it over the user's
+  file: the **Save** button, and the SILENT autosave that runs before every **Build** (its errors
+  were swallowed, so nothing was said). Now every load and save goes through one session unit
+  (`Config.ManifestSession`): a file that did not load is never written -- Save is disabled (the
+  caption says `[NOT LOADED -- saving disabled]`), a click or a Build autosave is refused with
+  `Not saved: <path> did not load (<error>). Fix the file, then Reload.`, and the load error is
+  shown in a dialog when the file is opened. The discovery path (no file resolved beside the exe)
+  now also disables Save on a partial load. **Config tool 0.45.1-alpha.** The deployed
+  `third_party\dll-win64\drag-lint-config.exe` was a 2026-06-15 build, so this defect was live
+  independently of 1.20.4.
+- **The doc-drift autofix and `document` wrote `///` lines up to 2,566 characters.** The
+  reconciliation facts (`Used by:` / `Called from:` inbound lists) are uncapped on purpose -- a
+  capped window onto the list would make every cross-project merge unsound -- and they were
+  rendered on ONE physical line. An over-long fact line now breaks at entry boundaries (a blank after
+  a `,` or `;`; any blank if there is none; a single token longer than the limit stays whole), and
+  ONLY a line that would exceed `DOC_FACT_MAX_COLS = 1000` is broken: every line within 1000
+  characters is byte-identical to 1.20.4, so no documented project churns. A legacy fact line with
+  no `<para>` is never broken. The readers of a stored block accept the wrapped form:
+  `doc-forget` (`--list-tags` and the rewrite; continuation lines were skipped, so tags on them
+  were missed and an emptied list left orphan lines inside the fence), the cross-project merge
+  (`MergeInboundFacts`, which rewrote the first physical line with the whole merged list and left
+  the continuation lines -- duplicate entries), and the merge's re-insert point (`ReinsertAt`,
+  which put a re-inserted `<para>` INSIDE a wrapped predecessor). A hand-broken, unterminated
+  `<para>` is read as a single line and never swallows the fence END. `doc-forget` keeps CRLF on
+  every line it re-wraps.
+- **A stored managed line over 1000 characters is now drift.** Drift compares whitespace-collapsed
+  content, so a long line written by 1.20.4 or earlier read as current and `--fix` never rewrote
+  it. `doc-drift` now reports such a block (`managed facts block is out of date -- a line is over
+  1000 characters`) and `--fix` rewrites it wrapped.
+- **The compiler limit, corrected.** The 1.20.4 entry below records the long lines as `F2069 Line
+  too long`; the message says "more than 1023 characters", but that is not what dcc64 37.0 was
+  measured to do. A 1020-character line compiled at every file offset sampled; longer lines
+  compiled at SOME offsets and failed at others (a 4056-character `///` line compiled near the
+  start of a file, a 1021-character one failed elsewhere). The mechanism is not settled. The
+  practical reading: a line over 1020 characters is a build that can break when an edit above it
+  moves it. The engine caps at 1000; the new tree guard checks 1020.
+- **Two latent over-long source lines in this repo** were broken up: the `Used by:` line in
+  `src\doc\DRagLint.Doc.SharedFacts.pas:111` (1139 characters) was regenerated wrapped, and a
+  1097-character trailing comment in `src\lint\DRagLint.Lint.RuleCatalog.pas` (near line 547) was
+  split over two lines. Both compiled only by position.
+
+### Index
+
+- New manifest section **`DragLint-Config`** (`src\config\drag-lint-config.dproj`, DB
+  `src\config\_D-RAG\drag-lint-config.sqlite`) in `third_party\dll-win64\drag-lint.json` and
+  `third_party\dll-win32\drag-lint.json`. The Config tool had no index, so the lint-clean rule could
+  not be applied to it.
+
+### Tests
+
+- `tests\autotest\run_config_save_guard.ps1` (+ `fixtures\configsave\ConfigSaveHarness.dpr`):
+  arms A/B (a file that did not load is refused and left byte-identical), C (a good file saves),
+  D (+ control: `src\config` writes only through `Config.ManifestSession`), and GUI arms G/H that
+  drive the real exe (Save disabled, Build autosave refused and SAID, Reload re-enables). G/H need
+  an interactive desktop.
+- `tests\autotest\run_doc_fact_wrap_readers.ps1`: the merge (short, long, re-insert after a
+  wrapped predecessor, a wrapped FRESH render), `doc-forget` over wrapped and legacy lines, CRLF.
+- `tests\autotest\run_doc_fact_line_length_guard.ps1`: a rendered 200-entry list stays within
+  1000 and COMPILES (real dcc), `document` is a fixed point, a stored over-long line is drift and
+  `--fix` wraps it (1000 current / 1001 drift), and no tracked source line exceeds 1020.
+- `drag-lint selftest fact-wrap` (internal): wrap and fold cases, including the rightmost-boundary,
+  comma-free, exactly-at-limit, over-long-token, legacy and unterminated-`<para>` cases.
+
+### Known issues
+
+- The three stale facts blocks in `src\index\DRagLint.Index.Manifest.pas` (lines 151, 184, 238)
+  are left unapplied: `src\index` is on the extractor-hash surface. A preview (`--fix` without
+  `--apply`) proves the fix now produces lines within the cap there -- widest 929 / 953 / 951
+  characters, none over 1000.
+- A hand-written source line of 1021+ characters is not caught by any lint rule; the doc engine
+  can only keep its own lines short.
+
 ## v1.20.4-alpha -- 2026-09-29
 
 PATCH: a project index can no longer write into another project's database; a malformed manifest
