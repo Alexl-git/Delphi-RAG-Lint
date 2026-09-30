@@ -4,10 +4,10 @@ unit ConvRules.ConvertRunner;
   unit up ONCE, apply each runnable book in order, reindex between books
   (convert-apply finds .dfm blocks through the index), and restore a unit from
   its backup the moment a unit-level step fails -- a unit is never left
-  half-converted. A book whose rules fail the engine's own validation (its
-  rule_errors) is skipped for the rest of the run: convert-validate without a
-  From/To pair checks syntax only (measured 2026-09-29), so it cannot be the
-  pre-check. Runs on a worker thread; no VCL. }
+  half-converted, and the rows say so. A book whose rules fail the engine's
+  own validation (its rule_errors) is skipped for the rest of the run:
+  convert-validate without a From/To pair checks syntax only (measured
+  2026-09-29), so it cannot be the pre-check. Runs on a worker thread; no VCL. }
 
 interface
 
@@ -19,9 +19,23 @@ uses
 
 type
   /// <summary>Outcome of one results-grid row.</summary>
-  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped);
+  /// <remarks>
+  /// csConverted: the book converted the unit and the reindex after it succeeded.
+  /// csFailedRestored: the book's apply (or the reindex after it) failed; the
+  ///   unit and its .dfm were restored from this run's backup and the unit's
+  ///   remaining books did not run.
+  /// csBookSkipped: the book failed the engine's validation (rule_errors); the
+  ///   unit is untouched by it and the book is not tried on any later unit.
+  /// csUnitSkipped: the unit was not run at all -- not found on disk, or its
+  ///   backup could not be taken (any .BCK already made for it is removed).
+  /// csRolledBack: the book HAD converted the unit, but a later book failed on
+  ///   the same unit and the restore undid this book's change too.
+  /// csRestoreFailed: a book failed AND the restore from the backup raised; the
+  ///   unit may be half-converted, the Note names the backup to restore by hand.
+  /// </remarks>
+  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed);
 
-  /// <summary>One results-grid row: a book x unit, or a book-level skip.</summary>
+  /// <summary>One results-grid row: a book x unit, or a unit-level skip.</summary>
   TConvertRow = record
     /// <summary>The .rules path; '' on a csUnitSkipped row.</summary>
     Book   : string;
@@ -31,7 +45,8 @@ type
     /// <summary>The .pas backup this run made; '' when none, and '' on a
     /// csBookSkipped row (the book did not touch the unit).</summary>
     Backup : string;
-    /// <summary>Human-readable reason / summary.</summary>
+    /// <summary>Human-readable reason / summary. Also records an unneeded
+    /// backup that could not be deleted (it is then kept).</summary>
     Note   : string;
     /// <summary>What happened.</summary>
     Status : TConvertStatus;
@@ -53,8 +68,17 @@ type
     ProjectFile: string;
   end;
 
-  /// <summary>Called once per row as it is produced (worker thread!).</summary>
+  /// <summary>Called once per row (worker thread!). A unit's rows arrive
+  /// together when that unit has finished, already in their final status.</summary>
   TConvertProgress = reference to procedure(const ARow: TConvertRow; ADone, ATotal: Integer);
+
+  /// <summary>Applies one book to one unit in place; the shape of
+  /// TEngineAdapter.ApplyConversion with the --db list bound.</summary>
+  TApplyFn = reference to function(const AUnitPas, ARulesFile: string; out AJson: string): Integer;
+
+  /// <summary>Refreshes the project index; the shape of
+  /// TEngineAdapter.IndexProject with the project bound. 0 = success.</summary>
+  TIndexFn = reference to function(out AOutput: string): Integer;
 
 /// <summary>Runs a whole job (AJob.Books over AJob.Units).</summary>
 /// <param name="AJob">The job.</param>
@@ -65,24 +89,39 @@ type
 /// csBookSkipped row (on the first unit that tried it) and is not tried again.</returns>
 function RunConversion(const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
 
-/// <summary>The unit loop of RunConversion, for books already validated.</summary>
+/// <summary>The unit loop of RunConversion, for books already validated,
+/// against the real engine (AJob.Dbs, AJob.ProjectFile, AJob.ProjectDb).</summary>
 /// <param name="AUnits">Source units.</param>
 /// <param name="ABooks">Validated books, application order.</param>
 /// <param name="AJob">Supplies Dbs, ProjectDb, ProjectFile.</param>
 /// <param name="AEngine">Engine adapter.</param>
 /// <param name="AProgress">May be nil.</param>
 /// <param name="ACancelled">May be nil; True stops before the NEXT unit.</param>
-/// <returns>One row per unit x book attempted (a missing unit: one row).</returns>
-/// <remarks>Each existing unit gets ONE .BCK&lt;N&gt; restore point (and one for
-/// its .dfm) before its first book; it is deleted again when no book changed
-/// the unit. A failed apply or reindex restores the unit from it and stops
-/// that unit's remaining books. File I/O errors (backup, restore) propagate
-/// as exceptions.</remarks>
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
+/// <returns>See the TApplyFn overload.</returns>
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>; overload;
+
+/// <summary>The unit loop with the engine calls injected.</summary>
+/// <param name="AUnits">Source units.</param>
+/// <param name="ABooks">Validated books, application order.</param>
+/// <param name="AApply">Applies one book to one unit.</param>
+/// <param name="AIndex">Reindexes after each successful apply.</param>
+/// <param name="AProgress">May be nil.</param>
+/// <param name="ACancelled">May be nil; True stops before the NEXT unit.</param>
+/// <returns>One row per unit x book attempted (a missing or un-backed-up unit:
+/// one csUnitSkipped row); a unit whose books were all found invalid on
+/// earlier units gets no row and no backup.</returns>
+/// <remarks>Each unit gets ONE .BCK&lt;N&gt; restore point (and one for its
+/// .dfm) before its first book, deleted again when no book changed the unit.
+/// A failed apply or reindex restores the unit, rewrites its earlier
+/// csConverted rows to csRolledBack and stops its remaining books. Never
+/// raises: file I/O failures and exceptions from AApply / AIndex become row
+/// outcomes (see TConvertStatus).</remarks>
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>; overload;
 
 /// <summary>Display text for a status.</summary>
 /// <param name="AStatus">The status.</param>
-/// <returns>'converted', 'FAILED -- restored', 'book skipped', 'unit skipped'.</returns>
+/// <returns>'converted', 'FAILED -- restored', 'book skipped', 'unit skipped',
+/// 'rolled back', 'FAILED -- NOT restored'.</returns>
 function ConvertStatusText(AStatus: TConvertStatus): string;
 
 implementation
@@ -102,7 +141,9 @@ begin
     csConverted     : Result:= 'converted';
     csFailedRestored: Result:= 'FAILED -- restored';
     csBookSkipped   : Result:= 'book skipped';
-    else              Result:= 'unit skipped';
+    csUnitSkipped   : Result:= 'unit skipped';
+    csRolledBack    : Result:= 'rolled back';
+    else              Result:= 'FAILED -- NOT restored';
   end;
 end;
 
@@ -121,117 +162,257 @@ end;
 
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
 var
-  Rows   : TArray<TConvertRow>;
-  Row    : TConvertRow;
-  Total  : Integer;
-  BakPas : string;
-  BakDfm : string;
-  Dfm    : string;
-  Json   : string;
-  Output : string;
-  Invalid: TArray<string>; // books whose rules failed the engine's validation this run
-  Changed: Boolean;        // some book converted this unit -> keep its backup
+  LJob   : TConvertJob;
+  LEngine: TEngineAdapter;
+begin
+  LJob   := AJob;
+  LEngine:= AEngine;
+  Result:= RunConversionUnits(AUnits, ABooks,
+    function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+    begin
+      Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AJson);
+    end,
+    function(out AOutput: string): Integer
+    begin
+      Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
+    end,
+    AProgress, ACancelled);
+end;
 
-  procedure Emit;
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
+var
+  Rows    : TArray<TConvertRow>;
+  UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
+  Row     : TConvertRow;
+  Total   : Integer;
+  CurUnit : string;
+  BakPas  : string;
+  BakDfm  : string;
+  Dfm     : string;
+  Invalid : TArray<string>; // books whose rules failed the engine's validation this run
+  Changed : Boolean;        // the unit's backup is still needed (a change, or a failed book)
+
+  procedure Add;
   begin
-    Rows:= Rows + [Row];
-    if Assigned(AProgress) then
-      AProgress(Row, Length(Rows), Total);
+    UnitRows:= UnitRows + [Row];
   end;
 
-  procedure Restore;
+  procedure Flush;
   begin
-    TFile.Copy(BakPas, Row.UnitPas, True);
-    if BakDfm <> '' then
-      TFile.Copy(BakDfm, Dfm, True);
+    for var LRow: TConvertRow in UnitRows do
+    begin
+      Rows:= Rows + [LRow];
+      if Assigned(AProgress) then
+        AProgress(LRow, Length(Rows), Total);
+    end;
+    UnitRows:= nil;
+  end;
+
+  function AllInvalid: Boolean;
+  begin
+    Result:= True;
+    for var LBook: string in ABooks do
+      if not MatchText(LBook, Invalid) then
+        Exit(False);
+  end;
+
+  // '' when ABak ('' = none made) is gone; else a note that it was kept.
+  function DropBackup(const ABak: string): string;
+  begin
+    Result:= '';
+    if ABak = '' then
+      Exit;
+    try
+      TFile.Delete(ABak);
+    except
+      on E: Exception do
+        Result:= Format('; unneeded backup kept (delete failed: %s): %s', [E.Message, ABak]);
+    end; // try
+  end;
+
+  // '' when every backup this run made for the unit is gone; else what was kept.
+  function DropBackups: string;
+  begin
+    Result:= DropBackup(BakPas) + DropBackup(BakDfm);
+  end;
+
+  // BakPas / BakDfm are set only once their copy has been made, so a failure
+  // leaves them naming exactly the backups DropBackups must remove.
+  function TakeBackups(out AError: string): Boolean;
+  begin
+    AError:= '';
+    BakPas:= '';
+    BakDfm:= '';
+    Dfm   := ChangeFileExt(CurUnit, '.dfm');
+    try
+      var LPath: string:= NextBackupPath(CurUnit, FileProbe());
+      TFile.Copy(CurUnit, LPath);
+      BakPas:= LPath;
+      if TFile.Exists(Dfm) then
+      begin
+        LPath:= NextBackupPath(Dfm, FileProbe());
+        TFile.Copy(Dfm, LPath);
+        BakDfm:= LPath;
+      end;
+      Result:= True;
+    except
+      on E: Exception do
+      begin
+        AError:= E.Message;
+        Result:= False;
+      end;
+    end; // try
+  end;
+
+  function TryRestore(out AError: string): Boolean;
+  begin
+    AError:= '';
+    try
+      TFile.Copy(BakPas, CurUnit, True);
+      if BakDfm <> '' then
+        TFile.Copy(BakDfm, Dfm, True);
+      Result:= True;
+    except
+      on E: Exception do
+      begin
+        AError:= E.Message;
+        Result:= False;
+      end;
+    end; // try
+  end;
+
+  // Row is the failing book's row; restore the unit and account for its earlier rows.
+  procedure FailUnit(const AReason: string);
+  var
+    LError: string;
+  begin
+    Changed:= True; // the backup is the restore point the rows name -- keep it
+    if not TryRestore(LError) then
+    begin
+      // Earlier csConverted rows stay: their change may still be on disk.
+      Row.Status:= csRestoreFailed;
+      Row.Note  := Format('restore failed: %s; the unit may be half-converted -- backup at %s', [LError, BakPas]);
+      Add;
+      Exit;
+    end;
+    for var I: Integer:= 0 to High(UnitRows) do
+      if UnitRows[I].Status = csConverted then
+      begin
+        UnitRows[I].Status:= csRolledBack;
+        UnitRows[I].Note  := Format('undone: %s failed on this unit; restored from %s', [ExtractFileName(Row.Book), ExtractFileName(BakPas)]);
+      end;
+    Row.Status:= csFailedRestored;
+    Row.Note  := AReason;
+    Add;
+  end;
+
+  // False = the unit failed; its remaining books must not run.
+  function RunBook(const ABook: string): Boolean;
+  var
+    LJson  : string;
+    LOutput: string;
+    LCode  : Integer;
+  begin
+    Result:= True;
+    Row:= Default(TConvertRow);
+    Row.UnitPas:= CurUnit;
+    Row.Book   := ABook;
+    Row.Backup := BakPas;
+    try
+      // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson.
+      AApply(CurUnit, ABook, LJson);
+    except  // dl:ok try-except-swallowed@3c3c -- REVIEWED 2026-09-29 not swallowed: the message becomes unparseable apply output, so the unit is restored and the row names it
+      on E: Exception do
+        LJson:= 'engine call raised: ' + E.Message; // unparseable -> the unit is restored
+    end; // try
+    Row.Apply:= ParseApplyJson(LJson);
+    if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) then
+    begin
+      // The BOOK is invalid; the engine validates before writing, so this unit
+      // is untouched by it. Skip the book for the rest of the run.
+      Invalid:= Invalid + [ABook];
+      Row.Backup:= ''; // the book made no change; the backup may yet be dropped
+      Row.Status:= csBookSkipped;
+      Row.Note  := 'rules failed the engine''s validation: ' + Row.Apply.Error;
+      Add;
+      Exit;
+    end;
+    if not Row.Apply.Ok then
+    begin
+      FailUnit(Row.Apply.Error);
+      Exit(False);
+    end;
+    try
+      LCode:= AIndex(LOutput);
+    except  // dl:ok try-except-swallowed@6298 -- REVIEWED 2026-09-29 not swallowed: becomes a failed reindex, so the unit is restored and the row carries the message
+      on E: Exception do
+      begin
+        LOutput:= 'reindex raised: ' + E.Message;
+        LCode  := -1;
+      end;
+    end; // try
+    if LCode <> 0 then
+    begin
+      FailUnit('reindex after apply failed: ' + Copy(LOutput, 1, OUTPUT_HEAD_CHARS));
+      Exit(False);
+    end;
+    Changed   := True;
+    Row.Status:= csConverted;
+    Row.Note  := Format('%d edit(s), %d remaining for manual work', [Row.Apply.EditsCount, Length(Row.Apply.Remainder)]);
+    Add;
+  end;
+
+  procedure RunUnit;
+  var
+    LError: string;
+  begin
+    Row:= Default(TConvertRow);
+    Row.UnitPas:= CurUnit;
+    if not TFile.Exists(CurUnit) then
+    begin
+      Row.Status:= csUnitSkipped;
+      Row.Note  := 'source unit not found on disk';
+      Add;
+      Exit;
+    end;
+    if AllInvalid then
+      Exit; // every book already failed validation on an earlier unit: nothing to run, no backup
+    // One restore point per unit per run, taken before the first book touches it.
+    if not TakeBackups(LError) then
+    begin
+      Row.Status:= csUnitSkipped;
+      Row.Note  := 'backup failed: ' + LError + DropBackups;
+      Add;
+      Exit;
+    end;
+    Changed:= False;
+    for var LBook: string in ABooks do
+      if not MatchText(LBook, Invalid) and not RunBook(LBook) then
+        Break;
+    if Changed then
+      Exit;
+    // Nothing touched the unit (every book invalid): the fresh copies are
+    // identical to it and would only litter the folder.
+    LError:= DropBackups;
+    if (LError <> '') and (Length(UnitRows) > 0) then
+      UnitRows[High(UnitRows)].Note:= UnitRows[High(UnitRows)].Note + LError;
   end;
 
 begin
-  Result := nil;
-  Rows   := nil;
-  Invalid:= nil;
+  Rows    := nil;
+  UnitRows:= nil;
+  Invalid := nil;
   if Length(ABooks) = 0 then
-    Exit; // no book, no backup
+    Exit(nil); // no book, no backup
   Total:= Length(AUnits) * Length(ABooks);
-  for var LUnit: string in AUnits do
+  for CurUnit in AUnits do
   begin
     // Cancel is honoured BETWEEN units only: a unit is never left with some of
     // its books applied and the rest not.
     if Assigned(ACancelled) and ACancelled() then
       Break;
-    Row:= Default(TConvertRow);
-    Row.UnitPas:= LUnit;
-    if not TFile.Exists(LUnit) then
-    begin
-      Row.Status:= csUnitSkipped;
-      Row.Note  := 'source unit not found on disk';
-      Emit;
-      Continue;
-    end;
-    // One restore point per unit per run, taken before the first book touches it.
-    BakPas:= NextBackupPath(LUnit, FileProbe());
-    TFile.Copy(LUnit, BakPas);
-    Dfm   := ChangeFileExt(LUnit, '.dfm');
-    BakDfm:= '';
-    if TFile.Exists(Dfm) then
-    begin
-      BakDfm:= NextBackupPath(Dfm, FileProbe());
-      TFile.Copy(Dfm, BakDfm);
-    end;
-    Changed:= False;
-    for var LBook: string in ABooks do
-    begin
-      if MatchText(LBook, Invalid) then
-        Continue; // already reported once, on the unit that found it
-      Row:= Default(TConvertRow);
-      Row.UnitPas:= LUnit;
-      Row.Book   := LBook;
-      Row.Backup := BakPas;
-      // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson.
-      AEngine.ApplyConversion(LUnit, LBook, AJob.Dbs, Json);
-      Row.Apply:= ParseApplyJson(Json);
-      if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) then
-      begin
-        // The BOOK is invalid; the engine validates before writing, so this unit
-        // is untouched by it. Skip the book for the rest of the run.
-        Invalid:= Invalid + [LBook];
-        Row.Backup:= ''; // the book made no change; the backup may yet be dropped
-        Row.Status:= csBookSkipped;
-        Row.Note  := 'rules failed the engine''s validation: ' + Row.Apply.Error;
-        Emit;
-        Continue;
-      end;
-      if not Row.Apply.Ok then
-      begin
-        Restore;
-        Row.Status:= csFailedRestored;
-        Row.Note  := Row.Apply.Error;
-        Emit;
-        Changed:= True; // the backup is the restore point the row names -- keep it
-        Break;          // the unit is back to its backup; its remaining books do not run
-      end;
-      if AEngine.IndexProject(AJob.ProjectFile, AJob.ProjectDb, Output) <> 0 then
-      begin
-        Restore;
-        Row.Status:= csFailedRestored;
-        Row.Note  := 'reindex after apply failed: ' + Copy(Output, 1, OUTPUT_HEAD_CHARS);
-        Emit;
-        Changed:= True;
-        Break;
-      end;
-      Changed   := True;
-      Row.Status:= csConverted;
-      Row.Note  := Format('%d edit(s), %d remaining for manual work', [Row.Apply.EditsCount, Length(Row.Apply.Remainder)]);
-      Emit;
-    end; // for books
-    if not Changed then
-    begin
-      // Nothing touched the unit (every book invalid): the fresh copies are
-      // identical to it and would only litter the folder.
-      TFile.Delete(BakPas);
-      if BakDfm <> '' then
-        TFile.Delete(BakDfm);
-    end;
+    RunUnit;
+    Flush;
   end; // for units
   Result:= Rows;
 end;

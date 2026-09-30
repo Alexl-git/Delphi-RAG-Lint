@@ -1622,6 +1622,123 @@ begin
   end; // try
 end; // procedure
 
+{ ConvertRunner row integrity and file-I/O faults, with the engine calls faked
+  (review fix round 1): a later book's failure rolls back an earlier book's rows
+  (and they reach AProgress only in their final status); a backup that cannot
+  be taken skips the unit; a restore that cannot be done says so. None of these
+  may raise out of RunConversionUnits. }
+procedure TestConvertRunnerFaults;
+const
+  OK_JSON   = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  FAIL_JSON = '{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[],"edits_count":0}';
+  ORIG      = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+  TWO_ROWS  = 2;
+var
+  Dir, PasR, PasL, PasF, Seen, Raised: string;
+  Rows : TArray<TConvertRow>;
+  Calls: Integer;
+  Index: TIndexFn;
+  Lock : TFileStream;
+
+  function Describe(const ARows: TArray<TConvertRow>): string;
+  begin
+    Result:= Format('%d rows', [Length(ARows)]);
+    for var LRow: TConvertRow in ARows do
+      Result:= Result + ' | ' + ExtractFileName(LRow.Book) + '=' + ConvertStatusText(LRow.Status) + ': ' + LRow.Note;
+  end;
+
+  // A writes into the unit and succeeds; B runs AOnB, then fails without rule_errors.
+  function ApplyAThenFailB(const AOnB: TProc<string>): TApplyFn;
+  begin
+    Result:= function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        if SameText(ExtractFileName(ARulesFile), 'A.rules') then
+        begin
+          TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+          AJson := OK_JSON;
+          Result:= 0;
+          Exit;
+        end;
+        if Assigned(AOnB) then
+          AOnB(AUnitPas);
+        AJson := FAIL_JSON;
+        Result:= 1;
+      end;
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-faults-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end;
+
+    // --- a later book fails: the earlier book's row is rolled back ---
+    PasR:= TPath.Combine(Dir, 'R.pas');
+    TFile.WriteAllText(PasR, ORIG, TEncoding.ASCII);
+    Seen:= '';
+    Rows:= RunConversionUnits([PasR], ['A.rules', 'B.rules'], ApplyAThenFailB(nil), Index,
+      procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
+      begin
+        Seen:= Seen + ExtractFileName(ARow.Book) + '=' + ConvertStatusText(ARow.Status) + ';';
+      end, nil);
+    Check('runner.rollback.row', (Length(Rows) = TWO_ROWS) and (Rows[0].Status = csRolledBack) and (Pos('B.rules', Rows[0].Note) > 0)
+      and (Rows[1].Status = csFailedRestored) and (TFile.ReadAllText(PasR) = ORIG), Describe(Rows) + ' | pas=' + TFile.ReadAllText(PasR));
+    Check('runner.rollback.progress.order', Seen = 'A.rules=rolled back;B.rules=FAILED -- restored;', Seen);
+
+    // --- the backup cannot be taken: the unit is skipped, nothing left behind ---
+    PasL:= TPath.Combine(Dir, 'L.pas');
+    TFile.WriteAllText(PasL, ORIG, TEncoding.ASCII);
+    Calls := 0;
+    Raised:= '';
+    Rows  := nil;  // dl:ok overwrite-before-read@05a7 -- REVIEWED 2026-09-29 read when the call below raises: the check must not report the previous case's rows
+    Lock:= TFileStream.Create(PasL, fmOpenRead or fmShareExclusive);
+    try
+      try
+        Rows:= RunConversionUnits([PasL], ['A.rules'],
+          function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+          begin
+            Inc(Calls);
+            AJson := OK_JSON;
+            Result:= 0;
+          end, Index, nil, nil);
+      except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-29 not swallowed: the text lands in Raised and the next Check fails on it
+        on E: Exception do
+          Raised:= E.ClassName + ': ' + E.Message;
+      end; // try
+    finally
+      Lock.Free;
+    end; // try
+    var LSkipRow  : Boolean:= (Length(Rows) = 1) and (Rows[0].Status = csUnitSkipped) and (Pos('backup failed', Rows[0].Note) > 0);
+    var LNoLeftBck: Boolean:= Length(TDirectory.GetFiles(Dir, 'L.pas.BCK*')) = 0;
+    Check('runner.backup.failure', (Raised = '') and LSkipRow and (Calls = 0) and LNoLeftBck, Raised + ' ' + Describe(Rows) + Format(' calls=%d', [Calls]));
+
+    // --- the restore itself fails: say so, keep the backup, do not raise ---
+    PasF:= TPath.Combine(Dir, 'F.pas');
+    TFile.WriteAllText(PasF, ORIG, TEncoding.ASCII);
+    Raised:= '';
+    Rows  := nil;  // dl:ok overwrite-before-read@05a7 -- REVIEWED 2026-09-29 read when the call below raises: the check must not report the previous case's rows
+    try
+      try
+        Rows:= RunConversionUnits([PasF], ['A.rules', 'B.rules'],
+          ApplyAThenFailB(procedure(AUnitPas: string) begin FileSetAttr(AUnitPas, faReadOnly); end), Index, nil, nil);
+      except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-29 not swallowed: the text lands in Raised and the next Check fails on it
+        on E: Exception do
+          Raised:= E.ClassName + ': ' + E.Message;
+      end; // try
+      Check('runner.restore.failure', (Raised = '') and (Length(Rows) = TWO_ROWS) and (Rows[1].Status = csRestoreFailed)
+        and (Pos(PasF + '.BCK1', Rows[1].Note) > 0) and TFile.Exists(PasF + '.BCK1'), Raised + ' ' + Describe(Rows));
+    finally
+      FileSetAttr(PasF, faNormal);
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end; // procedure
+
 { The real engine on a 3-file fixture (one TLabel, a one-#convert book) -- the
   shape measured converting on 2026-09-29 (dry run 106 s; the bad book 93 s).
   Two jobs, one apply each -- the slowest test in the runner:
@@ -6926,6 +7043,7 @@ begin
     TestBookSnapshot;
     TestConvertRun;
     TestConvertRunner;
+    TestConvertRunnerFaults;
     TestConvertRunnerLive;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
