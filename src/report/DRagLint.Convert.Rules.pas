@@ -73,7 +73,7 @@ type
   /// so identical names would make TSetPair ambiguous by uses-clause order.
   /// A change to one must be mirrored in the other.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Rules.pas), DRagLint.CLI.DoConvertValidate.SetsSummary (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ApplySets (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseSetList (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateConversionRules (DRagLint.Convert.Rules.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Rules.pas), DRagLint.CLI.DoConvertValidate.SetsSummary (DRagLint.CLI.pas), DRagLint.Convert.DfmReemit.ReemitComponent.ApplySets (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseSetList (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateBlocks.CheckMapping (DRagLint.Convert.Rules.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -106,8 +106,8 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.HasConvertFor (DRagLint.Convert.DfmReemit.pas) (+21 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
+  /// <para>Used by: DRagLint.CLI.BuildBlockTrees (DRagLint.CLI.pas), DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.Convert.Apply.CheckFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertRuleFor (DRagLint.Convert.Apply.pas) (+26 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConversionRule = record
@@ -177,13 +177,27 @@ type
   /// Task-2 brief's minimal shape -- documented as acceptable there; Task 3 reads
   /// Rules and may inspect ParseErrors but is not broken by its presence.)
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConversionRuleSet = record
     Rules      : TArray<TConversionRule>;
     ParseErrors: TArray<TRuleError>;
+  end;
+
+  /// <summary>The From and To property trees of one #convert block, as
+  /// ValidateConversionRulesPerBlock consumes them.</summary>
+  /// <remarks>
+  /// An empty tree (RootType='') skips the checks against that side, exactly as
+  /// in ValidateConversionRules -- an unresolved type is the freshness guard's
+  /// finding, not a path error. Callers build one per block, index-aligned with
+  /// the book's blocks: [0] is the region before the first #convert (no block,
+  /// normally both trees empty), [N] the Nth #convert in source order.
+  /// </remarks>
+  TBlockTrees = record
+    FromTree: TPropTree;
+    ToTree  : TPropTree;
   end;
 
 /// <summary>Parses the reFind-superset conversion-rules DSL text into a rule set.
@@ -251,19 +265,44 @@ function ParseConversionRules(const AText: string): TConversionRuleSet;
 /// block. These checks need no tree, so they also run in parse-only mode.
 /// Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Convert.Rules.ConvertBlocks, DRagLint.Convert.Rules.PathExists, DRagLint.Convert.Rules.ValidateConversionRules.Add, DRagLint.Convert.Rules.ValidateConversionRules.CheckGlyphLink, DRagLint.Convert.Rules.ValidateConversionRules.IsStub, DRagLint.Convert.Rules.ValidateConversionRules.MappingDeclared, Format, IsGlyphCountExpr, IsGlyphImageLink, ParseGlyphExpr, SameText, Trim, ValidateGlyphExpr</para>
-/// <para>Returns: Errs.ToArray</para>
-/// <para>Complexity: 29 (cyclomatic, outer body), 141 lines (full implementation)</para>
-/// <seealso cref="DRagLint.Convert.Rules.ConvertBlocks"/>
-/// <seealso cref="DRagLint.Convert.Rules.PathExists"/>
-/// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.Add"/>
-/// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.CheckGlyphLink"/>
-/// <seealso cref="DRagLint.Convert.Rules.ValidateConversionRules.IsStub"/>
+/// <para>Called from: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Convert.Rules.ValidateBlocks</para>
+/// <para>Returns: ValidateBlocks(ARules, Trees, False)</para>
+/// <seealso cref="DRagLint.Convert.Rules.ValidateBlocks"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ValidateConversionRules(const ARules: TConversionRuleSet;
   const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
+
+/// <summary>Validates a parsed rule set BLOCK BY BLOCK: each #convert block's
+/// #link and #default paths against that block's own From/To trees, and each
+/// #mapping line against the trees of the block(s) that #apply it -- plus the
+/// tree-less checks and parse errors ValidateConversionRules reports.</summary>
+/// <param name="ARules">The parsed rule set (its ParseErrors are included in the
+/// result).</param>
+/// <param name="ABlockTrees">One TBlockTrees per block, index-aligned with the
+/// book: [0] is the region before the first #convert, [N] the Nth #convert
+/// block in source order. An index past the end counts as two empty trees
+/// (checks skipped).</param>
+/// <returns>Zero-length array = valid. Otherwise one TRuleError per problem:
+/// parse errors first, then validation errors in source order. Each path error
+/// carries ValidateConversionRules' message followed by the block it was
+/// checked in, ' (#convert line N: From -&gt; To)'.</returns>
+/// <remarks>
+/// Why it exists: convert-apply used to check a whole multi-block book against
+/// the FIRST block's two trees, so every link of blocks 2..N failed
+/// (convrules\BDE-to-FireDAC.rules: 540 errors). convert-validate, which takes
+/// one --from/--to pair, keeps ValidateConversionRules.
+/// Mapping scope: an #apply belongs to the nearest #convert above it. A #mapping
+/// line is checked against every block that applies its name (and may report
+/// once per such block); a mapping no block applies is checked against the
+/// block it sits in, and is NOT tree-checked when it sits before the first
+/// #convert -- there is no tree it could be checked against. A #link or
+/// #default before the first #convert is checked against ABlockTrees[0].
+/// Pure; deterministic; no I/O.
+/// </remarks>
+function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
+  const ABlockTrees: TArray<TBlockTrees>): TArray<TRuleError>;
 
 /// <summary>Non-fatal findings on a parsed rule set: things that validate but
 /// are almost certainly not what the author meant.</summary>
@@ -934,17 +973,23 @@ begin
            ((Length(ParseGlyphExpr(ARule.GlyphExpr, Expr)) > 0) or not IsGlyphCountExpr(Expr));
 end;
 
-function ValidateConversionRules(const ARules: TConversionRuleSet;
-  const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
+{ The one validator behind ValidateConversionRules and
+  ValidateConversionRulesPerBlock. ABlockTrees is index-aligned with
+  ConvertBlocks' numbering. APerBlock selects the mapping scope and the message
+  suffix: False = the single-pair contract (every mapping line against the
+  trees of the block it sits in, no suffix -- the caller passes the same pair
+  for every block, so that is the one pair); True = the per-block contract
+  documented on ValidateConversionRulesPerBlock. }
+function ValidateBlocks(const ARules: TConversionRuleSet;
+  const ABlockTrees: TArray<TBlockTrees>; APerBlock: Boolean): TArray<TRuleError>;
 var
   Errs   : TList<TRuleError>;
   R      : TConversionRule ;
   PE     : TRuleError      ;
-  HaveTo : Boolean         ;
-  HaveFrom: Boolean        ;
-  SP     : TMappingSetPair        ;
   Blocks : TArray<Integer>;
+  ConvAt : TArray<Integer>;
   I      : Integer        ;
+  B      : Integer        ;
 
   procedure Add(ALineNo: Integer; const AMsg: string);
   var
@@ -960,6 +1005,32 @@ var
     Result:= Trim(APath) = STUB_MARKER;
   end;
 
+  function TreesOf(ABlock: Integer): TBlockTrees;
+  begin
+    if (ABlock >= 0) and (ABlock <= High(ABlockTrees)) then Result:= ABlockTrees[ABlock]
+    else Result:= Default(TBlockTrees);
+  end;
+
+  // ' (#convert line N: From -> To)' naming the block a path was checked in;
+  // '' in single-pair mode, whose messages must stay byte-identical.
+  function Where(ABlock: Integer): string;
+  var
+    C: TConversionRule;
+  begin
+    Result:= '';
+    if (not APerBlock) or (ABlock <= 0) or (ABlock > High(ConvAt)) then Exit;
+    C:= ARules.Rules[ConvAt[ABlock]];
+    Result:= Format(' (#convert line %d: %s -> %s)', [C.LineNo, C.FromType, C.ToType]);
+  end;
+
+  // A path is missing when the tree was supplied, the path is real (not empty,
+  // not the '???' stub) and no node carries it.
+  function Missing(const ATree: TPropTree; const APath: string): Boolean;
+  begin
+    Result:= (ATree.RootType <> '') and (APath <> '') and (not IsStub(APath)) and
+             (not PathExists(ATree, APath));
+  end;
+
   // True when some rkMapping line declares AName. Case-insensitive, matching
   // how the rest of the DSL compares identifiers.
   function MappingDeclared(const AName: string): Boolean;
@@ -969,6 +1040,60 @@ var
     Result:= False;
     for M in ARules.Rules do
       if (M.Kind = rkMapping) and SameText(M.MapName, AName) then Exit(True);
+  end;
+
+  { The blocks whose trees check the #mapping line at AIdx. Blocks[] never
+    decreases along the book, so comparing with the last block added is enough
+    to add each applying block once. }
+  function MappingBlocks(AIdx: Integer): TArray<Integer>;
+  var
+    J: Integer;
+  begin
+    if not APerBlock then Exit(TArray<Integer>.Create(Blocks[AIdx]));
+    Result:= nil;
+    for J:= 0 to High(ARules.Rules) do
+      if (ARules.Rules[J].Kind = rkApply) and (Blocks[J] > 0) and
+         SameText(ARules.Rules[J].MapName, ARules.Rules[AIdx].MapName) and
+         ((Length(Result) = 0) or (Result[High(Result)] <> Blocks[J])) then
+        Result:= Result + [Blocks[J]];
+    if (Length(Result) = 0) and (Blocks[AIdx] > 0) then Result:= TArray<Integer>.Create(Blocks[AIdx]);
+  end;
+
+  { A #when branch's condition names a path in the F tree, and its set list
+    assigns paths in the T tree -- same checks, same stub/empty-tree skips, as
+    #link/#default. Nothing here validates the mapping NAME: the three line
+    forms are flat siblings, so a #when may legally appear before its
+    declaration. }
+  procedure CheckMapping(const AMap: TConversionRule; ABlock: Integer);
+  var
+    T : TBlockTrees;
+    SP: TMappingSetPair;
+  begin
+    T:= TreesOf(ABlock);
+    if Missing(T.FromTree, AMap.WhenFrom) then
+      Add(AMap.LineNo, Format('mapping %s #when path not found in --from tree: %s',
+        [AMap.MapName, AMap.WhenFrom]) + Where(ABlock));
+    for SP in AMap.Sets do
+      if Missing(T.ToTree, SP.ToPath) then
+        Add(AMap.LineNo, Format('mapping %s target path not found in --to tree: %s',
+          [AMap.MapName, SP.ToPath]) + Where(ABlock));
+  end;
+
+  procedure CheckLinkOrDefault(const ARule: TConversionRule; ABlock: Integer);
+  var
+    T: TBlockTrees;
+  begin
+    T:= TreesOf(ABlock);
+    if ARule.Kind = rkDefault then
+    begin
+      if Missing(T.ToTree, ARule.ToPath) then
+        Add(ARule.LineNo, Format('default ToPath not found in --to tree: %s', [ARule.ToPath]) + Where(ABlock));
+      Exit;
+    end;
+    if Missing(T.ToTree, ARule.ToPath) then
+      Add(ARule.LineNo, Format('link ToPath not found in --to tree: %s', [ARule.ToPath]) + Where(ABlock));
+    if Missing(T.FromTree, ARule.FromPath) then
+      Add(ARule.LineNo, Format('link FromPath not found in --from tree: %s', [ARule.FromPath]) + Where(ABlock));
   end;
 
   { G-grammar design 3.2/3.3/8: the expression's own syntax and ranges, then --
@@ -1008,50 +1133,24 @@ begin
     for PE in ARules.ParseErrors do
       Errs.Add(PE);
 
-    // A tree with an empty RootType means "no tree supplied" -> skip its checks.
-    HaveTo  := AToTree.RootType   <> '';
-    HaveFrom:= AFromTree.RootType <> '';
-    Blocks  := ConvertBlocks(ARules);
+    Blocks:= ConvertBlocks(ARules);
+    SetLength(ConvAt, Length(ARules.Rules) + 1);
+    for I:= 0 to High(ARules.Rules) do
+      if ARules.Rules[I].Kind = rkConvert then ConvAt[Blocks[I]]:= I;
 
-    // 2. Path checks for #link and #default; glyph-expression checks for #link.
+    // 2. Path checks for #link, #default and #mapping; glyph-expression checks
+    //    for #link; the undeclared-mapping check for #apply.
     for I:= 0 to High(ARules.Rules) do
     begin
       R:= ARules.Rules[I];
       case R.Kind of
-        rkLink:
+        rkLink, rkDefault:
         begin
-          if HaveTo and (not IsStub(R.ToPath)) and (R.ToPath <> '') and
-             (not PathExists(AToTree, R.ToPath)) then
-            Add(R.LineNo, Format('link ToPath not found in --to tree: %s', [R.ToPath]));
-          if HaveFrom and (not IsStub(R.FromPath)) and (R.FromPath <> '') and
-             (not PathExists(AFromTree, R.FromPath)) then
-            Add(R.LineNo, Format('link FromPath not found in --from tree: %s', [R.FromPath]));
-          if R.GlyphExpr <> '' then CheckGlyphLink(I);
-        end;
-        rkDefault:
-        begin
-          if HaveTo and (not IsStub(R.ToPath)) and (R.ToPath <> '') and
-             (not PathExists(AToTree, R.ToPath)) then
-            Add(R.LineNo, Format('default ToPath not found in --to tree: %s', [R.ToPath]));
+          CheckLinkOrDefault(R, Blocks[I]);
+          if (R.Kind = rkLink) and (R.GlyphExpr <> '') then CheckGlyphLink(I);
         end;
         rkMapping:
-        begin
-          { A #when branch's condition names a path in the F tree, and its set
-            list assigns paths in the T tree -- same checks, same stub/empty-tree
-            skips, as rkLink/rkDefault above. Nothing here validates the mapping
-            NAME: the three line forms are flat siblings, so a #when may legally
-            appear before its declaration. }
-          if HaveFrom and (R.WhenFrom <> '') and (not IsStub(R.WhenFrom)) and
-             (not PathExists(AFromTree, R.WhenFrom)) then
-            Add(R.LineNo, Format('mapping %s #when path not found in --from tree: %s',
-              [R.MapName, R.WhenFrom]));
-          if HaveTo then
-            for SP in R.Sets do
-              if (SP.ToPath <> '') and (not IsStub(SP.ToPath)) and
-                 (not PathExists(AToTree, SP.ToPath)) then
-                Add(R.LineNo, Format('mapping %s target path not found in --to tree: %s',
-                  [R.MapName, SP.ToPath]));
-        end;
+          for B in MappingBlocks(I) do CheckMapping(R, B);
         rkApply:
         begin
           { An #apply naming a mapping that was never declared is the one error
@@ -1075,6 +1174,28 @@ begin
   finally
     Errs.Free;
   end;
+end;
+
+function ValidateConversionRules(const ARules: TConversionRuleSet;
+  const AFromTree, AToTree: TPropTree): TArray<TRuleError>;
+var
+  Trees: TArray<TBlockTrees>;
+  I    : Integer;
+begin
+  // One pair for every block, the region before the first #convert included.
+  SetLength(Trees, Length(ARules.Rules) + 1);
+  for I:= 0 to High(Trees) do
+  begin
+    Trees[I].FromTree:= AFromTree;
+    Trees[I].ToTree  := AToTree;
+  end;
+  Result:= ValidateBlocks(ARules, Trees, False);
+end;
+
+function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
+  const ABlockTrees: TArray<TBlockTrees>): TArray<TRuleError>;
+begin
+  Result:= ValidateBlocks(ARules, ABlockTrees, True);
 end;
 
 function ConversionRuleWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;

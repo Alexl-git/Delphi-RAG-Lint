@@ -24414,6 +24414,55 @@ begin
     Result:= 'skipped-no-instances';
 end;
 
+{ 1.20.6 (Task 2): the From/To property trees of EVERY #convert block of a
+  convert-apply book, index-aligned for ValidateConversionRulesPerBlock ([0] =
+  the region before the first #convert, left empty). A type is resolved across
+  AStores in order, first store whose BuildPropTree resolves it wins -- the
+  same convention as convert-validate/convert-reemit's TreeFor. Trees are
+  CACHED by type name (case-insensitive, as written in the header): a type
+  several blocks name is built once, because each build walks a library index
+  of several GB. An unresolved type caches its empty tree too, so it is not
+  retried per block. }
+function BuildBlockTrees(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet;
+  const AOpts: TPropTreeOptions): TArray<TBlockTrees>;
+var
+  Cache: TDictionary<string, TPropTree>;
+  R    : TConversionRule;
+  Block: Integer;
+
+  function TreeFor(const AQName: string): TPropTree;
+  var
+    St: ISymbolStore;
+  begin
+    Result:= Default(TPropTree);
+    if AQName = '' then Exit;
+    if Cache.TryGetValue(UpperCase(AQName), Result) then Exit;
+    for St in AStores do
+    begin
+      Result:= BuildPropTree(St, AQName, AOpts);
+      if Result.RootType <> '' then Break;
+    end;
+    Cache.Add(UpperCase(AQName), Result);
+  end;
+
+begin
+  SetLength(Result, 1);
+  Block:= 0;
+  Cache:= TDictionary<string, TPropTree>.Create;
+  try
+    for R in ARules.Rules do
+      if R.Kind = rkConvert then
+      begin
+        Inc(Block);
+        SetLength(Result, Block + 1);
+        Result[Block].FromTree:= TreeFor(R.FromType);
+        Result[Block].ToTree  := TreeFor(R.ToType);
+      end;
+  finally
+    Cache.Free;
+  end;
+end;
+
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
@@ -24437,7 +24486,7 @@ end;
 /// unlinked warnings; the json count and unlinked[] stay); DbPath/DbPaths=index(es).</param>
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
 /// hard error (missing .dfm when rules need it, invalid rules, BuildApplyPlan Ok=False, or
-/// --apply refused by the freshness guard); 2 on bad args (missing --unit/--rules, file not
+/// --apply refused by the freshness guard -- a stale or unindexed type of ANY block); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
 /// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
 /// missing .dfm is a hard error (exit 1) for a book with NO unit rules, since every #convert
@@ -24445,12 +24494,16 @@ end;
 /// 1.20.6) applies them to the unit's uses clauses (PlanUnitRules) -- alone when there is no
 /// .dfm, no #convert block or no matching instance (json component_part says which),
 /// otherwise folded into BuildApplyPlan's plan; a unit whose entry to remove sits in a
-/// conditional region is refused (exit 1, nothing written). Rules are read + parsed + validated (ValidateConversionRules) against the
-/// From/To property trees BEFORE BuildApplyPlan runs -- a rules error refuses (exit 1)
-/// rather than attempting a plan from a broken rule set. From/To trees are built the same
-/// first-DB-that-resolves-wins way as convert-validate/convert-scaffold/convert-reemit
-/// (TreeFor local fn, copied verbatim). Every readable --db is opened up front into Stores
-/// (not just the first); the freshness guard (CheckFreshness) and BuildApplyPlan both
+/// conditional region is refused (exit 1, nothing written). Every readable --db is opened
+/// up front into Stores (not just the first; a stale explicit --db exits 2 here, before
+/// any rule is checked). Rules are then read + parsed + validated
+/// (ValidateConversionRulesPerBlock) BEFORE BuildApplyPlan runs -- EVERY #convert block
+/// against its OWN From/To property trees, and a #mapping against the block(s) that #apply
+/// it (1.20.6; it used to be the whole book against the first block's pair) -- and a rules
+/// error refuses (exit 1) rather than attempting a plan from a broken rule set. The trees
+/// are built by BuildBlockTrees, first-store-that-resolves-wins as in
+/// convert-validate/convert-reemit, each distinct type once. The freshness guard
+/// (CheckFreshness, every block's types) and BuildApplyPlan both
 /// resolve From/To TYPES across ALL of Stores (first-that-resolves-wins), while unit/
 /// instance-scoped lookups use whichever store actually has --unit/the .dfm indexed -- the
 /// From type, To type, and the form's own instances may each live in a DIFFERENT --db. On
@@ -24466,11 +24519,6 @@ var
   Rules     : TConversionRuleSet;
   RuleErrors: TArray<TRuleError>;
   RE        : TRuleError        ;
-  FromType  : string            ;
-  ToType    : string            ;
-  R         : TConversionRule   ;
-  FromTree  : TPropTree         ;
-  ToTree    : TPropTree         ;
   Opts      : TPropTreeOptions  ;
   Depth     : Integer           ;
   Dbs       : TArray<string>    ;
@@ -24487,36 +24535,6 @@ var
     paths is suppressed -- one stray line and the document stops parsing. }
   UseJson     : Boolean         ;
   JCtx        : TApplyJsonCtx   ;
-
-  // Build the property tree for a type qname across the resolved DBs (first DB
-  // that resolves it wins). Empty RootType if unresolved / no db. Mirrors
-  // DoConvertValidate's TreeFor exactly.
-  function TreeFor(const AQName: string): TPropTree;
-  var
-    Cand: TPropTree;
-    LDb2: string   ;
-  begin
-    Result:= Default(TPropTree);
-    if AQName = '' then Exit;
-    for LDb2 in Dbs do
-    begin
-      if not TFile.Exists(LDb2) then Continue;
-      var RoOk2: Boolean;
-      var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb2, RoOk2);
-      { NO StaleDbRefusesRun here, and not an oversight. Unlike convert-validate
-        and convert-reemit -- whose TreeFor is the ONLY place they open a
-        database, so each needs a StaleExplicitDb flag -- this verb's StoresList
-        loop has already opened EVERY resolved db, with no Break, and refused a
-        stale explicit one with Exit(2) before this function is ever called. So
-        for an explicit --db list this branch is unreachable; for a manifest list
-        skipping is the correct behaviour anyway. Pinned by run_explicit_db_strict.ps1,
-        whose T5 row for convert-apply would go red if that loop ever moved
-        below here or grew a Break. }
-      if not RoOk2 then Continue;
-      Cand:= BuildPropTree(CandStore, AQName, Opts);
-      if Cand.RootType <> '' then Exit(Cand);
-    end;
-  end;
 
   // The --apply write sequence. Nested so its five working variables
   // (TouchedFiles/TouchedSet/Ed/Timestamp/Mappings) live here instead of in
@@ -24629,44 +24647,14 @@ begin
   Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
 
-  // Every #convert rule's FromType/ToType gets its property tree built so
-  // ValidateConversionRules can check #link/#default paths -- same as
-  // convert-validate, just driven from the rules file's own #convert headers
-  // rather than --from/--to (convert-apply has neither).
-  FromType:= ''; ToType:= '';
-  for R in Rules.Rules do
-    if R.Kind = rkConvert then begin FromType:= R.FromType; ToType:= R.ToType; Break; end;
-  FromTree:= TreeFor(FromType);
-  ToTree  := TreeFor(ToType);
-
-  { A valid G-expression passes validation, but nothing realises it yet (CV-2):
-    refuse through the same path rather than carry the source image whole. }
-  RuleErrors:= ValidateConversionRules(Rules, FromTree, ToTree) + UnrealisedGlyphLinks(Rules);
-  if Length(RuleErrors) > 0 then
-  begin
-    { A JSON consumer gets a parseable ok=false document naming every rule
-      error, rather than prose on stdout that its parser would choke on. }
-    if UseJson then
-    begin
-      JCtx.UnitPas   := UnitPas;
-      JCtx.DfmPath   := DfmPath;
-      JCtx.Ok        := False;
-      JCtx.Error     := 'conversion rules failed validation';
-      JCtx.RuleErrors:= RuleErrors;
-      EmitApplyJson(JCtx);
-      Exit(1);
-    end;
-    Writeln('ERROR: conversion rules failed validation:');
-    for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
-    Exit(1);
-  end;
-
   // Open EVERY readable --db up front (not just the first) -- Bug 2: the
   // From type, To type, and the form's own instances may each live in a
-  // DIFFERENT --db, so both the freshness guard and BuildApplyPlan need
-  // cross-db type resolution (first-db-that-resolves-wins, same convention
-  // as the rule-validation TreeFor above), while unit/instance-scoped
-  // lookups use whichever store actually has --unit/the .dfm indexed.
+  // DIFFERENT --db, so rule validation, the freshness guard and BuildApplyPlan
+  // all need cross-db type resolution (first-db-that-resolves-wins), while
+  // unit/instance-scoped lookups use whichever store actually has --unit/the
+  // .dfm indexed. This runs BEFORE the rules are validated, so a stale
+  // explicit --db exits 2 (StaleDbRefusesRun) rather than being skipped while
+  // the trees are built -- pinned by run_explicit_db_strict.ps1's T5 row.
   var StoresList: TList<ISymbolStore>:= TList<ISymbolStore>.Create;
   try
     for LDb in Dbs do
@@ -24686,8 +24674,35 @@ begin
   end;
   if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
 
+  { Every #convert block is validated against its OWN From/To trees (1.20.6,
+    Task 2) -- driven from the rules file's own #convert headers rather than
+    --from/--to (convert-apply has neither). It used to take the first block's
+    pair for the whole book, so every link of blocks 2..N failed.
+    A valid G-expression passes validation, but nothing realises it yet (CV-2):
+    refuse through the same path rather than carry the source image whole. }
+  RuleErrors:= ValidateConversionRulesPerBlock(Rules, BuildBlockTrees(Stores, Rules, Opts)) +
+    UnrealisedGlyphLinks(Rules);
+  if Length(RuleErrors) > 0 then
+  begin
+    { A JSON consumer gets a parseable ok=false document naming every rule
+      error, rather than prose on stdout that its parser would choke on. }
+    if UseJson then
+    begin
+      JCtx.UnitPas   := UnitPas;
+      JCtx.DfmPath   := DfmPath;
+      JCtx.Ok        := False;
+      JCtx.Error     := 'conversion rules failed validation';
+      JCtx.RuleErrors:= RuleErrors;
+      EmitApplyJson(JCtx);
+      Exit(1);
+    end;
+    Writeln('ERROR: conversion rules failed validation:');
+    for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
+    Exit(1);
+  end;
+
   // Freshness guard (Task 4): before trusting the index-derived property
-  // trees, verify the F and T types are BOTH indexed and current. Covers two
+  // trees, verify every block's F and T types are indexed and current. Covers two
   // failure modes -- "stale" (indexed but the source file changed on disk
   // since) and "not indexed at all" (ResolveClassQName-equivalent lookup
   // fails, which would otherwise silently hand BuildPropTree an empty tree).

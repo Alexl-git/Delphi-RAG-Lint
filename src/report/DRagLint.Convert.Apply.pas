@@ -350,17 +350,18 @@ type
     Reasons: TArray<string>;
   end;
 
-/// <summary>Verifies the F and T component types named by ARules' first
-/// #convert rule are both indexed and current before BuildApplyPlan trusts
+/// <summary>Verifies the F and T component types named by EVERY #convert
+/// block of ARules are indexed and current before BuildApplyPlan trusts
 /// their property trees.</summary>
 /// <param name="AStores">The symbol indexes to check against, in the order
 /// given (one per --db); the first store that resolves a given type wins
 /// (see CheckTypeFreshness's remarks) -- the From and To types, and the
 /// form's own instances, may live in DIFFERENT --db files.</param>
-/// <param name="ARules">The conversion rule set; the FromType/ToType of its
-/// first rkConvert rule are the two types checked.</param>
-/// <returns>A TFreshnessResult. Fresh=True when both types resolve to an
-/// indexed class in SOME store AND their declaring files are up to date on
+/// <param name="ARules">The conversion rule set; the FromType/ToType of every
+/// rkConvert rule are checked, each distinct type once (1.20.6: it used to be
+/// the first block's pair only, so a stale unit behind block 2..N passed).</param>
+/// <returns>A TFreshnessResult. Fresh=True when every such type resolves to an
+/// indexed class in SOME store AND its declaring file is up to date on
 /// disk. Fresh=False with one or more human-readable Reasons entries
 /// otherwise (see TFreshnessResult's remarks for the two distinct failure
 /// causes).</returns>
@@ -374,11 +375,9 @@ type
 /// validated ARules has at least one #convert rule before reaching here.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
-/// <para>Calls: Default, DRagLint.Convert.Apply.BareTypeTail, DRagLint.Convert.Apply.CheckTypeFreshness</para>
+/// <para>Calls: BareTypeTail, CheckTypeFreshness, Default, DRagLint.Convert.Apply.CheckFreshness.CheckOnce, UpperCase</para>
 /// <para>Returns: Default(TFreshnessResult)</para>
-/// <para>Pure</para>
-/// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
-/// <seealso cref="DRagLint.Convert.Apply.CheckTypeFreshness"/>
+/// <seealso cref="DRagLint.Convert.Apply.CheckFreshness.CheckOnce"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
@@ -1031,30 +1030,41 @@ end;
 function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 var
   R       : TConversionRule;
-  FromType, ToType: string;
   Reasons : TList<string>;
-  FromOk, ToOk: Boolean;
-begin
-  Result:= Default(TFreshnessResult);
-  Result.Fresh:= True;
+  Seen    : TList<string>;
 
   // BareTypeTail: a rule's #convert header may name either type qualified
   // ('LibA.TSrcBtn') -- FindSymbolsByExactName (inside CheckTypeFreshness)
   // matches the bare name column only, same as every other lookup in this
-  // unit (see BareTypeTail's own remarks, Bug 1).
-  FromType:= ''; ToType:= '';
-  for R in ARules.Rules do
-    if R.Kind = rkConvert then
-    begin FromType:= BareTypeTail(R.FromType); ToType:= BareTypeTail(R.ToType); Break; end;
-  if (FromType = '') and (ToType = '') then Exit; { nothing to check -- vacuously fresh }
+  // unit (see BareTypeTail's own remarks, Bug 1). Each type is checked ONCE,
+  // however many blocks name it, so a stale unit is reported once.
+  // False only when AType is checked here AND found stale or unindexed.
+  function CheckOnce(const AType: string): Boolean;
+  var
+    Bare: string;
+  begin
+    Bare:= BareTypeTail(AType);
+    if (Bare = '') or Seen.Contains(UpperCase(Bare)) then Exit(True);
+    Seen.Add(UpperCase(Bare));
+    Result:= CheckTypeFreshness(AStores, Bare, Reasons);
+  end;
+
+begin
+  Result:= Default(TFreshnessResult);
+  Result.Fresh:= True; { no #convert rule at all -> nothing to check, vacuously fresh }
 
   Reasons:= TList<string>.Create;
+  Seen   := TList<string>.Create;
   try
-    FromOk:= (FromType = '') or CheckTypeFreshness(AStores, FromType, Reasons);
-    ToOk  := (ToType   = '') or CheckTypeFreshness(AStores, ToType  , Reasons);
-    Result.Fresh  := FromOk and ToOk;
+    for R in ARules.Rules do
+      if R.Kind = rkConvert then
+      begin
+        if not CheckOnce(R.FromType) then Result.Fresh:= False;
+        if not CheckOnce(R.ToType)   then Result.Fresh:= False;
+      end;
     Result.Reasons:= Reasons.ToArray;
   finally
+    Seen.Free;
     Reasons.Free;
   end;
 end;
