@@ -3,9 +3,10 @@
   fact list the writer split over several `///` lines (1.20.5, Task 2).
 
   WHY. dcc 37.0 rejects an over-long source line with F2069 "Line too long
-  (more than 1023 characters)"; measured 2026-09-30, a line that crosses one of
-  the compiler's 4 KB read blocks fails at 1021 characters, so 1020 is the only
-  length that compiles wherever the line lands. The inbound lists of a
+  (more than 1023 characters)"; measured 2026-09-30, a 1020-character line
+  compiled at every file offset sampled, while longer lines compiled at SOME
+  offsets and failed at others (4056 compiled near a file start, 1021 failed
+  elsewhere); the mechanism is not settled. The inbound lists of a
   reconciliation block are uncapped by design, so they can exceed it. Owner
   ruling 2026-09-29: break such a line at entry boundaries, ONLY when it is
   over DOC_FACT_MAX_COLS (1000). Readers go first: a reader that parses one

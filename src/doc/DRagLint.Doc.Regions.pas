@@ -69,11 +69,13 @@ const
   /// <remarks>
   /// dcc 37.0 rejects an over-long source line with F2069 "Line too long (more
   /// than 1023 characters)", and a comment line counts. Measured 2026-09-30
-  /// (dcc64, comment and code lines alike): the compiler reads the file in 4 KB
-  /// blocks, a line that crosses a block boundary fails at 1021 characters, and
-  /// one inside a block compiles up to that block's end -- so 1020 is the only
-  /// length that compiles wherever the line lands, and a longer line breaks the
-  /// build when an edit above it moves it. The inbound lists of a
+  /// (dcc64, comment and code lines alike): a 1020-character line compiled at
+  /// every file offset sampled; longer lines compiled at SOME offsets and failed
+  /// at others (a 4056-character line compiled near the start of a file, a
+  /// 1021-character one failed elsewhere). The mechanism is not settled -- a
+  /// "4 KB block, compiles to the block end" model was contradicted at offsets
+  /// 4096 and 8192 -- so a line over 1020 characters is a build that can break
+  /// when an edit above it moves it. The inbound lists of a
   /// reconciliation block are uncapped by design (a window onto a list is not
   /// the list), so they grow past that. 1000 keeps a margin for a hand edit and
   /// keeps a list reviewable. A fact line at or under this width is written as

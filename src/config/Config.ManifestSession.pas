@@ -13,17 +13,20 @@ uses
 /// <summary>Load the manifest the Config tool will edit, and say whether it
 /// loaded cleanly.</summary>
 /// <param name="AConfigPath">The file to edit. When not '', it is parsed on its
-/// own with TManifestIO.ParseText (RootDir = its directory). When '', the
-/// manifest is found by TManifestIO.Load discovery instead.</param>
+/// own with TManifestIO.ParseText (RootDir = its directory); when it does not
+/// exist yet, AManifest receives the defaults and the result is '' -- there is
+/// nothing to overwrite, so a Save creates the file. When '', the manifest is
+/// found by TManifestIO.Load discovery instead.</param>
 /// <param name="AExeDir">Engine directory for TManifestIO.Load discovery; used
 /// only when AConfigPath is ''.</param>
 /// <param name="AStartDir">Start directory for the upward local-config search of
 /// TManifestIO.Load; used only when AConfigPath is ''.</param>
-/// <param name="AManifest">Receives the parsed manifest. When AConfigPath could
-/// not be read or parsed it receives the DEFAULTS (no sections, default
-/// settings, RootDir = the file's directory), which must never be saved over
-/// the file.</param>
-/// <returns>'' when the manifest loaded cleanly; otherwise why it did not, as
+/// <param name="AManifest">Receives the parsed manifest. When AConfigPath exists
+/// but could not be read or parsed it receives the DEFAULTS (no sections,
+/// default settings, RootDir = the file's directory), which must never be saved
+/// over the file.</param>
+/// <returns>'' when the manifest loaded cleanly or AConfigPath does not exist
+/// yet; otherwise why it did not load, as
 /// '&lt;file&gt;: &lt;message&gt;' -- the same shape as TIndexManifest.LoadError.
 /// Pass it unchanged to TrySaveConfigManifest.</returns>
 /// <remarks>Never raises for a bad or unreadable file: every exception from the
@@ -58,6 +61,15 @@ uses
   System.SysUtils,
   System.IOUtils;
 
+// The manifest LoadConfigManifest hands back when AConfigPath gives it nothing
+// to parse: no sections, default settings, RootDir = the file's directory.
+procedure SetDefaults(out AManifest: TIndexManifest; const AConfigPath: string);
+begin
+  AManifest := Default(TIndexManifest);
+  AManifest.Settings := TIndexSettings.Defaults;
+  AManifest.RootDir := ExtractFileDir(AConfigPath);
+end;
+
 function LoadConfigManifest(const AConfigPath, AExeDir, AStartDir: string;
   out AManifest: TIndexManifest): string;
 begin
@@ -68,6 +80,13 @@ begin
     Result := AManifest.LoadError;
     Exit;
   end;
+  // A file that does not exist yet has nothing on disk to overwrite: start
+  // from the defaults, so a Save creates it.
+  if not TFile.Exists(AConfigPath) then
+  begin
+    SetDefaults(AManifest, AConfigPath);
+    Exit;
+  end;
   try
     AManifest := TManifestIO.ParseText(TFile.ReadAllText(AConfigPath),
       ExtractFileDir(AConfigPath));
@@ -75,9 +94,7 @@ begin
     on E: Exception do
     begin
       Result := AConfigPath + ': ' + E.Message;
-      AManifest := Default(TIndexManifest);
-      AManifest.Settings := TIndexSettings.Defaults;
-      AManifest.RootDir := ExtractFileDir(AConfigPath);
+      SetDefaults(AManifest, AConfigPath);
     end;
   end;
 end;

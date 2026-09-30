@@ -5,11 +5,12 @@
 
   WHY. dcc 37.0 rejects a source line with F2069 "Line too long (more than 1023
   characters)". MEASURED 2026-09-30 (dcc64 37.0, comment and code lines alike):
-  the limit depends on WHERE the line sits. The compiler reads the file in 4 KB
-  blocks; a line that crosses a block boundary fails at 1021 characters, a line
-  inside one block compiles up to its end (4095 at offset 0). So 1020 is the
-  only length that compiles wherever the line lands, and a longer line is a
-  build that breaks when an edit ABOVE it moves it across a boundary. The
+  a 1020-character line compiled at every file offset sampled; longer lines
+  compiled at SOME offsets and failed at others (a 4056-character line compiled
+  near the start of a file, a 1021-character one failed elsewhere). The
+  mechanism is not settled -- a "4 KB block, compiles to the block end" model
+  was contradicted at offsets 4096 and 8192. So a line over 1020 characters is
+  a build that can break when an edit ABOVE it moves it. The
   inbound lists of a reconciliation block are uncapped by design, so they grow
   past that. Owner ruling 2026-09-29: break such a line at entry boundaries,
   ONLY when it is over DOC_FACT_MAX_COLS (1000); a line within it is written
@@ -34,7 +35,11 @@
         <= 1000; a second lint reports 0.
     E3b the boundary, width only: line 1 padded with blanks (collapsed away by
         the content compare) to exactly 1000 is current, to 1001 is drift.
-    E5  every tracked *.pas / *.dpr / *.inc under src\ and tests\ has no line
+    E3c the width is measured at the renderer's indent: `type TC = class end;`
+        (name at column 6, line indent 0) used by 200 routines, sized so a
+        wrapped line lands in 996..1000. document --apply -> lint --rule
+        doc-drift reports 0, and a second document --apply is a no-op.
+    E5 every tracked *.pas / *.dpr / *.inc under src\ and tests\ has no line
         over 1020 characters (the measured position-independent limit).
 
   Explicit --db everywhere; nothing touches a real project database.
@@ -218,6 +223,31 @@ Check "E3b: a stored line of exactly $FACT_MAX characters is current" (($w -eq $
 $w  = PadLine1 ($FACT_MAX + 1)
 $fs = DriftFindings (RunJson @('lint', $shared, '--db', $db, '--rule', 'doc-drift', '--project-rules', '--json'))
 Check "E3b: a stored line of $($FACT_MAX + 1) characters is drift" (($w -eq $FACT_MAX + 1) -and ($null -ne $fs) -and ($fs.Count -eq 1)) "width $w, $(@($fs).Count) finding(s)"
+
+# ----------------------------------------------------------------- E3c -------
+# The width check measures at the RENDERER's indent (the declaration LINE's
+# leading whitespace), not at the symbol's column. `type TC = class end;` has
+# its name at column 6 and an indent of 0; measuring at the column over-counts
+# by 5, so a wrapped line of 996..1000 read as drift that nothing could clear.
+# Entry names are sized so line 1 of the `Used by:` list lands at 998.
+$db3c     = Join-Path $WorkDir 'e3c.sqlite'
+$shared3c = Join-Path $WorkDir 'S2.pas'
+$dpr3c    = Join-Path $WorkDir 'E2.dpr'
+Write-Ascii $shared3c "unit S2;   // dl:shared ProjA, ProjB`n`ninterface`n`ntype TC = class end;`n`nimplementation`n`nend.`n"
+$decls = (1..$CALLERS | ForEach-Object { 'procedure Pqqqqqqq{0:D3};' -f $_ }) -join "`n"
+$impls = (1..$CALLERS | ForEach-Object { 'procedure Pqqqqqqq{0:D3}; var L: TC; begin L:= nil; L.Free; end;' -f $_ }) -join "`n"
+Write-Ascii (Join-Path $WorkDir 'Caller2.pas') "unit Caller2;`n`ninterface`n`n$decls`n`nimplementation`n`nuses S2;`n`n$impls`n`nend.`n"
+Write-Ascii $dpr3c "program E2;`n`n{`$APPTYPE CONSOLE}`n`nuses S2 in 'S2.pas', Caller2 in 'Caller2.pas';`n`nbegin`nend.`n"
+$null = Run @('index', '--project', $dpr3c, '--db', $db3c)
+$r = Run @('document', '--unit', $shared3c, '--db', $db3c, '--apply', '--no-backup')
+$m3c = MaxLineLen $shared3c
+Check 'E3c: POSITIVE CONTROL -- a wrapped line lands in 996..1000' (($m3c -ge ($FACT_MAX - 4)) -and ($m3c -le $FACT_MAX)) "max $m3c; $(LastLine $r.Out)"
+$null = Run @('index', '--project', $dpr3c, '--db', $db3c)
+$fs = DriftFindings (RunJson @('lint', $shared3c, '--db', $db3c, '--rule', 'doc-drift', '--project-rules', '--json'))
+Check 'E3c: a line within the limit under an unindented one-line type is not drift' (($null -ne $fs) -and ($fs.Count -eq 0)) ("{0} finding(s): {1}" -f @($fs).Count, ((@($fs) | ForEach-Object { $_.message }) -join ' | '))
+$h = (Get-FileHash $shared3c).Hash
+$r = Run @('document', '--unit', $shared3c, '--db', $db3c, '--apply', '--no-backup')
+Check 'E3c: a second document --apply is a no-op' ((Get-FileHash $shared3c).Hash -eq $h) (LastLine $r.Out)
 # ------------------------------------------------------------------ E5 --------
 # Tracked sources only (git ls-files): scratch and build output are not the
 # product. No exclusions today; a fixture that is long ON PURPOSE is excluded

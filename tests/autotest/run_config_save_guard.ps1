@@ -11,6 +11,8 @@
 #   A  a file with one bad leaf (sqlOnlyMS is a string): not saved, bytes unchanged
 #   B  a file that is not JSON at all: not saved, bytes unchanged
 #   C  positive control: a good file saves and re-loads with both sections
+#   E  a path that does not exist yet: LOADERR empty (defaults), Save creates
+#      it, and the created file re-loads cleanly
 #   D  structural: no src\config unit but Config.ManifestSession calls
 #      TManifestIO.Save/ParseText/ParseTextEx/Load, and MainForm routes both
 #      writers through TrySaveConfigManifest (with its own positive control)
@@ -114,6 +116,18 @@ Check 'C: SECTIONS=2' ($c.SECTIONS -eq '2') "SECTIONS='$($c.SECTIONS)'"
 Check 'C: SAVED=1' ($c.SAVED -eq '1') "REASON='$($c.REASON)'"
 $c2 = Invoke-Harness $good
 Check 'C: saved file re-loads cleanly with 2 sections' ($c2.ContainsKey('LOADERR') -and $c2.LOADERR -eq '' -and $c2.SECTIONS -eq '2') "got='$($c2.RAW)'"
+
+# --- E: a --config path that does not exist yet -------------------------------
+# There is nothing to overwrite, so it starts from the defaults and Save
+# creates it (docs\TEST-PLAN-CONFIG.md documents --config <path>).
+$missing = "$WorkDir\not-yet.json"
+Check 'E: setup -- the file does not exist' (-not (Test-Path -LiteralPath $missing))
+$e = Invoke-Harness $missing
+Check 'E: LOADERR empty' ($e.ContainsKey('LOADERR') -and $e.LOADERR -eq '') "got='$($e.RAW)'"
+Check 'E: SAVED=1' ($e.SAVED -eq '1') "REASON='$($e.REASON)'"
+Check 'E: the file now exists' (Test-Path -LiteralPath $missing)
+$e2 = Invoke-Harness $missing
+Check 'E: the created file re-loads with LOADERR empty' ($e2.ContainsKey('LOADERR') -and $e2.LOADERR -eq '') "got='$($e2.RAW)'"
 
 # --- D: structural -- one door in and out of the manifest file ---------------
 function Test-ConfigWriters([string]$Dir) {

@@ -1,4 +1,4 @@
-unit DRagLint.Doc.SharedFacts;  // dl:ok unit-too-large@b176 -- REVIEWED 2026-09-29: sat at 1999 lines; the 1.20.5 logical-line merge (F2069 wrap) and the facts blocks it regenerated add 95 (1999 -> 2094) that belong beside MergeInboundFacts. Splitting TSharedFacts is its own change, not a HIGH fix's
+unit DRagLint.Doc.SharedFacts;  // dl:ok unit-too-large@b176 -- REVIEWED 2026-09-29: sat at 2000 lines (the rule's count, at its limit); the 1.20.5 logical-line merge (F2069 wrap) and the facts blocks it regenerated add 95 (2000 -> 2095) that belong beside MergeInboundFacts. Splitting TSharedFacts is its own change, not a HIGH fix's
 
 { Shared-unit facts: the ONE place that knows how an inbound fact line is split
   into entries, which entries a project cannot see, and how two projects' views

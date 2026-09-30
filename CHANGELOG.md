@@ -21,7 +21,8 @@ re-parse or a re-resolve. Nothing under `src\parser`, `src\preprocess` or `src\i
   caption says `[NOT LOADED -- saving disabled]`), a click or a Build autosave is refused with
   `Not saved: <path> did not load (<error>). Fix the file, then Reload.`, and the load error is
   shown in a dialog when the file is opened. The discovery path (no file resolved beside the exe)
-  now also disables Save on a partial load. **Config tool 0.45.1-alpha.** The deployed
+  now also disables Save on a partial load. A `--config` path that does not exist yet starts from
+  the defaults and Save creates it. **Config tool 0.45.1-alpha.** The deployed
   `third_party\dll-win64\drag-lint-config.exe` was a 2026-06-15 build, so this defect was live
   independently of 1.20.4.
 - **The doc-drift autofix and `document` wrote `///` lines up to 2,566 characters.** The

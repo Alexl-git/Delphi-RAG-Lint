@@ -148,16 +148,16 @@ type
     /// That is what TDocFactsRenderOptions is for.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+27 more)</para>
+    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DeclIndentWidth, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody (+28 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 59 (cyclomatic, outer body), 562 lines (full implementation)</para>
+    /// <para>Complexity: 61 (cyclomatic, outer body), 569 lines (full implementation)</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
+    /// <seealso cref="DRagLint.Doc.Drift.DeclIndentWidth"/>
     /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>
-    /// <seealso cref="DRagLint.Doc.Drift.EffectiveSignature"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -284,9 +284,16 @@ const
 // ARawBlock reaches this point with each line's '///' and indentation already
 // stripped (the doc scanner keeps what follows the slashes, leading blank
 // included), so the physical width is rebuilt as AIndent + '///' + the raw
-// line, AIndent being the DECLARATION's own indentation -- the column the
-// engine writes a managed block at. A hand-indented block that differs is
-// measured at the declaration's indent.
+// line, AIndent being the width of the declaration LINE's leading whitespace --
+// the prefix the renderer writes a managed block with (Document.DeclIndent).
+// NOT the symbol's column: `type TC = class end;` has its name at column 6 and
+// an indent of 0, and measuring at the column made a wrapped line of 996..1000
+// read as drift that no rewrite could clear. A hand-indented block that
+// differs is measured at the declaration's indent.
+//
+// A single blank-free token longer than the budget cannot be wrapped, so a line
+// holding one would stay drift after every rewrite; rendered entries always
+// contain a blank ("name (file.pas)"), so this is theoretical.
 function StoredFactLineTooLong(const ARawBlock: string; AIndent: Integer): Boolean;
 var
   S      : string;
@@ -312,12 +319,12 @@ begin
   Result.Line   := ALine;
 end;
 
-// Reads the 1-based ALine of AFilePath, trimmed. '' on any error (missing file,
-// out-of-range line). Same tolerant ANSI-read idiom DocStub.ReadSourceLine and
-// Facts.ReadDeclLine use (both implementation-only in their units, so this is a
-// local copy rather than an added cross-unit export -- keeps the change within
-// this task's file set).
-function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
+// Reads the 1-based ALine of AFilePath, UNTRIMMED. '' on any error (missing
+// file, out-of-range line). Same tolerant ANSI-read idiom DocStub.ReadSourceLine
+// and Facts.ReadDeclLine use (both implementation-only in their units, so this
+// is a local copy rather than an added cross-unit export -- keeps the change
+// within this task's file set).
+function ReadDeclLineRaw(const AFilePath: string; ALine: Integer): string;
 var Lines: TArray<string>;
 begin
   Result:= '';
@@ -327,7 +334,29 @@ begin
   except
     Exit;
   end;
-  if ALine <= Length(Lines) then Result:= Trim(Lines[ALine - 1]);
+  if ALine <= Length(Lines) then Result:= Lines[ALine - 1];
+end;
+
+// ReadDeclLineRaw, trimmed.
+function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
+begin
+  Result:= Trim(ReadDeclLineRaw(AFilePath, ALine));
+end;
+
+// v(1.20.5 final review): the width of the leading whitespace of the 1-based
+// ALine of AFilePath -- the indent the renderer builds every /// line of that
+// declaration from. Same rule as Document.DeclIndent: spaces and tabs only,
+// each one character, and a blank or unreadable line answers 0. DeclIndent is
+// implementation-only in a unit this one does not use, and works on a source
+// string rather than a path, so it is mirrored here rather than exported.
+function DeclIndentWidth(const AFilePath: string; ALine: Integer): Integer;
+var
+  L: string;
+begin
+  L:= ReadDeclLineRaw(AFilePath, ALine);
+  if Trim(L) = '' then Exit(0);
+  Result:= 0;
+  while (Result < Length(L)) and CharInSet(L[Result + 1], [' ', #9]) do Inc(Result);
 end;
 
 // Returns the effective signature text for ASym: the indexed Signature, or a
@@ -1108,8 +1137,15 @@ begin
       // deliberately separable from it.
       //
       // v(1.20.5): a stored line wider than DOC_FACT_MAX_COLS is drift whatever
-      // the content says -- see StoredFactLineTooLong.
-      var TooLong: Boolean:= StoredFactLineTooLong(ADoc.RawBlock, ASym.StartCol - 1);
+      // the content says -- see StoredFactLineTooLong. Measured at the
+      // declaration line's indent, which reading the file finds; the symbol's
+      // column is never less than that indent, so it is the cheap bound that
+      // decides whether the file needs reading at all (an unknown column
+      // always reads it).
+      var TooLong: Boolean:=
+        ((ASym.StartCol <= 0) or StoredFactLineTooLong(ADoc.RawBlock, ASym.StartCol - 1))
+        and StoredFactLineTooLong(ADoc.RawBlock,
+              DeclIndentWidth(AStore.GetFilePath(ASym.FileId), ASym.StartLine));
       if TooLong or TSharedFacts.BlockDrifted(CurBlock, Fresh, AStore,
            AStore.GetFilePath(ASym.FileId)) then
       begin
