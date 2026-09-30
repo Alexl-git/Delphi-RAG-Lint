@@ -38,7 +38,10 @@ uses
   , ConvRules.UsesHarvest in 'ConvRules.UsesHarvest.pas'
   , ConvRules.UnitStatus in 'ConvRules.UnitStatus.pas'
   , ConvRules.UnitMask in 'ConvRules.UnitMask.pas'
+  , ConvRules.ConvertRun in 'ConvRules.ConvertRun.pas'
+  , ConvRules.ConvertRunner in 'ConvRules.ConvertRunner.pas'
   , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
+  , ConvRules.ConvertTab in 'ConvRules.ConvertTab.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

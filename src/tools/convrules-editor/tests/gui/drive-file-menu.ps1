@@ -1,7 +1,8 @@
-# Driven GUI check for the unit picker (feat/unit-picker, 2026-09-24).
-# Usage: pwsh -File drive-unit-rules-toolbar.ps1 -Exe <path\ConvRulesEditor.exe>  (put a frozen drag-lint.exe beside it).
+# Driven GUI check for File > New / Save As / Exit and the unsaved-changes guard
+# (feat/convert-tab, Task 3, 2026-09-29).
+# Usage: pwsh -File drive-file-menu.ps1 -Exe <path\ConvRulesEditor.exe>  (put a frozen drag-lint.exe beside it).
+# Writes its fixture book under a fresh %TEMP%\filemenu-<id> folder and deletes it on exit.
 param([string]$Exe)
-$ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
 public static class W {
@@ -191,26 +192,6 @@ function PickTyped($procId, $caption, $text) {
   Click (@(Find $pk 'TButton' 'OK')[0])
   return ''
 }
-function KeyEnter($h) { [void][W]::PostMessage($h, 0x0100, [IntPtr]0x0D, [IntPtr]::Zero); Start-Sleep -Milliseconds 400 }
-# The replacement picker's Replacements list: the only NON-virtual TListBox, the bottom-most one.
-function Chosen($pk) {
-  $lb = @(Find $pk 'TListBox' $null | Sort-Object { [W]::Top($_) } -Descending)[0]
-  $n = [int][W]::Send($lb, 0x018B, [IntPtr]::Zero, [IntPtr]::Zero)
-  @(for ($i = 0; $i -lt $n; $i++) { $sb = New-Object System.Text.StringBuilder 256; [void][W]::SendSB($lb, 0x0189, [IntPtr]$i, $sb); $sb.ToString() })
-}
-function UnitList($main) { [void][W]::ClickTab($main, 'Unit Rules'); Start-Sleep -Milliseconds 500; @(Find $main 'TListView' $null | Where-Object { [W]::Column($_, 0) -contains '#useswap' })[0] }
-function RowOf($lv, $old) { [array]::IndexOf([W]::Column($lv, 1), $old) }
-# The replacement picker: type each name and press Enter (adds, no dialog), then OK.
-function PickReplacements($procId, $caption, [string[]]$units) {
-  $pk = WaitFor $procId $caption 60
-  if ($pk -eq [IntPtr]::Zero) { return "no picker '$caption' (forms: $(TopsNow $procId))" }
-  $ed = @(Find $pk 'TEdit' $null | Sort-Object { [W]::Top($_) })[0]
-  foreach ($u in $units) { SetText $ed $u; KeyEnter $ed }
-  $got = (Chosen $pk) -join ','
-  Click (@(Find $pk 'TButton' 'OK')[0])
-  if ($got -ne ($units -join ',')) { return "replacements list read '$got', expected '$($units -join ',')'" }
-  return ''
-}
 function Answer($procId, $btnCaption) {
   $dlg = WaitCls $procId 'TMessageForm' 20
   if ($dlg -eq [IntPtr]::Zero) { return "no message box (forms: $(TopsNow $procId))" }
@@ -219,142 +200,96 @@ function Answer($procId, $btnCaption) {
   Click $b[0]
   return ''
 }
+function UseList($main) { [void][W]::ClickTab($main, 'Unit Rules'); Start-Sleep -Milliseconds 500; @(Find $main 'TListView' $null | Where-Object { [W]::Column($_, 0) -contains '#use' })[0] }
+function RowWith($lv, $unit) { foreach ($c in 1, 2) { $i = [array]::IndexOf([W]::Column($lv, $c), $unit); if ($i -ge 0) { return $i } }; return -1 }
 
-$p = Start-Process $Exe -PassThru
+$tmp = Join-Path $env:TEMP ('filemenu-' + [guid]::NewGuid().ToString('N').Substring(0,8))
+New-Item -ItemType Directory -Path $tmp | Out-Null
+$book = Join-Path $tmp 'Start.rules'
+[IO.File]::WriteAllText($book, "#unuse OldUnitZ`r`n", [Text.Encoding]::ASCII)
+function SaveDialogTo($procId, $path) {
+  $dlg = WaitCls $procId '#32770' 20
+  if ($dlg -eq [IntPtr]::Zero) { return "no save dialog (forms: $(TopsNow $procId))" }
+  $ed = @([W]::Kids($dlg) | Where-Object { [W]::Cls($_) -eq 'Edit' })[0]
+  SetText $ed $path
+  Click (@(Find $dlg 'Button' '&Save')[0])
+  return ''
+}
+$p = Start-Process $Exe -ArgumentList "`"$book`"" -PassThru
 try {
   $main = [IntPtr]::Zero; $t0 = Get-Date
-  while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $main = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($main -eq $null) { $main = [IntPtr]::Zero } }
+  while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $main = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($null -eq $main) { $main = [IntPtr]::Zero } }
   Check 'main.window' ($main -ne [IntPtr]::Zero)
   Start-Sleep -Seconds 2
   $caps = [W]::MenuCaptions($main)
-  Check 'menubar.items' (($caps -match 'File\|Open\.\.\.') -and ($caps -match 'Conversion\|New Conversion') -and ($caps -match 'Mapping\|Auto-Match') -and ($caps -match 'Uses Units\|Swap\.\.\.') -and ($caps -match 'View\|Theme')) $caps
-  Check 'toolbar.gone' (@(Find $main 'TToolBar' $null).Count -eq 0)
+  Check 'file.items' (($caps -match 'File\|New') -and ($caps -match 'File\|Save As\.\.\.') -and ($caps -match 'File\|Exit')) $caps
 
-  # --- 1. + New Conversion adds #unuse <From unit> and #use <To unit> ---
-  $pick = @(Find $main 'TButton' 'Pick...')[0]
-  $row2 = @(Find $main 'TComboBox' $null | Where-Object { [W]::Top($_) -gt [W]::Top($pick) + 20 -and [W]::Top($_) -lt [W]::Top($pick) + 45 } | Sort-Object { [W]::Left($_) })
-  Check 'pickers.found' ($row2.Count -ge 2) "row2 combos=$($row2.Count)"
-  SetText $row2[0] 'Vcl.CheckLst.TCheckListBox'
-  SetText $row2[1] 'cxCheckListBox.TcxCheckListBox'
-  Check 'invoke.new-conversion' ([W]::InvokeMenu($main, 'Conversion|New Conversion'))
-  $t0 = Get-Date; $raw = ''
-  while (((Get-Date) - $t0).TotalSeconds -lt 300 -and ($raw -notmatch '(?m)^#link ')) { Start-Sleep -Seconds 1; $raw = Raw $main; if ((Forms $p.Id).Count -gt 1) { break } }
-  "  debug: waited {0:N0}s, forms=[{1}], memos={2}, raw.len={3}" -f ((Get-Date)-$t0).TotalSeconds, (TopsNow $p.Id), (@(Find $main 'TMemo' $null).Count), $raw.Length
-  (Find $main 'TMemo' $null | ForEach-Object { '  memo: ' + ([W]::Txt($_) -replace '\s+',' ').Substring(0, [Math]::Min(80, ([W]::Txt($_)).Length)) })
-  Check 'derive.unuse.from.unit' ($raw -match '(?m)^#unuse Vcl\.CheckLst\s*$')
-  Check 'derive.use.to.unit' ($raw -match '(?m)^#use cxCheckListBox\s*$')
-  Check 'derive.convert.present.once' (([regex]::Matches($raw, '(?m)^#convert .*TCheckListBox')).Count -eq 1)
-  $raw = [string]$raw; $iUse = $raw.IndexOf('#use cxCheckListBox'); $iConv = $raw.IndexOf('#convert')
-  Check 'derive.units.above.convert' ($iUse -ge 0 -and $iConv -gt $iUse) "use@$iUse convert@$iConv"
-  # Auto-match fills the ACTIVE block's grid; #link lines under the new #convert
-  # prove the grid loaded the new block, not a neighbour shifted by the inserts.
-  $blk = [regex]::Match($raw, '(?ms)^#convert Vcl\.CheckLst\.TCheckListBox.*?(?=^#convert|\z)').Value
-  Check 'derive.grid.loaded.new.block' (([regex]::Matches($blk, '(?m)^#link ')).Count -gt 5) ("links in new block: " + ([regex]::Matches($blk, '(?m)^#link ')).Count)
+  # Clean book: New asks nothing.
+  Check 'new.clean.invoke' ([W]::InvokeMenu($main, 'File|New'))
+  Check 'new.clean.no.prompt' ((WaitCls $p.Id 'TMessageForm' 3) -eq [IntPtr]::Zero) (TopsNow $p.Id)
+  Check 'new.clean.empty' ((Raw $main) -notmatch 'OldUnitZ') (Raw $main)
 
-  # --- 2. Derive units again: idempotent ---
-  $before = Raw $main
-  Check 'invoke.derive' ([W]::InvokeMenu($main, 'Uses Units|Derive units'))
-  Start-Sleep -Seconds 8
-  $after = Raw $main
-  Check 'derive.button.idempotent' ($after -eq $before) ("lines {0} -> {1}" -f ($before -split "`n").Count, ($after -split "`n").Count)
-
-  # --- 3. + Use through the picker ---
-  Check 'invoke.use' ([W]::InvokeMenu($main, 'Uses Units|Add unit...'))
-  $e = PickTyped $p.Id 'Add unit (#use)' 'cxEdit'; Check 'use.picker' ($e -eq '') $e
+  # Modify, then New -> prompt -> Cancel keeps the book.
+  Check 'use.invoke' ([W]::InvokeMenu($main, 'Uses Units|Add unit...'))
+  $e = PickTyped $p.Id 'Add unit (#use)' 'GuardUnitX'; Check 'use.picker' ($e -eq '') $e
   Start-Sleep -Seconds 1
-  Check 'use.rule.written' ((Raw $main) -match '(?m)^#use cxEdit\s*$')
+  Check 'new.dirty.invoke' ([W]::InvokeMenu($main, 'File|New'))
+  $e = Answer $p.Id 'Cancel'; Check 'new.dirty.prompt.cancel' ($e -eq '') $e
+  Start-Sleep -Seconds 1
+  Check 'new.cancel.keeps.book' ((Raw $main) -match '(?m)^#use GuardUnitX\s*$') (Raw $main)
 
-  # --- 4. + Swap with NO row selected: Old picker, then the multi-pick replacement
-  #        picker (Enter adds, no Yes/No; the old unit and repeats are refused) ---
-  Check 'invoke.swap' ([W]::InvokeMenu($main, 'Uses Units|Swap...'))
-  $e = PickTyped $p.Id 'Unit swap: the OLD unit to replace' 'OldUnitA'; Check 'swap.old.picker' ($e -eq '') $e
-  $pk = WaitFor $p.Id 'Replacements for OldUnitA' 60
-  Check 'swap.replacements.picker' ($pk -ne [IntPtr]::Zero) (TopsNow $p.Id)
-  if ($pk -ne [IntPtr]::Zero) {
-    $ed = @(Find $pk 'TEdit' $null | Sort-Object { [W]::Top($_) })[0]
-    SetText $ed 'NewUnitB'; KeyEnter $ed
-    SetText $ed 'OldUnitA'; KeyEnter $ed   # refused: the unit being replaced
-    SetText $ed 'newunitb'; KeyEnter $ed   # refused: already chosen, any case
-    SetText $ed 'NewUnitC'; KeyEnter $ed
-    Check 'swap.multi.list' (((Chosen $pk) -join ',') -eq 'NewUnitB,NewUnitC') ((Chosen $pk) -join ',')
-    Click (@(Find $pk 'TButton' 'OK')[0])
+  # Save As: cancelled keeps the (empty) path; then writes a new file.
+  Check 'saveas.invoke' ([W]::InvokeMenu($main, 'File|Save As...'))
+  $dlg = WaitCls $p.Id '#32770' 20
+  if ($dlg -ne [IntPtr]::Zero) { Click (@(Find $dlg 'Button' 'Cancel')[0]) }
+  Start-Sleep -Seconds 1
+  # The book has had no path since File > New. If the cancelled Save As had kept the
+  # abandoned path, plain Save would now write silently; it must still ASK.
+  Check 'save.after.cancel.invoke' ([W]::InvokeMenu($main, 'File|Save'))
+  $dlg = WaitCls $p.Id '#32770' 20
+  Check 'saveas.cancel.keeps.path' ($dlg -ne [IntPtr]::Zero) (TopsNow $p.Id)
+  if ($dlg -ne [IntPtr]::Zero) { Click (@(Find $dlg 'Button' 'Cancel')[0]) }
+  Start-Sleep -Seconds 1
+  $out = Join-Path $tmp 'Saved.rules'
+  Check 'saveas.invoke2' ([W]::InvokeMenu($main, 'File|Save As...'))
+  $e = SaveDialogTo $p.Id $out; Check 'saveas.dialog' ($e -eq '') $e
+  $t0 = Get-Date; while (-not (Test-Path $out) -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500 }
+  Check 'saveas.wrote' ((Test-Path $out) -and ((Get-Content $out -Raw) -match '#use GuardUnitX')) $out
+
+  # A deletion is a change too (controller ruling): delete the saved #use rule IN
+  # PLACE on the Unit Rules tab, and New must ask. Cancel keeps the edited book;
+  # a plain Save then writes it, so Exit below still runs on a CLEAN book.
+  $why = ''
+  $lv = UseList $main
+  if ($null -eq $lv) { $why = 'no unit list with a #use row' }
+  else {
+    $row = RowWith $lv 'GuardUnitX'
+    if ($row -lt 0) { $why = 'GuardUnitX row not listed' }
+    else {
+      [W]::SelectRow($lv, $row)
+      if (-not [W]::InvokeMenu($main, 'Uses Units|Delete unit rule')) { $why = 'delete menu item not found' }
+      else {
+        Start-Sleep -Seconds 1
+        if ((Raw $main) -match '(?m)^#use GuardUnitX\s*$') { $why = 'rule still present after delete' }
+        elseif (-not [W]::InvokeMenu($main, 'File|New')) { $why = 'File|New not found' }
+        else { $why = Answer $p.Id 'Cancel' }
+      }
+    }
   }
-  Check 'swap.no.confirmation' ((WaitCls $p.Id 'TMessageForm' 2) -eq [IntPtr]::Zero) (TopsNow $p.Id)
+  Check 'new.after.delete.prompts' ($why -eq '') $why
   Start-Sleep -Seconds 1
-  Check 'swap.rule.written' ((Raw $main) -match '(?m)^#useswap OldUnitA -> NewUnitB, NewUnitC\s*$') ((Raw $main) -split "`n" | Where-Object { $_ -match 'useswap' })
+  [void][W]::InvokeMenu($main, 'File|Save')
+  $t0 = Get-Date; while ((Test-Path $out) -and ((Get-Content $out -Raw) -match 'GuardUnitX') -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500 }
+  Start-Sleep -Seconds 2
 
-  # --- 4b. THE REPORTED DEFECT (2026-09-29): with several Old units listed, swap the
-  #         first, then the second. The SELECTED ROW is the Old unit: no Old picker
-  #         opens, and the second swap replaces the second unit -- never the first
-  #         unit's replacement. ---
-  $lv = UnitList $main
-  Check 'unitlist.found' ($null -ne $lv) ((Find $main 'TListView' $null).Count)
-  [W]::SelectRow($lv, (RowOf $lv 'Vcl.CheckLst'))
-  Check 'row.swap.invoke' ([W]::InvokeMenu($main, 'Uses Units|Swap...'))
-  Check 'row.swap.no.old.picker' ((WaitFor $p.Id 'Unit swap: the OLD unit to replace' 3) -eq [IntPtr]::Zero) (TopsNow $p.Id)
-  $e = PickReplacements $p.Id 'Replacements for Vcl.CheckLst' @('NewUnitX'); Check 'row.swap.first' ($e -eq '') $e
-  Start-Sleep -Seconds 1
-  $lv = UnitList $main
-  [W]::SelectRow($lv, (RowOf $lv 'OldUnitA'))
-  Check 'row.swap2.invoke' ([W]::InvokeMenu($main, 'Uses Units|Swap...'))
-  $e = PickReplacements $p.Id 'Replacements for OldUnitA' @('NewUnitD'); Check 'row.swap.second.is.second.row' ($e -eq '') $e
-  Start-Sleep -Seconds 1
-  $raw = Raw $main
-  Check 'row.swap.first.rule' ($raw -match '(?m)^#useswap Vcl\.CheckLst -> NewUnitX\s*$') (($raw -split "`n" | Where-Object { $_ -match 'useswap' }) -join ' / ')
-  Check 'row.swap.second.merged' ($raw -match '(?m)^#useswap OldUnitA -> NewUnitB, NewUnitC, NewUnitD\s*$') (($raw -split "`n" | Where-Object { $_ -match 'useswap' }) -join ' / ')
-  Check 'row.swap.no.replacement.as.old' ($raw -notmatch '(?m)^#useswap NewUnit') (($raw -split "`n" | Where-Object { $_ -match 'useswap' }) -join ' / ')
-  Check 'row.swap.one.rule.per.old' (([regex]::Matches($raw, '(?m)^#useswap OldUnitA ')).Count -eq 1)
-
-  # --- 4c. Right-click menu on a row: Swap is captioned with the row's unit and
-  #         goes straight to the replacement picker; a #use row cannot be swapped. ---
-  $lv = UnitList $main
-  [W]::SelectRow($lv, -1)
-  [void][W]::PostMessage($lv, 0x007B, $lv, [W]::RowScreenPoint($lv, (RowOf $lv 'Vcl.CheckLst')))
-  $menu = WaitCls $p.Id '#32768' 10
-  Check 'popup.shown' ($menu -ne [IntPtr]::Zero) (TopsNow $p.Id)
-  if ($menu -ne [IntPtr]::Zero) {
-    $items = [W]::MenuItems($menu)
-    Check 'popup.swap.caption' ($items[0] -eq 'Swap Vcl.CheckLst with...') ($items -join ' | ')
-    [void][W]::PostMessage($menu, 0x0100, [IntPtr]0x28, [IntPtr]::Zero); Start-Sleep -Milliseconds 200
-    [void][W]::PostMessage($menu, 0x0100, [IntPtr]0x0D, [IntPtr]::Zero)
-    $e = PickReplacements $p.Id 'Replacements for Vcl.CheckLst' @('NewUnitY'); Check 'popup.swap.picker' ($e -eq '') $e
-    Start-Sleep -Seconds 1
-    Check 'popup.swap.merged' ((Raw $main) -match '(?m)^#useswap Vcl\.CheckLst -> NewUnitX, NewUnitY\s*$') (((Raw $main) -split "`n" | Where-Object { $_ -match 'useswap' }) -join ' / ')
-  }
-  $lv = UnitList $main
-  [void][W]::PostMessage($lv, 0x007B, $lv, [W]::RowScreenPoint($lv, [array]::IndexOf([W]::Column($lv, 2), 'cxEdit')))
-  $menu = WaitCls $p.Id '#32768' 10
-  if ($menu -ne [IntPtr]::Zero) {
-    $items = [W]::MenuItems($menu)
-    Check 'popup.use.row.no.swap' ($items[0] -like '`[off`] Swap*') ($items -join ' | ')
-    [void][W]::PostMessage($menu, 0x0100, [IntPtr]0x1B, [IntPtr]::Zero); Start-Sleep -Milliseconds 400
-  } else { Check 'popup.use.row.shown' $false (TopsNow $p.Id) }
-  # Right-click over EMPTY space below the rows: no row, so nothing row-bound is
-  # enabled -- and no access violation (IfThen evaluated a nil row's SubItems).
-  $lv = UnitList $main
-  [W]::SelectRow($lv, -1)
-  $r = New-Object W+RECT; [void][W]::GetWindowRect($lv, [ref]$r)
-  $lp = [IntPtr]((([int]($r.T + ($r.B - $r.T) * 3 / 4)) -shl 16) -bor (($r.L + 40) -band 0xFFFF))  # client area, clear of the rows and the scroll bar
-  [void][W]::PostMessage($lv, 0x007B, $lv, $lp)
-  $menu = WaitCls $p.Id '#32768' 10
-  Check 'popup.empty.no.error' ((WaitCls $p.Id '#32770' 1) -eq [IntPtr]::Zero) (TopsNow $p.Id)
-  if ($menu -ne [IntPtr]::Zero) {
-    $items = [W]::MenuItems($menu)
-    Check 'popup.empty.nothing.row.bound' (($items[0] -like '`[off`] Swap*') -and ($items[5] -like '`[off`] Delete')) ($items -join ' | ')
-    [void][W]::PostMessage($menu, 0x0100, [IntPtr]0x1B, [IntPtr]::Zero); Start-Sleep -Milliseconds 400
-  } else { Check 'popup.empty.shown' $false (TopsNow $p.Id) }
-
-  # --- 5. + Unuse, cancelled: nothing written ---
-  $before = Raw $main
-  Check 'invoke.unuse' ([W]::InvokeMenu($main, 'Uses Units|Remove unit'))
-  $pk = WaitFor $p.Id 'Remove unit (#unuse)' 30
-  Check 'unuse.picker' ($pk -ne [IntPtr]::Zero)
-  if ($pk -ne [IntPtr]::Zero) { Click (@(Find $pk 'TButton' 'Cancel')[0]) }
-  Start-Sleep -Seconds 1
-  Check 'unuse.cancel.nothing.written' ((Raw $main) -eq $before)
-  "---- raw DSL head ----"; ((Raw $main) -split "`n" | Select-Object -First 12) -join "`n"
+  # Saved book: Exit closes with no prompt.
+  Check 'exit.invoke' ([W]::InvokeMenu($main, 'File|Exit'))
+  $gone = $p.WaitForExit(15000)
+  Check 'exit.clean.closes' $gone (TopsNow $p.Id)
 }
 finally {
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
-  "gui2: $script:pass pass / $script:fail fail"
+  Get-ChildItem $tmp -File | ForEach-Object { [IO.File]::Delete($_.FullName) }
+  [IO.Directory]::Delete($tmp)
+  "gui-file: $script:pass pass / $script:fail fail"
 }

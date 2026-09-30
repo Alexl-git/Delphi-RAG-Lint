@@ -235,14 +235,15 @@ get its full context with `drag-lint context --task "modify <Unit.Routine>"
 ## Unit picker -- hand-over notes (feat/unit-picker, 2026-09-24)
 
 Every place the editor asks for a unit name opens `TUnitPickerForm`
-(`ConvRules.UnitPicker.pas`): **+ Add unit**, **+ Remove unit**, **+ Swap**
+(`ConvRules.UnitPicker.pas`): **Uses Units > Add unit... / Remove unit /
+Swap...** (toolbar buttons `+ Add unit` / `+ Remove unit` / `+ Swap` until 2026-09-29)
 and the From Unit **Pick...** button. Its decisions live in
 `ConvRules.UnitPick.pas`, which the model tests cover; the form only renders.
 
 * **Swap is row-driven, and the replacement picker is multi-pick (2026-09-29).**
   The ROW is the Old unit: a right-click on a unit-list row (`FUnitPopup`:
   Swap <Old> with... / Accept scope rename / Remove unit / Add unit / Delete)
-  or the toolbar **+ Swap** with exactly one row selected opens ONLY the
+  or **Uses Units > Swap...** with exactly one row selected opens ONLY the
   replacement picker (`TUnitPickerForm.ExecuteMulti`, caption
   `Replacements for <Old>`). There a double-click, Enter or Space ADDS the unit
   to a Replacements list with no confirmation; OK finishes; a chosen entry is
@@ -253,7 +254,8 @@ and the From Unit **Pick...** button. Its decisions live in
   (`Items.Clear`), dropping the selection, so the second **+ Swap** opened the
   Old picker EMPTY -- indistinguishable from a replacement picker -- and the
   replacement picked there became an Old unit. Guard:
-  `tests\gui\drive-unit-rules-toolbar.ps1` sections 4b/4c (40 checks).
+  `tests\gui\drive-unit-rules-toolbar.ps1` sections 4b/4c (the driver has 41
+  checks since the menu bar replaced the toolbar; the file name is historical).
 * **`IfThen` evaluates BOTH arguments.** `IfThen(Row <> nil, Format(..,
   [Row.SubItems[1]]), '')` is an access violation on a nil row -- the popup
   crashed on a right-click over empty space until it became if/else. The
@@ -282,9 +284,13 @@ and the From Unit **Pick...** button. Its decisions live in
 * **Unit inserts shift every `#convert` index.** `InsertUnitNode` re-derives
   `FActiveHdr`; any other index a caller holds must be re-found by NODE (see the
   set-conversion path).
-* **Driving it:** toolbar buttons are `TToolButton`s, not windows, and the
-  toolbar's class is `TToolBar` (VCL registers Delphi class names). A click is a
-  posted mouse down/up at `TB_GETITEMRECT`; a posted `WM_COMMAND` does nothing.
+* **Driving it (rewritten 2026-09-29 -- the toolbar is GONE):** every command
+  is a main-menu item, invoked by PATH: `[W]::InvokeMenu($main, 'Uses
+  Units|Swap...')` in the drivers' shared `W` block. `GetMenu(main)` returns 0
+  on this form -- the always-on VCL style detaches the native menu and paints
+  its own bar -- so the drivers ask the form for its HMENU with the registered
+  message `MAIN_MENU_QUERY_MSG` (`'ConvRulesEditor.MainMenuHandle'`) and post
+  `WM_COMMAND` with the item's id. Details in the menu-bar section below.
   Raw DSL's memo has no window until its tab has been shown.
 
 ## Unit Rules harvest -- hand-over notes (feat/unit-harvest, 2026-09-28)
@@ -401,3 +407,201 @@ anything is converted. Spec and plan (gitignored, main tree):
   `drive-unit-picker.ps1`. Explorer drag-drop itself, a real Ctrl+V keypress
   and the visual checks (bold MISSING, the platform label, wrapped strip at
   other widths) are owner checks.
+
+## Menu bar + Convert tab -- hand-over notes (feat/convert-tab, 2026-09-29)
+
+The toolbar became a main menu (File / Conversion / Mapping / Uses Units /
+View), File gained New / Save As / Exit behind one unsaved-changes guard, and a
+**Convert** tab applies checked rule books to a list of source units IN PLACE,
+with a numbered backup per unit. Plan and spec (gitignored, main tree):
+`docs\superpowers\plans\2026-09-29-menu-bar-and-convert-tab.md`; ledger and
+per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
+`convert-tab` worktree.
+
+### Menu bar
+
+* **The toolbar is gone; every command is a menu item** built by `BuildMenu`
+  through `AddMenuCmd(AParent, ACaption, AHint, AHandler, AShortCut)`.
+  `UpdateToolbarEnabled` is now `UpdateMenuEnabled`; `Only this type` is a
+  `Checked` toggle, not a caption change. Menu hints go to the status line
+  (`WM_ENTERMENULOOP` / `AppHint` / `WM_EXITMENULOOP` restores it) -- not
+  covered by any driver; an owner check.
+* **Shortcuts are Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S -- nothing else, and
+  never a bare key** (Delete, Enter, a letter): a main-menu shortcut fires
+  inside the Raw DSL memo and every edit control.
+* **`GetMenu(main)` returns 0 on this form.** The always-on VCL style
+  (`TFormStyleHook`) detaches the native menu and paints its own bar. The form
+  answers the registered window message `MAIN_MENU_QUERY_MSG`
+  (`'ConvRulesEditor.MainMenuHandle'`) with `Menu.Handle`, from its `WndProc`
+  override; every other message goes to `inherited`. This exists for the GUI
+  drivers (owner-accepted automation hook, ledger Task 2). Drivers invoke by
+  PATH -- `[W]::InvokeMenu($main, 'File|Save As...')`, `[W]::MenuCaptions` to
+  list -- never by toolbar rectangle; the `W` block is copied between drivers.
+* **Status text is readable only from the `TStatusBar`.** `FLblStatus` is a
+  `TLabel` (no window); `SetStatus` / `SetError` mirror to the status bar, with
+  a `[!] ` prefix on errors. Assert on the status bar.
+
+### File > New / Save As / Exit and the unsaved-changes guard
+
+* **Unsaved = `FBook.Snapshot <> FSnapshot`** (`TRuleBook.Snapshot` is the
+  canonical re-emit, so a non-canonical file does not load dirty, and an
+  incomplete `#convert` block never makes a book dirty). `FSnapshot` is taken
+  at `LoadText` (every open / New / Curate reload) and in `SaveBook` once the
+  bytes reached disk.
+* **`ConfirmDiscard` is the one guard** -- New, Open, Exit, the window X
+  (`FormCloseQueryHandler`), the Convert tab's open-book check
+  (`ConfirmOpenBookSaved`) and a cross-book double-click in the Classes list
+  (`OpenOwningRuleEntry`, which is an Open under the spec). `DoCurate` keeps
+  its OWN save-first prompt (keyed on `FBook.Nodes.Count > 0`) -- a second,
+  coarser notion of unsaved, deliberately not unified yet.
+* **Exit's handler is `DoExitClick`, not `DoExit`** -- `TWinControl.DoExit` is
+  a dynamic method and a same-named handler hides it (W1010).
+* **`SaveBook(APromptPath)` restores the old path and title ONLY when no bytes
+  were written** (`LBytesWritten`). Once `TFile.WriteAllText` succeeded, the new
+  path is kept and `FSnapshot` refreshed even if validate / rescan then raise.
+  A cancelled Save As exits before anything changes (`saveas.cancel.keeps.path`).
+  The written-then-raised path has no automated test (needs fault injection;
+  MainForm is outside the model tests' closure).
+
+### Convert tab
+
+* **Three layers.** Pure decisions in `ConvRules.ConvertRun` (model-tested:
+  `SharedBackupPaths`, `BookKindOfText`, `MoveEntry`,
+  `ExpandSources`, `Preflight`, `ParseApplyJson`, `UnitInIndex`, `SourceRowText`);
+  execution in
+  `ConvRules.ConvertRunner` (`RunConversion` / `RunConversionUnits`); UI in
+  `ConvRules.ConvertTab` (`TConvertTab`, a code-built `TPanel`, editor-only --
+  not in the tests' closure). `Conversion > Convert...` shows the tab.
+* **Backups:** full file name + `.BCK<N>`, ONE N per unit shared by its `.pas`
+  and `.dfm` (`SharedBackupPaths`): one above the highest existing N over BOTH
+  `X.pas.BCK*` and `X.dfm.BCK*`, so `X.pas.BCK1` + `X.dfm.BCK3` give both
+  `.BCK4` (gaps are not reused; the probe window is 50). `TConvertRow` carries
+  `Backup` and `BackupDfm`; the grid has a `Backup .dfm` column, and the report
+  and every Note that names a backup (`rolled back`, `FAILED -- NOT restored`)
+  name both. A unit that no VALID book touched keeps no `.BCK`.
+* **Cancel is honoured between UNITS only**, never between two books of one
+  unit. A unit listed twice (file + `.dproj`, any case) is converted once
+  (`ExpandSources` dedupes). A listed unit gone from disk gets a
+  `unit skipped` row and no engine call.
+* **Failure is per unit, and the row set never lies.** Rows are buffered per
+  unit and emitted when the unit finishes. Statuses (`TConvertStatus`,
+  `ConvertStatusText`): `converted`; `FAILED -- restored` (the unit was copied
+  back from its `.BCK`); `rolled back` (an earlier book on this unit converted,
+  a later one failed, the restore undid it); `book skipped` (invalid book --
+  reported once, skipped for every unit); `unit skipped` (missing, the reindex
+  before its first book failed, or the backup copy failed); `FAILED -- NOT
+  restored` (the restore itself failed; backups kept
+  and named -- the summary LEADS with these). File I/O exceptions are handled
+  per unit; nothing escapes the runner.
+* **Book validity comes from convert-apply's own `rule_errors`.** A separate
+  `convert-validate` without `--from`/`--to` checks syntax only (measured), so
+  it is not used for this.
+* **`ParseApplyJson` cuts at the LAST `}` and skips leading noise.** The engine
+  prints `(loaded defaults from ...)` AFTER the JSON document; before the fix
+  every real apply parsed as "unparseable" and every unit was restored.
+  `HasCapability` slices `info --json` the same way.
+* **Testable runner:** the `RunConversionUnits(AUnits, ABooks, AApply, AIndex,
+  ...)` overload takes `TApplyFn` / `TIndexFn` function references; the
+  `TEngineAdapter` overload binds `ApplyConversion` / `IndexProject`. The fault
+  checks (`runner.rollback.*`, `runner.backup.failure`,
+  `runner.restore.failure`) use fakes; `runner.live.*` uses the real engine.
+* **The index is refreshed BEFORE each unit's first book** as well as after
+  every book: convert-apply patches the `.dfm` at the index's line ranges, so a
+  unit edited in the IDE since the last index would be patched in the wrong
+  place. A failed refresh gives `unit skipped` with `reindex before apply
+  failed: <output>` -- no backup, no engine apply -- and the run continues with
+  the next unit (`runner.reindex.before.*`).
+* **The project file is ALWAYS the DB's own** -- `ProjectFileForDb(
+  GEditorProjectDb)`, i.e. `<dir>\<Name>.dproj` for `<dir>\_D-RAG\<Name>.sqlite`
+  -- never the Unit Rules Destination: `index --project <other.dproj> --db
+  <editor's DB>` would re-scope the editor's project DB to another project.
+  Convert refuses (`Convert refused: the project index <db> has no project file
+  on disk -- expected <path>.`) when it does not exist. The Destination field
+  only classifies harvested units.
+* **Captured at Convert time:** units, books, project file / DB and the rules
+  folder (`FRunRulesFolder`) -- File > Open / New during a run cannot move the
+  report (`convert-run-yyyymmdd-hhnnss.txt`, tab-separated, UTF-8 WITHOUT a BOM
+  so non-ASCII engine text survives, in that folder). After the rows it lists
+  every unit a cancel kept from running (`not reached (cancelled)`, also added
+  to the grid), then `Run<TAB>completed` or `Run<TAB>cancelled -- N unit(s) not
+  reached`, then `Final reindex<TAB>ok` / `FAILED: ...` / `not run`. The
+  never-reached set comes from counting cancel polls: `RunConversionUnits`
+  polls `ACancelled` exactly once just before each unit (documented contract).
+* **Mid-run locks:** File > Save / Save As / Curate are disabled while a run is
+  in progress (`TConvertHost.RunStateChanged`, fired from `SetRunning`) -- a
+  book saved mid-run would change the rules the run's later units get. Open and
+  New stay enabled. A drop (or any `AddSources` call) during a run is refused
+  with `A conversion is running -- sources cannot be added until it finishes.`
+* **Unindexed source units are flagged on their row:** owner-drawn, bold red,
+  display text + ` -- not in the project index`; the ITEM text stays the raw
+  path (the job consumes it). "Indexed" means the unit's FULL PATH is in the
+  project DB's `files` table (`TEngineAdapter.ListIndexedFiles`, one `sql
+  SELECT path FROM files` with `--limit 1000000`; `UnitInIndex` compares
+  `ExpandFileName`'d paths case-insensitively) -- NOT the unit name: the engine
+  finds the `.dfm` by path, and `M2022\DM1.pas` must be refused when the
+  project indexes its own `DM1.pas` (`convertrun.pre.same.name.foreign.path`).
+  The index set is refreshed on add, on tab show (skipped when the list is
+  empty) and after a run. Convert refuses while any listed unit is unindexed
+  (`Preflight`, same `UnitInIndex`), and refuses without the project file on
+  disk (see above).
+* **The form refuses to close while a run is in progress** (File > Exit and the
+  window X). `Application.Terminate` or a Windows shutdown still bypasses it.
+* **Measured cost:** a 3-file fixture takes ~94-106 s per engine call
+  (convert-apply); a whole driven run of one unit x one book was 105 s.
+  `CONVERT_TIMEOUT_MS = 600000` for conversion calls; `ENGINE_TIMEOUT_MS =
+  180000` stays for every other call. A book list of M books on N units is up
+  to M x N such calls.
+
+### Engine gaps (open INBOX notes, main tree `docs\`)
+
+* **Unit rules are not applied by the engine.** Unit-rules-only books are
+  listed greyed `(unit rules: engine support pending)` and cannot be checked;
+  mixed books run their `#convert` blocks with `(unit rules not applied:
+  engine)`. `info --json` -> `capabilities.apply_unit_rules: true` lifts both
+  (read once per session, re-probed by the tab's Refresh):
+  `INBOX-2026-09-29-converter-to-engine-apply-unit-rules.md`.
+* **`BDE-to-FireDAC.rules` fails convert-apply validation** (every `#link`
+  "not found"): `INBOX-2026-09-29-converter-to-engine-convert-apply-bde-book-fails-validation.md`.
+* **`lint-all --rule doc-drift --fix --apply` de-indents** a two-space `///`
+  block above a column-0 routine (hand-written lines too). After ANY use of the
+  fixer here, check non-`///` lines and `git diff --stat` with and without
+  `-w`, and delete its `.bak` files:
+  `INBOX-2026-09-29-converter-to-engine-doc-drift-fix-dedents-indented-blocks.md`.
+* **Lint false positives held by `dl:ok` reviews** (try-except-swallowed on a
+  catch-and-check test; unused-unit-in-uses when an implementation-only
+  routine's return type is the only use; per-file `lint` of a `.dpr` reporting
+  EVERY marker as `review-marker-unused`):
+  `INBOX-2026-09-29-converter-to-engine-lint-false-positives-convert-tab.md`.
+  Judge the tests `.dpr`'s markers with `lint-all`, never per-file.
+
+### Verification kit
+
+* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1243 pass / 5 fail**;
+  the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
+  `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
+  `.has.TOvcTable`). A full run is ~6 min (the live runner test is ~3 min of
+  it); a build or redeploy of `dll-win64` mid-run kills it -- discard that run.
+* **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
+  -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
+  Win64 library index answers -- a staged copy, never `dll-win64`). Expected
+  on the final build:
+
+  | driver | checks | covers |
+  |---|---|---|
+  | `drive-unit-rules-toolbar.ps1` | 41 | menu bar items, toolbar gone, Uses Units commands, Swap flow |
+  | `drive-unit-picker.ps1` | 20 | unit picker |
+  | `drive-unit-harvest.ps1` | 21 | Unit Rules harvest (`-ProofNoDestination` control) |
+  | `drive-file-menu.ps1` | 19 | New / Save As / Exit, the guard, delete-in-place makes dirty |
+  | `drive-owning-open.ps1` | 6 | cross-book double-click goes through `ConfirmDiscard` |
+  | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line |
+
+  `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
+  fail is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
+  the project index" (no DB), not at the unindexed refusal; that refusal is
+  proven by `Loose.pas` in the normal run.
+* **Driver traps recorded on this branch:** `LB_GETTEXT` is system-marshalled
+  -- read it into a LOCAL buffer, not remote memory; screen capture of a CHILD
+  window here returns another control's pixels -- use `PrintWindow(hwnd, dc,
+  0)`; an owner-drawn row's state is read from its pixels, with an "ink" count
+  so an unpainted row cannot pass as "not red"; the Open dialog is driven by
+  class `Edit` + `&Open` (English Windows only).
