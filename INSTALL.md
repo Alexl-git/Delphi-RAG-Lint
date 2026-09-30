@@ -234,9 +234,10 @@ Build and inspect:
 * The `Library` sections cover every folder RAD Studio registers and are by
   far the slowest to build. Build them once, on their own.
 * `resolve-dbs --platform` prints only databases that exist. A configured but
-  never-built one is a `NOTE:` line on stderr. **Known issue:** for a library
-  database that note suggests `--only library-Win64`, which is not a section
-  name and fails; use `--only Library --platform win64`.
+  never-built one is a `NOTE:` line on stderr naming the command that builds
+  it: `index --all --only <Section>`, plus `--platform <P>` for a library
+  database (`--only Library --platform Win64`) and `--config <path>` when
+  `resolve-dbs` was given one.
 * `resolve-dbs --project` exits 2 and says so when no section, or more than
   one, claims the project. Never guess a database path; ask it.
 

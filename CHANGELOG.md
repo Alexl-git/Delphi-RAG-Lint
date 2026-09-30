@@ -3,6 +3,140 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.20.4-alpha -- 2026-09-29
+
+PATCH: a project index can no longer write into another project's database; a malformed manifest
+names its bad key and a write verb refuses it; `resolve-dbs` advises a command that works; `info`
+answers `--db` in text mode; the compiled legacy fixtures fail when their compile fails and no
+longer write the owner's IDE plugin settings. Only `DRAGLINT_VERSION` moves; extractor
+1.20.0-alpha, resolver 1.11.0-alpha and schema v23 are unchanged -- no index needs a re-parse or a
+re-resolve. (`tests\extractor-version.baseline` was re-pinned WITHOUT a bump for comment-only and
+manifest-loader changes under `src\index`; each re-pin carries a dated note.)
+
+### Fixed
+
+- **A `--project` run with no `--db` could write into ANOTHER project's database.** `Run` defaulted
+  the database to the first manifest section whose DB existed, and the write paths honoured that
+  default as if it had been typed. Measured in a fixture: indexing an unregistered `Hello2` wrote
+  into the sibling `Hello.sqlite` and EVICTED `Hello.dpr` from it; on this machine the same path
+  wrote into `Micronite2027.sqlite`. Affected before 1.20.4, when no `--db` was given:
+  - `index --project <X>` -- wrote the project into the first existing section's DB. A REGISTERED
+    project indexed for the first time went to `<cwd>\_D-RAG\<cwd name>.sqlite` instead of its
+    section's DB.
+  - `index <X.dpr|.dproj|.dpk>` (positional) -- went through the folder-prefix match, so a project
+    under a FOLDER section was written into that section's DB, and a registered one got the retired
+    `<outDir>\<Section>.sqlite` name.
+  - `refresh-findings --project <X>` -- wrote findings into the defaulted (sibling) DB.
+  - `purge-locals --project <X>` -- purged the defaulted DB (for an unregistered project, a
+    sibling's).
+  - `compile-check` -- cached findings into a folder-matched DB, which could be another project's.
+  - `exceptions-sync --project <X> --apply` (a source writer) and `wiring --project <X>` (a reader)
+    -- took the first existing DB, another project's, as the project store.
+
+  Now one write rule, in one place: (1) an explicit `--db`, else (2) the project file's exact
+  manifest owner, else (3) `<project dir>\_D-RAG\<project base name>.sqlite`. Two sections claiming
+  the project refuse, naming both. `index` (`--project` or a positional project file) and
+  `refresh-findings` follow it (`--db` is now optional for `refresh-findings`). `compile-check`
+  caches only into an explicit `--db` or the project's unique manifest owner, and otherwise compiles
+  and reports without caching. `purge-locals` refuses unless `--db` is typed. `exceptions-sync` and
+  `wiring` refuse (exit 2, naming `--db`) when the project has no database of its own; a
+  Library-section DB is never taken as a project store (recognised by section kind, not by a
+  `library-` file-name prefix). Guard: `tests\autotest\run_index_project_nodb_sibling_guard.ps1`
+  (isolated engine copy with its own manifest; RED on 1.20.3 and on the first fix).
+- **`--project` READERS no longer see sibling project databases** (owner ruling 2026-08-13: the
+  authoritative set is the platform library plus the project's own DB). With `--project`,
+  `query`, `lint`, `lint-all` and the other readers open the project's own DB (if it exists) plus
+  the platform library, and nothing else; siblings are no longer kept behind the owner. With no own
+  DB, stderr says `NOTE: no index owns <project> -- other projects' indexes are not consulted` (an
+  ambiguous project names its claimants), and `lint-all --project` refuses instead of linting
+  against a sibling or the library. **A cross-project answer now needs an explicit `--db`.**
+- **A `.drag-lint.json` `"db"` counts as an explicit `--db`.** A reader given a config `db` that
+  does not exist exits 2, exactly as for a typed `--db`. A `--db` on the command line REPLACES the
+  config's `db` rather than adding to it.
+- **A malformed manifest named no key, and a bad local `.drag-lint.json` silently handed the run to
+  the global manifest.** Every wrong-typed key raised `EInvalidCast` ("Invalid class typecast"),
+  which `TManifestIO.Load` swallowed: a WARNING, then the GLOBAL plan ran with exit 0. Text that
+  was not JSON at all gave an empty manifest with no message, and `index --all --config <bad>`
+  died with `FATAL` exit 3. Now every manifest key and the `.drag-lint.json` defaults keys
+  (`docs.captureLooseComments`, `docs.allowBlankLineGap`, `watch.interval`) are read through typed
+  getters that name the key path and both types -- `indexes: expected object, got array`,
+  `indexes.sections[1].sqlOnlyMS: expected boolean, got string`, or `(root): not valid JSON --
+  <parser detail>`. **Write verbs refuse** with exit 2 and one wording on every path:
+  `ERROR: <verb>: refusing to write -- the manifest could not be parsed: <file>: <key path>:
+  expected <type>, got <type>`. They are `index` (even with `--db`), `index --all` (`--config`
+  included), `refresh-findings` without `--db`, `register-project` (dry run and `--apply`; `--json`
+  reports outcome `manifest-unparsed`), and -- when the bad key is in `.drag-lint.json`, which may
+  be what named the `db` -- also `purge-locals` and `refresh-findings` with `--db`. `compile-check`
+  still compiles and reports, but caches nothing. **Read verbs warn** (`WARNING: could not parse
+  config at <file>: <key path>: ...`, once per file per process) and carry on with what parsed.
+  Before, `register-project --apply` against a half-parsed manifest could add a second claimant.
+  Guard: `tests\autotest\run_manifest.ps1` (+44 checks; new fixtures `bad-indexes-array.json`,
+  `bad-bool-type.json`, `bad-syntax.json`).
+- **`resolve-dbs` advised a command that failed.** Its never-built `NOTE` guessed the `--only`
+  selector from the DB file's base name: `--only library-Win64` for the library, `--only Foo` for a
+  section `P-Foo` whose DB is `_D-RAG\Foo.sqlite` -- both exit 2. It now names the section:
+  `drag-lint index --all --only <Name>`, plus `--platform <P>` for a per-platform section and
+  `--config <path>` when `resolve-dbs` was given one. `index --all`'s "selectable" hint listed the
+  library twice ("Library, Library") with no `--platform`; it now lists each name once
+  (`Library (Win32, Win64)`) and says "selectable for this platform" only when `--platform` was
+  given. Guards: `run_resolve_dbs_library_contract.ps1` (RUNS each advised command with
+  `--dry-run` in an isolated engine copy), `run_cli_narrowing_is_reported.ps1`.
+- **`info --db <X>` without `--json` ignored the `--db`.** The per-index verdict lived only in the
+  JSON branch. Text mode now prints `index: <path>  verdict: <v>` per `--db`, and an indented
+  `remedy:` line when one is owed. The JSON `indexes` array is byte-identical to 1.20.3.
+  Guard: `run_info_verb.ps1` (text and JSON verdicts and remedies must agree).
+
+### Tests
+
+- **A compiled legacy fixture now fails when its compile fails.** `run_legacy_cli_fixtures.ps1`
+  judged a dcc64 fixture by its `.bat` exit code, and every such `.bat` checks only
+  `if not exist <exe>` -- so a failed compile kept the previous build's exe, which ran and passed.
+  The runner now deletes the fixture exe and build log first and fails on any `Error:`/`Fatal:`
+  line, or on a build log with no dcc64 `N lines` summary, whatever the exit code. Positive control
+  `T67_compile_fail` (plants a stale exe; its `.bat` alone exits 0). It exposed 8 broken fixtures,
+  now repaired: T28 T29 T30 T32 T34 T54 and T27 (missing `src\core` and sibling source dirs on
+  `-U`) and T51 (a missing third argument). **T61 had never compiled**: a trailing backslash in
+  `-E"%HERE%"` escaped the quote, so dcc64 printed its usage and exited 0. `run_v021_doctests.bat`
+  guards T27 the same way. `tests\fixtures\T30_keyboard.exe` is no longer tracked.
+- **The fixtures no longer write the owner's IDE plugin settings.** T29, T34 and T54 ended with
+  `SaveSettings(DefaultSettings)` on the LIVE key `HKCU\Software\drag-lint\DelphiPlugin`, resetting
+  the owner's plugin settings on every run. `DragLint.Plugin.Settings` now uses
+  `...\DelphiPlugin.Test` under the compile define `DRAGLINT_TEST_REGROOT`, which the 8 fixtures
+  that link the unit pass (with `-B`); the shipped BPL does not define it, so its behaviour is
+  unchanged. The runner snapshots the live key before and after and fails "owner plugin settings
+  untouched" on any difference, then removes the `.Test` key.
+- **Each compiling fixture has a private DCU folder** (`-NU tests\fixtures\_dcu\<name>`, gitignored).
+  Before, the `-B` fixtures left DCUs beside the sources -- among them a `Settings.dcu` built with
+  the test define that a plugin build could have reused. The runner fails "no fixture wrote a DCU
+  under src\" on any change there.
+
+### Docs
+
+- **`docs\INSTALL.md` (the IDE-side guide) corrected:** it is 7-bit ASCII (74 bytes replaced);
+  section 3c no longer calls a shipped `drag-lint.json` the template (the release ships none; the
+  tracked one is this machine's manifest) and points to root `INSTALL.md` section 2a; 3b builds the
+  per-platform library pair with `index --all --only Library --platform win32|win64`
+  (`index --scan-libraries` builds ONE Win32+Win64 union DB and ignores `--platform`); sections 0-2
+  locate the engine at `<BPL folder>\..\dll-win64\` and drop the retired `C:\TEMP1\bpl_staging`
+  auto-pull. `run_docs_sync_guard.ps1` now scans it and asserts it is ASCII.
+- **Ignore files:** no code reads a `.drag-lint-ignore` file. `--help`, `README.md`,
+  `docs\AI-USAGE.md` and `docs\INSTALL.md` now name what the indexer reads: `.gitignore` /
+  `.hgignore` pattern files (off with `--no-use-ignore` or manifest `useIgnoreFiles`) and the
+  `.scanignore` directory-prune MARKER (contents not read; always honoured).
+- `--help`, `README.md`, `INSTALL.md` and `docs\AI-USAGE.md` describe the project write rule, the
+  reader set, the manifest refusal and `info`'s text form. Root `INSTALL.md`'s "known issue" about
+  `--only library-Win64` is removed (fixed above).
+
+### Known issues
+
+- `info --db <file that is not SQLite>` dies with `FATAL` exit 3 and loses every other `--db` in the
+  call; the `unreadable` verdict is unreachable (pre-existing; filed for a later release).
+- `lint --fix --fix-rule doc-drift` renders some managed "Used by" lines uncapped (1005 to 2566
+  characters), which does not compile (`F2069 Line too long`); three such stale blocks stay in
+  `src\index\DRagLint.Index.Manifest.pas` (151, 184, 238) rather than be hand-wrapped.
+- A bad `docs` key in `.drag-lint.json` does not stop the source writers (`document --apply`,
+  `lint --fix --apply`); only the index writers above refuse.
+
 ## v1.20.3-alpha -- 2026-09-29
 
 PATCH: two doc-drift false reports fixed, a parallel-battery race in the legacy fixtures removed,
@@ -80,9 +214,10 @@ and a detailed INSTALL.md. Only `DRAGLINT_VERSION` moves; extractor 1.20.0-alpha
 
 ### Known issues
 
-- **`index --project <X.dpr>` with no `--db` can write into a SIBLING project's database** in the
-  same folder and evict its rows (the folder-matched lookup is used for a write).
-  `docs\INBOX-2026-09-29-engine-index-project-without-db-writes-sibling-db.md`. Always pass `--db`.
+- ~~**`index --project <X.dpr>` with no `--db` can write into a SIBLING project's database** in the
+  same folder and evict its rows (the folder-matched lookup is used for a write).~~ **Fixed in
+  1.20.4-alpha** (see above).
+  `docs\INBOX-2026-09-29-engine-index-project-without-db-writes-sibling-db.md`.
 - Entries hidden inside a stored `(+N more)` window are checked only by COUNT, never by identity.
   If a hidden entry left while at least as many others joined (the total did not shrink beyond the
   proven drops), `--fix` still offers the rewrite and the hidden entry is removed. `dl:shared` (an
