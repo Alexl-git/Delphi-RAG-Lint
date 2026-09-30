@@ -857,6 +857,51 @@
 #   DRAGLINT_RESOLVER_VERSION per the 1.6.0-1.9.0 precedent. Resolve pass only;
 #   no stored parse differs.
 #   Superseded: 1.20.0-alpha|a8a621888c3d5f581293484e700437709400e5750cf620d7aaa64fa13bdba59f
-1.20.0-alpha|a8b9d66d61e735891535cf1d4cc9b9da14f9ad447f9d7605756a8f6c6d714b2e
+# 2026-09-29: hash re-pinned WITHIN 1.20.0-alpha (1.20.4 Task 1, defect "a project index
+#   writes only to its own DB"): comment-only edit on the hashed surface.
+#   DRagLint.Index.Manifest.pas: three drag-lint:auto managed "Called from" lines
+#   (TManifestIO.Load, ResolveProjectDb, ResolveReadDbs) regenerated because their CLI
+#   callers changed. Only `///` lines differ; no code token changed; no stored parse differs.
+#   Superseded: 1.20.0-alpha|a8b9d66d61e735891535cf1d4cc9b9da14f9ad447f9d7605756a8f6c6d714b2e
+# 2026-09-29: hash re-pinned WITHIN 1.20.0-alpha (1.20.4 Task 2, "resolve-dbs advises the
+#   section name; Library listed once"): comment-only edit on the hashed surface.
+#   DRagLint.Index.Plan.pas: drag-lint:auto managed facts of TPlanSection, TIndexPlan and
+#   ResolvePlan regenerated because new CLI users appeared (SelectableSectionLabels,
+#   DoResolveDbsList). Only `///` lines differ; no code token changed; no stored parse differs.
+#   Superseded: 1.20.0-alpha|51720cd4f7dd3f844032e857b340ebf9f933f456a5dfaf0598d272c1b3a8a287
+# 2026-09-29: hash re-pinned WITHIN 1.20.0-alpha (1.20.4 Task 4, "a malformed manifest
+#   names the bad key; a write verb refuses it"). NO extractor bump: the one hashed file
+#   that changed is src\index\DRagLint.Index.Manifest.pas -- `git diff -U0` over
+#   src\parser src\preprocess src\index Core.Indexer.pas Doc.SymbolFacts.pas lists that
+#   file alone -- and every code hunk in it is the MANIFEST LOADER, which decides which
+#   config a run reads, never what the parser extracts from a byte sequence:
+#   ParseTextEx / ParseSection read typed keys through new GetObject/GetArray/GetBool/
+#   GetNumber helpers (EManifestError naming the key path instead of EInvalidCast),
+#   ParseManifestRoot rejects non-JSON text instead of yielding an empty manifest,
+#   Load records a skipped file in the new TIndexManifest.LoadError. A manifest that
+#   parsed before parses to the identical record now; one that did not now fails LOUDLY
+#   instead of half-loading. The remaining hunks are `///` doc lines. No stored parse
+#   differs, so a ~5-hour re-parse would say nothing new.
+#   Superseded: 1.20.0-alpha|ada581d4c4d75f2bb2ebe42687000e44726e98ea6b8681098f97b4d60298e0b4
+# 2026-09-29: hash re-pinned WITHIN 1.20.0-alpha again (1.20.4 Task 4 fix round 1). NO
+#   extractor bump, same reasoning as the entry above: `git diff -U0 HEAD` over the
+#   hashed roots lists only DRagLint.Index.Manifest.pas and DRagLint.Index.ManifestWrite.pas.
+#   Manifest.pas: the typed getters are EXPORTED (renamed GetManifestObject/Array/Bool/
+#   Number so the CLI's .drag-lint.json defaults reader names a bad key the same way),
+#   and Load prints each WARNING once per process (FirstLoadWarning). ManifestWrite.pas:
+#   register-project refuses (roManifestUnparsed) a manifest Load could not parse. All of
+#   it is config reading/writing; none of it changes what the parser extracts from a
+#   byte sequence. The rest of the diff is `///` managed facts. No stored parse differs.
+#   Superseded: 1.20.0-alpha|04c82b3bb96c5c43cc69b974703f7ec871f4d0edeef8ae30c1c44683114d942a
+# 2026-09-29: hash re-pinned WITHIN 1.20.0-alpha (1.20.4 Task 4 fix round 2). NO extractor
+#   bump. `git diff -U0 HEAD` over the hashed roots lists two files:
+#   DRagLint.Index.Manifest.pas -- three `///` managed-fact lines of TManifestIO.Load
+#   ((+18 more) -> (+17 more), Calls gains FirstLoadWarning, 143 -> 144 lines); zero
+#   non-`///` lines differ. DRagLint.Index.ManifestWrite.pas -- RegisterProjectSection's
+#   ownership arms folded into one if/else-case with a single exit test (7 Exits -> 5,
+#   same outcomes) plus its `///` Complexity fact. The register-project manifest WRITER,
+#   never reached by extraction. No stored parse differs.
+#   Superseded: 1.20.0-alpha|3ed2c84c7deb9eea8cfed9702aacbe20c9989b13ee77a8f071079ad7d5c231be
+1.20.0-alpha|c693f2f776ba9869f037065b6deeddb43dfbb276b85dab200e55cc53d1fb22c7
 # superseded: 1.19.0-alpha|376c7143274119aa23760b9d41092862c6b7d24b426d7367cf5debb6286aa8b8
 #   2026-09-28 1.19.0 -> 1.20.0-alpha: Self.X := v emits a WRITE (Parser.Delphi13 assignment case); sql_column positioned on its own identifier (Parser.Sql FlushItem). Owner-scheduled batch; full re-parse run the same night.

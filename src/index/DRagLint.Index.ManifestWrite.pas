@@ -66,7 +66,9 @@ type
     roAlreadyOwned,   { a section already claims this project    }
     roAmbiguous,      { several sections claim it -- do not add  }
     roNoManifest,     { no drag-lint.json found to write to      }
-    roFailed);        { parse or write error; see the message    }
+    roFailed,         { parse or write error; see the message    }
+    roManifestUnparsed); { Load could not parse a manifest it found;
+                        Message is its LoadError -- nothing written }
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -98,11 +100,14 @@ type
 /// <remarks>
 /// Refuses when a section already claims the project -- registering a
 /// second owner would create the ambiguity the reindex command exists to
-/// refuse. Not thread-safe; call from one thread.
+/// refuse. Refuses (roManifestUnparsed, nothing written, dry run or not) when
+/// TManifestIO.Load could not parse a manifest it found. Not thread-safe; call
+/// from one thread.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Index.Manifest.ResolveProjectDb, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.ManifestWrite.AppendSectionToText, DRagLint.Index.ManifestWrite.BuildSectionJson, DRagLint.Index.ManifestWrite.FindManifestCopies</para>
 /// <para>Returns: Default(TRegisterResult)</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 100 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
@@ -224,22 +229,32 @@ begin
   { Ownership is asked of the SAME resolver the reindex command refuses on, so
     the two can never disagree about whether a project is already claimed. }
   Manifest:= TManifestIO.Load(AEngineDir, TPath.GetDirectoryName(ProjAbs));
-  case ResolveProjectDb(Manifest, ProjAbs, Db, Claim) of
-    pdmUnique:
-      begin
-        Result.Outcome  := roAlreadyOwned;
-        Result.Claimants:= Claim;
-        Result.Message  := 'already registered; nothing to do';
-        Exit;
-      end;
-    pdmAmbiguous:
-      begin
-        Result.Outcome  := roAmbiguous;
-        Result.Claimants:= Claim;
-        Result.Message  := 'several sections already claim this project -- fix the manifest by hand';
-        Exit;
-      end;
-  end;
+  { A manifest Load had to SKIP is not asked about ownership: the part that did
+    parse can miss the very section that claims this project, and --apply would
+    then write a SECOND claimant -- an ambiguity every later index refuses on. }
+  if Manifest.LoadError <> '' then
+  begin
+    Result.Outcome:= roManifestUnparsed;
+    Result.Message:= Manifest.LoadError;
+  end
+  else
+    case ResolveProjectDb(Manifest, ProjAbs, Db, Claim) of
+      pdmUnique:
+        begin
+          Result.Outcome  := roAlreadyOwned;
+          Result.Claimants:= Claim;
+          Result.Message  := 'already registered; nothing to do';
+        end;
+      pdmAmbiguous:
+        begin
+          Result.Outcome  := roAmbiguous;
+          Result.Claimants:= Claim;
+          Result.Message  := 'several sections already claim this project -- fix the manifest by hand';
+        end;
+    end;
+  { Every arm above that decided the outcome moved it off roAdded, the ordinal-0
+    value Default(TRegisterResult) left there; only "nobody owns it yet" goes on. }
+  if Result.Outcome <> roAdded then Exit;
 
   Copies:= FindManifestCopies(AEngineDir);
   if Length(Copies) = 0 then

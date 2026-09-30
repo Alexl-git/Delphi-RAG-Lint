@@ -506,7 +506,8 @@ function Get-CliVerbFlagMap {
     .VerbFlags   ordered verb -> sorted flag list
     .FlagFields  flag -> TArgs fields
     .FieldFlags  TArgs field -> flags
-    .Global      fields read BEFORE dispatch (Run itself) -- cross-verb, so
+    .Global      fields read BEFORE dispatch (Run itself), plus the closure of
+                 the shared DB resolver ResolveConsumerDbs -- cross-verb, so
                  their flags belong to no single verb line
     .NoField     flags binding no TArgs field  (named, not dropped)
     .NoReader    fields no routine reads       (named, not dropped)
@@ -613,6 +614,22 @@ function Get-CliVerbFlagMap {
   }
   foreach ($c in (Get-ArgsCallees -Span $preSpan -Self 'Run')) {
     foreach ($f in (Get-Closure -Start $c -Routines $routines)) { [void]$global.Add($f) }
+  }
+  # The SHARED DATABASE RESOLVER is cross-verb plumbing too, wherever it is
+  # called from. Until 1.20.4 Run called ResolveConsumerDbs(Args) before the
+  # dispatch, so the pre-dispatch closure above measured its fields (--platform,
+  # --in/--file, the positional path) as cross-verb by accident of placement.
+  # 1.20.4 Task 1 made Run default a --project DB from --project alone, and the
+  # verbs call the resolver themselves -- the flags did not change meaning or
+  # acceptance (ParseArgs is verb-agnostic), and the banner still documents them
+  # once, in its Databases block. Named here rather than inferred, so the next
+  # code move cannot reclassify them silently; a rename throws instead of
+  # shrinking the set.
+  foreach ($p in @('ResolveConsumerDbs')) {
+    if (-not $routines.Contains($p)) {
+      throw "cross-verb DB resolver '$p' not found in the routine map -- renamed? update CliFlagVerbMap.ps1"
+    }
+    foreach ($f in (Get-Closure -Start $p -Routines $routines)) { [void]$global.Add($f) }
   }
 
   $verbFlags = [ordered]@{}

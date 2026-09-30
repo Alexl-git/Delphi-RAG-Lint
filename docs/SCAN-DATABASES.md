@@ -92,7 +92,7 @@ Scanner exe: `drag-lint.exe` (this example machine keeps a Win64 build under
 per command:
 
 ```
-drag-lint index C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --db C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite
+drag-lint index --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --db C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite
 drag-lint index C:\Projects\DB\SQL  --db C:\Projects\DB\SQL\drag-lint-sql.sqlite
 drag-lint index --scan-libraries-win --db C:\Projects\.drag-lint\library-Win64.sqlite
 REM  ...use --scan-libraries-all instead to also pull in Posix/iOS/Android/OSX source trees.
@@ -101,8 +101,10 @@ REM  In practice you rarely type a project's --db by hand -- `index --all` (belo
 REM  derives the _D-RAG path from the manifest automatically.
 ```
 
-A `.dproj`/`.dpr` target is a **project** scan (compile closure); a folder target
-is a **library** scan (whole tree). Add `--rebuild` to force a from-scratch pass;
+`--project <.dproj|.dpr>` is a **project** scan (compile closure); a folder target
+is a **library** scan (whole tree). A positional `index <X.dproj>` (no `--project`)
+refreshes only that one file, with no project defines -- it is not a closure scan.
+Add `--rebuild` to force a from-scratch pass;
 the default is `--recompile` (incremental).
 
 Or drive all of the above from a single **named-index manifest**

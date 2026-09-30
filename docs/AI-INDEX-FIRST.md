@@ -135,11 +135,13 @@ UNAMBIGUOUS; an ambiguous one returns nothing on purpose — qualify and re-ask.
 
 ### Keeping the index fresh
 - The IDE plugin reindexes each file on save (incremental, `--deep`).
-- **Scan type is declared by the target; mode is chosen per run.** A `.dpr` /
-  `.dproj` target indexes exactly that project's **compile closure** (members +
-  transitively-used project-local units + sibling `.dfm` + `{$I}` includes +
-  the project file; Library/Browsing-path units and loose unreferenced files are
-  excluded). A **folder** target indexes the whole tree. Independently:
+- **Scan type is declared by the target; mode is chosen per run.**
+  `--project <.dpr|.dproj>` indexes exactly that project's **compile closure**
+  (members + transitively-used project-local units + sibling `.dfm` + `{$I}`
+  includes + the project file; Library/Browsing-path units and loose
+  unreferenced files are excluded). A **folder** target indexes the whole tree.
+  A POSITIONAL `index <X.dproj>` (no `--project`) is NOT a closure scan: it
+  refreshes only that one file, with no project defines. Independently:
   `--recompile` (default, incremental) or `--rebuild` (from scratch).
 - Rebuild everything from the manifest: `drag-lint index --all --jobs 0`;
   one section only: `drag-lint index --all --only <Section>`.

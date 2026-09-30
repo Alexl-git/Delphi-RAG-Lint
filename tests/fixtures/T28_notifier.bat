@@ -9,7 +9,11 @@ REM closing quote escapes it, swallowing the next argument. %HERE% and the src
 REM paths contain no spaces so they need no quotes; %IDELIB% does but has no
 REM trailing backslash, so it is quoted whole. Do not "tidy" this.
 call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat" >NUL
-dcc64 -E%HERE% -U%HERE%..\..\src\delphi-plugin "-U%IDELIB%" -LUdesignide %HERE%T28_notifier.dpr > "%HERE%t28_build.txt" 2>&1
+REM -DDRAGLINT_TEST_REGROOT: Settings then writes HKCU\...\DelphiPlugin.Test, never the owner's live key. -B so no stale DCU built without the define is reused.
+REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
+REM src\*.dcu is reused by any later build that searches that directory.
+if not exist "%HERE%_dcu\T28_notifier" mkdir "%HERE%_dcu\T28_notifier"
+dcc64 -NU"%HERE%_dcu\T28_notifier" -B -DDRAGLINT_TEST_REGROOT -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core;%HERE%..\..\src\index;%HERE%..\..\src\workspace;%HERE%..\..\src\lint;%HERE%..\..\src\project "-U%IDELIB%" -LUdesignide %HERE%T28_notifier.dpr > "%HERE%t28_build.txt" 2>&1
 if not exist "%HERE%T28_notifier.exe" (echo FAIL: build failed && type "%HERE%t28_build.txt" && exit /b 1)
 "%HERE%T28_notifier.exe" > "%HERE%t28_out.txt"
 type "%HERE%t28_out.txt"

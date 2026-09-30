@@ -194,7 +194,17 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > names it (with its position, `--db #2 of 3`) on stderr and exits 2 -- it never
 > answers from the databases that happened to open. A narrowed answer is
 > indistinguishable from a complete one. Omit `--db` and the manifest resolver
-> supplies the set, dropping absent files itself.
+> supplies the set, dropping absent files itself. With `--project`, a reader
+> resolved through the consumer DB list opens the project's OWN index (its exact
+> manifest section, else `<project dir>\_D-RAG\<base>.sqlite`) plus the platform
+> library -- no sibling project's DB. Two readers are exceptions: `outline --file
+> F --project P` also opens the DBs that hold or folder-match `F` (siblings
+> included), and `lint`'s `dl:shared` check opens the sibling projects a shared
+> unit declares, on purpose. `index` (given `--project` or a `.dpr`/`.dproj`) and
+> `refresh-findings` write to that own index and refuse when two sections claim
+> the project; `compile-check` caches only into an explicit `--db` or the
+> project's unique manifest section. A `"db"` in `.drag-lint.json` counts as an
+> explicit `--db`.
 
 
 **The traps, because each one turns a correct command into a silent zero:**
@@ -246,7 +256,7 @@ Add `--json` to any query for machine-readable output.
 2. Put them in the same directory.
 3. Index a Delphi project:
    ```
-   drag-lint index C:\Projects\MyApp\MyApp.dproj --db myapp.sqlite
+   drag-lint index --project C:\Projects\MyApp\MyApp.dproj --db myapp.sqlite
    ```
 4. Query symbols:
    ```
@@ -263,6 +273,10 @@ Add `--json` to any query for machine-readable output.
 |---|---|---|
 | `.dpr` / `.dproj` | **Project** | exactly the **compile closure** - the project's members, the project-local units they use transitively, each unit's sibling `.dfm`, the `{$I}` include files, and the project file. Units resolved through a Delphi **Library/Browsing** path are excluded (they belong to the library index), and loose unreferenced files in the project folder are excluded. |
 | a folder | **Library** | every scannable file under the tree (subject to excludes). |
+
+The project row means `index --project <file>` or a manifest `include` naming the
+project file. A POSITIONAL `index <file.dproj>` is not a closure scan: it refreshes
+only that one file, with no project defines, into the project's own database.
 
 **MODE is chosen per run, independently of type:**
 
@@ -728,7 +742,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 | `index --scan-libraries-win` / `--scan-libraries-all` | Index the IDE's registered Library + Browsing paths (Win32+Win64, or every platform incl. Posix/iOS/Android/OSX) | `--dry-run` |
 | `index --all` | Index every section of the named-DB manifest (`drag-lint.json`) | `--only <Sec1,Sec2>`, `--platform win32\|win64`, `--jobs <n>`, `--dry-run [--json]` |
 | any `index` run | Mode is chosen per run, independent of scan type | `--recompile` (default, incremental) / `--rebuild` (from scratch), `--force-reparse` (alias `--no-skip`: re-parse every walked file even when path+mtime+sha are unchanged -- needed once per DB after an engine upgrade that extracts something new), `--no-prune` (dry look), `--prune` |
-| any `index` run (walk scoping) | Decide which files the walk admits before anything is parsed | `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` (skip any file larger than N KB), `--no-use-ignore` (opt out of the `.drag-lint-ignore` file, honoured by default), `--deep` (also record usage refs; `--shallow` is the default) |
+| any `index` run (walk scoping) | Decide which files the walk admits before anything is parsed | `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` (skip any file larger than N KB), `--no-use-ignore` (opt out of the `.gitignore` / `.hgignore` pattern files, honoured by default; a folder holding a `.scanignore` marker file is always pruned), `--deep` (also record usage refs; `--shallow` is the default) |
 | [`migrate-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Move project indexes into each project's `_D-RAG` folder | `--apply` |
 | `register-project` | Add a NEW project to the manifest so `index --all` and the IDE can index it | `<file.dproj>`, `--name <Section>`, `--apply`, `--json` |
 | [`resolve-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Show-Resolved-DBs-debug) | Show which DB(s) a project/file/platform resolves to | `--project <dproj>`, `--in <file>`, `--platform` |
@@ -913,8 +927,8 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | Command | What it does | Notable flags |
 |---|---|---|
 | `check-unit <unit.pas>` | Compile one unit in its project's context; real compiler errors | `--project`, `--platform`, `--shadow <dir>` (unsaved buffer), `--resolve-uses` |
-| `compile-check <target>` | Run msbuild/dcc and store diagnostics | `--db`, `--format json\|text` |
-| `refresh-findings --project <dproj> --db <db>` | Recompile only stale units and refresh stored findings | `--full` (force full build) |
+| `compile-check <target>` | Run msbuild/dcc and store diagnostics. With no `--db` it caches only into the project's unique manifest section (`--project`, else a project-file target); otherwise it reports without caching | `--db`, `--project <dproj>`, `--format json\|text` |
+| `refresh-findings --project <dproj> [--db <db>]` | Recompile only stale units and refresh stored findings (no `--db`: the project's own DB) | `--full` (force full build) |
 | [`ghost-check`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-check) `<dproj>` | Compile an **unsaved** editor buffer (single- or multi-unit overlay); restores files byte-for-byte | `--unit --buffer` or `--overlays <manifest>`, `--platform` |
 | [`ghost-recover`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-recover) `<dproj>` | Restore files left overlaid by an interrupted ghost-check | |
 | `import-log <logfile> --db <db>` | Parse a saved dcc/msbuild log into the DB | |
@@ -945,7 +959,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 |---|---|---|
 | [`schema`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/schema) `--db <db>` | Self-documenting live index schema: tables, columns, row counts | `--format text\|json`, `--output <f>` |
 | [`sql`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/sql) `--query "SELECT ..."` / `--file <q.sql>` `--db <db>` | **Guarded read-only SQL over the index** -- one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, plus a row cap and a wall-clock cap | `--limit N` (default 200), `--timeout-ms N` (default 10000), `--format text\|json`, `--output <f>` |
-| [`info`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Engine self-info: version, build date, tree-sitter versions, capabilities; with `--db`, per-index freshness (`current` / `resolve-owed` / `reparse-owed` / `index-newer`) | `--json`, `--db <index>` (repeatable) |
+| [`info`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Engine self-info: version, build date, tree-sitter versions, capabilities; with `--db`, per-index freshness (`current` / `resolve-owed` / `reparse-owed` / `index-newer`) -- an `indexes` array under `--json`, an `index: <path>  verdict: <v>` line (plus `remedy:` when owed) in text | `--json`, `--db <index>` (repeatable) |
 | [`ide-release`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ide-release) | Ask a running Delphi IDE plugin not to respawn `drag-lint.exe` while a hold lasts, so the engine can be **rebuilt while the IDE stays open**. Frees nothing by itself -- `build\stage-engine.ps1` kills the holder. Expires on its own | `--seconds N` (default 120), `--resume`, `--status`, `--json` |
 | `shutdown` | **Maintenance stand-down.** Ask every running engine of this user and logon session that was started in `lsp` mode (an editor's language server -- the process that lingers and holds an index) to close its stores and exit 0, so an index can be re-parsed or the engine re-staged without `TerminateProcess` and the `-wal`/`-shm` sidecars a kill leaves. Transport is a Windows **named pipe** with an explicit per-user DACL (`\\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>`), never a TCP port; the channel answers only `status` and `shutdown`. An engine mid-request answers **BUSY** and keeps running; every honoured or refused request is audited on the engine's stderr and in `%LOCALAPPDATA%\drag-lint\control-channel-audit.log` | `--db <f>` (only engines holding it), `--dry-run`, `--wait <sec>` (default 5), `--all` (default), `--force` (TerminateProcess **only** after a refusal, said loudly) |
 | [`dump-refs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-refs) `<file> --db <db>` | Diagnostic: refs + enclosing-symbol attribution | |

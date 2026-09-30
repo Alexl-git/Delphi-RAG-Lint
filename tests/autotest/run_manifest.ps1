@@ -142,8 +142,193 @@ Check 'size-guard index exits 0'          ($LASTEXITCODE -eq 0)
 Check 'size-guard prints SKIP for Huge.inc' ($bigOut -match 'SKIP.*Huge\.inc')
 $bgf = & $Exe selftest files --db $bigDb 2>&1 | Out-String
 Check 'size-guard: Huge.inc NOT in index' (-not ($bgf -match 'Huge\.inc'))
+
+# 1.20.4 Task 4 (spec docs\superpowers\specs\2026-09-29-filed-defects-map.md s4):
+# A MALFORMED MANIFEST NAMES THE BAD KEY, AND A WRITE VERB REFUSES IT.
+# Before: every wrong-typed key read "Invalid class typecast" (no key), and a bad
+# LOCAL .drag-lint.json printed a WARNING and then ran the GLOBAL plan, exit 0.
+# Only STDERR is asserted for the message, so a banner on stdout cannot pass it.
+function Invoke-Split([string[]]$ArgList) {
+  $all = & $Exe @ArgList 2>&1
+  $code = $LASTEXITCODE
+  $err = ($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { $_.ToString() }) -join "`n"
+  $out = ($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }) -join "`n"
+  [pscustomobject]@{ Code = $code; Err = $err; Out = $out }
+}
+Write-Host ''
+Write-Host '1.20.4 T4: malformed manifest via --config (no write reachable: dry run of a parse failure)...'
+$r = Invoke-Split @('index', '--all', '--dry-run', '--config', "$fx\bad-indexes-array.json")
+Check 'bad indexes: exit non-zero'                  ($r.Code -ne 0) "exit=$($r.Code)"
+Check 'bad indexes: stderr names the key and types' ($r.Err -match 'indexes: expected object, got array') $r.Err
+Check 'bad indexes: no class-typecast text'         (-not ($r.Err -match 'Invalid class typecast'))
+$r = Invoke-Split @('index', '--all', '--dry-run', '--config', "$fx\bad-bool-type.json")
+Check 'bad bool: exit non-zero'                     ($r.Code -ne 0) "exit=$($r.Code)"
+Check 'bad bool: stderr names the key PATH'         ($r.Err -match 'indexes\.sections\[1\]\.sqlOnlyMS: expected boolean, got string') $r.Err
+$r = Invoke-Split @('index', '--all', '--dry-run', '--config', "$fx\bad-syntax.json")
+Check 'bad syntax: exit non-zero'                   ($r.Code -ne 0) "exit=$($r.Code)"
+Check 'bad syntax: stderr says it is not valid JSON' ($r.Err -match 'not valid JSON') $r.Err
+
+# The LOCAL-override case needs the engine to read a manifest BESIDE THE EXE and
+# walk the CWD up. ISOLATION: an ENGINE COPY in %TEMP% with its OWN drag-lint.json,
+# run from a CWD under %TEMP%, so the shared engine manifest (which names real
+# project DBs) is never consulted -- a dry run alone is not isolation.
+Write-Host ''
+Write-Host '1.20.4 T4: malformed LOCAL .drag-lint.json (isolated engine copy)...'
+$iso = Join-Path $env:TEMP "drag-lint-manifest-err-$PID"
+if (Test-Path $iso) { Remove-Item -Recurse -Force $iso }
+$isoEng = "$iso\eng"; $isoSrc = "$iso\src"; $isoCwd = "$iso\work"; $isoOut = "$iso\out"
+New-Item -ItemType Directory $isoEng, $isoSrc, $isoCwd, $isoOut | Out-Null
+Copy-Item $Exe (Join-Path $isoEng 'drag-lint.exe') -Force
+Get-ChildItem -Path (Split-Path $Exe) -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName (Join-Path $isoEng $_.Name) -Force }
+if (Test-Path "$(Split-Path $Exe)\rules") { Copy-Item "$(Split-Path $Exe)\rules" "$isoEng\rules" -Recurse -Force }
+function Write-IsoAscii([string]$Path, [string]$Body) {
+  [System.IO.File]::WriteAllText($Path, (($Body -replace "`r`n", "`n") -replace "`n", "`r`n"), [System.Text.Encoding]::ASCII)
+}
+$isoOwnerDb = "$iso\owner\IsoOwner.sqlite"
+Write-IsoAscii "$isoEng\drag-lint.json" (@{
+  settings = @{ defaultPlatform = 'Win64'; maxJobs = 1 }
+  indexes  = @{ outDir = $isoOut; sections = @(
+    @{ name = 'IsoSrc';   include = @($isoSrc) },
+    @{ name = 'IsoOwner'; include = @("$isoSrc\Iso.dpr"); db = $isoOwnerDb }) }
+} | ConvertTo-Json -Depth 6)
+Write-IsoAscii "$isoSrc\UIso.pas" "unit UIso;`ninterface`nprocedure IsoProc;`nimplementation`nprocedure IsoProc;`nbegin`nend;`nend."
+Write-IsoAscii "$isoSrc\Iso.dpr"  "program Iso;`nuses UIso in 'UIso.pas';`nbegin`nend."
+function Get-FileStamp([string]$Path) {
+  if (-not (Test-Path $Path)) { return 'absent' }
+  $i = Get-Item $Path
+  '{0}|{1}|{2}' -f $i.Length, $i.LastWriteTimeUtc.Ticks, (Get-FileHash $Path -Algorithm SHA256).Hash
+}
+$ExeSaved = $Exe; $Exe = Join-Path $isoEng 'drag-lint.exe'
+Push-Location $isoCwd
+try {
+  # SETUP, while NO local file exists yet: the owner's DB (through the manifest)
+  # and a second DB for the explicit --db cases below.
+  $r = Invoke-Split @('index', '--project', "$isoSrc\Iso.dpr")
+  Check 'setup: index --project builds the owner DB'  (($r.Code -eq 0) -and (Test-Path $isoOwnerDb)) "exit=$($r.Code) $($r.Err)"
+  $r = Invoke-Split @('index', '--project', "$isoSrc\Iso.dpr", '--db', "$iso\y\Iso.sqlite")
+  Check 'setup: index --project --db builds DB y'     (($r.Code -eq 0) -and (Test-Path "$iso\y\Iso.sqlite")) "exit=$($r.Code) $($r.Err)"
+
+  # The bad local file sits ABOVE both the CWD and the index target, so both
+  # manifest walks (CWD, and the target being indexed) find it.
+  Copy-Item "$fx\bad-indexes-array.json" "$iso\.drag-lint.json" -Force
+
+  # Proof of isolation first: the engine copy sees ONLY its own sections.
+  $r = Invoke-Split @('resolve-dbs', '--platform', 'Win64')
+  Check 'isolation: resolve-dbs names only the scratch section' (($r.Out -match 'IsoSrc') -and -not ($r.Out -match 'Micronite|ORM3')) $r.Out
+  # A READ verb keeps working, and its warning now names the key.
+  Check 'read verb (resolve-dbs) still runs: exit 0'  ($r.Code -eq 0) "exit=$($r.Code)"
+  Check 'read verb warns, naming the key'             ($r.Err -match 'WARNING: could not parse config at .*\.drag-lint\.json: indexes: expected object, got array') $r.Err
+
+  $r = Invoke-Split @('index', '--all', '--dry-run')
+  Check 'local bad: index --all REFUSES (exit 2)'     ($r.Code -eq 2) "exit=$($r.Code)"
+  Check 'local bad: index --all names the key'        ($r.Err -match 'indexes: expected object, got array') $r.Err
+  Check 'local bad: the GLOBAL plan did not run'      (-not ($r.Out -match 'IsoSrc')) $r.Out
+
+  $r = Invoke-Split @('index', $isoSrc)
+  Check 'local bad: index <folder> (no --db) REFUSES' ($r.Code -eq 2) "exit=$($r.Code)"
+  Check 'local bad: index <folder> names the key'     ($r.Err -match 'indexes: expected object, got array') $r.Err
+  Check 'local bad: index <folder> wrote no DB'       (-not (Test-Path "$isoOut\IsoSrc.sqlite") -and -not (Test-Path "$isoSrc\_D-RAG"))
+  # ONE warning per bad file, however many times the verb loads the manifest.
+  $warns = ([regex]::Matches($r.Err, 'WARNING: could not parse config at')).Count
+  Check 'local bad: index <folder> warns ONCE'        ($warns -eq 1) "warnings=$warns"
+
+  $ownerBefore = Get-FileStamp $isoOwnerDb
+  $r = Invoke-Split @('index', '--project', "$isoSrc\Iso.dpr")
+  Check 'local bad: index --project (no --db) REFUSES' ($r.Code -eq 2) "exit=$($r.Code)"
+  Check 'local bad: index --project names the key'     ($r.Err -match 'indexes: expected object, got array') $r.Err
+  Check 'local bad: index --project wrote no DB'       ((-not (Test-Path "$isoSrc\_D-RAG")) -and ((Get-FileStamp $isoOwnerDb) -eq $ownerBefore))
+  $warns = ([regex]::Matches($r.Err, 'WARNING: could not parse config at')).Count
+  Check 'local bad: index --project warns ONCE'        ($warns -eq 1) "warnings=$warns"
+
+  # BOTH SIDES OF THE EXPLICIT --db RULE. index still reads the manifest (the
+  # size guard), so it refuses even with --db; refresh-findings with --db never
+  # consults the manifest for its DB, so it goes ahead.
+  $r = Invoke-Split @('index', '--project', "$isoSrc\Iso.dpr", '--db', "$iso\explicit\Iso.sqlite")
+  Check 'local bad: index --project --db REFUSES too'  ($r.Code -eq 2) "exit=$($r.Code)"
+  Check 'local bad: index --project --db wrote no DB'  (-not (Test-Path "$iso\explicit\Iso.sqlite"))
+  $r = Invoke-Split @('refresh-findings', '--project', "$isoSrc\Iso.dpr", '--db', "$iso\y\Iso.sqlite")
+  Check 'local bad: refresh-findings --db PROCEEDS'    ((-not ($r.Err -match 'refusing to write')) -and ($r.Code -ne 2)) "exit=$($r.Code) $($r.Err)"
+
+  $r = Invoke-Split @('refresh-findings', '--project', "$isoSrc\Iso.dpr")
+  Check 'local bad: refresh-findings (no --db) REFUSES' ($r.Code -eq 2) "exit=$($r.Code)"
+  Check 'local bad: refresh-findings names the key'     ($r.Err -match 'indexes: expected object, got array') $r.Err
+
+  # compile-check COMPUTES but does not CACHE: the half-parsed manifest (the
+  # global alone) names IsoOwner as the unique owner, which is exactly the
+  # write the refusal exists to stop.
+  $ownerBefore = Get-FileStamp $isoOwnerDb
+  $r = Invoke-Split @('compile-check', "$isoSrc\Iso.dpr")
+  Check 'local bad: compile-check says it will not cache' ($r.Err -match 'manifest could not be parsed .*indexes: expected object, got array.*will not be cached') $r.Err
+  Check 'local bad: compile-check left the owner DB untouched' ((Get-FileStamp $isoOwnerDb) -eq $ownerBefore)
+  # The generic "Pass --db to cache" line would be advice that cannot help here.
+  Check 'local bad: compile-check prints no generic --db advice' (-not ($r.Err -match 'Pass --db to cache')) $r.Err
+
+  # THE .drag-lint.json DEFAULTS KEYS (LoadConfigDefaults reads the same file).
+  Write-IsoAscii "$iso\.drag-lint.json" '{ "docs": { "captureLooseComments": "yes" } }'
+  $r = Invoke-Split @('resolve-dbs', '--platform', 'Win64')
+  Check 'defaults bad bool: a reader still runs (exit 0)' ($r.Code -eq 0) "exit=$($r.Code) $($r.Err)"
+  Check 'defaults bad bool: the warning names the key'    ($r.Err -match 'WARNING: could not parse config at .*\.drag-lint\.json: docs\.captureLooseComments: expected boolean, got string') $r.Err
+  $r = Invoke-Split @('index', '--all', '--dry-run')
+  Check 'defaults bad bool: a writer REFUSES (exit 2)'    ($r.Code -eq 2) "exit=$($r.Code)"
+  Check 'defaults bad bool: the refusal names the key'    ($r.Err -match 'refusing to write -- the manifest could not be parsed: .*docs\.captureLooseComments: expected boolean, got string') $r.Err
+  # compile-check on a broken defaults file: compiles, caches nothing EVEN WITH
+  # --db (the file may be what named the db), and so gives no "--db" advice.
+  $ownerBefore = Get-FileStamp $isoOwnerDb
+  $r = Invoke-Split @('compile-check', "$isoSrc\Iso.dpr", '--db', $isoOwnerDb)
+  Check 'defaults bad bool: compile-check says it will not cache' ($r.Err -match 'defaults could not be parsed .*docs\.captureLooseComments: expected boolean, got string.*will not be cached') $r.Err
+  Check 'defaults bad bool: compile-check gives no --db advice'   (-not ($r.Err -match 'Pass --db to cache')) $r.Err
+  Check 'defaults bad bool: compile-check left the DB untouched'  ((Get-FileStamp $isoOwnerDb) -eq $ownerBefore)
+  Write-IsoAscii "$iso\.drag-lint.json" '{ "watch": { "interval": "fast" } }'
+  $r = Invoke-Split @('resolve-dbs', '--platform', 'Win64')
+  Check 'defaults bad number: a reader still runs (exit 0)' ($r.Code -eq 0) "exit=$($r.Code) $($r.Err)"
+  Check 'defaults bad number: the warning names the key'    ($r.Err -match 'watch\.interval: expected number, got string') $r.Err
+
+  # POSITIVE CONTROL: the same runs with a well-formed local file go ahead, so the
+  # refusals above are about the malformed file and nothing else.
+  Write-IsoAscii "$iso\.drag-lint.json" '{ "settings": { "defaultPlatform": "Win64" } }'
+  $r = Invoke-Split @('index', '--all', '--dry-run')
+  Check 'control: good local -> index --all --dry-run exit 0'  ($r.Code -eq 0) "exit=$($r.Code) $($r.Err)"
+  Check 'control: good local -> the plan names IsoSrc'         ($r.Out -match 'IsoSrc')
+  Check 'control: good local -> no WARNING'                    (-not ($r.Err -match 'could not parse config'))
+} finally {
+  Pop-Location
+  $Exe = $ExeSaved
+}
+
+# register-project WRITES the manifest. Asked of a manifest Load had to SKIP,
+# ownership misses the section that already claims the project, and --apply
+# adds a SECOND claimant -- after which every index of it refuses as ambiguous.
+# Its own isolated root: the local walk from the project must find nothing, and
+# FindManifestCopies looks at the engine dir's SIBLINGS, which here are ours.
+Write-Host ''
+Write-Host '1.20.4 T4: register-project against a manifest with a wrong-typed leaf...'
+$reg = Join-Path $env:TEMP "drag-lint-manifest-reg-$PID"
+if (Test-Path $reg) { Remove-Item -Recurse -Force $reg }
+New-Item -ItemType Directory "$reg\eng", "$reg\src", "$reg\work" | Out-Null
+Copy-Item (Join-Path $isoEng 'drag-lint.exe') (Join-Path (Join-Path $reg 'eng') 'drag-lint.exe') -Force
+Get-ChildItem -Path $isoEng -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName (Join-Path "$reg\eng" $_.Name) -Force }
+Write-IsoAscii "$reg\src\UIso.pas" "unit UIso;`ninterface`nimplementation`nend."
+Write-IsoAscii "$reg\src\Iso.dpr"  "program Iso;`nuses UIso in 'UIso.pas';`nbegin`nend."
+Write-IsoAscii "$reg\eng\drag-lint.json" (@{
+  settings = @{ defaultPlatform = 'Win64' }
+  indexes  = @{ sections = @(
+    @{ name = 'IsoOwner'; include = @("$reg\src\Iso.dpr") },
+    @{ name = 'Other';    include = @("$reg\src"); sqlOnlyMS = 'yes' }) }
+} | ConvertTo-Json -Depth 6)
+$manBefore = Get-FileStamp "$reg\eng\drag-lint.json"
+$ExeSaved = $Exe; $Exe = Join-Path (Join-Path $reg 'eng') 'drag-lint.exe'
+Push-Location "$reg\work"
+try {
+  $r = Invoke-Split @('register-project', "$reg\src\Iso.dpr", '--apply')
+  Check 'register-project --apply REFUSES (exit 2)'         ($r.Code -eq 2) "exit=$($r.Code) $($r.Out)"
+  Check 'register-project names the key path'               ($r.Err -match 'indexes\.sections\[1\]\.sqlOnlyMS: expected boolean, got string') $r.Err
+  Check 'register-project left the manifest byte-identical' ((Get-FileStamp "$reg\eng\drag-lint.json") -eq $manBefore)
+} finally {
+  Pop-Location
+  $Exe = $ExeSaved
+}
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
   # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
-  foreach ($d23 in @((Join-Path $env:TEMP "draglint_ignore_stress_$PID.sqlite"), "$env:TEMP\draglint_stress_$PID.out", "$env:TEMP\draglint_stress_$PID.err", (Join-Path $env:TEMP "draglint_sizetest_$PID.sqlite"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+  foreach ($d23 in @((Join-Path $env:TEMP "draglint_ignore_stress_$PID.sqlite"), "$env:TEMP\draglint_stress_$PID.out", "$env:TEMP\draglint_stress_$PID.err", (Join-Path $env:TEMP "draglint_sizetest_$PID.sqlite"), (Join-Path $env:TEMP "drag-lint-manifest-err-$PID"), (Join-Path $env:TEMP "drag-lint-manifest-reg-$PID"))) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
 }

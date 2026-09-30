@@ -126,7 +126,9 @@ look at your source files; edited sources are reported differently (section 8).
 | `unreadable` | the file exists but cannot be read as an index | check the path; rebuild it |
 
 The `remedy` field is present for `resolve-owed`, `reparse-owed` and
-`index-newer`, and absent otherwise.
+`index-newer`, and absent otherwise. Without `--json`, `info --db <index>`
+prints the same verdict as one `index: <path>  verdict: <v>` line per
+database, followed by an indented `remedy: ...` line when one is owed.
 
 **Always run the engine by full path, or as `.\drag-lint.exe` from its own
 folder.** When the Windows environment variable
@@ -182,9 +184,20 @@ A minimal manifest (JSON: double every backslash):
 ```
 
 `indexes` is an OBJECT holding `outDir`, `exclude` and the `sections` array --
-not an array. Written as an array, the engine prints
-`WARNING: could not parse config at <path>: Invalid class typecast` and builds
-nothing.
+not an array. A key of the wrong JSON type is named, with its path and both
+types: `indexes: expected object, got array`, or
+`indexes.sections[1].sqlOnlyMS: expected boolean, got string`. Text that is not
+JSON at all reads `(root): not valid JSON -- <parser detail>`. The same goes
+for the `.drag-lint.json` defaults keys (`docs.captureLooseComments: expected
+boolean, got string`). A WRITE verb -- `index` (even with `--db`), `index --all`
+(`--config` included), `refresh-findings` without `--db`, `register-project`
+(and `purge-locals` when the bad key is in `.drag-lint.json`, which may be what
+named its `db`) -- REFUSES with exit 2 and
+`ERROR: <verb>: refusing to write -- the manifest could not be parsed: <file>: <key path>: expected <type>, got <type>`;
+a bad local `.drag-lint.json` never quietly hands the run to the global
+manifest. `compile-check` still compiles and reports, but caches nothing. A
+read verb prints `WARNING: could not parse config at <file>: <key path>: ...`
+once and carries on with whatever did parse.
 
 What a section's target makes it, and where its database lands:
 
@@ -221,9 +234,10 @@ Build and inspect:
 * The `Library` sections cover every folder RAD Studio registers and are by
   far the slowest to build. Build them once, on their own.
 * `resolve-dbs --platform` prints only databases that exist. A configured but
-  never-built one is a `NOTE:` line on stderr. **Known issue:** for a library
-  database that note suggests `--only library-Win64`, which is not a section
-  name and fails; use `--only Library --platform win64`.
+  never-built one is a `NOTE:` line on stderr naming the command that builds
+  it: `index --all --only <Section>`, plus `--platform <P>` for a library
+  database (`--only Library --platform Win64`) and `--config <path>` when
+  `resolve-dbs` was given one.
 * `resolve-dbs --project` exits 2 and says so when no section, or more than
   one, claims the project. Never guess a database path; ask it.
 
@@ -241,7 +255,27 @@ $db   = & $dl resolve-dbs --project $proj           # when the project is in the
 ```
 
 **Always pass `--db`.** Give it the path `resolve-dbs --project` printed, or
-the `_D-RAG` path above.
+the `_D-RAG` path above. An explicit path is the only one you can read back
+from your own command line.
+
+Without `--db` (and with no `"db"` in a `.drag-lint.json`, which counts as an
+explicit `--db`), a `--project` run -- or `index` given a `.dpr`/`.dproj`
+directly -- touches only the project's OWN database: its exact manifest
+section, else `<project dir>\_D-RAG\<project>.sqlite`. `index` and
+`refresh-findings` write there; readers resolved through the consumer DB list
+open it plus the platform library and no other project's database. Two readers
+are exceptions: `outline --file F --project P` also opens the databases that
+hold or folder-match `F`, and `lint`'s `dl:shared` check opens the sibling
+projects a shared unit declares. Two sections claiming the project make `index`
+and `refresh-findings` refuse, naming both. `compile-check` caches only into an
+explicit `--db` or the project's unique manifest section, and otherwise reports
+without caching. `purge-locals` always needs a database given explicitly (on
+the command line or as a `.drag-lint.json` `"db"`). A positional
+`index <X.dproj>` refreshes ONLY that one file, with no project defines, into
+the project's own database; `index --project` is the compile-closure scan.
+Before 1.20.4
+an unregistered project could be indexed into the FIRST manifest section's
+database -- another project's.
 
 **What a project index holds.** The compile closure: the project members, the
 project-local units they use (transitively), each unit's sibling `.dfm`, its
@@ -483,9 +517,12 @@ staleness. `--resolved` lists precise callers from the resolved call edges.
 ### `index --all` built nothing
 
 `Sections to build: 0` in the dry run means no manifest was found beside the
-exe (or at `--config`). A `WARNING: could not parse config` line means it was
-found but is malformed -- `indexes` must be an object (section 2a). Both still
-exit 0, so read the dry run.
+exe (or at `--config`); that still exits 0, so read the dry run. A malformed
+manifest (beside the exe, a local `.drag-lint.json`, or `--config`) makes
+`index` refuse with exit 2 and
+`ERROR: index --all: refusing to write -- the manifest could not be parsed: <file>: indexes: expected object, got array`
+-- the file, the key path and both types (`indexes` must be an object,
+section 2a).
 
 ### No lint rules load
 

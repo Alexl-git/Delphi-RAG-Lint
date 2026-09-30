@@ -8,7 +8,11 @@ set CORE_SRC=%ROOT%\src\core
 call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"
 set IDELIB=%BDS%\lib\win64\release
 if exist "%HERE%T64_lint_options_compile.exe" del "%HERE%T64_lint_options_compile.exe"
-dcc64 -E%HERE% -U%PLUGIN_SRC% -U%LINT_SRC% -U%CORE_SRC% "-U%IDELIB%" -LUdesignide %HERE%T64_lint_options_compile.dpr 2>&1 | findstr /v "Found compiler" > "%HERE%t64_build.txt"
+REM -DDRAGLINT_TEST_REGROOT: Settings then writes HKCU\...\DelphiPlugin.Test, never the owner's live key. -B so no stale DCU built without the define is reused.
+REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
+REM src\*.dcu is reused by any later build that searches that directory.
+if not exist "%HERE%_dcu\T64_lint_options_compile" mkdir "%HERE%_dcu\T64_lint_options_compile"
+dcc64 -NU"%HERE%_dcu\T64_lint_options_compile" -B -DDRAGLINT_TEST_REGROOT -E%HERE% -U%PLUGIN_SRC% -U%LINT_SRC% -U%CORE_SRC% "-U%IDELIB%" -LUdesignide %HERE%T64_lint_options_compile.dpr 2>&1 | findstr /v "Found compiler" > "%HERE%t64_build.txt"
 if not exist "%HERE%T64_lint_options_compile.exe" (echo FAIL: build failed && type "%HERE%t64_build.txt" && exit /b 1)
 "%HERE%T64_lint_options_compile.exe" > "%HERE%t64_out.txt"
 type "%HERE%t64_out.txt"

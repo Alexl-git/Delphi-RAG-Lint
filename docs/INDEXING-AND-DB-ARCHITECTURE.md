@@ -148,8 +148,10 @@ enclosing symbol. This is why a partial re-index still re-resolves edges.
 
 **Scan TYPE is declared by the target**, never chosen on the command line:
 
-- an `include` entry (or `index` argument) ending **`.dpr` / `.dproj`** -> a
-  **Project** scan;
+- an `include` entry (or an `index --project` argument) ending **`.dpr` /
+  `.dproj`** -> a **Project** scan. A POSITIONAL `index <X.dproj>` (no
+  `--project`) is not a closure scan: it refreshes only that one file, with no
+  project defines;
 - a **folder** (or `source: registry-libraries`) -> a **Library** scan.
 
 A **project index is exactly the compile closure**: the `.dproj` members, the
@@ -173,7 +175,7 @@ that definition and are deliberate:
 
 | Command | Purpose |
 |---|---|
-| `index <path> [--db F]` | Index a target into DB `F`. A `.dpr`/`.dproj` target = project scan; a folder = library scan. `--recompile` (default) / `--rebuild`. |
+| `index <path> [--db F]` | Index a target into DB `F`. `--project <.dpr/.dproj>` = project (compile-closure) scan; a folder = library scan; a positional `.dpr`/`.dproj` refreshes only that one file. `--recompile` (default) / `--rebuild`. |
 | `index --project <x.dproj> [--db F]` | Index exactly a project's compile closure. |
 | `index --all [--only S1,S2] [--platform p] [--jobs n]` | Index every manifest section (or just the named ones). `--jobs 0` = all cores. |
 | `index --all --dry-run [--json]` | Preview what would be indexed -- no writes. |

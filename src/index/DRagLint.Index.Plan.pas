@@ -36,7 +36,7 @@ type
   /// expansion of a library section).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) (+5 more)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.SelectableSectionLabels (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [drag-lint]DRagLint.Index.Plan.CollectRootsByName (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.CollectRootsExcept (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
   /// <para>Used in units: Config.IndexesFrame, DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -62,7 +62,7 @@ type
   /// <summary>Complete concrete build plan resolved from a TIndexManifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas) (+2 more)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas)</para>
   /// <para>Used in units: Config.IndexesFrame, DRagLint.CLI, DRagLint.Index.Coverage, DRagLint.Index.DbSelect, DRagLint.Index.Plan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -90,7 +90,7 @@ type
 /// DedupAgainst='*' -> union of ALL other sections' roots.
 /// Not thread-safe; call from a single thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas) (+2 more)</para>
 /// <para>Calls: Default, DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.TIndexManifest.FindSection, DRagLint.Index.Plan.BuildFilter, DRagLint.Index.Plan.ClassifyMode, DRagLint.Index.Plan.CollectRootsByName, DRagLint.Index.Plan.CollectRootsExcept, DRagLint.Index.Plan.ExpandDbPath, DRagLint.Index.Plan.PlatformAllowed, DRagLint.Index.Plan.ResolveRoots, DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms, DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths</para>
 /// <para>Returns: Default(TIndexPlan)</para>
 /// <para>Complexity: 13 (cyclomatic, outer body), 126 lines (full implementation)</para>

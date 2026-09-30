@@ -48,6 +48,29 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > exist is exit 2, never a narrower answer: the verb names the path and its
 > position on stderr and returns nothing. Match on the EXIT CODE, not the prose.
 > Omitting `--db` is always safe -- the manifest resolver drops absent files.
+> With `--project` and no `--db` (a `"db"` in `.drag-lint.json` counts as an
+> explicit `--db`), readers resolved through the consumer DB list open ONLY that
+> project's own index (its exact manifest section, else
+> `<project dir>\_D-RAG\<base>.sqlite`) plus the platform library; with no index
+> of its own such a reader prints `NOTE: no index owns ...` (or names the
+> claiming sections) and consults no other project's DB. Two exceptions:
+> `outline --file F --project P` also opens the DBs that hold or folder-match
+> `F` (siblings included), and `lint`'s `dl:shared` check opens the sibling
+> projects a shared unit declares, on purpose.
+> `index` (given `--project` or a `.dpr`/`.dproj`) and `refresh-findings` write
+> to that same own index and refuse, naming both, when two sections claim the
+> project. `compile-check` caches only into an explicit `--db` or the project's
+> unique manifest section, and otherwise reports without caching.
+> A MALFORMED manifest (beside the exe, a local `.drag-lint.json` -- its
+> defaults keys included -- or `--config`) makes the write verbs exit 2:
+> `index` (even with `--db`), `index --all`, `refresh-findings` without `--db`,
+> `register-project` (and `purge-locals` when the bad key is in `.drag-lint.json`,
+> which may be what named its `db`). Every path prints the same line,
+> `ERROR: <verb>: refusing to write -- the manifest could not be parsed: <file>:
+> <key path>: expected <type>, got <type>` -- a write never falls back to the
+> part that did parse. `compile-check` compiles and reports but caches nothing.
+> Read verbs print `WARNING: could not parse config at <file>: ...` once and
+> carry on.
 >
 > **The same applies to a `--db` that exists but is at an OLD SCHEMA** (exit 2,
 > reason and both migrate commands on stderr). A stale index cannot answer, so it
@@ -111,16 +134,18 @@ published while `modifiers` says `public` for both.
 1. Download `drag-lint.exe` + the three `tree-sitter*.dll` files from
    [Releases](https://github.com/Alexl-git/Delphi-RAG-Lint/releases) and keep
    them in the same folder (put it on PATH for convenience).
-2. Build an index. **Prefer one DB per project** -- point `index` at the
+2. Build an index. **Prefer one DB per project** -- `index --project` the
    `.dproj`, and it stores exactly that project's compile closure:
    ```
-   drag-lint index C:\path\to\MyApp.dproj --db C:\path\to\MyApp.sqlite
+   drag-lint index --project C:\path\to\MyApp.dproj --db C:\path\to\MyApp.sqlite
    ```
-   - The **target declares the scan type**: a `.dpr`/`.dproj` gives a *project*
-     scan (compile closure -- members + transitively-used project-local units +
-     sibling `.dfm` + `{$I}` includes + the project file; Library/Browsing-path
-     units and loose unreferenced files are excluded), a **folder** gives a
-     *library* scan of the whole tree.
+   - The **target declares the scan type**: `--project <.dpr|.dproj>` gives a
+     *project* scan (compile closure -- members + transitively-used
+     project-local units + sibling `.dfm` + `{$I}` includes + the project file;
+     Library/Browsing-path units and loose unreferenced files are excluded), a
+     **folder** gives a *library* scan of the whole tree. A POSITIONAL
+     `index <X.dproj>` (no `--project`) is NOT a closure scan: it refreshes only
+     that one file, with no project defines.
    - The **mode is chosen per run**: `--recompile` (default, incremental) or
      `--rebuild` (from scratch).
    - `--scan-libraries` to index the installed RTL/VCL/DevExpress/Spring4D.
@@ -265,8 +290,10 @@ published while `modifiers` says `public` for both.
 >   Exit codes: `0` ok, `2` usage error, `1` refused / timed out / SQL error.
 > - **Introspect the engine itself:** `drag-lint info [--json]` -- engine
 >   self-info: version, build date, tree-sitter versions, capabilities (FTS5,
->   CLI verb count), exe path, platform. Read-only, no DB. This is what the IDE
->   Help>About box calls.
+>   CLI verb count), exe path, platform. Read-only. This is what the IDE
+>   Help>About box calls. Each `--db <index>` adds that index's freshness
+>   verdict: in `--json` an `indexes` entry, in text an
+>   `index: <path>  verdict: <v>` line plus `  remedy: ...` when one is owed.
 > - **Framework wiring (Spring4D DI + DFM events):** `drag-lint wiring --qname <IIntf|TForm> --db <DB> [--format json]`
 >   Answers "who implements `IFoo` and where is it resolved" (DI: impl class +
 >   lifetime + resolve-sites) and "what handles this form's events" (DFM
@@ -347,7 +374,7 @@ pure-diagnostic verbs are broken out in 2b.
 | `wiki --term "<phrase>"` | route a HUMAN word to the code -- looks a phrase or alias up against the `dl:wiki` concept topics authors wrote in `///` comments, and prints the owning symbol, its resolved `SeeCode` participants and the body. **Use this when a task names something that is not an identifier** ("the scheduler", "delta streaming") -- it is the only query that maps team vocabulary to symbols. `--list` prints every topic, `--check` is the drift gate (exit 1). Exits 1 on no match, so "not in the wiki" is branchable. `--json` |
 | `ide-release` | ask a running Delphi IDE plugin not to respawn `drag-lint.exe` while a hold lasts, so the engine binary can be rebuilt while the IDE stays open (`--seconds N` default 120, `--resume`, `--status`, `--json`). No DB. It frees nothing by itself. The staging step of `build_draglint_win64.bat` does this automatically when it hits the lock. While a hold lasts the IDE plugin's job queue also DEFERS its heavy jobs (reindex / lint-all / autodoc / forms-CSV / refresh-findings) rather than starting them; they run when the hold lifts |
 | `shutdown` | ask every running engine of THIS user + logon session that was started in `lsp` mode (editor language servers -- the processes that linger and hold an index) to close its stores and exit 0, so an index can be re-parsed or the engine re-staged without `TerminateProcess` (which leaves `-wal`/`-shm` behind). Named-pipe transport with a per-user DACL, never TCP; the channel does only `status` + `shutdown`. `--db <f>` keeps only engines holding that index, `--dry-run` lists and changes nothing (reach for it first), `--wait <sec>` (default 5) bounds the graceful wait, an engine mid-request answers BUSY and stays (exit 1), `--force` terminates ONLY an engine that refused or did not answer and says ESCALATING. `--all` is the default. Audit: engine stderr + `%LOCALAPPDATA%\drag-lint\control-channel-audit.log`. Engines in other modes (`serve`, `index`, one-shot verbs) do not listen |
-| `info` | engine self-info: version, build date, tree-sitter versions, capabilities, exe path, platform (`--json`; read-only). `--json --db <index>` (repeatable) adds per-index freshness: fingerprints, `indexer_stale`/`resolver_stale`/`indexer_newer`/`resolver_newer`, a `verdict` (`current` / `resolve-owed` / `reparse-owed` / `index-newer` / `missing` / `unreadable`) and a `remedy`. `index-newer` = built or resolved by a NEWER engine: reads work, `index` with this one is refused, use a newer engine -- never re-resolve it. |
+| `info` | engine self-info: version, build date, tree-sitter versions, capabilities, exe path, platform (`--json`; read-only). `--db <index>` (repeatable) adds per-index freshness -- in text, one `index: <path>  verdict: <v>` line per index plus `  remedy: ...` when owed; with `--json`: fingerprints, `indexer_stale`/`resolver_stale`/`indexer_newer`/`resolver_newer`, a `verdict` (`current` / `resolve-owed` / `reparse-owed` / `index-newer` / `missing` / `unreadable`) and a `remedy`. `index-newer` = built or resolved by a NEWER engine: reads work, `index` with this one is refused, use a newer engine -- never re-resolve it. |
 | `find-deadcode` | unreferenced symbols (`--kind`, `--include-private`) |
 | `doc-drift --qname X` | doc-vs-code drift findings for one symbol |
 | `top` | fan-in ranking (also above) |
@@ -587,16 +614,16 @@ pure-diagnostic verbs are broken out in 2b.
 | `lint-tree` | does an interface edit to a unit reach any dependent? `--unit B.pas --db <db>` fingerprints B's interface; `--write-baseline f.json` captures the OLD side once per edit episode, `--baseline f.json` diffs against it, `--buffer f` reads an unsaved buffer, `--with-rules` also harvests the dependents' lint findings, `--compile` also compiles the dependents in a shadow dir. Exit 0 whether or not anything was found; 2 = could not run. A baseline from a different extractor/schema is REFUSED, not diffed. |
 | `exceptions-sync` | materialise the project's derived exception classes into the exceptions unit (`--apply`; dry-run without it; `--json` emits one machine-readable document on stdout with the counts and the classes it would add, prose to stderr). Harvests every bare `raise Exception.Create('literal')` project-wide and declares ONE class per DISTINCT message inside a `drag-lint:auto` managed block. Opt in with an `"exceptions"` block in `drag-lint-lint.json` -- an empty one is enough; key `unit` names the unit (default `uExceptionDefinitions`, **created if absent**) and key `root` the ancestor (default `Exception`). **The same-line `//` comment after each declaration IS the key**, so renaming a generated class is safe and editing its comment makes the next run add a second class for the old message. It is a VERB and not a `--fix` because its input is project-wide and its output is one file |
 | `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`; `--shadow <dir>` compiles an unsaved buffer staged there instead of the file on disk) |
-| `compile-check <target>` | real compiler diagnostics for a `.dproj`/`.pas` |
-| `refresh-findings --project X --db D` | recompile stale units (mtime > `files.last_compiled_unix`) + refresh `compiler_findings` per file; `>=2` stale -> full build, 1 stale -> incremental, `--full` forces full; feeds the IDE compiler overlay (surfaces DCC hints even for clean unchanged units). `--json` emits `mode` (full\|incremental\|noop) + counts; exit 1 if an Error survived, 2 = usage / no db. **Point `--db` at the project's OWN index, not a shared/library index** -- a full build clears + re-stamps `compiler_findings` for every indexed `.pas`/`.dpr`/`.dpk` file, so a shared index would lose findings for files outside this project |
+| `compile-check <target>` | real compiler diagnostics for a `.dproj`/`.pas`; caches them only into an explicit `--db` or the project's unique manifest section (`--project`, else a project-file target), otherwise reports without caching |
+| `refresh-findings --project X [--db D]` | recompile stale units (mtime > `files.last_compiled_unix`) + refresh `compiler_findings` per file; `>=2` stale -> full build, 1 stale -> incremental, `--full` forces full; feeds the IDE compiler overlay (surfaces DCC hints even for clean unchanged units). `--json` emits `mode` (full\|incremental\|noop) + counts; exit 1 if an Error survived, 2 = usage / no db. **Point `--db` at the project's OWN index, not a shared/library index** -- a full build clears + re-stamps `compiler_findings` for every indexed `.pas`/`.dpr`/`.dpk` file, so a shared index would lose findings for files outside this project |
 | `check-ast <file>` | syntax check without the compiler (`(line,col): error syntax-error`); `--rule <id>` narrows the report |
 | `todos [path]` | scan TODO/FIXME/HACK/XXX/REVIEW/NOTE |
 
 **Index / DB management**
 | Verb | What it does |
 |------|--------------|
-| `index <path>` | build/refresh an index; a `.dpr`/`.dproj` target = project (compile-closure) scan, a folder = library scan. `--recompile` (default) / `--rebuild`; also `--project`, `--watch`, `--deep`. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform. After the walk every run resolves in this order: `uses-targets`, `ancestry`, **`facts-inherited`** (v23 -- inherited fields into `symbol_facts.reads_fields`/`writes_fields`; runs only when the run parsed files, so a no-change run does nothing here), `helpers`, `calls` (skipped when no file changed and the edges already hold), **`purity`** (purity v2: the interprocedural `Effect-free (proven)` verdict into `symbol_facts.effect_free` / `effect_summary` / `effect_witness`; runs whenever `calls` ran or any routine lacks a verdict) |
-| any `index` run | mode and sweep: `--force-reparse` (alias `--no-skip`) re-parses every walked file even when path+mtime+sha are unchanged -- once per DB after an engine upgrade that extracts something new; `--no-prune` is the one "delete nothing" switch (a dry look: both sweeps are computed and reported, nothing deleted), `--prune` forces the sweep for a single-FILE walk. Walk scoping: `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` skips any file larger than N KB, `--no-use-ignore` opts out of the `.drag-lint-ignore` file honoured by default, `--no-sql-ms` indexes EVERY `.sql` file rather than only the `MS*.sql` migration scripts, `--shallow` (default) vs `--deep` (also records usage refs) |
+| `index <path>` | build/refresh an index; `--project <.dpr/.dproj>` = project (compile-closure) scan, a folder = library scan. A POSITIONAL `.dpr`/`.dproj` refreshes ONLY that one file (no project defines, into the project's own DB) -- not a closure scan. `--recompile` (default) / `--rebuild`; also `--project`, `--watch`, `--deep`. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform. After the walk every run resolves in this order: `uses-targets`, `ancestry`, **`facts-inherited`** (v23 -- inherited fields into `symbol_facts.reads_fields`/`writes_fields`; runs only when the run parsed files, so a no-change run does nothing here), `helpers`, `calls` (skipped when no file changed and the edges already hold), **`purity`** (purity v2: the interprocedural `Effect-free (proven)` verdict into `symbol_facts.effect_free` / `effect_summary` / `effect_witness`; runs whenever `calls` ran or any routine lacks a verdict) |
+| any `index` run | mode and sweep: `--force-reparse` (alias `--no-skip`) re-parses every walked file even when path+mtime+sha are unchanged -- once per DB after an engine upgrade that extracts something new; `--no-prune` is the one "delete nothing" switch (a dry look: both sweeps are computed and reported, nothing deleted), `--prune` forces the sweep for a single-FILE walk. Walk scoping: `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` skips any file larger than N KB, `--no-use-ignore` opts out of the `.gitignore` / `.hgignore` pattern files honoured by default (a folder holding a `.scanignore` marker file is always pruned), `--no-sql-ms` indexes EVERY `.sql` file rather than only the `MS*.sql` migration scripts, `--shallow` (default) vs `--deep` (also records usage refs) |
 | any verb that opens a DB | `--size-guard-mb N` / `--force32` (`index`, `query`, `lsp`, `serve`): the 32-bit build refuses a database larger than the guard because it would run out of address space mid-answer; the first moves the threshold, the second overrides the refusal. Neither is normally needed on Win64 |
 | `index <path> --resolve-only` | re-derive call edges / ancestry / helper targets and purity verdicts from the STORED parses, skipping the walk. Use when `schema_meta.resolver_fingerprint` shows the edges predate the current resolver -- minutes, against the hours a re-parse costs, because no parse became wrong. It writes edges INSIDE that one index only: **no cross-store edges are written** (0 `refs.external_target` in every project DB, measured 2026-09-22; a library re-resolve added 13 intra-library edges per platform). Do not expect it to bind project calls to the platform library |
 | `index --all` | build every DB in the manifest (`--only`, `--platform`, `--jobs`, `--dry-run`) |

@@ -27,7 +27,10 @@ REM src\core is on the path because HoverForm uses DRagLint.Hover.Contrast,
 REM which lives there, not beside it in src\delphi-plugin. The unit moved (or
 REM the form gained the dependency) at some point after this fixture was
 REM written, and because the fixture was never run, nothing reported F2613.
-dcc64 -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core "-U%IDELIB%" -LUdesignide %HERE%T31_hoverform.dpr > "%HERE%t31_build.txt" 2>&1
+REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
+REM src\*.dcu is reused by any later build that searches that directory.
+if not exist "%HERE%_dcu\T31_hoverform" mkdir "%HERE%_dcu\T31_hoverform"
+dcc64 -NU"%HERE%_dcu\T31_hoverform" -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core "-U%IDELIB%" -LUdesignide %HERE%T31_hoverform.dpr > "%HERE%t31_build.txt" 2>&1
 if not exist "%HERE%T31_hoverform.exe" (echo FAIL: build failed && type "%HERE%t31_build.txt" && exit /b 1)
 "%HERE%T31_hoverform.exe" > "%HERE%t31_out.txt"
 type "%HERE%t31_out.txt"

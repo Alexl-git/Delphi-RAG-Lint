@@ -74,8 +74,9 @@ const
 /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing; via DRagLint.CLI.ParseArgs: Unknown argument: %s</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+101 more)</para>
-/// <para>Complexity: 113 (cyclomatic, outer body), 295 lines (full implementation)</para>
+/// <para>Called from: declaration (drag-lint.dpr), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
+/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+106 more)</para>
+/// <para>Complexity: 116 (cyclomatic, outer body), 329 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
@@ -233,6 +234,15 @@ type
     Path            : string        ;
     DbPath          : string        ;
     DbPaths         : TArray<string>;
+    { True while DbPaths holds ONLY a "db" key from a .drag-lint.json. That key
+      is an explicit --db (owner ruling 2026-08-13, recorded in Run), so it is
+      put in DbPaths; the first command-line --db then REPLACES it rather than
+      appending, because the command line beats the config file. }
+    DbFromConfig    : Boolean       ;
+    { '<file>: <key path>: expected <type>, got <type>' when the .drag-lint.json
+      defaults file could not be read (LoadConfigDefaults); '' otherwise. Readers
+      carry on with what was read; Run makes the WRITE verbs refuse. }
+    ConfigError     : string        ;
     { v21: --library-db, repeatable. Extra indexes consulted ONLY for calls the
       primary index cannot resolve; a hit is recorded as a qualified NAME on
       refs.external_target. Explicit rather than auto-opened from the manifest
@@ -610,7 +620,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@1927 -- REVIEWED 2026-09-24: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@cca2 -- REVIEWED 2026-09-29: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -687,7 +697,9 @@ begin
   Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
   Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
   Writeln('                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the');
-  Writeln('                               .drag-lint-ignore file, which is honoured by default. --no-sql-ms indexes EVERY');
+  Writeln('                               .gitignore / .hgignore pattern files, which are honoured by default. A folder');
+  Writeln('                               holding a .scanignore MARKER file (contents never read) is always pruned with');
+  Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
   Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
   Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
   Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
@@ -720,6 +732,9 @@ begin
   Writeln('                               one "delete nothing" switch, and it is a DRY LOOK: both sweeps are still');
   Writeln('                               COMPUTED and REPORTED as "would remove" (count + a capped sample of paths),');
   Writeln('                               nothing is deleted. Take it before a big run. Applies to index --all too.');
+  Writeln('                               A MALFORMED MANIFEST REFUSES the write (exit 2) -- beside the exe, a local');
+  Writeln('                               .drag-lint.json, or --config -- naming the file, the key path and both types');
+  Writeln('                               ("indexes: expected object, got array"). Read verbs only warn.');
   Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
@@ -863,8 +878,9 @@ begin
   Writeln('  drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
-  Writeln('                               each --db adds an `indexes` entry: stored fingerprints, indexer_stale / resolver_stale, a verdict');
+  Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
   Writeln('                               (current | resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
+  Writeln('                               text form: one "index: <path>  verdict: <v>" line per --db, then "  remedy: ..." when one is owed.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
@@ -906,8 +922,8 @@ begin
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
-  Writeln('  drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]');
-  Writeln('  drag-lint refresh-findings --project <X.dproj> --db <db> [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build)');
+  Writeln('  drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]   (no --db: caches only into the project''s unique manifest owner, else reports uncached)');
+  Writeln('  drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build; no --db = the project''s own DB)');
   Writeln('  drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--in-place] [--format json|text]');
   Writeln('       ^ compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written.');
   Writeln('         --in-place restores the old behaviour (overwrites the real files for the compile,');
@@ -1008,6 +1024,18 @@ begin
   Writeln('         manifest (see resolve-dbs); if none resolves it FAILS rather');
   Writeln('         than adopting or creating one in the current directory.');
   Writeln('         index with no --db writes to <target>\_D-RAG\<name>.sqlite');
+  Writeln('         --project (or index <x.dpr|.dproj>) with no --db: the project''s');
+  Writeln('         OWN database only -- its exact manifest owner, else');
+  Writeln('         <project dir>\_D-RAG\<base>.sqlite -- plus, for readers that use');
+  Writeln('         the consumer DB list, the platform library; no sibling project DB.');
+  Writeln('         Exceptions: outline --file also opens DBs that hold or folder-match');
+  Writeln('         the file, and lint''s dl:shared check opens the sibling projects a');
+  Writeln('         unit declares. index <x.dpr|.dproj> refreshes ONLY that one file');
+  Writeln('         (use --project for the compile-closure scan). index and');
+  Writeln('         refresh-findings refuse when two sections claim the project.');
+  Writeln('         A "db" in .drag-lint.json counts as an explicit --db.');
+  Writeln('         Destructive purge-locals always needs an explicit --db');
+  Writeln('         (on the command line or a .drag-lint.json "db").');
 end; // procedure
 
 /// <summary>True when ASwitch appears verbatim on the command line.</summary>
@@ -1081,52 +1109,78 @@ begin
   end;
   if J = nil then Exit;
   try
-    V:= J.GetValue('db');
-    if (V <> nil) and (V.Value <> '') then AArgs.DbPath:= V.Value;
-    V:= J.GetValue('project');
-    if (V <> nil) and (V.Value <> '') then AArgs.ProjectPath:= V.Value;
-    V:= J.GetValue('path');
-    if (V <> nil) and (V.Value <> '') then AArgs.Path:= V.Value;
-    { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
-      It used to set AArgs.Rule for EVERY verb, so a "rule" left in a
-      .drag-lint.json anywhere above the CWD turned every lint-all into a
-      one-rule run whose report read as a clean project -- and nothing said so
-      (this file's banner is printed on every run and names no key).
-
-      Decided 2026-09-23: the key is a default for `lint` only, where the run is
-      the file or folder the user named, and it is ANNOUNCED on stderr. Every
-      other verb -- lint-all and lint-project above all, which are whole-project
-      questions -- IGNORES it and says so. --rule on the command line is the one
-      way to narrow those. ParamStr(1) rather than TArgs because this runs
-      before ParseArgs (see the --quiet note below). }
-    V:= J.GetValue('rule');
-    if (V <> nil) and (V.Value <> '') and not HasSwitch('--rule') then
-    begin
-      if SameText(ParamStr(1), 'lint') then
+    try
+      { "db" is an EXPLICIT --db, so it goes into DbPaths too: every write verb
+        tells "explicit" from "defaulted" by DbPaths, and a config db left only
+        in DbPath would be ignored as if Run had guessed it. }
+      V:= J.GetValue('db');
+      if (V <> nil) and (V.Value <> '') then
       begin
-        AArgs.Rule:= V.Value;
-        Writeln(ErrOutput, Format('drag-lint: note: this run is narrowed to rule "%s" by the "rule" key in %s' +
-          ' -- only that rule is reported. Pass --rule to choose another.', [V.Value, Candidate]));
-      end
-      else
-        Writeln(ErrOutput, Format('drag-lint: note: ignoring "rule": "%s" in %s for `%s` -- a defaults file ' +
-          'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
-          [V.Value, Candidate, ParamStr(1), V.Value]));
-    end;
-    V:= J.GetValue('watch');
-    if V is TJSONObject then begin JWatch:= TJSONObject(V); AArgs.Watch:= True; N:= JWatch.GetValue('interval') as TJSONNumber; if N <> nil then AArgs.Interval:= N.AsInt; end;
-    // v0.16 Task 13: "docs" section
-    V:= J.GetValue('docs');
-    if V is TJSONObject then
-    begin
-      JDocs:= TJSONObject(V);
-      B:= JDocs.GetValue('captureLooseComments') as TJSONBool;
-      if B <> nil then AArgs.Docs.CaptureLooseComments:= B.AsBoolean;
-      N:= JDocs.GetValue('allowBlankLineGap') as TJSONNumber;
-      if N <> nil then AArgs.Docs.AllowBlankLineGap:= N.AsInt;
-      V:= JDocs.GetValue('implPrecedence');
-      if (V <> nil) and (V.Value <> '') then AArgs.Docs.ImplPrecedence:= V.Value;
-    end;
+        AArgs.DbPath      := V.Value;
+        AArgs.DbPaths     := [V.Value];
+        AArgs.DbFromConfig:= True;
+      end;
+      V:= J.GetValue('project');
+      if (V <> nil) and (V.Value <> '') then AArgs.ProjectPath:= V.Value;
+      V:= J.GetValue('path');
+      if (V <> nil) and (V.Value <> '') then AArgs.Path:= V.Value;
+      { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
+        It used to set AArgs.Rule for EVERY verb, so a "rule" left in a
+        .drag-lint.json anywhere above the CWD turned every lint-all into a
+        one-rule run whose report read as a clean project -- and nothing said so
+        (this file's banner is printed on every run and names no key).
+
+        Decided 2026-09-23: the key is a default for `lint` only, where the run is
+        the file or folder the user named, and it is ANNOUNCED on stderr. Every
+        other verb -- lint-all and lint-project above all, which are whole-project
+        questions -- IGNORES it and says so. --rule on the command line is the one
+        way to narrow those. ParamStr(1) rather than TArgs because this runs
+        before ParseArgs (see the --quiet note below). }
+      V:= J.GetValue('rule');
+      if (V <> nil) and (V.Value <> '') and not HasSwitch('--rule') then
+      begin
+        if SameText(ParamStr(1), 'lint') then
+        begin
+          AArgs.Rule:= V.Value;
+          Writeln(ErrOutput, Format('drag-lint: note: this run is narrowed to rule "%s" by the "rule" key in %s' +
+            ' -- only that rule is reported. Pass --rule to choose another.', [V.Value, Candidate]));
+        end
+        else
+          Writeln(ErrOutput, Format('drag-lint: note: ignoring "rule": "%s" in %s for `%s` -- a defaults file ' +
+            'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
+            [V.Value, Candidate, ParamStr(1), V.Value]));
+      end;
+      V:= J.GetValue('watch');
+      if V is TJSONObject then
+      begin
+        JWatch:= TJSONObject(V);
+        AArgs.Watch:= True;
+        N:= GetManifestNumber(JWatch, 'interval', 'watch');
+        if N <> nil then AArgs.Interval:= N.AsInt;
+      end;
+      // v0.16 Task 13: "docs" section
+      V:= J.GetValue('docs');
+      if V is TJSONObject then
+      begin
+        JDocs:= TJSONObject(V);
+        B:= GetManifestBool(JDocs, 'captureLooseComments', 'docs');
+        if B <> nil then AArgs.Docs.CaptureLooseComments:= B.AsBoolean;
+        N:= GetManifestNumber(JDocs, 'allowBlankLineGap', 'docs');
+        if N <> nil then AArgs.Docs.AllowBlankLineGap:= N.AsInt;
+        V:= JDocs.GetValue('implPrecedence');
+        if (V <> nil) and (V.Value <> '') then AArgs.Docs.ImplPrecedence:= V.Value;
+      end;
+    except
+      { A WRONG-TYPED KEY (1.20.4 Task 4) used to escape as EInvalidCast and kill
+        EVERY verb with a FATAL that named neither the key nor the file. Now it is
+        named, the keys read before it stay applied, a reader carries on, and Run
+        makes the write verbs refuse (ConfigError). }
+      on E: EManifestError do
+      begin
+        AArgs.ConfigError:= Candidate + ': ' + E.Message;
+        Writeln(ErrOutput, 'WARNING: could not parse config at ', Candidate, ': ', E.Message);
+      end;
+    end; // try
   finally
     J.Free;
   end; // try
@@ -1313,6 +1367,12 @@ begin
         an extra. A single --db is unaffected in every verb.
 
         Guard: tests\autotest\run_doc_drift_extra_stores.ps1. }
+      if Result.DbFromConfig then
+      begin
+        { the command line replaces a .drag-lint.json "db"; it does not add to it }
+        Result.DbPaths     := nil;
+        Result.DbFromConfig:= False;
+      end;
       if Length(Result.DbPaths) = 0 then Result.DbPath:= ParamStr(i);
       SetLength(Result.DbPaths, Length(Result.DbPaths) + 1);
       Result.DbPaths[High(Result.DbPaths)]:= ParamStr(i);
@@ -3794,6 +3854,91 @@ begin
   if AItem.Platform <> '' then Result:= Result + ' [' + AItem.Platform + ']';
 end;
 
+/// <summary>The distinct section names of APlan, sorted, as the "selectable"
+/// hint of `index --all --only` prints them.</summary>
+/// <param name="APlan">The plan after --platform filtering and before --only.</param>
+/// <returns>One entry per section NAME (case-insensitive). A name the plan
+/// expanded for more than one platform reads "Library (Win32, Win64)"; a name
+/// with one platform or none reads as the bare name, which is what --only takes.</returns>
+/// <remarks>ResolvePlan emits one item per platform for a library section, so
+/// listing Plan.Items verbatim printed "Library, Library" when no --platform
+/// narrowed it -- two entries for one selectable name. The count the hint
+/// prints is Length(Result), i.e. the number of distinct names.</remarks>
+function SelectableSectionLabels(const APlan: TIndexPlan): TArray<string>;
+var
+  Names: TArray<string>;
+  Plats: TArray<TArray<string>>;
+  PS   : TPlanSection;
+  Found: Integer;
+  i    : Integer;
+begin
+  Names:= nil;
+  Plats:= nil;
+  for PS in APlan.Items do
+  begin
+    Found:= -1;
+    for i:= 0 to High(Names) do
+      if (Found < 0) and SameText(Names[i], PS.Name) then Found:= i;
+    if Found < 0 then
+    begin
+      Names:= Names + [PS.Name];
+      SetLength(Plats, Length(Names));
+      Found:= High(Names);
+    end;
+    if PS.Platform <> '' then Plats[Found]:= Plats[Found] + [PS.Platform];
+  end;
+  SetLength(Result, Length(Names));
+  for i:= 0 to High(Names) do
+    Result[i]:= if Length(Plats[i]) > 1 then Format('%s (%s)', [Names[i], string.Join(', ', Plats[i])]) else Names[i];
+  TArray.Sort<string>(Result);
+end;
+
+/// <summary>The command that builds one plan section's database, as the
+/// resolve-dbs never-built NOTE advises it.</summary>
+/// <param name="AItem">The plan item whose DbPath has never been built.</param>
+/// <param name="AConfigPath">The --config the caller named, or '' for the
+/// default manifest lookup; carried into the advice so it reads the same manifest.</param>
+/// <returns>"drag-lint index --all --only &lt;Name&gt;", plus " --platform
+/// &lt;P&gt;" when the item is a per-platform (library) expansion and
+/// " --config &lt;path&gt;" when one was given.</returns>
+/// <remarks>--only matches the SECTION name. The advice used to guess it from the
+/// DB file's base name, which is wrong for a library ("library-Win64" vs the
+/// section "Library") and for a project section ("Foo" for a section "P-Foo"
+/// whose DB is _D-RAG\Foo.sqlite): both advised commands exited 2.</remarks>
+function IndexSectionCommand(const AItem: TPlanSection; const AConfigPath: string): string;
+begin
+  Result:= 'drag-lint index --all --only ' + (if AItem.Name.Contains(' ') then AnsiQuotedStr(AItem.Name, '"') else AItem.Name);
+  if AItem.Platform <> '' then Result:= Result + ' --platform ' + AItem.Platform;
+  if AConfigPath <> '' then Result:= Result + ' --config ' + AnsiQuotedStr(TPath.GetFullPath(AConfigPath), '"');
+end;
+
+/// <summary>THE one wording of a write verb's refusal of a config it could not
+/// parse -- a manifest (Load, --config) or the .drag-lint.json defaults file --
+/// so every path prints, and the docs quote, the same two lines.</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AError">'&lt;file&gt;: &lt;key path&gt;: expected &lt;type&gt;, got &lt;type&gt;'.</param>
+procedure ReportManifestRefusal(const AVerb, AError: string);
+begin
+  Writeln(ErrOutput, 'ERROR: ', AVerb, ': refusing to write -- the manifest could not be parsed: ', AError);
+  Writeln(ErrOutput, '       Fix that file and re-run. A write verb does not fall back to the part that did parse.');
+end;
+
+/// <summary>A WRITE verb's refusal of a manifest that TManifestIO.Load could not
+/// fully parse (1.20.4 Task 4).</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AManifest">What Load returned.</param>
+/// <returns>True (having said why on stderr) when AManifest.LoadError is set;
+/// the caller then exits 2.</returns>
+/// <remarks>Load keeps going past a bad file so a READ verb can still answer,
+/// but what it returns is then only the part that parsed: a bad LOCAL
+/// .drag-lint.json leaves the GLOBAL manifest in force, and a bad global leaves
+/// no sections. A write must never run on that silently.</remarks>
+function ManifestWriteRefused(const AVerb: string; const AManifest: TIndexManifest): Boolean;
+begin
+  Result:= AManifest.LoadError <> '';
+  if Result then ReportManifestRefusal(AVerb, AManifest.LoadError);
+end;
+
 // v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
 // validates it, resolves the build plan, optionally filters by --only / --platform,
@@ -3828,9 +3973,21 @@ begin
     if not TFile.Exists(ConfigPath) then begin Writeln('ERROR: config file not found: ', ConfigPath); Exit(2); end;
     var Content:= TFile.ReadAllText(ConfigPath);
     var RootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
-    Manifest:= TManifestIO.ParseText(Content, RootDir);
+    try
+      Manifest:= TManifestIO.ParseText(Content, RootDir);
+    except
+      on E: EManifestError do
+      begin
+        ReportManifestRefusal('index --all', ConfigPath + ': ' + E.Message);
+        Exit(2);
+      end;
+    end; // try
   end
-  else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+  else
+  begin
+    Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    if ManifestWriteRefused('index --all', Manifest) then Exit(2);
+  end;
 
   ErrMsg:= TManifestIO.Validate(Manifest);
   if ErrMsg <> '' then begin Writeln(ErrOutput, 'ERROR: manifest invalid: ', ErrMsg); Exit(2); end;
@@ -3862,6 +4019,7 @@ begin
       exactly what matched, so there is nothing left to tell the user about. }
     var Selectable: TArray<string>:= nil;
     for i:= 0 to High(Plan.Items) do Selectable:= Selectable + [Plan.Items[i].Name];
+    var SelectableLabels: TArray<string>:= SelectableSectionLabels(Plan);
 
     var Filtered: TArray<TPlanSection>;
     for i:= 0 to High(Plan.Items) do
@@ -3902,9 +4060,11 @@ begin
     begin
       Writeln(ErrOutput, Format('ERROR: --only matched no configured section: %s',
         [string.Join(', ', Unmatched)]));
-      TArray.Sort<string>(Selectable);
-      Writeln(ErrOutput, Format('selectable for this platform (%d): %s',
-        [Length(Selectable), string.Join(', ', Selectable)]));
+      { "for this platform" only when --platform chose one: without it the plan
+        holds every platform, and the library is one entry naming them all. }
+      Writeln(ErrOutput, Format('%s (%d): %s',
+        [(if AArgs.CheckPlatform <> '' then 'selectable for this platform' else 'selectable'),
+         Length(SelectableLabels), string.Join(', ', SelectableLabels)]));
       Writeln(ErrOutput, 'nothing was indexed.');
       Exit(2);
     end;
@@ -4178,14 +4338,6 @@ begin
   Result:= ReportFailedSections(FailedNames, TotalSections);
 end; // function
 
-/// <summary>Resolves the DB path for an index operation. If --db was given
-/// explicitly, returns it unchanged. Otherwise finds the manifest section
-/// whose include path covers AIndexPath (longest-prefix match) and returns
-/// that section's resolved db. Falls back to AArgs.DbPath when no match.</summary>
-/// <param name="AArgs">Parsed arguments; explicit DbPaths short-circuit the lookup.</param>
-/// <param name="AIndexPath">Path being indexed (folder or file); used for matching.</param>
-/// <returns>Absolute path to the DB to use for this index operation.</returns>
-/// <remarks>Library sections (source=registry-libraries) are skipped. Not thread-safe.</remarks>
 { ONE PLACE THAT SAYS WHY THERE IS NO DATABASE (2026-08-26).
 
   Every consumer below used to test TFile.Exists(DbPath) alone. With the cwd
@@ -4299,31 +4451,246 @@ begin
   Flush(ErrOutput);
 end;
 
-function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string): string;
+/// <summary>The ONE database a --project run may treat as its own: the exact
+/// manifest owner of the project file, else the documented default
+/// &lt;project dir&gt;\_D-RAG\&lt;project base name&gt;.sqlite.</summary>
+/// <param name="AManifest">The manifest this run loaded.</param>
+/// <param name="AProjectFile">The --project argument (.dproj/.dpr); a relative
+/// path resolves against the process CWD, as ResolveProjectDb does.</param>
+/// <param name="ADb">Receives the owner's DB path: the section's DB on
+/// pdmUnique, the _D-RAG default on pdmNone, '' on pdmAmbiguous.</param>
+/// <param name="AClaimants">Receives the names of the sections that claim the
+/// project -- two or more on pdmAmbiguous, which is what a refusal names.</param>
+/// <returns>pdmUnique, pdmNone or pdmAmbiguous, exactly as ResolveProjectDb.</returns>
+/// <remarks>
+/// <para>Never consults manifest ORDER or a folder prefix. Before 1.20.4 a
+/// --project run with no --db took the FIRST manifest section whose DB existed,
+/// and `index --project` wrote an unregistered project into it -- live, into
+/// Micronite2027.sqlite. Owner ruling 2026-08-13: the authoritative set is the
+/// platform library plus the project's own DB, nothing else; a guessed owner is
+/// worse than none.</para>
+/// <para>Does not test existence. Whether a missing file is created (index) or
+/// refused (every reader) is the caller's decision.</para>
+/// </remarks>
+function ResolveOwnProjectDb(const AManifest: TIndexManifest; const AProjectFile: string;
+  out ADb: string; out AClaimants: TArray<string>): TProjectDbMatch;
+begin
+  Result:= ResolveProjectDb(AManifest, AProjectFile, ADb, AClaimants);
+  if Result = pdmAmbiguous then ADb:= ''
+  else if (Result = pdmNone) and (AProjectFile <> '') then
+    ADb:= TPath.Combine(TPath.Combine(ExtractFilePath(ExpandFileName(AProjectFile)), DRAG_HOME_DIR),
+                        TPath.GetFileNameWithoutExtension(AProjectFile) + '.sqlite');
+end;
+
+/// <summary>Writes the refusal for a project that two or more manifest sections
+/// claim, naming every claimant, on stderr.</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AProjectFile">The project file as the user typed it.</param>
+/// <param name="AClaimants">The claiming section names, from ResolveOwnProjectDb.</param>
+/// <remarks>Same wording as `resolve-dbs --project`, so the two cannot drift
+/// into two instructions for one manifest defect. Naming the claimants IS the
+/// fix instruction.</remarks>
+procedure ReportAmbiguousProject(const AVerb, AProjectFile: string; const AClaimants: TArray<string>);
+begin
+  Writeln(ErrOutput, Format('ERROR: %s: %d manifest sections claim %s -- refusing to guess which index it belongs to.',
+                            [AVerb, Length(AClaimants), AProjectFile]));
+  for var C: string in AClaimants do Writeln(ErrOutput, '  section: ' + C);
+  Writeln(ErrOutput, 'Fix the manifest so exactly one section includes this project file, or pass --db.');
+  Flush(ErrOutput);
+end;
+
+/// <summary>Every database a LIBRARY section of AManifest names, for every
+/// platform the section expands to, as expanded absolute paths.</summary>
+/// <param name="AManifest">The manifest this run loaded.</param>
+/// <returns>The library-section DB paths; empty when the manifest has none.</returns>
+/// <remarks>Keyed on the section KIND (ResolvePlan's smLibrary), not on a
+/// `library-` file-name prefix: a library section may name its DB anything,
+/// and a project DB may happen to start with that prefix.</remarks>
+function LibrarySectionDbs(const AManifest: TIndexManifest): TArray<string>;
+var
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  PS      : TPlanSection;
+begin
+  Result:= nil;
+  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    for PS in ResolvePlan(AManifest, nil, Resolver).Items do
+      if PS.Mode = smLibrary then Result:= Result + [ExpandFileName(PS.DbPath)];
+  finally
+    Resolver.Free;
+  end; // try
+end;
+
+/// <summary>True when ADb is one of ALibraryDbs (case-insensitive, after
+/// expansion).</summary>
+/// <param name="ALibraryDbs">From LibrarySectionDbs.</param>
+/// <param name="ADb">The database path to classify.</param>
+/// <returns>True for a library-section database.</returns>
+function IsLibrarySectionDb(const ALibraryDbs: TArray<string>; const ADb: string): Boolean;
+begin
+  Result:= False;
+  for var L: string in ALibraryDbs do
+    if SameText(L, ExpandFileName(ADb)) then Exit(True);
+end;
+
+/// <summary>Splits a consumer DB list into the PROJECT store and the platform
+/// LIBRARY store.</summary>
+/// <param name="AArgs">Parsed args; an explicit --db list changes the rule.</param>
+/// <param name="ADbs">The list, normally ResolveConsumerDbs(AArgs).</param>
+/// <param name="AProjectDb">Receives the project store, or '' when there is none.</param>
+/// <param name="ALibraryDb">Receives the first existing library-section DB, or ''.</param>
+/// <remarks>
+/// <para>Manifest-resolved list: the project store is the first EXISTING DB
+/// that is not a library section's. A --project with no index of its own gets
+/// a library-only list from ResolveConsumerDbs, and before 1.20.4 the "first
+/// existing" rule then took the platform library as the project store --
+/// exceptions-sync --apply would have harvested RTL/VCL raise sites into the
+/// user's unit.</para>
+/// <para>Explicit --db list: the first existing DB, whatever it is. The user
+/// named it; that is the documented meaning of `--db &lt;proj&gt; --db &lt;lib&gt;`.</para>
+/// <para>A manifest that fails to load classifies nothing as a library, and
+/// says so on stderr.</para>
+/// </remarks>
+procedure SplitConsumerDbs(const AArgs: TArgs; const ADbs: TArray<string>; out AProjectDb, ALibraryDb: string);
+var
+  LibDbs: TArray<string>;
+begin
+  AProjectDb:= '';
+  ALibraryDb:= '';
+  LibDbs    := nil;
+  try
+    LibDbs:= LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
+  except
+    on E: Exception do
+    begin
+      LibDbs:= nil;
+      Writeln(ErrOutput, Format('NOTE: could not load the manifest (%s: %s); no database is treated as the library.',
+                                [E.ClassName, E.Message]));
+    end;
+  end; // try
+  for var D: string in ADbs do
+  begin
+    if not TFile.Exists(D) then Continue;
+    var IsLib: Boolean:= IsLibrarySectionDb(LibDbs, D);
+    if (ALibraryDb = '') and IsLib then ALibraryDb:= D;
+    if (AProjectDb = '') and ((Length(AArgs.DbPaths) > 0) or not IsLib) then AProjectDb:= D;
+  end;
+end;
+
+/// <summary>The PROJECT store of a consumer DB list: see SplitConsumerDbs.</summary>
+/// <param name="AArgs">Parsed args.</param>
+/// <param name="ADbs">The list, normally ResolveConsumerDbs(AArgs).</param>
+/// <returns>The project store, or '' -- a verb that writes source from it must
+/// then refuse and name --db.</returns>
+function FirstProjectDb(const AArgs: TArgs; const ADbs: TArray<string>): string;
+var
+  LibDb: string;
+begin
+  SplitConsumerDbs(AArgs, ADbs, Result, LibDb);
+end;
+
+/// <summary>The WRITE rule's manifest half, shared by index --project and
+/// refresh-findings: the project's own DB, or '' (having said why on stderr)
+/// when the manifest will not load or two sections claim the project.</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AProjectFile">The --project argument.</param>
+/// <param name="AManifest">The manifest the caller loaded (reused, not reloaded).</param>
+/// <returns>The DB path to write, or '' to refuse.</returns>
+/// <remarks>The explicit --db half is the caller's: test DbPaths first.</remarks>
+function ResolveProjectWriteDbIn(const AVerb, AProjectFile: string; const AManifest: TIndexManifest): string;
+var
+  Claimants: TArray<string>;
+begin
+  Result:= '';
+  { "will not load" includes a file Load had to skip: ownership asked of the
+    part that DID parse can miss the section that claims this project. }
+  if ManifestWriteRefused(AVerb, AManifest) then Exit;
+  if ResolveOwnProjectDb(AManifest, AProjectFile, Result, Claimants) = pdmAmbiguous then
+    ReportAmbiguousProject(AVerb, AProjectFile, Claimants);
+end;
+
+/// <summary>ResolveProjectWriteDbIn over the manifest loaded from AStartDir.</summary>
+/// <param name="AVerb">Verb name for the message prefix.</param>
+/// <param name="AProjectFile">The --project argument.</param>
+/// <param name="AStartDir">Where the local-manifest search starts.</param>
+/// <returns>The DB path to write, or '' to refuse.</returns>
+function ResolveProjectWriteDb(const AVerb, AProjectFile, AStartDir: string): string;
+begin
+  Result:= '';
+  try
+    Result:= ResolveProjectWriteDbIn(AVerb, AProjectFile, TManifestIO.Load(ExtractFilePath(ParamStr(0)), AStartDir));
+  except
+    on E: Exception do
+    begin
+      Result:= '';
+      Writeln(ErrOutput, Format('ERROR: %s: could not load the manifest (%s: %s).', [AVerb, E.ClassName, E.Message]));
+    end;
+  end; // try
+end;
+
+/// <summary>Resolves the database an `index` run WRITES.</summary>
+/// <param name="AArgs">Parsed arguments. An explicit --db (DbPaths non-empty)
+/// short-circuits everything; a --project argument selects the project rule.</param>
+/// <param name="AIndexPath">Without --project, the folder or file being indexed
+/// (used for prefix matching).</param>
+/// <param name="AManifest">The manifest DoIndex loaded from AIndexPath, reused
+/// rather than reloaded; DoIndex has already refused it if it did not parse.</param>
+/// <returns>Absolute DB path, or '' when nothing defensible resolves (the
+/// caller refuses).</returns>
+/// <remarks>
+/// <para>THE WRITE RULE for a --project run, and for a positional
+/// .dpr/.dproj/.dpk (a SINGLE-FILE refresh, not a closure scan, but the file
+/// belongs to the same project's database): (1) an explicit --db (the
+/// command line, or a "db" key in a .drag-lint.json), else (2) the exact
+/// manifest owner of the project file (pdmUnique, ExpandSectionDb naming), else
+/// (3) &lt;project dir&gt;\_D-RAG\&lt;project base name&gt;.sqlite -- even when
+/// the project sits under a FOLDER section. Two sections claiming the project
+/// (pdmAmbiguous) is a refusal naming both -- never a pick. See
+/// ResolveOwnProjectDb.</para>
+/// <para>AArgs.DbPath alone is NOT an explicit --db: Run may have defaulted it.
+/// Honouring a defaulted DbPath "as if explicit" is exactly how an unregistered
+/// project was indexed into the first manifest section's DB.</para>
+/// <para>Any other target (a folder, a unit): the longest manifest include
+/// prefixing AIndexPath (library sections skipped), else
+/// &lt;target&gt;\_D-RAG\&lt;name&gt;.sqlite.</para>
+/// </remarks>
+function ResolveIndexDb(const AArgs: TArgs; const AIndexPath: string; const AManifest: TIndexManifest): string;
 var
   DbBase: string;
-  Manifest : TIndexManifest ;
   Sec      : TIndexSection  ;
   IncPath  : string         ;
   PathNorm : string         ;
   IncNorm  : string         ;
   BestLen  : Integer        ;
   BestDb   : string         ;
-  EngineDir: string         ;
   OutDir   : string         ;
   DbRaw    : string         ;
 begin
   // Explicit --db always wins.
   if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPath);
 
+  { A --project run writes the project's OWN database, never one chosen by
+    manifest order or by a folder prefix. The folder loop below cannot name it
+    anyway: a project include never prefixes a folder, and it names the DB with
+    the pre-_D-RAG OutDir\<section>.sqlite rule rather than ExpandSectionDb. }
+  { A POSITIONAL project file is NOT a --project run: DoIndex walks just that
+    one file (Folders:= [AArgs.Path]) with no project defines, because only
+    --project (or a .drag-lint.json "project" key) sets ProjectPath. The file
+    still belongs to that project, so it is written into the project's OWN
+    database by the same rule. Through the folder loop it got the dead
+    OutDir\<Section>.sqlite name, resolved includes against the process CWD,
+    and a project under a FOLDER section landed in that section's DB.
+    `index --project X` is the closure scan. }
+  var ProjFile: string:= AArgs.ProjectPath;
+  if (ProjFile = '') and MatchText(ExtractFileExt(AIndexPath), ['.dpr', '.dproj', '.dpk']) then ProjFile:= AIndexPath;
+  if ProjFile <> '' then Exit(ResolveProjectWriteDbIn('index', ProjFile, AManifest));
+
   BestLen:= -1;
   BestDb:= '';
   try
-    EngineDir:= ExtractFilePath(ParamStr(0));
-    Manifest:= TManifestIO.Load(EngineDir, AIndexPath);
     PathNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(AIndexPath)).ToLower;
 
-    for Sec in Manifest.Sections do
+    for Sec in AManifest.Sections do
     begin
       // Skip library sections -- never auto-select them for index.
       if SameText(Sec.Source, 'registry-libraries') then Continue;
@@ -4338,13 +4705,13 @@ begin
           if DbRaw = '' then DbRaw:= Sec.Name + '.sqlite';
           if not TPath.IsPathRooted(DbRaw) then
           begin
-            OutDir:= Manifest.OutDir;
+            OutDir:= AManifest.OutDir;
             if OutDir <> '' then
             begin
               if TPath.IsPathRooted(OutDir) then BestDb:= TPath.Combine(OutDir, DbRaw)
-              else BestDb:= TPath.Combine(TPath.Combine(Manifest.RootDir, OutDir), DbRaw);
+              else BestDb:= TPath.Combine(TPath.Combine(AManifest.RootDir, OutDir), DbRaw);
             end
-            else BestDb:= TPath.Combine(Manifest.RootDir, DbRaw);
+            else BestDb:= TPath.Combine(AManifest.RootDir, DbRaw);
           end
           else BestDb:= DbRaw;
         end; // if
@@ -4355,7 +4722,9 @@ begin
   end; // try
 
   if BestDb <> '' then Exit(BestDb);
-  if AArgs.DbPath <> '' then Exit(AArgs.DbPath);   { an explicit --db always wins }
+  { No `DbPath <> ''` fallback here. An explicit --db already returned above;
+    a DbPath that is set without DbPaths was DEFAULTED, and is not this run's
+    to write. }
 
   { THE INDEX LIVES BESIDE WHAT IT INDEXES. This used to fall back to the cwd
     default, so a scan of a folder outside every manifest section wrote its
@@ -4757,11 +5126,30 @@ begin
     if not TFile.Exists(AArgs.ProjectPath) then begin Writeln('ERROR: .dproj not found: ', AArgs.ProjectPath); Exit(2); end;
   end;
 
-  var ResolvedDb: string:= ResolveIndexDb(AArgs, IfThen(AArgs.Path <> '', AArgs.Path, GetCurrentDir));
+  { The manifest search starts at what is being indexed: the positional path,
+    else the --project file, else the CWD. }
+  var IndexTarget: string:= AArgs.Path;
+  if IndexTarget = '' then IndexTarget:= AArgs.ProjectPath;
+  if IndexTarget = '' then IndexTarget:= GetCurrentDir;
+  { A WRITE REFUSES A MANIFEST IT COULD NOT PARSE (1.20.4 Task 4) -- even with
+    an explicit --db, because this run still reads the manifest (the size
+    guard) and a broken one is the user's to fix, not ours to half-read. BOTH
+    walks this verb makes are checked: from the target (DB selection, below)
+    and from the CWD (the size guard). Each is loaded ONCE and reused. }
+  var TargetManifest: TIndexManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), IndexTarget);
+  if ManifestWriteRefused('index', TargetManifest) then Exit(2);
+  var CwdManifest: TIndexManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+  if ManifestWriteRefused('index', CwdManifest) then Exit(2);
+  var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget, TargetManifest);
   if ResolvedDb = '' then
   begin
-    Writeln('ERROR: index: no --db given and no index location resolves for this target.');
-    Writeln('       Run "drag-lint resolve-dbs" or pass --db <file.sqlite>.');
+    { A project target's refusal (two claimants, or no manifest) was already
+      printed by ResolveProjectWriteDb; one message, not two. }
+    if (AArgs.ProjectPath = '') and not MatchText(ExtractFileExt(IndexTarget), ['.dpr', '.dproj', '.dpk']) then
+    begin
+      Writeln('ERROR: index: no --db given and no index location resolves for this target.');
+      Writeln('       Run "drag-lint resolve-dbs" or pass --db <file.sqlite>.');
+    end;
     Exit(2);
   end;
   Writeln('Database: ', ResolvedDb);
@@ -4820,12 +5208,7 @@ begin
   begin
     var IdxGuardMB: Integer:= 1500;
     if AArgs.SizeGuardMBSet then IdxGuardMB:= AArgs.SizeGuardMB
-    else
-      try
-        IdxGuardMB:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir).Settings.SizeGuardMB;
-      except
-        { best-effort, exactly as the consumer path treats a missing manifest }
-      end;
+    else IdxGuardMB:= CwdManifest.Settings.SizeGuardMB;
     SizeGuardCheck(ResolvedDb, IdxGuardMB, AArgs.Force32);
   end;
   if not AArgs.NoPreprocess then Writeln('Preprocess: ON  (per-config directive resolution; platform=', PpPlatform, ')')
@@ -4990,10 +5373,12 @@ begin
   end
   else Folders:= [AArgs.Path];
 
-  { PROJECT-scoped means the scope came from a project's compile closure, not
-    from a folder walk. `--project` is the explicit form; a bare .dpr/.dproj
-    path reaches the same arm, so both count. Everything else -- an explicit
-    folder, --scan-libraries-* -- is a LIBRARY scan. }
+  { PROJECT-scoped: `--project` (the compile-closure scan above) or a bare
+    .dpr/.dproj path. The bare path does NOT reach the closure arm -- it walks
+    only that one file (Folders:= [AArgs.Path]) with the platform built-in
+    defines -- but it is counted here, so it stamps the scope and the project
+    tag as a --project run does. Everything else -- an explicit folder,
+    --scan-libraries-* -- is a LIBRARY scan. }
   var IsProjectScopedTarget: Boolean:=
     (AArgs.ProjectPath <> '') or
     SameText(ExtractFileExt(AArgs.Path), '.dpr') or
@@ -8772,7 +9157,6 @@ var
   JSites  : TJSONArray           ;
   Dbs     : TArray<string>       ;
   DbToUse : string               ;
-  D       : string               ;
 begin
   if not ExplicitDbsExist(AArgs, 'wiring') then Exit(2);
   { v8: resolve the DB like query/hover -- explicit --db if given, else
@@ -8780,10 +9164,12 @@ begin
     beside the .dproj (e.g. ORM3 -> C:\Projects\DB\ORM3\drag-lint.sqlite). Use the
     first existing resolved DB (the project/primary index). }
   Dbs:= ResolveConsumerDbs(AArgs);
-  DbToUse:= '';
-  for D in Dbs do
-    if TFile.Exists(D) then begin DbToUse:= D; Break; end;
-  if DbToUse = '' then begin Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs), ' resolved path(s)). Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  DbToUse:= FirstProjectDb(AArgs, Dbs); { a project's wiring, never the library's }
+  if DbToUse = '' then
+  begin
+    Writeln('ERROR: no drag-lint index found (tried ', Length(Dbs), ' resolved path(s)). Pass --db <file.sqlite> or build the index first.');
+    Exit(2);
+  end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(DbToUse, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'wiring', DbToUse) then Exit(2);
@@ -15336,12 +15722,126 @@ begin
   end;
 end;
 
+type
+  /// <summary>One `info --db` answer: the staleness verdict for one index and
+  /// the facts it was computed from. Filled by ComputeInfoIndexVerdict and read
+  /// by BOTH output forms of DoInfo, so the text and JSON verdicts cannot
+  /// disagree.</summary>
+  /// <remarks>Present=False means the file does not exist (verdict `missing`);
+  /// Readable=False means it exists but would not open (verdict `unreadable`).
+  /// The fingerprint and stale/newer fields are meaningful only when both are
+  /// True. Remedy is empty when the verdict owes nothing.</remarks>
+  TInfoIndexVerdict = record
+    Present         : Boolean;
+    Readable        : Boolean;
+    IndexerFp       : string;
+    ResolverFp      : string;
+    ResolverExpected: string;
+    IndexerStale    : Boolean;
+    ResolverStale   : Boolean;
+    IndexerNewer    : Boolean;
+    ResolverNewer   : Boolean;
+    Verdict         : string;
+    Remedy          : string;
+  end;
+
+/// <summary>Computes the `info --db` staleness verdict for one index file:
+/// `missing`, `unreadable`, `index-newer`, `reparse-owed`, `resolve-owed` or
+/// `current`, plus the remedy the owed verdicts carry.</summary>
+/// <param name="ADbPath">Index file to inspect; opened read-only and never
+/// written.</param>
+/// <returns>The verdict and the fingerprints it was computed from.</returns>
+/// <remarks>THE VERDICT IS COMPUTED HERE, NOT BY THE CALLER. Handing back two
+/// fingerprint strings and letting each consumer compare them is how the
+/// comparison drifts -- an absent stamp is the case that has already been got
+/// wrong once, in the engine itself, where `PrevRfp &lt;&gt; ''` treated a missing
+/// resolver stamp as fresh and cancelled the whole feature. The rule is stated
+/// once, here: MISSING IS STALE. Since 1.20.4 the text form of `info` reads this
+/// same routine; before it, only `--json` reported --db at all.
+///
+/// The two remedies are priced differently and the verdict says which, because
+/// conflating them is the mistake this reports on -- a re-parse is hours, a
+/// re-resolve is minutes.
+///
+/// CHEAP BY CONSTRUCTION: two keyed lookups in schema_meta, read-only, no
+/// COUNT. The IDE's About window has a stated contract against counting rows;
+/// the measurement it cites (38 s) belongs to `schema --format json`, which
+/// counts every table, while an indexed lookup on the same 3 GB file is
+/// 0.5 s.</remarks>
+function ComputeInfoIndexVerdict(const ADbPath: string): TInfoIndexVerdict;
+begin
+  Result:= Default(TInfoIndexVerdict);
+  Result.Present:= TFile.Exists(ADbPath);
+  if not Result.Present then
+  begin
+    Result.Verdict:= 'missing';
+    Exit;
+  end;
+  var Ok: Boolean;
+  var St: ISymbolStore:= OpenReadOnlyStore(ADbPath, Ok, {AQuiet=}True);
+  Result.Readable:= Ok and (St <> nil);
+  if not Result.Readable then
+  begin
+    Result.Verdict:= 'unreadable';
+    Exit;
+  end;
+  Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
+  Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
+  Result.ResolverExpected:= ResolverFingerprint(St);
+  { The stored indexer fingerprint is a compound
+    `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is compared,
+    because platform and preprocess differences are legitimate per-index facts,
+    not staleness. }
+  { C2 (2026-09-23): THE DIRECTION IS THE ADVICE. A stamp NEWER than this
+    engine is not owed anything -- re-parsing or re-resolving it here would be
+    the downgrade RefuseIfEngineOlderThanDb refuses (ENG-2), so advising it
+    named a command that fails. Compared with the refusal's own comparison,
+    semantically; an absent or unparseable stamp is never newer (MISSING IS
+    STALE). }
+  var IdxVer: string:= ExtractorVersionOfFingerprint(Result.IndexerFp);
+  var ResVer: string:= ResolverVersionOfFingerprint(Result.ResolverFp);
+  Result.IndexerNewer := (IdxVer <> '')
+    and (CompareDottedVersions(DRAGLINT_EXTRACTOR_VERSION, IdxVer) < 0);
+  Result.ResolverNewer:= (ResVer <> '')
+    and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, ResVer) < 0);
+  Result.IndexerStale := (not Result.IndexerNewer) and ((Result.IndexerFp = '')
+    or (Pos('v=' + DRAGLINT_EXTRACTOR_VERSION + ';', Result.IndexerFp) <> 1));
+  Result.ResolverStale:= (not Result.ResolverNewer)
+    and ((Result.ResolverFp = '') or (Result.ResolverFp <> Result.ResolverExpected));
+  { index-newer outranks both owed verdicts: this engine may not write the
+    index at all, so neither remedy is available to it. }
+  if Result.IndexerNewer or Result.ResolverNewer then
+  begin
+    Result.Verdict:= 'index-newer';
+    Result.Remedy := Format('use a newer engine: the index is at extractor %s / resolver %s, ' +
+      'this engine is extractor %s / resolver %s (drag-lint %s). Reads work; an index run ' +
+      'with this engine is refused (a writer never downgrades an index).',
+      [IdxVer, ResVer, DRAGLINT_EXTRACTOR_VERSION, DRAGLINT_RESOLVER_VERSION, DRAGLINT_VERSION]);
+  end
+  else if Result.IndexerStale then
+  begin
+    Result.Verdict:= 'reparse-owed';
+    Result.Remedy := IndexRemedyFor(St, ADbPath, {AResolveOnly=}False) + '   (a re-parse: hours across the box)';
+  end
+  else if Result.ResolverStale then
+  begin
+    Result.Verdict:= 'resolve-owed';
+    Result.Remedy := IndexRemedyFor(St, ADbPath, {AResolveOnly=}True) + '   (minutes, no parse becomes wrong)';
+  end
+  else
+    Result.Verdict:= 'current';
+end;
+
 /// <summary>drag-lint info [--json] -- prints engine self-info: version, build
 /// date (from the exe's own file timestamp), MIT license, description,
 /// tree-sitter ABI numbers AND the on-disk stamp of each loaded grammar DLL,
 /// capabilities (FTS5, CLI verb count), the exe path, and the build platform.
-/// Read-only; no DB, no side effects. --json emits the stable schema "info/1";
-/// without it, a human-readable block. Consumed by the IDE About box.</summary>
+/// Each repeatable --db adds that index's staleness verdict (see
+/// ComputeInfoIndexVerdict) -- an `indexes` array under --json, and an
+/// `index: <path>  verdict: <v>` line (plus an indented `remedy:` line when one
+/// is owed) in the text form. Read-only; no side effects. --json emits the
+/// stable schema "info/1"; without it, a human-readable block. Consumed by the
+/// IDE About box.</summary>
 /// <returns>0 always.</returns>
 /// <remarks>v(ADP3 T4f, register K20): the numbers under `tree_sitter` are ABI
 /// versions, not grammar versions, and the text form now says so. `dll_delphi13`
@@ -15421,102 +15921,35 @@ begin
 
       { `info --db <path>` (repeatable): per-index staleness, so a caller that
         already has a connection to this engine can ask the question in ONE
-        spawn instead of learning SQLite.
-
-        THE VERDICT IS COMPUTED HERE, NOT BY THE CALLER. Handing back two
-        fingerprint strings and letting each consumer compare them is how the
-        comparison drifts -- an absent stamp is the case that has already been
-        got wrong once, in the engine itself, where `PrevRfp <> ''` treated a
-        missing resolver stamp as fresh and cancelled the whole feature. The
-        rule is stated once, here: MISSING IS STALE.
-
-        The two remedies are priced differently and the verdict says which,
-        because conflating them is the mistake this reports on -- a re-parse is
-        hours, a re-resolve is minutes.
-
-        CHEAP BY CONSTRUCTION: two keyed lookups in schema_meta, read-only, no
-        COUNT. That matters because the IDE's About window has a stated contract
-        against counting rows -- and the measurement it cites (38 s) belongs to
-        `schema --format json`, which counts every table, while an indexed
-        lookup on the same 3 GB file is 0.5 s. Counting is what was forbidden;
-        this does not count. }
+        spawn instead of learning SQLite. The verdict rule lives in
+        ComputeInfoIndexVerdict, shared with the text form below. The key
+        order here is the info/1 contract and is unchanged from 1.20.3. }
       if Length(AArgs.DbPaths) > 0 then
       begin
         var JIdx: TJSONArray:= TJSONArray.Create;
+        JRoot.AddPair('indexes', JIdx);
         for var DbP: string in AArgs.DbPaths do
         begin
+          var V: TInfoIndexVerdict:= ComputeInfoIndexVerdict(DbP);
           var JOne: TJSONObject:= TJSONObject.Create;
-          JOne.AddPair('path', DbP);
-          if not TFile.Exists(DbP) then
-          begin
-            JOne.AddPair('present', TJSONBool.Create(False));
-            JOne.AddPair('verdict', 'missing');
-          end
-          else
-          begin
-            JOne.AddPair('present', TJSONBool.Create(True));
-            var Ok: Boolean;
-            var St: ISymbolStore:= OpenReadOnlyStore(DbP, Ok, {AQuiet=}True);
-            if (not Ok) or (St = nil) then
-            begin
-              JOne.AddPair('verdict', 'unreadable');
-            end
-            else
-            begin
-              var PrevIfp: string:= St.GetMetaValue(INDEXER_FP_KEY );
-              var PrevRfp: string:= St.GetMetaValue(RESOLVER_FP_KEY);
-              var CurRfp : string:= ResolverFingerprint(St);
-              JOne.AddPair('indexer_fingerprint' , PrevIfp);
-              JOne.AddPair('resolver_fingerprint', PrevRfp);
-              JOne.AddPair('extractor_expected'  , DRAGLINT_EXTRACTOR_VERSION);
-              JOne.AddPair('resolver_expected'   , CurRfp);
-              { The stored indexer fingerprint is a compound
-                `v=<ver>;schema=<n>;pp=<n>;plat=<p>`; only the version limb is
-                compared, because platform and preprocess differences are
-                legitimate per-index facts, not staleness. }
-              { C2 (2026-09-23): THE DIRECTION IS THE ADVICE. A stamp NEWER than
-                this engine is not owed anything -- re-parsing or re-resolving
-                it here would be the downgrade RefuseIfEngineOlderThanDb refuses
-                (ENG-2), so advising it named a command that fails. Compared
-                with the refusal's own comparison, semantically; an absent or
-                unparseable stamp is never newer (MISSING IS STALE). }
-              var IdxVer: string:= ExtractorVersionOfFingerprint(PrevIfp);
-              var ResVer: string:= ResolverVersionOfFingerprint(PrevRfp);
-              var IdxNewer: Boolean:= (IdxVer <> '')
-                and (CompareDottedVersions(DRAGLINT_EXTRACTOR_VERSION, IdxVer) < 0);
-              var ResNewer: Boolean:= (ResVer <> '')
-                and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, ResVer) < 0);
-              var IdxStale: Boolean:= (not IdxNewer) and ((PrevIfp = '')
-                or (Pos('v=' + DRAGLINT_EXTRACTOR_VERSION + ';', PrevIfp) <> 1));
-              var ResStale: Boolean:= (not ResNewer) and ((PrevRfp = '') or (PrevRfp <> CurRfp));
-              JOne.AddPair('indexer_stale' , TJSONBool.Create(IdxStale));
-              JOne.AddPair('resolver_stale', TJSONBool.Create(ResStale));
-              JOne.AddPair('indexer_newer' , TJSONBool.Create(IdxNewer));
-              JOne.AddPair('resolver_newer', TJSONBool.Create(ResNewer));
-              { index-newer outranks both owed verdicts: this engine may not
-                write the index at all, so neither remedy is available to it. }
-              if IdxNewer or ResNewer then
-                JOne.AddPair('verdict', 'index-newer')
-              else if IdxStale then
-                JOne.AddPair('verdict', 'reparse-owed')
-              else if ResStale then
-                JOne.AddPair('verdict', 'resolve-owed')
-              else
-                JOne.AddPair('verdict', 'current');
-              if IdxNewer or ResNewer then
-                JOne.AddPair('remedy', Format('use a newer engine: the index is at extractor %s / resolver %s, ' +
-                  'this engine is extractor %s / resolver %s (drag-lint %s). Reads work; an index run ' +
-                  'with this engine is refused (a writer never downgrades an index).',
-                  [IdxVer, ResVer, DRAGLINT_EXTRACTOR_VERSION, DRAGLINT_RESOLVER_VERSION, DRAGLINT_VERSION]))
-              else if IdxStale then
-                JOne.AddPair('remedy', IndexRemedyFor(St, DbP, {AResolveOnly=}False) + '   (a re-parse: hours across the box)')
-              else if ResStale then
-                JOne.AddPair('remedy', IndexRemedyFor(St, DbP, {AResolveOnly=}True) + '   (minutes, no parse becomes wrong)');
-            end;
-          end;
           JIdx.AddElement(JOne);
+          JOne.AddPair('path', DbP);
+          JOne.AddPair('present', TJSONBool.Create(V.Present));
+          if V.Readable then
+          begin
+            JOne.AddPair('indexer_fingerprint' , V.IndexerFp);
+            JOne.AddPair('resolver_fingerprint', V.ResolverFp);
+            JOne.AddPair('extractor_expected'  , DRAGLINT_EXTRACTOR_VERSION);
+            JOne.AddPair('resolver_expected'   , V.ResolverExpected);
+            JOne.AddPair('indexer_stale' , TJSONBool.Create(V.IndexerStale));
+            JOne.AddPair('resolver_stale', TJSONBool.Create(V.ResolverStale));
+            JOne.AddPair('indexer_newer' , TJSONBool.Create(V.IndexerNewer));
+            JOne.AddPair('resolver_newer', TJSONBool.Create(V.ResolverNewer));
+          end;
+          JOne.AddPair('verdict', V.Verdict);
+          if V.Remedy <> '' then
+            JOne.AddPair('remedy', V.Remedy);
         end;
-        JRoot.AddPair('indexes', JIdx);
       end;
 
       Writeln(JRoot.ToJSON);
@@ -15538,6 +15971,15 @@ begin
     Writeln('  dfm      dll: ', TsDfmDll);
     Writeln('capabilities: FTS5=', BoolToStr(Fts5, True), ', CLI verbs=', CLI_VERB_COUNT);
     Writeln('exe: ', ExePath, '   platform: ', Plat);
+    { 1.20.4: --db was honoured by --json only, so the text form silently
+      dropped the question it was asked. Same routine, same verdict. }
+    for var DbP: string in AArgs.DbPaths do
+    begin
+      var V: TInfoIndexVerdict:= ComputeInfoIndexVerdict(DbP);
+      Writeln('index: ', DbP, '  verdict: ', V.Verdict);
+      if V.Remedy <> '' then
+        Writeln('  remedy: ', V.Remedy);
+    end;
   end;
 end; // function
 
@@ -17451,9 +17893,9 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'exceptions-sync') then Exit(2);
   Dbs:= ResolveConsumerDbs(AArgs);
-  ProjectDb:= '';
-  for var D in Dbs do
-    if TFile.Exists(D) then begin ProjectDb:= D; Break; end;
+  { The project store, never the platform library: this verb WRITES a unit
+    from what it harvests, and the library's raise sites are the RTL's. }
+  ProjectDb:= FirstProjectDb(AArgs, Dbs);
   if ProjectDb = '' then
   begin
     EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.');
@@ -17883,14 +18325,10 @@ begin
     sections put a project DB in second place on every single run.
     An explicit `--db <proj> --db <lib>` keeps its documented meaning. }
   Dbs:= ResolveConsumerDbs(AArgs);
-  ProjectDb:= '';
-  LibDb    := '';
-  for var D in Dbs do
-  begin
-    if not TFile.Exists(D) then Continue;
-    if ProjectDb = '' then ProjectDb:= D;
-    if (LibDb = '') and StartsText('library-', ExtractFileName(D)) then LibDb:= D;
-  end;
+  { The library is never the project store: for a --project with no index of
+    its own, linting its closure against the library is "0 file(s) scanned", a
+    silent zero -- ProjectDb stays '' and the run refuses below. }
+  SplitConsumerDbs(AArgs, Dbs, ProjectDb, LibDb);
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
@@ -19108,26 +19546,43 @@ end; // function
   had been silently dead, and the owner's own broken edit (a property naming a
   getter he had just commented out) was reported by dcc and never shown.
 
-  Resolution uses ResolveReadDbs -- the SAME function resolve-dbs uses -- rather
-  than a second lookup that could disagree with it. A .dproj/.dpr/.dpk target is
-  the active project; anything else is an editor file. }
-function ResolveCompileCheckDb(const AArgs: TArgs; const ATarget: string): string;
+  Resolution is the project's EXACT manifest owner (ResolveProjectDb, the same
+  function `resolve-dbs --project` uses), because this verb WRITES: it caches
+  compiler findings. It used to go through ResolveReadDbs, whose folder-match
+  fallback is documented as READ-path only -- so an editor file inside another
+  section's folder cached its findings into that section's DB, and a --project
+  run took whatever DB Run had defaulted. Since 1.20.4: an explicit --db, else
+  the unique owner of the project (a --project argument, else a .dproj/.dpr/.dpk
+  target); otherwise the compile still runs and reports, and nothing is cached. }
+function ResolveCompileCheckDb(const AArgs: TArgs; const ATarget: string; out AReasonPrinted: Boolean): string;
 var
-  Manifest: TIndexManifest;
-  Paths   : TArray<string>;
-  Ext     : string        ;
-  ProjArg : string        ;
-  FileArg : string        ;
+  Manifest : TIndexManifest;
+  Ext      : string        ;
+  ProjArg  : string        ;
+  ProjDb   : string        ;
+  Claimants: TArray<string>;
 begin
-  Result:= AArgs.DbPath;
-  if Result <> '' then Exit; { an explicit --db always wins }
-  if ATarget = '' then Exit;
+  Result:= '';
+  AReasonPrinted:= False;
+  { A HALF-READ CONFIG IS NOT WRITTEN THROUGH (1.20.4 Task 4). The compile
+    still runs and reports -- the caller wants dcc's answer -- but nothing is
+    cached: the defaults file may be the very thing that supplied --db, and a
+    manifest Load had to skip can name the wrong owner. }
+  if AArgs.ConfigError <> '' then
+  begin
+    Writeln(ErrOutput, 'compile-check: the .drag-lint.json defaults could not be parsed (', AArgs.ConfigError, ') -- findings will not be cached.');
+    AReasonPrinted:= True;
+    Exit;
+  end;
+  if Length(AArgs.DbPaths) > 0 then Exit(AArgs.DbPath); { an explicit --db always wins }
 
   Ext:= LowerCase(ExtractFileExt(ATarget));
-  ProjArg:= ''; FileArg:= '';
-  if (Ext = '.dproj') or (Ext = '.dpr') or (Ext = '.dpk') then ProjArg:= ATarget
-  else FileArg:= ATarget;
+  ProjArg:= '';
+  if (Ext = '.dproj') or (Ext = '.dpr') or (Ext = '.dpk') then ProjArg:= ATarget;
   if AArgs.ProjectPath <> '' then ProjArg:= AArgs.ProjectPath;
+  { No target, or an editor file with no project: no owner. A FOLDER match
+    would be a guess, and a guess is not written to. }
+  if (ATarget = '') or (ProjArg = '') then Exit;
 
   try
     if AArgs.WorkspaceConfig <> '' then
@@ -19135,21 +19590,30 @@ begin
                    ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
     else
       Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-    Paths:= ResolveReadDbs(Manifest, ProjArg, FileArg);
   except
     { A manifest that will not load is not a reason to throw away a compile that
       already succeeded -- the caller wants dcc's answer, not ours. }
     on E: Exception do
     begin
       Writeln(ErrOutput, Format('compile-check: could not load the manifest (%s: %s) -- findings will not be cached.', [E.ClassName, E.Message]));
+      AReasonPrinted:= True;
       Exit('');
     end;
   end;
+  if Manifest.LoadError <> '' then
+  begin
+    Writeln(ErrOutput, 'compile-check: the manifest could not be parsed (', Manifest.LoadError, ') -- findings will not be cached.');
+    AReasonPrinted:= True;
+    Exit;
+  end;
 
-  { The project DB is the one that owns compiler findings for this target. The
-    platform library DB can also come back here and must never be written to. }
-  for var P: string in Paths do
-    if TFile.Exists(P) and not ContainsText(ExtractFileName(P), 'library-') then Exit(P);
+  { The project DB is the one that owns compiler findings for this target. A
+    project section never names a library DB, so none can come back here. }
+  case ResolveProjectDb(Manifest, ProjArg, ProjDb, Claimants) of
+    pdmUnique   : if TFile.Exists(ProjDb) then Result:= ProjDb;
+    pdmAmbiguous: ReportAmbiguousProject('compile-check', ProjArg, Claimants);
+    pdmNone     : ; { unregistered: no owner to cache into }
+  end;
 end;
 
 function DoCompileCheck(const AArgs: TArgs): Integer;
@@ -19193,9 +19657,15 @@ begin
     asked what dcc says; it can be told that whether or not we can cache it.
     Failing here is fail-open in the worst way: the plugin read the empty output
     as zero errors. }
-  DbPath:= ResolveCompileCheckDb(AArgs, Target);
+  var NoCacheReasonPrinted: Boolean;
+  DbPath:= ResolveCompileCheckDb(AArgs, Target, NoCacheReasonPrinted);
+  { The generic line suggests --db, which cannot help when the reason was a
+    config that did not parse -- so it is printed only when no reason was. }
   if DbPath = '' then
-    Writeln(ErrOutput, 'compile-check: no database resolved for this target -- reporting findings without caching them. Pass --db to cache, or check "drag-lint resolve-dbs".')
+  begin
+    if not NoCacheReasonPrinted then
+      Writeln(ErrOutput, 'compile-check: no database resolved for this target -- reporting findings without caching them. Pass --db to cache, or check "drag-lint resolve-dbs".');
+  end
   else if TFile.Exists(DbPath) then
   begin
     Store:= TSQLiteSymbolStore.Create(DbPath);
@@ -19384,7 +19854,7 @@ begin
 end; // function
 
 // fresh compiler findings: drag-lint refresh-findings --project <X.dproj|.dpr>
-// --db <db> [--platform win32|win64] [--full] [--json]
+// [--db <db>] [--platform win32|win64] [--full] [--json]
 //
 // Recompiles only what is STALE (files.mtime_unix newer than
 // files.last_compiled_unix) and refreshes compiler_findings for exactly the
@@ -19393,7 +19863,7 @@ end; // function
 //
 // Algorithm (see docs/superpowers/plans/2026-07-14-fresh-compiler-findings.md
 // Task 4 brief for the full spec this mirrors 1:1):
-//   1. Require --project + a readable --db.
+//   1. Require --project; the DB is --db, else the project's own (write rule).
 //   2. Open the store, Migrate.
 //   3. Stale := GetStaleFileIds. Nothing stale and no --full -> noop, exit 0.
 //   4. FullBuild := --full or (>= 2 files stale) -- a full build is not much
@@ -19413,21 +19883,31 @@ var
   Stale    : TArray<Int64>;
   FullBuild: Boolean      ;
   IsJson   : Boolean      ;
+  DbPath   : string       ;
 begin
-  if (AArgs.ProjectPath = '') or (AArgs.DbPath = '') then
+  if AArgs.ProjectPath = '' then
   begin
-    Writeln('Usage: drag-lint refresh-findings --project <X.dproj|.dpr> --db <db> ' +
+    Writeln('Usage: drag-lint refresh-findings --project <X.dproj|.dpr> [--db <db>] ' +
       '[--platform win32|win64] [--full] [--json]');
     Exit(2);
   end;
-  if NoDbResolved(AArgs.DbPath, 'refresh-findings') then Exit(2);
-  if not TFile.Exists(AArgs.DbPath) then
+  { This verb WRITES compiler findings, so it takes the write rule
+    (ResolveIndexDb): an explicit --db, else the project's exact manifest owner,
+    else its own <project dir>\_D-RAG\<base>.sqlite -- never a DB that Run or
+    manifest order supplied. Two claimants refuse. }
+  DbPath:= if Length(AArgs.DbPaths) > 0 then AArgs.DbPath
+           else ResolveProjectWriteDb('refresh-findings', AArgs.ProjectPath, AArgs.ProjectPath);
+  { '' only when two sections claim the project or the manifest would not load
+    -- ResolveProjectWriteDb has already said which, so say nothing more. }
+  if DbPath = '' then Exit(2);
+  if not TFile.Exists(DbPath) then
   begin
-    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('ERROR: database not found: ', DbPath);
+    Writeln('       Build the project index first: drag-lint index --project "', AArgs.ProjectPath, '"');
     Exit(2);
   end;
 
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store:= TSQLiteSymbolStore.Create(DbPath);
   Store.Migrate;
 
   // Step 3: nothing stale and no forced --full -> noop.
@@ -24714,8 +25194,18 @@ var
   SizeBefore: Int64        ;
   SizeAfter : Int64        ;
 begin
-  if AArgs.DbPath = '' then begin Writeln('ERROR: purge-locals needs an explicit --db <db>'); Exit(2); end;
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  { DbPaths, not DbPath: Run defaults DbPath from --project, and a DESTRUCTIVE
+    verb must not act on a database the user did not name. }
+  if Length(AArgs.DbPaths) = 0 then
+  begin
+    Writeln('ERROR: purge-locals needs an explicit --db <db>');
+    Exit(2);
+  end;
+  if not FileExists(AArgs.DbPath) then
+  begin
+    Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+    Exit(2);
+  end;
 
   SizeBefore:= TFile.GetSize(AArgs.DbPath);
   { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
@@ -25530,8 +26020,8 @@ end; // function DetectPlatformFromDproj
 //      use that list.
 //   3. If no manifest is found or the resolved list is empty, fall back to the
 //      default .\drag-lint.sqlite so existing behaviour is preserved.
-//   4. --project names the ONE index that owns that project, so when it is given
-//      (and resolves unambiguously) that DB is promoted to the FRONT of the list.
+//   4. --project: the list is the project's OWN index (when it exists) plus the
+//      platform library, nothing else (owner ruling 2026-08-13; 1.20.4).
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
@@ -25541,12 +26031,15 @@ var
   Resolved : TArray<string>                            ;
   ProjDb   : string                                    ;
   Claimants: TArray<string>                            ;
+  LibDbs   : TArray<string>                            ;
   D        : string                                    ;
 begin
   // User supplied explicit --db: honour without modification.
   if Length(AArgs.DbPaths) > 0 then begin Result:= AArgs.DbPaths; Exit; end;
 
-  ProjDb:= '';
+  ProjDb   := '';
+  Claimants:= nil;
+  LibDbs   := nil;
   // Try manifest-driven selection.
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
@@ -25576,15 +26069,25 @@ begin
       Resolver.Free;
     end;
 
-    { The one DB that owns --project. Same function the IDE's Rebuild Index and
-      `resolve-dbs --project` use, so all three agree by construction. Anything
-      short of pdmUnique is left alone: a guessed owner is worse than none. }
+    { The one DB that owns --project: the manifest's exact owner (the same
+      ResolveProjectDb the IDE's Rebuild Index and `resolve-dbs --project` use),
+      else the project's own _D-RAG default. Two claimants name no owner: a
+      guessed owner is worse than none. }
     if AArgs.ProjectPath <> '' then
-      if ResolveProjectDb(Manifest, AArgs.ProjectPath, ProjDb, Claimants) <> pdmUnique then ProjDb:= '';
+    begin
+      if ResolveOwnProjectDb(Manifest, AArgs.ProjectPath, ProjDb, Claimants) = pdmAmbiguous then ProjDb:= '';
+      LibDbs:= LibrarySectionDbs(Manifest);
+    end;
   except
-    // Any manifest parse / IO error: fall through to default.
-    Resolved:= nil;
-    ProjDb  := '';
+    on E: Exception do
+    begin
+      // Any manifest parse / IO error: fall through to default -- and say so.
+      Resolved:= nil;
+      ProjDb  := '';
+      LibDbs  := nil;
+      Writeln(ErrOutput, Format('NOTE: could not load the manifest (%s: %s); falling back to the default database.',
+                                [E.ClassName, E.Message]));
+    end;
   end; // try
 
   if Length(Resolved) > 0 then Result:= Resolved
@@ -25594,21 +26097,36 @@ begin
     Result:= [AArgs.DbPath];
   end;
 
-  { Promote the owning index to the front. Consumers read the list as "the
-    project index first, everything else after" -- lint-all literally takes
-    Result[0] as its store -- so leaving the manifest's own section order in
-    charge meant `--project` opened whichever project happened to be declared
-    first. With --project scoping the FILE LIST to one closure and the store
-    coming from a different project, the intersection is empty: `0 finding(s),
-    0 file(s) scanned` on a correctly indexed project, which reads as success.
-    Promote rather than replace -- the library DB and the rest of the list are
-    still wanted, just not in front. }
-  if (ProjDb <> '') and TFile.Exists(ProjDb) then
+  { --project: THE PROJECT'S OWN INDEX, THEN THE PLATFORM LIBRARY, AND NOTHING
+    ELSE. Owner ruling 2026-08-13: the authoritative set is the platform library
+    plus the project DB; every other database -- another project's above all --
+    is noise and misleading, for reads as much as for writes.
+
+    This list used to be the manifest's sections with the owner PROMOTED to the
+    front and the siblings kept behind it. Consumers take Result[0] as their
+    store (lint-all, wiring, exceptions-sync), so an owner-less project then
+    opened whichever sibling was declared first; and multi-DB readers (query,
+    hover) answered by NAME from every sibling even when the owner was in
+    front. Library sections are recognised by section KIND (LibrarySectionDbs),
+    not by a file-name prefix.
+
+    With no index of its own (never built, or two sections claim it) only the
+    library is left, and that is SAID: an empty answer must not read as a
+    clean one. }
+  if AArgs.ProjectPath <> '' then
   begin
-    var Reordered: TArray<string>:= [ProjDb];
+    var Kept: TArray<string>:= nil;
+    if (ProjDb <> '') and TFile.Exists(ProjDb) then Kept:= [ProjDb]
+    else if Length(Claimants) > 1 then
+      Writeln(ErrOutput, Format('NOTE: %d manifest sections claim %s (%s) -- no index owns it, and other ' +
+                                'projects'' indexes are not consulted. Fix the manifest or pass --db.',
+                                [Length(Claimants), AArgs.ProjectPath, string.Join(', ', Claimants)]))
+    else
+      Writeln(ErrOutput, Format('NOTE: no index owns %s -- other projects'' indexes are not consulted. ' +
+                                'Build it: drag-lint index --project "%s"', [AArgs.ProjectPath, AArgs.ProjectPath]));
     for D in Result do
-      if not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Reordered:= Reordered + [D];
-    Result:= Reordered;
+      if IsLibrarySectionDb(LibDbs, D) and not SameText(ExpandFileName(D), ExpandFileName(ProjDb)) then Kept:= Kept + [D];
+    Result:= Kept;
   end;
 
   { Then reorder by what the indexes ACTUALLY CONTAIN, when this run names a
@@ -25962,6 +26480,7 @@ begin
         roAlreadyOwned: OutcomeText:= 'already-registered';
         roAmbiguous   : OutcomeText:= 'ambiguous';
         roNoManifest  : OutcomeText:= 'no-manifest';
+        roManifestUnparsed: OutcomeText:= 'manifest-unparsed';
       else               OutcomeText:= 'failed';
       end;
       O.AddPair('outcome', OutcomeText);
@@ -25977,6 +26496,9 @@ begin
     finally
       O.Free;
     end;
+    { The refusal is an EXIT CODE in JSON mode too: a caller that reads only
+      the code must not take an unparsed manifest for a registration. }
+    if Res.Outcome = roManifestUnparsed then Exit(2);
   end
   else
   begin
@@ -26005,6 +26527,11 @@ begin
           for var C: string in Res.Claimants do Writeln(ErrOutput, '  section: ', C);
           Exit(1);
         end;
+      roManifestUnparsed:
+        begin
+          ReportManifestRefusal('register-project', Res.Message);
+          Exit(2);
+        end;
     else
       begin
         Writeln(ErrOutput, 'FAILED: ', Res.Message);
@@ -26024,6 +26551,8 @@ var
   Platform  : string                                    ;
   Paths     : TArray<string>                            ;
   AllPaths  : TArray<string>                            ;
+  NotePlan  : TIndexPlan                                ;
+  PS        : TPlanSection                              ;
   P         : string                                    ;
   J         : TJSONArray                                ;
 begin
@@ -26200,6 +26729,11 @@ begin
           DBs (or from none) and nothing said so. Resolve again WITHOUT the
           existence filter and name the difference. }
         AllPaths:= TDbSelect.Resolve(Manifest, Platform, Resolver, False);
+        { The same plan TDbSelect walks, kept so a never-built DB can be mapped
+          back to the SECTION that builds it (its name and platform). }
+        var NoteFilter: TArray<string>:= nil;
+        if Platform <> '' then NoteFilter:= [Platform];
+        NotePlan:= ResolvePlan(Manifest, NoteFilter, Resolver);
       finally
         Resolver.Free;
       end;
@@ -26216,18 +26750,25 @@ begin
                                   [E.ClassName, E.Message]));
         Paths   := nil;
         AllPaths:= nil;
+        NotePlan:= Default(TIndexPlan);
       end;
     end; // try
 
+    { Advice keyed on the plan ITEM that owns the DB, never on the file name:
+      --only takes the section name, and a library item also needs --platform.
+      Guessing from the file name advised `--only library-Win64` and `--only Foo`
+      (for section P-Foo), both of which exit 2. }
     for P in AllPaths do
     begin
-      var Present: Boolean:= False;
-      for var Q: string in Paths do
-        if SameText(Q, P) then begin Present:= True; Break; end;
-      if (not Present) and (not TFile.Exists(P)) then
-        EmitStatusLine(AArgs, Format(
-          'NOTE: %s is configured in the manifest but has never been built -- run: drag-lint index --all --only %s',
-          [P, TPath.GetFileNameWithoutExtension(P)]));
+      if TFile.Exists(P) then Continue;
+      for PS in NotePlan.Items do
+        if SameText(ExpandFileName(PS.DbPath), ExpandFileName(P)) then
+        begin
+          EmitStatusLine(AArgs, Format(
+            'NOTE: %s is configured in the manifest but has never been built -- run: %s',
+            [P, IndexSectionCommand(PS, ConfigPath)]));
+          Break;
+        end;
     end;
 
     { Fallback: preserve pre-Task-9 default when no manifest is found -- but only
@@ -28187,6 +28728,18 @@ begin
     if Args.ShowHelp then begin PrintHelp; Exit(0); end;
     if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
 
+    { A .drag-lint.json DEFAULTS FILE THAT COULD NOT BE READ (1.20.4 Task 4):
+      LoadConfigDefaults has warned and kept only the keys before the bad one.
+      A reader carries on with that; a verb that WRITES an index or a manifest
+      refuses, because the half it read may be the very "db" it would write.
+      compile-check computes and skips its cache instead (ResolveCompileCheckDb). }
+    if (Args.ConfigError <> '') and
+       MatchText(Args.Command, ['index', 'refresh-findings', 'purge-locals', 'register-project']) then
+    begin
+      ReportManifestRefusal(Args.Command, Args.ConfigError);
+      Exit(2);
+    end;
+
     { THE DEFAULT SCHEME: a project's own index + the platform library index.
       Owner ruling, 2026-08-13 -- "by default and maybe always", overridable only
       where a user says otherwise, which is exactly three places: an explicit
@@ -28200,15 +28753,32 @@ begin
       refresh-findings, forms-csv, uses-fix, check-unit...) reads AArgs.DbPath,
       so defaulting it once covers all of them and the next one added.
 
-      Only when the user gave NO explicit --db (DbPaths empty). ResolveConsumerDbs
-      already promotes the project's own DB to the front and leaves the list
-      alone when the project cannot be resolved unambiguously, so taking [0] here
-      inherits that caution rather than re-deciding it. }
+      Only when the user gave NO explicit --db (DbPaths empty), and only to the
+      project's OWN database (ResolveOwnProjectDb: the manifest's exact owner,
+      else <project dir>\_D-RAG\<base>.sqlite) when it exists. This used to take
+      ResolveConsumerDbs(Args)[0], which for a project the manifest does not
+      register is simply the FIRST section whose DB exists -- and `index
+      --project` then wrote an unregistered project into Micronite2027.sqlite
+      (1.20.4). DbPaths stays empty, so every verb can still tell an explicit
+      --db from this default; a WRITE verb must test DbPaths, never DbPath. }
     { doc-forget reads --project as a TAG NAME, never a project file. }
     if (Args.ProjectPath <> '') and (Length(Args.DbPaths) = 0) and (Args.Command <> 'doc-forget') then
     begin
-      var ProjDbs: TArray<string>:= ResolveConsumerDbs(Args);
-      if (Length(ProjDbs) > 0) and (ProjDbs[0] <> '') and TFile.Exists(ProjDbs[0]) then Args.DbPath:= ProjDbs[0];
+      var OwnDb: string:= '';
+      var OwnClaimants: TArray<string>:= nil;
+      try
+        if ResolveOwnProjectDb(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir),
+                               Args.ProjectPath, OwnDb, OwnClaimants) = pdmAmbiguous then OwnDb:= '';
+      except
+        on E: Exception do
+        begin
+          { No manifest, no default: each verb then reports its own missing DB. }
+          OwnDb:= '';
+          Writeln(ErrOutput, Format('NOTE: --project: could not load the manifest (%s: %s); no project database defaulted.',
+                                    [E.ClassName, E.Message]));
+        end;
+      end; // try
+      if (OwnDb <> '') and TFile.Exists(OwnDb) then Args.DbPath:= OwnDb;
     end;
     { THE PROJECT TAG (2026-09-23): the name this run writes into, and reaps
       from, inbound fact entries on a reconciled block -- the primary DB's base
