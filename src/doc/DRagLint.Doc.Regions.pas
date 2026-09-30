@@ -67,13 +67,20 @@ const
   /// <summary>The widest physical line the engine may write for ONE fact of a
   /// managed block, prefix included.</summary>
   /// <remarks>
-  /// dcc rejects a source line longer than 1023 characters (F2069), and a
-  /// comment line counts. The inbound lists of a reconciliation block are
-  /// uncapped by design (a window onto a list is not the list), so they can
-  /// exceed it. 1000 leaves room for a CR and a later hand edit. A fact line at
-  /// or under this width is written as ONE line, byte-identical to before; only
-  /// a longer one is broken, at entry boundaries (TDocRegions.WrapFactLine).
-  /// Unrelated to DOC_WRAP_COLS, which budgets engine PROSE for readability.
+  /// dcc 37.0 rejects an over-long source line with F2069 "Line too long (more
+  /// than 1023 characters)", and a comment line counts. Measured 2026-09-30
+  /// (dcc64, comment and code lines alike): the compiler reads the file in 4 KB
+  /// blocks, a line that crosses a block boundary fails at 1021 characters, and
+  /// one inside a block compiles up to that block's end -- so 1020 is the only
+  /// length that compiles wherever the line lands, and a longer line breaks the
+  /// build when an edit above it moves it. The inbound lists of a
+  /// reconciliation block are uncapped by design (a window onto a list is not
+  /// the list), so they grow past that. 1000 keeps a margin for a hand edit and
+  /// keeps a list reviewable. A fact line at or under this width is written as
+  /// ONE line, byte-identical to before; only a longer one is broken, at entry
+  /// boundaries (TDocRegions.WrapFactLine), and a stored managed-block line over
+  /// it is drift (TDocDrift.Analyze). Unrelated to DOC_WRAP_COLS, which budgets
+  /// engine PROSE for readability.
   /// </remarks>
   DOC_FACT_MAX_COLS = 1000;
   /// Legacy trailing param marker TEXT. DECLARATION-ONLY as of v(ADP3 T1): no
@@ -501,9 +508,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.EscXmlAttr, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.AppendFact, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinEsc, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.MoreSuffix, Format, IsCertain, SameText</para>
-    /// <para>Complexity: 21 (cyclomatic, outer body), 317 lines (full implementation)</para>
-    /// <para>Pure</para>
+    /// <para>Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.EscXmlAttr, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.AppendFact, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinEsc, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.MoreSuffix, Format, IsCertain, SameText, WrapFactLine</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 325 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
     /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
     /// <seealso cref="DRagLint.Doc.Regions.EscXmlAttr"/>
@@ -813,7 +819,10 @@ type
     /// <param name="AText">The fact text after the prefix, e.g.
     /// '&lt;para&gt;Used by: A (a.pas), B (b.pas)&lt;/para&gt;'.</param>
     /// <returns>[APrefix + AText] when Length(APrefix) + Length(AText) &lt;=
-    /// DOC_FACT_MAX_COLS (byte-identical to an unwrapped write). Otherwise lines
+    /// DOC_FACT_MAX_COLS (byte-identical to an unwrapped write), and also when
+    /// AText does not start with '&lt;para&gt;' -- a legacy fact line, which
+    /// FoldFactLine cannot fold back, so a continuation line would be an orphan
+    /// in the fence; it stays one line whatever its length. Otherwise lines
     /// APrefix + Chunk[i] whose chunks satisfy string.Join(' ', Chunks) = AText:
     /// exactly one blank is dropped at each break.</returns>
     /// <remarks>
@@ -866,7 +875,10 @@ type
     /// FoldFactLine; a blank-free 1500-character token is returned whole; a
     /// '; '-separated list breaks after ';'; an unterminated or interrupted
     /// &lt;para&gt; folds to its first line; trailing CRs are stripped;
-    /// FactLinePrefix with and without &lt;para&gt;.</remarks>
+    /// FactLinePrefix with and without &lt;para&gt;; each break is the rightmost
+    /// boundary; comma-free text breaks at the rightmost blank; a line of exactly
+    /// DOC_FACT_MAX_COLS stays whole and one more character breaks it; a legacy
+    /// line without &lt;para&gt; is never broken.</remarks>
     class function SelfTestFactWrap(out AFailure: string): Boolean; static;
   end;
 
@@ -2068,6 +2080,9 @@ var
 begin
   Result:= [APrefix + AText];
   if Length(APrefix) + Length(AText) <= DOC_FACT_MAX_COLS then Exit;
+  { a legacy line (no <para>) stays whole: FoldFactLine cannot fold it back, so
+    its continuation lines would be orphans in the fence }
+  if not AText.StartsWith(FACT_PARA_OPEN) then Exit;
   L:= TList<string>.Create;
   try
     Rest  := AText;
@@ -2141,6 +2156,9 @@ const
   TOKEN_LEN   = 1500;
   LIST_FMT    = 'U%0:.3d.P%0:.3d (U%0:.3d.pas)';
   CASE_FMT    = 'Result:= Value%d';
+  WORD_FMT    = 'word%.3dz';
+  WORD_END    = 'z';
+  BOUNDARY_TAIL = ', Y';
 var
   Text   : string;
   Lines  : TArray<string>;
@@ -2254,6 +2272,39 @@ begin
   { case 10: FactLinePrefix with and without <para> }
   Expect(FactLinePrefix('    /// <para>Calls: X</para>') = '    /// ', 'case 10 FactLinePrefix with para');
   Expect(FactLinePrefix('  /// Calls: X') = '  /// ', 'case 10 FactLinePrefix without para');
+
+  { case 11: each break is the RIGHTMOST boundary -- line 1 of case 2's list is
+    within one entry of the limit, not merely under it }
+  Text := FACT_PARA_OPEN + 'Used by: ' + Joined(ENTRY_COUNT, LIST_FMT, ', ') + FACT_PARA_CLOSE;
+  Lines:= WrapFactLine(PFX, Text);
+  Expect(Length(Lines[0]) > DOC_FACT_MAX_COLS - Length(Format(LIST_FMT, [ENTRY_COUNT - 1]) + ', '),
+    'case 11 line 1 did not break at the rightmost entry boundary');
+
+  { case 12: comma-free text with inner blanks falls back to the rightmost blank }
+  Text := FACT_PARA_OPEN + Joined(ENTRY_COUNT, WORD_FMT, ' ') + FACT_PARA_CLOSE;
+  Lines:= WrapFactLine(PFX, Text);
+  Expect((Length(Lines) > 1) and (Rejoined(Lines) = Text), 'case 12 comma-free text not wrapped at a blank');
+  Expect(WellWrapped(Lines, WORD_END), 'case 12 a line is over the limit or ends mid-word');
+  Expect(Length(Lines[0]) > DOC_FACT_MAX_COLS - Length(Format(WORD_FMT, [ENTRY_COUNT - 1]) + ' '),
+    'case 12 line 1 did not break at the rightmost blank');
+
+  { case 13: the boundary -- a line of exactly DOC_FACT_MAX_COLS stays one line,
+    one more character breaks it }
+  Text := FACT_PARA_OPEN + StringOfChar('X', DOC_FACT_MAX_COLS - Length(PFX) - Length(BOUNDARY_TAIL)
+    - Length(FACT_PARA_OPEN) - Length(FACT_PARA_CLOSE)) + BOUNDARY_TAIL + FACT_PARA_CLOSE;
+  Lines:= WrapFactLine(PFX, Text);
+  Expect((Length(PFX + Text) = DOC_FACT_MAX_COLS) and (Length(Lines) = 1) and (Lines[0] = PFX + Text),
+    'case 13 a line of exactly the limit was not kept whole');
+  Text := FACT_PARA_OPEN + 'X' + Copy(Text, Length(FACT_PARA_OPEN) + 1, MaxInt);
+  Lines:= WrapFactLine(PFX, Text);
+  Expect((Length(Lines) = 2) and (Rejoined(Lines) = Text), 'case 13 a line one over the limit was not broken in two');
+
+  { case 14: a LEGACY fact line (no <para>) is never broken, whatever its length:
+    FoldFactLine cannot fold it back, so a continuation line would be orphaned }
+  Text := 'Used by: ' + Joined(ENTRY_COUNT, LIST_FMT, ', ');
+  Lines:= WrapFactLine(PFX, Text);
+  Expect((Length(PFX + Text) > DOC_FACT_MAX_COLS) and (Length(Lines) = 1) and (Lines[0] = PFX + Text),
+    'case 14 a legacy line without <para> was broken');
 
   Result:= AFailure = '';
 end;
@@ -2661,21 +2712,28 @@ var
   end;
   // v(PHASE C, B8): the single emission point for a facts-block line.
   //
-  // A FACT LIST IS DELIBERATELY NOT WRAPPED, and that is a decision, not an
-  // oversight. B8 wraps engine-owned PROSE (<summary>, <remarks>, harvested
-  // text) because prose is what made a one-word change rewrite a 759-column
-  // line. A fact list is structured data, not prose: 'Called from:' and friends
-  // are read back by tooling and by five pinned runners that treat one fact as
-  // one line, and word-wrapping a comma-joined list mid-entry buys reviewable
-  // diffs at the cost of a format every consumer has to re-learn.
+  // A FACT LIST IS NOT WORD-WRAPPED to DOC_WRAP_COLS, and that is a decision,
+  // not an oversight. B8 wraps engine-owned PROSE (<summary>, <remarks>,
+  // harvested text) because prose is what made a one-word change rewrite a
+  // 759-column line. A fact list is structured data, not prose: 'Called from:'
+  // and friends are read back by tooling, and breaking a comma-joined list
+  // mid-entry buys reviewable diffs at the cost of a format every consumer has
+  // to re-learn. So these lines still exceed DOC_WRAP_COLS -- measured at 262
+  // columns on YADF.LineScan's 'Called from:'.
   //
-  // So these lines can still exceed DOC_WRAP_COLS -- measured at 262 columns on
-  // YADF.LineScan's 'Called from:'. THE PREFERRED FUTURE FIX IS NOT WORD-WRAP:
-  // it is ONE ENTRY PER LINE, which keeps every entry atomic and greppable and
-  // makes a diff show exactly the caller that changed. That change belongs
-  // here, in this one procedure, which is why the call sites route through it
-  // rather than calling Sb.AppendLine directly -- the seam is the deliverable
-  // even though the body is currently a passthrough.
+  // v(1.20.5, OWNER RULING 2026-09-29): a fact line over DOC_FACT_MAX_COLS IS
+  // broken -- at entry boundaries, and ONLY when it is over that limit. The
+  // uncapped inbound lists of a reconciliation block grew past what dcc
+  // compiles (F2069; see DOC_FACT_MAX_COLS for the measured limit), and a unit
+  // the engine documents must still build. Every line within the limit is
+  // written byte-identical to before, so no project churns; the readers fold a
+  // broken line back (TDocRegions.FoldFactLine).
+  //
+  // THE PREFERRED SHAPE, if reviewable diffs are ever wanted, is still ONE ENTRY
+  // PER LINE, which keeps every entry atomic and greppable and makes a diff show
+  // exactly the caller that changed. That change belongs here, in this one
+  // procedure, which is why the call sites route through it rather than calling
+  // Sb.AppendLine directly.
   procedure AppendFact(const AText: string);
   begin
     { v(P8, 2026-08-24): each fact is its own <para>.
@@ -2699,7 +2757,8 @@ var
 
       NOT WRAPPED, DELIBERATELY: <since> and <seealso>. They are real
       elements, not prose, and still call Sb.AppendLine. }
-    Sb.AppendLine(APrefix + '<para>' + AText + '</para>');
+    for var FL in WrapFactLine(APrefix, FACT_PARA_OPEN + AText + FACT_PARA_CLOSE) do
+      Sb.AppendLine(FL);
   end;
 begin
   Sb:= TStringBuilder.Create;

@@ -148,10 +148,10 @@ type
     /// That is what TDocFactsRenderOptions is for.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+26 more)</para>
+    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody, DRagLint.Doc.Drift.GroupIsVolatile (+27 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 57 (cyclomatic, outer body), 556 lines (full implementation)</para>
+    /// <para>Complexity: 59 (cyclomatic, outer body), 562 lines (full implementation)</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
@@ -268,6 +268,38 @@ begin
   E:= PosEx(AEnd, ARemarks, B);
   if E = 0 then Exit;
   Result:= Copy(ARemarks, B, E - B);
+end;
+
+const
+  DOC_LINE_SLASHES = '///';
+
+// v(1.20.5, Review Focus 1): True when a PHYSICAL line inside the managed fence
+// of ARawBlock is wider than DOC_FACT_MAX_COLS. Such a line was written by
+// 1.20.4 or earlier, before the renderer broke long fact lines, and it may not
+// compile (F2069). The content compare cannot see it -- BlockDrifted collapses
+// whitespace, so the one long line and the wrapped render read as equal -- and
+// the unit would stay uncompilable forever; so the WIDTH is drift on its own,
+// fail-safe toward drift like the rest of this check.
+//
+// ARawBlock reaches this point with each line's '///' and indentation already
+// stripped (the doc scanner keeps what follows the slashes, leading blank
+// included), so the physical width is rebuilt as AIndent + '///' + the raw
+// line, AIndent being the DECLARATION's own indentation -- the column the
+// engine writes a managed block at. A hand-indented block that differs is
+// measured at the declaration's indent.
+function StoredFactLineTooLong(const ARawBlock: string; AIndent: Integer): Boolean;
+var
+  S      : string;
+  InFence: Boolean;
+begin
+  Result := False;
+  InFence:= False;
+  for S in ARawBlock.Split([#10]) do
+    if Pos(AUTO_BEGIN, S) > 0 then InFence:= True
+    else if Pos(AUTO_END, S) > 0 then InFence:= False
+    else if InFence
+      and (AIndent + Length(DOC_LINE_SLASHES) + Length(S.TrimRight([#13])) > DOC_FACT_MAX_COLS) then
+      Exit(True);
 end;
 
 // Builds one drift finding.
@@ -1074,7 +1106,11 @@ begin
       // vouch for what the regeneration would delete. Step 2 makes the
       // regeneration itself preserve them; this stops the bleeding first, and is
       // deliberately separable from it.
-      if TSharedFacts.BlockDrifted(CurBlock, Fresh, AStore,
+      //
+      // v(1.20.5): a stored line wider than DOC_FACT_MAX_COLS is drift whatever
+      // the content says -- see StoredFactLineTooLong.
+      var TooLong: Boolean:= StoredFactLineTooLong(ADoc.RawBlock, ASym.StartCol - 1);
+      if TooLong or TSharedFacts.BlockDrifted(CurBlock, Fresh, AStore,
            AStore.GetFilePath(ASym.FileId)) then
       begin
         var CanVouch: Boolean:=
@@ -1083,6 +1119,8 @@ begin
         // The message PREFIX stays byte-identical: two runners match it with
         // -like '*managed facts block is out of date*'.
         var Detail: string:= 'managed facts block is out of date';
+        if TooLong then
+          Detail:= Detail + Format(' -- a line is over %d characters', [DOC_FACT_MAX_COLS]);
         if not CanVouch then
           Detail:= Detail + ' -- names facts in unit(s) this index does not hold; not auto-fixed';
         Findings.Add(MakeFinding(ddFactsBlockStale, Detail, CanVouch, DocLine));

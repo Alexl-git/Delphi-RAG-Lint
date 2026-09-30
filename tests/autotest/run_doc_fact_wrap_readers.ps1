@@ -2,9 +2,12 @@
   run_doc_fact_wrap_readers.ps1 -- every reader of a STORED managed block reads a
   fact list the writer split over several `///` lines (1.20.5, Task 2).
 
-  WHY. dcc rejects a source line over 1023 characters (F2069), and the inbound
-  lists of a reconciliation block are uncapped by design, so they can exceed it.
-  Owner ruling 2026-09-29: break such a line at entry boundaries, ONLY when it is
+  WHY. dcc 37.0 rejects an over-long source line with F2069 "Line too long
+  (more than 1023 characters)"; measured 2026-09-30, a line that crosses one of
+  the compiler's 4 KB read blocks fails at 1021 characters, so 1020 is the only
+  length that compiles wherever the line lands. The inbound lists of a
+  reconciliation block are uncapped by design, so they can exceed it. Owner
+  ruling 2026-09-29: break such a line at entry boundaries, ONLY when it is
   over DOC_FACT_MAX_COLS (1000). Readers go first: a reader that parses one
   PHYSICAL line at a time sees only the first line of a wrapped list, and
     * MergeInboundFacts writes the merged list over line 1 and leaves the
@@ -43,6 +46,16 @@
                   [ProjA,ProjB] entries as [ProjA], and drops the emptied Target2
                   line WHOLE (all its physical lines).
     F3  CRLF      after F1 and after F2, every 0x0A is preceded by 0x0D.
+    F4  wrapped   (Task 3) Wide.pas' Target4 has 150 ProjA callers, so the
+        fresh     FRESH render is itself wrapped (the renderer breaks it); the
+                  stored list holds three of them tagged [ProjA] and 30
+                  ProjB-only entries. The merge must fold the fresh side too:
+                  180 entries, each exactly once, every ProjA entry tagged
+                  [ProjA], no line over 1000, and a fixed point.
+    F5  legacy    (Task 3, R5b) a legacy fact line WITHOUT <para>, over 1000
+                  characters, through doc-forget: it stays ONE line (a wrapped
+                  legacy line would orphan its continuation, which FoldFactLine
+                  cannot fold back) and keeps the tags it was not asked to drop.
 
   Explicit --db everywhere; nothing touches a real project database.
 #>
@@ -222,7 +235,8 @@ end.
 '@
 Write-Ascii (Join-Path $aDir 'ProjA.dpr') @'
 program ProjA;
-uses Shared in '..\shared\Shared.pas', uX in '..\shared\uX.pas', uA in 'uA.pas';
+uses Shared in '..\shared\Shared.pas', uX in '..\shared\uX.pas', uA in 'uA.pas',
+  Wide in '..\shared\Wide.pas', uW in 'uW.pas';
 begin
 end.
 '@
@@ -252,9 +266,60 @@ begin
 end.
 '@
 
+# F4 (Task 3): Target4 has 150 ProjA callers, so its FRESH render is wrapped.
+# The stored list holds three of them, tagged, and 30 ProjB-only entries.
+$wide   = Join-Path $shDir 'Wide.pas'
+$wStored = @('[ProjA]uW.W001 (uW.pas)', '[ProjA]uW.W002 (uW.pas)', '[ProjA]uW.W150 (uW.pas)') +
+           @(1..30 | ForEach-Object { '[ProjB]uZ.Far{0:D2} (uZ.pas)' -f $_ })
+Write-Ascii $wide @"
+unit Wide;   // dl:shared ProjA, ProjB
+
+interface
+
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: $($wStored -join ', ')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure Target4;
+
+implementation
+
+procedure Target4;
+begin
+end;
+
+end.
+"@
+$wDecls = (1..150 | ForEach-Object { 'procedure W{0:D3};' -f $_ }) -join "`n"
+$wImpls = (1..150 | ForEach-Object { 'procedure W{0:D3}; begin Target4; end;' -f $_ }) -join "`n"
+Write-Ascii (Join-Path $aDir 'uW.pas') "unit uW;`n`ninterface`n`n$wDecls`n`nimplementation`n`nuses Wide;`n`n$wImpls`n`nend.`n"
+
+# F5 (Task 3, R5b): a LEGACY fact line -- no <para> -- over 1000 characters.
+$legacy = Join-Path $WorkDir 'Legacy.pas'
+$legacyEntries = @('[ProjA]uA.A1 (uA.pas)') + @(1..45 | ForEach-Object { '[ProjB]uZ.RemoteCaller{0:D2} (uZ.pas)' -f $_ }) + @('[ProjC]uC.C1 (uC.pas)')
+Write-Ascii $legacy @"
+unit Legacy;   // dl:shared ProjA, ProjB, ProjC
+
+interface
+
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// Called from: $($legacyEntries -join ', ')
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure Old;
+
+implementation
+
+procedure Old;
+begin
+end;
+
+end.
+"@
 $r = Run @('index', '--project', (Join-Path $aDir 'ProjA.dpr'), '--db', $dbA)
 Check 'setup: ProjA indexed' (($r.Code -eq 0) -and (Test-Path $dbA)) ($r.Out.Trim() -split "`n" | Select-Object -Last 1)
-$fx = Logical (BlockAbove '^procedure Target;')
 Check 'setup: the stored Target list spans 3 physical lines' (((BlockAbove '^procedure Target;') | Where-Object { $_ -match 'uZ\.|uA\.|uX\.' }).Count -eq 3) ''
 Check 'setup: every stored line is within the limit' ((MaxLineLen $shared) -le 1000) "max $(MaxLineLen $shared)"
 
@@ -327,6 +392,46 @@ Check 'F2: Target2 -- the emptied fact is dropped WHOLE, continuation lines too'
 Check 'F2: Target2 -- its fence is intact' ((($blk2 -join "`n") -match 'drag-lint:auto BEGIN') -and (($blk2 -join "`n") -match 'drag-lint:auto END')) ''
 Check 'F3: no bare LF after doc-forget' ((BareLfCount $shared) -eq 0) "bare LF: $(BareLfCount $shared)"
 
+# ------------------------------------------------------- F4: wrapped fresh ----
+function BlockAboveIn([string]$Path, [string]$DeclPat) {
+  $ls = [IO.File]::ReadAllLines($Path); $d = -1
+  for ($i = 0; $i -lt $ls.Count; $i++) { if ($ls[$i] -match $DeclPat) { $d = $i; break } }
+  if ($d -lt 0) { return ,@() }
+  $acc = @()
+  for ($i = $d - 1; $i -ge 0; $i--) { if ($ls[$i] -notmatch '^\s*///') { break }; $acc = ,$ls[$i] + $acc }
+  return ,$acc
+}
+# F2 rewrote Shared.pas: reindex, so F4 runs on an index of what is on disk.
+$null = Run @('index', '--project', (Join-Path $aDir 'ProjA.dpr'), '--db', $dbA)
+$r = Run @('document', '--unit', $wide, '--db', $dbA, '--apply', '--no-backup')
+Check 'F4: document --apply ran' ($r.Code -eq 0) ($r.Out.Trim() -split "`n" | Select-Object -Last 1)
+$blk4 = BlockAboveIn $wide '^procedure Target4;'
+$es4  = Entries (CalledFrom (Logical $blk4))
+$bare4 = @($es4 | ForEach-Object { $_ -replace '^\[[^\]]*\]', '' })
+$dups4 = @($bare4 | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+Check 'F4: Target4 -- 180 entries (150 ProjA + 30 ProjB)' ($es4.Count -eq 180) "$($es4.Count) entries"
+Check 'F4: Target4 -- no entry is duplicated (tags ignored)' ($dups4.Count -eq 0) "duplicates: $($dups4.Count) e.g. $($dups4 | Select-Object -First 3)"
+Check 'F4: Target4 -- every ProjA caller is tagged [ProjA]' ((@($es4 | Where-Object { $_ -like '`[ProjA`]uW.W*' })).Count -eq 150) "$((@($es4 | Where-Object { $_ -like '`[ProjA`]uW.W*' })).Count) tagged"
+Check 'F4: Target4 -- all 30 ProjB-only entries survive' ((@($es4 | Where-Object { $_ -like '`[ProjB`]uZ.Far*' })).Count -eq 30) ''
+Check 'F4: Target4 -- the merged list is written wrapped' ((@($blk4 | Where-Object { $_ -match 'uW\.W' })).Count -gt 1) ''
+Check 'F4: no line of Wide.pas exceeds 1000 characters' ((MaxLineLen $wide) -le 1000) "max $(MaxLineLen $wide)"
+$null = Run @('index', '--project', (Join-Path $aDir 'ProjA.dpr'), '--db', $dbA)
+$h = (Get-FileHash $wide).Hash
+$r = Run @('document', '--unit', $wide, '--db', $dbA, '--apply', '--no-backup')
+Check 'F4: a second document run is a no-op' ((Get-FileHash $wide).Hash -eq $h) ($r.Out.Trim() -split "`n" | Select-Object -Last 1)
+
+# ------------------------------------------------------------- F5: legacy -----
+$r = Run @('doc-forget', '--scope', $legacy, '--project', 'ProjC', '--apply', '--no-backup')
+Check 'F5: doc-forget ran' ($r.Code -eq 0) ($r.Out.Trim() -split "`n" | Select-Object -Last 1)
+$blk5 = BlockAboveIn $legacy '^procedure Old;'
+$fact5 = @($blk5 | Where-Object { $_ -match 'uZ\.|uA\.' })
+Check 'F5: the legacy line stays ONE physical line' ($fact5.Count -eq 1) "$($fact5.Count) lines"
+Check 'F5: it is still a legacy line (no <para> added)' (($fact5 -join ' ') -notmatch '<para>') ''
+Check 'F5: the ProjC entry is gone' (($fact5 -join ' ') -notmatch 'uC\.C1') ''
+$l5 = $fact5 -join ' '
+Check 'F5: the ProjA and ProjB tags are kept' (((TagCount $l5 'ProjA') -eq 1) -and ((TagCount $l5 'ProjB') -eq 45)) "ProjA $(TagCount $l5 'ProjA'), ProjB $(TagCount $l5 'ProjB')"
+Check 'F5: POSITIVE CONTROL -- the line really is over 1000 characters' ((MaxLineLen $legacy) -gt 1000) "max $(MaxLineLen $legacy)"
+Check 'F3: no bare LF after the legacy forget' ((BareLfCount $legacy) -eq 0) "bare LF: $(BareLfCount $legacy)"
 Write-Host ''
 if ($script:Failed) { Write-Host 'run_doc_fact_wrap_readers: FAILED' -ForegroundColor Red; exit 1 }
 Write-Host 'run_doc_fact_wrap_readers: OK' -ForegroundColor Green
