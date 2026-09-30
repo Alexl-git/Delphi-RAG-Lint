@@ -92,6 +92,23 @@ function MoveEntry(const AEntries: TArray<TBookEntry>; AIndex, ADelta: Integer):
 /// (Vcl.Forms) is a library unit, neither expanded nor reported.</remarks>
 function ExpandSources(const APaths: TArray<string>; out AErrors: TArray<string>): TArray<string>;
 
+/// <summary>True when the unit AUnitPas declares (its file name without the
+/// extension) is one of AIndexedUnits, compared case-insensitively.</summary>
+/// <param name="AUnitPas">A .pas path.</param>
+/// <param name="AIndexedUnits">Unit names in the project index (any case).</param>
+/// <returns>True = indexed.</returns>
+function UnitInIndex(const AUnitPas: string; const AIndexedUnits: TArray<string>): Boolean;
+
+/// <summary>The Convert tab's DISPLAYED text for one source row.</summary>
+/// <param name="AUnitPas">The listed .pas path. It stays the item string --
+/// the job and Preflight consume it -- so only the display changes.</param>
+/// <param name="AIndexedUnits">Unit names in the project index (any case).</param>
+/// <param name="AIndexKnown">False when the index could not be read: then
+/// nothing is flagged -- unknown is never reported as indexed OR unindexed.</param>
+/// <param name="AFlagged">True = the unit is known NOT to be in the index.</param>
+/// <returns>AUnitPas, plus ' -- not in the project index' when AFlagged.</returns>
+function SourceRowText(const AUnitPas: string; const AIndexedUnits: TArray<string>; AIndexKnown: Boolean; out AFlagged: Boolean): string;
+
 /// <summary>Decides whether a Convert run may start, and which books run.</summary>
 /// <param name="ABooks">The checklist.</param>
 /// <param name="AUnits">The source units (.pas paths).</param>
@@ -261,6 +278,19 @@ begin
   Result:= Found;
 end;
 
+function UnitInIndex(const AUnitPas: string; const AIndexedUnits: TArray<string>): Boolean;
+begin
+  Result:= MatchText(ChangeFileExt(ExtractFileName(AUnitPas), ''), AIndexedUnits);
+end;
+
+function SourceRowText(const AUnitPas: string; const AIndexedUnits: TArray<string>; AIndexKnown: Boolean; out AFlagged: Boolean): string;
+begin
+  AFlagged:= AIndexKnown and not UnitInIndex(AUnitPas, AIndexedUnits);
+  Result  := AUnitPas;
+  if AFlagged then
+    Result:= Result + ' -- not in the project index';
+end;
+
 function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedUnits: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
 var
   B       : TBookEntry;
@@ -299,7 +329,7 @@ begin
     Result.Problems:= Result.Problems + ['No source unit is listed.'];
   Missing:= nil;
   for U in AUnits do
-    if not MatchText(ChangeFileExt(ExtractFileName(U), ''), AIndexedUnits) then
+    if not UnitInIndex(U, AIndexedUnits) then
       Missing:= Missing + [ExtractFileName(U)];
   if Length(Missing) > 0 then
     Result.Problems:= Result.Problems + [Format('Not in the project index (index the project first): %s', [string.Join(', ', Missing)])];

@@ -1893,7 +1893,7 @@ type
       /// open book's folder.</summary>
       /// <returns>The folder, or '' when neither is known.</returns>
       function RulesFolderNow: string;
-      /// <summary>The Convert tab became visible: re-list its books.</summary>
+      /// <summary>The Convert tab became visible: re-list its books and re-read which listed units are indexed.</summary>
       /// <param name="Sender">FTabConvert.</param>
       procedure ConvertTabShow(Sender: TObject);
       /// <summary>Conversion &gt; Convert...: shows the Convert tab.</summary>
@@ -7170,6 +7170,7 @@ end;
 procedure TConvRulesForm.ConvertTabShow(Sender: TObject);
 begin
   FConvertTab.RefreshBooks;
+  FConvertTab.RefreshIndex;
 end;
 
 procedure TConvRulesForm.DoShowConvertTab(Sender: TObject);

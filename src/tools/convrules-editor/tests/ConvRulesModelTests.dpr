@@ -1587,6 +1587,24 @@ begin
   end; // try
 end; // procedure
 
+{ The Convert tab's source rows: an unindexed unit is flagged in the DISPLAY
+  only, and an unreadable index flags nothing (unknown is not "indexed"). }
+procedure TestConvertSourceRow;
+var
+  Flagged: Boolean;
+  Text   : string;
+begin
+  Check('unitinindex.nocase', UnitInIndex('src\dmCPData.pas', ['X', 'DMCPDATA']));
+  Check('unitinindex.dotted', UnitInIndex('src\My.Unit.pas', ['my.unit']));
+  Check('unitinindex.absent', not UnitInIndex('src\Foo.pas', ['Bar', 'FooX']));
+  Text:= SourceRowText('src\Foo.pas', ['Bar'], True, Flagged);
+  Check('sourcerow.flagged', Flagged and (Text = 'src\Foo.pas -- not in the project index'), Text);
+  Text:= SourceRowText('src\dmCPData.pas', ['DMCPDATA'], True, Flagged);
+  Check('sourcerow.indexed.plain', (not Flagged) and (Text = 'src\dmCPData.pas'), Text);
+  Text:= SourceRowText('src\Foo.pas', nil, False, Flagged);
+  Check('sourcerow.unknown.notflagged', (not Flagged) and (Text = 'src\Foo.pas'), Text);
+end; // procedure
+
 { ConvertRunner paths that need no engine answer: a missing unit, a cancel
   between units. The engine adapter points at a non-existent exe, so any call
   that DID reach the engine would fail loudly rather than pass silently. }
@@ -7042,6 +7060,7 @@ begin
     TestUnitPickMulti;
     TestBookSnapshot;
     TestConvertRun;
+    TestConvertSourceRow;
     TestConvertRunner;
     TestConvertRunnerFaults;
     TestConvertRunnerLive;

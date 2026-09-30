@@ -13,6 +13,8 @@ interface
 uses
   System.SysUtils
   , System.Classes
+  , System.Types
+  , Winapi.Windows // TOwnerDrawState / odSelected: SourcesDrawItem's signature
   , Vcl.Controls
   , Vcl.StdCtrls
   , Vcl.CheckLst
@@ -74,6 +76,9 @@ type
       FCancelRequested: Boolean;            // written on the UI thread, polled by the worker
       FNotes          : TArray<string>;     // the current run's pre-flight notes (for the report)
       FRunRows        : TArray<TConvertRow>;// the current run's rows as they arrived
+      FRunRulesFolder : string;             // the rules folder when Convert was pressed: the report goes THERE
+      FIndexed        : TArray<string>;     // unit names in the project index (valid while FIndexKnown)
+      FIndexKnown     : Boolean;            // False = the index could not be read: flag nothing
       FLockable       : TArray<TControl>;   // disabled while a run is in progress
       FTopPanel       : TPanel;
       FBottomPanel    : TPanel;
@@ -116,6 +121,21 @@ type
       /// <param name="AProblem">'' or what went wrong outside the rows.</param>
       procedure RunFinished(const AJob: TConvertJob; const AProblem: string);
       function WriteReport(out APath, AError: string): Boolean;
+      /// <summary>Re-reads the project index's unit names into FIndexed and
+      /// repaints the source list.</summary>
+      /// <param name="AError">'' on success, else why the index could not be read.</param>
+      /// <returns>False = FIndexKnown is now False and no row is flagged.</returns>
+      function ReadIndex(out AError: string): Boolean;
+      /// <summary>Draws a source row: an unindexed unit in SetError's red, bold,
+      /// with ' -- not in the project index' appended to the DISPLAYED text.</summary>
+      /// <param name="Control">FSources.</param>
+      /// <param name="Index">The row.</param>
+      /// <param name="Rect">The row's client rectangle.</param>
+      /// <param name="State">Selected / focused state.</param>
+      procedure SourcesDrawItem(Control: TWinControl; Index: Integer; Rect: TRect; State: TOwnerDrawState);
+      /// <summary>The source-list status line: count, and how many are not indexed.</summary>
+      /// <returns>The status text.</returns>
+      function SourcesSummary: string;
     public
       /// <summary>Builds the tab's controls; nothing is listed until RefreshBooks.</summary>
       /// <param name="AOwner">Owner (the main form).</param>
@@ -134,6 +154,10 @@ type
       /// source list, once each, and feeds them to the Unit Rules harvest.</summary>
       /// <param name="APaths">Dropped or picked .pas / .dpr / .dproj / folder paths.</param>
       procedure AddSources(const APaths: TArray<string>);
+      /// <summary>Re-reads which listed units are in the project index and
+      /// repaints the flags; a failure goes to the status line and flags nothing.</summary>
+      /// <remarks>One engine call (~0.9 s); skipped while the list is empty.</remarks>
+      procedure RefreshIndex;
       /// <summary>True from Convert until the worker's results are in.</summary>
       property Running: Boolean read FRunning;
   end;
@@ -144,6 +168,7 @@ uses
   System.IOUtils
   , System.StrUtils
   , Vcl.Dialogs
+  , Vcl.Graphics
   ;
 
 const
@@ -162,6 +187,7 @@ const
   COL_BACKUP_W    = 120;
   COL_NOTE_W      = 300;
   PROBLEM_HEAD    = 200;  // chars of engine output quoted in a status line
+  TEXT_INSET_X    = 2;    // source row text inset, px
   CAP_CANCEL      = 'Cancel';
   CAP_CANCELLING  = 'Cancelling after this unit...';
   CAPABILITY_UNIT_RULES = 'apply_unit_rules';
@@ -256,7 +282,6 @@ begin
   LLabel.Align           := alTop;
   LLabel.AlignWithMargins:= True;
   LLabel.Transparent     := True; // TGraphicControl: opaque, it paints clBtnFace under a dark style
-  LLabel.WordWrap        := True;
   LLabel.Caption         := 'Source units -- drop .pas / .dpr / .dproj / folders here, or Add...';
 
   LRow:= TPanel.Create(Self);
@@ -272,6 +297,8 @@ begin
   FSources.Align           := alClient;
   FSources.AlignWithMargins:= True;
   FSources.MultiSelect     := True;
+  FSources.Style           := lbOwnerDrawFixed; // flags unindexed units (SourcesDrawItem)
+  FSources.OnDrawItem      := SourcesDrawItem;
   FLockable:= FLockable + [FSources];
 end;
 
@@ -510,10 +537,72 @@ begin
       FSources.Items.Add(LPath);
   if Length(Added) > 0 then
     FHost.FeedHarvest(Added);
+  var LIndexErr: string;
+  var LIndexOk: Boolean:= (FSources.Count = 0) or ReadIndex(LIndexErr);
   if Length(Errs) > 0 then
     FHost.SetStatus(Format('%d source(s) added; %d problem(s): %s', [Length(Added), Length(Errs), string.Join(' | ', Errs)]), True)
+  else if not LIndexOk then
+    FHost.SetStatus(Format('%d source unit(s) listed; cannot read the project index, so unindexed units are not flagged: %s', [FSources.Count, LIndexErr]), True)
   else
-    FHost.SetStatus(Format('%d source unit(s) listed.', [FSources.Count]), False);
+    FHost.SetStatus(SourcesSummary, False);
+end;
+
+procedure TConvertTab.RefreshIndex;
+var
+  LErr: string;
+begin
+  if FSources.Count = 0 then
+    Exit;
+  if not ReadIndex(LErr) then
+    FHost.SetStatus('Cannot read the project index, so unindexed units are not flagged: ' + LErr, True);
+end;
+
+function TConvertTab.ReadIndex(out AError: string): Boolean;
+var
+  LNames: TArray<string>;
+begin
+  Result:= FEngineProbe.ListUnits([FHost.GetProjectDb()], LNames, AError);
+  // Unknown is never "indexed": on failure nothing is flagged, and says so.
+  FIndexKnown:= Result;
+  FIndexed   := if Result then LNames else nil;
+  FSources.Invalidate;
+end;
+
+function TConvertTab.SourcesSummary: string;
+var
+  LFlagged: Boolean;
+  LCount  : Integer;
+begin
+  LCount:= 0;
+  for var LPath: string in FSources.Items do
+  begin
+    SourceRowText(LPath, FIndexed, FIndexKnown, LFlagged);
+    if LFlagged then
+      Inc(LCount);
+  end;
+  Result:= Format('%d source unit(s) listed.', [FSources.Count]);
+  if LCount > 0 then
+    Result:= Result + Format(' %d NOT in the project index (red) -- Convert will refuse until they are indexed.', [LCount]);
+end;
+
+procedure TConvertTab.SourcesDrawItem(Control: TWinControl; Index: Integer; Rect: TRect; State: TOwnerDrawState);
+var
+  LFlagged: Boolean;
+  LText   : string;
+begin
+  // The item string stays the raw path (the job and Preflight read it); only
+  // the display carries the flag.
+  LText:= SourceRowText(FSources.Items[Index], FIndexed, FIndexKnown, LFlagged);
+  FSources.Canvas.FillRect(Rect);
+  if LFlagged then
+  begin
+    FSources.Canvas.Font.Style:= [fsBold];
+    // SetError's colour (MainForm.RefreshStatusColor: clRed in both themes);
+    // a selected row keeps the highlight text colour so it stays readable.
+    if not (odSelected in State) then
+      FSources.Canvas.Font.Color:= clRed;
+  end;
+  FSources.Canvas.TextOut(Rect.Left + TEXT_INSET_X, Rect.Top, LText);
 end;
 
 procedure TConvertTab.AddClick(Sender: TObject);
@@ -534,7 +623,7 @@ end;
 procedure TConvertTab.DeleteClick(Sender: TObject);
 begin
   FSources.DeleteSelected;
-  FHost.SetStatus(Format('%d source unit(s) listed.', [FSources.Count]), False);
+  FHost.SetStatus(SourcesSummary, False);
 end;
 
 procedure TConvertTab.AddResultRow(const ABook, AUnit, AStatus, AEdits, ARemaining, ABackup, ANote: string);
@@ -616,9 +705,16 @@ begin
     end;
   if not FEngineProbe.ListUnits([FHost.GetProjectDb()], Idx, Err) then
   begin
+    FIndexKnown:= False;
+    FIndexed   := nil;
+    FSources.Invalidate;
     FHost.SetStatus('Cannot read the project index: ' + Err, True);
     Exit;
   end;
+  // The answer Preflight gets is also what the rows show.
+  FIndexKnown:= True;
+  FIndexed   := Idx;
+  FSources.Invalidate;
   Pre:= Preflight(FEntries, Units, Idx, FUnitRulesOk);
   FResults.Items.Clear;
   FRunRows:= nil;
@@ -643,6 +739,9 @@ begin
     Exit;
   end;
   LExe:= FHost.ExePath;
+  // Captured now: the user may open or start another book mid-run, which moves
+  // the live rules folder; the report belongs beside the books that ran.
+  FRunRulesFolder:= FHost.GetRulesFolder();
   FCancelRequested:= False;
   SetRunning(True);
   FProgress.Max     := Length(Job.Books) * Length(Job.Units);
@@ -695,7 +794,7 @@ var
 begin
   APath := '';
   AError:= '';
-  var LFolder: string:= FHost.GetRulesFolder();
+  var LFolder: string:= FRunRulesFolder;
   if LFolder = '' then
   begin
     AError:= 'no rules folder';
@@ -777,9 +876,13 @@ begin
     Msg:= Msg + ' Report: ' + Report
   else
     Msg:= Msg + ' Report NOT written (' + RepErr + ').';
+  // Restored / converted units may have left or entered the index.
+  var LIndexErr: string;
+  if not ReadIndex(LIndexErr) then
+    Msg:= Msg + ' The project index could not be re-read, so unindexed units are not flagged: ' + LIndexErr;
   // Re-harvest the converted code so the Unit Rules MISSING list is current.
   FHost.FeedHarvest(AJob.Units);
-  FHost.SetStatus(Msg, (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> ''));
+  FHost.SetStatus(Msg, (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '') or (LIndexErr <> ''));
 end;
 
 end.
