@@ -21,8 +21,12 @@ re-parse or a re-resolve. Nothing under `src\parser`, `src\preprocess` or `src\i
   caption says `[NOT LOADED -- saving disabled]`), a click or a Build autosave is refused with
   `Not saved: <path> did not load (<error>). Fix the file, then Reload.`, and the load error is
   shown in a dialog when the file is opened. The discovery path (no file resolved beside the exe)
-  now also disables Save on a partial load. A `--config` path that does not exist yet starts from
-  the defaults and Save creates it. **Config tool 0.45.1-alpha.** The deployed
+  now also disables Save on a partial load. A `--config` path that does not exist yet in an
+  existing folder starts from the defaults and Save creates it; a path whose folder does not exist
+  or cannot be reached (a disconnected share, an unmounted drive) is refused as a load error
+  (`<file>: folder not found or not reachable -- not creating a new config there`), so a Save
+  after the share reconnects cannot put the defaults over the real manifest.
+  **Config tool 0.45.1-alpha.** The deployed
   `third_party\dll-win64\drag-lint-config.exe` was a 2026-06-15 build, so this defect was live
   independently of 1.20.4.
 - **The doc-drift autofix and `document` wrote `///` lines up to 2,566 characters.** The
@@ -67,7 +71,8 @@ re-parse or a re-resolve. Nothing under `src\parser`, `src\preprocess` or `src\i
 
 - `tests\autotest\run_config_save_guard.ps1` (+ `fixtures\configsave\ConfigSaveHarness.dpr`):
   arms A/B (a file that did not load is refused and left byte-identical), C (a good file saves),
-  D (+ control: `src\config` writes only through `Config.ManifestSession`), and GUI arms G/H that
+  E (a missing file in an existing folder is created), F (a missing folder is refused and nothing
+  is created), D (+ control: `src\config` writes only through `Config.ManifestSession`), and GUI arms G/H that
   drive the real exe (Save disabled, Build autosave refused and SAID, Reload re-enables). G/H need
   an interactive desktop.
 - `tests\autotest\run_doc_fact_wrap_readers.ps1`: the merge (short, long, re-insert after a

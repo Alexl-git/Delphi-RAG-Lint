@@ -13,6 +13,8 @@
 #   C  positive control: a good file saves and re-loads with both sections
 #   E  a path that does not exist yet: LOADERR empty (defaults), Save creates
 #      it, and the created file re-loads cleanly
+#   F  a path whose FOLDER does not exist (an unreachable share reads the
+#      same): LOADERR names the folder, not saved, nothing created
 #   D  structural: no src\config unit but Config.ManifestSession calls
 #      TManifestIO.Save/ParseText/ParseTextEx/Load, and MainForm routes both
 #      writers through TrySaveConfigManifest (with its own positive control)
@@ -128,6 +130,22 @@ Check 'E: SAVED=1' ($e.SAVED -eq '1') "REASON='$($e.REASON)'"
 Check 'E: the file now exists' (Test-Path -LiteralPath $missing)
 $e2 = Invoke-Harness $missing
 Check 'E: the created file re-loads with LOADERR empty' ($e2.ContainsKey('LOADERR') -and $e2.LOADERR -eq '') "got='$($e2.RAW)'"
+
+# --- F: a --config path whose FOLDER does not exist ---------------------------
+# A disconnected share, an unmounted drive or a transient access error also
+# reads as "file does not exist". Starting from the defaults there would let a
+# Save after the share reconnects overwrite the real manifest with defaults, so
+# a missing folder is a load error: defaults, Save refused, nothing created.
+$noDir     = "$WorkDir\no-such-dir"
+$noDirFile = "$noDir\new.json"
+Check 'F: setup -- the folder does not exist' (-not (Test-Path -LiteralPath $noDir))
+$f = Invoke-Harness $noDirFile
+Check 'F: LOADERR names the folder condition' ([string]$f.LOADERR -match 'folder not found or not reachable') "got='$($f.RAW)'"
+Check 'F: LOADERR starts with the file path' ([string]$f.LOADERR -like "$noDirFile*") "LOADERR='$($f.LOADERR)'"
+Check 'F: SAVED=0' ($f.SAVED -eq '0') "SAVED='$($f.SAVED)' REASON='$($f.REASON)'"
+Check 'F: REASON starts "Not saved:"' ([string]$f.REASON -like 'Not saved:*') "REASON='$($f.REASON)'"
+Check 'F: the folder still does not exist' (-not (Test-Path -LiteralPath $noDir))
+Check 'F: the file still does not exist' (-not (Test-Path -LiteralPath $noDirFile))
 
 # --- D: structural -- one door in and out of the manifest file ---------------
 function Test-ConfigWriters([string]$Dir) {

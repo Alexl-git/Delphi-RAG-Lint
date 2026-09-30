@@ -12,23 +12,28 @@ uses
 
 /// <summary>Load the manifest the Config tool will edit, and say whether it
 /// loaded cleanly.</summary>
-/// <param name="AConfigPath">The file to edit. When not '', it is parsed on its
-/// own with TManifestIO.ParseText (RootDir = its directory); when it does not
-/// exist yet, AManifest receives the defaults and the result is '' -- there is
-/// nothing to overwrite, so a Save creates the file. When '', the manifest is
-/// found by TManifestIO.Load discovery instead.</param>
+/// <param name="AConfigPath">The file to edit. When not '', three cases: an
+/// existing file is parsed on its own with TManifestIO.ParseText (RootDir = its
+/// directory), and one that fails to read or parse returns an error; a missing
+/// file in an EXISTING folder gives the defaults and '' -- there is nothing to
+/// overwrite, so a Save creates the file; a missing file whose folder does not
+/// exist or cannot be reached (a disconnected share, an unmounted drive) gives
+/// the defaults and an error, so Save stays refused and nothing is created.
+/// When '', the manifest is found by TManifestIO.Load discovery instead.</param>
 /// <param name="AExeDir">Engine directory for TManifestIO.Load discovery; used
 /// only when AConfigPath is ''.</param>
 /// <param name="AStartDir">Start directory for the upward local-config search of
 /// TManifestIO.Load; used only when AConfigPath is ''.</param>
 /// <param name="AManifest">Receives the parsed manifest. When AConfigPath exists
-/// but could not be read or parsed it receives the DEFAULTS (no sections,
-/// default settings, RootDir = the file's directory), which must never be saved
-/// over the file.</param>
+/// but could not be read or parsed, or its folder is missing, it receives the
+/// DEFAULTS (no sections, default settings, RootDir = the file's directory),
+/// which must never be saved over the file.</param>
 /// <returns>'' when the manifest loaded cleanly or AConfigPath does not exist
-/// yet; otherwise why it did not load, as
-/// '&lt;file&gt;: &lt;message&gt;' -- the same shape as TIndexManifest.LoadError.
-/// Pass it unchanged to TrySaveConfigManifest.</returns>
+/// yet in an existing folder; otherwise why it did not load, as
+/// '&lt;file&gt;: &lt;message&gt;' -- the same shape as TIndexManifest.LoadError
+/// (a missing folder gives '&lt;file&gt;: folder not found or not reachable --
+/// not creating a new config there'). Pass it unchanged to
+/// TrySaveConfigManifest.</returns>
 /// <remarks>Never raises for a bad or unreadable file: every exception from the
 /// read or the parse is turned into the returned text.</remarks>
 function LoadConfigManifest(const AConfigPath, AExeDir, AStartDir: string;
@@ -81,10 +86,16 @@ begin
     Exit;
   end;
   // A file that does not exist yet has nothing on disk to overwrite: start
-  // from the defaults, so a Save creates it.
+  // from the defaults, so a Save creates it -- but only in a folder that
+  // exists. A disconnected share, an unmounted drive or a transient access
+  // error also reads as "no file", and a Save after it comes back would put
+  // the defaults over the real manifest.
   if not TFile.Exists(AConfigPath) then
   begin
     SetDefaults(AManifest, AConfigPath);
+    if not TDirectory.Exists(ExtractFileDir(AConfigPath)) then
+      Result := AConfigPath +
+        ': folder not found or not reachable -- not creating a new config there';
     Exit;
   end;
   try
