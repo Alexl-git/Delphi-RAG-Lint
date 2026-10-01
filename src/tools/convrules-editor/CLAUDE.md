@@ -605,3 +605,177 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   0)`; an owner-drawn row's state is read from its pixels, with an "ink" count
   so an unpainted row cannot pass as "not red"; the Open dialog is driven by
   class `Edit` + `&Open` (English Windows only).
+
+## Book depth, progress window, refusals -- hand-over notes (feat/engine-1206-adoption, 2026-09-30)
+
+The editor side of engine 1.20.6's interface change: a per-book `#depth N`, a
+cancellable progress window for property-tree loads, and a `refused` row status
+on the Convert tab. Built and verified against the 1.20.3 pin (which has none of
+the three capabilities); the depth-change path is proven only once 1.20.6 is
+pinned. Plan / spec (gitignored, main tree):
+`docs\superpowers\plans\2026-09-30-engine-1206-adoption.md`,
+`docs\superpowers\specs\2026-09-30-engine-1206-adoption-design.md`; ledger with
+every ruling: `.superpowers\sdd\2026-09-30-engine-1206-adoption\progress.md` in
+the `convrules-depth` worktree.
+
+### `#depth` in the model
+
+* **`#depth` lives in `ConvRules.Model`**: node kind `rnkDepth`, consts
+  `BOOK_DEPTH_DEFAULT` (5) / `BOOK_DEPTH_MIN` (1) / `BOOK_DEPTH_MAX` (10),
+  `TRuleBook.Depth`, `DepthState` (`bdsAbsent` / `bdsValid` / `bdsInvalid` /
+  `bdsDuplicate`), `DepthNodes`, `SetDepth`. The engine reads the FIRST
+  `#depth`; so does `Depth`.
+* **`SetDepth` inserts before the first `#convert`** when the book has no
+  `#depth`, which shifts EVERY header index after it. Re-find by NODE, never
+  keep an index: `DepthChanged` captures the active header node, calls
+  `SetDepth`, then `FActiveHdr:= FBook.Nodes.IndexOf(Hdr)` and
+  `RefreshRulesList` (the list items' header indices are stale too).
+* **On a `bdsDuplicate` book `SetDepth` updates only the FIRST line**; the state
+  stays `bdsDuplicate` (pinned by `depth.set.duplicate.updates.first`). An
+  update re-emits the line canonically (`#depth  3` becomes `#depth 3`).
+* **Opening and saving a book without `#depth` never adds one** -- only a user
+  change writes the directive (`depth.absent.roundtrip`; driver
+  `depth.absent.not.added`, which also proves a save really happened).
+* `ConvRules.BlockFile`'s `FILE_SCOPE_DIRECTIVES` includes `#depth`, so a
+  `#depth` after the last block opens a trailing file-scope block.
+* `TRuleBook.ParseLine` carries one comma-list review for method-too-long /
+  too-many-exit-points / cyclomatic / cognitive: every directive adds one arm
+  and one exit. `SetDepth` carries a `function-result-not-set` review that is an
+  ENGINE false positive (a leading `if .. then raise` guard is counted as a path
+  that skips Result; filed, see below).
+
+### Capabilities and engine arguments
+
+* **Capabilities are probed ONCE, in `TConvRulesForm.Create`**, by one
+  `TEngineAdapter.CapabilityNames` (`info --json`, `ParseCapabilityNames`):
+  `FBookDepthOk` from `CAPABILITY_BOOK_DEPTH`, `FEngine.ProgressLines` from
+  `CAPABILITY_PROGRESS_LINES`. A re-pin needs an EDITOR RESTART. The probe is
+  bounded by the ordinary 180 s engine timeout if `info` hangs (deferred minor).
+  `HasCapability` is now case-insensitive.
+* **`--depth N` only with `book_depth`; `--progress-interval S` only with
+  `progress_lines`** -- an older engine exits 3 on either flag. `DepthArgs(ADepth,
+  AProgress)` builds both; `ADepth = 0` omits `--depth`. `PrepareEngineForTrees`
+  sets `FEngine.TreeDepth:= if FBookDepthOk then FBook.Depth else 0` before
+  every tree load. `GetProptree` passes `DepthArgs(FTreeDepth, FProgressLines)`;
+  `convert-scaffold` passes `DepthArgs(FTreeDepth, False)` (no progress). Both
+  come from the IN-MEMORY book, never `--rules FILE`.
+* **The depth combo (`FCbDepth`, 1..10) is disabled** with the hint
+  `DEPTH_HINT_UNSUPPORTED` when the engine lacks `book_depth`. `FLblDepthNote`
+  says `(default)`, `(from book)`, `(book value invalid -- using 5)` or
+  `(several #depth lines -- the first is used)` (the last two in red).
+  `RefreshDepthControl` runs on every load, in `Create`, and after
+  `DoNewConversion`'s new-file `FBook.Clear` (Task 5 fix I1).
+* **A depth change reloads the grid EXACTLY ONCE** (`DepthChanged` ->
+  `LoadGridForBlock`); `RefreshRulesList` does not fire a second load.
+  Proven by instrumentation in Task 5; a double load is a second slow engine
+  call (the double-click path shipped one once, ~161 s).
+
+### Streaming runner and the progress window
+
+* **`TEngineAdapter.RunCaptureStreaming` = two pipes.** Stdout is `AOutput`;
+  stderr is split into lines (`TLineSplitter`), progress lines
+  (`TryParseProgressLine`) go to `AOnProgress` and NEVER reach `AOutput`; any
+  other stderr text (a `FATAL: ...`) is kept and returned
+  (`stream.stderr.kept`). Exit codes: `ENGINE_EXIT_TIMEOUT` = 3,
+  `ENGINE_EXIT_CANCELLED` = 4 (editor-side only). The child is killed on every
+  exit path, including a raising progress callback (`ReapChild` in a finally;
+  `stream.raise.kills`), and each drain reads at most `MAX_READS_PER_DRAIN` (16)
+  chunks so Cancel and the deadline stay responsive. `StartHiddenProcess` is
+  shared with `RunCaptureTimed`.
+* **Only `GetProptree` streams.** Every other verb stays on the merged-pipe
+  `RunCaptureTimed`. The proptree bound is `CONVERT_TIMEOUT_MS` (600 s).
+* **`ConvRules.EngineWait` is editor-only** (`RunWithProgressDialog`,
+  `TEngineWaitForm`; not in the tests' compile closure). The tests leave
+  `LongCallRunner` nil: the work runs inline, with no window and no cancel.
+  `TConvRulesForm.Create` sets `FEngine.LongCallRunner:= RunWithProgressDialog`.
+* **The window appears only after `SHOW_DELAY_MS` (400 ms)** -- a fast load
+  shows nothing (`wait.fast.no.window`). Never raise the delay to hide a slow
+  call; measure the call.
+* **One Cancel stops From AND To.** `GetProptree` resets `LastCancelled` at its
+  TOP (before any early exit) and sets it on exit 4; the block load checks it
+  after the From tree and does not start the To tree
+  (`wait.cancel.stops.to.tree`: no second window within 3 s). A cancelled load
+  sets `FActiveHdr:= -1` and QUEUES a deselect of the rules list
+  (`TThread.ForceQueue`), so selecting the rule again really retries
+  (`wait.retry.after.cancel`); it must not count as loaded.
+* **Cancel texts are accurate per caller** (`DoNewConversion`: "New conversion
+  cancelled -- no class was checked."). After a cancelled load of a From-only
+  stub, New Conversion no longer treats it as completing the stub
+  (`FActiveHdr = -1`) and shows the same-book prompt (deferred minor).
+* **Known gaps (deferred):** `DoAutoMatch` / Mappings / Surface overwrite the
+  cancelled status line; the class-name resolve (`ResolveClassQName`, 0.5-1 s)
+  still runs on the UI thread and cannot be cancelled.
+
+### Refusals on the Convert tab
+
+* **`TApplyRow.Refused`** is `(not Ok) and refused = true` in the apply/1 JSON
+  (`ParseApplyJson`); `TApplyRow.Error` then holds the engine's `reason`
+  (`convert-apply refused the unit and gave no reason` when empty).
+* **`csRefused` (last member of `TConvertStatus`, text `refused -- not
+  changed`) takes the FAILURE path**: `FailUnit(AReason, csRefused)` restores
+  the unit and rolls back earlier books on it, exactly like
+  `csFailedRestored`; notes say "was refused" instead of "failed". The summary
+  adds `N unit(s) refused by the engine and left unchanged`.
+* The book-invalid check runs BEFORE the refused check: `refused:true` with
+  non-empty `rule_errors` would be classified `book skipped` (cannot happen in
+  1.20.6; deferred minor -- guard `and not Refused` plus a test).
+
+### Drivers (`tests\gui\`, by hand, on a staged pin copy)
+
+* **`drive-engine-wait.ps1` -- 8 checks** (`wait.main`, `.window.appears`,
+  `.cancel.button`, `.cancel.closes`, `.cancel.status`, `.cancel.stops.to.tree`,
+  `.retry.after.cancel`, `.fast.no.window`). It waits out the start-up engine
+  calls first. The slow fixture is a TcxButton block; the fast one is
+  `#convert TNoSuchClassXyz -> , NoSuchUnitXyz` (58-93 ms).
+* **`drive-book-depth.ps1` -- 10 checks + 1 SKIP line** on the 1.20.3 pin. The
+  SKIP line covers the three `depth.change.*` checks (`invoke.save`,
+  `one.line`, `saved`), which run only when the engine reports `book_depth`.
+  **They become REQUIRED after the 1.20.6 re-pin:** 13 pass, no SKIP.
+* **Both drivers open a class with `--form` plus a double-click on the rule
+  row** -- opening a book loads NO tree, so a driver that only opens a book
+  never sees the window.
+* **`drive-unit-rules-toolbar.ps1` ignores `TEngineWaitForm`** when it counts
+  top-level windows, and waits up to `ENGINE_IDLE_SEC = 900` for the window to
+  go (Task 5 fix; it had read the progress window as New Conversion's second
+  dialog and dropped to 30/11). The window is intended behaviour; the driver
+  changed, not the product.
+* **Machine load, measured 2026-09-30 ~18:05:** the pinned 1.20.3 CLI
+  `proptree --qname cxButtons.TcxButton --min-visibility published
+  --refs-as-leaves --format json --db library-Win64` took **37.5 s** (6.96 s in
+  July), with the engine session's proptree runs and three LSP engines on the
+  box. Driver timeouts were raised for that; PRODUCT timeouts were not.
+
+### Waiting on engine 1.20.6 (plan Task 8 PENDING)
+
+* **Owner checks after the re-pin:** a real TFDQuery load shows `depth x of y`
+  progress in the window; Cancel stops it; changing the depth changes the leaf
+  count; `drive-book-depth.ps1` runs 13/0 with no SKIP; confirm the refusal
+  key names (`refused`, `reason`) against the merge notice.
+* **Plan Task 8: show the engine's unreachable-member warnings** (owner
+  requirement 2026-09-30: a rule through an inaccessible member is KEPT in the
+  book; engine and editor WARN, "never applied unless a descendant class
+  changes the visibility of <Member>"). The editor shows the ENGINE's warnings
+  and does not judge accessibility itself. Engine contract (T2h, commits
+  a92b45a7 + 9d4b98bf, not merged yet):
+  * text line on STDOUT: `line N: warning: <path>: <Member> is <visibility> in
+    <DeclaringClass>; never applied unless a descendant class changes its
+    visibility`;
+  * `convert-validate`: TEXT ONLY (no `--json`); an unreachable warning does
+    not change the exit code;
+  * `convert-apply`: a text Warnings block, plus apply/1 `unreachable[]`
+    (always present) of `{line, path, member, visibility, class, reason:
+    "unreachable", message}`; `warnings[]` stays STRINGS and also carries each
+    message; `items[]` kind `rule-path-unreachable`. Schema stays apply/1.
+  * BDE-to-FireDAC.rules measured on the engine branch: exit 0, 16 warnings
+    (lines 274-277, 374-377, 478-485).
+* **Owner decisions still open:**
+  * a refused unit keeps an IDENTICAL `.BCK<N>` beside it (the `FailUnit` path
+    takes the backup before the engine refuses) -- keep, or delete on refusal?
+  * the combo on a `bdsInvalid` book already shows 5, so picking 5 does not
+    fire `OnChange`; the user must pick another value first (`SetDepth` then
+    repairs the line). On `bdsDuplicate` a change rewrites only the first
+    line and the red note stays. Accept, or repair / collapse the lines?
+* **Other deferred minors (ledger):** summary order reads oddly when a refusal
+  caused the roll-back; `TLineSplitter.Feed` is quadratic on huge chunks
+  (irrelevant at a 2 s cadence); a From-only `#convert X -> ` loses its From
+  type on reload (pre-existing model defect, not this branch).
