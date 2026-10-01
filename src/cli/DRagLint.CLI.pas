@@ -969,8 +969,8 @@ begin
     'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); no JSON mode)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
     'expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
-  Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (decimal seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
-    '{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) exits 2; ' +
+  Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
+    '{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) or missing exits 2; every stderr line is flushed BEFORE the stdout document, which is written in one piece (a merged pipe reads notes, then the whole document); ' +
     'convert-apply / convert-validate never emit progress and reject the flag as an unknown argument (exit 3); cancel = kill the process (the default write-back is kill-safe: each memoized type is its own SQLite statement)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
@@ -1569,12 +1569,18 @@ begin
     // 1.20.6 (T2e): progress lines on stderr -- ONLY the two tree-expanding
     // verbs take it; on every other verb (convert-apply / convert-validate
     // above all) it falls through to the Unknown-argument raise, exit 3.
-    else if (A = '--progress-interval') and (i < ParamCount) and
+    // As the LAST argument (no value) it is given-but-empty, which
+    // ResolveProgressInterval rejects with exit 2 like any bad value (T2i).
+    else if (A = '--progress-interval') and
       ((Result.Command = 'proptree') or (Result.Command = 'convert-scaffold')) then
     begin
-      Inc(i);
       Result.ProgressIntervalGiven:= True;
-      Result.ProgressIntervalRaw  := ParamStr(i);
+      Result.ProgressIntervalRaw  := '';
+      if i < ParamCount then
+      begin
+        Inc(i);
+        Result.ProgressIntervalRaw:= ParamStr(i);
+      end;
     end
     else if A = '--include-impl'   then Result.IncludeImpl   := True
     else if A = '--full-surface'   then Result.FullSurface   := True
@@ -23369,6 +23375,40 @@ begin
   end;
 end;
 
+const
+  STDOUT_DOCUMENT_BUFFER = 1 shl 20; // 1 MiB: TFDQuery depth 5 (37 MB) is ~36 WriteFile calls, not ~290,000
+
+/// <summary>Writes one whole stdout document (proptree's JSON or text tree,
+/// convert-scaffold's book) with the same bytes as Write(Output, ADoc), after
+/// every pending STDERR byte (engine 1.20.6, T2i).</summary>
+/// <param name="ADoc">The complete document, line breaks included. Converted to
+/// stdout's code page by the RTL exactly as Write/Writeln would convert it.</param>
+/// <remarks>Output and ErrOutput are Text files whose Writeln does NOT flush
+/// when the handle is a file or a pipe -- only a console flushes per line -- so
+/// before this, a stderr note sat in its 128-byte buffer and reached a merged
+/// pipe (the editor runs the engine with stdout and stderr on ONE pipe) after,
+/// or in the middle of, the document; and the document itself went out in
+/// 128-byte WriteFile calls, which is what made a 37 MB proptree take minutes.
+/// Order here: flush ErrOutput, flush Output, write ADoc through a 1 MiB buffer
+/// swapped in for the call, flush, restore Output's own 128-byte buffer. Nothing
+/// else writes to either stream in between (single-threaded; progress lines
+/// are only emitted while the tree builds, before this is called).</remarks>
+procedure WriteStdoutDocument(const ADoc: string);
+var
+  Buf: TBytes;
+begin
+  Flush(ErrOutput);
+  Flush(Output);
+  SetLength(Buf, STDOUT_DOCUMENT_BUFFER);
+  SetTextBuf(Output, Buf[0], Length(Buf));
+  try
+    Write(Output, ADoc);
+    Flush(Output);
+  finally
+    SetTextBuf(Output, TTextRec(Output).Buffer, SizeOf(TTextRec(Output).Buffer));
+  end;
+end;
+
 /// <summary>drag-lint proptree --qname X [--depth N] [--rules FILE] [--no-to-persistent]
 /// [--refs-as-leaves] [--min-visibility published|public] [--format text|json] [--json] --db PATH
 /// [--db ...] -- Track 3 Batch 1: the index-driven RECURSIVE deep-property
@@ -23553,7 +23593,9 @@ begin
         JProps.AddElement(JN);
       end;
       JRoot.AddPair('properties', JProps);
-      Writeln(JRoot.Format(2));
+      // One document, one write, after every stderr byte (WriteStdoutDocument):
+      // the bytes Writeln(JRoot.Format(2)) wrote before T2i.
+      WriteStdoutDocument(JRoot.Format(2) + sLineBreak);
     finally
       JRoot.Free;
     end;
@@ -23563,18 +23605,26 @@ begin
     var ShownCount: Integer:= 0;
     for var N in Tree.Nodes do
       if PassesMinVisibility(N, MinVis) then Inc(ShownCount);
-    Writeln(Format('%s  (%d properties%s)', [Tree.RootType, ShownCount,
-      IfThen(Tree.Truncated, ', truncated', '')]));
-    for var N in Tree.Nodes do
-    begin
-      if not PassesMinVisibility(N, MinVis) then Continue;
-      // Indent by the path's dot-depth (top-level = 0).
-      var DotDepth: Integer:= 0;
-      for var Ch in N.Path do if Ch = '.' then Inc(DotDepth);
-      var Leaf: string:= N.Path;
-      var LastDot: Integer:= LastDelimiter('.', N.Path);
-      if LastDot > 0 then Leaf:= Copy(N.Path, LastDot + 1, MaxInt);
-      Writeln(Format('%s%s: %s [%s]', [StringOfChar(' ', DotDepth * 2), Leaf, N.TypeName, KindLabel(N)]));
+    // One document, one write (WriteStdoutDocument): the same lines Writeln
+    // wrote one by one before T2i, each ended by sLineBreak as Writeln ends it.
+    var Doc: TStringBuilder:= TStringBuilder.Create;
+    try
+      Doc.Append(Format('%s  (%d properties%s)', [Tree.RootType, ShownCount,
+        IfThen(Tree.Truncated, ', truncated', '')])).Append(sLineBreak);
+      for var N in Tree.Nodes do
+      begin
+        if not PassesMinVisibility(N, MinVis) then Continue;
+        // Indent by the path's dot-depth (top-level = 0).
+        var DotDepth: Integer:= 0;
+        for var Ch in N.Path do if Ch = '.' then Inc(DotDepth);
+        var Leaf: string:= N.Path;
+        var LastDot: Integer:= LastDelimiter('.', N.Path);
+        if LastDot > 0 then Leaf:= Copy(N.Path, LastDot + 1, MaxInt);
+        Doc.Append(Format('%s%s: %s [%s]', [StringOfChar(' ', DotDepth * 2), Leaf, N.TypeName, KindLabel(N)])).Append(sLineBreak);
+      end;
+      WriteStdoutDocument(Doc.ToString);
+    finally
+      Doc.Free;
     end;
   end;
   Result:= 0;
@@ -24371,7 +24421,7 @@ begin
     Writeln('Wrote ', AArgs.Output);
   end
   else
-    Write(OutText); // already CRLF-terminated per line
+    WriteStdoutDocument(OutText); // already CRLF-terminated per line; after every stderr byte (T2i)
 
   Result:= 0;
 end; // function

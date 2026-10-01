@@ -103,8 +103,8 @@ emitted as flat leaves (`member_kind: "field"` -- see below; never recursed into
 even when class-typed).
 
 **Progress (1.20.6).** A deep tree can take a while (FireDAC `TFDQuery` at depth
-4 is ~66 classes and ~26k nodes). `--progress-interval S` (decimal seconds, the
-same digits-only check as `--depth`; `x`, `-1`, `+3`, `1.5` exit 2) makes
+4 is ~66 classes and ~26k nodes). `--progress-interval S` (whole seconds, the
+same digits-only check as `--depth`; `x`, `-1`, `+3`, `1.5` and a missing value exit 2) makes
 `proptree` and `convert-scaffold` write ONE JSON line to **STDERR** at most every
 `S` seconds while the tree is expanded and emitted -- never to stdout, so the
 verb's own output is byte-identical with or without it:
@@ -121,12 +121,20 @@ at this or a deeper level (0 while emitting); `nodes` the nodes emitted so far (
 while expanding). `class` is the tree's root (`convert-scaffold` builds the FROM
 tree, then the TO tree). The key set and order are fixed; `elapsed_s`,
 `classes_done` and `nodes` never decrease. The first line comes after one full
-interval, so a run shorter than `S` prints none. Note that the JSON writer that
-runs AFTER the tree is built prints no progress (on `TFDQuery --depth 4 --json`
-it is most of the wall time).
+interval, so a run shorter than `S` prints none. Writing the document AFTER the
+tree is built prints no progress: since 1.20.6 (T2i) it is one buffered write
+(`TFDQuery --depth 5 --json`, 101,063 nodes / 37 MB: under 1 s of a ~14 s run).
+
+**Stream order (1.20.6).** `proptree` and `convert-scaffold` flush every
+STDERR line they wrote (the `(loaded defaults ...)` banner, freshness and
+resolver notes, progress lines) BEFORE the first byte of the stdout document,
+and write the document in one piece; nothing follows it on either stream. So a
+caller that merges the two streams into one pipe gets the notes as a preamble
+and the complete document after them.
 
 **Default 0 = OFF.** A caller that merges stdout and stderr (the rules editor
-does, then parses from the first `{` to the last `}`) must leave it off.
+does, then parses from the first `{` to the last `}`) must leave it off: a
+progress line in the preamble carries a `{` of its own.
 `convert-apply` / `convert-validate` never build a tree and never emit progress:
 they reject `--progress-interval` as an unknown argument (exit 3).
 **Cancel = kill the process.** That is safe with the default write-back: each
@@ -757,6 +765,12 @@ autotests (run each individually; there is no aggregating runner):
   lines (off by default, stderr only, the line format, exit 2 / exit 3 cases, the
   `info` capability keys, kill-safety of the write-back; the `TFDQuery` arms need
   `-LibDb <scratch library copy>`).
+- `tests/autotest/run_proptree_output_speed.ps1` -- the stdout document of
+  `proptree` / `convert-scaffold`: stderr ++ stdout on a merged stream, a missing
+  `--progress-interval` value, byte-identity against a pre-1.20.6 engine
+  (`-OldExe`, every call of the `run_proptree*` / `run_convert_scaffold*`
+  runners as json and text, all `--min-visibility` values) and `TFDQuery` depth 5
+  under 60 s through a replica of the editor's pipe drain (`-LibDb`).
 - `tests/autotest/run_dfm_reemit.ps1` -- the Batch 2a-i DFM re-emit engine (via the
   hidden `convert-reemit` verb): 1:1 rename, moved-depth, events, `#ignore`,
   unmapped-drop, `#default`, collection relocate, binary same-type/mismatch,
