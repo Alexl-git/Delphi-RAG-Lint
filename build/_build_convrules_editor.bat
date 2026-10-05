@@ -1,5 +1,5 @@
 @echo off
-REM Build ConvRulesEditor.exe (Win64) from THIS checkout, then stage to dll-win64.
+REM Build ConvRulesEditor.exe (Win64) from THIS checkout; pass "stage" to also copy it to dll-win64.
 REM
 REM This name is kept because older docs and plans reference it. It used to hard-code
 REM C:\Projects\Delphi-RAG-lint for both the cd and the staging copy, so running it from

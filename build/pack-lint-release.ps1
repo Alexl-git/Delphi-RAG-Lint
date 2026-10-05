@@ -54,7 +54,7 @@ Copy-Item (Join-Path $repo "src\cli\Win64\Release\drag-lint.exe") (Join-Path $re
 # guards is the one the repo has already paid for once: a build script reporting
 # green for code that was never compiled.
 $edBat = Join-Path $repo "build\_build_convrules_editor_local.bat"
-$edOut = cmd /c "`"$edBat`"" 2>&1
+$edOut = cmd /c "`"$edBat`" stage" 2>&1  # stage: keep dll-win64's editor in step with the drag-lint.exe synced above
 if (($LASTEXITCODE -ne 0) -or -not ($edOut | Select-String -SimpleMatch "BUILD_EXITCODE=0" -Quiet)) {
   Write-Host "ConvRulesEditor BUILD FAILED:"; $edOut | Select-Object -Last 15; exit 1
 }
