@@ -192,6 +192,7 @@ type
       FDepthComboWndProc: TWndMethod  ; // FCbDepth's own WindowProc, chained by DepthComboWndProc
       FTreeLoads    : Integer         ; // > 0 while a tree load or a proptree engine call runs (depth commits wait)
       FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
+      FCancelStatus : string          ; // the status text that cancel wrote; SetStatusAfterCancel keeps it while it is on screen
       FCastDefs     : TArray<TCastDef>; // shipped class-cast library (.castlib)
     { The ENUM half of the same file. LoadCastLib returns only the casts, so the
       enum blocks were parsed and thrown away; the conversion catalog needs them
@@ -2007,6 +2008,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetError(const S: string);
+      /// <summary>SetStatus that does not erase a cancelled property-tree load's message:
+      /// while FLastLoadCancelled is set and FCancelStatus is still on screen, S is
+      /// appended to it; otherwise this is SetStatus(S).</summary>
+      /// <param name="S">The command's own status text.</param>
+      /// <remarks>Used by the commands that need a loaded rule (Auto-Match, Mappings,
+      /// Assign, Find in From, Only this type) and by SurfaceChanged. After a cancel the
+      /// grid is empty and FActiveHdr is -1, so their "Select or create a rule first."
+      /// would otherwise replace the only line that says why. The on-screen check keeps
+      /// a cancel from an earlier book from coming back once anything else wrote the
+      /// status line, and appending to FCancelStatus (not to the current text) keeps
+      /// repeated clicks from stacking.</remarks>
+      procedure SetStatusAfterCancel(const S: string);
       { Re-applies FLblStatus's font for the kind of message currently shown. }
       /// <summary><!-- drag-lint:auto sum -->Re-applies FLblStatus's font for the kind of
       /// message currently shown.</summary>
@@ -3548,6 +3561,14 @@ begin
     FStatusBar.SimpleText:= '[!] ' + S;
 end;
 
+procedure TConvRulesForm.SetStatusAfterCancel(const S: string);
+begin
+  if FLastLoadCancelled and (FCancelStatus <> '') and string(FLblStatus.Caption).StartsWith(FCancelStatus) then
+    SetStatus(FCancelStatus + '  ' + S)
+  else
+    SetStatus(S);
+end;
+
 { Resolve a leaf's declared type from a proptree ('' if not found). }
 function TConvRulesForm.LeafType(const ATree: TProptree; const APath: string): string;
 var
@@ -4452,7 +4473,8 @@ begin
       'Lower the book depth if needed, then select the rule (or double-click its class) again to retry.'
     else
       'Select the rule (or double-click its class) again to retry.';
-    SetStatus(Format('Property-tree load cancelled for %s -> %s. %s', [Node.FromType, Node.ToType, LRetry]));
+    FCancelStatus:= Format('Property-tree load cancelled for %s -> %s. %s', [Node.FromType, Node.ToType, LRetry]);
+    SetStatus(FCancelStatus);
     // Leave the block NOT loaded, or the retry is a no-op: OpenOwningRuleEntry
     // skips a block that FActiveHdr says is already on screen.
     FActiveHdr:= -1;
@@ -5782,7 +5804,11 @@ var
   toName: string ;
   r     : Integer;
 begin
-  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  if FActiveHdr < 0 then
+  begin
+    SetStatusAfterCancel('Select or create a rule first.');
+    Exit;
+  end;
   if FPool.ItemIndex < 0 then
   begin SetStatus('Highlight a To leaf in the pool (right) first.'); Exit; end;
   toName:= LeafNameOf(PathOfGridCell(FPool.Items[FPool.ItemIndex]));
@@ -5803,7 +5829,11 @@ procedure TConvRulesForm.DoOnlyType(Sender: TObject);
 var
   T: string;
 begin
-  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  if FActiveHdr < 0 then
+  begin
+    SetStatusAfterCancel('Select or create a rule first.');
+    Exit;
+  end;
   if FPoolTypeFilter <> '' then
   begin
     FPoolTypeFilter:= '';
@@ -5870,7 +5900,11 @@ var
   N      : TRuleNode        ;
   Applied: Boolean          ;
 begin
-  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  if FActiveHdr < 0 then
+  begin
+    SetStatusAfterCancel('Select or create a rule first.');
+    Exit;
+  end;
 
   Names:= MappingNames(FBook.Nodes.ToArray);
 
@@ -5940,9 +5974,9 @@ begin
   if FActiveHdr >= 0 then
     LoadGridForBlock(FActiveHdr);
   if FSurfaceMinVis = 'public' then
-    SetStatus('Surface: PAS -- public props + public fields (public targets tagged PAS-only).')
+    SetStatusAfterCancel('Surface: PAS -- public props + public fields (public targets tagged PAS-only).')
   else
-    SetStatus('Surface: DFM -- published (DFM-streamable) props only.');
+    SetStatusAfterCancel('Surface: DFM -- published (DFM-streamable) props only.');
 end; // procedure
 
 procedure TConvRulesForm.RefreshDepthControl;
@@ -6233,7 +6267,11 @@ var
   FromType: string ;
   ToType  : string ;
 begin
-  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  if FActiveHdr < 0 then
+  begin
+    SetStatusAfterCancel('Select or create a rule first.');
+    Exit;
+  end;
   if FPool.ItemIndex < 0 then begin SetStatus('Pick a To property from the pool (right) first.'); Exit; end;
   Row:= FGrid.Row;
   if Row < 1 then begin SetStatus('Pick a From row in the grid (left) first.'); Exit; end;
@@ -6321,7 +6359,11 @@ var
 
 begin
   var LGuard: IInterface:= HourGlass;
-  if FActiveHdr < 0 then begin SetStatus('Select or create a rule first.'); Exit; end;
+  if FActiveHdr < 0 then
+  begin
+    SetStatusAfterCancel('Select or create a rule first.');
+    Exit;
+  end;
   nMatched:= 0;
   conds   := ActiveConditionals;
   assignedTo := TDictionary<string, Boolean>.Create;
@@ -6423,7 +6465,7 @@ begin
   LoadGridForBlock(FActiveHdr);
   SyncRawFromModel;
   RefreshRulesList;
-  SetStatus(Format('Auto-Match: %d unambiguous assignment(s) created.', [nMatched]));
+  SetStatusAfterCancel(Format('Auto-Match: %d unambiguous assignment(s) created.', [nMatched]));
 end; // begin
 
 { New Conversion: read From/To from the pickers, verify both resolve to indexed
