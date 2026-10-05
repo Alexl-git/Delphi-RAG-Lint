@@ -179,9 +179,9 @@ type
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DeclIndent, DRagLint.Doc.Document.ExtractSourceSpan (+20 more)</para>
+    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove (+21 more)</para>
     /// <para>Returns: Default(TDocumentResult)</para>
-    /// <para>Complexity: 29 (cyclomatic, outer body), 504 lines (full implementation)</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 512 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -481,6 +481,25 @@ begin
   end;
 end;
 
+// v(1.20.6 T5): Src split into physical lines for EffectiveDocIndent. The
+// documenter runs once per symbol over the SAME unit text, so the split is
+// cached per thread and reused while the text is identical (a string compare:
+// pointer, length, then one memcmp -- far cheaper than re-splitting and
+// re-allocating every line per symbol). A different text, e.g. after an apply
+// rewrote the file, never matches, so the cache cannot go stale.
+threadvar
+  GSplitSrc  : string;
+  GSplitLines: TArray<string>;
+
+function SourceLines(const ASrc: string): TArray<string>;
+begin
+  if (GSplitLines = nil) or (GSplitSrc <> ASrc) then
+  begin
+    GSplitLines:= ASrc.Split([#10]);
+    GSplitSrc  := ASrc;
+  end;
+  Result:= GSplitLines;
+end;
 // v(PHASE A2): arms TTextEditApplier's stale-anchor guard on one doc edit.
 //
 // EVERY coordinate in a doc edit is derived from ASym.StartLine, and that number
@@ -1022,7 +1041,8 @@ begin
   // and a mixed-indent block all still take the declaration's indent.
   // EffectiveDocIndent is shared with Doc.Drift's width check, so the writer
   // and the checker cannot disagree.
-  Prefix:= EffectiveDocIndent(Src.Split([#10]), ASym.StartLine, Existing.StartLine, Existing.EndLine) + '/// ';  // v(ADP3 T3 review round 2, Finding 4): a SEPARATE, LOCAL signal for the
+  Prefix:= EffectiveDocIndent(SourceLines(Src), ASym.StartLine, Existing.StartLine, Existing.EndLine) + '/// ';
+  // v(ADP3 T3 review round 2, Finding 4): a SEPARATE, LOCAL signal for the
   // repair-vs-fresh decision only -- NOT a widening of TParsedDoc.HasContent
   // itself (that stays narrower, exactly as before v(ADP3 T3): the indexer's
   // symbol_docs write, context bundling, TypeAt, MCP, and LSP hover all read

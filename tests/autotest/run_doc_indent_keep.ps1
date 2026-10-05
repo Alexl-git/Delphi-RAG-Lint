@@ -16,6 +16,7 @@
     K2  a mixed-indent block (first line at six, rest at four, declaration at
         four) is NOT a kept block: the declaration's indent wins (this is the
         run_doc_p3_indent ResidualMember pin, restated here at the unit level).
+    K4  doc-drift over a LOCKED source file does not crash (fail-safe width 0).
     K3  a wrapped fact line in such a block: `type TC = class end;` at column 0
         with a two-space block directly above, 200 callers in a dl:shared unit.
         document --apply keeps the two-space indent, every physical line is
@@ -165,6 +166,27 @@ $h = (Get-FileHash $u3).Hash
 $null = Run @('document', '--unit', $u3, '--db', $db3, '--apply', '--no-backup')
 Check 'K3: a second document --apply is a no-op' ((Get-FileHash $u3).Hash -eq $h)
 
+# --------------------------------------------------------------------- K4 -----
+# An unreadable source file must never crash drift (fail-safe: no indent to
+# measure -> width 0). HONEST SCOPE: lint opens the file itself before drift
+# runs, so over the CLI a LOCKED file stops lint with the engine's own clean
+# FATAL line (exit 3, the engine's own top-level handler) and the catch in Drift.FileLinesCached is not reached; what
+# this arm pins is that neither a locked nor a vanished unit takes the process
+# down with an unhandled exception. The catch itself is a plain `except` (every
+# exception class), matching the pre-1.20.6 ReadDeclLineRaw.
+$null = Run @('index', '--project', $d1, '--db', $b1)
+$fs = [System.IO.File]::Open($u1, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
+try {
+  $r4 = Run @('lint-all', '--db', $b1, '--rule', 'doc-drift', '--project-rules', '--json')
+} finally { $fs.Dispose() }
+Check 'K4: doc-drift over a LOCKED source file ends cleanly (exit 0, 1 or the engine error 3)' (@(0, 1, 3) -contains $r4.Code) "exit $($r4.Code); $(LastLine $r4.Out)"
+Check 'K4: ...with no unhandled exception text' ($r4.Out -notmatch 'Access violation|Unhandled|Runtime error') (LastLine $r4.Out)
+$moved = "$u1.moved"
+Move-Item -LiteralPath $u1 -Destination $moved
+try {
+  $r4b = Run @('lint-all', '--db', $b1, '--rule', 'doc-drift', '--project-rules', '--json')
+} finally { Move-Item -LiteralPath $moved -Destination $u1 }
+Check 'K4b: doc-drift over a VANISHED source file ends cleanly' ((@(0, 1, 3) -contains $r4b.Code) -and ($r4b.Out -notmatch 'Access violation|Unhandled|Runtime error')) "exit $($r4b.Code); $(LastLine $r4b.Out)"
 Write-Host ''
 if ($script:Failed) { Write-Host 'run_doc_indent_keep: FAILED' -ForegroundColor Red; exit 1 }
 Write-Host 'run_doc_indent_keep: OK' -ForegroundColor Green

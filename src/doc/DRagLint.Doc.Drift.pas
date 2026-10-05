@@ -151,13 +151,13 @@ type
     /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveIndentWidth, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody (+28 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 61 (cyclomatic, outer body), 569 lines (full implementation)</para>
+    /// <para>Complexity: 59 (cyclomatic, outer body), 573 lines (full implementation)</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
-    /// <seealso cref="DRagLint.Doc.Drift.EffectiveIndentWidth"/>
     /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>
+    /// <seealso cref="DRagLint.Doc.Drift.EffectiveIndentWidth"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -344,21 +344,54 @@ begin
   Result:= Trim(ReadDeclLineRaw(AFilePath, ALine));
 end;
 
+// v(1.20.6 T5): the lines of AFilePath, for the indent decision. Drift asks once
+// per documented symbol, all within one file at a time, so ONE entry is cached
+// per thread. The key is path + size + last-write time, re-checked on every
+// call (a stat, not a read): a file edited between runs -- or by a document
+// --apply earlier in the same process -- misses and is re-read, so the cache
+// cannot serve a stale answer and needs no explicit invalidation. Unreadable
+// answers nil (and is not cached), and the caller reads that as width 0.
+threadvar
+  GLinesPath : string;
+  GLinesSize : Int64;
+  GLinesStamp: Int64;
+  GLines     : TArray<string>;
+
+function FileLinesCached(const AFilePath: string): TArray<string>;
+var
+  Size : Int64;
+  Stamp: Int64;
+begin
+  Result:= nil;
+  if (AFilePath = '') or (not TFile.Exists(AFilePath)) then Exit;
+  try
+    Stamp:= Round(TFile.GetLastWriteTime(AFilePath) * MSecsPerDay);
+    Size := TFile.GetSize(AFilePath);
+    if (GLines = nil) or (GLinesPath <> AFilePath) or (GLinesSize <> Size) or (GLinesStamp <> Stamp) then
+    begin
+      GLines     := TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+      GLinesPath := AFilePath;
+      GLinesSize := Size;
+      GLinesStamp:= Stamp;
+    end;
+    Result:= GLines;
+  except  // fail safe by design: a locked, missing or undecodable file has no indent to measure and answers width 0, exactly as the pre-1.20.6 ReadDeclLineRaw swallowed every read error. Drift must never crash on a file it cannot read
+    on Exception do
+    begin
+      GLines:= nil;
+      Result:= nil;
+    end;
+  end;
+end;
+
 // v(1.20.6 T5): the width of the indent the renderer builds every /// line of
 // the block from -- Facts.EffectiveDocIndent, the one decision the writer
 // (Document.BuildForSymbol) shares. An unreadable file answers 0.
 function EffectiveIndentWidth(const AFilePath: string; ADeclLine, ADocStart, ADocEnd: Integer): Integer;
-var
-  Lines: TArray<string>;
 begin
   Result:= 0;
-  if (AFilePath = '') or (ADeclLine <= 0) or (not TFile.Exists(AFilePath)) then Exit;
-  try
-    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
-  except  // dl:ok try-except-swallowed@065c -- REVIEWED 2026-10-04: fail safe, an unreadable file has no indent to measure; width 0 is what the pre-1.20.6 DeclIndentWidth answered
-    on EInOutError do Exit;
-  end;
-  Result:= Length(EffectiveDocIndent(Lines, ADeclLine, ADocStart, ADocEnd));
+  if ADeclLine <= 0 then Exit;
+  Result:= Length(EffectiveDocIndent(FileLinesCached(AFilePath), ADeclLine, ADocStart, ADocEnd));
 end;
 // Returns the effective signature text for ASym: the indexed Signature, or a
 // source-line read at the declaration when the index did not capture it (the

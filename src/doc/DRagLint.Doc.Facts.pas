@@ -1318,7 +1318,8 @@ begin
   Result:= First;
 end;
 
-function LastSeg(const S: string): string;var P: Integer;
+function LastSeg(const S: string): string;
+var P: Integer;
 begin
   P:= S.LastDelimiter('.');
   if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
