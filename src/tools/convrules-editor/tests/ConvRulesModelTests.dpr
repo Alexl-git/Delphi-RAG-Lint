@@ -1679,7 +1679,8 @@ const
   OK_JSON   = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
   FAIL_JSON = '{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[],"edits_count":0}';
   REFUSED_JSON = '{"schema":"apply/1","ok":false,"refused":true,"reason":"inherited instances of TTable are not converted yet -- unit not changed","rule_errors":[],"edits_count":0}';
-  ORIG      = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+  REFUSED_ERRS_JSON = '{"schema":"apply/1","ok":false,"refused":true,"reason":"inherited instances of TTable are not converted yet -- unit not changed","rule_errors":[{"line":3,"message":"x not found"}],"edits_count":0}';
+  ORIG      ='unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
   TWO_ROWS  = 2;
 var
   Dir, PasR, PasL, PasF, Seen, Raised: string;
@@ -1767,6 +1768,24 @@ var
     // The restore needed the backup: it is kept and named on the refused row.
     Check('runner.refused.later.keeps.backup', (Length(LRows) = TWO_ROWS) and (LRows[1].Backup <> '') and TFile.Exists(LRows[1].Backup)
       and (BackupsLeft(LPas) = 1) and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows) + Format(' | backups left=%d', [BackupsLeft(LPas)]));
+
+    // --- a refusal that ALSO carries rule_errors is a refusal, not an invalid book:
+    // the book stays valid, so the NEXT unit still gets its own apply call ---
+    var LPas2: string:= TPath.Combine(Dir, 'F4.pas');
+    var LCalls: Integer:= 0;
+    LPas:= TPath.Combine(Dir, 'F3.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(LPas2, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas, LPas2], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Inc(LCalls);
+        AJson := REFUSED_ERRS_JSON;
+        Result:= 1;
+      end, Index, nil, nil);
+    Check('runner.refused.with.rule.errors.is.refused', (Length(LRows) = TWO_ROWS) and (LRows[0].Status = csRefused)
+      and (LRows[1].Status = csRefused) and (LCalls = TWO_ROWS) and (TFile.ReadAllText(LPas) = ORIG),
+      Describe(LRows) + Format(' | calls=%d', [LCalls]));
   end;
 
 begin

@@ -26,8 +26,9 @@ type
   /// csFailedRestored: the book's apply (or the reindex after it) failed; the
   ///   unit and its .dfm were restored from this run's backup and the unit's
   ///   remaining books did not run.
-  /// csBookSkipped: the book failed the engine's validation (rule_errors); the
-  ///   unit is untouched by it and the book is not tried on any later unit.
+  /// csBookSkipped: the book failed the engine's validation (rule_errors) and the
+  ///   reply is not a refusal; the unit is untouched by it and the book is not
+  ///   tried on any later unit.
   /// csUnitSkipped: the unit was not run at all -- not found on disk, the
   ///   reindex before its first book failed (no backup is taken, the engine is
   ///   not called), or its backup could not be taken (any .BCK already made for
@@ -37,8 +38,9 @@ type
   /// csRestoreFailed: a book failed AND the restore from the backup raised; the
   ///   unit may be half-converted, the Note names the backups (.pas and .dfm)
   ///   to restore by hand.
-  /// csRefused: the engine refused this book on the unit (TApplyRow.Refused);
-  ///   its remaining books do not run and the unit ends unchanged. When an
+  /// csRefused: the engine refused this book on the unit (TApplyRow.Refused),
+  ///   whether or not the reply also lists rule_errors; the book stays valid for
+  ///   later units. The unit's remaining books do not run and it ends unchanged. When an
   ///   earlier book had converted the unit, it is restored like a failure (those
   ///   rows become csRolledBack) and the backup is kept and named. When nothing
   ///   had changed it (the refused book was its first, or every earlier one was
@@ -394,7 +396,9 @@ var
         LJson:= 'engine call raised: ' + E.Message; // unparseable -> the unit is restored
     end; // try
     Row.Apply:= ParseApplyJson(LJson);
-    if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) then
+    // A refusal is about THIS unit, even when it also lists rule_errors: it takes the
+    // refused path below and leaves the book valid for the next unit.
+    if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) and not Row.Apply.Refused then
     begin
       // The BOOK is invalid; the engine validates before writing, so this unit
       // is untouched by it. Skip the book for the rest of the run.
