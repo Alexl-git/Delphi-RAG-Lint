@@ -6,6 +6,11 @@ section 5). A G-link on a class with no section here is a validate error by desi
 Informal on purpose: collect whatever helps the goal of a deterministic N
 algorithm. Regenerate the corpus numbers with `drag-lint glyph-vacuum`.
 
+**Direction (owner, 2026-10-05):** the long-term aim is to move from BMP glyphs
+to SVG (skins, high-DPI). The CONV-8 gallery rulings recorded below (job item
+C11, marked "owner ruling 2026-10-05") are PROVISIONAL: they were accepted as
+recommended for now, and the owner may correct them during the real conversion.
+
 **First real run: 2026-09-17.** `glyph-vacuum --root C:\Projects\DB\ORM3 --out
 C:\TEMP\claude\vacuum-orm3 --db <abc5-scratch-lib> --db
 C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite` -- `dfm=108 graphics=1016
@@ -265,6 +270,24 @@ unresolved after both fixes -- it is neither SVG text nor the length-prefixed
 bare-bitmap shape, so its actual wire format is still unknown; do not assume
 it is SVG without checking the raw bytes.
 
+- **TdxBarLargeButton is mostly single-glyph, with ONE rare 2-slot outlier
+  (M2022; owner ruling 2026-10-05, C11, provisional).** The count above (77) is
+  ORM3. The M2022 gallery has 109 instances; `inferred_distribution
+  2:1;1:15;?:93`, no declared count (`n_distribution ?:109`). ONE payload
+  (`Glyph.Data`, 32x16x32 bmp, inferred N=2, shared by 1 instance) is a genuine
+  2-slot strip -- so 1 of TdxBarLargeButton's 109 M2022 instances is a 2-slot
+  strip, and the blanket "single-glyph, no strip" reading above does not hold
+  for it. There is no N reader for this class: a G-link on it hits the
+  "no N reader" validate error by design. It was not listed in the M2022
+  per-class table below, whose own selection bar ("every class with a strip
+  or a declared count property") it meets.
+- **Not recorded, by decision (owner ruling 2026-10-05, C11):** the optional
+  note on 6 more M2022-only DevExpress single-glyph classes (`TcxBarEditItem`,
+  `TdxBarDateCombo`, `TdxBarInPlaceSubItem`, `TdxBarScreenTip`,
+  `TdxBarScreenTipRepository`, `TdxRibbonRadialMenu`) and on `TRzDBTrackBar`
+  (single 16x16, not a strip, unlike its near-namesake `TRzTrackBar`, M2022.7)
+  was SKIPPED. Source: `docs\cv7-gallery-review-2026-09-17.md`, decision 6.
+
 ## F. Form icons -- single ICO, no count property (39 classes, one section)
 
 Every remaining class in classes.tsv whose only graphic property is
@@ -289,6 +312,11 @@ Every remaining class in classes.tsv whose only graphic property is
 - **Corpus:** 1-3 instances each, `formats ico:N`, `distinct_payloads 1` in
   every case (each form's own icon is a single distinct payload). No G-rule
   applies -- these are `kind = single`, one glyph, nothing to split.
+- **M2022 (owner ruling 2026-10-05, C11, provisional): left as they are.** The
+  39-name list above is ORM3-only. About 140 M2022 form classes (`TAboutBox`,
+  `TMainFrm`, `TfrmMEStats`, ...) are plain `Icon.Data`-only classes of exactly
+  this shape and are NOT named here. Decision: this section's text covers the
+  shape generically, so they are not added individually.
 
 ## H. NOT GLYPHS -- harvested false positives (do not write a G-rule)
 
@@ -296,6 +324,13 @@ The vacuum harvests every `dnkBinary` .dfm property regardless of name (by
 design -- see `HarvestObject`'s own comment, "harvests every dnkBinary"). These
 four classes' only binary properties are NOT images; they decode to nothing
 recognisable and have `width=height=0`, confirmed by reading the raw bytes:
+
+**Scope of the counts below (owner ruling 2026-10-05, C11, provisional):** the
+instance counts for the six original classes are ORM3-ONLY. M2022 counts for the
+same classes (`TOvcSimpleField`/`TOvcDbSimpleField`/`TOvcTCSimpleField`/
+`TQuery`/`TcxTreeList`/`TdxComponentPrinter`) are 4/516/40/71/2/9 against the
+ORM3 2/18/16/3/4/2 -- for `TOvcSimpleField` about 28x off. Do not size "how much
+of this is false positive" for M2022 from these numbers.
 
 - **TOvcDbSimpleField, TOvcSimpleField, TOvcTCSimpleField** (Orpheus numeric
   fields; 2, 18, 16 instances respectively): `RangeHigh`/`RangeLow` are 10-byte
@@ -314,6 +349,17 @@ recognisable and have `width=height=0`, confirmed by reading the raw bytes:
   485-587 bytes, not an image.
 - **TdxComponentPrinter** (2 instances): `PreviewOptions.PreviewBoundsRect` is
   a 16-byte `TRect` (4 x Int32), not an image.
+
+**M2022-only non-glyph false positives (owner ruling 2026-10-05, C11,
+provisional):** five more classes, seen only in the M2022 corpus, all
+blank-format, 0x0x0, not images -- the same shape as the entries above. M2022
+instance counts in brackets:
+
+- **TFDMemTable** (2): `Content`.
+- **TdxDBGrid** (3): `Filter.Criteria`.
+- **TdxMemData** (14): `Persistent.Data`.
+- **TTreeView** (1): `Items.Data`.
+- **TcxGridTableView** (1): `DataController.Data`.
 
 ---
 
@@ -360,6 +406,12 @@ rows (nothing skipped). Exit 0. 208 distinct component classes in
 `classes.tsv`. Across all 2721 rows: `format` resolves (non-blank) for 1969
 (72%); `agree = Y` for 75 rows; `agree = N` for **zero** rows -- same "no
 declared/inferred disagreement anywhere" result as ORM3.
+
+**Q1 consistency accepted (owner ruling 2026-10-05, C11, provisional):** the
+CV-2 gallery review (`docs\cv7-gallery-review-2026-09-17.md`) re-checked every
+class this doc claims a shape for against classes.tsv / instances.tsv directly:
+`agree = Y` 75, `agree = N` 0 across all 2721 M2022 instance rows. Accepted
+as-is; no correction to any existing section.
 
 **No `CountPropNames` gap found this run.** Step 3 of the task brief calls for
 adding a new count-property name only when a class shows strip geometry with
