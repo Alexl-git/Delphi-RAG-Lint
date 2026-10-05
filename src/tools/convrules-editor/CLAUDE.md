@@ -697,15 +697,21 @@ the `convrules-depth` worktree.
   `DepthComboCloseUp` DEFER -- step kept pending, timer re-armed -- while
   `DepthCommitBlocked`: `FTreeLoads > 0` (set with try/finally by
   `LoadGridForBlock` and by the `LongCallRunner` wrapper in `Create`, so New
-  Conversion's class checks count too), `Screen.ActiveForm <> Self` (a modal
+  Conversion's class checks count too), a menu loop (`FMenuOpen` for the main
+  menu, `InMenuLoop` = `GetGUIThreadInfo` for popup / system menus, whose loop a
+  VCL `TPopupMenu` runs on its own window), `Screen.ActiveForm <> Self` (a modal
   form) or the main window disabled (a common dialog). A pending pick is
   COMMITTED (not cancelled) by `CommitPendingDepth` at the top of
   `ConfirmDiscard` (Open, New, Exit / window X, cross-book double-click, the
   Convert tab's check), `SaveBook` (Save, Save As), `DoCurate` and
   `DoNewConversion` -- so the unsaved-changes guard sees it; the commit costs one
   reload even when the book is then replaced. **Esc in the dropped list cancels**:
-  `DepthComboWndProc` (a `WindowProc` hook) records `CBN_SELENDCANCEL`, and
-  `DepthComboCloseUp` then drops the pending pick (a queued reset also drops a
+  `DepthComboWndProc` (a `WindowProc` hook) records `CBN_SELENDCANCEL` ONLY between
+  `CBN_DROPDOWN` and `CBN_CLOSEUP` (`FDepthDropped`) -- a drop-down-list combo
+  also sends it on EVERY focus loss with the list closed, with no close-up after
+  it, and a flag set then stuck and swallowed later steps (fix round 3);
+  `CBN_SETFOCUS` clears a stale cancel; a cancelled pick re-syncs the combo to
+  the book (`SyncDepthCombo`). `DepthComboCloseUp` then drops the pending pick (a queued reset also drops a
   SELCHANGE that follows the close-up), so an explicit cancel never modifies the
   book, not even as a repair.
   Proven by instrumentation in Task 5; a double load is a second slow engine
