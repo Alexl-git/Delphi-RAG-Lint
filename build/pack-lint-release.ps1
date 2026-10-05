@@ -126,6 +126,23 @@ foreach ($plat in 'win64','win32') {
   $z = Join-Path $rel "drag-lint-v$Version-$plat.zip"
   Compress-Archive -Path $stg -DestinationPath $z
   Write-Host ("{0} -> {1:N0} bytes" -f $plat, (Get-Item $z).Length)
+  # The editor ships in EVERY release (owner request 2026-09-30): open the finished
+  # Win64 zip and require ConvRulesEditor.exe beside drag-lint.exe. Read from the
+  # archive, not the staging folder, because the zip is what a user receives.
+  if ($plat -eq 'win64') {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zf = [IO.Compression.ZipFile]::OpenRead($z)
+    try { $names = @($zf.Entries | ForEach-Object { $_.FullName.Replace('\','/') }) }
+    finally { $zf.Dispose() }
+    $root = "drag-lint-v$Version-$plat"
+    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe') {
+      if ($names -notcontains "$root/$need") {
+        Write-Host "PACK FAILED: $z does not contain $root/$need" -ForegroundColor Red
+        exit 1
+      }
+    }
+    Write-Host "  verified: win64 zip holds drag-lint.exe and ConvRulesEditor.exe"
+  }
   $zips += $z
 }
 Write-Host ("ZIPS: " + ($zips -join " "))

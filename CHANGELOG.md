@@ -3,6 +3,56 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.20.6-alpha -- 2026-10-05
+
+MINOR-in-PATCH: the converter engine gains what the rule-book editor asked for. Only
+`DRAGLINT_VERSION` moves; the extractor version is unchanged -- no index needs a re-parse.
+
+### Added
+
+- **convert-apply applies unit rules** (`#unuse`, `#use`, `#useswap`). `info --json` advertises
+  `capabilities.apply_unit_rules`; the apply/1 JSON gains `component_part`, `uses[]`,
+  `uses_removed` and `uses_added`.
+- **`#depth N` book directive.** The default proptree / convert-scaffold depth is now 5
+  (previously effectively 3).
+- **`--rules`** on proptree / convert-scaffold.
+- **`--progress-interval S`**: one JSON progress line on stderr every S seconds; off by default.
+- `info --json` capabilities `book_depth`, `progress_lines`, `lazy_validate`.
+- apply/1 `refused` + `reason`; text mode prints `REFUSED: <reason>`.
+- apply/1 `unreachable[]` (and the unreachable-path warning text) and `classes_built`.
+
+### Changed
+
+- convert-validate / convert-apply resolve paths lazily through a per-class member cache, and
+  every `#convert` block is validated; proptree expands through the same cache.
+- Private members are never shown or resolved.
+- A rule through an inaccessible member is a warning and is skipped (owner ruling 2026-09-30).
+- JSON/text output is written in one buffered write, and stderr is flushed first, so a merged
+  stdout/stderr stream still parses.
+- `REFUSED: <reason>` replaces `ERROR:` for refusals.
+
+### Removed
+
+- `--validate-all-blocks`, `blocks_not_validated`, `trees_built` (replaced by `classes_built`).
+
+### Fixed
+
+- Per-file lint of a `.dpr` runs the AST checks.
+- `try-except-swallowed` accepts a captured exception in the routine's own local that is
+  checked after the try.
+- An indented doc block directly on its declaration keeps its indent.
+- convert-apply refuses to splice a stale `.dfm` span.
+
+### Performance
+
+- BDE book convert-apply dry run: more than 20 min (cap hit) -> 26.5 s.
+- convert-validate BDE (TQuery -> TFDQuery): 408.6 s -> 17.9 s.
+- TabcToggleBtn book convert-apply: 129.8 s -> 16.7 s.
+- TFDQuery proptree depth-5 JSON: 80 s -> 14 s (byte-identical output).
+
+### Known
+
+- The `unused-unit-in-uses` parser false positive ships in 1.21.0 with a re-parse.
 ## v1.20.5-alpha -- 2026-09-30
 
 PATCH: the Config tool no longer overwrites a `drag-lint.json` it could not load, and the doc
