@@ -942,5 +942,16 @@ unchanged is presumed validated earlier."
   Conversion TTable -> TFDTable (book `#depth 2`), Save shows `4 warning(s)`, an
   unchanged re-save is fast and `OK`. RED on the main build
   (`Validate: OK`, no warnings; its unchanged re-save took 19.9 s).
-* **Known cost:** a save validates changed blocks sequentially on the UI thread
-  (hourglass, no cancel): a new book with many blocks is N x 10-40 s.
+* **Progress window + Cancel (follow-up, same branch):** every pass runs on
+  `FEngine.LongCallRunner` (`RunWithProgressDialog`, so `FTreeLoads` is counted
+  and no depth commit fires inside). The window shows after `SHOW_DELAY_MS`;
+  Cancel kills the running engine call and starts no further pass. The book is
+  already on disk, so nothing is undone and it stays clean. Blocks not validated
+  keep their marks and go into `FValidatePending` (pure: `NextPending`,
+  `ChangedBlockJobs(..., APending)`), so the NEXT Save validates them although they
+  no longer differ from the snapshot; the set is dropped when the book is
+  replaced. Status: `Validate: cancelled -- N changed block(s) not checked: <From
+  types>; checked so far: ...`. Driver now 16 checks (window, Cancel, owed block
+  revalidated, unchanged re-save fast, Exit without a prompt).
+* **Known cost:** passes still run one after another: a new book with many blocks
+  is N x 10-40 s, now cancellable.
