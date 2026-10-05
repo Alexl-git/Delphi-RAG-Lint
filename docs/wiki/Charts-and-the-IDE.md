@@ -3,14 +3,45 @@
 **How to ask a chart question, where the answer lands, how to read it, and how
 to jump from it into RAD Studio.** Companion to
 [Diagrams and Charts](Diagrams-and-Charts), which lists the questions. For a step-by-step
-recipe on one field (the Blueprint Operation Name benchmark), including a RAD Studio
-Tools-menu entry, see [Field Round-Trip Report](Field-Round-Trip-Report).
+recipe on one field (the Blueprint Operation Name benchmark) from the drag-lint >
+Reports menu, see [Field Round-Trip Report](Field-Round-Trip-Report).
 
-Status, 29 September 2026: **26 of the 27 catalogue questions ship**; only
+Status, 5 October 2026: **26 of the 27 catalogue questions ship**; only
 `compare` does not (parked by the owner). The newest is `round-trip`. The chart
-tool-set lives in the `charts\` folder of the repository (merged into `main` on
-29 September 2026). The engine has no `ask` verb yet -- today a question is
-asked with the PowerShell scripts below.
+tool-set lives in the `charts\` folder of the repository. **In RAD Studio every
+question is on the drag-lint > Reports menu** (below). The engine has no `ask`
+verb yet -- outside the IDE a question is asked with the PowerShell scripts below.
+
+## From RAD Studio: drag-lint > Reports
+
+1. Put the caret on the symbol -- a routine, a field, a grid column, a type.
+   Save first; the menu offers to save all when the unit has unsaved changes,
+   because the caret line must match the index.
+2. Pick the question from **drag-lint > Reports**. Questions are grouped by
+   what you select: *Routine at the cursor*, *Field, property or grid column*,
+   *Type at the cursor*, *This unit*, *This project*, *Table or column*.
+3. A prompt shows the full name the caret resolved to (via `typeat`); press
+   Enter, or edit it. Table questions ask for the table name; project
+   questions ask nothing.
+4. The report runs in the background -- the IDE stays usable.
+5. The chart opens in your browser. The text answer is put on the clipboard and
+   shown in a small window, formatted as a DocInsight block:
+
+   ```
+   /// <remarks>
+   /// Who writes Blueprint4.ViewModel.TBlueprint_ViewModel.FName (drag-lint report, 2026-10-05):
+   /// ...
+   /// </remarks>
+   ```
+
+   Paste it above the declaration. It carries no `drag-lint:auto` marker, so
+   Auto Document preserves it byte for byte.
+
+When the index is stale the menu says so and offers the incremental reindex
+command; when a question is refused (an ambiguous target, a missing index
+pair) the reason is shown. The menu runs the same `Ask-Report.ps1` described
+below, so it needs a repository clone, PowerShell 7 and, for pictures,
+Graphviz. **Forms for testers (CSV)...** sits on the same submenu.
 
 ## What a chart is
 
@@ -295,5 +326,6 @@ them.
 * **No chart viewer inside RAD Studio.** Charts open in a browser.
 * **`round-trip` as a chart.** It answers in text today; a picture drawn from
   that text is the next step.
-* **One engine verb, `ask`.** Planned; until then use the scripts.
+* **One engine verb, `ask`.** Planned; until then the IDE menu and the
+  terminal both run the scripts.
 * `compare` (before / delta / after) is parked.

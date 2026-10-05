@@ -103,16 +103,31 @@ findings (here: clean).
 
 ## Diagrams and charts
 
-**Ask the index a question about one symbol, get a clickable chart back.** The
-`drag-lint ask` family (shipping in the charts release) answers twenty-four formal
-diagram questions -- `butterfly`, `who-calls`, `what-it-calls`, `who-writes`,
-`who-reads`, `change-impact`, `tested-by`, `effects`, `touches-tables`,
-`class-surface`, `hierarchy`, `deps`, `cycles`, `wiring`, `lifecycle`,
-`event-wiring`, `architecture`, `protocol-trace`, `crosses-boundary`,
-`shown-where`, `exception-paths`, `consumers`, `feeds-from` and
-`lands-where`. You name the question and put the
-caret on the selection (a method, unit, type, field, form class or the project);
-`ask` can also list which questions are valid for what is under the caret.
+**Ask the index a question about one symbol, get a clickable chart back.**
+Twenty-five formal questions -- `butterfly`, `who-calls`, `what-it-calls`,
+`who-writes`, `who-reads`, `change-impact`, `tested-by`, `effects`,
+`touches-tables`, `class-surface`, `hierarchy`, `deps`, `cycles`, `wiring`,
+`lifecycle`, `event-wiring`, `architecture`, `protocol-trace`,
+`crosses-boundary`, `shown-where`, `exception-paths`, `consumers`,
+`feeds-from`, `lands-where` and `round-trip` (one grid field, client -> pipe ->
+server -> SQL and back).
+
+**From RAD Studio:** put the caret on the symbol and pick the question from
+**drag-lint > Reports**. The menu groups the questions by what you select
+(routine, field or grid column, type, unit, project, table), resolves the
+symbol under the caret to its full name, and runs the report in the
+background. The chart opens in your browser; the text answer is copied to the
+clipboard (and shown in a small IDE window) as a DocInsight `/// <remarks>`
+block you can paste above the declaration -- it carries no autodoc marker, so
+Auto Document leaves it alone. The same submenu holds **Forms for testers
+(CSV)...**, a spreadsheet of every form and how to reach it. See
+[IDE Menu Reference](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/IDE-Menu-Reference).
+
+**From a terminal or an AI agent:** `charts\src\Ask-Report.ps1 -Question <id>
+-Target <name> -Project <x.dproj> [-Open]` -- it finds the indexes itself and
+prints the answer as text. A single engine verb, `drag-lint ask`, is planned
+and not shipped yet. The chart scripts live in the repository's `charts\`
+folder (not in the release zip) and need PowerShell 7 and Graphviz.
 
 drag-lint is not a model: every chart comes from a formal call, and every row in
 it is a fact from the index with a file and a line. Each answer is a bundle --

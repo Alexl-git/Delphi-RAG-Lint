@@ -3,9 +3,10 @@
 **Ask the index a question, get a chart back.** A chart question turns one
 formal question about one selected symbol into a clickable diagram: who calls
 this, what breaks if I change it, which tests reach it, what does this form
-wire, where does this protocol command travel. **Today the questions run
-through the chart pipeline** -- `charts\src\New-DiagramArtifact.ps1`, and
-`Ask-Report.ps1` for a text answer (see [Charts and the IDE](Charts-and-the-IDE)).
+wire, where does this protocol command travel. **In RAD Studio, ask from
+drag-lint > Reports** with the caret on the symbol. Outside the IDE the
+questions run through the chart pipeline -- `charts\src\New-DiagramArtifact.ps1`,
+and `Ask-Report.ps1` for a text answer (see [Charts and the IDE](Charts-and-the-IDE)).
 A single engine verb, `drag-lint ask`, is **planned and not shipped yet**; its
 design is below.
 

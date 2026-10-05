@@ -1008,7 +1008,8 @@ The report verbs answer a PATH or a SET: what happens when a grid field is edite
 writes or reads a field, who calls a routine, what a change breaks, which tables it touches. Each row
 of the answer is anchored `@File.pas:line`. They are PowerShell scripts under `charts\src`, not engine
 verbs; one command asks any of them, resolves every index itself and never reindexes (a stale index
-stops it, exit 3, with the reindex command on stderr):
+stops it, exit 3, with the reindex command on stderr). A human in RAD Studio asks the same questions
+from drag-lint > Reports (caret -> typeat -> Ask-Report.ps1); an agent uses the command line:
 
     pwsh -NoProfile -File C:\Projects\Delphi-RAG-lint\charts\src\Ask-Report.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1FtrsVNum -Project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
 
