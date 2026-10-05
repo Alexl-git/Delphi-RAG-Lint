@@ -43,8 +43,6 @@ can still read them. Any private or pinned copy must be replaced.
 
 ## Known, not blocking
 
-* `run_backlog_index_guard` fails only on hand-kept counts in the gitignored
-  `docs\INBOX-INDEX.md`; no code is involved.
 * Two index gaps found today, to ride the next extractor change: `dfm_event` is
   empty for nested-property events (`Properties.OnButtonClick`), and a
   `class procedure` carries no class modifier.
