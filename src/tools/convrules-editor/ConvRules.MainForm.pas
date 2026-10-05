@@ -570,7 +570,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.ActiveConditionals, ConvRules.MainForm.TConvRulesForm.ActiveLinks, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.DoAutoMatch.LeafName, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList (+9 more)</para>
-      /// <para>Complexity: 19 (cyclomatic, outer body), 128 lines (full implementation)</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 132 lines (full implementation)</para>
       /// <para>Reads: FActiveHdr, FToTree, FFromTree</para>
       /// <seealso cref="ConvRules.Casts.ResolveUnknownTypes"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
@@ -635,8 +635,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, Default, Format, Trim</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 108 lines (full implementation)</para>
-      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+6 more)   Writes: FTreeLoads, FActiveHdr, FPoolTypeFilter, FFromTree, FToTree, FLastLoadCancelled</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 109 lines (full implementation)</para>
+      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+7 more)   Writes: FTreeLoads, FActiveHdr, FPoolTypeFilter, FFromTree, FToTree, FLastLoadCancelled, FCancelStatus</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
@@ -1378,7 +1378,7 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.ActiveConditionals, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LeafType, ConvRules.MainForm.TConvRulesForm.LeafWritable, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.RefreshRulesList (+8 more)</para>
+      /// <para>Calls: ConvRules.Casts.ResolveUnknownTypes, ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.ActiveConditionals, ConvRules.MainForm.TConvRulesForm.AssignLink, ConvRules.MainForm.TConvRulesForm.CanCast, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.MainForm.TConvRulesForm.LeafType, ConvRules.MainForm.TConvRulesForm.LeafWritable, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.RefreshRulesList (+9 more)</para>
       /// <para>Reads: FActiveHdr, FPool, FGrid, FFromTree, FToTree</para>
       /// <seealso cref="ConvRules.Casts.ResolveUnknownTypes"/>
       /// <seealso cref="ConvRules.MainForm.PathOfGridCell"/>
@@ -1422,14 +1422,13 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.LeafNameOf, ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.SetStatus, Format, SameText</para>
+      /// <para>Calls: ConvRules.MainForm.LeafNameOf, ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SetStatusAfterCancel, Format, SameText</para>
       /// <para>Reads: FActiveHdr, FPool, FGrid</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.LeafNameOf"/>
       /// <seealso cref="ConvRules.MainForm.PathOfGridCell"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatusAfterCancel"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoFindInFrom(Sender: TObject);
@@ -1440,13 +1439,13 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TypeOfCell, Format</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SetStatusAfterCancel, ConvRules.MainForm.TypeOfCell, Format</para>
       /// <para>Reads: FActiveHdr, FPoolTypeFilter, FMiOnlyType, FPool   Writes: FPoolTypeFilter</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshPool"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatusAfterCancel"/>
       /// <seealso cref="ConvRules.MainForm.TypeOfCell"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoOnlyType(Sender: TObject);
@@ -1457,14 +1456,14 @@ type
       /// Needs an active block: the live validation is done against that block's
       /// To tree and To class, and a mapping only reaches a block through an #apply.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MappingForm.TMappingForm.EditMapping, ConvRules.Mappings.MappingNames, ConvRules.Model.TRuleBook.MappingNodesNamed, ConvRules.Model.TRuleBook.NodesInBlock, ConvRules.Model.TRuleBook.ReplaceMapping, Format, IfThen, InputQuery, SameText, Trim</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 67 lines (full implementation)</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.SetStatusAfterCancel, ConvRules.MainForm.TConvRulesForm.SyncRawFromModel, ConvRules.MappingForm.TMappingForm.EditMapping, ConvRules.Mappings.MappingNames, ConvRules.Model.TRuleBook.MappingNodesNamed, ConvRules.Model.TRuleBook.NodesInBlock, ConvRules.Model.TRuleBook.ReplaceMapping, Format, IfThen, InputQuery, SameText, Trim</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 71 lines (full implementation)</para>
       /// <para>Reads: FActiveHdr, FBook, FEngine, FToTree   Writes: FActiveHdr</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadGridForBlock"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatusAfterCancel"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SyncRawFromModel"/>
-      /// <seealso cref="ConvRules.MappingForm.TMappingForm.EditMapping"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoMappings(Sender: TObject);
@@ -1981,7 +1980,7 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+44 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadClasses (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+43 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
@@ -2122,10 +2121,10 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetStatus</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetStatusAfterCancel</para>
       /// <para>Reads: FCbSurface, FActiveHdr, FSurfaceMinVis   Writes: FSurfaceMinVis</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadGridForBlock"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatusAfterCancel"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>

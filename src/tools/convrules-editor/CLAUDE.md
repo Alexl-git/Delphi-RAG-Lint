@@ -655,6 +655,11 @@ the `convrules-depth` worktree.
   Snapshot + reload, and a DIRTY re-emit + reload. Note that Save / Snapshot
   still DROP a block that maps nothing (`BlockMapsSomething`), so a stub with
   no `#link` / `#apply` / `#ignore` is still not written -- unchanged policy.
+  `#useswap` parses the same way (`SplitArrow(Body, ...)`) and was deliberately
+  NOT changed: an Old-only `#useswap X -> ` is not a form the editor can create
+  (the replacement picker's OK refuses an empty list), and a hand-written one
+  reads as nothing useful to the engine either (`DRagLint.Convert.Rules` takes
+  `X ->` as the Old unit name).
 * `ConvRules.BlockFile`'s `FILE_SCOPE_DIRECTIVES` includes `#depth`, so a
   `#depth` after the last block opens a trailing file-scope block.
 * `TRuleBook.ParseLine` carries one comma-list review for method-too-long /
@@ -675,7 +680,9 @@ the `convrules-depth` worktree.
   timeout reads as NO capabilities, i.e. the old-engine behaviour
   (`caps.timeout.is.none`: a sleeping `.cmd` stand-in gives [] inside a 1.5 s
   bound; `caps.standin.answers` is its positive control).
-  `HasCapability` is now case-insensitive.
+  `HasCapability` is now case-insensitive, and it goes through `CapabilityNames`,
+  so the Convert tab's `apply_unit_rules` probe has the same 15 s bound (a
+  timeout = False = unit rules greyed, as on an old engine).
 * **`--depth N` only with `book_depth`; `--progress-interval S` only with
   `progress_lines`** -- an older engine exits 3 on either flag. `DepthArgs(ADepth,
   AProgress)` builds both; `ADepth = 0` omits `--depth`. `PrepareEngineForTrees`
