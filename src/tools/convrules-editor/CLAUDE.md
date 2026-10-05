@@ -576,7 +576,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 
 ### Verification kit
 
-* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1323 pass / 5 fail** (1328 total; was 1243 / 5 before the engine-1.20.6 adoption branch);
+* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1329 pass / 5 fail** (1334 total; was 1243 / 5 before the engine-1.20.6 adoption branch);
   the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
   `.has.TOvcTable`). A full run is ~6 min (the live runner test is ~3 min of
@@ -684,11 +684,30 @@ the `convrules-depth` worktree.
   `FDepthPending` and, on the CLOSED combo (mouse wheel, arrow keys), restarts
   `FDepthTimer` (`DEPTH_COMMIT_DELAY_MS` = 600 ms); with the list dropped down it
   waits for `OnCloseUp` (`DepthComboCloseUp`). Either path calls `DepthChanged`,
-  which commits only when the value differs from `Depth` or the book is
-  `bdsDuplicate` / `bdsInvalid` (then the commit is the repair) -- so a
-  SELCHANGE/CLOSEUP pair for one pick (Windows does not fix their order) still
-  reloads once, and opening and closing the list without a pick writes nothing.
-  Picking the default (5) on a book WITHOUT `#depth` writes nothing either.
+  which writes unless `TRuleBook.DepthPickWrites` says the book already holds
+  exactly that one valid value -- so a SELCHANGE/CLOSEUP pair for one pick
+  (Windows does not fix their order) still reloads once, and opening and closing
+  the list without a pick writes nothing. **An explicit pick is recorded**: the
+  default (5) on a book WITHOUT `#depth` WRITES `#depth 5` (owner decision
+  2026-10-04, `depth.pick.default.on.absent.writes`); only opening and saving
+  must never add the line. On `bdsDuplicate` / `bdsInvalid` the write is the repair.
+* **A depth commit never runs inside another operation** (fix round 2). The
+  timer runs in ANY message pump (`LoadGridForBlock`'s `ProcessMessages`, the
+  progress window, `MessageDlg`, the Open dialog), so `DepthTimerFire` and
+  `DepthComboCloseUp` DEFER -- step kept pending, timer re-armed -- while
+  `DepthCommitBlocked`: `FTreeLoads > 0` (set with try/finally by
+  `LoadGridForBlock` and by the `LongCallRunner` wrapper in `Create`, so New
+  Conversion's class checks count too), `Screen.ActiveForm <> Self` (a modal
+  form) or the main window disabled (a common dialog). A pending pick is
+  COMMITTED (not cancelled) by `CommitPendingDepth` at the top of
+  `ConfirmDiscard` (Open, New, Exit / window X, cross-book double-click, the
+  Convert tab's check), `SaveBook` (Save, Save As), `DoCurate` and
+  `DoNewConversion` -- so the unsaved-changes guard sees it; the commit costs one
+  reload even when the book is then replaced. **Esc in the dropped list cancels**:
+  `DepthComboWndProc` (a `WindowProc` hook) records `CBN_SELENDCANCEL`, and
+  `DepthComboCloseUp` then drops the pending pick (a queued reset also drops a
+  SELCHANGE that follows the close-up), so an explicit cancel never modifies the
+  book, not even as a repair.
   Proven by instrumentation in Task 5; a double load is a second slow engine
   call (the double-click path shipped one once, ~161 s).
 
@@ -717,7 +736,9 @@ the `convrules-depth` worktree.
   nil the work runs inline, with no window and no cancel; the model tests
   install FAKE runners (`TestProptreeCancelState`: one returns
   `ENGINE_OUTCOME_CANCELLED`, one the engine's exit 3, one
-  `ENGINE_OUTCOME_TIMEOUT`, one raises). `TConvRulesForm.Create` sets `FEngine.LongCallRunner:= RunWithProgressDialog`.
+  `ENGINE_OUTCOME_TIMEOUT`, one raises). `TConvRulesForm.Create` sets
+  `FEngine.LongCallRunner` to a wrapper that counts `FTreeLoads` around
+  `RunWithProgressDialog`.
 * **The window appears only after `SHOW_DELAY_MS` (400 ms)** -- a fast load
   shows nothing (`wait.fast.no.window`). Never raise the delay to hide a slow
   call; measure the call.
@@ -755,7 +776,13 @@ the `convrules-depth` worktree.
 * **`csRefused` (last member of `TConvertStatus`, text `refused -- not
   changed`) takes the FAILURE path**: `FailUnit(AReason, csRefused)` restores
   the unit and rolls back earlier books on it, exactly like
-  `csFailedRestored`; notes say "was refused" instead of "failed". The summary
+  `csFailedRestored`; notes say "was refused" instead of "failed". **Except
+  when nothing had changed the unit yet** (the refused book was its first, or
+  every earlier one was skipped): the engine left the file untouched, so nothing
+  is restored, the row's `Backup` / `BackupDfm` are '' and the unneeded `.BCK<N>`
+  files are DROPPED, as for a skipped book (owner decision 2026-10-04;
+  `runner.refused.first.drops.backup`). After an earlier book converted the unit,
+  the restore needs the backup and keeps it (`runner.refused.later.keeps.backup`). The summary
   adds `N unit(s) refused by the engine and left unchanged`, THEN (if any)
   `N earlier conversion(s) on those units were rolled back by a later failure or
   refusal` -- after the refused sentence, because a roll-back can follow a

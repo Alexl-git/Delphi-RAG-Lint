@@ -1721,10 +1721,18 @@ var
   var
     LPas : string;
     LRows: TArray<TConvertRow>;
+
+    // Backups of APas's unit (.pas and .dfm) left in Dir.
+    function BackupsLeft(const APas: string): Integer;
+    begin
+      Result:= Length(TDirectory.GetFiles(Dir, ChangeFileExt(ExtractFileName(APas), '') + '.*.BCK*'));
+    end;
+
   begin
-    // --- the FIRST book is refused: restored (a no-op), status refused, reason kept ---
+    // --- the FIRST book is refused: nothing changed the unit, so no restore and no backup ---
     LPas:= TPath.Combine(Dir, 'F1.pas');
     TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(ChangeFileExt(LPas, '.dfm'), 'object F1: TF1' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
     LRows:= RunConversionUnits([LPas], ['A.rules'],
       function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
       begin
@@ -1733,6 +1741,9 @@ var
       end, Index, nil, nil);
     Check('runner.refused.first', (Length(LRows) = 1) and (LRows[0].Status = csRefused)
       and (Pos('inherited instances', LRows[0].Note) > 0) and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
+    // Owner decision 2 (2026-10-04): an unneeded backup is dropped, as for a skipped book.
+    Check('runner.refused.first.drops.backup', (Length(LRows) = 1) and (LRows[0].Backup = '') and (LRows[0].BackupDfm = '')
+      and (BackupsLeft(LPas) = 0) and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows) + Format(' | backups left=%d', [BackupsLeft(LPas)]));
 
     // --- a LATER book is refused: the earlier book's change is rolled back ---
     LPas:= TPath.Combine(Dir, 'F2.pas');
@@ -1753,6 +1764,9 @@ var
     Check('runner.refused.rolls.back', (Length(LRows) = TWO_ROWS) and (LRows[0].Status = csRolledBack)
       and (Pos('B.rules was refused', LRows[0].Note) > 0) and (LRows[1].Status = csRefused)
       and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows) + ' | pas=' + TFile.ReadAllText(LPas));
+    // The restore needed the backup: it is kept and named on the refused row.
+    Check('runner.refused.later.keeps.backup', (Length(LRows) = TWO_ROWS) and (LRows[1].Backup <> '') and TFile.Exists(LRows[1].Backup)
+      and (BackupsLeft(LPas) = 1) and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows) + Format(' | backups left=%d', [BackupsLeft(LPas)]));
   end;
 
 begin
@@ -7156,6 +7170,9 @@ begin
     B.LoadFromString(BOOK_NO_DEPTH);
     Check('depth.absent.default', (B.Depth = BOOK_DEPTH_DEFAULT) and (B.DepthState = bdsAbsent));
     Check('depth.absent.roundtrip', B.Snapshot = BOOK_NO_DEPTH, B.Snapshot);
+    // Owner decision 1 (2026-10-04): an explicit pick of the DEFAULT on a book with
+    // no #depth is recorded; only a book that already says exactly that skips it.
+    Check('depth.pick.default.on.absent.writes', B.DepthPickWrites(BOOK_DEPTH_DEFAULT));
 
     Hdr:= B.Nodes[B.ConvertHeaders[0]];
     B.SetDepth(DEPTH_MID);
@@ -7169,14 +7186,17 @@ begin
 
     B.LoadFromString('#depth 4' + CRLF + BOOK_NO_DEPTH);
     Check('depth.load.valid', (B.Depth = DEPTH_FOUR) and (B.DepthState = bdsValid));
+    Check('depth.pick.same.on.valid.no.write', (not B.DepthPickWrites(DEPTH_FOUR)) and B.DepthPickWrites(DEPTH_HIGH));
     Check('depth.roundtrip.verbatim', B.Snapshot = '#depth 4' + CRLF + BOOK_NO_DEPTH, B.Snapshot);
 
     B.LoadFromString('#depth deep' + CRLF + BOOK_NO_DEPTH);
     Check('depth.invalid.default', (B.Depth = BOOK_DEPTH_DEFAULT) and (B.DepthState = bdsInvalid));
+    Check('depth.pick.default.on.invalid.writes', B.DepthPickWrites(BOOK_DEPTH_DEFAULT));
     Check('depth.invalid.verbatim', Pos('#depth deep', B.Snapshot) = 1, B.Snapshot);
 
     B.LoadFromString('#depth 2' + CRLF + '#depth 9' + CRLF + BOOK_NO_DEPTH);
     Check('depth.duplicate.first.wins', (B.Depth = DEPTH_LOW) and (B.DepthState = bdsDuplicate));
+    Check('depth.pick.same.on.duplicate.writes', B.DepthPickWrites(DEPTH_LOW));
     // An explicit depth change REPAIRS a duplicate (ruling R11): the engine rejects a
     // book with two #depth lines, so the first is set and every other one deleted.
     Hdr:= B.Nodes[B.ConvertHeaders[0]];

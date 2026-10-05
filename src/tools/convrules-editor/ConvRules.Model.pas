@@ -521,6 +521,14 @@ type
       /// header index must re-find it BY NODE (Nodes.IndexOf), as InsertUnitNode does.
       /// Deleted #depth nodes are freed; do not hold references to them.</remarks>
       function SetDepth(AValue: Integer): TRuleNode;
+      /// <summary>Whether a user's EXPLICIT pick of AValue must be written (SetDepth).</summary>
+      /// <param name="AValue">The picked depth.</param>
+      /// <returns>False only when the book already carries exactly one valid #depth equal
+      /// to AValue (bdsValid). True otherwise -- including the default (5) on a book with
+      /// no #depth: an explicit pick is recorded (owner decision, 2026-10-04); and on a
+      /// bdsDuplicate / bdsInvalid book, where the write is the repair.</returns>
+      /// <remarks>Only explicit picks reach this; opening and saving never add #depth.</remarks>
+      function DepthPickWrites(AValue: Integer): Boolean;
   end;
 
 const
@@ -1241,6 +1249,11 @@ begin
     Result:= L[0].DepthValue
   else
     Result:= BOOK_DEPTH_DEFAULT;
+end;
+
+function TRuleBook.DepthPickWrites(AValue: Integer): Boolean;
+begin
+  Result:= not ((DepthState = bdsValid) and (Depth = AValue));
 end;
 
 function TRuleBook.DepthState: TBookDepthState;

@@ -187,6 +187,9 @@ type
       FBookDepthOk  : Boolean         ; // engine reports book_depth
       FDepthTimer   : TTimer          ; // debounces wheel / arrow-key steps on FCbDepth: one reload per committed change
       FDepthPending : Boolean         ; // a selection notification arrived on FCbDepth and is not committed yet
+      FDepthCancelled: Boolean        ; // CBN_SELENDCANCEL seen: the open list was dismissed (Esc), not picked from
+      FDepthComboWndProc: TWndMethod  ; // FCbDepth's own WindowProc, chained by DepthComboWndProc
+      FTreeLoads    : Integer         ; // > 0 while a tree load or a proptree engine call runs (depth commits wait)
       FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
       FCastDefs     : TArray<TCastDef>; // shipped class-cast library (.castlib)
     { The ENUM half of the same file. LoadCastLib returns only the casts, so the
@@ -309,7 +312,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+7 more)</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthTimer, FLblDepthNote (+34 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthTimer, FLblDepthNote (+33 more)</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthTimer, FLblDepthNote (+34 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthComboWndProc, FDepthTimer (+34 more)</para>
       /// <seealso cref="ConvRules.ConvertTab.TConvertTab.Create"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddPopupItem"/>
@@ -504,29 +507,28 @@ type
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.CurationForm.TCurationForm.Execute, ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ExtractFileName, MessageDlg</para>
+      /// <para>Calls: ConvRules.CurationForm.TCurationForm.Execute, ConvRules.MainForm.TConvRulesForm.CommitPendingDepth, ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ExtractFileName, MessageDlg</para>
       /// <para>Reads: FFilePath, FBook, FFormTypeRows</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.CurationForm.TCurationForm.Execute"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.CommitPendingDepth"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoCurate(Sender: TObject);
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus (+7 more)</para>
-      /// <para>Complexity: 24 (cyclomatic, outer body), 123 lines (full implementation)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.CommitPendingDepth, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError (+8 more)</para>
+      /// <para>Complexity: 24 (cyclomatic, outer body), 124 lines (full implementation)</para>
       /// <para>Reads: FCbFrom, FCbTo, FEngine, FActiveHdr, FBook, FRules, FLastLoadCancelled   Writes: FLastLoadCancelled</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoAutoMatch"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.CommitPendingDepth"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoNewConversion(Sender: TObject);
@@ -631,8 +633,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, Default, Format, Trim</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 101 lines (full implementation)</para>
-      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+6 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree, FLastLoadCancelled</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 108 lines (full implementation)</para>
+      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+6 more)   Writes: FTreeLoads, FActiveHdr, FPoolTypeFilter, FFromTree, FToTree, FLastLoadCancelled</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
@@ -2118,19 +2120,34 @@ type
       procedure SurfaceChanged(Sender: TObject);
       /// <summary>Commits the depth combo's value: writes the book's #depth (SetDepth, which also
       /// repairs a book with several #depth lines) and reloads the active block's trees once.
-      /// A no-op when D equals Depth and the book is not bdsDuplicate / bdsInvalid.</summary>
+      /// A no-op only when TRuleBook.DepthPickWrites says the book already holds that value.</summary>
       /// <param name="Sender">The depth combo.</param>
       procedure DepthChanged(Sender: TObject);
       /// <summary>FCbDepth.OnChange: a step from the wheel or the arrow keys only (re)starts
       /// FDepthTimer; while the list is dropped down it does nothing (OnCloseUp commits).</summary>
       /// <param name="Sender">The depth combo.</param>
       procedure DepthComboChange(Sender: TObject);
-      /// <summary>FCbDepth.OnCloseUp: commits the picked depth now (DepthChanged).</summary>
+      /// <summary>FCbDepth.OnCloseUp: commits a pending pick now (DepthChanged), defers it while
+      /// DepthCommitBlocked, and drops it when the list was dismissed (Esc).</summary>
       /// <param name="Sender">The depth combo.</param>
       procedure DepthComboCloseUp(Sender: TObject);
-      /// <summary>FDepthTimer.OnTimer: the steps have settled -- commit once (DepthChanged).</summary>
+      /// <summary>FDepthTimer.OnTimer: the steps have settled -- commit once (DepthChanged); while
+      /// DepthCommitBlocked it stays armed and the step stays pending.</summary>
       /// <param name="Sender">The timer.</param>
       procedure DepthTimerFire(Sender: TObject);
+      /// <summary>FCbDepth.WindowProc hook: records CBN_SELENDCANCEL / CBN_SELENDOK, which VCL
+      /// does not surface, so a dismissed list (Esc) can cancel the pending pick.</summary>
+      /// <param name="AMsg">The message; always passed on to the combo's own WindowProc.</param>
+      procedure DepthComboWndProc(var AMsg: TMessage);
+      /// <summary>True while committing a depth pick would run inside another operation:
+      /// a tree load or proptree call, or any modal window or dialog.</summary>
+      /// <returns>True = defer the commit.</returns>
+      function DepthCommitBlocked: Boolean;
+      /// <summary>Commits a pending depth pick NOW (DepthChanged, one reload), so the
+      /// unsaved-changes guard and Save see it. Called first by ConfirmDiscard, SaveBook,
+      /// DoCurate and DoNewConversion -- before any dialog or a book replacement.</summary>
+      /// <remarks>While a tree load runs it re-arms the timer instead (never nests a load).</remarks>
+      procedure CommitPendingDepth;
       /// <summary>Shows the book's depth, its state note and the capability gate on the depth combo.</summary>
       procedure RefreshDepthControl;
       /// <summary>Sets the engine's --depth for the next proptree calls: the book's depth, or 0 (omit) on an engine without book_depth.</summary>
@@ -2356,19 +2373,20 @@ type
       /// does not, and Run returns immediately. Engine/db config is read from the globals
       /// below.</summary>
       /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via ConvRules.EngineWait.RunWithProgressDialog</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.CapabilityNames, ConvRules.Engine.TEngineAdapter.Create, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.RefreshDepthControl, ConvRules.MainForm.TConvRulesForm.SetError (+10 more)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.CapabilityNames, ConvRules.Engine.TEngineAdapter.Create, ConvRules.EngineWait.RunWithProgressDialog, ConvRules.MainForm.ReadLastFormDir, ConvRules.MainForm.TConvRulesForm.ApplyTheme, ConvRules.MainForm.TConvRulesForm.BuildUI, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.ExpandUnitSiblings, ConvRules.MainForm.TConvRulesForm.LoadFormFiles, ConvRules.MainForm.TConvRulesForm.RefreshDepthControl (+11 more)</para>
       /// <para>constructor</para>
-      /// <para>Reads: FBook, FEngine, FEdDest   Writes: FBook, FSnapshot, FFromPlatform, FToPlatform, FEngine, FBookDepthOk, FActiveHdr, FSurfaceMinVis (+3 more)</para>
+      /// <para>Reads: FBook, FEngine, FEdDest   Writes: FBook, FSnapshot, FFromPlatform, FToPlatform, FEngine, FTreeLoads, FBookDepthOk, FActiveHdr (+4 more)</para>
       /// <para>UI thread only -- touches Application</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: override</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
+      /// <seealso cref="ConvRules.EngineWait.RunWithProgressDialog"/>
       /// <seealso cref="ConvRules.MainForm.ReadLastFormDir"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ApplyTheme"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildUI"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(AOwner: TComponent); override;
@@ -2499,6 +2517,7 @@ uses
   , Winapi.ShellAPI    // HDROP for a pasted Explorer file list
   , ConvRules.DropTarget
   , ConvRules.EngineWait // RunWithProgressDialog: proptree behind a cancellable window
+  , ConvRules.EngineProgress // TStreamingWork: the LongCallRunner wrapper's signature
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2585,7 +2604,17 @@ begin
   FFromPlatform:= GEditorFromPlatform;
   FToPlatform  := GEditorToPlatform;
   FEngine:= TEngineAdapter.Create(GEditorExe, EngineDbSet);
-  FEngine.LongCallRunner:= RunWithProgressDialog; // proptree runs behind a cancellable window
+  // proptree runs behind a cancellable window; FTreeLoads holds depth commits back
+  // for every such call, including New Conversion's class checks.
+  FEngine.LongCallRunner:= function(const ATitle: string; const AWork: TStreamingWork): Integer
+    begin
+      Inc(FTreeLoads);
+      try
+        Result:= RunWithProgressDialog(ATitle, AWork);
+      finally
+        Dec(FTreeLoads);
+      end; // try
+    end;
   // One `info --json` call gates both 1.20.6 features for the whole session.
   var LCaps: TArray<string>:= FEngine.CapabilityNames;
   FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
@@ -2998,6 +3027,8 @@ begin
   // step, and every commit is a full (possibly slow) tree reload.
   FCbDepth.OnChange := DepthComboChange;
   FCbDepth.OnCloseUp:= DepthComboCloseUp;
+  FDepthComboWndProc:= FCbDepth.WindowProc;
+  FCbDepth.WindowProc:= DepthComboWndProc;
   FDepthTimer:= TTimer.Create(Self);
   FDepthTimer.Enabled := False;
   FDepthTimer.Interval:= DEPTH_COMMIT_DELAY_MS;
@@ -4332,6 +4363,10 @@ var
   Notes   : string   ;
 begin
   var LGuard: IInterface:= HourGlass;
+  // FTreeLoads > 0 holds back a depth commit (DepthTimerFire) for the whole load:
+  // the ProcessMessages below and the progress window both pump messages.
+  Inc(FTreeLoads);
+  try
   FActiveHdr:= AHdrIdx;
   // A fresh block: drop any pool type-narrowing carried over from the last selection.
   FPoolTypeFilter:= '';
@@ -4424,6 +4459,9 @@ begin
   // "a rule was selected" path (RulesSelectItem, LoadFile's auto-select,
   // DoNewConversion, SurfaceChanged) lands here, so this is the single hook.
   UpdateMenuEnabled;
+  finally
+    Dec(FTreeLoads);
+  end; // try
 end; // procedure
 
 { Refill the grid from FFromTree.Leaves, keeping only rows that pass the active
@@ -5935,9 +5973,10 @@ var
 begin
   D:= FCbDepth.ItemIndex + BOOK_DEPTH_MIN;
   FDepthPending:= False;
-  // Same value, nothing to write -- except on a book the engine rejects (several
-  // #depth lines, or an invalid one): there the commit IS the repair (ruling R11).
-  if (FBook.Depth = D) and not (FBook.DepthState in [bdsDuplicate, bdsInvalid]) then
+  // An explicit pick is recorded -- the default on a book without #depth too (owner
+  // decision, 2026-10-04) -- unless the book already holds exactly that one valid
+  // value. On a duplicate / invalid book the write IS the repair (ruling R11).
+  if not FBook.DepthPickWrites(D) then
     Exit;
   // Capture the active block's NODE: an inserted or deleted #depth shifts #convert indexes.
   Hdr:= nil;
@@ -5960,6 +5999,8 @@ end; // procedure
   second finds the book already holding the value and returns without a reload. }
 procedure TConvRulesForm.DepthComboChange(Sender: TObject);
 begin
+  if FDepthCancelled then
+    Exit; // the list was dismissed (Esc): a SELCHANGE for the revert is not a pick
   FDepthPending:= True;
   FDepthTimer.Enabled:= False;
   if FCbDepth.DroppedDown then
@@ -5970,14 +6011,69 @@ end;
 procedure TConvRulesForm.DepthComboCloseUp(Sender: TObject);
 begin
   FDepthTimer.Enabled:= False;
-  if FDepthPending then // opening and closing the list without a pick changes nothing
+  if FDepthCancelled then
+  begin
+    // An explicit cancel never modifies the book, not even as a repair. Any
+    // notification still on its way for this close-up is dropped too: the queued
+    // reset runs after them.
+    FDepthPending:= False;
+    TThread.ForceQueue(nil,
+      procedure
+      begin
+        FDepthCancelled:= False;
+        FDepthPending  := False;
+        FDepthTimer.Enabled:= False;
+      end);
+    Exit;
+  end;
+  if not FDepthPending then
+    Exit; // opening and closing the list without a pick changes nothing
+  if DepthCommitBlocked then
+    FDepthTimer.Enabled:= True // picked during a load: commit once it is over
+  else
     DepthChanged(FCbDepth);
 end;
 
 procedure TConvRulesForm.DepthTimerFire(Sender: TObject);
 begin
+  if not FDepthPending then
+  begin
+    FDepthTimer.Enabled:= False;
+    Exit;
+  end;
+  // Deferred, still armed: a commit is a tree reload, and running it inside a load's
+  // message pump or a modal window nests loads or edits a book about to be replaced.
+  if DepthCommitBlocked then
+    Exit;
   FDepthTimer.Enabled:= False;
-  if FDepthPending then
+  DepthChanged(FCbDepth);
+end;
+
+procedure TConvRulesForm.DepthComboWndProc(var AMsg: TMessage);
+begin
+  if AMsg.Msg = CN_COMMAND then
+    case TWMCommand(AMsg).NotifyCode of
+      CBN_DROPDOWN, CBN_SELENDOK: FDepthCancelled:= False;
+      CBN_SELENDCANCEL          : FDepthCancelled:= True;
+    end; // case
+  FDepthComboWndProc(AMsg);
+end;
+
+function TConvRulesForm.DepthCommitBlocked: Boolean;
+begin
+  // A modal TForm makes itself the active form; a common dialog (Open / Save) does
+  // not, but disables this window like every modal does.
+  Result:= (FTreeLoads > 0) or (Screen.ActiveForm <> Self) or not IsWindowEnabled(Handle);
+end;
+
+procedure TConvRulesForm.CommitPendingDepth;
+begin
+  if not FDepthPending then
+    Exit;
+  FDepthTimer.Enabled:= False;
+  if FTreeLoads > 0 then
+    FDepthTimer.Enabled:= True // never nest a load: the timer commits after it
+  else
     DepthChanged(FCbDepth);
 end;
 
@@ -6414,6 +6510,7 @@ var
   CompletingStub: Boolean  ;
 begin
   var LGuard: IInterface:= HourGlass;
+  CommitPendingDepth; // before the class checks and ChooseTargetForNewRule's prompts
   fromT:= Trim(FCbFrom.Text);
   toT  := Trim(FCbTo  .Text);
   if (fromT = '') or (toT = '') then
@@ -6588,6 +6685,7 @@ var
   FormTypes: TArray<string>;
   TypeRow  : TFormTypeRow  ;
 begin
+  CommitPendingDepth; // before the save prompt and the reload that replaces the book
   if (FFilePath <> '') and (FBook.Nodes.Count > 0) then
   case MessageDlg('Curation works on the file on disk. Save your edits first?', mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
     mrCancel: Exit;
@@ -6653,6 +6751,7 @@ function TConvRulesForm.ConfirmDiscard: Boolean;
 var
   LName: string;
 begin
+  CommitPendingDepth; // the guard must see a pick still waiting on its timer
   if FBook.Snapshot = FSnapshot then
     Exit(True);
   if FFilePath <> '' then
@@ -6688,6 +6787,7 @@ var
   toT  : string         ;
 begin
   Result:= False; // every early Exit below means nothing reached disk
+  CommitPendingDepth; // a pick still waiting on its timer belongs in this save
   var LGuard: IInterface:= HourGlass;
   var LOldPath: string:= FFilePath;
   var LBytesWritten: Boolean:= False;

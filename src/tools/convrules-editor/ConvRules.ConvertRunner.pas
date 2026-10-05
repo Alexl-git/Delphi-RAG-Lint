@@ -38,8 +38,12 @@ type
   ///   unit may be half-converted, the Note names the backups (.pas and .dfm)
   ///   to restore by hand.
   /// csRefused: the engine refused this book on the unit (TApplyRow.Refused);
-  ///   the unit was restored like a failure -- earlier books on it rolled back,
-  ///   its remaining books not run -- so it is unchanged.
+  ///   its remaining books do not run and the unit ends unchanged. When an
+  ///   earlier book had converted the unit, it is restored like a failure (those
+  ///   rows become csRolledBack) and the backup is kept and named. When nothing
+  ///   had changed it (the refused book was its first, or every earlier one was
+  ///   skipped), nothing is restored and the unneeded backup is DROPPED, as for
+  ///   csBookSkipped: Backup / BackupDfm are '' on the row.
   /// </remarks>
   TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused);
 
@@ -131,7 +135,8 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// then gets ONE restore point, .BCK&lt;N&gt; for the .pas and the SAME N for
 /// its .dfm (SharedBackupPaths), deleted again when no book changed the unit.
 /// A failed or refused apply, or a failed reindex, restores the unit, rewrites its earlier
-/// csConverted rows to csRolledBack and stops its remaining books. Never
+/// csConverted rows to csRolledBack and stops its remaining books -- except a refusal
+/// on a unit nothing has changed yet, which restores nothing and drops the backup. Never
 /// raises: file I/O failures and exceptions from AApply / AIndex become row
 /// outcomes (see TConvertStatus).</remarks>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>; overload;
@@ -317,6 +322,18 @@ var
     LError: string;
     LVerb : string;
   begin
+    // A refusal leaves the file untouched (engine contract). When no earlier book
+    // changed the unit either, there is nothing to restore and the backup is not
+    // needed: RunUnit drops it, as for a skipped book (owner decision, 2026-10-04).
+    if (AStatus = csRefused) and not Changed then
+    begin
+      Row.Backup   := '';
+      Row.BackupDfm:= '';
+      Row.Status   := csRefused;
+      Row.Note     := AReason;
+      Add;
+      Exit;
+    end;
     Changed:= True; // the backup is the restore point the rows name -- keep it
     if not TryRestore(LError) then
     begin
@@ -444,7 +461,7 @@ var
         Break;
     if Changed then
       Exit;
-    // Nothing touched the unit (every book invalid): the fresh copies are
+    // Nothing touched the unit (every book invalid, or refused before any change): the fresh copies are
     // identical to it and would only litter the folder.
     LError:= DropBackups;
     if (LError <> '') and (Length(UnitRows) > 0) then
