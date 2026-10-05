@@ -89,6 +89,23 @@ type
     Value : string;
   end;
 
+  /// <summary>One convert-validate diagnostic attached to the rule line that caused
+  /// it -- what the editor shows as a marker and hint on that rule.</summary>
+  /// <remarks>SESSION STATE ONLY: never emitted, never part of Snapshot, never sets
+  /// Dirty. It lives and dies with its node, so replacing the book (Open / New /
+  /// Curate reload) drops every mark. ConvRules.ValidateScope owns the rules for
+  /// adding and clearing them.</remarks>
+  TRuleMark = record
+    /// <summary>The engine's diagnostic line, verbatim ("line N: ...").</summary>
+    Text      : string ;
+    /// <summary>True for a "line N: warning:" diagnostic; False for an error.</summary>
+    IsWarning : Boolean;
+    /// <summary>True when the syntax-only pass (no --from/--to) produced it; such
+    /// marks are replaced on EVERY validation, a block pass's only when that block
+    /// is validated again.</summary>
+    FromSyntax: Boolean;
+  end;
+
   /// <summary>One parsed DSL line. Raw is the verbatim source (minus EOL); the
   /// typed fields carry the parsed parts for the kinds that have them. Emit()
   /// re-serializes from the typed fields when Dirty, else returns Raw unchanged
@@ -179,6 +196,10 @@ type
       /// IsDecimalDigits: no sign, no '$' or '0x' hex) valued BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.
       /// An invalid line keeps its Raw text verbatim; the engine's validator names it.</summary>
       DepthValid: Boolean;  // dl:ok public-field@85bc -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
+
+      /// <summary>Validation marks on this line (session state; see TRuleMark).
+      /// Emit ignores them, so they never reach a file, Snapshot or Dirty.</summary>
+      Marks: TArray<TRuleMark>;  // dl:ok public-field@7e9e -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
 
       /// <summary><!-- drag-lint:auto sum -->TRuleNode</summary>
       /// <returns><!-- drag-lint:auto type -->string</returns>
@@ -491,6 +512,16 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SaveCompleteToString(out ADroppedCount: Integer): string;
+      /// <summary>SaveCompleteToString's text together with the node that emitted
+      /// each line.</summary>
+      /// <param name="ADroppedCount">Set to the number of blocks omitted; 0 when none.</param>
+      /// <param name="ALineNodes">ALineNodes[k] is the node that emitted line k + 1
+      /// of the result (one entry per CRLF-terminated line). Borrowed references --
+      /// the book still owns them.</param>
+      /// <returns>Exactly SaveCompleteToString's text: that routine is this one with
+      /// the map discarded, so a validator's "line N" maps back through
+      /// ALineNodes[N - 1] to the rule that caused it.</returns>
+      function SaveCompleteWithMap(out ADroppedCount: Integer; out ALineNodes: TArray<TRuleNode>): string;
       /// <summary>The text Save would write right now -- the editor's
       /// unsaved-changes baseline.</summary>
       /// <returns>SaveCompleteToString's text; the dropped-rule count is
@@ -1166,14 +1197,24 @@ end;
 
 function TRuleBook.SaveCompleteToString(out ADroppedCount: Integer): string;
 var
-  SB  : TStringBuilder  ;
-  i   : Integer         ;
-  j   : Integer         ;
-  Body: TList<TRuleNode>;
+  LLineNodes: TArray<TRuleNode>;
+begin
+  Result:= SaveCompleteWithMap(ADroppedCount, LLineNodes);
+end;
+
+function TRuleBook.SaveCompleteWithMap(out ADroppedCount: Integer; out ALineNodes: TArray<TRuleNode>): string;
+var
+  SB   : TStringBuilder  ;
+  i    : Integer         ;
+  j    : Integer         ;
+  Body : TList<TRuleNode>;
+  Lines: TList<TRuleNode>;
 begin
   ADroppedCount:= 0;
+  ALineNodes:= nil;
   SB:= TStringBuilder.Create;
   Body:= TList<TRuleNode>.Create; // borrowed references; FNodes still owns them
+  Lines:= TList<TRuleNode>.Create; // borrowed too: one entry per emitted line
   try
     i:= 0;
     while i < FNodes.Count do
@@ -1197,6 +1238,7 @@ begin
           begin
             SB.Append(FNodes[k].Emit);
             SB.Append(#13#10);
+            Lines.Add(FNodes[k]);
           end;
         end
         else
@@ -1208,11 +1250,14 @@ begin
         // content outside any #convert block (leading comments/blanks) -> keep
         SB.Append(FNodes[i].Emit);
         SB.Append(#13#10);
+        Lines.Add(FNodes[i]);
         Inc(i);
       end;
     end; // while
     Result:= SB.ToString;
+    ALineNodes:= Lines.ToArray;
   finally
+    Lines.Free;
     Body.Free;
     SB.Free;
   end; // try

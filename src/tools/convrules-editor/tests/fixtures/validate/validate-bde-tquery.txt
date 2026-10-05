@@ -1,0 +1,159 @@
+(loaded defaults from C:\Projects\.drag-lint.json)
+line 131: mapping BdeTransIsolation #when path not found in --from tree: TransIsolation
+line 131: mapping BdeTransIsolation target path not found in --to tree: TxOptions.Isolation
+line 132: mapping BdeTransIsolation #when path not found in --from tree: TransIsolation
+line 132: mapping BdeTransIsolation target path not found in --to tree: TxOptions.Isolation
+line 133: mapping BdeTransIsolation #when path not found in --from tree: TransIsolation
+line 133: mapping BdeTransIsolation target path not found in --to tree: TxOptions.Isolation
+line 136: mapping BdeBatchMode #when path not found in --from tree: Mode
+line 136: mapping BdeBatchMode target path not found in --to tree: Mode
+line 137: mapping BdeBatchMode #when path not found in --from tree: Mode
+line 137: mapping BdeBatchMode target path not found in --to tree: Mode
+line 138: mapping BdeBatchMode #when path not found in --from tree: Mode
+line 138: mapping BdeBatchMode target path not found in --to tree: Mode
+line 139: mapping BdeBatchMode #when path not found in --from tree: Mode
+line 139: mapping BdeBatchMode target path not found in --to tree: Mode
+line 140: mapping BdeBatchMode #when path not found in --from tree: Mode
+line 140: mapping BdeBatchMode target path not found in --to tree: Mode
+line 171: link ToPath not found in --to tree: ConnectionDefName
+line 171: link FromPath not found in --from tree: AliasName
+line 175: link ToPath not found in --to tree: Connected
+line 175: link FromPath not found in --from tree: Connected
+line 176: link ToPath not found in --to tree: DriverName
+line 176: link FromPath not found in --from tree: DriverName
+line 177: link ToPath not found in --to tree: ResourceOptions.KeepConnection
+line 177: link FromPath not found in --from tree: KeepConnection
+line 178: link ToPath not found in --to tree: LoginPrompt
+line 178: link FromPath not found in --from tree: LoginPrompt
+line 179: link ToPath not found in --to tree: AfterConnect
+line 179: link FromPath not found in --from tree: AfterConnect
+line 180: link ToPath not found in --to tree: AfterDisconnect
+line 180: link FromPath not found in --from tree: AfterDisconnect
+line 181: link ToPath not found in --to tree: BeforeConnect
+line 181: link FromPath not found in --from tree: BeforeConnect
+line 182: link ToPath not found in --to tree: BeforeDisconnect
+line 182: link FromPath not found in --from tree: BeforeDisconnect
+line 211: link FromPath not found in --from tree: ReadOnly
+line 218: link ToPath not found in --to tree: Exclusive
+line 218: link FromPath not found in --from tree: Exclusive
+line 231: link FromPath not found in --from tree: IndexDefs.Items.CaseInsFields
+line 232: link FromPath not found in --from tree: IndexDefs.Items.DescFields
+line 233: link FromPath not found in --from tree: IndexDefs.Items.Expression
+line 234: link FromPath not found in --from tree: IndexDefs.Items.Fields
+line 235: link FromPath not found in --from tree: IndexDefs.Items.Options
+line 236: link FromPath not found in --from tree: IndexDefs.Items.Source
+line 237: link FromPath not found in --from tree: IndexDefs.Items.GroupingLevel
+line 238: link FromPath not found in --from tree: IndexDefs.Items.Name
+line 239: link FromPath not found in --from tree: IndexFieldNames
+line 240: link FromPath not found in --from tree: IndexName
+line 241: link FromPath not found in --from tree: MasterFields
+line 242: link FromPath not found in --from tree: MasterSource
+line 426: link ToPath not found in --to tree: ModifySQL
+line 426: link FromPath not found in --from tree: ModifySQL
+line 427: link ToPath not found in --to tree: InsertSQL
+line 427: link FromPath not found in --from tree: InsertSQL
+line 428: link ToPath not found in --to tree: DeleteSQL
+line 428: link FromPath not found in --from tree: DeleteSQL
+line 438: link ToPath not found in --to tree: StoredProcName
+line 438: link FromPath not found in --from tree: StoredProcName
+line 439: link ToPath not found in --to tree: Overload
+line 439: link FromPath not found in --from tree: Overload
+line 536: link ToPath not found in --to tree: DataType
+line 536: link FromPath not found in --from tree: DataType
+line 537: link ToPath not found in --to tree: Precision
+line 537: link FromPath not found in --from tree: Precision
+line 538: link ToPath not found in --to tree: NumericScale
+line 538: link FromPath not found in --from tree: NumericScale
+line 540: link ToPath not found in --to tree: ParamType
+line 540: link FromPath not found in --from tree: ParamType
+line 541: link ToPath not found in --to tree: Size
+line 541: link FromPath not found in --from tree: Size
+line 542: link ToPath not found in --to tree: Value
+line 542: link FromPath not found in --from tree: Value
+line 548: link ToPath not found in --to tree: Items.DataType
+line 548: link FromPath not found in --from tree: Items.DataType
+line 549: link ToPath not found in --to tree: Items.Precision
+line 549: link FromPath not found in --from tree: Items.Precision
+line 550: link ToPath not found in --to tree: Items.NumericScale
+line 550: link FromPath not found in --from tree: Items.NumericScale
+line 551: link ToPath not found in --to tree: Items.Name
+line 551: link FromPath not found in --from tree: Items.Name
+line 552: link ToPath not found in --to tree: Items.ParamType
+line 552: link FromPath not found in --from tree: Items.ParamType
+line 553: link ToPath not found in --to tree: Items.Size
+line 553: link FromPath not found in --from tree: Items.Size
+line 554: link ToPath not found in --to tree: Items.Value
+line 554: link FromPath not found in --from tree: Items.Value
+line 560: link ToPath not found in --to tree: MaxValue
+line 560: link FromPath not found in --from tree: MaxValue
+line 561: link ToPath not found in --to tree: MinValue
+line 561: link FromPath not found in --from tree: MinValue
+line 562: link ToPath not found in --to tree: Alignment
+line 562: link FromPath not found in --from tree: Alignment
+line 563: link ToPath not found in --to tree: DisplayFormat
+line 563: link FromPath not found in --from tree: DisplayFormat
+line 564: link ToPath not found in --to tree: EditFormat
+line 564: link FromPath not found in --from tree: EditFormat
+line 565: link ToPath not found in --to tree: AutoGenerateValue
+line 565: link FromPath not found in --from tree: AutoGenerateValue
+line 566: link ToPath not found in --to tree: CustomConstraint
+line 566: link FromPath not found in --from tree: CustomConstraint
+line 567: link ToPath not found in --to tree: ConstraintErrorMessage
+line 567: link FromPath not found in --from tree: ConstraintErrorMessage
+line 568: link ToPath not found in --to tree: DefaultExpression
+line 568: link FromPath not found in --from tree: DefaultExpression
+line 569: link ToPath not found in --to tree: DisplayLabel
+line 569: link FromPath not found in --from tree: DisplayLabel
+line 570: link ToPath not found in --to tree: DisplayWidth
+line 570: link FromPath not found in --from tree: DisplayWidth
+line 571: link ToPath not found in --to tree: FieldKind
+line 571: link FromPath not found in --from tree: FieldKind
+line 572: link ToPath not found in --to tree: FieldName
+line 572: link FromPath not found in --from tree: FieldName
+line 573: link ToPath not found in --to tree: Index
+line 573: link FromPath not found in --from tree: Index
+line 574: link ToPath not found in --to tree: ImportedConstraint
+line 574: link FromPath not found in --from tree: ImportedConstraint
+line 575: link ToPath not found in --to tree: LookupDataSet
+line 575: link FromPath not found in --from tree: LookupDataSet
+line 576: link ToPath not found in --to tree: LookupKeyFields
+line 576: link FromPath not found in --from tree: LookupKeyFields
+line 577: link ToPath not found in --to tree: LookupResultField
+line 577: link FromPath not found in --from tree: LookupResultField
+line 578: link ToPath not found in --to tree: KeyFields
+line 578: link FromPath not found in --from tree: KeyFields
+line 579: link ToPath not found in --to tree: LookupCache
+line 579: link FromPath not found in --from tree: LookupCache
+line 580: link ToPath not found in --to tree: Origin
+line 580: link FromPath not found in --from tree: Origin
+line 581: link ToPath not found in --to tree: ProviderFlags
+line 581: link FromPath not found in --from tree: ProviderFlags
+line 582: link ToPath not found in --to tree: ReadOnly
+line 582: link FromPath not found in --from tree: ReadOnly
+line 583: link ToPath not found in --to tree: Required
+line 583: link FromPath not found in --from tree: Required
+line 584: link ToPath not found in --to tree: Visible
+line 584: link FromPath not found in --from tree: Visible
+line 585: link ToPath not found in --to tree: OnChange
+line 585: link FromPath not found in --from tree: OnChange
+line 586: link ToPath not found in --to tree: OnGetText
+line 586: link FromPath not found in --from tree: OnGetText
+line 587: link ToPath not found in --to tree: OnSetText
+line 587: link FromPath not found in --from tree: OnSetText
+line 588: link ToPath not found in --to tree: OnValidate
+line 588: link FromPath not found in --from tree: OnValidate
+line 611: link ToPath not found in --to tree: CommitCount
+line 611: link FromPath not found in --from tree: CommitCount
+line 274: warning: FieldOptions.AutoCreateMode: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 275: warning: FieldOptions.PositionMode: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 276: warning: FieldOptions.UpdatePersistent: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 277: warning: FieldOptions.BlobDisplayValue: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 374: warning: FieldOptions.AutoCreateMode: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 375: warning: FieldOptions.PositionMode: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 376: warning: FieldOptions.UpdatePersistent: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 377: warning: FieldOptions.BlobDisplayValue: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 482: warning: FieldOptions.AutoCreateMode: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 483: warning: FieldOptions.PositionMode: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+line 484: warning: FieldOptions.UpdatePersistent: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility
+  resolver: edges were derived by r=1.10.0-alpha;schema=23, this build is r=1.11.0-alpha;schema=23 -- re-derive with `index <dir> --db "C:\Projects\.drag-lint\library-Win64.sqlite" --resolve-only` (minutes, not a re-parse).
+line 485: warning: FieldOptions.BlobDisplayValue: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility

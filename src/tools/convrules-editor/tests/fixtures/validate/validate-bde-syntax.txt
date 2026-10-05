@@ -1,0 +1,2 @@
+OK
+(loaded defaults from C:\Projects\.drag-lint.json)

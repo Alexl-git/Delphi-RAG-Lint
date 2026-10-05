@@ -34,6 +34,7 @@ uses
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
+  , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   ;
 
@@ -7684,6 +7685,298 @@ begin
   end; // try
 end;
 
+{ ---------------------------------------------------------------------------
+  Scoped validation (fix/validate-edited-blocks, 2026-10-05). The fixtures under
+  fixtures\validate\ are REAL pinned-engine output (1.20.6-alpha-20261005-032338,
+  --db library-Win64.sqlite) over the BDE book copied beside them:
+    validate-bde-syntax.txt  convert-validate, no pair            exit 0, 0.6 s
+    validate-bde-tquery.txt  --from Bde.DBTables.TQuery --to ...  exit 1, 145 errors
+    validate-bde-ttable.txt  --from Bde.DBTables.TTable --to ...  exit 1, 14.8 s
+    validate-bad-syntax.txt  bad-syntax.rules, no pair            exit 1 }
+
+const
+  { Facts about fixtures\validate\BDE-to-FireDAC.rules and its pinned-engine captures. }
+  BDE_LINES               = 707; // lines in the book
+  BDE_BLOCKS              = 10;  // #convert blocks, all with a To type
+  BDE_TDATABASE_HDR       = 166; // #convert Bde.DBTables.TDatabase (#apply BdeTransIsolation)
+  BDE_TTABLE_HDR          = 205; // #convert Bde.DBTables.TTable
+  BDE_TTABLE_LAST         = 319; // its last line (blank, before the TQuery header)
+  BDE_TQUERY_HDR          = 320; // #convert Bde.DBTables.TQuery
+  BDE_TRANSISO_FIRST      = 130; // #mapping BdeTransIsolation: declaration ...
+  BDE_TRANSISO_CLAUSE     = 131; // ... its first #when clause ...
+  BDE_TRANSISO_LAST       = 133; // ... and its last line
+  BDE_TRANSISO_LINES      = 4;
+  BDE_BATCHMODE_CLAUSE    = 137; // a #mapping BdeBatchMode #when line, applied by TBatchMove only
+  BDE_UNREACHABLE_LINK    = 274; // #link FieldOptions.AutoCreateMode -- FieldOptions is protected
+  BLOCK_UNREACHABLE       = 4;   // FieldOptions.* links per dataset block (274-277 in TTable)
+  TTABLE_CAPTURE_WARNINGS = 14;  // validate-bde-ttable.txt: every block vs the TTable pair
+  TTABLE_CAPTURE_ERRORS   = 146;
+  STUB_HDR_OFFSET         = 3;   // the appended From-only header: after the new block's 2 lines
+function ValidateFixture(const AName: string): string;
+var
+  P: string;
+begin
+  P:= TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\validate\' + AName);
+  if not TFile.Exists(P) then
+    P:= 'fixtures\validate\' + AName;
+  if TFile.Exists(P) then
+    Result:= TFile.ReadAllText(P)
+  else
+    Result:= '';
+end;
+
+function CountDiags(const ADiags: TArray<TValidateDiag>; AWarnings: Boolean): Integer;
+var
+  D: TValidateDiag;
+begin
+  Result:= 0;
+  for D in ADiags do
+    if D.IsWarning = AWarnings then
+      Inc(Result);
+end;
+
+function JobFrom(const AJobs: TArray<TValidateJob>; const AFrom: string): Integer;
+var
+  i: Integer;
+begin
+  for i:= 0 to High(AJobs) do
+    if SameText(AJobs[i].FromType, AFrom) then
+      Exit(i);
+  Result:= -1;
+end;
+
+procedure TestValidateParse;
+var
+  D: TArray<TValidateDiag>;
+  X: TValidateDiag;
+  Noise: Boolean;
+begin
+  Check('validate.fixture.present', ValidateFixture('validate-bde-ttable.txt') <> '', 'fixtures\validate missing');
+  D:= ParseValidateOutput(ValidateFixture('validate-bde-syntax.txt'));
+  Check('validate.parse.syntax.ok.is.empty', Length(D) = 0, IntToStr(Length(D)));
+
+  D:= ParseValidateOutput(ValidateFixture('validate-bad-syntax.txt'));
+  Check('validate.parse.bad.two.errors', (Length(D) = 2) and (CountDiags(D, False) = 2), IntToStr(Length(D)));
+  if Length(D) = 2 then
+  begin
+    Check('validate.parse.bad.depth.line1', (D[0].Line = 1) and (Pos('#depth', D[0].Text) > 0), D[0].Text);
+    Check('validate.parse.bad.fromonly.line2', (D[1].Line = 2) and (Pos('has no To type', D[1].Text) > 0), D[1].Text);
+  end;
+
+  D:= ParseValidateOutput(ValidateFixture('validate-bde-ttable.txt'));
+  Check('validate.parse.ttable.warnings', CountDiags(D, True) = TTABLE_CAPTURE_WARNINGS, IntToStr(CountDiags(D, True)));
+  Check('validate.parse.ttable.errors', CountDiags(D, False) = TTABLE_CAPTURE_ERRORS, IntToStr(CountDiags(D, False)));
+  Noise:= False;
+  for X in D do
+    if (Pos('loaded defaults', X.Text) > 0) or (Pos('resolver:', X.Text) > 0) or (X.Line = 0) then
+      Noise:= True;
+  Check('validate.parse.ttable.no.noise', not Noise);
+
+  D:= ParseValidateOutput('OK'#13#10'FATAL: cannot open --db x.sqlite'#13#10'warning: something odd'#13#10 + '  resolver: edges were derived by r=1'#13#10'(loaded defaults from C:\x.json)'#13#10);
+  Check('validate.parse.fatal.is.error.line0', (Length(D) = 2) and (D[0].Line = 0) and not D[0].IsWarning, IntToStr(Length(D)));
+  if Length(D) = 2 then
+    Check('validate.parse.bare.warning.line0', (D[1].Line = 0) and D[1].IsWarning, D[1].Text);
+  Check('validate.noise.ok', IsValidateNoise('OK') and IsValidateNoise('  ') and IsValidateNoise('(loaded defaults from C:\Projects\.drag-lint.json)'));
+  Check('validate.noise.not.diag', not IsValidateNoise('line 3: link ToPath not found'));
+end;
+
+procedure TestValidateScopeBlocks;
+var
+  Book   : TRuleBook;
+  Src    : string   ;
+  Txt    : string   ;
+  Txt2   : string   ;
+  Dropped: Integer  ;
+  Map    : TArray<TRuleNode>;
+  Jobs   : TArray<TValidateJob>;
+  K      : Integer  ;
+  D      : TArray<TValidateDiag>;
+  Job    : TValidateJob;
+begin
+  Src:= ValidateFixture('BDE-to-FireDAC.rules');
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(Src);
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Check('validate.map.text.equals.savecomplete', Txt = Book.SaveCompleteToString(Dropped));
+    // The captures were taken on the FILE; their line numbers hold only if Save
+    // re-emits it unchanged.
+    Check('validate.map.bde.canonical', Txt = Src, Format('%d vs %d bytes', [Length(Txt), Length(Src)]));
+    Check('validate.map.one.node.per.line', Length(Map) = Length(Txt.Split([#13#10])) - 1, IntToStr(Length(Map)));
+    Check('validate.map.header.line205', (Length(Map) >= BDE_TTABLE_HDR) and (Map[BDE_TTABLE_HDR - 1].Kind = rnkConvert) and (Map[BDE_TTABLE_HDR - 1].FromType = 'Bde.DBTables.TTable'));
+
+    Jobs:= BlockJobs(Txt);
+    Check('validate.blocks.count', Length(Jobs) = BDE_BLOCKS, IntToStr(Length(Jobs)));
+    K:= JobFrom(Jobs, 'Bde.DBTables.TTable');
+    // Not IfThen: it evaluates BOTH arguments, and Jobs[-1] is an access violation.
+    var Span: string:= 'no job';
+    if K >= 0 then
+      Span:= Format('%d..%d', [Jobs[K].FirstLine, Jobs[K].LastLine]);
+    Check('validate.blocks.ttable.span', (K >= 0) and (Jobs[K].FirstLine = BDE_TTABLE_HDR) and (Jobs[K].LastLine = BDE_TTABLE_LAST) and (Jobs[K].ToType = 'FireDAC.Comp.Client.TFDTable'), Span);
+    K:= JobFrom(Jobs, 'Bde.DBTables.TDatabase');
+    Check('validate.blocks.tdatabase.mapping.lines', (K >= 0) and (Length(Jobs[K].MappingLines) = BDE_TRANSISO_LINES) and (Jobs[K].MappingLines[0] = BDE_TRANSISO_FIRST) and (Jobs[K].MappingLines[High(Jobs[K].MappingLines)] = BDE_TRANSISO_LAST));
+
+    Check('validate.changed.none', Length(ChangedBlockJobs(Txt, Txt)) = 0);
+    Check('validate.changed.new.book.all', Length(ChangedBlockJobs('', Txt)) = BDE_BLOCKS);
+
+    // One link edited in the TTable block: that block only.
+    Book.Nodes[BDE_UNREACHABLE_LINK - 1].Raw:= Book.Nodes[BDE_UNREACHABLE_LINK - 1].Raw + ' ';
+    Txt2:= Book.SaveCompleteToString(Dropped);
+    Jobs:= ChangedBlockJobs(Txt, Txt2);
+    Check('validate.changed.one.link', (Length(Jobs) = 1) and (Jobs[0].FromType = 'Bde.DBTables.TTable'), IntToStr(Length(Jobs)));
+    Book.LoadFromString(Src);
+
+    // A file-scope #mapping clause edited: the block that #applies it (TBatchMove).
+    Book.Nodes[BDE_BATCHMODE_CLAUSE - 1].Raw:= Book.Nodes[BDE_BATCHMODE_CLAUSE - 1].Raw + ' ';
+    Txt2:= Book.SaveCompleteToString(Dropped);
+    Jobs:= ChangedBlockJobs(Txt, Txt2);
+    Check('validate.changed.mapping', (Length(Jobs) = 1) and (Jobs[0].FromType = 'Bde.DBTables.TBatchMove'), IntToStr(Length(Jobs)));
+    Book.LoadFromString(Src);
+
+    // A new block, and a From-only block (skipped -- the syntax pass reports it).
+    Txt2:= Txt + '#convert A.TNew -> B.TNew'#13#10'#link X <- X'#13#10'#convert A.TStub -> '#13#10'#link Y <- Y'#13#10;
+    Jobs:= ChangedBlockJobs(Txt, Txt2);
+    Check('validate.changed.new.header', (Length(Jobs) = 1) and (Jobs[0].FromType = 'A.TNew') and (Jobs[0].FirstLine = BDE_LINES + 1) and (Jobs[0].LastLine = BDE_LINES + 2), IntToStr(Length(Jobs)));
+    Check('validate.jobatline.fromonly.false', not JobAtLine(Txt2, BDE_LINES + STUB_HDR_OFFSET, Job));
+    Check('validate.jobatline.ttable', JobAtLine(Txt, BDE_TTABLE_HDR, Job) and (Job.LastLine = BDE_TTABLE_LAST));
+    Check('validate.jobatline.not.header', not JobAtLine(Txt, BDE_TTABLE_HDR + 1, Job));
+
+    // The 145-error TQuery capture filtered to the TQuery block: 4 warnings, 0 errors.
+    Check('validate.jobatline.tquery', JobAtLine(Txt, BDE_TQUERY_HDR, Job));
+    D:= DiagsForJob(ParseValidateOutput(ValidateFixture('validate-bde-tquery.txt')), Job);
+    Check('validate.filter.tquery.own.block', (CountDiags(D, False) = 0) and (CountDiags(D, True) = BLOCK_UNREACHABLE), Format('%d err %d warn', [CountDiags(D, False), CountDiags(D, True)]));
+    // TDatabase's pair pass keeps the BdeTransIsolation mapping lines it applies.
+    Check('validate.jobatline.tdatabase', JobAtLine(Txt, BDE_TDATABASE_HDR, Job));
+    D:= DiagsForJob([Default(TValidateDiag)], Job); // line 0 is always kept
+    Check('validate.filter.line0.kept', Length(D) = 1);
+    var M: TValidateDiag:= Default(TValidateDiag);
+    M.Line:= BDE_TRANSISO_CLAUSE;
+    var N: TValidateDiag:= Default(TValidateDiag);
+    N.Line:= BDE_BATCHMODE_CLAUSE; // BdeBatchMode: not applied by TDatabase
+    D:= DiagsForJob([M, N], Job);
+    Check('validate.filter.applied.mapping.only', (Length(D) = 1) and (D[0].Line = BDE_TRANSISO_CLAUSE), IntToStr(Length(D)));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ ValidateText's Output feeds ParseValidateOutput, which reads it LINE by line. A
+  merged stdout+stderr pipe interleaves the two by chunk, and on 2026-10-05 a driven
+  Save showed "Validate: s, not a re-parse). (+3 more)": the tail of the engine's
+  stderr "resolver: ... (minutes, not a re-parse)." advisory, split from its head by
+  a stdout chunk, parsed as an ERROR. Stand-in: stdout, stderr, stdout. Separate
+  pipes put every stdout line first and the stderr line after them, whole. }
+procedure TestValidateTextStreams;
+const
+  STANDIN_CMD = '@echo off'#13#10'echo line 1: warning: first'#13#10'echo   resolver: edges were derived by r=1 (minutes, not a re-parse). 1>&2'#13#10 +
+    'echo line 2: warning: second'#13#10'exit /b 0'#13#10;
+var
+  Dir: string         ;
+  Eng: TEngineAdapter ;
+  Res: TValidateResult;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'validate-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'standin.cmd'), STANDIN_CMD, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'standin.cmd'), []);
+    try
+      Res:= Eng.ValidateText('#note x'#13#10, 'A.TFrom', 'B.TTo');
+      var D: TArray<TValidateDiag>:= ParseValidateOutput(Res.Output);
+      Check('validate.text.standin.ran', Pos('line 1: warning: first', Res.Output) > 0, Res.Output);
+      Check('validate.text.stdout.before.stderr', (Pos('line 2: warning: second', Res.Output) > 0) and (Pos('line 2: warning: second', Res.Output) < Pos('resolver:', Res.Output)), Res.Output);
+      Check('validate.text.two.warnings.no.error', (CountDiags(D, True) = 2) and (CountDiags(D, False) = 0), Res.Output);
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
+procedure TestValidateScopeRun;
+var
+  Book   : TRuleBook;
+  Src    : string   ;
+  Txt    : string   ;
+  Dropped: Integer  ;
+  Map    : TArray<TRuleNode>;
+  Jobs   : TArray<TValidateJob>;
+  Calls  : TArray<string>;
+  R      : TScopedValidation;
+  Fake   : TValidateFn;
+  E, W   : Integer  ;
+begin
+  Src:= ValidateFixture('BDE-to-FireDAC.rules');
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(Src);
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Calls:= nil;
+    Fake:= function(const AText, AFrom, ATo: string): string
+      begin
+        Calls:= Calls + [AFrom + '|' + ATo];
+        if AFrom = '' then
+          Result:= ValidateFixture('validate-bde-syntax.txt')
+        else if AFrom = 'Bde.DBTables.TTable' then
+          Result:= ValidateFixture('validate-bde-ttable.txt')
+        else
+          Result:= 'FATAL: unexpected pair ' + AFrom;
+      end;
+
+    // Unchanged save: the syntax pass only.
+    R:= RunScopedValidation(Txt, ChangedBlockJobs(Txt, Txt), Fake);
+    Check('validate.run.unchanged.one.call', (Length(Calls) = 1) and (Calls[0] = '|'), string.Join(';', Calls));
+    Check('validate.run.unchanged.ok', (R.Errors = 0) and (R.Warnings = 0) and (ValidateVerdict(R) = 'OK'), ValidateVerdict(R));
+
+    // The TTable block edited: syntax + its own pair; the 146 errors of the other
+    // blocks are not kept, its 4 warnings are -- although the engine exited 1.
+    Calls:= nil;
+    Book.Nodes[BDE_UNREACHABLE_LINK - 1].Raw:= Book.Nodes[BDE_UNREACHABLE_LINK - 1].Raw + ' ';
+    var Old: string:= Txt;
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Jobs:= ChangedBlockJobs(Old, Txt);
+    R:= RunScopedValidation(Txt, Jobs, Fake);
+    Check('validate.run.changed.two.calls', (Length(Calls) = 2) and (Calls[1] = 'Bde.DBTables.TTable|FireDAC.Comp.Client.TFDTable'), string.Join(';', Calls));
+    Check('validate.run.changed.counts', (R.Errors = 0) and (R.Warnings = BLOCK_UNREACHABLE), Format('%d err %d warn', [R.Errors, R.Warnings]));
+    Check('validate.run.verdict.warnings', ValidateVerdict(R) = 'OK, 4 warning(s) -- see marked rules', ValidateVerdict(R));
+
+    // Marks: on the rule that emitted the line, never in the text.
+    var Before: string:= Book.Snapshot;
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, Jobs, R);
+    Check('validate.marks.on.link.274', (Length(Map[BDE_UNREACHABLE_LINK - 1].Marks) = 1) and Map[BDE_UNREACHABLE_LINK - 1].Marks[0].IsWarning and (Pos('FieldOptions.AutoCreateMode', Map[BDE_UNREACHABLE_LINK - 1].Marks[0].Text) > 0));
+    Check('validate.marks.not.in.snapshot', Book.Snapshot = Before);
+    MarksText(BlockMarkNodes(Book, BDE_TTABLE_HDR - 1), E, W);
+    Check('validate.marks.block.ttable', (E = 0) and (W = BLOCK_UNREACHABLE), Format('%d/%d', [E, W]));
+    MarksText(BlockMarkNodes(Book, BDE_TQUERY_HDR - 1), E, W);
+    Check('validate.marks.block.tquery.none', (E = 0) and (W = 0), Format('%d/%d', [E, W]));
+    Check('validate.marker.text', (MarkerText(0, BLOCK_UNREACHABLE) = '4 warn') and (MarkerText(1, 2) = '1 err, 2 warn') and (MarkerText(0, 0) = ''), MarkerText(1, 2));
+
+    // A later save that did not change the block keeps its marks...
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, RunScopedValidation(Txt, nil, Fake));
+    Check('validate.marks.unchanged.kept', Length(Map[BDE_UNREACHABLE_LINK - 1].Marks) = 1);
+    // ...and revalidating it replaces them.
+    var Clean: TScopedValidation:= Default(TScopedValidation);
+    SetLength(Clean.JobDiags, Length(Jobs));
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, Jobs, Clean);
+    Check('validate.marks.revalidated.cleared', Length(Map[BDE_UNREACHABLE_LINK - 1].Marks) = 0);
+
+    // Syntax marks are replaced on every pass; a FATAL counts as an error.
+    var Bad: TScopedValidation:= RunScopedValidation('x', nil,
+      function(const AText, AFrom, ATo: string): string
+      begin
+        Result:= 'line 1: #depth must be an integer 1..10'#13#10'FATAL: db locked'#13#10;
+      end);
+    Check('validate.run.fatal.is.error', (Bad.Errors = 2) and (Pos('line 1: #depth', ValidateVerdict(Bad)) = 1) and (Pos('(+1 more)', ValidateVerdict(Bad)) > 0), ValidateVerdict(Bad));
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, Bad);
+    Check('validate.marks.syntax.added', (Length(Map[0].Marks) = 1) and Map[0].Marks[0].FromSyntax);
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, Clean);
+    Check('validate.marks.syntax.replaced', Length(Map[0].Marks) = 0);
+  finally
+    Book.Free;
+  end;
+end;
+
 begin
   try
     TestReFindCorpusLoads;
@@ -7835,6 +8128,10 @@ begin
     TestCapabilityProbeTimeout;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
+    TestValidateParse;
+    TestValidateScopeBlocks;
+    TestValidateScopeRun;
+    TestValidateTextStreams;
 
     FreeAndNil(GParseBook);
 
