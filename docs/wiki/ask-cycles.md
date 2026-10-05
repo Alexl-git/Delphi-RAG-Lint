@@ -6,6 +6,8 @@
 
 **Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
 
+From RAD Studio: *drag-lint > Reports > Circular unit dependencies...* -- no selection needed (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
+
 ```
 drag-lint ask --question cycles --at <Project.dpr>:1:1 --db <project.sqlite>
 ```

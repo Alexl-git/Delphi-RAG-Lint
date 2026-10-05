@@ -103,6 +103,8 @@ contains
   DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',
   DragLint.Plugin.OptionsFrames in 'DragLint.Plugin.OptionsFrames.pas' {DLPageFrame: TFrame},
-  DragLint.Plugin.About in 'DragLint.Plugin.About.pas';
+  DragLint.Plugin.About in 'DragLint.Plugin.About.pas',
+  DragLint.Plugin.ReportText in 'DragLint.Plugin.ReportText.pas',
+  DragLint.Plugin.Reports in 'DragLint.Plugin.Reports.pas';
 
 end.
