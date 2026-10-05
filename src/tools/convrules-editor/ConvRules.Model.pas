@@ -282,7 +282,7 @@ type
 
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas) ?, ConvRules.Model.TRuleBook.Clear (ConvRules.Model.pas) ?, ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas), ConvRules.Model.TRuleBook.SaveCompleteToString (ConvRules.Model.pas) ?</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.LoadText (ConvRules.MainForm.pas) ?, ConvRules.Model.TRuleBook.Clear (ConvRules.Model.pas) ?, ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas), ConvRules.Model.TRuleBook.SaveCompleteWithMap (ConvRules.Model.pas) ?</para>
       /// <para>Reads: FNodes</para>
       /// <seealso cref="ConvRules.Model.TRuleBook.Add"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.BlockMapsSomething"/>

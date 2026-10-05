@@ -278,7 +278,7 @@ type
       /// ENGINE_TIMEOUT_MS, AOutput).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+3 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCaptureTimed</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCaptureTimed"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
@@ -887,7 +887,7 @@ type
       /// Runs with separate stdout / stderr pipes (RunCaptureStreaming), bounded by
       /// ENGINE_TIMEOUT_MS, so Output's lines are never cut by interleaving.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RunScopedValidate (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RunScopedValidate (ConvRules.MainForm.pas), TestComposedFileValidates (ConvRulesModelTests.dpr), TestValidateTextStreams (ConvRulesModelTests.dpr)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCaptureStreaming, Format, Pos, Trim</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>

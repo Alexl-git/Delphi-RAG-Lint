@@ -493,16 +493,21 @@ type
       /// <param name="Sender">The form; unused.</param>
       /// <param name="CanClose">Set to ConfirmDiscard's answer.</param>
       procedure FormCloseQueryHandler(Sender: TObject; var CanClose: Boolean);
+      /// <summary><!-- drag-lint:auto sum -->File &gt; Validate: the syntax pass plus the
+      /// ACTIVE block with its own pair -- an explicit request, so it runs whether or not
+      /// that block changed. It validates the text Save would write
+      /// (SaveCompleteWithMap), so every "line N" maps to a rule; a block that maps
+      /// nothing yet is not in that text and gets the syntax pass only.</summary>
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.ValidateText, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.SaveToString</para>
-      /// <para>Reads: FFilePath, FActiveHdr, FBook, FEngine</para>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ValidateText"/>
+      /// <para>Calls: ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.RunScopedValidate, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.SaveCompleteWithMap, ConvRules.ValidateScope.JobAtLine</para>
+      /// <para>Reads: FFilePath, FBook, FActiveHdr</para>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RunScopedValidate"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetError"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SetStatus"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.SaveToString"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
+      /// <seealso cref="ConvRules.Model.TRuleBook.SaveCompleteWithMap"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoValidate(Sender: TObject);
@@ -588,8 +593,8 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.DoSave, ConvRules.MainForm.TConvRulesForm.OpenOwningRule, ConvRules.MainForm.TConvRulesForm.RefreshDepthControl, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.RefreshUnitList, ConvRules.MainForm.TConvRulesForm.RescanRulesFolder, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.Model.TRuleBook.Clear, ConvRules.Model.TRuleBook.Snapshot (+9 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 120 lines (full implementation)</para>
-      /// <para>Reads: FCatalog, FFilePath, FCbFrom, FRulesFolder, FBook, FLblFile   Writes: FSnapshot, FFilePath, FActiveHdr</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 121 lines (full implementation)</para>
+      /// <para>Reads: FCatalog, FFilePath, FCbFrom, FRulesFolder, FBook, FLblFile   Writes: FSnapshot, FValidatePending, FFilePath, FActiveHdr</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DoSave"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRule"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshDepthControl"/>
@@ -626,13 +631,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAddRuleForSelectedClass (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas) (+10 more)</para>
-      /// <para>Calls: ConvRules.RuleCatalog.HeaderIndexFor, ConvRules.RuleCatalog.RulesForType, ExtractFileName, NativeInt, Pointer</para>
+      /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshRuleMarks, ConvRules.RuleCatalog.HeaderIndexFor, ConvRules.RuleCatalog.RulesForType, ExtractFileName, NativeInt, Pointer</para>
       /// <para>Reads: FRules, FSelectedFormType, FCatalog, FBook   Writes: FRulesEntries</para>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRuleMarks"/>
       /// <seealso cref="ConvRules.RuleCatalog.HeaderIndexFor"/>
       /// <seealso cref="ConvRules.RuleCatalog.RulesForType"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RefreshRulesList;
@@ -1256,14 +1261,14 @@ type
       /// <param name="State"><!-- drag-lint:auto type -->TGridDrawState</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ColorToRGB, ConvRules.MainForm.PathOfGridCell, ConvRules.Theme.ExamineRowColor, ConvRules.Usage.IsRowUsed, Integer, TColor</para>
+      /// <para>Calls: ColorToRGB, ConvRules.MainForm.PathOfGridCell, ConvRules.MainForm.TConvRulesForm.FindLinkForFrom, ConvRules.Theme.ExamineRowColor, ConvRules.Usage.IsRowUsed, ConvRules.ValidateScope.MarksText, Integer, TColor</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 46 lines (full implementation)</para>
       /// <para>Reads: FGrid, FUsedProps, FThemeMode</para>
-      /// <para>Pure</para>
       /// <seealso cref="ConvRules.MainForm.PathOfGridCell"/>
+      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.FindLinkForFrom"/>
       /// <seealso cref="ConvRules.Theme.ExamineRowColor"/>
       /// <seealso cref="ConvRules.Usage.IsRowUsed"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
+      /// <seealso cref="ConvRules.ValidateScope.MarksText"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure GridDrawCell(Sender: TObject; ACol, ARow: Integer; Rect: TRect; State: TGridDrawState);
@@ -2033,7 +2038,7 @@ type
       /// <param name="S"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+20 more)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AddHarvest (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyNamedFilterClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.ApplyTheme (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.CbLoadUnits (ConvRules.MainForm.pas) (+21 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.RefreshStatusColor</para>
       /// <para>Reads: FLblStatus, FStatusBar   Writes: FStatusIsError</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshStatusColor"/>
@@ -2317,7 +2322,7 @@ type
       /// <returns><!-- drag-lint:auto -->TRuleNode -- Observed: nil; N.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoUnassign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RefreshGrid (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.AssignLink (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoUnassign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.GridDrawCell (ConvRules.MainForm.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ActiveLinks, SameText</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveLinks"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
