@@ -430,28 +430,43 @@ const
     `drag-lint resolve-dbs --in <file.pas>` rather than guessing a path. }
   ProjectDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite';
 
-  { Resolve the real drag-lint.exe the editor would use (next to this runner, else
-  the deployed dll-win64 copy, else PATH). '' if none found. }
-function ResolveExe: string;
+const
+  /// <summary>Environment variable naming the engine the live tests run, when no
+  /// drag-lint.exe sits beside the runner.</summary>
+  TEST_ENGINE_ENV = 'CONVRULES_TEST_ENGINE';
+
+/// <summary>The engine the live tests run, chosen EXPLICITLY.</summary>
+/// <param name="ARunnerDir">The test runner's folder.</param>
+/// <param name="AEnvExe">The value of CONVRULES_TEST_ENGINE ('' when unset).</param>
+/// <param name="AWhy">Why the answer is '' (empty otherwise).</param>
+/// <returns>ARunnerDir\drag-lint.exe when it exists, else AEnvExe when it names an
+/// existing file, else ''. Never third_party\dll-win64 by default: that folder is the
+/// live engine the engine stream rebuilds without warning.</returns>
+function ChooseTestEngine(const ARunnerDir, AEnvExe: string; out AWhy: string): string;
 begin
-  // 1) next to this runner (a co-deployed exe).
-  Result:= TPath.Combine(ExtractFilePath(ParamStr(0)), 'drag-lint.exe');
+  AWhy:= '';
+  Result:= TPath.Combine(ARunnerDir, 'drag-lint.exe');
   if TFile.Exists(Result) then
     Exit;
-  // 2) THIS checkout's staged exe -- the runner lives at
-  //    <root>\src\tools\convrules-editor\tests\, so climb 4 to the root. Prefer this
-  //    over a hardcoded path so the tests exercise the exe built from THIS source
-  //    (e.g. a worktree), not a stale sibling checkout missing a just-added flag.
-  Result:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), '..\..\..\..\third_party\dll-win64\drag-lint.exe'));
-  if TFile.Exists(Result) then
-    Exit;
-  // 3) fallback: the canonical main-checkout deploy.
-  Result:= 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';
-  if TFile.Exists(Result) then
-    Exit;
+  if AEnvExe <> '' then
+  begin
+    if TFile.Exists(AEnvExe) then
+      Exit(AEnvExe);
+    AWhy:= Format('%s names %s, which does not exist', [TEST_ENGINE_ENV, AEnvExe]);
+    Exit('');
+  end;
+  AWhy:= Format('no drag-lint.exe beside the runner (%s) and %s is not set -- copy a ' + 'pinned engine beside the runner or name one; live tests SKIP', [ARunnerDir, TEST_ENGINE_ENV]);
   Result:= '';
 end; // function
+var
+  GEngineWhy: string = '';
 
+{ The engine every live test runs (ChooseTestEngine on this runner's folder and
+  CONVRULES_TEST_ENGINE). '' when none was named; GEngineWhy then says why. }
+function ResolveExe: string;
+begin
+  Result:= ChooseTestEngine(ExtractFilePath(ParamStr(0)), GetEnvironmentVariable(TEST_ENGINE_ENV), GEngineWhy);
+end; // function
 { True if the ORM3 project DB answers a units query -- i.e. it exists AND is at or above
   the exe's own SCHEMA_VERSION. The gate is `>=`, so a NEWER DB is fine; only an OLDER one
   is refused ("index schema vN < vM ... migrate", 0 rows), in which case ORM3-dependent
@@ -7618,7 +7633,7 @@ end;
   raises comes back as an error, not an exception. The engine exe is a path that
   does not exist: a QUALIFIED name skips resolution, so the fake runner's answer
   is what that call sees; a BARE name then fails at resolution (the query process
-  cannot start) before any runner call is made. }
+  cannot start) inside the runner's work, before any proptree call. }
 procedure TestProptreeCancelState;
 const
   ENGINE_FATAL = 3; // the engine's own FATAL exit code
@@ -7640,6 +7655,13 @@ begin
       end;
     Ok:= Eng.GetProptree('U.TFoo', Tree, Err, Note);
     Check('engine.lastcancelled.set', (not Ok) and Eng.LastCancelled, Err);
+    // The resolve runs INSIDE the runner's work since job C6, so this runner must
+    // actually run it for the bare name's resolution failure to happen at all.
+    Eng.LongCallRunner:=
+      function(const ATitle: string; const AWork: TStreamingWork): Integer
+      begin
+        Result:= AWork(nil, nil);
+      end;
     Ok:= Eng.GetProptree('TFoo', Tree, Err, Note);
     Check('engine.lastcancelled.reset.on.resolve.error', (not Ok) and (not Eng.LastCancelled) and (Pos('cannot resolve', Err) > 0), Err);
 
@@ -8078,8 +8100,269 @@ begin
   end;
 end;
 
+{ The live tests' engine is chosen EXPLICITLY: beside the runner, else the exe
+  CONVRULES_TEST_ENGINE names. Never a silent fallback to third_party\dll-win64 --
+  that folder is the live, rebuilt-without-warning engine (2026-10-05: an
+  unreviewed 1.21.0 build sat there while this suite was being run). }
+procedure TestChooseTestEngine;
+var
+  Dir : string;
+  Exe : string;
+  Why : string;
+  Got : string;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'engchoice-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Got:= ChooseTestEngine(Dir, '', Why);
+    Check('engine.choice.none.is.empty', Got = '', Got);
+    Check('engine.choice.none.says.why', (Pos(TEST_ENGINE_ENV, Why) > 0) and (Pos('beside', Why) > 0), Why);
+    Got:= ChooseTestEngine(Dir, TPath.Combine(Dir, 'missing.exe'), Why);
+    Check('engine.choice.env.missing.refused', (Got = '') and (Pos('missing.exe', Why) > 0), Got + ' / ' + Why);
+    Exe:= TPath.Combine(Dir, 'named.exe');
+    TFile.WriteAllText(Exe, 'x');
+    Got:= ChooseTestEngine(Dir, Exe, Why);
+    Check('engine.choice.env.used', SameText(Got, Exe), Got);
+    TFile.WriteAllText(TPath.Combine(Dir, 'drag-lint.exe'), 'x');
+    Got:= ChooseTestEngine(Dir, Exe, Why);
+    Check('engine.choice.beside.wins', SameText(Got, TPath.Combine(Dir, 'drag-lint.exe')), Got);
+    Check('engine.choice.never.dll-win64', Pos('dll-win64', LowerCase(ResolveExe)) = 0, ResolveExe);
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
+{ Every engine verb whose stdout is PARSED (JSON / sql / query) reads it over a
+  pipe of its own. The stand-ins write the stdout line in two pieces with a stderr
+  line between them; a merged pipe puts the noise INSIDE the JSON. }
+procedure TestStdoutSeparateFromStderr;
+const
+  CAPS_CMD = '@echo off'#13#10'<nul set /p ={"capabilities":{"book_depth"'#13#10'echo noise-on-stderr 1>&2'#13#10'echo :true}}'#13#10;
+  SQL_CMD  = '@echo off'#13#10'<nul set /p ={"rows":[["A.pas"'#13#10'echo noise-on-stderr 1>&2'#13#10'echo ]]}'#13#10;
+var
+  Dir  : string;
+  Eng  : TEngineAdapter;
+  Files: TArray<string>;
+  Err  : string;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'pipes-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'caps.cmd'), CAPS_CMD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'sql.cmd'), SQL_CMD, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'caps.cmd'), []);
+    try
+      Check('pipes.info.json.whole', MatchText(CAPABILITY_BOOK_DEPTH, Eng.CapabilityNames), string.Join(',', Eng.CapabilityNames));
+    finally
+      Eng.Free;
+    end;
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'sql.cmd'), []);
+    try
+      var Ok: Boolean:= Eng.ListIndexedFiles(['x.sqlite'], Files, Err);
+      Check('pipes.sql.json.whole', Ok and (Length(Files) = 1) and (Files[0] = 'A.pas'), Err);
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
+{ ResolveClassQName (a `query`, 0.5-1 s) runs INSIDE the long-call runner, on its
+  worker: the progress window and its Cancel cover it, and FTreeLoads (counted by
+  the editor's runner) holds depth commits back. The stand-in engine logs every
+  call and answers exit 1 (no such class / no tree). }
+{ Lines in the stand-in engine's call log (0 when it was never called). }
+function LogLineCount(const APath: string): Integer;
+begin
+  if TFile.Exists(APath) then
+    Result:= Length(TFile.ReadAllLines(APath))
+  else
+    Result:= 0;
+end;
+
+procedure TestProptreeResolveInRunner;
+const
+  LOG_CMD = '@echo %1>>"%~dp0calls.log"'#13#10'@exit /b 1'#13#10;
+var
+  Dir     : string;
+  Log     : string;
+  Eng     : TEngineAdapter;
+  Tree    : TProptree;
+  Err     : string;
+  Note    : string;
+  CallsIn : Integer;
+  Ran     : Boolean;
+begin
+
+  Dir:= TPath.Combine(TPath.GetTempPath, 'resolve-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Log:= TPath.Combine(Dir, 'calls.log');
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'engine.cmd'), LOG_CMD, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'engine.cmd'), []);
+    try
+      CallsIn:= -1;
+      Ran    := False;
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          CallsIn:= LogLineCount(Log); // engine calls made BEFORE the runner was entered
+          Ran:= True;
+          Result:= AWork(nil, nil);
+        end;
+      Eng.GetProptree('TFoo', Tree, Err, Note);
+      Check('resolve.inside.runner', Ran and (CallsIn = 0), Format('engine calls before the runner: %d', [CallsIn]));
+      Check('resolve.then.proptree', LogLineCount(Log) = 2, IntToStr(LogLineCount(Log)));
+
+      // Cancel pressed before the work starts: no engine call at all.
+      TFile.Delete(Log);
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        var
+          T: TCancelToken;
+        begin
+          T:= TCancelToken.Create;
+          try
+            T.Cancel;
+            Result:= AWork(nil, T);
+          finally
+            T.Free;
+          end;
+        end;
+      var Ok: Boolean:= Eng.GetProptree('TFoo', Tree, Err, Note);
+      Check('resolve.cancel.no.engine.call', (not Ok) and Eng.LastCancelled and (LogLineCount(Log) = 0), Format('calls=%d err=%s', [LogLineCount(Log), Err]));
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+{ ResolveClassQName answers are cached for the session (job C6 follow-up): every
+  rule click resolved its From and To classes again (0.5-1.2 s each), so even a
+  trivial load flashed the progress window. Keyed on the name (case-insensitive,
+  as Delphi is) AND the --db set; a NEGATIVE answer (exit 1: no such class) is an
+  answer and is cached; a FAILED lookup is not. Cleared by SetDbs, by
+  ClearResolveCache and by IndexProject. The stand-ins log every call. }
+{ Calls of one verb in the stand-in engine's log (each line is the verb, %1). }
+function VerbCount(const APath, AVerb: string): Integer;
+var
+  L: string;
+begin
+  Result:= 0;
+  if TFile.Exists(APath) then
+    for L in TFile.ReadAllLines(APath) do
+      if SameText(Trim(L), AVerb) then
+        Inc(Result);
+end;
+
+procedure TestResolveCache;
+const
+  MISS_CMD = '@echo %1>>"%~dp0calls.log"'#13#10'@exit /b 1'#13#10;  // query: no such class; proptree: no tree
+  FAIL_CMD = '@echo %1>>"%~dp0calls.log"'#13#10'@exit /b 2'#13#10;  // the call itself failed
+var
+  Dir : string;
+  Log : string;
+  Eng : TEngineAdapter;
+  Tree: TProptree;
+  Err : string;
+  Note: string;
+  Out : string;
+  Q   : Integer; // query calls logged before the step under test
+
+  procedure Load(const AName: string);
+  begin
+    Eng.GetProptree(AName, Tree, Err, Note);
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'rcache-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Log:= TPath.Combine(Dir, 'calls.log');
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'miss.cmd'), MISS_CMD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'fail.cmd'), FAIL_CMD, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'miss.cmd'), ['a.sqlite']);
+    try
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          Result:= AWork(nil, nil);
+        end;
+      Load('TFoo');
+      Check('rcache.negative.answer', (VerbCount(Log, 'query') = 1) and (Pos('cannot resolve', Err) = 0), Err);
+      Load('TFoo');
+      Check('rcache.negative.cached', VerbCount(Log, 'query') = 1, IntToStr(VerbCount(Log, 'query')));
+      Check('rcache.proptree.still.runs', VerbCount(Log, 'proptree') = 2, IntToStr(VerbCount(Log, 'proptree')));
+      Load('tfoo');
+      Check('rcache.key.case.insensitive', VerbCount(Log, 'query') = 1, IntToStr(VerbCount(Log, 'query')));
+      Load('TBar');
+      Check('rcache.key.other.name.misses', VerbCount(Log, 'query') = 2, IntToStr(VerbCount(Log, 'query')));
+      Q:= VerbCount(Log, 'query');
+      Eng.SetDbs(['b.sqlite']);
+      Load('TFoo');
+      Check('rcache.cleared.by.setdbs', VerbCount(Log, 'query') = Q + 1, IntToStr(VerbCount(Log, 'query')));
+      Q:= VerbCount(Log, 'query');
+      Eng.ClearResolveCache;
+      Load('TFoo');
+      Check('rcache.cleared.explicitly', VerbCount(Log, 'query') = Q + 1, IntToStr(VerbCount(Log, 'query')));
+      Q:= VerbCount(Log, 'query');
+      Eng.IndexProject('x.dproj', 'b.sqlite', Out);
+      Load('TFoo');
+      Check('rcache.cleared.by.reindex', VerbCount(Log, 'query') = Q + 1, IntToStr(VerbCount(Log, 'query')));
+      // Cancelled before the lookup: nothing resolved, so nothing may be cached.
+      Eng.ClearResolveCache;
+      Q:= VerbCount(Log, 'query');
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        var
+          T: TCancelToken;
+        begin
+          T:= TCancelToken.Create;
+          try
+            T.Cancel;
+            Result:= AWork(nil, T);
+          finally
+            T.Free;
+          end;
+        end;
+      Load('TBaz');
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          Result:= AWork(nil, nil);
+        end;
+      Load('TBaz');
+      Check('rcache.cancel.not.cached', VerbCount(Log, 'query') = Q + 1, IntToStr(VerbCount(Log, 'query')));
+    finally
+      Eng.Free;
+    end;
+    TFile.Delete(Log);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'fail.cmd'), ['a.sqlite']);
+    try
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          Result:= AWork(nil, nil);
+        end;
+      Load('TFoo');
+      Check('rcache.failure.reported', Pos('cannot resolve', Err) > 0, Err);
+      Load('TFoo');
+      Check('rcache.failure.not.cached', VerbCount(Log, 'query') = 2, IntToStr(VerbCount(Log, 'query')));
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
 begin
   try
+    if ResolveExe <> '' then
+      Writeln('engine: ', ResolveExe)
+    else
+      Writeln('engine: (none) -- ', GEngineWhy);
     TestReFindCorpusLoads;
     TestReFindCorpusReconstructs;
     TestConversionLibraryLoads;
@@ -8229,6 +8512,10 @@ begin
     TestCapabilityProbeTimeout;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
+    TestChooseTestEngine;
+    TestStdoutSeparateFromStderr;
+    TestProptreeResolveInRunner;
+    TestResolveCache;
     TestValidateParse;
     TestValidateScopeBlocks;
     TestValidateScopeRun;

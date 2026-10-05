@@ -160,6 +160,7 @@ type
       FMiFindInFrom  : TMenuItem  ;
       FMiOnlyType    : TMenuItem  ; // Mapping: CHECKED while the pool shows only one type
       FMiMappings    : TMenuItem  ;
+      FMiAutoMatch   : TMenuItem  ; // Mapping > Auto-Match: needs a loaded rule (UpdateMenuEnabled)
       FMiScopeRenames: TMenuItem  ; // Uses Units: #useswap Name -> Scope.Name for "via scope" rows
       FMiExamine     : TMenuItem  ;
       FMiClearExamine: TMenuItem  ;
@@ -319,13 +320,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+7 more)</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthTimer, FLblDepthNote (+34 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthComboWndProc, FDepthTimer (+34 more)</para>
+      /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.Engine.TEngineAdapter.ClearResolveCache, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow (+8 more)</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthTimer, FLblDepthNote (+35 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthComboWndProc, FDepthTimer (+34 more)</para>
       /// <seealso cref="ConvRules.ConvertTab.TConvertTab.Create"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.ClearResolveCache"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddPopupItem"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip"/>
-      /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure BuildUI;
@@ -338,8 +339,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas) (+8 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SelectedUnitRows</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
-      /// <para>Reads: FMiAssign, FActiveHdr, FGrid, FPool, FMiUnassign, FMiFindInFrom, FMiExamine, FMiClearExamine (+5 more)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 17 lines (full implementation)</para>
+      /// <para>Reads: FMiAssign, FActiveHdr, FGrid, FPool, FMiUnassign, FMiFindInFrom, FMiExamine, FMiClearExamine (+6 more)</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedUnitRows"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
@@ -1282,7 +1283,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.AddMenuCmd, ConvRules.MainForm.TConvRulesForm.BuildMenu.Top, ShortCut</para>
-      /// <para>Reads: FMnuFile, FMnuConversion, FMnuTheme   Writes: FMnuFile, FMiFileSave, FMiFileSaveAs, FMiFileCurate, FMnuConversion, FMiExamine, FMiClearExamine, FMiAssign (+6 more)</para>
+      /// <para>Reads: FMnuFile, FMnuConversion, FMnuTheme   Writes: FMnuFile, FMiFileSave, FMiFileSaveAs, FMiFileCurate, FMnuConversion, FMiExamine, FMiClearExamine, FMiAutoMatch (+7 more)</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddMenuCmd"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu.Top"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
@@ -2801,7 +2802,7 @@ begin
   AddMenuCmd(FMnuConversion, 'Con&vert...', 'Open the Convert tab: apply checked rule books to a list of source units', DoShowConvertTab);
 
   LMapping:= Top('&Mapping');
-  AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
+  FMiAutoMatch:= AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
   FMiAssign    := AddMenuCmd(LMapping, '&Assign'      , 'Assign the highlighted To leaf (pool, right) to the selected From row', DoAssign);
   FMiUnassign  := AddMenuCmd(LMapping, '&Unassign'    , 'Drop the selected From row''s assignment', DoUnassign);
   FMiFindInFrom:= AddMenuCmd(LMapping, '&Find in From', 'Select the From-grid row whose property has the SAME name as the highlighted To leaf', DoFindInFrom);
@@ -2953,6 +2954,7 @@ begin
   FMiExamine.Enabled:= (FActiveHdr >= 0);
   FMiClearExamine.Enabled:= (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
   FMiMappings.Enabled:= (FActiveHdr >= 0);
+  FMiAutoMatch.Enabled:= (FActiveHdr >= 0); // job C6: enabled, it only answered "Select or create a rule first."
   if (FMiScopeRenames <> nil) and (FUnitList <> nil) then
   begin
     var LScope: Boolean:= False;
@@ -3423,6 +3425,10 @@ begin
       FMiFileSave.Enabled  := not ARunning;
       FMiFileSaveAs.Enabled:= not ARunning;
       FMiFileCurate.Enabled:= not ARunning;
+      // The run reindexed the project through its OWN adapter: a class this one
+      // resolved before may now be declared elsewhere, or not at all.
+      if not ARunning then
+        FEngine.ClearResolveCache;
     end;
   FConvertTab:= TConvertTab.Create(Self, LHost);
   FConvertTab.Parent:= FTabConvert;

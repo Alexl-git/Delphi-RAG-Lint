@@ -265,6 +265,17 @@ type
   /// </remarks>
   TEngineAdapter = class
     private
+      type
+        /// <summary>One cached ResolveClassQName answer.</summary>
+        TResolvedClass = record
+          QName    : string ; // the qualified name, or the bare one for "no such class"
+          Ambiguity: Integer;
+        end;
+    private
+      /// <summary>ResolveClassQName answers for this session, keyed on the upper-cased
+      /// name + #0 + DbArgs. Negative answers included; failures never. Guarded by
+      /// TMonitor on itself: lookups run on the progress window's worker.</summary>
+      FResolveCache: TDictionary<string, TResolvedClass>;
       FExePath: string        ;
       FDbList : TArray<string>;
       FTreeDepth     : Integer        ;
@@ -284,7 +295,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function RunCapture(const AArgs: string; out AOutput: string): Integer;
@@ -305,7 +316,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean; overload;
@@ -342,15 +353,15 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgsFor(const ADbs: TArray<string>): string; overload;
-      /// <returns><!-- drag-lint:auto -->string -- Observed: DbArgsFor(FDbList).</returns>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.Scaffold (ConvRules.Engine.pas) (+1 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgsFor</para>
       /// <para>Reads: FDbList</para>
       /// <para>Directives: overload</para>
@@ -358,7 +369,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgs: string; overload;
@@ -378,7 +389,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string): string; overload;
@@ -390,7 +401,8 @@ type
       /// <param name="AError">'' when the name resolved OR when the index simply
       /// holds no such class (both are ordinary outcomes). Non-empty only when the
       /// query could not be answered at all -- an unusable --db list above all.</param>
-      /// <returns><!-- drag-lint:auto -->string -- Observed: AName; Sym.QualifiedName.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: AName; LHit.QName;
+      /// Sym.QualifiedName.</returns>
       /// <remarks>
       /// The distinction is load-bearing. Without it a dead --db path and an
       /// unknown type are the same event to the caller, the bare name flows on to
@@ -400,15 +412,16 @@ type
       /// 2026-09-09; pinned by resolve.harderror.* in ConvRulesModelTests.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/2 (ConvRules.Engine.pas)</para>
-      /// <para>Calls: ConvRules.Engine.ParseQuerySymbols, ConvRules.Engine.SelectQuerySymbol, ConvRules.Engine.TEngineAdapter.QueryJsonFor/4, Pos, SameText</para>
+      /// <para>Calls: ConvRules.Engine.ParseQuerySymbols, ConvRules.Engine.SelectQuerySymbol, ConvRules.Engine.TEngineAdapter.CacheResolved, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.QueryJsonFor/4, Pos, SameText, UpperCase</para>
       /// <para>Overload 2 of 3</para>
+      /// <para>Reads: FResolveCache</para>
       /// <para>Mutates: AAmbiguity (out), AError (out)</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.ParseQuerySymbols"/>
       /// <seealso cref="ConvRules.Engine.SelectQuerySymbol"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.QueryJsonFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer; out AError: string): string; overload;
@@ -445,7 +458,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer): string; overload;
@@ -465,6 +478,11 @@ type
       /// <param name="AError">Receives the failure text; '' on success.</param>
       /// <returns>False when the engine could not answer from ADb.</returns>
       function AddSqlColumnOfDb(const ADb, ASql, AWhat: string; ASeen: TStringList; out AError: string): Boolean;
+      /// <summary>Store one ResolveClassQName answer under AKey (thread-safe).</summary>
+      /// <param name="AKey">Upper-cased name + #0 + DbArgs.</param>
+      /// <param name="AQName">The answer.</param>
+      /// <param name="AAmbiguity">How many classes carry the name.</param>
+      procedure CacheResolved(const AKey, AQName: string; AAmbiguity: Integer);
     public
       /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
       /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
@@ -518,6 +536,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetDbs(const ADbs: TArray<string>);
+      /// <summary>Forget every cached class-name resolution.</summary>
+      /// <remarks>ResolveClassQName caches its answers for the session -- each rule
+      /// click used to pay a 0.5-1.2 s `query` per class and flash the progress
+      /// window. SetDbs and IndexProject clear the cache themselves; call this when
+      /// the index changed some other way (the Convert tab's own adapter reindexed).</remarks>
+      procedure ClearResolveCache;
+      /// <summary>Frees the resolution cache.</summary>
+      destructor Destroy; override;
       /// <summary>The adapter's current default DB list (read-only view).</summary>
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: FDbList.</returns>
       /// <remarks>
@@ -623,7 +649,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>; out AError: string): Boolean; overload;
@@ -639,7 +665,7 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/3 (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.LoadAllClasses (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/3 (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.LoadAllClasses (ConvRules.MainForm.pas), TestPickerDatasource (ConvRulesModelTests.dpr), TestPlatformRescope (ConvRulesModelTests.dpr)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgsFor, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Pos, Trim</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Mutates: AError (out), ANames (out)</para>
@@ -939,7 +965,8 @@ type
       /// with ENGINE_TIMEOUT_MS.</summary>
       /// <param name="AArgs">The command line after the exe path.</param>
       /// <param name="ATimeoutMs">Watchdog; on expiry the child is terminated.</param>
-      /// <param name="AOutput">stdout AND stderr, merged into one pipe.</param>
+      /// <param name="AOutput">stdout, then stderr's lines after it -- separate pipes, so a
+      /// stderr line can never land inside a stdout line.</param>
       /// <returns>The engine's exit code; -1 when it could not be started; 3 on
       /// timeout.</returns>
       /// <remarks>Drains on the calling thread: from the UI thread the UI is
@@ -1196,11 +1223,29 @@ begin
   FExePath:= AExePath;
   FDbList := ADbList;
   FInfoTimeoutMs:= INFO_TIMEOUT_MS;
+  FResolveCache:= TDictionary<string, TResolvedClass>.Create;
+end;
+
+destructor TEngineAdapter.Destroy;
+begin
+  FResolveCache.Free;
+  inherited Destroy;
 end;
 
 procedure TEngineAdapter.SetDbs(const ADbs: TArray<string>);
 begin
   FDbList:= ADbs;
+  ClearResolveCache; // the answers were given by the OLD database set
+end;
+
+procedure TEngineAdapter.ClearResolveCache;
+begin
+  TMonitor.Enter(FResolveCache);
+  try
+    FResolveCache.Clear;
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
 end;
 
 function TEngineAdapter.DbList: TArray<string>;
@@ -1238,6 +1283,7 @@ function TEngineAdapter.IndexProject(const AProjectFile, AProjectDb: string; out
 begin
   // --project, never a folder: a folder target widens a project DB into a directory DB.
   Result:= RunCaptureTimed(Format('index --project "%s" --db "%s"', [AProjectFile, AProjectDb]), CONVERT_TIMEOUT_MS, AOutput);
+  ClearResolveCache; // the index may now declare (or no longer declare) a class
 end;
 
 function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
@@ -1312,89 +1358,22 @@ begin
   Result:= CreateProcessW(nil, @CmdW[0], nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, API);
 end;
 
-function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;  // dl:ok deep-nesting@dc47 -- REVIEWED 2026-09-29 pre-existing RunCapture body, only renamed + parameterised; flattening the drain loop is out of scope
-var
-  SA       : TSecurityAttributes       ;
-  ReadPipe : THandle                   ;
-  WritePipe: THandle                   ;
-  PI       : TProcessInformation       ;
-  Buf      : array[0..4095] of AnsiChar;
-  BytesRead: DWORD                     ;
-  ExitCode : DWORD                     ;
-  SB       : TStringBuilder            ;
+function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;
+const
+  RUN_CAPTURE_TIMEOUT_CODE = 3; // this routine's own timeout code; its callers test for 3
 begin
-  Result:= -1;
-  AOutput:= '';
-  FillChar(SA, SizeOf(SA), 0);
-  SA.nLength:= SizeOf(SA);
-  SA.bInheritHandle:= True;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then
-    Exit;
-  try
-    if not StartHiddenProcess(Format('"%s" %s', [FExePath, AArgs]), WritePipe, WritePipe, PI) then
-      Exit;
-    CloseHandle(WritePipe);
-    WritePipe:= 0;
-
-    // Bounded, non-blocking drain: poll the pipe so a pathological engine call
-    // times out gracefully instead of freezing the editor's main thread on an
-    // INFINITE wait. See ENGINE_TIMEOUT_MS for why the bound is where it is.
-    var TimedOut: Boolean:= False;
-    SB:= TStringBuilder.Create;
-    try
-      var Deadline: UInt64:= GetTickCount64 + ATimeoutMs;
-      var Avail: DWORD:= 0                                     ;
-      repeat
-        if PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) then
-        begin
-          BytesRead:= 0;
-          if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
-            Break;
-          SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
-          Continue; // keep draining while bytes are ready
-        end;
-        if WaitForSingleObject(PI.hProcess, 40) = WAIT_OBJECT_0 then
-        begin
-          // process exited: drain any final buffered bytes, then stop
-          while PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) do
-          begin
-            BytesRead:= 0;
-            if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
-              Break;
-            SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
-          end;
-          Break;
-        end; // if
-        if GetTickCount64 >= Deadline then
-        begin
-          TerminateProcess(PI.hProcess, DWORD(-1));
-          WaitForSingleObject(PI.hProcess, 2000);
-          TimedOut:= True;
-          Break;
-        end;
-      until False;
-      AOutput:= SB.ToString;
-    finally
-      SB.Free;
-    end; // try
-
-    if TimedOut then
-    begin
-      AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
-      Result:= 3; // distinct code: timed out (not 0/1/2)
-    end
-    else if GetExitCodeProcess(PI.hProcess, ExitCode) then
-      Result:= Integer(ExitCode);
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-  finally
-    if ReadPipe <> 0 then
-      CloseHandle(ReadPipe);
-    if WritePipe <> 0 then
-      CloseHandle(WritePipe);
-  end; // try
+  // SEPARATE pipes (job C6, 2026-10-05). This used to hand the child ONE pipe for
+  // both streams, which interleaves them by CHUNK: a stderr line could land inside
+  // a stdout line and break the JSON / sql / query text every caller parses (seen
+  // on convert-validate as "Validate: s, not a re-parse). (+3 more)"). Now stdout
+  // comes first, whole, and stderr's lines follow it.
+  Result:= RunCaptureStreaming(AArgs, ATimeoutMs, nil, nil, AOutput);
+  if Result = ENGINE_OUTCOME_TIMEOUT then
+  begin
+    AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
+    Result:= RUN_CAPTURE_TIMEOUT_CODE;
+  end;
 end; // function
-
 function TEngineAdapter.RunCaptureStreaming(const AArgs: string; ATimeoutMs: Cardinal; const AOnProgress: TProgressProc; const ACancel: TCancelToken; out AOutput: string): Integer;
 const
   POLL_MS   = 40;
@@ -1590,24 +1569,9 @@ begin
   // First, before any early Exit: LastCancelled describes THIS call only. A reset
   // further down left a previous cancel standing through a resolve failure.
   FLastCancelled:= False;
-  // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
-  // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
-  // qualified or not resolvable).
-  QN:= ResolveClassQName(AQname, Ambig, ResErr);
-  // A hard resolution failure is a fault in the ENGINE CALL, not in the type.
-  // Report it here: proptree tolerates a --db that does not exist and answers
-  // from the remaining indexes, so letting the unqualified name through would
-  // produce a confident "class not found" about a perfectly real class.
-  if ResErr <> '' then
-  begin
-    AError:= Format('cannot resolve "%s": %s', [AQname, ResErr]);
-    Exit(False);
-  end;
-  // Several classes carry that bare name -- TEdit, TButton and TLabel all have both an
-  // FMX and a VCL declaration -- and only the engine's row order chose between them.
-  // Silently returning an FMX property tree for a VCL form is the failure this reports.
-  if Ambig > 1 then
-    ANote:= Format('%s: %d classes carry that name; used %s.', [AQname, Ambig, QN]);
+  QN    := AQname;
+  Ambig := 0;
+  ResErr:= '';
   // Target surface (engine schema v17): --min-visibility published (DFM-streamable
   // props only) or public (adds public props + public fields); '' emits all leaves.
   // --refs-as-leaves IS on main (parsed in DRagLint.CLI.pas) and is passed on every
@@ -1626,16 +1590,29 @@ begin
   VisArg:= '';
   if AMinVisibility <> '' then
     VisArg:= ' --min-visibility ' + AMinVisibility;
-  var LArgs: string:= Format('proptree --qname "%s"%s --refs-as-leaves --format json%s%s',
-    [QN, VisArg, DepthArgs(FTreeDepth, FProgressLines), DbArgs]);
+  var LTail: string:= Format('%s --refs-as-leaves --format json%s%s', [VisArg, DepthArgs(FTreeDepth, FProgressLines), DbArgs]);
+  // The resolve AND the proptree run inside the long-call runner (job C6): the
+  // resolve is a `query` of 0.5-1 s that used to block the UI thread with no Cancel.
+  // Now the progress window covers both, its Cancel is honoured before either call
+  // starts, and the editor's runner counts FTreeLoads around the whole of it.
   var LWork: TStreamingWork:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
     begin
-      // CONVERT_TIMEOUT_MS: the user can Cancel now, so the watchdog is a backstop only.
-      Result:= RunCaptureStreaming(LArgs, CONVERT_TIMEOUT_MS, AOnProgress, ACancel, Output);
+      Result:= ENGINE_OUTCOME_CANCELLED;
+      if (ACancel = nil) or not ACancel.IsCancelled then
+      begin
+        // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
+        // unit-qualified form (cxButtons.TcxButton). No-op if already qualified.
+        QN:= ResolveClassQName(AQname, Ambig, ResErr);
+        if ResErr <> '' then
+          Result:= 0 // reported after the runner returns
+        else if (ACancel = nil) or not ACancel.IsCancelled then
+          // CONVERT_TIMEOUT_MS: the user can Cancel now, so the watchdog is a backstop only.
+          Result:= RunCaptureStreaming(Format('proptree --qname "%s"', [QN]) + LTail, CONVERT_TIMEOUT_MS, AOnProgress, ACancel, Output);
+      end;
     end;
   try
     if Assigned(FLongCallRunner) then
-      Code:= FLongCallRunner(Format('Loading property tree for %s', [QN]), LWork)
+      Code:= FLongCallRunner(Format('Loading property tree for %s', [AQname]), LWork)
     else
       Code:= LWork(nil, nil);
   except
@@ -1653,6 +1630,20 @@ begin
     AError:= Format('proptree cancelled for %s -- no tree loaded.', [AQname]);
     Exit(False);
   end;
+  // A hard resolution failure is a fault in the ENGINE CALL, not in the type.
+  // Report it here: proptree tolerates a --db that does not exist and answers
+  // from the remaining indexes, so letting the unqualified name through would
+  // produce a confident "class not found" about a perfectly real class.
+  if ResErr <> '' then
+  begin
+    AError:= Format('cannot resolve "%s": %s', [AQname, ResErr]);
+    Exit(False);
+  end;
+  // Several classes carry that bare name -- TEdit, TButton and TLabel all have both an
+  // FMX and a VCL declaration -- and only the engine's row order chose between them.
+  // Silently returning an FMX property tree for a VCL form is the failure this reports.
+  if Ambig > 1 then
+    ANote:= Format('%s: %d classes carry that name; used %s.', [AQname, Ambig, QN]);
   if Code = ENGINE_OUTCOME_TIMEOUT then
   begin
     // Name the Depth box only when it is usable: TreeDepth > 0 means the engine
@@ -1916,13 +1907,28 @@ begin
   // Already qualified (has a '.') or empty -> nothing to do.
   if (AName = '') or (Pos('.', AName) > 0) then
     Exit;
+  var LKey: string:= UpperCase(AName) + #0 + DbArgs;
+  var LHit: TResolvedClass;
+  TMonitor.Enter(FResolveCache);
+  try
+    if FResolveCache.TryGetValue(LKey, LHit) then
+    begin
+      AAmbiguity:= LHit.Ambiguity;
+      Exit(LHit.QName);
+    end;
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
   if not QueryJsonFor(AName, JSON, Err, Code) then
   begin
     // Exit 1 is "no such class" -- an ordinary answer, so leave AError empty and
-    // hand back the bare name as before. Any OTHER code means the query did not
-    // run; that must not masquerade as a miss.
+    // hand back the bare name as before (and cache it: it IS the answer). Any
+    // OTHER code means the query did not run; that must not masquerade as a miss,
+    // and it is not cached, so the next call asks again.
     if Code <> 1 then
-      AError:= Err;
+      AError:= Err
+    else
+      CacheResolved(LKey, AName, 0);
     Exit;
   end;
   Syms:= ParseQuerySymbols(JSON);
@@ -1942,12 +1948,28 @@ begin
   if not SelectQuerySymbol(Classes, AName, Sym, AAmbiguity) then
   begin
     AAmbiguity:= 0;
+    CacheResolved(LKey, AName, 0); // rows, but no class of that exact name: an answer
     Exit;
   end;
   if Sym.QualifiedName <> '' then
     Result:= Sym.QualifiedName
   else AAmbiguity:= 0; // a row with no qualified_name qualifies nothing
+  CacheResolved(LKey, Result, AAmbiguity);
 end; // function
+
+procedure TEngineAdapter.CacheResolved(const AKey, AQName: string; AAmbiguity: Integer);
+var
+  E: TResolvedClass;
+begin
+  E.QName    := AQName;
+  E.Ambiguity:= AAmbiguity;
+  TMonitor.Enter(FResolveCache);
+  try
+    FResolveCache.AddOrSetValue(AKey, E);
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
+end;
 
 function TEngineAdapter.DeclaringUnitOf(const ATypeName: string): string;
 var

@@ -955,3 +955,38 @@ unchanged is presumed validated earlier."
   revalidated, unchanged re-save fast, Exit without a prompt).
 * **Known cost:** passes still run one after another: a new book with many blocks
   is N x 10-40 s, now cancellable.
+
+## Editor minors -- hand-over notes (fix/editor-minors, job C6, 2026-10-05)
+
+* **Model tests choose their engine EXPLICITLY** (`ChooseTestEngine` in the
+  tests `.dpr`): `drag-lint.exe` beside the runner, else the exe named by
+  `CONVRULES_TEST_ENGINE`, else none (live tests SKIP; the runner prints its
+  first line `engine: ...` with the reason). The silent fallbacks to
+  `third_party\dll-win64` are gone -- that is the live, rebuilt-without-warning
+  engine. Stage a COPY of a pin beside the runner.
+* **`build\_build_convrules_editor_local.bat` no longer stages to dll-win64**
+  unless given `stage`. The release pack ships
+  `src\tools\convrules-editor\ConvRulesEditor.exe` (not the dll-win64 copy) and
+  passes `stage` so dll-win64's editor keeps step with the drag-lint.exe it syncs
+  (`run_release_pack_payload_guard.ps1` still PASS).
+* **Every engine verb now reads stdout on its own pipe.** `RunCaptureTimed` (and
+  so `RunCapture`) wraps `RunCaptureStreaming`: stdout whole, stderr's lines
+  after it; its timeout code stays 3. Guard: `pipes.*` -- `.cmd` stand-ins write a
+  stderr line in the MIDDLE of a stdout JSON line (`info --json`, `sql --json`).
+* **`ResolveClassQName` runs inside `GetProptree`'s long-call work** -- under the
+  progress window, cancellable before either call starts, `FTreeLoads` counted
+  by the editor's runner (`resolve.*` tests). Measured: the resolve query is
+  0.5-1.2 s (`query --name TcxButton`, library-Win64 + Micronite2027), which the
+  UI thread no longer blocks on.
+* **Resolutions are CACHED for the session** (`TEngineAdapter.FResolveCache`,
+  key = upper-cased name + `#0` + `DbArgs`; NEGATIVE answers cached too). Without
+  it every rule click paid the query under the window and a trivial load flashed
+  it. Cleared by `SetDbs`, by `IndexProject`, by `ClearResolveCache`, and by the
+  form when a Convert run ends (that run reindexes through its OWN adapter). A
+  failed lookup (query exit other than 0/1) and a lookup cancelled before it ran
+  are never cached (`rcache.*`). `drive-engine-wait.ps1` now checks the RE-load
+  (`wait.reload.no.window`, `wait.reload.query.cached` = one engine child,
+  proptree only); both FAIL on the uncached build. The first uncached load is not
+  asserted; `wait.window.appears` is the positive control.* **Mapping > Auto-Match is disabled while no rule is loaded**
+  (`UpdateMenuEnabled`; driver `automatch.*` in `drive-validate-scope.ps1`, RED
+  on main).
