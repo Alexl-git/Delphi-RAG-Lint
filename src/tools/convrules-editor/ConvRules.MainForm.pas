@@ -160,6 +160,7 @@ type
       FMiFindInFrom  : TMenuItem  ;
       FMiOnlyType    : TMenuItem  ; // Mapping: CHECKED while the pool shows only one type
       FMiMappings    : TMenuItem  ;
+      FMiAutoMatch   : TMenuItem  ; // Mapping > Auto-Match: needs a loaded rule (UpdateMenuEnabled)
       FMiScopeRenames: TMenuItem  ; // Uses Units: #useswap Name -> Scope.Name for "via scope" rows
       FMiExamine     : TMenuItem  ;
       FMiClearExamine: TMenuItem  ;
@@ -338,8 +339,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAcceptScopeRenames (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAssign (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoClearExamine (ConvRules.MainForm.pas) (+8 more)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.SelectedUnitRows</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
-      /// <para>Reads: FMiAssign, FActiveHdr, FGrid, FPool, FMiUnassign, FMiFindInFrom, FMiExamine, FMiClearExamine (+5 more)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 17 lines (full implementation)</para>
+      /// <para>Reads: FMiAssign, FActiveHdr, FGrid, FPool, FMiUnassign, FMiFindInFrom, FMiExamine, FMiClearExamine (+6 more)</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedUnitRows"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveConditionals"/>
@@ -1282,7 +1283,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.BuildUI (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.AddMenuCmd, ConvRules.MainForm.TConvRulesForm.BuildMenu.Top, ShortCut</para>
-      /// <para>Reads: FMnuFile, FMnuConversion, FMnuTheme   Writes: FMnuFile, FMiFileSave, FMiFileSaveAs, FMiFileCurate, FMnuConversion, FMiExamine, FMiClearExamine, FMiAssign (+6 more)</para>
+      /// <para>Reads: FMnuFile, FMnuConversion, FMnuTheme   Writes: FMnuFile, FMiFileSave, FMiFileSaveAs, FMiFileCurate, FMnuConversion, FMiExamine, FMiClearExamine, FMiAutoMatch (+7 more)</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddMenuCmd"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.BuildMenu.Top"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ActiveAppliedNames"/>
@@ -2801,7 +2802,7 @@ begin
   AddMenuCmd(FMnuConversion, 'Con&vert...', 'Open the Convert tab: apply checked rule books to a list of source units', DoShowConvertTab);
 
   LMapping:= Top('&Mapping');
-  AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
+  FMiAutoMatch:= AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
   FMiAssign    := AddMenuCmd(LMapping, '&Assign'      , 'Assign the highlighted To leaf (pool, right) to the selected From row', DoAssign);
   FMiUnassign  := AddMenuCmd(LMapping, '&Unassign'    , 'Drop the selected From row''s assignment', DoUnassign);
   FMiFindInFrom:= AddMenuCmd(LMapping, '&Find in From', 'Select the From-grid row whose property has the SAME name as the highlighted To leaf', DoFindInFrom);
@@ -2953,6 +2954,7 @@ begin
   FMiExamine.Enabled:= (FActiveHdr >= 0);
   FMiClearExamine.Enabled:= (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
   FMiMappings.Enabled:= (FActiveHdr >= 0);
+  FMiAutoMatch.Enabled:= (FActiveHdr >= 0); // job C6: enabled, it only answered "Select or create a rule first."
   if (FMiScopeRenames <> nil) and (FUnitList <> nil) then
   begin
     var LScope: Boolean:= False;

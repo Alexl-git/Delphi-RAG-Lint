@@ -939,7 +939,8 @@ type
       /// with ENGINE_TIMEOUT_MS.</summary>
       /// <param name="AArgs">The command line after the exe path.</param>
       /// <param name="ATimeoutMs">Watchdog; on expiry the child is terminated.</param>
-      /// <param name="AOutput">stdout AND stderr, merged into one pipe.</param>
+      /// <param name="AOutput">stdout, then stderr's lines after it -- separate pipes, so a
+      /// stderr line can never land inside a stdout line.</param>
       /// <returns>The engine's exit code; -1 when it could not be started; 3 on
       /// timeout.</returns>
       /// <remarks>Drains on the calling thread: from the UI thread the UI is
@@ -1312,89 +1313,22 @@ begin
   Result:= CreateProcessW(nil, @CmdW[0], nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, API);
 end;
 
-function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;  // dl:ok deep-nesting@dc47 -- REVIEWED 2026-09-29 pre-existing RunCapture body, only renamed + parameterised; flattening the drain loop is out of scope
-var
-  SA       : TSecurityAttributes       ;
-  ReadPipe : THandle                   ;
-  WritePipe: THandle                   ;
-  PI       : TProcessInformation       ;
-  Buf      : array[0..4095] of AnsiChar;
-  BytesRead: DWORD                     ;
-  ExitCode : DWORD                     ;
-  SB       : TStringBuilder            ;
+function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;
+const
+  RUN_CAPTURE_TIMEOUT_CODE = 3; // this routine's own timeout code; its callers test for 3
 begin
-  Result:= -1;
-  AOutput:= '';
-  FillChar(SA, SizeOf(SA), 0);
-  SA.nLength:= SizeOf(SA);
-  SA.bInheritHandle:= True;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then
-    Exit;
-  try
-    if not StartHiddenProcess(Format('"%s" %s', [FExePath, AArgs]), WritePipe, WritePipe, PI) then
-      Exit;
-    CloseHandle(WritePipe);
-    WritePipe:= 0;
-
-    // Bounded, non-blocking drain: poll the pipe so a pathological engine call
-    // times out gracefully instead of freezing the editor's main thread on an
-    // INFINITE wait. See ENGINE_TIMEOUT_MS for why the bound is where it is.
-    var TimedOut: Boolean:= False;
-    SB:= TStringBuilder.Create;
-    try
-      var Deadline: UInt64:= GetTickCount64 + ATimeoutMs;
-      var Avail: DWORD:= 0                                     ;
-      repeat
-        if PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) then
-        begin
-          BytesRead:= 0;
-          if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
-            Break;
-          SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
-          Continue; // keep draining while bytes are ready
-        end;
-        if WaitForSingleObject(PI.hProcess, 40) = WAIT_OBJECT_0 then
-        begin
-          // process exited: drain any final buffered bytes, then stop
-          while PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) do
-          begin
-            BytesRead:= 0;
-            if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
-              Break;
-            SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
-          end;
-          Break;
-        end; // if
-        if GetTickCount64 >= Deadline then
-        begin
-          TerminateProcess(PI.hProcess, DWORD(-1));
-          WaitForSingleObject(PI.hProcess, 2000);
-          TimedOut:= True;
-          Break;
-        end;
-      until False;
-      AOutput:= SB.ToString;
-    finally
-      SB.Free;
-    end; // try
-
-    if TimedOut then
-    begin
-      AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
-      Result:= 3; // distinct code: timed out (not 0/1/2)
-    end
-    else if GetExitCodeProcess(PI.hProcess, ExitCode) then
-      Result:= Integer(ExitCode);
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-  finally
-    if ReadPipe <> 0 then
-      CloseHandle(ReadPipe);
-    if WritePipe <> 0 then
-      CloseHandle(WritePipe);
-  end; // try
+  // SEPARATE pipes (job C6, 2026-10-05). This used to hand the child ONE pipe for
+  // both streams, which interleaves them by CHUNK: a stderr line could land inside
+  // a stdout line and break the JSON / sql / query text every caller parses (seen
+  // on convert-validate as "Validate: s, not a re-parse). (+3 more)"). Now stdout
+  // comes first, whole, and stderr's lines follow it.
+  Result:= RunCaptureStreaming(AArgs, ATimeoutMs, nil, nil, AOutput);
+  if Result = ENGINE_OUTCOME_TIMEOUT then
+  begin
+    AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
+    Result:= RUN_CAPTURE_TIMEOUT_CODE;
+  end;
 end; // function
-
 function TEngineAdapter.RunCaptureStreaming(const AArgs: string; ATimeoutMs: Cardinal; const AOnProgress: TProgressProc; const ACancel: TCancelToken; out AOutput: string): Integer;
 const
   POLL_MS   = 40;
@@ -1590,24 +1524,9 @@ begin
   // First, before any early Exit: LastCancelled describes THIS call only. A reset
   // further down left a previous cancel standing through a resolve failure.
   FLastCancelled:= False;
-  // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
-  // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
-  // qualified or not resolvable).
-  QN:= ResolveClassQName(AQname, Ambig, ResErr);
-  // A hard resolution failure is a fault in the ENGINE CALL, not in the type.
-  // Report it here: proptree tolerates a --db that does not exist and answers
-  // from the remaining indexes, so letting the unqualified name through would
-  // produce a confident "class not found" about a perfectly real class.
-  if ResErr <> '' then
-  begin
-    AError:= Format('cannot resolve "%s": %s', [AQname, ResErr]);
-    Exit(False);
-  end;
-  // Several classes carry that bare name -- TEdit, TButton and TLabel all have both an
-  // FMX and a VCL declaration -- and only the engine's row order chose between them.
-  // Silently returning an FMX property tree for a VCL form is the failure this reports.
-  if Ambig > 1 then
-    ANote:= Format('%s: %d classes carry that name; used %s.', [AQname, Ambig, QN]);
+  QN    := AQname;
+  Ambig := 0;
+  ResErr:= '';
   // Target surface (engine schema v17): --min-visibility published (DFM-streamable
   // props only) or public (adds public props + public fields); '' emits all leaves.
   // --refs-as-leaves IS on main (parsed in DRagLint.CLI.pas) and is passed on every
@@ -1626,16 +1545,29 @@ begin
   VisArg:= '';
   if AMinVisibility <> '' then
     VisArg:= ' --min-visibility ' + AMinVisibility;
-  var LArgs: string:= Format('proptree --qname "%s"%s --refs-as-leaves --format json%s%s',
-    [QN, VisArg, DepthArgs(FTreeDepth, FProgressLines), DbArgs]);
+  var LTail: string:= Format('%s --refs-as-leaves --format json%s%s', [VisArg, DepthArgs(FTreeDepth, FProgressLines), DbArgs]);
+  // The resolve AND the proptree run inside the long-call runner (job C6): the
+  // resolve is a `query` of 0.5-1 s that used to block the UI thread with no Cancel.
+  // Now the progress window covers both, its Cancel is honoured before either call
+  // starts, and the editor's runner counts FTreeLoads around the whole of it.
   var LWork: TStreamingWork:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
     begin
-      // CONVERT_TIMEOUT_MS: the user can Cancel now, so the watchdog is a backstop only.
-      Result:= RunCaptureStreaming(LArgs, CONVERT_TIMEOUT_MS, AOnProgress, ACancel, Output);
+      Result:= ENGINE_OUTCOME_CANCELLED;
+      if (ACancel = nil) or not ACancel.IsCancelled then
+      begin
+        // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
+        // unit-qualified form (cxButtons.TcxButton). No-op if already qualified.
+        QN:= ResolveClassQName(AQname, Ambig, ResErr);
+        if ResErr <> '' then
+          Result:= 0 // reported after the runner returns
+        else if (ACancel = nil) or not ACancel.IsCancelled then
+          // CONVERT_TIMEOUT_MS: the user can Cancel now, so the watchdog is a backstop only.
+          Result:= RunCaptureStreaming(Format('proptree --qname "%s"', [QN]) + LTail, CONVERT_TIMEOUT_MS, AOnProgress, ACancel, Output);
+      end;
     end;
   try
     if Assigned(FLongCallRunner) then
-      Code:= FLongCallRunner(Format('Loading property tree for %s', [QN]), LWork)
+      Code:= FLongCallRunner(Format('Loading property tree for %s', [AQname]), LWork)
     else
       Code:= LWork(nil, nil);
   except
@@ -1653,6 +1585,20 @@ begin
     AError:= Format('proptree cancelled for %s -- no tree loaded.', [AQname]);
     Exit(False);
   end;
+  // A hard resolution failure is a fault in the ENGINE CALL, not in the type.
+  // Report it here: proptree tolerates a --db that does not exist and answers
+  // from the remaining indexes, so letting the unqualified name through would
+  // produce a confident "class not found" about a perfectly real class.
+  if ResErr <> '' then
+  begin
+    AError:= Format('cannot resolve "%s": %s', [AQname, ResErr]);
+    Exit(False);
+  end;
+  // Several classes carry that bare name -- TEdit, TButton and TLabel all have both an
+  // FMX and a VCL declaration -- and only the engine's row order chose between them.
+  // Silently returning an FMX property tree for a VCL form is the failure this reports.
+  if Ambig > 1 then
+    ANote:= Format('%s: %d classes carry that name; used %s.', [AQname, Ambig, QN]);
   if Code = ENGINE_OUTCOME_TIMEOUT then
   begin
     // Name the Depth box only when it is usable: TreeDepth > 0 means the engine
