@@ -187,7 +187,8 @@ type
       FBookDepthOk  : Boolean         ; // engine reports book_depth
       FDepthTimer   : TTimer          ; // debounces wheel / arrow-key steps on FCbDepth: one reload per committed change
       FDepthPending : Boolean         ; // a selection notification arrived on FCbDepth and is not committed yet
-      FDepthCancelled: Boolean        ; // CBN_SELENDCANCEL seen: the open list was dismissed (Esc), not picked from
+      FDepthCancelled: Boolean        ; // CBN_SELENDCANCEL seen WHILE the list was dropped: dismissed (Esc / focus loss), not picked from
+      FDepthDropped : Boolean         ; // between CBN_DROPDOWN and CBN_CLOSEUP on FCbDepth
       FDepthComboWndProc: TWndMethod  ; // FCbDepth's own WindowProc, chained by DepthComboWndProc
       FTreeLoads    : Integer         ; // > 0 while a tree load or a proptree engine call runs (depth commits wait)
       FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
@@ -2135,8 +2136,10 @@ type
       /// DepthCommitBlocked it stays armed and the step stays pending.</summary>
       /// <param name="Sender">The timer.</param>
       procedure DepthTimerFire(Sender: TObject);
-      /// <summary>FCbDepth.WindowProc hook: records CBN_SELENDCANCEL / CBN_SELENDOK, which VCL
-      /// does not surface, so a dismissed list (Esc) can cancel the pending pick.</summary>
+      /// <summary>FCbDepth.WindowProc hook: tracks CBN_DROPDOWN .. CBN_CLOSEUP (FDepthDropped) and a
+      /// CBN_SELENDCANCEL inside that window (FDepthCancelled), which VCL does not surface, so a
+      /// dismissed list (Esc, focus loss while open) cancels the pending pick. A SELENDCANCEL with
+      /// the list closed (every focus loss) is ignored; CBN_SETFOCUS clears a stale cancel.</summary>
       /// <param name="AMsg">The message; always passed on to the combo's own WindowProc.</param>
       procedure DepthComboWndProc(var AMsg: TMessage);
       /// <summary>True while committing a depth pick would run inside another operation:
@@ -2148,6 +2151,12 @@ type
       /// DoCurate and DoNewConversion -- before any dialog or a book replacement.</summary>
       /// <remarks>While a tree load runs it re-arms the timer instead (never nests a load).</remarks>
       procedure CommitPendingDepth;
+      /// <summary>Shows the book's depth in FCbDepth (no events fire): used whenever a
+      /// cancelled or dropped pick would leave the combo showing a value the book does not hold.</summary>
+      procedure SyncDepthCombo;
+      /// <summary>True while this thread is in a menu, popup-menu or system-menu loop.</summary>
+      /// <returns>GetGUIThreadInfo's GUI_INMENUMODE / GUI_POPUPMENUMODE / GUI_SYSTEMMENUMODE.</returns>
+      function InMenuLoop: Boolean;
       /// <summary>Shows the book's depth, its state note and the capability gate on the depth combo.</summary>
       procedure RefreshDepthControl;
       /// <summary>Sets the engine's --depth for the next proptree calls: the book's depth, or 0 (omit) on an engine without book_depth.</summary>
@@ -5938,7 +5947,7 @@ begin
   // A pending wheel step belongs to the book on screen before this refresh, never the next one.
   FDepthTimer.Enabled:= False;
   FDepthPending:= False;
-  FCbDepth.ItemIndex:= FBook.Depth - BOOK_DEPTH_MIN;
+  SyncDepthCombo;
   FCbDepth.Enabled  := FBookDepthOk;
   FCbDepth.Hint     := if FBookDepthOk then DEPTH_HINT else DEPTH_HINT_UNSUPPORTED;
   FLblDepthNote.Font.Color:= clRed;
@@ -6017,12 +6026,15 @@ begin
     // notification still on its way for this close-up is dropped too: the queued
     // reset runs after them.
     FDepthPending:= False;
+    SyncDepthCombo;
     TThread.ForceQueue(nil,
       procedure
       begin
         FDepthCancelled:= False;
         FDepthPending  := False;
         FDepthTimer.Enabled:= False;
+        // A SELCHANGE after the close-up may have moved the combo again.
+        SyncDepthCombo;
       end);
     Exit;
   end;
@@ -6050,20 +6062,55 @@ begin
 end;
 
 procedure TConvRulesForm.DepthComboWndProc(var AMsg: TMessage);
+var
+  LCode: Word;
 begin
+  LCode:= 0;
   if AMsg.Msg = CN_COMMAND then
-    case TWMCommand(AMsg).NotifyCode of
-      CBN_DROPDOWN, CBN_SELENDOK: FDepthCancelled:= False;
-      CBN_SELENDCANCEL          : FDepthCancelled:= True;
-    end; // case
-  FDepthComboWndProc(AMsg);
+    LCode:= TWMCommand(AMsg).NotifyCode;
+  case LCode of
+    CBN_DROPDOWN:
+    begin
+      FDepthDropped  := True;
+      FDepthCancelled:= False;
+    end;
+    CBN_SELENDOK, CBN_SETFOCUS:
+      FDepthCancelled:= False; // SETFOCUS: belt and braces against a stale cancel
+    CBN_SELENDCANCEL:
+      // A drop-down-list combo also sends this on EVERY focus loss with the list
+      // CLOSED (kill-focus hides the list before checking it is visible), and no
+      // CBN_CLOSEUP follows. Only a cancel of an OPEN list counts.
+      if FDepthDropped then
+        FDepthCancelled:= True;
+  end; // case
+  FDepthComboWndProc(AMsg); // CBN_CLOSEUP reaches DepthComboCloseUp in here
+  if LCode = CBN_CLOSEUP then
+    FDepthDropped:= False;
 end;
 
 function TConvRulesForm.DepthCommitBlocked: Boolean;
 begin
   // A modal TForm makes itself the active form; a common dialog (Open / Save) does
   // not, but disables this window like every modal does.
-  Result:= (FTreeLoads > 0) or (Screen.ActiveForm <> Self) or not IsWindowEnabled(Handle);
+  // A menu or popup-menu loop dispatches WM_TIMER too: FMenuOpen covers the main
+  // menu (WM_ENTERMENULOOP reaches this form); a TPopupMenu's loop is owned by
+  // VCL's PopupList window, so the thread's GUI state is asked as well.
+  Result:= (FTreeLoads > 0) or FMenuOpen or InMenuLoop or (Screen.ActiveForm <> Self) or not IsWindowEnabled(Handle);
+end;
+
+procedure TConvRulesForm.SyncDepthCombo;
+begin
+  FCbDepth.ItemIndex:= FBook.Depth - BOOK_DEPTH_MIN;
+end;
+
+function TConvRulesForm.InMenuLoop: Boolean;
+var
+  LInfo: TGUIThreadInfo;
+begin
+  LInfo:= Default(TGUIThreadInfo);
+  LInfo.cbSize:= SizeOf(LInfo);
+  Result:= GetGUIThreadInfo(GetCurrentThreadId, LInfo)
+    and ((LInfo.flags and (GUI_INMENUMODE or GUI_POPUPMENUMODE or GUI_SYSTEMMENUMODE)) <> 0);
 end;
 
 procedure TConvRulesForm.CommitPendingDepth;
