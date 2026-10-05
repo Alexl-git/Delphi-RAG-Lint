@@ -86,6 +86,9 @@ type
       /// <summary>Append AChunk; call AOnLine for every line it completes, in order.</summary>
       /// <param name="AChunk">Any text, possibly empty or mid-line.</param>
       /// <param name="AOnLine">Receives each complete line without its terminator.</param>
+      /// <remarks>Linear in the chunk size: the consumed lines are cut from the held
+      /// text once per call, also when AOnLine raises (a line already handed over is
+      /// never handed over again).</remarks>
       procedure Feed(const AChunk: string; const AOnLine: TProc<string>);
       /// <summary>Hand back a held partial line, if any, and clear it.</summary>
       /// <param name="AOnLine">Receives the tail; not called when nothing is held.</param>
@@ -128,20 +131,29 @@ end;
 
 procedure TLineSplitter.Feed(const AChunk: string; const AOnLine: TProc<string>);
 var
-  P   : Integer;
-  Line: string ;
+  LStart: Integer;
+  P     : Integer;
+  Line  : string ;
 begin
   FPending:= FPending + AChunk;
-  P:= Pos(#10, FPending);
-  while P > 0 do
-  begin
-    Line:= Copy(FPending, 1, P - 1);
-    if Line.EndsWith(#13) then
-      SetLength(Line, Length(Line) - 1);
-    FPending:= Copy(FPending, P + 1, MaxInt);
-    AOnLine(Line);
-    P:= Pos(#10, FPending);
-  end;
+  // Scan from a start index and cut the consumed head ONCE: copying the rest of
+  // FPending per line made a chunk of N lines cost O(N^2).
+  LStart:= 1;
+  try
+    P:= Pos(#10, FPending, LStart);
+    while P > 0 do
+    begin
+      Line:= Copy(FPending, LStart, P - LStart);
+      if Line.EndsWith(#13) then
+        SetLength(Line, Length(Line) - 1);
+      LStart:= P + 1; // before AOnLine: a raising sink must not see this line again
+      AOnLine(Line);
+      P:= Pos(#10, FPending, LStart);
+    end;
+  finally
+    if LStart > 1 then
+      Delete(FPending, 1, LStart - 1);
+  end; // try
 end; // procedure
 
 procedure TLineSplitter.Flush(const AOnLine: TProc<string>);

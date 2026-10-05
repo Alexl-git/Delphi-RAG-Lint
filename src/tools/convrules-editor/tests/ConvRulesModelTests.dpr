@@ -7314,6 +7314,7 @@ const
   NODES    = 9120;
   TWO      = 2;
   COULD_NOT_START = -1; // RunCaptureStreaming: the process was never started
+  MANY_LINES = 10000;
   LINE_WRONG_TYPES = '{"progress":{"depth":"x","verb":7,"elapsed_s":null,"class":[]}}';
 var
   Sp      : TLineSplitter;
@@ -7326,6 +7327,10 @@ var
   Counts  : Boolean;
   Defaults: Boolean;
   Raised  : string;
+  LCount  : Integer;
+  LFirst  : string;
+  LLast   : string;
+  LChunk  : TStringBuilder;
 begin
   Lines:= '';
   Sink:= procedure(ALine: string)
@@ -7355,6 +7360,32 @@ begin
     Sp.Feed(#10, Sink);
     Sp.Flush(Sink);
     Check('split.crlf.across.feeds', Lines = '[abc]', Lines);
+  finally
+    Sp.Free;
+  end;
+
+  // One chunk holding many lines: every line comes back, in order.
+  LCount:= 0;
+  LChunk:= TStringBuilder.Create;
+  try
+    for var LIdx: Integer:= 0 to MANY_LINES - 1 do
+      LChunk.Append('line').Append(LIdx).Append(#13#10);
+    Lines:= LChunk.ToString;
+  finally
+    LChunk.Free;
+  end;
+  Sp:= TLineSplitter.Create;
+  try
+    Sp.Feed(Lines,
+      procedure(ALine: string)
+      begin
+        if LCount = 0 then
+          LFirst:= ALine;
+        LLast:= ALine;
+        Inc(LCount);
+      end);
+    Check('split.many.lines.one.chunk', (LCount = MANY_LINES) and (LFirst = 'line0') and (LLast = 'line' + IntToStr(MANY_LINES - 1)),
+      Format('count=%d first=[%s] last=[%s]', [LCount, LFirst, LLast]));
   finally
     Sp.Free;
   end;
