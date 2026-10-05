@@ -52,6 +52,7 @@ uses
   , ConvRules.UnitStatus  // dl:unit ConvRules.UnitStatus accepted -- TDestinationResolver types a field; STATUS_MISSING_TEXT travels with StatusText so the bold-MISSING draw cannot drift from the text it matches
   , ConvRules.UnitMask    // TUnitRow: a field's type
   , ConvRules.ConvertTab  // TConvertTab: a field's type
+  , ConvRules.ValidateScope // TValidateJob: a method parameter's type, so INTERFACE-visible
   ;
 
 const
@@ -500,6 +501,34 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoValidate(Sender: TObject);
+      /// <summary>Run a scoped validation of AText and mark the rules it reports on.</summary>
+      /// <param name="AText">The text being validated -- exactly what
+      /// TRuleBook.SaveCompleteWithMap returned.</param>
+      /// <param name="ALineNodes">That call's line map, so "line N" reaches its rule.</param>
+      /// <param name="AJobs">The blocks to validate with their OWN From/To pair; the
+      /// syntax-only pass always runs as well.</param>
+      /// <param name="AIsError">True when an error diagnostic was kept (never the
+      /// engine's exit code).</param>
+      /// <returns>The verdict for the status line (ConvRules.ValidateScope.ValidateVerdict).</returns>
+      /// <remarks>Each engine call is a separate convert-validate run (about 0.6 s for
+      /// the syntax pass, 10-15 s per block on 2026-10-05). Blocks not in AJobs keep
+      /// their earlier marks. Refreshes the rules list's Check column and the grid.</remarks>
+      function RunScopedValidate(const AText: string; const ALineNodes: TArray<TRuleNode>; const AJobs: TArray<TValidateJob>; out AIsError: Boolean): string;
+      /// <summary>Re-read every rules-list row's Check column from the book's marks,
+      /// in place (no rebuild, so the selection and the loaded grid stay).</summary>
+      procedure RefreshRuleMarks;
+      /// <summary>FRules.OnInfoTip: the validation messages on the row's block.</summary>
+      /// <param name="Sender">FRules; unused.</param>
+      /// <param name="Item">The row under the mouse.</param>
+      /// <param name="InfoTip">Set to the messages; left as is when the block has none.</param>
+      procedure RulesInfoTip(Sender: TObject; Item: TListItem; var InfoTip: string);
+      /// <summary>FGrid.OnMouseMove: the hint is the validation messages on the
+      /// hovered row's #link, '' when it has none.</summary>
+      /// <param name="Sender">FGrid; unused.</param>
+      /// <param name="Shift">Unused.</param>
+      /// <param name="X">Client x.</param>
+      /// <param name="Y">Client y.</param>
+      procedure GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
       /// <summary><!-- drag-lint:auto sum -->Open the curation window on the file
       /// currently loaded here. Curation moves VERBATIM block text and deliberately does
       /// NOT go through this form's canonical re-emitter, so a block that was merely
@@ -2557,6 +2586,14 @@ const { VCL style names as they are recorded INSIDE the .vsf files linked by
   { Quiet time after the last wheel / arrow-key step on the depth combo before the
     change is committed (one reload); long enough to span a run of wheel notches. }
   DEPTH_COMMIT_DELAY_MS = 600;
+  { Validation marks in the grid's cast column (GridDrawCell). Prefixes are
+    painted, never stored in the cell. Colours are the fixed red / orange of a
+    status mark, readable on both the light and the dark style. }
+  GRID_CAST_COL     = 2;
+  MARK_ERROR_PREFIX = '[!] ';
+  MARK_WARN_PREFIX  = '[w] ';
+  MARK_ERROR_COLOR  = clRed;
+  MARK_WARN_COLOR   = TColor($00007FFF); // orange (BGR)
 
   { ---- helpers ---- }
 
@@ -3264,6 +3301,13 @@ begin
   var RulesFileColWidth: Integer:= 130;  // dl:ok magic-literal@075a, large-magic-number@075a -- Task 12; the literal IS the named constant's own initializer, but the rule does not special-case that
   FRules.Columns.Add.Caption:= 'File';
   FRules.Columns[1].Width  := RulesFileColWidth;
+  // Validation marks on the row's block ("2 err", "4 warn"); the messages are its
+  // info tip. Session state, refreshed in place by RefreshRuleMarks.
+  var RulesCheckColWidth: Integer:= 70;  // dl:ok magic-literal@1a00, large-magic-number@1a00 -- the literal IS the named width's own initializer, as RulesFileColWidth above
+  FRules.Columns.Add.Caption:= 'Check';
+  FRules.Columns[2].Width  := RulesCheckColWidth;
+  FRules.ShowHint  := True;
+  FRules.OnInfoTip := RulesInfoTip;
   FRules.OnSelectItem:= RulesSelectItem;
   FRules.OnDblClick  := RulesDblClick;
 
@@ -3499,6 +3543,8 @@ begin
   // marking all go through it) -- required for OnDrawCell to own the cell colour.
   FGrid.DefaultDrawing:= False;
   FGrid.OnDrawCell    := GridDrawCell;
+  FGrid.OnMouseMove   := GridMouseMove; // hint = validation messages on the row's #link
+  FGrid.ShowHint      := True;
   FGrid.OnSelectCell  := GridSelectCell; // re-gates the menu as the row moves
 
   // Needs both FGrid and FPool, so it goes after the grid, not next to the pool.
@@ -4313,6 +4359,7 @@ begin
   finally
     FRules.Items.EndUpdate;
   end; // try
+  RefreshRuleMarks;
 end; // procedure
 
 procedure TConvRulesForm.RulesSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
@@ -5791,8 +5838,26 @@ begin
   else
     Cv.Font.Color:= StyleServices.GetSystemColor(clWindowText);
 
+  // A validation mark on the row's #link shows in the cast column as a prefix --
+  // painted only: the cell TEXT stays the cast, which DoAssign and friends read.
+  var CellText: string:= FGrid.Cells[ACol, ARow];
+  if (ARow > 0) and (ACol = GRID_CAST_COL) then
+  begin
+    var Link: TRuleNode:= FindLinkForFrom(PathOfGridCell(FGrid.Cells[0, ARow]));
+    var E: Integer:= 0;
+    var W: Integer:= 0;
+    if Link <> nil then
+      MarksText([Link], E, W);
+    if E + W > 0 then
+    begin
+      CellText:= (if E > 0 then MARK_ERROR_PREFIX else MARK_WARN_PREFIX) + CellText;
+      if not (gdSelected in State) then
+        Cv.Font.Color:= if E > 0 then MARK_ERROR_COLOR else MARK_WARN_COLOR;
+    end;
+  end;
+
   Cv.FillRect(Rect);
-  Cv.TextRect(Rect, Rect.Left + 2, Rect.Top + 2, FGrid.Cells[ACol, ARow]);
+  Cv.TextRect(Rect, Rect.Left + 2, Rect.Top + 2, CellText);
 end; // procedure
 
 { Align the highlighted To leaf to the From side: select the From-grid row whose
@@ -6748,26 +6813,118 @@ begin
   FRaw.Lines.Text:= FBook.SaveToString;
 end;
 
+{ File > Validate: the syntax pass plus the ACTIVE block with its own pair -- an
+  explicit request, so it runs whether or not that block changed. It validates
+  the text Save would write (SaveCompleteWithMap), so every "line N" maps to a
+  rule; a block that maps nothing yet is not in that text and gets the syntax
+  pass only. }
 procedure TConvRulesForm.DoValidate(Sender: TObject);
 var
-  res  : TValidateResult;
-  Node : TRuleNode      ;
-  fromT: string         ;
-  toT  : string         ;
+  Dropped  : Integer             ;
+  LineNodes: TArray<TRuleNode>   ;
+  Txt      : string              ;
+  Jobs     : TArray<TValidateJob>;
+  Job      : TValidateJob        ;
+  Note     : string              ;
+  IsError  : Boolean             ;
+  Msg      : string              ;
 begin
   var LGuard: IInterface:= HourGlass;
   if FFilePath = '' then begin SetStatus('Load a file first.'); Exit; end;
-  fromT:= ''; toT:= '';
-  if FActiveHdr >= 0 then
+  Txt:= FBook.SaveCompleteWithMap(Dropped, LineNodes);
+  Jobs:= nil;
+  Note:= '';
+  if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
   begin
-    Node:= FBook.Nodes[FActiveHdr];
-    fromT:= Node.FromType; toT:= Node.ToType;
+    var HdrLine: Integer:= 0;
+    for var k:= 0 to High(LineNodes) do
+      if LineNodes[k] = FBook.Nodes[FActiveHdr] then
+      begin
+        HdrLine:= k + 1;
+        Break;
+      end;
+    if HdrLine = 0 then
+      Note:= ' (the selected rule maps nothing yet, so Save would not write it -- syntax checked only)'
+    else if JobAtLine(Txt, HdrLine, Job) then
+      Jobs:= [Job]
+    else
+      Note:= ' (the selected rule has no To type -- syntax checked only)';
   end;
-  res:= FEngine.ValidateText(FBook.SaveToString, fromT, toT);
-  if res.OK then
-    SetStatus('Validate: OK')
+  Msg:= 'Validate: ' + RunScopedValidate(Txt, LineNodes, Jobs, IsError) + Note;
+  if IsError then
+    SetError(Msg)
   else
-    SetStatus('Validate: ' + res.FirstError);
+    SetStatus(Msg);
+end; // procedure
+
+function TConvRulesForm.RunScopedValidate(const AText: string; const ALineNodes: TArray<TRuleNode>; const AJobs: TArray<TValidateJob>; out AIsError: Boolean): string;
+var
+  R: TScopedValidation;
+begin
+  R:= RunScopedValidation(AText, AJobs,
+    function(const AValidated, AFrom, ATo: string): string
+    begin
+      Result:= FEngine.ValidateText(AValidated, AFrom, ATo).Output;
+    end);
+  ApplyValidateMarks(FBook.Nodes.ToArray, ALineNodes, AJobs, R);
+  RefreshRuleMarks;
+  FGrid.Invalidate;
+  AIsError:= R.Errors > 0;
+  Result:= ValidateVerdict(R);
+end; // function
+
+procedure TConvRulesForm.RefreshRuleMarks;
+var
+  E: Integer;
+  W: Integer;
+  k: Integer;
+begin
+  if FRules = nil then
+    Exit;
+  for k:= 0 to FRules.Items.Count - 1 do
+  begin
+    E:= 0;
+    W:= 0;
+    MarksText(BlockMarkNodes(FBook, Integer(FRules.Items[k].Data)), E, W);
+    while FRules.Items[k].SubItems.Count < 2 do
+      FRules.Items[k].SubItems.Add('');
+    FRules.Items[k].SubItems[1]:= MarkerText(E, W);
+  end;
+end; // procedure
+
+procedure TConvRulesForm.RulesInfoTip(Sender: TObject; Item: TListItem; var InfoTip: string);
+var
+  E: Integer;
+  W: Integer;
+begin
+  if Item = nil then
+    Exit;
+  var Tip: string:= MarksText(BlockMarkNodes(FBook, Integer(Item.Data)), E, W);
+  if Tip <> '' then
+    InfoTip:= Tip;
+end;
+
+procedure TConvRulesForm.GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+var
+  ACol: Integer;
+  ARow: Integer;
+  E   : Integer;
+  W   : Integer;
+  Tip : string ;
+begin
+  FGrid.MouseToCell(X, Y, ACol, ARow);
+  Tip:= '';
+  if ARow > 0 then
+  begin
+    var Link: TRuleNode:= FindLinkForFrom(PathOfGridCell(FGrid.Cells[0, ARow]));
+    if Link <> nil then
+      Tip:= MarksText([Link], E, W);
+  end;
+  if Tip <> FGrid.Hint then
+  begin
+    FGrid.Hint:= Tip;
+    Application.CancelHint; // re-show for the new row, not the last one's text
+  end;
 end; // procedure
 
 { Open the curation window on the file currently loaded here. Curation moves
@@ -6876,11 +7033,7 @@ end;
 
 function TConvRulesForm.SaveBook(APromptPath: Boolean): Boolean;
 var
-  bak  : string         ;
-  res  : TValidateResult;
-  Node : TRuleNode      ;
-  fromT: string         ;
-  toT  : string         ;
+  Bak: string;
 begin
   Result:= False; // every early Exit below means nothing reached disk
   CommitPendingDepth; // a pick still waiting on its timer belongs in this save
@@ -6914,9 +7067,9 @@ begin
     // 1) backup existing
     if TFile.Exists(FFilePath) then
     begin
-      bak:= BackupPath(FFilePath);
+      Bak:= BackupPath(FFilePath);
       try
-        TFile.Copy(FFilePath, bak);
+        TFile.Copy(FFilePath, Bak);
       except
         on E: Exception do
         begin
@@ -6929,8 +7082,9 @@ begin
     // 2) write canonical DSL (ASCII/CRLF) -- only COMPLETE rules (a #convert block
     //    with at least one #link). A From/To pair with nothing mapped yet is scratch
     //    and is not persisted.
-    var dropped: Integer                                     ;
-    var outText: string:= FBook.SaveCompleteToString(dropped);
+    var dropped  : Integer                                                ;
+    var lineNodes: TArray<TRuleNode>                                      ;
+    var outText  : string:= FBook.SaveCompleteWithMap(dropped, lineNodes);
 
     { A BRAND-NEW rule file with nothing complete would be created EMPTY.
       SaveCompleteToString drops a #convert that has no #link yet, so "new file AND
@@ -6939,7 +7093,7 @@ begin
       a file that already existed).
 
       Refused NARROWLY, on both conditions. Saving an EXISTING book down to empty is a
-      different act -- deliberate deletion -- and it keeps its .bak. }
+      different act -- deliberate deletion -- and it keeps its .Bak. }
     if (Trim(outText) = '') and (dropped > 0) and (not TFile.Exists(FFilePath)) then
     begin
       SetError(Format(
@@ -6951,23 +7105,22 @@ begin
     TFile.WriteAllText(FFilePath, outText, TEncoding.ASCII);
     LBytesWritten:= True;
 
-    // 3) validate the saved file
-    fromT:= '';
-    toT  := '';
-    if FActiveHdr >= 0 then
-    begin
-      Node := FBook.Nodes[FActiveHdr];
-      fromT:= Node.FromType;
-      toT  := Node.ToType;
-    end;
-    res:= FEngine.ValidateText(outText, fromT, toT);
+    // 3) validate what was saved: the syntax pass over the whole text, plus each
+    //    block that CHANGED since the last load / save with its OWN From/To pair
+    //    (owner ruling 2026-10-05: "The edited saved block should be validated.
+    //    Stuff that is unchanged is presumed validated earlier."). One pair for the
+    //    whole book checked every other block against the wrong classes: 145 false
+    //    errors on BDE-to-FireDAC.rules.
     var droppedMsg: string:= '';
     if dropped > 0 then
       droppedMsg:= Format(' (%d empty rule(s) not saved)', [dropped]);
-    if res.OK then
-      SetStatus(Format('Saved %s (backup %s)%s. Validate: OK', [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg]))
+    var isError: Boolean;
+    var verdict: string:= RunScopedValidate(outText, lineNodes, ChangedBlockJobs(FSnapshot, outText), isError);
+    var LSaveText: string:= Format('Saved %s (backup %s)%s. Validate: %s', [ExtractFileName(FFilePath), ExtractFileName(Bak), droppedMsg, verdict]);
+    if isError then
+      SetError(LSaveText)
     else
-      SetStatus(Format('Saved %s (backup %s)%s. Validate: %s', [ExtractFileName(FFilePath), ExtractFileName(bak), droppedMsg, res.FirstError]));
+      SetStatus(LSaveText);
 
     // Surface unit-rule conflicts (ADD wins) after every save, non-blocking.
     RefreshUnitList;
@@ -6985,9 +7138,13 @@ begin
     if Length(FFormTypeRows) > 0 then
     begin
       var SaveMsg: string:= FLblStatus.Caption;
+      var SaveWasError: Boolean:= FStatusIsError; // a failed validation must stay red
       RescanRulesFolder(nil);
       RefreshFormTypes;
-      SetStatus(SaveMsg);
+      if SaveWasError then
+        SetError(SaveMsg)
+      else
+        SetStatus(SaveMsg);
     end;
     // The saved book may be new to the folder, or changed kind (convert / unit rules).
     if FConvertTab <> nil then
