@@ -19,6 +19,7 @@ schema version; the CLI surface is not yet frozen.
 | **[Feature Index](Feature-Index)** | Every feature as its own page, by the surface it is reached from |
 | **[Diagrams and Charts](Diagrams-and-Charts)** | Ask a question about a symbol, get a clickable chart -- the chart questions |
 | **[Charts and the IDE](Charts-and-the-IDE)** | Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio |
+| **[Field Round-Trip Report](Field-Round-Trip-Report)** | The Blueprint "Operation Name" benchmark: produce the round-trip text and the charts from RAD Studio (Tools menu) or a terminal; setup for the owner and for users |
 | **[Installation](Installation)** | Getting the CLI, the IDE plugin, or the LSP running |
 | **[Maintenance](Maintenance)** | Indexes, the manifest, reindexing, and what to do when something looks wrong |
 | **[IDE Menu Reference](IDE-Menu-Reference)** | What every item in the `drag-lint` menu does |

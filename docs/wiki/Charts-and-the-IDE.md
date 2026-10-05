@@ -2,7 +2,9 @@
 
 **How to ask a chart question, where the answer lands, how to read it, and how
 to jump from it into RAD Studio.** Companion to
-[Diagrams and Charts](Diagrams-and-Charts), which lists the questions.
+[Diagrams and Charts](Diagrams-and-Charts), which lists the questions. For a step-by-step
+recipe on one field (the Blueprint Operation Name benchmark), including a RAD Studio
+Tools-menu entry, see [Field Round-Trip Report](Field-Round-Trip-Report).
 
 Status, 29 September 2026: **26 of the 27 catalogue questions ship**; only
 `compare` does not (parked by the owner). The newest is `round-trip`. The chart
