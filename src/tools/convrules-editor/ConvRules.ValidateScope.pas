@@ -51,12 +51,19 @@ type
     /// <summary>Lines of every #mapping line whose name the block #applies --
     /// a diagnostic there belongs to this block's pass too.</summary>
     MappingLines: TArray<Integer>;
+    /// <summary>The block's identity across saves: its header line plus how many
+    /// identical headers precede it. What ChangedBlockJobs compares and what a
+    /// pending-validation set holds.</summary>
+    Key         : string;
   end;
 
   /// <summary>The engine call: validate AText, with the pair when AFrom and ATo are
   /// both non-empty, syntax-only when they are both ''. Returns the raw output
   /// (stdout and stderr together); the exit code is deliberately not consulted.</summary>
   TValidateFn = reference to function(const AText, AFrom, ATo: string): string;
+
+  /// <summary>Has the user cancelled? Polled before and after every engine call.</summary>
+  TCancelledFn = reference to function: Boolean;
 
   /// <summary>Everything one scoped validation produced.</summary>
   TScopedValidation = record
@@ -71,6 +78,15 @@ type
     Errors  : Integer;
     /// <summary>Warnings among Kept.</summary>
     Warnings: Integer;
+    /// <summary>The syntax pass ran to completion (False when cancelled).</summary>
+    SyntaxDone: Boolean;
+    /// <summary>Per job: its pass ran to completion. A job that is not done
+    /// contributes no diagnostics and its block keeps its earlier marks.</summary>
+    JobDone   : TArray<Boolean>;
+    /// <summary>The run was cancelled before every pass completed.</summary>
+    Cancelled : Boolean;
+    /// <summary>From types of the jobs not done, in job order.</summary>
+    NotChecked: TArray<string>;
   end;
 
 /// <summary>Is ALine output noise rather than a diagnostic?</summary>
@@ -100,7 +116,18 @@ function BlockJobs(const AText: string): TArray<TValidateJob>;
 /// #applies a #mapping whose lines changed. Blocks are keyed by their header line
 /// (plus its occurrence number, so a repeated header still pairs up in order).
 /// From-only blocks are never returned.</returns>
-function ChangedBlockJobs(const AOldText, ANewText: string): TArray<TValidateJob>;
+/// <param name="APending">Keys (TValidateJob.Key) of blocks whose last validation
+/// did not complete (NextPending); such a block is returned even when unchanged.</param>
+function ChangedBlockJobs(const AOldText, ANewText: string; const APending: TArray<string> = nil): TArray<TValidateJob>;
+
+/// <summary>The pending-validation set after a run.</summary>
+/// <param name="APending">The set before the run.</param>
+/// <param name="AJobs">The jobs the run was given.</param>
+/// <param name="AResult">What RunScopedValidation returned for them.</param>
+/// <returns>APending minus the keys of the jobs that completed, plus the keys of the
+/// jobs that did not -- so a cancelled block is validated on the next save even
+/// though it no longer differs from the snapshot.</returns>
+function NextPending(const APending: TArray<string>; const AJobs: TArray<TValidateJob>; const AResult: TScopedValidation): TArray<string>;
 
 /// <summary>The job for the block whose header is on line AHeaderLine.</summary>
 /// <param name="AText">The text to be validated.</param>
@@ -119,16 +146,23 @@ function DiagsForJob(const ADiags: TArray<TValidateDiag>; const AJob: TValidateJ
 /// <summary>Run the syntax pass and one pass per job, keeping what each owns.</summary>
 /// <param name="AText">The text to validate.</param>
 /// <param name="AJobs">The blocks to check with their own pair.</param>
-/// <param name="AValidate">The engine call; called 1 + Length(AJobs) times.</param>
-/// <returns>The kept diagnostics and their counts. OK/failed is Errors = 0 --
-/// never the exit code.</returns>
-function RunScopedValidation(const AText: string; const AJobs: TArray<TValidateJob>; const AValidate: TValidateFn): TScopedValidation;
+/// <param name="AValidate">The engine call; called 1 + Length(AJobs) times unless
+/// cancelled.</param>
+/// <param name="ACancelled">Polled before and after each call; nil = never. A
+/// pass during or after which it answers True is NOT done, and no further pass
+/// starts.</param>
+/// <returns>The kept diagnostics and their counts, from completed passes only.
+/// OK/failed is Errors = 0 -- never the exit code.</returns>
+function RunScopedValidation(const AText: string; const AJobs: TArray<TValidateJob>; const AValidate: TValidateFn; const ACancelled: TCancelledFn = nil): TScopedValidation;
 
 /// <summary>The status-line verdict for a scoped validation.</summary>
 /// <param name="AResult">What RunScopedValidation returned.</param>
 /// <returns>"OK"; "OK, N warning(s) -- see marked rules"; or the first kept
 /// error, then " (+N more)" when other diagnostics were kept, then
-/// " -- see marked rules".</returns>
+/// " -- see marked rules". A cancelled run reads "cancelled -- N changed block(s)
+/// not checked: T1, T2" (plus "; syntax not checked" when that pass did not
+/// complete), followed by "; checked so far: " and the verdict above when any
+/// pass completed.</returns>
 function ValidateVerdict(const AResult: TScopedValidation): string;
 
 /// <summary>Replace validation marks after a scoped validation.</summary>
@@ -136,8 +170,10 @@ function ValidateVerdict(const AResult: TScopedValidation): string;
 /// Syntax marks are cleared on all of them.</param>
 /// <param name="ALineNodes">The line map from TRuleBook.SaveCompleteWithMap for the
 /// SAME text that was validated.</param>
-/// <param name="AJobs">The jobs that ran. Block marks are cleared on their lines
-/// and applied #mapping lines only; every other node keeps its block marks.</param>
+/// <param name="AJobs">The jobs given to the run. Block marks are cleared on the
+/// lines and applied #mapping lines of the jobs that COMPLETED only; every other
+/// node -- a cancelled job's included -- keeps its block marks. Syntax marks are
+/// replaced only when the syntax pass completed.</param>
 /// <param name="AResult">What RunScopedValidation returned for those jobs.</param>
 /// <remarks>Marks never touch Emit, Snapshot or Dirty. A job diagnostic whose text
 /// the syntax pass already put on the node is not added twice; a line-0
@@ -277,6 +313,7 @@ begin
       if ABlocks[k].Key = ABlocks[i].Key then
         Inc(M);
     ABlocks[i].Key:= ABlocks[i].Key + #0 + IntToStr(M);
+    ABlocks[i].Job.Key:= ABlocks[i].Key;
   end;
 
   for i:= 0 to High(ABlocks) do
@@ -347,7 +384,17 @@ begin
       Result:= Result + [B.Job];
 end;
 
-function ChangedBlockJobs(const AOldText, ANewText: string): TArray<TValidateJob>;
+function InKeys(const AKeys: TArray<string>; const AKey: string): Boolean;
+var
+  K: string;
+begin
+  for K in AKeys do
+    if K = AKey then
+      Exit(True);
+  Result:= False;
+end;
+
+function ChangedBlockJobs(const AOldText, ANewText: string; const APending: TArray<string>): TArray<TValidateJob>;
 var
   OldBlocks: TArray<TBlockScan>;
   OldMaps  : TArray<TMapScan>  ;
@@ -375,6 +422,8 @@ begin
         Changed:= O.Text <> B.Text;
         Break;
       end;
+    if Found and not Changed and InKeys(APending, B.Key) then
+      Changed:= True; // its last validation was cancelled: still owed
     if Found and not Changed then
       for Name in B.Applies do
         if MapText(OldMaps, Name) <> MapText(NewMaps, Name) then
@@ -385,6 +434,24 @@ begin
     if Changed then
       Result:= Result + [B.Job];
   end; // for
+end; // function
+
+function NextPending(const APending: TArray<string>; const AJobs: TArray<TValidateJob>; const AResult: TScopedValidation): TArray<string>;
+var
+  Done: TArray<string>;
+  K   : string        ;
+  i   : Integer       ;
+begin
+  Done:= nil;
+  Result:= nil;
+  for i:= 0 to High(AJobs) do
+    if (i <= High(AResult.JobDone)) and AResult.JobDone[i] then
+      Done:= Done + [AJobs[i].Key]
+    else if not InKeys(Result, AJobs[i].Key) then
+      Result:= Result + [AJobs[i].Key];
+  for K in APending do
+    if not InKeys(Done, K) and not InKeys(Result, K) then
+      Result:= Result + [K];
 end; // function
 
 function JobAtLine(const AText: string; AHeaderLine: Integer; out AJob: TValidateJob): Boolean;
@@ -448,16 +515,47 @@ begin
   end;
 end; // procedure
 
-function RunScopedValidation(const AText: string; const AJobs: TArray<TValidateJob>; const AValidate: TValidateFn): TScopedValidation;
+function IsCancelled(const ACancelled: TCancelledFn): Boolean;
+begin
+  Result:= Assigned(ACancelled) and ACancelled();
+end;
+
+function RunScopedValidation(const AText: string; const AJobs: TArray<TValidateJob>; const AValidate: TValidateFn; const ACancelled: TCancelledFn): TScopedValidation;
 var
   i: Integer      ;
   D: TValidateDiag;
 begin
   Result:= Default(TScopedValidation);
-  Result.Syntax:= ParseValidateOutput(AValidate(AText, '', ''));
   SetLength(Result.JobDiags, Length(AJobs));
+  SetLength(Result.JobDone, Length(AJobs));
+  // A pass is done only when no cancel came before OR during it: a cancel kills
+  // the engine mid-run, so its output is partial and must not replace any mark.
+  if not IsCancelled(ACancelled) then
+  begin
+    var LOut: string:= AValidate(AText, '', '');
+    if not IsCancelled(ACancelled) then
+    begin
+      Result.Syntax:= ParseValidateOutput(LOut);
+      Result.SyntaxDone:= True;
+      for i:= 0 to High(AJobs) do
+      begin
+        if IsCancelled(ACancelled) then
+          Break;
+        LOut:= AValidate(AText, AJobs[i].FromType, AJobs[i].ToType);
+        if IsCancelled(ACancelled) then
+          Break;
+        Result.JobDiags[i]:= DiagsForJob(ParseValidateOutput(LOut), AJobs[i]);
+        Result.JobDone[i]:= True;
+      end;
+    end;
+  end;
+  Result.Cancelled:= not Result.SyntaxDone;
   for i:= 0 to High(AJobs) do
-    Result.JobDiags[i]:= DiagsForJob(ParseValidateOutput(AValidate(AText, AJobs[i].FromType, AJobs[i].ToType)), AJobs[i]);
+    if not Result.JobDone[i] then
+    begin
+      Result.Cancelled:= True;
+      Result.NotChecked:= Result.NotChecked + [AJobs[i].FromType];
+    end;
   AddUnique(Result.Kept, Result.Syntax);
   for i:= 0 to High(Result.JobDiags) do
     AddUnique(Result.Kept, Result.JobDiags[i]);
@@ -468,7 +566,22 @@ begin
       Inc(Result.Errors);
 end; // function
 
+function CompletedVerdict(const AResult: TScopedValidation): string; forward;
+
 function ValidateVerdict(const AResult: TScopedValidation): string;
+begin
+  if not AResult.Cancelled then
+    Exit(CompletedVerdict(AResult));
+  Result:= Format('cancelled -- %d changed block(s) not checked', [Length(AResult.NotChecked)]);
+  if Length(AResult.NotChecked) > 0 then
+    Result:= Result + ': ' + string.Join(', ', AResult.NotChecked);
+  if not AResult.SyntaxDone then
+    Result:= Result + '; syntax not checked'
+  else
+    Result:= Result + '; checked so far: ' + CompletedVerdict(AResult);
+end; // function
+
+function CompletedVerdict(const AResult: TScopedValidation): string;
 var
   D: TValidateDiag;
 begin
@@ -539,10 +652,14 @@ var
   MapL: Integer     ;
   i   : Integer     ;
 begin
-  for N in ABookNodes do
-    RemoveMarks(N, True);
-  for Job in AJobs do
+  if AResult.SyntaxDone then
+    for N in ABookNodes do
+      RemoveMarks(N, True);
+  for i:= 0 to High(AJobs) do
   begin
+    if (i > High(AResult.JobDone)) or not AResult.JobDone[i] then
+      Continue; // not validated: its block keeps the marks it had
+    Job:= AJobs[i];
     for L:= Job.FirstLine to Job.LastLine do
       if (L >= 1) and (L <= Length(ALineNodes)) then
         RemoveMarks(ALineNodes[L - 1], False);

@@ -7860,6 +7860,102 @@ begin
   end;
 end;
 
+{ Cancel (the progress window's button) mid-way through a Save's passes: the TTable
+  pass completes, the TQuery pass is cancelled. The book is already on disk, so the
+  cancelled block must stay OWED: NextPending keeps its key and ChangedBlockJobs
+  returns it on the next save although it no longer differs from the snapshot. }
+procedure TestValidateScopeCancel;
+var
+  Book   : TRuleBook;
+  Src    : string   ;
+  Old    : string   ;
+  Txt    : string   ;
+  Dropped: Integer  ;
+  Map    : TArray<TRuleNode>;
+  Jobs   : TArray<TValidateJob>;
+  R      : TScopedValidation;
+  Pending: TArray<string>;
+  Calls  : Integer  ;
+  Stop   : Boolean  ;
+  Fake   : TValidateFn;
+  Cancel : TCancelledFn;
+  QMark  : TRuleMark;
+begin
+  Src:= ValidateFixture('BDE-to-FireDAC.rules');
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(Src);
+    Old:= Book.SaveCompleteToString(Dropped);
+    // Edit one link in TTable and one in TQuery: two changed blocks.
+    Book.Nodes[BDE_UNREACHABLE_LINK - 1].Raw:= Book.Nodes[BDE_UNREACHABLE_LINK - 1].Raw + ' ';
+    Book.Nodes[BDE_TQUERY_HDR].Raw:= Book.Nodes[BDE_TQUERY_HDR].Raw + ' ';
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Jobs:= ChangedBlockJobs(Old, Txt);
+    Check('validate.cancel.two.jobs', Length(Jobs) = 2, IntToStr(Length(Jobs)));
+    // A mark from an earlier save on the TQuery block must survive the cancel.
+    QMark:= Default(TRuleMark);
+    QMark.Text:= 'line 321: earlier';
+    Map[BDE_TQUERY_HDR].Marks:= [QMark];
+
+    Calls:= 0;
+    Stop := False;
+    Fake:= function(const AText, AFrom, ATo: string): string
+      begin
+        Inc(Calls);
+        if AFrom = 'Bde.DBTables.TQuery' then
+          Stop:= True; // the user presses Cancel during this pass
+        if AFrom = 'Bde.DBTables.TTable' then
+          Result:= ValidateFixture('validate-bde-ttable.txt')
+        else
+          Result:= ValidateFixture('validate-bde-syntax.txt');
+      end;
+    Cancel:= function: Boolean
+      begin
+        Result:= Stop;
+      end;
+    R:= RunScopedValidation(Txt, Jobs, Fake, Cancel);
+    Check('validate.cancel.flag', R.Cancelled and R.SyntaxDone);
+    Check('validate.cancel.done.flags', (Length(R.JobDone) = 2) and R.JobDone[0] and not R.JobDone[1]);
+    Check('validate.cancel.kept.done.only', (R.Warnings = BLOCK_UNREACHABLE) and (R.Errors = 0), Format('%d/%d', [R.Errors, R.Warnings]));
+    Check('validate.cancel.verdict', Pos('cancelled -- 1 changed block(s) not checked: Bde.DBTables.TQuery', ValidateVerdict(R)) = 1, ValidateVerdict(R));
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, Jobs, R);
+    Check('validate.cancel.marks.kept', (Length(Map[BDE_TQUERY_HDR].Marks) = 1) and (Map[BDE_TQUERY_HDR].Marks[0].Text = 'line 321: earlier'));
+    Check('validate.cancel.done.block.marked', Length(Map[BDE_UNREACHABLE_LINK - 1].Marks) = 1);
+
+    Pending:= NextPending(nil, Jobs, R);
+    Check('validate.pending.has.cancelled', (Length(Pending) = 1) and (Pending[0] = Jobs[1].Key), IntToStr(Length(Pending)));
+    // Next save: nothing changed against the NEW snapshot, but TQuery is owed.
+    Jobs:= ChangedBlockJobs(Txt, Txt, Pending);
+    Check('validate.pending.revalidated', (Length(Jobs) = 1) and (Jobs[0].FromType = 'Bde.DBTables.TQuery'), IntToStr(Length(Jobs)));
+    Stop:= False;
+    Cancel:= function: Boolean
+      begin
+        Result:= False;
+      end;
+    R:= RunScopedValidation(Txt, Jobs, Fake, Cancel);
+    Pending:= NextPending(Pending, Jobs, R);
+    Check('validate.pending.cleared', (Length(Pending) = 0) and not R.Cancelled, IntToStr(Length(Pending)));
+    Check('validate.pending.none.unchanged', Length(ChangedBlockJobs(Txt, Txt, Pending)) = 0);
+
+    // Cancelled before anything ran: no pass done, syntax marks untouched.
+    Calls:= 0;
+    Map[0].Marks:= nil;
+    QMark.FromSyntax:= True;
+    Map[0].Marks:= [QMark];
+    R:= RunScopedValidation(Txt, Jobs, Fake,
+      function: Boolean
+      begin
+        Result:= True;
+      end);
+    Check('validate.cancel.early.no.calls', (Calls = 0) and R.Cancelled and not R.SyntaxDone, IntToStr(Calls));
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, Jobs, R);
+    Check('validate.cancel.early.syntax.marks.kept', Length(Map[0].Marks) = 1);
+    Check('validate.cancel.early.verdict', Pos('syntax not checked', ValidateVerdict(R)) > 0, ValidateVerdict(R));
+  finally
+    Book.Free;
+  end;
+end;
+
 { ValidateText's Output feeds ParseValidateOutput, which reads it LINE by line. A
   merged stdout+stderr pipe interleaves the two by chunk, and on 2026-10-05 a driven
   Save showed "Validate: s, not a re-parse). (+3 more)": the tail of the engine's
@@ -7958,6 +8054,11 @@ begin
     // ...and revalidating it replaces them.
     var Clean: TScopedValidation:= Default(TScopedValidation);
     SetLength(Clean.JobDiags, Length(Jobs));
+    // Every pass completed and found nothing (a cancelled one would keep its marks).
+    Clean.SyntaxDone:= True;
+    SetLength(Clean.JobDone, Length(Jobs));
+    for var k:= 0 to High(Jobs) do
+      Clean.JobDone[k]:= True;
     ApplyValidateMarks(Book.Nodes.ToArray, Map, Jobs, Clean);
     Check('validate.marks.revalidated.cleared', Length(Map[BDE_UNREACHABLE_LINK - 1].Marks) = 0);
 
@@ -8132,6 +8233,7 @@ begin
     TestValidateScopeBlocks;
     TestValidateScopeRun;
     TestValidateTextStreams;
+    TestValidateScopeCancel;
 
     FreeAndNil(GParseBook);
 

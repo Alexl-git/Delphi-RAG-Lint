@@ -194,6 +194,11 @@ type
       FTreeLoads    : Integer         ; // > 0 while a tree load or a proptree engine call runs (depth commits wait)
       FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
       FCancelStatus : string          ; // the status text that cancel wrote; SetStatusAfterCancel keeps it while it is on screen
+      { Keys (TValidateJob.Key) of blocks whose validation a Cancel cut short. The
+        book was already saved, so they no longer differ from FSnapshot; the next
+        Save validates them anyway (ChangedBlockJobs' APending). Dropped whenever the
+        book is replaced. }
+      FValidatePending: TArray<string>;
       FCastDefs     : TArray<TCastDef>; // shipped class-cast library (.castlib)
     { The ENUM half of the same file. LoadCastLib returns only the casts, so the
       enum blocks were parsed and thrown away; the conversion catalog needs them
@@ -511,8 +516,11 @@ type
       /// engine's exit code).</param>
       /// <returns>The verdict for the status line (ConvRules.ValidateScope.ValidateVerdict).</returns>
       /// <remarks>Each engine call is a separate convert-validate run (about 0.6 s for
-      /// the syntax pass, 10-15 s per block on 2026-10-05). Blocks not in AJobs keep
-      /// their earlier marks. Refreshes the rules list's Check column and the grid.</remarks>
+      /// the syntax pass, 10-40 s per block on 2026-10-05), all behind the progress
+      /// window (FEngine.LongCallRunner). Cancel stops the running pass and every one
+      /// after it: blocks not validated keep their earlier marks and stay in
+      /// FValidatePending, so the next Save validates them. Nothing here undoes the
+      /// save or touches FSnapshot. Refreshes the rules list's Check column and the grid.</remarks>
       function RunScopedValidate(const AText: string; const ALineNodes: TArray<TRuleNode>; const AJobs: TArray<TValidateJob>; out AIsError: Boolean): string;
       /// <summary>Re-read every rules-list row's Check column from the book's marks,
       /// in place (no rebuild, so the selection and the loaded grid stay).</summary>
@@ -4325,6 +4333,7 @@ begin
     RefreshFormTypes;
   end;
   FSnapshot:= FBook.Snapshot;
+  FValidatePending:= nil; // a different book: its blocks owe nothing
 end; // procedure
 
 { The rules that convert the selected class. Retired on 2026-09-16 when the tab
@@ -6643,6 +6652,7 @@ begin
       FBook.Clear;
       RefreshDepthControl; // bypasses LoadText: the combo still shows the OLD book's depth otherwise
       FSnapshot:= FBook.Snapshot; // the new book starts clean: only the rule about to be added makes it dirty
+      FValidatePending:= nil;
       FFilePath:= NewPath;
       FLblFile.Caption:= NewPath;
       FActiveHdr:= -1;
@@ -6859,13 +6869,43 @@ end; // procedure
 
 function TConvRulesForm.RunScopedValidate(const AText: string; const ALineNodes: TArray<TRuleNode>; const AJobs: TArray<TValidateJob>; out AIsError: Boolean): string;
 var
-  R: TScopedValidation;
+  R   : TScopedValidation;
+  Work: TStreamingWork   ;
 begin
-  R:= RunScopedValidation(AText, AJobs,
-    function(const AValidated, AFrom, ATo: string): string
+  R:= Default(TScopedValidation);
+  // Every pass runs on the progress window's worker: the window appears after
+  // SHOW_DELAY_MS and its Cancel stops the running engine call and every pass
+  // after it. The runner (set in Create) counts FTreeLoads, so a pending depth
+  // commit cannot fire inside the window's message pump.
+  Work:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
     begin
-      Result:= FEngine.ValidateText(AValidated, AFrom, ATo).Output;
-    end);
+      R:= RunScopedValidation(AText, AJobs,
+        function(const AValidated, AFrom, ATo: string): string
+        begin
+          Result:= FEngine.ValidateText(AValidated, AFrom, ATo, ACancel).Output;
+        end,
+        function: Boolean
+        begin
+          Result:= (ACancel <> nil) and ACancel.IsCancelled;
+        end);
+      Result:= 0;
+    end;
+  try
+    if Assigned(FEngine.LongCallRunner) then
+      FEngine.LongCallRunner(Format('Validating the book (syntax + %d changed rule block(s))', [Length(AJobs)]), Work)
+    else
+      Work(nil, nil);
+  except
+    // The book is already on disk: a failed validation is a report, never a
+    // reason to unwind the save. Nothing completed, so every mark stays.
+    on E: Exception do
+    begin
+      AIsError:= True;
+      FValidatePending:= NextPending(FValidatePending, AJobs, Default(TScopedValidation));
+      Exit('failed: ' + E.Message);
+    end;
+  end; // try
+  FValidatePending:= NextPending(FValidatePending, AJobs, R);
   ApplyValidateMarks(FBook.Nodes.ToArray, ALineNodes, AJobs, R);
   RefreshRuleMarks;
   FGrid.Invalidate;
@@ -7115,7 +7155,7 @@ begin
     if dropped > 0 then
       droppedMsg:= Format(' (%d empty rule(s) not saved)', [dropped]);
     var isError: Boolean;
-    var verdict: string:= RunScopedValidate(outText, lineNodes, ChangedBlockJobs(FSnapshot, outText), isError);
+    var verdict: string:= RunScopedValidate(outText, lineNodes, ChangedBlockJobs(FSnapshot, outText, FValidatePending), isError);
     var LSaveText: string:= Format('Saved %s (backup %s)%s. Validate: %s', [ExtractFileName(FFilePath), ExtractFileName(Bak), droppedMsg, verdict]);
     if isError then
       SetError(LSaveText)

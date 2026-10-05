@@ -1,4 +1,5 @@
-# Driven GUI check for scoped validation on Save (fix/validate-edited-blocks, 2026-10-05).
+# Driven GUI check for scoped validation on Save (fix/validate-edited-blocks, 2026-10-05):
+# the progress window and its Cancel, the owed block revalidated on the next Save.
 # A Save validates the syntax of the whole book plus each CHANGED #convert block with
 # its OWN From/To pair, and the status line reports the warnings the engine prints
 # (an unreachable member never changes convert-validate's exit code, so the old Save,
@@ -247,32 +248,45 @@ try {
   $s = WaitStatus $main 'set and auto-matched|cancelled|not indexed' $SLOW_SEC
   Check 'newconv.done' ($s -match 'set and auto-matched') $s
 
-  # Save: the syntax pass + the ONE changed block with its own pair.
+  # Save 1, CANCELLED: the pair pass of the one changed block is slow (10-40 s), so
+  # the progress window appears; Cancel stops it. The book is on disk regardless.
   [IO.File]::SetLastWriteTimeUtc($book, [DateTime]::UtcNow.AddHours(-2))
-  $t0 = Get-Date
-  Check 'save.invoke' ([W]::InvokeMenu($main, 'File|Save'))
-  $s = WaitStatus $main 'Validate:' 300
-  $secs = [math]::Round(((Get-Date) - $t0).TotalSeconds, 1)
+  Check 'save1.invoke' ([W]::InvokeMenu($main, 'File|Save'))
+  $dlg = WaitCls $p.Id 'TEngineWaitForm' 60
+  Check 'save1.window.appears' ($dlg -ne [IntPtr]::Zero) (TopsNow $p.Id)
+  Start-Sleep -Seconds 3 # past the ~0.6 s syntax pass, into the block's pair pass
+  if ($dlg -ne [IntPtr]::Zero) { $btn = @(Find $dlg 'TButton' 'Cancel'); if ($btn.Count -gt 0) { Click $btn[0] } }
+  $t0 = Get-Date; while ((@([W]::Tops($p.Id)) -contains $dlg) -and ((Get-Date) - $t0).TotalSeconds -lt 30) { Start-Sleep -Milliseconds 200 }
+  Check 'save1.cancel.closes' (-not (@([W]::Tops($p.Id)) -contains $dlg)) (TopsNow $p.Id)
+  $s = WaitStatus $main 'Validate: cancelled' 60
+  Check 'save1.status.cancelled' ($s -match '^Saved Fix\.rules .*Validate: cancelled -- 1 changed block\(s\) not checked: Bde\.DBTables\.TTable') $s
   $txt = [IO.File]::ReadAllText($book)
   # Positive control: without an unreachable link the warning check proves nothing.
-  Check 'save.has.unreachable.link' ($txt -match '(?m)^#link FieldOptions\.') ("FieldOptions links: " + ([regex]::Matches($txt, '(?m)^#link FieldOptions\.')).Count)
-  Check 'save.status.saved' ($s -match '^Saved Fix\.rules') $s
-  $m = [regex]::Match($s, 'Validate: OK, (\d+) warning\(s\) -- see marked rules')
-  Check 'save.status.warning.count' ($m.Success -and [int]$m.Groups[1].Value -ge 1) "$s  [$secs s]"
+  Check 'save1.wrote.unreachable.link' ($txt -match '(?m)^#link FieldOptions\.') ("FieldOptions links: " + ([regex]::Matches($txt, '(?m)^#link FieldOptions\.')).Count)
 
-  # Save again, nothing changed: syntax pass only -- no block is revalidated, so it
-  # is fast and reports no new diagnostics (the marks from the first save stay).
+  # Save 2: the block is unchanged against the new snapshot but still OWED, so it
+  # is validated now, with its own pair.
+  $t0 = Get-Date
+  Check 'save2.invoke' ([W]::InvokeMenu($main, 'File|Save'))
+  $s = WaitStatus $main 'Validate: OK, \d+ warning' 300
+  $secs = [math]::Round(((Get-Date) - $t0).TotalSeconds, 1)
+  Check 'save2.status.saved' ($s -match '^Saved Fix\.rules') $s
+  $m = [regex]::Match($s, 'Validate: OK, (\d+) warning\(s\) -- see marked rules')
+  Check 'save2.revalidates.cancelled.block' ($m.Success -and [int]$m.Groups[1].Value -ge 1) "$s  [$secs s]"
+
+  # Save 3, nothing changed or owed: syntax pass only -- fast, and no new diagnostics
+  # (the marks from save 2 stay).
   $t0 = Get-Date
   Check 'resave.invoke' ([W]::InvokeMenu($main, 'File|Save'))
   $s2 = WaitStatus $main 'Validate: OK$' 120
   $secs2 = [math]::Round(((Get-Date) - $t0).TotalSeconds, 1)
   Check 'resave.unchanged.ok' ($s2 -match 'Validate: OK$') "$s2  [$secs2 s]"
-  Check 'resave.unchanged.fast' ($secs2 -lt $secs) "first $secs s, unchanged $secs2 s"
+  Check 'resave.unchanged.fast' ($secs2 -lt $secs) "owed $secs s, unchanged $secs2 s"
 
+  # A cancelled validation never made the book dirty: Exit asks nothing.
   [void][W]::InvokeMenu($main, 'File|Exit')
-  Start-Sleep -Milliseconds 500
-  Answer $p.Id '&No' | Out-Null
-} finally {
+  $prompt = WaitCls $p.Id 'TMessageForm' 3
+  Check 'exit.no.prompt' (($prompt -eq [IntPtr]::Zero) -and $p.WaitForExit(10000)) (TopsNow $p.Id)} finally {
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
   [IO.Directory]::Delete($tmp, $true)
 }

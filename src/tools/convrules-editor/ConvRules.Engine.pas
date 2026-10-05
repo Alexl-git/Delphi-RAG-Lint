@@ -878,6 +878,8 @@ type
       /// <param name="AFrom">From type; with ATo, every #convert block is checked
       /// against this ONE pair. '' (both) = syntax only.</param>
       /// <param name="ATo">To type; see AFrom.</param>
+      /// <param name="ACancel">When set, the engine run is terminated (Output is then
+      /// partial; callers must discard it); nil = not cancellable.</param>
       /// <returns>OK = exit code 0, FirstError = the first output line on failure, and
       /// Output = the whole reply for ConvRules.ValidateScope, which decides on the
       /// diagnostics rather than the exit code.</returns>
@@ -896,7 +898,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function ValidateText(const ARulesText, AFrom, ATo: string): TValidateResult;
+      function ValidateText(const ARulesText, AFrom, ATo: string; const ACancel: TCancelToken = nil): TValidateResult;
 
       /// <summary>Every class the unit declares, from the engine's `outline`.</summary>
       /// <param name="APasFile">Full path to the .pas.</param>
@@ -2644,7 +2646,7 @@ begin
   Result:= True;
 end; // function
 
-function TEngineAdapter.ValidateText(const ARulesText, AFrom, ATo: string): TValidateResult;
+function TEngineAdapter.ValidateText(const ARulesText, AFrom, ATo: string; const ACancel: TCancelToken): TValidateResult;
 var
   Tmp   : string     ;
   Output: string     ;
@@ -2667,7 +2669,7 @@ begin
     // line, and a merged pipe interleaves stdout and stderr by CHUNK -- a driven Save
     // showed the tail of stderr's "resolver: ..." advisory, cut off from its head,
     // parsed as an error. RunCaptureStreaming puts whole stderr lines after stdout.
-    Code:= RunCaptureStreaming(Args, ENGINE_TIMEOUT_MS, nil, nil, Output);
+    Code:= RunCaptureStreaming(Args, ENGINE_TIMEOUT_MS, nil, ACancel, Output);
     Result.Output:= Output;
     Result.OK:= Code = 0;
     if not Result.OK then
