@@ -2141,9 +2141,12 @@ type
       /// dismissed list (Esc, focus loss while open) cancels the pending pick. A SELENDCANCEL with
       /// the list closed (every focus loss) is ignored; CBN_SETFOCUS clears a stale cancel.</summary>
       /// <param name="AMsg">The message; always passed on to the combo's own WindowProc.</param>
+      /// <remarks>FDepthDropped is cleared after CBN_CLOSEUP in a finally, so an exception
+      /// from the close-up's commit cannot leave it set.</remarks>
       procedure DepthComboWndProc(var AMsg: TMessage);
       /// <summary>True while committing a depth pick would run inside another operation:
-      /// a tree load or proptree call, or any modal window or dialog.</summary>
+      /// a tree load or proptree call, a main-menu loop (FMenuOpen) or a popup / system
+      /// menu loop (InMenuLoop), or any modal window or dialog.</summary>
       /// <returns>True = defer the commit.</returns>
       function DepthCommitBlocked: Boolean;
       /// <summary>Commits a pending depth pick NOW (DepthChanged, one reload), so the
@@ -6083,9 +6086,14 @@ begin
       if FDepthDropped then
         FDepthCancelled:= True;
   end; // case
-  FDepthComboWndProc(AMsg); // CBN_CLOSEUP reaches DepthComboCloseUp in here
-  if LCode = CBN_CLOSEUP then
-    FDepthDropped:= False;
+  try
+    FDepthComboWndProc(AMsg); // CBN_CLOSEUP reaches DepthComboCloseUp in here
+  finally
+    // Even when the close-up's commit raises (DepthChanged -> LoadGridForBlock): a
+    // flag left set would turn every later focus loss into a cancel.
+    if LCode = CBN_CLOSEUP then
+      FDepthDropped:= False;
+  end;
 end;
 
 function TConvRulesForm.DepthCommitBlocked: Boolean;
