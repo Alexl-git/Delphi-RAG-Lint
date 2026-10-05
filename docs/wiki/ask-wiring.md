@@ -6,6 +6,8 @@
 
 **Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
 
+From RAD Studio: *drag-lint > Reports > Who registers and resolves this interface...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
+
 ```
 drag-lint ask --question wiring --at <file.pas>:<line>:<col> --db <project.sqlite>
 ```

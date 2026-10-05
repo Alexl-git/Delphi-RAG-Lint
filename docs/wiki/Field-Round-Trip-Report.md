@@ -27,11 +27,25 @@ so the trace stops and lists them. Pass the grid column (above) instead.
 
 ## Inside RAD Studio -- what exists today
 
-**There is no drag-lint menu command that runs a chart question yet** (the
-engine `ask` verb is planned). The IDE takes part in two ways:
+**The drag-lint menu runs every chart question: *drag-lint > Reports*** (see
+[IDE Menu Reference](IDE-Menu-Reference#reports)). For this report: put the
+caret on the grid column's declaration or any use of it
+(`dxDBGrid1OperationVName` in `Blueprint4.pas`), then *drag-lint > Reports >
+Field round-trip (grid -> server -> SQL)...*. The plugin resolves the caret,
+rewrites `Blueprint4.TfrmBlueprint4.dxDBGrid1OperationVName` to
+`frmBlueprint4.dxDBGrid1OperationVName` from the DFM, shows it in a prompt, and
+runs `Ask-Report.ps1` in the background. The trace opens in your browser, and
+the text comes back as a DocInsight block on the clipboard and in a small
+window. The picture is *Reports > Callers and callees (butterfly chart)...* with
+the caret on `SendDeltaOperation`. (The engine `ask` verb is still planned; the
+menu runs the same scripts as the terminal form below.)
 
-1. **You can launch the report from the IDE** with RAD Studio's own *Tools >
-   Configure Tools* entry -- set up once, below. No plugin change is needed.
+The IDE takes part in two more ways:
+
+1. **The Tools-entry fallback**: RAD Studio's own *Tools > Configure Tools*
+   entry, set up once below, runs the same command with a typed target. Use it
+   where the plugin is not installed, or to keep the console open with
+   `-NoExit`.
 2. **The report jumps back into the IDE**: every `@File.pas:line` in the page is
    a `draglint://` link; a click opens that file at that line in the running
    IDE (needs the drag-lint plugin loaded and the link handler registered).
@@ -157,7 +171,8 @@ and column.
 
 ## Not yet
 
-* A drag-lint menu command (and an engine `ask` verb) that runs a question
-  without the Tools-entry setup.
+* An engine `ask` verb. The *drag-lint > Reports* menu exists (it runs
+  `Ask-Report.ps1`, so it still needs a repository clone and PowerShell 7);
+  the Tools entries above remain the fallback without the plugin.
 * `round-trip` as a picture; today it is text.
 * A Graphviz location setting for the chart scripts.

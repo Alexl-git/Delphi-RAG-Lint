@@ -67,6 +67,93 @@ Everything about what a unit depends on and what depends on it.
 | **Reverse Call Tree (clickable, Messages window)...** *(index)* | The same tree in the IDE Messages window, so each line navigates. |
 | **Call Graph (Butterfly)...** *(index)* | Callers and callees of one symbol together -- the butterfly view. |
 
+## Reports
+
+Every report question of the chart pipeline (`charts\src\Ask-Report.ps1`), asked
+from the IDE. Grouped by what you select; every item needs a current **(index)**.
+
+What a click does:
+
+1. **Picks the target.** For the caret groups, if the active unit has unsaved
+   changes you are asked *Save all first?* (*Cancel* stops -- an unsaved buffer
+   may not match the indexed line numbers). The caret is then resolved with
+   `drag-lint typeat` to a qualified name (the bare identifier if it cannot be
+   resolved). For a form control, `Unit.TForm.Control` is rewritten to the
+   `<FormInstance>.<Control>` form the control questions take, read from the
+   unit's DFM. The target is shown in an editable prompt before anything runs.
+   *This project* items need no target; the *table or column* items prompt for
+   a name.
+2. **Runs in the background** through the plugin's job queue (the status bar
+   shows it), as `pwsh -File Ask-Report.ps1 ... -In <active file> -Open`.
+   Needs PowerShell 7 and the repository's `charts\src` two folders above the
+   engine exe; if either is missing the item says so.
+3. **Answers twice.** Charts open in your browser. The text answer is turned
+   into a DocInsight `/// <remarks>` block -- 7-bit ASCII, wrapped under 100
+   columns, `File.pas:line` anchors in parentheses, "+N more ... not shown" kept
+   -- copied to the clipboard and shown in a small window with a *Copy* button.
+   Paste it above the declaration it describes: it carries no autodoc marker,
+   so Auto Doc leaves it alone.
+
+If the question is refused (exit 1) or the indexes cannot be resolved (exit 2)
+you see the script's reason. If an index is **stale** (exit 3) you see the
+reindex command and are offered to run it as the background incremental index
+job; ask again when it finishes.
+
+**Routine at the cursor**
+
+| Item | Question |
+|---|---|
+| **Callers and callees (butterfly chart)...** | [butterfly](ask-butterfly) |
+| **Who calls this routine...** | [who-calls](ask-who-calls) |
+| **What this routine calls...** | [what-it-calls](ask-what-it-calls) |
+| **What this routine changes (side effects)...** | [effects](ask-effects) |
+| **Which tables this routine touches...** | [touches-tables](ask-touches-tables) |
+| **Which exceptions escape this routine...** | [exception-paths](ask-exception-paths) |
+| **Does this routine leave the process...** | [crosses-boundary](ask-crosses-boundary) |
+| **Where this protocol command travels...** | [protocol-trace](ask-protocol-trace) |
+| **What a change here would break...** | [change-impact](ask-change-impact) |
+| **Which tests reach this code...** | [tested-by](ask-tested-by) |
+
+**Field, property or grid column at the cursor**
+
+| Item | Question |
+|---|---|
+| **Who writes this field...** | [who-writes](ask-who-writes) |
+| **Who reads this field...** | [who-reads](ask-who-reads) |
+| **What feeds this control (back to the column)...** | [feeds-from](ask-feeds-from) |
+| **Where this field lands in the database...** | [lands-where](ask-lands-where) |
+| **Field round-trip (grid -> server -> SQL)...** | `round-trip` -- see [Field Round-Trip Report](Field-Round-Trip-Report) |
+
+**Type at the cursor**
+
+| Item | Question |
+|---|---|
+| **What this type exposes (class surface)...** | [class-surface](ask-class-surface) |
+| **Ancestors and descendants (hierarchy)...** | [hierarchy](ask-hierarchy) |
+| **Who registers and resolves this interface...** | [wiring](ask-wiring) |
+| **Which handler runs on which event (form)...** | [event-wiring](ask-event-wiring) |
+| **Form lifecycle (create -> show -> destroy)...** | [lifecycle](ask-lifecycle) |
+
+**This unit**
+
+| Item | Question |
+|---|---|
+| **Dependencies of this unit...** | [deps](ask-deps) -- the target is pre-filled with the active unit's name |
+
+**This project**
+
+| Item | Question |
+|---|---|
+| **Project architecture (layered zones)...** | [architecture](ask-architecture) |
+| **Circular unit dependencies...** | [cycles](ask-cycles) |
+
+**Table or column (typed name)**
+
+| Item | Question |
+|---|---|
+| **Who uses this table or column...** | [consumers](ask-consumers) |
+| **Where this database column is shown...** | [shown-where](ask-shown-where) |
+
 ## Inspect Symbol
 
 | Item | What it does |

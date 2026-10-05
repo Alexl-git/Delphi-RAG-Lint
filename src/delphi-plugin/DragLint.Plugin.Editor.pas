@@ -253,6 +253,7 @@ uses
   , DragLint.Plugin.ProcRun
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.Reports
   ;
 
 { ---- PluginBuildTag ---- }
@@ -6246,6 +6247,28 @@ begin
   AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...'                 , InvokeReconcileProject);
   AddWrappedItem(SubUses, 'Uses Report (CSV)...'                                       , InvokeUsesReportCsv   );
   AddWrappedItem(SubUses, 'Dependency Report (third-party rollup)...'                  , InvokeDepsReport      );
+
+  { Reports submenu (2026-10-05): every Ask-Report.ps1 question, grouped by
+    what the user selects. DragLint.Plugin.Reports owns the catalog and the
+    runner; the items are still created HERE, through AddWrappedItem /
+    AddSeparator / AddSectionHeader, so GMenuItems and GWrappers stay the one
+    owner and the one teardown path for every drag-lint menu item. }
+  var SubReports: TMenuItem:= TMenuItem.Create(RootMenu);
+  SubReports.Caption:= 'Reports';
+  RootMenu.Add(SubReports);
+  BuildReportsMenu(SubReports,
+    function(AParent: TMenuItem; const ACaption: string): TMenuItem
+    begin
+      Result:= AddWrappedItem(AParent, ACaption, InvokeReportQuestion);
+    end,
+    procedure(AParent: TMenuItem)
+    begin
+      AddSeparator(AParent);
+    end,
+    procedure(AParent: TMenuItem; const ACaption: string)
+    begin
+      AddSectionHeader(AParent, ACaption);
+    end);
 
   { v0.46: Inspect Symbol submenu }
   var SubInspect: TMenuItem:= TMenuItem.Create(RootMenu);
