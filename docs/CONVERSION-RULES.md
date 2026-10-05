@@ -581,7 +581,11 @@ Some units `convert-apply` will not touch at all, because no safe rewrite
 exists: a `.dfm` holding an `inherited`/`inline` object of a From type
 (`inherited instances of <Type> are not converted yet -- unit not changed`), and
 a unit whose uses entry to change sits in a `{$IF...}` region (the message
-names the entry and the clause). Every such refusal behaves the same way: exit
+names the entry and the clause), and a `.dfm` that changed after indexing: the
+line range the index recorded for an instance no longer opens `object <Name>:`
+(or `inherited`/`inline`) or no longer ends at its `end`
+(`<Name>: index is stale for this .dfm -- reindex`; reindex and run again).
+Every such refusal behaves the same way: exit
 1, NOTHING written (neither `.pas` nor `.dfm`), one text line
 `REFUSED: <reason>`, and in `apply/1` JSON `"ok": false`, `"refused": true`,
 `"reason": "<reason>"` (`error` holds the same text). `refused` (a JSON bool)

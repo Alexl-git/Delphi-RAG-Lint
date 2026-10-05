@@ -1357,6 +1357,39 @@ begin
   Result:= Copy(ALine, 1, i - 1);
 end;
 
+/// <summary>Reports whether the .dfm lines [AStart..AEnd] (1-based, inclusive) still hold the
+/// object block of the named instance.</summary>
+/// <param name="ADfmLines">The .dfm as it is on disk now, one entry per line.</param>
+/// <param name="AStart">First line of the span, as the index recorded it.</param>
+/// <param name="AEnd">Last line of the span, as the index recorded it.</param>
+/// <param name="AInstanceName">Name of the instance the span must open with.</param>
+/// <returns>True when line AStart opens `object`, `inherited` or `inline` followed by
+/// AInstanceName and a colon, and line AEnd is an `end` at the same indentation. False
+/// when the .dfm changed after indexing, so the recorded span no longer holds it.</returns>
+/// <remarks>Both lines must be in range. The check is deliberately shallow: it catches a line
+/// added or removed above or inside the block without re-parsing the block.</remarks>
+function DfmSpanHoldsInstance(const ADfmLines: TArray<string>; AStart, AEnd: Integer;
+  const AInstanceName: string): Boolean;
+const
+  Openers: array[0..2] of string = ('object ', 'inherited ', 'inline ');
+var
+  First, Opener, Rest: string;
+begin
+  Result:= False;
+  First:= ADfmLines[AStart - 1].TrimLeft;
+  for Opener in Openers do
+    if First.StartsWith(Opener, True) then
+    begin
+      Rest:= First.Substring(Length(Opener)).TrimLeft;
+      Result:= Rest.StartsWith(AInstanceName, True) and
+               Rest.Substring(Length(AInstanceName)).TrimLeft.StartsWith(':');
+      Break;
+    end;
+  if Result then
+    Result:= SameText(ADfmLines[AEnd - 1].Trim, 'end') and
+             (LeadingIndent(ADfmLines[AEnd - 1]) = LeadingIndent(ADfmLines[AStart - 1]));
+end;
+
 // Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
 // output, trailing CRLF trimmed) with AIndent, so the replacement block lands
 // at the same indentation depth as the original.
@@ -2259,6 +2292,7 @@ begin
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
 
+    var StaleDfm: string:= '';
     for Inst in Instances do
     begin
       { -- surface #3 FIRST: the .dfm object-block re-emit. A hard re-emit
@@ -2332,6 +2366,14 @@ begin
         Continue;
       end;
 
+      { the span came from the index; if the .dfm moved on since, splicing would
+        delete the wrong lines -- refuse the unit whole (see StaleDfm below) }
+      if not DfmSpanHoldsInstance(DfmLines, BlockStart, BlockEnd, Inst.InstanceName) then
+      begin
+        StaleDfm:= Format('%s: index is stale for this .dfm -- reindex', [Inst.InstanceName]);
+        Break;
+      end;
+
       var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
       var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ABook.Rules, ATrees.ClassFor(Inst.FromType),
         ATrees.ClassFor(Inst.ToType), ACastLib, ABook.Unreachable);
@@ -2383,7 +2425,15 @@ begin
 
     PlanAccessSites;
     var UsesPlan: TUsesPlan;
-    PlanUsesAdditions(UsesPlan);
+    { a stale .dfm span is folded into the uses-plan refusal below, so
+      BuildApplyPlan keeps one exit for it }
+    if StaleDfm <> '' then
+    begin
+      UsesPlan.Ok     := False;
+      UsesPlan.Refused:= True;
+      UsesPlan.Error  := StaleDfm;
+    end
+    else PlanUsesAdditions(UsesPlan);
     { a unit the unit rules refuse (a conditional entry) is refused WHOLE --
       its #convert edits included -- so nothing is half-applied }
     if not UsesPlan.Ok then
