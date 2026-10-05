@@ -344,6 +344,34 @@ $decOut = ((& $Exe convert-validate --rules $decFile 2>&1) -join "`n")
 $decExit = $LASTEXITCODE
 Check 'declared #apply exits 0 (control)' ($decExit -eq 0) "exit=$decExit; out=$decOut"
 
+# R27 (1.20.6 fix wave): a From-only header -- '#convert TButton -> ' with the
+# trailing space and no To, the form the editor writes while authoring -- used
+# to lose its trailing space to the line trim, so ' -> ' never matched and the
+# engine read FromType = 'TButton ->'. It is a normal line-N parse error now,
+# and 'TButton ->' never appears as a type anywhere.
+$foFile = Join-Path $WorkDir 'from-only.rules'
+[IO.File]::WriteAllText($foFile, "#convert TButton -> `r`n#link Caption <- Caption`r`n", [Text.Encoding]::ASCII)
+$foOut = ((& $Exe convert-validate --rules $foFile 2>$null) -join "`n")
+$foExit = $LASTEXITCODE
+Check 'R27a From-only #convert: exit 1 with "line 1: #convert TButton has no To type"' `
+  (($foExit -eq 1) -and ($foOut -match '(?m)^line 1: #convert TButton has no To type\r?$')) "exit=$foExit; out=$foOut"
+Check 'R27b From-only #convert: no "TButton ->" anywhere in the output' (-not ($foOut -match 'TButton ->')) "out=$foOut"
+$foParsed = ((& $Exe convert-validate --rules $foFile --print-parsed 2>$null) -join "`n")
+Check 'R27c --print-parsed: From is TButton, never "TButton ->"' (-not ($foParsed -match 'TButton ->\s*->')) "out=$foParsed"
+$usFile = Join-Path $WorkDir 'useswap-only.rules'
+[IO.File]::WriteAllText($usFile, "#useswap OldU -> `r`n", [Text.Encoding]::ASCII)
+$usOut = ((& $Exe convert-validate --rules $usFile 2>$null) -join "`n")
+$usExit = $LASTEXITCODE
+Check 'R27d #useswap with no New: exit 1 with "line 1: #useswap OldU has no replacement unit"' `
+  (($usExit -eq 1) -and ($usOut -match '(?m)^line 1: #useswap OldU has no replacement unit\r?$')) "exit=$usExit; out=$usOut"
+Check 'R27e #useswap with no New: no "OldU ->" anywhere in the output' (-not ($usOut -match 'OldU ->')) "out=$usOut"
+$okFile = Join-Path $WorkDir 'convert-normal.rules'
+[IO.File]::WriteAllText($okFile, "#convert A -> B`r`n#link Caption <- Caption`r`n#useswap OldU -> NewU`r`n", [Text.Encoding]::ASCII)
+$okOut = ((& $Exe convert-validate --rules $okFile --print-parsed 2>$null) -join "`n")
+$okExit = $LASTEXITCODE
+Check 'R27f control: a normal #convert A -> B and #useswap OldU -> NewU parse unchanged (exit 0)' `
+  (($okExit -eq 0) -and ($okOut -match '(?m)^line 1: convert A -> B\r?$') -and ($okOut -match '(?m)^line 3: useswap OldU -> NewU\s*$')) "exit=$okExit; out=$okOut"
+
 # A bare '#mapping Name' counts as a declaration: the editor emits that shape
 # while a rule is being authored, and rejecting it would fail the round-trip.
 $bareFile = Join-Path $WorkDir 'mapping-baredecl.rules'

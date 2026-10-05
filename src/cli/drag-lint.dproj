@@ -217,6 +217,7 @@
         <DCCReference Include="..\report\DRagLint.Report.RCallTree.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.CyclePlan.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.PropTree.pas"/>
+        <DCCReference Include="..\report\DRagLint.Convert.PropCache.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.Rules.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.CastLib.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.GlyphExpr.pas"/>
@@ -225,6 +226,7 @@
         <DCCReference Include="..\report\DRagLint.Convert.DfmReemit.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.Apply.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.Backup.pas"/>
+        <DCCReference Include="..\report\DRagLint.Convert.UnitRules.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

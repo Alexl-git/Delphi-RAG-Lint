@@ -148,16 +148,16 @@ type
     /// That is what TDocFactsRenderOptions is for.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DeclIndentWidth, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody (+28 more)</para>
+    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveIndentWidth, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody (+28 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 61 (cyclomatic, outer body), 569 lines (full implementation)</para>
+    /// <para>Complexity: 59 (cyclomatic, outer body), 573 lines (full implementation)</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
-    /// <seealso cref="DRagLint.Doc.Drift.DeclIndentWidth"/>
     /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>
+    /// <seealso cref="DRagLint.Doc.Drift.EffectiveIndentWidth"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -285,11 +285,12 @@ const
 // stripped (the doc scanner keeps what follows the slashes, leading blank
 // included), so the physical width is rebuilt as AIndent + '///' + the raw
 // line, AIndent being the width of the declaration LINE's leading whitespace --
-// the prefix the renderer writes a managed block with (Document.DeclIndent).
+// the prefix the renderer writes a managed block with (Facts.EffectiveDocIndent:
+// the declaration's indent, or a deeper block's own indent when it sits directly
+// on its declaration -- v(1.20.6 T5)).
 // NOT the symbol's column: `type TC = class end;` has its name at column 6 and
 // an indent of 0, and measuring at the column made a wrapped line of 996..1000
-// read as drift that no rewrite could clear. A hand-indented block that
-// differs is measured at the declaration's indent.
+// read as drift that no rewrite could clear.
 //
 // A single blank-free token longer than the budget cannot be wrapped, so a line
 // holding one would stay drift after every rewrite; rendered entries always
@@ -343,22 +344,55 @@ begin
   Result:= Trim(ReadDeclLineRaw(AFilePath, ALine));
 end;
 
-// v(1.20.5 final review): the width of the leading whitespace of the 1-based
-// ALine of AFilePath -- the indent the renderer builds every /// line of that
-// declaration from. Same rule as Document.DeclIndent: spaces and tabs only,
-// each one character, and a blank or unreadable line answers 0. DeclIndent is
-// implementation-only in a unit this one does not use, and works on a source
-// string rather than a path, so it is mirrored here rather than exported.
-function DeclIndentWidth(const AFilePath: string; ALine: Integer): Integer;
+// v(1.20.6 T5): the lines of AFilePath, for the indent decision. Drift asks once
+// per documented symbol, all within one file at a time, so ONE entry is cached
+// per thread. The key is path + size + last-write time, re-checked on every
+// call (a stat, not a read): a file edited between runs -- or by a document
+// --apply earlier in the same process -- misses and is re-read, so the cache
+// cannot serve a stale answer and needs no explicit invalidation. Unreadable
+// answers nil (and is not cached), and the caller reads that as width 0.
+threadvar
+  GLinesPath : string;
+  GLinesSize : Int64;
+  GLinesStamp: Int64;
+  GLines     : TArray<string>;
+
+function FileLinesCached(const AFilePath: string): TArray<string>;
 var
-  L: string;
+  Size : Int64;
+  Stamp: Int64;
 begin
-  L:= ReadDeclLineRaw(AFilePath, ALine);
-  if Trim(L) = '' then Exit(0);
-  Result:= 0;
-  while (Result < Length(L)) and CharInSet(L[Result + 1], [' ', #9]) do Inc(Result);
+  Result:= nil;
+  if (AFilePath = '') or (not TFile.Exists(AFilePath)) then Exit;
+  try
+    Stamp:= Round(TFile.GetLastWriteTime(AFilePath) * MSecsPerDay);
+    Size := TFile.GetSize(AFilePath);
+    if (GLines = nil) or (GLinesPath <> AFilePath) or (GLinesSize <> Size) or (GLinesStamp <> Stamp) then
+    begin
+      GLines     := TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+      GLinesPath := AFilePath;
+      GLinesSize := Size;
+      GLinesStamp:= Stamp;
+    end;
+    Result:= GLines;
+  except  // fail safe by design: a locked, missing or undecodable file has no indent to measure and answers width 0, exactly as the pre-1.20.6 ReadDeclLineRaw swallowed every read error. Drift must never crash on a file it cannot read
+    on Exception do
+    begin
+      GLines:= nil;
+      Result:= nil;
+    end;
+  end;
 end;
 
+// v(1.20.6 T5): the width of the indent the renderer builds every /// line of
+// the block from -- Facts.EffectiveDocIndent, the one decision the writer
+// (Document.BuildForSymbol) shares. An unreadable file answers 0.
+function EffectiveIndentWidth(const AFilePath: string; ADeclLine, ADocStart, ADocEnd: Integer): Integer;
+begin
+  Result:= 0;
+  if ADeclLine <= 0 then Exit;
+  Result:= Length(EffectiveDocIndent(FileLinesCached(AFilePath), ADeclLine, ADocStart, ADocEnd));
+end;
 // Returns the effective signature text for ASym: the indexed Signature, or a
 // source-line read at the declaration when the index did not capture it (the
 // same fallback DocStub / Documenter use).
@@ -1142,10 +1176,14 @@ begin
       // column is never less than that indent, so it is the cheap bound that
       // decides whether the file needs reading at all (an unknown column
       // always reads it).
+      //
+      // v(1.20.6 T5): the indent is Facts.EffectiveDocIndent, the SAME decision
+      // the writer makes -- a block directly on its declaration and deeper than
+      // it keeps its own indent, so the declaration's column is no longer a
+      // bound on it and the file is always read.
       var TooLong: Boolean:=
-        ((ASym.StartCol <= 0) or StoredFactLineTooLong(ADoc.RawBlock, ASym.StartCol - 1))
-        and StoredFactLineTooLong(ADoc.RawBlock,
-              DeclIndentWidth(AStore.GetFilePath(ASym.FileId), ASym.StartLine));
+        StoredFactLineTooLong(ADoc.RawBlock,
+          EffectiveIndentWidth(AStore.GetFilePath(ASym.FileId), ASym.StartLine, ADoc.StartLine, ADoc.EndLine));
       if TooLong or TSharedFacts.BlockDrifted(CurBlock, Fresh, AStore,
            AStore.GetFilePath(ASym.FileId)) then
       begin

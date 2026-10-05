@@ -217,12 +217,14 @@ uses
   , DRagLint.Report    .RCallTree
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
   , DRagLint.Convert   .PropTree
+  , DRagLint.Convert   .PropCache
   , DRagLint.Convert   .Rules
   , DRagLint.Convert   .CastLib
   , DRagLint.Convert   .GlyphVacuum
   , DRagLint.Convert   .DfmReemit
   , DRagLint.Convert   .Apply
   , DRagLint.Convert   .Backup
+  , DRagLint.Convert   .UnitRules
   , DRagLint.Query     .Callers    { v(hover bundle): shared with the LSP -- find-callers renders from it }
   , DRagLint.Query     .HoverModel { v(hover bundle): shared with the LSP -- hover --format json builds from it }
   ;
@@ -334,6 +336,18 @@ type
     Docs: TDocConfig;
     // v0.17: blast-radius pack
     Depth         : Integer;
+    // 1.20.6 (T2d): --depth was given at all, and its raw text. proptree and
+    // convert-scaffold need both: Depth alone cannot tell "--depth 3" from the
+    // parse default 3, nor "--depth x" from a number (see ResolveTreeDepth).
+    DepthGiven    : Boolean;
+    DepthRaw      : string ;
+    // 1.20.6 (T2e): --progress-interval S was given, and its raw text (not
+    // given = 0 = off).
+    // Parsed only for proptree / convert-scaffold (any other verb rejects the
+    // flag as an unknown argument, exit 3); validated by
+    // ResolveProgressInterval (not decimal digits = exit 2).
+    ProgressIntervalGiven: Boolean;
+    ProgressIntervalRaw  : string ;
     IncludeImpl   : Boolean;
     AllVisibility : Boolean;
     WiringCoverage: Boolean; // v8: --coverage for the wiring command
@@ -579,8 +593,8 @@ type
     EnumMethodsStr: string; // --methods tobyte,frombyte,...
     EnumToString  : string; // --tostring rtti|case
     // Track 3 Batch 1 (Task 1): proptree deep-property enumerator. Depth reuses
-    // Depth (--depth; proptree applies its own default 6 inside DoPropTree when
-    // Depth<=0). ToPersistent defaults ON (stop the ancestor climb at
+    // Depth (--depth; proptree / convert-scaffold resolve --depth > the --rules
+    // book's #depth > 5 in ResolveTreeDepth). ToPersistent defaults ON (stop the ancestor climb at
     // TPersistent/TObject); --no-to-persistent turns it OFF.
     ToPersistent  : Boolean; // proptree: stop ancestor climb at TPersistent/TObject (default True)
     RefsAsLeaves  : Boolean; // proptree: TComponent-typed props are reference leaves, not expanded (default False)
@@ -620,7 +634,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@cca2 -- REVIEWED 2026-09-29: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@4fc5 -- REVIEWED 2026-10-05: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -947,11 +961,28 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
-  Writeln('  drag-lint proptree --qname <X> [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2)');
-  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real property trees, and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code)');
-  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees: concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface)');
+  Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; ' +
+    'depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2; ' +
+    '--progress-interval S: see PROGRESS below)');
+  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header (''#convert TFoo -> '' or ''#convert TFoo'': ''#convert TFoo has no To type''; ''#useswap X -> '': ''#useswap X has no replacement unit''); ' +
+    'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; ' +
+    'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); no JSON mode)');
+  Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
+    'expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
+  Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
+    '{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) or missing exits 2; every stderr line is flushed BEFORE the stdout document, which is written in one piece (a merged pipe reads notes, then the whole document); ' +
+    'convert-apply / convert-validate never emit progress and reject the flag as an unknown argument (exit 3); cancel = kill the process (the default write-back is kill-safe: each memoized type is its own SQLite statement)');
   Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
-    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count)');
+    'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
+    'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added; ' +
+    'EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each #mapping against the blocks that #apply it -- ' +
+    'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
+    'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
+    'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
+    'a .dfm holding an inherited/inline object of a From type is refused whole, unit rules included (exit 1); ' +
+    'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- that one; a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
+    '--only filters instances, never unit rules, so a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed''); ' +
+    'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
@@ -1037,6 +1068,46 @@ begin
   Writeln('         Destructive purge-locals always needs an explicit --db');
   Writeln('         (on the command line or a .drag-lint.json "db").');
 end; // procedure
+
+const
+  STDOUT_DOCUMENT_BUFFER = 1 shl 20; // 1 MiB: TFDQuery depth 5 (37 MB) is ~36 WriteFile calls, not ~290,000
+  STDOUT_CONSOLE_CHUNK   = 32 shl 10; // 32 KiB: a 1 MiB WriteFile to a CONSOLE handle can fail on older Windows
+
+/// <summary>Writes one whole stdout document -- a JSON document (proptree,
+/// convert-apply / convert-reemit, info, query / outline --json, sql) or a text
+/// document (proptree's tree, convert-scaffold's book) -- with the same bytes as
+/// Write(Output, ADoc), after every pending STDERR byte (engine 1.20.6, T2i).</summary>
+/// <param name="ADoc">The complete document, line breaks included. Converted to
+/// stdout's code page by the RTL exactly as Write/Writeln would convert it.</param>
+/// <remarks>Output and ErrOutput are Text files whose Writeln does NOT flush
+/// when the handle is a file or a pipe -- only a console flushes per line -- so
+/// before this, a stderr note (even the "(loaded defaults ...)" banner) sat in
+/// its 128-byte buffer and reached a merged pipe (the editor runs the engine
+/// with stdout and stderr on ONE pipe) AFTER, or split around, the document;
+/// and the document itself went out in 128-byte WriteFile calls, which is what
+/// made a 37 MB proptree take minutes. Order here: flush ErrOutput, flush
+/// Output, write ADoc through a buffer swapped in for the call, flush, restore
+/// Output's own 128-byte buffer. The buffer is 1 MiB for a file or a pipe (one
+/// write for most documents) and 32 KiB when stdout is a console
+/// (GetFileType = FILE_TYPE_CHAR), so no single console WriteFile exceeds 32
+/// KiB. Nothing else writes to either stream in between (single-threaded;
+/// proptree's progress lines are only emitted while the tree builds).</remarks>
+procedure WriteStdoutDocument(const ADoc: string);
+var
+  Buf: TBytes;
+begin
+  Flush(ErrOutput);
+  Flush(Output);
+  if GetFileType(TTextRec(Output).Handle) = FILE_TYPE_CHAR then SetLength(Buf, STDOUT_CONSOLE_CHUNK)
+  else SetLength(Buf, STDOUT_DOCUMENT_BUFFER);
+  SetTextBuf(Output, Buf[0], Length(Buf));
+  try
+    Write(Output, ADoc);
+    Flush(Output);
+  finally
+    SetTextBuf(Output, TTextRec(Output).Buffer, SizeOf(TTextRec(Output).Buffer));
+  end;
+end;
 
 /// <summary>True when ASwitch appears verbatim on the command line.</summary>
 /// <remarks>For the handful of decisions that must be made BEFORE ParseArgs has
@@ -1529,7 +1600,29 @@ begin
     else if (A = '--no-docs') then Result.NoDocs:= True
     else if (A = '--kind') and (i < ParamCount) then begin Inc(i); Result.Kind:= ParamStr(i); end
     else if (A = '--public') then Result.PublicOnly:= True
-    else if (A = '--depth') and (i < ParamCount) then begin Inc(i); Result.Depth:= StrToIntDef(ParamStr(i), 3); end
+    else if (A = '--depth') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Depth     := StrToIntDef(ParamStr(i), Result.Depth); { unparsable keeps the default }
+      Result.DepthGiven:= True;
+      Result.DepthRaw  := ParamStr(i);
+    end
+    // 1.20.6 (T2e): progress lines on stderr -- ONLY the two tree-expanding
+    // verbs take it; on every other verb (convert-apply / convert-validate
+    // above all) it falls through to the Unknown-argument raise, exit 3.
+    // As the LAST argument (no value) it is given-but-empty, which
+    // ResolveProgressInterval rejects with exit 2 like any bad value (T2i).
+    else if (A = '--progress-interval') and
+      ((Result.Command = 'proptree') or (Result.Command = 'convert-scaffold')) then
+    begin
+      Result.ProgressIntervalGiven:= True;
+      Result.ProgressIntervalRaw  := '';
+      if i < ParamCount then
+      begin
+        Inc(i);
+        Result.ProgressIntervalRaw:= ParamStr(i);
+      end;
+    end
     else if A = '--include-impl'   then Result.IncludeImpl   := True
     else if A = '--full-surface'   then Result.FullSurface   := True
     else if A = '--all-visibility' then Result.AllVisibility := True
@@ -6024,7 +6117,7 @@ begin
         if Sym.ForwardLine > 0 then JObj.AddPair('forward_line', TJSONNumber.Create(Sym.ForwardLine));
         JArr.AddElement(JObj);
       end; // for
-      Writeln(JArr.Format(2));
+      WriteStdoutDocument(JArr.Format(2) + sLineBreak); // after every stderr byte (T2i R18)
     finally
       JArr.Free;
     end; // try
@@ -9615,7 +9708,7 @@ begin
         if StubOf[Idx] >= 0 then JObj.AddPair('forward_target_line', TJSONNumber.Create(Syms[StubOf[Idx]].StartLine));
         JArr.AddElement(JObj);
       end;
-      Writeln(JArr.Format(2));
+      WriteStdoutDocument(JArr.Format(2) + sLineBreak); // after every stderr byte (T2i R18)
     finally
       JArr.Free;
     end; // try
@@ -12706,7 +12799,11 @@ begin
     { v0.46: AST checks that need no DB -- single .pas file only. The plugin's
       lint provider runs `lint <buffer>` with no --rule, so all of these surface
       as live edit-time diagnostics. }
-    if TFile.Exists(EffPath) and (SameText(ExtractFileExt(EffPath), '.pas') or SameText(ExtractFileExt(EffPath), '.inc')) then
+    { .dpr joins .pas/.inc: lint-all scans a .dpr with these same AST checks (fixed 2026-08-16),
+      so the per-file verb must too or the editor's gutter hides them (1.20.6 T3;
+      tests\autotest\run_lint_dpr_parity.ps1). .dpk stays out: lint-all does not scan it. }
+    if TFile.Exists(EffPath) and (SameText(ExtractFileExt(EffPath), '.pas') or SameText(ExtractFileExt(EffPath), '.inc')
+       or SameText(ExtractFileExt(EffPath), '.dpr')) then
     begin
       var Cfg: TLintConfig:= LoadLintConfig(AArgs);
       { THE STORE IS RESOLVED ONCE, HERE, FOR EVERY PER-FILE CHECKER BELOW.
@@ -15479,7 +15576,7 @@ begin
   end; // try
 
   if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.ANSI)
-  else Writeln(OutStr);
+  else WriteStdoutDocument(OutStr + sLineBreak); // after every stderr byte (T2i R18)
   Result:= 0;
 end; // function
 
@@ -15915,6 +16012,19 @@ begin
       JCap:= TJSONObject.Create;
       JCap.AddPair('fts5', TJSONBool.Create(Fts5));
       JCap.AddPair('cli_verbs', TJSONNumber.Create(CLI_VERB_COUNT));
+      { 1.20.6: convert-apply applies a book's #unuse / #use / #useswap. The
+        converter/editor greys a unit-rules book out unless this is the JSON
+        literal TRUE (its HasCapability tests `is TJSONTrue`), so it is always
+        emitted, and never as a string or a number. }
+      JCap.AddPair('apply_unit_rules', TJSONBool.Create(True));
+      { 1.20.6 (T2e), same JSON-literal-true contract: book_depth = a --rules
+        book's '#depth N' sets proptree / convert-scaffold depth;
+        progress_lines = those two verbs take --progress-interval S (stderr
+        JSON lines, off by default); lazy_validate = convert-validate /
+        convert-apply resolve rule paths segment by segment and build no tree. }
+      JCap.AddPair('book_depth'    , TJSONBool.Create(True));
+      JCap.AddPair('progress_lines', TJSONBool.Create(True));
+      JCap.AddPair('lazy_validate' , TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -15952,7 +16062,7 @@ begin
         end;
       end;
 
-      Writeln(JRoot.ToJSON);
+      WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
     finally
       JRoot.Free;
     end;
@@ -23171,14 +23281,154 @@ begin
   Result:= 0;
 end; // function
 
-/// <summary>drag-lint proptree --qname X [--depth N] [--no-to-persistent]
+/// <summary>The tree-expansion depth of proptree / convert-scaffold:
+/// --depth N &gt; the --rules book's '#depth N' &gt; DEFAULT_TREE_DEPTH (5).</summary>
+/// <param name="AArgs">DepthGiven/DepthRaw=--depth; RulesFile=--rules.</param>
+/// <param name="ADepth">The depth to expand to (&gt;= 1); only meaningful when the
+/// result is True.</param>
+/// <returns>True when ADepth is set; False on a usage error, already printed
+/// as one 'ERROR: ...' line (the caller exits 2): --depth that is not decimal
+/// digits ('+3', '$A' and '-1' included -- the IsDecimalDigits check '#depth'
+/// uses) or is &lt; 1; a --rules file that is missing or unreadable; a book whose
+/// '#depth' is invalid or repeated (named by file and line).</returns>
+/// <remarks>The book is read whenever --rules is given, even beside --depth, so
+/// a broken '#depth' never goes unnoticed; its other parse errors are ignored
+/// here (convert-validate reports them). Depth is the class-recursion budget:
+/// a K-segment path needs depth &gt;= K-1.</remarks>
+function ResolveTreeDepth(const AArgs: TArgs; out ADepth: Integer): Boolean;
+var
+  Book: TConversionRuleSet;
+  E   : TRuleError        ;
+  Bad : Boolean           ;
+begin
+  Result:= False;
+  ADepth:= DEFAULT_TREE_DEPTH;
+  Book  := Default(TConversionRuleSet);
+  if AArgs.RulesFile <> '' then
+  begin
+    if not TFile.Exists(AArgs.RulesFile) then
+    begin
+      Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile]));
+      Exit;
+    end;
+    try
+      Book:= ParseConversionRules(TFile.ReadAllText(AArgs.RulesFile));
+    except
+      on Ex: Exception do
+      begin
+        Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message]));
+        Exit;
+      end;
+    end;
+    Bad:= False;
+    for E in Book.ParseErrors do
+      if E.IsDepthError then
+      begin
+        Writeln(Format('ERROR: %s line %d: %s', [AArgs.RulesFile, E.LineNo, E.Message]));
+        Bad:= True;
+      end;
+    if Bad then Exit;
+  end;
+  if AArgs.DepthGiven then
+  begin
+    // Decimal digits only, exactly like '#depth': TryStrToInt alone takes '+3'
+    // and '$A' (hex).
+    if not IsDecimalDigits(AArgs.DepthRaw) or not TryStrToInt(AArgs.DepthRaw, ADepth) or
+      (ADepth < MIN_BOOK_DEPTH) then
+    begin
+      Writeln(Format('ERROR: --depth must be an integer >= 1 (got "%s")', [AArgs.DepthRaw]));
+      Exit;
+    end;
+  end
+  else if Book.Depth > 0 then
+    ADepth:= Book.Depth;
+  Result:= True;
+end;
+
+const
+  MS_PER_SECOND           = 1000;
+  MAX_PROGRESS_INTERVAL_S = 86400; // one day; keeps S * 1000 inside an Integer
+
+/// <summary>The progress interval of proptree / convert-scaffold, from
+/// --progress-interval S (engine 1.20.6, T2e).</summary>
+/// <param name="AArgs">ProgressIntervalGiven/ProgressIntervalRaw.</param>
+/// <param name="AMs">The interval in milliseconds; 0 = off -- the default
+/// (flag absent) and S = 0 alike. Only meaningful when the result is
+/// True.</param>
+/// <returns>True when AMs is set; False on a usage error, already printed as
+/// one 'ERROR: ...' line (the caller exits 2): S that is not decimal digits
+/// (a sign, a '$' hex prefix, a decimal point -- the IsDecimalDigits check
+/// '#depth' and --depth use) or is above 86400.</returns>
+function ResolveProgressInterval(const AArgs: TArgs; out AMs: Integer): Boolean;
+var
+  Secs: Integer;
+begin
+  AMs:= 0;
+  if not AArgs.ProgressIntervalGiven then Exit(True);
+  if not IsDecimalDigits(AArgs.ProgressIntervalRaw) or not TryStrToInt(AArgs.ProgressIntervalRaw, Secs) or
+    (Secs > MAX_PROGRESS_INTERVAL_S) then
+  begin
+    Writeln(Format('ERROR: --progress-interval must be an integer 0..%d (seconds; got "%s")',
+      [MAX_PROGRESS_INTERVAL_S, AArgs.ProgressIntervalRaw]));
+    Exit(False);
+  end;
+  AMs   := Secs * MS_PER_SECOND;
+  Result:= True;
+end;
+
+// S as a quoted JSON string ("..."), escaped, non-ASCII as \u -- for the
+// progress line, which is built by hand to fix its key order and number format.
+function ProgressJsonStr(const S: string): string;
+var
+  J: TJSONString;
+begin
+  J:= TJSONString.Create(S);
+  try
+    Result:= J.ToJSON;
+  finally
+    J.Free;
+  end;
+end;
+
+/// <summary>The TPropTreeOptions.OnProgress handler of a tree-expanding verb:
+/// writes each snapshot as ONE JSON line to STDERR (engine 1.20.6, T2e).</summary>
+/// <param name="AVerb">'proptree' or 'convert-scaffold' (the line's "verb").</param>
+/// <returns>A handler that writes
+/// {"progress":{"elapsed_s":12.3,"verb":"proptree","class":"Unit.TX","depth":2,
+/// "max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}}
+/// -- keys in exactly that order, no blanks, 7-bit ASCII (the class name is
+/// JSON-escaped, non-ASCII as \u), elapsed_s with one decimal and a '.' in
+/// every locale.</returns>
+/// <remarks>elapsed_s counts from THIS call (the verb's arguments are valid by
+/// then), so it is non-decreasing across convert-scaffold's two trees; the
+/// other fields are TPropTreeProgress's. STDOUT is never written, so the
+/// verb's own output is byte-identical with or without progress; a caller
+/// that merges the streams (the editor slices the first '{' .. the last '}')
+/// must leave progress OFF, which is the default.</remarks>
+function MakeProgressWriter(const AVerb: string): TProc<TPropTreeProgress>;
+var
+  Clock: TStopwatch;
+begin
+  Clock:= TStopwatch.StartNew;
+  Result:= procedure(P: TPropTreeProgress)
+  begin
+    Writeln(ErrOutput, Format('{"progress":{"elapsed_s":%s,"verb":%s,"class":%s,"depth":%d,' +
+      '"max_depth":%d,"classes_done":%d,"classes_queued":%d,"nodes":%d}}',
+      [FormatFloat('0.0', Clock.ElapsedMilliseconds / MS_PER_SECOND, TFormatSettings.Invariant),
+       ProgressJsonStr(AVerb), ProgressJsonStr(P.RootQName), P.Level, P.MaxDepth, P.ClassesDone, P.ClassesQueued, P.Nodes]));
+    Flush(ErrOutput);
+  end;
+end;
+
+/// <summary>drag-lint proptree --qname X [--depth N] [--rules FILE] [--no-to-persistent]
 /// [--refs-as-leaves] [--min-visibility published|public] [--format text|json] [--json] --db PATH
 /// [--db ...] -- Track 3 Batch 1: the index-driven RECURSIVE deep-property
 /// enumerator. Resolves class X, walks its own + inherited kind='property'
 /// children, parses each property's type from its Signature, and recurses into
 /// class-typed property types (depth-capped + a visited-TYPE-name cycle guard) to
-/// produce flattened dotted paths (Font.Color, Inner.Shade). --depth defaults to 6
-/// (applied here when Depth&lt;=0). ToPersistent (default ON) stops the ancestor
+/// produce flattened dotted paths (Font.Color, Inner.Shade). Depth is --depth N,
+/// else the --rules book's '#depth N', else 5 (ResolveTreeDepth; a bad --depth,
+/// --depth &lt; 1 or a bad '#depth' is exit 2). ToPersistent (default ON) stops the ancestor
 /// climb at TPersistent/TObject; --no-to-persistent climbs past. --refs-as-leaves
 /// (TreatRefsAsLeaves, default OFF) emits a property whose type descends from
 /// TComponent as a REFERENCE LEAF instead of recursing into it -- a referenced
@@ -23196,15 +23446,21 @@ end; // function
 /// unresolved/type-alias ancestor edge) is memoized back onto the property row
 /// (next query is a plain hit; self-limiting). A writable open that fails falls
 /// back to read-only (resolution still works; memoization skipped). --no-write-back
-/// forces a read-only (query_only) open that never mutates the DB.</summary>
-/// <param name="AArgs">QName=class, Depth=recursion cap (default 6),
+/// forces a read-only (query_only) open that never mutates the DB; killing the
+/// process mid-run is safe (each memoized type is its own SQLite statement).
+/// --progress-interval S (default 0 = off) writes one JSON progress line to
+/// STDERR at most every S seconds while the tree is built (MakeProgressWriter);
+/// stdout is unchanged.</summary>
+/// <param name="AArgs">QName=class, DepthGiven/DepthRaw=--depth and
+/// RulesFile=--rules (recursion cap, see ResolveTreeDepth; default 5),
 /// ToPersistent=ancestor-stop, RefsAsLeaves=--refs-as-leaves (TComponent-typed
 /// properties are reference leaves, not expanded), NoWriteBack=force read-only
 /// (no memoization),
 /// MinVisibility=--min-visibility filter ('' = all), Format/AsJson=output,
 /// DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok; 1 qname not resolved to a class in any DB; 2 usage error / no
-/// readable db / invalid --min-visibility value.</returns>
+/// readable db / invalid --min-visibility value / invalid --depth or --rules
+/// book depth / invalid --progress-interval.</returns>
 function DoPropTree(const AArgs: TArgs): Integer;
 var
   Dbs   : TArray<string>  ;
@@ -23216,6 +23472,7 @@ var
   Fmt   : string          ;
   Opts  : TPropTreeOptions;
   MinVis: string          ;
+  ProgMs: Integer         ;
 
   function KindLabel(const ANode: TPropNode): string;
   begin
@@ -23249,7 +23506,10 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'proptree') then Exit(2);
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint proptree --qname X [--depth N] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]'); Exit(2); end;
+  begin
+    Writeln('Usage: drag-lint proptree --qname X [--depth N] [--rules FILE] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]');
+    Exit(2);
+  end;
 
   Fmt:= LowerCase(Trim(AArgs.Format));
 
@@ -23259,15 +23519,18 @@ begin
   if (MinVis <> '') and (MinVis <> 'published') and (MinVis <> 'public') then
   begin Writeln(Format('ERROR: --min-visibility must be published|public (got "%s")', [AArgs.MinVisibility])); Exit(2); end;
 
-  // proptree's own default depth is 6 (deeper than the global --depth default of
-  // 3), applied here so the shared parse default is untouched.
-  Depth:= AArgs.Depth;
-  if Depth <= 0 then Depth:= 6;
+  // --depth > the --rules book's #depth > 5. Before 1.20.6 this read AArgs.Depth,
+  // whose parse default is 3, so a proptree with no --depth ran at 3, not the
+  // documented 6.
+  if not ResolveTreeDepth(AArgs, Depth) then Exit(2);
+  if not ResolveProgressInterval(AArgs, ProgMs) then Exit(2);
 
   Opts:= Default(TPropTreeOptions);
   Opts.Depth            := Depth;
   Opts.ToPersistent     := AArgs.ToPersistent;
   Opts.TreatRefsAsLeaves:= AArgs.RefsAsLeaves;
+  Opts.ProgressIntervalMs:= ProgMs;
+  if ProgMs > 0 then Opts.OnProgress:= MakeProgressWriter('proptree');
 
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
@@ -23341,7 +23604,9 @@ begin
         JProps.AddElement(JN);
       end;
       JRoot.AddPair('properties', JProps);
-      Writeln(JRoot.Format(2));
+      // One document, one write, after every stderr byte (WriteStdoutDocument):
+      // the bytes Writeln(JRoot.Format(2)) wrote before T2i.
+      WriteStdoutDocument(JRoot.Format(2) + sLineBreak);
     finally
       JRoot.Free;
     end;
@@ -23351,28 +23616,79 @@ begin
     var ShownCount: Integer:= 0;
     for var N in Tree.Nodes do
       if PassesMinVisibility(N, MinVis) then Inc(ShownCount);
-    Writeln(Format('%s  (%d properties%s)', [Tree.RootType, ShownCount,
-      IfThen(Tree.Truncated, ', truncated', '')]));
-    for var N in Tree.Nodes do
-    begin
-      if not PassesMinVisibility(N, MinVis) then Continue;
-      // Indent by the path's dot-depth (top-level = 0).
-      var DotDepth: Integer:= 0;
-      for var Ch in N.Path do if Ch = '.' then Inc(DotDepth);
-      var Leaf: string:= N.Path;
-      var LastDot: Integer:= LastDelimiter('.', N.Path);
-      if LastDot > 0 then Leaf:= Copy(N.Path, LastDot + 1, MaxInt);
-      Writeln(Format('%s%s: %s [%s]', [StringOfChar(' ', DotDepth * 2), Leaf, N.TypeName, KindLabel(N)]));
+    // One document, one write (WriteStdoutDocument): the same lines Writeln
+    // wrote one by one before T2i, each ended by sLineBreak as Writeln ends it.
+    var Doc: TStringBuilder:= TStringBuilder.Create;
+    try
+      Doc.Append(Format('%s  (%d properties%s)', [Tree.RootType, ShownCount,
+        IfThen(Tree.Truncated, ', truncated', '')])).Append(sLineBreak);
+      for var N in Tree.Nodes do
+      begin
+        if not PassesMinVisibility(N, MinVis) then Continue;
+        // Indent by the path's dot-depth (top-level = 0).
+        var DotDepth: Integer:= 0;
+        for var Ch in N.Path do if Ch = '.' then Inc(DotDepth);
+        var Leaf: string:= N.Path;
+        var LastDot: Integer:= LastDelimiter('.', N.Path);
+        if LastDot > 0 then Leaf:= Copy(N.Path, LastDot + 1, MaxInt);
+        Doc.Append(Format('%s%s: %s [%s]', [StringOfChar(' ', DotDepth * 2), Leaf, N.TypeName, KindLabel(N)])).Append(sLineBreak);
+      end;
+      WriteStdoutDocument(Doc.ToString);
+    finally
+      Doc.Free;
     end;
   end;
   Result:= 0;
 end; // function
 
+{ convert-validate / convert-reemit: the class AQName names in the first of ADbs
+  whose index has it (a stale explicit --db sets AStale and stops, as
+  StaleDbRefusesRun rules; a stale manifest DB is skipped). Each store opened
+  gets its own TPropMemberCache, added to ACaches (which owns it); the result
+  pairs AQName with the cache of the store that resolved it. Unset when AQName
+  is '' or resolves nowhere. 1.20.6 (T2b): replaces the two verbs' TreeFor, which
+  built a whole property tree per type. }
+function ConvertClassIn(const AArgs: TArgs; const AVerb: string; const ADbs: TArray<string>;
+  const AQName: string; const AOpts: TPropTreeOptions; ACaches: TObjectList<TPropMemberCache>;
+  var AStale: Boolean): TClassRef;
+var
+  LDb  : string;
+  Cache: TPropMemberCache;
+begin
+  Result:= Default(TClassRef);
+  if AQName = '' then Exit;
+  for LDb in ADbs do
+  begin
+    if not TFile.Exists(LDb) then Continue;
+    var RoOk: Boolean;
+    var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
+    if not RoOk then
+    begin
+      if StaleDbRefusesRun(AArgs, AVerb, LDb) then
+      begin
+        AStale:= True;
+        Exit;
+      end;
+      Continue; { manifest-resolved: stale DB reported, scan the rest }
+    end;
+    Cache:= TPropMemberCache.Create(CandStore, AOpts);
+    ACaches.Add(Cache);
+    if Cache.MembersOf(AQName).RootType <> '' then
+    begin
+      Result.QName:= AQName;
+      Result.Cache:= Cache;
+      Exit;
+    end;
+  end;
+end;
+
 /// <summary>drag-lint convert-validate --rules FILE [--from FromType] [--to ToType]
 /// [--print-parsed] [--db PATH ...] -- Track 3 Batch 1: parse a reFind-superset
 /// conversion-rules DSL file and (when --from/--to types are supplied) validate its
-/// #link / #default target/source paths against the REAL property trees of those
-/// types (Task 1's BuildPropTree). --rules is required (missing -&gt; usage + exit 2;
+/// #link / #default target/source paths against the REAL members of those types,
+/// each path resolved segment by segment (1.20.6, T2b: TPropMemberCache -- no property
+/// tree is built, so --depth no longer applies and no path is too deep; a published
+/// leaf, each hop published or public-and-class-typed, never private). --rules is required (missing -&gt; usage + exit 2;
 /// unreadable -&gt; exit 2). Without --from/--to it is parse-only: only unknown-
 /// directive parse errors are reported, path checks are skipped. --print-parsed
 /// dumps 'parsed N rule(s)' plus one 'line L: kind ...' summary per rule (so a test
@@ -23380,11 +23696,15 @@ end; // function
 /// STUB marker (the scaffolder emits these) and is NOT a path error. A #link
 /// glyph expression (G[I/N] grammar) is checked in either mode, and a problem
 /// names the column inside the expression. Prints 'line N: message' per error,
-/// then 'line N: warning: message' per warning (ConversionRuleWarnings), then
-/// 'OK' when there were no errors; warnings never change the exit code.</summary>
+/// then 'line N: warning: message' per warning -- first each UNREACHABLE path
+/// (T2h, owner ruling R12: every segment exists but one fails the .dfm surface,
+/// 'line N: warning: &lt;path&gt;: &lt;Member&gt; is &lt;visibility&gt; in
+/// &lt;Class&gt;; never applied unless a descendant class changes its
+/// visibility'), then ConversionRuleWarnings -- all on stdout, then 'OK' when
+/// there were no errors; warnings never change the exit code. No JSON mode.</summary>
 /// <param name="AArgs">RulesFile=--rules; CallFrom=--from (FromType qname),
-/// RenameTo=--to (ToType qname); PrintParsed=--print-parsed; DbPath/DbPaths=index(es)
-/// used to build the from/to trees.</param>
+/// RenameTo=--to (ToType qname); PrintParsed=--print-parsed; ToPersistent=--no-to-persistent;
+/// DbPath/DbPaths=index(es) the from/to classes are resolved in.</param>
 /// <returns>0 valid / parse-ok; 1 errors found (parse or validation); 2 bad args
 /// (no --rules) or unreadable rules file.</returns>
 function DoConvertValidate(const AArgs: TArgs): Integer;
@@ -23392,16 +23712,18 @@ var
   RulesText: string             ;
   RuleSet  : TConversionRuleSet ;
   Errors   : TArray<TRuleError> ;
-  FromTree : TPropTree          ;
-  ToTree   : TPropTree          ;
+  FromCls  : TClassRef          ;
+  ToCls    : TClassRef          ;
   Opts     : TPropTreeOptions   ;
   Dbs      : TArray<string>     ;
+  Caches   : TObjectList<TPropMemberCache>; { one per store opened -- owns them }
   E        : TRuleError         ;
   R        : TConversionRule    ;
-  Depth    : Integer            ;
-  { TreeFor returns a TPropTree, so it cannot Exit(2) on a stale explicit --db.
+  { ClassFor returns a TClassRef, so it cannot Exit(2) on a stale explicit --db.
     It raises this flag instead and the body refuses right after the calls. }
   StaleExplicitDb: Boolean      ;
+  Unreach  : TArray<TUnreachablePath>; { T2h: paths through inaccessible members -- warnings }
+  U        : TUnreachablePath   ;
 
   function KindStr(const AKind: TRuleKind): string;
   begin
@@ -23419,6 +23741,7 @@ var
       rkUseSwap: Result:= 'useswap';
       rkMapping: Result:= 'mapping';
       rkApply  : Result:= 'apply';
+      rkDepth  : Result:= 'depth';
     else        Result:= '?';
     end;
   end;
@@ -23480,33 +23803,16 @@ var
                  else
                    Result:= Format('mapping %s', [R.MapName]);
       rkApply  : Result:= Format('apply %s', [R.MapName]);
+      rkDepth  : Result:= Format('depth %d', [R.Depth]);
     else        Result:= KindStr(R.Kind);
     end;
   end;
 
-  // Build the property tree for a type qname across the resolved DBs (first DB
-  // that resolves it wins). Empty RootType if unresolved / no db.
-  function TreeFor(const AQName: string): TPropTree;
-  var
-    Cand: TPropTree;
-    LDb : string   ;
+  // The class a type qname names across the resolved DBs (first DB that resolves
+  // it wins), with that store's member cache. Unset if unresolved / no db.
+  function ClassFor(const AQName: string): TClassRef;
   begin
-    Result:= Default(TPropTree);
-    if AQName = '' then Exit;
-    for LDb in Dbs do
-    begin
-      if not TFile.Exists(LDb) then Continue;
-      var RoOk: Boolean;
-      var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
-      if not RoOk then
-      begin
-        if StaleDbRefusesRun(AArgs, 'convert-validate', LDb) then
-        begin StaleExplicitDb:= True; Exit; end;
-        Continue; { manifest-resolved: stale DB reported, scan the rest }
-      end;
-      Cand:= BuildPropTree(CandStore, AQName, Opts);
-      if Cand.RootType <> '' then Exit(Cand);
-    end;
+    Result:= ConvertClassIn(AArgs, 'convert-validate', Dbs, AQName, Opts, Caches, StaleExplicitDb);
   end;
 
 begin
@@ -23534,28 +23840,35 @@ begin
       Writeln(Format('line %d: parse error: %s', [E.LineNo, E.Message]));
   end;
 
-  // Build the from/to property trees when the types are supplied. Ids are per-DB,
-  // so both trees come from the same resolved DB set. When neither is given this
-  // is parse-only: only parse errors surface (empty trees skip path checks).
-  Depth:= AArgs.Depth;
-  if Depth <= 0 then Depth:= 6;
+  // Resolve the from/to classes when the types are supplied. Ids are per-DB, so
+  // each side is paired with the cache of the store it resolved in. When neither
+  // is given this is parse-only: only parse errors surface (unset sides skip
+  // path checks). Referenced components are expanded, as they always were here.
   Opts:= Default(TPropTreeOptions);
-  Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
 
   Dbs     := ResolveConsumerDbs(AArgs);
   StaleExplicitDb:= False; { a local Boolean is not zero-initialised }
-  FromTree := TreeFor(AArgs.CallFrom); // --from reuses CallFrom
-  ToTree   := TreeFor(AArgs.RenameTo); // --to   reuses RenameTo
-  { TreeFor cannot Exit(2) from inside a function returning a tree, so the
+  Caches  := TObjectList<TPropMemberCache>.Create(True);
+  try
+  FromCls := ClassFor(AArgs.CallFrom); // --from reuses CallFrom
+  ToCls   := ClassFor(AArgs.RenameTo); // --to   reuses RenameTo
+  { ClassFor cannot Exit(2) from inside a function returning a class, so the
     refusal it could only flag is enforced here. }
   if StaleExplicitDb then Exit(2);
 
-  Errors:= ValidateConversionRules(RuleSet, FromTree, ToTree);
+  Errors:= ValidateConversionRules(RuleSet, FromCls, ToCls, Unreach);
+  finally
+    Caches.Free;
+  end;
 
   for E in Errors do
     Writeln(Format('line %d: %s', [E.LineNo, E.Message]));
-  { Warnings never change the exit code: the book is valid, just suspicious. }
+  { Warnings never change the exit code: the book is valid, just suspicious.
+    T2h (owner ruling R12): a path through an inaccessible member first, each
+    its whole 'line N: warning: ...' text, on stdout beside the errors. }
+  for U in DistinctUnreachable(Unreach) do
+    Writeln(U.Message);
   for E in ConversionRuleWarnings(RuleSet) do
     Writeln(Format('line %d: warning: %s', [E.LineNo, E.Message]));
 
@@ -23564,65 +23877,65 @@ begin
   Result:= 0;
 end; // function
 
+{ T2h (owner ruling R12): apply/1 unreachable[] and convert-reemit's -- one
+  object per UNREACHABLE rule path, keys line, path, member, visibility,
+  class, reason (always 'unreachable') and message (the exact text line), in
+  that order. The caller owns the array. }
+function UnreachableJson(const AItems: TArray<TUnreachablePath>): TJSONArray;
+var
+  U : TUnreachablePath;
+  JU: TJSONObject;
+begin
+  Result:= TJSONArray.Create;
+  for U in AItems do
+  begin
+    JU:= TJSONObject.Create;
+    JU.AddPair('line'      , TJSONNumber.Create(U.LineNo));
+    JU.AddPair('path'      , U.Path);
+    JU.AddPair('member'    , U.Member);
+    JU.AddPair('visibility', U.Visibility);
+    JU.AddPair('class'     , U.DeclaringClass);
+    JU.AddPair('reason'    , 'unreachable');
+    JU.AddPair('message'   , U.Message);
+    Result.AddElement(JU);
+  end;
+end;
+
 /// <summary>drag-lint convert-reemit --from-block FILE --rules FILE --from FromType
 /// --to ToType --db PATH -- HIDDEN test verb driving the pure ReemitComponent
 /// engine. Prints the emitted T DFM block + report as JSON. Not in help/README;
 /// superseded by convert-apply (2a-iii).</summary>
 /// <param name="AArgs">FromBlockFile=--from-block (one F DFM object block file);
 /// RulesFile=--rules; CallFrom=--from (FromType qname), RenameTo=--to (ToType
-/// qname); DbPath/DbPaths=index(es) used to build the from/to trees.</param>
+/// qname); DbPath/DbPaths=index(es) the from/to classes are resolved in.</param>
 /// <returns>0 when Ok; 1 on a hard re-emit failure; 2 on bad args.</returns>
-/// <remarks>Builds the F/T property trees from the index (like convert-validate,
-/// same first-DB-that-resolves-wins loop), parses the rules DSL, calls
+/// <remarks>Resolves the F/T classes from the index (like convert-validate,
+/// same first-DB-that-resolves-wins loop, ConvertClassIn -- 1.20.6: no property
+/// tree is built, each dotted path is resolved lazily), parses the rules DSL, calls
 /// ReemitComponent, and serializes the result. Read-only against the store.</remarks>
 function DoConvertReemit(const AArgs: TArgs): Integer;
 var
-  FromTree : TPropTree          ;
-  ToTree   : TPropTree          ;
+  FromCls  : TClassRef          ;
+  ToCls    : TClassRef          ;
   Rules    : TConversionRuleSet ;
   Res      : TReemitResult      ;
   Opts     : TPropTreeOptions   ;
-  Depth    : Integer            ;
+  Caches   : TObjectList<TPropMemberCache>; { one per store opened -- owns them }
   Dbs      : TArray<string>     ;
   BlockText: string             ;
   RulesText: string             ;
   JRoot    : TJSONObject        ;
   JReport  : TJSONObject        ;
-  { TreeFor returns a TPropTree, so it cannot Exit(2) on a stale explicit --db.
-    It raises this flag instead and the body refuses right after the calls. }
+  { ConvertClassIn cannot Exit(2) on a stale explicit --db. It raises this flag
+    instead and the body refuses right after the calls. }
   StaleExplicitDb: Boolean      ;
+  Unreach  : TArray<TUnreachablePath>; { T2h: skipped, and listed in unreachable[] }
 
   function ArrJson(const A: TArray<string>): TJSONArray;
   var S: string;
   begin
     Result:= TJSONArray.Create;
     for S in A do Result.Add(S);
-  end;
-
-  // Build the property tree for a type qname across the resolved DBs (first DB
-  // that resolves it wins). Empty RootType if unresolved / no db. Mirrors
-  // DoConvertValidate's TreeFor exactly.
-  function TreeFor(const AQName: string): TPropTree;
-  var
-    Cand: TPropTree;
-    LDb : string   ;
-  begin
-    Result:= Default(TPropTree);
-    if AQName = '' then Exit;
-    for LDb in Dbs do
-    begin
-      if not TFile.Exists(LDb) then Continue;
-      var RoOk: Boolean;
-      var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
-      if not RoOk then
-      begin
-        if StaleDbRefusesRun(AArgs, 'convert-reemit', LDb) then
-        begin StaleExplicitDb:= True; Exit; end;
-        Continue; { manifest-resolved: stale DB reported, scan the rest }
-      end;
-      Cand:= BuildPropTree(CandStore, AQName, Opts);
-      if Cand.RootType <> '' then Exit(Cand);
-    end;
   end;
 
 begin
@@ -23656,23 +23969,29 @@ begin
     Exit(1);
   end;
 
-  // Build F/T trees from the first DB that resolves each qname (mirrors
-  // DoConvertValidate's store-open + multi-db loop verbatim).
-  Depth:= AArgs.Depth;
-  if Depth <= 0 then Depth:= 6;
+  // Resolve the F/T classes in the first DB that resolves each qname (the same
+  // store-open + multi-db loop as convert-validate: ConvertClassIn). Referenced
+  // components are expanded, as they always were in this verb.
   Opts:= Default(TPropTreeOptions);
-  Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
 
   Dbs     := ResolveConsumerDbs(AArgs);
   StaleExplicitDb:= False; { a local Boolean is not zero-initialised }
-  FromTree:= TreeFor(AArgs.CallFrom); // --from reuses CallFrom
-  ToTree  := TreeFor(AArgs.RenameTo); // --to   reuses RenameTo
-  { TreeFor cannot Exit(2) from inside a function returning a tree, so the
-    refusal it could only flag is enforced here. }
+  Caches  := TObjectList<TPropMemberCache>.Create(True);
+  try
+  FromCls := ConvertClassIn(AArgs, 'convert-reemit', Dbs, AArgs.CallFrom, Opts, Caches, StaleExplicitDb); // --from reuses CallFrom
+  ToCls   := ConvertClassIn(AArgs, 'convert-reemit', Dbs, AArgs.RenameTo, Opts, Caches, StaleExplicitDb); // --to   reuses RenameTo
   if StaleExplicitDb then Exit(2);
 
-  Res:= ReemitComponent(BlockText, Rules, FromTree, ToTree, ParseCastLib(AArgs.CastLibFile));
+  { T2h (owner ruling R12): a #link / #default / #mapping path through a member
+    that exists but is inaccessible is skipped, as in convert-apply. Only the
+    unreachable half of the validation is used here -- this verb never refused
+    on a missing path, and does not start to. }
+  ValidateConversionRules(Rules, FromCls, ToCls, Unreach);
+  Res:= ReemitComponent(BlockText, Rules, FromCls, ToCls, ParseCastLib(AArgs.CastLibFile), Unreach);
+  finally
+    Caches.Free;
+  end;
 
   JRoot:= TJSONObject.Create;
   try
@@ -23752,7 +24071,8 @@ begin
     JReport.AddPair('notes',      ArrJson(Res.Report.Stubs + Res.Report.Relocated +
                                           Res.Report.MappingNotes + Res.Report.Notes));
     JRoot.AddPair('report', JReport);
-    Writeln(JRoot.ToJSON);
+    JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(Unreach))); { T2h -- same objects as apply/1 }
+    WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
   finally
     JRoot.Free;
   end;
@@ -23769,7 +24089,8 @@ end; // function
 /// are BOTH required (missing -&gt; usage + exit 2). --output (reuses Output) writes
 /// an ASCII/CRLF file; omitted -&gt; stdout. Multiple --db are tried in order; the
 /// FIRST db that resolves BOTH types is used (ids are per-DB). If either type is
-/// unresolved the verb names it and exits 1.
+/// unresolved the verb names it and exits 1. Both trees expand to --depth N, else
+/// the --rules book's '#depth N', else 5 (ResolveTreeDepth; a bad value exits 2).
 /// proptree assignability engine (Task 5): auto-'#link' TARGETS (the To side
 /// only -- From remains an unrestricted candidate SOURCE pool) are restricted to
 /// leaves that are actually valid assignment targets, using the is_writable/
@@ -23800,9 +24121,14 @@ end; // function
 /// neither linked nor noted.</summary>
 /// <param name="AArgs">CallFrom=--from (FromType qname), RenameTo=--to (ToType
 /// qname), Output=--output (file; empty=stdout), Surface=--surface dfm|pas ('' =
-/// default 'dfm'), DbPath/DbPaths=index(es).</param>
+/// default 'dfm'), DepthGiven/DepthRaw=--depth and RulesFile=--rules (tree
+/// depth, see ResolveTreeDepth), ProgressIntervalGiven/ProgressIntervalRaw=
+/// --progress-interval S (default 0 = off; one JSON line on STDERR at most every
+/// S seconds while the two trees are built, see MakeProgressWriter; stdout is
+/// unchanged), DbPath/DbPaths=index(es).</param>
 /// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
-/// --from/--to, invalid --surface value) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
+/// --from/--to, invalid --surface value, invalid --depth or book #depth, invalid
+/// --progress-interval) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
 /// <remarks>Output is DETERMINISTIC (paths sorted case-insensitively) so the
 /// emitted text is stable across runs. Emission order: (1) a '#convert From -&gt;
 /// To' header with a best-guess ', unit' uses-add taken from the qname unit
@@ -23832,6 +24158,7 @@ var
   Sb       : TStringBuilder  ;
   OutText  : string          ;
   Surface  : string          ;
+  ProgMs   : Integer         ;
 
   // Bare leaf (last dotted segment) of a path, lowercased for matching.
   function LeafLower(const APath: string): string;
@@ -23985,7 +24312,7 @@ begin
   if not ExplicitDbsExist(AArgs, 'convert-scaffold') then Exit(2);
   if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
   begin
-    Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--output FILE] [--surface dfm|pas] --db PATH [--db ...]');
+    Writeln('Usage: drag-lint convert-scaffold --from FromType --to ToType [--output FILE] [--surface dfm|pas] [--depth N] [--rules FILE] [--progress-interval S] --db PATH [--db ...]');
     Exit(2);
   end;
 
@@ -24002,11 +24329,13 @@ begin
   if (Surface <> 'dfm') and (Surface <> 'pas') then
   begin Writeln(Format('ERROR: --surface must be dfm|pas (got "%s")', [AArgs.Surface])); Exit(2); end;
 
-  Depth:= AArgs.Depth;
-  if Depth <= 0 then Depth:= 6;
+  if not ResolveTreeDepth(AArgs, Depth) then Exit(2); // --depth > #depth > 5
+  if not ResolveProgressInterval(AArgs, ProgMs) then Exit(2);
   Opts:= Default(TPropTreeOptions);
   Opts.Depth       := Depth;
   Opts.ToPersistent:= AArgs.ToPersistent;
+  Opts.ProgressIntervalMs:= ProgMs;
+  if ProgMs > 0 then Opts.OnProgress:= MakeProgressWriter('convert-scaffold');
 
   Dbs:= ResolveConsumerDbs(AArgs);
   if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
@@ -24027,8 +24356,17 @@ begin
       Continue; { manifest-resolved: stale DB reported, scan the rest }
     end;
     HaveStore:= True;
-    var CF: TPropTree:= BuildPropTree(CandStore, AArgs.CallFrom, Opts);
-    var CT: TPropTree:= BuildPropTree(CandStore, AArgs.RenameTo, Opts);
+    // One member cache per store for BOTH trees (1.20.6 T2c): a class the two
+    // sides share (TStrings, TParams, ...) is resolved once.
+    var CF: TPropTree;
+    var CT: TPropTree;
+    var TreeCache: TPropMemberCache:= TPropMemberCache.Create(CandStore, Opts);
+    try
+      CF:= TreeCache.BuildTree(AArgs.CallFrom, Opts.Depth);
+      CT:= TreeCache.BuildTree(AArgs.RenameTo, Opts.Depth);
+    finally
+      TreeCache.Free;
+    end;
     if (CF.RootType <> '') and (CT.RootType <> '') then
     begin FromTree:= CF; ToTree:= CT; Break; end;
     // Keep the first db's partial trees so we can report which type failed.
@@ -24094,7 +24432,7 @@ begin
     Writeln('Wrote ', AArgs.Output);
   end
   else
-    Write(OutText); // already CRLF-terminated per line
+    WriteStdoutDocument(OutText); // already CRLF-terminated per line; after every stderr byte (T2i)
 
   Result:= 0;
 end; // function
@@ -24146,7 +24484,19 @@ begin
   Block('Todos',        AReport.Todos);
   Block('ReemitNotes',  AReport.ReemitNotes);
   Block('Warnings',     AReport.Warnings);
-  { ResolvedDefaults -- a COUNT, not a listing, and that asymmetry is deliberate.
+  { 1.20.6 -- one line per uses-clause change a unit rule made, e.g.
+      remove OldU (interface, line 6) -- #useswap OldU -> NewU1, NewU2
+    under a heading carrying the two counts; nothing when there are none. }
+  if Length(AReport.UsesChanges) > 0 then
+  begin
+    var NRemoved: Integer:= 0;
+    for var UC: TUsesChange in AReport.UsesChanges do
+      if UC.Action = 'remove' then Inc(NRemoved);
+    Writeln('');
+    Writeln(Format('Uses: %d removed, %d added', [NRemoved, Length(AReport.UsesChanges) - NRemoved]));
+    for var UC: TUsesChange in AReport.UsesChanges do
+      Writeln(Format('  %s %s (%s, line %d) -- %s', [UC.Action, UC.UnitName, UC.Section, UC.Line, UC.Rule]));
+  end;  { ResolvedDefaults -- a COUNT, not a listing, and that asymmetry is deliberate.
     Text mode used to print one line per resolved default under ReemitNotes,
     which on a real form is ~2,000 lines of "this worked" ahead of the handful
     that did not. A human reading the terminal needs to know the carries
@@ -24179,6 +24529,25 @@ type
     Freshness : TFreshnessResult;
     EditCount : Integer;
     Ok        : Boolean;
+    { 1.20.6: what happened to the COMPONENT (#convert / .dfm) part --
+      'applied', 'skipped-no-dfm', 'skipped-no-convert-rules' or
+      'skipped-no-instances' (the last three: the book's unit rules ran alone);
+      '' when the run stopped before planning. }
+    ComponentPart: string;
+    { 1.20.6 (T2b): how many classes' members the run resolved (validation and
+      plan share one cache per store) -- apply/1 classes_built. }
+    ClassesBuilt: Integer;
+    { 1.20.6 (T2h, owner ruling R12): the rule paths through members that exist
+      but are inaccessible -- skipped, never applied -- apply/1 unreachable[].
+      Their messages are ALSO in Report.Warnings / Report.Items. }
+    Unreachable: TArray<TUnreachablePath>;
+    { 1.20.6 (T2f): True for a DELIBERATE refusal -- the unit cannot be
+      converted safely and nothing was written (ruling R6 inherited instances,
+      a unit-rules conditional-uses refusal, and any TApplyResult.Refusal) --
+      apply/1 refused / reason. False for every other outcome, success and
+      genuine failure alike. Reason is '' unless Refused. }
+    Refused: Boolean;
+    Reason : string;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24244,6 +24613,10 @@ begin
     JRoot.AddPair('rules_file', ACtx.RulesFile);
     JRoot.AddPair('ok', TJSONBool.Create(ACtx.Ok));
     JRoot.AddPair('error', ACtx.Error);
+    { T2f: always emitted; the editor keys its 'refused -- not changed' row on
+      refused == true. reason is '' unless refused. }
+    JRoot.AddPair('refused', TJSONBool.Create(ACtx.Refused));
+    JRoot.AddPair('reason', ACtx.Reason);
 
     JRuleErrors:= TJSONArray.Create;
     for RE in ACtx.RuleErrors do
@@ -24334,11 +24707,147 @@ begin
     JRoot.AddPair('unlinked_source_property_sites', TJSONNumber.Create(UnlinkedTotal));
     JRoot.AddPair('unlinked', JUnlinked);
 
-    Writeln(JRoot.ToJSON);
+    { 1.20.6 -- the unit rules. component_part says whether the #convert /
+      .dfm part ran; uses[] has one row per uses-clause change a unit rule
+      made (action remove|add, unit, section interface|implementation, line in
+      the unit as read, rule as normalised from the book), and the two counts
+      sum it by action. Always present, [] / 0 when the book has no unit
+      rules, like every other array here. The #convert blocks' own uses-add is
+      NOT a row: it is surface #2 and is counted in edits_count as before. }
+    JRoot.AddPair('component_part', ACtx.ComponentPart);
+    var UsesRemoved: Integer:= 0;
+    var UsesAdded  : Integer:= 0;
+    var JUses: TJSONArray:= TJSONArray.Create;
+    for var UC: TUsesChange in ACtx.Report.UsesChanges do
+    begin
+      if UC.Action = 'remove' then Inc(UsesRemoved) else Inc(UsesAdded);
+      var JUC: TJSONObject:= TJSONObject.Create;
+      JUC.AddPair('action' , UC.Action);
+      JUC.AddPair('unit'   , UC.UnitName);
+      JUC.AddPair('section', UC.Section);
+      JUC.AddPair('line'   , TJSONNumber.Create(UC.Line));
+      JUC.AddPair('rule'   , UC.Rule);
+      JUses.AddElement(JUC);
+    end;
+    JRoot.AddPair('uses', JUses);
+    JRoot.AddPair('uses_removed', TJSONNumber.Create(UsesRemoved));
+    JRoot.AddPair('uses_added'  , TJSONNumber.Create(UsesAdded));
+
+    { 1.20.6 (T2b) -- the classes whose members the run resolved, summed over
+      the --db stores. No property tree is built; this is the whole cost. }
+    JRoot.AddPair('classes_built', TJSONNumber.Create(ACtx.ClassesBuilt));
+
+    { 1.20.6 (T2h, owner ruling R12, JSON shape R13) -- one OBJECT per rule path
+      through a member that exists but is inaccessible on the .dfm surface
+      (see UnreachableJson for the keys). ALWAYS present, [] when none.
+      warnings[] above stays an array of STRINGS and carries each object's
+      message too, so a consumer reading only warnings[] still sees them. }
+    JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(ACtx.Unreachable)));
+
+    WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
   finally
     JRoot.Free;
   end;
 end; // procedure
+
+{ 1.20.6: which part of a convert-apply book runs on a unit -- the value of
+  apply/1's component_part. 'applied' (BuildApplyPlan runs the whole book)
+  unless the book has UNIT rules and its component part has nothing to act
+  on: 'skipped-no-dfm', 'skipped-no-convert-rules' (no #convert block) or
+  'skipped-no-instances' (no .dfm instance a block matches, after --only). A
+  book with no unit rules is always 'applied', so its old errors stand. }
+function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
+  const AOnly: TArray<string>): string;
+var
+  R         : TConversionRule;
+  HasConvert: Boolean;
+begin
+  Result:= 'applied';
+  if not BookHasUnitRules(ARules) then Exit;
+  HasConvert:= False;
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then HasConvert:= True;
+  if not TFile.Exists(ADfmPath) then
+    Result:= 'skipped-no-dfm'
+  else if not HasConvert then
+    Result:= 'skipped-no-convert-rules'
+  else if Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0 then
+    Result:= 'skipped-no-instances';
+end;
+
+{ 1.20.6 (Task 2, T2b): the From/To classes of EVERY #convert block,
+  index-aligned for ValidateConversionRulesPerBlock ([0] = the region before
+  the first #convert, left unset). Each side comes from ATrees (ClassFor), shared
+  with BuildApplyPlan, so each class's members are resolved once per run and only
+  when a path asks for them.
+  A block whose From or To type resolves in no --db is an ERROR on its #convert
+  line (added to AErrors, ruling R7) -- an unset side would skip every check of
+  the block and pass it silently. }
+function BuildBlockClasses(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
+  AErrors: TList<TRuleError>): TArray<TBlockClasses>;
+var
+  R    : TConversionRule;
+  Block: Integer;
+
+  procedure RequireResolved(const AConv: TConversionRule; const ASide, AType: string);
+  var
+    E: TRuleError;
+  begin
+    if (AType = '') or (ATrees.ResolveType(AType) <> '') then Exit;
+    E        := Default(TRuleError);
+    E.LineNo := AConv.LineNo;
+    E.Message:= Format('#convert %s type not found in any --db: %s', [ASide, AType]);
+    AErrors.Add(E);
+  end;
+
+begin
+  SetLength(Result, 1);
+  Block:= 0;
+  for R in ARules.Rules do
+    if R.Kind = rkConvert then
+    begin
+      Inc(Block);
+      SetLength(Result, Block + 1);
+      RequireResolved(R, 'From', R.FromType);
+      RequireResolved(R, 'To', R.ToType);
+      Result[Block].FromClass:= ATrees.ClassFor(R.FromType);
+      Result[Block].ToClass  := ATrees.ClassFor(R.ToType);
+    end;
+end;
+
+{ 1.20.6: the From types the unit's .dfm holds as inherited/inline objects -- a
+  refusal (ruling R6), settled before any class is resolved. No .dfm: none. }
+function ConvertApplyInheritedTypes(const ARules: TConversionRuleSet; const ADfmPath: string): TArray<string>;
+begin
+  Result:= nil;
+  if TFile.Exists(ADfmPath) then
+    Result:= FindInheritedConvertTypes(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules);
+end;
+
+{ 1.20.6: convert-apply's rule check. EVERY #convert block is validated against
+  its own classes (ValidateConversionRulesPerBlock, classes from ATrees; T2b
+  reverted ruling R5's per-unit scope, because resolving a path no longer costs
+  a tree), a block whose type resolves nowhere is an error on its #convert line
+  (BuildBlockClasses), and a #link carrying a glyph expression is refused
+  (UnrealisedGlyphLinks). A path through a member that exists but is
+  inaccessible is not an error: it comes back in AUnreachable (T2h, owner
+  ruling R12), one record per block it is unreachable in -- print through
+  DistinctUnreachable, filter per block through WithoutUnreachableRules. }
+function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
+  out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
+var
+  TypeErrs: TList<TRuleError>;
+  Classes : TArray<TBlockClasses>;
+begin
+  TypeErrs:= TList<TRuleError>.Create;
+  try
+    Classes:= BuildBlockClasses(ATrees, ARules, TypeErrs);
+    Result := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable) + TypeErrs.ToArray +
+              UnrealisedGlyphLinks(ARules);
+  finally
+    TypeErrs.Free;
+  end;
+end;
 
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
@@ -24362,17 +24871,38 @@ end; // procedure
 /// --no-backup; NoWarnUnlinked=--no-warn-unlinked (silences the per-(source type, property)
 /// unlinked warnings; the json count and unlinked[] stay); DbPath/DbPaths=index(es).</param>
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
-/// hard error (missing .dfm when rules need it, invalid rules, BuildApplyPlan Ok=False, or
-/// --apply refused by the freshness guard); 2 on bad args (missing --unit/--rules, file not
+/// hard error (missing .dfm when rules need it, invalid rules, a block whose type resolves in
+/// no --db, an inherited/inline .dfm object of a From type, BuildApplyPlan Ok=False, or
+/// --apply refused by the freshness guard -- a stale or unindexed type of any block; a deliberate
+/// refusal -- the inherited/inline object, a unit-rules {$IF...} uses entry, any
+/// TApplyResult.Refusal -- goes through RefuseUnit: 'REFUSED: <reason>', apply/1 refused=true,
+/// reason, nothing written); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
 /// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
-/// missing .dfm is a hard error (exit 1) since every #convert rule needs DFM instances to
-/// locate. Rules are read + parsed + validated (ValidateConversionRules) against the
-/// From/To property trees BEFORE BuildApplyPlan runs -- a rules error refuses (exit 1)
-/// rather than attempting a plan from a broken rule set. From/To trees are built the same
-/// first-DB-that-resolves-wins way as convert-validate/convert-scaffold/convert-reemit
-/// (TreeFor local fn, copied verbatim). Every readable --db is opened up front into Stores
-/// (not just the first); the freshness guard (CheckFreshness) and BuildApplyPlan both
+/// missing .dfm is a hard error (exit 1) for a book with NO unit rules, since every #convert
+/// rule needs DFM instances to locate. A book with unit rules (#unuse / #use / #useswap,
+/// 1.20.6) applies them to the unit's uses clauses (PlanUnitRules) -- alone when there is no
+/// .dfm, no #convert block or no matching instance (json component_part says which),
+/// otherwise folded into BuildApplyPlan's plan; a unit whose entry to remove sits in a
+/// conditional region is refused (exit 1, nothing written). Every readable --db is opened
+/// up front into Stores (not just the first; a stale explicit --db exits 2 here, before
+/// any rule is checked). The .dfm is then read (ConvertApplyInheritedTypes): a unit whose .dfm
+/// holds an inherited/inline object of a From type is REFUSED whole, unit rules included (exit 1,
+/// ruling R6), before any class is resolved. Rules are then validated (ValidateConvertBook)
+/// BEFORE BuildApplyPlan runs -- EVERY block against its OWN From/To classes, each path resolved
+/// segment by segment (1.20.6, T2b: no property tree is built, so validating the whole book is
+/// cheap and ruling R5's per-unit scope and --validate-all-blocks are gone), and a #mapping
+/// against the block(s) that #apply it; a block whose type resolves in no --db is an error on
+/// its #convert line (R7) -- and a rules error refuses (exit 1) rather than attempting a plan
+/// from a broken rule set. A #link / #default / #mapping path whose members all exist but one
+/// is inaccessible on the .dfm surface is NOT an error (T2h, owner ruling R12): it is skipped
+/// per block (WithoutUnreachableRules, inside each re-emit -- a #link / #default line is dropped,
+/// a #mapping keeps its branch order and loses only the unreachable targets, and a mapping whose
+/// #when source is unreachable is skipped whole), the unit converts everything else, and each is reported
+/// -- apply/1 unreachable[] objects, the same text in warnings[] / items[]
+/// (rule-path-unreachable), and a text-mode 'line N: warning: ...' line under Warnings. Validation and BuildApplyPlan share one TConvertTreeCache, so each
+/// class's members are resolved once per run (json classes_built). The freshness guard
+/// (CheckFreshness, every block) and BuildApplyPlan both
 /// resolve From/To TYPES across ALL of Stores (first-that-resolves-wins), while unit/
 /// instance-scoped lookups use whichever store actually has --unit/the .dfm indexed -- the
 /// From type, To type, and the form's own instances may each live in a DIFFERENT --db. On
@@ -24388,13 +24918,8 @@ var
   Rules     : TConversionRuleSet;
   RuleErrors: TArray<TRuleError>;
   RE        : TRuleError        ;
-  FromType  : string            ;
-  ToType    : string            ;
-  R         : TConversionRule   ;
-  FromTree  : TPropTree         ;
-  ToTree    : TPropTree         ;
-  Opts      : TPropTreeOptions  ;
-  Depth     : Integer           ;
+  Trees     : TConvertTreeCache ; { one per run: validation and BuildApplyPlan share its member caches }
+  InhTypes  : TArray<string>    ; { From types the .dfm holds as inherited/inline objects }
   Dbs       : TArray<string>    ;
   Stores    : TArray<ISymbolStore>;
   RoOk      : Boolean           ;
@@ -24410,36 +24935,6 @@ var
   UseJson     : Boolean         ;
   JCtx        : TApplyJsonCtx   ;
 
-  // Build the property tree for a type qname across the resolved DBs (first DB
-  // that resolves it wins). Empty RootType if unresolved / no db. Mirrors
-  // DoConvertValidate's TreeFor exactly.
-  function TreeFor(const AQName: string): TPropTree;
-  var
-    Cand: TPropTree;
-    LDb2: string   ;
-  begin
-    Result:= Default(TPropTree);
-    if AQName = '' then Exit;
-    for LDb2 in Dbs do
-    begin
-      if not TFile.Exists(LDb2) then Continue;
-      var RoOk2: Boolean;
-      var CandStore: ISymbolStore:= OpenReadOnlyStore(LDb2, RoOk2);
-      { NO StaleDbRefusesRun here, and not an oversight. Unlike convert-validate
-        and convert-reemit -- whose TreeFor is the ONLY place they open a
-        database, so each needs a StaleExplicitDb flag -- this verb's StoresList
-        loop has already opened EVERY resolved db, with no Break, and refused a
-        stale explicit one with Exit(2) before this function is ever called. So
-        for an explicit --db list this branch is unreachable; for a manifest list
-        skipping is the correct behaviour anyway. Pinned by run_explicit_db_strict.ps1,
-        whose T5 row for convert-apply would go red if that loop ever moved
-        below here or grew a Break. }
-      if not RoOk2 then Continue;
-      Cand:= BuildPropTree(CandStore, AQName, Opts);
-      if Cand.RootType <> '' then Exit(Cand);
-    end;
-  end;
-
   // The --apply write sequence. Nested so its five working variables
   // (TouchedFiles/TouchedSet/Ed/Timestamp/Mappings) live here instead of in
   // DoConvertApply's var block, which was already at the 25-local limit.
@@ -24451,6 +24946,11 @@ var
     Timestamp   : string;
     Mappings    : TArray<string>;
   begin
+    { 1.20.6: a unit-rules-only run that changes nothing writes nothing -- no
+      backup, no recovery record, no provenance stamp on an untouched unit, so
+      a book run over many units leaves the ones it does not touch
+      byte-identical. The component path keeps its historical behaviour. }
+    if (JCtx.ComponentPart <> 'applied') and (Length(PlanRes.Edits) = 0) then Exit;
     // 1. Collect the distinct touched file paths from the edit set.
     TouchedFiles:= TList<string>.Create;
     TouchedSet  := TDictionary<string, Boolean>.Create;
@@ -24485,6 +24985,60 @@ var
     end;
   end;
 
+  // 1.20.6 (T2h, owner ruling R12): each UNREACHABLE rule path becomes one more
+  // warnings[] line -- its whole 'line N: warning: ...' text -- and its items[]
+  // mirror (kind rule-path-unreachable, the rules file and line), so Report
+  // invariant 1 holds. The structured facts are JCtx.Unreachable.
+  procedure MergeUnreachable(var AReport: TApplyReport);
+  var
+    It: TApplyItem;
+    U : TUnreachablePath;
+  begin
+    for U in DistinctUnreachable(JCtx.Unreachable) do
+    begin
+      It         := Default(TApplyItem);
+      It.Kind    := aikRulePathUnreachable;
+      It.Field   := afWarnings;
+      It.FilePath:= AArgs.RulesFile;
+      It.Path    := U.Path;
+      It.Text    := U.Message;
+      It.Line    := U.LineNo;
+      It.RuleLine:= U.LineNo;
+      AReport.Warnings:= AReport.Warnings + [U.Message];
+      AReport.Items   := AReport.Items + [It];
+    end;
+  end;
+
+  // 1.20.6 (T2f): the ONE exit for a deliberate refusal. JSON: ok=false,
+  // refused=true, reason (and error) = AReason. Text: one 'REFUSED: ' line.
+  // Nothing has been written when this is called. Exit(RefuseUnit(S)).
+  function RefuseUnit(const AReason: string): Integer;
+  begin
+    if UseJson then
+    begin
+      JCtx.Ok     := False;
+      JCtx.Error  := AReason;
+      JCtx.Refused:= True;
+      JCtx.Reason := AReason;
+      EmitApplyJson(JCtx);
+    end
+    else
+      Writeln('REFUSED: ' + AReason);
+    Result:= 1;
+  end;
+
+  // 1.20.6: one line saying the component part was skipped, and why; nothing
+  // when it ran. Text mode only -- JSON carries component_part.
+  procedure PrintComponentPart;
+  begin
+    if JCtx.ComponentPart = 'skipped-no-dfm' then
+      Writeln('dfm: none -- component part skipped, unit rules only')
+    else if JCtx.ComponentPart = 'skipped-no-convert-rules' then
+      Writeln('no #convert block in the book -- component part skipped, unit rules only')
+    else if JCtx.ComponentPart = 'skipped-no-instances' then
+      Writeln('no .dfm instance matches a #convert block -- component part skipped, unit rules only');
+  end;
+
 begin
   if not ExplicitDbsExist(AArgs, 'convert-apply') then Exit(2);
   UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
@@ -24506,8 +25060,6 @@ begin
 
   // Sibling .dfm: same base name + '.dfm', same folder as --unit.
   DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
-  if not TFile.Exists(DfmPath) then
-  begin Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath])); Exit(1); end;
 
   try
     RulesText:= TFile.ReadAllText(AArgs.RulesFile);
@@ -24517,53 +25069,27 @@ begin
   end;
   Rules:= ParseConversionRules(RulesText);
 
-  Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
-
-  Depth:= AArgs.Depth;
-  if Depth <= 0 then Depth:= 6;
-  Opts:= Default(TPropTreeOptions);
-  Opts.Depth       := Depth;
-  Opts.ToPersistent:= AArgs.ToPersistent;
-
-  // Every #convert rule's FromType/ToType gets its property tree built so
-  // ValidateConversionRules can check #link/#default paths -- same as
-  // convert-validate, just driven from the rules file's own #convert headers
-  // rather than --from/--to (convert-apply has neither).
-  FromType:= ''; ToType:= '';
-  for R in Rules.Rules do
-    if R.Kind = rkConvert then begin FromType:= R.FromType; ToType:= R.ToType; Break; end;
-  FromTree:= TreeFor(FromType);
-  ToTree  := TreeFor(ToType);
-
-  { A valid G-expression passes validation, but nothing realises it yet (CV-2):
-    refuse through the same path rather than carry the source image whole. }
-  RuleErrors:= ValidateConversionRules(Rules, FromTree, ToTree) + UnrealisedGlyphLinks(Rules);
-  if Length(RuleErrors) > 0 then
+  { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
+    #convert blocks have nothing to locate. A book with #unuse / #use /
+    #useswap still has the unit's uses clauses to change, so it runs them and
+    reports the component part as skipped (component_part skipped-no-dfm). }
+  if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) then
   begin
-    { A JSON consumer gets a parseable ok=false document naming every rule
-      error, rather than prose on stdout that its parser would choke on. }
-    if UseJson then
-    begin
-      JCtx.UnitPas   := UnitPas;
-      JCtx.DfmPath   := DfmPath;
-      JCtx.Ok        := False;
-      JCtx.Error     := 'conversion rules failed validation';
-      JCtx.RuleErrors:= RuleErrors;
-      EmitApplyJson(JCtx);
-      Exit(1);
-    end;
-    Writeln('ERROR: conversion rules failed validation:');
-    for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
+    Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]));
     Exit(1);
   end;
 
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+
   // Open EVERY readable --db up front (not just the first) -- Bug 2: the
   // From type, To type, and the form's own instances may each live in a
-  // DIFFERENT --db, so both the freshness guard and BuildApplyPlan need
-  // cross-db type resolution (first-db-that-resolves-wins, same convention
-  // as the rule-validation TreeFor above), while unit/instance-scoped
-  // lookups use whichever store actually has --unit/the .dfm indexed.
+  // DIFFERENT --db, so rule validation, the freshness guard and BuildApplyPlan
+  // all need cross-db type resolution (first-db-that-resolves-wins), while
+  // unit/instance-scoped lookups use whichever store actually has --unit/the
+  // .dfm indexed. This runs BEFORE the rules are validated, so a stale
+  // explicit --db exits 2 (StaleDbRefusesRun) rather than being skipped while
+  // the trees are built -- pinned by run_explicit_db_strict.ps1's T5 row.
   var StoresList: TList<ISymbolStore>:= TList<ISymbolStore>.Create;
   try
     for LDb in Dbs do
@@ -24583,86 +25109,148 @@ begin
   end;
   if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
 
-  // Freshness guard (Task 4): before trusting the index-derived property
-  // trees, verify the F and T types are BOTH indexed and current. Covers two
-  // failure modes -- "stale" (indexed but the source file changed on disk
-  // since) and "not indexed at all" (ResolveClassQName-equivalent lookup
-  // fails, which would otherwise silently hand BuildPropTree an empty tree).
-  // dry-run: WARN and continue (so a user can still preview a plan while
-  // reindexing). --apply: REFUSE outright -- writing a conversion built from
-  // a stale/empty property tree could silently drop or mis-map properties.
-  Freshness:= CheckFreshness(Stores, Rules);
-  JCtx.UnitPas  := UnitPas;
-  JCtx.DfmPath  := DfmPath;
-  JCtx.Freshness:= Freshness;
-  if not Freshness.Fresh then
+  { 1.20.6 -- ruling R6. convert-apply does not convert inherited / inline .dfm
+    objects. A unit whose .dfm holds one of a From type is refused WHOLE, unit
+    rules included: converting its other parts (say '#unuse BDE.DBTables')
+    would leave those components behind and break the compile. Settled before
+    any class is resolved. }
+  InhTypes:= ConvertApplyInheritedTypes(Rules, DfmPath);
+  JCtx.UnitPas:= UnitPas;
+  JCtx.DfmPath:= DfmPath;
+  if Length(InhTypes) > 0 then
   begin
-    if AArgs.Apply then
+    S:= Format('inherited instances of %s are not converted yet -- unit not changed', [String.Join(', ', InhTypes)]);
+    Exit(RefuseUnit(S));
+  end;
+
+  Trees:= TConvertTreeCache.Create(Stores);
+  try
+    { EVERY block is validated against its OWN From/To classes (1.20.6, Task 2
+      and T2b) -- driven from the rules file's own #convert headers rather than
+      --from/--to (convert-apply has neither). It used to take the first block's
+      pair for the whole book, so every link of blocks 2..N failed. A valid
+      G-expression passes validation, but nothing realises it yet (CV-2):
+      refuse through the same path rather than carry the source image whole. }
+    RuleErrors:= ValidateConvertBook(Trees, Rules, JCtx.Unreachable);
+    JCtx.ClassesBuilt:= Trees.ClassesBuilt;
+    { T2h: an UNREACHABLE path warns and its rule is skipped (BuildApplyPlan
+      below gets the book without those lines); it never fails the unit. On
+      every JSON exit from here on, warnings[] carries the messages too. }
+    MergeUnreachable(JCtx.Report);
+    if Length(RuleErrors) > 0 then
     begin
-      { --apply refuses. Under JSON the reasons ride in freshness.reasons, so
-        the consumer sees WHY without parsing prose. }
+      { A JSON consumer gets a parseable ok=false document naming every rule
+        error, rather than prose on stdout that its parser would choke on. }
       if UseJson then
       begin
-        JCtx.Ok   := False;
-        JCtx.Error:= 'freshness guard failed -- refusing to --apply';
+        JCtx.Ok        := False;
+        JCtx.Error     := 'conversion rules failed validation';
+        JCtx.RuleErrors:= RuleErrors;
         EmitApplyJson(JCtx);
         Exit(1);
       end;
-      Writeln('ERROR: freshness guard failed -- refusing to --apply:');
-      for S in Freshness.Reasons do Writeln('  ' + S);
-      Exit(1);
-    end
-    else if not UseJson then
-    begin
-      { dry-run only warns. Under JSON the warning is NOT printed -- it is
-        already carried structurally by freshness.fresh=false + reasons. }
-      Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
-      for S in Freshness.Reasons do Writeln('  ' + S);
-    end;
-  end;
-
-  PlanRes:= BuildApplyPlan(Stores, UnitPas, DfmPath, Rules, AArgs.OnlySections,
-    ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked);
-  if not PlanRes.Ok then
-  begin
-    if UseJson then
-    begin
-      JCtx.Ok   := False;
-      JCtx.Error:= PlanRes.Error;
-      EmitApplyJson(JCtx);
+      Writeln('ERROR: conversion rules failed validation:');
+      for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
+      for var UW: string in JCtx.Report.Warnings do Writeln('  ' + UW);
       Exit(1);
     end;
-    Writeln('ERROR: ' + PlanRes.Error);
-    Exit(1);
-  end;
-
-  JCtx.Ok       := True;
-  JCtx.Report   := PlanRes.Report;
-  JCtx.EditCount:= Length(PlanRes.Edits);
-
-  if not AArgs.Apply then
-  begin
-    // DRY-RUN: writes nothing.
-    if UseJson then
+    // Freshness guard (Task 4): before trusting the index-derived class
+    // members, verify the F and T types of every block are indexed and current. Covers two
+    // failure modes -- "stale" (indexed but the source file changed on disk
+    // since) and "not indexed at all" (ResolveClassQName-equivalent lookup
+    // fails, which would otherwise silently hand BuildPropTree an empty tree).
+    // dry-run: WARN and continue (so a user can still preview a plan while
+    // reindexing). --apply: REFUSE outright -- writing a conversion built from
+    // a stale/empty property tree could silently drop or mis-map properties.
+    Freshness:= CheckFreshness(Stores, Rules);
+    JCtx.Freshness:= Freshness;
+    if not Freshness.Fresh then
     begin
-      { RenderDryRun and the summary are BOTH suppressed -- the edit plan is
-        reported as edits_count, and the summary as the six arrays + items. }
-      EmitApplyJson(JCtx);
+      if AArgs.Apply then
+      begin
+        { --apply refuses. Under JSON the reasons ride in freshness.reasons, so
+          the consumer sees WHY without parsing prose. }
+        if UseJson then
+        begin
+          JCtx.Ok   := False;
+          JCtx.Error:= 'freshness guard failed -- refusing to --apply';
+          EmitApplyJson(JCtx);
+          Exit(1);
+        end;
+        Writeln('ERROR: freshness guard failed -- refusing to --apply:');
+        for S in Freshness.Reasons do Writeln('  ' + S);
+        Exit(1);
+      end
+      else if not UseJson then
+      begin
+        { dry-run only warns. Under JSON the warning is NOT printed -- it is
+          already carried structurally by freshness.fresh=false + reasons. }
+        Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
+        for S in Freshness.Reasons do Writeln('  ' + S);
+      end;
+    end;
+
+    { 1.20.6: which parts of the book run on this unit. A book WITH unit rules
+      runs them alone when its component part has nothing to act on -- no .dfm,
+      no #convert block, or no .dfm instance a block matches; everywhere else
+      BuildApplyPlan runs the whole book (its unit rules folded in). A book with
+      no unit rules takes the old path unchanged, errors included. }
+    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections);
+    if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
+    if JCtx.ComponentPart = 'applied' then
+      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
+        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
+    else
+      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules);
+    JCtx.ClassesBuilt:= Trees.ClassesBuilt;
+    if PlanRes.Refused then Exit(RefuseUnit(PlanRes.Error));
+    if not PlanRes.Ok then
+    begin
+      if UseJson then
+      begin
+        JCtx.Ok   := False;
+        JCtx.Error:= PlanRes.Error;
+        EmitApplyJson(JCtx);
+        Exit(1);
+      end;
+      Writeln('ERROR: ' + PlanRes.Error);
+      Exit(1);
+    end;
+
+    JCtx.Ok       := True;
+    MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
+    JCtx.Report   := PlanRes.Report;
+    JCtx.EditCount:= Length(PlanRes.Edits);
+
+    if not AArgs.Apply then
+    begin
+      // DRY-RUN: writes nothing.
+      if UseJson then
+      begin
+        { RenderDryRun and the summary are BOTH suppressed -- the edit plan is
+          reported as edits_count, and the summary as the six arrays + items. }
+        EmitApplyJson(JCtx);
+        Exit(0);
+      end;
+      Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
+      Writeln('');
+      PrintComponentPart;
+      PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'planned');
       Exit(0);
     end;
-    Writeln(TTextEditApplier.RenderDryRun(PlanRes.Edits));
-    Writeln('');
-    PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'planned');
-    Exit(0);
+
+    PerformApplyWrites;
+
+    if UseJson then
+      EmitApplyJson(JCtx)
+    else
+    begin
+      PrintComponentPart;
+      PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
+    end;
+  finally
+    Trees.Free;
   end;
-
-  PerformApplyWrites;
-
-  if UseJson then
-    EmitApplyJson(JCtx)
-  else
-    PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
-
   Result:= 0;
 end; // function
 

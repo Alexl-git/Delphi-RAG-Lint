@@ -38,16 +38,13 @@
 
   Load-bearing assertions (proptree --qname VisFix.TDerived --format json):
     - schema == 'proptree/2' (was 'proptree/1')
-    - no --min-visibility: ALL 4 PROPERTY leaves present (back-compat: default
-      = show everything), each carries its raw 'visibility' string, every
-      PROPERTY leaf has is_writable == true and member_kind == 'property'.
-      Task 4 (R4) ADDITIVELY emits TBase's 4 private fields (FPrivName,
-      FProtValue, FPubFlag, FPubName) alongside the 4 properties in this same
-      unfiltered list -- expected, not a regression: field leaves are
-      unconditionally in BuildPropTree's Nodes (same as properties always
-      were) and --min-visibility is the only gate, so the true unfiltered
-      total is 8 (4 property + 4 field), not 4.
-    - PrivName.visibility   == 'private'
+    - no --min-visibility: every NON-PRIVATE leaf present -- the 3 property
+      leaves ProtValue/PubFlag/PubName -- each carrying its raw 'visibility'
+      string, every PROPERTY leaf with is_writable == true and member_kind ==
+      'property'. Owner ruling 2026-09-30 (engine 1.20.6, T2b): private and
+      strict private members are NEVER emitted, so PrivName and TBase's 4
+      private fields (FPrivName, FProtValue, FPubFlag, FPubName) are absent
+      (this list was 8 leaves before the ruling), and no leaf says 'private'.
     - PubFlag.visibility    == 'public'
     - PubName.visibility    == 'published'
     - ProtValue.visibility  == 'published'  (RAISED from TBase's 'protected'
@@ -60,7 +57,7 @@
     - --min-visibility public -> exactly {ProtValue, PubName, PubFlag}
       (3 leaves; adds PubFlag, still excludes PrivName), every emitted leaf's
       visibility is 'published' or 'public'
-    - StrictPrivVal.visibility == 'private'   (NOT 'strict private')
+    - StrictPrivVal (strict private) is absent (owner ruling 2026-09-30)
     - StrictProtVal.visibility == 'protected' (NOT 'strict protected')
 
   Run from a NEUTRAL CWD ($env:TEMP\drag-lint-proptree-visibility by default).
@@ -182,19 +179,19 @@ if ($null -ne $r.Tree) {
 
   $propLeaves  = @($props | Where-Object { $_.member_kind -eq 'property' })
   $fieldLeaves = @($props | Where-Object { $_.member_kind -eq 'field' })
-  Check 'no flag: all 4 PROPERTY leaves present' ($propLeaves.Count -eq 4) ("paths=" + ($paths -join ', '))
-  # Task 4 (R4): TBase's 4 private fields (FPrivName/FProtValue/FPubFlag/
-  # FPubName) are ADDITIVELY present too -- unfiltered = ALL leaves, field or
-  # property, per the existing --min-visibility back-compat contract.
-  Check 'no flag: R4 also emits the 4 field leaves' ($fieldLeaves.Count -eq 4) ("paths=" + ($paths -join ', '))
-  Check "has 'PrivName'"  ($byPath.ContainsKey('PrivName'))
+  # Owner ruling 2026-09-30 (engine 1.20.6, T2b): PRIVATE and STRICT PRIVATE
+  # members are never emitted -- they are invisible outside their unit. So the
+  # unfiltered tree now holds the 3 non-private PROPERTY leaves (was 4, with
+  # PrivName) and none of TBase's 4 fields, which are all private (was 4:
+  # FPrivName/FProtValue/FPubFlag/FPubName).
+  Check 'no flag: the 3 non-private PROPERTY leaves present (private PrivName pruned)' ($propLeaves.Count -eq 3) ("paths=" + ($paths -join ', '))
+  Check 'no flag: no field leaf -- TBase''s 4 fields are private, pruned' ($fieldLeaves.Count -eq 0) ("paths=" + ($paths -join ', '))
+  Check "no 'PrivName' (private)"  (-not $byPath.ContainsKey('PrivName'))
+  Check 'no leaf carries visibility private' (@($props | Where-Object { $_.visibility -eq 'private' }).Count -eq 0) ("paths=" + ($paths -join ', '))
   Check "has 'ProtValue'" ($byPath.ContainsKey('ProtValue'))
   Check "has 'PubFlag'"   ($byPath.ContainsKey('PubFlag'))
   Check "has 'PubName'"   ($byPath.ContainsKey('PubName'))
 
-  if ($byPath.ContainsKey('PrivName')) {
-    Check "PrivName.visibility == 'private'" ($byPath['PrivName'].visibility -eq 'private') "visibility=$($byPath['PrivName'].visibility)"
-  }
   if ($byPath.ContainsKey('PubFlag')) {
     Check "PubFlag.visibility == 'public'" ($byPath['PubFlag'].visibility -eq 'public') "visibility=$($byPath['PubFlag'].visibility)"
   }
@@ -271,13 +268,10 @@ if ($null -ne $rs.Tree) {
   foreach ($p in $sprops) { $sByPath[$p.path] = $p }
   $spaths = @($sprops | ForEach-Object { $_.path })
 
-  Check "strict-fix: has 'StrictPrivVal'" ($sByPath.ContainsKey('StrictPrivVal')) ("paths=" + ($spaths -join ', '))
+  # Owner ruling 2026-09-30 (T2b): strict private is private -- never emitted.
+  Check "strict-fix: no 'StrictPrivVal' (strict private, pruned)" (-not $sByPath.ContainsKey('StrictPrivVal')) ("paths=" + ($spaths -join ', '))
   Check "strict-fix: has 'StrictProtVal'" ($sByPath.ContainsKey('StrictProtVal')) ("paths=" + ($spaths -join ', '))
 
-  if ($sByPath.ContainsKey('StrictPrivVal')) {
-    $v = $sByPath['StrictPrivVal'].visibility
-    Check "StrictPrivVal.visibility == 'private' (NOT 'strict private')" ($v -eq 'private') "visibility=$v"
-  }
   if ($sByPath.ContainsKey('StrictProtVal')) {
     $v = $sByPath['StrictProtVal'].visibility
     Check "StrictProtVal.visibility == 'protected' (NOT 'strict protected')" ($v -eq 'protected') "visibility=$v"

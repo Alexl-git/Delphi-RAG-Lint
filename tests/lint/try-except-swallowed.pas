@@ -169,4 +169,192 @@ begin
   end;
 end;
 
+// 1.20.6 Task 4, OWNER RULING: a handler that captures the exception into a
+// plain LOCAL which the SAME routine reads after the try ends is HANDLING it --
+// the routine acts on the capture (a test's Check, an `if`, an Assert). This is
+// the ConvRulesModelTests shape: `Raised := E.ClassName + ': ' + E.Message`,
+// then `Check(..., Raised = '', Raised)` after the try. Appended at the END,
+// as above, because every expectation is line-anchored.
+procedure CaptureThenCheck;
+var
+  Raised: string;
+begin
+  Raised := '';
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      Raised := E.ClassName + ': ' + E.Message;
+  end;
+  if Raised = '' then Writeln('ok');
+end;
+
+procedure CaptureThenAssert;
+var
+  Raised: string;
+begin
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      Raised := E.ClassName + ': ' + E.Message;
+  end;
+  Assert(Raised <> '');
+end;
+
+// The real shape: the capturing try sits inside a try..finally, and the read
+// is after the OUTER try's end -- still after the capturing try ends.
+procedure CaptureInsideTryFinally;
+var
+  Raised: string;
+begin
+  try
+    try
+      Writeln('x');
+    except
+      on E: Exception do
+        Raised := E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    Writeln('cleanup');
+  end;
+  Check(Raised = '', Raised);
+end;
+
+// The guards. Each of these still FIRES. The local is read only inside ANOTHER
+// handler -- that runs only if a second exception happens, so the first one is
+// still dropped on the normal path.
+procedure ReadOnlyInAnotherHandler;
+var
+  Raised: string;
+begin
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      Raised := E.Message;
+  end;
+  try
+    Writeln('y');
+  except
+    Writeln(Raised);
+  end;
+end;
+
+// Read only in a NESTED routine: not the same routine, and nothing says the
+// nested routine is ever called after the try.
+procedure ReadOnlyInNestedRoutine;
+var
+  Raised: string;
+  procedure Show;
+  begin
+    Writeln(Raised);
+  end;
+begin
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      Raised := E.Message;
+  end;
+end;
+
+// Read only in an anonymous method body after the try: same reasoning.
+procedure ReadOnlyInAnonymousMethod;
+var
+  Raised: string;
+begin
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      Raised := E.Message;
+  end;
+  Later := procedure begin Writeln(Raised); end;
+end;
+
+// Read only BEFORE the try: that read cannot see what the handler wrote.
+procedure ReadOnlyBeforeTry;
+var
+  Raised: string;
+begin
+  Writeln(Raised);
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      Raised := E.Message;
+  end;
+end;
+
+// After the try the local is only WRITTEN again, and the same name appears only
+// as a MEMBER of another object. Neither is a read of the local.
+procedure OnlyOverwrittenAfterTry;
+var
+  Raised: string;
+begin
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      Raised := E.Message;
+  end;
+  Raised := '';
+  Writeln(Rec.Raised);
+end;
+// Fix round 1 (ruling R22): "plain LOCAL" is enforced -- the captured name must
+// be declared by the routine itself. A FIELD written in the handler (FLastError
+// is not declared here, so it is TFixHolder's field) still fires even though the
+// method reads it after the try: the failure now lives in object state, not in
+// a local the routine acts on.
+procedure TFixHolder.FieldCapture;
+begin
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      FLastError := E.Message;
+  end;
+  if FLastError <> '' then Writeln('failed');
+end;
+
+// ...and the same with a unit-level GLOBAL: still fires.
+var
+  GLastError: string;
+
+procedure GlobalCapture;
+begin
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      GLastError := E.Message;
+  end;
+  if GLastError <> '' then Writeln('failed');
+end;
+
+// Positive controls for the two arms above: the same shape with a declared
+// local (here an inline var) and with a VALUE parameter does NOT fire.
+procedure InlineLocalCapture;
+begin
+  var LastError: string := '';
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      LastError := E.Message;
+  end;
+  if LastError <> '' then Writeln('failed');
+end;
+
+procedure ValueParamCapture(AError: string);
+begin
+  try
+    Writeln('x');
+  except
+    on E: Exception do
+      AError := E.Message;
+  end;
+  if AError <> '' then Writeln('failed');
+end;
 end.

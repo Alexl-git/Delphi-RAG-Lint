@@ -226,9 +226,16 @@ Check 'pas: KMax (read-only) STILL NOT mentioned at all' ($pasRaw -notmatch 'KMa
 Check 'pas: FThing (writable field) NOW INCLUDED with a concrete #link' ($pasRaw -match '#link\s+FThing\s+<-\s+FThing') "raw=$pasRaw"
 
 # ---------------------------------------------------------------------------
-# (4) Round-trip: the pas-surface emitted file must still validate clean
-#     (every concrete path emitted is real, even though the tree used for
-#     validation is the FULL unfiltered tree).
+# (4) Round-trip of the pas-surface emitted file through convert-validate.
+#     1.20.6 (T2b, ruling R8): convert-validate resolves every path on the
+#     .dfm surface -- a published leaf, each hop published or public-and-
+#     class-typed, never a field -- because a #link drives the .dfm re-emit.
+#     The pas surface deliberately emits PUBLIC targets (Caption) and a public
+#     FIELD (FThing). T2b made exactly those three paths fail; the owner's
+#     ruling of 2026-09-30 (T2h, R12) makes a path through a member that EXISTS
+#     but is inaccessible on the surface a WARNING instead: the book validates
+#     (exit 0) with exactly three unreachable warnings on stdout, and every
+#     published path still validates clean.
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'convert-scaffold --surface pas --out (write file), then convert-validate round-trip' -ForegroundColor Cyan
@@ -240,10 +247,16 @@ Check 'emitted file exists' (Test-Path $emitted) "path=$emitted"
 
 Push-Location $WorkDir
 try {
-  $valOut = (& $Exe convert-validate --rules $emitted --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --db $db) -join "`n"
+  $valOut = (& $Exe convert-validate --rules $emitted --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --db $db 2>$null) -join "`n"
   $valExit = $LASTEXITCODE
 } finally { Pop-Location }
-Check 'round-trip convert-validate exits 0' ($valExit -eq 0) "exit=$valExit; out=$valOut"
+$valLines = @($valOut -split "`n" | Where-Object { $_ -match '^\s*line \d+: ' })
+$valWarn  = @($valLines | Where-Object { $_ -match ': warning: .* never applied unless a descendant class changes its visibility\s*$' })
+Check 'round-trip convert-validate: exit 0, OK, and ONLY 3 unreachable warnings on stdout (Caption public in TTo, FThing public in TTo, FThing public in TFrom)' `
+  (($valExit -eq 0) -and ($valOut -match '(?m)^OK') -and ($valLines.Count -eq 3) -and ($valWarn.Count -eq 3) -and `
+   (@($valWarn | Where-Object { $_ -match ': warning: Caption: Caption is public in ScafFix\.TTo;' }).Count -eq 1) -and `
+   (@($valWarn | Where-Object { $_ -match ': warning: FThing: FThing is public in ScafFix\.TTo;' }).Count -eq 1) -and `
+   (@($valWarn | Where-Object { $_ -match ': warning: FThing: FThing is public in ScafFix\.TFrom;' }).Count -eq 1)) "exit=$valExit; out=$valOut"
 
 # ---------------------------------------------------------------------------
 # (5) Bad --surface value -> usage error exit 2.

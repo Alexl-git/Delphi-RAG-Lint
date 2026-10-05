@@ -703,10 +703,16 @@ type
       /// anything, but an exception cannot be reported without being touched), OR an
       /// assignment to the enclosing routine's Result (function only) or one of its var/out
       /// parameters (Task 9c) -- the standard Delphi TryXxx idiom that converts a caught
-      /// exception into a status the caller must inspect. Deliberately does NOT extend this to
-      /// plain locals: an assignment nothing outside the routine can observe still communicates
-      /// nothing, and stays flagged (see tests/lint/try-except-swallowed.pas's LocalOnly case) --
-      /// which is why the .Message/.ClassName test is restricted to a call and not an assignment.
+      /// exception into a status the caller must inspect. A plain local counts only when the
+      /// SAME routine reads it after the try ends (1.20.6 owner ruling: the routine then acts on
+      /// the capture); a read only before the try, only inside another try's except part, or
+      /// only in a nested routine or anonymous method does not count. "Local" means declared by
+      /// that routine itself (var section, inline var, or a value parameter); a field, a global
+      /// or anything reached through Self never counts. "After the try" is TEXTUAL: a read
+      /// earlier in a loop that contains the try does not count. A local that is never read
+      /// afterwards still communicates nothing and stays flagged (see
+      /// tests/lint/try-except-swallowed.pas's LocalOnly and CaptureThenCheck cases) -- which is
+      /// why the .Message/.ClassName test is restricted to a call and not an assignment.
       /// try-finally is ignored. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
@@ -7473,9 +7479,10 @@ var
     "Result" does not count), and any 'var'/'out' parameter (the standard
     Delphi TryXxx idiom converts a caught exception into a status the caller
     is required to inspect via one of these). Value/const parameters and
-    plain locals are deliberately excluded -- an assignment to a local that
-    nothing outside the routine can observe does not communicate the failure
-    anywhere, so it is not handling. }
+    plain locals are deliberately excluded HERE -- an assignment to a local
+    that nothing outside the routine can observe does not communicate the
+    failure by itself. A local the routine READS after the try is accepted
+    separately (ReadAfterTry, 1.20.6 Task 4). }
   procedure CollectHandlingAssignTargets(const ADefProc: TTSNode; AHandled: TStrings);
   var
     Hdr, RetType, Args, DA, Modi, NameId: TTSNode;
@@ -7515,8 +7522,9 @@ var
     standard Delphi TryXxx shape: 'except Result:= False; end' converts the
     exception into a status the caller is required to check, so it is not
     silent even though it neither raises nor logs. An assignment to any other
-    (plain local) name does NOT count -- that is still the case this rule
-    exists to catch, and stays flagged. }
+    (plain local) name does NOT count here -- on its own that is still the
+    case this rule exists to catch; Visit accepts it only when ReadAfterTry
+    finds the routine reading that local after the try. }
   { True when the already-lowercased node text is a call to `exit` WITH an
     argument -- `exit(False)`, `exit (X)`. A bare `exit;` answers False: it
     returns without saying anything, which is the swallow this rule is for. }
@@ -7630,6 +7638,170 @@ var
       if HandlesException(N.Child(I), AHandled) then Exit(True);
   end;
 
+  { v(1.20.6 Task 4, OWNER RULING): "a handler that assigns a plain LOCAL which
+    the SAME routine reads after the try ends is handling the exception, not
+    swallowing it. A local that is never read afterwards still fires." The
+    helpers below decide "read after the try ends in the same routine" on the
+    AST:
+
+      * the routine is the nearest defProc or lambda -- a read inside a NESTED
+        routine or an anonymous method does not count (nothing says it runs);
+      * a read is an identifier occurrence that is not the LHS of an
+        assignment, not a member name after a dot, and not a declaration;
+      * a read inside the except part of ANOTHER try does not count -- it runs
+        only if a second exception happens -- unless the capturing try sits in
+        that same except part (then the read is ordinary code after it). }
+  function IsRoutineScope(const N: TTSNode): Boolean;
+  begin
+    Result:= (N.NodeType = 'defProc') or (N.NodeType = 'lambda');
+  end;
+
+  function SameNode(const A, B: TTSNode): Boolean;
+  begin
+    Result:= (A.StartByte = B.StartByte) and (A.EndByte = B.EndByte) and (A.NodeType = B.NodeType);
+  end;
+
+  { Appends (lowercased) every bare identifier assigned anywhere under N, not
+    descending into a nested routine or anonymous method. }
+  procedure CollectAssignedNames(const N: TTSNode; var ANames: TArray<string>);
+  var
+    I  : Integer;
+    Lhs: TTSNode;
+  begin
+    if N.IsNull or IsRoutineScope(N) then Exit;
+    if N.NodeType = 'assignment' then
+    begin
+      Lhs:= N.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
+        ANames:= ANames + [LowerCase(Trim(NodeStr(Lhs)))];
+    end;
+    for I:= 0 to N.ChildCount - 1 do CollectAssignedNames(N.Child(I), ANames);
+  end;
+
+  { False for an identifier that only WRITES or NAMES something: the LHS of an
+    assignment, the member after a dot, a var declaration. }
+  function IsReadOccurrence(const AId: TTSNode): Boolean;
+  var
+    P, Lhs: TTSNode;
+  begin
+    P:= AId.Parent;
+    if P.IsNull then Exit(True);
+    if P.NodeType = 'assignment' then
+    begin
+      Lhs:= P.ChildByField('lhs');
+      if (not Lhs.IsNull) and SameNode(Lhs, AId) then Exit(False);
+    end;
+    if (P.NodeType = 'exprDot') and (P.ChildCount > 0) and (not SameNode(P.Child(0), AId)) then Exit(False);
+    Result:= (P.NodeType <> 'varAssignDef') and (P.NodeType <> 'declVar');
+  end;
+
+  { True when AId lies in the except part of a try other than one whose except
+    part also holds ATry (see the block comment above). }
+  function InOtherHandler(const AId, ATry, AScope: TTSNode): Boolean;
+  var
+    A, P, K: TTSNode;
+    J      : Integer;
+  begin
+    Result:= False;
+    A:= AId;
+    P:= A.Parent;
+    while (not P.IsNull) and (not SameNode(P, AScope)) do
+    begin
+      if P.NodeType = 'try' then
+        for J:= 0 to P.ChildCount - 1 do
+        begin
+          K:= P.Child(J);
+          if K.NodeType <> 'kExcept' then Continue;
+          if (A.StartByte > K.StartByte)
+             and not ((ATry.StartByte > K.StartByte) and (ATry.EndByte <= P.EndByte)) then Exit(True);
+          Break;
+        end;
+      A:= P;
+      P:= P.Parent;
+    end;
+  end;
+
+  { True when the routine AScope reads AName (lowercased) after ATry ends. }
+  function ReadAfterTry(const N: TTSNode; const AName: string; const ATry, AScope: TTSNode): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= False;
+    if N.IsNull or (N.EndByte <= ATry.EndByte) then Exit;
+    if IsRoutineScope(N) and (not SameNode(N, AScope)) then Exit;
+    if (N.NodeType = 'identifier') and (N.StartByte >= ATry.EndByte)
+       and (LowerCase(Trim(NodeStr(N))) = AName)
+       and IsReadOccurrence(N) and (not InOtherHandler(N, ATry, AScope)) then Exit(True);
+    for I:= 0 to N.ChildCount - 1 do
+      if ReadAfterTry(N.Child(I), AName, ATry, AScope) then Exit(True);
+  end;
+
+  { Appends (lowercased) the names declared DIRECTLY by declaration node N:
+    its own identifier children, not identifiers inside its type. }
+  procedure AddDeclaredNames(const N: TTSNode; var ANames: TArray<string>);
+  var
+    I: Integer;
+  begin
+    for I:= 0 to N.NamedChildCount - 1 do
+      if N.NamedChild(I).NodeType = 'identifier' then
+        ANames:= ANames + [LowerCase(Trim(NodeStr(N.NamedChild(I))))];
+  end;
+
+  { Appends the routine's VALUE / const parameter names from a declArgs node;
+    var/out parameters are CollectHandlingAssignTargets' business. }
+  procedure AddValueArgs(const AArgs: TTSNode; var ANames: TArray<string>);
+  var
+    I, J  : Integer;
+    DA    : TTSNode;
+    ByRef : Boolean;
+  begin
+    if AArgs.IsNull then Exit;
+    for I:= 0 to AArgs.NamedChildCount - 1 do
+    begin
+      DA:= AArgs.NamedChild(I);
+      if DA.NodeType <> 'declArg' then Continue;
+      ByRef:= False;
+      for J:= 0 to DA.ChildCount - 1 do
+        if (DA.Child(J).NodeType = 'kVar') or (DA.Child(J).NodeType = 'kOut') then ByRef:= True;
+      if not ByRef then AddDeclaredNames(DA, ANames);
+    end;
+  end;
+
+  { Appends the locals the routine N itself declares -- var-section declVar,
+    inline varDef / varAssignDef -- not descending into nested routines or
+    anonymous methods (their locals are not this routine's). }
+  procedure CollectOwnLocals(const N, AScope: TTSNode; var ANames: TArray<string>);
+  var
+    I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if IsRoutineScope(N) and (not SameNode(N, AScope)) then Exit;
+    if (N.NodeType = 'declVar') or (N.NodeType = 'varDef') or (N.NodeType = 'varAssignDef') then
+      AddDeclaredNames(N, ANames);
+    for I:= 0 to N.ChildCount - 1 do CollectOwnLocals(N.Child(I), AScope, ANames);
+  end;
+
+  { v(1.20.6 Task 4, ruling R22): the names that are the routine AScope's OWN
+    plain locals -- its declared locals and its value parameters. A field, a
+    global, or anything reached through Self is never in this list, so a
+    handler that only writes one of those still fires. }
+  function RoutineLocals(const AScope: TTSNode): TArray<string>;
+  var
+    Hdr: TTSNode;
+    I  : Integer;
+  begin
+    Result:= nil;
+    CollectOwnLocals(AScope, AScope, Result);
+    if AScope.NodeType = 'defProc' then
+    begin
+      Hdr:= AScope.ChildByField('header');
+      if not Hdr.IsNull then AddValueArgs(Hdr.ChildByField('args'), Result);
+    end
+    else
+      for I:= 0 to AScope.NamedChildCount - 1 do
+        if AScope.NamedChild(I).NodeType = 'declArgs' then AddValueArgs(AScope.NamedChild(I), Result);
+  end;
+
   { True when a comment carries HUMAN PROSE rather than a tool-written marker.
 
     `// dl:ok <rule>@<hash>` and `// drag-lint:ignore <rule>` are written by
@@ -7682,6 +7854,10 @@ var
     ExceptPt : TTSPoint;
     F        : TLintFinding;
     HandledNames: TStringList;
+    Captured    : TArray<string>;
+    Locals      : TArray<string>;
+    Scope       : TTSNode;
+    Name        : string;
   begin
     if N.IsNull or (Findings.Count >= 100) then Exit;
     if N.NodeType = 'try' then
@@ -7691,6 +7867,7 @@ var
       Documented  := False;
       CommentsOnly:= True;
       ExceptPt := Default(TTSPoint);
+      Captured := nil;
       HandledNames:= TStringList.Create;
       try
         HandledNames.CaseSensitive:= False;
@@ -7724,7 +7901,25 @@ var
             begin
               CommentsOnly:= False;
               if HandlesException(C, HandledNames) then Handled:= True;
+              CollectAssignedNames(C, Captured);
             end;
+          end;
+        end;
+        { 1.20.6 Task 4: a local the handler captures into, read after the try
+          in the same routine, is the exception being acted on. }
+        if HasExcept and (not Handled) and (Length(Captured) > 0) then
+        begin
+          Scope:= N.Parent;
+          while (not Scope.IsNull) and (not IsRoutineScope(Scope)) do Scope:= Scope.Parent;
+          if not Scope.IsNull then
+          begin
+            Locals:= RoutineLocals(Scope);
+            for Name in Captured do
+              if (IndexStr(Name, Locals) >= 0) and ReadAfterTry(Scope, Name, N, Scope) then
+              begin
+                Handled:= True;
+                Break;
+              end;
           end;
         end;
       finally

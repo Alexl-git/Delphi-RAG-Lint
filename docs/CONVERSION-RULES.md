@@ -77,7 +77,8 @@ directly (not the index) and treats `--db` as optional per-class enrichment.
 ### 1. `proptree` -- deep property enumerator
 
 ```
-drag-lint proptree --qname <TClass> [--depth N] [--no-to-persistent]
+drag-lint proptree --qname <TClass> [--depth N] [--rules <file>] [--progress-interval S]
+                    [--no-to-persistent]
                     [--min-visibility published|public]
                     [--format text|json] --db PATH [--db ...]
 ```
@@ -86,10 +87,63 @@ Walks a class's `property` symbols (own **and** inherited), parses each property
 type from its indexed signature, and recurses into class-typed property types --
 producing flattened dotted paths (`Font.Color`, `Sub.Color`). By default it stops
 the ancestor climb at `TPersistent`/`TObject`; `--no-to-persistent` climbs past.
-Recursion is depth-capped (default **6**) with a visited-type cycle guard. Each
+Recursion is depth-capped with a visited-type cycle guard. **Depth** is the
+class-recursion budget: root members are 1-segment paths, and a K-segment path
+needs depth >= K-1 (depth 2 already holds `Constraints.Items.CustomConstraint`).
+The depth is `--depth N` (an integer >= 1), else the `#depth N` of the book named
+by `--rules <file>`, else **5** (1.20.6; before that the documented default was
+6, but a run with no `--depth` actually used the global parse default 3). A
+non-numeric `--depth`, `--depth 0` / negative, a missing `--rules` file, or a
+book whose `#depth` is invalid or repeated is a usage error (exit 2); so is a
+`--depth` that is not plain decimal digits (`+3`, `$A` -- the check `#depth`
+uses).
+`convert-scaffold` takes the same `--depth` / `--rules` with the same rule. Each
 visited class's own **fields** and class-scoped **consts** are also walked and
 emitted as flat leaves (`member_kind: "field"` -- see below; never recursed into,
 even when class-typed).
+
+**Progress (1.20.6).** A deep tree can take a while (FireDAC `TFDQuery` at depth
+4 is ~66 classes and ~26k nodes). `--progress-interval S` (whole seconds, the
+same digits-only check as `--depth`; `x`, `-1`, `+3`, `1.5` and a missing value exit 2) makes
+`proptree` and `convert-scaffold` write ONE JSON line to **STDERR** at most every
+`S` seconds while the tree is expanded and emitted -- never to stdout, so the
+verb's own output is byte-identical with or without it:
+
+```
+{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"FireDAC.Comp.Client.TFDQuery","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}}
+```
+
+`elapsed_s` counts from the start of the verb (one decimal, `.` in every locale);
+`depth` is the breadth-first level being expanded (`max_depth` once expansion is
+over and the nodes are being emitted); `classes_done` is the number of classes
+resolved into the member cache so far; `classes_queued` the classes still waiting
+at this or a deeper level (0 while emitting); `nodes` the nodes emitted so far (0
+while expanding). `class` is the tree's root (`convert-scaffold` builds the FROM
+tree, then the TO tree). The key set and order are fixed; `elapsed_s`,
+`classes_done` and `nodes` never decrease. The first line comes after one full
+interval, so a run shorter than `S` prints none. Writing the document AFTER the
+tree is built prints no progress: since 1.20.6 (T2i) it is one buffered write
+(`TFDQuery --depth 5 --json`, 101,063 nodes / 37 MB: under 1 s of a ~14 s run).
+
+**Stream order (1.20.6).** `proptree`, `convert-scaffold`, `convert-apply`
+(dry run and `--apply`, `--format json`), `convert-reemit`, `info --json`,
+`query --name --json`, `outline --format json` and `sql` -- the verbs the rules
+editor runs -- flush every STDERR line they wrote (the `(loaded defaults ...)`
+banner, freshness and resolver notes, progress lines) BEFORE the first byte of the stdout document,
+and write the document in one piece; nothing follows it on either stream. So a
+caller that merges the two streams into one pipe gets the notes as a preamble
+and the complete document after them.
+
+**Default 0 = OFF.** A caller that merges stdout and stderr (the rules editor
+does, then parses from the first `{` to the last `}`) must leave it off: a
+progress line in the preamble carries a `{` of its own.
+`convert-apply` / `convert-validate` never build a tree and never emit progress:
+they reject `--progress-interval` as an unknown argument (exit 3).
+**Cancel = kill the process.** That is safe with the default write-back: each
+type the ancestry-bridge recovers is memoised by its own SQLite statement, so a
+killed run leaves the index consistent (pinned by a kill test and
+`PRAGMA integrity_check`); `--no-write-back` never writes at all. `info --json`
+advertises the flag as `capabilities.progress_lines: true`.
 
 A re-declared / inherited property (for example `property Color;`, which the index
 stores with an empty signature) resolves its type from the first ancestor
@@ -180,7 +234,9 @@ usage error / an explicit `--db` that does not exist / invalid `--min-visibility
 
 ```
 drag-lint convert-scaffold --from <FromType> --to <ToType>
-                           [--out <file>] [--surface dfm|pas] --db PATH [--db ...]
+                           [--out <file>] [--surface dfm|pas]
+                           [--depth N] [--rules <file>] [--progress-interval S]
+                           --db PATH [--db ...]
 ```
 
 Enumerates BOTH deep property trees (via `proptree`'s engine) and emits a VALID,
@@ -251,10 +307,94 @@ drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>]
 ```
 
 Parses a rules file and, when `--from`/`--to` types are supplied, validates its
-`#link`/`#default` **paths** against the REAL property trees of those types (built
-with `proptree`'s engine). This is the crux reFind cannot do: reFind is blind PCRE
-text; we know the real properties, so a `#link` target/source typo is a validation
-error, not a silent no-op.
+`#link`/`#default` **paths** against the REAL members of those types. This is the
+crux reFind cannot do: reFind is blind PCRE text; we know the real properties, so a
+`#link` target/source typo is a validation error, not a silent no-op.
+
+**How a path is resolved (1.20.6).** No property tree is built. Each path is
+resolved SEGMENT BY SEGMENT against a per-class member cache (`proptree`'s own
+per-member resolution, each class resolved once per run), so there is no depth
+limit and neither `--depth` nor a book's `#depth` applies (a bad `#depth` is still
+reported as a `line N:` error) -- a 9-segment path validates as readily as a
+1-segment one, and the BDE book's TQuery block checks in seconds (the old depth-6
+tree of `FireDAC.Comp.Client.TFDQuery` did not finish in 20 minutes). A rule path
+names a `.dfm`-streamed property, so the `.dfm` rule applies: the LEAF must be a
+published property; each INTERMEDIATE hop must be published, or public AND
+class-typed (a collection's public `Items`, which a `.dfm` streams as `item`
+blocks); a protected hop, a public leaf or a field does not pass. **Private and
+strict private members never resolve** (and `proptree` no longer lists them). A
+hop may not pass through a type already passed through on the same path (the
+same cycle guard `proptree` applies).
+
+**Unreachable paths are warnings, not errors (1.20.6, owner ruling
+2026-09-30).** A path can fail in two different ways, and they are reported
+differently:
+
+- **NOT FOUND** -- some segment names no member at all on its hop (a typo, a
+  member of another class), or an intermediate hop has no children to name: a
+  scalar or other NON-class-typed hop, a field, or a referenced component --
+  whatever its visibility. This is an **error**: `line N: link FromPath not
+  found in --from tree: <path>`, exit 1.
+- **UNREACHABLE** -- every segment names a member that EXISTS, but one of them
+  is inaccessible on the `.dfm` surface: private or strict private anywhere,
+  protected anywhere (a class-typed hop included), or a public LEAF (a public
+  field leaf too). This is a **warning**, the rule is KEPT in the book, and
+  exit stays 0.
+
+A path that runs INTO a private member stops there: the private member's type
+is never expanded, so nothing after it is checked. `FPriv.Typo` is therefore
+UNREACHABLE naming `FPriv`, not NOT FOUND -- the misspelled tail is not looked
+at. (A protected or public hop is still descended, so `ProtPart.Typo` IS NOT
+FOUND.)
+
+The warning text, exactly (one line, printed on **stdout** beside the errors):
+
+```
+line N: warning: <path>: <Member> is <visibility> in <DeclaringClass>; never applied unless a descendant class changes its visibility
+```
+
+`<Member>` is the FIRST offending segment, `<visibility>` its visibility as
+declared (`private`, `strict private`, `protected`, `public`, `published` for a
+field), and `<DeclaringClass>` the qualified class that declares it. When a
+class redeclares an ancestor's member in a private section, the warning names
+the REDECLARATION (the descendant, `private`), not the ancestor's member.
+
+Why a warning: such a rule is like `if 1 > 2 then ...` -- no `.dfm` can stream
+the member, so the rule never fires. It can still be right to keep it: a
+descendant class (`TMyTable = class(TTable)`) may republish the member, and then
+the same rule applies to that descendant. The BDE book's 16 `FieldOptions.*` and
+`Constraints.Items.*` links (protected in `Data.DB.TDataSet`) are exactly this
+case.
+
+`convert-apply` and the hidden `convert-reemit` SKIP what is unreachable, per
+`#convert` block (the block of the component being converted), keep
+converting everything else, and report it:
+
+- a `#link` or `#default` line with an unreachable path is not applied;
+- a `#mapping` line keeps its place (branches are still tried in order, first
+  match wins) and loses only its unreachable TARGETS: a value matching that
+  branch sets the branch's reachable targets and never falls through to a
+  later `#when` or `#else`;
+- a `#mapping` whose `#when` SOURCE path is unreachable is skipped WHOLE for
+  that block -- no branch and no `#else` fires (the conservative reading: that
+  branch can never match, and letting another branch write in its place would
+  set a value nobody chose);
+- a mapping applied by two blocks is judged per block: reachable in one and
+  unreachable in the other, it still applies in the first, and the warning
+  names the second block's class only.
+
+Reporting: text mode prints the same `line N: warning: ...` line under
+`Warnings:`; apply/1 JSON appends the same text to the string array
+`warnings[]`, mirrors it in `items[]` as kind `rule-path-unreachable`, and adds
+one object per path to `unreachable[]` (always present, `[]` when none):
+
+```
+{ "line": 274, "path": "FieldOptions.AutoCreateMode", "member": "FieldOptions",
+  "visibility": "protected", "class": "Data.DB.TDataSet", "reason": "unreachable",
+  "message": "line 274: warning: FieldOptions.AutoCreateMode: FieldOptions is protected in Data.DB.TDataSet; never applied unless a descendant class changes its visibility" }
+```
+
+`convert-validate` has no JSON mode; its warnings are text lines only.
 
 - Without `--from`/`--to` it is **parse-only**: only unknown-directive parse
   errors surface; path checks are skipped.
@@ -384,13 +524,14 @@ Real reFind sample lines (from the BDE2FD sample):
 
 | Directive | Meaning |
 |---|---|
-| `#convert <From> -> <To> [, <unit> ...]` | declares the type-pair this block converts (groups the links; optional target uses-add) |
+| `#convert <From> -> <To> [, <unit> ...]` | declares the type-pair this block converts (groups the links; optional target uses-add). A From-only header -- `#convert TFoo -> ` (the editor writes it while authoring) or `#convert TFoo` -- parses as From `TFoo` with an EMPTY To, never as a class named `TFoo ->`, and is a `line N:` error: `#convert TFoo has no To type` (1.20.6, R27). Likewise `#useswap X -> ` with no New unit: `#useswap X has no replacement unit`. |
 | `#link <ToPath> <- <FromPath>` | deep property assignment. **Note the `<-` arrow** -- reversed vs `#migrate`'s `->`. Read it "target gets source." **Type-identity carry (2026-09-16):** when both sides are CLASS-TYPED and of the SAME class (`#link Font <- Font`, both `TFont`), every sub-leaf the `.dfm` streams under the source (`Font.Charset`, `Font.Name`, ...) is carried to the same leaf under the target automatically -- the five hand-written `Font.*` lines become one. When the types DIFFER (`OptionsImage.Glyph <- Picture`, `TdxSmartGlyph <- TPicture`) nothing is carried implicitly and every dotted leaf must be named, because an invented target path is how a form stops loading. An explicit per-leaf `#link` / `#ignore` / `#remove` always wins over the carry; a carried leaf is reported (`sub-leaf-carried` in `convert-apply --format json`, `report.carried[]` in `convert-reemit`) so the leaves nobody typed are visible. Not implemented: the "target type is an ancestor of the source type" case -- the engine has no class graph, so that still needs explicit leaves. |
 | `#default <ToPath> = <value>` | set a target property to a default when no source maps to it |
 | `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. |
 | `#note <text>` | a human comment carried in the rule (the scaffolder emits `candidates:` and `DROPPED` notes) |
 | `#use <unit>` | add a unit to the PAS `uses` clause (the companion to reFind's `#unuse`) |
 | `#useswap <Old> -> <New1> [, <New2> ...]` | replace unit `<Old>` with one-or-more `<New>` units. Sugar for `#unuse Old` + `#use New1` + `#use New2` ... |
+| `#depth <N>` | the book's property-tree depth for `proptree --rules` / `convert-scaffold --rules` (1.20.6). `N` is decimal digits 1..10, at most one per book; anything else (`#depth 11`, `#depth x`, a bare `#depth`, a second `#depth`) is a `line N:` error in `convert-validate` and a usage error (exit 2) in `proptree`/`convert-scaffold`. Precedence: `--depth N` > `#depth N` > 5. `convert-validate`/`convert-apply` resolve paths lazily and ignore it. `--print-parsed` shows it as `line L: depth N`. |
 
 Example superset block:
 
@@ -423,8 +564,44 @@ apply path) is:
 - add each ADD unit only if not already present; a unit in both sets -> **ADD wins**
   (it is needed), reported as a conflict.
 
-_Status:_ **recognized by the parser now (parse-only -- they validate clean and
-round-trip);** executed by `convert-apply` in a later phase.
+_Status:_ **executed by `convert-apply` since 1.20.6** (`info --json` ->
+`capabilities.apply_unit_rules: true`). Per unit: remove Old from whichever clause
+holds it; add each New once (case-insensitive, never a duplicate in either section)
+into the section Old was in; a `#useswap` whose Old the unit does not use makes NO
+edit. `#use` adds to the **implementation** uses (a clause is created when there is
+none). An
+entry to remove inside a `{$IF...}` region refuses the whole unit (exit 1, nothing
+written; see *Refusals* below). A unit with no `.dfm`, a book with no `#convert` block, or a `.dfm` no
+block matches, gets its unit rules alone. The `apply/1` JSON reports them as
+`uses[]` / `uses_removed` / `uses_added` plus `component_part`.
+
+### Refusals (`refused` / `reason`, 1.20.6)
+
+Some units `convert-apply` will not touch at all, because no safe rewrite
+exists: a `.dfm` holding an `inherited`/`inline` object of a From type
+(`inherited instances of <Type> are not converted yet -- unit not changed`), and
+a unit whose uses entry to change sits in a `{$IF...}` region (the message
+names the entry and the clause), and a `.dfm` that changed after indexing: the
+line range the index recorded for an instance no longer opens `object <Name>:`
+(or `inherited`/`inline`), its first `end` at the opener's indent is not the
+recorded end line (a block that lost lines now ends on a later sibling's `end`),
+or the `.dfm` was cut short so the range runs past its end
+(`<Name>: index is stale for this .dfm -- reindex`; reindex and run again), and
+(R26) a unit-rule removal -- `#unuse`, or `#useswap`'s Old -- of the unit that
+declares the From type of an instance that stays unconverted (skipped, or left
+out by `--only`, which filters instances and never unit rules): removing it would
+break the compile (E2003), so the unit is refused with
+`<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed`
+(e.g. `#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed`;
+the declaring unit is the From type's indexed declaring file).
+Every such refusal behaves the same way: exit
+1, NOTHING written (neither `.pas` nor `.dfm`), one text line
+`REFUSED: <reason>`, and in `apply/1` JSON `"ok": false`, `"refused": true`,
+`"reason": "<reason>"` (`error` holds the same text). `refused` (a JSON bool)
+and `reason` are always present: `false` and `""` on success and on every
+genuine failure -- rule errors, the freshness guard, a missing file. The editor
+keys its "refused -- not changed" row on `refused == true`. An unreachable-path
+warning is not a refusal. Schema stays `apply/1` (additive).
 
 ## End-to-end workflow
 
@@ -494,6 +671,26 @@ Without `--apply`, `convert-apply` is dry-run only: it prints the planned edits
 (`TTextEditApplier.RenderDryRun`) and writes nothing. `--apply` writes the edits
 for real. `--only Name1,Name2,...` restricts the run to specific `.dfm` instance
 names; `--db` may repeat for a multi-DB index.
+
+**Which blocks are validated (1.20.6).** Before planning, `convert-apply`
+validates the WHOLE book: every `#convert` block against its OWN From/To types,
+and each `#mapping` against the block(s) that `#apply` it -- each path resolved
+segment by segment as in `convert-validate` above (the `.dfm` rule; private
+never; no depth limit), except that a referenced component (a `TComponent`-typed
+property such as `Connection`) is a leaf here, so a path THROUGH it
+(`Connection.Params.X`) is not found -- the plan could not apply it either.
+Every block is also freshness-checked: a stale type behind ANY block warns on a
+dry run and refuses `--apply`, a unit-rules-only run included. A block whose
+From or To type resolves in no `--db` is an error on its `#convert` line.
+Validation and the plan share one member cache per `--db` (json
+`classes_built` = the classes whose members were resolved). A path error ends
+with the block it was checked in: `(#convert line N: From -> To)`.
+
+**Inherited forms.** `convert-apply` does not convert `inherited` / `inline`
+`.dfm` objects yet. If the unit's `.dfm` holds one whose class is a From type
+of the book, the whole unit is refused (exit 1, nothing written, unit rules
+included): `inherited instances of <Type> are not converted yet -- unit not
+changed`.
 
 `convert-apply` locates every `.dfm` component instance whose class matches a
 `#convert FromType` rule, then rewrites all **5 conversion surfaces** for each:
@@ -577,6 +774,18 @@ autotests (run each individually; there is no aggregating runner):
 - `tests/autotest/run_convert_rules.ps1` -- the DSL parser + `convert-validate`
   (including the Batch 2a-i `#ignore` directive).
 - `tests/autotest/run_convert_scaffold.ps1` -- the `convert-scaffold` generator.
+- `tests/autotest/run_convert_book_depth.ps1` -- the `#depth` directive and the
+  `--depth` > `#depth` > 5 precedence of `proptree` / `convert-scaffold`.
+- `tests/autotest/run_proptree_progress.ps1` -- `--progress-interval` progress
+  lines (off by default, stderr only, the line format, exit 2 / exit 3 cases, the
+  `info` capability keys, kill-safety of the write-back; the `TFDQuery` arms need
+  `-LibDb <scratch library copy>`).
+- `tests/autotest/run_proptree_output_speed.ps1` -- the stdout document of
+  `proptree` / `convert-scaffold`: stderr ++ stdout on a merged stream, a missing
+  `--progress-interval` value, byte-identity against a pre-1.20.6 engine
+  (`-OldExe`, every call of the `run_proptree*` / `run_convert_scaffold*`
+  runners as json and text, all `--min-visibility` values) and `TFDQuery` depth 5
+  under 60 s through a replica of the editor's pipe drain (`-LibDb`).
 - `tests/autotest/run_dfm_reemit.ps1` -- the Batch 2a-i DFM re-emit engine (via the
   hidden `convert-reemit` verb): 1:1 rename, moved-depth, events, `#ignore`,
   unmapped-drop, `#default`, collection relocate, binary same-type/mismatch,

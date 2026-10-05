@@ -940,6 +940,27 @@ function DocFactsBuildProfile: string;
   /// </remarks>
   function DocDisplayCount(ATotal: Integer): Integer;
 
+  /// <summary>THE one indent decision for a managed doc block: the leading
+  /// whitespace every `///` line the engine writes for a declaration carries.
+  /// The writer (Doc.Document) and the checker (Doc.Drift) both call this, so
+  /// they cannot disagree about where a block sits -- if they did, doc-drift
+  /// would never settle (the 1.20.5 lesson).</summary>
+  /// <param name="ALines">The whole source file, one entry per physical line
+  /// (1-based line numbers index it as ALines[N - 1]).</param>
+  /// <param name="ADeclLine">The declaration's 1-based line.</param>
+  /// <param name="ADocStart">The existing doc block's first 1-based line; 0 when
+  /// there is none.</param>
+  /// <param name="ADocEnd">The existing doc block's last 1-based line.</param>
+  /// <returns>The block's own first-line indent when the block sits DIRECTLY on
+  /// the declaration (ADocEnd = ADeclLine - 1, no gap), every line of it carries
+  /// that same indent, and it is DEEPER than the declaration's; otherwise the
+  /// declaration line's own leading whitespace ('' for a blank or missing
+  /// line). Owner ruling 2026-09-30.</returns>
+  /// <remarks>Pure. A mixed-indent block is not "kept": the declaration wins,
+  /// which keeps a block with one stray line at a fixed point. Spaces and tabs
+  /// only, each one character.</remarks>
+  function EffectiveDocIndent(const ALines: TArray<string>; ADeclLine, ADocStart, ADocEnd: Integer): string;
+
 implementation
 
 uses
@@ -1268,6 +1289,33 @@ end;
 function DocDisplayCount(ATotal: Integer): Integer;
 begin
   if ATotal > 15 then Result:= 10 else Result:= ATotal;
+end;
+
+function EffectiveDocIndent(const ALines: TArray<string>; ADeclLine, ADocStart, ADocEnd: Integer): string;
+  function Lead(const S: string): string;
+  var N: Integer;
+  begin
+    N:= 0;
+    while (N < Length(S)) and CharInSet(S[N + 1], [' ', #9]) do Inc(N);
+    Result:= Copy(S, 1, N);
+  end;
+var
+  Decl, First, Cur: string;
+  I: Integer;
+begin
+  Result:= '';
+  if (ADeclLine < 1) or (ADeclLine > Length(ALines)) then Exit;
+  if Trim(ALines[ADeclLine - 1]) <> '' then Result:= Lead(ALines[ADeclLine - 1]);
+  Decl:= Result;
+  if (ADocStart < 1) or (ADocEnd <> ADeclLine - 1) or (ADocStart > ADocEnd) then Exit;
+  First:= Lead(ALines[ADocStart - 1]);
+  if Length(First) <= Length(Decl) then Exit;
+  for I:= ADocStart + 1 to ADocEnd do
+  begin
+    Cur:= Lead(ALines[I - 1]);
+    if Cur <> First then Exit;
+  end;
+  Result:= First;
 end;
 
 function LastSeg(const S: string): string;
