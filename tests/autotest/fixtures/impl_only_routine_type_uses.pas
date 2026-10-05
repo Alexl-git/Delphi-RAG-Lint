@@ -15,10 +15,12 @@ implementation
 
 uses
   Classes,
-  impl_only_routine_type_uses_types;  // declares TImportedType
+  impl_only_routine_type_uses_types,  // declares TImportedType
+  impl_only_routine_type_uses_unused;  // positive control: genuinely unused
 
 type
   TLocalType = class(TObject)
+    procedure Run;
   end;
 
 { Implementation-only routine: TImportedType appears ONLY in the signature,
@@ -52,7 +54,22 @@ begin
   { Empty. }
 end;
 
+{ Variant: a nested routine inside a METHOD implementation. }
+procedure TLocalType.Run;
+  procedure NestedInMethod(Q: TImportedType);
+  begin
+    { Empty. }
+  end;
+begin
+  { Empty. }
+end;
+
+{ Variant: a nested routine inside an INTERFACE-declared free routine. }
 procedure DoSomething;
+  function NestedInIfaceRoutine: TImportedType;
+  begin
+    Result := nil;
+  end;
 begin
   { Implementation of interface routine; this one can use local types. }
 end;

@@ -931,4 +931,15 @@
 #   Superseded: 1.20.0-alpha|c693f2f776ba9869f037065b6deeddb43dfbb276b85dab200e55cc53d1fb22c7
 # Superseded: 1.19.0-alpha|376c7143274119aa23760b9d41092862c6b7d24b426d7367cf5debb6286aa8b8
 #   2026-09-28 1.19.0 -> 1.20.0-alpha: Self.X := v emits a WRITE (Parser.Delphi13 assignment case); sql_column positioned on its own identifier (Parser.Sql FlushItem). Owner-scheduled batch; full re-parse run the same night.
-1.21.0-alpha|481261fd9d556f85d59dadab81e219748d18aace0ba88cbb4a711e5359dec330
+# 2026-10-05: bumped 1.21.0-alpha -> 1.21.1-alpha. Ref-gap F, second half: NESTED routines
+#   (local to a free routine, a method impl, or an interface-declared routine) now emit
+#   type_use refs for their parameter and return types too. 1.21.0 covered only
+#   implementation-only FREE routines; its nested arm (Parser.Delphi13, the RoutineDepth > 0
+#   branch of the defProc case) called WalkDeclProc, which emits symbols and never refs.
+#   1.21.0 was never released, but databases stamped 1.21.0 hold that incomplete parse,
+#   so they must re-parse -- hence a bump rather than a re-pin.
+#   MEASURED on the extended fixture: type_use rows 8 -> 11 (lines 49, 59, 69), symbols
+#   23 -> 23 (no duplicate params). Guard: tests\autotest\run_impl_only_signature_type_uses.ps1
+#   (RED on an engine without the nested arm: 5 failures; GREEN with it).
+#   Superseded: 1.21.0-alpha|481261fd9d556f85d59dadab81e219748d18aace0ba88cbb4a711e5359dec330
+1.21.1-alpha|23d91cc58ee54446b0cf6a5809389cef208aff1ef9dcf8960af9a5d2584a1704

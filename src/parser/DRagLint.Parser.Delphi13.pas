@@ -2530,6 +2530,18 @@ begin
           if (NName <> '') and (Pos('.', NName) = 0) then
           begin
             SelfIdx:= WalkDeclProc(NHdr, AState, AParentSymbolIdx, AParentQualifiedName, False);
+            { Ref-gap F (1.21.1): a NESTED routine's header is, like an
+              impl-only free routine's, the ONLY place its signature exists,
+              and WalkDeclProc emits symbols, never refs -- so without this
+              walk `procedure Inner(P: TImported);` left TImported with no
+              type_use row and unused-unit-in-uses reported its unit dead.
+              Same routing as the depth-0 arms above: args + return type
+              through Walk, which emits a type_use per typeref and adds no
+              param symbols (EmitRoutineParams in WalkDeclProc owns those). }
+            var NArgs:= NHdr.ChildByField('args');
+            if not NArgs.IsNull then Walk(NArgs, AState, AParentSymbolIdx, AParentQualifiedName);
+            var NRet:= NHdr.ChildByField('type');
+            if not NRet.IsNull then Walk(NRet, AState, AParentSymbolIdx, AParentQualifiedName);
             if SelfIdx >= 0 then
             begin
               SelfQName:= AState.Symbols[SelfIdx].QualifiedName;

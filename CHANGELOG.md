@@ -3,6 +3,19 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased -- extractor 1.21.1-alpha
+
+EXTRACTOR BUMP 1.20.0 -> 1.21.1 (1.21.0 was never released): every index re-parses once.
+
+### Fixed
+
+- **Ref-gap F: signature types of header-only routines are now `type_use` refs.** An
+  implementation-only free routine (1.21.0) and a NESTED routine -- local to a free routine, a
+  method implementation or an interface-declared routine (1.21.1) -- emitted its symbol and
+  params but no ref for its parameter or return types. An imported unit whose type appeared only
+  there was reported by `unused-unit-in-uses` as a dead import. Guard:
+  `tests\autotest\run_impl_only_signature_type_uses.ps1`.
+
 ## v1.20.6-alpha -- 2026-10-05
 
 MINOR-in-PATCH: the converter engine gains what the rule-book editor asked for. Only

@@ -87,7 +87,17 @@ const
     lexer and the grammar see them (a body with an apostrophe, or a 5-quote
     delimiter, made the whole unit unparseable). Schema unchanged. Re-parses
     every index. docs\INBOX-defects-found-2026-09-23-rule-work.md D18/D19 }
-  DRAGLINT_EXTRACTOR_VERSION = '1.21.0-alpha';
+  { 1.20.0 -> 1.21.0 -> 1.21.1 (2026-10-05, Ref-gap F): a routine whose header
+    is the ONLY place its signature exists now emits type_use refs for its
+    parameter and return types. 1.21.0 covered implementation-only FREE
+    routines; 1.21.1 adds NESTED routines (inside a free routine, a method impl
+    or an interface-declared routine), which 1.21.0 missed. 1.21.0 was never
+    released, but databases already stamped 1.21.0 hold the incomplete parse,
+    so the second bump is what makes them re-parse. Before the fix an imported
+    unit whose type appeared only in such a signature read as unused
+    (unused-unit-in-uses false positive). Guard:
+    tests\autotest\run_impl_only_signature_type_uses.ps1 }
+  DRAGLINT_EXTRACTOR_VERSION = '1.21.1-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
