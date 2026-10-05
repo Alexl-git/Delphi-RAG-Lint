@@ -54,3 +54,11 @@ try-except-swallowed 256
 try-except-swallowed 269
 try-except-swallowed 284
 try-except-swallowed 298
+# Fix round 1 (ruling R22): the captured name must be the routine's OWN local.
+# A field (314) and a unit global (329) still fire even when read after the
+# try; the positive controls -- an inline local (343) and a value parameter
+# (354) -- do not.
+try-except-swallowed 314
+try-except-swallowed 329
+!try-except-swallowed 343
+!try-except-swallowed 354

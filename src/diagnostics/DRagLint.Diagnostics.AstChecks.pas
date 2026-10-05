@@ -706,7 +706,10 @@ type
       /// exception into a status the caller must inspect. A plain local counts only when the
       /// SAME routine reads it after the try ends (1.20.6 owner ruling: the routine then acts on
       /// the capture); a read only before the try, only inside another try's except part, or
-      /// only in a nested routine or anonymous method does not count. A local that is never read
+      /// only in a nested routine or anonymous method does not count. "Local" means declared by
+      /// that routine itself (var section, inline var, or a value parameter); a field, a global
+      /// or anything reached through Self never counts. "After the try" is TEXTUAL: a read
+      /// earlier in a loop that contains the try does not count. A local that is never read
       /// afterwards still communicates nothing and stays flagged (see
       /// tests/lint/try-except-swallowed.pas's LocalOnly and CaptureThenCheck cases) -- which is
       /// why the .Message/.ClassName test is restricted to a call and not an assignment.
@@ -7733,6 +7736,72 @@ var
       if ReadAfterTry(N.Child(I), AName, ATry, AScope) then Exit(True);
   end;
 
+  { Appends (lowercased) the names declared DIRECTLY by declaration node N:
+    its own identifier children, not identifiers inside its type. }
+  procedure AddDeclaredNames(const N: TTSNode; var ANames: TArray<string>);
+  var
+    I: Integer;
+  begin
+    for I:= 0 to N.NamedChildCount - 1 do
+      if N.NamedChild(I).NodeType = 'identifier' then
+        ANames:= ANames + [LowerCase(Trim(NodeStr(N.NamedChild(I))))];
+  end;
+
+  { Appends the routine's VALUE / const parameter names from a declArgs node;
+    var/out parameters are CollectHandlingAssignTargets' business. }
+  procedure AddValueArgs(const AArgs: TTSNode; var ANames: TArray<string>);
+  var
+    I, J  : Integer;
+    DA    : TTSNode;
+    ByRef : Boolean;
+  begin
+    if AArgs.IsNull then Exit;
+    for I:= 0 to AArgs.NamedChildCount - 1 do
+    begin
+      DA:= AArgs.NamedChild(I);
+      if DA.NodeType <> 'declArg' then Continue;
+      ByRef:= False;
+      for J:= 0 to DA.ChildCount - 1 do
+        if (DA.Child(J).NodeType = 'kVar') or (DA.Child(J).NodeType = 'kOut') then ByRef:= True;
+      if not ByRef then AddDeclaredNames(DA, ANames);
+    end;
+  end;
+
+  { Appends the locals the routine N itself declares -- var-section declVar,
+    inline varDef / varAssignDef -- not descending into nested routines or
+    anonymous methods (their locals are not this routine's). }
+  procedure CollectOwnLocals(const N, AScope: TTSNode; var ANames: TArray<string>);
+  var
+    I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if IsRoutineScope(N) and (not SameNode(N, AScope)) then Exit;
+    if (N.NodeType = 'declVar') or (N.NodeType = 'varDef') or (N.NodeType = 'varAssignDef') then
+      AddDeclaredNames(N, ANames);
+    for I:= 0 to N.ChildCount - 1 do CollectOwnLocals(N.Child(I), AScope, ANames);
+  end;
+
+  { v(1.20.6 Task 4, ruling R22): the names that are the routine AScope's OWN
+    plain locals -- its declared locals and its value parameters. A field, a
+    global, or anything reached through Self is never in this list, so a
+    handler that only writes one of those still fires. }
+  function RoutineLocals(const AScope: TTSNode): TArray<string>;
+  var
+    Hdr: TTSNode;
+    I  : Integer;
+  begin
+    Result:= nil;
+    CollectOwnLocals(AScope, AScope, Result);
+    if AScope.NodeType = 'defProc' then
+    begin
+      Hdr:= AScope.ChildByField('header');
+      if not Hdr.IsNull then AddValueArgs(Hdr.ChildByField('args'), Result);
+    end
+    else
+      for I:= 0 to AScope.NamedChildCount - 1 do
+        if AScope.NamedChild(I).NodeType = 'declArgs' then AddValueArgs(AScope.NamedChild(I), Result);
+  end;
+
   { True when a comment carries HUMAN PROSE rather than a tool-written marker.
 
     `// dl:ok <rule>@<hash>` and `// drag-lint:ignore <rule>` are written by
@@ -7786,6 +7855,7 @@ var
     F        : TLintFinding;
     HandledNames: TStringList;
     Captured    : TArray<string>;
+    Locals      : TArray<string>;
     Scope       : TTSNode;
     Name        : string;
   begin
@@ -7842,12 +7912,15 @@ var
           Scope:= N.Parent;
           while (not Scope.IsNull) and (not IsRoutineScope(Scope)) do Scope:= Scope.Parent;
           if not Scope.IsNull then
+          begin
+            Locals:= RoutineLocals(Scope);
             for Name in Captured do
-              if ReadAfterTry(Scope, Name, N, Scope) then
+              if (IndexStr(Name, Locals) >= 0) and ReadAfterTry(Scope, Name, N, Scope) then
               begin
                 Handled:= True;
                 Break;
               end;
+          end;
         end;
       finally
         HandledNames.Free;
