@@ -1128,10 +1128,13 @@ Step 'E-T0' {
   if ($null -eq $t0.VerbCaseFailures) { Fail 'A-CO0-VERB' 'VerbCaseFailures is null -- the verb-case check did not run' }
   elseif (@($t0.VerbCaseFailures).Count) { Fail 'A-CO0-VERB' (@($t0.VerbCaseFailures) -join '; ') }
 
-  # P2 through Get-SourceContext: of 430 candidate refs, 168 reads sit after
+  # RE-PINNED 2026-10-05 (re-clone at extractor 1.21.1): 430 -> 433. Ref-gap F -- a routine declared only in the
+  # implementation section now records its parameter types -- adds three `E: Exception` type_uses (EExtraExceptionInfo:231,
+  # ControlPlan2:1140, Blueprint4.ViewModel:1493; source sha identical). None is after `raise`/`on`, so 168/185 hold.
+  # P2 through Get-SourceContext: of 433 candidate refs, 168 reads sit after
   # `raise` and 185 type_uses after `on [E:]` -- with 0 stale files among them
   # and 0 refs whose stripped token is not the ref's own name (column alignment).
-  Chk 'A-EP0-CAND'      $t0.ExcCandidates 430
+  Chk 'A-EP0-CAND'      $t0.ExcCandidates 433
   Chk 'A-EP0-CLASSIFY'  "$($t0.ExcRaise)/$($t0.ExcHandle)" '168/185'
   Chk 'A-EP0-FRESH'     $t0.ExcStale 0
   Chk 'A-EP0-TOKEN'     $t0.ExcTokenMiss 0
@@ -1291,9 +1294,11 @@ Step 'E-EP' {
   # the names declared only as non-classes (P5), each classified by source token
   Chk 'A-EP0-CANDS'     "$($ep1.IndexRaise)/$($ep1.IndexHandle)" '168/185'
   Chk 'A-EP0-ROUTINES'  "$($ep1.IndexRaiseRoutines)/$($ep1.IndexHandleRoutines)" '120/106'
-  # 30 decl + 17 class( + 8 is + 2 as + 8 call-cast + 7 member-access; 425 = 168 + 185 + 72
-  Chk 'A-EP0-DROPPED'   $ep1.IndexDropped 72
-  Chk 'A-EP0-CANDCOUNT' $ep1.IndexCandidates 425
+  # 30 decl + 17 class( + 8 is + 2 as + 8 call-cast + 7 member-access; 425 = 168 + 185 + 72 at 1.20.
+  # RE-PINNED 2026-10-05 (extractor 1.21.1, Ref-gap F): +3 parameter-type Exception refs, all dropped (a decl-site
+  # type_use is neither raise nor handle): 428 = 168 + 185 + 75
+  Chk 'A-EP0-DROPPED'   $ep1.IndexDropped 75
+  Chk 'A-EP0-CANDCOUNT' $ep1.IndexCandidates 428
 
   Chk 'A-EP1-RAISES'    $ep1.Raises 6
   Chk 'A-EP1-LINES'     $ep1.RaiseLines '1624,1653,1667,1679,1691,1707'
@@ -2233,14 +2238,16 @@ Step 'E-RT0' {
   $script:rt0 = & "$SRC\Test-RoundTripHelpers.ps1" -DbCli $DbCli -DbSrv $DbSrv -DbSql $DbSql -OutDir $OutDir
   # GetTable has one implementation. RE-PINNED 2026-09-28 (resolver 1.11, RB-1): every call site on the
   # unit var GDatasetsDef now BINDS to TDatasetsDef.GetTable (151229) -- was -1 (unbound) at all four,
-  # which the walk resolved BY NAME (ask receiver-typed-calls)
-  Chk 'A-RT0-GETTABLE'  $rt0.GetTableCalls 'uGenericTableRoute.pas:431:151229,uPipeSessionBuilder.pas:525:151229,uPipeSessionBuilder.pas:649:151229,uPipeSessionBuilder.pas:1301:151229'
+  # which the walk resolved BY NAME (ask receiver-typed-calls). RE-PINNED 2026-10-05 (1.21.1 full re-parse renumbers
+  # symbols): 151229 -> 107698, still TDatasetsDef.GetTable (method, decl line 59); the binding did not move.
+  Chk 'A-RT0-GETTABLE'  $rt0.GetTableCalls 'uGenericTableRoute.pas:431:107698,uPipeSessionBuilder.pas:525:107698,uPipeSessionBuilder.pas:649:107698,uPipeSessionBuilder.pas:1301:107698'
   Chk 'A-RT0-GETIMPL'   $rt0.GetTableImpls 'uDatasetsDef.TDatasetsDef.GetTable:199'
   Chk 'A-RT0-GLOBALS'   $rt0.GlobalVars 'var:TBroadcastServer:136,var:TDatasetsDef:66'
   # the post-commit broadcast: one call in HandleDelta, one implementation (golden node 13 cites :120, the declaration area).
   # RE-PINNED 2026-09-28 (resolver 1.11, RB-1): the call on the unit var GBroadcastServer now BINDS to
-  # TBroadcastServer.PushTableChanged (151569) -- was -1 (unbound)
-  Chk 'A-RT0-PUSH'      $rt0.PushCalls 'uGenericTableRoute.pas:507:151569:HandleDelta'
+  # TBroadcastServer.PushTableChanged (151569) -- was -1 (unbound). RE-PINNED 2026-10-05 (full re-parse renumbers):
+  # 151569 -> 108038, still PushTableChanged (decl line 124, = PUSHIMPL's decl124).
+  Chk 'A-RT0-PUSH'      $rt0.PushCalls 'uGenericTableRoute.pas:507:108038:HandleDelta'
   Chk 'A-RT0-PUSHIMPL'  $rt0.PushImpl 'uBroadcastServer.TBroadcastServer.PushTableChanged:401:decl124'
   # the Exit lines the 12 golden guards hang on (plus 4004, 193 and 612, which are branch ends, not golden guards;
   # 612 is HandleTableLoad's except-handler Exit after Rollback -- the plan's probe read 515-560 only, and 612 is on the 1.8 clone too)
@@ -2695,8 +2702,9 @@ Step 'E-RTF' {
   # M3: AS OF is each index's own schema_meta indexed_at_unix (CLIENT / SERVER / SQL, UTC to the minute) -- it was the
   # CLIENT clone FILE's UTC date, 2026-09-28, a stamp the header did not read
   # RE-PINNED 2026-09-28 (re-clone): the new clones' indexed_at_unix 1790633987 / 1790633975 / 1790633871 (was
-  # 02:46Z / 02:46Z / 02:45Z on the r=1.9 clones)
-  Chk 'A-RTF-M3-ASOF'   $rt0.FinM3AsOf '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-09-28T22:19Z/2026-09-28T22:19Z/2026-09-28T22:17Z'
+  # 02:46Z / 02:46Z / 02:45Z on the r=1.9 clones). RE-PINNED 2026-10-05 (re-clone at 1.21.1): indexed_at_unix
+  # 1791217538 / 1791217275 / 1791216661 (was 2026-09-28T22:19Z/22:19Z/22:17Z)
+  Chk 'A-RTF-M3-ASOF'   $rt0.FinM3AsOf '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-10-05T16:25Z/2026-10-05T16:21Z/2026-10-05T16:11Z'
 }
 
 Note 'round-trip negatives ...'
