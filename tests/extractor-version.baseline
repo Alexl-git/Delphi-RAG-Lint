@@ -902,6 +902,33 @@
 #   same outcomes) plus its `///` Complexity fact. The register-project manifest WRITER,
 #   never reached by extraction. No stored parse differs.
 #   Superseded: 1.20.0-alpha|3ed2c84c7deb9eea8cfed9702aacbe20c9989b13ee77a8f071079ad7d5c231be
-1.20.0-alpha|c693f2f776ba9869f037065b6deeddb43dfbb276b85dab200e55cc53d1fb22c7
-# superseded: 1.19.0-alpha|376c7143274119aa23760b9d41092862c6b7d24b426d7367cf5debb6286aa8b8
+# 2026-10-05: bumped 1.20.0-alpha -> 1.21.0-alpha. Ref-gap F: implementation-only
+#   routine signatures (those with no interface declaration) now emit type_use refs
+#   for their parameter types and return types. Previously, only interface signatures
+#   and local variable declarations emitted these refs, causing unused-unit-in-uses
+#   false positives when an imported type appeared only in an implementation-only
+#   routine's signature.
+#
+#   WHAT CHANGED: src\parser\DRagLint.Parser.Delphi13.pas at line 2446-2447. When an
+#   implementation-only free routine is parsed, WalkDeclProc is called to emit the
+#   routine symbol, then Walk() is now called on the 'args' and 'type' fields to
+#   emit type_use refs for parameter and return types, matching the existing behavior
+#   for qualified method-impl headers (lines 2436-2445).
+#
+#   THIS IS A REAL EXTRACTION CHANGE: the parser now produces NEW type_use ref rows
+#   that no existing index contains. Every implementation-only routine with imported
+#   types in its signature will have its type_use refs when re-parsed.
+#
+#   MEASURED: fixture impl_only_routine_type_uses.pas reproduces a function returning
+#   TImportedType and procedures with TImportedType parameters, all declared in the
+#   implementation section only. Indexing the fixture under the old engine showed 0
+#   type_use refs for these; the new engine emits 6 refs across all test cases.
+#   Stored parses are stale and a full re-parse is the point, not a cost to be argued.
+#
+#   Pinned by tests\autotest\fixtures\impl_only_routine_type_uses.pas and
+#   tests\autotest\fixtures\impl_only_routine_type_uses_types.pas.
+#
+#   Superseded: 1.20.0-alpha|c693f2f776ba9869f037065b6deeddb43dfbb276b85dab200e55cc53d1fb22c7
+# Superseded: 1.19.0-alpha|376c7143274119aa23760b9d41092862c6b7d24b426d7367cf5debb6286aa8b8
 #   2026-09-28 1.19.0 -> 1.20.0-alpha: Self.X := v emits a WRITE (Parser.Delphi13 assignment case); sql_column positioned on its own identifier (Parser.Sql FlushItem). Owner-scheduled batch; full re-parse run the same night.
+1.21.0-alpha|481261fd9d556f85d59dadab81e219748d18aace0ba88cbb4a711e5359dec330

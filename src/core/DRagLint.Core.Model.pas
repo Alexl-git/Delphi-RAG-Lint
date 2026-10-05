@@ -87,7 +87,7 @@ const
     lexer and the grammar see them (a body with an apostrophe, or a 5-quote
     delimiter, made the whole unit unparseable). Schema unchanged. Re-parses
     every index. docs\INBOX-defects-found-2026-09-23-rule-work.md D18/D19 }
-  DRAGLINT_EXTRACTOR_VERSION = '1.20.0-alpha';
+  DRAGLINT_EXTRACTOR_VERSION = '1.21.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.

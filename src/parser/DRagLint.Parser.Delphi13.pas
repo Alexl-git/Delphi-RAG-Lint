@@ -2444,7 +2444,19 @@ begin
             if not RetTypeNode.IsNull then Walk(RetTypeNode, AState, AParentSymbolIdx, AParentQualifiedName);
           end;
           if (HdrName <> '') and (Pos('.', HdrName) = 0) and not FreeRoutineSymbolExists(AState, HdrName) then
+          begin
             WalkDeclProc(HdrNode, AState, AParentSymbolIdx, AParentQualifiedName, False);
+            { Ref-gap F: emit type_use refs for parameter and return types on
+              implementation-only free routines. These routines have no interface
+              declaration, so their signature types are never indexed unless we
+              emit them here. Walk() already handles all typeref shapes (including
+              generics and grouped params), so we route args/return through it
+              just like method-impl headers above (lines 2441-2444). }
+            var ArgsNode:= HdrNode.ChildByField('args');
+            if not ArgsNode.IsNull then Walk(ArgsNode, AState, AParentSymbolIdx, AParentQualifiedName);
+            var RetTypeNode:= HdrNode.ChildByField('type');
+            if not RetTypeNode.IsNull then Walk(RetTypeNode, AState, AParentSymbolIdx, AParentQualifiedName);
+          end;
           { v9: record this routine's body span on its symbol (decl or the
             impl-only one just emitted above). v(ADP1 Bug B): pass the impl
             header's own signature (built by the same ProcSignatureOf that
