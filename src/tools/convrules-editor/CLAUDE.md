@@ -977,11 +977,16 @@ unchanged is presumed validated earlier."
   progress window, cancellable before either call starts, `FTreeLoads` counted
   by the editor's runner (`resolve.*` tests). Measured: the resolve query is
   0.5-1.2 s (`query --name TcxButton`, library-Win64 + Micronite2027), which the
-  UI thread no longer blocks on. CONSEQUENCE, open: `drive-engine-wait.ps1`
-  `wait.fast.no.window` now FAILS -- its "fast" fixture uses a BARE unknown name,
-  whose resolve alone passes `SHOW_DELAY_MS`, so the window rightly appears. A
-  qualified header does not fit (the form-type match is by the written name);
-  the fixture needs a redesign, not a longer delay.
-* **Mapping > Auto-Match is disabled while no rule is loaded**
+  UI thread no longer blocks on.
+* **Resolutions are CACHED for the session** (`TEngineAdapter.FResolveCache`,
+  key = upper-cased name + `#0` + `DbArgs`; NEGATIVE answers cached too). Without
+  it every rule click paid the query under the window and a trivial load flashed
+  it. Cleared by `SetDbs`, by `IndexProject`, by `ClearResolveCache`, and by the
+  form when a Convert run ends (that run reindexes through its OWN adapter). A
+  failed lookup (query exit other than 0/1) and a lookup cancelled before it ran
+  are never cached (`rcache.*`). `drive-engine-wait.ps1` now checks the RE-load
+  (`wait.reload.no.window`, `wait.reload.query.cached` = one engine child,
+  proptree only); both FAIL on the uncached build. The first uncached load is not
+  asserted; `wait.window.appears` is the positive control.* **Mapping > Auto-Match is disabled while no rule is loaded**
   (`UpdateMenuEnabled`; driver `automatch.*` in `drive-validate-scope.ps1`, RED
   on main).

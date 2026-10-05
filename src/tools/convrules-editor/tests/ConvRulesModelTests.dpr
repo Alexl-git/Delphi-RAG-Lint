@@ -8239,6 +8239,124 @@ begin
     TDirectory.Delete(Dir, True);
   end;
 end;
+{ ResolveClassQName answers are cached for the session (job C6 follow-up): every
+  rule click resolved its From and To classes again (0.5-1.2 s each), so even a
+  trivial load flashed the progress window. Keyed on the name (case-insensitive,
+  as Delphi is) AND the --db set; a NEGATIVE answer (exit 1: no such class) is an
+  answer and is cached; a FAILED lookup is not. Cleared by SetDbs, by
+  ClearResolveCache and by IndexProject. The stand-ins log every call. }
+{ Calls of one verb in the stand-in engine's log (each line is the verb, %1). }
+function VerbCount(const APath, AVerb: string): Integer;
+var
+  L: string;
+begin
+  Result:= 0;
+  if TFile.Exists(APath) then
+    for L in TFile.ReadAllLines(APath) do
+      if SameText(Trim(L), AVerb) then
+        Inc(Result);
+end;
+
+procedure TestResolveCache;
+const
+  MISS_CMD = '@echo %1>>"%~dp0calls.log"'#13#10'@exit /b 1'#13#10;  // query: no such class; proptree: no tree
+  FAIL_CMD = '@echo %1>>"%~dp0calls.log"'#13#10'@exit /b 2'#13#10;  // the call itself failed
+var
+  Dir : string;
+  Log : string;
+  Eng : TEngineAdapter;
+  Tree: TProptree;
+  Err : string;
+  Note: string;
+  Out : string;
+  Q   : Integer; // query calls logged before the step under test
+
+  procedure Load(const AName: string);
+  begin
+    Eng.GetProptree(AName, Tree, Err, Note);
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'rcache-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Log:= TPath.Combine(Dir, 'calls.log');
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'miss.cmd'), MISS_CMD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'fail.cmd'), FAIL_CMD, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'miss.cmd'), ['a.sqlite']);
+    try
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          Result:= AWork(nil, nil);
+        end;
+      Load('TFoo');
+      Check('rcache.negative.answer', (VerbCount(Log, 'query') = 1) and (Pos('cannot resolve', Err) = 0), Err);
+      Load('TFoo');
+      Check('rcache.negative.cached', VerbCount(Log, 'query') = 1, IntToStr(VerbCount(Log, 'query')));
+      Check('rcache.proptree.still.runs', VerbCount(Log, 'proptree') = 2, IntToStr(VerbCount(Log, 'proptree')));
+      Load('tfoo');
+      Check('rcache.key.case.insensitive', VerbCount(Log, 'query') = 1, IntToStr(VerbCount(Log, 'query')));
+      Load('TBar');
+      Check('rcache.key.other.name.misses', VerbCount(Log, 'query') = 2, IntToStr(VerbCount(Log, 'query')));
+      Q:= VerbCount(Log, 'query');
+      Eng.SetDbs(['b.sqlite']);
+      Load('TFoo');
+      Check('rcache.cleared.by.setdbs', VerbCount(Log, 'query') = Q + 1, IntToStr(VerbCount(Log, 'query')));
+      Q:= VerbCount(Log, 'query');
+      Eng.ClearResolveCache;
+      Load('TFoo');
+      Check('rcache.cleared.explicitly', VerbCount(Log, 'query') = Q + 1, IntToStr(VerbCount(Log, 'query')));
+      Q:= VerbCount(Log, 'query');
+      Eng.IndexProject('x.dproj', 'b.sqlite', Out);
+      Load('TFoo');
+      Check('rcache.cleared.by.reindex', VerbCount(Log, 'query') = Q + 1, IntToStr(VerbCount(Log, 'query')));
+      // Cancelled before the lookup: nothing resolved, so nothing may be cached.
+      Eng.ClearResolveCache;
+      Q:= VerbCount(Log, 'query');
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        var
+          T: TCancelToken;
+        begin
+          T:= TCancelToken.Create;
+          try
+            T.Cancel;
+            Result:= AWork(nil, T);
+          finally
+            T.Free;
+          end;
+        end;
+      Load('TBaz');
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          Result:= AWork(nil, nil);
+        end;
+      Load('TBaz');
+      Check('rcache.cancel.not.cached', VerbCount(Log, 'query') = Q + 1, IntToStr(VerbCount(Log, 'query')));
+    finally
+      Eng.Free;
+    end;
+    TFile.Delete(Log);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'fail.cmd'), ['a.sqlite']);
+    try
+      Eng.LongCallRunner:=
+        function(const ATitle: string; const AWork: TStreamingWork): Integer
+        begin
+          Result:= AWork(nil, nil);
+        end;
+      Load('TFoo');
+      Check('rcache.failure.reported', Pos('cannot resolve', Err) > 0, Err);
+      Load('TFoo');
+      Check('rcache.failure.not.cached', VerbCount(Log, 'query') = 2, IntToStr(VerbCount(Log, 'query')));
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
 begin
   try
     if ResolveExe <> '' then
@@ -8397,6 +8515,7 @@ begin
     TestChooseTestEngine;
     TestStdoutSeparateFromStderr;
     TestProptreeResolveInRunner;
+    TestResolveCache;
     TestValidateParse;
     TestValidateScopeBlocks;
     TestValidateScopeRun;

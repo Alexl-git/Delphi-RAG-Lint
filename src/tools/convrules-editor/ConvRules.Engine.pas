@@ -265,6 +265,17 @@ type
   /// </remarks>
   TEngineAdapter = class
     private
+      type
+        /// <summary>One cached ResolveClassQName answer.</summary>
+        TResolvedClass = record
+          QName    : string ; // the qualified name, or the bare one for "no such class"
+          Ambiguity: Integer;
+        end;
+    private
+      /// <summary>ResolveClassQName answers for this session, keyed on the upper-cased
+      /// name + #0 + DbArgs. Negative answers included; failures never. Guarded by
+      /// TMonitor on itself: lookups run on the progress window's worker.</summary>
+      FResolveCache: TDictionary<string, TResolvedClass>;
       FExePath: string        ;
       FDbList : TArray<string>;
       FTreeDepth     : Integer        ;
@@ -284,7 +295,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function RunCapture(const AArgs: string; out AOutput: string): Integer;
@@ -305,7 +316,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean; overload;
@@ -342,15 +353,15 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgsFor(const ADbs: TArray<string>): string; overload;
-      /// <returns><!-- drag-lint:auto -->string -- Observed: DbArgsFor(FDbList).</returns>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.Scaffold (ConvRules.Engine.pas) (+1 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgsFor</para>
       /// <para>Reads: FDbList</para>
       /// <para>Directives: overload</para>
@@ -358,7 +369,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgs: string; overload;
@@ -378,7 +389,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string): string; overload;
@@ -390,7 +401,8 @@ type
       /// <param name="AError">'' when the name resolved OR when the index simply
       /// holds no such class (both are ordinary outcomes). Non-empty only when the
       /// query could not be answered at all -- an unusable --db list above all.</param>
-      /// <returns><!-- drag-lint:auto -->string -- Observed: AName; Sym.QualifiedName.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: AName; LHit.QName;
+      /// Sym.QualifiedName.</returns>
       /// <remarks>
       /// The distinction is load-bearing. Without it a dead --db path and an
       /// unknown type are the same event to the caller, the bare name flows on to
@@ -400,15 +412,16 @@ type
       /// 2026-09-09; pinned by resolve.harderror.* in ConvRulesModelTests.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/2 (ConvRules.Engine.pas)</para>
-      /// <para>Calls: ConvRules.Engine.ParseQuerySymbols, ConvRules.Engine.SelectQuerySymbol, ConvRules.Engine.TEngineAdapter.QueryJsonFor/4, Pos, SameText</para>
+      /// <para>Calls: ConvRules.Engine.ParseQuerySymbols, ConvRules.Engine.SelectQuerySymbol, ConvRules.Engine.TEngineAdapter.CacheResolved, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.QueryJsonFor/4, Pos, SameText, UpperCase</para>
       /// <para>Overload 2 of 3</para>
+      /// <para>Reads: FResolveCache</para>
       /// <para>Mutates: AAmbiguity (out), AError (out)</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.ParseQuerySymbols"/>
       /// <seealso cref="ConvRules.Engine.SelectQuerySymbol"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.QueryJsonFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer; out AError: string): string; overload;
@@ -445,7 +458,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer): string; overload;
@@ -465,6 +478,11 @@ type
       /// <param name="AError">Receives the failure text; '' on success.</param>
       /// <returns>False when the engine could not answer from ADb.</returns>
       function AddSqlColumnOfDb(const ADb, ASql, AWhat: string; ASeen: TStringList; out AError: string): Boolean;
+      /// <summary>Store one ResolveClassQName answer under AKey (thread-safe).</summary>
+      /// <param name="AKey">Upper-cased name + #0 + DbArgs.</param>
+      /// <param name="AQName">The answer.</param>
+      /// <param name="AAmbiguity">How many classes carry the name.</param>
+      procedure CacheResolved(const AKey, AQName: string; AAmbiguity: Integer);
     public
       /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
       /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
@@ -518,6 +536,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetDbs(const ADbs: TArray<string>);
+      /// <summary>Forget every cached class-name resolution.</summary>
+      /// <remarks>ResolveClassQName caches its answers for the session -- each rule
+      /// click used to pay a 0.5-1.2 s `query` per class and flash the progress
+      /// window. SetDbs and IndexProject clear the cache themselves; call this when
+      /// the index changed some other way (the Convert tab's own adapter reindexed).</remarks>
+      procedure ClearResolveCache;
+      /// <summary>Frees the resolution cache.</summary>
+      destructor Destroy; override;
       /// <summary>The adapter's current default DB list (read-only view).</summary>
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: FDbList.</returns>
       /// <remarks>
@@ -623,7 +649,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>; out AError: string): Boolean; overload;
@@ -639,7 +665,7 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/3 (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.LoadAllClasses (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/3 (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.LoadAllClasses (ConvRules.MainForm.pas), TestPickerDatasource (ConvRulesModelTests.dpr), TestPlatformRescope (ConvRulesModelTests.dpr)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgsFor, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Pos, Trim</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Mutates: AError (out), ANames (out)</para>
@@ -1197,11 +1223,29 @@ begin
   FExePath:= AExePath;
   FDbList := ADbList;
   FInfoTimeoutMs:= INFO_TIMEOUT_MS;
+  FResolveCache:= TDictionary<string, TResolvedClass>.Create;
+end;
+
+destructor TEngineAdapter.Destroy;
+begin
+  FResolveCache.Free;
+  inherited Destroy;
 end;
 
 procedure TEngineAdapter.SetDbs(const ADbs: TArray<string>);
 begin
   FDbList:= ADbs;
+  ClearResolveCache; // the answers were given by the OLD database set
+end;
+
+procedure TEngineAdapter.ClearResolveCache;
+begin
+  TMonitor.Enter(FResolveCache);
+  try
+    FResolveCache.Clear;
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
 end;
 
 function TEngineAdapter.DbList: TArray<string>;
@@ -1239,6 +1283,7 @@ function TEngineAdapter.IndexProject(const AProjectFile, AProjectDb: string; out
 begin
   // --project, never a folder: a folder target widens a project DB into a directory DB.
   Result:= RunCaptureTimed(Format('index --project "%s" --db "%s"', [AProjectFile, AProjectDb]), CONVERT_TIMEOUT_MS, AOutput);
+  ClearResolveCache; // the index may now declare (or no longer declare) a class
 end;
 
 function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
@@ -1862,13 +1907,28 @@ begin
   // Already qualified (has a '.') or empty -> nothing to do.
   if (AName = '') or (Pos('.', AName) > 0) then
     Exit;
+  var LKey: string:= UpperCase(AName) + #0 + DbArgs;
+  var LHit: TResolvedClass;
+  TMonitor.Enter(FResolveCache);
+  try
+    if FResolveCache.TryGetValue(LKey, LHit) then
+    begin
+      AAmbiguity:= LHit.Ambiguity;
+      Exit(LHit.QName);
+    end;
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
   if not QueryJsonFor(AName, JSON, Err, Code) then
   begin
     // Exit 1 is "no such class" -- an ordinary answer, so leave AError empty and
-    // hand back the bare name as before. Any OTHER code means the query did not
-    // run; that must not masquerade as a miss.
+    // hand back the bare name as before (and cache it: it IS the answer). Any
+    // OTHER code means the query did not run; that must not masquerade as a miss,
+    // and it is not cached, so the next call asks again.
     if Code <> 1 then
-      AError:= Err;
+      AError:= Err
+    else
+      CacheResolved(LKey, AName, 0);
     Exit;
   end;
   Syms:= ParseQuerySymbols(JSON);
@@ -1888,12 +1948,28 @@ begin
   if not SelectQuerySymbol(Classes, AName, Sym, AAmbiguity) then
   begin
     AAmbiguity:= 0;
+    CacheResolved(LKey, AName, 0); // rows, but no class of that exact name: an answer
     Exit;
   end;
   if Sym.QualifiedName <> '' then
     Result:= Sym.QualifiedName
   else AAmbiguity:= 0; // a row with no qualified_name qualifies nothing
+  CacheResolved(LKey, Result, AAmbiguity);
 end; // function
+
+procedure TEngineAdapter.CacheResolved(const AKey, AQName: string; AAmbiguity: Integer);
+var
+  E: TResolvedClass;
+begin
+  E.QName    := AQName;
+  E.Ambiguity:= AAmbiguity;
+  TMonitor.Enter(FResolveCache);
+  try
+    FResolveCache.AddOrSetValue(AKey, E);
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
+end;
 
 function TEngineAdapter.DeclaringUnitOf(const ATypeName: string): string;
 var
