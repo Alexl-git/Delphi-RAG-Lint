@@ -41,7 +41,6 @@ look thin or stale, see [Maintenance](Maintenance).
 | **Rename Symbol...** *(index)* | Index-backed rename across the project. Review the preview: a rename is a source-wide edit. |
 | **Format with YADF** | Formats the current unit with YADF. |
 | **Format Whole Project with YADF...** | Formats every unit in the project. |
-| **Generate Test Helper CSV...** | Exports a CSV used by the form/test helper tooling. |
 | **drag-lint Options...** | The plugin's own options page (rule enablement, profiles, paths). |
 
 ---
@@ -153,6 +152,7 @@ job; ask again when it finishes.
 |---|---|
 | **Who uses this table or column...** | [consumers](ask-consumers) |
 | **Where this database column is shown...** | [shown-where](ask-shown-where) |
+| **Forms for testers (CSV)...** *(index)* | Under the *For testers* header, last on Reports. One spreadsheet row per form: the menu / ribbon / tab path from the main form, the control to click, whether it opens modally, how sure the tool is, and a blank *Tester result* column. See [Generate Test Helper CSV](Generate-Test-Helper-CSV). |
 
 ## Inspect Symbol
 

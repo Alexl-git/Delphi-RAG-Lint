@@ -6205,7 +6205,6 @@ begin
   AddWrappedItem(RootMenu, 'Convert Public Field to Property at Cursor', InvokeConvertFieldToProperty);
   AddWrappedItem(RootMenu, 'Format with YADF'           , InvokeFormatYadf      );
   AddWrappedItem(RootMenu, 'Format Whole Project with YADF...', InvokeFormatProjectYadf);
-  AddWrappedItem(RootMenu, 'Generate Test Helper CSV...', InvokeGenerateFormsCsv);
   AddWrappedItem(RootMenu, 'drag-lint Options...'       , InvokeOptionsDialog   );
 
   { v0.46: Uses & Dependencies submenu }
@@ -6269,6 +6268,11 @@ begin
     begin
       AddSectionHeader(AParent, ACaption);
     end);
+  { MOVED here from the root menu (2026-10-05, forms-csv v6): the tester CSV is
+    a report, so it sits last on Reports instead of as a stand-alone item. }
+  AddSeparator(SubReports);
+  AddSectionHeader(SubReports, 'For testers');
+  AddWrappedItem(SubReports, 'Forms for testers (CSV)...', InvokeGenerateFormsCsv);
 
   { v0.46: Inspect Symbol submenu }
   var SubInspect: TMenuItem:= TMenuItem.Create(RootMenu);

@@ -1062,7 +1062,7 @@ There are also 12 `Ctrl+Alt` shortcuts (`H` hover, `C` completion, `S` signature
 **`drag-lint` menu** (top-level on the main menu bar -- falls back under Tools -- organized into submenus): Hover at Cursor, Show Completion, 
 Show Signature Help, Run Diagnostics, Rename Symbol, Compile & Diagnose, Import Build Log,
 Format with YADF, Show Structure, Run AST Checks, Find Usages, Symbol Search, dockable 
-panels (Structure / Usages / Graph), Generate Test Helper CSV..., 
+panels (Structure / Usages / Graph), **Reports** submenu (every chart question, plus Forms for testers (CSV)...), 
 **Uses & Dependencies** submenu (cycles, uses-audit, uses-fix, reconcile, wiring, impact, reverse call tree,
 **Call Graph (Butterfly)...**), 
 **Reverse Call Tree (clickable, Messages window)** -- posts the N-deep upward

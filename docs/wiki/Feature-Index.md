@@ -31,7 +31,7 @@ See also [Features](Features) for the grouped overview and
 * [Format Whole Project with YADF...](Format-Whole-Project-with-YADF) -- `format + index`
 * [Format with YADF](Format-with-YADF) -- `format`
 * [Full Compile Sweep](Full-Compile-Sweep) -- `refresh-findings`
-* [Generate Test Helper CSV...](Generate-Test-Helper-CSV) -- `forms-csv`
+* [Forms for testers (CSV)...](Generate-Test-Helper-CSV) -- `forms-csv`
 * [Go to Definition](Go-to-Definition)
 * [Hover at Cursor](Hover-at-Cursor) -- `hover`
 * [Impact / Blast Radius (symbol)...](Impact-Blast-Radius-symbol) -- `impact`

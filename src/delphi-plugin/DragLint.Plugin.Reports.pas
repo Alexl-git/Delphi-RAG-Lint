@@ -453,9 +453,8 @@ begin
     for var I: Integer:= Low(REPORT_QUESTIONS) to High(REPORT_QUESTIONS) do
       if REPORT_QUESTIONS[I].Kind = Kind then pAddItem(pParent, REPORT_QUESTIONS[I].Caption).Tag:= I;
   end;
-  { SLOT RESERVED for the 'Forms for testers (CSV)...' item, which another task
-    adds here: after a separator, as the last entry of this submenu. Nothing is
-    added for it yet. }
+  { The 'Forms for testers (CSV)...' item follows these groups; RegisterDragLintMenu
+    (DragLint.Plugin.Editor) adds it, because its handler lives there. }
 end;
 
 { Everything a run needs besides the target; says plainly what is missing. }

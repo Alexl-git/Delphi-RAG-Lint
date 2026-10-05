@@ -17,7 +17,7 @@ path (without it the CSV goes to stdout); `--root` sets the root form to start
 from (default: the last form the `.dpr` creates before `Application.Run`).
 
 ## Reaching it in the IDE
-drag-lint > Generate Test Helper CSV...
+drag-lint > Reports > Forms for testers (CSV)... (it was a stand-alone item on the drag-lint menu before 2026-10-05)
 
 ## What it needs
 An index IS required. The project's DB lives at

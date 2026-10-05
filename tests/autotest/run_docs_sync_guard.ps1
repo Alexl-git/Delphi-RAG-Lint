@@ -696,8 +696,12 @@ Write-Host '-- check 5: documented menu paths vs the registration' -ForegroundCo
 
 $editorPas = Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.Editor.pas'
 $aboutForm = Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas'
+# 2026-10-05: the Reports submenu's items are created through AddWrappedItem in
+# Editor.pas, but their CAPTIONS live in this unit's REPORT_QUESTIONS catalog and
+# its group headers in ReportGroupCaption -- a menu source like the other two.
+$reportTxt = Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.ReportText.pas'
 $menuSrc   = ''
-foreach ($p in @($editorPas, $aboutForm)) {
+foreach ($p in @($editorPas, $aboutForm, $reportTxt)) {
   if (Test-Path -LiteralPath $p) { $menuSrc += (Get-Content -LiteralPath $p -Raw) }
 }
 Check 'plugin menu sources located' ($menuSrc.Length -gt 0) `
@@ -711,7 +715,9 @@ foreach ($rx in @(
     "AddWrappedItem\(\s*\w+\s*,\s*'([^']+)'",
     "AddSectionHeader\(\s*\w+\s*,\s*'([^']+)'",
     "Add(?:Proc)?Button\(\s*'([^']+)'",
-    "\.Caption\s*:=\s*'([^']+)'")) {
+    "\.Caption\s*:=\s*'([^']+)'",
+    "\bCaption:\s*'([^']+)'",                      # REPORT_QUESTIONS catalog rows
+    "\brtk\w+\s*:\s*Result\s*:=\s*'([^']+)'")) {   # ReportGroupCaption headers
   foreach ($m in [regex]::Matches($menuSrc, $rx)) {
     # '&&' is the Delphi escape for a literal '&' in a caption; docs write one.
     [void]$liveCaptions.Add($m.Groups[1].Value.Replace('&&', '&').Trim())
