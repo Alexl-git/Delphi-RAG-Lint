@@ -69,8 +69,8 @@ type
   /// (To), per the matching #convert rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.ConvertApplyScope (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ConvertBlockScope (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.SummarizeUnlinked (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.RemovalLeavesUnconverted (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConvertInstance = record
@@ -168,7 +168,7 @@ type
   /// only be anchored to the instance's object-block header line. RuleLine is
   /// the 1-based line in the rules file that produced the item, or 0.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport.FoldOne (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlainItem (DRagLint.Convert.Apply.pas) (+6 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlainItem (DRagLint.Convert.Apply.pas) (+7 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -554,7 +554,14 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// Ok=False only on a hard failure (missing .pas/.dfm, zero instances
 /// matched, or -- 1.20.6 -- the book's unit rules refusing the unit, e.g. an
 /// entry to remove inside a conditional region: then NOTHING is planned, the
-/// #convert edits included). When the book has unit rules (#unuse / #use /
+/// #convert edits included). Refused=True, nothing planned, also when an
+/// instance's indexed .dfm span no longer holds it -- lines added or removed,
+/// a block shrunk onto a sibling's `end`, or the .dfm cut short ('&lt;Name&gt;:
+/// index is stale for this .dfm -- reindex') -- and (R26) when a unit-rule
+/// removal targets the unit declaring the From type of a #convert instance
+/// that stays unconverted, skipped or left out by AOnly ('&lt;rule&gt; would
+/// leave &lt;N&gt; unconverted instance(s) of &lt;Type&gt; -- unit not
+/// changed'). When the book has unit rules (#unuse / #use /
 /// #useswap), surface #2's resolved units are handed to PlanUnitRules, which
 /// then plans every uses change to the unit (Report.UsesChanges). Ok=True
 /// with per-instance problems noted in Report.Warnings
@@ -562,9 +569,9 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas)</para>
-/// <para>Calls: BookHasUnitRules, CompareText, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (+28 more)</para>
-/// <para>Returns: Default(TApplyResult)</para>
-/// <para>Complexity: 16 (cyclomatic, outer body), 921 lines (full implementation)</para>
+/// <para>Calls: BookHasUnitRules, CompareText, Default, DRagLint.Convert.Apply.BuildApplyPlan.Emit, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport, DRagLint.Convert.Apply.BuildApplyPlan.InstItem, DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanCreatorSites, DRagLint.Convert.Apply.BuildApplyPlan.PlanFieldRetype, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (+32 more)</para>
+/// <para>Returns: Default(TApplyResult); TApplyResult.Refusal(UsesPlan.Error)</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 941 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>
@@ -581,17 +588,28 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// -- no sibling .dfm, no #convert block in the book, or no .dfm instance any
 /// block matches -- so only the book's unit rules (#unuse / #use / #useswap)
 /// act on it.</summary>
+/// <param name="ATrees">Resolves a .dfm instance's From type to the unit that
+/// declares it (R26 below). Not owned.</param>
 /// <param name="AUnitPas">The unit to change; read from disk as it is now.</param>
+/// <param name="ADfmPath">The unit's sibling .dfm, or '' (or a missing file)
+/// when it has none.</param>
 /// <param name="ARules">The parsed, validated rule book; its #convert blocks
 /// only count toward the ADD-wins normalisation (see PlanUnitRules).</param>
 /// <returns>Ok=True with the uses-clause edits in Edits and one row per
 /// change in Report.UsesChanges (both empty when the book changes nothing
 /// here); every other report array empty. Ok=False with Error when the unit
 /// does not exist or PlanUnitRules refuses it (e.g. an entry to remove sits in
-/// a conditional region) -- then nothing is planned.</returns>
-/// <remarks>Reads the unit; writes nothing. Needs no index: the uses clauses
-/// are lexed from the unit's own bytes.</remarks>
-function BuildUnitRulesOnlyPlan(const AUnitPas: string; const ARules: TConversionRuleSet): TApplyResult;
+/// a conditional region) -- then nothing is planned. Refused=True, Ok=False
+/// (R26) when a removal (#unuse, or #useswap's Old) targets the unit that
+/// declares the From type of a #convert instance in ADfmPath -- every such
+/// instance stays unconverted on this path -- with Error
+/// '&lt;rule&gt; would leave &lt;N&gt; unconverted instance(s) of &lt;Type&gt; --
+/// unit not changed'.</returns>
+/// <remarks>Reads the unit and the .dfm; writes nothing. The uses clauses are
+/// lexed from the unit's own bytes; the index is consulted only for R26's
+/// declaring unit. Pinned by run_convert_apply_unit_rules.ps1 (arm R).</remarks>
+function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
 /// returns the instances that should be converted: those whose class matches
@@ -615,7 +633,7 @@ function BuildUnitRulesOnlyPlan(const AUnitPas: string; const ARules: TConversio
 /// scan only, not a full DFM parse (Task 3's ParseDfmBlock/ReemitComponent do
 /// the real per-instance re-emit). Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.ConvertApplyScope (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.RemovalLeavesUnconverted (DRagLint.Convert.Apply.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.Apply.FindConvertRuleFor, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.TryParseObjectHeader, Trim</para>
 /// <para>Returns: nil; List.ToArray</para>
 /// <seealso cref="DRagLint.Convert.Apply.FindConvertRuleFor"/>
@@ -1364,16 +1382,20 @@ end;
 /// <param name="AEnd">Last line of the span, as the index recorded it.</param>
 /// <param name="AInstanceName">Name of the instance the span must open with.</param>
 /// <returns>True when line AStart opens `object`, `inherited` or `inline` followed by
-/// AInstanceName and a colon, and line AEnd is an `end` at the same indentation. False
-/// when the .dfm changed after indexing, so the recorded span no longer holds it.</returns>
-/// <remarks>Both lines must be in range. The check is deliberately shallow: it catches a line
-/// added or removed above or inside the block without re-parsing the block.</remarks>
+/// AInstanceName and a colon, and the FIRST `end` after it at the opener's indentation is
+/// on line AEnd. False when the .dfm changed after indexing, so the recorded span no
+/// longer holds it -- including a block that shrank, whose recorded AEnd now lands on a
+/// later sibling's `end` at the same indentation.</returns>
+/// <remarks>Both lines must be in range. The check is deliberately shallow: it finds the
+/// block's own closing line by indentation (nested blocks are indented deeper) without
+/// re-parsing the block.</remarks>
 function DfmSpanHoldsInstance(const ADfmLines: TArray<string>; AStart, AEnd: Integer;
   const AInstanceName: string): Boolean;
 const
   Openers: array[0..2] of string = ('object ', 'inherited ', 'inline ');
 var
-  First, Opener, Rest: string;
+  First, Opener, Rest, Indent: string;
+  CloseLine: Integer;
 begin
   Result:= False;
   First:= ADfmLines[AStart - 1].TrimLeft;
@@ -1385,9 +1407,79 @@ begin
                Rest.Substring(Length(AInstanceName)).TrimLeft.StartsWith(':');
       Break;
     end;
-  if Result then
-    Result:= SameText(ADfmLines[AEnd - 1].Trim, 'end') and
-             (LeadingIndent(ADfmLines[AEnd - 1]) = LeadingIndent(ADfmLines[AStart - 1]));
+  if not Result then Exit;
+  { the block's own end is the first `end` at the opener's indent after it }
+  Indent:= LeadingIndent(ADfmLines[AStart - 1]);
+  CloseLine:= AStart + 1;
+  while (CloseLine <= AEnd) and not (SameText(ADfmLines[CloseLine - 1].Trim, 'end') and
+                                     (LeadingIndent(ADfmLines[CloseLine - 1]) = Indent)) do
+    Inc(CloseLine);
+  Result:= CloseLine = AEnd;
+end;
+
+// The unit declaring the class ATypeName resolves to in ATrees -- its indexed
+// declaring file's base name ('FireDAC.Comp.Client'), never a guess from the
+// qualified name (a nested type's prefix is not a unit) -- or '' when no store
+// has the class.
+function DeclaringUnitOf(const ATrees: TConvertTreeCache; const ATypeName: string): string;
+var
+  QName: string;
+  St   : ISymbolStore;
+  S    : TSymbol;
+begin
+  Result:= '';
+  QName := ATrees.ResolveType(ATypeName);
+  if QName = '' then Exit;
+  for St in ATrees.Stores do
+    for S in St.FindSymbolsByExactName(BareTypeTail(QName)) do
+      if (S.Kind = skClass) and SameText(S.QualifiedName, QName) then
+        Exit(TPath.GetFileNameWithoutExtension(St.GetFilePath(S.FileId)));
+end;
+
+// R26 (1.20.6): the refusal reason when a planned unit-rule REMOVAL (#unuse,
+// or #useswap's Old) takes away the unit declaring the From type of a .dfm
+// instance that stays unconverted -- skipped, or left out by --only -- which
+// would break the compile (E2003); '' when no removal does. Every #convert
+// instance of ADfmText counts, --only ignored; AConverted names the ones the
+// plan converts. The text is '<rule> would leave <N> unconverted instance(s)
+// of <Type> -- unit not changed', <rule> as TUsesChange.Rule spells it.
+function RemovalLeavesUnconverted(const ATrees: TConvertTreeCache; const ADfmText: string;
+  const ARules: TConversionRuleSet; const AConverted: TList<string>;
+  const AChanges: TArray<TUsesChange>): string;
+var
+  Left : TDictionary<string, Integer>; { From type as the .dfm spells it -> unconverted count }
+  Order: TList<string>;                { the same types, in .dfm order, so the reason is stable }
+  Inst : TConvertInstance;
+  Ch   : TUsesChange;
+  Key  : string;
+  Count: Integer;
+begin
+  Result:= '';
+  Left  := TDictionary<string, Integer>.Create;
+  Order := TList<string>.Create;
+  try
+    for Inst in FindConvertInstances(ADfmText, ARules, nil) do
+    begin
+      if Assigned(AConverted) and AConverted.Contains(Inst.InstanceName) then Continue;
+      if not Left.TryGetValue(Inst.FromType, Count) then
+      begin
+        Count:= 0;
+        Order.Add(Inst.FromType);
+      end;
+      Left.AddOrSetValue(Inst.FromType, Count + 1);
+    end;
+    for Ch in AChanges do
+    begin
+      if Ch.Action <> 'remove' then Continue;
+      for Key in Order do
+        if SameText(DeclaringUnitOf(ATrees, Key), Ch.UnitName.Replace(' ', '').Replace(#9, '')) then
+          Exit(Format('%s would leave %d unconverted instance(s) of %s -- unit not changed',
+            [Ch.Rule, Left[Key], Key]));
+    end;
+  finally
+    Order.Free;
+    Left.Free;
+  end;
 end;
 
 // Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
@@ -2356,19 +2448,11 @@ begin
 
       var BlockStart: Integer:= DfmSym.StartLine;
       var BlockEnd  : Integer:= DfmSym.EndLine;
-      if (BlockStart < 1) or (BlockEnd < BlockStart) or (BlockEnd > Length(DfmLines)) then
-      begin
-        It:= InstItem(aikInstanceSkipped, afWarnings,
-          Format('%s: .dfm object block line range [%d..%d] out of bounds in %s -- instance skipped',
-            [Inst.InstanceName, BlockStart, BlockEnd, ADfmPath]));
-        It.FilePath:= ADfmPath;
-        Emit(It);
-        Continue;
-      end;
-
-      { the span came from the index; if the .dfm moved on since, splicing would
-        delete the wrong lines -- refuse the unit whole (see StaleDfm below) }
-      if not DfmSpanHoldsInstance(DfmLines, BlockStart, BlockEnd, Inst.InstanceName) then
+      { the span came from the index; if the .dfm moved on since (lines added or
+        removed, or the file cut short so the span runs past its end), splicing
+        would delete the wrong lines -- refuse the unit whole (see StaleDfm below) }
+      if (BlockStart < 1) or (BlockEnd < BlockStart) or (BlockEnd > Length(DfmLines)) or
+         not DfmSpanHoldsInstance(DfmLines, BlockStart, BlockEnd, Inst.InstanceName) then
       begin
         StaleDfm:= Format('%s: index is stale for this .dfm -- reindex', [Inst.InstanceName]);
         Break;
@@ -2434,6 +2518,16 @@ begin
       UsesPlan.Error  := StaleDfm;
     end
     else PlanUsesAdditions(UsesPlan);
+    { R26: a removal must not take away the unit an unconverted instance needs }
+    var Leaves: string:= '';
+    if UsesPlan.Ok then
+      Leaves:= RemovalLeavesUnconverted(ATrees, DfmText, ABook.Rules, ConvertedInstNames, UsesPlan.Changes);
+    if Leaves <> '' then
+    begin
+      UsesPlan.Ok     := False;
+      UsesPlan.Refused:= True;
+      UsesPlan.Error  := Leaves;
+    end;
     { a unit the unit rules refuse (a conditional entry) is refused WHOLE --
       its #convert edits included -- so nothing is half-applied }
     if not UsesPlan.Ok then
@@ -2479,9 +2573,11 @@ begin
   Result.Error  := AReason;
 end;
 
-function BuildUnitRulesOnlyPlan(const AUnitPas: string; const ARules: TConversionRuleSet): TApplyResult;
+function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet): TApplyResult;
 var
   UsesPlan: TUsesPlan;
+  Leaves  : string;
 begin
   Result:= Default(TApplyResult);
   if not TFile.Exists(AUnitPas) then
@@ -2490,6 +2586,18 @@ begin
     Exit;
   end;
   UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, nil);
+  { R26: every #convert instance of the .dfm stays unconverted here (--only
+    left them all out), so no removal may take away a unit they need }
+  Leaves:= '';
+  if UsesPlan.Ok and (ADfmPath <> '') and TFile.Exists(ADfmPath) then
+    Leaves:= RemovalLeavesUnconverted(ATrees, TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules,
+      nil, UsesPlan.Changes);
+  if Leaves <> '' then
+  begin
+    UsesPlan:= Default(TUsesPlan); { a refusal plans nothing }
+    UsesPlan.Refused:= True;
+    UsesPlan.Error  := Leaves;
+  end;
   Result.Ok                := UsesPlan.Ok;
   Result.Refused           := UsesPlan.Refused;
   Result.Error             := UsesPlan.Error;

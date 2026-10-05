@@ -524,7 +524,7 @@ Real reFind sample lines (from the BDE2FD sample):
 
 | Directive | Meaning |
 |---|---|
-| `#convert <From> -> <To> [, <unit> ...]` | declares the type-pair this block converts (groups the links; optional target uses-add) |
+| `#convert <From> -> <To> [, <unit> ...]` | declares the type-pair this block converts (groups the links; optional target uses-add). A From-only header -- `#convert TFoo -> ` (the editor writes it while authoring) or `#convert TFoo` -- parses as From `TFoo` with an EMPTY To, never as a class named `TFoo ->`, and is a `line N:` error: `#convert TFoo has no To type` (1.20.6, R27). Likewise `#useswap X -> ` with no New unit: `#useswap X has no replacement unit`. |
 | `#link <ToPath> <- <FromPath>` | deep property assignment. **Note the `<-` arrow** -- reversed vs `#migrate`'s `->`. Read it "target gets source." **Type-identity carry (2026-09-16):** when both sides are CLASS-TYPED and of the SAME class (`#link Font <- Font`, both `TFont`), every sub-leaf the `.dfm` streams under the source (`Font.Charset`, `Font.Name`, ...) is carried to the same leaf under the target automatically -- the five hand-written `Font.*` lines become one. When the types DIFFER (`OptionsImage.Glyph <- Picture`, `TdxSmartGlyph <- TPicture`) nothing is carried implicitly and every dotted leaf must be named, because an invented target path is how a form stops loading. An explicit per-leaf `#link` / `#ignore` / `#remove` always wins over the carry; a carried leaf is reported (`sub-leaf-carried` in `convert-apply --format json`, `report.carried[]` in `convert-reemit`) so the leaves nobody typed are visible. Not implemented: the "target type is an ancestor of the source type" case -- the engine has no class graph, so that still needs explicit leaves. |
 | `#default <ToPath> = <value>` | set a target property to a default when no source maps to it |
 | `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. |
@@ -583,8 +583,17 @@ exists: a `.dfm` holding an `inherited`/`inline` object of a From type
 a unit whose uses entry to change sits in a `{$IF...}` region (the message
 names the entry and the clause), and a `.dfm` that changed after indexing: the
 line range the index recorded for an instance no longer opens `object <Name>:`
-(or `inherited`/`inline`) or no longer ends at its `end`
-(`<Name>: index is stale for this .dfm -- reindex`; reindex and run again).
+(or `inherited`/`inline`), its first `end` at the opener's indent is not the
+recorded end line (a block that lost lines now ends on a later sibling's `end`),
+or the `.dfm` was cut short so the range runs past its end
+(`<Name>: index is stale for this .dfm -- reindex`; reindex and run again), and
+(R26) a unit-rule removal -- `#unuse`, or `#useswap`'s Old -- of the unit that
+declares the From type of an instance that stays unconverted (skipped, or left
+out by `--only`, which filters instances and never unit rules): removing it would
+break the compile (E2003), so the unit is refused with
+`<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed`
+(e.g. `#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed`;
+the declaring unit is the From type's indexed declaring file).
 Every such refusal behaves the same way: exit
 1, NOTHING written (neither `.pas` nor `.dfm`), one text line
 `REFUSED: <reason>`, and in `apply/1` JSON `"ok": false`, `"refused": true`,

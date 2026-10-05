@@ -24,6 +24,10 @@
       skipped, 'dfm: none'); a book without unit rules keeps today's exit 1.
     * apply/1 JSON: uses[] {action, unit, section, line, rule}, uses_removed,
       uses_added, component_part.
+    * R26 (fix wave): a removal (#unuse, or #useswap's Old) of the unit that
+      declares the From type of an instance left UNCONVERTED (skipped, or
+      excluded by --only) refuses the unit: '<rule> would leave <N>
+      unconverted instance(s) of <Type> -- unit not changed'.
 
   Fixtures live in tests\autotest\fixtures\unitrules and are COPIED to a
   $PID scratch folder, indexed into a scratch --db there. Nothing shared is
@@ -266,6 +270,42 @@ Check 'M1 mixed book: exit 0, the instance converted' (($r.Code -eq 0) -and ($r.
 Check 'M2 LibA swapped out, LibB present EXACTLY once (not added by both the block and the rule)' `
   ((([regex]::Matches($t, '\bLibB\b')).Count -eq 1) -and -not ($t -match '\bLibA\b') -and $t.Contains("uses$CRLF  Classes, LibB;$CRLF")) $t
 Check 'M3 the declaration was retyped by the #convert block' ($t -match 'btnTop: TDstBtn;') $t
+
+# ---- R26: a removal never takes away a unit an UNCONVERTED instance needs ---
+# --only filters instances, never unit rules, so '#unuse LibA' with btnTwo left
+# out would leave 'btnTwo: TSrcBtn' with LibA gone (E2003). The declaring unit
+# comes from the index (LibA.pas declares TSrcBtn), not from the name.
+$R26Unuse = '#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed'
+$hRp = Hash 'R26Form.pas'; $hRd = Hash 'R26Form.dfm'
+$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnOne', '--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+Check 'R1 --only btnOne + #unuse LibA: exit 1, ok=false, refused=true, reason names the rule, count and type' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -eq $true) -and ($j.reason -eq $R26Unuse)) $r.Out
+$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnOne', '--apply', '--no-backup')
+Check 'R2 text: one REFUSED line with the same reason, no ERROR: line' `
+  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($R26Unuse) + '\r?$')) -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
+$r = Apply 'R26Form.pas' 'r26swap.rules' @('--only', 'btnOne', '--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+Check 'R3 --only btnOne + #useswap LibA -> LibB: refused, the reason spells the swap rule' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and `
+   ($j.reason -eq '#useswap LibA -> LibB would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed')) $r.Out
+$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnNone', '--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+Check 'R4 --only matching nothing (unit rules run alone, skipped-no-instances): refused for BOTH instances' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and `
+   ($j.reason -eq '#unuse LibA would leave 2 unconverted instance(s) of TSrcBtn -- unit not changed')) $r.Out
+Check 'R5 R26Form.pas and R26Form.dfm are byte-identical after R1-R4' (((Hash 'R26Form.pas') -eq $hRp) -and ((Hash 'R26Form.dfm') -eq $hRd))
+$r = Apply 'R26Other.pas' 'r26other.rules' @('--only', 'btnOne', '--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+$t = Text 'R26Other.pas'
+Check 'R6 an UNRELATED #unuse OldU beside an unconverted TSrcBtn still applies (OldU gone, LibA kept)' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.refused -eq $false) -and ($j.uses_removed -eq 1) -and `
+   -not ($t -match '\bOldU\b') -and ($t -match '\bLibA\b') -and ($t -match 'btnTwo: TSrcBtn;')) $r.Out
+$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+$t = Text 'R26Form.pas'
+Check 'R7 positive control: every instance converted, #unuse LibA applies (exit 0, LibA gone)' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and (@($j.converted).Count -eq 2) -and -not ($t -match '\bLibA\b') -and ($t -match '\bLibB\b')) $r.Out
 
 # ---- the backup path (default --apply) still works on a unit-rules-only run -
 $r = Apply 'Keep2U.pas' 'use.rules' @('--apply')

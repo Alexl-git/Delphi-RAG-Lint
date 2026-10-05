@@ -634,7 +634,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@9903 -- REVIEWED 2026-09-30: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@4fc5 -- REVIEWED 2026-10-05: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -964,7 +964,7 @@ begin
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; ' +
     'depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2; ' +
     '--progress-interval S: see PROGRESS below)');
-  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error; ' +
+  Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header (''#convert TFoo -> '' or ''#convert TFoo'': ''#convert TFoo has no To type''; ''#useswap X -> '': ''#useswap X has no replacement unit''); ' +
     'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; ' +
     'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); no JSON mode)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
@@ -980,7 +980,8 @@ begin
     'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
     'a .dfm holding an inherited/inline object of a From type is refused whole, unit rules included (exit 1); ' +
-    'a deliberate refusal (that one, or a uses entry to change inside a {$IF...} region) writes nothing and prints one ''REFUSED: <reason>'' line; ' +
+    'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- that one; a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
+    '--only filters instances, never unit rules, so a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed''); ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
@@ -25200,7 +25201,7 @@ begin
       PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
         AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
     else
-      PlanRes:= BuildUnitRulesOnlyPlan(UnitPas, Rules);
+      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules);
     JCtx.ClassesBuilt:= Trees.ClassesBuilt;
     if PlanRes.Refused then Exit(RefuseUnit(PlanRes.Error));
     if not PlanRes.Ok then

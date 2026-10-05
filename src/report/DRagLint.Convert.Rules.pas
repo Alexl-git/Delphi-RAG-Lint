@@ -304,6 +304,11 @@ function IsDecimalDigits(const S: string): Boolean;
 /// '#depth &lt;N&gt;' (the book's tree-expansion depth, decimal digits 1..10,
 /// one per book -- out of range, non-numeric or a second '#depth' is a
 /// ParseError on that line; see TConversionRuleSet.Depth).
+/// R27 (1.20.6): a From-only header -- '#convert TFoo -&gt; ' or '#convert
+/// TFoo', the form the editor writes while authoring -- still parses as a
+/// rule with FromType 'TFoo' and an EMPTY ToType (never 'TFoo -&gt;'), and is a
+/// ParseError on its line: '#convert TFoo has no To type'. Likewise
+/// '#useswap X -&gt; ' (no New unit): '#useswap X has no replacement unit'.
 /// A NON-'#' line containing ' -&gt; ' is a raw PCRE
 /// rule (Search -&gt; Replace). Any other '#word' is an unknown directive
 /// recorded in ParseErrors. Pure; deterministic; no I/O.
@@ -903,7 +908,9 @@ begin
       begin
         // #useswap <Old> -> <New1>[, <New2> ...]  -- UnitName=Old, UnitsAdd=News.
         R.Kind:= rkUseSwap;
-        ArrPos:= Pos(ARROW_MIGRATE, Arg);
+        { Arg is trimmed, so a From-only '#useswap X -> ' has lost the space
+          after its arrow: match against Arg + ' ' (R27) }
+        ArrPos:= Pos(ARROW_MIGRATE, Arg + ' ');
         if ArrPos > 0 then
         begin
           R.UnitName:= Trim(Copy(Arg, 1, ArrPos - 1));
@@ -914,6 +921,7 @@ begin
         SplitHeadAndUnits(Rhs, Head, Units);
         if Head <> '' then Insert(Head, Units, 0);
         R.UnitsAdd:= Units;
+        if Length(Units) = 0 then AddError(Format('#useswap %s has no replacement unit', [R.UnitName]));
         AddRule(R);
       end
       else if Directive('#use', Arg) then
@@ -957,7 +965,8 @@ begin
       else if Directive('#convert', Arg) then
       begin
         R.Kind:= rkConvert;
-        ArrPos:= Pos(ARROW_MIGRATE, Arg);
+        { as #useswap: a From-only '#convert TFoo -> ' must read From 'TFoo' (R27) }
+        ArrPos:= Pos(ARROW_MIGRATE, Arg + ' ');
         if ArrPos > 0 then
         begin
           R.FromType:= Trim(Copy(Arg, 1, ArrPos - 1));
@@ -967,6 +976,7 @@ begin
         SplitHeadAndUnits(Rhs, Head, Units);
         R.ToType  := Head;
         R.UnitsAdd:= Units;
+        if Head = '' then AddError(Format('#convert %s has no To type', [R.FromType]));
         SeenConvert:= True;
         AddRule(R);
       end
