@@ -31,7 +31,6 @@ See also [Features](Features) for the grouped overview and
 * [Format Whole Project with YADF...](Format-Whole-Project-with-YADF) -- `format + index`
 * [Format with YADF](Format-with-YADF) -- `format`
 * [Full Compile Sweep](Full-Compile-Sweep) -- `refresh-findings`
-* [Forms for testers (CSV)...](Generate-Test-Helper-CSV) -- `forms-csv`
 * [Go to Definition](Go-to-Definition)
 * [Hover at Cursor](Hover-at-Cursor) -- `hover`
 * [Impact / Blast Radius (symbol)...](Impact-Blast-Radius-symbol) -- `impact`
@@ -153,29 +152,33 @@ Verbs with no page of their own are described on [Features](Features):
 
 ## Diagrams and charts
 
-The `ask` question family -- see [Diagrams and Charts](Diagrams-and-Charts).
+Every chart question, by its **drag-lint > Reports** caption in RAD Studio. Outside the IDE
+ask the same question with `charts\src\Ask-Report.ps1 -Question <id>` -- see
+[Charts and the IDE](Charts-and-the-IDE). The engine verb `ask` is planned, not shipped.
 
-* [architecture](ask-architecture) -- `ask --question architecture`
-* [butterfly](ask-butterfly) -- `ask --question butterfly`
-* [change-impact](ask-change-impact) -- `ask --question change-impact`
-* [class-surface](ask-class-surface) -- `ask --question class-surface`
-* [crosses-boundary](ask-crosses-boundary) -- `ask --question crosses-boundary`
-* [cycles](ask-cycles) -- `ask --question cycles`
-* [deps](ask-deps) -- `ask --question deps`
-* [effects](ask-effects) -- `ask --question effects`
-* [event-wiring](ask-event-wiring) -- `ask --question event-wiring`
-* [hierarchy](ask-hierarchy) -- `ask --question hierarchy`
-* [lifecycle](ask-lifecycle) -- `ask --question lifecycle`
-* [protocol-trace](ask-protocol-trace) -- `ask --question protocol-trace`
-* [shown-where](ask-shown-where) -- `ask --question shown-where`
-* [tested-by](ask-tested-by) -- `ask --question tested-by`
-* [touches-tables](ask-touches-tables) -- `ask --question touches-tables`
-* [what-it-calls](ask-what-it-calls) -- `ask --question what-it-calls`
-* [who-calls](ask-who-calls) -- `ask --question who-calls`
-* [who-reads](ask-who-reads) -- `ask --question who-reads`
-* [who-writes](ask-who-writes) -- `ask --question who-writes`
-* [wiring](ask-wiring) -- `ask --question wiring`
-
-Shipping with the charts release:
-[consumers](ask-consumers), [exception-paths](ask-exception-paths),
-[feeds-from](ask-feeds-from), [lands-where](ask-lands-where).
+* [Callers and callees (butterfly chart)...](ask-butterfly) -- `butterfly`
+* [Who calls this routine...](ask-who-calls) -- `who-calls`
+* [What this routine calls...](ask-what-it-calls) -- `what-it-calls`
+* [What this routine changes (side effects)...](ask-effects) -- `effects`
+* [Which tables this routine touches...](ask-touches-tables) -- `touches-tables`
+* [Which exceptions escape this routine...](ask-exception-paths) -- `exception-paths`
+* [Does this routine leave the process...](ask-crosses-boundary) -- `crosses-boundary`
+* [Where this protocol command travels...](ask-protocol-trace) -- `protocol-trace`
+* [What a change here would break...](ask-change-impact) -- `change-impact`
+* [Which tests reach this code...](ask-tested-by) -- `tested-by`
+* [Who writes this field...](ask-who-writes) -- `who-writes`
+* [Who reads this field...](ask-who-reads) -- `who-reads`
+* [What feeds this control (back to the column)...](ask-feeds-from) -- `feeds-from`
+* [Where this field lands in the database...](ask-lands-where) -- `lands-where`
+* [Field round-trip (grid -> server -> SQL)...](Field-Round-Trip-Report) -- `round-trip`
+* [What this type exposes (class surface)...](ask-class-surface) -- `class-surface`
+* [Ancestors and descendants (hierarchy)...](ask-hierarchy) -- `hierarchy`
+* [Who registers and resolves this interface...](ask-wiring) -- `wiring`
+* [Which handler runs on which event (form)...](ask-event-wiring) -- `event-wiring`
+* [Form lifecycle (create -> show -> destroy)...](ask-lifecycle) -- `lifecycle`
+* [Dependencies of this unit...](ask-deps) -- `deps`
+* [Project architecture (layered zones)...](ask-architecture) -- `architecture`
+* [Circular unit dependencies...](ask-cycles) -- `cycles`
+* [Who uses this table or column...](ask-consumers) -- `consumers`
+* [Where this database column is shown...](ask-shown-where) -- `shown-where`
+* [Forms for testers (CSV)...](Generate-Test-Helper-CSV) -- `forms-csv`, last on the same submenu

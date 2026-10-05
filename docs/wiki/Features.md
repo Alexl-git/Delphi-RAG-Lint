@@ -192,14 +192,17 @@ DevExpress `cx`/`dx`).
 | Top symbols by fan-in | `top` |
 | TODO / FIXME scan | `todos` |
 | Spring4D DI + DFM event wiring | `wiring` |
-| Form hierarchy CSV for test helpers | `forms-csv` |
+| Tester spreadsheet: every form, the menu / ribbon / tab path to it, the control to click, modal or not, confidence, a blank Tester result column ([Forms for testers](Generate-Test-Helper-CSV); drag-lint > Reports > Forms for testers (CSV)...) | `forms-csv` |
 | Export to DOT / Mermaid / Obsidian / Delphi consts | `export`, `--format dot\|mermaid` |
 | Interactive graph viewer | `drag_lint_graph.exe`, dockable in the IDE |
 
 ## Diagrams and charts
 
-Ask a formal question about one symbol and get a clickable chart back -- the
-`ask` family, shipping in the charts release. Twenty-four questions: `butterfly`,
+Ask a formal question about one symbol and get a clickable chart back. In RAD
+Studio, put the caret on the symbol and pick the question from **drag-lint >
+Reports**; the chart opens in the browser and the text answer is copied as a
+DocInsight `/// <remarks>` block that Auto Document leaves alone. Outside the IDE,
+`charts\src\Ask-Report.ps1` asks the same questions. Twenty-five questions: `round-trip`, `butterfly`,
 `who-calls`, `what-it-calls`, `who-writes`, `who-reads`, `change-impact`,
 `tested-by`, `effects`, `touches-tables`, `class-surface`, `hierarchy`, `deps`,
 `cycles`, `wiring`, `lifecycle`, `event-wiring`, `architecture`,
@@ -209,8 +212,10 @@ back to it.
 
 | Feature | Command |
 |---|---|
-| List the questions valid for a selection | `ask --list --at <file>:<line>:<col>` |
-| Answer one, as an SVG/PNG/PDF bundle that records how to regenerate it | `ask --question <id> --at <file>:<line>:<col>` |
+| Ask from the caret in RAD Studio | drag-lint > Reports > *question* |
+| Ask from a terminal or an agent; prints the answer as text | `charts\src\Ask-Report.ps1 -Question <id> -Target <name> -Project <x.dproj> [-Open]` |
+| Answer one as an SVG/PNG/PDF bundle that records how to regenerate it | `charts\src\New-DiagramArtifact.ps1 -Question <id> -Target <name>` |
+| One engine verb for all of them | `ask` -- planned, not shipped |
 
 See [Diagrams and Charts](Diagrams-and-Charts), with three samples drawn from
 drag-lint's own code.

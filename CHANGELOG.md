@@ -3,9 +3,26 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased -- extractor 1.21.1-alpha
+## v1.21.1-alpha -- 2026-10-05
 
-EXTRACTOR BUMP 1.20.0 -> 1.21.1 (1.21.0 was never released): every index re-parses once.
+EXTRACTOR BUMP 1.20.0 -> 1.21.1 (1.21.0 was never released): every index re-parses once
+(done 2026-10-05, 37/37 sections, 5 h 05 m).
+
+### Added
+
+- **`forms-csv` algorithm v6 -- a tester spreadsheet that says what to click.** Edges come from
+  the index first (DFM control event -> handler -> resolved call path to the routine that
+  creates / shows the form); the old `.pas` text scan is only the fallback, and every row says
+  which method found it. Each form's `.dfm` is read at report time for the menu / ribbon /
+  action / tab path ("Ribbon: Lists > Lists Bar > Variable Names"). New columns: How to open,
+  Click, Control type, Handler, Opened by, Modal, Before you start, Other ways in, Confidence
+  (traced / handler-only / unresolved), Tester result. Micronite2027: "no path from MAIN"
+  7 -> 5, handler-only rows with no control 1 -> 0. Guard: `run_forms_csv_v6.ps1`.
+- **IDE plugin: drag-lint > Reports.** Every chart question of `charts\src\Ask-Report.ps1`
+  (25) from the editor caret (`typeat` resolves the full name), run in the background; the
+  chart opens in the browser and the text answer is copied as a DocInsight `/// <remarks>`
+  block with no autodoc marker, so Auto Document preserves it. "Forms for testers (CSV)..."
+  moved here from the root menu. Tests: `tests\plugin\run_reports_text.ps1`.
 
 ### Fixed
 
