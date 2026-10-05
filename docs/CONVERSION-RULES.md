@@ -125,9 +125,11 @@ interval, so a run shorter than `S` prints none. Writing the document AFTER the
 tree is built prints no progress: since 1.20.6 (T2i) it is one buffered write
 (`TFDQuery --depth 5 --json`, 101,063 nodes / 37 MB: under 1 s of a ~14 s run).
 
-**Stream order (1.20.6).** `proptree` and `convert-scaffold` flush every
-STDERR line they wrote (the `(loaded defaults ...)` banner, freshness and
-resolver notes, progress lines) BEFORE the first byte of the stdout document,
+**Stream order (1.20.6).** `proptree`, `convert-scaffold`, `convert-apply`
+(dry run and `--apply`, `--format json`), `convert-reemit`, `info --json`,
+`query --name --json`, `outline --format json` and `sql` -- the verbs the rules
+editor runs -- flush every STDERR line they wrote (the `(loaded defaults ...)`
+banner, freshness and resolver notes, progress lines) BEFORE the first byte of the stdout document,
 and write the document in one piece; nothing follows it on either stream. So a
 caller that merges the two streams into one pipe gets the notes as a preamble
 and the complete document after them.

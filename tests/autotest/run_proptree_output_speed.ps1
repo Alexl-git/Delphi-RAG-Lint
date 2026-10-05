@@ -49,6 +49,22 @@
        note); the slice parses with the separate run's node count.
     c  (-LibDb, and -OldD5Json or -OldExe) TFDQuery --depth 5 --json, old vs
        new, by SHA256. Pass -OldD5Json <file> to reuse a kept old output.
+    e  (always; fix round 1, ruling R18) the other JSON verbs the rules editor
+       runs merged -- convert-apply (dry run and --apply), convert-reemit,
+       info --json, query --name --json, outline --format json, sql --json --
+       from a work dir holding a .drag-lint.json, so the "(loaded defaults
+       ...)" banner is on stderr: merged == stderr ++ stdout, and the
+       '{'..'}' (or '['..']') slice parses with the expected keys. With
+       -OldExe also: stdout identical to the old engine (info masks exe_path,
+       build_date and the two DLL lines).
+    k  (always) stdout on a CONSOLE (a hidden window): proptree --json exits 0;
+       the writer uses <= 32 KiB pieces there. A positive control only.
+
+  RED 2026-10-04 (fix round 1), the ed5cdd4c build, no -OldExe / -LibDb:
+  27 PASS / 7 FAIL -- the seven e "merged == stderr ++ stdout" checks (the
+  banner landed AFTER the document on every verb). The e slice checks PASSED
+  there: the banner carries no brace, so slicing survived -- they are positive
+  controls. GREEN, same flags, the fix-round build: 34 PASS / 0 FAIL.
 
   RED 2026-09-30, the pre-T2i build (fa846fcb copy), -OldExe = itself:
   m and l FAIL (the stale-index / resolver note is split around the document:
@@ -332,6 +348,147 @@ Write-Host 'h: --help says whole seconds' -ForegroundColor Cyan
 $help = Ascii (RunRaw $Exe @('--help')).Out
 Check '--help: "--progress-interval S (whole seconds"' ($help -match '--progress-interval S \(whole seconds') ''
 Check '--help: no "decimal seconds"' (-not ($help -match 'decimal seconds')) ''
+
+# ---- e: the other JSON verbs the editor runs merged (fix round 1, ruling R18) --
+#     The work dir carries a .drag-lint.json, so every run from it writes the
+#     "(loaded defaults ...)" banner to stderr -- the note the editor actually
+#     sees. RED on ed5cdd4c: that banner sat in ErrOutput's buffer and landed
+#     AFTER the document on all six verbs.
+Write-Host ''
+Write-Host 'e: merged stream on convert-apply / convert-reemit / info / query / outline / sql (R18)' -ForegroundColor Cyan
+$ex = P 'ex'
+New-Item -ItemType Directory $ex | Out-Null
+Write-Ascii (Join-Path $ex 'EdFix.pas') @'
+unit EdFix;
+
+interface
+
+uses
+  Classes, OldUnit;
+
+type
+  TSrcComp = class(TComponent)
+  private
+    FCaption: string;
+  published
+    property Caption: string read FCaption write FCaption;
+  end;
+
+  TDstComp = class(TComponent)
+  private
+    FCaption: string;
+  published
+    property Caption: string read FCaption write FCaption;
+  end;
+
+implementation
+
+end.
+'@
+Write-Ascii (Join-Path $ex 'u.rules') "#useswap OldUnit -> NewUnit`n"
+Write-Ascii (Join-Path $ex 'r.rules') "#convert EdFix.TSrcComp -> EdFix.TDstComp`n#link Caption <- Caption`n"
+Write-Ascii (Join-Path $ex 'blk.txt') "object S1: TSrcComp`n  Caption = 'x'`nend`n"
+Write-Ascii (Join-Path $ex '.drag-lint.json') '{}'
+$exDb = Join-Path $ex 'ex.sqlite'
+$null = & $Exe index $ex --db $exDb 2>&1
+# convert-apply --apply edits the unit: it runs on its own indexed copy, one per engine run.
+function ApplyCopy([string]$Tag) {
+  $dir = Join-Path $ex $Tag
+  New-Item -ItemType Directory $dir -Force | Out-Null
+  Copy-Item (Join-Path $ex 'EdFix.pas') $dir -Force
+  $null = & $Exe index $dir --db (Join-Path $dir 'c.sqlite') 2>&1
+  return (Join-Path $dir 'EdFix.pas')
+}
+function RunRawIn([string]$Cwd, [string]$E, [string[]]$A) {
+  $psi = [System.Diagnostics.ProcessStartInfo]::new($E)
+  foreach ($x in $A) { $psi.ArgumentList.Add($x) }
+  $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $psi.WorkingDirectory = $Cwd
+  $p = [System.Diagnostics.Process]::Start($psi)
+  $ms = [System.IO.MemoryStream]::new(); $es = [System.IO.MemoryStream]::new()
+  $t = $p.StandardError.BaseStream.CopyToAsync($es)
+  $p.StandardOutput.BaseStream.CopyTo($ms); $t.Wait(); $p.WaitForExit()
+  return [pscustomobject]@{ Code = $p.ExitCode; Out = $ms.ToArray(); Err = $es.ToArray() }
+}
+function RunMergedIn([string]$Cwd, [string]$E, [string[]]$A) {
+  $line = ($A | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
+  $psi = [System.Diagnostics.ProcessStartInfo]::new("$env:ComSpec")
+  $psi.Arguments = '/s /c ""' + $E + '" ' + $line + ' 2>&1"'
+  $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.WorkingDirectory = $Cwd
+  $p = [System.Diagnostics.Process]::Start($psi)
+  $ms = [System.IO.MemoryStream]::new()
+  $p.StandardOutput.BaseStream.CopyTo($ms); $p.WaitForExit()
+  return ,$ms.ToArray()
+}
+function SliceBy([string]$S, [char]$Open, [char]$Close) {
+  $a = $S.IndexOf($Open); $b = $S.LastIndexOf($Close)
+  if ($a -lt 0 -or $b -le $a) { return $null }
+  try { return (ConvertFrom-Json -InputObject $S.Substring($a, $b - $a + 1) -NoEnumerate) } catch { return $null }
+}
+$edCases = @(
+  @{ N = 'convert-apply (dry run)'; Open = '{'; Close = '}'; A = { param($t) @('convert-apply', '--unit', (Join-Path $ex 'EdFix.pas'), '--rules', (Join-Path $ex 'u.rules'), '--db', $exDb, '--format', 'json') };
+     Ok = { param($j) $j.schema -eq 'apply/1' -and $j.mode -eq 'dry-run' -and $j.ok -eq $true -and $j.uses_removed -eq 1 } },
+  @{ N = 'convert-apply --apply'; Open = '{'; Close = '}'; A = { param($t) $u = ApplyCopy $t; @('convert-apply', '--unit', $u, '--rules', (Join-Path $ex 'u.rules'), '--db', (Join-Path (Split-Path $u) 'c.sqlite'), '--apply', '--no-backup', '--format', 'json') };
+     Ok = { param($j) $j.schema -eq 'apply/1' -and $j.mode -ne 'dry-run' -and $null -ne $j.ok -and $null -ne $j.uses } },
+  @{ N = 'convert-reemit'; Open = '{'; Close = '}'; A = { param($t) @('convert-reemit', '--from-block', (Join-Path $ex 'blk.txt'), '--rules', (Join-Path $ex 'r.rules'), '--from', 'EdFix.TSrcComp', '--to', 'EdFix.TDstComp', '--db', $exDb) };
+     Ok = { param($j) $null -ne $j.report -and $null -ne $j.unreachable } },
+  @{ N = 'info --json'; Open = '{'; Close = '}'; A = { param($t) @('info', '--json') };
+     Ok = { param($j) $j.schema -eq 'info/1' -and $j.capabilities.progress_lines -eq $true } },
+  @{ N = 'query --name --json'; Open = '['; Close = ']'; A = { param($t) @('query', '--name', 'TSrcComp', '--json', '--db', $exDb) };
+     Ok = { param($j) @($j | Where-Object { $_.name -eq 'TSrcComp' }).Count -ge 1 } },
+  @{ N = 'outline --format json'; Open = '['; Close = ']'; A = { param($t) @('outline', '--file', (Join-Path $ex 'EdFix.pas'), '--format', 'json', '--db', $exDb) };
+     Ok = { param($j) @($j | Where-Object { $_.kind -eq 'class' }).Count -eq 2 } },
+  @{ N = 'sql --json'; Open = '{'; Close = '}'; A = { param($t) @('sql', '--query', 'SELECT 1 AS n', '--db', $exDb, '--json') };
+     Ok = { param($j) $null -ne $j.columns -and $null -ne $j.rows } }
+)
+$ci = 0
+foreach ($c in $edCases) {
+  $ci++
+  $sep = RunRawIn $ex $Exe (& $c.A "s$ci")
+  $mrg = RunMergedIn $ex $Exe (& $c.A "m$ci")
+  $errTxt = Ascii $sep.Err
+  Check "e $($c.N): separate run exits 0 and writes the banner to stderr" `
+    (($sep.Code -eq 0) -and ($errTxt -match 'loaded defaults')) "exit=$($sep.Code) stderr=$($errTxt.Trim())"
+  $tail = ((Ascii $mrg).TrimEnd() -split "`n" | Select-Object -Last 1)
+  # The --apply case runs on per-run copies (s<i> / m<i>): the copy's directory
+  # name is the only byte allowed to differ.
+  $mt = (Ascii $mrg).Replace("\\m$ci\\", '\\RUN\\')
+  $ct = (Ascii (Concat $sep.Err $sep.Out)).Replace("\\s$ci\\", '\\RUN\\')
+  Check "e $($c.N): merged bytes == stderr bytes ++ stdout bytes" ($mt -ceq $ct) `
+    ("merged={0} B, stderr+stdout={1} B; merged last line: [{2}]" -f $mrg.Length, ($sep.Err.Length + $sep.Out.Length), $tail)
+  $j = SliceBy (Ascii $mrg) $c.Open $c.Close
+  Check "e $($c.N): the '$($c.Open)'..'$($c.Close)' slice of the merged output parses with the expected keys" `
+    (($null -ne $j) -and (& $c.Ok $j)) ''
+  if ($OldExe) {
+    $o = RunRawIn $ex $OldExe (& $c.A "o$ci")
+    $n = RunRawIn $ex $Exe (& $c.A "n$ci")
+    $os = Ascii $o.Out; $ns = Ascii $n.Out
+    if ($c.N -like 'info*') {
+      # info names its own exe, DLLs and build time: mask exactly those values.
+      $mask = '"(exe_path|build_date|dll_delphi13|dll_dfm)":"(\\.|[^"\\])*"'
+      $os = $os -replace $mask, '"$1":"*"'; $ns = $ns -replace $mask, '"$1":"*"'
+    }
+    if ($c.N -like 'convert-apply --apply*') {
+      # the unit path differs per copy: compare with each run's own path removed.
+      $os = $os.Replace((Join-Path $ex "o$ci").Replace('\', '\\'), '<dir>'); $ns = $ns.Replace((Join-Path $ex "n$ci").Replace('\', '\\'), '<dir>')
+    }
+    Check "e $($c.N): stdout identical to the old engine (exit $($n.Code) vs $($o.Code))" (($os -eq $ns) -and ($o.Code -eq $n.Code)) "old=$($o.Out.Length) B new=$($n.Out.Length) B"
+  }
+}
+
+# ---- k: stdout is a CONSOLE -- written in <= 32 KiB pieces (fix round 1 minor) --
+#     A hidden window still gets its own console, so stdout is a FILE_TYPE_CHAR
+#     handle. A failed console WriteFile would surface as an I/O exception (exit
+#     3); exit 0 is the check. Positive control only: a 1 MiB console write does
+#     not fail on this Windows build, so this cannot go RED here.
+Write-Host ''
+Write-Host 'k: stdout on a console' -ForegroundColor Cyan
+$kArgs = if ($LibDb) { @('proptree', '--qname', 'Bde.DBTables.TQuery', '--depth', '3', '--refs-as-leaves', '--no-write-back', '--json', '--db', $LibDb) }
+         else { @('proptree', '--qname', 'OutFix.TSrcComp', '--json', '--no-write-back', '--db', $db) }
+$pk = Start-Process -FilePath $Exe -ArgumentList $kArgs -WindowStyle Hidden -PassThru
+$finK = $pk.WaitForExit(300000)
+if (-not $finK) { try { $pk.Kill() } catch {} }
+Check ("k: proptree --json to a console exits 0 ({0})" -f $(if ($LibDb) { 'TQuery depth 3, ~180 KB' } else { 'fixture' })) ($finK -and $pk.ExitCode -eq 0) "exit=$(if ($finK) { $pk.ExitCode } else { 'TIMEOUT' })"
 
 # ---- a: differential shim over the existing runners ---------------------------
 if ($OldExe) {

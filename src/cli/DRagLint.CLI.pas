@@ -1068,6 +1068,46 @@ begin
   Writeln('         (on the command line or a .drag-lint.json "db").');
 end; // procedure
 
+const
+  STDOUT_DOCUMENT_BUFFER = 1 shl 20; // 1 MiB: TFDQuery depth 5 (37 MB) is ~36 WriteFile calls, not ~290,000
+  STDOUT_CONSOLE_CHUNK   = 32 shl 10; // 32 KiB: a 1 MiB WriteFile to a CONSOLE handle can fail on older Windows
+
+/// <summary>Writes one whole stdout document -- a JSON document (proptree,
+/// convert-apply / convert-reemit, info, query / outline --json, sql) or a text
+/// document (proptree's tree, convert-scaffold's book) -- with the same bytes as
+/// Write(Output, ADoc), after every pending STDERR byte (engine 1.20.6, T2i).</summary>
+/// <param name="ADoc">The complete document, line breaks included. Converted to
+/// stdout's code page by the RTL exactly as Write/Writeln would convert it.</param>
+/// <remarks>Output and ErrOutput are Text files whose Writeln does NOT flush
+/// when the handle is a file or a pipe -- only a console flushes per line -- so
+/// before this, a stderr note (even the "(loaded defaults ...)" banner) sat in
+/// its 128-byte buffer and reached a merged pipe (the editor runs the engine
+/// with stdout and stderr on ONE pipe) AFTER, or split around, the document;
+/// and the document itself went out in 128-byte WriteFile calls, which is what
+/// made a 37 MB proptree take minutes. Order here: flush ErrOutput, flush
+/// Output, write ADoc through a buffer swapped in for the call, flush, restore
+/// Output's own 128-byte buffer. The buffer is 1 MiB for a file or a pipe (one
+/// write for most documents) and 32 KiB when stdout is a console
+/// (GetFileType = FILE_TYPE_CHAR), so no single console WriteFile exceeds 32
+/// KiB. Nothing else writes to either stream in between (single-threaded;
+/// proptree's progress lines are only emitted while the tree builds).</remarks>
+procedure WriteStdoutDocument(const ADoc: string);
+var
+  Buf: TBytes;
+begin
+  Flush(ErrOutput);
+  Flush(Output);
+  if GetFileType(TTextRec(Output).Handle) = FILE_TYPE_CHAR then SetLength(Buf, STDOUT_CONSOLE_CHUNK)
+  else SetLength(Buf, STDOUT_DOCUMENT_BUFFER);
+  SetTextBuf(Output, Buf[0], Length(Buf));
+  try
+    Write(Output, ADoc);
+    Flush(Output);
+  finally
+    SetTextBuf(Output, TTextRec(Output).Buffer, SizeOf(TTextRec(Output).Buffer));
+  end;
+end;
+
 /// <summary>True when ASwitch appears verbatim on the command line.</summary>
 /// <remarks>For the handful of decisions that must be made BEFORE ParseArgs has
 /// run -- today just --quiet, which LoadConfigDefaults needs while it is loading
@@ -6076,7 +6116,7 @@ begin
         if Sym.ForwardLine > 0 then JObj.AddPair('forward_line', TJSONNumber.Create(Sym.ForwardLine));
         JArr.AddElement(JObj);
       end; // for
-      Writeln(JArr.Format(2));
+      WriteStdoutDocument(JArr.Format(2) + sLineBreak); // after every stderr byte (T2i R18)
     finally
       JArr.Free;
     end; // try
@@ -9667,7 +9707,7 @@ begin
         if StubOf[Idx] >= 0 then JObj.AddPair('forward_target_line', TJSONNumber.Create(Syms[StubOf[Idx]].StartLine));
         JArr.AddElement(JObj);
       end;
-      Writeln(JArr.Format(2));
+      WriteStdoutDocument(JArr.Format(2) + sLineBreak); // after every stderr byte (T2i R18)
     finally
       JArr.Free;
     end; // try
@@ -15531,7 +15571,7 @@ begin
   end; // try
 
   if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.ANSI)
-  else Writeln(OutStr);
+  else WriteStdoutDocument(OutStr + sLineBreak); // after every stderr byte (T2i R18)
   Result:= 0;
 end; // function
 
@@ -16017,7 +16057,7 @@ begin
         end;
       end;
 
-      Writeln(JRoot.ToJSON);
+      WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
     finally
       JRoot.Free;
     end;
@@ -23375,40 +23415,6 @@ begin
   end;
 end;
 
-const
-  STDOUT_DOCUMENT_BUFFER = 1 shl 20; // 1 MiB: TFDQuery depth 5 (37 MB) is ~36 WriteFile calls, not ~290,000
-
-/// <summary>Writes one whole stdout document (proptree's JSON or text tree,
-/// convert-scaffold's book) with the same bytes as Write(Output, ADoc), after
-/// every pending STDERR byte (engine 1.20.6, T2i).</summary>
-/// <param name="ADoc">The complete document, line breaks included. Converted to
-/// stdout's code page by the RTL exactly as Write/Writeln would convert it.</param>
-/// <remarks>Output and ErrOutput are Text files whose Writeln does NOT flush
-/// when the handle is a file or a pipe -- only a console flushes per line -- so
-/// before this, a stderr note sat in its 128-byte buffer and reached a merged
-/// pipe (the editor runs the engine with stdout and stderr on ONE pipe) after,
-/// or in the middle of, the document; and the document itself went out in
-/// 128-byte WriteFile calls, which is what made a 37 MB proptree take minutes.
-/// Order here: flush ErrOutput, flush Output, write ADoc through a 1 MiB buffer
-/// swapped in for the call, flush, restore Output's own 128-byte buffer. Nothing
-/// else writes to either stream in between (single-threaded; progress lines
-/// are only emitted while the tree builds, before this is called).</remarks>
-procedure WriteStdoutDocument(const ADoc: string);
-var
-  Buf: TBytes;
-begin
-  Flush(ErrOutput);
-  Flush(Output);
-  SetLength(Buf, STDOUT_DOCUMENT_BUFFER);
-  SetTextBuf(Output, Buf[0], Length(Buf));
-  try
-    Write(Output, ADoc);
-    Flush(Output);
-  finally
-    SetTextBuf(Output, TTextRec(Output).Buffer, SizeOf(TTextRec(Output).Buffer));
-  end;
-end;
-
 /// <summary>drag-lint proptree --qname X [--depth N] [--rules FILE] [--no-to-persistent]
 /// [--refs-as-leaves] [--min-visibility published|public] [--format text|json] [--json] --db PATH
 /// [--db ...] -- Track 3 Batch 1: the index-driven RECURSIVE deep-property
@@ -24061,7 +24067,7 @@ begin
                                           Res.Report.MappingNotes + Res.Report.Notes));
     JRoot.AddPair('report', JReport);
     JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(Unreach))); { T2h -- same objects as apply/1 }
-    Writeln(JRoot.ToJSON);
+    WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
   finally
     JRoot.Free;
   end;
@@ -24733,7 +24739,7 @@ begin
       message too, so a consumer reading only warnings[] still sees them. }
     JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(ACtx.Unreachable)));
 
-    Writeln(JRoot.ToJSON);
+    WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
   finally
     JRoot.Free;
   end;
