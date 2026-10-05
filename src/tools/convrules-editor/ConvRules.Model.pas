@@ -243,7 +243,8 @@ type
       /// it unless it is handed to Add/LoadFromString, which transfer it to the book.</returns>
       /// <remarks>
       /// Never raises. Public so the model can be spec'd line-by-line without
-      /// round-tripping a whole file.
+      /// round-tripping a whole file. A From-only #convert ('#convert X -> ', with or
+      /// without ', Unit') keeps FromType with an empty ToType.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas), ConvRules.Model.TRuleBook.SetDepth (ConvRules.Model.pas)</para>
       /// <para>Calls: ConvRules.Model.IsDecimalDigits, ConvRules.Model.ParseSetList, ConvRules.Model.SplitTopLevelCommas, ConvRules.Model.StripComment, ConvRules.Model.TRuleBook.ParseLine.SplitArrow, ConvRules.Model.TRuleBook.ParseLine.SplitBareArrow, Copy, LowerCase, Pos, Trim, TryStrToInt</para>
@@ -916,8 +917,8 @@ begin
     if Dir = '#convert' then
     begin
       N.Kind:= rnkConvert;
-      // From -> To [, unit ...]
-      if SplitArrow(Body, ARROW_MIGRATE, N.FromType, Rest) then
+      // From -> To [, unit ...]; + ' ': trimming turned a From-only 'X -> ' into 'X ->'
+      if SplitArrow(Body + ' ', ARROW_MIGRATE, N.FromType, Rest) then
       begin
         CommaP:= Pos(',', Rest);
         if CommaP > 0 then

@@ -7227,6 +7227,61 @@ begin
   end;
 end;
 
+{ A From-only #convert (a From class, no To yet) must survive load, save + reload
+  and a dirty re-emit, so a conversion can be authored in two sittings. The block
+  carries an #ignore so Snapshot (which drops a block that maps nothing) keeps it. }
+procedure TestConvertFromOnly;
+const
+  CRLF      = #13#10;
+  FROM_TYPE = 'TNoSuchClassXyz';
+  UNIT_NAME = 'NoSuchUnitXyz';
+
+  function HeaderText(const ABook: TRuleBook): string;
+  var
+    LHdr: TRuleNode;
+  begin
+    if Length(ABook.ConvertHeaders) = 0 then
+      Exit('<no #convert header>');
+    LHdr:= ABook.Nodes[ABook.ConvertHeaders[0]];
+    Result:= Format('from=[%s] to=[%s] units=[%s]', [LHdr.FromType, LHdr.ToType, LHdr.Units]);
+  end;
+
+  function RoundTrips(const AHeaderLine, AUnits: string; out ADetail: string): Boolean;
+  var
+    LBook : TRuleBook;
+    LOther: TRuleBook;
+    LWant : string;
+  begin
+    LWant:= Format('from=[%s] to=[] units=[%s]', [FROM_TYPE, AUnits]);
+    LBook := TRuleBook.Create;
+    LOther:= TRuleBook.Create;
+    try
+      LBook.LoadFromString(AHeaderLine + CRLF + '#ignore Tag' + CRLF);
+      ADetail:= 'load ' + HeaderText(LBook);
+      Result:= HeaderText(LBook) = LWant;
+
+      LOther.LoadFromString(LBook.Snapshot);
+      ADetail:= ADetail + '; reload ' + HeaderText(LOther);
+      Result:= Result and (HeaderText(LOther) = LWant);
+
+      // A dirty node re-emits through TRuleNode.Emit, not Raw.
+      LBook.Nodes[LBook.ConvertHeaders[0]].Dirty:= True;
+      LOther.LoadFromString(LBook.Snapshot);
+      ADetail:= ADetail + '; dirty reload ' + HeaderText(LOther);
+      Result:= Result and (HeaderText(LOther) = LWant);
+    finally
+      LOther.Free;
+      LBook.Free;
+    end; // try
+  end;
+
+var
+  Detail: string;
+begin
+  Check('model.convert.from.only.roundtrip', RoundTrips('#convert ' + FROM_TYPE + ' -> ', '', Detail), Detail);
+  Check('model.convert.from.only.with.unit.roundtrip', RoundTrips('#convert ' + FROM_TYPE + ' -> , ' + UNIT_NAME, UNIT_NAME, Detail), Detail);
+end;
+
 procedure TestEngineProgress;
 const
   // The engine's real shape: elapsed_s is FormatFloat('0.0'), the rest are integers.
@@ -7602,6 +7657,7 @@ begin
     TestProptree2Fields;
     TestSaveComplete;
     TestBookDepth;
+    TestConvertFromOnly;
     TestPickerDatasource;
     TestFillFromUnit;
     TestProptreeBareClass;
