@@ -12798,7 +12798,11 @@ begin
     { v0.46: AST checks that need no DB -- single .pas file only. The plugin's
       lint provider runs `lint <buffer>` with no --rule, so all of these surface
       as live edit-time diagnostics. }
-    if TFile.Exists(EffPath) and (SameText(ExtractFileExt(EffPath), '.pas') or SameText(ExtractFileExt(EffPath), '.inc')) then
+    { .dpr joins .pas/.inc: lint-all scans a .dpr with these same AST checks (fixed 2026-08-16),
+      so the per-file verb must too or the editor's gutter hides them (1.20.6 T3;
+      tests\autotest\run_lint_dpr_parity.ps1). .dpk stays out: lint-all does not scan it. }
+    if TFile.Exists(EffPath) and (SameText(ExtractFileExt(EffPath), '.pas') or SameText(ExtractFileExt(EffPath), '.inc')
+       or SameText(ExtractFileExt(EffPath), '.dpr')) then
     begin
       var Cfg: TLintConfig:= LoadLintConfig(AArgs);
       { THE STORE IS RESOLVED ONCE, HERE, FOR EVERY PER-FILE CHECKER BELOW.
