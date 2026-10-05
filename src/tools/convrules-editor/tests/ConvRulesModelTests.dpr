@@ -7460,6 +7460,54 @@ begin
   Check('caps.consts', (CAPABILITY_BOOK_DEPTH = 'book_depth') and (CAPABILITY_PROGRESS_LINES = 'progress_lines'));
 end;
 
+{ CapabilityNames is bounded by its own InfoTimeoutMs, not ENGINE_TIMEOUT_MS: a
+  stand-in engine (a .cmd that sleeps) must give [] within the bound. A second
+  stand-in that answers proves the .cmd mechanism reaches CapabilityNames at all --
+  without it, a stand-in that never started would pass the timeout check. }
+procedure TestCapabilityProbeTimeout;
+const
+  BOUND_MS  = 1500;
+  MARGIN_MS = 2500;  // the bound plus process start-up; the stand-in sleeps ~6 s
+  SLEEP_CMD = '@ping -n 7 127.0.0.1 >nul' + #13#10;
+  ANSWER_CMD = '@echo {"capabilities":{"book_depth":true}}' + #13#10;
+var
+  Dir    : string;
+  Eng    : TEngineAdapter;
+  Caps   : TArray<string>;
+  TStart : UInt64;
+  Elapsed: UInt64;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'caps-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'answer.cmd'), ANSWER_CMD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'sleep.cmd'), SLEEP_CMD, TEncoding.ASCII);
+
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'answer.cmd'), []);
+    try
+      Check('caps.info.timeout.default', Eng.InfoTimeoutMs = INFO_TIMEOUT_MS, IntToStr(Eng.InfoTimeoutMs));
+      Caps:= Eng.CapabilityNames;
+      Check('caps.standin.answers', MatchText(CAPABILITY_BOOK_DEPTH, Caps), string.Join(',', Caps));
+    finally
+      Eng.Free;
+    end;
+
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'sleep.cmd'), []);
+    try
+      Eng.InfoTimeoutMs:= BOUND_MS;
+      TStart := GetTickCount64;
+      Caps   := Eng.CapabilityNames;
+      Elapsed:= GetTickCount64 - TStart;
+      Check('caps.timeout.is.none', (Length(Caps) = 0) and (Elapsed < BOUND_MS + MARGIN_MS),
+        Format('%d caps in %d ms', [Length(Caps), Elapsed]));
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
 { RunCaptureStreaming against a pwsh stand-in for the engine. SKIPs when pwsh.exe
   is not on PATH (it is on the dev box: PowerShell 7). }
 procedure TestRunCaptureStreaming;
@@ -7784,6 +7832,7 @@ begin
     TestDestPlatformLabel;
     TestEngineProgress;
     TestEngineArgsAndCaps;
+    TestCapabilityProbeTimeout;
     TestRunCaptureStreaming;
     TestProptreeCancelState;
 

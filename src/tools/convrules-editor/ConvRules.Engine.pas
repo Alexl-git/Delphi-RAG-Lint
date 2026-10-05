@@ -53,6 +53,13 @@ const
   /// <summary>Watchdog for ONE conversion-path call (convert-apply, index
   /// --project), in milliseconds.</summary>
   CONVERT_TIMEOUT_MS = 600000; // conversions: a 3-file fixture dry-run measured 106 s (2026-09-29)
+  /// <summary>Watchdog for the start-up capability probe (`info --json`, see
+  /// TEngineAdapter.CapabilityNames), in milliseconds.</summary>
+  /// <remarks>The probe runs in TConvRulesForm.Create on the UI thread, so this
+  /// bound is how long a hung engine can freeze start-up. `info` reads no index;
+  /// 15 s is generous. On expiry the probe reports NO capabilities, which is the
+  /// behaviour of an engine older than 1.20.6.</remarks>
+  INFO_TIMEOUT_MS = 15000;
   /// <summary>info --json capability: the #depth book directive plus --depth on
   /// proptree / convert-scaffold (engine 1.20.6).</summary>
   CAPABILITY_BOOK_DEPTH = 'book_depth';
@@ -259,6 +266,7 @@ type
       FProgressLines : Boolean        ;
       FLongCallRunner: TLongCallRunner;
       FLastCancelled : Boolean        ;
+      FInfoTimeoutMs : Cardinal       ;
       /// <param name="AArgs"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AOutput"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: RunCaptureTimed(AArgs,
@@ -954,7 +962,11 @@ type
       /// engine's "(loaded defaults from ...)" stderr line shares the pipe.</remarks>
       function HasCapability(const AName: string): Boolean;
       /// <summary>One `info --json` call: every capability the engine reports as true.</summary>
-      /// <returns>[] when the engine fails or its output is unparseable.</returns>
+      /// <returns>[] when the engine fails, its output is unparseable, or the call
+      /// exceeds InfoTimeoutMs.</returns>
+      /// <remarks>Bounded by InfoTimeoutMs (INFO_TIMEOUT_MS), not ENGINE_TIMEOUT_MS: the
+      /// editor probes once in TConvRulesForm.Create, on the UI thread. A timeout reads
+      /// as no capabilities -- the behaviour of an engine older than 1.20.6.</remarks>
       function CapabilityNames: TArray<string>;
       /// <summary>Runs `exe AArgs` with stdout and stderr on SEPARATE pipes, both drained
       /// while it runs. Progress lines on stderr go to AOnProgress; everything else on
@@ -984,6 +996,10 @@ type
       property LongCallRunner: TLongCallRunner read FLongCallRunner write FLongCallRunner;
       /// <summary>True when the LAST GetProptree was cancelled by the user.</summary>
       property LastCancelled: Boolean read FLastCancelled;
+      /// <summary>CapabilityNames' watchdog; INFO_TIMEOUT_MS after Create.</summary>
+      /// <remarks>Writable so the model tests can use a short bound with a
+      /// sleeping stand-in engine; the editor never changes it.</remarks>
+      property InfoTimeoutMs: Cardinal read FInfoTimeoutMs write FInfoTimeoutMs;
   end;
 
 /// <summary>PURE: the engine flags for tree depth and progress.</summary>
@@ -1165,6 +1181,7 @@ begin
   inherited Create;
   FExePath:= AExePath;
   FDbList := ADbList;
+  FInfoTimeoutMs:= INFO_TIMEOUT_MS;
 end;
 
 procedure TEngineAdapter.SetDbs(const ADbs: TArray<string>);
@@ -1250,7 +1267,8 @@ var
   Output: string;
 begin
   Result:= nil;
-  if RunCapture('info --json', Output) = 0 then
+  // Its own short bound, not ENGINE_TIMEOUT_MS: this runs during start-up.
+  if RunCaptureTimed('info --json', FInfoTimeoutMs, Output) = 0 then
     Result:= ParseCapabilityNames(Output);
 end;
 
