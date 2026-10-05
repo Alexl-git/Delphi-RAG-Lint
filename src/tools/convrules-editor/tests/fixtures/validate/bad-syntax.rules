@@ -1,0 +1,5 @@
+#depth 0
+#convert TFoo -> 
+#link A <- B
+#convert TBar -> TBaz
+#link C <- D

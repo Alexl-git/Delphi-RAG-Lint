@@ -1,0 +1,3 @@
+line 1: #depth must be an integer 1..10
+line 2: #convert TFoo has no To type
+(loaded defaults from C:\Projects\.drag-lint.json)

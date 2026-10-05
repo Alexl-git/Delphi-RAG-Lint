@@ -88,15 +88,18 @@ through a breaking change buys nothing.
   the .dfm -- check the `--db` set first. Filed as
   `docs\INBOX-2026-09-16-converter-to-engine-dfm-block-needs-indexed-unit.md`.
 
-* **The class cast is still not realized, and the .dfm half DROPS the image.**
-  `#link OptionsImage.Glyph <- Picture : AssignGraphic` is skipped on the `.pas`
-  side, and the re-emit reports `dropped Picture.Data` -- so twenty buttons lose
-  their glyphs silently. `--castlib` executes **enum blocks only** (its own help
-  says so); `TCastDef.PasTemplate` is parsed at
-  `src\report\DRagLint.Convert.CastLib.pas:375` and read nowhere in `src\`. This
-  is engine item 6, `realize-class-casts`, 3-5 d, planned in
-  `PLAN-SESSION-95-OPEN-NOTES.md`. It is the ONLY remaining gap in the
-  conversion; everything else lands.
+* **The class cast IS realized on the `.pas` side (corrected 2026-10-05); the
+  `.dfm` image half is UNVERIFIED.** This bullet said `#link OptionsImage.Glyph <-
+  Picture : AssignGraphic` was skipped on the `.pas` side and that `--castlib`
+  ran enum blocks only. Engine commit `52d9a1b9` realized class casts on the
+  `.pas` side. Whether the `.dfm` re-emit still reports `dropped Picture.Data`
+  (twenty buttons losing their glyphs) has NOT been re-measured since -- check a
+  real convert-apply on VARINSP before repeating either claim.
+* **Real conversions are ON HOLD for projects re-stamped to 1.21.0 (2026-10-05)**
+  until the engine session sends "done". 34 of 36 DBs (Micronite2027 among
+  them) were re-stamped by an unreviewed 1.21.0 build, and the 1.20.6 pin
+  refuses to WRITE them -- the Convert tab's reindex-before-apply would fail.
+  Read-only verbs (convert-validate, proptree, query, sql) still answer.
 * **The `--db` strictness sweep has LANDED, and the "costs us nothing" reading of
   it was WRONG (corrected 2026-09-15).** The claim recorded here was that our DB
   set is three hardcoded paths that all exist, so strictness could not touch us.
@@ -893,3 +896,62 @@ the `convrules-depth` worktree.
   chunk); a From-only `#convert X -> ` keeps its From type on reload (see the
   model section); `FDepthDropped` is cleared after `CBN_CLOSEUP` in a finally,
   so an exception from the close-up's commit cannot leave it set.
+
+## Scoped validation on Save -- hand-over notes (fix/validate-edited-blocks, 2026-10-05)
+
+Owner ruling: "The edited saved block should be validated. Stuff that is
+unchanged is presumed validated earlier."
+
+* **Why:** `convert-validate --from F --to T` checks EVERY `#convert` block
+  against that ONE pair. Save used the active block's pair, so a multi-block book
+  showed bogus errors (BDE-to-FireDAC.rules with TQuery -> TFDQuery: 145 error
+  lines, exit 1). And warnings (`line N: warning: ...`, e.g. an unreachable
+  protected member) never change the exit code, so the old Save -- which read
+  only a failing exit's first line -- lost every one of them.
+* **Save now runs:** one syntax-only pass (no pair, ~0.6 s) over the saved text,
+  keeping everything; plus, for each block that CHANGED against `FSnapshot`
+  (keyed by header line + occurrence; a new header counts; a block that `#apply`s
+  a changed `#mapping` counts), one pass with THAT block's own pair, keeping only
+  the diagnostics on its lines and on the `#mapping` lines it applies. From-only
+  blocks get no pair pass. An unchanged save is the syntax pass only (driven:
+  0.3-0.5 s vs 20-39 s for a save with one changed TTable block on this loaded box;
+  CLI: 10-15 s per block). **File > Validate** = syntax pass + the ACTIVE block.
+* **OK / failed comes from the kept diagnostics, never the exit code.** A
+  non-`line N:` line that is not noise (`OK`, `(loaded defaults ...)`,
+  `resolver: ...`) is an error on line 0 (FATAL etc.). Status:
+  `Validate: OK, N warning(s) -- see marked rules`, or the first error +
+  `(+N more)` through `SetError` (it stays red across the post-save rescan).
+* **Pure logic: `ConvRules.ValidateScope`** (parse, blocks, changed blocks,
+  filter, `RunScopedValidation` with an injected `TValidateFn`, marks). Tests:
+  `validate.*` in the model tests, on REAL pinned-engine captures in
+  `tests\fixtures\validate\` (taken 2026-10-05 10:52, before the 1.21.1 re-parse;
+  TQuery capture = 145 errors, warnings only on the known 274-277 / 374-377 /
+  482-485 lines).
+* **Line -> rule:** `TRuleBook.SaveCompleteWithMap` returns the saved text AND the
+  node per line (`SaveCompleteToString` is it with the map dropped). Marks are
+  `TRuleNode.Marks` -- session state, never emitted, not in `Snapshot`/dirty, gone
+  with the node on Open / New / Curate. A revalidated block's marks are replaced;
+  other blocks keep theirs; syntax marks are replaced every pass.
+* **Display:** rules list column `Check` (`2 err` / `4 warn`) + info tip; grid
+  cast column painted with `[!] ` / `[w] ` (text unchanged) + hint. Owner checks:
+  the visuals were not driven.
+* **`ValidateText` now uses separate pipes** (`RunCaptureStreaming`): over the
+  merged pipe a driven Save showed `Validate: s, not a re-parse). (+3 more)` --
+  the tail of stderr's `resolver:` advisory cut off by a stdout chunk.
+* **GUI driver `tests\gui\drive-validate-scope.ps1`** -- 11 checks: New
+  Conversion TTable -> TFDTable (book `#depth 2`), Save shows `4 warning(s)`, an
+  unchanged re-save is fast and `OK`. RED on the main build
+  (`Validate: OK`, no warnings; its unchanged re-save took 19.9 s).
+* **Progress window + Cancel (follow-up, same branch):** every pass runs on
+  `FEngine.LongCallRunner` (`RunWithProgressDialog`, so `FTreeLoads` is counted
+  and no depth commit fires inside). The window shows after `SHOW_DELAY_MS`;
+  Cancel kills the running engine call and starts no further pass. The book is
+  already on disk, so nothing is undone and it stays clean. Blocks not validated
+  keep their marks and go into `FValidatePending` (pure: `NextPending`,
+  `ChangedBlockJobs(..., APending)`), so the NEXT Save validates them although they
+  no longer differ from the snapshot; the set is dropped when the book is
+  replaced. Status: `Validate: cancelled -- N changed block(s) not checked: <From
+  types>; checked so far: ...`. Driver now 16 checks (window, Cancel, owed block
+  revalidated, unchanged re-save fast, Exit without a prompt).
+* **Known cost:** passes still run one after another: a new book with many blocks
+  is N x 10-40 s, now cancellable.

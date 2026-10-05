@@ -112,6 +112,11 @@ type
   TValidateResult = record
     OK        : Boolean;
     FirstError: string ; // '' when OK
+    /// <summary>The engine's whole reply -- stdout, then stderr's lines whole after
+    /// it (never interleaved mid-line) -- for
+    /// ConvRules.ValidateScope.ParseValidateOutput: warnings never change the exit
+    /// code, so OK / FirstError alone lose every one of them.</summary>
+    Output    : string ;
   end;
 
 /// <summary>PURE: parse `proptree/1` JSON into a TProptree. Raises on malformed
@@ -273,7 +278,7 @@ type
       /// ENGINE_TIMEOUT_MS, AOutput).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+3 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCaptureTimed</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCaptureTimed"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
@@ -869,24 +874,31 @@ type
 
       /// <summary>convert-validate --rules FILE [--from F --to T]. Writes ARulesText
       /// to a temp file, validates, returns the parsed outcome.</summary>
-      /// <param name="ARulesText"><!-- drag-lint:auto type -->const string</param>
-      /// <param name="AFrom"><!-- drag-lint:auto type -->const string</param>
-      /// <param name="ATo"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto type -->TValidateResult</returns>
+      /// <param name="ARulesText">The book text to validate.</param>
+      /// <param name="AFrom">From type; with ATo, every #convert block is checked
+      /// against this ONE pair. '' (both) = syntax only.</param>
+      /// <param name="ATo">To type; see AFrom.</param>
+      /// <param name="ACancel">When set, the engine run is terminated (Output is then
+      /// partial; callers must discard it); nil = not cancellable.</param>
+      /// <returns>OK = exit code 0, FirstError = the first output line on failure, and
+      /// Output = the whole reply for ConvRules.ValidateScope, which decides on the
+      /// diagnostics rather than the exit code.</returns>
       /// <remarks>
+      /// Runs with separate stdout / stderr pipes (RunCaptureStreaming), bounded by
+      /// ENGINE_TIMEOUT_MS, so Output's lines are never cut by interleaving.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DoValidate (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.SaveBook (ConvRules.MainForm.pas)</para>
-      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Pos, Trim</para>
+      /// <para>Called from: ConvRules.MainForm.TConvRulesForm.RunScopedValidate (ConvRules.MainForm.pas), TestComposedFileValidates (ConvRulesModelTests.dpr), TestValidateTextStreams (ConvRulesModelTests.dpr)</para>
+      /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.RunCaptureStreaming, Format, Pos, Trim</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCapture"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCaptureStreaming"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function ValidateText(const ARulesText, AFrom, ATo: string): TValidateResult;
+      function ValidateText(const ARulesText, AFrom, ATo: string; const ACancel: TCancelToken = nil): TValidateResult;
 
       /// <summary>Every class the unit declares, from the engine's `outline`.</summary>
       /// <param name="APasFile">Full path to the .pas.</param>
@@ -2634,7 +2646,7 @@ begin
   Result:= True;
 end; // function
 
-function TEngineAdapter.ValidateText(const ARulesText, AFrom, ATo: string): TValidateResult;
+function TEngineAdapter.ValidateText(const ARulesText, AFrom, ATo: string; const ACancel: TCancelToken): TValidateResult;
 var
   Tmp   : string     ;
   Output: string     ;
@@ -2645,6 +2657,7 @@ var
 begin
   Result.OK        := False;
   Result.FirstError:= '';
+  Result.Output    := '';
   Tmp:= TPath.Combine(TPath.GetTempPath, 'convrules-validate-' + TPath.GetGUIDFileName + '.rules');
   try
     TFile.WriteAllText(Tmp, ARulesText, TEncoding.ASCII);
@@ -2652,7 +2665,12 @@ begin
     if (AFrom <> '') and (ATo <> '') then
       Args:= Args + Format(' --from "%s" --to "%s"', [AFrom, ATo]);
     Args:= Args + DbArgs;
-    Code:= RunCapture(Args, Output);
+    // SEPARATE pipes, not RunCapture's merged one: the diagnostics are read line by
+    // line, and a merged pipe interleaves stdout and stderr by CHUNK -- a driven Save
+    // showed the tail of stderr's "resolver: ..." advisory, cut off from its head,
+    // parsed as an error. RunCaptureStreaming puts whole stderr lines after stdout.
+    Code:= RunCaptureStreaming(Args, ENGINE_TIMEOUT_MS, nil, ACancel, Output);
+    Result.Output:= Output;
     Result.OK:= Code = 0;
     if not Result.OK then
     begin
