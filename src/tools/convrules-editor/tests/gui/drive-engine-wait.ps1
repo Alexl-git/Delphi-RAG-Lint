@@ -232,9 +232,9 @@ $slow = Join-Path $tmp 'Slow.rules'
 $fast = Join-Path $tmp 'Fast.rules'
 # A From-only rule whose class resolves nowhere: ONE proptree call, measured 58-93 ms
 # in the editor on the 1.20.3 pin (5 of 5 runs, 2026-09-30). Written with a unit
-# suffix because the plain From-only form (`#convert X -> `) does not survive a
-# reload: TRuleBook's parser trims the line before looking for ' -> ', so the rule
-# comes back with an EMPTY From type and no load ever runs. A two-class rule
+# suffix because the plain From-only form (`#convert X -> `) lost its From type on
+# reload until 2026-10-05 (ParseLine trimmed away the arrow's space; fixed, guarded
+# by model.convert.from.only.roundtrip); the measured form is kept. A two-class rule
 # (X -> Y) makes TWO calls, and the second one measured 533-748 ms in 3 of 5 runs.
 [IO.File]::WriteAllText($fast, "#convert TNoSuchClassXyz -> , NoSuchUnitXyz`r`n#link Caption <- Caption`r`n", [Text.Encoding]::ASCII)
 # Opening a book selects no rule, so nothing loads on its own. A form holding the

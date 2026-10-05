@@ -647,6 +647,14 @@ the `convrules-depth` worktree.
 * **Opening and saving a book without `#depth` never adds one** -- only a user
   change writes the directive (`depth.absent.roundtrip`; driver
   `depth.absent.not.added`, which also proves a save really happened).
+* **A From-only `#convert X -> ` keeps its From type** (fixed 2026-10-05; it
+  had been lost on every load). `ParseLine` trims the line, which takes the
+  arrow's right-hand space with it, so `SplitArrow(' -> ')` never matched
+  `X ->`; it now splits `Body + ' '`. The `, Unit` form always parsed. Guards:
+  `model.convert.from.only.roundtrip` / `.with.unit.roundtrip` -- load,
+  Snapshot + reload, and a DIRTY re-emit + reload. Note that Save / Snapshot
+  still DROP a block that maps nothing (`BlockMapsSomething`), so a stub with
+  no `#link` / `#apply` / `#ignore` is still not written -- unchanged policy.
 * `ConvRules.BlockFile`'s `FILE_SCOPE_DIRECTIVES` includes `#depth`, so a
   `#depth` after the last block opens a trailing file-scope block.
 * `TRuleBook.ParseLine` carries one comma-list review for method-too-long /
@@ -660,8 +668,13 @@ the `convrules-depth` worktree.
 * **Capabilities are probed ONCE, in `TConvRulesForm.Create`**, by one
   `TEngineAdapter.CapabilityNames` (`info --json`, `ParseCapabilityNames`):
   `FBookDepthOk` from `CAPABILITY_BOOK_DEPTH`, `FEngine.ProgressLines` from
-  `CAPABILITY_PROGRESS_LINES`. A re-pin needs an EDITOR RESTART. The probe is
-  bounded by the ordinary 180 s engine timeout if `info` hangs (deferred minor).
+  `CAPABILITY_PROGRESS_LINES`. A re-pin needs an EDITOR RESTART. The probe has
+  its OWN bound, `INFO_TIMEOUT_MS` = 15 s (`TEngineAdapter.InfoTimeoutMs`, set by
+  `Create`; writable for the tests only), via `RunCaptureTimed` -- not the 180 s
+  `ENGINE_TIMEOUT_MS`, because it runs on the UI thread during start-up. A
+  timeout reads as NO capabilities, i.e. the old-engine behaviour
+  (`caps.timeout.is.none`: a sleeping `.cmd` stand-in gives [] inside a 1.5 s
+  bound; `caps.standin.answers` is its positive control).
   `HasCapability` is now case-insensitive.
 * **`--depth N` only with `book_depth`; `--progress-interval S` only with
   `progress_lines`** -- an older engine exits 3 on either flag. `DepthArgs(ADepth,
@@ -770,9 +783,15 @@ the `convrules-depth` worktree.
   class). After a cancelled load of a From-only
   stub, New Conversion no longer treats it as completing the stub
   (`FActiveHdr = -1`) and shows the same-book prompt (deferred minor).
-* **Known gaps (deferred):** `DoAutoMatch` / Mappings / Surface overwrite the
-  cancelled status line; the class-name resolve (`ResolveClassQName`, 0.5-1 s)
-  still runs on the UI thread and cannot be cancelled.
+* **The cancel message stays on screen** (`SetStatusAfterCancel`): Auto-Match,
+  Mappings, Assign, Find in From, Only this type and `SurfaceChanged` APPEND
+  their text to `FCancelStatus` (the text the cancel wrote) while
+  `FLastLoadCancelled` is set AND that text is still what the status line
+  starts with -- so a cancel from an earlier book never comes back once
+  anything else wrote the status, and repeated clicks do not stack. No
+  automated test (MainForm); a manual check.
+* **Known gap (deferred):** the class-name resolve (`ResolveClassQName`,
+  0.5-1 s) still runs on the UI thread and cannot be cancelled.
 
 ### Refusals on the Convert tab
 
@@ -793,9 +812,13 @@ the `convrules-depth` worktree.
   `N earlier conversion(s) on those units were rolled back by a later failure or
   refusal` -- after the refused sentence, because a roll-back can follow a
   refusal and the old "rolled back with them" read as caused by "0 failed".
-* The book-invalid check runs BEFORE the refused check: `refused:true` with
-  non-empty `rule_errors` would be classified `book skipped` (cannot happen in
-  1.20.6; deferred minor -- guard `and not Refused` plus a test).
+* **A refusal is a refusal even when it also lists `rule_errors`**: the
+  book-invalid branch in `RunBook` is guarded `and not Row.Apply.Refused`, so
+  `refused:true` with a non-empty `rule_errors[]` gives `csRefused` for that
+  unit and the book stays VALID for the next one
+  (`runner.refused.with.rule.errors.is.refused`: two units, two apply calls,
+  two refused rows). Engine 1.20.6 never sends that combination; the guard is
+  for a later engine that might.
 
 ### Drivers (`tests\gui\`, by hand, on a staged pin copy)
 
@@ -856,6 +879,10 @@ the `convrules-depth` worktree.
     repairs the line). On `bdsDuplicate` a change rewrites only the first
     line and the red note stays. Accept, or repair / collapse the lines?
 * **Other deferred minors (ledger):** summary order reads oddly when a refusal
-  caused the roll-back; `TLineSplitter.Feed` is quadratic on huge chunks
-  (irrelevant at a 2 s cadence); a From-only `#convert X -> ` loses its From
-  type on reload (pre-existing model defect, not this branch).
+  caused the roll-back.
+* **Fixed on fix/editor-open-issues (2026-10-05):** `TLineSplitter.Feed` is
+  linear (scans from a start index, cuts the consumed head once per call, also
+  when the sink raises; `split.many.lines.one.chunk`, 10,000 lines in one
+  chunk); a From-only `#convert X -> ` keeps its From type on reload (see the
+  model section); `FDepthDropped` is cleared after `CBN_CLOSEUP` in a finally,
+  so an exception from the close-up's commit cannot leave it set.
