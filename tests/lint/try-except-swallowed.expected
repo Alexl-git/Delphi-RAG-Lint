@@ -37,3 +37,20 @@ try-except-swallowed 142
 # matching the word "exit" alone would pass 154 and quietly widen the rule.
 !try-except-swallowed 154
 try-except-swallowed 167
+# 1.20.6 Task 4, OWNER RULING: a handler that captures the exception into a
+# plain LOCAL which the SAME routine reads after the try ends is handling it,
+# not swallowing it (185 if, 198 Assert, 214 read after an enclosing
+# try..finally). 67 and 116 above still fire: there the local is never read.
+!try-except-swallowed 185
+!try-except-swallowed 198
+!try-except-swallowed 214
+# The guards -- each still fires: read only inside ANOTHER handler (233; that
+# handler itself writes the local out, so 239 is clean), read only in a nested
+# routine (256) or an anonymous method (269), read only BEFORE the try (284),
+# and after the try only overwritten / named as a member of another object (298).
+try-except-swallowed 233
+!try-except-swallowed 239
+try-except-swallowed 256
+try-except-swallowed 269
+try-except-swallowed 284
+try-except-swallowed 298
