@@ -923,7 +923,7 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | [`deps-report`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/deps-report) `--db <db>` | Third-party dependency rollup | `--edges`, `--format text\|json\|csv` |
 | `uses-report --output <f.csv>` | Uses graph as CSV | `--depth N`, `--include-external`, `--all-sources` (every unit across every `--db`, not just the first DB's files; `deps-report` takes it too), `--name <pattern>` (substring on the unit stem; a pattern matching NO source unit exits 2 with `ERROR: uses-report: no index passed contains a source unit named ...` and writes nothing, the same refusal `outline` gives an unindexed file) |
 | `find-deadcode` | Symbols with no callers outside their own unit | `--kind`, `--include-private` |
-| `forms-csv --project <dproj> --db <db>` | Test-helper navigation CSV, one row per form | `--output <f.csv>`, `--root <TfrmMAIN>` |
+| `forms-csv --project <dproj> --db <db>` | Tester CSV, one row per form: menu/ribbon/tab path from the main form, control, handler, opening routine, modal, confidence (algorithm v6) | `--output <f.csv>`, `--root <TfrmMAIN>` |
 | `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const`, `--output <file>` |
 | `export obsidian --db <db> --output-dir <dir>` | Export the index into an Obsidian vault | `--open` |
 | [`diff`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) `--db <old> --db <new>` | Diff two index snapshots | `--json` |

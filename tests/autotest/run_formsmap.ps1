@@ -46,31 +46,32 @@ $swCsv.Stop()
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'csv exists' (Test-Path $out)
 $csv = Get-Content $out -Raw
-Check 'header present' ($csv -match '#,Unit,FormName,PAS lines,Navigation,Called From,Notes')
+# v6 (forms-csv algorithm 6): tester columns replace Navigation/Called From/PAS
+# lines; every text cell is quoted; the footer sits in the 14th (Notes) column.
+# Rows are parsed against the known header because ConvertFrom-Csv reads a line
+# starting with '#' as a comment. Per-row cells are asserted, not substrings.
+$v6Header = '#,Form,Unit,How to open,Click,Control type,Handler,Opened by,Modal,Before you start,Other ways in,Confidence,Tester result,Notes'
 $rows = ($csv -split "`r`n") | Where-Object { $_ -ne '' }
-Check 'frmMain row present'  ($csv -match 'uDemoMain,frmMain,')
-Check 'frmList row present'  ($csv -match 'uDemoList,frmList,')
-Check 'frmEdit row present'  ($csv -match 'uDemoEdit,frmEdit,')
+Check 'column header is row 1' ($rows[0] -eq $v6Header)
+$data = @($rows[1..($rows.Count - 2)] | ConvertFrom-Csv -Header ($v6Header -split ','))
+function Row([string]$Form) { $data | Where-Object { $_.Form -ceq $Form } | Select-Object -First 1 }
+Check 'frmMain row present'  ($null -ne (Row 'frmMain'))
+Check 'frmList row present'  ($null -ne (Row 'frmList'))
+Check 'frmEdit row present'  ($null -ne (Row 'frmEdit'))
 Check 'data module excluded' (-not ($csv -match 'dmDemo'))
-Check 'pas line count for frmEdit' ($csv -match 'uDemoEdit,frmEdit,16,')
-# v2 (9a81345): output gained a '# forms-csv algorithm v...' provenance line.
-# v0.86 (header move): the column header is now row 1 and the provenance line is
-# the FOOTER (padded with 6 leading commas into the Notes column). Total lines
-# unchanged: 7 forms + 1 column-header + 1 provenance-footer = 9.
+# 7 forms + 1 column-header + 1 provenance-footer = 9.
 Check 'row count is 7 forms + 1 header + 1 footer' ($rows.Count -eq 9)
-Check 'column header is row 1' ($rows[0] -eq '#,Unit,FormName,PAS lines,Navigation,Called From,Notes')
-Check 'provenance is footer (last row, in Notes col)' ($rows[-1] -match '^,,,,,,"?# forms-csv algorithm v')
-Check 'frmMain is root (blank nav)'   ($csv -match "uDemoMain,frmMain,\d+,,")
-Check 'frmList nav via Lists'         ($csv -match "uDemoList,frmList,\d+,frmMain -> 'Lists' -> frmList,")
-Check 'frmEdit nav via Lists>Edit'    ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> frmList -> 'Edit Item' -> frmEdit,")
-Check 'frmChild nav via named ctor'   ($csv -match "uDemoChild,frmChild,\d+,frmMain -> 'Lists' -> frmList -> 'Open Child' -> frmChild,")
-Check 'action-bound caption (Reports)' ($csv -match "uDemoReports,frmReports,\d+,frmMain -> 'Reports' -> frmReports,")
-Check 'keep-the-gap via routine'       ($csv -match "uDemoGap,frmGap,\d+,frmMain -> \(via [^)]+\) -> frmGap,")
-Check 'nav interleaves landing forms'  ($csv -match "-> 'Lists' -> frmList -> 'Edit Item' ->")
-Check 'unreachable form'               ($csv -match 'uDemoUnreached,frmLonely,\d+,\(no path from MAIN\),')
-# v2 (9a81345): standalone-function call sites (Demo.RunAdminBootstrap) are also
-# listed as callers, so frmList need not be first in the Called From field.
-Check 'called-from for frmEdit'        ($csv -match "uDemoEdit,frmEdit,\d+,[^,]*,[^,]*frmList")
+Check 'provenance is footer (last row, in Notes col)' ($rows[-1] -match '^,{13}"# forms-csv algorithm v6 ')
+Check 'frmMain is root'               ((Row 'frmMain').'How to open' -eq 'Main form (opens at startup)')
+Check 'frmList via Lists'             ((Row 'frmList').'How to open' -eq 'Lists')
+Check 'frmEdit via Lists > Edit Item' ((Row 'frmEdit').'How to open' -eq 'Lists -> in frmList: Edit Item')
+Check 'frmChild via named ctor'       ((Row 'frmChild').'How to open' -eq 'Lists -> in frmList: Open Child')
+Check 'action-bound caption (Reports)' ((Row 'frmReports').'How to open' -eq 'Reports')
+Check 'action-bound handler'          ((Row 'frmReports').Handler -eq 'TfrmMain.actReportsExecute')
+Check 'keep-the-gap: handler-only'    ((Row 'frmGap').'How to open' -eq '(no control: TfrmMain.OpenGap)' -and (Row 'frmGap').Confidence -eq 'handler-only')
+Check 'frmList opened by helper'      ((Row 'frmList').'Opened by' -eq 'TfrmMain.OpenLists')
+Check 'unreachable form'              ((Row 'frmLonely').'How to open' -eq '(no path from frmMain)' -and (Row 'frmLonely').Confidence -eq 'unresolved')
+Check 'traced rows say so'            ((Row 'frmEdit').Confidence -eq 'traced')
 # K6: a real bound on the wall clock of the forms-csv call, replacing a literal
 # $true. The fixture is 7 forms; the call is sub-second on this machine, so 60 s
 # is two orders of magnitude of headroom and still fails on a genuine hang --
@@ -79,11 +80,11 @@ Check 'called-from for frmEdit'        ($csv -match "uDemoEdit,frmEdit,\d+,[^,]*
 Check 'no hang: forms-csv completed within 60 s' ($swCsv.Elapsed.TotalSeconds -lt 60) `
   ("{0:N2}s" -f $swCsv.Elapsed.TotalSeconds)
 # Task 7b: root regression (bootstrap procedure must not steal root)
-Check 'root regression: frmMain root (blank nav)' ($csv -match "uDemoMain,frmMain,\d+,,")
-Check 'root regression: frmEdit still reachable'  ($csv -match "uDemoEdit,frmEdit,\d+,frmMain -> 'Lists' -> frmList -> 'Edit Item' -> frmEdit,")
+Check 'root regression: frmMain root'            ((Row 'frmMain').'How to open' -eq 'Main form (opens at startup)')
+Check 'root regression: frmEdit still reachable'  ((Row 'frmEdit').'How to open' -eq 'Lists -> in frmList: Edit Item')
 # Task 7b: backup copy exclusion
 Check 'backup copy excluded'  (-not ($csv -match '- Copy'))
-Check 'no duplicate frmEdit'  ((($csv -split "`r`n") | Select-String ',frmEdit,').Count -eq 1)
+Check 'no duplicate frmEdit'  (@($data | Where-Object { $_.Form -ceq 'frmEdit' }).Count -eq 1)
 
 # --- v4 fixture: interface-dispatch + hook-registration navigation ---------
 # Task 1 of the forms-csv v4 plan (docs/superpowers/plans/2026-07-05-forms-csv-v4-navigation-plan.md).
@@ -104,13 +105,17 @@ Check 'v4: index fixture exits 0' ($LASTEXITCODE -eq 0)
 Check 'v4: forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'v4: csv exists' (Test-Path $out4)
 $csv4 = Get-Content $out4 -Raw
-Check 'v4: header present' ($csv4 -match '#,Unit,FormName,PAS lines,Navigation,Called From,Notes')
 $rows4 = ($csv4 -split "`r`n") | Where-Object { $_ -ne '' }
-Check 'v4: footer/provenance line present' ($rows4[-1] -match '^,,,,,,"?# forms-csv algorithm v')
+Check 'v4: header present' ($rows4[0] -eq $v6Header)
+Check 'v4: footer/provenance line present' ($rows4[-1] -match '^,{13}"# forms-csv algorithm v')
+$data4 = @($rows4[1..($rows4.Count - 2)] | ConvertFrom-Csv -Header ($v6Header -split ','))
+function Row4([string]$Form) { $data4 | Where-Object { $_.Form -ceq $Form } | Select-Object -First 1 }
+# These two chains cross an interface dispatch and a proc-var hook that
+# call_edges cannot follow, so they are the text-scan FALLBACK's job in v6.
 # Layer 1: interface-dispatch bridge (APlan.EditThing -> TDirectPlan4.EditThing -> frmDirect4)
-Check 'v4: frmDirect4 nav via interface dispatch' ($csv4 -match "uDirect4,frmDirect4,\d+,frmRoot4 -> 'Plan' -> frmDirect4,")
+Check 'v4: frmDirect4 via interface dispatch' ((Row4 'frmDirect4').'How to open' -eq 'Plan' -and (Row4 'frmDirect4').Notes -eq 'found by: text scan')
 # Layer 1 + Layer 2: interface-dispatch + proc-var hook (APlan.EditThing -> THookPlan4.EditThing -> ThingHook() -> ShowThing4 -> frmHooked4)
-Check 'v4: frmHooked4 nav via interface dispatch + hook' ($csv4 -match "uHooked4,frmHooked4,\d+,frmRoot4 -> 'Plan' -> frmHooked4,")
+Check 'v4: frmHooked4 via interface dispatch + hook' ((Row4 'frmHooked4').'How to open' -eq 'Plan' -and (Row4 'frmHooked4').'Opened by' -eq 'uHookReg4.ShowThing4')
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

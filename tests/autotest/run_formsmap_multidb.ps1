@@ -179,19 +179,21 @@ function Invoke-FormsCsv([string[]]$Dbs) {
 }
 
 # 1. CLIENT-only: frmPlanEditMulti's only launch body lives in COMMON, which is
-#    not indexed here, so no caller is found at all -> DEAD FORM.
+#    not indexed here, so no caller is found at all -> unresolved, no caller.
+#    (v6 wording: 'no caller found' replaced v5's 'DEAD FORM'.)
 $only = Invoke-FormsCsv @($clientDb)
-Check 'client-only shows PlanEditMulti as DEAD (no callers)' `
-    (($only -match 'PlanEditMulti') -and ($only -match 'DEAD FORM')) $only
+$onlyRow = ($only -split "`n") | Where-Object { $_ -match '"frmPlanEditMulti"' }
+Check 'client-only shows PlanEditMulti with no caller' `
+    (($onlyRow -match '"unresolved"') -and ($onlyRow -match 'no caller found')) $only
 
 # 2. CLIENT + COMMON: the caller-search scope now spans both dbs, so
 #    TDirectPlanMulti.EditForm's body is found and the chain resolves back to
 #    frmRootMulti via the 'Plan' button caption.
 $both = Invoke-FormsCsv @($clientDb, $commonDb)
 Check 'multi-db resolves PlanEditMulti chain' ($both -match 'PlanEditMulti') $both
-Check 'chain carries Plan caption' ($both -match "'Plan'") $both
-$planEditRow = ($both -split "`n") | Where-Object { $_ -match 'PlanEditMulti' }
-Check 'multi-db PlanEditMulti NOT dead' (-not ($planEditRow -match 'DEAD FORM')) $both
+$planEditRow = ($both -split "`n") | Where-Object { $_ -match '"frmPlanEditMulti"' }
+Check 'chain carries Plan caption' ($planEditRow -match '^\d+,"frmPlanEditMulti","uPlanEditMulti","Plan","Plan",') $both
+Check 'multi-db PlanEditMulti traced, not unresolved' ($planEditRow -match '"traced"') $both
 
 # 3. Provenance/version footer present in the --out file.
 $outFile = "$WorkDir\out.csv"
