@@ -71,8 +71,12 @@ function Assert-Arms([string]$Csv, [string]$Tag) {
     # POSITIVE CONTROL -- the real caller still wins the caption. Fails if the
     # scrub is too aggressive (edge degrades to '(via OpenReal)') just as surely
     # as it fails if a decoy wins.
+    # v6 (algorithm 6): the index pass resolves this edge first, through
+    # call_edges, which never see comments; the text scan this file was written
+    # for is now the fallback and only runs for a From -> To pair the index
+    # cannot explain. The arms below still pin the observable answer.
     Check "$Tag`: REAL-CAPTION control -- edge captioned 'Real'" `
-        ($Csv -match "uScrubReal,frmRealS,\d+,frmRootS -> 'Real' -> frmRealS,")
+        ($Csv -match '(?m)^\d+,"frmRealS","uScrubReal","Real","Real","TButton","TfrmRootS\.btnRealClick",')
 
     # THE DEFECT -- a brace comment must not caption the edge.
     Check "$Tag`: brace-comment caller ignored" (-not ($Csv -match "'Brace'"))
@@ -86,8 +90,8 @@ function Assert-Arms([string]$Csv, [string]$Tag) {
     Check "$Tag`: caption did not fall back to '(via OpenReal)'" `
         (-not ($Csv -match '\(via OpenReal\)'))
 
-    Check "$Tag`: root form present with blank nav" ($Csv -match 'uScrubMain,frmRootS,\d+,,')
-    Check "$Tag`: no form reported dead" (-not ($Csv -match 'DEAD FORM'))
+    Check "$Tag`: root form present as the main form" ($Csv -match '(?m)^\d+,"frmRootS","uScrubMain","Main form \(opens at startup\)",')
+    Check "$Tag`: no form reported unresolved" (-not ($Csv -match '"unresolved"'))
 }
 
 # --- Pass 1: fixture as checked in (file ends with a newline) ---------------
@@ -95,12 +99,8 @@ Write-Host 'Pass 1: uScrubMain.pas WITH a trailing newline'
 $csv1 = Get-FormsCsv $FixtureDir 'trail'
 Assert-Arms $csv1 'trail'
 
-# The PAS-lines column comes from a raw read this fix deliberately leaves alone
-# (it is a LINE COUNT, not a scan). Assert it against the real count so a future
-# change to that read is caught here rather than in a project's CSV.
-$mainLines = (Get-Content "$FixtureDir\uScrubMain.pas").Count
-Check "trail: PAS lines column matches ReadAllLines count ($mainLines)" `
-    ($csv1 -match "uScrubMain,frmRootS,$mainLines,")
+# (v6 dropped the PAS-lines column, so the line-count check that lived here has
+# nothing left to measure.)
 
 # --- Pass 2: same fixture, last line has NO end-of-line --------------------
 Write-Host 'Pass 2: uScrubMain.pas WITHOUT a trailing newline'

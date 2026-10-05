@@ -1,0 +1,16 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>Demo6.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uMain6.pas"><Form>frmMain6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uGroups6.pas"><Form>frmGroups6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uGroupEdit6.pas"><Form>frmGroupEdit6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uEdit6.pas"><Form>frmEdit6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uReports6.pas"><Form>frmReports6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uNag6.pas"><Form>frmNag6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uLonely6.pas"><Form>frmLonely6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uLog6.pas"><Form>frmLog6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uHelpers6.pas"/>
+  </ItemGroup>
+</Project>

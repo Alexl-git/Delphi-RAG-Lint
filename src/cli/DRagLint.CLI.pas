@@ -1001,7 +1001,7 @@ begin
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
-  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (test-helper navigation CSV, one row per form)');
+  Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)');
   Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');

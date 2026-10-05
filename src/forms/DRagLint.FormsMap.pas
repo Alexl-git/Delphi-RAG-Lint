@@ -1,9 +1,12 @@
 unit DRagLint.FormsMap;
 
-/// <summary>Builds a per-form navigation-map CSV for a project: how a tester
-/// reaches each form from the application's root form, plus which forms launch
-/// it. Reuses the drag-lint index (form/component symbols + event-binding refs +
-/// construction refs) and reads caption literals from .dfm line ranges.</summary>
+/// <summary>Builds a per-form tester CSV for a project (algorithm v6): how a
+/// tester reaches each form from the application's root form -- the menu /
+/// ribbon / tab path, the control, its handler, the routine that opens the form,
+/// modality and a confidence. Edges come from the index first (refs to the form
+/// class/instance + resolved call_edges walked up to a .dfm-bound handler), with
+/// the v5 text scan as the fallback; control locations come from the .dfm tree
+/// (DRagLint.FormsMap.Dfm).</summary>
 /// <remarks>Engine only. The CLI command forms-csv and the IDE menu item are thin
 /// wrappers. Not thread-safe; single-shot per call.</remarks>
 
@@ -28,7 +31,7 @@ type
   /// <summary>One navigable form (a .dfm root that descends from a form base).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.BuildHookMap (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.ProcessSite (DRagLint.FormsMap.pas), DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.BuildHookMap (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.ProcessSite (DRagLint.FormsMap.pas), DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -47,7 +50,7 @@ type
   /// control binds the launching routine.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas), DRagLint.FormsMap.NavPath (DRagLint.FormsMap.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas), DRagLint.FormsMap.TNavBuilder.AddTextEdges (DRagLint.FormsMap.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -55,23 +58,10 @@ type
     FromClass: string;
     ToClass  : string;
     Caption  : string;
+    Handler  : string; // v6: routine in FromClass that starts the chain (bare name)
+    OpenedBy : string; // v6: Owner.Routine / Unit.Routine holding the Create/Show line
+    Modal    : string; // v6: Yes / No / ? read from the launch line
   end;
-
-/// <summary>Lists distinct parent forms that directly launch AToClass, each as its
-/// form Name with the resolved caption in parentheses; ';'-separated. Caption is
-/// omitted when the edge caption is a '(via ...)' gap marker.</summary>
-/// <param name="AEdges">All launch edges built by BuildEdges.</param>
-/// <param name="AClassToNode">Class-name to TFormNode lookup.</param>
-/// <param name="AToClass">The form class whose callers we want.</param>
-/// <returns>Semicolon-separated list, e.g. "frmList (Edit Item)" or "".</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas)</para>
-/// <para>Calls: Copy, SameText</para>
-/// <para>Pure</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function CalledFrom(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, TFormNode>; const AToClass: string): string;
 
 /// <summary>Generates the navigation-map CSV text.</summary>
 /// <param name="ADbPath">Path to the project's drag-lint index (sqlite).</param>
@@ -98,7 +88,8 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 /// <summary>Generates the forms navigation-map CSV. ADbPaths[0] is the project
 /// index (drives which forms are enumerated + PAS-line counts); ADbPaths[1..] are
 /// additional indexes searched ONLY to resolve callers/landings whose call site
-/// lives in another DB (e.g. COMMON). A form with no caller in ANY store is DEAD.</summary>
+/// lives in another DB (e.g. COMMON). A form with no caller in ANY store is
+/// reported unresolved with 'no caller found'.</summary>
 /// <param name="ADbPaths">1+ SQLite index paths; [0] authoritative, rest search-scope.</param>
 /// <param name="AProjectFile">Project (.dpr/.dproj) whose units scope the inventory.</param>
 /// <param name="ARootForm">Root form class (e.g. TfrmMAIN); '' = auto-detect.</param>
@@ -119,6 +110,11 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 function GenerateFormsCsv(const ADbPaths: TArray<string>; const AProjectFile, ARootForm: string): string; overload;
 
 implementation
+
+uses
+  System.RegularExpressions
+  , DRagLint.FormsMap.Dfm
+  ;
 
 /// <summary>Reads a .pas file as lines with comment content blanked out, for
 /// the raw-text scans in this unit. Element i is line i of TFile.ReadAllLines
@@ -185,7 +181,10 @@ const
   // v5: the raw-text scans in this unit (caller lookup, launch/show
   // confirmation, hook map) now read comment-scrubbed lines, so edges whose
   // caption used to be resolved from a commented-out call site change.
-  FORMS_CSV_ALGORITHM = '5'; // bump when BuildEdges / NavPath algorithm changes
+  // v6: index-first edges (refs + call_edges) with the text scan as fallback, a
+  // .dfm-tree location per control (menu / bar / ribbon / tab path), and the
+  // tester columns (Click, Handler, Opened by, Modal, Confidence ...).
+  FORMS_CSV_ALGORITHM = '6'; // bump when the edge or path algorithm changes
 
 type
   TKnownPopupEntry = record Name: string; Note: string; end;
@@ -398,6 +397,37 @@ function IsShowLine(const ALine, AFormName: string): Boolean;
 begin
   Result:= (Pos(AFormName + '.Show'   , ALine) > 0) or
            (Pos(AFormName + '.Execute', ALine) > 0);
+end;
+
+/// <summary>True when ALine calls a plain .Show (not .ShowModal, .ShowHint,
+/// .Showing ...): '.show' followed by a non-identifier character or the end.</summary>
+function HasShowCall(const ALine: string): Boolean;
+const
+  SHOW_TOKEN = '.show';
+var
+  Lc   : string ;
+  P    : Integer;
+  After: Integer;
+begin
+  Lc:= LowerCase(ALine);
+  P:= Pos(SHOW_TOKEN, Lc);
+  while P > 0 do
+  begin
+    After:= P + Length(SHOW_TOKEN);
+    if (After > Length(Lc)) or not CharInSet(Lc[After], ['a'..'z', '0'..'9', '_']) then Exit(True);
+    P:= PosEx(SHOW_TOKEN, Lc, P + 1);
+  end;
+  Result:= False;
+end;
+
+/// <summary>Modality read from launch text: 'Yes' when it calls ShowModal,
+/// 'No' when it calls a plain Show, '?' otherwise (Execute, or a Create whose
+/// Show happens elsewhere).</summary>
+function LineModal(const ALine: string): string;
+begin
+  if ContainsText(ALine, 'ShowModal') then Result:= 'Yes'
+  else if HasShowCall(ALine) then Result:= 'No'
+  else Result:= '?';
 end;
 
 /// <summary>Reads the Caption literal of a control from its .dfm line range
@@ -1018,16 +1048,19 @@ var
     end;
   end;
 
-  procedure TryAddEdge(const AFrom, ATo, ACaption: string);
+  procedure TryAddEdge(const AFrom, ATo, ACaption, AHandler, AOpenedBy, AModal: string);
   var EKey: string; E: TFormEdge;
   begin
-    EKey:= AFrom + #1 + ATo + #1 + ACaption;
+    EKey:= AFrom + #1 + ATo + #1 + ACaption + #1 + AHandler;
     if SeenEdges.IndexOf(EKey) >= 0 then Exit;
     SeenEdges.Add(EKey);
     E:= Default(TFormEdge);
     E.FromClass:= AFrom;
     E.ToClass  := ATo;
     E.Caption  := ACaption;
+    E.Handler  := AHandler;
+    E.OpenedBy := AOpenedBy;
+    E.Modal    := AModal;
     Result.Add(E);
   end;
 
@@ -1045,6 +1078,8 @@ var
     FormCls : string        ;
     FormRout: string        ;
     XN      : TFormNode     ;
+    Opener  : string        ;
+    Modal   : string        ;
   begin
     Arr:= FileLines(APasFileId, APath);
     if (ALaunchLine < 1) or (ALaunchLine > Length(Arr)) then Exit;
@@ -1058,6 +1093,10 @@ var
     end;
     if not FindEnclosingImpl(Arr, ALaunchLine, OC, Rout) then Exit;
     if SameText(OC, ATargetClass) then Exit; // self-launch
+    // v6: who holds the launch line, and whether it is modal, for the tester columns.
+    if OC <> '' then Opener:= OC + '.' + Rout
+    else Opener:= TPath.GetFileNameWithoutExtension(APath) + '.' + Rout;
+    Modal:= LineModal(Arr[ALaunchLine - 1]);
     if OC = '' then
     begin
       // Call site is inside a standalone function (no class owner).
@@ -1095,11 +1134,10 @@ var
             Vis3s.Free;
           end;
           if Cap = '' then Cap:= '(via ' + Rout + ')';
-          TryAddEdge(FormCls, ATargetClass, Cap);
+          TryAddEdge(FormCls, ATargetClass, Cap, FormRout, Opener, Modal);
         end
         else
-          TryAddEdge(TPath.GetFileNameWithoutExtension(APath) + '.' + Rout,
-                     ATargetClass, '(via hook)');
+          TryAddEdge(Opener, ATargetClass, '(via hook)', Rout, Opener, Modal);
       finally
         Vis2s.Free;
       end;
@@ -1115,7 +1153,7 @@ var
         Vis1.Free;
       end;
       if Cap = '' then Cap:= '(via ' + Rout + ')';
-      TryAddEdge(OC, ATargetClass, Cap);
+      TryAddEdge(OC, ATargetClass, Cap, Rout, Opener, Modal);
     end
     else
     begin
@@ -1135,7 +1173,7 @@ var
             Vis3.Free;
           end;
           if Cap = '' then Cap:= '(via ' + Rout + ')';
-          TryAddEdge(FormCls, ATargetClass, Cap);
+          TryAddEdge(FormCls, ATargetClass, Cap, FormRout, Opener, Modal);
         end;
       finally
         Vis2.Free;
@@ -1209,81 +1247,6 @@ begin
     PasLines.Free;
     SeenEdges.Free;
     HandlerToHook.Free;
-  end; // try
-end; // function
-
-type
-  /// <summary>One navigation hop: the button caption (or synthetic '(via X)'
-  /// marker) and the FormName of the form the click lands on.</summary>
-  THop = record
-    Caption    : string;
-    LandingName: string;
-  end;
-
-/// <summary>Renders the root form name plus hops into the Navigation cell text.
-/// v3 (interleaved): every caption is followed by the landing form's name, e.g.
-/// frmMAIN -> 'Job List' -> frmJobList -> ... -> Z14slctFrm. Quoted captions keep
-/// quotes; synthetic '(...)' captions render unquoted. This is the SOLE place hop
-/// data becomes text -- change future path formats here only.</summary>
-function RenderPath(const ARootName: string; const AHops: TArray<THop>): string;
-var
-  H: THop;
-begin
-  Result:= ARootName;
-  for H in AHops do
-  begin
-    if Copy(H.Caption, 1, 1) = '(' then Result:= Result + ' -> ' + H.Caption
-    else Result:= Result + ' -> ''' + H.Caption + '''';
-    Result:= Result + ' -> ' + H.LandingName;
-  end; // for
-end; // function
-
-/// <summary>BFS shortest navigation path from the root form to AToClass.
-/// Returns "RootName -> 'Cap1' -> frmNext -> 'Cap2' -> frmDest" or '' if unreachable.</summary>
-function NavPath(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, TFormNode>; const ARootClass, AToClass: string): string;
-type
-  TStep = record Cls: string; Hops: TArray<THop>; end;
-var
-  Queue   : TQueue<TStep>               ;
-  Visited : TDictionary<string, Boolean>;
-  Cur     : TStep                       ;
-  Nxt     : TStep                       ;
-  E       : TFormEdge                   ;
-  RootNode: TFormNode                   ;
-  RootName: string                      ;
-  ToNode  : TFormNode                   ;
-  Hop     : THop                        ;
-begin
-  Result:= '';
-  if SameText(ARootClass, AToClass) then Exit;
-  Queue:= TQueue<TStep>.Create;
-  Visited:= TDictionary<string, Boolean>.Create;
-  try
-    if AClassToNode.TryGetValue(ARootClass, RootNode) then RootName:= RootNode.FormName
-    else RootName:= ARootClass;
-    Cur.Cls := ARootClass;
-    Cur.Hops:= nil;
-    Queue.Enqueue(Cur);
-    Visited.Add(ARootClass, True);
-    while Queue.Count > 0 do
-    begin
-      Cur:= Queue.Dequeue;
-      for E in AEdges do
-        if SameText(E.FromClass, Cur.Cls) and not Visited.ContainsKey(E.ToClass) then
-        begin
-          Hop.Caption:= E.Caption;
-          if AClassToNode.TryGetValue(E.ToClass, ToNode) then Hop.LandingName:= ToNode.FormName
-          else Hop.LandingName:= E.ToClass; // defensive: edges target inventory nodes today
-          Nxt.Cls := E.ToClass;
-          Nxt.Hops:= Cur.Hops + [Hop]; // fresh array per branch -- no aliasing
-          if SameText(E.ToClass, AToClass) then Exit(RenderPath(RootName, Nxt.Hops));
-          Visited.Add(E.ToClass, True);
-          Queue.Enqueue(Nxt);
-        end;
-    end; // while
-  finally
-    Queue.Free;
-    Visited.Free;
   end; // try
 end; // function
 
@@ -1388,40 +1351,672 @@ begin
   end; // try
 end; // function
 
-function CalledFrom(AEdges: TList<TFormEdge>; AClassToNode: TDictionary<string, TFormNode>; const AToClass: string): string;
+const
+  FORMS_CALLER_MAX_DEPTH = 6; // call_edges hops walked up from a launch routine
+  FORMS_ALSO_MAX         = 3; // other ways listed in Notes before the count says the rest
+  METHOD_INDEX           = 'index';
+  METHOD_TEXT            = 'text scan';
+  CONF_TRACED            = 'traced';
+  CONF_HANDLER_ONLY      = 'handler-only';
+  CONF_UNRESOLVED        = 'unresolved';
+
+type
+  /// <summary>v6: one way into a form as found by the index pass or the text
+  /// scan. Ways is empty when the handler is known but no control fires it.</summary>
+  TNavEdge = record
+    FromClass: string; // launching form class; 'Unit.Routine' for a synthetic text edge
+    ToClass  : string;
+    Handler  : string; // bare routine name in FromClass that starts the chain
+    OpenedBy : string; // Owner.Routine / Unit.Routine holding the Create/Show
+    Modal    : string; // Yes / No / ?
+    Method   : string; // METHOD_INDEX / METHOD_TEXT
+    Hint     : string; // "Before you start"
+    Note     : string;
+    Ways     : TArray<TNavWay>;
+  end;
+
+  /// <summary>v6: a routine symbol with what the report needs from it.</summary>
+  TRoutineInfo = record
+    Id           : Int64  ;
+    Name         : string ;
+    Owner        : string ; // class name; '' for a standalone routine
+    UnitName     : string ;
+    Path         : string ;
+    IsClassMethod: Boolean;
+    StartLine    : Integer;
+    ImplStart    : Integer;
+    ImplEnd      : Integer;
+  end;
+
+  /// <summary>v6 edge builder: index-first (refs + call_edges + the .dfm tree),
+  /// text-scan edges merged in afterwards as a fallback. Every edge records the
+  /// method that found it.</summary>
+  TNavBuilder = class  // dl:ok high-response@f32a -- RFC is the index queries and caches one report needs (routines, callers, .dfm trees, scrubbed lines); they share the caches, and splitting would hand the same calls to a second class
+  private
+    FStores     : TArray<TSQLiteSymbolStore>;
+    FNodes      : TList<TFormNode>;
+    FClassToNode: TDictionary<string, TFormNode>;
+    FTrees      : TObjectDictionary<string, TFormDfmTree>;
+    FLines      : TDictionary<string, TArray<string>>;
+    FRoutines   : TDictionary<string, TRoutineInfo>;
+    FEdgeKeys   : TDictionary<string, Boolean>;
+    FEdges      : TList<TNavEdge>;
+    function TreeFor(const AFormClass: string): TFormDfmTree;
+    function LinesOf(const APath: string): TArray<string>;
+    function Routine(AStore: TSQLiteSymbolStore; AId: Int64): TRoutineInfo;
+    function FindMethod(AStore: TSQLiteSymbolStore; const AOwner, AName: string): TRoutineInfo;
+    function CallerIds(AStore: TSQLiteSymbolStore; AId: Int64): TArray<Int64>;
+    function ActionInvokerIds(AStore: TSQLiteSymbolStore; const AOwner, AAction: string): TArray<Int64>;
+    function Body(const AInfo: TRoutineInfo): TArray<string>;
+    function BodyModal(const AInfo: TRoutineInfo): string;
+    function IsFormField(AStore: TSQLiteSymbolStore; const AFormClass, AName: string): Boolean;
+    function SelectionHint(AStore: TSQLiteSymbolStore; const AFormClass: string; const AInfos: array of TRoutineInfo): string;
+    procedure AddEdge(const AEdge: TNavEdge);
+    procedure TraceLaunch(AStore: TSQLiteSymbolStore; const AY: TFormNode; const AL: TRoutineInfo; const AModal: string);
+    procedure IndexPassFor(AStore: TSQLiteSymbolStore; const AY: TFormNode);
+  public
+    constructor Create(const AStores: TArray<TSQLiteSymbolStore>; ANodes: TList<TFormNode>; AClassToNode: TDictionary<string, TFormNode>);
+    destructor Destroy; override;
+    procedure RunIndexPass;
+    procedure AddTextEdges(ATextEdges: TList<TFormEdge>);
+    procedure AddTextEdge(const T: TFormEdge);
+    property Edges: TList<TNavEdge> read FEdges;
+  end;
+
+/// <summary>True when the first (best-ranked) way is something a tester can
+/// press; ways are sorted so controls come before actions and automatic events.</summary>
+function HasControl(const AWays: TArray<TNavWay>): Boolean;
+begin
+  Result:= (Length(AWays) > 0) and AWays[0].IsControl;
+end;
+
+function RoutineDisplay(const AInfo: TRoutineInfo): string;
+begin
+  if AInfo.Owner <> '' then Result:= AInfo.Owner + '.' + AInfo.Name
+  else Result:= AInfo.UnitName + '.' + AInfo.Name;
+end;
+
+/// <summary>The identifier right after "AClass." on ALine ('' when absent),
+/// e.g. ShowForRegion in "TfrmOcr.ShowForRegion(R)".</summary>
+function MemberAfter(const ALine, AClass: string): string;
 var
-  E         : TFormEdge  ;
-  Seen      : TStringList;
-  ParentNode: TFormNode  ;
-  Item      : string     ;
+  P: Integer;
+  Q: Integer;
 begin
   Result:= '';
-  Seen:= TStringList.Create;
+  P:= Pos(LowerCase(AClass) + '.', LowerCase(ALine));
+  if P = 0 then Exit;
+  P:= P + Length(AClass) + 1;
+  Q:= P;
+  while (Q <= Length(ALine)) and CharInSet(ALine[Q], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(Q);
+  Result:= Copy(ALine, P, Q - P);
+end;
+
+constructor TNavBuilder.Create(const AStores: TArray<TSQLiteSymbolStore>; ANodes: TList<TFormNode>; AClassToNode: TDictionary<string, TFormNode>);
+begin
+  inherited Create;
+  FStores     := AStores;
+  FNodes      := ANodes;
+  FClassToNode:= AClassToNode;
+  FTrees      := TObjectDictionary<string, TFormDfmTree>.Create([doOwnsValues]);
+  FLines      := TDictionary<string, TArray<string>>.Create;
+  FRoutines   := TDictionary<string, TRoutineInfo>.Create;
+  FEdgeKeys   := TDictionary<string, Boolean>.Create;
+  FEdges      := TList<TNavEdge>.Create;
+end;
+
+destructor TNavBuilder.Destroy;
+begin
+  FEdges.Free;
+  FEdgeKeys.Free;
+  FRoutines.Free;
+  FLines.Free;
+  FTrees.Free;
+  inherited Destroy;
+end;
+
+function TNavBuilder.TreeFor(const AFormClass: string): TFormDfmTree;
+var
+  N: TFormNode;
+begin
+  if FTrees.TryGetValue(LowerCase(AFormClass), Result) then Exit;
+  Result:= TFormDfmTree.Create;
+  FTrees.Add(LowerCase(AFormClass), Result);
+  if FClassToNode.TryGetValue(AFormClass, N) then Result.LoadFromFile(N.DfmPath);
+end;
+
+function TNavBuilder.LinesOf(const APath: string): TArray<string>;
+begin
+  if not FLines.TryGetValue(APath, Result) then
+  begin
+    Result:= ReadPasLinesScrubbed(APath);
+    FLines.Add(APath, Result);
+  end;
+end;
+
+function TNavBuilder.Routine(AStore: TSQLiteSymbolStore; AId: Int64): TRoutineInfo;
+var
+  Key: string  ;
+  Q  : TFDQuery;
+  PK : string  ;
+begin
+  Key:= IntToHex(NativeInt(AStore)) + ':' + IntToStr(AId);
+  if FRoutines.TryGetValue(Key, Result) then Exit;
+  Result:= Default(TRoutineInfo);
+  Q:= TFDQuery.Create(nil);
   try
-    Seen.Sorted    := True;
-    Seen.Duplicates:= dupIgnore;
-    for E in AEdges do
-      if SameText(E.ToClass, AToClass) then
-      begin
-        if AClassToNode.TryGetValue(E.FromClass, ParentNode) then Item:= ParentNode.FormName
-        else Item:= E.FromClass;
-        if Copy(E.Caption, 1, 1) <> '(' then Item:= Item + ' (' + E.Caption + ')';
-        if Seen.IndexOf(Item) < 0 then
-        begin
-          Seen.Add(Item);
-          if Result <> '' then Result:= Result + '; ';
-          Result:= Result + Item;
-        end;
-      end;
+    Q.Connection:= AStore.GetConnection;
+    Q.SQL.Text:=
+      'SELECT s.name AS nm, s.modifiers AS md, s.signature AS sg, s.start_line AS sl, ' +
+      's.impl_start_line AS isl, s.impl_end_line AS iel, f.path AS p, pa.name AS pn, pa.kind AS pk ' +
+      'FROM symbols s JOIN files f ON f.id = s.file_id LEFT JOIN symbols pa ON pa.id = s.parent_id ' +
+      'WHERE s.id = :id';
+    Q.ParamByName('id').AsLargeInt:= AId;
+    Q.Open;
+    if not Q.IsEmpty then
+    begin
+      Result.Id       := AId;
+      Result.Name     := Q.FieldByName('nm' ).AsString;
+      Result.Path     := Q.FieldByName('p'  ).AsString;
+      Result.UnitName := TPath.GetFileNameWithoutExtension(Result.Path);
+      Result.StartLine:= Q.FieldByName('sl' ).AsInteger;
+      Result.ImplStart:= Q.FieldByName('isl').AsInteger;
+      Result.ImplEnd  := Q.FieldByName('iel').AsInteger;
+      PK:= Q.FieldByName('pk').AsString;
+      if SameText(PK, 'class') or SameText(PK, 'record') then Result.Owner:= Q.FieldByName('pn').AsString;
+      Result.IsClassMethod:= ContainsText(Q.FieldByName('md').AsString, 'class') or StartsText('class ', Q.FieldByName('sg').AsString);
+    end;
   finally
+    Q.Free;
+  end;
+  FRoutines.Add(Key, Result);
+end;
+
+function TNavBuilder.FindMethod(AStore: TSQLiteSymbolStore; const AOwner, AName: string): TRoutineInfo;
+var
+  Q: TFDQuery;
+begin
+  Result:= Default(TRoutineInfo);
+  if AName = '' then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AStore.GetConnection;
+    Q.SQL.Text:=
+      'SELECT s.id AS id FROM symbols s JOIN symbols pa ON pa.id = s.parent_id ' +
+      'WHERE pa.kind = ''class'' AND pa.name = :o AND s.name = :n LIMIT 1';
+    Q.ParamByName('o').AsString:= AOwner;
+    Q.ParamByName('n').AsString:= AName;
+    Q.Open;
+    if not Q.IsEmpty then Result:= Routine(AStore, Q.FieldByName('id').AsLargeInt);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TNavBuilder.CallerIds(AStore: TSQLiteSymbolStore; AId: Int64): TArray<Int64>;
+var
+  Q  : TFDQuery;
+  Fld: TField  ;
+begin
+  Result:= [];
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AStore.GetConnection;
+    Q.SQL.Text:=
+      'SELECT DISTINCT r.enclosing_symbol_id AS e FROM call_edges ce ' +
+      'JOIN refs r ON r.id = ce.ref_id ' +
+      'WHERE ce.target_symbol_id = :t AND r.enclosing_symbol_id IS NOT NULL';
+    Q.ParamByName('t').AsLargeInt:= AId;
+    Q.Open;
+    Fld:= Q.FieldByName('e');
+    while not Q.Eof do
+    begin
+      Result:= Result + [Fld.AsLargeInt];
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+/// <summary>Routines of AOwner that mention action AAction -- in practice
+/// "actX.Execute" from a grid double-click or key handler. They stand in for
+/// callers of the action's OnExecute handler, which call_edges cannot show.</summary>
+function TNavBuilder.ActionInvokerIds(AStore: TSQLiteSymbolStore; const AOwner, AAction: string): TArray<Int64>;
+var
+  Q  : TFDQuery;
+  Fld: TField  ;
+begin
+  Result:= [];
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AStore.GetConnection;
+    Q.SQL.Text:=
+      'SELECT DISTINCT r.enclosing_symbol_id AS e FROM refs r ' +
+      'JOIN symbols e ON e.id = r.enclosing_symbol_id JOIN symbols pa ON pa.id = e.parent_id ' +
+      'WHERE r.name_text = :a AND pa.kind = ''class'' AND pa.name = :o';
+    Q.ParamByName('a').AsString:= AAction;
+    Q.ParamByName('o').AsString:= AOwner;
+    Q.Open;
+    Fld:= Q.FieldByName('e');
+    while not Q.Eof do
+    begin
+      Result:= Result + [Fld.AsLargeInt];
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TNavBuilder.Body(const AInfo: TRoutineInfo): TArray<string>;
+var
+  Lines: TArray<string>;
+  First: Integer;
+  Last : Integer;
+begin
+  Result:= [];
+  if AInfo.Path = '' then Exit;
+  Lines:= LinesOf(AInfo.Path);
+  if AInfo.ImplStart > 0 then
+  begin
+    First:= AInfo.ImplStart;
+    Last := AInfo.ImplEnd;
+  end
+  else
+  begin
+    First:= AInfo.StartLine;
+    Last := AInfo.StartLine;
+  end;
+  if First < 1 then First:= 1;
+  if Last > Length(Lines) then Last:= Length(Lines);
+  if Last >= First then Result:= Copy(Lines, First - 1, Last - First + 1);
+end;
+
+function TNavBuilder.BodyModal(const AInfo: TRoutineInfo): string;
+var
+  L      : string ;
+  SawShow: Boolean;
+begin
+  SawShow:= False;
+  for L in Body(AInfo) do
+  begin
+    if ContainsText(L, 'ShowModal') then Exit('Yes');
+    if HasShowCall(L) then SawShow:= True;
+  end;
+  if SawShow then Result:= 'No'
+  else Result:= '?';
+end;
+
+function TNavBuilder.IsFormField(AStore: TSQLiteSymbolStore; const AFormClass, AName: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AStore.GetConnection;
+    Q.SQL.Text:=
+      'SELECT 1 FROM symbols s JOIN symbols pa ON pa.id = s.parent_id ' +
+      'WHERE pa.kind = ''class'' AND pa.name = :c AND s.name = :n AND s.kind = ''field'' LIMIT 1';
+    Q.ParamByName('c').AsString:= AFormClass;
+    Q.ParamByName('n').AsString:= AName;
+    Q.Open;
+    Result:= not Q.IsEmpty;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TNavBuilder.SelectionHint(AStore: TSQLiteSymbolStore; const AFormClass: string; const AInfos: array of TRoutineInfo): string;
+var
+  Info  : TRoutineInfo;
+  L     : string;
+  M     : TMatch;
+  Member: string;
+  N     : TFormNode;
+  What  : string;
+begin
+  Result:= '';
+  if not FClassToNode.TryGetValue(AFormClass, N) then Exit;
+  // Only a member read on a FIELD of the launching form counts: that is state the
+  // tester must have set up on that form. A local or a data-module dataset is
+  // not something we can name honestly, so it yields no hint.
+  for Info in AInfos do
+    for L in Body(Info) do
+      for M in TRegEx.Matches(L, '\b([A-Za-z_][A-Za-z0-9_]*)\.(FieldByName|FieldValues|Fields|SelectedRows|Selected|ItemIndex|FocusedRecord|FocusedRow|FocusedNode|DataController|Controller)\b') do
+        if IsFormField(AStore, AFormClass, M.Groups[1].Value) then
+        begin
+          Member:= M.Groups[2].Value;
+          if SameText(Member, 'ItemIndex') or SameText(Member, 'Selected') then What:= 'an item'
+          else What:= 'a row';
+          Exit(N.FormName + ': select ' + What + ' in ' + M.Groups[1].Value + ' first (the handler reads ' + M.Groups[1].Value + '.' + Member + ')');
+        end;
+end;
+
+procedure TNavBuilder.AddEdge(const AEdge: TNavEdge);
+var
+  Key: string;
+begin
+  Key:= LowerCase(AEdge.FromClass + #1 + AEdge.ToClass + #1 + AEdge.Handler);
+  if FEdgeKeys.ContainsKey(Key) then Exit;
+  FEdgeKeys.Add(Key, True);
+  FEdges.Add(AEdge);
+end;
+
+procedure TNavBuilder.TraceLaunch(AStore: TSQLiteSymbolStore; const AY: TFormNode; const AL: TRoutineInfo; const AModal: string);
+type
+  TItem = record Id: Int64; Depth: Integer; end;
+var
+  Queue    : TQueue<TItem>;
+  Visited  : TDictionary<Int64, Boolean>;
+  Cur      : TItem;
+  Nxt      : TItem;
+  S        : TRoutineInfo;
+  Cand     : TRoutineInfo;
+  CandWays : TArray<TNavWay>;
+  HaveCand : Boolean;
+  W        : TNavWay;
+  Traced   : Boolean;
+  Ways     : TArray<TNavWay>;
+  E        : TNavEdge;
+  C        : Int64;
+
+  function MakeEdge(const AH: TRoutineInfo; const AWays: TArray<TNavWay>): TNavEdge;
+  begin
+    Result:= Default(TNavEdge);
+    Result.FromClass:= AH.Owner;
+    Result.ToClass  := AY.FormClass;
+    Result.Handler  := AH.Name;
+    Result.OpenedBy := RoutineDisplay(AL);
+    Result.Modal    := AModal;
+    Result.Method   := METHOD_INDEX;
+    Result.Ways     := AWays;
+    if SameText(AL.Owner, AH.Owner) and (AL.Id <> AH.Id) then Result.Hint:= SelectionHint(AStore, AH.Owner, [AH, AL])
+    else Result.Hint:= SelectionHint(AStore, AH.Owner, [AH]);
+  end;
+
+begin
+  Queue  := TQueue<TItem>.Create;
+  Visited:= TDictionary<Int64, Boolean>.Create;
+  try
+    HaveCand:= False;
+    Traced  := False;
+    Cand    := Default(TRoutineInfo);
+    CandWays:= [];
+    Cur.Id:= AL.Id;
+    Cur.Depth:= 0;
+    Queue.Enqueue(Cur);
+    Visited.Add(AL.Id, True);
+    while Queue.Count > 0 do
+    begin
+      Cur:= Queue.Dequeue;
+      S:= Routine(AStore, Cur.Id);
+      if (S.Owner <> '') and not SameText(S.Owner, AY.FormClass) and FClassToNode.ContainsKey(S.Owner) then
+      begin
+        Ways:= TreeFor(S.Owner).WaysForHandler(S.Name);
+        if HasControl(Ways) then
+        begin
+          AddEdge(MakeEdge(S, Ways));
+          Traced:= True;
+          Continue; // a bound handler is where the tester starts; look no higher
+        end;
+        if not HaveCand then
+        begin
+          Cand    := S;
+          CandWays:= Ways;
+          HaveCand:= True;
+        end;
+        // An action no control displays is usually run from code (actX.Execute
+        // in a grid double-click); those routines are its real callers.
+        for W in Ways do
+          if not W.IsControl and ContainsText(W.CtrlClass, 'Action') then
+            for C in ActionInvokerIds(AStore, S.Owner, W.CompName) do
+              if not Visited.ContainsKey(C) then
+              begin
+                Visited.Add(C, True);
+                Nxt.Id   := C;
+                Nxt.Depth:= Cur.Depth + 1;
+                Queue.Enqueue(Nxt);
+              end;
+      end;
+      if Cur.Depth >= FORMS_CALLER_MAX_DEPTH then Continue;
+      for C in CallerIds(AStore, Cur.Id) do
+        if not Visited.ContainsKey(C) then
+        begin
+          Visited.Add(C, True);
+          Nxt.Id   := C;
+          Nxt.Depth:= Cur.Depth + 1;
+          Queue.Enqueue(Nxt);
+        end;
+    end; // while
+    if not Traced and HaveCand then
+    begin
+      E:= MakeEdge(Cand, CandWays);
+      if Length(CandWays) = 0 then
+        E.Note:= Cand.Name + ' is not bound to any control in ' + ExtractFileName(TPath.ChangeExtension(Cand.Path, '.dfm')) + ' (assigned in code?)';
+      AddEdge(E);
+    end;
+  finally
+    Visited.Free;
+    Queue.Free;
+  end;
+end;
+
+procedure TNavBuilder.IndexPassFor(AStore: TSQLiteSymbolStore; const AY: TFormNode);
+var
+  Q      : TFDQuery;
+  FldE   : TField  ;
+  FldL   : TField  ;
+  FldP   : TField  ;
+  L      : TRoutineInfo;
+  CM     : TRoutineInfo;
+  Lines  : TArray<string>;
+  Line   : string ;
+  SL     : Integer;
+  Modal  : string ;
+  Member : string ;
+  Seen   : TDictionary<Int64, Boolean>;
+  Sites  : TList<TPair<TRoutineInfo, string>>;
+  Site   : TPair<TRoutineInfo, string>;
+begin
+  Seen := TDictionary<Int64, Boolean>.Create;
+  Sites:= TList<TPair<TRoutineInfo, string>>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AStore.GetConnection;
+    // Every ref to the form's class or instance name inside a routine body. The
+    // ref itself only says "mentions"; the line text below decides "launches".
+    Q.SQL.Text:=
+      'SELECT DISTINCT r.enclosing_symbol_id AS e, r.start_line AS sl, f.path AS p ' +
+      'FROM refs r JOIN files f ON f.id = r.file_id ' +
+      'WHERE r.name_text IN (:cls, :nm) AND r.enclosing_symbol_id IS NOT NULL ' +
+      'AND f.language LIKE ''delphi%'' ORDER BY f.path, r.start_line';
+    Q.ParamByName('cls').AsString:= AY.FormClass;
+    Q.ParamByName('nm' ).AsString:= AY.FormName;
+    Q.Open;
+    FldE:= Q.FieldByName('e');
+    FldL:= Q.FieldByName('sl');
+    FldP:= Q.FieldByName('p');
+    while not Q.Eof do
+    begin
+      L := Routine(AStore, FldE.AsLargeInt);
+      SL:= FldL.AsInteger;
+      Lines:= LinesOf(FldP.AsString);
+      Q.Next;
+      if (L.Id = 0) or SameText(L.Owner, AY.FormClass) or Seen.ContainsKey(L.Id) then Continue;
+      if (SL < 1) or (SL > Length(Lines)) then Continue;
+      Line:= Lines[SL - 1];
+      // TfrmX.ShowForRegion(...): a method of the target called through the
+      // class name, i.e. a class method that opens it -- its body decides
+      // modality. Checked before the show test, which would substring-match
+      // "frmX.Show" inside "TfrmX.ShowForRegion". Constructors (Create*) are
+      // launches by the caller and fall through to IsLaunchLine.
+      Member:= MemberAfter(Line, AY.FormClass);
+      CM:= Default(TRoutineInfo);
+      if (Member <> '') and not StartsText('Create', Member) then CM:= FindMethod(AStore, AY.FormClass, Member);
+      if CM.Id <> 0 then Modal:= BodyModal(CM)
+      else if IsLaunchLine(Line, AY.FormClass) or IsShowLine(Line, AY.FormName) then Modal:= BodyModal(L)
+      else Continue;
+      Seen.Add(L.Id, True);
+      Sites.Add(TPair<TRoutineInfo, string>.Create(L, Modal));
+    end;
+  finally
+    Q.Free;
+  end;
+  try
+    for Site in Sites do TraceLaunch(AStore, AY, Site.Key, Site.Value);
+  finally
+    Sites.Free;
     Seen.Free;
-  end; // try
-end; // function
+  end;
+end;
+
+procedure TNavBuilder.RunIndexPass;
+var
+  Y : TFormNode;
+  St: TSQLiteSymbolStore;
+begin
+  for Y in FNodes do
+    for St in FStores do
+      if St <> nil then IndexPassFor(St, Y);
+end;
+
+procedure TNavBuilder.AddTextEdges(ATextEdges: TList<TFormEdge>);
+var
+  T      : TFormEdge;
+  X      : TNavEdge;
+  Covered: TDictionary<string, Boolean>;
+begin
+  // Fallback only: a From -> To pair the index already explains keeps the
+  // index's answer, and a form "opening itself" is not a way in.
+  Covered:= TDictionary<string, Boolean>.Create;
+  try
+    for X in FEdges do Covered.AddOrSetValue(LowerCase(X.FromClass + #1 + X.ToClass), True);
+    for T in ATextEdges do
+    begin
+      if SameText(T.FromClass, T.ToClass) or Covered.ContainsKey(LowerCase(T.FromClass + #1 + T.ToClass)) then Continue;
+      AddTextEdge(T);
+    end;
+  finally
+    Covered.Free;
+  end;
+end;
+
+/// <summary>Converts one v5 text-scan edge into a v6 edge, locating its
+/// control in the source form's .dfm by handler, then by the v5 caption.</summary>
+procedure TNavBuilder.AddTextEdge(const T: TFormEdge);
+var
+  E: TNavEdge;
+begin
+  E:= Default(TNavEdge);
+  E.FromClass:= T.FromClass;
+  E.ToClass  := T.ToClass;
+  E.Handler  := T.Handler;
+  E.OpenedBy := T.OpenedBy;
+  E.Modal    := T.Modal;
+  E.Method   := METHOD_TEXT;
+  if FClassToNode.ContainsKey(T.FromClass) then
+  begin
+    E.Ways:= TreeFor(T.FromClass).WaysForHandler(T.Handler);
+    // The v5 caption walk may have found the control through an in-form
+    // helper the index has no call edge for; locate that control by caption.
+    if (Length(E.Ways) = 0) and (Copy(T.Caption, 1, 1) <> '(') then
+      E.Ways:= TreeFor(T.FromClass).WaysForCaption(T.Caption);
+    if Length(E.Ways) = 0 then E.Note:= T.Handler + ' is not bound to any control in its form (assigned in code?)';
+  end
+  else
+    E.Note:= 'launched by ' + T.FromClass + '; no form caller found';
+  AddEdge(E);
+end;
+
+/// <summary>RFC 4180 cell that Excel never reads as a formula or a number:
+/// non-empty text is always quoted.</summary>
+function CsvText(const S: string): string;
+begin
+  if S = '' then Result:= ''
+  else Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"';
+end;
+
+/// <summary>Shortest chain of edge indexes from ARoot to ATarget, over edges
+/// whose source is a form; ATracedOnly restricts it to edges with a control.
+/// Empty when unreachable.</summary>
+function FindNavPath(AEdges: TList<TNavEdge>; AClassToNode: TDictionary<string, TFormNode>; const ARoot, ATarget: string; ATracedOnly: Boolean): TArray<Integer>;
+var
+  Queue : TQueue<string>;
+  Via   : TDictionary<string, Integer>; // lower(class) -> edge index that reached it
+  Cur   : string;
+  I     : Integer;
+  E     : TNavEdge;
+  Walk  : string;
+begin
+  Result:= [];
+  if (ARoot = '') or SameText(ARoot, ATarget) then Exit;
+  Queue:= TQueue<string>.Create;
+  Via  := TDictionary<string, Integer>.Create;
+  try
+    Via.Add(LowerCase(ARoot), -1);
+    Queue.Enqueue(ARoot);
+    while Queue.Count > 0 do
+    begin
+      Cur:= Queue.Dequeue;
+      for I:= 0 to AEdges.Count - 1 do
+      begin
+        E:= AEdges[I];
+        if not SameText(E.FromClass, Cur) or Via.ContainsKey(LowerCase(E.ToClass)) then Continue;
+        if not AClassToNode.ContainsKey(E.FromClass) then Continue;
+        if ATracedOnly and not HasControl(E.Ways) then Continue;
+        Via.Add(LowerCase(E.ToClass), I);
+        if SameText(E.ToClass, ATarget) then
+        begin
+          Walk:= ATarget;
+          while Via[LowerCase(Walk)] >= 0 do
+          begin
+            Result:= [Via[LowerCase(Walk)]] + Result;
+            Walk:= AEdges[Via[LowerCase(Walk)]].FromClass;
+          end;
+          Exit;
+        end;
+        Queue.Enqueue(E.ToClass);
+      end;
+    end;
+  finally
+    Via.Free;
+    Queue.Free;
+  end;
+end;
+
+/// <summary>Text for a hop no control fires. A form-lifecycle handler opens the
+/// target by itself when its own form opens, which a tester can act on.</summary>
+function NoControlText(const AEdge: TNavEdge; AClassToNode: TDictionary<string, TFormNode>): string;
+var
+  N: TFormNode;
+begin
+  if (SameText(AEdge.Handler, 'FormCreate') or SameText(AEdge.Handler, 'FormShow') or SameText(AEdge.Handler, 'FormActivate')) and
+     AClassToNode.TryGetValue(AEdge.FromClass, N) then
+    Result:= '(opens automatically when ' + N.FormName + ' opens: ' + AEdge.Handler + ')'
+  else
+    Result:= '(no control: ' + AEdge.FromClass + '.' + AEdge.Handler + ')';
+end;
+
+/// <summary>Tester-facing text for one hop; AFirst omits the "in frmX:" prefix
+/// because the first hop always happens on the root form.</summary>
+function HopText(const AEdge: TNavEdge; AClassToNode: TDictionary<string, TFormNode>; AFirst: Boolean): string;
+var
+  N: TFormNode;
+begin
+  if Length(AEdge.Ways) > 0 then Result:= AEdge.Ways[0].Location
+  else Result:= NoControlText(AEdge, AClassToNode);
+  if not AFirst then
+  begin
+    if AClassToNode.TryGetValue(AEdge.FromClass, N) then Result:= 'in ' + N.FormName + ': ' + Result
+    else Result:= 'in ' + AEdge.FromClass + ': ' + Result;
+  end;
+end;
 
 /// <summary>Shared body of GenerateFormsCsv, operating on already-constructed
 /// stores. APrimary is project-scoped (form enumeration + PAS lines); AExtras
-/// are searched only when BuildEdges resolves callers. Caller owns lifetime of
-/// both APrimary and AExtras (this function never constructs/frees a store).</summary>
+/// are searched only when resolving callers. Caller owns lifetime of both
+/// APrimary and AExtras (this function never constructs/frees a store).</summary>
 function GenerateFormsCsvCore(APrimary: TSQLiteSymbolStore; const AExtras: TArray<TSQLiteSymbolStore>; const AProjectFile, ARootForm, APrimaryDbPath: string): string;
 var
   Nodes      : TList<TFormNode>              ;
@@ -1429,10 +2024,31 @@ var
   N          : TFormNode                     ;
   Idx        : Integer                       ;
   ClassToNode: TDictionary<string, TFormNode>;
-  Edges      : TList<TFormEdge>              ;
+  TextEdges  : TList<TFormEdge>              ;
+  Builder    : TNavBuilder                   ;
   RootClass  : string                        ;
-  Nav        : string                        ;
+  RootName   : string                        ;
   ProjUnits  : TArray<string>                ;
+  Stores     : TArray<TSQLiteSymbolStore>    ;
+  St         : TSQLiteSymbolStore            ;
+  Path       : TArray<Integer>               ;
+  Conf       : string                        ;
+  How        : string                        ;
+  Notes      : string                        ;
+  E          : TNavEdge                      ;
+  HasEdge    : Boolean                       ;
+  I          : Integer                       ;
+  W          : TNavWay                       ;
+  WayKeys    : TStringList                   ;
+  Also       : TStringList                   ;
+  Desc       : string                        ;
+  ShownKey   : string                        ;
+  RootNode   : TFormNode                     ;
+  FromNode   : TFormNode                     ;
+  Handler    : string                        ;
+  OtherWays  : Integer                       ;
+  Parts      : TArray<string>                ;
+  AlsoShown  : TArray<string>                ;
 begin
   Sb:= TStringBuilder.Create;
   try
@@ -1443,9 +2059,20 @@ begin
       Nodes.Sort(TComparer<TFormNode>.Construct( function(const L, R: TFormNode): Integer begin Result:= CompareText(L.FormName, R.FormName); end));
       ClassToNode:= TDictionary<string, TFormNode>.Create;
       for N in Nodes do ClassToNode.AddOrSetValue(N.FormClass, N);
-      Edges:= BuildEdges(APrimary, Nodes, ClassToNode, AExtras);
+      TextEdges:= BuildEdges(APrimary, Nodes, ClassToNode, AExtras);
+      Stores:= [APrimary];
+      for St in AExtras do Stores:= Stores + [St];
+      Builder:= TNavBuilder.Create(Stores, Nodes, ClassToNode);
+      WayKeys:= TStringList.Create;
+      Also   := TStringList.Create;
       try
-        RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, Edges);
+        // v6: index-first edges, then the v5 text scan merged in as a fallback
+        // (AddEdge keeps the first edge per From/To/Handler, so index wins).
+        Builder.RunIndexPass;
+        Builder.AddTextEdges(TextEdges);
+        RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, TextEdges);
+        if ClassToNode.TryGetValue(RootClass, RootNode) then RootName:= RootNode.FormName
+        else RootName:= RootClass;
         { Schema version lives in schema_meta (written at migrate), NOT in
           PRAGMA user_version (which the engine never writes -> always 0).
           Mirror IsSchemaCurrent's query; a missing table/row falls back to 0. }
@@ -1463,63 +2090,166 @@ begin
         finally
           Qver.Free;
         end;
-        Sb.Append('#,Unit,FormName,PAS lines,Navigation,Called From,Notes').Append(#13#10);
+        Sb.Append('#,Form,Unit,How to open,Click,Control type,Handler,Opened by,Modal,Before you start,Other ways in,Confidence,Tester result,Notes').Append(#13#10);
         Idx:= 0;
-        { v4 Layer 0 (spec D0) db-scope guardrail counter. Counts forms that ended
-          '(no path from MAIN)' yet have a NON-EMPTY Called From: a known caller
-          routine IS indexed but its upward chain to MAIN is severed -- the
-          signature of an interface-dispatch launch body whose bridge to MAIN
-          lives outside the scanned db (e.g. COMMON absent from a CLIENT-only db).
-          Forms with EMPTY Called From are genuine dead forms (no callers at all)
-          and are deliberately NOT counted. }
+        { v4 Layer 0 (spec D0) db-scope guardrail counter: forms with a known
+          caller that could not be walked back to the root. }
         var UnresolvedWithCaller:= 0;
         for N in Nodes do
         begin
           Inc(Idx);
-          Nav:= '';
-          if RootClass <> '' then
+          E:= Default(TNavEdge);
+          HasEdge:= False;
+          Notes:= '';
+          OtherWays:= 0;
+          if SameText(N.FormClass, RootClass) then
           begin
-            Nav:= NavPath(Edges, ClassToNode, RootClass, N.FormClass);
-            if (Nav = '') and not SameText(N.FormClass, RootClass) then Nav:= '(no path from MAIN)';
+            How := 'Main form (opens at startup)';
+            Conf:= CONF_TRACED;
+          end
+          else
+          begin
+            Conf:= CONF_TRACED;
+            Path:= FindNavPath(Builder.Edges, ClassToNode, RootClass, N.FormClass, True);
+            if Length(Path) = 0 then
+            begin
+              Conf:= CONF_HANDLER_ONLY;
+              Path:= FindNavPath(Builder.Edges, ClassToNode, RootClass, N.FormClass, False);
+            end;
+            if Length(Path) > 0 then
+            begin
+              SetLength(Parts, Length(Path));
+              for I:= 0 to High(Path) do Parts[I]:= HopText(Builder.Edges[Path[I]], ClassToNode, I = 0);
+              How:= string.Join(' -> ', Parts);
+              E:= Builder.Edges[Path[High(Path)]];
+              HasEdge:= True;
+            end
+            else
+            begin
+              Conf:= CONF_UNRESOLVED;
+              if RootName <> '' then How:= '(no path from ' + RootName + ')'
+              else How:= '(no root form detected)';
+              // Best known way in, even though it does not connect to the root:
+              // a form source with a control first, then any form source, then any.
+              for I:= 0 to Builder.Edges.Count - 1 do
+                if SameText(Builder.Edges[I].ToClass, N.FormClass) and ClassToNode.ContainsKey(Builder.Edges[I].FromClass) and (Length(Builder.Edges[I].Ways) > 0) then
+                begin
+                  E      := Builder.Edges[I];
+                  HasEdge:= True;
+                  Break;
+                end;
+              if not HasEdge then
+                for I:= 0 to Builder.Edges.Count - 1 do
+                  if SameText(Builder.Edges[I].ToClass, N.FormClass) then
+                  begin
+                    E      := Builder.Edges[I];
+                    HasEdge:= True;
+                    Break;
+                  end;
+              if HasEdge then
+              begin
+                Inc(UnresolvedWithCaller);
+                if ClassToNode.ContainsKey(E.FromClass) then How:= How + ' ' + HopText(E, ClassToNode, False);
+              end;
+            end;
           end;
-          var CF:= CalledFrom(Edges, ClassToNode, N.FormClass);
-          if (Nav = '(no path from MAIN)') and (CF <> '') then Inc(UnresolvedWithCaller);
-          var Notes:= '';
-          if (Nav = '(no path from MAIN)') and (CF = '') then
+
+          if HasEdge then
           begin
-            var PopupNote:= '';
-            var FormNameLower:= LowerCase(N.FormName);
+            // Every distinct way into this form: one per control, or one per
+            // handler when no control fires it.
+            WayKeys.Clear;
+            Also.Clear;
+            if Length(E.Ways) > 0 then ShownKey:= LowerCase(E.FromClass + #1 + E.Ways[0].Location)
+            else ShownKey:= LowerCase(E.FromClass + #1 + '#' + E.Handler);
+            for I:= 0 to Builder.Edges.Count - 1 do
+            begin
+              if not SameText(Builder.Edges[I].ToClass, N.FormClass) then Continue;
+              if not ClassToNode.TryGetValue(Builder.Edges[I].FromClass, FromNode) then Continue;
+              if Length(Builder.Edges[I].Ways) = 0 then
+              begin
+                Desc:= LowerCase(Builder.Edges[I].FromClass + #1 + '#' + Builder.Edges[I].Handler);
+                if WayKeys.IndexOf(Desc) < 0 then
+                begin
+                  WayKeys.Add(Desc);
+                  if Desc <> ShownKey then Also.Add('in ' + FromNode.FormName + ': ' + NoControlText(Builder.Edges[I], ClassToNode));
+                end;
+              end
+              else
+                for W in Builder.Edges[I].Ways do
+                begin
+                  Desc:= LowerCase(Builder.Edges[I].FromClass + #1 + W.Location);
+                  if WayKeys.IndexOf(Desc) >= 0 then Continue;
+                  WayKeys.Add(Desc);
+                  if Desc = ShownKey then Continue;
+                  if SameText(Builder.Edges[I].FromClass, E.FromClass) then Also.Add(W.Location)
+                  else Also.Add('in ' + FromNode.FormName + ': ' + W.Location);
+                end;
+            end;
+            OtherWays:= Also.Count;
+            Parts:= ['found by: ' + E.Method];
+            if E.Note <> '' then Parts:= Parts + [E.Note];
+            if Also.Count > 0 then
+            begin
+              // Up to FORMS_ALSO_MAX listed; the rest only counted.
+              AlsoShown:= Copy(Also.ToStringArray, 0, FORMS_ALSO_MAX);
+              if Also.Count > FORMS_ALSO_MAX then AlsoShown:= AlsoShown + [Format('(+%d more)', [Also.Count - FORMS_ALSO_MAX])];
+              Parts:= Parts + ['also: ' + string.Join(' | ', AlsoShown)];
+            end;
+            Notes:= string.Join('; ', Parts);
+          end
+          else if Conf = CONF_UNRESOLVED then
+          begin
             for var KP in KnownPopupForms do
-              if KP.Name = FormNameLower then begin PopupNote:= KP.Note; Break; end;
-            if PopupNote <> '' then Notes:= PopupNote
-            else Notes:= 'DEAD FORM - no callers found';
+              if KP.Name = LowerCase(N.FormName) then
+              begin
+                Notes:= KP.Note;
+                Break;
+              end;
+            if Notes = '' then Notes:= 'no caller found (index or text scan)';
           end;
-          Sb.Append(Idx).Append(',').Append(CsvField(N.UnitName)).Append(',').Append(CsvField(N.FormName)).Append(',').Append(N.PasLineCount).Append(',')
-            .Append(CsvField(Nav)).Append(',').Append(CsvField(CF)).Append(',').Append(CsvField(Notes))
+
+          if HasEdge and ClassToNode.ContainsKey(E.FromClass) then Handler:= E.FromClass + '.' + E.Handler
+          else Handler:= E.Handler;
+          Sb.Append(Idx).Append(',')
+            .Append(CsvText(N.FormName)).Append(',')
+            .Append(CsvText(N.UnitName)).Append(',')
+            .Append(CsvText(How)).Append(',');
+          if HasEdge and HasControl(E.Ways) then
+            Sb.Append(CsvText(E.Ways[0].Click)).Append(',').Append(CsvText(E.Ways[0].CtrlClass)).Append(',')
+          else
+            Sb.Append(',,');
+          Sb.Append(CsvText(Handler)).Append(',')
+            .Append(CsvText(E.OpenedBy)).Append(',')
+            .Append(CsvText(E.Modal)).Append(',')
+            .Append(CsvText(E.Hint)).Append(',')
+            .Append(OtherWays).Append(',')
+            .Append(CsvText(Conf)).Append(',')
+            .Append(',') // Tester result: left blank for the tester
+            .Append(CsvText(Notes))
             .Append(#13#10);
         end; // for
         { v4 Layer 0 (spec D0) guardrail: announce, on stderr only, when forms
-          have an indexed caller that could not be walked back to MAIN -- almost
-          always a db-scope problem (the interface-dispatch launch bodies live in
-          a unit outside this db, e.g. COMMON missing from a CLIENT-only index).
-          A scope gap thus announces itself instead of silently printing
-          '(no path)'. stderr-only: this does NOT alter any CSV cell. }
+          have an indexed caller that could not be walked back to the root --
+          usually a db-scope problem (the launch bodies live in a unit outside
+          this db, e.g. COMMON missing from a CLIENT-only index). stderr-only:
+          this does NOT alter any CSV cell. }
         if UnresolvedWithCaller > 0 then
           Writeln(ErrOutput, Format('forms-csv: %d form(s) with callers could not be traced to MAIN -- db may not include COMMON (interface-dispatch launch bodies); run against the full-tree index', [UnresolvedWithCaller]));
-        { Metadata footer: the algorithm/db/schema/timestamp line moved from the
-          top to the bottom so the column header is row 1 (spreadsheet-friendly).
-          6 leading commas push the '#' cell into the 7th (Notes) column, out of
-          the numbered-row column so it never looks like a data row. CsvField the
-          whole line since APrimaryDbPath may contain characters worth quoting. }
-        Sb.Append(',,,,,,')
-          .Append(CsvField('# forms-csv algorithm v' + FORMS_CSV_ALGORITHM +
+        { Metadata footer: 13 leading commas put the '#' cell in the 14th (Notes)
+          column, out of the numbered-row column so it never reads as a data row. }
+        Sb.Append(',,,,,,,,,,,,,')
+          .Append(CsvText('# forms-csv algorithm v' + FORMS_CSV_ALGORITHM +
                   ' | db: ' + APrimaryDbPath +
                   ' | schema v' + IntToStr(SchemaVer) +
                   ' | ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Now)))
           .Append(#13#10);
         Result:= Sb.ToString;
       finally
-        Edges.Free;
+        Also.Free;
+        WayKeys.Free;
+        Builder.Free;
+        TextEdges.Free;
         ClassToNode.Free;
       end; // try
     finally
@@ -1533,7 +2263,8 @@ end; // function
 /// <summary>Generates the forms navigation-map CSV. ADbPaths[0] is the project
 /// index (drives which forms are enumerated + PAS-line counts); ADbPaths[1..] are
 /// additional indexes searched ONLY to resolve callers/landings whose call site
-/// lives in another DB (e.g. COMMON). A form with no caller in ANY store is DEAD.</summary>
+/// lives in another DB (e.g. COMMON). A form with no caller in ANY store is
+/// reported unresolved with 'no caller found'.</summary>
 /// <param name="ADbPaths">1+ SQLite index paths; [0] authoritative, rest search-scope.</param>
 /// <param name="AProjectFile">Project (.dpr/.dproj) whose units scope the inventory.</param>
 /// <param name="ARootForm">Root form class (e.g. TfrmMAIN); '' = auto-detect.</param>

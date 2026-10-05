@@ -103,6 +103,7 @@ uses
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.Project.OwnRoots in '..\project\DRagLint.Project.OwnRoots.pas',
   DRagLint.FormsMap in '..\forms\DRagLint.FormsMap.pas',
+  DRagLint.FormsMap.Dfm in '..\forms\DRagLint.FormsMap.Dfm.pas',
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
   DRagLint.Core.LiveDocs in '..\core\DRagLint.Core.LiveDocs.pas',
