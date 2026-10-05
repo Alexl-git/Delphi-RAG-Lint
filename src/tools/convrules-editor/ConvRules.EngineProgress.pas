@@ -13,10 +13,18 @@ uses
   ;
 
 const
-  /// <summary>Editor-side exit code: the engine call exceeded its watchdog.</summary>
-  ENGINE_EXIT_TIMEOUT = 3;
-  /// <summary>Editor-side exit code: the user cancelled; the engine was terminated.</summary>
-  ENGINE_EXIT_CANCELLED = 4;
+  /// <summary>Editor-side OUTCOME of a streaming call (never an engine exit code):
+  /// the call exceeded its watchdog and the engine was terminated.</summary>
+  /// <remarks>Deliberately NEGATIVE, outside the engine's exit codes 0..3: the
+  /// engine's own 3 is FATAL (unknown flag, the DB cannot be opened or is locked),
+  /// and a timeout reported as 3 turned every engine crash into "TIMED OUT".
+  /// -1 stays "the process could not be started". RunCaptureTimed is separate and
+  /// still reports its timeout as 3.</remarks>
+  ENGINE_OUTCOME_TIMEOUT = -2;
+  /// <summary>Editor-side OUTCOME of a streaming call (never an engine exit code):
+  /// the user cancelled and the engine was terminated.</summary>
+  /// <remarks>Negative for the same reason as ENGINE_OUTCOME_TIMEOUT.</remarks>
+  ENGINE_OUTCOME_CANCELLED = -3;
   /// <summary>Seconds between progress lines requested with --progress-interval.</summary>
   PROGRESS_INTERVAL_S = 2;
 
@@ -25,7 +33,8 @@ type
   /// <remarks>Expansion runs level by level, so ClassesDone / (ClassesDone +
   /// ClassesQueued) is an honest fraction within the current Depth.</remarks>
   TEngineProgress = record
-    /// <summary>elapsed_s.</summary>
+    /// <summary>elapsed_s, truncated to whole seconds (the engine writes one
+    /// decimal, e.g. 12.3 reads as 12).</summary>
     ElapsedS     : Integer;
     /// <summary>verb (proptree / convert-scaffold).</summary>
     Verb         : string;
@@ -59,7 +68,8 @@ type
   /// <summary>Receives progress. Called on the thread that runs the engine call.</summary>
   TProgressProc = reference to procedure(const AProgress: TEngineProgress);
 
-  /// <summary>A long engine call: runs to completion and returns the exit code;
+  /// <summary>A long engine call: runs to completion and returns the engine's exit
+  /// code, or ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / -1 (not started);
   /// reports progress through AOnProgress (may be nil) and polls ACancel (may be nil).</summary>
   TStreamingWork = reference to function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer;
 
@@ -87,9 +97,11 @@ type
 /// <param name="AProgress">The parsed values; Default when False.</param>
 /// <returns>True only for a JSON object whose single key is "progress" holding an
 /// object. Anything else is ordinary stderr text and returns False. Never raises.</returns>
-/// <remarks>A field that is missing or of the wrong JSON type (a string or null where
-/// an integer belongs, a number or array where a string belongs, a fraction, an
-/// integer out of range) reads as 0 / '' and the line is still accepted (True).</remarks>
+/// <remarks>elapsed_s is a decimal (engine FormatFloat '0.0') and is truncated to
+/// whole seconds; every other numeric field is an integer. A field that is missing
+/// or of the wrong JSON type (a string or null where a number belongs, a number or
+/// array where a string belongs, a fraction in an integer field, a value out of
+/// range) reads as 0 / '' and the line is still accepted (True).</remarks>
 function TryParseProgressLine(const ALine: string; out AProgress: TEngineProgress): Boolean;
 
 /// <summary>The one-line display, e.g. "TFDQuery -- depth 3 of 5 -- 41 done, 28 queued -- 15 s".</summary>
@@ -159,6 +171,21 @@ begin
   Result:= 0;
 end;
 
+{ elapsed_s is the one DECIMAL field: the engine writes FormatFloat('0.0') (12.3).
+  Truncated to whole seconds; a non-number, a negative or an out-of-range value
+  reads as 0. TryStrToFloat with the invariant settings cannot raise. }
+function SecondsField(const AObj: TJSONObject; const AName: string): Integer;
+var
+  V: TJSONValue;
+  D: Double    ;
+begin
+  V:= AObj.Values[AName];
+  if (V is TJSONNumber) and TryStrToFloat(V.Value, D, TFormatSettings.Invariant)
+     and (D >= 0) and (D < MaxInt) then
+    Exit(Trunc(D));
+  Result:= 0;
+end;
+
 function StrField(const AObj: TJSONObject; const AName: string): string;
 var
   V: TJSONValue;
@@ -186,7 +213,7 @@ begin
     if not (Root is TJSONObject) or (TJSONObject(Root).Count <> 1)
        or not TJSONObject(Root).TryGetValue<TJSONObject>('progress', P) then
       Exit;
-    AProgress.ElapsedS     := IntField(P, 'elapsed_s');
+    AProgress.ElapsedS     := SecondsField(P, 'elapsed_s');
     AProgress.Verb         := StrField(P, 'verb');
     AProgress.QName        := StrField(P, 'class');
     AProgress.Depth        := IntField(P, 'depth');

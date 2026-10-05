@@ -263,7 +263,10 @@ try {
   Check 'depth.enabled.matches.capability' (($cb -ne [IntPtr]::Zero) -and ([W]::IsWindowEnabled($cb) -eq $hasDepth)) ("enabled=" + [W]::IsWindowEnabled($cb))
   if ($hasDepth) {
     Choose $cb 6
-    Start-Sleep -Milliseconds 500
+    # A CBN_SELCHANGE on the CLOSED combo is the wheel / arrow-key path: it only
+    # starts the editor's debounce timer (DEPTH_COMMIT_DELAY_MS = 600), which then
+    # commits once. Wait past it before saving.
+    Start-Sleep -Milliseconds 1500
     Check 'depth.change.invoke.save' ([W]::InvokeMenu($main, 'File|Save'))
     Start-Sleep -Milliseconds 800
     $txt = [IO.File]::ReadAllText($d3)

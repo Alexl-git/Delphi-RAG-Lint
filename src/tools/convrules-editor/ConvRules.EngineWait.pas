@@ -14,7 +14,7 @@ uses
 /// <summary>Runs AWork on a worker thread behind a modal progress window.</summary>
 /// <param name="ATitle">First line of the window, e.g. "Loading property tree for X".</param>
 /// <param name="AWork">The engine call; receives the progress sink and the cancel token.</param>
-/// <returns>AWork's result: the engine exit code, or ENGINE_EXIT_CANCELLED after Cancel.</returns>
+/// <returns>AWork's result: the engine exit code, or ENGINE_OUTCOME_CANCELLED after Cancel.</returns>
 /// <exception cref="Exception">Re-raises, on the caller's thread, anything AWork raised on the worker.</exception>
 /// <remarks>Main thread only. The window appears only when AWork is still running after
 /// SHOW_DELAY_MS, so a fast call never flashes it. Modal: the editor takes no other

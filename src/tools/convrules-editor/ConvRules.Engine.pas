@@ -524,9 +524,10 @@ type
       /// <summary>proptree --qname X [--min-visibility V] --refs-as-leaves --format
       /// json. AMinVisibility ('published'|'public'|'') selects the target surface
       /// (engine schema v17); '' emits every leaf. Returns False + empty tree if the
-      /// type does not resolve (exit 1), the exe/db is unusable (exit 2), the call
-      /// exceeded CONVERT_TIMEOUT_MS (ENGINE_EXIT_TIMEOUT), or the user cancelled it
-      /// (ENGINE_EXIT_CANCELLED; LastCancelled is then True). Appends
+      /// type does not resolve (exit 1), the exe/db is unusable (exit 2, or the engine's
+      /// FATAL exit 3 -- reported with its output, never as a timeout), the call
+      /// exceeded CONVERT_TIMEOUT_MS (ENGINE_OUTCOME_TIMEOUT), or the user cancelled it
+      /// (ENGINE_OUTCOME_CANCELLED; LastCancelled is then True). Appends
       /// DepthArgs(TreeDepth, ProgressLines) and runs through LongCallRunner when one is
       /// set (inline, uncancellable, otherwise).</summary>
       /// <param name="AQname">Bare ('TcxButton') or unit-qualified
@@ -963,8 +964,9 @@ type
       /// <param name="AOnProgress">Progress sink, called on THIS thread; may be nil.</param>
       /// <param name="ACancel">Polled every ~40 ms; when set the child is terminated; may be nil.</param>
       /// <param name="AOutput">stdout, then the non-progress stderr lines.</param>
-      /// <returns>The exit code; -1 when it could not start; ENGINE_EXIT_TIMEOUT;
-      /// ENGINE_EXIT_CANCELLED.</returns>
+      /// <returns>The child's own exit code (the engine's 3 = FATAL comes back as 3);
+      /// -1 when it could not start; ENGINE_OUTCOME_TIMEOUT or ENGINE_OUTCOME_CANCELLED
+      /// (both negative, so never mistaken for an exit code).</returns>
       /// <remarks>Blocks the calling thread. Run it on a worker (LongCallRunner) to keep
       /// the UI alive. Every exit -- normal, cancel, timeout or an exception raised by
       /// AOnProgress -- leaves no child running: a live child is terminated and its
@@ -1492,18 +1494,18 @@ begin
         Break;
       end;
       if (ACancel <> nil) and ACancel.IsCancelled then
-        Outcome:= ENGINE_EXIT_CANCELLED
+        Outcome:= ENGINE_OUTCOME_CANCELLED
       else if GetTickCount64 >= Deadline then
-        Outcome:= ENGINE_EXIT_TIMEOUT;
+        Outcome:= ENGINE_OUTCOME_TIMEOUT;
     until Outcome <> 0; // the finally terminates a child that is still running
     // A cancelled or timed-out run's last stderr line may be cut mid-write: drop it.
     if Outcome = 0 then
       Splitter.Flush(OnErrLine);
     AOutput:= StdOut.ToString + ErrText.ToString;
     case Outcome of
-      ENGINE_EXIT_TIMEOUT:
+      ENGINE_OUTCOME_TIMEOUT:
         AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
-      ENGINE_EXIT_CANCELLED:
+      ENGINE_OUTCOME_CANCELLED:
         AOutput:= AOutput + sLineBreak + '[cancelled by the user]';
     end;
     if Outcome <> 0 then
@@ -1613,18 +1615,23 @@ begin
       Exit(False);
     end;
   end; // try
-  if Code = ENGINE_EXIT_CANCELLED then
+  if Code = ENGINE_OUTCOME_CANCELLED then
   begin
     FLastCancelled:= True;
     AError:= Format('proptree cancelled for %s -- no tree loaded.', [AQname]);
     Exit(False);
   end;
-  if Code = ENGINE_EXIT_TIMEOUT then
+  if Code = ENGINE_OUTCOME_TIMEOUT then
   begin
+    // Name the Depth box only when it is usable: TreeDepth > 0 means the engine
+    // reports book_depth; an older engine's box is disabled and --depth is not sent.
+    var LAdvice: string:= if FTreeDepth > 0 then
+      'Lower the book''s depth (Depth box, top right) or report the qname'
+    else
+      'Report the qname';
     AError:= Format(
-      'proptree TIMED OUT for %s after %d s. Lower the book''s depth (Depth box, top '
-        + 'right) or report the qname; the index may also be being written by another process.',
-      [AQname, CONVERT_TIMEOUT_MS div MS_PER_SECOND]);
+      'proptree TIMED OUT for %s after %d s. %s; the index may also be being written by another process.',
+      [AQname, CONVERT_TIMEOUT_MS div MS_PER_SECOND, LAdvice]);
     Exit(False);
   end;
   if Code <> 0 then

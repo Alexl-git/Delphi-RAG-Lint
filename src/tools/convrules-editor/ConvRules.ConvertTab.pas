@@ -931,10 +931,12 @@ begin
       csRefused       : Inc(Refused);
     end; // case
   Msg:= Format('Converted %d of %d unit x book pair(s); %d failed and were restored.', [Converted, Length(AJob.Books) * Length(AJob.Units), Restored]);
-  if RolledBack > 0 then
-    Msg:= Msg + Format(' %d earlier conversion(s) were rolled back with them.', [RolledBack]);
   if Refused > 0 then
     Msg:= Msg + Format(' %d unit(s) refused by the engine and left unchanged (a known limitation -- see each row''s note).', [Refused]);
+  // After the refused sentence: a roll-back follows a failure OR a refusal, and
+  // "rolled back with them" right after "0 failed" named the wrong cause.
+  if RolledBack > 0 then
+    Msg:= Msg + Format(' %d earlier conversion(s) on those units were rolled back by a later failure or refusal.', [RolledBack]);
   if BookSkips > 0 then
     Msg:= Msg + Format(' %d book(s) failed the engine''s validation and were skipped.', [BookSkips]);
   if UnitSkips > 0 then

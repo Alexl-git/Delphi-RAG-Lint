@@ -576,7 +576,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 
 ### Verification kit
 
-* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1243 pass / 5 fail**;
+* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1323 pass / 5 fail** (1328 total; was 1243 / 5 before the engine-1.20.6 adoption branch);
   the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
   `.has.TOvcTable`). A full run is ~6 min (the live runner test is ~3 min of
@@ -584,7 +584,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 * **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
   -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
   Win64 library index answers -- a staged copy, never `dll-win64`). Expected
-  on the final build:
+  on the final build (measured 2026-10-04 on the 1.20.3 pin copy, all 8 green):
 
   | driver | checks | covers |
   |---|---|---|
@@ -593,6 +593,8 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   | `drive-unit-harvest.ps1` | 21 | Unit Rules harvest (`-ProofNoDestination` control) |
   | `drive-file-menu.ps1` | 19 | New / Save As / Exit, the guard, delete-in-place makes dirty |
   | `drive-owning-open.ps1` | 6 | cross-book double-click goes through `ConfirmDiscard` |
+  | `drive-engine-wait.ps1` | 8 | progress window: appears after `SHOW_DELAY_MS`, Cancel closes it and stops the To tree, retry after cancel, a fast load shows no window |
+  | `drive-book-depth.ps1` | 10 + 1 SKIP | depth combo shows the book's `#depth`, gated on `book_depth`, absent `#depth` not added on save, New file shows the default; the SKIP line is the 3 `depth.change.*` checks (13 pass after the 1.20.6 re-pin) |
   | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line |
 
   `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
@@ -623,16 +625,25 @@ the `convrules-depth` worktree.
 * **`#depth` lives in `ConvRules.Model`**: node kind `rnkDepth`, consts
   `BOOK_DEPTH_DEFAULT` (5) / `BOOK_DEPTH_MIN` (1) / `BOOK_DEPTH_MAX` (10),
   `TRuleBook.Depth`, `DepthState` (`bdsAbsent` / `bdsValid` / `bdsInvalid` /
-  `bdsDuplicate`), `DepthNodes`, `SetDepth`. The engine reads the FIRST
-  `#depth`; so does `Depth`.
+  `bdsDuplicate`), `DepthNodes` (private), `SetDepth`. **The engine accepts
+  ONE `#depth` per book, decimal digits only, 1..10** (`DRagLint.Convert.Rules`,
+  `IsDecimalDigits`): a second `#depth` -- whatever either value is -- and a
+  sign, ``$` or `0x` value are validation ERRORS, so `convert-apply` reports
+  `rule_errors` and the Convert tab skips the book. `ParseLine` matches it
+  (`IsDecimalDigits` + range; `depth.parse.digits.only`). `Depth` is the FIRST
+  line's value when valid, else 5; `DepthState` precedence is `bdsDuplicate` >
+  `bdsInvalid` > `bdsValid` (`depth.duplicate.first.invalid`: an invalid first
+  line plus a valid second is still `bdsDuplicate`).
 * **`SetDepth` inserts before the first `#convert`** when the book has no
   `#depth`, which shifts EVERY header index after it. Re-find by NODE, never
   keep an index: `DepthChanged` captures the active header node, calls
   `SetDepth`, then `FActiveHdr:= FBook.Nodes.IndexOf(Hdr)` and
   `RefreshRulesList` (the list items' header indices are stale too).
-* **On a `bdsDuplicate` book `SetDepth` updates only the FIRST line**; the state
-  stays `bdsDuplicate` (pinned by `depth.set.duplicate.updates.first`). An
-  update re-emits the line canonically (`#depth  3` becomes `#depth 3`).
+* **An explicit depth change REPAIRS a `bdsDuplicate` book** (ruling R11):
+  `SetDepth` updates the first `#depth` and DELETES (frees) every other one; the
+  state becomes `bdsValid` (`depth.set.duplicate.repairs`; the header is
+  re-found by node, `depth.set.duplicate.header.found.by.node`). An update
+  re-emits the line canonically (`#depth  3` becomes `#depth 3`).
 * **Opening and saving a book without `#depth` never adds one** -- only a user
   change writes the directive (`depth.absent.roundtrip`; driver
   `depth.absent.not.added`, which also proves a save really happened).
@@ -662,11 +673,22 @@ the `convrules-depth` worktree.
 * **The depth combo (`FCbDepth`, 1..10) is disabled** with the hint
   `DEPTH_HINT_UNSUPPORTED` when the engine lacks `book_depth`. `FLblDepthNote`
   says `(default)`, `(from book)`, `(book value invalid -- using 5)` or
-  `(several #depth lines -- the first is used)` (the last two in red).
-  `RefreshDepthControl` runs on every load, in `Create`, and after
-  `DoNewConversion`'s new-file `FBook.Clear` (Task 5 fix I1).
+  `(several #depth lines -- the engine rejects this book; pick a depth to repair
+  it)` (the last two in red). `RefreshDepthControl` runs in `LoadText` (every
+  open / New / Curate reload), in `Create`, in `DepthChanged`, and in
+  `ChooseTargetForNewRule` right after the new-file `FBook.Clear` (Task 5 fix
+  I1). It also stops a pending depth commit (`FDepthTimer`, `FDepthPending`).
 * **A depth change reloads the grid EXACTLY ONCE** (`DepthChanged` ->
   `LoadGridForBlock`); `RefreshRulesList` does not fire a second load.
+  `FCbDepth.OnChange` (`DepthComboChange`) does NOT commit: it marks
+  `FDepthPending` and, on the CLOSED combo (mouse wheel, arrow keys), restarts
+  `FDepthTimer` (`DEPTH_COMMIT_DELAY_MS` = 600 ms); with the list dropped down it
+  waits for `OnCloseUp` (`DepthComboCloseUp`). Either path calls `DepthChanged`,
+  which commits only when the value differs from `Depth` or the book is
+  `bdsDuplicate` / `bdsInvalid` (then the commit is the repair) -- so a
+  SELCHANGE/CLOSEUP pair for one pick (Windows does not fix their order) still
+  reloads once, and opening and closing the list without a pick writes nothing.
+  Picking the default (5) on a book WITHOUT `#depth` writes nothing either.
   Proven by instrumentation in Task 5; a double load is a second slow engine
   call (the double-click path shipped one once, ~161 s).
 
@@ -676,8 +698,14 @@ the `convrules-depth` worktree.
   stderr is split into lines (`TLineSplitter`), progress lines
   (`TryParseProgressLine`) go to `AOnProgress` and NEVER reach `AOutput`; any
   other stderr text (a `FATAL: ...`) is kept and returned
-  (`stream.stderr.kept`). Exit codes: `ENGINE_EXIT_TIMEOUT` = 3,
-  `ENGINE_EXIT_CANCELLED` = 4 (editor-side only). The child is killed on every
+  (`stream.stderr.kept`). It returns the CHILD's exit code unchanged -- the
+  engine's own 3 is FATAL (unknown flag, DB cannot be opened or is locked) and
+  reaches `GetProptree`'s generic failure branch with its output
+  (`stream.exit3.not.timeout`, `stream.exit3.fatal.kept`,
+  `engine.proptree.exit3.is.failure`). Its own outcomes are NEGATIVE so they can
+  never collide with an exit code: `ENGINE_OUTCOME_TIMEOUT` = -2,
+  `ENGINE_OUTCOME_CANCELLED` = -3 (-1 = not started; `exit.codes.distinct`).
+  `RunCaptureTimed` is unchanged and still reports ITS timeout as 3. The child is killed on every
   exit path, including a raising progress callback (`ReapChild` in a finally;
   `stream.raise.kills`), and each drain reads at most `MAX_READS_PER_DRAIN` (16)
   chunks so Cancel and the deadline stay responsive. `StartHiddenProcess` is
@@ -685,21 +713,34 @@ the `convrules-depth` worktree.
 * **Only `GetProptree` streams.** Every other verb stays on the merged-pipe
   `RunCaptureTimed`. The proptree bound is `CONVERT_TIMEOUT_MS` (600 s).
 * **`ConvRules.EngineWait` is editor-only** (`RunWithProgressDialog`,
-  `TEngineWaitForm`; not in the tests' compile closure). The tests leave
-  `LongCallRunner` nil: the work runs inline, with no window and no cancel.
-  `TConvRulesForm.Create` sets `FEngine.LongCallRunner:= RunWithProgressDialog`.
+  `TEngineWaitForm`; not in the tests' compile closure). With `LongCallRunner`
+  nil the work runs inline, with no window and no cancel; the model tests
+  install FAKE runners (`TestProptreeCancelState`: one returns
+  `ENGINE_OUTCOME_CANCELLED`, one the engine's exit 3, one
+  `ENGINE_OUTCOME_TIMEOUT`, one raises). `TConvRulesForm.Create` sets `FEngine.LongCallRunner:= RunWithProgressDialog`.
 * **The window appears only after `SHOW_DELAY_MS` (400 ms)** -- a fast load
   shows nothing (`wait.fast.no.window`). Never raise the delay to hide a slow
   call; measure the call.
 * **One Cancel stops From AND To.** `GetProptree` resets `LastCancelled` at its
-  TOP (before any early exit) and sets it on exit 4; the block load checks it
+  TOP (before any early exit) and sets it on `ENGINE_OUTCOME_CANCELLED`; the block load checks it
   after the From tree and does not start the To tree
   (`wait.cancel.stops.to.tree`: no second window within 3 s). A cancelled load
-  sets `FActiveHdr:= -1` and QUEUES a deselect of the rules list
+  clears BOTH trees, so the grid is left EMPTY (a To cancel no longer leaves the
+  From leaves), sets `FActiveHdr:= -1` and QUEUES a deselect of the rules list
   (`TThread.ForceQueue`), so selecting the rule again really retries
-  (`wait.retry.after.cancel`); it must not count as loaded.
+  (`wait.retry.after.cancel`); it must not count as loaded. Because of that a
+  depth change after a cancel does NOT reload; the status says to change the
+  depth first, THEN select the rule again (the depth part only when the engine
+  has `book_depth`). The proptree timeout text likewise names the Depth box only
+  when `TreeDepth > 0` (`engine.timeout.text.depth.box` / `.no.depth.box`).
+* **`FLastLoadCancelled` (form) is per call, `FEngine.LastCancelled` is per
+  engine call.** `LoadGridForBlock` sets the former; `OpenOwningRuleEntry` and
+  `DoNewConversion`'s select step RESET it before the load they own, so a cancel
+  left over from an earlier call (New Conversion's From check) can no longer
+  suppress `Opened the rule ...` / `Loaded ...` when no load ran.
 * **Cancel texts are accurate per caller** (`DoNewConversion`: "New conversion
-  cancelled -- no class was checked."). After a cancelled load of a From-only
+  cancelled while checking the From class X -- nothing was created." / the To
+  class). After a cancelled load of a From-only
   stub, New Conversion no longer treats it as completing the stub
   (`FActiveHdr = -1`) and shows the same-book prompt (deferred minor).
 * **Known gaps (deferred):** `DoAutoMatch` / Mappings / Surface overwrite the
@@ -715,7 +756,10 @@ the `convrules-depth` worktree.
   changed`) takes the FAILURE path**: `FailUnit(AReason, csRefused)` restores
   the unit and rolls back earlier books on it, exactly like
   `csFailedRestored`; notes say "was refused" instead of "failed". The summary
-  adds `N unit(s) refused by the engine and left unchanged`.
+  adds `N unit(s) refused by the engine and left unchanged`, THEN (if any)
+  `N earlier conversion(s) on those units were rolled back by a later failure or
+  refusal` -- after the refused sentence, because a roll-back can follow a
+  refusal and the old "rolled back with them" read as caused by "0 failed".
 * The book-invalid check runs BEFORE the refused check: `refused:true` with
   non-empty `rule_errors` would be classified `book skipped` (cannot happen in
   1.20.6; deferred minor -- guard `and not Refused` plus a test).
@@ -730,7 +774,10 @@ the `convrules-depth` worktree.
 * **`drive-book-depth.ps1` -- 10 checks + 1 SKIP line** on the 1.20.3 pin. The
   SKIP line covers the three `depth.change.*` checks (`invoke.save`,
   `one.line`, `saved`), which run only when the engine reports `book_depth`.
-  **They become REQUIRED after the 1.20.6 re-pin:** 13 pass, no SKIP.
+  **They become REQUIRED after the 1.20.6 re-pin:** 13 pass, no SKIP. Its
+  `Choose` sends CBN_SELCHANGE to the CLOSED combo, so it now exercises the
+  wheel / arrow-key path (`FDepthTimer`), and waits 1.5 s before File > Save; the
+  drop-down + `OnCloseUp` path is an owner check.
 * **Both drivers open a class with `--form` plus a double-click on the rule
   row** -- opening a book loads NO tree, so a driver that only opens a book
   never sees the window.

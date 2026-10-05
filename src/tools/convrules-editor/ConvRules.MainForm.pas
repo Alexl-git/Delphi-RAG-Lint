@@ -185,6 +185,9 @@ type
       FCbDepth      : TComboBox       ; // book #depth, 1..10 (engine 1.20.6 book_depth)
       FLblDepthNote : TLabel          ; // "(default)" / "(from book)" / invalid / duplicate
       FBookDepthOk  : Boolean         ; // engine reports book_depth
+      FDepthTimer   : TTimer          ; // debounces wheel / arrow-key steps on FCbDepth: one reload per committed change
+      FDepthPending : Boolean         ; // a selection notification arrived on FCbDepth and is not committed yet
+      FLastLoadCancelled: Boolean     ; // the LAST LoadGridForBlock was cancelled; callers reset it before a load they own
       FCastDefs     : TArray<TCastDef>; // shipped class-cast library (.castlib)
     { The ENUM half of the same file. LoadCastLib returns only the casts, so the
       enum blocks were parsed and thrown away; the conversion catalog needs them
@@ -306,7 +309,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.Create (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.ConvertTab.TConvertTab.Create, ConvRules.MainForm.TConvRulesForm.AddHarvest, ConvRules.MainForm.TConvRulesForm.AddPopupItem, ConvRules.MainForm.TConvRulesForm.BuildHarvestStrip, ConvRules.MainForm.TConvRulesForm.BuildMenu, ConvRules.MainForm.TConvRulesForm.BuildTypePopup, ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.EngineDbSet, ConvRules.MainForm.TConvRulesForm.RulesFolderNow, ConvRules.MainForm.TConvRulesForm.SetError (+7 more)</para>
-      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FLblDepthNote, FCbFrom (+33 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FLblDepthNote, FCbFrom (+32 more)</para>
+      /// <para>Reads: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthTimer, FLblDepthNote (+34 more)   Writes: FStatusBar, FPanelTop, FLblStatus, FCbUnit, FCbSurface, FCbDepth, FDepthTimer, FLblDepthNote (+33 more)</para>
       /// <seealso cref="ConvRules.ConvertTab.TConvertTab.Create"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddHarvest"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.AddPopupItem"/>
@@ -516,8 +519,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.AddDerivedUnitRules, ConvRules.MainForm.TConvRulesForm.ChooseTargetForNewRule, ConvRules.MainForm.TConvRulesForm.DoAutoMatch, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus (+7 more)</para>
-      /// <para>Complexity: 24 (cyclomatic, outer body), 122 lines (full implementation)</para>
-      /// <para>Reads: FCbFrom, FCbTo, FEngine, FActiveHdr, FBook, FRules</para>
+      /// <para>Complexity: 24 (cyclomatic, outer body), 123 lines (full implementation)</para>
+      /// <para>Reads: FCbFrom, FCbTo, FEngine, FActiveHdr, FBook, FRules, FLastLoadCancelled   Writes: FLastLoadCancelled</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
@@ -628,8 +631,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.DepthChanged (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoAutoMatch (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoMappings (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.DoNewConversion (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry (ConvRules.MainForm.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.GetProptree, ConvRules.MainForm.HourGlass, ConvRules.MainForm.TConvRulesForm.PrepareEngineForTrees, ConvRules.MainForm.TConvRulesForm.RefreshGrid, ConvRules.MainForm.TConvRulesForm.RefreshPool, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.MainForm.TConvRulesForm.UpdateMenuEnabled, Default, Format, Trim</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 90 lines (full implementation)</para>
-      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+5 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 101 lines (full implementation)</para>
+      /// <para>Reads: FMiOnlyType, FBook, FCbFrom, FCbTo, FFromTree, FSurfaceMinVis, FEngine, FToTree (+6 more)   Writes: FActiveHdr, FPoolTypeFilter, FFromTree, FToTree, FLastLoadCancelled</para>
       /// <para>UI thread only -- touches Application</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.GetProptree"/>
       /// <seealso cref="ConvRules.MainForm.HourGlass"/>
@@ -849,7 +852,7 @@ type
       /// cross-book save/discard prompt.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry, ConvRules.MainForm.TConvRulesForm.RefreshRulesList, ConvRules.MainForm.TConvRulesForm.SelectedRowIndex, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.RulesForType, ConvRules.RuleChooser.TRuleChooserForm.Execute, ExtractFileName, Format</para>
-      /// <para>Reads: FCbFrom, FFormTypeRows, FCatalog, FCbTo, FEngine   Writes: FSelectedFormType</para>
+      /// <para>Reads: FCbFrom, FFormTypeRows, FCatalog, FCbTo, FLastLoadCancelled   Writes: FSelectedFormType</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.OpenOwningRuleEntry"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.RefreshRulesList"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.SelectedRowIndex"/>
@@ -910,8 +913,8 @@ type
       /// <para>Called from: ConvRules.MainForm.TConvRulesForm.FormTypeDblClick (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.OpenOwningRule (ConvRules.MainForm.pas), ConvRules.MainForm.TConvRulesForm.RulesDblClick (ConvRules.MainForm.pas)</para>
       /// <para>Calls: ConvRules.MainForm.TConvRulesForm.ConfirmDiscard, ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor, ConvRules.MainForm.TConvRulesForm.LoadFile, ConvRules.MainForm.TConvRulesForm.LoadGridForBlock, ConvRules.MainForm.TConvRulesForm.SetError, ConvRules.MainForm.TConvRulesForm.SetStatus, ConvRules.RuleCatalog.BareTypeName, ConvRules.RuleCatalog.HeaderIndexFor, ExtractFileName, Format, Integer, SameText</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 84 lines (full implementation)</para>
-      /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr, FEngine   Writes: FPendingSelectEntry, FHasPendingSelectEntry</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 88 lines (full implementation)</para>
+      /// <para>Reads: FFilePath, FBook, FRules, FActiveHdr, FLastLoadCancelled   Writes: FLastLoadCancelled, FPendingSelectEntry, FHasPendingSelectEntry</para>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.ConfirmDiscard"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.DuplicateSitesFor"/>
       /// <seealso cref="ConvRules.MainForm.TConvRulesForm.LoadFile"/>
@@ -2113,9 +2116,21 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SurfaceChanged(Sender: TObject);
-      /// <summary>Depth combo changed: writes the book's #depth (SetDepth) and reloads the active block's trees once.</summary>
+      /// <summary>Commits the depth combo's value: writes the book's #depth (SetDepth, which also
+      /// repairs a book with several #depth lines) and reloads the active block's trees once.
+      /// A no-op when D equals Depth and the book is not bdsDuplicate / bdsInvalid.</summary>
       /// <param name="Sender">The depth combo.</param>
       procedure DepthChanged(Sender: TObject);
+      /// <summary>FCbDepth.OnChange: a step from the wheel or the arrow keys only (re)starts
+      /// FDepthTimer; while the list is dropped down it does nothing (OnCloseUp commits).</summary>
+      /// <param name="Sender">The depth combo.</param>
+      procedure DepthComboChange(Sender: TObject);
+      /// <summary>FCbDepth.OnCloseUp: commits the picked depth now (DepthChanged).</summary>
+      /// <param name="Sender">The depth combo.</param>
+      procedure DepthComboCloseUp(Sender: TObject);
+      /// <summary>FDepthTimer.OnTimer: the steps have settled -- commit once (DepthChanged).</summary>
+      /// <param name="Sender">The timer.</param>
+      procedure DepthTimerFire(Sender: TObject);
       /// <summary>Shows the book's depth, its state note and the capability gate on the depth combo.</summary>
       procedure RefreshDepthControl;
       /// <summary>Sets the engine's --depth for the next proptree calls: the book's depth, or 0 (omit) on an engine without book_depth.</summary>
@@ -2496,6 +2511,9 @@ const { VCL style names as they are recorded INSIDE the .vsf files linked by
   UNIT_STATUS_COL_W   = 170;
   DEPTH_HINT = 'Property-tree depth for this book. Deeper = slower; the loading window shows progress.';
   DEPTH_HINT_UNSUPPORTED = 'Engine does not support book depth (needs drag-lint 1.20.6 or later).';
+  { Quiet time after the last wheel / arrow-key step on the depth combo before the
+    change is committed (one reload); long enough to span a run of wheel notches. }
+  DEPTH_COMMIT_DELAY_MS = 600;
 
   { ---- helpers ---- }
 
@@ -2976,7 +2994,14 @@ begin
     FCbDepth.Items.Add(IntToStr(D));
   FCbDepth.ItemIndex:= BOOK_DEPTH_DEFAULT - BOOK_DEPTH_MIN;
   FCbDepth.ShowHint:= True;
-  FCbDepth.OnChange:= DepthChanged;
+  // Commit on close-up, or once the wheel / arrow-key steps settle: OnChange fires per
+  // step, and every commit is a full (possibly slow) tree reload.
+  FCbDepth.OnChange := DepthComboChange;
+  FCbDepth.OnCloseUp:= DepthComboCloseUp;
+  FDepthTimer:= TTimer.Create(Self);
+  FDepthTimer.Enabled := False;
+  FDepthTimer.Interval:= DEPTH_COMMIT_DELAY_MS;
+  FDepthTimer.OnTimer := DepthTimerFire;
   FLblDepthNote:= TLabel.Create(Self);
   FLblDepthNote.Parent:= FPanelTop;
   FLblDepthNote.SetBounds(884, 42, 200, 15);  // dl:ok magic-literal@5670, large-magic-number@5670 -- Task 5; same unnamed SetBounds coordinate idiom used by every control in BuildUI
@@ -4340,6 +4365,11 @@ begin
     FToTree:= Default(TProptree);
   end;
   var LCancelled: Boolean:= FEngine.LastCancelled;
+  FLastLoadCancelled:= LCancelled;
+  // A cancel at either half leaves the grid EMPTY (spec success criterion 3), not
+  // a From-only grid that looks like a rule with no targets.
+  if LCancelled then
+    FFromTree:= Default(TProptree);
   // A bare class name that several units declare resolved by row order alone, so the
   // tree on screen may belong to the wrong framework. Say which one was used -- this
   // rides on the SUCCESS path, so it has to be carried down to the final SetStatus
@@ -4369,7 +4399,13 @@ begin
     SetStatus(Format('%s -> %s : %d From leaves, %d To leaves.', [Node.FromType, Node.ToType, Length(FFromTree.Leaves), Length(FToTree.Leaves)]) + Notes);
   if LCancelled then
   begin
-    SetStatus(Format('Property-tree load cancelled for %s -> %s. Lower the book depth, or select the rule (or double-click its class) again to retry.', [Node.FromType, Node.ToType]));
+    // FActiveHdr is cleared below, so a depth change does NOT reload this block: the
+    // advice is to change the depth FIRST, then select the rule again.
+    var LRetry: string:= if FBookDepthOk then
+      'Lower the book depth if needed, then select the rule (or double-click its class) again to retry.'
+    else
+      'Select the rule (or double-click its class) again to retry.';
+    SetStatus(Format('Property-tree load cancelled for %s -> %s. %s', [Node.FromType, Node.ToType, LRetry]));
     // Leave the block NOT loaded, or the retry is a no-op: OpenOwningRuleEntry
     // skips a block that FActiveHdr says is already on screen.
     FActiveHdr:= -1;
@@ -5085,7 +5121,7 @@ begin
   if not OpenOwningRuleEntry(Entry) then
     Exit;
   FCbTo.Text:= Entry.ToType;
-  if not FEngine.LastCancelled then // keep LoadGridForBlock's "load cancelled" on screen
+  if not FLastLoadCancelled then // keep LoadGridForBlock's "load cancelled" on screen (reset by OpenOwningRuleEntry)
     SetStatus(Format('Loaded %s -> %s from %s.', [Entry.FromType, Entry.ToType, ExtractFileName(Entry.FilePath)]));
 end; // procedure
 
@@ -5117,6 +5153,10 @@ var
 begin
   Result  := False;
   TypeName:= BareTypeName(AEntry.FromType);
+  // Only a load THIS call runs may hold back the status below: a cancel left over
+  // from an earlier call (e.g. New Conversion's From check) must not, when the
+  // block is already on screen and no load runs here at all.
+  FLastLoadCancelled:= False;
 
   if not SameText(AEntry.FilePath, FFilePath) then
   begin
@@ -5187,7 +5227,7 @@ begin
     Extra:= Format(' -- %d rules convert %s; this is the first. Double-click the class to choose.', [Sites, TypeName])
   else
     Extra:= '';
-  if not FEngine.LastCancelled then // keep LoadGridForBlock's "load cancelled" on screen
+  if not FLastLoadCancelled then // keep LoadGridForBlock's "load cancelled" on screen
     SetStatus(Format('Opened the rule for %s -- %s, line %d.', [TypeName, ExtractFileName(AEntry.FilePath), AEntry.LineNo]) + Extra);
   Result:= True;
 end; // function
@@ -5857,6 +5897,9 @@ end; // procedure
 
 procedure TConvRulesForm.RefreshDepthControl;
 begin
+  // A pending wheel step belongs to the book on screen before this refresh, never the next one.
+  FDepthTimer.Enabled:= False;
+  FDepthPending:= False;
   FCbDepth.ItemIndex:= FBook.Depth - BOOK_DEPTH_MIN;
   FCbDepth.Enabled  := FBookDepthOk;
   FCbDepth.Hint     := if FBookDepthOk then DEPTH_HINT else DEPTH_HINT_UNSUPPORTED;
@@ -5875,7 +5918,7 @@ begin
     bdsInvalid:
       FLblDepthNote.Caption:= Format('(book value invalid -- using %d)', [BOOK_DEPTH_DEFAULT]);
     bdsDuplicate:
-      FLblDepthNote.Caption:= '(several #depth lines -- the first is used)';
+      FLblDepthNote.Caption:= '(several #depth lines -- the engine rejects this book; pick a depth to repair it)';
   end; // case
 end; // procedure
 
@@ -5891,9 +5934,12 @@ var
   Hdr: TRuleNode;
 begin
   D:= FCbDepth.ItemIndex + BOOK_DEPTH_MIN;
-  if (FBook.DepthState in [bdsValid, bdsDuplicate]) and (FBook.Depth = D) then
+  FDepthPending:= False;
+  // Same value, nothing to write -- except on a book the engine rejects (several
+  // #depth lines, or an invalid one): there the commit IS the repair (ruling R11).
+  if (FBook.Depth = D) and not (FBook.DepthState in [bdsDuplicate, bdsInvalid]) then
     Exit;
-  // Capture the active block's NODE: an inserted #depth shifts every #convert index.
+  // Capture the active block's NODE: an inserted or deleted #depth shifts #convert indexes.
   Hdr:= nil;
   if (FActiveHdr >= 0) and (FActiveHdr < FBook.Nodes.Count) then
     Hdr:= FBook.Nodes[FActiveHdr];
@@ -5908,6 +5954,32 @@ begin
     LoadGridForBlock(FActiveHdr);
   SetStatus(Format('Tree depth %d for this book -- unsaved; File > Save keeps it.', [D]));
 end; // procedure
+
+{ Windows does not promise the order of CBN_SELCHANGE and CBN_CLOSEUP for a pick
+  from the open list, so both paths may reach DepthChanged for one pick; the
+  second finds the book already holding the value and returns without a reload. }
+procedure TConvRulesForm.DepthComboChange(Sender: TObject);
+begin
+  FDepthPending:= True;
+  FDepthTimer.Enabled:= False;
+  if FCbDepth.DroppedDown then
+    Exit; // stepping through the open list: OnCloseUp commits the final pick
+  FDepthTimer.Enabled:= True; // restart: the last of a run of steps commits
+end;
+
+procedure TConvRulesForm.DepthComboCloseUp(Sender: TObject);
+begin
+  FDepthTimer.Enabled:= False;
+  if FDepthPending then // opening and closing the list without a pick changes nothing
+    DepthChanged(FCbDepth);
+end;
+
+procedure TConvRulesForm.DepthTimerFire(Sender: TObject);
+begin
+  FDepthTimer.Enabled:= False;
+  if FDepthPending then
+    DepthChanged(FCbDepth);
+end;
 
 { Create or update the #link mapping ToPath <- FromPath in the active block,
   choosing a default cast from the leaf types (identity when same type). Shared by
@@ -6419,6 +6491,7 @@ begin
 
   RefreshRulesList;
   // select the target rule (also fires LoadGridForBlock)
+  FLastLoadCancelled:= False; // only the load below counts
   var Sel: Integer:= -1;
   for var k:= 0 to FRules.Items.Count - 1 do
     if Integer(FRules.Items[k].Data) = newHdrIdx then begin Sel:= k; Break; end;
@@ -6430,7 +6503,7 @@ begin
   else
     LoadGridForBlock(newHdrIdx);
   // A cancelled load leaves no trees to match against (and no active block).
-  var LLoadCancelled: Boolean:= FEngine.LastCancelled;
+  var LLoadCancelled: Boolean:= FLastLoadCancelled;
 
   // pre-fill the obvious matches
   if not LLoadCancelled then

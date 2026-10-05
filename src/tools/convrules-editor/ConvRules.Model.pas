@@ -65,8 +65,11 @@ type
   );
 
   /// <summary>What a book says about its property-tree depth.</summary>
-  /// <remarks>bdsInvalid wins over bdsDuplicate: the FIRST #depth line is the one the
-  /// engine reads, so a bad first value is the fact that matters.</remarks>
+  /// <remarks>Follows the engine (ruling R11), which accepts at most ONE #depth per
+  /// book and rejects the book otherwise. Precedence: bdsDuplicate (two or more
+  /// #depth lines, whatever their values -- the engine rejects the book either way,
+  /// so the editor claims no book value) over bdsInvalid (the only #depth line is not
+  /// decimal digits 1..10) over bdsValid; bdsAbsent when there is none.</remarks>
   TBookDepthState = (bdsAbsent, bdsValid, bdsInvalid, bdsDuplicate);
 
   /// <summary>One 'ToPath = Value' assignment from a #mapping clause's set list.</summary>
@@ -172,7 +175,8 @@ type
       // rnkDepth
       /// <summary>The #depth value; meaningful only when DepthValid.</summary>
       DepthValue: Integer;  // dl:ok public-field@db18 -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
-      /// <summary>True when the #depth body is an integer BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.
+      /// <summary>True when the #depth body is DECIMAL DIGITS only (as the engine's
+      /// IsDecimalDigits: no sign, no '$' or '0x' hex) valued BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.
       /// An invalid line keeps its Raw text verbatim; the engine's validator names it.</summary>
       DepthValid: Boolean;  // dl:ok public-field@85bc -- TRuleNode is a plain parse record by design; every sibling typed field is public the same way
 
@@ -242,14 +246,14 @@ type
       /// round-tripping a whole file.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Model.TRuleBook.LoadFromString (ConvRules.Model.pas), ConvRules.Model.TRuleBook.SetDepth (ConvRules.Model.pas)</para>
-      /// <para>Calls: ConvRules.Model.ParseSetList, ConvRules.Model.SplitTopLevelCommas, ConvRules.Model.StripComment, ConvRules.Model.TRuleBook.ParseLine.SplitArrow, ConvRules.Model.TRuleBook.ParseLine.SplitBareArrow, Copy, LowerCase, Pos, Trim, TryStrToInt</para>
+      /// <para>Calls: ConvRules.Model.IsDecimalDigits, ConvRules.Model.ParseSetList, ConvRules.Model.SplitTopLevelCommas, ConvRules.Model.StripComment, ConvRules.Model.TRuleBook.ParseLine.SplitArrow, ConvRules.Model.TRuleBook.ParseLine.SplitBareArrow, Copy, LowerCase, Pos, Trim, TryStrToInt</para>
       /// <para>Returns: N</para>
-      /// <para>Complexity: 43 (cyclomatic, outer body), 294 lines (full implementation)</para>
+      /// <para>Complexity: 44 (cyclomatic, outer body), 295 lines (full implementation)</para>
+      /// <seealso cref="ConvRules.Model.IsDecimalDigits"/>
       /// <seealso cref="ConvRules.Model.ParseSetList"/>
       /// <seealso cref="ConvRules.Model.SplitTopLevelCommas"/>
       /// <seealso cref="ConvRules.Model.StripComment"/>
       /// <seealso cref="ConvRules.Model.TRuleBook.ParseLine.SplitArrow"/>
-      /// <seealso cref="ConvRules.Model.TRuleBook.ParseLine.SplitBareArrow"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParseLine(const ALine: string): TRuleNode;
@@ -496,20 +500,26 @@ type
       /// what Save persists. TRuleNode.Dirty is not this signal: it is never
       /// cleared by Save and a deleted node leaves no trace in it.</remarks>
       function Snapshot: string;
-      /// <summary>The effective property-tree depth: the FIRST #depth line's value when
-      /// it is valid, else BOOK_DEPTH_DEFAULT.</summary>
+      /// <summary>The depth the editor asks the engine for: the FIRST #depth line's
+      /// value when it is valid, else BOOK_DEPTH_DEFAULT.</summary>
+      /// <remarks>On bdsDuplicate this is still the first line's value -- the one
+      /// SetDepth keeps when it repairs the book -- and the editor's own trees load at
+      /// it (--depth is passed explicitly), but the ENGINE rejects such a book in
+      /// convert-apply; DepthState is what says so.</remarks>
       /// <returns>BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.</returns>
       function Depth: Integer;
       /// <summary>Absent / valid / invalid / duplicate -- what the depth control shows.</summary>
       /// <returns>See TBookDepthState.</returns>
       function DepthState: TBookDepthState;
-      /// <summary>Set the book's depth: updates the first #depth line, or inserts
-      /// '#depth N' before the first #convert (appends when there is none).</summary>
+      /// <summary>Set the book's depth: updates the first #depth line and DELETES every
+      /// other #depth line (repairing a book the engine rejects), or inserts '#depth N'
+      /// before the first #convert (appends when there is none).</summary>
       /// <param name="AValue">BOOK_DEPTH_MIN..BOOK_DEPTH_MAX.</param>
       /// <returns>The #depth node, owned by the book.</returns>
       /// <exception cref="EArgumentOutOfRangeException">AValue outside the range.</exception>
-      /// <remarks>An insert shifts every #convert index by one: a caller holding a
-      /// header index must re-find it BY NODE (Nodes.IndexOf), as InsertUnitNode does.</remarks>
+      /// <remarks>An insert or a delete shifts #convert indexes: a caller holding a
+      /// header index must re-find it BY NODE (Nodes.IndexOf), as InsertUnitNode does.
+      /// Deleted #depth nodes are freed; do not hold references to them.</remarks>
       function SetDepth(AValue: Integer): TRuleNode;
   end;
 
@@ -554,6 +564,19 @@ end;
 function StripComment(const S: string): Boolean; inline;
 begin
   Result:= S.StartsWith('//') or S.StartsWith(';');
+end;
+
+{ True when S is one or more '0'..'9' and nothing else -- the engine's own
+  #depth check (DRagLint.Convert.Rules IsDecimalDigits), kept identical so the
+  editor never calls valid a value the engine rejects. }
+function IsDecimalDigits(const S: string): Boolean;
+var
+  C: Char;
+begin
+  Result:= S <> '';
+  for C in S do
+    if not CharInSet(C, ['0'..'9']) then
+      Exit(False);
 end;
 
 { Split S on TOP-LEVEL commas. A comma nested in (), [] or <>, or inside a quoted
@@ -738,7 +761,7 @@ begin
   Result:= ANode;
 end;
 
-function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@cedc, too-many-exit-points@94ac, cyclomatic-complexity@6a20, cognitive-complexity@c54c -- REVIEWED 2026-09-30: a flat one-arm-per-directive dispatcher (each arm sets Kind and Exits); every new directive necessarily adds one arm, one branch and one exit -- #depth took it to 256 lines / 20 exits / cyclomatic 43 / cognitive 102 -- and splitting the arms apart is a refactor outside this change
+function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@ed95, too-many-exit-points@94ac, cyclomatic-complexity@0f40, cognitive-complexity@383b -- REVIEWED 2026-09-30 (re-read in the fix wave): a flat one-arm-per-directive dispatcher (each arm sets Kind and Exits); every new directive necessarily adds one arm, one branch and one exit -- #depth, with its engine-identical digits-only check, took it to 257 lines / 20 exits / cyclomatic 44 / cognitive 103 -- and splitting the arms apart is a refactor outside this change
 var
   N     : TRuleNode;
   T     : string   ;
@@ -1014,7 +1037,8 @@ begin
     if Dir = '#depth' then
     begin
       N.Kind:= rnkDepth;
-      N.DepthValid:= TryStrToInt(Body, N.DepthValue) and (N.DepthValue >= BOOK_DEPTH_MIN) and (N.DepthValue <= BOOK_DEPTH_MAX);
+      // Digits only, as the engine: TryStrToInt alone accepts '+3', '$A' and '0x0A'.
+      N.DepthValid:= IsDecimalDigits(Body) and TryStrToInt(Body, N.DepthValue) and (N.DepthValue >= BOOK_DEPTH_MIN) and (N.DepthValue <= BOOK_DEPTH_MAX);
       if not N.DepthValid then
         N.DepthValue:= 0;
       Exit(N);
@@ -1226,10 +1250,11 @@ begin
   L:= DepthNodes;
   if Length(L) = 0 then
     Exit(bdsAbsent);
-  if not L[0].DepthValid then
-    Exit(bdsInvalid);
+  // Duplicate first: the engine rejects a second #depth whatever either value is.
   if Length(L) > 1 then
     Exit(bdsDuplicate);
+  if not L[0].DepthValid then
+    Exit(bdsInvalid);
   Result:= bdsValid;
 end; // function
 
@@ -1247,6 +1272,9 @@ begin
     Result.DepthValue:= AValue;
     Result.DepthValid:= True;
     Result.Dirty     := True;
+    // Repair: the engine rejects a book with a second #depth (ruling R11).
+    for var LExtra: TRuleNode in Copy(L, 1, MaxInt) do
+      FNodes.Remove(LExtra); // owned: Remove frees it
   end
   else
   begin

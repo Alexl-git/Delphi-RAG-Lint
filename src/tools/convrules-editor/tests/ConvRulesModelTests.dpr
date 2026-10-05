@@ -34,7 +34,7 @@ uses
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
-  , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_EXIT_TIMEOUT / ENGINE_EXIT_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
+  , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   ;
 
 var
@@ -7133,6 +7133,25 @@ begin
     finally
       N.Free;
     end;
+    // The engine accepts DECIMAL DIGITS only (IsDecimalDigits): a sign, a '$' hex
+    // or a '0x' prefix is an engine error even where TryStrToInt would accept it.
+    var LDigitsOnly: Boolean:= True;
+    for var LBody: string in ['#depth +3', '#depth $A', '#depth 0x0A'] do
+    begin
+      N:= B.ParseLine(LBody);
+      try
+        LDigitsOnly:= LDigitsOnly and (N.Kind = rnkDepth) and not N.DepthValid;
+      finally
+        N.Free;
+      end;
+    end;
+    Check('depth.parse.digits.only', LDigitsOnly);
+    N:= B.ParseLine('#depth 03');
+    try
+      Check('depth.parse.digits.leading.zero', N.DepthValid and (N.DepthValue = DEPTH_MID));
+    finally
+      N.Free;
+    end;
 
     B.LoadFromString(BOOK_NO_DEPTH);
     Check('depth.absent.default', (B.Depth = BOOK_DEPTH_DEFAULT) and (B.DepthState = bdsAbsent));
@@ -7158,9 +7177,18 @@ begin
 
     B.LoadFromString('#depth 2' + CRLF + '#depth 9' + CRLF + BOOK_NO_DEPTH);
     Check('depth.duplicate.first.wins', (B.Depth = DEPTH_LOW) and (B.DepthState = bdsDuplicate));
+    // An explicit depth change REPAIRS a duplicate (ruling R11): the engine rejects a
+    // book with two #depth lines, so the first is set and every other one deleted.
+    Hdr:= B.Nodes[B.ConvertHeaders[0]];
     B.SetDepth(DEPTH_HIGH);
     S:= B.Snapshot;
-    Check('depth.set.duplicate.updates.first', (B.Depth = DEPTH_HIGH) and (B.DepthState = bdsDuplicate) and (Pos('#depth 7', S) = 1) and (Pos('#depth 9', S) > 0) and (Occurrences('#depth', S) = 2), S);
+    Check('depth.set.duplicate.repairs', (B.Depth = DEPTH_HIGH) and (B.DepthState = bdsValid) and (Pos('#depth 7', S) = 1) and (Occurrences('#depth', S) = 1), S);
+    Check('depth.set.duplicate.header.found.by.node', B.Nodes.IndexOf(Hdr) = B.ConvertHeaders[0]);
+
+    // First line invalid, second valid: the engine still rejects the book, so the
+    // state is bdsDuplicate (it wins over bdsInvalid) and no book value is claimed.
+    B.LoadFromString('#depth x' + CRLF + '#depth 4' + CRLF + BOOK_NO_DEPTH);
+    Check('depth.duplicate.first.invalid', (B.DepthState = bdsDuplicate) and (B.Depth = BOOK_DEPTH_DEFAULT));
 
     Raised:= False;
     try
@@ -7181,16 +7209,17 @@ end;
 
 procedure TestEngineProgress;
 const
-  LINE_A   = '{"progress":{"elapsed_s":15,"verb":"proptree","class":"FireDAC.Comp.Client.TFDQuery","depth":3,"max_depth":5,"classes_done":41,"classes_queued":28,"nodes":9120}}';
+  // The engine's real shape: elapsed_s is FormatFloat('0.0'), the rest are integers.
+  LINE_A   = '{"progress":{"elapsed_s":15.0,"verb":"proptree","class":"FireDAC.Comp.Client.TFDQuery","depth":3,"max_depth":5,"classes_done":41,"classes_queued":28,"nodes":9120}}';
   ELAPSED  = 15;
+  ELAPSED_TRUNC = 12;
   DEPTH    = 3;
   MAXDEPTH = 5;
   DONE     = 41;
   QUEUED   = 28;
   NODES    = 9120;
   TWO      = 2;
-  THREE    = 3;
-  FOUR     = 4;
+  COULD_NOT_START = -1; // RunCaptureStreaming: the process was never started
   LINE_WRONG_TYPES = '{"progress":{"depth":"x","verb":7,"elapsed_s":null,"class":[]}}';
 var
   Sp      : TLineSplitter;
@@ -7242,6 +7271,10 @@ begin
     and (P.ClassesQueued = QUEUED) and (P.Nodes = NODES);
   Check('progress.parse.accept', Parsed and Names and Counts);
   Check('progress.parse.padded', TryParseProgressLine('  ' + LINE_A + '  ', P));
+  TryParseProgressLine('{"progress":{"elapsed_s":12.3,"depth":1}}', P);
+  Check('progress.elapsed.decimal', P.ElapsedS = ELAPSED_TRUNC, IntToStr(P.ElapsedS));
+  TryParseProgressLine('{"progress":{"elapsed_s":0.0,"depth":1}}', P);
+  Check('progress.elapsed.zero', (P.ElapsedS = 0) and (P.Depth = 1), IntToStr(P.ElapsedS));
   Check('progress.reject.text', not TryParseProgressLine('(loaded defaults from C:\x.json)', P));
   Check('progress.reject.fatal', not TryParseProgressLine('FATAL: Exception: Unknown argument: --depth', P));
   Check('progress.reject.other.json', not TryParseProgressLine('{"schema":"apply/1","ok":true}', P));
@@ -7276,7 +7309,10 @@ begin
   finally
     Tok.Free;
   end;
-  Check('exit.codes.distinct', (ENGINE_EXIT_TIMEOUT = THREE) and (ENGINE_EXIT_CANCELLED = FOUR) and (PROGRESS_INTERVAL_S = TWO));
+  // Editor-side outcomes are NEGATIVE: never the engine's exit codes 0..3 (3 = FATAL)
+  // and never -1 (could not start).
+  Check('exit.codes.distinct', (ENGINE_OUTCOME_TIMEOUT < COULD_NOT_START) and (ENGINE_OUTCOME_CANCELLED < COULD_NOT_START)
+    and (ENGINE_OUTCOME_TIMEOUT <> ENGINE_OUTCOME_CANCELLED) and (PROGRESS_INTERVAL_S = TWO));
 end;
 
 procedure TestEngineArgsAndCaps;
@@ -7309,12 +7345,14 @@ const
     + '[Console]::Out.WriteLine(''{"qname":"A.TX"}'')' + #13#10
     + '[Console]::Error.WriteLine(''{"progress":{"elapsed_s":2,"verb":"proptree","class":"A.TX","depth":2,"max_depth":5,"classes_done":3,"classes_queued":0,"nodes":20}}'')' + #13#10
     + 'if ($args[0] -eq ''sleep'') { Start-Sleep -Seconds 4; Set-Content -LiteralPath $args[1] -Value survived }' + #13#10
+    + 'if ($args[0] -eq ''fatal'') { [Console]::Error.WriteLine(''FATAL: cannot open the index''); exit 3 }' + #13#10
     + 'exit 0' + #13#10;
   LONG_MS       = 60000;
   SHORT_MS      = 1500;
   CANCEL_MAX_MS = 1500;
   SURVIVE_WAIT  = 6000;
   TWO           = 2;
+  ENGINE_FATAL  = 3; // the engine's own FATAL exit code (unknown flag, DB cannot be opened)
 var
   Pwsh, Dir, Ps1, Marker, Output: string;
   Eng  : TEngineAdapter;
@@ -7351,6 +7389,12 @@ begin
     Check('stream.progress.not.in.output', Pos('"progress"', Output) = 0, Output);
     Check('stream.progress.seen', (Seen = TWO) and (Last.Depth = TWO) and (Last.QName = 'A.TX'), IntToStr(Seen));
 
+    // The engine's real exit 3 (FATAL) must come back AS 3, with its stderr text --
+    // never confused with the editor's own timeout outcome.
+    Code:= Eng.RunCaptureStreaming(Format('-NoProfile -NonInteractive -File "%s" fatal', [Ps1]), LONG_MS, nil, nil, Output);
+    Check('stream.exit3.not.timeout', (Code = ENGINE_FATAL) and (Code <> ENGINE_OUTCOME_TIMEOUT) and (Pos('[timeout', Output) = 0), IntToStr(Code) + ' ' + Output);
+    Check('stream.exit3.fatal.kept', Pos('FATAL: cannot open the index', Output) > 0, Output);
+
     Tok:= TCancelToken.Create;
     try
       TCancel:= 0;
@@ -7364,7 +7408,7 @@ begin
           end;
         end, Tok, Output);
       TBack:= GetTickCount64;
-      Check('stream.cancel.code', Code = ENGINE_EXIT_CANCELLED, IntToStr(Code));
+      Check('stream.cancel.code', Code = ENGINE_OUTCOME_CANCELLED, IntToStr(Code));
       Check('stream.cancel.fast', (TCancel > 0) and (TBack - TCancel < CANCEL_MAX_MS), Format('%d ms', [TBack - TCancel]));
       Sleep(SURVIVE_WAIT);  // dl:ok sleep-in-vcl@d144 -- REVIEWED 2026-09-30 console test runner, no VCL message loop: waits past the killed stand-in's would-be write
       Check('stream.cancel.killed', not TFile.Exists(Marker), 'the sleeping stand-in finished after Cancel');
@@ -7373,7 +7417,7 @@ begin
     end;
 
     Code:= Eng.RunCaptureStreaming(Format('-NoProfile -NonInteractive -File "%s" sleep "%s"', [Ps1, Marker]), SHORT_MS, nil, nil, Output);
-    Check('stream.timeout.code', Code = ENGINE_EXIT_TIMEOUT, IntToStr(Code));
+    Check('stream.timeout.code', Code = ENGINE_OUTCOME_TIMEOUT, IntToStr(Code));
 
     // A progress sink that raises must not orphan the engine: the child is killed
     // on the way out, so the sleeping stand-in never writes its marker.
@@ -7402,6 +7446,9 @@ end;
   is what that call sees; a BARE name then fails at resolution (the query process
   cannot start) before any runner call is made. }
 procedure TestProptreeCancelState;
+const
+  ENGINE_FATAL = 3; // the engine's own FATAL exit code
+  DEPTH_THREE  = 3;
 var
   Eng   : TEngineAdapter;
   Tree  : TProptree;
@@ -7415,12 +7462,35 @@ begin
     Eng.LongCallRunner:=
       function(const ATitle: string; const AWork: TStreamingWork): Integer
       begin
-        Result:= ENGINE_EXIT_CANCELLED;
+        Result:= ENGINE_OUTCOME_CANCELLED;
       end;
     Ok:= Eng.GetProptree('U.TFoo', Tree, Err, Note);
     Check('engine.lastcancelled.set', (not Ok) and Eng.LastCancelled, Err);
     Ok:= Eng.GetProptree('TFoo', Tree, Err, Note);
     Check('engine.lastcancelled.reset.on.resolve.error', (not Ok) and (not Eng.LastCancelled) and (Pos('cannot resolve', Err) > 0), Err);
+
+    // The engine's FATAL exit 3 is a FAILURE with the exit code named, not a timeout.
+    Eng.LongCallRunner:=
+      function(const ATitle: string; const AWork: TStreamingWork): Integer
+      begin
+        Result:= ENGINE_FATAL;
+      end;
+    Ok:= Eng.GetProptree('U.TFoo', Tree, Err, Note);
+    Check('engine.proptree.exit3.is.failure', (not Ok) and (Pos('TIMED OUT', Err) = 0) and (Pos('exit 3', Err) > 0), Err);
+
+    // The timeout advice names the Depth box only when it is usable (TreeDepth > 0
+    // means the engine reports book_depth; an older engine's box is disabled).
+    Eng.LongCallRunner:=
+      function(const ATitle: string; const AWork: TStreamingWork): Integer
+      begin
+        Result:= ENGINE_OUTCOME_TIMEOUT;
+      end;
+    Eng.TreeDepth:= 0;
+    Eng.GetProptree('U.TFoo', Tree, Err, Note);
+    Check('engine.timeout.text.no.depth.box', (Pos('TIMED OUT', Err) > 0) and (Pos('Depth box', Err) = 0), Err);
+    Eng.TreeDepth:= DEPTH_THREE;
+    Eng.GetProptree('U.TFoo', Tree, Err, Note);
+    Check('engine.timeout.text.depth.box', (Pos('TIMED OUT', Err) > 0) and (Pos('Depth box', Err) > 0), Err);
 
     Eng.LongCallRunner:=
       function(const ATitle: string; const AWork: TStreamingWork): Integer
