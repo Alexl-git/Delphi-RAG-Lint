@@ -24810,24 +24810,25 @@ end;
   the first #convert, left unset). Each side comes from ATrees (ClassFor), shared
   with BuildApplyPlan, so each class's members are resolved once per run and only
   when a path asks for them.
-  A block whose From or To type resolves in no --db is an ERROR on its #convert
-  line (added to AErrors, ruling R7) -- an unset side would skip every check of
-  the block and pass it silently. }
+  A block whose From or To type resolves in no --db goes to AUnresolved (its
+  #convert line, the type in Message) -- an unset side would skip every check
+  of the block and pass it silently (ruling R7). C13 d: that is an INDEX gap,
+  not a rule-book error, so the caller refuses the unit on it (UnresolvedReason). }
 function BuildBlockClasses(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
-  AErrors: TList<TRuleError>): TArray<TBlockClasses>;
+  AUnresolved: TList<TRuleError>): TArray<TBlockClasses>;
 var
   R    : TConversionRule;
   Block: Integer;
 
-  procedure RequireResolved(const AConv: TConversionRule; const ASide, AType: string);
+  procedure RequireResolved(const AConv: TConversionRule; const AType: string);
   var
     E: TRuleError;
   begin
     if (AType = '') or (ATrees.ResolveType(AType) <> '') then Exit;
     E        := Default(TRuleError);
     E.LineNo := AConv.LineNo;
-    E.Message:= Format('#convert %s type not found in any --db: %s', [ASide, AType]);
-    AErrors.Add(E);
+    E.Message:= AType;
+    AUnresolved.Add(E);
   end;
 
 begin
@@ -24838,8 +24839,8 @@ begin
     begin
       Inc(Block);
       SetLength(Result, Block + 1);
-      RequireResolved(R, 'From', R.FromType);
-      RequireResolved(R, 'To', R.ToType);
+      RequireResolved(R, R.FromType);
+      RequireResolved(R, R.ToType);
       Result[Block].FromClass:= ATrees.ClassFor(R.FromType);
       Result[Block].ToClass  := ATrees.ClassFor(R.ToType);
     end;
@@ -24848,26 +24849,41 @@ end;
 { 1.20.6: convert-apply's rule check. EVERY #convert block is validated against
   its own classes (ValidateConversionRulesPerBlock, classes from ATrees; T2b
   reverted ruling R5's per-unit scope, because resolving a path no longer costs
-  a tree), a block whose type resolves nowhere is an error on its #convert line
-  (BuildBlockClasses), and a #link carrying a glyph expression is refused
+  a tree), a block whose type resolves nowhere comes back in AUnresolved (C13 d:
+  the caller REFUSES the unit, see UnresolvedReason), and a #link carrying a glyph expression is refused
   (UnrealisedGlyphLinks). A path through a member that exists but is
   inaccessible is not an error: it comes back in AUnreachable (T2h, owner
   ruling R12), one record per block it is unreachable in -- print through
   DistinctUnreachable, filter per block through WithoutUnreachableRules. }
 function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
-  out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
+  out AUnreachable: TArray<TUnreachablePath>; out AUnresolved: TArray<TRuleError>): TArray<TRuleError>;
 var
   TypeErrs: TList<TRuleError>;
   Classes : TArray<TBlockClasses>;
 begin
   TypeErrs:= TList<TRuleError>.Create;
   try
-    Classes:= BuildBlockClasses(ATrees, ARules, TypeErrs);
-    Result := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable) + TypeErrs.ToArray +
-              UnrealisedGlyphLinks(ARules);
+    Classes    := BuildBlockClasses(ATrees, ARules, TypeErrs);
+    AUnresolved:= TypeErrs.ToArray;
+    Result     := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable) + UnrealisedGlyphLinks(ARules);
   finally
     TypeErrs.Free;
   end;
+end;
+
+{ C13 d (owner ruling 2026-10-06): the REFUSED reason for #convert types that
+  resolve in no --db. Each is '<Type> (line N)', the block's #convert line; the
+  text says it is an index gap (library or project index), never a rule-book
+  error, because the converter cannot convert a type it cannot see. }
+function UnresolvedReason(const AUnresolved: TArray<TRuleError>): string;
+var
+  Parts: TArray<string>;
+  U    : TRuleError;
+begin
+  Parts:= nil;
+  for U in AUnresolved do Parts:= Parts + [Format('%s (line %d)', [U.Message, U.LineNo])];
+  Result:= Format('%s %s in no --db -- index gap in the library or project index; reindex, or report it, before converting',
+    [String.Join(', ', Parts), if Length(Parts) = 1 then 'resolves' else 'resolve']);
 end;
 
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
@@ -24892,10 +24908,10 @@ end;
 /// --no-backup; NoWarnUnlinked=--no-warn-unlinked (silences the per-(source type, property)
 /// unlinked warnings; the json count and unlinked[] stay); DbPath/DbPaths=index(es).</param>
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
-/// hard error (missing .dfm when rules need it, invalid rules, a block whose type resolves in
-/// no --db, BuildApplyPlan Ok=False, or
+/// hard error (missing .dfm when rules need it, invalid rules, BuildApplyPlan Ok=False, or
 /// --apply refused by the freshness guard -- a stale or unindexed type of any block; a deliberate
-/// refusal -- a unit-rules {$IF...} uses entry, any
+/// refusal -- a #convert type that resolves in no --db (C13 d: an index gap, refused on dry run and
+/// --apply alike, before any rule error), a unit-rules {$IF...} uses entry, any
 /// TApplyResult.Refusal -- goes through RefuseUnit: 'REFUSED: <reason>', apply/1 refused=true,
 /// reason, nothing written); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
@@ -24916,8 +24932,8 @@ end;
 /// BEFORE BuildApplyPlan runs -- EVERY block against its OWN From/To classes, each path resolved
 /// segment by segment (1.20.6, T2b: no property tree is built, so validating the whole book is
 /// cheap and ruling R5's per-unit scope and --validate-all-blocks are gone), and a #mapping
-/// against the block(s) that #apply it; a block whose type resolves in no --db is an error on
-/// its #convert line (R7) -- and a rules error refuses (exit 1) rather than attempting a plan
+/// against the block(s) that #apply it; a block whose type resolves in no --db REFUSES the unit
+/// (C13 d, UnresolvedReason) -- and a rules error refuses (exit 1) rather than attempting a plan
 /// from a broken rule set. A #link / #default / #mapping path whose members all exist but one
 /// is inaccessible on the .dfm surface is NOT an error (T2h, owner ruling R12): it is skipped
 /// per block (WithoutUnreachableRules, inside each re-emit -- a #link / #default line is dropped,
@@ -24941,6 +24957,7 @@ var
   RulesText : string            ;
   Rules     : TConversionRuleSet;
   RuleErrors: TArray<TRuleError>;
+  Unresolved: TArray<TRuleError>;
   RE        : TRuleError        ;
   Trees     : TConvertTreeCache ; { one per run: validation and BuildApplyPlan share its member caches }
   Dbs       : TArray<string>    ;
@@ -25150,12 +25167,15 @@ begin
       pair for the whole book, so every link of blocks 2..N failed. A valid
       G-expression passes validation, but nothing realises it yet (CV-2):
       refuse through the same path rather than carry the source image whole. }
-    RuleErrors:= ValidateConvertBook(Trees, Rules, JCtx.Unreachable);
+    RuleErrors:= ValidateConvertBook(Trees, Rules, JCtx.Unreachable, Unresolved);
     JCtx.ClassesBuilt:= Trees.ClassesBuilt;
     { T2h: an UNREACHABLE path warns and its rule is skipped (BuildApplyPlan
       below gets the book without those lines); it never fails the unit. On
       every JSON exit from here on, warnings[] carries the messages too. }
     MergeUnreachable(JCtx.Report);
+    { C13 d: a type no --db resolves is an index gap -- the unit is REFUSED,
+      dry run and --apply alike, before any rule error is reported }
+    if Length(Unresolved) > 0 then Exit(RefuseUnit(UnresolvedReason(Unresolved)));
     if Length(RuleErrors) > 0 then
     begin
       { A JSON consumer gets a parseable ok=false document naming every rule

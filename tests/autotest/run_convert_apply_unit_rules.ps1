@@ -307,6 +307,39 @@ $t = Text 'R26Form.pas'
 Check 'R7 positive control: every instance converted, #unuse LibA applies (exit 0, LibA gone)' `
   (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and (@($j.converted).Count -eq 2) -and -not ($t -match '\bLibA\b') -and ($t -match '\bLibB\b')) $r.Out
 
+# ---- (d) C13: a #convert type that resolves in NO --db refuses the unit ----
+# Owner ruling 2026-10-06: an unresolved type is an index gap (library or
+# project index), never a rule-book error and never a warning. Dry run AND
+# --apply refuse alike: exit 1, nothing written, ONE 'REFUSED: <reason>' line,
+# apply/1 refused=true. TGhostBtn is declared in GhostLib, which is NOT in the
+# index until the positive control writes it.
+$GhostReason = 'TGhostBtn (line 2) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting'
+$hGp = Hash 'GhostForm.pas'; $hGd = Hash 'GhostForm.dfm'
+$r = Apply 'GhostForm.pas' 'ghost.rules' @('--format', 'json')
+$j = Json $r.Out
+Check 'Z1 unresolved From type, json DRY RUN: exit 1, ok=false, refused=true, reason names type, line and index gap' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -eq $true) -and ($j.reason -eq $GhostReason)) $r.Out
+$r = Apply 'GhostForm.pas' 'ghost.rules'
+Check 'Z2 text dry run: exactly one REFUSED line with that reason, no "failed validation" / ERROR: line' `
+  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($GhostReason) + '\r?$')) -and `
+   (@($r.Out -split "`n" | Where-Object { $_ -match '^REFUSED: ' }).Count -eq 1) -and -not ($r.Out -match 'failed validation') -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
+$r = Apply 'GhostForm.pas' 'ghost.rules' @('--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+Check 'Z3 --apply (json): refused the same way' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and ($j.reason -eq $GhostReason)) $r.Out
+$r = Apply 'GhostForm.pas' 'ghost.rules' @('--apply', '--no-backup')
+Check 'Z4 --apply (text): one REFUSED line' (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($GhostReason) + '\r?$'))) $r.Out
+Check 'Z5 GhostForm.pas and GhostForm.dfm are byte-identical after Z1-Z4' (((Hash 'GhostForm.pas') -eq $hGp) -and ((Hash 'GhostForm.dfm') -eq $hGd))
+# positive control: close the index gap (write GhostLib.pas, reindex) and the
+# SAME book converts -- the refusal was about the index, not the book.
+Copy-Item (P 'GhostLib.pas.txt') (P 'GhostLib.pas')
+& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+$r = Apply 'GhostForm.pas' 'ghost.rules' @('--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+$t = Text 'GhostForm.pas'
+Check 'Z6 positive control: GhostLib indexed -> the same book converts (exit 0, refused=false, btnOne retyped, GhostLib removed)' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.refused -eq $false) -and ($t -match 'btnOne: TDstBtn;') -and -not ($t -match '\bGhostLib\b')) $r.Out
+
 # ---- the backup path (default --apply) still works on a unit-rules-only run -
 $r = Apply 'Keep2U.pas' 'use.rules' @('--apply')
 Check 'K1 default --apply (backup + provenance stamp) exits 0' ($r.Code -eq 0) $r.Out
