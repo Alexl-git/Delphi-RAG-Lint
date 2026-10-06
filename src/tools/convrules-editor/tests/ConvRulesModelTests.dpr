@@ -19,6 +19,8 @@ uses
   , ConvRules.Casts in '..\ConvRules.Casts.pas'
   , ConvRules.ConvCatalog in '..\ConvRules.ConvCatalog.pas'
   , DRagLint.Convert.CastLib in '..\..\..\report\DRagLint.Convert.CastLib.pas'
+  , DRagLint.Convert.GlyphExpr in '..\..\..\report\DRagLint.Convert.GlyphExpr.pas'
+  , ConvRules.Glyph in '..\ConvRules.Glyph.pas'  // dl:unit ConvRules.Glyph accepted -- the tests read GLYPH_KIND_STITCHED to pin the stitched/to-do split, so the const travels with the unit under test
   , ConvRules.BlockFile in '..\ConvRules.BlockFile.pas'
   , ConvRules.BlockOps in '..\ConvRules.BlockOps.pas'
   , ConvRules.WorkingSet in '..\ConvRules.WorkingSet.pas'
@@ -10006,6 +10008,108 @@ begin
   Check('glyph.split.case.sensitive', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Picture g[1/2]'), 'lower-case g[ is a path, as in the engine');
 end;
 
+{ C10 E7/E8/E12-E14: the editor's own glyph decisions -- the live check goes through the
+  ENGINE's parser (DRagLint.Convert.GlyphExpr, one parser for both), the two block-level
+  rules carry the engine's wording, the count-target suggestion never guesses, and the
+  note / report / summary texts are pinned verbatim. }
+procedure TestGlyphDecisions;
+const
+  BLOCK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] : AssignGraphic'#13#10 +
+    '#link OptionsImage.NumGlyphs <- NumGlyphs'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  BLOCK_TWO_IMAGES =
+    '#convert A -> B'#13#10 +
+    '#link Glyph1 <- Picture G[1/2]'#13#10 +
+    '#link Glyph2 <- Picture G[2/2]'#13#10;
+  BLOCK_NO_GLINK =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- NumGlyphs'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph : AssignGraphic'#13#10;
+  BLOCK_CARRY_NOT_COUNT =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Spacing'#13#10;
+  EXPECT_HINT = '#link OptionsImage.NumGlyphs <- NumGlyphs is a straight carry of the source glyph count -- write "#link OptionsImage.NumGlyphs <- Glyph G[count]" instead';
+  N_FIVE = 5;
+  N_TWO  = 2;
+  LINE_IMG = 52;
+  IDX_CAPTION = 3;
+var
+  Book : TRuleBook;
+  Nodes: TArray<TRuleNode>;
+  Err  : string;
+  O    : TGlyphOutcome;
+  P    : TGlyphOutcome;
+  Line : string;
+begin
+  Check('glyph.check.ok', CheckGlyphExprText('G[*/4], G[1/5]G[2/5]', Err) and (Err = ''), Err);
+  Check('glyph.check.empty.ok', CheckGlyphExprText('', Err) and (Err = ''));
+  Check('glyph.check.syntax', (not CheckGlyphExprText('G[1/', Err)) and (Pos('column ', Err) = 1), Err);
+  Check('glyph.check.range', (not CheckGlyphExprText('G[5/4]', Err)) and (Pos('column ', Err) = 1) and (Pos('5', Err) > 0), Err);
+  Check('glyph.check.two.for.one.n', not CheckGlyphExprText('G[1/4], G[*/4]', Err), Err);
+
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    Nodes:= Book.Nodes.ToArray;
+    Check('glyph.image.link', IsImageGlyphLink(Nodes[1]) and not IsImageGlyphLink(Nodes[2]) and not IsImageGlyphLink(Nodes[IDX_CAPTION]));
+    Check('glyph.image.links.from', (ImageGlyphLinksFrom(Nodes, 'glyph') = 1) and (ImageGlyphLinksFrom(Nodes, 'Caption') = 0));
+    Check('glyph.count.issue.none', CountLinkIssue(Nodes, 'Glyph', 'G[count]') = '', CountLinkIssue(Nodes, 'Glyph', 'G[count]'));
+    Check('glyph.count.issue.not.count.expr', CountLinkIssue(Nodes, 'Caption', 'G[1/2]') = '');
+    Check('glyph.count.issue.zero', CountLinkIssue(Nodes, 'Caption', 'G[count]') = 'G[count] needs exactly one image link from Caption; found 0', CountLinkIssue(Nodes, 'Caption', 'G[count]'));
+    Check('glyph.carry.hint', StraightCountCarryHint(Nodes) = EXPECT_HINT, StraightCountCarryHint(Nodes));
+    Check('glyph.suggest.one', SuggestCountTarget(['OptionsImage.Glyph', 'OptionsImage.NumGlyphs', 'Caption'], [Nodes[0], Nodes[1], Nodes[IDX_CAPTION]]) = 'OptionsImage.NumGlyphs');
+    Check('glyph.suggest.already.linked', SuggestCountTarget(['OptionsImage.Glyph', 'OptionsImage.NumGlyphs'], Nodes) = '', 'NumGlyphs is already a link target');
+    Check('glyph.suggest.ambiguous', SuggestCountTarget(['OptionsImage.NumGlyphs', 'Other.GlyphCount'], [Nodes[0], Nodes[1]]) = '', 'two candidates: never guess');
+    Check('glyph.suggest.none', SuggestCountTarget(['Caption', 'Width'], [Nodes[0], Nodes[1]]) = '');
+
+    Book.LoadFromString(BLOCK_TWO_IMAGES);
+    Nodes:= Book.Nodes.ToArray;
+    Check('glyph.count.two.image.links', CountLinkIssue(Nodes, 'Picture', 'G[count]') = 'G[count] needs exactly one image link from Picture; found 2', CountLinkIssue(Nodes, 'Picture', 'G[count]'));
+
+    Book.LoadFromString(BLOCK_NO_GLINK);
+    Check('glyph.carry.no.glink.silent', StraightCountCarryHint(Book.Nodes.ToArray) = '', StraightCountCarryHint(Book.Nodes.ToArray));
+    Book.LoadFromString(BLOCK_CARRY_NOT_COUNT);
+    Check('glyph.carry.not.count.prop', StraightCountCarryHint(Book.Nodes.ToArray) = '', StraightCountCarryHint(Book.Nodes.ToArray));
+  finally
+    Book.Free;
+  end;
+
+  Check('glyph.book.has', BookHasGlyphLinks(BLOCK) and BookHasGlyphLinks(BLOCK_TWO_IMAGES));
+  Check('glyph.book.has.not', (not BookHasGlyphLinks(BLOCK_NO_GLINK)) and (not BookHasGlyphLinks('')));
+  Check('glyph.last.segment', (LastSegment('OptionsImage.NumGlyphs') = 'NumGlyphs') and (LastSegment('Glyph') = 'Glyph') and (LastSegment('') = ''));
+
+  O:= Default(TGlyphOutcome);
+  O.Instance:= 'Btn1';
+  O.FromPath:= 'Picture';
+  O.ToPath:= 'OptionsImage.Glyph';
+  O.Kind:= GLYPH_KIND_STITCHED;
+  O.SourceN:= N_FIVE;
+  O.Alternative:= 'G[1/5]G[2/5]G[3/5]G[4/5]';
+  O.DroppedSlots:= [N_FIVE];
+  O.RuleLine:= LINE_IMG;
+  O.Message:= 'slot 5 dropped by rule line 52';
+  P:= O;
+  P.Instance:= 'Btn2';
+  P.Kind:= 'glyph-no-alternative';
+  P.SourceN:= N_TWO;
+  P.Alternative:= '';
+  P.DroppedSlots:= nil;
+  P.Message:= 'N=2 matched no alternative; TODO written';
+  Check('glyph.todo.kinds', (not IsGlyphTodo(O)) and IsGlyphTodo(P));
+  Check('glyph.todo.unknown.kind', GlyphTodoCount([O, P, Default(TGlyphOutcome)]) = 2, 'an unknown / empty kind is a TODO');
+  Check('glyph.note.suffix', GlyphNoteSuffix([O, P]) = '; glyphs: 1 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', GlyphNoteSuffix([O, P]));
+  Check('glyph.note.none', GlyphNoteSuffix(nil) = '');
+  Line:= GlyphReportLine('x\U.pas', O);
+  Check('glyph.report.line', Line = 'glyph'#9'x\U.pas'#9'Btn1.Picture -> OptionsImage.Glyph'#9'glyph-stitched'#9'N=5'#9'G[1/5]G[2/5]G[3/5]G[4/5]'#9'dropped 5'#9'slot 5 dropped by rule line 52', Line);
+  Line:= GlyphReportLine('U.pas', P);
+  Check('glyph.report.line.todo', Pos(#9'glyph-no-alternative'#9'N=2'#9#9'-'#9, Line) > 0, Line);
+  Check('glyph.summary', GlyphRunSummary(2) = '2 unit(s) have glyph TODOs -- each one''s implementation section starts with the TODO line; see the report', GlyphRunSummary(2));
+  Check('glyph.summary.none', GlyphRunSummary(0) = '');
+end;
+
 { C10 fix round 1: the block merger must see a #link's glyph expression. Once the
   expression left LinkFrom, two links to one To that differ ONLY in the expression
   compared equal and the incoming one was dropped as a duplicate. They are a
@@ -10250,6 +10354,7 @@ begin
     TestValidateTextStreams;
     TestValidateScopeCancel;
     TestGlyphLinkParse;
+    TestGlyphDecisions;
     TestGlyphLinkMerge;
 
     FreeAndNil(GParseBook);
