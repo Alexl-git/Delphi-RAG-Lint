@@ -145,15 +145,20 @@ type
 
   /// <summary>The declaring ancestor's state for one inherited instance (spec Terms).</summary>
   /// <remarks>asUnconverted: the ancestor's object still has the instance's (From)
-  /// type. asConverted: the declaring object's type is no longer the From type (the
-  /// block's To type, normally). asOutside: the chain left the project index (a
+  /// type. asConverted: the declaring object has the To type of a checked pair whose
+  /// From type is the instance's (for an E2b code use: the declared field is no longer a
+  /// From type). asMismatched: the declaring object's type is neither the instance's
+  /// From type nor that pair's To type (engine C8 N1 'mismatched'; FoundType names it) --
+  /// converting that ancestor with this book would not help, so it is neither offered
+  /// (E6) nor warned about (E7). This reverses preflight ruling C4 (2026-10-06), which
+  /// read every non-From type as converted. asOutside: the chain left the project index (a
   /// library ancestor, or an ambiguous class) or ended at an indexed class with no
   /// ancestor, before any .dfm opened the object with `object`. asUnknown: the walk
   /// could not decide -- the index could not be asked, the chain loops or runs past
   /// MAX_CHAIN_DEPTH, or an indexed ancestor's .dfm is binary or unreadable; the
   /// verdict's Reason says which. Never reported as outside (AnalyzeUnit turns it into
   /// Known = False).</remarks>
-  TAncestorState = (asUnconverted, asConverted, asOutside, asUnknown);
+  TAncestorState = (asUnconverted, asConverted, asMismatched, asOutside, asUnknown);
 
   /// <summary>One ancestor unit whose .dfm opens an instance with the From type.</summary>
   TChainUnit = record
@@ -183,6 +188,9 @@ type
     DeclaringPas : string;
     /// <summary>asUnknown only: why the walk could not decide, naming the class.</summary>
     Reason       : string;
+    /// <summary>asMismatched only: the declaring object's class as its .dfm writes it
+    /// ('TADOTable'); '' otherwise.</summary>
+    FoundType    : string;
     /// <summary>Every ancestor unit (declaring or intermediate) whose .dfm still opens
     /// the instance with the From type -- the units to convert first.</summary>
     Chain        : TArray<TChainUnit>;
@@ -255,6 +263,9 @@ function UnitNameOf(const APasPath: string): string;
 /// class for a form-owned instance, the frame class itself for a frame child.</param>
 /// <param name="ALookup">The project index.</param>
 /// <param name="AReader">The file system.</param>
+/// <param name="APairs">The checked books' pairs: the declaring object's type is the
+/// From type (asUnconverted), a matching pair's To type (asConverted) or neither
+/// (asMismatched). Empty = no To type is known, so any other type is asMismatched.</param>
 /// <returns>The verdict. When the form chain does not declare the instance and it sits
 /// in enclosing blocks, each enclosing block's class (AInst.Enclosing, innermost
 /// outward) is walked next until one declares it (a frame placed on an ancestor form,
@@ -262,7 +273,8 @@ function UnitNameOf(const APasPath: string): string;
 /// Chain. asUnknown (with Reason) when the index cannot be asked, the chain loops or
 /// passes MAX_CHAIN_DEPTH, or an indexed class's .dfm is binary or unreadable -- the
 /// caller (AnalyzeUnit) turns that into Known = False, never into a report.</returns>
-function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader): TInstanceVerdict;
+function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader;
+  const APairs: TArray<TTypePair>): TInstanceVerdict;
 
 /// <summary>PURE: the C8 analysis of one listed unit (spec E1-E3, E2b).</summary>
 /// <param name="AUnitPas">The listed .pas; its .dfm is ChangeFileExt(AUnitPas, DFM_EXT).</param>
@@ -383,10 +395,12 @@ function DiskTextReader: TDfmTextReader;
 /// <returns>'' when AUnit is not Known or nothing is unconverted / outside; else, per
 /// declaring unit of its asUnconverted verdicts (.dfm instances and E2b code uses alike)
 /// in first-seen order, 'inherits N &lt;types&gt; instance(s) from &lt;Unit&gt; --
-/// convert it first (recommended)' (types distinct, first-seen, ', '-joined), then each
-/// distinct OutsideNote of its asOutside verdicts; all joined '; '.</returns>
-/// <remarks>asConverted says nothing (E11: the run converts it). asUnknown never yields a
-/// note: AnalyzeUnit makes such a unit Known = False.</remarks>
+/// convert it first (recommended)' (types distinct, first-seen, ', '-joined), then per
+/// (declaring unit, type found) of its asMismatched verdicts 'inherits N &lt;types&gt;
+/// instance(s) from &lt;Unit&gt;, where they are &lt;Found&gt; -- not this book's From or
+/// To type', then each distinct OutsideNote of its asOutside verdicts; all joined '; '.</returns>
+/// <remarks>asConverted says nothing (the engine reports it after the run). asUnknown
+/// never yields a note: AnalyzeUnit makes such a unit Known = False.</remarks>
 function InheritanceRowNote(const AUnit: TUnitInheritance): string;
 
 /// <summary>PURE: the ancestor units to convert before AUnit (spec E2a / E6): the chain
@@ -491,6 +505,7 @@ const
   SELF_WORD     = 'Self';
   TYPE_SEP      = ', ';
   NOTE_UNCONVERTED  = 'inherits %d %s instance(s) from %s -- convert it first (recommended)';
+  NOTE_MISMATCHED   = 'inherits %d %s instance(s) from %s, where they are %s -- not this book''s From or To type';
   OFFER_FMT         = 'Add %s ahead of %s?';
   GATE_ASK_FMT      = 'Could not check inherited instances for %s -- convert anyway?';
   GATE_ALL_UNITS    = 'the listed units';
@@ -528,10 +543,11 @@ type
     Text: string;
   end;
 
-  // One declaring unit, how many verdicts name it and their distinct instance types,
-  // first-seen (TallyByUnit).
+  // One declaring unit (and, for asMismatched, the type found there), how many verdicts
+  // name it and their distinct instance types, first-seen (TallyByUnit).
   TUnitTally = record
     UnitName: string;
+    Found   : string; // TInstanceVerdict.FoundType: a tally is per (unit, type found)
     Count   : Integer;
     Types   : TArray<string>;
   end;
@@ -830,6 +846,16 @@ begin
     AVerdict.Chain:= AVerdict.Chain + [ChainUnitOf(AInfo.PasPath, ADepth)];
 end;
 
+// True when AObjType is the To type of a pair whose From type is AFromType (bare names,
+// case-insensitive): the declaring ancestor was converted with this book.
+function IsToTypeOf(const AObjType, AFromType: string; const APairs: TArray<TTypePair>): Boolean;
+begin
+  for var LPair: TTypePair in APairs do
+    if SameText(LPair.FromType, BareType(AFromType)) and (LPair.ToType <> '') and SameText(BareType(LPair.ToType), BareType(AObjType)) then
+      Exit(True);
+  Result:= False;
+end;
+
 // AReason, plus the engine's own failure text in parentheses when there is one.
 function WithCause(const AReason, ACause: string): string;
 begin
@@ -876,8 +902,18 @@ begin
       begin
         AVerdict.DeclaringPas := Info.PasPath;
         AVerdict.DeclaringUnit:= UnitNameOf(Info.PasPath);
-        AVerdict.State        := if Same then asUnconverted else asConverted;
-        Result                := weDeclared;
+        if Same then
+          AVerdict.State:= asUnconverted
+        else if IsToTypeOf(ObjType, ACtx.Inst.TypeName, ACtx.Pairs) then
+          AVerdict.State:= asConverted
+        else
+        begin
+          // Neither this book's From nor its To (engine N1 'mismatched'; reverses
+          // preflight ruling C4, which read every non-From type as converted).
+          AVerdict.State    := asMismatched;
+          AVerdict.FoundType:= ObjType;
+        end;
+        Result:= weDeclared;
       end;
     end;
     else
@@ -984,7 +1020,8 @@ begin
   end; // case
 end;
 
-function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader): TInstanceVerdict;
+function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader;
+  const APairs: TArray<TTypePair>): TInstanceVerdict;
 var
   LCtx: TWalkCtx;
 begin
@@ -992,6 +1029,7 @@ begin
   LCtx.Inst  := AInst;
   LCtx.Lookup:= ALookup;
   LCtx.Reader:= AReader;
+  LCtx.Pairs := APairs;
   Result:= ResolveWalk(LCtx, AStartClass);
 end;
 
@@ -1158,7 +1196,7 @@ begin
   for var LInst: TInheritedInstance in LWanted do
   begin
     LStart  := if LInst.FrameClass <> '' then LInst.FrameClass else LOwn.ParentClass;
-    LVerdict:= ResolveInstance(LInst, LStart, ALookup, AReader);
+    LVerdict:= ResolveInstance(LInst, LStart, ALookup, AReader, APairs);
     if LVerdict.State = asUnknown then
     begin
       Result.Error   := Format(REASON_OF, [LInst.Name, LVerdict.Reason]);
@@ -1275,7 +1313,7 @@ begin
   Result:= Format(GATE_STOP_FMT, [AReason]);
 end;
 
-// Per declaring unit, in first-seen order, how many of AVerdicts AWanted accepts and
+// Per declaring unit (and type found), in first-seen order, how many of AVerdicts AWanted accepts and
 // their distinct instance types.
 function TallyByUnit(const AVerdicts: TArray<TInstanceVerdict>; const AWanted: TVerdictFilter): TArray<TUnitTally>;
 var
@@ -1289,11 +1327,12 @@ begin
       Continue;
     LIdx:= -1;
     for var I: Integer:= 0 to High(Result) do
-      if SameText(Result[I].UnitName, LVerdict.DeclaringUnit) then
+      if SameText(Result[I].UnitName, LVerdict.DeclaringUnit) and SameText(Result[I].Found, LVerdict.FoundType) then
         LIdx:= I;
     if LIdx < 0 then
     begin
       LNew.UnitName:= LVerdict.DeclaringUnit;
+      LNew.Found   := LVerdict.FoundType;
       LNew.Count   := 0;
       LNew.Types   := nil;
       Result:= Result + [LNew];
@@ -1345,6 +1384,12 @@ begin
       Result:= AVerdict.State = asUnconverted;
     end) do
     LParts:= LParts + [Format(NOTE_UNCONVERTED, [LTally.Count, string.Join(TYPE_SEP, LTally.Types), LTally.UnitName])];
+  for var LTally: TUnitTally in TallyByUnit(AUnit.Verdicts,
+    function(const AVerdict: TInstanceVerdict): Boolean
+    begin
+      Result:= AVerdict.State = asMismatched;
+    end) do
+    LParts:= LParts + [Format(NOTE_MISMATCHED, [LTally.Count, string.Join(TYPE_SEP, LTally.Types), LTally.UnitName, LTally.Found])];
   for var LVerdict: TInstanceVerdict in AUnit.Verdicts do
   begin
     LNote:= OutsideNote(LVerdict);

@@ -492,17 +492,9 @@ var
     end;
     Changed   := True;
     Row.Status:= csConverted;
-    Row.Note  := Format('%d edit(s), %d remaining for manual work', [Row.Apply.EditsCount, Length(Row.Apply.Remainder)]);
-    // E10: only an engine with inherited_instances sends inherited[]; the gate keeps an
-    // older engine's output from being read as this contract.
-    if AInheritedSupported then
-    begin
-      // Unfiltered (ruling M4): the engine answered after this unit's reindex, so its
-      // inherited[] already knows which ancestors this run converted.
-      var LLeft: string:= InheritedLeftNote(Row.Apply.InheritedLeft);
-      if LLeft <> '' then
-        Row.Note:= Row.Note + '; ' + LLeft;
-    end;
+    // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
+    // before its first book, so the engine already knows which ancestors this run converted.
+    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported);
     Add;
   end;
 

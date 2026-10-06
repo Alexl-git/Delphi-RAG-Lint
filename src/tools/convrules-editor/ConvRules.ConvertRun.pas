@@ -39,9 +39,9 @@ type
     TypeName     : string;
     /// <summary>`line` -- its .dfm line; 0 when absent or not an integer.</summary>
     Line         : Integer;
-    /// <summary>`ancestor_unit` -- the declaring ancestor's unit.</summary>
+    /// <summary>`ancestor_unit` -- the declaring ancestor's unit; '' for outside.</summary>
     AncestorUnit : string;
-    /// <summary>`ancestor_state` -- unconverted / converted / outside.</summary>
+    /// <summary>`ancestor_state` -- unconverted / converted / mismatched / outside.</summary>
     AncestorState: string;
     /// <summary>`reason` -- the engine's words.</summary>
     Reason       : string;
@@ -75,6 +75,10 @@ type
     /// without inherited_instances (it refuses such a unit instead). A non-object
     /// entry is skipped; a missing or wrongly-typed field reads as '' / 0.</summary>
     InheritedLeft: TArray<TInheritedLeft>;
+    /// <summary>`component_part` -- what happened to the .dfm's component part
+    /// ('skipped-no-instances': the .dfm holds no instance of its own, only inherited
+    /// ones, engine C8 N1); '' when absent.</summary>
+    ComponentPart: string;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -173,15 +177,34 @@ function ParseApplyJson(const AJson: string): TApplyRow;
 /// reported after the runner's reindex and shown UNFILTERED (controller ruling M4: the
 /// R4 omission of ancestors converted earlier in the run is the editor-side code-use
 /// note's alone).</param>
-/// <returns>'' for none; else per (ancestor, state) in first-seen order 'N inherited
-/// instance(s) left: ancestor &lt;U&gt; not converted' ('not in the index' for outside,
-/// the raw state otherwise), joined '; '.</returns>
+/// <returns>'' for none; else 'N inherited instance(s) left: &lt;words&gt;' per distinct
+/// words, first-seen order, joined '; '. The words by ancestor_state: unconverted
+/// 'ancestor &lt;U&gt; not converted'; converted 'ancestor &lt;U&gt; converted -- retype
+/// pending (engine N2)'; mismatched 'ancestor &lt;U&gt; has &lt;Found&gt; (neither
+/// &lt;From&gt; nor &lt;To&gt;)', the three types read from the engine's reason, or
+/// 'ancestor &lt;U&gt; has another type -- &lt;reason&gt;' when the reason has another
+/// shape; outside 'ancestor not determinable -- &lt;reason&gt;' (the engine sends no
+/// ancestor_unit); any other state 'ancestor &lt;U&gt;: &lt;state&gt;'.</returns>
+/// <remarks>Grouping is by the words, so it is by (state, unit), plus the type found for
+/// mismatched and the reason for outside.</remarks>
 function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
 
 /// <summary>PURE: one run-report note for one left instance.</summary>
 /// <param name="AItem">The instance.</param>
-/// <returns>'&lt;name&gt;: &lt;type&gt; line N -- ancestor &lt;U&gt; &lt;state&gt; (&lt;reason&gt;)'.</returns>
+/// <returns>'&lt;name&gt;: &lt;type&gt; line N -- &lt;words&gt; (&lt;reason&gt;)', the words as
+/// InheritedLeftNote's; ' (&lt;reason&gt;)' is left out when the reason is '' or the words
+/// already carry it (outside, and a mismatched reason that could not be read).</returns>
 function InheritedReportNote(const AItem: TInheritedLeft): string;
+
+/// <summary>PURE: the note of a csConverted row.</summary>
+/// <param name="AApply">The book's apply/1 answer (Ok).</param>
+/// <param name="AInheritedSupported">The engine reports inherited_instances: only then is
+/// inherited[] read as that contract (InheritedLeftNote is appended).</param>
+/// <returns>'N edit(s), M remaining for manual work', then '; no component of its own to
+/// convert' when ComponentPart is 'skipped-no-instances' (the engine converted around a
+/// .dfm holding only inherited instances, exit 0 -- not a failure), then '; ' +
+/// InheritedLeftNote when supported and something was left.</returns>
+function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported: Boolean): string;
 
 /// <summary>PURE: why the Convert tab must not add sources right now, or '' when it may.</summary>
 /// <param name="ARunning">A conversion run is in progress.</param>
@@ -508,6 +531,7 @@ begin
     Result.Converted := Strings(Obj, 'converted');
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + Strings(Obj, 'warnings');
     Result.InheritedLeft:= InheritedItems(Obj);
+    Result.ComponentPart:= Str(Obj, 'component_part');
     if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
       Result.RuleErrorCount:= Errs.Count;
     Result.Refused:= (not Result.Ok) and Obj.GetValue<Boolean>('refused', False);
@@ -534,56 +558,137 @@ begin
 end;
 
 const
-  LEFT_FMT        = '%d inherited instance(s) left: ancestor %s %s';
+  LEFT_FMT        = '%d inherited instance(s) left: %s';
   STATE_UNCONV    = 'unconverted';
+  STATE_CONV      = 'converted';
+  STATE_MISMATCH  = 'mismatched';
   STATE_OUTSIDE   = 'outside';
-  WORDS_UNCONV    = 'not converted';
-  WORDS_OUTSIDE   = 'not in the index';
-  REPORT_LEFT_FMT = '%s: %s line %d -- ancestor %s %s (%s)';
+  WORDS_UNCONV    = 'ancestor %s not converted';
+  WORDS_CONV      = 'ancestor %s converted -- retype pending (engine N2)';
+  WORDS_MISMATCH  = 'ancestor %s has %s (neither %s nor %s)';
+  WORDS_MIS_OTHER = 'ancestor %s has another type -- %s';
+  WORDS_OUTSIDE   = 'ancestor not determinable -- %s';
+  WORDS_OTHER     = 'ancestor %s: %s';
+  REPORT_LEFT_FMT = '%s: %s line %d -- %s';
+  REPORT_REASON   = ' (%s)';
+  NOTE_CONVERTED  = '%d edit(s), %d remaining for manual work';
+  NOTE_NO_OWN_COMPONENT = '; no component of its own to convert';
+  PART_SKIPPED_NO_INSTANCES = 'skipped-no-instances';
+  // The engine's mismatched reason (DRagLint.Convert.Apply, 1.22.0):
+  // 'declared in <Unit> as <Found>, neither <From> nor <To> -- not converted'.
+  MIS_HEAD    = 'declared in ';
+  MIS_AS      = ' as ';
+  MIS_NEITHER = ', neither ';
+  MIS_NOR     = ' nor ';
+  MIS_TAIL    = ' -- ';
   SOURCES_REFUSED_RUNNING  = 'A conversion is running -- sources cannot be added until it finishes.';
   SOURCES_REFUSED_CHECKING = 'Inherited instances are being checked -- add the sources again when it finishes.';
 
+// The engine's mismatched reason read back: True with the three type names when
+// AItem.Reason has exactly MIS_HEAD + AncestorUnit + MIS_AS + Found + MIS_NEITHER + From
+// + MIS_NOR + To + MIS_TAIL..., each name one non-empty word.
+function TryReadMismatch(const AItem: TInheritedLeft; out AFound, AFrom, ATo: string): Boolean;
+
+  // The text of ARest up to ASep (ARest then starts after it); False when ASep is
+  // absent or the cut is not one word.
+  function Cut(var ARest: string; const ASep: string; out AWord: string): Boolean;
+  var
+    LPos: Integer;
+  begin
+    LPos := Pos(ASep, ARest);
+    AWord:= if LPos > 0 then Copy(ARest, 1, LPos - 1) else '';
+    ARest:= if LPos > 0 then Copy(ARest, LPos + Length(ASep), MaxInt) else '';
+    Result:= (AWord <> '') and (Pos(' ', AWord) = 0) and (Pos(',', AWord) = 0);
+  end;
+
+var
+  LHead: string;
+  LRest: string;
+begin
+  AFound:= '';
+  AFrom := '';
+  ATo   := '';
+  LHead := MIS_HEAD + AItem.AncestorUnit + MIS_AS;
+  if (AItem.AncestorUnit = '') or not StartsText(LHead, AItem.Reason) then
+    Exit(False);
+  LRest := Copy(AItem.Reason, Length(LHead) + 1, MaxInt);
+  Result:= Cut(LRest, MIS_NEITHER, AFound) and Cut(LRest, MIS_NOR, AFrom) and Cut(LRest, MIS_TAIL, ATo);
+end;
+
+// What was left, in words, per ancestor_state (see InheritedLeftNote).
+function LeftWords(const AItem: TInheritedLeft): string;
+var
+  LFound, LFrom, LTo: string;
+begin
+  if SameText(AItem.AncestorState, STATE_UNCONV) then
+    Result:= Format(WORDS_UNCONV, [AItem.AncestorUnit])
+  else if SameText(AItem.AncestorState, STATE_CONV) then
+    Result:= Format(WORDS_CONV, [AItem.AncestorUnit])
+  else if SameText(AItem.AncestorState, STATE_MISMATCH) then
+    Result:= if TryReadMismatch(AItem, LFound, LFrom, LTo) then Format(WORDS_MISMATCH, [AItem.AncestorUnit, LFound, LFrom, LTo])
+      else Format(WORDS_MIS_OTHER, [AItem.AncestorUnit, AItem.Reason])
+  else if SameText(AItem.AncestorState, STATE_OUTSIDE) then
+    Result:= Format(WORDS_OUTSIDE, [AItem.Reason])
+  else
+    Result:= Format(WORDS_OTHER, [AItem.AncestorUnit, AItem.AncestorState]);
+end;
+
 function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
 var
-  LGroups: TArray<TInheritedLeft>; // one per (ancestor, state), first-seen order
+  LWords : TArray<string>; // one per distinct LeftWords, first-seen order
   LCounts: TArray<Integer>;
   LIdx   : Integer;
   LParts : TArray<string>;
-  LWords : string;
+  LText  : string;
 begin
-  LGroups:= nil;
+  LWords := nil;
   LCounts:= nil;
+  // The words carry the grouping: ancestor + state, plus the type found (mismatched)
+  // or the reason (outside, an unread mismatched reason) -- two different texts are
+  // never merged under one count.
   for var LItem: TInheritedLeft in AItems do
   begin
-    LIdx:= High(LGroups);
-    while (LIdx >= 0) and not (SameText(LGroups[LIdx].AncestorUnit, LItem.AncestorUnit) and SameText(LGroups[LIdx].AncestorState, LItem.AncestorState)) do
+    LText:= LeftWords(LItem);
+    LIdx := High(LWords);
+    while (LIdx >= 0) and not SameText(LWords[LIdx], LText) do
       Dec(LIdx);
     if LIdx < 0 then
     begin
-      LGroups:= LGroups + [LItem];
+      LWords := LWords + [LText];
       LCounts:= LCounts + [0];
-      LIdx   := High(LGroups);
+      LIdx   := High(LWords);
     end;
     Inc(LCounts[LIdx]);
   end;
   LParts:= nil;
-  for var I: Integer:= 0 to High(LGroups) do
-  begin
-    LWords:= LGroups[I].AncestorState;
-    if SameText(LWords, STATE_UNCONV) then
-      LWords:= WORDS_UNCONV
-    else if SameText(LWords, STATE_OUTSIDE) then
-      LWords:= WORDS_OUTSIDE;
-    LParts:= LParts + [Format(LEFT_FMT, [LCounts[I], LGroups[I].AncestorUnit, LWords])];
-  end;
+  for var I: Integer:= 0 to High(LWords) do
+    LParts:= LParts + [Format(LEFT_FMT, [LCounts[I], LWords[I]])];
   Result:= string.Join('; ', LParts);
 end;
 
 function InheritedReportNote(const AItem: TInheritedLeft): string;
+var
+  LWords: string;
 begin
-  Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, AItem.AncestorUnit, AItem.AncestorState, AItem.Reason]);
+  LWords:= LeftWords(AItem);
+  Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, LWords]);
+  if (AItem.Reason <> '') and (Pos(AItem.Reason, LWords) = 0) then
+    Result:= Result + Format(REPORT_REASON, [AItem.Reason]);
 end;
 
+function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported: Boolean): string;
+var
+  LLeft: string;
+begin
+  Result:= Format(NOTE_CONVERTED, [AApply.EditsCount, Length(AApply.Remainder)]);
+  if SameText(AApply.ComponentPart, PART_SKIPPED_NO_INSTANCES) then
+    Result:= Result + NOTE_NO_OWN_COMPONENT;
+  // E10: only an engine with inherited_instances sends inherited[]; the gate keeps an
+  // older engine's output from being read as this contract. Unfiltered (ruling M4).
+  LLeft:= if AInheritedSupported then InheritedLeftNote(AApply.InheritedLeft) else '';
+  if LLeft <> '' then
+    Result:= Result + '; ' + LLeft;
+end;
 function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
 begin
   if ARunning then

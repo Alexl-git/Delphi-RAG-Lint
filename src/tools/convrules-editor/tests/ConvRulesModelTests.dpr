@@ -8835,11 +8835,23 @@ end;
   E11: ancestor then descendant, each unit reindexed before its first book. }
 procedure TestInheritedApply;
 const
-  INH_JSON = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
-    + '"inherited":[{"name":"tblFtrs","type":"TTable","line":4,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"ancestor not converted"},'
-    + '{"name":"tblOps","type":"TTable","line":9,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"ancestor not converted"},'
-    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"LibForms","ancestor_state":"outside","reason":"ancestor not in any --db"}]}';
+  // The engine's own reason texts (DRagLint.Convert.Apply, 1.22.0).
+  REASON_PTD = 'declared in PathToData, which still has TTable -- convert PathToData first (recommended)';
+  REASON_LIB = 'declaring ancestor not found (no ancestor .dfm of TLeafDM declares qryLib) -- convert it from its own project';
+  REASON_ANC = 'declared in Anc, which already has TStaticText -- retyping an inherited instance is not supported yet';
+  INH_JSON ='{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
+    + '"inherited":[{"name":"tblFtrs","type":"TTable","line":4,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"' + REASON_PTD + '"},'
+    + '{"name":"tblOps","type":"TTable","line":9,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"' + REASON_PTD + '"},'
+    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"","ancestor_state":"outside","reason":"' + REASON_LIB + '"}]}';
   OLD_JSON = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  // Engine 1.22.0's own output for a .dfm holding ONLY inherited instances (captured
+  // 2026-10-06 on the E11 fixture after its ancestor was converted): ok, exit 0, no edit.
+  SKIPPED_JSON = '{"schema":"apply/1","mode":"apply","ok":true,"error":"","refused":false,"reason":"","rule_errors":[],"edits_count":0,"converted":[],'
+    + '"todos":[],"reemit_notes":[],"warnings":["line 2: warning: inherited instance Label1: TLabel skipped -- ' + REASON_ANC + '"],'
+    + '"component_part":"skipped-no-instances","inherited":[{"name":"Label1","type":"TLabel","line":2,"ancestor_unit":"Anc",'
+    + '"ancestor_state":"converted","reason":"' + REASON_ANC + '"}]}';
+  NOTE_SKIPPED = '0 edit(s), 1 remaining for manual work; no component of its own to convert; '
+    + '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)';
   // A non-object entry is skipped; a wrongly-typed field reads as its default.
   BAD_ITEMS_JSON = '{"schema":"apply/1","ok":true,"edits_count":1,"inherited":[5,"x",null,{"name":"tblA","line":"four","type":7}]}';
   BAD_KEY_JSON   = '{"schema":"apply/1","ok":true,"edits_count":1,"inherited":{"name":"tblA"}}';
@@ -8847,7 +8859,7 @@ const
   ORIG = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
   LINE_TBL = 4;
   ITEMS    = 3;
-  NOTE_LEFT = '2 inherited instance(s) left: ancestor PathToData not converted; 1 inherited instance(s) left: ancestor LibForms not in the index';
+  NOTE_LEFT = '2 inherited instance(s) left: ancestor PathToData not converted; 1 inherited instance(s) left: ancestor not determinable -- ' + REASON_LIB;
 var
   Row : TApplyRow;
   Bad : TApplyRow;
@@ -8886,8 +8898,18 @@ begin
   Check('apply.inherited.note', InheritedLeftNote(Row.InheritedLeft) = NOTE_LEFT, InheritedLeftNote(Row.InheritedLeft));
   Check('apply.inherited.note.empty', InheritedLeftNote(nil) = '');
   if Length(Row.InheritedLeft) = ITEMS then
-    Check('apply.inherited.report', InheritedReportNote(Row.InheritedLeft[0]) = 'tblFtrs: TTable line 4 -- ancestor PathToData unconverted (ancestor not converted)',
+  begin
+    Check('apply.inherited.report', InheritedReportNote(Row.InheritedLeft[0]) = 'tblFtrs: TTable line 4 -- ancestor PathToData not converted (' + REASON_PTD + ')',
       InheritedReportNote(Row.InheritedLeft[0]));
+    // outside: the reason is already in the words, so it is not repeated in parentheses.
+    Check('apply.inherited.report.outside', InheritedReportNote(Row.InheritedLeft[2]) = 'qryLib: TQuery line 12 -- ancestor not determinable -- ' + REASON_LIB,
+      InheritedReportNote(Row.InheritedLeft[2]));
+  end;
+  Bad:= ParseApplyJson(SKIPPED_JSON);
+  Check('apply.component.part', Bad.Ok and (Bad.ComponentPart = 'skipped-no-instances') and (ParseApplyJson(OLD_JSON).ComponentPart = ''), Bad.ComponentPart);
+  Check('apply.note.skipped', ConvertedRowNote(Bad, True) = NOTE_SKIPPED, ConvertedRowNote(Bad, True));
+  Check('apply.note.plain', ConvertedRowNote(ParseApplyJson(OLD_JSON), True) = '1 edit(s), 0 remaining for manual work', ConvertedRowNote(ParseApplyJson(OLD_JSON), True));
+  Check('apply.note.skipped.gated', ConvertedRowNote(Bad, False) = '0 edit(s), 1 remaining for manual work; no component of its own to convert', ConvertedRowNote(Bad, False));
 
   Dir:= TPath.Combine(TPath.GetTempPath, 'c8apply-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -8912,6 +8934,10 @@ begin
       if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
     Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(REFUSED_JSON), Index, nil, nil, True);
     Check('runner.inherited.refusal.kept', (Length(Rows) = 1) and (Rows[0].Status = csRefused));
+    // Engine 1.22.0: a .dfm with ONLY inherited instances is ok + exit 0 -- a converted row, never a failure.
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(SKIPPED_JSON), Index, nil, nil, True);
+    Check('runner.inherited.skipped.no.instances', (Length(Rows) = 1) and (Rows[0].Status = csConverted) and (Rows[0].Note = NOTE_SKIPPED),
+      if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
 
     Log.Clear;
     Rows:= RunConversionUnits([Anc, Desc], ['A.rules'],
@@ -8929,14 +8955,17 @@ begin
   end; // try
 end;
 
-{ C8 E11 live, ONLY against an engine that reports inherited_instances: Anc then
-  Desc in one run; the descendant's inherited Label1 is retyped. Skipped today. }
+{ C8 E11 live, ONLY against an engine that reports inherited_instances (1.22.0 on):
+  Anc then Desc in one run; Anc's Label1 is retyped, Desc's inherited Label1 is left
+  as it is (N1 skips it; retype is N2) and reported as left with state converted. }
 procedure TestInheritedRunLive;
 var
   Exe, Dir, Db, Dpr, AncPas, DescPas, Book, Output: string;
+  DescDfm: string;
   Eng : TEngineAdapter;
   Job : TConvertJob;
   Rows: TArray<TConvertRow>;
+  LShape: Boolean;
 begin
   Exe:= ResolveExe;
   if (Exe = '') or not TFile.Exists(LibWin64) then
@@ -8971,8 +9000,9 @@ begin
       '    Caption = ''Hello''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
     TFile.WriteAllText(DescPas, 'unit Desc;' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak + '  Anc;' + sLineBreak + 'type' + sLineBreak +
       '  TDescForm = class(TAncForm)' + sLineBreak + '  end;' + sLineBreak + 'implementation' + sLineBreak + '{$R *.dfm}' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
-    TFile.WriteAllText(ChangeFileExt(DescPas, '.dfm'), 'inherited DescForm: TDescForm' + sLineBreak + '  inherited Label1: TLabel' + sLineBreak +
-      '    Caption = ''Desc''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    DescDfm:= 'inherited DescForm: TDescForm' + sLineBreak + '  inherited Label1: TLabel' + sLineBreak + '    Caption = ''Desc''' + sLineBreak + '  end' + sLineBreak +
+      'end' + sLineBreak;
+    TFile.WriteAllText(ChangeFileExt(DescPas, '.dfm'), DescDfm, TEncoding.ASCII);
     TFile.WriteAllText(Book, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link Caption <- Caption' + sLineBreak, TEncoding.ASCII);
     Eng:= TEngineAdapter.Create(Exe, [Db, LibWin64]);
     try
@@ -8986,8 +9016,18 @@ begin
       Job.InheritedSupported:= True;
       Rows:= RunConversion(Job, Eng, nil, nil);
       Check('inherited.live.both.converted', (Length(Rows) = 2) and (Rows[0].Status = csConverted) and (Rows[1].Status = csConverted), Format('%d rows', [Length(Rows)]));
-      Check('inherited.live.descendant.retyped', Pos('inherited Label1: TStaticText', TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm'))) > 0,
-        TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')));
+      Check('inherited.live.ancestor.retyped', Pos('object Label1: TStaticText', TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm'))) > 0,
+        TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm')));
+      // Engine N1 (1.22.0): the descendant's inherited instance is SKIPPED even though its
+      // ancestor now has the To type -- retyping it is N2. The .dfm stays byte-unchanged.
+      // (Corrected 2026-10-06 from a real run: the Task 6 guess expected it retyped.)
+      Check('inherited.live.descendant.unchanged', TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')) = DescDfm, TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')));
+      LShape:= (Length(Rows) = 2) and (Length(Rows[1].Apply.InheritedLeft) = 1);
+      Check('inherited.live.descendant.left', LShape and (Rows[1].Apply.InheritedLeft[0].Name = 'Label1') and (Rows[1].Apply.InheritedLeft[0].AncestorUnit = 'Anc')
+        and (Rows[1].Apply.InheritedLeft[0].AncestorState = 'converted') and (Rows[1].Apply.ComponentPart = 'skipped-no-instances'),
+        if Length(Rows) = 2 then Format('%d left, part=%s', [Length(Rows[1].Apply.InheritedLeft), Rows[1].Apply.ComponentPart]) else '');
+      Check('inherited.live.descendant.note', (Length(Rows) = 2) and Rows[1].Note.EndsWith('; no component of its own to convert; '
+        + '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)'), if Length(Rows) = 2 then Rows[1].Note else '');
     finally
       Eng.Free;
     end; // try
@@ -9238,12 +9278,13 @@ end;
   reindex and is authoritative) -- neither in the note nor in the runner's row. }
 procedure TestInheritanceTabR4;
 const
+  REASON_LIB = 'declaring ancestor not found (no ancestor .dfm of TLeafDM declares qryLib) -- convert it from its own project';
   INH_JSON  = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
     + '"inherited":[{"name":"tblFtrs","type":"TTable","line":4,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"ancestor not converted"},'
-    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"LibForms","ancestor_state":"outside","reason":"ancestor not in any --db"}]}';
+    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"","ancestor_state":"outside","reason":"' + REASON_LIB + '"}]}';
   OLD_JSON  = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
   ORIG      = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
-  NOTE_LIB  = '1 inherited instance(s) left: ancestor LibForms not in the index';
+  NOTE_LIB  = '1 inherited instance(s) left: ancestor not determinable -- ' + REASON_LIB;
   N_ROWS    = 2;
 var
   U     : TUnitInheritance;
@@ -9275,8 +9316,9 @@ begin
   Item.AncestorUnit := 'PathToData';
   Item.AncestorState:= 'unconverted';
   Items:= [Item];
-  Item.AncestorUnit := 'LibForms';
+  Item.AncestorUnit := '';
   Item.AncestorState:= 'outside';
+  Item.Reason       := REASON_LIB;
   Items:= Items + [Item];
   Check('tab.r4.left.engine.all', InheritedLeftNote(Items) = '1 inherited instance(s) left: ancestor PathToData not converted; ' + NOTE_LIB, InheritedLeftNote(Items));
 
@@ -9323,6 +9365,60 @@ begin
   finally
     TDirectory.Delete(Dir, True);
   end; // try
+end;
+
+{ C8 Task 8 (engine 1.22.0, N1+N5): the row note and the report note for every
+  ancestor_state the engine sends -- unconverted, converted (retype is N2), mismatched
+  (the type read from the engine's reason; a reason of another shape falls back to it
+  verbatim), outside (ancestor_unit is '', grouped by reason) and any other state. }
+procedure TestInheritedStateTexts;
+const
+  REASON_MIS   = 'declared in Base as TADOTable, neither TTable nor TFDTable -- not converted';
+  REASON_MIS_2 = 'declared in Base as TClientDataSet, neither TTable nor TFDTable -- not converted';
+  REASON_ODD   = 'the declaring object has some other type';
+  REASON_OUT_A = 'declaring ancestor not found (Mid.dfm is binary (TPF0)) -- convert it from its own project';
+  REASON_OUT_B = 'declaring ancestor not found (no ancestor .dfm of TLeafDM declares qryLib) -- convert it from its own project';
+  NOTE_MIS     = '2 inherited instance(s) left: ancestor Base has TADOTable (neither TTable nor TFDTable)';
+  ITEM_LINE    = 3; // the 'line 3' of the report notes below
+var
+  Items: TArray<TInheritedLeft>;
+
+  function Item(const AName, AUnit, AState, AReason: string): TInheritedLeft;
+  begin
+    Result:= Default(TInheritedLeft);
+    Result.Name         := AName;
+    Result.TypeName     := 'TTable';
+    Result.Line         := ITEM_LINE;
+    Result.AncestorUnit := AUnit;
+    Result.AncestorState:= AState;
+    Result.Reason       := AReason;
+  end;
+
+begin
+  Check('state.converted', InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')]) = '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)',
+    InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')]));
+  Items:= [Item('tblA', 'Base', 'mismatched', REASON_MIS), Item('tblB', 'Base', 'mismatched', REASON_MIS)];
+  Check('state.mismatched', InheritedLeftNote(Items) = NOTE_MIS, InheritedLeftNote(Items));
+  Items:= Items + [Item('tblC', 'Base', 'mismatched', REASON_MIS_2)];
+  Check('state.mismatched.by.found.type', InheritedLeftNote(Items) = NOTE_MIS + '; 1 inherited instance(s) left: ancestor Base has TClientDataSet (neither TTable nor TFDTable)',
+    InheritedLeftNote(Items));
+  Check('state.mismatched.fallback', InheritedLeftNote([Item('tblA', 'Base', 'mismatched', REASON_ODD)]) = '1 inherited instance(s) left: ancestor Base has another type -- ' + REASON_ODD,
+    InheritedLeftNote([Item('tblA', 'Base', 'mismatched', REASON_ODD)]));
+  Check('state.mismatched.fallback.other.unit', Pos('has another type', InheritedLeftNote([Item('tblA', 'Mid', 'mismatched', REASON_MIS)])) > 0,
+    InheritedLeftNote([Item('tblA', 'Mid', 'mismatched', REASON_MIS)]));
+  Items:= [Item('tblA', '', 'outside', REASON_OUT_A), Item('tblB', '', 'outside', REASON_OUT_B), Item('tblC', '', 'outside', REASON_OUT_A)];
+  Check('state.outside.by.reason', InheritedLeftNote(Items) = '2 inherited instance(s) left: ancestor not determinable -- ' + REASON_OUT_A
+    + '; 1 inherited instance(s) left: ancestor not determinable -- ' + REASON_OUT_B, InheritedLeftNote(Items));
+  Check('state.other', InheritedLeftNote([Item('tblA', 'Anc', 'frobbed', 'x')]) = '1 inherited instance(s) left: ancestor Anc: frobbed',
+    InheritedLeftNote([Item('tblA', 'Anc', 'frobbed', 'x')]));
+  Check('state.report.mismatched', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_MIS))
+    = 'tblA: TTable line 3 -- ancestor Base has TADOTable (neither TTable nor TFDTable) (' + REASON_MIS + ')', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_MIS)));
+  Check('state.report.fallback.once', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_ODD)) = 'tblA: TTable line 3 -- ancestor Base has another type -- ' + REASON_ODD,
+    InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_ODD)));
+  Check('state.report.converted', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'))
+    = 'tblA: TTable line 3 -- ancestor Anc converted -- retype pending (engine N2) (why)', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why')));
+  Check('state.report.no.reason', InheritedReportNote(Item('tblA', 'Anc', 'unconverted', '')) = 'tblA: TTable line 3 -- ancestor Anc not converted',
+    InheritedReportNote(Item('tblA', 'Anc', 'unconverted', '')));
 end;
 
 { C8 Task 6: the real disk reader (missing, BOM stripped as TFile.ReadAllText does,
@@ -9533,7 +9629,7 @@ end;
   measured DMTEST shape: the leaf's tblFtrs is declared two levels up (Base), and
   the middle unit does not mention it; Mid re-opens tblOps; qryLib is declared by
   no project unit (the chain leaves the index at TDataModule -- outside). }
-procedure TestInheritanceWalk;  // dl:ok cyclomatic-complexity@cedf -- REVIEWED 2026-10-06 an assertion list plus a one-loop lookup helper (nested function V); the count is mostly the and-chains in Check conditions, and splitting the list would only scatter one fixture
+procedure TestInheritanceWalk;  // dl:ok cyclomatic-complexity@2712 -- REVIEWED 2026-10-06 an assertion list plus a one-loop lookup helper (nested function V); the count is mostly the and-chains in Check conditions (Task 8 added the mismatched checks), and splitting the list would only scatter one fixture
 const
   BASE_PAS = 'fx\Base.pas';
   MID_PAS  = 'fx\Mid.pas';
@@ -9542,9 +9638,12 @@ const
     '  object tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
   BASE_DONE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TFDTable' + sLineBreak + '  end' + sLineBreak +
     '  object tblOps: TFDTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BASE_MIS_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TADOTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TFDTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  NOTE_MISMATCHED = 'inherits 1 TTable instance(s) from Base, where they are TADOTable -- not this book''s From or To type';
   MID_DFM  = 'inherited MidDM: TMidDM' + sLineBreak + '  inherited tblOps: TTable' + sLineBreak + '    ReadOnly = True' + sLineBreak +
     '  end' + sLineBreak + 'end' + sLineBreak;
-  LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak +
+  LEAF_DFM ='inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak +
     '  inherited tblOps: TTable' + sLineBreak + '  end' + sLineBreak + '  inherited qryLib: TQuery' + sLineBreak + '  end' + sLineBreak +
     '  inherited memNote: TMemo' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
   FORM_DFM = 'object Form2: TForm2' + sLineBreak + '  inline Frame11: TFrame1' + sLineBreak + '    inherited Button1: TButton' + sLineBreak +
@@ -9603,6 +9702,20 @@ begin
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
     FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, MID_DFM, BASE_DONE_DFM]));
   Check('inherit.walk.converted', (V('tblFtrs').State = asConverted) and (V('tblFtrs').DeclaringUnit = 'Base') and (Length(V('tblFtrs').Chain) = 0));
+  Check('inherit.note.converted.silent.walk', InheritanceRowNote(U) = NOTE_OUTSIDE_LIB, InheritanceRowNote(U));
+
+  // Task 8 (reverses preflight ruling C4): a declaring object of a THIRD type -- neither
+  // the book's From (TTable) nor its To (TFDTable) -- is mismatched, as the engine says.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, MID_DFM, BASE_MIS_DFM]));
+  Check('inherit.walk.mismatched', (V('tblFtrs').State = asMismatched) and (V('tblFtrs').DeclaringUnit = 'Base') and (V('tblFtrs').FoundType = 'TADOTable')
+    and (Length(V('tblFtrs').Chain) = 0), Format('state=%d found=%s', [Ord(V('tblFtrs').State), V('tblFtrs').FoundType]));
+  Check('inherit.walk.mismatched.to.is.converted', V('tblOps').State = asConverted, IntToStr(Ord(V('tblOps').State)));
+  Check('inherit.note.mismatched', InheritanceRowNote(U) = NOTE_MISMATCHED + '; ' + NOTE_OUTSIDE_LIB, InheritanceRowNote(U));
+  Check('inherit.chain.mismatched.not.offered', Length(AncestorChain(U)) = 0, string.Join(',', AncestorChain(U)));
+  Check('inherit.order.mismatched.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [U])) = 0);
+  Check('inherit.walk.mismatched.direct', ResolveInstance(V('tblFtrs').Instance, 'TMidDM', FakeLookup(Rows, nil),
+    FakeReader(['fx\Mid.dfm', 'fx\Base.dfm'], [MID_DFM, BASE_MIS_DFM]), Pairs).State = asMismatched);
 
   U:= AnalyzeUnit('fx\Form2.pas', Pairs, FakeLookup(['TForm2|fx\Form2.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
     FakeReader(['fx\Form2.dfm', 'fx\Frame1.dfm'], [FORM_DFM, FRAME_DFM]));
@@ -9761,7 +9874,7 @@ begin
     U.Error);
 
   // The failure travels as a state, not as an empty string.
-  R:= ResolveInstance(Btn.Instance, 'TBroken', FakeLookup(['TBroken|!'], nil), FakeReader([], []));
+  R:= ResolveInstance(Btn.Instance, 'TBroken', FakeLookup(['TBroken|!'], nil), FakeReader([], []), []);
   Check('inherit.resolve.unknown.state', (R.State = asUnknown) and ContainsText(R.Reason, 'TBroken') and (OutsideNote(R) = ''), R.Reason);
 end;
 
@@ -9916,6 +10029,7 @@ begin
     TestCodeRefsLive;
     TestInheritanceTabAnalysis;
     TestInheritanceTabR4;
+    TestInheritedStateTexts;
     TestInheritanceTabDiskAndStale;
     TestInheritanceTabGate;
     TestUnitPickPlatform;
