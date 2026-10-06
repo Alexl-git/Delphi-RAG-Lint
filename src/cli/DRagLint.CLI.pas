@@ -984,7 +984,7 @@ begin
     'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
     'a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed'') -- EXCEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); ' +
     '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
-    '--unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built,units[]: one apply/1 per unit}; a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; ' +
+    '--unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
@@ -24931,6 +24931,12 @@ begin
     [String.Join(', ', Parts), if Length(Parts) = 1 then 'resolves' else 'resolve']);
 end;
 
+type
+  { 1.23.0 (C13): a unit's --apply write cannot be done (a read-only or locked
+    file, or a failure mid-write); DoConvertApply turns it into that unit's
+    failure, exit 2 }
+  EConvertApplyWrite = class(Exception);
+
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
@@ -25017,6 +25023,7 @@ var
   FreshChecked   : Boolean;
   BookUnreachable: TArray<TUnreachablePath>;
   BatchJson      : TJSONArray;
+  BookBuilt      : Integer; { classes the book validation built (C13: per-unit classes_built) }
   { --format json / --json. Both are parsed globally (ParseArgs), so this verb
     only has to READ them. Under JSON every Writeln on the success and failure
     paths is suppressed -- one stray line and the document stops parsing. }
@@ -25049,6 +25056,26 @@ var
 
       Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
 
+      // 1b. (1.23.0, C13) Every touched file must be writable BEFORE anything
+      // is written: the applier writes file by file, so a read-only or locked
+      // .pas found mid-way would leave the .dfm converted and the .pas not.
+      // A refusal here leaves the unit byte-identical, with no .BCK and no
+      // recovery record. (A failure AFTER this check -- a lock taken in
+      // between, a full disk -- can still leave the unit partly written; the
+      // backups and recovery.txt of step 2 are complete by then, and the
+      // error says so.)
+      for var F: string in TouchedFiles do
+      begin
+        if TFileAttribute.faReadOnly in TFile.GetAttributes(F) then
+          raise EConvertApplyWrite.CreateFmt('cannot write %s: the file is read-only -- unit not changed, nothing written', [F]);
+        try
+          TFileStream.Create(F, fmOpenReadWrite or fmShareExclusive).Free;
+        except
+          on Ex: Exception do
+            raise EConvertApplyWrite.CreateFmt('cannot write %s: %s -- unit not changed, nothing written', [F, Ex.Message]);
+        end;
+      end;
+
       // 2. Backup + recovery record BEFORE any conversion write. Writing the
       // recovery record first means a crash between here and the actual write
       // still leaves a complete recovery map alongside the untouched .BCK files.
@@ -25058,15 +25085,23 @@ var
         WriteRecoveryRecord(ExtractFileDir(UnitPas), Timestamp, AArgs.RulesFile, Mappings);
       end;
 
-      // 3. Perform the conversion write. AWriteBackups=False: our backup layer
-      // (step 2) already backed up every touched file -- letting the applier
-      // ALSO write its own .bak would double-backup.
-      TTextEditApplier.Apply(PlanRes.Edits, False);
+      try
+        // 3. Perform the conversion write. AWriteBackups=False: our backup layer
+        // (step 2) already backed up every touched file -- letting the applier
+        // ALSO write its own .bak would double-backup.
+        TTextEditApplier.Apply(PlanRes.Edits, False);
 
-      // 4. Stamp the converted .pas with a provenance comment (skipped along
-      // with backups under --no-backup, per the brief: keep --no-backup simple).
-      if not AArgs.NoBackup then
-        PrependConvertComment(UnitPas, Timestamp, AArgs.RulesFile, Mappings);
+        // 4. Stamp the converted .pas with a provenance comment (skipped along
+        // with backups under --no-backup, per the brief: keep --no-backup simple).
+        if not AArgs.NoBackup then
+          PrependConvertComment(UnitPas, Timestamp, AArgs.RulesFile, Mappings);
+      except
+        on Ex: Exception do
+          raise EConvertApplyWrite.CreateFmt('write failed for %s: %s: %s -- the unit may be PARTLY converted; %s',
+            [ExtractFileName(UnitPas), Ex.ClassName, Ex.Message,
+             if AArgs.NoBackup then 'no backup was taken (--no-backup)'
+             else 'restore it from the .BCK backups recorded in recovery.txt']);
+      end;
     finally
       TouchedFiles.Free;
       TouchedSet.Free;
@@ -25129,7 +25164,7 @@ var
   // with ok=false -- and AExit as that unit's exit code.
   function FailUnit(const AMsg: string; AExit: Integer): Integer;
   begin
-    if Assigned(BatchJson) then
+    if UseJson then
     begin
       JCtx.Ok   := False;
       JCtx.Error:= AMsg;
@@ -25145,8 +25180,21 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@7f4b
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@0bf7 -- REVIEWED 2026-10-06: each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  var
+    UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
+    ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
+
+    { apply/1 classes_built for THIS unit: the book's validation set plus what
+      this unit's own run added -- what a single-unit run of it reports }
+    function UnitClassesBuilt: Integer;
+    begin
+      Result:= BookBuilt + (Trees.ClassesBuilt - UnitStart) - ValHere;
+    end;
+
   begin
+    UnitStart:= Trees.ClassesBuilt;
+    ValHere  := 0;
     UnitPas:= AUnitPas;
     PlanRes:= Default(TApplyResult);
     JCtx   := Default(TApplyJsonCtx);
@@ -25188,10 +25236,13 @@ var
     if not BookChecked then
     begin
       BookChecked:= True;
+      ValHere    := Trees.ClassesBuilt;
       RuleErrors := ValidateConvertBook(Trees, Rules, BookUnreachable, Unresolved);
+      ValHere    := Trees.ClassesBuilt - ValHere;
+      BookBuilt  := ValHere;
     end;
     JCtx.Unreachable := BookUnreachable;
-    JCtx.ClassesBuilt:= Trees.ClassesBuilt;
+    JCtx.ClassesBuilt:= UnitClassesBuilt;
     { T2h: an UNREACHABLE path warns and its rule is skipped (BuildApplyPlan
       below gets the book without those lines); it never fails the unit. On
       every JSON exit from here on, warnings[] carries the messages too. }
@@ -25269,7 +25320,7 @@ var
         AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
     else
       PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections);
-    JCtx.ClassesBuilt:= Trees.ClassesBuilt;
+    JCtx.ClassesBuilt:= UnitClassesBuilt;
     if PlanRes.Refused then Exit(RefuseUnit(PlanRes.Error));
     if not PlanRes.Ok then
     begin
@@ -25307,7 +25358,13 @@ var
       Exit(0);
     end;
 
-    PerformApplyWrites;
+    { a write failure fails THIS unit (exit 2) instead of the run: a batch
+      goes on with the next unit (see PerformApplyWrites for what is on disk) }
+    try
+      PerformApplyWrites;
+    except
+      on Ex: Exception do Exit(FailUnit(Ex.Message, 2));
+    end;
 
     if UseJson then
       EmitApplyJson(JCtx)
@@ -25428,6 +25485,7 @@ begin
     Exit(2);
   end;
 
+  BookBuilt   := 0;
   BookChecked := False;
   FreshChecked:= False;
   BatchJson   := nil;
@@ -25445,7 +25503,14 @@ begin
     for var I: Integer:= 0 to High(Units) do
     begin
       if not UseJson then Writeln(Format('=== unit %d of %d: %s ===', [I + 1, Length(Units), Units[I]]));
-      var Code: Integer:= RunUnit(Units[I]);
+      var Code: Integer;
+      try
+        Code:= RunUnit(Units[I]);
+      except
+        { anything else a unit raises fails that unit, never the batch }
+        on Ex: Exception do
+          Code:= FailUnit(Format('%s: %s: %s -- unit not finished', [ExtractFileName(Units[I]), Ex.ClassName, Ex.Message]), 2);
+      end;
       if Code > Result then Result:= Code;
       if Code = 0 then Inc(NOk)
       else if JCtx.Refused then Inc(NRefused);

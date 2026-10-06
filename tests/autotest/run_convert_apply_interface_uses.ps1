@@ -108,6 +108,13 @@ $t = Text 'IntfMoveSolo.pas'
 Check 'M6 LibB was the implementation clause''s only entry: the clause goes, LibB is in the interface' `
   (($r.Code -eq 0) -and $t.Contains("uses$CRLF  Classes, LibA, LibB;$CRLF") -and -not ($t -match '(?s)implementation.*\buses\b')) ($r.Out + "`n" + $t)
 
+# a move whose implementation entry sits in a {$IF...} region cannot be done
+# safely: the existing conditional-entry refusal fires, nothing is written
+$hM = (Get-FileHash (P 'IntfMoveIf.pas')).Hash
+$r = Apply 'IntfMoveIf.pas' 'convert.rules' @('--apply', '--no-backup')
+Check 'M7 move of a {$IFDEF}-guarded implementation entry: REFUSED (exit 1) with the conditional-entry reason' `
+  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape('IntfMoveIf.pas: "LibB" sits inside a conditional ({$IF...}) region of the implementation uses clause -- unit rules not applied to this unit') + '\r?$'))) $r.Out
+Check 'M8 ... IntfMoveIf.pas byte-identical' ((Get-FileHash (P 'IntfMoveIf.pas')).Hash -eq $hM)
 # ---- PIN: the dmToolStats shape (an interface unit rule + an interface field)
 # 1.21.1 planned dmToolStats (BDE-to-FireDAC.rules) at 40 edits, 1.23.0 at 38:
 # the interface clause was already rewritten for '#unuse DBTables', and the

@@ -15,7 +15,9 @@
         unit), ok_count, refused_count, failed_count, classes_built (the run's
         total), units[] -- one apply/1 object per unit, in --unit order.
     * each units[i] equals the single-unit run of that unit, except
-      classes_built (cumulative within the run).
+      nothing -- classes_built included: per unit it is that unit's own (the
+      book's validation set plus what its run added); the batch total is the
+      wrapper's.
     * the book's classes are resolved ONCE: a 2-unit batch's classes_built
       equals one unit's (the cost model the batch exists for).
     * a unit that is refused, or fails, never stops the others; the process
@@ -65,11 +67,10 @@ function Json([string]$s) {
   if ($a -lt 0 -or $b -le $a) { return $null }
   try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
 }
-# an apply/1 object as comparable text, without the run-cumulative classes_built
+# an apply/1 object as comparable text -- every key, classes_built included
 function Shape($o) {
   if ($null -eq $o) { return '<null>' }
   $c = $o | ConvertTo-Json -Depth 8 | ConvertFrom-Json
-  $c.PSObject.Properties.Remove('classes_built')
   return ($c | ConvertTo-Json -Depth 8 -Compress)
 }
 
@@ -96,8 +97,8 @@ Check 'B2 wrapper keys: mode dry-run, units_count 2, ok true, exit_code 0, ok/re
    ($j.ok_count -eq 2) -and ($j.refused_count -eq 0) -and ($j.failed_count -eq 0) -and ($j.rules_file -eq (P 'mixed.rules'))) $r.Out
 Check 'B3 units[] are apply/1 objects in --unit order' `
   (($null -ne $j) -and (@($j.units).Count -eq 2) -and ($j.units[0].schema -eq 'apply/1') -and ($j.units[0].unit -eq (P 'MixForm.pas')) -and ($j.units[1].unit -eq (P 'R26Form.pas'))) $r.Out
-Check 'B4 units[0] equals the single run of MixForm.pas (classes_built aside)' ((Shape $j.units[0]) -eq (Shape $jA)) "batch=$(Shape $j.units[0])`nsingle=$(Shape $jA)"
-Check 'B5 units[1] equals the single run of R26Form.pas (classes_built aside)' ((Shape $j.units[1]) -eq (Shape $jB)) "batch=$(Shape $j.units[1])`nsingle=$(Shape $jB)"
+Check 'B4 units[0] equals the single run of MixForm.pas (classes_built included)' ((Shape $j.units[0]) -eq (Shape $jA)) "batch=$(Shape $j.units[0])`nsingle=$(Shape $jA)"
+Check 'B5 units[1] equals the single run of R26Form.pas (classes_built included)' ((Shape $j.units[1]) -eq (Shape $jB)) "batch=$(Shape $j.units[1])`nsingle=$(Shape $jB)"
 Check 'B6 the book''s classes are resolved ONCE: batch classes_built = one unit''s, not the sum' `
   (($null -ne $j) -and ($jA.classes_built -gt 0) -and ($j.classes_built -eq $jA.classes_built) -and ($jA.classes_built -eq $jB.classes_built)) `
   "batch=$($j.classes_built) singleA=$($jA.classes_built) singleB=$($jB.classes_built)"
@@ -127,9 +128,35 @@ Check 'T3 the refusal sits in unit 2''s section as its REFUSED line' `
 Check 'T4 summary line: 2 unit(s) -- 1 ok, 1 refused, 0 failed; exit 1' `
   ($r.Out -match '(?m)^batch: 2 unit\(s\) -- 1 ok, 1 refused, 0 failed; classes_built \d+; exit 1\r?$') $r.Out
 
+# ---- a unit that cannot be WRITTEN fails alone; the batch completes --------
+# R26Form.pas is read-only: the write pre-check fails that unit (ok=false,
+# refused=false, exit 2) BEFORE any byte, backup or recovery record is written;
+# units 1 and 3 convert, and the apply-batch/1 document is whole.
+$ro = P 'R26Form.pas'
+$hP = Hash 'R26Form.pas'; $hD = Hash 'R26Form.dfm'
+try {
+  Set-ItemProperty -LiteralPath $ro -Name IsReadOnly -Value $true
+  $r = Run @('MixForm.pas', 'R26Form.pas', 'R26Other.pas') 'r26convert.rules' @('--apply', '--format', 'json')
+  $j = Json $r.Out
+  Check 'W1 read-only unit 2: exit 2 (worst), ONE apply-batch/1 with 3 units: ok 2, refused 0, failed 1' `
+    (($r.Code -eq 2) -and ($null -ne $j) -and ($j.schema -eq 'apply-batch/1') -and (@($j.units).Count -eq 3) -and `
+     ($j.ok_count -eq 2) -and ($j.refused_count -eq 0) -and ($j.failed_count -eq 1) -and ($j.exit_code -eq 2)) $r.Out
+  Check 'W2 units[1]: ok=false, refused=false, error names the file and read-only' `
+    (($null -ne $j) -and ($j.units[1].ok -eq $false) -and ($j.units[1].refused -eq $false) -and `
+     ($j.units[1].error -match ('^cannot write ' + [regex]::Escape($ro) + ': the file is read-only -- unit not changed, nothing written$'))) $r.Out
+  Check 'W3 R26Form.pas and .dfm byte-identical, no R26Form backup written' `
+    (((Hash 'R26Form.pas') -eq $hP) -and ((Hash 'R26Form.dfm') -eq $hD) -and (@(Get-ChildItem $WorkDir -Filter 'R26Form.*.BCK*').Count -eq 0)) `
+    (@(Get-ChildItem $WorkDir -Filter 'R26Form.*') | ForEach-Object Name) -join ', '
+  Check 'W4 units 1 and 3 converted and written (MixForm, R26Other retyped)' `
+    (([IO.File]::ReadAllText((P 'MixForm.pas')) -match 'btnTop: TDstBtn;') -and ([IO.File]::ReadAllText((P 'R26Other.pas')) -match 'btnOne: TDstBtn;')) $r.Out
+} finally {
+  if (Test-Path -LiteralPath $ro) { Set-ItemProperty -LiteralPath $ro -Name IsReadOnly -Value $false }
+}
+
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
 } finally {
+  foreach ($f23 in @(Get-ChildItem "C:\TEMP\draglint_convert_apply_batch_$PID" -File -ErrorAction SilentlyContinue)) { $f23.IsReadOnly = $false }
   foreach ($d23 in @("C:\TEMP\draglint_convert_apply_batch_$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
 }

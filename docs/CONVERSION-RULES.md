@@ -701,9 +701,17 @@ JSON is one `apply-batch/1` document: `schema`, `mode`, `rules_file`,
 `units_count`, `ok` (every unit ok), `exit_code` (the worst unit's),
 `ok_count`, `refused_count`, `failed_count`, `classes_built` (the run's
 total) and `units[]` -- one ordinary `apply/1` object per unit, in `--unit`
-order (its `classes_built` is cumulative within the run). A single `--unit`
-still emits a bare `apply/1`. A unit's refusal or failure never stops the
-others; the process exits with the worst unit's code (2 > 1 > 0).
+order, equal to that unit's single-unit `apply/1` (its `classes_built` is the
+unit's own: the book's validation set plus what its run added). A single
+`--unit` still emits a bare `apply/1`. A unit's refusal or failure never stops
+the others; the process exits with the worst unit's code (2 > 1 > 0). Under
+`--apply`, every file a unit would touch is checked writable FIRST: a read-only
+or locked file fails that unit (exit 2, `ok: false`, `refused: false`,
+`cannot write <file>: ... -- unit not changed, nothing written`) with nothing
+written, no `.BCK` and no recovery record. A write that fails AFTER that check
+(a lock taken in between, a full disk) can leave the unit partly converted; its
+backups and `recovery.txt` entry are complete by then and the error says to
+restore from them. A single `--unit` reports either as `ERROR: ...`, exit 2.
 `info --json` advertises it as `capabilities.batch_units: true`.
 
 **Which blocks are validated (1.20.6).** Before planning, `convert-apply`

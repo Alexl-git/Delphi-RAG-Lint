@@ -50,7 +50,22 @@ No extractor change: indexes do not re-parse.
   (BDE-to-FireDAC.rules) plans 38 edits, not 1.21.1's 40; the 2 gone are that clause's
   delete + insert. Pinned by arm P (IntfFormU: 7 -> 5).
   Guard: `run_convert_apply_interface_uses.ps1` (compiles the result).
+  A move whose implementation entry sits in a `{$IF...}` region is REFUSED (the existing
+  conditional-entry refusal; pinned by M7).
 - **`#migrate Foo -> ` (From-only) read Old `Foo ->` (C13 c, R27).**
+- **A file `convert-apply --apply` cannot write no longer aborts the run.** Every touched file
+  is checked writable before anything is written; a read-only or locked one fails THAT unit
+  (exit 2, `ok:false`, `refused:false`, `cannot write <file>: ... -- unit not changed, nothing
+  written`; no `.BCK`, no recovery record). A failure after that check can leave the unit
+  partly written -- its backups and `recovery.txt` are complete and the error says so. In a
+  batch the other units go on and `apply-batch/1` is still emitted. Batch `units[i].classes_built`
+  is now the unit's own (equal to its single-unit run), the wrapper's the run total.
+
+### Known limitations
+
+- The interface-uses MOVE decides "used only in the implementation" from the index's uses
+  (`UsedOnlyInImplementation`) while the uses planner reads the live file: a stale index can
+  miss a move (the convert-apply freshness guard covers most such staleness).
 
 ## v1.22.0-alpha -- unreleased
 
