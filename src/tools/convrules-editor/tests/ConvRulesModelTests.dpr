@@ -37,6 +37,7 @@ uses
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
+  , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
@@ -10746,6 +10747,148 @@ begin
   end;
 end;
 
+{ C12 Task 1: the IDE convert-request file (convert-request/1) -- parse, validate
+  against the editor's own project index, and the editor-capabilities/1 file.
+  Every request path is a FAKE under REQ_ROOT: validation takes an injected file
+  probe, so none of them is ever opened. }
+const
+  REQ_ROOT = 'C:\';  // dl:ok hardcoded-absolute-path@c4f0 -- REVIEWED 2026-10-06 root of FAKE request paths: validation takes an injected file probe, nothing under it is ever opened
+  REQ_GOOD = '{"schema":"convert-request/1","written":"2026-10-06T14:02:11","source":"ide-menu","ide_pid":12345,' +
+             '"scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite","platform":"Win64",' +
+             '"units":[{"pas":"C:\\P\\U.pas","dfm":"C:\\P\\U.dfm","form_class":"TFormU",' +
+             '"components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Label2","type":"tlabel"}]}]}';
+  REQ_COMPONENTS = '"components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Label2","type":"tlabel"}]';
+  REQ_DB           = REQ_ROOT + 'P\_D-RAG\App.sqlite';
+  REQ_PROJECT_FILE = REQ_ROOT + 'P\App.dproj';
+  REQ_PAS          = REQ_ROOT + 'P\U.pas';
+
+{ ParseConvertRequest over REQ_GOOD with AFind replaced by AReplace (first match). }
+function ParseEditedRequest(const AFind, AReplace: string): TRequestOutcome;
+begin
+  Result:= ParseConvertRequest(StringReplace(REQ_GOOD, AFind, AReplace, []));
+end;
+
+procedure TestConvertRequestParse;
+const
+  IDE_PID         = 12345;
+  COMPONENT_COUNT = 3;
+var
+  O        : TRequestOutcome;
+  ShapeOk  : Boolean;
+  ValuesOk : Boolean;
+begin
+  O:= ParseConvertRequest(REQ_GOOD);
+  ShapeOk := O.Ok and (O.Request.Scope = rsSelected) and (Length(O.Request.Units) = 1)
+    and (Length(O.Request.Units[0].Components) = COMPONENT_COUNT);
+  ValuesOk:= ShapeOk and (O.Request.Units[0].Components[1].TypeName = 'TButton') and (O.Request.IdePid = IDE_PID)
+    and (O.Request.ProjectDb = REQ_DB);
+  Check('request.parse.ok', ValuesOk, O.Error);
+  Check('request.parse.types.distinct', string.Join(',', RequestedTypes(O.Request)) = 'TLabel,TButton');
+  Check('request.parse.rules.folder.absent', O.Ok and (O.Request.RulesFolder = ''), O.Request.RulesFolder);
+  O:= ParseEditedRequest('"platform":"Win64",', '"platform":"Win64","rules_folder":"C:\\R\\Books",');
+  Check('request.parse.rules.folder.present', O.Ok and (O.Request.RulesFolder = REQ_ROOT + 'R\Books'), O.Error + O.Request.RulesFolder);
+  O:= ParseEditedRequest('convert-request/1', 'convert-request/2');
+  Check('request.parse.schema.refused', (not O.Ok) and (Pos('schema', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":"project"');
+  Check('request.parse.project.refused', (not O.Ok) and (O.Error = SCOPE_PROJECT_UNSUPPORTED), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":"all"');
+  Check('request.parse.scope.unknown', (not O.Ok) and (Pos('scope', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest(REQ_COMPONENTS, '"components":[]');
+  Check('request.parse.components.empty', (not O.Ok) and (Pos('components', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('{"name":"Btn1","type":"TButton"}', '{"name":"Btn1"}');
+  Check('request.parse.component.no.type', (not O.Ok) and (Pos('type', O.Error) > 0), O.Error);
+  O:= ParseConvertRequest('{"schema":"convert-request/1","scope":"selected","project_file":"a","project_db":"b","units":[]}');
+  Check('request.parse.units.empty', (not O.Ok) and (Pos('units', O.Error) > 0), O.Error);
+  O:= ParseConvertRequest('not json at all');
+  Check('request.parse.garbage', (not O.Ok) and (O.Error <> ''), O.Error);
+  O:= ParseConvertRequest('[1,2]');
+  Check('request.parse.root.array', (not O.Ok) and (O.Error <> ''), O.Error);
+  O:= ParseEditedRequest('"platform":"Win64",', '"platform":"Win64","extra":{"x":1},');
+  Check('request.parse.unknown.key.ignored', O.Ok, O.Error);
+
+  // R8: a missing required key is refused and named.
+  O:= ParseEditedRequest('"project_file":"C:\\P\\App.dproj",', '');
+  Check('request.parse.project.file.missing', (not O.Ok) and (Pos('project_file', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"project_db":"C:\\P\\_D-RAG\\App.sqlite",', '');
+  Check('request.parse.project.db.missing', (not O.Ok) and (Pos('project_db', O.Error) > 0), O.Error);
+
+  // R4: a malformed shape is refused with a message, never an exception.
+  O:= ParseEditedRequest('"units":[{"pas":"C:\\P\\U.pas","dfm":"C:\\P\\U.dfm","form_class":"TFormU",' + REQ_COMPONENTS + '}]',
+    '"units":{"pas":"x"}');
+  Check('request.parse.units.not.array', (not O.Ok) and (Pos('units', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"units":[{', '"units":[5,{');
+  Check('request.parse.unit.not.object', (not O.Ok) and (Pos('unit', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest(REQ_COMPONENTS, '"components":"Label1"');
+  Check('request.parse.components.not.array', (not O.Ok) and (Pos('components', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('{"name":"Btn1","type":"TButton"}', '"Btn1"');
+  Check('request.parse.component.not.object', (not O.Ok) and (Pos('component', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"type":"TButton"', '"type":7');
+  Check('request.parse.component.type.wrong.type', (not O.Ok) and (Pos('type', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"project_file":"C:\\P\\App.dproj"', '"project_file":5');
+  Check('request.parse.project.file.wrong.type', (not O.Ok) and (Pos('project_file', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":["selected"]');
+  Check('request.parse.scope.wrong.type', (not O.Ok) and (Pos('scope', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"ide_pid":12345', '"ide_pid":"abc"');
+  Check('request.parse.ide.pid.wrong.type', (not O.Ok) and (Pos('ide_pid', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"pas":"C:\\P\\U.pas"', '"pas":{}');
+  Check('request.parse.pas.wrong.type', (not O.Ok) and (Pos('pas', O.Error) > 0), O.Error);
+end;
+
+procedure TestConvertRequestValidate;
+var
+  O  : TRequestOutcome;
+  Err: string;
+
+  function Exists(const AAll: Boolean): TFunc<string, Boolean>;
+  begin
+    Result:= function(APath: string): Boolean
+      begin
+        Result:= AAll;
+      end;
+  end;
+
+begin
+  O:= ParseConvertRequest(REQ_GOOD);
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(True));
+  Check('request.validate.ok', Err = '', Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_ROOT + 'P\_D-RAG\app.SQLITE', LowerCase(REQ_ROOT) + 'p\APP.dproj', Exists(True));
+  Check('request.validate.case.insensitive', Err = '', Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_ROOT + 'Other\_D-RAG\Other.sqlite', REQ_ROOT + 'Other\Other.dproj', Exists(True));
+  Check('request.validate.project.db.mismatch', (Pos('project index', Err) > 0) and (Pos(REQ_ROOT + 'Other\_D-RAG\Other.sqlite', Err) > 0), Err);
+  // Review Focus 1: the editor's DB, but a DIFFERENT .dproj in the same folder.
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_ROOT + 'P\Other.dproj', Exists(True));
+  Check('request.validate.project.file.mismatch', (Pos(REQ_PROJECT_FILE, Err) > 0) and (Pos(REQ_ROOT + 'P\Other.dproj', Err) > 0), Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(False));
+  Check('request.validate.pas.missing', Pos(REQ_PAS, Err) > 0, Err);
+  O:= ParseEditedRequest('"units":[{', '"units":[{"pas":"C:\\P\\V.pas","components":[{"name":"X","type":"TX"}]},{');
+  Check('request.validate.two.units', O.Ok and (Pos('one unit', ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(True))) > 0));
+end;
+
+procedure TestConvertRequestCaps;
+var
+  Dir : string;
+  Caps: string;
+  Cwd : string;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c12caps-' + IntToStr(GetCurrentProcessId));
+  Cwd:= GetCurrentDir;
+  try
+    Check('request.caps.write', WriteCapabilitiesFile(TPath.Combine(Dir, 'sub\caps.json')) = 0);
+    Caps:= TFile.ReadAllText(TPath.Combine(Dir, 'sub\caps.json'));
+    Check('request.caps.json', (Caps = CapabilitiesJson) and (Pos('"schema":"editor-capabilities/1"', Caps) > 0) and (Pos('"convert_request":1', Caps) > 0), Caps);
+    Check('request.caps.no.bom', TFile.ReadAllBytes(TPath.Combine(Dir, 'sub\caps.json'))[0] = Ord('{'));
+    // a FILE in the folder position
+    Check('request.caps.write.fails', WriteCapabilitiesFile(TPath.Combine(Dir, 'sub\caps.json\inner.json')) = 1);
+    // C7: a bare file name has no folder part -- written to the current folder, no CreateDirectory('').
+    SetCurrentDir(TPath.Combine(Dir, 'sub'));
+    Check('request.caps.write.bare.name', (WriteCapabilitiesFile('bare-caps.json') = 0) and TFile.Exists(TPath.Combine(Dir, 'sub\bare-caps.json')));
+  finally
+    SetCurrentDir(Cwd);
+    if TDirectory.Exists(Dir) then
+      TDirectory.Delete(Dir, True);
+  end;
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -10938,6 +11081,9 @@ begin
     TestGlyphValidateMarks;
     TestGlyphLinkMerge;
     TestGlyphConvertTab;
+    TestConvertRequestParse;
+    TestConvertRequestValidate;
+    TestConvertRequestCaps;
 
     FreeAndNil(GParseBook);
 
