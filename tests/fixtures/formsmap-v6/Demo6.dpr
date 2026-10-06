@@ -16,7 +16,13 @@ uses
   uPanel6 in 'uPanel6.pas' {frmPanel6},
   uSerial6 in 'uSerial6.pas' {frmSerial6},
   uCache6 in 'uCache6.pas' {frmCache6},
-  uPopup6 in 'uPopup6.pas' {frmPopup6};
+  uPopup6 in 'uPopup6.pas' {frmPopup6},
+  uArchive6 in 'uArchive6.pas' {frmArchive6},
+  uAfter6 in 'uAfter6.pas' {frmAfter6},
+  uBoth6 in 'uBoth6.pas' {frmBoth6},
+  uWith6 in 'uWith6.pas' {frmWith6},
+  uSelf6 in 'uSelf6.pas' {frmSelf6},
+  uWithOk6 in 'uWithOk6.pas' {frmWithOk6};
 
 begin
   Application.Initialize;

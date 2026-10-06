@@ -55,6 +55,30 @@ object frmMain6: TfrmMain6
         Caption = 'Cache'
         OnClick = btnCacheClick
       end
+      object btnArchive: TButton
+        Caption = 'Archive'
+        OnClick = btnArchiveClick
+      end
+      object btnAfter: TButton
+        Caption = 'After'
+        OnClick = btnAfterClick
+      end
+      object btnBoth: TButton
+        Caption = 'Both'
+        OnClick = btnBothClick
+      end
+      object btnWith: TButton
+        Caption = 'With'
+        OnClick = btnWithClick
+      end
+      object btnSelf: TButton
+        Caption = 'Self'
+        OnClick = btnSelfClick
+      end
+      object btnWithOk: TButton
+        Caption = 'With OK'
+        OnClick = btnWithOkClick
+      end
     end
   end
   object mnuMain: TMainMenu

@@ -55,7 +55,9 @@ $out = "$WorkDir\forms6.csv"
 $fx = "$WorkDir\fx"
 Copy-Item -LiteralPath (Resolve-Path $FixtureDir).Path -Destination $fx -Recurse
 New-Item -ItemType Directory "$fx\_D-RAG" | Out-Null
-$popupJson = '{ "ownRoots": ["."], "popupForms": [ { "form": "frmPopup6", "note": "popup via TPopupHost6 (right-click a grid > Layout)" } ] }'
+# Two bad entries beside the good one: each is skipped with its own stderr
+# line and the good entry still applies.
+$popupJson = '{ "ownRoots": ["."], "popupForms": [ { "note": "no form here" }, { "form": 5, "note": "form is a number" }, { "form": "frmPopup6", "note": "popup via TPopupHost6 (right-click a grid > Layout)" } ] }'
 [IO.File]::WriteAllText("$fx\_D-RAG\drag-lint-project.json", $popupJson)
 
 # No project name may remain hard-coded in the engine's forms units.
@@ -65,8 +67,10 @@ Check 'no hard-coded popup form in src\forms' ($hard.Count -eq 0) (($hard | ForE
 
 & $Exe index $fx --db $db 2>&1 | Out-Null
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
-& $Exe forms-csv --project "$fx\Demo6.dproj" --db $db --output $out 2>&1 | Out-Null
+$err = @(& $Exe forms-csv --project "$fx\Demo6.dproj" --db $db --output $out 2>&1 | ForEach-Object { "$_" })
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
+Check 'popupForms: entry without form skipped on stderr' (@($err | Where-Object { $_ -match 'entry has no "form"' }).Count -eq 1) ($err -join ' | ')
+Check 'popupForms: non-string form skipped on stderr' (@($err | Where-Object { $_ -match '"form" is not a string' }).Count -eq 1) ($err -join ' | ')
 Check 'csv exists' (Test-Path $out)
 
 $raw = [IO.File]::ReadAllText($out)
@@ -79,7 +83,7 @@ Check 'footer names algorithm v6' ($lines[-1] -match '^,{13}"# forms-csv algorit
 # ConvertFrom-Csv skips a line starting with '#' as a comment, so the header
 # row cannot be its own header; parse the data rows against the known names.
 $rows = @($lines[1..($lines.Count - 2)] | ConvertFrom-Csv -Header ($header -split ','))
-Check '14 data rows' ($rows.Count -eq 14) "got $($rows.Count)"
+Check '20 data rows' ($rows.Count -eq 20) "got $($rows.Count)"
 function RowOf([string]$Form) { $rows | Where-Object { $_.Form -ceq $Form } | Select-Object -First 1 }
 
 # Root form.
@@ -198,6 +202,37 @@ Cell $r 'Notes'            'found by: index'              'frmSerial6'
 $r = RowOf 'frmCache6'
 Cell $r 'Modal'         '?'                                   'frmCache6'
 Cell $r 'Notes'         'found by: index; modal unknown: TfrmMain6.btnCacheClick creates frmCache6 but does not show it there' 'frmCache6'
+# Fix round 1 (1a): a confirmation MessageDlg is a question, not a
+# precondition; an mtError MessageDlg followed by Exit is.
+$r = RowOf 'frmArchive6'
+Cell $r 'Modal'            'Yes'                                                                   'frmArchive6'
+Cell $r 'Before you start' 'frmMain6: it refuses with "Nothing to archive" until that is set up'  'frmArchive6'
+
+# Fix round 1 (1b): the handler is not the opener; a check AFTER it calls the
+# opener is not a precondition, one BEFORE is.
+$r = RowOf 'frmAfter6'
+Cell $r 'Opened by'        'uHelpers6.OpenAfter6'                                                'frmAfter6'
+Cell $r 'Before you start' 'frmMain6: it refuses with "Load items first" until that is set up'  'frmAfter6'
+
+# Fix round 1 (2): shown modally on one branch, modelessly on another -> '?' with why.
+$r = RowOf 'frmBoth6'
+Cell $r 'Modal'         '?'                                                                   'frmBoth6'
+Cell $r 'Notes'         'found by: index; modal unknown: shown both modally and modelessly'   'frmBoth6'
+
+# Fix round 1 (3): a bare ShowModal after the with-block belongs to the outer form.
+$r = RowOf 'frmWith6'
+Cell $r 'Modal'         '?'                                                                                    'frmWith6'
+Cell $r 'Notes'         'found by: index; modal unknown: TfrmMain6.btnWithClick creates frmWith6 but does not show it there' 'frmWith6'
+
+# Fix round 1 (3): Self.ShowModal inside "with F do" is the outer form's; F.Show is F's.
+$r = RowOf 'frmSelf6'
+Cell $r 'Modal'         'No'                 'frmSelf6'
+Cell $r 'Notes'         'found by: index'    'frmSelf6'
+
+# Fix round 1 (3): a bare ShowModal INSIDE "with TfrmX.Create(..) do try" counts.
+$r = RowOf 'frmWithOk6'
+Cell $r 'Modal'         'Yes'                'frmWithOk6'
+
 Check 'no row says ? without a reason' (@($rows | Where-Object { $_.Modal -ceq '?' -and $_.Notes -notmatch 'modal unknown: ' }).Count -eq 0)
 
 # Positive control: the tester-result column exists and is blank on every row,
@@ -205,6 +240,25 @@ Check 'no row says ? without a reason' (@($rows | Where-Object { $_.Modal -ceq '
 # (caption-only Navigation) cannot satisfy this.
 Check 'positive control: Tester result blank on all rows' (@($rows | Where-Object { $_.'Tester result' -ne '' }).Count -eq 0 -and $rows.Count -gt 0)
 Check 'positive control: a nested menu path is present' (@($rows | Where-Object { $_.'How to open' -like 'Main menu: * > * > *' }).Count -ge 1)
+
+# Fix round 1 (5): a broken drag-lint-project.json never stops the CSV. Re-run
+# forms-csv on the same index with (a) malformed JSON, (b) no popupForms key.
+$popupNote = 'no caller found (index or text scan)'
+foreach ($case in @(
+    @{ Name = 'malformed json';      Json = '{ "popupForms": [ { "form": '; WantErr = $true  },
+    @{ Name = 'no popupForms key';   Json = '{ "ownRoots": ["."] }';         WantErr = $false })) {
+  [IO.File]::WriteAllText("$fx\_D-RAG\drag-lint-project.json", $case.Json)
+  $out2 = "$WorkDir\forms6-$($case.Name -replace ' ', '-').csv"
+  $err2 = @(& $Exe forms-csv --project "$fx\Demo6.dproj" --db $db --output $out2 2>&1 | ForEach-Object { "$_" })
+  Check "$($case.Name): forms-csv exits 0" ($LASTEXITCODE -eq 0)
+  $l2 = if (Test-Path $out2) { @([IO.File]::ReadAllText($out2) -split "`r`n" | Where-Object { $_ -ne '' }) } else { @() }
+  $rows2 = if ($l2.Count -gt 2) { @($l2[1..($l2.Count - 2)] | ConvertFrom-Csv -Header ($header -split ',')) } else { @() }
+  Check "$($case.Name): CSV still has every row" ($rows2.Count -eq $rows.Count) "got $($rows2.Count)"
+  $p2 = $rows2 | Where-Object { $_.Form -ceq 'frmPopup6' } | Select-Object -First 1
+  Cell $p2 'Notes' $popupNote "$($case.Name): frmPopup6"
+  $hasErr = @($err2 | Where-Object { $_ -match 'popupForms" ignored' }).Count -gt 0
+  Check "$($case.Name): stderr line iff malformed" ($hasErr -eq $case.WantErr) ($err2 -join ' | ')
+}
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

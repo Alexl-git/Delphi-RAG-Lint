@@ -210,13 +210,17 @@ var
   V      : TJSONValue ;
   Arr    : TJSONArray ;
   Item   : TJSONValue ;
+  FormVal: TJSONValue ;
+  NoteVal: TJSONValue ;
   Form   : string     ;
   Note   : string     ;
 begin
+  // Everything that can raise runs before the dictionary exists, so nothing leaks.
+  CfgPath:= '';
+  if AProjectFile <> '' then
+    CfgPath:= TPath.Combine(TPath.Combine(ExtractFileDir(ExpandFileName(AProjectFile)), DRAG_HOME_DIR), 'drag-lint-project.json');
   Result:= TDictionary<string, string>.Create;
-  if AProjectFile = '' then Exit;
-  CfgPath:= TPath.Combine(TPath.Combine(ExtractFileDir(ExpandFileName(AProjectFile)), DRAG_HOME_DIR), 'drag-lint-project.json');
-  if not TFile.Exists(CfgPath) then Exit;
+  if (CfgPath = '') or not TFile.Exists(CfgPath) then Exit;
   try
     JVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(CfgPath));
     try
@@ -229,18 +233,26 @@ begin
       Arr:= TJSONArray(V);
       for Item in Arr do
       begin
-        Form:= '';
-        Note:= '';
+        // One bad entry skips that entry only, with its own stderr line.
+        FormVal:= nil;
+        NoteVal:= nil;
         if Item is TJSONObject then
         begin
-          Form:= Trim(TJSONObject(Item).GetValue<string>('form', ''));
-          Note:= Trim(TJSONObject(Item).GetValue<string>('note', ''));
+          FormVal:= TJSONObject(Item).GetValue('form');
+          NoteVal:= TJSONObject(Item).GetValue('note');
         end;
+        if (FormVal <> nil) and not (FormVal is TJSONString) then
+        begin
+          Writeln(ErrOutput, 'forms-csv: ' + CfgPath + ': a "' + POPUP_FORMS_KEY + '" entry whose "form" is not a string -- skipped');
+          Continue;
+        end;
+        Form:= if FormVal <> nil then Trim(FormVal.Value) else '';
         if Form = '' then
         begin
           Writeln(ErrOutput, 'forms-csv: ' + CfgPath + ': a "' + POPUP_FORMS_KEY + '" entry has no "form" -- skipped');
           Continue;
         end;
+        Note:= if NoteVal is TJSONString then Trim(NoteVal.Value) else '';
         if Note = '' then Note:= POPUP_NOTE_DEFAULT;
         Result.AddOrSetValue(LowerCase(Form), Note);
       end;
@@ -1515,10 +1527,11 @@ type
     function SelectionHint(AStore: TSQLiteSymbolStore; const AFormClass: string; const AInfos: array of TRoutineInfo): string;
     function EnclosingRoutine(AStore: TSQLiteSymbolStore; const APath: string; ALine: Integer): TRoutineInfo;
     function DfmModal(const AY: TFormNode; out ANote: string): string;
-    function VarModal(AStore: TSQLiteSymbolStore; const ALine, AVar: string; const AY: TFormNode): string;
+    procedure VarModal(AStore: TSQLiteSymbolStore; const ALine, AVar: string; const AY: TFormNode; var AYes, ANo: Boolean);
+    function CallLine(const AInfo: TRoutineInfo; const AName: string): Integer;
     function LaunchModal(AStore: TSQLiteSymbolStore; const AL: TRoutineInfo; ALaunchLine: Integer; const AY: TFormNode; out ANote: string): string;
     function GuardMessages(const AInfo: TRoutineInfo; AUpToLine: Integer): TArray<string>;
-    function BeforeYouStart(AStore: TSQLiteSymbolStore; const AH, AL: TRoutineInfo; ALaunchLine: Integer): string;
+    function BeforeYouStart(AStore: TSQLiteSymbolStore; const AH, AL: TRoutineInfo; ALaunchLine: Integer; const ANextName: string): string;
     procedure AddEdge(const AEdge: TNavEdge);
     procedure TraceLaunch(AStore: TSQLiteSymbolStore; const AY: TFormNode; const ASite: TLaunchSite);
     procedure IndexPassFor(AStore: TSQLiteSymbolStore; const AY: TFormNode);
@@ -1840,57 +1853,117 @@ begin
   Result:= 'No';
 end;
 
-/// <summary>R1: 'Yes' / 'No' when ALine calls a bare (or Self.) ShowModal /
-/// Show -- the shape inside a form's own method or a "with F do" block; '?'
-/// otherwise.</summary>
-function BareModal(const ALine: string): string;
+/// <summary>R1: True when ALine calls a bare ShowModal (AModal) or a bare
+/// Show (not AModal). Inside "with F do" that is F's; Self.ShowModal there is
+/// the OUTER form's and is deliberately not matched.</summary>
+function BareShow(const ALine: string; AModal: Boolean): Boolean;
 begin
-  if TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])ShowModal\b|\bSelf\.ShowModal\b', [roIgnoreCase]) then Result:= 'Yes'
-  else if TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])Show\s*(;|$)|\bSelf\.Show\b', [roIgnoreCase]) then Result:= 'No'
+  if AModal then Result:= TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])ShowModal\b', [roIgnoreCase])
+  else Result:= TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])Show\s*(;|$)', [roIgnoreCase]);
+end;
+
+/// <summary>R1: 'Yes' / 'No' / '?' for a line inside a form's OWN method,
+/// where a bare or Self. ShowModal / Show shows that form.</summary>
+function SelfModal(const ALine: string): string;
+begin
+  if BareShow(ALine, True) or TRegEx.IsMatch(ALine, '\bSelf\.ShowModal\b', [roIgnoreCase]) then Result:= 'Yes'
+  else if BareShow(ALine, False) or TRegEx.IsMatch(ALine, '\bSelf\.Show\b', [roIgnoreCase]) then Result:= 'No'
   else Result:= '?';
 end;
 
-/// <summary>R1: modality ALine shows for form variable AVar: AVar.ShowModal,
-/// AVar.Show, or AVar.Method where Method is a method of AY whose own body
-/// shows it (F.Execute -> ShowModal). '?' when the line says nothing.</summary>
-function TNavBuilder.VarModal(AStore: TSQLiteSymbolStore; const ALine, AVar: string; const AY: TFormNode): string;
+/// <summary>R1: the lines of a "with ... do" body. ARest is the text after
+/// "do" on line AIndex (0-based into ALines). A body that starts with begin or
+/// try runs to its matching end; otherwise it is the single statement after
+/// "do", or on the next non-blank line when "do" ends its line.</summary>
+function WithBody(const ALines: TArray<string>; AIndex: Integer; const ARest: string): TArray<string>;
+var
+  Depth: Integer;
+  I    : Integer;
+  L    : string ;
+begin
+  Result:= [];
+  I:= AIndex;
+  L:= ARest;
+  if Trim(L) = '' then
+  begin
+    repeat
+      Inc(I);
+    until (I > High(ALines)) or (Trim(ALines[I]) <> '');
+    if I > High(ALines) then Exit;
+    L:= ALines[I];
+  end;
+  if not TRegEx.IsMatch(L, '^\s*(begin|try)\b', [roIgnoreCase]) then
+  begin
+    Result:= [L]; // a single statement
+    Exit;
+  end;
+  Depth:= 0;
+  repeat
+    Result:= Result + [L];
+    Depth:= Depth + TRegEx.Matches(L, '\b(begin|try|case|asm)\b', [roIgnoreCase]).Count - TRegEx.Matches(L, '\bend\b', [roIgnoreCase]).Count;
+    Inc(I);
+    if I <= High(ALines) then L:= ALines[I];
+  until (Depth <= 0) or (I > High(ALines));
+end;
+
+/// <summary>R1: records a bare ShowModal / Show anywhere in the "with" body
+/// starting at ARest on line AIndex.</summary>
+procedure WithScan(const ALines: TArray<string>; AIndex: Integer; const ARest: string; var AYes, ANo: Boolean);
+var
+  L: string;
+begin
+  for L in WithBody(ALines, AIndex, ARest) do
+  begin
+    if BareShow(L, True) then AYes:= True;
+    if BareShow(L, False) then ANo:= True;
+  end;
+end;
+
+/// <summary>R1: records what ALine shows for form variable AVar: AVar.ShowModal
+/// (AYes), AVar.Show (ANo), or AVar.Method where Method is a method of AY whose
+/// own body shows it (F.Execute -> ShowModal).</summary>
+procedure TNavBuilder.VarModal(AStore: TSQLiteSymbolStore; const ALine, AVar: string; const AY: TFormNode; var AYes, ANo: Boolean);
 var
   M   : TMatch;
   Meth: TRoutineInfo;
   ML  : string;
+  R   : string;
 begin
-  Result:= '?';
-  if TRegEx.IsMatch(ALine, '\b' + AVar + '\.ShowModal\b', [roIgnoreCase]) then Result:= 'Yes'
-  else if TRegEx.IsMatch(ALine, '\b' + AVar + '\.Show\b', [roIgnoreCase]) then Result:= 'No'
-  else
-    for M in TRegEx.Matches(ALine, '\b' + AVar + '\.(' + IDENT_RX + ')', [roIgnoreCase]) do
-    begin
-      Meth:= FindMethod(AStore, AY.FormClass, M.Groups[1].Value);
-      if Meth.ImplStart = 0 then Continue; // a field or property, not a method
-      for ML in Body(Meth) do
-        if Result = '?' then Result:= BareModal(ML);
-      if Result <> '?' then Break;
-    end;
+  if TRegEx.IsMatch(ALine, '\b' + AVar + '\.ShowModal\b', [roIgnoreCase]) then AYes:= True;
+  if TRegEx.IsMatch(ALine, '\b' + AVar + '\.Show\b', [roIgnoreCase]) then ANo:= True;
+  for M in TRegEx.Matches(ALine, '\b' + AVar + '\.(' + IDENT_RX + ')', [roIgnoreCase]) do
+  begin
+    if SameText(M.Groups[1].Value, 'ShowModal') or SameText(M.Groups[1].Value, 'Show') then Continue;
+    Meth:= FindMethod(AStore, AY.FormClass, M.Groups[1].Value);
+    if Meth.ImplStart = 0 then Continue; // a field or property, not a method
+    R:= '?';
+    for ML in Body(Meth) do
+      if R = '?' then R:= SelfModal(ML);
+    if R = 'Yes' then AYes:= True
+    else if R = 'No' then ANo:= True;
+  end;
 end;
 
 /// <summary>R1: modality of form AY at its launch site in routine AL, read
-/// from the code that follows the launch line: a ShowModal / Show on the
-/// variable the form was created into (or on its global instance, or bare
-/// inside "with ... do"), a method of the form called on that variable whose
-/// own body shows it (F.Execute -> ShowModal), then the .dfm (MDI child or
-/// Visible). '?' with ANote saying why when none of those answers.</summary>
+/// from the code from the launch line to the end of AL: a ShowModal / Show on
+/// the variable the form was created into (or its global instance), a bare one
+/// INSIDE "with F do" / "with TfrmX.Create(..) do", or a method of the form
+/// called on that variable whose own body shows it (F.Execute -> ShowModal).
+/// A variable assigned again stops counting. Shown both ways -> '?'. Nothing
+/// in the code -> the .dfm (MDI child or Visible). '?' always sets ANote.</summary>
 function TNavBuilder.LaunchModal(AStore: TSQLiteSymbolStore; const AL: TRoutineInfo; ALaunchLine: Integer; const AY: TFormNode; out ANote: string): string;
 var
   Lines   : TArray<string>;
   Last    : Integer;
   I       : Integer;
+  J       : Integer;
   L       : string ;
   P       : Integer;
   Vars    : TStringList;
-  V       : string ;
   M       : TMatch ;
-  InWith  : Boolean;
   Created : Boolean;
+  SawYes  : Boolean;
+  SawNo   : Boolean;
 begin
   ANote:= '';
   Result:= '?';
@@ -1900,6 +1973,8 @@ begin
   if (Last < ALaunchLine) or (Last > Length(Lines)) then Last:= ALaunchLine;
   L:= Lines[ALaunchLine - 1];
   Created:= IsLaunchLine(L, AY.FormClass);
+  SawYes := False;
+  SawNo  := False;
   Vars:= TStringList.Create;
   try
     Vars.CaseSensitive:= False;
@@ -1907,37 +1982,67 @@ begin
     // The launch line itself: TfrmX.Create(..).ShowModal, "X:= TfrmX.Create",
     // "var X: TfrmX:= TfrmX.Create", CreateForm(TfrmX, X), with TfrmX.Create do.
     P:= Pos(LowerCase(AY.FormClass) + '.create', LowerCase(L));
-    if P > 0 then Result:= LineModal(Copy(L, P, MaxInt));
+    if P > 0 then
+    begin
+      SawYes:= LineModal(Copy(L, P, MaxInt)) = 'Yes';
+      SawNo := LineModal(Copy(L, P, MaxInt)) = 'No';
+    end;
     M:= TRegEx.Match(L, '(' + IDENT_RX + ')\s*(?::\s*[A-Za-z_][A-Za-z0-9_.]*\s*)?:=\s*' + AY.FormClass + '\.Create', [roIgnoreCase]);
     if M.Success then Vars.Add(M.Groups[1].Value);
     M:= TRegEx.Match(L, 'CreateForm\s*\(\s*' + AY.FormClass + '\s*,\s*(' + IDENT_RX + ')', [roIgnoreCase]);
     if M.Success then Vars.Add(M.Groups[1].Value);
-    InWith:= TRegEx.IsMatch(L, '\bwith\s+' + AY.FormClass + '\.Create', [roIgnoreCase]);
-    I:= ALaunchLine - 1;
-    while (Result = '?') and (I <= Last - 1) do
+    M:= TRegEx.Match(L, '\bwith\s+' + AY.FormClass + '\.Create\b.*?\bdo\b(.*)$', [roIgnoreCase]);
+    if M.Success then WithScan(Lines, ALaunchLine - 1, M.Groups[1].Value, SawYes, SawNo);
+    for I:= ALaunchLine - 1 to Last - 1 do
     begin
       L:= Lines[I];
-      for V in Vars do
-        if Result = '?' then
-        begin
-          if TRegEx.IsMatch(L, '\bwith\s+' + V + '\s+do\b', [roIgnoreCase]) then InWith:= True;
-          Result:= VarModal(AStore, L, V, AY);
-        end;
-      if (Result = '?') and InWith then Result:= BareModal(L);
-      Inc(I);
+      // A variable assigned again after the launch line no longer holds this form.
+      if I > ALaunchLine - 1 then
+        for J:= Vars.Count - 1 downto 0 do
+          if TRegEx.IsMatch(L, '\b' + Vars[J] + '\s*(?::\s*[A-Za-z_][A-Za-z0-9_.]*\s*)?:=', [roIgnoreCase]) then Vars.Delete(J);
+      for J:= 0 to Vars.Count - 1 do
+      begin
+        VarModal(AStore, L, Vars[J], AY, SawYes, SawNo);
+        M:= TRegEx.Match(L, '\bwith\s+' + Vars[J] + '\s+do\b(.*)$', [roIgnoreCase]);
+        if M.Success then WithScan(Lines, I, M.Groups[1].Value, SawYes, SawNo);
+      end;
     end;
   finally
     Vars.Free;
   end;
-  if Result <> '?' then Exit;
-  Result:= DfmModal(AY, ANote);
-  if Result <> '?' then Exit;
-  if Created then ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' creates ' + AY.FormName + ' but does not show it there'
-  else ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' reaches ' + AY.FormName + ' but does not show it there';
+  if SawYes and SawNo then ANote:= 'modal unknown: shown both modally and modelessly'
+  else if SawYes then Result:= 'Yes'
+  else if SawNo then Result:= 'No'
+  else
+  begin
+    Result:= DfmModal(AY, ANote);
+    if Result <> '?' then Exit;
+    if Created then ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' creates ' + AY.FormName + ' but does not show it there'
+    else ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' reaches ' + AY.FormName + ' but does not show it there';
+  end;
+end;
+
+/// <summary>R1: 1-based line of the first line of AInfo's body (after its
+/// header) that mentions AName as a word -- where a handler calls the next
+/// routine on the path. 0 when AName is '' or not found.</summary>
+function TNavBuilder.CallLine(const AInfo: TRoutineInfo; const AName: string): Integer;
+var
+  Lines: TArray<string>;
+  I    : Integer;
+  Last : Integer;
+begin
+  Result:= 0;
+  if (AName = '') or (AInfo.ImplStart < 1) then Exit;
+  Lines:= LinesOf(AInfo.Path);
+  Last:= AInfo.ImplEnd;
+  if Last > Length(Lines) then Last:= Length(Lines);
+  for I:= AInfo.ImplStart + 1 to Last do
+    if TRegEx.IsMatch(Lines[I - 1], '\b' + AName + '\b', [roIgnoreCase]) then Exit(I);
 end;
 
 /// <summary>R1: the messages a routine stops with before the launch -- a
-/// conditional "raise E.Create('...')", or a ShowMessage / MessageDlg literal
+/// conditional "raise E.Create('...')", or a ShowMessage literal (or an
+/// mtError / mtWarning MessageDlg that is not compared with an mrXxx result)
 /// followed by Exit. Lines from the routine's start up to (not including)
 /// AUpToLine; 0 = the whole body.</summary>
 function TNavBuilder.GuardMessages(const AInfo: TRoutineInfo; AUpToLine: Integer): TArray<string>;
@@ -1973,7 +2078,11 @@ begin
       if M.Success then Msg:= M.Groups[1].Value
       else
       begin
-        M:= TRegEx.Match(L, '\b(?:ShowMessage|ShowMessageFmt|MessageDlg)\s*\(\s*' + LIT, [roIgnoreCase]);
+        // MessageDlg counts only as an mtError / mtWarning notice: a confirmation
+        // ('Delete this job?' ... <> mrYes) is a question, not a precondition.
+        M:= TRegEx.Match(L, '\b(?:ShowMessage|ShowMessageFmt)\s*\(\s*' + LIT, [roIgnoreCase]);
+        if not M.Success and TRegEx.IsMatch(L, '\bmt(Error|Warning)\b', [roIgnoreCase]) and not TRegEx.IsMatch(L, '\bmr[A-Za-z]+\b', [roIgnoreCase]) then
+          M:= TRegEx.Match(L, '\bMessageDlg\s*\(\s*' + LIT, [roIgnoreCase]);
         if M.Success and (TRegEx.IsMatch(L, '\bExit\b', [roIgnoreCase]) or ((I < Length(Lines)) and TRegEx.IsMatch(Lines[I], '\bExit\b', [roIgnoreCase]))) then
           Msg:= M.Groups[1].Value;
       end;
@@ -1987,12 +2096,13 @@ end;
 /// handler (and an opener on the same form) reads, then each message the
 /// handler or the opener stops with before the launch line. Prefixed with the
 /// handler's form, where the tester is standing. '' when nothing is derivable.</summary>
-function TNavBuilder.BeforeYouStart(AStore: TSQLiteSymbolStore; const AH, AL: TRoutineInfo; ALaunchLine: Integer): string;
+function TNavBuilder.BeforeYouStart(AStore: TSQLiteSymbolStore; const AH, AL: TRoutineInfo; ALaunchLine: Integer; const ANextName: string): string;
 var
   N    : TFormNode;
   Parts: TStringList;
   Msgs : TArray<string>;
   Added: Integer;
+  CallAt: Integer;
   Msg  : string;
   Sel  : string;
 begin
@@ -2007,7 +2117,14 @@ begin
     // opener's guards above its launch line; at most FORMS_ALSO_MAX messages.
     Msgs:= [];
     Added:= 0;
-    if AL.Id <> AH.Id then Msgs:= GuardMessages(AH, 0);
+    // A handler that is not the opener counts only ABOVE its call to the next
+    // routine on the path (ANextName): a check after that call is not a
+    // precondition. When the call line cannot be found, the handler adds none.
+    if AL.Id <> AH.Id then
+    begin
+      CallAt:= CallLine(AH, ANextName);
+      if CallAt > 0 then Msgs:= GuardMessages(AH, CallAt);
+    end;
     Msgs:= Msgs + GuardMessages(AL, ALaunchLine);
     for Msg in Msgs do
     begin
@@ -2039,7 +2156,7 @@ type
   TItem = record Id: Int64; Depth: Integer; end;
 var
   Queue    : TQueue<TItem>;
-  Visited  : TDictionary<Int64, Boolean>;
+  Visited  : TDictionary<Int64, string>; // routine id -> the name its body calls next on the path ('' for the opener)
   Cur      : TItem;
   Nxt      : TItem;
   S        : TRoutineInfo;
@@ -2063,12 +2180,12 @@ var
     Result.ModalNote:= ASite.ModalNote;
     Result.Method   := METHOD_INDEX;
     Result.Ways     := AWays;
-    Result.Hint     := BeforeYouStart(AStore, AH, ASite.Info, ASite.Line);
+    Result.Hint     := BeforeYouStart(AStore, AH, ASite.Info, ASite.Line, Visited[AH.Id]);
   end;
 
 begin
   Queue  := TQueue<TItem>.Create;
-  Visited:= TDictionary<Int64, Boolean>.Create;
+  Visited:= TDictionary<Int64, string>.Create;
   try
     HaveCand:= False;
     Traced  := False;
@@ -2077,7 +2194,7 @@ begin
     Cur.Id:= ASite.Info.Id;
     Cur.Depth:= 0;
     Queue.Enqueue(Cur);
-    Visited.Add(ASite.Info.Id, True);
+    Visited.Add(ASite.Info.Id, '');
     while Queue.Count > 0 do
     begin
       Cur:= Queue.Dequeue;
@@ -2104,7 +2221,7 @@ begin
             for C in ActionInvokerIds(AStore, S.Owner, W.CompName) do
               if not Visited.ContainsKey(C) then
               begin
-                Visited.Add(C, True);
+                Visited.Add(C, W.CompName); // it calls actX.Execute
                 Nxt.Id   := C;
                 Nxt.Depth:= Cur.Depth + 1;
                 Queue.Enqueue(Nxt);
@@ -2114,7 +2231,7 @@ begin
       for C in CallerIds(AStore, Cur.Id) do
         if not Visited.ContainsKey(C) then
         begin
-          Visited.Add(C, True);
+          Visited.Add(C, S.Name);
           Nxt.Id   := C;
           Nxt.Depth:= Cur.Depth + 1;
           Queue.Enqueue(Nxt);
@@ -2278,7 +2395,7 @@ begin
               H:= FindMethod(HSt, T.FromClass, T.Handler);
               if H.Id <> 0 then
               begin
-                E.Hint:= BeforeYouStart(HSt, H, L, T.LaunchLine);
+                E.Hint:= BeforeYouStart(HSt, H, L, T.LaunchLine, L.Name);
                 Break;
               end;
             end;
@@ -2443,9 +2560,11 @@ begin
       Builder:= TNavBuilder.Create(Stores, Nodes, ClassToNode);
       WayKeys:= TStringList.Create;
       Also   := TStringList.Create;
-      Hints  := TStringList.Create;
-      Popups := LoadPopupForms(AProjectFile);
+      Hints  := nil;
+      Popups := nil;
       try
+        Hints := TStringList.Create;  // dl:ok create-inside-try@3da8 -- Hints and Popups are set to nil before the try, so a raising constructor leaves nil and the finally's Free is a no-op
+        Popups:= LoadPopupForms(AProjectFile);
         // v6: index-first edges, then the v5 text scan merged in as a fallback
         // (AddEdge keeps the first edge per From/To/Handler, so index wins).
         Builder.RunIndexPass;
