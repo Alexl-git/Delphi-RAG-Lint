@@ -250,7 +250,24 @@ const
   /// `index --all --resolve-only`. A MINOR: new bindings, and bindings that
   /// can disappear. The reservation for C2.3 + the IsStub unification MOVES
   /// from 1.11.0 to 1.12.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.11.0-alpha';
+  /// <para>1.11.0-alpha -&gt; 1.12.0-alpha (2026-10-06, E5 / DEC-19, owner ruled
+  /// YES 2026-10-05): TCallResolver.ResolveBareMemberRead binds a BARE read of
+  /// a FIELD of the enclosing class or of one of its resolved ancestors
+  /// (`if FConnected`, `with tblFtrs do`, the receiver read of `tblFtrs.Post`
+  /// where a grand-ancestor declares tblFtrs) -- refs.symbol_id plus a
+  /// member_accesses row, mode read, no accessor, no call edge. It declined
+  /// 'field' by design since 1.8.0; that reason is gone. Shadowing is
+  /// unchanged (with target, then locals/params of the routine and its outer
+  /// routines, then the class chain). The class chain is now walked NEAREST
+  /// first over ANY member kind (NearestClassMember): a nearer method, class
+  /// const/var or nested type hides a farther field ('hidden'), an unresolved
+  /// parent ends the walk, and an implemented interface's property -- which
+  /// the 1.8.0 bare-property read bound -- is no longer in scope. DERIVED rows only, no parse change:
+  /// remedy is `index --all --resolve-only`. A MINOR: a new class of derived
+  /// row (~31k reads on ORM3 SERVER, ~21k on CLIENT by the 2026-09-28 decline
+  /// counters). The reservation for C2.3 + the IsStub unification MOVES from
+  /// 1.12.0 to 1.13.0-alpha.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.12.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
