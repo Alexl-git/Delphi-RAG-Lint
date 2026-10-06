@@ -38,7 +38,7 @@ pwsh -NoProfile -File $ar -Question <id> -Target <t> -Project <x.dproj>   (or -I
 
 * Use it for a PATH or SET question (the ids in `question-catalogue.md`: `round-trip`, `who-writes`, `who-calls`, `lands-where`, `consumers` ...), not for one symbol's definition.
 * It resolves the project index with the engine's `resolve-dbs`, takes the SERVER and SQL indexes from `charts\report-pairs.json`, and writes the bundle under `%TEMP%\drag-lint-reports`. A stale index stops it (exit 3) with the incremental `index` command printed; it never indexes.
-* Read stdout: `BUNDLE <folder>`, one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)` after the first), then the answer -- the whole Form A trace for `round-trip`, else a `CHART` header with the counts, `TARGET <name> @File.pas:line` for the chart's own selection, one `<name> @File.pas:line` line per result row, and `... +N more ... not shown (-Cap N; raise -Cap to see them)` whenever the chart drew fewer rows than its header counts. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
+* Read stdout. By DEFAULT it is a DocInsight `/// <remarks>` block, byte for byte what the IDE's drag-lint > Reports menu puts on the clipboard (R5, owner 2026-10-05; `src\Report.DocInsight.ps1`, checked against the plugin's own formatter by `Test-AskReport` AR-DOC-*) -- ready to paste above a declaration. With `-Plain`: `BUNDLE <folder>`, one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)` after the first), then the answer -- the whole Form A trace for `round-trip` (plus `NOTE the chart could not be drawn: <why>` if dot failed), else a `CHART` header with the counts, `TARGET <name> @File.pas:line` for the chart's own selection, one `<name> @File.pas:line` line per result row, and `... +N more ... not shown (-Cap N; raise -Cap to see them)` whenever the chart drew fewer rows than its header counts. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
 * Give the target the way the verb takes it: `who-writes` wants `Blueprint4.ViewModel.TBlueprint_ViewModel.FSuppressEvents`, not `TBlueprint_ViewModel.FSuppressEvents`.
 * `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~70 s measured 2026-09-28, not in the gate). Several of its cases read the clones under `scratch\db` and need them FRESH (Ask-Report checks freshness first and answers exit 3 once a source file they index changes -- re-take the clones); `AR-STALE` needs the DL clone to stay stale.
 
@@ -100,10 +100,10 @@ set and each question's caveat is `question-catalogue.md`, the gate is
 examples into `docs\examples\index.html` -- 76 over the 25 shipped question
 names (26 rows; `protocol-trace` is two), three or four each, measured on a
 2026-09-28 run into a scratch `-OutRoot` (the copy under `docs\examples` on
-this machine is still from 2026-09-23/24, with no `round-trip` folder, until it
-is rebuilt).
-`round-trip`'s three are TEXT bundles (the trace in a `<pre>`;
-a bundle made since DOC-R1 links each `@file:line` anchor into the IDE); the rest are charts.
+this machine is from 2026-09-23/24, except `round-trip`, regenerated with its charts on
+2026-10-06 by `New-ExampleGallery.ps1 -Only round-trip`).
+`round-trip`'s three carry the trace in a `<pre>` (a bundle made since DOC-R1 links each
+`@file:line` anchor into the IDE) under the chart drawn from it (R5, 2026-10-06); the rest are charts.
 
 ### The last four (PLAN-last-four-verbs.md)
 
@@ -157,8 +157,10 @@ New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<
   carries the generated note `-- not walked: the <write|read> direction stopped at [NN]`, and
   the title claims only the walked direction (gate `RT-NOWIRE` on the read-only listing
   `frmAssignGroups.grdFtrsColNum`, 33 steps / 10 conditions / 2 crossings / 2 unresolved;
-  `RT-SRVSTOP` for a server that stops). The bundle is `trace.dlgraph` + `index.html` (the trace in a
-  `<pre>`) + `meta.json` + `xref.txt`; no `graph.*`. The page is a document:
+  `RT-SRVSTOP` for a server that stops). The bundle is `trace.dlgraph` + the chart drawn from it, `graph.svg/.png/.pdf/.plain/.dot`
+  (R5, 2026-10-06: `src\Trace.Chart.ps1`, no second walk) + `index.html` (the chart, then the trace in a
+  `<pre>`) + `meta.json` + `xref.txt`; if dot fails the text is still delivered and the page says the
+  chart could not be drawn. In the text,
   each `@File.pas:line` anchor is a `draglint://` link that opens the line in the IDE
   (DOC-R1, 2026-09-28; a file leaf the three indexes hold at more than one path stays
   plain text; gate `A-RT-ART-LINKS`: 126 of 126 on OPERAT.NAME). Engine asks (E1-E4,
