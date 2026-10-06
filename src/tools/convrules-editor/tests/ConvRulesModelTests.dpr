@@ -9933,6 +9933,73 @@ begin
   Check('inherit.resolve.unknown.state', (R.State = asUnknown) and ContainsText(R.Reason, 'TBroken') and (OutsideNote(R) = ''), R.Reason);
 end;
 
+{ C10 E1-E3: a #link's glyph expression is split off AFTER the cast suffix, at the
+  first ' G[', kept verbatim, found by its bare FromPath, and re-emitted canonically. }
+procedure TestGlyphLinkParse;
+const
+  LINE_IMG   = '#link OptionsImage.Glyph <- Picture G[*/4], G[1/5]G[2/5]G[3/5]G[4/5] : AssignGraphic';
+  LINE_COUNT = '#link OptionsImage.NumGlyphs <- Picture G[count]';
+  LINE_PLAIN = '#link Caption <- Caption';
+  LINE_TWO   = '#link SomeOtherGlyph <- Picture G[5/5]';
+  LINE_LOOSE = '#link Glyph2 <- Picture   G[5/5]   :   AssignGraphic';
+  BOOK_TEXT = '#convert Abcbtn.TabcToggleBtn -> cxButtons.TcxButton, cxButtons'#13#10 + LINE_IMG + #13#10 + LINE_COUNT + #13#10
+    + LINE_PLAIN + #13#10 + LINE_TWO + #13#10;
+  NODES_IN_BOOK = 5;
+  LINKS_IN_BOOK = 4;
+  IDX_IMG   = 1; // node index of LINE_IMG in BOOK_TEXT (0 is the #convert header)
+  IDX_COUNT = 2;
+  IDX_PLAIN = 3;
+  IDX_TWO   = 4;
+var
+  Book : TRuleBook;
+  Book2: TRuleBook;
+  N    : TRuleNode;
+  Path : string;
+  Expr : string;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BOOK_TEXT);
+    Check('glyph.parse.nodes', Book.Nodes.Count = NODES_IN_BOOK, IntToStr(Book.Nodes.Count));
+    if Book.Nodes.Count <> NODES_IN_BOOK then
+      Exit;
+    N:= Book.Nodes[IDX_IMG];
+    Check('glyph.parse.from.bare', N.LinkFrom = 'Picture', N.LinkFrom);
+    Check('glyph.parse.expr.verbatim', N.GlyphExpr = 'G[*/4], G[1/5]G[2/5]G[3/5]G[4/5]', N.GlyphExpr);
+    Check('glyph.parse.cast', N.Cast = 'AssignGraphic', N.Cast);
+    N:= Book.Nodes[IDX_COUNT];
+    Check('glyph.parse.count.link', (N.LinkFrom = 'Picture') and (N.GlyphExpr = 'G[count]') and (N.Cast = ''), N.GlyphExpr + '|' + N.Cast);
+    Check('glyph.parse.plain.empty', (Book.Nodes[IDX_PLAIN].GlyphExpr = '') and (Book.Nodes[IDX_PLAIN].LinkFrom = 'Caption'));
+    Check('glyph.roundtrip.untouched', Book.SaveToString = BOOK_TEXT);
+    Check('glyph.snapshot.clean', Book.Snapshot = BOOK_TEXT, 'a canonical G-link book must not read dirty');
+    Book.Nodes[IDX_IMG].Dirty:= True;
+    Book.Nodes[IDX_COUNT].Dirty:= True;
+    Book.Nodes[IDX_TWO].Dirty:= True;
+    Check('glyph.roundtrip.dirty', Book.SaveToString = BOOK_TEXT, Book.Nodes[IDX_IMG].Emit);
+    Check('glyph.links.for.block', Length(Book.LinksForBlock(0)) = LINKS_IN_BOOK, IntToStr(Length(Book.LinksForBlock(0))));
+    Check('glyph.links.two.from.same', (Book.Nodes[IDX_TWO].LinkFrom = 'Picture') and (Book.Nodes[IDX_TWO].GlyphExpr = 'G[5/5]'));
+  finally
+    Book.Free;
+  end;
+  Book2:= TRuleBook.Create;
+  try
+    Book2.LoadFromString(LINE_LOOSE + #13#10);
+    N:= Book2.Nodes[0];
+    Check('glyph.parse.loose', (N.LinkFrom = 'Picture') and (N.GlyphExpr = 'G[5/5]') and (N.Cast = 'AssignGraphic'), N.Raw);
+    Check('glyph.roundtrip.loose.raw', Book2.SaveToString = LINE_LOOSE + #13#10);
+    N.Dirty:= True;
+    Check('glyph.emit.canonical', N.Emit = '#link Glyph2 <- Picture G[5/5] : AssignGraphic', N.Emit);
+  finally
+    Book2.Free;
+  end;
+  Path:= 'Picture G[1/2]G[2/2]';
+  Check('glyph.split.helper', SplitGlyphExprOff(Path, Expr) and (Path = 'Picture') and (Expr = 'G[1/2]G[2/2]'), Path + '|' + Expr);
+  Path:= 'Font.Size';
+  Check('glyph.split.none', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Font.Size') and (Expr = ''));
+  Path:= 'Picture g[1/2]';
+  Check('glyph.split.case.sensitive', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Picture g[1/2]'), 'lower-case g[ is a path, as in the engine');
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -10114,6 +10181,7 @@ begin
     TestValidateScopeRun;
     TestValidateTextStreams;
     TestValidateScopeCancel;
+    TestGlyphLinkParse;
 
     FreeAndNil(GParseBook);
 
