@@ -148,7 +148,7 @@ function LastSegment(const APath: string): string;
 /// <summary>True when the book text holds at least one #link with a glyph expression.</summary>
 /// <param name="ARulesText">A .rules text.</param>
 /// <returns>True = the Convert tab must gate this book on glyph_stitch.</returns>
-function BookHasGlyphLinks(const ARulesText: string): Boolean;  // dl:ok unused-public-symbol@3796 -- REVIEWED 2026-10-06 editor caller arrives in a later C10 task (GlyphForm / MainForm / ConvertTab); ConvRulesModelTests already calls it
+function BookHasGlyphLinks(const ARulesText: string): Boolean;
 
 /// <summary>True when the outcome is anything but GLYPH_KIND_STITCHED.</summary>
 /// <param name="AOutcome">One glyphs[] object.</param>
@@ -170,12 +170,12 @@ function GlyphNoteSuffix(const AOutcomes: TArray<TGlyphOutcome>): string;
 /// <param name="AOutcome">The outcome.</param>
 /// <returns>glyph TAB unit TAB instance.from -&gt; to TAB kind TAB N=n TAB alternative TAB
 /// 'dropped a,b' or '-' TAB message.</returns>
-function GlyphReportLine(const AUnitPas: string; const AOutcome: TGlyphOutcome): string;  // dl:ok unused-public-symbol@b124 -- REVIEWED 2026-10-06 editor caller arrives in a later C10 task (GlyphForm / MainForm / ConvertTab); ConvRulesModelTests already calls it
+function GlyphReportLine(const AUnitPas: string; const AOutcome: TGlyphOutcome): string;
 
 /// <summary>The red run summary (spec E14).</summary>
 /// <param name="ATodoUnits">Units with at least one to-do outcome.</param>
 /// <returns>'' for 0, else the sentence.</returns>
-function GlyphRunSummary(ATodoUnits: Integer): string;  // dl:ok unused-public-symbol@a92e -- REVIEWED 2026-10-06 editor caller arrives in a later C10 task (GlyphForm / MainForm / ConvertTab); ConvRulesModelTests already calls it
+function GlyphRunSummary(ATodoUnits: Integer): string;
 
 implementation
 

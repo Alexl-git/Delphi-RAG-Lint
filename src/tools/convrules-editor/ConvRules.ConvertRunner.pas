@@ -195,6 +195,14 @@ function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvert
 /// <returns>[] unless ARow is csConverted and AInheritedSupported.</returns>
 function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported, ARetypeSupported: Boolean): TArray<string>;
 
+/// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
+/// one csConverted row whose Apply.Glyphs holds a to-do (GlyphTodoCount &gt; 0). A unit
+/// two books converted counts once; a csRolledBack row counts nowhere -- its change,
+/// and the to-do marker it wrote, were restored away.</returns>
+function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
+
 implementation
 
 uses
@@ -250,6 +258,17 @@ begin
     Exit;
   for var LLeft: TInheritedLeft in ARow.Apply.InheritedLeft do
     Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft, ARetypeSupported)])];
+end;
+
+function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
+var
+  LUnits: TArray<string>;
+begin
+  LUnits:= nil;
+  for var LRow: TConvertRow in ARows do
+    if (LRow.Status = csConverted) and (GlyphTodoCount(LRow.Apply.Glyphs) > 0) and not MatchText(LRow.UnitPas, LUnits) then
+      LUnits:= LUnits + [LRow.UnitPas];
+  Result:= Length(LUnits);
 end;
 
 function FileProbe: TFileProbe;

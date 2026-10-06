@@ -71,6 +71,10 @@ type
     /// it cached from the old index -- the main adapter's class resolutions -- as it
     /// does when a run ends.</summary>
     ProjectReindexed: TProc;
+    /// <summary>The editor's resolved casts.castlib path; '' when none. Read on the UI
+    /// thread when Convert is pressed; the run passes and reports it only when the
+    /// file exists (ExistingCastLib).</summary>
+    GetCastLib    : TFunc<string>;
   end;
 
   /// <summary>The Convert tab: a checklist of rule books, a list of source
@@ -97,12 +101,14 @@ type
       FEngineProbe    : TEngineAdapter;
       FEntries        : TArray<TBookEntry>; // the book checklist, application order
       FUnitRulesOk    : Boolean;            // engine reports apply_unit_rules
-      FProbed         : Boolean;            // FUnitRulesOk has been asked this session
+      FGlyphOk        : Boolean;            // engine reports glyph_stitch
+      FProbed         : Boolean;            // FUnitRulesOk / FGlyphOk have been asked this session
       FRunning        : Boolean;
       FCancelRequested: Boolean;            // written on the UI thread, polled by the worker
       FNotes          : TArray<string>;     // the current run's pre-flight notes (for the report)
       FRunRows        : TArray<TConvertRow>;// the current run's rows as they arrived
       FRunRulesFolder : string;             // the rules folder when Convert was pressed: the report goes THERE
+      FRunCastLib     : string;             // the castlib the run passed ('' = none): ExistingCastLib, captured when Convert was pressed
       FIndexed        : TArray<string>;     // file paths in the project index (valid while FIndexKnown)
       FIndexKnown     : Boolean;            // False = the index could not be read: flag nothing
       FInheritedOk    : Boolean;            // engine reports inherited_instances (C8 E10/E11)
@@ -272,6 +278,7 @@ uses
   , Vcl.Dialogs
   , Vcl.Graphics
   , ConvRules.InheritanceEngine
+  , ConvRules.Glyph
   ;
 
 const
@@ -486,15 +493,17 @@ var
   Next  : TArray<TBookEntry>;
   Errs  : TArray<string>;
 
-  function KindOf(const APath: string; out AKind: TBookKind): Boolean;
+  // Kind AND HasGlyph from one read, for a kept entry and a new one alike: a
+  // HasGlyph set on one path only would leave the glyph_stitch gate inert.
+  function Classify(var AEntry: TBookEntry): Boolean;
   begin
     try
-      AKind:= BookKindOfText(TFile.ReadAllText(APath));
+      AEntry:= ClassifiedEntry(AEntry, TFile.ReadAllText(AEntry.Path));
       Result:= True;
     except
       on E: Exception do
       begin
-        Errs:= Errs + [ExtractFileName(APath) + ': ' + E.Message];
+        Errs:= Errs + [ExtractFileName(AEntry.Path) + ': ' + E.Message];
         Result:= False;
       end;
     end; // try
@@ -518,6 +527,7 @@ begin
     FUnitRulesOk:= MatchText(CAPABILITY_UNIT_RULES, LCaps);
     FInheritedOk:= MatchText(CAPABILITY_INHERITED_INSTANCES, LCaps);
     FRetypeOk   := MatchText(CAPABILITY_INHERITED_RETYPE, LCaps);
+    FGlyphOk    := MatchText(CAPABILITY_GLYPH_STITCH, LCaps);
     FProbed     := True;
   end;
   Folder:= FHost.GetRulesFolder();
@@ -532,7 +542,7 @@ begin
     if MatchText(LOld.Path, Files) then
     begin
       var E: TBookEntry:= LOld;
-      if KindOf(E.Path, E.Kind) then
+      if Classify(E) then
         Next:= Next + [E];
     end;
   for var LFile: string in Files do
@@ -541,7 +551,7 @@ begin
       var E: TBookEntry:= Default(TBookEntry); // HasGlyph must not be stack garbage (C10 Task 4)
       E.Path   := LFile;
       E.Checked:= False;
-      if KindOf(LFile, E.Kind) then
+      if Classify(E) then
         Next:= Next + [E];
     end;
   FEntries:= Next;
@@ -563,21 +573,8 @@ begin
     FBooks.Items.Clear;
     for var I: Integer:= 0 to High(FEntries) do
     begin
-      var LSuffix : string := '';
-      var LEnabled: Boolean:= True;
-      case FEntries[I].Kind of
-        bkEmpty:
-          LSuffix:= '  (empty)';
-        bkUnitsOnly:
-          if not FUnitRulesOk then
-          begin
-            LSuffix := '  (unit rules: engine support pending)';
-            LEnabled:= False;
-          end;
-        bkMixed:
-          if not FUnitRulesOk then
-            LSuffix:= '  (unit rules not applied: engine)';
-      end; // case
+      var LEnabled: Boolean;
+      var LSuffix : string := BookListSuffix(FEntries[I], FUnitRulesOk, FGlyphOk, LEnabled);
       if not LEnabled then
         FEntries[I].Checked:= False;
       FBooks.Items.Add(ExtractFileName(FEntries[I].Path) + LSuffix);
@@ -1151,7 +1148,7 @@ begin
   FIndexKnown:= True;
   FIndexed   := Idx;
   FSources.Invalidate;
-  Pre:= Preflight(FEntries, Units, Idx, FUnitRulesOk, False); // glyph_stitch probe arrives in C10 Task 6
+  Pre:= Preflight(FEntries, Units, Idx, FUnitRulesOk, FGlyphOk);
   FResults.Items.Clear;
   FRunRows:= nil;
   FNotes  := Pre.Notes;
@@ -1187,6 +1184,10 @@ begin
   FRunRulesFolder:= FHost.GetRulesFolder();
   FRunInheritedOk:= FInheritedOk;
   FRunRetypeOk   := FRetypeOk;
+  // The worker builds its own adapter: the castlib is read HERE, on the UI thread,
+  // and only an existing file is passed and named in the report.
+  FRunCastLib:= ExistingCastLib(FHost.GetCastLib());
+  var LCastLib: string:= FRunCastLib;
   FCancelRequested:= False;
   SetRunning(True);
   FProgress.Max     := Length(Job.Books) * Length(Job.Units);
@@ -1212,6 +1213,7 @@ begin
         // The worker's OWN adapter: FEngineProbe belongs to the UI thread.
         LEng:= TEngineAdapter.Create(LExe, Job.Dbs);
         try
+          LEng.CastLibFile:= LCastLib;
           RunConversion(Job, LEng,
             procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
             begin
@@ -1278,6 +1280,8 @@ begin
       // C8 E10: one line per instance the engine says the converted unit left (unfiltered, ruling M4).
       for var LLine: string in InheritedReportLines(LRow, FRunInheritedOk, FRunRetypeOk) do
         LLines.Add(LLine);
+      for var LG: TGlyphOutcome in LRow.Apply.Glyphs do
+        LLines.Add(GlyphReportLine(LRow.UnitPas, LG));
     end;
     for var LUnit: string in ANotReached do
       LLines.Add(string.Join(#9, ['', LUnit, STATUS_NOT_REACHED, '', '', '', '', '']));
@@ -1286,6 +1290,7 @@ begin
       LLines.Add(Format('Run'#9'cancelled -- %d unit(s) not reached', [Length(ANotReached)]))
     else
       LLines.Add('Run'#9'completed');
+    LLines.Add('Castlib'#9 + (if FRunCastLib = '' then '(none)' else FRunCastLib));
     LLines.Add('Final reindex'#9 + AFinalIndex);
     try
       // UTF-8 without a BOM: engine text (a rule error, a path) may be non-ASCII,
@@ -1375,7 +1380,13 @@ begin
     Msg:= Msg + ' Inherited instances could not be re-checked: ' + FInheritError;
   // Re-harvest the converted code so the Unit Rules MISSING list is current.
   FHost.FeedHarvest(AJob.Units);
-  FHost.SetStatus(Msg, (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '') or (LIndexErr <> '') or (FInheritError <> ''));
+  // Glyph to-dos lead, in red (spec E14): converted, but each such unit's implementation
+  // section starts with a to-do line the user must act on. Counted per UNIT (R5).
+  var LGlyphSummary: string:= GlyphRunSummary(GlyphTodoUnitCount(FRunRows));
+  if LGlyphSummary <> '' then
+    FHost.SetStatus(LGlyphSummary + '  ' + Msg, True)
+  else
+    FHost.SetStatus(Msg, (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '') or (LIndexErr <> '') or (FInheritError <> ''));
 end;
 
 end.

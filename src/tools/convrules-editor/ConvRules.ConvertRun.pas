@@ -116,6 +116,31 @@ function SharedBackupPaths(const AFiles: TArray<string>; const AExists: TFilePro
 /// <returns>bkEmpty (no #convert, no unit rule), bkConvertOnly, bkUnitsOnly or bkMixed.</returns>
 function BookKindOfText(const ARulesText: string): TBookKind;
 
+/// <summary>AEntry with Kind and HasGlyph set from the book's text -- the ONE place
+/// the Convert tab classifies a book, on first listing and on every refresh alike.</summary>
+/// <param name="AEntry">The entry; Path and Checked are kept.</param>
+/// <param name="ARulesText">The .rules text.</param>
+/// <returns>The entry with Kind = BookKindOfText and HasGlyph = BookHasGlyphLinks of
+/// ARulesText (both recomputed, so an edit that removed the last G-link clears it).</returns>
+function ClassifiedEntry(const AEntry: TBookEntry; const ARulesText: string): TBookEntry;
+
+/// <summary>The checklist suffix for a book and whether its check box is enabled.</summary>
+/// <param name="AEntry">The classified entry.</param>
+/// <param name="AUnitRulesOk">The engine reports apply_unit_rules.</param>
+/// <param name="AGlyphOk">The engine reports glyph_stitch.</param>
+/// <param name="AEnabled">False = the book cannot be checked (unit-rules-only while
+/// apply_unit_rules is missing, or a G-link book while glyph_stitch is missing).</param>
+/// <returns>'  (empty)', '  (unit rules: engine support pending)' or '  (unit rules not
+/// applied: engine)' by Kind, then GLYPH_BOOK_PENDING_SUFFIX appended for a G-link book
+/// while glyph_stitch is missing; '' when nothing applies.</returns>
+function BookListSuffix(const AEntry: TBookEntry; AUnitRulesOk, AGlyphOk: Boolean; out AEnabled: Boolean): string;
+
+/// <summary>The castlib a Convert run records and passes: APath when that file exists.</summary>
+/// <param name="APath">The editor's resolved casts.castlib path; '' = none.</param>
+/// <returns>APath, or '' when it is '' or names no file (the adapter then passes no
+/// --castlib, so the report must not name one either).</returns>
+function ExistingCastLib(const APath: string): string;
+
 /// <summary>AEntries with entry AIndex moved ADelta places (clamped to the ends).</summary>
 /// <param name="AEntries">The checklist, in application order.</param>
 /// <param name="AIndex">The entry to move.</param>
@@ -307,6 +332,42 @@ begin
     Result:= bkUnitsOnly
   else
     Result:= bkEmpty;
+end;
+
+function ClassifiedEntry(const AEntry: TBookEntry; const ARulesText: string): TBookEntry;
+begin
+  Result:= AEntry;
+  Result.Kind    := BookKindOfText(ARulesText);
+  Result.HasGlyph:= BookHasGlyphLinks(ARulesText);
+end;
+
+function BookListSuffix(const AEntry: TBookEntry; AUnitRulesOk, AGlyphOk: Boolean; out AEnabled: Boolean): string;
+begin
+  AEnabled:= True;
+  Result  := '';
+  case AEntry.Kind of
+    bkEmpty:
+      Result:= '  (empty)';
+    bkUnitsOnly:
+      if not AUnitRulesOk then
+      begin
+        Result  := '  (unit rules: engine support pending)';
+        AEnabled:= False;
+      end;
+    bkMixed:
+      if not AUnitRulesOk then
+        Result:= '  (unit rules not applied: engine)';
+  end; // case
+  if AEntry.HasGlyph and not AGlyphOk then
+  begin
+    Result  := Result + GLYPH_BOOK_PENDING_SUFFIX;
+    AEnabled:= False;
+  end;
+end;
+
+function ExistingCastLib(const APath: string): string;
+begin
+  Result:= if (APath <> '') and TFile.Exists(APath) then APath else '';
 end;
 
 function MoveEntry(const AEntries: TArray<TBookEntry>; AIndex, ADelta: Integer): TArray<TBookEntry>;

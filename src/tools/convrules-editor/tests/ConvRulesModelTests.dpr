@@ -10182,6 +10182,92 @@ begin
   Check('glyph.pre.only.glyph.book.refused', (not Pre.Ok) and (Length(Pre.Problems) = 1) and (Pre.Problems[0] = 'None of the checked rule books can run (see notes).'), string.Join(';', Pre.Problems));
 end;
 
+{ C10 E11/E12/E14 (Task 6): the Convert tab's decisions -- one classification sets
+  HasGlyph on first listing AND on refresh (else the glyph_stitch gate is inert), the
+  checklist greys a G-link book until glyph_stitch, a castlib that does not exist is
+  never recorded, and the red summary counts UNITS, not rows. }
+procedure TestGlyphConvertTab;
+const
+  GLYPH_BOOK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4] : AssignGraphic'#13#10;
+  PLAIN_BOOK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  MIXED_GLYPH_BOOK = '#use cxButtons'#13#10 + GLYPH_BOOK;
+  UNITS_SUFFIX  = '  (unit rules: engine support pending)';
+  MIXED_SUFFIX  = '  (unit rules not applied: engine)';
+  TODO_UNITS    = 2;
+var
+  E   : TBookEntry;
+  En  : Boolean;
+  S   : string;
+  Dir : string;
+  Lib : string;
+  Rows: TArray<TConvertRow>;
+  Todo: TGlyphOutcome;
+  Done: TGlyphOutcome;
+
+  function Row(const AUnit: string; AStatus: TConvertStatus; const AGlyphs: TArray<TGlyphOutcome>): TConvertRow;
+  begin
+    Result:= Default(TConvertRow);
+    Result.UnitPas:= AUnit;
+    Result.Status := AStatus;
+    Result.Apply.Glyphs:= AGlyphs;
+  end;
+
+begin
+  E:= Default(TBookEntry);
+  E.Path   := 'b\Glyph.rules';
+  E.Checked:= True;
+  E:= ClassifiedEntry(E, GLYPH_BOOK);
+  Check('glyph.tab.classify.glyph', E.HasGlyph and (E.Kind = bkConvertOnly) and E.Checked and (E.Path = 'b\Glyph.rules'));
+  E:= ClassifiedEntry(E, PLAIN_BOOK);
+  Check('glyph.tab.classify.refresh.clears', (not E.HasGlyph) and (E.Kind = bkConvertOnly), 'a refresh must recompute HasGlyph');
+  E:= ClassifiedEntry(E, MIXED_GLYPH_BOOK);
+  Check('glyph.tab.classify.mixed', E.HasGlyph and (E.Kind = bkMixed));
+
+  E:= ClassifiedEntry(Default(TBookEntry), GLYPH_BOOK);
+  S:= BookListSuffix(E, True, False, En);
+  Check('glyph.tab.suffix.pending', (S = GLYPH_BOOK_PENDING_SUFFIX) and (S = '  (glyph links: engine support pending)') and not En, S);
+  S:= BookListSuffix(E, True, True, En);
+  Check('glyph.tab.suffix.supported', (S = '') and En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), MIXED_GLYPH_BOOK);
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.mixed.both', (S = MIXED_SUFFIX + GLYPH_BOOK_PENDING_SUFFIX) and not En, S);
+  S:= BookListSuffix(E, False, True, En);
+  Check('glyph.tab.suffix.mixed.units.only', (S = MIXED_SUFFIX) and En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), '#use cxButtons'#13#10);
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.units.unchanged', (S = UNITS_SUFFIX) and not En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), '');
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.empty.unchanged', (S = '  (empty)') and En, S);
+
+  Check('glyph.tab.castlib.none', ExistingCastLib('') = '');
+  Dir:= TPath.Combine(TPath.GetTempPath, 'tabcastlib-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Lib:= TPath.Combine(Dir, 'casts.castlib');
+    Check('glyph.tab.castlib.missing', ExistingCastLib(Lib) = '', ExistingCastLib(Lib));
+    TFile.WriteAllText(Lib, '# empty'#13#10, TEncoding.ASCII);
+    Check('glyph.tab.castlib.exists', ExistingCastLib(Lib) = Lib, ExistingCastLib(Lib));
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  Todo:= Default(TGlyphOutcome);
+  Todo.Kind:= 'glyph-no-alternative';
+  Done:= Default(TGlyphOutcome);
+  Done.Kind:= GLYPH_KIND_STITCHED;
+  Rows:= [Row('u\A.pas', csConverted, [Todo]), Row('U\a.PAS', csConverted, [Done, Todo]),
+    Row('u\B.pas', csConverted, [Done]), Row('u\C.pas', csRolledBack, [Todo]),
+    Row('u\D.pas', csConverted, [Todo]), Row('u\E.pas', csRefused, [Todo])];
+  Check('glyph.tab.todo.units', GlyphTodoUnitCount(Rows) = TODO_UNITS, IntToStr(GlyphTodoUnitCount(Rows)));
+  Check('glyph.tab.todo.none', GlyphTodoUnitCount([Row('u\B.pas', csConverted, [Done])]) = 0);
+  Check('glyph.tab.todo.summary', GlyphRunSummary(GlyphTodoUnitCount(Rows)) <> '');
+end;
+
 { C10 E7/E8/E12-E14: the editor's own glyph decisions -- the live check goes through the
   ENGINE's parser (DRagLint.Convert.GlyphExpr, one parser for both), the two block-level
   rules carry the engine's wording, the count-target suggestion never guesses, and the
@@ -10710,6 +10796,7 @@ begin
     TestGlyphApplyParse;
     TestGlyphRunner;
     TestGlyphLinkMerge;
+  TestGlyphConvertTab;
 
     FreeAndNil(GParseBook);
 

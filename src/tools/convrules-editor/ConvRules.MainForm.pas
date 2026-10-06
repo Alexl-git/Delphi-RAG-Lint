@@ -3432,6 +3432,10 @@ begin
     begin
       AddHarvest(HarvestFiles(APaths, LErrs), LErrs, 'Convert sources', False);
     end;
+  LHost.GetCastLib:= function: string
+    begin
+      Result:= GEditorCastLib;
+    end;
   LHost.SetStatus:= procedure(AText: string; AIsError: Boolean)
     begin
       if AIsError then
