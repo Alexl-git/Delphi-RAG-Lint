@@ -71,6 +71,11 @@ const
   /// retypes them once the declaring ancestor is converted (C8, engine N1-N5). Without
   /// it the engine refuses such a unit.</summary>
   CAPABILITY_INHERITED_INSTANCES = 'inherited_instances';
+  /// <summary>The words every C8 read's failure text carries when the engine marked
+  /// its answer "stale" (a file changed on disk since it was indexed).</summary>
+  /// <remarks>ConvRules.InheritanceEngine.IsStaleIndexError matches on it to decide
+  /// that ONE incremental reindex may fix the read.</remarks>
+  INDEX_STALE_MARKER = 'the index is stale';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -1876,7 +1881,7 @@ const
   // How much of a failed call's output an error text quotes.
   SQL_ERROR_HEAD_CHARS = 400;
   // The failure text of a read that needs a fresh index and got a stale one.
-  SQL_STALE_TEXT = '%s failed for %s: the index is stale (%d file(s) changed since it was indexed) -- reindex the project first';
+  SQL_STALE_TEXT = '%s failed for %s: ' + INDEX_STALE_MARKER + ' (%d file(s) changed since it was indexed) -- reindex the project first';
 
 type
   { One `sql --json` answer: its POSITIONAL rows as strings, and the engine's own

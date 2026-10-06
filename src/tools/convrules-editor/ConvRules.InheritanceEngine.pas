@@ -26,7 +26,7 @@ uses
 /// The fields are read from the declaring file LookupClass found.</returns>
 /// <remarks>Each call spawns up to two `sql` engine processes; wrap the result in
 /// CachingLookup. Not thread-safe beyond what TEngineAdapter is.</remarks>
-function EngineClassLookup(AEngine: TEngineAdapter; const ADb: string; const APairs: TArray<TTypePair>): TClassLookup;  // dl:ok unused-public-symbol@d8b1 -- REVIEWED 2026-10-05 called by the model tests (lookup.live.*, coderefs.live.*) only until the C8 Convert-tab task (Task 6) passes it to AnalyzeUnit; drop this marker when it does
+function EngineClassLookup(AEngine: TEngineAdapter; const ADb: string; const APairs: TArray<TTypePair>): TClassLookup;
 
 /// <summary>A TCodeUseLookup over the project index: ListCodeRefs mapped through
 /// CodeUseName, one TCodeUse per ref row (Line = refs.start_line).</summary>
@@ -35,10 +35,73 @@ function EngineClassLookup(AEngine: TEngineAdapter; const ADb: string; const APa
 /// <returns>A lookup answering False (unknown, never "no uses") when the engine could
 /// not answer, the answer was stale, or the unit is not in the index; AError then
 /// holds the engine-side failure text.</returns>
-function EngineCodeUses(AEngine: TEngineAdapter; const ADb: string): TCodeUseLookup;  // dl:ok unused-public-symbol@b06b -- REVIEWED 2026-10-05 called by the model tests (coderefs.live.analysis) only until the C8 Convert-tab task (Task 6) passes it to AnalyzeUnit; drop this marker when it does
+function EngineCodeUses(AEngine: TEngineAdapter; const ADb: string): TCodeUseLookup;
+
+type
+  /// <summary>Analyses a set of listed units (AnalyzeUnits with the pass's lookups bound).</summary>
+  TUnitsAnalyzer = reference to function(const APaths: TArray<string>): TArray<TUnitInheritance>;
+
+  /// <summary>Refreshes the project index (TEngineAdapter.IndexProject of the editor's OWN
+  /// project, ProjectFileForDb of its DB); False with AError when it failed.</summary>
+  TIndexRefresh = reference to function(out AError: string): Boolean;
+
+/// <summary>PURE: True when AError is a C8 read's failure on a STALE index (the engine
+/// marked the answer stale -- INDEX_STALE_MARKER), the one failure a reindex can fix.</summary>
+/// <param name="AError">A TUnitInheritance.Error, or any engine failure text.</param>
+/// <returns>Case-insensitive match on INDEX_STALE_MARKER.</returns>
+function IsStaleIndexError(const AError: string): Boolean;
+
+/// <summary>PURE: analyses APaths; when a unit is unknown because the index was STALE,
+/// refreshes the index ONCE and analyses those units ONCE more.</summary>
+/// <param name="APaths">Listed .pas paths.</param>
+/// <param name="AAnalyze">The analysis pass (fresh caches per call).</param>
+/// <param name="AReindex">The incremental reindex; called at most once, and only when a
+/// unit came back stale.</param>
+/// <returns>One analysis per path, APaths order. A unit still unknown after the retry
+/// keeps the retry's Error; when the reindex itself failed the stale units are not
+/// re-analysed and their Error gains '; reindex failed: &lt;why&gt;'.</returns>
+function AnalyzeRetryingStale(const APaths: TArray<string>; const AAnalyze: TUnitsAnalyzer; const AReindex: TIndexRefresh): TArray<TUnitInheritance>;
 
 implementation
 
+uses
+  System.StrUtils
+  ;
+
+function IsStaleIndexError(const AError: string): Boolean;
+begin
+  Result:= ContainsText(AError, INDEX_STALE_MARKER);
+end;
+
+function AnalyzeRetryingStale(const APaths: TArray<string>; const AAnalyze: TUnitsAnalyzer; const AReindex: TIndexRefresh): TArray<TUnitInheritance>;
+var
+  LStale  : TArray<string>;
+  LAt     : TArray<Integer>;
+  LRetry  : TArray<TUnitInheritance>;
+  LError  : string;
+begin
+  Result:= AAnalyze(APaths);
+  LStale:= nil;
+  LAt   := nil;
+  for var I: Integer:= 0 to High(Result) do
+    if not Result[I].Known and IsStaleIndexError(Result[I].Error) then
+    begin
+      LStale:= LStale + [Result[I].UnitPas];
+      LAt   := LAt + [I];
+    end;
+  if Length(LStale) = 0 then
+    Exit;
+  if not AReindex(LError) then
+  begin
+    for var I: Integer in LAt do
+      Result[I].Error:= Result[I].Error + '; reindex failed: ' + LError;
+    Exit;
+  end;
+  LRetry:= AAnalyze(LStale);
+  for var I: Integer:= 0 to High(LAt) do
+    if I <= High(LRetry) then
+      Result[LAt[I]]:= LRetry[I];
+end;
 function EngineClassLookup(AEngine: TEngineAdapter; const ADb: string; const APairs: TArray<TTypePair>): TClassLookup;
 var
   LFrom: TArray<string>;

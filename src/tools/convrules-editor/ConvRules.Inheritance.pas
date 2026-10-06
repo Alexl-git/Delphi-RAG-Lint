@@ -25,6 +25,10 @@ const
   /// no ancestor class at all (the unit's own class records none). Not a class name:
   /// OutsideNote words this case without it.</summary>
   OUTSIDE_NO_ANCESTOR = '(no ancestor class)';
+  /// <summary>The failure text CancellableLookup / CancellableCodeUses answer with once
+  /// the user cancelled: AnalyzeUnit appends it to the unit's Error, so the unit is
+  /// Known = False and the status line says why.</summary>
+  ANALYSIS_CANCELLED = 'cancelled';
 
 type
   /// <summary>The keyword that opens a .dfm block.</summary>
@@ -218,7 +222,7 @@ function BareType(const AType: string): string;
 /// <summary>PURE: the #convert pairs of a rule book, bare names, book order.</summary>
 /// <param name="ARulesText">The .rules text.</param>
 /// <returns>One pair per #convert header that names a From type.</returns>
-function TypePairsOfText(const ARulesText: string): TArray<TTypePair>;  // dl:ok unused-public-symbol@e472 -- REVIEWED 2026-10-05 called by the model tests (inherit.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function TypePairsOfText(const ARulesText: string): TArray<TTypePair>;
 
 /// <summary>PURE: True when AType (bare or qualified) is the From type of one of APairs.</summary>
 /// <param name="AType">A class name from a .dfm.</param>
@@ -273,7 +277,38 @@ function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: str
 /// caller. Accepted gap: a closer ancestor redeclaring the name with a
 /// non-From type (shadowing) is not in the filtered Fields, so the walk goes on to a
 /// further ancestor's From-typed field of that name and counts it.</remarks>
-function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader; const ACodeUses: TCodeUseLookup = nil): TUnitInheritance;  // dl:ok unused-public-symbol@af24 -- REVIEWED 2026-10-05 called by the model tests (inherit.walk.*, code.use.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader; const ACodeUses: TCodeUseLookup = nil): TUnitInheritance;
+
+/// <summary>PURE: AnalyzeUnit for each of APaths, in order, with ONE .dfm cache for the
+/// whole pass (an ancestor's .dfm shared by several listed units is read once).</summary>
+/// <param name="APaths">Listed .pas paths.</param>
+/// <param name="APairs">See AnalyzeUnit.</param>
+/// <param name="ALookup">See AnalyzeUnit; wrap it in CachingLookup for the pass.</param>
+/// <param name="AReader">See AnalyzeUnit.</param>
+/// <param name="ACodeUses">See AnalyzeUnit.</param>
+/// <returns>One analysis per path, APaths order.</returns>
+function AnalyzeUnits(const APaths: TArray<string>; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader; const ACodeUses: TCodeUseLookup = nil): TArray<TUnitInheritance>;
+
+/// <summary>PURE: ALookup, unless ACancelled answers True: then a Failed answer with
+/// Error = ANALYSIS_CANCELLED, without asking ALookup.</summary>
+/// <param name="AInner">The real lookup.</param>
+/// <param name="ACancelled">Polled before each lookup.</param>
+/// <returns>The wrapped lookup. CachingLookup never caches the Failed answer.</returns>
+function CancellableLookup(const AInner: TClassLookup; const ACancelled: TFunc<Boolean>): TClassLookup;
+
+/// <summary>PURE: ACodeUses, unless ACancelled answers True: then False with AError =
+/// ANALYSIS_CANCELLED, without asking ACodeUses.</summary>
+/// <param name="AInner">The real code-use lookup.</param>
+/// <param name="ACancelled">Polled before each call.</param>
+/// <returns>The wrapped lookup.</returns>
+function CancellableCodeUses(const AInner: TCodeUseLookup; const ACancelled: TFunc<Boolean>): TCodeUseLookup;
+
+/// <summary>PURE: the status-line text for the units the analysis could not decide
+/// (Known = False with an Error -- the index could not answer, or the user cancelled).</summary>
+/// <param name="AUnits">The analyses.</param>
+/// <returns>'' when no unit has an Error; else '&lt;Unit.pas&gt;: &lt;Error&gt;' for the
+/// first such unit, plus ' (+N more)' when N others have one too.</returns>
+function UnknownUnitsText(const AUnits: TArray<TUnitInheritance>): string;
 
 /// <summary>PURE: the spec E8 note for one asOutside verdict.</summary>
 /// <param name="AVerdict">A verdict from ResolveInstance / AnalyzeUnit.</param>
@@ -288,26 +323,29 @@ function OutsideNote(const AVerdict: TInstanceVerdict): string;
 /// <param name="AInner">The real lookup.</param>
 /// <param name="ACache">Owned by the caller; clear it whenever the index changes.</param>
 /// <returns>A lookup that asks AInner once per class; a Failed answer is NOT cached.</returns>
-function CachingLookup(const AInner: TClassLookup; ACache: TDictionary<string, TClassInfo>): TClassLookup;  // dl:ok unused-public-symbol@867b -- REVIEWED 2026-10-05 called by the model tests (inherit.cache.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function CachingLookup(const AInner: TClassLookup; ACache: TDictionary<string, TClassInfo>): TClassLookup;
 
 /// <summary>PURE: the identifier a `refs` row stands for: the receiver's first segment
 /// ('Self.' skipped; cut at '.', '[', '(' or a space), else the name itself.</summary>
 /// <param name="AName">refs.name_text.</param>
 /// <param name="AReceiver">refs.receiver_text; '' (or 'Self') for an implicit-Self use.</param>
 /// <returns>'tblFtrs' for ('IndexName', 'tblFtrs') and for ('Post', 'Self.tblFtrs').</returns>
-function CodeUseName(const AName, AReceiver: string): string;  // dl:ok unused-public-symbol@b129 -- REVIEWED 2026-10-05 called by the model tests (code.use.name, FakeCodeUses) only until the C8 ListCodeRefs task (Task 4) calls it from the engine adapter; drop this marker when it does
+function CodeUseName(const AName, AReceiver: string): string;
 
 /// <summary>PURE: the converted row's note for E2b code uses the run could not convert
 /// (spec E10, editor side -- the engine's inherited[] covers .dfm instances only).</summary>
 /// <param name="AUnit">The unit's analysis taken before the run.</param>
+/// <param name="AConvertedUnits">Unit names (no path, no extension) converted EARLIER IN
+/// THE SAME RUN: their code uses are not counted -- that conversion retyped the field,
+/// so the run converted the use too (spec E11 / N2a).</param>
 /// <returns>'' for none; else per declaring unit, in first-seen order, 'N inherited code
 /// use(s) left: ancestor &lt;U&gt; not converted', joined '; '.</returns>
-function CodeUseLeftNote(const AUnit: TUnitInheritance): string;  // dl:ok unused-public-symbol@6a7d -- REVIEWED 2026-10-05 called by the model tests (code.use.left.note*) only until the C8 E10 row-note task wires it into the editor; drop this marker when it does
+function CodeUseLeftNote(const AUnit: TUnitInheritance; const AConvertedUnits: TArray<string> = nil): string;
 
 /// <summary>A TDfmTextReader over the real file system (TFile.ReadAllText).</summary>
 /// <returns>A reader that answers drMissing for a missing file, drUnreadable when
 /// reading raises, else drRead.</returns>
-function DiskTextReader: TDfmTextReader;  // dl:ok unused-public-symbol@8af4 -- REVIEWED 2026-10-05 wired into the editor by the C8 Convert-tab tasks; drop this marker when they do
+function DiskTextReader: TDfmTextReader;
 
 /// <summary>PURE: the Convert tab's row note for a unit (spec E5, E8).</summary>
 /// <param name="AUnit">The unit's analysis.</param>
@@ -318,7 +356,7 @@ function DiskTextReader: TDfmTextReader;  // dl:ok unused-public-symbol@8af4 -- 
 /// distinct OutsideNote of its asOutside verdicts; all joined '; '.</returns>
 /// <remarks>asConverted says nothing (E11: the run converts it). asUnknown never yields a
 /// note: AnalyzeUnit makes such a unit Known = False.</remarks>
-function InheritanceRowNote(const AUnit: TUnitInheritance): string;  // dl:ok unused-public-symbol@8131 -- REVIEWED 2026-10-05 called by the model tests (inherit.note.*, code.use.note) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function InheritanceRowNote(const AUnit: TUnitInheritance): string;
 
 /// <summary>PURE: the ancestor units to convert before AUnit (spec E2a / E6): the chain
 /// units of its asUnconverted verdicts -- the units whose .dfm declares or re-opens one of
@@ -336,14 +374,14 @@ function AncestorChain(const AUnit: TUnitInheritance): TArray<string>;
 /// <param name="AChain">AncestorChain's answer.</param>
 /// <param name="AList">The source list.</param>
 /// <returns>In AChain order.</returns>
-function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@9a33 -- REVIEWED 2026-10-05 called by the model tests (inherit.offer.*) only until the C8 Convert-tab tasks wire the E6 offer into the editor; drop this marker when they do
+function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;
 
 /// <summary>PURE: the E6 question, 'Add &lt;chain&gt; ahead of &lt;unit&gt;?', with file names.</summary>
 /// <param name="AChain">The units the offer would add: MissingAncestors(AncestorChain(unit),
 /// source list) -- the chain units not yet listed, topmost first. Not empty.</param>
 /// <param name="AUnitPas">The descendant.</param>
 /// <returns>'Add Base.pas, Mid.pas ahead of Leaf.pas?'.</returns>
-function OfferText(const AChain: TArray<string>; const AUnitPas: string): string;  // dl:ok unused-public-symbol@9c66 -- REVIEWED 2026-10-05 called by the model tests (inherit.offer.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function OfferText(const AChain: TArray<string>; const AUnitPas: string): string;
 
 /// <summary>PURE: AList with AChain's missing units inserted so every ancestor precedes its
 /// descendants (spec E6 Yes, as amended 2026-10-05).</summary>
@@ -355,7 +393,7 @@ function OfferText(const AChain: TArray<string>; const AUnitPas: string): string
 /// of those is listed. ([Mid, Leaf] + [Base, Mid] gives [Base, Mid, Leaf].)</returns>
 /// <remarks>Units already listed are never moved: a pre-existing misorder stays, and E7
 /// (OrderWarnings) still warns about it.</remarks>
-function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; const AChain: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@5e06 -- REVIEWED 2026-10-05 called by the model tests (inherit.insert.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; const AChain: TArray<string>): TArray<string>;
 
 /// <summary>PURE: one line per (listed descendant, listed ancestor of its AncestorChain
 /// listed BELOW it) pair (spec E7).</summary>
@@ -365,13 +403,13 @@ function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; co
 /// converted yet' lines, per unit in AUnits order, ancestors topmost first.</returns>
 /// <remarks>A warning, never a refusal: the run converts the descendant's own part
 /// either way (E9).</remarks>
-function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;  // dl:ok unused-public-symbol@69fc -- REVIEWED 2026-10-05 called by the model tests (inherit.order.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
 
 /// <summary>PURE: the single E7 confirmation text.</summary>
 /// <param name="AWarnings">OrderWarnings' lines; not empty.</param>
 /// <returns>A heading line, the warnings one per line, a blank line, then 'Convert in
 /// this order anyway?'.</returns>
-function OrderWarningText(const AWarnings: TArray<string>): string;  // dl:ok unused-public-symbol@ff20 -- REVIEWED 2026-10-05 called by the model tests (inherit.order.text) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function OrderWarningText(const AWarnings: TArray<string>): string;
 
 /// <summary>PURE: the run notes for an engine WITHOUT inherited_instances: today's
 /// convert-apply refuses every unit holding an inherited From instance.</summary>
@@ -383,7 +421,7 @@ function OrderWarningText(const AWarnings: TArray<string>): string;  // dl:ok un
 /// left unchanged').</returns>
 /// <remarks>FromCode verdicts are not counted: the engine does not refuse on code. A unit
 /// that is not Known gets no note, although the engine may still refuse it.</remarks>
-function EngineRefusalNotes(const AUnits: TArray<TUnitInheritance>; AInheritedSupported: Boolean): TArray<string>;  // dl:ok unused-public-symbol@2cbe -- REVIEWED 2026-10-05 called by the model tests (inherit.refusal.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+function EngineRefusalNotes(const AUnits: TArray<TUnitInheritance>; AInheritedSupported: Boolean): TArray<string>;
 
 implementation
 
@@ -1113,6 +1151,72 @@ begin
   end; // try
 end;
 
+function AnalyzeUnits(const APaths: TArray<string>; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader;
+  const ACodeUses: TCodeUseLookup): TArray<TUnitInheritance>;
+var
+  LCache : TDictionary<string, TCachedDfm>;
+  LReader: TDfmTextReader;
+begin
+  Result:= nil;
+  LCache:= TDictionary<string, TCachedDfm>.Create;
+  try
+    LReader:= CachingReader(AReader, LCache); // the PASS cache; AnalyzeUnit's own per-call one sits above it
+    for var LPath: string in APaths do
+      Result:= Result + [AnalyzeUnit(LPath, APairs, ALookup, LReader, ACodeUses)];
+  finally
+    LCache.Free;
+  end; // try
+end;
+
+function CancellableLookup(const AInner: TClassLookup; const ACancelled: TFunc<Boolean>): TClassLookup;
+begin
+  Result:= function(const AClassName: string): TClassInfo
+    begin
+      if ACancelled() then
+      begin
+        Result:= Default(TClassInfo);
+        Result.Failed:= True;
+        Result.Error := ANALYSIS_CANCELLED;
+      end
+      else
+        Result:= AInner(AClassName);
+    end;
+end;
+
+function CancellableCodeUses(const AInner: TCodeUseLookup; const ACancelled: TFunc<Boolean>): TCodeUseLookup;
+begin
+  Result:= function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>; out AError: string): Boolean
+    begin
+      if ACancelled() then
+      begin
+        AUses := nil;
+        AError:= ANALYSIS_CANCELLED;
+        Result:= False;
+      end
+      else
+        Result:= AInner(AUnitPas, AClassName, AUses, AError);
+    end;
+end;
+
+function UnknownUnitsText(const AUnits: TArray<TUnitInheritance>): string;
+var
+  LMore: Integer;
+begin
+  Result:= '';
+  LMore := 0;
+  for var LUnit: TUnitInheritance in AUnits do
+  begin
+    if LUnit.Error = '' then
+      Continue;
+    if Result = '' then
+      Result:= ExtractFileName(LUnit.UnitPas) + ': ' + LUnit.Error
+    else
+      Inc(LMore);
+  end;
+  if LMore > 0 then
+    Result:= Result + Format(' (+%d more)', [LMore]);
+end;
+
 // Per declaring unit, in first-seen order, how many of AVerdicts AWanted accepts and
 // their distinct instance types.
 function TallyByUnit(const AVerdicts: TArray<TInstanceVerdict>; const AWanted: TVerdictFilter): TArray<TUnitTally>;
@@ -1143,15 +1247,17 @@ begin
   end;
 end;
 
-function CodeUseLeftNote(const AUnit: TUnitInheritance): string;
+function CodeUseLeftNote(const AUnit: TUnitInheritance; const AConvertedUnits: TArray<string>): string;
 var
-  LParts: TArray<string>;
+  LParts    : TArray<string>;
+  LConverted: TArray<string>;
 begin
-  LParts:= nil;
+  LParts    := nil;
+  LConverted:= AConvertedUnits;
   for var LTally: TUnitTally in TallyByUnit(AUnit.Verdicts,
     function(const AVerdict: TInstanceVerdict): Boolean
     begin
-      Result:= AVerdict.Instance.FromCode and (AVerdict.State = asUnconverted);
+      Result:= AVerdict.Instance.FromCode and (AVerdict.State = asUnconverted) and not MatchText(AVerdict.DeclaringUnit, LConverted);
     end) do
     LParts:= LParts + [Format(NOTE_CODE_LEFT, [LTally.Count, LTally.UnitName])];
   Result:= string.Join(NOTE_JOIN, LParts);

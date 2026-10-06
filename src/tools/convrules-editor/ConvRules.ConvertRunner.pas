@@ -154,6 +154,15 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// 'rolled back', 'FAILED -- NOT restored', 'refused -- not changed'.</returns>
 function ConvertStatusText(AStatus: TConvertStatus): string;
 
+/// <summary>PURE: the units ARows converted (C8 R4: an ancestor converted EARLIER IN THE
+/// SAME RUN converts its descendants' inherited instances and code uses too).</summary>
+/// <param name="ARows">A run's rows so far.</param>
+/// <returns>Unit names (file name without extension) of the csConverted rows, first-seen
+/// order, once each.</returns>
+/// <remarks>A unit whose conversion a later book on it rolled back is csRolledBack, not
+/// csConverted, so it is not listed.</remarks>
+function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
+
 implementation
 
 uses
@@ -177,6 +186,20 @@ begin
     csRefused       : Result:= 'refused -- not changed';
     else              Result:= 'FAILED -- NOT restored';
   end;
+end;
+
+function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
+var
+  LName: string;
+begin
+  Result:= nil;
+  for var LRow: TConvertRow in ARows do
+    if LRow.Status = csConverted then
+    begin
+      LName:= ChangeFileExt(ExtractFileName(LRow.UnitPas), '');
+      if not MatchText(LName, Result) then
+        Result:= Result + [LName];
+    end;
 end;
 
 function FileProbe: TFileProbe;
@@ -430,8 +453,13 @@ var
     Row.Note  := Format('%d edit(s), %d remaining for manual work', [Row.Apply.EditsCount, Length(Row.Apply.Remainder)]);
     // E10: only an engine with inherited_instances sends inherited[]; the gate keeps an
     // older engine's output from being read as this contract.
-    if AInheritedSupported and (Length(Row.Apply.InheritedLeft) > 0) then
-      Row.Note:= Row.Note + '; ' + InheritedLeftNote(Row.Apply.InheritedLeft);
+    if AInheritedSupported then
+    begin
+      // R4: an ancestor this run already converted is not "left" (Rows = earlier units only).
+      var LLeft: string:= InheritedLeftNote(Row.Apply.InheritedLeft, UnitsConvertedIn(Rows));
+      if LLeft <> '' then
+        Row.Note:= Row.Note + '; ' + LLeft;
+    end;
     Add;
   end;
 

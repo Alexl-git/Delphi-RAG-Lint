@@ -170,15 +170,26 @@ function ParseApplyJson(const AJson: string): TApplyRow;
 
 /// <summary>PURE: the converted row's note for what was left (spec E10).</summary>
 /// <param name="AItems">TApplyRow.InheritedLeft.</param>
+/// <param name="AConvertedUnits">Unit names (no path, no extension) converted EARLIER IN
+/// THE SAME RUN: an item whose ancestor_unit is one of them is not counted (spec E11 /
+/// N2a: that run converts it).</param>
 /// <returns>'' for none; else per (ancestor, state) in first-seen order 'N inherited
 /// instance(s) left: ancestor &lt;U&gt; not converted' ('not in the index' for outside,
 /// the raw state otherwise), joined '; '.</returns>
-function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; const AConvertedUnits: TArray<string> = nil): string;
 
 /// <summary>PURE: one run-report note for one left instance.</summary>
 /// <param name="AItem">The instance.</param>
 /// <returns>'&lt;name&gt;: &lt;type&gt; line N -- ancestor &lt;U&gt; &lt;state&gt; (&lt;reason&gt;)'.</returns>
-function InheritedReportNote(const AItem: TInheritedLeft): string;  // dl:ok unused-public-symbol@7df1 -- REVIEWED 2026-10-05 the Convert tab's run report consumes it in C8 Task 6; until then only the model tests (apply.inherited.report) call it
+function InheritedReportNote(const AItem: TInheritedLeft): string;
+
+/// <summary>PURE: AItems without those whose ancestor_unit converted EARLIER IN THE SAME
+/// RUN (spec E11 / N2a: that run converts them too; ruling R4).</summary>
+/// <param name="AItems">TApplyRow.InheritedLeft.</param>
+/// <param name="AConvertedUnits">Unit names converted earlier in the run
+/// (ConvertRunner.UnitsConvertedIn); matched case-insensitively.</param>
+/// <returns>The kept items, AItems order.</returns>
+function InheritedLeftOmitting(const AItems: TArray<TInheritedLeft>; const AConvertedUnits: TArray<string>): TArray<TInheritedLeft>;
 
 implementation
 
@@ -526,7 +537,7 @@ const
   WORDS_OUTSIDE   = 'not in the index';
   REPORT_LEFT_FMT = '%s: %s line %d -- ancestor %s %s (%s)';
 
-function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; const AConvertedUnits: TArray<string>): string;
 var
   LGroups: TArray<TInheritedLeft>; // one per (ancestor, state), first-seen order
   LCounts: TArray<Integer>;
@@ -536,7 +547,7 @@ var
 begin
   LGroups:= nil;
   LCounts:= nil;
-  for var LItem: TInheritedLeft in AItems do
+  for var LItem: TInheritedLeft in InheritedLeftOmitting(AItems, AConvertedUnits) do
   begin
     LIdx:= High(LGroups);
     while (LIdx >= 0) and not (SameText(LGroups[LIdx].AncestorUnit, LItem.AncestorUnit) and SameText(LGroups[LIdx].AncestorState, LItem.AncestorState)) do
@@ -562,6 +573,13 @@ begin
   Result:= string.Join('; ', LParts);
 end;
 
+function InheritedLeftOmitting(const AItems: TArray<TInheritedLeft>; const AConvertedUnits: TArray<string>): TArray<TInheritedLeft>;
+begin
+  Result:= nil;
+  for var LItem: TInheritedLeft in AItems do
+    if not MatchText(LItem.AncestorUnit, AConvertedUnits) then
+      Result:= Result + [LItem];
+end;
 function InheritedReportNote(const AItem: TInheritedLeft): string;
 begin
   Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, AItem.AncestorUnit, AItem.AncestorState, AItem.Reason]);

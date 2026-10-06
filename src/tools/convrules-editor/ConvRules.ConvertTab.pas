@@ -14,15 +14,18 @@ uses
   System.SysUtils
   , System.Classes
   , System.Types
+  , System.Generics.Collections
   , Winapi.Windows // TOwnerDrawState / odSelected: SourcesDrawItem's signature
   , Vcl.Controls
   , Vcl.StdCtrls
   , Vcl.CheckLst
   , Vcl.ComCtrls
   , Vcl.ExtCtrls
-  , ConvRules.Engine
+  , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- CAPABILITY_INHERITED_INSTANCES is the engine contract the tab gates E10 on, so it travels with the adapter
+  , ConvRules.EngineProgress
   , ConvRules.ConvertRun
   , ConvRules.ConvertRunner
+  , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel
   ;
 
 type
@@ -58,6 +61,10 @@ type
     /// are in; may be nil. The host disables what must not change mid-run
     /// (File > Save / Save As / Curate).</summary>
     RunStateChanged: TProc<Boolean>;
+    /// <summary>Runs a long engine call behind the host's cancellable progress window
+    /// (the main form's wrapper around RunWithProgressDialog); may be nil = the call
+    /// runs inline on the UI thread, with no window and no cancel.</summary>
+    RunLongCall   : TLongCallRunner;
   end;
 
   /// <summary>The Convert tab: a checklist of rule books, a list of source
@@ -86,6 +93,12 @@ type
       FRunRulesFolder : string;             // the rules folder when Convert was pressed: the report goes THERE
       FIndexed        : TArray<string>;     // file paths in the project index (valid while FIndexKnown)
       FIndexKnown     : Boolean;            // False = the index could not be read: flag nothing
+      FInheritedOk    : Boolean;            // engine reports inherited_instances (C8 E10/E11)
+      FRunInheritedOk : Boolean;            // FInheritedOk when Convert was pressed: the report follows the run
+      FInherit        : TDictionary<string, TUnitInheritance>; // C8 analyses, by upper-cased path
+      FPairsKey       : string;             // the checked pairs FInherit was computed with
+      FInheritError   : string;             // '' or why some unit could not be checked (status line)
+      FAnalyzing      : Boolean;            // an analysis is running behind the progress window
       FLockable       : TArray<TControl>;   // disabled while a run is in progress
       FTopPanel       : TPanel;
       FBottomPanel    : TPanel;
@@ -155,6 +168,41 @@ type
       /// <summary>The source-list status line: count, and how many are not indexed.</summary>
       /// <returns>The status text.</returns>
       function SourcesSummary: string;
+      /// <summary>The status line for the source list: SourcesSummary, or, when some
+      /// unit could not be checked for inherited instances, that reason as an error.</summary>
+      procedure ShowSourcesStatus;
+      /// <summary>The checked books' #convert pairs (C8 E3 input); an unreadable book is
+      /// named in FInheritError.</summary>
+      /// <returns>Bare From / To names, book order.</returns>
+      function CheckedPairs: TArray<TTypePair>;
+      /// <summary>Analyses APaths against the checked books (C8 E1-E3, E2b) and stores
+      /// the results; behind the host's progress window, cancellable. A stale index is
+      /// refreshed ONCE (the editor's own project) and the stale units retried once.</summary>
+      /// <param name="APaths">Listed .pas paths.</param>
+      /// <remarks>Appends to FInheritError (callers clear it). Units that cannot be
+      /// decided (index failure, cancel) are stored not-Known: no row note.</remarks>
+      procedure Analyze(const APaths: TArray<string>);
+      /// <summary>Re-analyses the whole list when the checked pairs changed since the
+      /// last analysis, or always when AForce.</summary>
+      /// <param name="AForce">True after the index or the files may have changed.</param>
+      /// <returns>True when an analysis ran.</returns>
+      function ReanalyzeAll(AForce: Boolean): Boolean;
+      /// <summary>The stored analysis of AUnitPas; an empty, not-Known record when none.</summary>
+      /// <param name="AUnitPas">A listed .pas.</param>
+      /// <returns>The analysis.</returns>
+      function InheritanceOf(const AUnitPas: string): TUnitInheritance;
+      /// <summary>The stored analyses of AUnits, in order.</summary>
+      /// <param name="AUnits">Listed .pas paths.</param>
+      /// <returns>One record per unit.</returns>
+      function InheritanceOfAll(const AUnits: TArray<string>): TArray<TUnitInheritance>;
+      /// <summary>C8 E6: for each just-added descendant whose ancestor chain is not all
+      /// listed, asks 'Add &lt;missing chain&gt; ahead of &lt;unit&gt;?' (mirrored on the
+      /// status line); Yes inserts them (InsertAncestors).</summary>
+      /// <param name="AAdded">The units this add listed.</param>
+      procedure OfferAncestors(const AAdded: TArray<string>);
+      /// <summary>Replaces the source list's items with AList, in order.</summary>
+      /// <param name="AList">.pas paths.</param>
+      procedure SetSources(const AList: TArray<string>);
     public
       /// <summary>Builds the tab's controls; nothing is listed until RefreshBooks.</summary>
       /// <param name="AOwner">Owner (the main form).</param>
@@ -187,8 +235,10 @@ implementation
 uses
   System.IOUtils
   , System.StrUtils
+  , System.UITypes // MessageDlg's inline expansion, mrYes
   , Vcl.Dialogs
   , Vcl.Graphics
+  , ConvRules.InheritanceEngine
   ;
 
 const
@@ -212,6 +262,9 @@ const
   CAP_CANCELLING  = 'Cancelling after this unit...';
   STATUS_NOT_REACHED = 'not reached (cancelled)'; // a unit a cancel kept from running
   CAPABILITY_UNIT_RULES = 'apply_unit_rules';
+  STATUS_INHERITED_LEFT = 'inherited left'; // C8 E10: one report line per instance a converted unit left
+  INHERIT_FAIL_FMT      = '%s Inherited instances could not be checked for every unit -- %s';
+  ORDER_CANCELLED       = 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.';
 
 { TConvertTab }
 
@@ -222,6 +275,7 @@ begin
   BevelOuter:= bvNone;
   Caption   := '';
   FEngineProbe:= TEngineAdapter.Create(FHost.ExePath, FHost.GetDbs());
+  FInherit    := TDictionary<string, TUnitInheritance>.Create;
   BuildBooks;
   BuildRun;
   BuildSources;
@@ -232,6 +286,7 @@ destructor TConvertTab.Destroy;
 begin
   if FRunning then
     FCancelRequested:= True; // see the class remarks: the host refuses to close mid-run
+  FInherit.Free;
   FEngineProbe.Free;
   inherited Destroy;
 end;
@@ -423,7 +478,10 @@ begin
     Exit; // the run holds its own copy of the books; keep the list it started from
   if not FProbed then
   begin
-    FUnitRulesOk:= FEngineProbe.HasCapability(CAPABILITY_UNIT_RULES);
+    // ONE info call for both keys (each HasCapability is its own info call).
+    var LCaps: TArray<string>:= FEngineProbe.CapabilityNames;
+    FUnitRulesOk:= MatchText(CAPABILITY_UNIT_RULES, LCaps);
+    FInheritedOk:= MatchText(CAPABILITY_INHERITED_INSTANCES, LCaps);
     FProbed     := True;
   end;
   Folder:= FHost.GetRulesFolder();
@@ -452,8 +510,11 @@ begin
     end;
   FEntries:= Next;
   ShowBooks;
+  var LRan: Boolean:= ReanalyzeAll(False); // the checks may have changed (a book gone, a unit-rules book unchecked)
   if Length(Errs) > 0 then
-    FHost.SetStatus(Format('%d rule book(s) could not be read and are not listed: %s', [Length(Errs), string.Join(' | ', Errs)]), True);
+    FHost.SetStatus(Format('%d rule book(s) could not be read and are not listed: %s', [Length(Errs), string.Join(' | ', Errs)]), True)
+  else if LRan then
+    ShowSourcesStatus;
 end;
 
 procedure TConvertTab.ShowBooks;
@@ -499,6 +560,8 @@ begin
   for var I: Integer:= 0 to FBooks.Count - 1 do
     if I <= High(FEntries) then
       FEntries[I].Checked:= FBooks.Checked[I];
+  if ReanalyzeAll(False) then
+    ShowSourcesStatus;
 end;
 
 procedure TConvertTab.MoveBook(ADelta: Integer);
@@ -532,6 +595,8 @@ begin
   for var I: Integer:= 0 to High(FEntries) do
     FEntries[I].Checked:= AChecked;
   ShowBooks; // unchecks again what the engine cannot run
+  if ReanalyzeAll(False) then
+    ShowSourcesStatus;
 end;
 
 procedure TConvertTab.CheckAllClick(Sender: TObject);
@@ -562,15 +627,28 @@ begin
     FHost.SetStatus('A conversion is running -- sources cannot be added until it finishes.', True);
     Exit;
   end;
+  // A drop can arrive while the inherited-instance check holds the progress window.
+  if FAnalyzing then
+  begin
+    FHost.SetStatus('Inherited instances are being checked -- add the sources again when it finishes.', True);
+    Exit;
+  end;
   Added:= ExpandSources(APaths, Errs);
   for var LPath: string in Added do
     if FSources.Items.IndexOf(LPath) < 0 then  // TListBox.IndexOf is case-insensitive
       FSources.Items.Add(LPath);
+  FInheritError:= '';
   if Length(Added) > 0 then
+  begin
     FHost.FeedHarvest(Added);
+    Analyze(Added);        // C8 E1-E3, E2b
+    OfferAncestors(Added); // C8 E6
+  end;
   var LIndexErr: string;
   var LIndexOk: Boolean:= (FSources.Count = 0) or ReadIndex(LIndexErr);
-  if Length(Errs) > 0 then
+  if FInheritError <> '' then
+    FHost.SetStatus(Format(INHERIT_FAIL_FMT, [SourcesSummary, FInheritError]), True)
+  else if Length(Errs) > 0 then
     FHost.SetStatus(Format('%d source(s) added; %d problem(s): %s', [Length(Added), Length(Errs), string.Join(' | ', Errs)]), True)
   else if not LIndexOk then
     FHost.SetStatus(Format('%d source unit(s) listed; cannot read the project index, so unindexed units are not flagged: %s', [FSources.Count, LIndexErr]), True)
@@ -615,6 +693,201 @@ begin
   Result:= Format('%d source unit(s) listed.', [FSources.Count]);
   if LCount > 0 then
     Result:= Result + Format(' %d NOT in the project index (red) -- Convert will refuse until they are indexed.', [LCount]);
+  // C8 E5 / E8: the row notes, readable on the status bar (the list is owner-drawn).
+  for var LPath: string in FSources.Items do
+  begin
+    var LNote: string:= InheritanceRowNote(InheritanceOf(LPath));
+    if LNote <> '' then
+      Result:= Result + ' | ' + ExtractFileName(LPath) + ': ' + LNote;
+  end;
+end;
+
+procedure TConvertTab.ShowSourcesStatus;
+begin
+  if FInheritError <> '' then
+    FHost.SetStatus(Format(INHERIT_FAIL_FMT, [SourcesSummary, FInheritError]), True)
+  else
+    FHost.SetStatus(SourcesSummary, False);
+end;
+
+function TConvertTab.CheckedPairs: TArray<TTypePair>;
+begin
+  Result:= nil;
+  for var LEntry: TBookEntry in FEntries do
+    if LEntry.Checked then
+      try
+        Result:= Result + TypePairsOfText(TFile.ReadAllText(LEntry.Path));
+      except  // dl:ok try-except-swallowed@3e87 -- REVIEWED 2026-10-05 not swallowed: the book and its message go to FInheritError, which reaches the error status line
+        on E: Exception do
+          FInheritError:= FInheritError + ExtractFileName(LEntry.Path) + ': ' + E.Message + ' ';
+      end; // try
+end;
+
+procedure TConvertTab.Analyze(const APaths: TArray<string>);
+var
+  LPairs  : TArray<TTypePair>;
+  LDb     : string;
+  LProject: string;
+  LPaths  : TArray<string>;
+  LUnits  : TArray<TUnitInheritance>;
+  LWork   : TStreamingWork;
+  LText   : string;
+begin
+  if Length(APaths) = 0 then
+    Exit;
+  LPairs:= CheckedPairs;
+  LUnits:= nil;
+  if Length(LPairs) > 0 then
+  begin
+    LDb     := FHost.GetProjectDb();
+    LProject:= FHost.GetProjectFile();
+    LPaths  := APaths;
+    // Runs on the progress window's worker thread; the UI is modal meanwhile, so
+    // FEngineProbe has no other user. Only the PROJECT DB is asked (authority).
+    LWork:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
+      var
+        LCancelled: TFunc<Boolean>;
+      begin
+        LCancelled:= function: Boolean
+          begin
+            Result:= ACancel.IsCancelled;
+          end;
+        LUnits:= AnalyzeRetryingStale(LPaths,
+          function(const AThese: TArray<string>): TArray<TUnitInheritance>
+          var
+            LCache: TDictionary<string, TClassInfo>;
+          begin
+            // Per pass: a retry after a reindex asks afresh.
+            LCache:= TDictionary<string, TClassInfo>.Create;
+            try
+              Result:= AnalyzeUnits(AThese, LPairs,
+                CachingLookup(CancellableLookup(EngineClassLookup(FEngineProbe, LDb, LPairs), LCancelled), LCache),
+                DiskTextReader(), CancellableCodeUses(EngineCodeUses(FEngineProbe, LDb), LCancelled));
+            finally
+              LCache.Free;
+            end;
+          end,
+          function(out AError: string): Boolean
+          var
+            LOut: string;
+          begin
+            Result:= False;
+            if LCancelled() then
+              AError:= ANALYSIS_CANCELLED
+            else if (LProject = '') or not TFile.Exists(LProject) then
+              AError:= Format('the project index %s has no project file on disk', [LDb])
+            else
+            begin
+              // The editor's OWN project (ProjectFileForDb), as the runner reindexes it.
+              Result:= FEngineProbe.IndexProject(LProject, LDb, LOut) = 0;
+              AError:= if Result then '' else Copy(Trim(LOut), 1, PROBLEM_HEAD);
+            end;
+          end);
+        Result:= if ACancel.IsCancelled then ENGINE_OUTCOME_CANCELLED else 0;
+      end;
+    FAnalyzing:= True;
+    try
+      try
+        if Assigned(FHost.RunLongCall) then
+          FHost.RunLongCall(Format('Checking %d source unit(s) for inherited instances', [Length(APaths)]), LWork)
+        else
+        begin
+          var LToken: TCancelToken:= TCancelToken.Create;
+          try
+            LWork(nil, LToken);
+          finally
+            LToken.Free;
+          end; // try
+        end;
+      except
+        on E: Exception do
+        begin
+          LUnits:= nil;
+          FInheritError:= FInheritError + 'the inherited-instance check stopped on an error: ' + E.Message + ' ';
+        end;
+      end; // try
+    finally
+      FAnalyzing:= False;
+    end; // try
+  end;
+  for var LPath: string in APaths do
+    FInherit.Remove(UpperCase(LPath));
+  for var LUnit: TUnitInheritance in LUnits do
+    FInherit.AddOrSetValue(UpperCase(LUnit.UnitPas), LUnit);
+  LText:= UnknownUnitsText(LUnits);
+  if LText <> '' then
+    FInheritError:= FInheritError + LText;
+  FSources.Invalidate;
+end;
+
+function TConvertTab.ReanalyzeAll(AForce: Boolean): Boolean;
+var
+  LKey: string;
+begin
+  LKey:= '';
+  for var LPair: TTypePair in CheckedPairs do
+    LKey:= LKey + LPair.FromType + '>' + LPair.ToType + ';';
+  Result:= AForce or not SameText(LKey, FPairsKey);
+  if not Result then
+    Exit;
+  FPairsKey    := LKey;
+  FInheritError:= '';
+  FInherit.Clear;
+  Analyze(FSources.Items.ToStringArray);
+end;
+
+function TConvertTab.InheritanceOf(const AUnitPas: string): TUnitInheritance;
+begin
+  if not FInherit.TryGetValue(UpperCase(AUnitPas), Result) then
+  begin
+    Result:= Default(TUnitInheritance);
+    Result.UnitPas:= AUnitPas;
+  end;
+end;
+
+function TConvertTab.InheritanceOfAll(const AUnits: TArray<string>): TArray<TUnitInheritance>;
+begin
+  Result:= nil;
+  for var LPath: string in AUnits do
+    Result:= Result + [InheritanceOf(LPath)];
+end;
+
+procedure TConvertTab.SetSources(const AList: TArray<string>);
+begin
+  FSources.Items.BeginUpdate;
+  try
+    FSources.Items.Clear;
+    for var LPath: string in AList do
+      FSources.Items.Add(LPath);
+  finally
+    FSources.Items.EndUpdate;
+  end; // try
+end;
+
+procedure TConvertTab.OfferAncestors(const AAdded: TArray<string>);
+var
+  LChain  : TArray<string>;
+  LList   : TArray<string>;
+  LMissing: TArray<string>;
+  LPrompt : string;
+begin
+  for var LPath: string in AAdded do
+  begin
+    LChain  := AncestorChain(InheritanceOf(LPath));
+    LList   := FSources.Items.ToStringArray;
+    LMissing:= MissingAncestors(LChain, LList);
+    if Length(LMissing) = 0 then
+      Continue;
+    LPrompt:= OfferText(LMissing, LPath);
+    // Mirrored on the status line: a TMessageForm's text is a TLabel with no window,
+    // so the GUI driver reads the status bar while the dialog is up.
+    FHost.SetStatus(LPrompt, False);
+    if MessageDlg(LPrompt, mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+      Continue;
+    SetSources(InsertAncestors(LList, LPath, LChain));
+    FHost.FeedHarvest(LMissing);
+    Analyze(LMissing);
+  end;
 end;
 
 procedure TConvertTab.SourcesDrawItem(Control: TWinControl; Index: Integer; Rect: TRect; State: TOwnerDrawState);
@@ -625,6 +898,10 @@ begin
   // The item string stays the raw path (the job and Preflight read it); only
   // the display carries the flag.
   LText:= SourceRowText(FSources.Items[Index], FIndexed, FIndexKnown, LFlagged);
+  // C8 E5 / E8: what the unit inherits; italic, not red -- it is advice, not a refusal.
+  var LNote: string:= InheritanceRowNote(InheritanceOf(FSources.Items[Index]));
+  if LNote <> '' then
+    LText:= LText + ' -- ' + LNote;
   FSources.Canvas.FillRect(Rect);
   // Every row sets its own font state, flagged or not. The colour a clean or
   // selected row needs is already on the canvas: TCustomListBox.CNDrawItem
@@ -633,6 +910,8 @@ begin
   // unselected row overrides it.
   if LFlagged then
     FSources.Canvas.Font.Style:= [fsBold]
+  else if LNote <> '' then
+    FSources.Canvas.Font.Style:= [fsItalic]
   else
     FSources.Canvas.Font.Style:= [];
   // SetError's colour (MainForm.RefreshStatusColor: clRed in both themes); a
@@ -676,14 +955,25 @@ end;
 procedure TConvertTab.AddRow(const ARow: TConvertRow);
 var
   LRan: Boolean;
+  LRow: TConvertRow;
 begin
-  FRunRows:= FRunRows + [ARow];
+  LRow:= ARow;
+  // C8 E10, editor side: E2b code uses the run left, from the analysis taken BEFORE
+  // the run (RunFinished reanalyses only after every row is in). An ancestor this run
+  // converted earlier converted them too (R4).
+  if LRow.Status = csConverted then
+  begin
+    var LLeft: string:= CodeUseLeftNote(InheritanceOf(LRow.UnitPas), UnitsConvertedIn(FRunRows));
+    if LLeft <> '' then
+      LRow.Note:= LRow.Note + '; ' + LLeft;
+  end;
+  FRunRows:= FRunRows + [LRow];
   // Edit counts belong to a book that actually changed the unit.
-  LRan:= ARow.Status in [csConverted, csRolledBack];
-  AddResultRow([ExtractFileName(ARow.Book), ExtractFileName(ARow.UnitPas), ConvertStatusText(ARow.Status),
-    if LRan then IntToStr(ARow.Apply.EditsCount) else '',
-    if LRan then IntToStr(Length(ARow.Apply.Remainder)) else '',
-    ExtractFileName(ARow.Backup), ExtractFileName(ARow.BackupDfm), ARow.Note]);
+  LRan:= LRow.Status in [csConverted, csRolledBack];
+  AddResultRow([ExtractFileName(LRow.Book), ExtractFileName(LRow.UnitPas), ConvertStatusText(LRow.Status),
+    if LRan then IntToStr(LRow.Apply.EditsCount) else '',
+    if LRan then IntToStr(Length(LRow.Apply.Remainder)) else '',
+    ExtractFileName(LRow.Backup), ExtractFileName(LRow.BackupDfm), LRow.Note]);
 end;
 
 procedure TConvertTab.QueueRow(const ARow: TConvertRow; ADone: Integer);
@@ -750,22 +1040,37 @@ begin
   FIndexKnown:= True;
   FIndexed   := Idx;
   FSources.Invalidate;
+  // C8: the files and the index may have moved since the units were added.
+  ReanalyzeAll(True);
   Pre:= Preflight(FEntries, Units, Idx, FUnitRulesOk);
   FResults.Items.Clear;
   FRunRows:= nil;
-  FNotes  := Pre.Notes;
-  for var LNote: string in Pre.Notes do
+  FNotes  := Pre.Notes + EngineRefusalNotes(InheritanceOfAll(Units), FInheritedOk);
+  for var LNote: string in FNotes do
     AddResultRow(['', '', 'note', '', '', '', '', LNote]);
   if not Pre.Ok then
   begin
     FHost.SetStatus('Convert refused: ' + string.Join(' ', Pre.Problems), True);
     Exit;
   end;
+  // C8 E7: a descendant listed above an unconverted ancestor converts without its
+  // inherited instances. Warn once; never block (E9).
+  var LWarn: TArray<string>:= OrderWarnings(Units, InheritanceOfAll(Units));
+  if Length(LWarn) > 0 then
+  begin
+    FHost.SetStatus(string.Join(' ', LWarn), False); // mirrored for the GUI driver: a TMessageForm's text has no window
+    if MessageDlg(OrderWarningText(LWarn), mtWarning, [mbYes, mbNo], 0) <> mrYes then
+    begin
+      FHost.SetStatus(ORDER_CANCELLED, False);
+      Exit;
+    end;
+  end;
   Job.Books      := Pre.Runnable;
   Job.Units      := Units;
   Job.Dbs        := FHost.GetDbs();
   Job.ProjectDb  := FHost.GetProjectDb();
   Job.ProjectFile:= FHost.GetProjectFile();
+  Job.InheritedSupported:= FInheritedOk;
   // Every unit and every book is followed by `index --project` on the DB's OWN
   // project file: without it each apply would "fail" and every unit would be
   // restored; another project's file would re-scope the DB.
@@ -779,6 +1084,7 @@ begin
   // Captured now: the user may open or start another book mid-run, which moves
   // the live rules folder; the report belongs beside the books that ran.
   FRunRulesFolder:= FHost.GetRulesFolder();
+  FRunInheritedOk:= FInheritedOk;
   FCancelRequested:= False;
   SetRunning(True);
   FProgress.Max     := Length(Job.Books) * Length(Job.Units);
@@ -859,13 +1165,19 @@ begin
     LLines.Add(string.Join(#9, ['Book', 'Unit', 'Status', 'Edits', 'Remaining', 'Backup', 'Backup .dfm', 'Note']));
     for var LNote: string in FNotes do
       LLines.Add(string.Join(#9, ['', '', 'note', '', '', '', '', LNote]));
-    for var LRow: TConvertRow in FRunRows do
+    for var I: Integer:= 0 to High(FRunRows) do
     begin
+      var LRow: TConvertRow:= FRunRows[I];
       var LRan: Boolean:= LRow.Status in [csConverted, csRolledBack];
       LLines.Add(string.Join(#9, [LRow.Book, LRow.UnitPas, ConvertStatusText(LRow.Status),
         if LRan then IntToStr(LRow.Apply.EditsCount) else '',
         if LRan then IntToStr(Length(LRow.Apply.Remainder)) else '',
         LRow.Backup, LRow.BackupDfm, LRow.Note]));
+      // C8 E10: one line per instance the converted unit left, same 8 columns; an
+      // ancestor converted earlier in this run is not "left" (R4, as the row note).
+      if FRunInheritedOk and (LRow.Status = csConverted) then
+        for var LLeft: TInheritedLeft in InheritedLeftOmitting(LRow.Apply.InheritedLeft, UnitsConvertedIn(Copy(FRunRows, 0, I))) do
+          LLines.Add(string.Join(#9, [LRow.Book, LRow.UnitPas, STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft)]));
     end;
     for var LUnit: string in ANotReached do
       LLines.Add(string.Join(#9, ['', LUnit, STATUS_NOT_REACHED, '', '', '', '', '']));
@@ -956,6 +1268,11 @@ begin
   var LIndexErr: string;
   if not ReadIndex(LIndexErr) then
     Msg:= Msg + ' The project index could not be re-read, so unindexed units are not flagged: ' + LIndexErr;
+  // C8: converted ancestors now answer differently -- after every row is in (AddRow
+  // read the pre-run analysis).
+  ReanalyzeAll(True);
+  if FInheritError <> '' then
+    Msg:= Msg + ' Inherited instances could not be re-checked: ' + FInheritError;
   // Re-harvest the converted code so the Unit Rules MISSING list is current.
   FHost.FeedHarvest(AJob.Units);
   FHost.SetStatus(Msg, (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '') or (LIndexErr <> ''));
