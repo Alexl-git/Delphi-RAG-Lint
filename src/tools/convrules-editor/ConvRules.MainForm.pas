@@ -157,6 +157,7 @@ type
       FMiFileCurate  : TMenuItem  ; //   would otherwise see a changed book)
       FMiAssign      : TMenuItem  ; // Mapping: gated by UpdateMenuEnabled
       FMiUnassign    : TMenuItem  ;
+      FMiGlyphExpr   : TMenuItem  ; // Mapping > Glyph expression...: needs a loaded rule (C10, ruling B2)
       FMiFindInFrom  : TMenuItem  ;
       FMiOnlyType    : TMenuItem  ; // Mapping: CHECKED while the pool shows only one type
       FMiMappings    : TMenuItem  ;
@@ -537,12 +538,21 @@ type
       /// <param name="InfoTip">Set to the messages; left as is when the block has none.</param>
       procedure RulesInfoTip(Sender: TObject; Item: TListItem; var InfoTip: string);
       /// <summary>FGrid.OnMouseMove: the hint is the validation messages on the
-      /// hovered row's #link, '' when it has none.</summary>
+      /// hovered cell's mark nodes (RowMarkNodes -- the ones GridDrawCell paints), ''
+      /// when they have none.</summary>
       /// <param name="Sender">FGrid; unused.</param>
       /// <param name="Shift">Unused.</param>
       /// <param name="X">Client x.</param>
       /// <param name="Y">Client y.</param>
       procedure GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+      /// <summary>The rule nodes whose marks a grid cell shows: GridMarkNodes over the
+      /// active block for the row's From. Shared by GridDrawCell and GridMouseMove, so
+      /// the hint names exactly what the cell paints (the G[count] link's marks in the
+      /// Glyph column included).</summary>
+      /// <param name="ARow">A grid row; 0 (the header) or less gives [].</param>
+      /// <param name="ACol">The grid column (GRID_GLYPH_COL adds the count link).</param>
+      /// <returns>See GridMarkNodes; [] when the row's From has no link.</returns>
+      function RowMarkNodes(ARow, ACol: Integer): TArray<TRuleNode>;
       /// <summary><!-- drag-lint:auto sum -->Open the curation window on the file
       /// currently loaded here. Curation moves VERBATIM block text and deliberately does
       /// NOT go through this form's canonical re-emitter, so a block that was merely
@@ -1445,6 +1455,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoUnassign(Sender: TObject);
+      /// <summary>Mapping > Glyph expression...: sets, changes or clears the selected
+      /// grid row's link G[I/N] expression through RunGlyphExprDialog, and adds, keeps or
+      /// removes the block's G[count] link for that From (C10 E6-E8, ruling R4).</summary>
+      /// <param name="Sender">The menu item; unused.</param>
+      /// <remarks>Disabled while no rule is loaded (UpdateMenuEnabled, ruling B2). Every
+      /// decision is ConvRules.Glyph's; an insert re-finds FActiveHdr by node (R3).</remarks>
+      procedure DoGlyphExpr(Sender: TObject);
+      /// <summary>Removes the active block's G[count] link from AFromPath when NO
+      /// image link from that From is left for it (OrphanedCountLink, K = 0).</summary>
+      /// <param name="AFromPath">The bare From path.</param>
+      /// <returns>The removed link as '#link To &lt;- From G[count]', or ''.</returns>
+      function DropOrphanCountLink(const AFromPath: string): string;
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1955,6 +1977,16 @@ type
       /// <summary>Conversion &gt; Convert...: shows the Convert tab.</summary>
       /// <param name="Sender">The menu item.</param>
       procedure DoShowConvertTab(Sender: TObject);
+      /// <summary>C12 E1-E5: reads the IDE's request file, prepares it
+      /// (PrepareConvertRequest: parse, validate against this editor's project DB /
+      /// file, the index's existence, the rules folder -- request, --rules-folder, else
+      /// RulesFolderNow -- and the .dfm scope) and hands it to the Convert tab.
+      /// Queued from Create, so it runs once the window is up.</summary>
+      /// <param name="APath">The --convert-request file.</param>
+      /// <remarks>A refused request leaves the editor as a plain --form launch, on the
+      /// Classes tab, with the reason in red. Never starts the run, never deletes the
+      /// file.</remarks>
+      procedure ApplyConvertRequest(const APath: string);
       procedure AddSourceFiles(const APaths: TArray<string>);
       procedure AddSourceText(const AText: string);
       procedure DoAddSource(Sender: TObject);
@@ -2555,6 +2587,12 @@ var
     browsing to it every time. Its FOLDER also seeds the Open dialog, so a browse
     from a --form session starts beside the unit that was passed. }
   GEditorFormPath: string = '';
+  { --convert-request <file>: the IDE plugin's request (C12); '' = none. Read once,
+    queued from Create after the --form load (ApplyConvertRequest). }
+  GEditorConvertRequest: string = '';
+  { --rules-folder <dir>: the rules folder a --convert-request uses when its file has
+    no rules_folder (ruling B1); '' = none. }
+  GEditorRulesFolderArg: string = '';
   { Defaults come from ConvRules.Platform so the .dpr and this unit cannot drift
     apart; the .dpr overwrites both from --from-platform / --to-platform, which
     still accept win32|win64|both. FROM was cpBoth until 2026-07-29 -- see
@@ -2585,6 +2623,10 @@ uses
   , ConvRules.DropTarget
   , ConvRules.EngineWait // RunWithProgressDialog: proptree behind a cancellable window
   , ConvRules.EngineProgress // TStreamingWork: the LongCallRunner wrapper's signature
+  , ConvRules.Glyph     // dl:unit ConvRules.Glyph accepted -- C10 glyph-link decisions; GLYPH_COUNT_EXPR travels with FindCountLink / CountLinkIssueFor
+  , ConvRules.GlyphForm // C10: the glyph-expression dialog
+  , ConvRules.ConvertRequest // C12: PrepareConvertRequest / TPreparedRequest
+  , ConvRules.Inheritance    // C12: DiskTextReader, the .dfm reader the request's scope is built from
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2604,6 +2646,8 @@ const { VCL style names as they are recorded INSIDE the .vsf files linked by
     painted, never stored in the cell. Colours are the fixed red / orange of a
     status mark, readable on both the light and the dark style. }
   GRID_CAST_COL     = 2;
+  GRID_GLYPH_COL    = 3; // C10: the link's G[I/N] expression, verbatim
+  GRID_COL_COUNT    = 4;
   MARK_ERROR_PREFIX = '[!] ';
   MARK_WARN_PREFIX  = '[w] ';
   MARK_ERROR_COLOR  = clRed;
@@ -2702,6 +2746,8 @@ begin
   var LLib: TCastLib := ParseCastLib(GEditorCastLib);
   FCastDefs:= LLib.Casts;
   FEnumDefs:= LLib.Enums;
+  // C10: validate gets --castlib from the same file (CastLibArgs drops a missing one).
+  FEngine.CastLibFile:= GEditorCastLib;
   BuildUI;
   // After BuildUI: ApplyTheme repaints FGrid, which BuildUI creates.
   ApplyTheme(ResolveThemeMode(GEditorThemePref, GEditorIdeTheme));
@@ -2735,6 +2781,15 @@ begin
   end
   else
     SetStatus('Ready. Open a .rules file, or pick From/To classes and choose ' + '"Conversion > New Conversion".');
+
+  // C12: after the window shows (ruling R2) -- and after a .rules file the .dpr opens
+  // once CreateForm returns, so nothing queued before it overwrites the request's status.
+  if GEditorConvertRequest <> '' then
+    TThread.ForceQueue(nil,
+      procedure
+      begin
+        ApplyConvertRequest(GEditorConvertRequest);
+      end);
 end; // constructor
 
 procedure TConvRulesForm.FormCloseHandler(Sender: TObject; var Action: TCloseAction);
@@ -2805,6 +2860,7 @@ begin
   FMiAutoMatch:= AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
   FMiAssign    := AddMenuCmd(LMapping, '&Assign'      , 'Assign the highlighted To leaf (pool, right) to the selected From row', DoAssign);
   FMiUnassign  := AddMenuCmd(LMapping, '&Unassign'    , 'Drop the selected From row''s assignment', DoUnassign);
+  FMiGlyphExpr := AddMenuCmd(LMapping, '&Glyph expression...', 'Set, change or clear the selected link''s G[I/N] glyph expression (C10)', DoGlyphExpr);
   FMiFindInFrom:= AddMenuCmd(LMapping, '&Find in From', 'Select the From-grid row whose property has the SAME name as the highlighted To leaf', DoFindInFrom);
   FMiOnlyType  := AddMenuCmd(LMapping, '&Only this type', 'Show only pool leaves whose TYPE matches the highlighted leaf (toggle)', DoOnlyType);
   AddMenuCmd(LMapping, '-', '', nil);
@@ -2955,6 +3011,7 @@ begin
   FMiClearExamine.Enabled:= (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
   FMiMappings.Enabled:= (FActiveHdr >= 0);
   FMiAutoMatch.Enabled:= (FActiveHdr >= 0); // job C6: enabled, it only answered "Select or create a rule first."
+  FMiGlyphExpr.Enabled:= (FActiveHdr >= 0); // C10 ruling B2: same gate as Auto-Match
   if (FMiScopeRenames <> nil) and (FUnitList <> nil) then
   begin
     var LScope: Boolean:= False;
@@ -3411,6 +3468,10 @@ begin
     begin
       AddHarvest(HarvestFiles(APaths, LErrs), LErrs, 'Convert sources', False);
     end;
+  LHost.GetCastLib:= function: string
+    begin
+      Result:= GEditorCastLib;
+    end;
   LHost.SetStatus:= procedure(AText: string; AIsError: Boolean)
     begin
       if AIsError then
@@ -3429,6 +3490,23 @@ begin
       // resolved before may now be declared elsewhere, or not at all.
       if not ARunning then
         FEngine.ClearResolveCache;
+    end;
+  // C8: the tab's inherited-instance check reindexed the project through ITS adapter
+  // (the stale retry) -- the same staleness as after a run.
+  LHost.ProjectReindexed:= procedure
+    begin
+      FEngine.ClearResolveCache;
+    end;
+  // C8: the inherited-instance check behind the same cancellable window as proptree;
+  // FTreeLoads holds depth commits back while it runs (see FEngine.LongCallRunner).
+  LHost.RunLongCall:= function(const ATitle: string; const AWork: TStreamingWork): Integer
+    begin
+      Inc(FTreeLoads);
+      try
+        Result:= RunWithProgressDialog(ATitle, AWork);
+      finally
+        Dec(FTreeLoads);
+      end; // try
     end;
   FConvertTab:= TConvertTab.Create(Self, LHost);
   FConvertTab.Parent:= FTabConvert;
@@ -3550,7 +3628,10 @@ begin
   FGrid:= TStringGrid.Create(Self);
   FGrid.Parent:= GridPanel; FGrid.Align:= alClient;
   // RowCount must stay > FixedRows: start at 2 (header + one blank data row).
-  FGrid.ColCount:= 3; FGrid.RowCount:= 2; FGrid.FixedRows:= 1; FGrid.FixedCols:= 0;
+  FGrid.ColCount:= GRID_COL_COUNT;
+  FGrid.RowCount:= 2;
+  FGrid.FixedRows:= 1;
+  FGrid.FixedCols:= 0;
   // goColSizing: the user can drag column borders to widen From/To to taste.
   FGrid.Options:= FGrid.Options + [goRowSelect, goVertLine, goHorzLine, goColSizing];
   FGrid.DefaultRowHeight:= 20;
@@ -3558,6 +3639,8 @@ begin
   FGrid.Cells[1, 0]:= 'To (assigned)';
   FGrid.Cells[2, 0]:= 'cast';
   FGrid.ColWidths[0]:= 330; FGrid.ColWidths[1]:= 330; FGrid.ColWidths[2]:= 110;
+  FGrid.Cells[GRID_GLYPH_COL, 0]:= 'Glyph';
+  FGrid.ColWidths[GRID_GLYPH_COL]:= FGrid.ColWidths[GRID_CAST_COL] * 2;
   // Hand painting entirely to GridDrawCell (header, selection and Examine's green
   // marking all go through it) -- required for OnDrawCell to own the cell colour.
   FGrid.DefaultDrawing:= False;
@@ -4627,7 +4710,10 @@ begin
   FGrid.RowCount:= Max(2, matched + 1);
   for r:= 1 to FGrid.RowCount - 1 do
   begin
-    FGrid.Cells[0, r]:= ''; FGrid.Cells[1, r]:= ''; FGrid.Cells[2, r]:= '';
+    FGrid.Cells[0, r]:= '';
+    FGrid.Cells[1, r]:= '';
+    FGrid.Cells[GRID_CAST_COL, r]:= '';
+    FGrid.Cells[GRID_GLYPH_COL, r]:= '';
   end;
 
   r:= 1;
@@ -4648,6 +4734,13 @@ begin
       FGrid.Cells[2, r]:= Link.Cast
     else
       FGrid.Cells[2, r]:= '';
+    // C10: the expression verbatim. Only the FIRST link per From is a row, so a
+    // G[count] link behind an image link is not shown here (its image link's glyph
+    // dialog carries it as the 'Keep' box).
+    if Link <> nil then
+      FGrid.Cells[GRID_GLYPH_COL, r]:= Link.GlyphExpr
+    else
+      FGrid.Cells[GRID_GLYPH_COL, r]:= '';
     Inc(r);
   end; // for
 
@@ -5858,16 +5951,27 @@ begin
   else
     Cv.Font.Color:= StyleServices.GetSystemColor(clWindowText);
 
-  // A validation mark on the row's #link shows in the cast column as a prefix --
-  // painted only: the cell TEXT stays the cast, which DoAssign and friends read.
+  // A validation mark on the row's #link shows in the cast AND the glyph column as a
+  // prefix (a bad G-expression is reported on the link's line, so the mark belongs
+  // beside the expression too) -- painted only: the cell TEXT stays the cast / the
+  // expression, which DoAssign and friends read.
   var CellText: string:= FGrid.Cells[ACol, ARow];
-  if (ARow > 0) and (ACol = GRID_CAST_COL) then
+  if (ARow > 0) and (ACol in [GRID_CAST_COL, GRID_GLYPH_COL]) then
   begin
-    var Link: TRuleNode:= FindLinkForFrom(PathOfGridCell(FGrid.Cells[0, ARow]));
     var E: Integer:= 0;
     var W: Integer:= 0;
-    if Link <> nil then
-      MarksText([Link], E, W);
+    // The G[count] link is no grid row of its own (ruling R4): RowMarkNodes adds it in
+    // the glyph column of the row it shares a From with.
+    var MarkNodes: TArray<TRuleNode>:= RowMarkNodes(ARow, ACol);
+    var HasCountLink: Boolean:= Length(MarkNodes) > 1;
+    MarksText(MarkNodes, E, W);
+    // An empty glyph cell gets no bare prefix (the cast column already carries the
+    // link's mark) -- unless the marks are the hidden count link's, shown nowhere else.
+    if (ACol = GRID_GLYPH_COL) and (CellText = '') and not HasCountLink then
+    begin
+      E:= 0;
+      W:= 0;
+    end;
     if E + W > 0 then
     begin
       CellText:= (if E > 0 then MARK_ERROR_PREFIX else MARK_WARN_PREFIX) + CellText;
@@ -6253,7 +6357,11 @@ end;
 { Create or update the #link mapping ToPath <- FromPath in the active block,
   choosing a default cast from the leaf types (identity when same type). Shared by
   the manual Assign and the Auto-Match pass. Does NOT touch the grid/UI -- callers
-  refresh. Assumes CanCast(AFromType, AToType) was already checked. }
+  refresh. Assumes CanCast(AFromType, AToType) was already checked.
+  The link's glyph expression (C10) survives a re-assign: only LinkTo and Cast
+  change. DoAssign never re-assigns a glyph link, or a From with several links
+  (ConvRules.Glyph.GlyphAssignBlock refuses first); Auto-Match only fills From
+  leaves that have no link. }
 procedure TConvRulesForm.AssignLink(const AFromPath, AToPath, AFromType, AToType: string);
 var
   Link    : TRuleNode ;
@@ -6379,6 +6487,16 @@ begin
           + 'Edit that mapping instead -- a #link here would claim the same source property '
           + 'a second time, unconditionally.',
         [FromPath, LCases]));
+    Exit;
+  end;
+
+  // C10: AssignLink retargets the FIRST link of this From. On a glyph link that would
+  // keep the expression against a new target; with several links it would move one
+  // the grid does not show. Refuse and name the link instead.
+  var LGlyphBlock: string:= GlyphAssignBlock(ActiveLinks, FromPath);
+  if LGlyphBlock <> '' then
+  begin
+    SetError(LGlyphBlock);
     Exit;
   end;
 
@@ -6818,15 +6936,154 @@ begin
   FromPath:= PathOfGridCell(FGrid.Cells[0, Row]);
   Link:= FindLinkForFrom(FromPath);
   if Link = nil then begin SetStatus('That From row has no assignment.'); Exit; end;
+  // Read BEFORE Remove: the book owns its nodes, and Remove frees this one.
+  var LHadGlyph: Boolean:= Link.GlyphExpr <> '';
   // remove the link node from the model
   FBook.Nodes.Remove(Link);
-  FGrid.Cells[1, Row]:= '';
-  FGrid.Cells[2, Row]:= '';
+  // A G[count] link left with no image link from this From is an engine error, and
+  // as the From's first link it would take over this grid row: it goes too.
+  var LDropped: string:= DropOrphanCountLink(FromPath);
+  // Re-read the row from the model: a later link from this From (a hand-ordered block
+  // that put the G[count] link first, or a second plain link) now shows here.
+  RefreshGrid;
+  if Row < FGrid.RowCount then
+    FGrid.Row:= Row;
   RefreshPool;
   SyncRawFromModel;
   RefreshRulesList;
   UpdateMenuEnabled; // same reason as DoAssign: the pool list was rebuilt
-  SetStatus('Unassigned ' + FromPath);
+  if LDropped <> '' then
+    SetStatus('Unassigned ' + FromPath + ' -- its glyph expression and ' + LDropped + ' went with it')
+  else if LHadGlyph then
+    SetStatus('Unassigned ' + FromPath + ' -- its glyph expression went with it')
+  else
+    SetStatus('Unassigned ' + FromPath);
+end; // procedure
+
+{ C10: removes the block's G[count] link from AFromPath when NO image link from that
+  From is left (OrphanedCountLink, K = 0 -- one of several image links going keeps
+  it). Returns the removed link as '#link To <- From G[count]', or '' when nothing
+  was removed. }
+function TConvRulesForm.DropOrphanCountLink(const AFromPath: string): string;
+var
+  LCount: TRuleNode;
+begin
+  Result:= '';
+  LCount:= OrphanedCountLink(ActiveLinks, AFromPath);
+  if LCount = nil then
+    Exit;
+  Result:= Format('#link %s <- %s %s', [LCount.LinkTo, LCount.LinkFrom, LCount.GlyphExpr]);
+  FBook.Nodes.Remove(LCount);
+end;
+
+{ C10 E6: the selected grid row's link gets its glyph expression from the dialog.
+  Decisions (the live check, the block rules, the count-target suggestion, which
+  count link exists) are ConvRules.Glyph's; this only moves text between the nodes
+  and the dialog. The G[count] link is managed here too (ruling R4): the box is
+  checked and reads 'Keep' when the block already has one from this From, and
+  unchecking it removes that link. }
+procedure TConvRulesForm.DoGlyphExpr(Sender: TObject);
+var
+  Row      : Integer;
+  FromPath : string;
+  Link     : TRuleNode;
+  Opts     : TGlyphDialogOptions;
+  AddCount : Boolean;
+  Existing : TRuleNode;
+  CountLink: TRuleNode;
+  ToPaths  : TArray<string>;
+  Extra    : string;
+  i        : Integer;
+begin
+  if FActiveHdr < 0 then
+  begin
+    SetStatusAfterCancel('Select or create a rule first.');
+    Exit;
+  end;
+  Row:= FGrid.Row;
+  if Row < 1 then
+  begin
+    SetStatus('Pick a From row in the grid (left) first.');
+    Exit;
+  end;
+  FromPath:= PathOfGridCell(FGrid.Cells[0, Row]);
+  Link:= FindLinkForFrom(FromPath);
+  if Link = nil then
+  begin
+    SetStatus(Format('%s has no #link yet -- assign a To property first, then add the glyph expression.', [FromPath]));
+    Exit;
+  end;
+  Opts:= Default(TGlyphDialogOptions);
+  Opts.FromPath  := FromPath;
+  Opts.ToPath    := Link.LinkTo;
+  Opts.Expr      := Link.GlyphExpr;
+  Opts.BlockNodes:= ActiveLinks; // block-scoped: the block rules never see another block
+  Opts.Link      := Link; // left out of the G[count] rule: its expression is being replaced
+  // The From's OTHER count link: a row that IS a count link is not its own count link.
+  Existing:= FindCountLink(Opts.BlockNodes, FromPath, Link);
+  Opts.CountExists:= Existing <> nil;
+  if Existing <> nil then
+    Opts.CountTarget:= Existing.LinkTo
+  else
+  begin
+    SetLength(ToPaths, Length(FToTree.Leaves));
+    for i:= 0 to High(FToTree.Leaves) do
+      ToPaths[i]:= FToTree.Leaves[i].Path;
+    Opts.CountTarget:= SuggestCountTarget(ToPaths, Opts.BlockNodes);
+  end;
+  Extra:= '';
+  case RunGlyphExprDialog(Self, Opts, AddCount) of
+    gerCancel:
+      Exit;
+    gerSet:
+    begin
+      // A mark about the OLD expression must not survive the edit; an OK that left the
+      // expression as it was keeps the marks the last validation put there.
+      if Link.GlyphExpr <> Opts.Expr then
+        Link.Marks:= nil;
+      Link.GlyphExpr:= Opts.Expr;
+      Link.Dirty    := True;
+      // CountLinkStepFor never AUTO-adds a count link beside an existing one, nor when
+      // the link itself became G[count]; a count link the user writes is the user's.
+      var LStep: TCountLinkStep:= CountLinkStepFor(Existing, Opts.Expr, AddCount);
+      if LStep = clsAdd then
+      begin
+        CountLink:= TRuleNode.Create;
+        CountLink.Kind     := rnkLink;
+        CountLink.LinkTo   := Opts.CountTarget;
+        CountLink.LinkFrom := FromPath;
+        CountLink.GlyphExpr:= GLYPH_COUNT_EXPR;
+        CountLink.Dirty    := True;
+        // R3: an insert shifts every later header -- re-find the active one by NODE.
+        var LHdr: TRuleNode:= FBook.Nodes[FActiveHdr];
+        FBook.Nodes.Insert(FBook.Nodes.IndexOf(Link) + 1, CountLink);
+        FActiveHdr:= FBook.Nodes.IndexOf(LHdr);
+        Extra:= Format(' -- added #link %s <- %s %s', [Opts.CountTarget, FromPath, GLYPH_COUNT_EXPR]);
+      end
+      else if LStep = clsRemove then
+      begin
+        Extra:= Format(' -- removed #link %s <- %s %s', [Existing.LinkTo, Existing.LinkFrom, Existing.GlyphExpr]);
+        FBook.Nodes.Remove(Existing);
+      end;
+      SetStatus(Format('Glyph expression on %s -> %s: %s', [FromPath, Link.LinkTo, Opts.Expr]) + Extra);
+    end;
+    gerClear:
+    begin
+      Link.GlyphExpr:= '';
+      Link.Dirty    := True;
+      Link.Marks    := nil;
+      Extra:= DropOrphanCountLink(FromPath);
+      if Extra <> '' then
+        Extra:= ' -- ' + Extra + ' went with it';
+      SetStatus(Format('Glyph expression removed from %s -> %s.', [FromPath, Link.LinkTo]) + Extra);
+    end;
+  end; // case
+  SyncRawFromModel;
+  RefreshRulesList;
+  RefreshGrid;
+  if Row < FGrid.RowCount then
+    FGrid.Row:= Row;
+  UpdateMenuEnabled;
 end; // procedure
 
 procedure TConvRulesForm.SyncRawFromModel;
@@ -6964,19 +7221,21 @@ var
   Tip : string ;
 begin
   FGrid.MouseToCell(X, Y, ACol, ARow);
-  Tip:= '';
-  if ARow > 0 then
-  begin
-    var Link: TRuleNode:= FindLinkForFrom(PathOfGridCell(FGrid.Cells[0, ARow]));
-    if Link <> nil then
-      Tip:= MarksText([Link], E, W);
-  end;
+  Tip:= MarksText(RowMarkNodes(ARow, ACol), E, W);
   if Tip <> FGrid.Hint then
   begin
     FGrid.Hint:= Tip;
     Application.CancelHint; // re-show for the new row, not the last one's text
   end;
 end; // procedure
+
+function TConvRulesForm.RowMarkNodes(ARow, ACol: Integer): TArray<TRuleNode>;
+begin
+  if ARow <= 0 then
+    Exit(nil);
+  var RowFrom: string:= PathOfGridCell(FGrid.Cells[0, ARow]);
+  Result:= GridMarkNodes(ActiveLinks, FindLinkForFrom(RowFrom), RowFrom, ACol = GRID_GLYPH_COL);
+end; // function
 
 { Open the curation window on the file currently loaded here. Curation moves
   VERBATIM block text and deliberately does NOT go through this form's canonical
@@ -7802,6 +8061,45 @@ end;
 procedure TConvRulesForm.DoShowConvertTab(Sender: TObject);
 begin
   FTabs.ActivePage:= FTabConvert;
+end;
+
+procedure TConvRulesForm.ApplyConvertRequest(const APath: string);
+var
+  LText: string;
+  LPrep: TPreparedRequest;
+begin
+  try
+    LText:= TFile.ReadAllText(APath, TEncoding.UTF8);
+  except
+    on E: Exception do
+    begin
+      SetError(Format('Convert request %s could not be read: %s', [APath, E.Message]));
+      Exit;
+    end;
+  end; // try
+  LPrep:= PrepareConvertRequest(LText,
+    TRequestEditorState.Make(GEditorProjectDb, ProjectFileForDb(GEditorProjectDb), GEditorRulesFolderArg, RulesFolderNow),
+    function(P: string): Boolean
+    begin
+      Result:= TFile.Exists(P);
+    end,
+    function(P: string): Boolean
+    begin
+      Result:= TDirectory.Exists(P);
+    end,
+    DiskTextReader());
+  if not LPrep.Ok then
+  begin
+    SetError(Format('Convert request %s refused: %s', [APath, LPrep.Error]));
+    Exit;
+  end;
+  // B1: the folder is known BEFORE the request is applied. Through RescanRulesFolder,
+  // so the catalog and the skip file follow the folder exactly as on any other rescan.
+  FRulesFolder:= LPrep.RulesFolder;
+  RescanRulesFolder(nil);
+  DoShowConvertTab(nil);     // its OnShow re-lists the books (ConvertTabShow)
+  FConvertTab.RefreshBooks;  // R2: explicit -- the tab may already have been the active page
+  FConvertTab.LoadRequest(LPrep.Request, LPrep.Scope);
 end;
 
 procedure TConvRulesForm.AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string; AActivate: Boolean);

@@ -1,0 +1,1 @@
+line 3: link OptionsImage.Glyph <- Glyph: G-expression column 1: slot 5 exceeds its count 4 (in "G[5/4]")

@@ -95,11 +95,14 @@ through a breaking change buys nothing.
   `.pas` side. Whether the `.dfm` re-emit still reports `dropped Picture.Data`
   (twenty buttons losing their glyphs) has NOT been re-measured since -- check a
   real convert-apply on VARINSP before repeating either claim.
-* **Real conversions are ON HOLD for projects re-stamped to 1.21.0 (2026-10-05)**
-  until the engine session sends "done". 34 of 36 DBs (Micronite2027 among
-  them) were re-stamped by an unreviewed 1.21.0 build, and the 1.20.6 pin
-  refuses to WRITE them -- the Convert tab's reindex-before-apply would fail.
-  Read-only verbs (convert-validate, proptree, query, sql) still answer.
+* **The 1.21.0 conversion hold is OVER (corrected 2026-10-06).** It held while the
+  DBs re-stamped by an unreviewed 1.21.0 build could not be written by the 1.20.6
+  pin. The engine re-parsed every DB at extractor 1.21.1; the C8 branch runs on the
+  **1.22.0 pin** (`1.22.0-alpha-20261006-040048`, extractor still 1.21.1, so no
+  re-parse), which writes them. The other live pin, `1.21.1-alpha-20261005-161726`,
+  stays for the C10 stream. Before a REAL conversion of a project, still check
+  `check-engine-drift.ps1` and that the project DB answers to the pin (a schema
+  refusal names the DB; `index --project` migrates it in seconds).
 * **The `--db` strictness sweep has LANDED, and the "costs us nothing" reading of
   it was WRONG (corrected 2026-09-15).** The claim recorded here was that our DB
   set is three hardcoded paths that all exist, so strictness could not touch us.
@@ -579,15 +582,22 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 
 ### Verification kit
 
-* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1329 pass / 5 fail** (1334 total; was 1243 / 5 before the engine-1.20.6 adoption branch);
-  the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
+* **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
+  the 1.22.0 pin -> **`model-tests: 1951 pass / 5 fail / 0 skip / 1956 total`**
+  (measured 2026-10-06 on C8 + C10 + C12 after the C12 final-review fix wave, 148 s;
+  1938 / 5 / 0 right after the C12 rebase onto C10; C12 on C8 alone 1792 / 5 / 0;
+  C8 + C10 1806 / 5 / 0 after the C10 fix wave, 1793 / 5 / 0 right after the C10 rebase onto C8; C8 alone 1660 / 5 / 0 after its Task 8 fix round 1, 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
+  fix wave; 1422 / 5 / 0 before C8; 1329 / 5 before C6); `inherited.live` RUNS now
+  (the engine reports `inherited_instances`) and SKIPs on an older pin; the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
-  `.has.TOvcTable`). A full run is ~6 min (the live runner test is ~3 min of
-  it); a build or redeploy of `dll-win64` mid-run kills it -- discard that run.
+  `.has.TOvcTable`). A full run measured 98-178 s on 2026-10-06 (recorded
+  earlier as ~6 min, the live runner test ~3 min of it); a build or redeploy of `dll-win64` mid-run kills it -- discard that run.
 * **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
   -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
   Win64 library index answers -- a staged copy, never `dll-win64`). Expected
-  on the final build (measured 2026-10-04 on the 1.20.3 pin copy, all 8 green):
+  on the final build (re-measured 2026-10-06 on C8 + C10 + C12 after the C12 fix wave,
+  on a staged copy of the 1.22.0 pin: all 12 green with these exact counts, each on
+  its first run; `drive-inherited-offer.ps1` also 15 / 0 on a staged 1.21.1 copy):
 
   | driver | checks | covers |
   |---|---|---|
@@ -596,14 +606,38 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   | `drive-unit-harvest.ps1` | 21 | Unit Rules harvest (`-ProofNoDestination` control) |
   | `drive-file-menu.ps1` | 19 | New / Save As / Exit, the guard, delete-in-place makes dirty |
   | `drive-owning-open.ps1` | 6 | cross-book double-click goes through `ConfirmDiscard` |
-  | `drive-engine-wait.ps1` | 8 | progress window: appears after `SHOW_DELAY_MS`, Cancel closes it and stops the To tree, retry after cancel, a fast load shows no window |
-  | `drive-book-depth.ps1` | 10 + 1 SKIP | depth combo shows the book's `#depth`, gated on `book_depth`, absent `#depth` not added on save, New file shows the default; the SKIP line is the 3 `depth.change.*` checks (13 pass after the 1.20.6 re-pin) |
-  | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line |
+  | `drive-engine-wait.ps1` | 9 | progress window: appears after `SHOW_DELAY_MS`, Cancel closes it and stops the To tree, retry after cancel, a fast load shows no window, a re-load is cached (`wait.reload.*`) |
+  | `drive-book-depth.ps1` | 13 | depth combo shows the book's `#depth`, gated on `book_depth`, absent `#depth` not added on save, New file shows the default, `depth.change.*` (an engine without `book_depth` gives 10 + 1 SKIP line) |
+  | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line; since C8 also: no E7 order dialog on a fixture with no inherited instance |
+  | `drive-validate-scope.ps1` | 18 | scoped validation on Save (warnings, unchanged re-save fast), progress window + Cancel, owed block revalidated, Exit without a prompt, `automatch.*` |
+  | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), the E10 run note branching on the staged engine's `inherited_instances` (`engine.refusal.note.absent` on 1.22.0, `engine.refusal.note` on a 1.21.1 pin copy -- run BOTH stages; `-ProofNoInheritance` control) |
+  | `drive-glyph-link.ps1` | 23 | C10: Glyph expression menu item (disabled without a rule, enabled with one), Convert tab greys the G-link book and it stays unchecked through Check all / Space / a click (`Convert refused: No rule book is checked.`), the dialog's checked `Keep ... G[count]` box, Auto-Match + Save As keeps both G-link lines byte-exact with no duplicate, the bad book's Save shows `G-expression column` (`-ProofNoGlyph` control: 17 / 6) |
+  | `drive-convert-request.ps1` | 25 | C12: `--convert-request` opens the Convert tab with the unit listed, only the matching book checked, the E5 status, `Clear scope` enabled; Convert converts the selected instance only (`--only`), report `Scope` line + `--only` note; Delete resets the scope and says `Scope cleared` on the status bar; Exit without a prompt; `form` scope; E3 no-rules-folder refusal (editor stays usable); missing project index refused; unindexed unit named in red; `--write-capabilities` within 5 s, no window (`-ProofNoRequest` control) |
 
   `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
   fail is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
   the project index" (no DB), not at the unindexed refusal; that refusal is
-  proven by `Loose.pas` in the normal run.
+  proven by `Loose.pas` in the normal run. `drive-inherited-offer.ps1
+  -ProofNoInheritance` gave 8 pass / 6 fail on the 1.22.0 pin and 7 / 7 on the
+  1.21.1 pin (both measured 2026-10-06 with the C8 fix-round-1 exe; on 1.21.1 the E10
+  refusal note is the seventh FAIL, on 1.22.0 its `.absent` twin passes vacuously);
+  on the C12 fix-wave build 7 / 7 on 1.22.0 and 6 / 8 on 1.21.1, the extra FAIL in
+  both being `sources.cleared` (the timing below):
+  the C8 checks can fail. On the C8 + C10 build (C10 fix wave, 1.22.0) it measured
+  7 / 7 TWICE: the six C8 checks plus `sources.cleared` -- in proof mode Convert starts
+  a REAL two-unit run and the driver clears the list ~32 s later; both logs show the
+  status still `Converting 2 unit(s) with 1 book(s)...` 30 s after the click, so the
+  run had most likely not finished when the delete came (the earlier 8 / 6 measured a
+  run that had). Read it as the proof run's timing, not a C8 check -- unconfirmed
+  against a C8-only build. Not bent in the driver. The driver also branches its E6 / E7 / cancel expectations on
+  the staged engine's `inherited_retype` (absent on both pins today). `drive-convert-request.ps1
+  -ProofNoRequest` gives 6 pass / 19 fail (C12 fix wave; 6 / 18 before
+  `req.delete.says.scope.cleared`) and prints a `PROOF` line per pass: four
+  positive controls (`req.fixture.index`, `req.main`, `req.nofolder.usable`,
+  `req.caps.probe`) and two checks that CANNOT discriminate (`req.label2.untouched`,
+  `req.exit` -- they hold with or without a request); any other pass is printed as
+  UNEXPECTED. The normal run against C8's editor build (774093c9, no C12 code) gave
+  5 / 19 -- RED (C12 Task 5).
 * **Driver traps recorded on this branch:** `LB_GETTEXT` is system-marshalled
   -- read it into a LOCAL buffer, not remote memory; screen capture of a CHILD
   window here returns another control's pixels -- use `PrintWindow(hwnd, dc,
@@ -987,6 +1021,586 @@ unchanged is presumed validated earlier."
   are never cached (`rcache.*`). `drive-engine-wait.ps1` now checks the RE-load
   (`wait.reload.no.window`, `wait.reload.query.cached` = one engine child,
   proptree only); both FAIL on the uncached build. The first uncached load is not
-  asserted; `wait.window.appears` is the positive control.* **Mapping > Auto-Match is disabled while no rule is loaded**
+  asserted; `wait.window.appears` is the positive control.
+* **Mapping > Auto-Match is disabled while no rule is loaded**
   (`UpdateMenuEnabled`; driver `automatch.*` in `drive-validate-scope.ps1`, RED
   on main).
+
+## Inherited instances (C8) -- hand-over notes (feat/c8-inherited-editor, 2026-10-06)
+
+Spec: `docs\superpowers\specs\2026-10-05-c8-inherited-instances-design.md` (E1-E11;
+the engine half C8 N1-N5 is the ENGINE stream's). Plan:
+`docs\superpowers\plans\2026-10-05-c8-inherited-instances-editor.md`. Ledger with
+every ruling: `.superpowers\sdd\2026-10-05-c8-inherited-instances-editor\progress.md`
+in the `c8-inherited` worktree.
+
+### Where things live
+
+* **Decisions: `ConvRules.Inheritance`** (model-tested). `ScanDfmInheritance` /
+  `FindDfmObject` share one header walk (`WalkDfmHeaders`) that skips `<` / `(` /
+  `{` values whole, so a collection's `item`/`end` never closes a component.
+  `AnalyzeUnit` / `AnalyzeUnits` walk the class chain through a `TClassLookup` and
+  read ancestor .dfm files through a `TDfmTextReader`; the row notes, the offer,
+  the list insert, the order warning, the Convert gate and the no-capability run
+  notes are all pure routines here. Two helpers are not pure: `DiskTextReader`
+  (the real reader, `TFile.ReadAllText`, which drops a BOM) and `CachingLookup`
+  (fills a caller-owned cache).
+* **Run-side decisions are NOT in `ConvRules.Inheritance`** (model-tested too):
+  `InheritedLeftNote` / `InheritedReportNote` (the engine's `inherited[]` as a row
+  note / a report note), `ConvertedRowNote` and `SourcesAddRefusal` live in
+  `ConvRules.ConvertRun`;
+  `InheritedReportLines`, `UnitsConvertedIn` and `CodeUseNoteDue` live in
+  `ConvRules.ConvertRunner`.
+* **The reader answers `TDfmRead`:** `drMissing` (no .dfm -- a class with no .dfm
+  declares no component), `drUnreadable` (exists, read raised), `drRead`.
+* **Engine binders: `ConvRules.InheritanceEngine`** -- `EngineClassLookup`
+  (`LookupClass` + `ListClassFields`), `EngineCodeUses` (`ListCodeRefs` through
+  `CodeUseName`), `IsStaleIndexError`, `AnalyzeRetryingStale`. The ONE place the
+  binding is made; the model tests drive it against a fixture index.
+* **Engine reads (`ConvRules.Engine`) share `SqlRowsOfDb`.** `LookupClass`:
+  `symbols` kind `class` JOIN `files` LEFT JOIN `type_ancestors` ordinal 0,
+  `COLLATE NOCASE`; only `IsPlainIdentifier` names are spliced in. One file = found;
+  two or more files = ambiguous = outside, never guessed. `ListClassFields` reads
+  only the From-typed fields the class itself declares, PINNED to the .pas the
+  lookup found. The C8 reads pass `ARequireFresh`: a STALE answer is a failure
+  (`INDEX_STALE_MARKER`), not data. `ParseClassLookupRows` / `ParseFieldRows` /
+  `ParseCodeRefRows` are test-only entry points over the same row mappers (held by
+  `dl:ok unused-public-symbol`).
+* **`MainForm.pas` / `ConvertTab.pas` are outside the tests' closure** -- as before,
+  build the editor too.
+
+### What the analysis decides
+
+* **The declaring ancestor is NOT always the parent.** Measured on DMTEST:
+  `dmCPData`'s `inherited tblFtrs: TTable` is declared in `DMREADINGS`, two levels
+  up; `PathToData.dfm` never mentions it. The walk continues past an ancestor that
+  does not open the instance.
+* **`TAncestorState`: `asUnconverted` / `asConverted` / `asMismatched` / `asOutside` /
+  `asUnknown`.** `asConverted` = the declaring object has the To type of a checked pair
+  whose From is the instance's type; **`asMismatched` (Task 8, 2026-10-06; REVERSES
+  preflight ruling C4, which read every non-From type as converted)** = it has neither
+  (the engine's `mismatched`; `TInstanceVerdict.FoundType` names the type). Its row note
+  is `inherits N <types> instance(s) from <Unit>, where they are <Found> -- not this
+  book's From or To type`; it is NOT offered (E6) and NOT warned about (E7) -- converting
+  that ancestor with this book would not help. `ResolveInstance` therefore takes the
+  pairs. `asUnknown` = the walk could not decide: the index could not be asked (failed or
+  stale read), the chain loops or passes `MAX_CHAIN_DEPTH` (32), or an IN-INDEX
+  ancestor's .dfm is binary (`TPF0`) or unreadable. The verdict's `Reason` names the
+  cause; `AnalyzeUnit` then makes the unit `Known = False` with an `Error` carrying
+  the engine's own text. **Unknown is never a row note** -- the reason goes to the
+  status line (`UnknownUnitsText`). `asOutside` = the chain left the project index
+  (a library ancestor, an ambiguous class) or ended at an indexed class with no
+  ancestor; with no ancestor class named at all the note is the no-ancestor wording
+  (`OUTSIDE_NO_ANCESTOR`, `OutsideNote`).
+* **`inline` blocks are the unit's OWN frames** and are not verdicts; their
+  `inherited` children are, resolved from the frame class. **Frame fallback:** when
+  the form chain does not declare an instance, every enclosing block's class
+  (`TInheritedInstance.Enclosing`, innermost outward, up to the innermost `inline`)
+  is walked next, and the chains are MERGED; `TChainUnit.Depth` is one shared
+  counter, so a frame unit always sits above every form that re-opens its child.
+* **The chain offered (E2a / E6) is only the units whose .dfm declares or re-opens
+  one of the descendant's instances** (plus, for a code use, the unit declaring the
+  field), topmost first -- ancestors that never mention it are not offered.
+* **E2b code uses: Fields first.** An identifier the unit's own class's methods use
+  (implicit Self, or a receiver's first segment) is matched against the From-typed
+  `Fields` each ancestor declares (`ListClassFields`); a name no ancestor declares is
+  dropped WITHOUT reading any .dfm, so it can never make the unit unknown. Only a
+  real hit walks the chain again reading .dfm files. The index leaves implicit-Self
+  refs unresolved, so `ListCodeRefs` matches by enclosing class + name. Accepted
+  gap: a closer ancestor redeclaring the name with a non-From type (shadowing) is
+  absent from the filtered Fields, so a further ancestor's From field of that name
+  counts.
+* **Cost:** one pass measured 1.5-2.1 s per unit on DMTEST `dmCPData`. Each pass
+  has its OWN class cache (`CachingLookup` over a per-pass dictionary; a failed
+  answer is never cached) and one .dfm cache, so a retry asks afresh.
+
+### The Convert tab
+
+* **Analysis runs behind the progress window** (`FHost.RunLongCall`,
+  cancellable). `FEngineProbe` is then used on the window's worker thread; that is
+  safe only because the runner is MODAL and a drop is refused while `FAnalyzing`
+  (class remarks of `TConvertTab`). A non-modal runner would break it.
+* **A drop is refused under ANY C8 prompt too** (fix wave M2): OLE delivers drops
+  inside a `MessageDlg`'s modal loop, and the E6 offer, the Convert gate and the E7
+  warning were each built from the list as it was when they opened -- a unit dropped
+  under the E6 prompt was wiped by Yes (`SetSources`), one dropped under the gate /
+  E7 was listed but not run. `AskBlockingDrops` sets `FPrompting` around each of the
+  three; `AddSources` asks `SourcesAddRefusal(FRunning, FAnalyzing or FPrompting)`
+  (pure, `tab.add.*`). `ConvertClick` also reads the list only AFTER the
+  open-book save prompt.
+* **A stale read triggers ONE incremental reindex of the editor's own project**
+  (`ProjectFileForDb` of the project DB, as the runner does) and one retry of the
+  stale units (`AnalyzeRetryingStale`); a second failure leaves them unknown with
+  `; reindex failed: ...` or the retry's own reason. After any such reindex the tab
+  calls `TConvertHost.ProjectReindexed`, which clears the MAIN adapter's resolve cache
+  (`FEngine.ClearResolveCache`), as `RunStateChanged(False)` does after a run (M6;
+  wiring only, no automated check).
+* **Re-analysis cadence:** added units on add; the whole list when the CHECKED PAIRS
+  change (`ReanalyzeAll(False)` is a no-op otherwise, so showing the tab costs
+  nothing), always on Convert -- AFTER `Preflight`, so a refused run never pays the
+  analysis -- and after a run (converted ancestors answer differently). The pairs key
+  is committed only for a completed pass.
+* **E6 offer:** a unit whose chain has units not yet listed asks
+  `Add <chain> ahead of <unit>?`. **Insertion (amended 2026-10-05):** each MISSING
+  chain unit, topmost first, goes directly before the earliest LISTED unit among the
+  later chain units and the descendant (appended when none is listed); listed units
+  never move, so a pre-existing misorder stays and E7 still warns about it.
+* **Ancestor-first is the LONG-TERM order -- and until engine C8 N2 it breaks the
+  descendant (controller ruling, Task 8 fix round 1, binding).** Engine 1.22.0 (C8 N1)
+  converts the ancestor and SKIPS the descendant's `inherited X: TOld`; that block under
+  an ancestor that now declares TNew fails at load (EClassNotFound, or EReadError on a
+  TOld-only property) and descendant code using TOld-only members stops compiling. So
+  while the engine lacks `inherited_retype` (`CAPABILITY_INHERITED_RETYPE`, a PROPOSED
+  key for C8 N2 -- the engine stream confirms or renames it; one constant), probed in the
+  SAME `CapabilityNames` call as `inherited_instances` (`FRetypeOk`, `Job.RetypeSupported`):
+  * E5 row note: `... -- convert it first (recommended)` stays verbatim (spec E5) plus
+    ` -- with this engine, converting it now breaks this unit until N2`;
+  * E6 prompt: `Add <chain> ahead of <unit>?` plus ` Converting <chain> leaves <unit>'s
+    inherited instance(s) as <From types> until engine N2 -- <unit> may not compile or
+    load.` (the ruling's `<types> as <From>` collapsed: the instance types ARE the From
+    types, so naming both read `TLabel as TLabel`);
+  * E7: lines `<Desc> is listed above its ancestor <Anc>.`, tail `With this engine the
+    order does not change this run's result: inherited instances are skipped either way.
+    Run anyway?` (no heading claiming reordering helps); still never blocking; No gives
+    `Convert cancelled: nothing was run.` (`OrderCancelledText`);
+  * the converted state's words: `ancestor <U> converted -- this unit still has <Type>
+    there and may not compile or load until the engine can retype inherited instances
+    (N2)`.
+  With the capability, every text is the pre-ruling one. All of it is pure
+  (`ConvRules.Inheritance` / `ConvRules.ConvertRun`), model-tested in both states.
+* **Convert order (fix wave M3):** the no-project-file refusal is checked right after
+  `Preflight` and BEFORE the C8 re-analysis, gate and E7 -- a run that will be refused
+  asks nothing.
+* **Convert gate (`InheritanceGate`):** a CANCELLED check stops the Convert
+  (`GATE_CANCELLED_TEXT`, nothing runs); a FAILED check asks once
+  `Could not check inherited instances for <units> -- convert anyway?` with the
+  reason on the status line; No stops with `InheritanceGateStopText`. Never a
+  refusal (E9). Covered by model tests only -- the fixture analysis finishes before
+  the 400 ms window delay.
+* **E7 order warning:** one dialog listing every descendant listed above an
+  unconverted ancestor; No runs nothing.
+* **Dialog text is mirrored on the status line** (the E6 prompt, the gate question,
+  the E7 warning) because a `TMessageForm`'s text is a windowless `TLabel`;
+  `drive-inherited-offer.ps1` asserts the status bar.
+* **Capability gate:** `inherited_instances`, read with `apply_unit_rules` in ONE
+  `CapabilityNames` call in `RefreshBooks`; `TConvertJob.InheritedSupported` comes
+  from that probe. Without it: `EngineRefusalNotes` says the engine will refuse each
+  Known unit with a .dfm verdict (code uses do not count -- the engine does not
+  refuse on code), and the refusal path is unchanged. With it (engine 1.22.0 on,
+  pin `1.22.0-alpha-20261006-040048`): the engine converts around inherited instances
+  and never refuses for them; a converted row's note (`ConvertedRowNote`) lists
+  `N inherited instance(s) left: <words>` (`InheritedLeftNote`) and the report adds
+  one 8-column `inherited left` line per instance (`InheritedReportLines`,
+  `<name>: <type> line N -- <words> (<reason>)`, the reason left out when the words
+  carry it). The words per `ancestor_state`:
+
+  | state | words |
+  |---|---|
+  | `unconverted` | `ancestor <U> not converted` |
+  | `converted` | without `inherited_retype` (1.22.0): `ancestor <U> converted -- this unit still has <Type> there and may not compile or load until the engine can retype inherited instances (N2)`; with it: `ancestor <U> converted -- retype pending (engine N2)`. N1 SKIPS it; the descendant's .dfm stays byte-unchanged |
+  | `mismatched` | `ancestor <U> has <Found> (neither <From> nor <To>)`, read from the engine's reason `declared in <U> as <Found>, neither <From> nor <To> -- ...`; any other reason shape gives `ancestor <U> has another type -- <reason>` |
+  | `outside` | `ancestor not determinable -- <reason>` (the engine sends `ancestor_unit` ""; a missing / binary ancestor .dfm lands here with the file named) |
+  | anything else | `ancestor <U>: <state>` |
+
+  Grouping is by the words, i.e. (state, unit) plus the type found / the reason (and the
+  instance type for converted without retype). The engine also puts each left instance in
+  `warnings[]` (`line N: warning: inherited instance ...`); when `inherited[]` is not
+  empty those are NOT counted in `M remaining for manual work` (`ParseApplyJson`,
+  `apply.remainder.*`) -- the left note already counts them.
+  A .dfm holding ONLY inherited instances answers `component_part:
+  "skipped-no-instances"`, ok, exit 0: a CONVERTED row with `; no component of its own
+  to convert` (`TApplyRow.ComponentPart`; `runner.inherited.skipped.no.instances`). Its
+  `.BCK<N>` is kept like any converted row's, although nothing changed. The editor's
+  own pre-run analysis keeps treating an unreadable / binary IN-INDEX ancestor .dfm as
+  unknown (status line); the engine's post-run `outside` reports it per instance.
+* **R4 -- an ancestor converted EARLIER IN THE SAME RUN is not "left" -- in the
+  editor-side code-use note ONLY** (`UnitsConvertedIn`). The code-use note
+  (`N inherited code use(s) left: ...`, `CodeUseLeftNote`) appears ONCE per unit
+  (`CodeUseNoteDue`), not once per book. **The engine's own `inherited[]` is shown
+  UNFILTERED** in the converted row's note and in the report's `inherited left` lines
+  (controller ruling, fix wave M4): the engine answers after the runner's reindex and
+  is authoritative. `InheritedLeftOmitting` was deleted with that ruling; guards
+  `tab.r4.runner.engine.unfiltered`, `tab.report.lines.engine.unfiltered`,
+  `tab.r4.left.engine.all`.
+* **Not built:** E4 (the index's inherited/inline `modifiers` flag) -- the .dfm text
+  read is the only source. The E11 live test `inherited.live` RUNS on the 1.22.0 pin
+  (6 checks; it SKIPs on an engine without `inherited_instances`). Its Task 6
+  expectation (descendant retyped) was a guess; a real run showed N1 leaves the
+  descendant's `inherited Label1: TLabel` byte-unchanged and reports it `converted`,
+  so the test now asserts that (Task 8). **`inherited.live.descendant.unchanged` pins
+  N1 on purpose: it goes RED when the engine ships N2 -- the signal to re-adopt
+  (retyped descendant, the retype texts), not a regression.**
+* **Deferred minors (ledger):** a multi-file drop of N descendants of one unlisted
+  base prompts once per descendant on No (no "No to all"); the Convert gate's Yes /
+  No has no GUI check; `drive-inherited-offer.ps1` still has a fixed 2 s sleep after
+  an answer.
+
+## Glyph expressions on #link -- hand-over notes (feat/c10-glyph-editor, 2026-10-06)
+
+The editor half of the G[I/N] glyph grammar (spec
+`docs\superpowers\specs\2026-10-06-c10-split-merge-design.md`, over
+`2026-09-17-glyph-strip-G-grammar-design.md`): a `#link` may carry a glyph
+expression (`#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] :
+AssignGraphic`, `#link OptionsImage.NumGlyphs <- Glyph G[count]`). Built against
+engine 1.21.1, which VALIDATES expressions (CV-4) but does not yet APPLY them.
+Plan, ledger and per-task reports: `docs\superpowers\plans\2026-10-06-c10-split-merge-editor.md`
+(main tree) and `.superpowers\sdd\2026-10-06-c10-split-merge-editor\` in the
+`c10-glyph` worktree. The engine asks (C10 ask N1 `glyph_stitch`, N2, N3 `glyphs[]`,
+N5, N7 capture ...) are in `docs\superpowers\specs\2026-10-06-c10-engine-asks.md`.
+**Two N-series exist: "C8 N1/N2/N5" (inherited instances, the section above) and "C10
+ask N1/N2/N5" (glyphs, here) are DIFFERENT engine asks** -- always qualify which.
+Rebased onto `feat/c8-inherited-editor` on 2026-10-06 (merge order C8 -> C10 -> C12).
+
+### Model and grammar
+
+* **`TRuleNode.GlyphExpr` holds the expression VERBATIM** ('' = none). `ParseLine`
+  splits the cast suffix FIRST (the existing `LastIndexOf(':')` rule), then the
+  expression at the first `GLYPH_EXPR_START` = `' G['` (space, capital G, `[`;
+  case-SENSITIVE, as the engine's `SplitGlyphExpr` -- `Picture g[1/2]` is a path).
+  `SplitGlyphExprOff` is that second step. A count link has no `:`, so `Cast = ''`
+  and the expression is `G[count]` (`glyph.parse.count.link`). `Emit` writes the
+  CANONICAL form `#link To <- From Expr : Cast` for a dirty node; the byte-exact
+  load/save round trip comes from `Raw` on UNTOUCHED lines, not from `Emit`.
+* **Merge (`ConvRules.BlockOps`)**: `TBlockLink` carries `GlyphExpr`; two links to
+  ONE To that differ only in the expression are a merge CONFLICT, an identical pair
+  is a duplicate, two G-links from one From to different Tos both merge in.
+
+### `ConvRules.Glyph` -- the decision unit (pure, model-tested)
+
+* **The expression is checked by the ENGINE's parser**, `DRagLint.Convert.GlyphExpr`,
+  imported from `src\report` by both `.dpr`s (as `DRagLint.Convert.CastLib` is):
+  `CheckGlyphExprText` gives `column C: <message>` with the engine's wording.
+* **Block rules** the parser cannot see: `CountLinkIssueFor` (`G[count] needs exactly
+  one image link from <From>; found K`, plus an exact same-From-same-To duplicate
+  refusal -- slightly stricter than the engine, which has no duplicate check; parked
+  ruling), `StraightCountCarryHint` (the engine's straight-carry warning as a hint),
+  `SuggestCountTarget`, `FindCountLink`, `OrphanedCountLink`, `CountLinkStepFor`,
+  `GlyphAssignBlock`. **Every block-level routine takes ONE block's nodes**
+  (`ActiveLinks` / `LinksForBlock`), never the whole book.
+* **Convert-tab and report text** also lives here: `GLYPH_BOOK_PENDING_SUFFIX`,
+  `BookHasGlyphLinks`, `GlyphNoteSuffix`, `GlyphReportNote`, `GlyphRunSummary`,
+  `TGlyphOutcome`; and the grid's `GridMarkNodes` (below). The report LINES are
+  `GlyphReportLines` in `ConvRules.ConvertRunner`, beside C8's `InheritedReportLines`.
+
+### Grid, dialog, Assign, Auto-Match
+
+* **Grid column `Glyph`** (`GRID_GLYPH_COL`, after `cast`) shows the expression
+  verbatim. A validation mark paints its `[!] ` / `[w] ` prefix on the Cast AND the
+  Glyph cell (text unchanged). The G[count] link is **not a grid row** (ruling R4:
+  `FindLinkForFrom` returns the first link per From); its marks show in the Glyph
+  cell of the row it shares a From with, and it is edited through the image link's
+  dialog or the Raw DSL. **Which nodes a cell shows is ONE answer:**
+  `TConvRulesForm.RowMarkNodes(ARow, ACol)` over the pure `GridMarkNodes`
+  (`glyph.marks.*`), used by BOTH `GridDrawCell` and the hint (`GridMouseMove`), so
+  the hint names the count link's marks too. An EMPTY Glyph cell gets no mark prefix
+  (the Cast cell already carries the link's mark) UNLESS the hidden count link
+  carries it -- that is the only place its marks show.
+* **An OK that leaves the expression unchanged keeps the link's marks**; only a
+  changed expression clears them (`DoGlyphExpr`, final-review Minor 3).
+* **Mapping > Glyph expression...** (`DoGlyphExpr`) is DISABLED while no rule is
+  loaded (ruling B2, the Auto-Match gate). On the selected grid row it opens
+  `TGlyphExprForm` (`ConvRules.GlyphForm`, editor-only): caption `Glyph expression:
+  <From> -> <To>`, the edit prefilled, a live check line (`OK`, `enter an
+  expression, or Clear to remove it`, or the engine's error in red -- OK is disabled
+  until it reads OK), a box `Keep #link <To> <- <From> G[count]` (an existing count
+  link; unchecking removes it) or `Also add ...` (no count link and exactly one
+  `SuggestCountTarget`; hidden when there is none), the straight-carry hint, and
+  OK / Clear / Cancel. Statuses: `Glyph expression on <From> -> <To>: <Expr>` (+
+  ` -- added ...` / ` -- removed ...`), `Glyph expression removed from <From> ->
+  <To>.` (+ ` -- <count link> went with it`). Inserting the count link re-finds the
+  active header by NODE (ruling R3).
+* **Assign refuses on a G-link** or a From with several links
+  (`GlyphAssignBlock`, red status naming the existing link): the grid shows only the
+  first link per From, so a retarget would be silent. Unassign and Clear also drop a
+  G[count] link left with no image link from its From.
+* **Auto-Match never writes an expression**: it fills only From leaves with no
+  link, so a G-link is never touched or duplicated (`drive-glyph-link.ps1`
+  `glyph.saveas.no.duplicate`).
+
+### Engine arguments, gating, outcomes
+
+* **`--castlib` now reaches the engine.** `TEngineAdapter.CastLibFile` adds
+  `--castlib "<file>"` to `convert-apply` AND `convert-validate` when the file
+  EXISTS (`CastLibArgs`; a missing file would make the engine exit 2). The form
+  sets it from `GEditorCastLib`; the Convert tab passes `ExistingCastLib`, captured on
+  the UI thread when Convert is pressed. **Behaviour change, said out loud: enum
+  casts in `.castlib` blocks now EXECUTE in editor-driven runs**; before this branch
+  the editor never passed the castlib. `convert-validate` accepts `--castlib` and
+  IGNORES it -- no check may assume validate looks at cast names.
+* **`glyph_stitch` gating (C10 ask N1, NOT shipped in 1.21.1 NOR in 1.22.0 --
+  re-checked 2026-10-06 on the 1.22.0 pin's `info --json`).** The Convert tab probes
+  `info --json` ONCE for every key -- `apply_unit_rules`, C8's `inherited_instances`
+  and `inherited_retype`, and `glyph_stitch` (`CapabilityNames`, one call), again
+  only on the tab's Refresh. **Convert re-classifies the checked books from disk
+  after the open-book save prompt** (`ClassifiedEntry`, then `ShowBooks`), so a book
+  that just gained a G-link is greyed before the run (final-review Minor 2). Without
+  `glyph_stitch` a book with a G-link (`BookHasGlyphLinks`, set on BOTH the
+  list-build and reload paths) is listed
+  `<book>  (glyph links: engine support pending)`, disabled, and unchecked again
+  after Check all. `Preflight`'s `<book>: glyph links: engine support pending --
+  skipped` note is DEFENCE IN DEPTH -- the GUI never lets the book be checked, so no
+  driver expects it. **Today every G-link book is greyed**; the with-capability
+  paths (row note, report lines, red summary) are model-tested only, on
+  `tests\fixtures\glyph\apply-glyphs-sample.json`, which is HAND-WRITTEN to the
+  C10 ask N3 contract until C10 ask N7's real capture replaces it.
+* **`glyphs[]` (apply/1, C10 ask N3):** `{instance, from_path, to_path, kind,
+  source_n, alternative, dropped_slots[], rule_line, message}` ->
+  `TApplyRow.Glyphs`. `kind` `glyph-stitched` is a success; ANY other kind is a
+  to-do. Every key is optional and type-checked; a missing array or key, or a wrong
+  type, degrades and never raises (ruling R8).
+* **Report and status.** A converted row's note gets `; glyphs: N stitched, M
+  slot(s) dropped by rule, K TODO(s)` (after C8's `ConvertedRowNote`; C8's code-use
+  note, added by the tab, stays last). Per row the run report writes the row line,
+  then C8's `inherited left` lines, then one `glyph` line per outcome for CONVERTED
+  rows only (`GlyphReportLines`) -- in the report's ONE 8-column shape: Book, Unit,
+  `glyph`, four empty cells, Note = `<instance>.<from> -> <to>: <kind>, N=<n>[,
+  <alternative>][, dropped a,b][ -- <message>]` (`GlyphReportNote`; spec E13 amended
+  by the final-review ruling), and a `Castlib<TAB><path>` /
+  `(none)` line before `Final reindex`. When a unit has glyph to-dos the status goes
+  red with `N unit(s) have glyph TODOs -- each one's implementation section starts
+  with the TODO line; see the report`, AFTER a `RESTORE FAILED` lead
+  (`RunStatusLead`) -- the most severe outcome still comes first; C8's
+  `Inherited instances could not be re-checked` follows the body. The line is red
+  on the run's own problems, a failed re-read (C8) OR glyph to-dos. The summary
+  counts UNITS (ruling R5).
+
+### Verification kit additions
+
+* **Model tests:** the combined C8 + C10 count is in the Verification kit above
+  (C10 alone measured 1555 / 5 on the 1.21.1 pin before the rebase). `glyph.validate.*`
+  feeds the REAL pinned-engine capture `tests\fixtures\glyph\validate-glyph-bad.txt` /
+  `-ok.txt` (`convert-validate --rules <book>`, parse-only, no `--db`, stdout; stderr
+  empty) of the fixture books `tests\fixtures\glyph\BitBtn-glyph-bad.rules` /
+  `BitBtn-glyph.rules` through `RunScopedValidation` and asserts the error marks the
+  G-link node. Captured on the 1.21.1 pin; RE-CAPTURED on the 1.22.0 pin 2026-10-06:
+  byte-identical (exit 1 / exit 0).
+* **GUI driver `drive-glyph-link.ps1`** -- its row is in the Verification kit table above.
+  It writes its own fixture (a Fix project indexed with the engine beside the exe,
+  so the Convert tab can pre-flight) and needs no real project. On an engine with
+  `glyph_stitch` the two greying checks SKIP and `glyph.convert.book.listed`
+  asserts the book is checkable instead. `-ProofNoGlyph` (books without
+  expressions) fails 6: greyed, never.checked, the count box, both exact-line checks
+  and the bad-save error. On the pre-C10 editor (main `0383bb87`) it fails 6: the
+  three menu checks, greyed, never.checked and the count box -- the old editor
+  already kept both G-link lines byte-exact (the expression rode along in LinkFrom)
+  and its Auto-Match did not duplicate the link (the To was taken).
+* **Driver trap found here:** a process's `ParentProcessId` can name a REUSED PID --
+  a day-old `tail.exe` of another session read as the editor's engine child and a
+  wait-for-idle loop never finished. `drive-glyph-link.ps1` counts only children
+  created after the editor started; `drive-engine-wait.ps1`'s `WaitIdle` still has
+  the old filter.
+
+## IDE hand-off -- hand-over notes (feat/c12-convert-request, 2026-10-06)
+
+The editor half of C12: the IDE plugin writes a request file and launches the
+editor with it; the editor opens on the Convert tab with that unit listed, the
+matching books checked and a component SCOPE, and waits for Convert. Spec
+`docs\superpowers\specs\2026-10-06-c12-ide-convert-menu-design.md` ("Hand-off
+contract"), engine asks `...\2026-10-06-c12-engine-asks.md`, plan
+`docs\superpowers\plans\2026-10-06-c12-ide-convert-menu-editor.md`; ledger with
+every ruling `.superpowers\sdd\2026-10-06-c12-ide-convert-menu-editor\progress.md`
+in the `c12-request` worktree. Branched from C8 (774093c9); rebased onto C10
+(`feat/c10-glyph-editor` d879dedc) for the final-review fix wave, so the merge order is
+C8 -> C10 -> C12.
+
+**The ENGINE's plugin half is NOT built yet** -- N1 (the `drag-lint > Convert
+Components` submenu, the request writer, close / launch / reopen) and N2 (the
+capability probe that calls `--write-capabilities`). Until then the only way in is a
+hand-written request file, which is exactly what `drive-convert-request.ps1` does.
+
+### Contract and switches
+
+* **`convert-request/1`** (`ConvRules.ConvertRequest`, `ParseConvertRequest`):
+  `schema`, `scope` (`selected` | `form`; `project` is parsed and refused as
+  `Project-wide scope is not supported by this editor version`), `project_file` and
+  `project_db` (required), `units[]` (exactly one for both scopes) each with `pas`
+  (required), `dfm`, `form_class` and `components[]` of `{name, type}`. Optional:
+  `written`, `source`, `ide_pid`, `platform`, and **`rules_folder`** (controller
+  ruling B1, accepted by ENGINE: the plugin writes it from its "Conversion rules
+  folder" setting and OMITS the key -- never `""` -- when unset). Unknown keys are
+  ignored; a KNOWN key of the wrong JSON type is refused, never defaulted. Nothing
+  raises: every read is type-checked (`is TJSONArray` / `is TJSONObject`).
+* **Switches** (documented in the `.dpr` header): `--convert-request <file>`,
+  `--rules-folder <dir>`, `--write-capabilities <file>`. The editor NEVER starts the
+  run (owner Q1, plan default) and never deletes the request file.
+* **`--write-capabilities <file>`** is answered first in the `.dpr` main block,
+  before any global, window or engine child: it writes
+  `{"schema":"editor-capabilities/1","convert_request":1}` (UTF-8, no BOM, one line;
+  the folder is created) and exits 0, or 1 on any failure. An old editor opens its
+  window instead, so the plugin tells them apart by the file appearing within
+  seconds (`req.caps.probe`: written, exited, no window, within 5 s).
+* **Project index adoption** (`AdoptedProjectDb`): an explicit `--project-db` wins;
+  a request launch WITHOUT one adopts the request's `project_db` instead of the
+  built-in `ProjectDb` -- only when that file EXISTS (fix wave Minor 3: a missing one
+  would have put the whole session on a missing index). Not adopted, the editor keeps
+  its own index and the request is refused naming the request's file (`the project
+  index <request db> does not exist -- index the project first`), not as a mismatch.
+  An explicit `--project-db` that differs from the request is
+  kept, and `ValidateConvertRequest` then refuses the request naming both paths --
+  never re-scoped. `project_file` must equal `ProjectFileForDb(project_db)`.
+* **`PrepareConvertRequest(AJson, TRequestEditorState, probes, reader)`** is the
+  pure pass the form runs before touching a control; refusals in this order: parse;
+  the editor has no project index (`the editor has no project index -- launch it with
+  --project-db`); the REQUEST's project index does not exist; validate; the editor's
+  project index file does not exist (both as `the project index <db> does not exist --
+  index the project first`); rules folder; scope (`.dfm`
+  binary, missing, unreadable or header-less -- refused for BOTH scopes, ruling R9).
+  A refusal is shown red as `Convert request <file> refused: ...` and the editor
+  stays on the Classes tab, usable (`req.nofolder.usable`).
+* **Rules folder resolution** (`ResolveRequestRulesFolder`): the request's
+  `rules_folder` > `--rules-folder` > the editor's in-session folder
+  (`RulesFolderNow`: the rescanned folder, else the open book's) > refuse with E3
+  (`No book in <no rules folder: the request has no rules_folder, no --rules-folder
+  was given and no book is open> converts T1, T2 -- ...`). The FIRST non-empty
+  candidate decides: a named folder that does not exist is refused, never replaced
+  by a later candidate. The request is applied only after the folder is known.
+* **Applying it** (`TConvRulesForm.ApplyConvertRequest`, queued with
+  `TThread.ForceQueue` after the form shows, ruling R2): `RescanRulesFolder` on the
+  chosen folder, show the Convert tab, `RefreshBooks`, then
+  `TConvertTab.LoadRequest`: check EXACTLY the books with a `#convert` pair whose
+  From type is a requested bare type (`BookMatchesTypes`; exact match, owner Q6;
+  all matching books, Q7), list the unit (`AddSources` -- index flag, harvest, the C8
+  analysis with those books' pairs), THEN set the scope (`AddSources` resets it,
+  ruling R1). Status E5 `Request from the IDE: convert <scope> with N matching
+  book(s) -- review and press Convert.`, or E3 in red when no book matches.
+  `RequestStatusTail` appends what the tab already knows, each as ` Also: ...`, and
+  the line goes RED when anything was appended: an unindexed unit is named (`Also:
+  <pas> is not in the project index -- Convert will refuse.`) and then the C8
+  inherited-analysis error is DROPPED (the missing index entry is its cause --
+  reported once); an unreadable project index is said so. A scope that holds NO
+  instance (every selected name missing from the `.dfm`, or a form scope `(0 found)`)
+  leads the tail with ` Also: no requested instance is on the form.` (`EmptyScopeTail`,
+  fix wave Minor 1), red: such a run converts nothing. Its Scope text has no empty
+  list: `0 selected component(s) on U; not found on the form: x`.
+
+### The scope
+
+* **`TConvertScope`** (`skWholeUnit` = `Default`, `skSelected`, `skForm`) from
+  `BuildScope` over the `.dfm` text (the C8 depth-tracked header walk, any depth --
+  panels, inline frames' children; the root is never an instance). `selected`: each
+  requested name the `.dfm` opens, request order; names not on the form go to
+  `NotFound`, are listed in the Scope line (`; not found on the form: x`) and NEVER
+  reach the engine; a name selected twice is listed once. `form`: every object whose
+  bare type is a requested type, `.dfm` order; inherited / inline instances are
+  listed and counted in `(N found)` too.
+* **The scope binds the request's `UnitPas` ONLY** (ruling B5). Any other listed unit
+  -- e.g. an ancestor the C8 offer inserted above it -- converts WHOLE, with no
+  `--only` (`ScopedNamesForUnit` returns False for it).
+* **Per book** (`ScopedNamesForBookFile` -> `ScopedNamesForBook`): the scope's names
+  whose bare type is a From type of one of the book's pairs go to `convert-apply
+  --only a,b` (`TEngineAdapter.ApplyConversion` AOnly overload). A book with no name
+  in scope on the unit gets `skipped -- not in scope` (`csOutOfScope`) with NO engine
+  call and no backup named; a unit whose every book is out of scope keeps no `.BCK`.
+  A book file that cannot be read scopes to no name (out of scope, never whole-unit).
+* **Notes and summary.** A converted scoped row's note is `--only N instance(s): a,
+  b; ` + the unscoped note (`ConvertedRowNote`: `<edits> edit(s), <k> remaining for
+  manual work` and any C8 tail; then C10's `; glyphs: ...` suffix, `GlyphNoteSuffix`)
+  -- what was ASKED, not what converted (spec E11 amended; the engine had no
+  per-name answer). The engine's `--only` refusal (`unconverted instance(s) of
+  <Type>`, a `#unuse` / `#useswap` stranding excluded instances) gets the E10 hint
+  ` -- convert all <Type> instances on this form, or remove the #unuse / #useswap
+  from the book`. `csOutOfScope` is counted apart (`TallyRows`) and leaves the
+  `Converted N of M` denominator: `... 2 pair(s) skipped -- not in scope.`
+* **Unknown `--only` name, measured on 1.22.0** (`runner.live.only.unknown.name`):
+  exit 1, `ok=false`, `refused=false`, `edits_count` 0, a generic reason (`no
+  convertible instances found`) -- NOT a refusal. The runner keeps it on the
+  FAILED / restore path (all-or-nothing per unit) and appends ` -- --only asked for
+  <names>; the form may have changed since the IDE request -- re-send it`. A mix of
+  valid and unknown names was not measured. Interim until N3 is adopted (fix wave
+  Minor 2): the hint is SKIPPED when every `--only` name is an inherited or inline
+  instance (`UnmatchedOnlyHintFor`, bound to the job's scope through the runner's
+  `AOnlyHint` seam) -- the engine leaves those to the ancestor, so "re-send it" would
+  be wrong.
+* **`--castlib` travels on the AOnly overload** of `TEngineAdapter.ApplyConversion`
+  (rebase hot spot H1): the runner ALWAYS calls that overload (nil = unscoped) and the
+  4-argument one only delegates to it. Guard: `glyph.castlib.apply.only.scoped.arg` /
+  `.unscoped.arg` (RED with the argument left out).
+* **The Convert tab.** `Scope:` line (`FLblScope`, a `TLabel` named `LblScope`) under
+  the heading; `Clear scope` (enabled only with a scope, disabled during a run)
+  resets to a whole-unit run and says so. **Adding a NEW unit (Add / drop,
+  `AddSources`) or deleting any selected row resets the scope**, and when a scope was
+  in force the status says `Scope cleared -- the whole unit will be converted.`
+  (`SCOPE_CLEARED_TEXT`, fix wave Minor 4; `ResetScope` answers whether it cleared
+  one); the C8 ancestor
+  insert does not (ruling B5/R7). So the `ScopeMatchesUnits` refusal (`the scope
+  names <pas> but the source list (N unit(s)) does not hold it`) is NOT reachable
+  from the GUI today: deleting the unit clears the scope first. Review Focus 5's
+  "Convert tab check" therefore has no GUI driver; `req.delete.resets.scope` covers
+  what the GUI does, and `scope.matches.units.mismatch` (model) covers the refusal
+  (ruling R11). A scoped run adds a grid note row with the scope text.
+* **The run report's layout, all three branches together** (C8 + C10 + C12): the
+  header; `Scope<TAB><scope text>` (`Scope<TAB>whole unit` on a plain run; captured at
+  Convert time in `FRunScope`, so `Clear scope` mid-run cannot change it); per row the
+  row line, then C8's `inherited left` lines, then C10's `glyph` lines (converted rows
+  only); the `not reached (cancelled)` rows; `Run<TAB>completed` / `cancelled -- ...`;
+  `Castlib<TAB><path>` / `(none)` (C10); `Final reindex<TAB>...`.
+* **Driver decision:** the Scope line is a `TLabel` -- no window, unreadable by the
+  driver -- so `drive-convert-request.ps1` asserts the status bar, built from the
+  same `ScopeText`. The label itself is an owner visual check.
+
+### Waiting on ENGINE
+
+* **1.23.0 (merged on main, NOT deployed or pinned)** ships `only_matched[]` /
+  `only_unmatched[]` in apply/1 (N3) and `only_skips_unit_rules` (N4: a unit rule
+  that would strand only `--only`-excluded instances is SKIPPED). Queued editor
+  follow-ups, after a re-pin to 1.23.0: (1) the scoped note from `only_matched[]` /
+  `only_unmatched[]` ("converted N of M", unknown names named) instead of "--only
+  asked for"; (2) the E10 hint gated on `only_skips_unit_rules`; (3) a C13 `REFUSED
+  ... index gap ...` shown as "fix the index", not "edit the book"; (4) runner batch
+  mode (`batch_units`: one apply-batch/1 call per book over all units; measured
+  45.7 s vs 114.7 s for 3 units by ENGINE).
+* Still open: N1 / N2 (above), N6 (hold the plugin's own index jobs on the launched
+  project's DB while the editor lives), N7 (designer right-click entry). The plan's
+  INBOX note to ENGINE about `--only` was superseded (ENGINE shipped N3 / N4 and was
+  told the 1.22.0 measurement directly).
+* **Deferred minors (ledger):** a queued `ApplyConvertRequest` could run before the
+  form is visible if something pumps messages between `CreateForm` and
+  `Application.Run` (latent for IDE launches); a `--form` error is overwritten by the
+  request status; a whitespace-only required value reads "is missing"; the
+  unmatched-name hint also fires on unparseable output / a raised engine call.
+
+## Engine half-apply guard (fix/apply-refusal-guard, 2026-10-06)
+
+* **What it catches.** Every engine up to the deployed 1.25.0: a full
+  `convert-apply --apply` on a unit with NESTED converted components (a TTable
+  with TField children -- DMREADINGS on the DMTEST copies) plans overlapping
+  `.dfm` deletes; `TTextEditApplier.Apply` (`DRagLint.Refactor.TextEdit.pas`,
+  the `DeletesOverlap` branch) refuses that FILE's edits whole and writes one
+  stderr line, `drag-lint: refused N edit(s) to <file> -- overlapping delete
+  ranges (an engine defect; the file is left unchanged)`. The `.pas` IS written,
+  the `.dfm` is not, and `DoConvertApply` ignores the applier's skipped count:
+  apply/1 says `ok: true`, `edits_count` is the PLANNED count, exit 0. No
+  apply/1 key carries the refusal -- the stderr line is the only signal.
+* **What the editor does.** `ParseApplyJson` collects every whole line matching
+  `EDIT_REFUSAL_PATTERN` =
+  `^(?:drag-lint: |ERROR: )?refused (\d+) edit(?:\(s\)|s)? to (.+?) -- (.+)$`,
+  case-insensitive (`EDIT_REFUSAL_OPTIONS` = `[roIgnoreCase]`), from the captured
+  output (stderr follows stdout there), `warnings[]` and `error` into
+  `TApplyRow.EditRefusals`; `ApplyHalfWritten` = `Ok` and any refusal. The
+  runner then takes the FAILURE path (`FailUnit(.., csFailedRestored)`): the
+  unit is restored from its `.BCK<N>`, earlier books on it roll back, the summary
+  counts it failed (red), and the note reads `engine left the unit
+  half-converted (.dfm edits refused: N edit(s), overlapping delete ranges) --
+  restored from backup; engine fix pending` (`HalfWrittenNote`). Tests:
+  `half.*`, `runner.half.*`.
+* **Engine 1.25.1+ shape (not merged yet), covered too.** The plan is checked
+  BEFORE any write, on dry runs too: exit 1, `ok: false`, nothing written (no
+  `.BCK`, no recovery.txt), and the line is `ERROR: refused N edit(s) to <file>
+  -- overlapping delete ranges (an engine defect) -- unit not changed, nothing
+  written` (assumed the same text without `ERROR: ` in apply/1 `error`). The
+  pattern above accepts that prefix;
+  `ApplyEditSetRefused` = NOT `Ok` and any refusal. It is a UNIT failure, never a
+  book error (the book-skip branch excludes it; the next unit still runs), the
+  note is `EditSetRefusedNote` (`engine refused the unit as an engine defect
+  (...) -- unit not changed, nothing written`). It takes the `csRefused` path of
+  `FailUnit` (status `refused -- not changed`): when no earlier book changed the
+  unit nothing is restored and the unneeded `.BCK<N>` files are DROPPED (owner
+  decision 2026-10-04, as `runner.refused.first.drops.backup`); when one did, the
+  unit is restored from its `.BCK<N>` and that book rolls back. A scoped run's
+  `edits_count` 0 here never gets the `--only asked for ... re-send it` hint.
+  Tests: `editset.*`, `runner.editset.*`.
+* **A STOP-GAP.** It keys on engine TEXT. When the engine ships its
+  all-or-nothing apply (a non-zero exit / `ok:false` on any refused edit set),
+  tighten this to that exit contract and drop the text match. Blind spot: the
+  applier's other silent drops (stale anchor, invalid replace, out-of-range
+  line) print nothing, so they cannot be seen from here.

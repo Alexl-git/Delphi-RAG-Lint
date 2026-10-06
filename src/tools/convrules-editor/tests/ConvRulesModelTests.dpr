@@ -11,6 +11,7 @@ uses
   , System.IOUtils
   , System.Classes
   , System.StrUtils
+  , System.Generics.Collections
   , Winapi.Windows
   , ConvRules.Model in '..\ConvRules.Model.pas'  // dl:unit ConvRules.Model accepted -- the tests read BOOK_DEPTH_DEFAULT to pin the model's own default, so the const travels with the unit under test
   , ConvRules.Mappings in '..\ConvRules.Mappings.pas'
@@ -18,6 +19,8 @@ uses
   , ConvRules.Casts in '..\ConvRules.Casts.pas'
   , ConvRules.ConvCatalog in '..\ConvRules.ConvCatalog.pas'
   , DRagLint.Convert.CastLib in '..\..\..\report\DRagLint.Convert.CastLib.pas'
+  , DRagLint.Convert.GlyphExpr in '..\..\..\report\DRagLint.Convert.GlyphExpr.pas'
+  , ConvRules.Glyph in '..\ConvRules.Glyph.pas'  // dl:unit ConvRules.Glyph accepted -- the tests read GLYPH_KIND_STITCHED to pin the stitched/to-do split, so the const travels with the unit under test
   , ConvRules.BlockFile in '..\ConvRules.BlockFile.pas'
   , ConvRules.BlockOps in '..\ConvRules.BlockOps.pas'
   , ConvRules.WorkingSet in '..\ConvRules.WorkingSet.pas'
@@ -34,8 +37,11 @@ uses
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
+  , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
+  , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
+  , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
   ;
 
 var
@@ -1474,6 +1480,73 @@ begin
   end; // try
 end; // procedure
 
+const
+  { The engine's own refusal line, verbatim (DRagLint.Refactor.TextEdit.pas:452,
+    Writeln(ErrOutput, ...)): the editor's capture appends stderr AFTER stdout,
+    so it follows the apply/1 document, before the "(loaded defaults ...)" line. }
+  HALF_DFM_LINE  = 'drag-lint: refused 74 edit(s) to C:\fix\DMREADINGS.dfm -- overlapping delete ranges (an engine defect; the file is left unchanged)';
+  HALF_OK_JSON   = '{"schema":"apply/1","mode":"apply","ok":true,"error":"","refused":false,"reason":"","rule_errors":[],"edits_count":74,' +
+    '"converted":["tblReadings: TTable -> TFDTable"],"todos":[],"reemit_notes":[],"warnings":[],"items":[],"component_part":"applied"}';
+  HALF_EDITS     = 74;  // edits_count in HALF_OK_JSON, and the N of HALF_DFM_LINE
+  HALF_DEFAULTS  = '(loaded defaults from C:\Projects\.drag-lint.json)';
+  { Engine 1.25.1+ (coordinator contract, 2026-10-06): the refusal is checked before
+    any write -- exit 1, ok=false, nothing written. The text-mode line, verbatim: }
+  NEW_REFUSED_LINE = 'ERROR: refused 74 edit(s) to C:\fix\DMREADINGS.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written';
+  NEW_REFUSED_JSON = '{"schema":"apply/1","mode":"apply","ok":false,"error":"refused 74 edit(s) to C:\\fix\\DMREADINGS.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written",' +
+    '"refused":false,"reason":"","rule_errors":[],"edits_count":74,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}';
+  NEW_REFUSED_NOTE = 'engine refused the unit as an engine defect (.dfm edits refused: 74 edit(s), overlapping delete ranges) -- unit not changed, nothing written';
+
+{ The half-apply guard (2026-10-06): convert-apply reported ok=true / exit 0 while
+  its applier refused the .dfm's edit set -- only the stderr line says so. }
+procedure TestApplyHalfWritten;
+var
+  Row: TApplyRow;
+begin
+  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak + HALF_DEFAULTS + sLineBreak);
+  Check('half.parse.still.ok', Row.Ok and (Row.EditsCount = HALF_EDITS), Row.Error);
+  Check('half.parse.refusal.read', (Length(Row.EditRefusals) = 1) and (Row.EditRefusals[0] = HALF_DFM_LINE), string.Join(' | ', Row.EditRefusals));
+  Check('half.detected', ApplyHalfWritten(Row));
+  Check('half.note', HalfWrittenNote(Row) = 'engine left the unit half-converted (.dfm edits refused: 74 edit(s), overlapping delete ranges) -- restored from backup; engine fix pending', HalfWrittenNote(Row));
+  // The same line BEFORE the document (another capture order) reads the same.
+  Row:= ParseApplyJson(HALF_DFM_LINE + sLineBreak + HALF_OK_JSON);
+  Check('half.detected.before.document', Row.Ok and ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
+  // An ordinary success: nothing refused, nothing half-written.
+  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DEFAULTS);
+  Check('half.ordinary.success', Row.Ok and (Length(Row.EditRefusals) = 0) and not ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
+  // The phrase inside an unrelated warning is not the applier's refusal line.
+  Row:= ParseApplyJson(StringReplace(HALF_OK_JSON, '"warnings":[]',
+    '"warnings":["line 12: warning: Fields: overlapping delete ranges are not a property"]', []));
+  Check('half.phrase.in.warning.no.trigger', Row.Ok and not ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
+  // The applier's line carried in warnings[] (a later engine) counts, once.
+  Row:= ParseApplyJson(StringReplace(HALF_OK_JSON, '"warnings":[]',
+    '"warnings":["' + StringReplace(HALF_DFM_LINE, '\', '\\', [rfReplaceAll]) + '"]', []) + sLineBreak + HALF_DFM_LINE);
+  Check('half.in.warnings.once', ApplyHalfWritten(Row) and (Length(Row.EditRefusals) = 1), string.Join(' | ', Row.EditRefusals));
+  // A failed row is not "half-written": it fails on its own already.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}' + sLineBreak + HALF_DFM_LINE);
+  Check('half.not.ok.is.plain.failure', (not Row.Ok) and not ApplyHalfWritten(Row));
+  // Both files refused: one part each, in order.
+  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak +
+    'drag-lint: refused 3 edit(s) to C:\fix\DMREADINGS.pas -- overlapping delete ranges (an engine defect; the file is left unchanged)');
+  Check('half.note.two.files', HalfWrittenNote(Row) = 'engine left the unit half-converted (.dfm edits refused: 74 edit(s), overlapping delete ranges; ' +
+    '.pas edits refused: 3 edit(s), overlapping delete ranges) -- restored from backup; engine fix pending', HalfWrittenNote(Row));
+
+  // --- engine 1.25.1+: the plan is checked BEFORE any write; ok=false, exit 1, nothing written ---
+  Row:= ParseApplyJson(NEW_REFUSED_JSON + sLineBreak + HALF_DEFAULTS);
+  Check('editset.new.read.from.error', (not Row.Ok) and (not Row.Refused) and (Row.RuleErrorCount = 0) and ApplyEditSetRefused(Row) and not ApplyHalfWritten(Row),
+    string.Join(' | ', Row.EditRefusals));
+  Check('editset.new.note', EditSetRefusedNote(Row) = NEW_REFUSED_NOTE, EditSetRefusedNote(Row));
+  // The same line on stderr (text-mode prefix 'ERROR: ') after a generic document.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[]}' + sLineBreak + NEW_REFUSED_LINE);
+  Check('editset.new.read.from.stderr', ApplyEditSetRefused(Row) and (EditSetRefusedNote(Row) = NEW_REFUSED_NOTE), string.Join(' | ', Row.EditRefusals));
+  // An ordinary failure is not an edit-set refusal.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}');
+  Check('editset.plain.failure.no', not ApplyEditSetRefused(Row));
+  // The pattern is case-insensitive and takes 'edit', 'edits' and 'edit(s)'.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[]}' + sLineBreak +
+    'Error: Refused 1 edit to C:\fix\DMREADINGS.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written');
+  Check('editset.variant.case.singular', ApplyEditSetRefused(Row) and (Pos('.dfm edits refused: 1 edit(s)', EditSetRefusedNote(Row)) > 0), string.Join(' | ', Row.EditRefusals));
+end; // procedure
+
 { ConvRules.ConvertRun -- every decision the Convert tab makes before or after
   an engine call. The tab and the runner only execute what these return. }
 procedure TestConvertRun;
@@ -1539,26 +1612,26 @@ begin
   Books[2].Checked:= True;
   Books[2].Kind:= bkMixed;
   // The index is a list of FILE PATHS (the project DB's files table).
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.ok', Pre.Ok, string.Join(' | ', Pre.Problems));
   Check('convertrun.pre.units.only.skipped', string.Join(',', Pre.Runnable) = 'Conv.rules,Mixed.rules', string.Join(',', Pre.Runnable));
   Check('convertrun.pre.notes', Length(Pre.Notes) = 2, string.Join(' | ', Pre.Notes));
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
   Check('convertrun.pre.units.supported', Length(Pre.Runnable) = BOOK_COUNT, string.Join(',', Pre.Runnable));
-  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['P\u1.PAS'], False);
+  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['P\u1.PAS'], False, True);
   Check('convertrun.pre.unindexed.refused', (not Pre.Ok) and (Pos('Loose', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
   Check('convertrun.pre.index.nocase', Pos('U1', string.Join(' ', Pre.Problems)) = 0, string.Join(' | ', Pre.Problems));
   // The migration case: the project indexes ITS OWN U1.pas; a same-named unit
   // from another tree is not indexed -- the engine finds the .dfm by path.
-  Pre:= Preflight(Books, ['m2022\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['m2022\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.same.name.foreign.path', (not Pre.Ok) and (Pos('U1.pas', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
   Books[0].Checked:= False;
   Books[1].Checked:= False;
   Books[2].Checked:= False;
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.book', not Pre.Ok, string.Join(' | ', Pre.Problems));
   Books[0].Checked:= True;
-  Pre:= Preflight(Books, [], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, [], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
 
   // --- ParseApplyJson (schema apply/1) ---
@@ -1595,6 +1668,7 @@ begin
   Check('apply.refused.false.is.failure', not Row.Refused);
   Check('status.text.refused', ConvertStatusText(csRefused) = 'refused -- not changed');
   Check('status.text.restore.failed.unchanged', ConvertStatusText(csRestoreFailed) = 'FAILED -- NOT restored');
+  TestApplyHalfWritten;
 
   // --- ExpandSources: .pas / folder / .dpr, deduped case-insensitively ---
   Dir:= TPath.Combine(TPath.GetTempPath, 'convrun-' + TPath.GetGUIDFileName);
@@ -1732,18 +1806,18 @@ var
       end;
   end;
 
+  // Backups of APas's unit (.pas and .dfm) left in Dir.
+  function BackupsLeft(const APas: string): Integer;
+  begin
+    Result:= Length(TDirectory.GetFiles(Dir, ChangeFileExt(ExtractFileName(APas), '') + '.*.BCK*'));
+  end;
+
   // Engine 1.20.6 refusals (apply/1 "refused": true), kept out of the main body
   // so its cyclomatic complexity stays under the lint limit.
   procedure CheckRefusals;
   var
     LPas : string;
     LRows: TArray<TConvertRow>;
-
-    // Backups of APas's unit (.pas and .dfm) left in Dir.
-    function BackupsLeft(const APas: string): Integer;
-    begin
-      Result:= Length(TDirectory.GetFiles(Dir, ChangeFileExt(ExtractFileName(APas), '') + '.*.BCK*'));
-    end;
 
   begin
     // --- the FIRST book is refused: nothing changed the unit, so no restore and no backup ---
@@ -1804,6 +1878,121 @@ var
       Describe(LRows) + Format(' | calls=%d', [LCalls]));
   end;
 
+  // The half-apply guard (2026-10-06): ok=true + exit 0, the .pas written, the .dfm's
+  // edits refused -- the unit must be restored, not kept as converted.
+  procedure CheckHalfWritten;
+  const
+    ORIG_DFM = 'object DmReadings: TDmReadings' + sLineBreak + '  object tblReadings: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  var
+    LPas : string;
+    LDfm : string;
+    LRows: TArray<TConvertRow>;
+    LSum : TRunTally;
+    // Writes the .pas only, as the engine does, and answers with the captured shape.
+    LHalf: TApplyFn;
+  begin
+    LHalf:= function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        TFile.WriteAllText(AUnitPas, 'CONVERTED-PAS-ONLY', TEncoding.ASCII);
+        AJson := HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak + HALF_DEFAULTS;
+        Result:= 0;
+      end;
+    // --- the only book half-writes: FAILED -- restored, .pas and .dfm as they were ---
+    LPas:= TPath.Combine(Dir, 'H1.pas');
+    LDfm:= ChangeFileExt(LPas, '.dfm');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(LDfm, ORIG_DFM, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules'], LHalf, Index, nil, nil);
+    Check('runner.half.failed.restored', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored)
+      and (TFile.ReadAllText(LPas) = ORIG) and (TFile.ReadAllText(LDfm) = ORIG_DFM), Describe(LRows) + ' | pas=' + TFile.ReadAllText(LPas));
+    Check('runner.half.note', (Length(LRows) = 1) and (Pos('engine left the unit half-converted (.dfm edits refused: 74 edit(s), overlapping delete ranges)', LRows[0].Note) > 0)
+      and (Pos('restored from backup; engine fix pending', LRows[0].Note) > 0), Describe(LRows));
+    Check('runner.half.backup.kept', (Length(LRows) = 1) and (LRows[0].Backup <> '') and TFile.Exists(LRows[0].Backup), Describe(LRows));
+    LSum:= TallyRows(LRows);
+    Check('runner.half.summary.failed', (LSum.Restored = 1) and (LSum.Converted = 0), Format('restored=%d converted=%d', [LSum.Restored, LSum.Converted]));
+
+    // --- an earlier book converted, the next half-writes: both undone ---
+    LPas:= TPath.Combine(Dir, 'H2.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        if not SameText(ExtractFileName(ARulesFile), 'A.rules') then
+          Exit(LHalf(AUnitPas, ARulesFile, AJson));
+        TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+        AJson := OK_JSON;
+        Result:= 0;
+      end, Index, nil, nil);
+    // The unit is back to ORIG first: the .pas the half-apply wrote is gone too.
+    Check('runner.half.rolls.back', (TFile.ReadAllText(LPas) = ORIG) and (Length(LRows) = TWO_ROWS)
+      and (LRows[1].Status = csFailedRestored) and (LRows[0].Status = csRolledBack)
+      and (Pos('B.rules failed', LRows[0].Note) > 0), 'pas=' + TFile.ReadAllText(LPas) + ' | ' + Describe(LRows));
+
+    // --- an ordinary success is unchanged: converted, kept ---
+    LPas:= TPath.Combine(Dir, 'H3.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+        AJson := HALF_OK_JSON + sLineBreak + HALF_DEFAULTS;
+        Result:= 0;
+      end, Index, nil, nil);
+    Check('runner.half.ordinary.converted', (Length(LRows) = 1) and (LRows[0].Status = csConverted)
+      and (TFile.ReadAllText(LPas) = 'CONVERTED-A'), Describe(LRows));
+  end;
+
+  // Engine 1.25.1+ edit-set refusals through the runner (apart from CheckHalfWritten
+  // so each stays under the complexity limit).
+  procedure CheckEditSetRefusedRunner;
+  var
+    LPas : string;
+    LRows: TArray<TConvertRow>;
+  begin
+    // --- engine 1.25.1+: exit 1, ok=false, nothing written. A unit failure (never a
+    // book error), the note says the engine refused it as a defect; the next unit runs ---
+    LPas:= TPath.Combine(Dir, 'H4.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    var LPas5: string:= TPath.Combine(Dir, 'H5.pas');
+    TFile.WriteAllText(LPas5, ORIG, TEncoding.ASCII);
+    var LCalls5: Integer:= 0;
+    LRows:= RunConversionUnits([LPas, LPas5], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Inc(LCalls5);
+        AJson := NEW_REFUSED_JSON + sLineBreak + NEW_REFUSED_LINE + sLineBreak + HALF_DEFAULTS;
+        Result:= 1;
+      end, Index, nil, nil);
+    // Nothing had changed either unit: the csRefused "nothing changed" branch -- no
+    // restore, no backup named, the unneeded .BCK<N> dropped (owner decision 2026-10-04).
+    Check('runner.editset.new.unit.failure', (Length(LRows) = TWO_ROWS) and (LRows[0].Status = csRefused)
+      and (LRows[1].Status = csRefused) and (LCalls5 = TWO_ROWS) and (TFile.ReadAllText(LPas) = ORIG),
+      Describe(LRows) + Format(' | calls=%d', [LCalls5]));
+    Check('runner.editset.new.note', (Length(LRows) = TWO_ROWS) and (LRows[0].Note = NEW_REFUSED_NOTE), Describe(LRows));
+    Check('runner.editset.first.drops.backup', (Length(LRows) = TWO_ROWS) and (LRows[0].Backup = '') and (LRows[0].BackupDfm = '')
+      and (BackupsLeft(LPas) = 0) and (BackupsLeft(LPas5) = 0), Describe(LRows) + Format(' | backups left=%d/%d', [BackupsLeft(LPas), BackupsLeft(LPas5)]));
+
+    // --- 1.25.1 shape after an earlier book converted the unit: restore + roll back ---
+    LPas:= TPath.Combine(Dir, 'H6.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        if not SameText(ExtractFileName(ARulesFile), 'A.rules') then
+        begin
+          AJson := NEW_REFUSED_JSON + sLineBreak + NEW_REFUSED_LINE;
+          Exit(1);
+        end;
+        TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+        AJson := OK_JSON;
+        Result:= 0;
+      end, Index, nil, nil);
+    var LRestored: Boolean:= (TFile.ReadAllText(LPas) = ORIG) and (BackupsLeft(LPas) = 1);
+    Check('runner.editset.later.restores', LRestored and (Length(LRows) = TWO_ROWS)
+      and (LRows[0].Status = csRolledBack) and (LRows[1].Status = csRefused) and (LRows[1].Backup <> ''),
+      'pas=' + TFile.ReadAllText(LPas) + ' | ' + Describe(LRows) + Format(' | backups left=%d', [BackupsLeft(LPas)]));
+  end;
+
 begin
   Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-faults-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -1828,6 +2017,8 @@ begin
     Check('runner.rollback.progress.order', Seen = 'A.rules=rolled back;B.rules=FAILED -- restored;', Seen);
 
     CheckRefusals;
+    CheckHalfWritten;
+    CheckEditSetRefusedRunner;
 
     // --- the backup cannot be taken: the unit is skipped, nothing left behind ---
     PasL:= TPath.Combine(Dir, 'L.pas');
@@ -1935,6 +2126,14 @@ begin
   end; // try
 end; // procedure
 
+// The live runner fixtures' project file: program Fix, using FixUnit (form FixForm).
+procedure WriteFixDpr(const ADpr: string);
+begin
+  TFile.WriteAllText(ADpr, 'program Fix;' + sLineBreak + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak +
+    '  FixUnit in ''FixUnit.pas'' {FixForm};' + sLineBreak + sLineBreak + 'begin' + sLineBreak + '  Application.Initialize;' + sLineBreak +
+    '  Application.Run;' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+end;
+
 { The real engine on a 3-file fixture (one TLabel, a one-#convert book) -- the
   shape measured converting on 2026-09-29 (dry run 106 s; the bad book 93 s).
   Two jobs, one apply each -- the slowest test in the runner:
@@ -1966,9 +2165,7 @@ begin
     Book:= TPath.Combine(Dir, 'Fix.rules');
     Bad := TPath.Combine(Dir, 'Bad.rules');
     Db  := TPath.Combine(Dir, 'Fix.sqlite');
-    TFile.WriteAllText(Dpr, 'program Fix;' + sLineBreak + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak +
-      '  FixUnit in ''FixUnit.pas'' {FixForm};' + sLineBreak + sLineBreak + 'begin' + sLineBreak + '  Application.Initialize;' + sLineBreak +
-      '  Application.Run;' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    WriteFixDpr(Dpr);
     TFile.WriteAllText(Pas, 'unit FixUnit;' + sLineBreak + sLineBreak + 'interface' + sLineBreak + sLineBreak + 'uses' + sLineBreak +
       '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak + sLineBreak + 'type' + sLineBreak +
       '  TFixForm = class(TForm)' + sLineBreak + '    Label1: TLabel;' + sLineBreak + '  end;' + sLineBreak + sLineBreak + 'var' + sLineBreak +
@@ -7473,7 +7670,8 @@ begin
   Check('caps.string.true.is.not.true', not MatchText('lazy_validate', Caps));
   Check('caps.garbage', Length(ParseCapabilityNames('FATAL: no')) = 0);
   Check('caps.no.block', Length(ParseCapabilityNames('{"version":"1"}')) = 0);
-  Check('caps.consts', (CAPABILITY_BOOK_DEPTH = 'book_depth') and (CAPABILITY_PROGRESS_LINES = 'progress_lines'));
+  Check('caps.consts', (CAPABILITY_BOOK_DEPTH = 'book_depth') and (CAPABILITY_PROGRESS_LINES = 'progress_lines')
+    and (CAPABILITY_INHERITED_INSTANCES = 'inherited_instances'));
 end;
 
 { CapabilityNames is bounded by its own InfoTimeoutMs, not ENGINE_TIMEOUT_MS: a
@@ -8357,6 +8555,3118 @@ begin
     TDirectory.Delete(Dir, True);
   end;
 end;
+
+{ C8 E1: the .dfm scan lists every inherited / inline object, nested ones included,
+  with name, class, line, enclosing frame class and enclosing block type. Lists ('<',
+  '(', '{' values) are skipped whole, so a collection's item/end never closes a
+  component; quoted text is never a header. }
+procedure TestInheritanceScan;
+const
+  DESC_DFM =
+    'inherited dmlCPData: TdmlCPData' + sLineBreak +
+    '  Height = 480' + sLineBreak +
+    '  inherited tblFtrs: TTable' + sLineBreak +
+    '    inherited tblFtrsDimName: TStringField' + sLineBreak +
+    '      DisplayLabel = ''Characteristic Name''' + sLineBreak +
+    '    end' + sLineBreak +
+    '  end' + sLineBreak +
+    '  inherited qryScrap: TQuery [2]' + sLineBreak +
+    '    SQL.Strings = (' + sLineBreak +
+    '      ''select a, b'' +' + sLineBreak +
+    '      ''from t)'')' + sLineBreak +
+    '  end' + sLineBreak +
+    '  object qryOwn: TQuery' + sLineBreak +
+    '  end' + sLineBreak +
+    'end' + sLineBreak;
+  FRAME_DFM =
+    'object Form2: TForm2' + sLineBreak +
+    '  Caption = ''inherited fake: TTable''' + sLineBreak +
+    '  inline Frame11: TFrame1' + sLineBreak +
+    '    inherited Button1: TButton' + sLineBreak +
+    '      Caption = ''Go''' + sLineBreak +
+    '    end' + sLineBreak +
+    '  end' + sLineBreak +
+    '  object Grid: TDBGrid' + sLineBreak +
+    '    Columns = <' + sLineBreak +
+    '      item' + sLineBreak +
+    '        Expanded = False' + sLineBreak +
+    '      end' + sLineBreak +
+    '      item' + sLineBreak +
+    '        Title.Caption = ''a > b''' + sLineBreak +
+    '      end>' + sLineBreak +
+    '  end' + sLineBreak +
+    '  object After: TLabel' + sLineBreak +
+    '  end' + sLineBreak +
+    'end' + sLineBreak;
+  // Ruling R2: a string CONTINUATION line holding '=' and '(' is not a property
+  // assignment, so it must not open a list skip that would swallow every header after it.
+  CONT_DFM =
+    'inherited Form3: TForm3' + sLineBreak +
+    '  object Lbl: TLabel' + sLineBreak +
+    '    Hint =' + sLineBreak +
+    '      ''abc = (def'' +' + sLineBreak +
+    '      ''ghi''' + sLineBreak +
+    '  end' + sLineBreak +
+    '  inherited qryLate: TQuery' + sLineBreak +
+    '  end' + sLineBreak +
+    'end' + sLineBreak;
+  LINE_DIM   = 4;
+  LINE_SCRAP = 8;
+  LINE_LATE  = 7;
+  INSTANCES_IN_DESC = 3;
+var
+  S     : TDfmInheritance;
+  Opener: TDfmOpener;
+  Typ   : string;
+begin
+  S:= ScanDfmInheritance(DESC_DFM);
+  Check('inherit.scan.root', S.RootClass = 'TdmlCPData', S.RootClass);
+  Check('inherit.scan.count', Length(S.Instances) = INSTANCES_IN_DESC, IntToStr(Length(S.Instances)));
+  if Length(S.Instances) = INSTANCES_IN_DESC then
+  begin
+    Check('inherit.scan.plain', (S.Instances[0].Name = 'tblFtrs') and (S.Instances[0].TypeName = 'TTable') and (S.Instances[0].Opener = doInherited)
+      and (S.Instances[0].FrameClass = '') and (S.Instances[0].ParentType = ''));
+    Check('inherit.scan.nested', (S.Instances[1].Name = 'tblFtrsDimName') and (S.Instances[1].Line = LINE_DIM) and (S.Instances[1].ParentType = 'TTable'),
+      Format('%s line %d parent %s', [S.Instances[1].Name, S.Instances[1].Line, S.Instances[1].ParentType]));
+    Check('inherit.scan.index.suffix', (S.Instances[2].TypeName = 'TQuery') and (S.Instances[2].Line = LINE_SCRAP), S.Instances[2].TypeName);
+  end;
+  Check('inherit.scan.list.skipped', FindDfmObject(DESC_DFM, 'qryOwn', Opener, Typ) and (Opener = doObject) and (Typ = 'TQuery'), Typ);
+
+  S:= ScanDfmInheritance(FRAME_DFM);
+  Check('inherit.scan.quoted.not.header', Length(S.Instances) = 2, IntToStr(Length(S.Instances)));
+  if Length(S.Instances) = 2 then
+  begin
+    Check('inherit.scan.inline', (S.Instances[0].Name = 'Frame11') and (S.Instances[0].Opener = doInline) and (S.Instances[0].FrameClass = ''));
+    Check('inherit.scan.frame.child', (S.Instances[1].Name = 'Button1') and (S.Instances[1].Opener = doInherited)
+      and (S.Instances[1].FrameClass = 'TFrame1') and (S.Instances[1].ParentType = 'TFrame1'), S.Instances[1].FrameClass);
+  end;
+  Check('inherit.find.after.collection', FindDfmObject(FRAME_DFM, 'after', Opener, Typ) and (Opener = doObject) and (Typ = 'TLabel'), Typ);
+  Check('inherit.find.ignores.frame.children', not FindDfmObject(FRAME_DFM, 'Button1', Opener, Typ));
+  Check('inherit.find.absent', not FindDfmObject(FRAME_DFM, 'NoSuch', Opener, Typ));
+
+  S:= ScanDfmInheritance(CONT_DFM);
+  Check('inherit.scan.continuation.not.list', (Length(S.Instances) = 1) and (S.Instances[0].Name = 'qryLate') and (S.Instances[0].Line = LINE_LATE),
+    IntToStr(Length(S.Instances)));
+
+  S:= ScanDfmInheritance('TPF0'#0#1'garbage');
+  Check('inherit.scan.binary', S.IsBinary and (Length(S.Instances) = 0));
+  S:= ScanDfmInheritance('');
+  Check('inherit.scan.empty', (S.RootClass = '') and (Length(S.Instances) = 0) and not S.IsBinary);
+end;
+
+{ C8 E1 helpers: bare class names, a book's #convert pairs (From-only stubs kept), the
+  From-type test, and the two ConvRules.Usage helpers the scan now shares. }
+procedure TestInheritancePairs;
+const
+  BOOK =
+    '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak +
+    '#link Caption <- Caption' + sLineBreak +
+    '#convert TTable -> TFDTable' + sLineBreak +
+    '#convert TQuery -> ' + sLineBreak;
+  PAIRS_IN_BOOK = 3;
+var
+  Pairs: TArray<TTypePair>;
+begin
+  Check('inherit.bare.type', (BareType('Vcl.StdCtrls.TLabel') = 'TLabel') and (BareType('TTable') = 'TTable') and (BareType('') = ''));
+  Pairs:= TypePairsOfText(BOOK);
+  Check('inherit.pairs.count', Length(Pairs) = PAIRS_IN_BOOK, IntToStr(Length(Pairs)));
+  if Length(Pairs) = PAIRS_IN_BOOK then
+  begin
+    Check('inherit.pairs.bare', (Pairs[0].FromType = 'TLabel') and (Pairs[0].ToType = 'TStaticText') and (Pairs[1].FromType = 'TTable') and (Pairs[1].ToType = 'TFDTable'));
+    Check('inherit.pairs.from.only', (Pairs[2].FromType = 'TQuery') and (Pairs[2].ToType = ''));
+  end;
+  Check('inherit.isfrom', IsFromType('ttable', Pairs) and IsFromType('DBTables.TTable', Pairs) and not IsFromType('TMemo', Pairs));
+  Check('inherit.isfrom.none', not IsFromType('TTable', nil));
+  Check('usage.stripquoted.public', Pos('>', StripQuoted('Title.Caption = ''a > b''')) = 0);
+  Check('usage.ispropname.public', IsPropName('Title.Caption') and not IsPropName('''abc'));
+end;
+
+{ A fake project index for the C8 walk: each row 'Class|PasPath|Parent[|f1:T1,f2:T2]'
+  (the 4th part: the From-typed fields the class itself declares); a row 'Class|!'
+  answers Failed (the engine could not be asked), 'Class|!|why' with Error 'why'. A class with no row is not in the
+  index. ACalls (may be nil) records every question asked. }
+function FakeLookup(const ARows: TArray<string>; ACalls: TStringList): TClassLookup;
+const
+  PARENT_FIELD = 2;
+  FIELDS_FIELD = 3;
+  FIELD_NAME   = 0;
+  FIELD_TYPE   = 1;
+var
+  LRows: TArray<string>;
+begin
+  LRows:= ARows;
+  Result:= function(const AClassName: string): TClassInfo
+    var
+      LParts: TArray<string>;
+      LPair : TArray<string>;
+      LField: TFieldDecl;
+    begin
+      Result:= Default(TClassInfo);
+      if ACalls <> nil then
+        ACalls.Add(AClassName);
+      for var LRow: string in LRows do
+      begin
+        LParts:= LRow.Split(['|']);
+        if not SameText(LParts[0], AClassName) then
+          Continue;
+        if LParts[1] = '!' then
+        begin
+          Result.Failed:= True;
+          Result.Error := if Length(LParts) > PARENT_FIELD then LParts[PARENT_FIELD] else '';
+        end
+        else
+        begin
+          Result.Found  := True;
+          Result.PasPath:= LParts[1];
+          if Length(LParts) > PARENT_FIELD then
+            Result.ParentClass:= LParts[PARENT_FIELD];
+          if Length(LParts) > FIELDS_FIELD then
+            for var LText: string in LParts[FIELDS_FIELD].Split([',']) do
+            begin
+              LPair          := LText.Split([':']);
+              LField.Name    := LPair[FIELD_NAME];
+              LField.TypeName:= LPair[FIELD_TYPE];
+              Result.Fields  := Result.Fields + [LField];
+            end;
+        end;
+        Exit;
+      end;
+    end;
+end;
+
+const
+  { FakeReader answers drUnreadable for a path whose text is this. }
+  FAKE_UNREADABLE_DFM = '<unreadable>';
+
+{ A fake file system for the C8 walk: APaths[i] holds ATexts[i] (FAKE_UNREADABLE_DFM =
+  the file exists but cannot be read); anything else is absent. }
+function FakeReader(const APaths, ATexts: TArray<string>): TDfmTextReader;
+var
+  LPaths, LTexts: TArray<string>;
+begin
+  LPaths:= APaths;
+  LTexts:= ATexts;
+  Result:= function(const APath: string; out AText: string): TDfmRead
+    begin
+      AText:= '';
+      for var I: Integer:= 0 to High(LPaths) do
+        if SameText(LPaths[I], APath) then
+        begin
+          if LTexts[I] = FAKE_UNREADABLE_DFM then
+            Exit(drUnreadable);
+          AText:= LTexts[I];
+          Exit(drRead);
+        end;
+      Result:= drMissing;
+    end;
+end;
+
+{ A fake `refs` answer for the C8 code-use scan: rows 'Name|Receiver|Line' for every
+  unit; AFail = the engine could not answer (AError = FAKE_REFS_ERROR). }
+function FakeCodeUses(const ARows: TArray<string>; AFail: Boolean): TCodeUseLookup;
+const
+  FAKE_REFS_ERROR = 'fake: refs unavailable';
+  NAME_FIELD     = 0;
+  RECEIVER_FIELD = 1;
+  LINE_FIELD     = 2;
+var
+  LRows: TArray<string>;
+begin
+  LRows:= ARows;
+  Result:= function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>; out AError: string): Boolean
+    var
+      LParts: TArray<string>;
+      LUse  : TCodeUse;
+    begin
+      AUses := nil;
+      AError:= '';
+      if AFail then
+      begin
+        AError:= FAKE_REFS_ERROR;
+        Exit(False);
+      end;
+      for var LRow: string in LRows do
+      begin
+        LParts   := LRow.Split(['|']);
+        LUse.Name:= CodeUseName(LParts[NAME_FIELD], LParts[RECEIVER_FIELD]);
+        LUse.Line:= StrToInt(LParts[LINE_FIELD]);
+        AUses    := AUses + [LUse];
+      end;
+      Result:= True;
+    end;
+end;
+
+{ C8 E2b: descendant CODE on an ancestor's From-typed field counts as an inherited
+  use even with no .dfm block for it (spec: `tblFtrs.IndexName := ...` in a descendant
+  whose .dfm never overrides tblFtrs). Same chain rule as E2a; no double count with a
+  .dfm block; own fields, unknown names and converted fields are not uses; a walk
+  that cannot decide makes the unit unknown, never outside. }
+procedure TestInheritanceCodeUses;  // dl:ok cyclomatic-complexity@520f -- REVIEWED 2026-10-06 an assertion list plus a one-loop lookup helper (nested function V); the count is mostly the and-chains in Check conditions, and splitting the list would only scatter one fixture
+const
+  BASE_PAS = 'fx\Base.pas';
+  MID_PAS  = 'fx\Mid.pas';
+  LEAF_PAS = 'fx\Leaf.pas';
+  BASE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  MID_DFM  = 'inherited MidDM: TMidDM' + sLineBreak + '  inherited tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BARE_LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  Height = 200' + sLineBreak + 'end' + sLineBreak;
+  BLOCK_LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  NONFROM_LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TFDTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  CONV_BASE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TFDTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BINARY_DFM = BINARY_DFM_SIGNATURE + 'binary';
+  LINE_FIRST = 40;
+  DEPTH_BASE = 2;
+  CHAIN_OPS  = 2;
+  N_USES     = 2;
+var
+  Pairs : TArray<TTypePair>;
+  Rows  : TArray<string>;
+  Reader: TDfmTextReader;
+  Inner : TDfmTextReader;
+  Reads : Integer;
+  U     : TUnitInheritance;
+  P     : TTypePair;
+
+  function V(const AName: string): TInstanceVerdict;
+  begin
+    Result:= Default(TInstanceVerdict);
+    for var LV: TInstanceVerdict in U.Verdicts do
+      if SameText(LV.Instance.Name, AName) then
+        Exit(LV);
+  end;
+
+begin
+  Check('code.use.name', (CodeUseName('IndexName', 'tblFtrs') = 'tblFtrs') and (CodeUseName('Post', 'Self.tblOps') = 'tblOps')
+    and (CodeUseName('Open', 'tblA.Fields[0]') = 'tblA') and (CodeUseName('tblX', '') = 'tblX') and (CodeUseName('Go', 'Self') = 'Go'));
+  P.FromType:= 'TTable';
+  P.ToType  := 'TFDTable';
+  Pairs:= [P];
+  // Base also lists qryOwn, so only the own-class skip (not "no ancestor declares it") drops the leaf's qryOwn use.
+  Rows := ['TLeafDM|' + LEAF_PAS + '|TMidDM|qryOwn:TTable', 'TMidDM|' + MID_PAS + '|TBaseDM', 'TBaseDM|' + BASE_PAS + '|TDataModule|tblFtrs:TTable,tblOps:TTable,qryOwn:TTable'];
+  Reader:= FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, MID_DFM, BASE_DFM]);
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader,
+    FakeCodeUses(['IndexName|tblFtrs|41', 'tblFtrs||40', 'Post|Self.tblOps|50', 'Caption|lblNoSuch|60', 'Open|qryOwn|70'], False));
+  Check('code.use.no.dfm.block', U.Known and (Length(U.Verdicts) = N_USES), Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+  Check('code.use.declared.two.up', V('tblFtrs').Instance.FromCode and (V('tblFtrs').State = asUnconverted) and (V('tblFtrs').DeclaringUnit = 'Base')
+    and (V('tblFtrs').Instance.TypeName = 'TTable') and (V('tblFtrs').Instance.Line = LINE_FIRST));
+  Check('code.use.chain.e2a', (Length(V('tblFtrs').Chain) = 1) and SameText(V('tblFtrs').Chain[0].PasPath, BASE_PAS) and (V('tblFtrs').Chain[0].Depth = DEPTH_BASE)
+    and (Length(V('tblOps').Chain) = CHAIN_OPS) and SameText(V('tblOps').Chain[0].PasPath, MID_PAS));
+  Check('code.use.unknown.dropped', V('lblNoSuch').Instance.Name = '');
+  Check('code.use.own.field.dropped', V('qryOwn').Instance.Name = '');
+  Check('code.use.note', InheritanceRowNote(U, True) = 'inherits 2 TTable instance(s) from Base -- convert it first (recommended)', InheritanceRowNote(U, True));
+  Check('code.use.left.note', CodeUseLeftNote(U) = '2 inherited code use(s) left: ancestor Base not converted', CodeUseLeftNote(U));
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BLOCK_LEAF_DFM, MID_DFM, BASE_DFM]),
+    FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.no.double.count', (Length(U.Verdicts) = 1) and not U.Verdicts[0].Instance.FromCode, Format('%d verdicts', [Length(U.Verdicts)]));
+  Check('code.use.left.note.dfm.only', CodeUseLeftNote(U) = '');
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses([], True));
+  Check('code.use.lookup.failed', not U.Known and (U.Error <> '') and (Length(U.Verdicts) = 0), U.Error);
+  Check('code.use.lookup.failed.cause', ContainsText(U.Error, 'fake: refs unavailable'), U.Error);
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, nil);
+  Check('code.use.not.asked', U.Known and (Length(U.Verdicts) = 0));
+
+  // A walk that cannot decide (the index fails on TBaseDM) is unknown, never outside or dropped.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM', 'TBaseDM|!'], nil), Reader,
+    FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.walk.unknown', not U.Known and (Pos('TBaseDM', U.Error) > 0) and (Length(U.Verdicts) = 0), U.Error);
+  // A converted ancestor's field no longer has the From type: not a use (E11).
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM',
+    'TBaseDM|' + BASE_PAS + '|TDataModule|tblFtrs:TFDTable'], nil), Reader, FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.converted.dropped', U.Known and (Length(U.Verdicts) = 0), Format('n=%d %s', [Length(U.Verdicts), U.Error]));
+  // The PRODUCT shape of a converted ancestor: the filtered Fields omit tblFtrs (now a
+  // TFDTable) while Base.dfm still opens it with the To type -- no inherited use left.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM',
+    'TBaseDM|' + BASE_PAS + '|TDataModule|tblOps:TTable'], nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, MID_DFM, CONV_BASE_DFM]), FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.converted.product.shape', U.Known and (Length(U.Verdicts) = 0), Format('n=%d %s', [Length(U.Verdicts), U.Error]));
+
+  // An unusable (binary) ancestor .dfm: a name no ancestor declares is still decided from
+  // Fields alone (Known); a declared name needs that .dfm for its chain (unknown).
+  Reader:= FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, BINARY_DFM, BASE_DFM]);
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses(['Caption|lblNoSuch|60', 'ShowMessage||61'], False));
+  Check('code.use.binary.dfm.nonfield.known', U.Known and (Length(U.Verdicts) = 0), Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.binary.dfm.field.unknown', not U.Known and (Pos('Mid.dfm', U.Error) > 0) and (Length(U.Verdicts) = 0), U.Error);
+
+  // One AnalyzeUnit reads each ancestor .dfm once, however many names walk past it.
+  Inner:= FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, MID_DFM, BASE_DFM]);
+  Reads:= 0;
+  Reader:= function(const APath: string; out AText: string): TDfmRead
+    begin
+      if SameText(APath, 'fx\Base.dfm') then
+        Inc(Reads);
+      Result:= Inner(APath, AText);
+    end;
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses(['IndexName|tblFtrs|41', 'Post|tblOps|50'], False));
+  Check('code.use.dfm.read.once', (Length(U.Verdicts) = N_USES) and (Reads = 1), Format('n=%d reads=%d', [Length(U.Verdicts), Reads]));
+
+  // A leaf .dfm block with a NON-From type is no verdict; the code use then counts from
+  // the ancestor's From-typed field.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [NONFROM_LEAF_DFM, MID_DFM, BASE_DFM]), FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.leaf.block.nonfrom', U.Known and (Length(U.Verdicts) = 1) and U.Verdicts[0].Instance.FromCode and (U.Verdicts[0].DeclaringUnit = 'Base'),
+    Format('n=%d %s', [Length(U.Verdicts), U.Error]));
+
+  // Names match case-insensitively, against Fields and between uses (first line kept).
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Inner, FakeCodeUses(['IndexName|TBLFTRS|45', 'tblftrs||40'], False));
+  Check('code.use.case.insensitive', (Length(U.Verdicts) = 1) and (U.Verdicts[0].DeclaringUnit = 'Base') and (U.Verdicts[0].Instance.Line = LINE_FIRST),
+    Format('n=%d %s', [Length(U.Verdicts), U.Error]));
+end;
+
+{ C8: the class lookup reads `sql --json`'s POSITIONAL rows [path, parent] (measured
+  on DMTEST 2026-10-05). One file = found (a forward declaration's second row in the
+  same file is the same class); two files = ambiguous, never guessed. A name that is
+  not a plain identifier never reaches the SQL. A truncated answer is a failure. }
+procedure TestClassLookup;
+const
+  ONE = '{"schema":"sql/1","columns":[{"name":"path"},{"name":"c"}],"rows":[["C:\\DM\\dmCPData.pas","TdmlGlbReadings"]],"row_count":1}'
+    + sLineBreak + '(loaded defaults from C:\Projects\.drag-lint.json)';
+  NONE = '{"schema":"sql/1","rows":[],"row_count":0}';
+  TWO  = '{"rows":[["C:\\a\\U.pas","TForm"],["C:\\b\\U.pas","TForm"]]}';
+  FWD  = '{"rows":[["C:\\a\\U.pas",""],["C:\\a\\U.pas","TForm"]]}';
+  CUT  = '{"rows":[["C:\\a\\U.pas","TForm"]],"row_count":1,"truncated":true}';
+  OLD  = '{"rows":[["C:\\a\\U.pas","TForm"]],"row_count":1,"truncated":false,"stale":true,"stale_files":1}';
+var
+  P, A    : string;
+  LAccepts: Boolean;
+  LRejects: Boolean;
+begin
+  Check('lookup.rows.found', (ParseClassLookupRows(ONE, P, A) = cloFound) and (P = 'C:\DM\dmCPData.pas') and (A = 'TdmlGlbReadings'), P + ' ' + A);  // dl:ok hardcoded-absolute-path@4926 -- REVIEWED 2026-10-05 a path VALUE inside fixture JSON; nothing on disk is touched
+  Check('lookup.rows.absent', (ParseClassLookupRows(NONE, P, A) = cloAbsent) and (P = ''));
+  Check('lookup.rows.ambiguous', (ParseClassLookupRows(TWO, P, A) = cloAmbiguous) and (P = '') and (A = ''));
+  Check('lookup.rows.forward.decl', (ParseClassLookupRows(FWD, P, A) = cloFound) and (A = 'TForm'), A);
+  Check('lookup.rows.garbage', ParseClassLookupRows('FATAL: index locked', P, A) = cloFailed);
+  Check('lookup.rows.truncated.failed', (ParseClassLookupRows(CUT, P, A) = cloFailed) and (P = ''));
+  Check('lookup.rows.stale.failed', (ParseClassLookupRows(OLD, P, A) = cloFailed) and (P = ''));
+  LAccepts:= IsPlainIdentifier('TdmlCPData') and IsPlainIdentifier('_T1');
+  LRejects:= not (IsPlainIdentifier('') or IsPlainIdentifier('x'' OR 1=1') or IsPlainIdentifier('Unit.TFoo') or IsPlainIdentifier('1T'));
+  Check('lookup.ident', LAccepts and LRejects);
+end;
+
+{ The C8 two-unit fixture: Anc.pas declares TAncForm (Label1: TLabel, object in
+  Anc.dfm); ADescPas declares ADescClass = class(TAncForm) with ADescBody as its
+  class body and ADescImpl after implementation; ADescDfm is its .dfm. }
+procedure WriteC8Fixture(const ADir, ADescPas, ADescClass, ADescBody, ADescImpl, ADescDfm: string);
+var
+  LDescUnit, LDescForm: string;
+begin
+  LDescUnit:= TPath.GetFileNameWithoutExtension(ADescPas);
+  LDescForm:= Copy(ADescClass, 2, MaxInt);
+  TFile.WriteAllText(TPath.Combine(ADir, 'Fix.dpr'), 'program Fix;' + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak +
+    '  Anc in ''Anc.pas'' {AncForm},' + sLineBreak + '  ' + LDescUnit + ' in ''' + LDescUnit + '.pas'' {' + LDescForm + '};' + sLineBreak +
+    'begin' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(ADir, 'Anc.pas'), 'unit Anc;' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak +
+    '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak + 'type' + sLineBreak + '  TAncForm = class(TForm)' + sLineBreak +
+    '    Label1: TLabel;' + sLineBreak + '  end;' + sLineBreak + 'implementation' + sLineBreak + '{$R *.dfm}' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(ADir, 'Anc.dfm'), 'object AncForm: TAncForm' + sLineBreak + '  Caption = ''Anc''' + sLineBreak +
+    '  object Label1: TLabel' + sLineBreak + '    Caption = ''Hello''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+  TFile.WriteAllText(ADescPas, 'unit ' + LDescUnit + ';' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak + '  System.Classes, Anc;' + sLineBreak +
+    'type' + sLineBreak + '  ' + ADescClass + ' = class(TAncForm)' + sLineBreak + ADescBody + '  end;' + sLineBreak + 'implementation' + sLineBreak +
+    '{$R *.dfm}' + sLineBreak + ADescImpl + 'end.' + sLineBreak, TEncoding.ASCII);
+  TFile.WriteAllText(ChangeFileExt(ADescPas, '.dfm'), ADescDfm, TEncoding.ASCII);
+end;
+
+{ C8 live: a 2-unit fixture indexed by the test engine; LookupClass answers from the
+  real type_ancestors / files tables and AnalyzeUnit (through the editor's own
+  EngineClassLookup binder) + DiskTextReader find the declaring ancestor on disk. A
+  missing --db is a FAILED lookup: the pinned 1.21.1 engine exits 2 ("--db #1 of 1
+  does not exist ... Nothing was answered") and creates no file (measured 2026-10-05). }
+procedure TestClassLookupLive;
+var
+  Exe, Dir, Db, DescPas, Output, P, A, E: string;
+  Eng: TEngineAdapter;
+  U  : TUnitInheritance;
+  Pr : TTypePair;
+begin
+  Exe:= ResolveExe;
+  if Exe = '' then
+  begin
+    Skip('lookup.live', 'no test engine: ' + GEngineWhy);
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8lookup-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    DescPas:= TPath.Combine(Dir, 'Desc.pas');
+    Db     := TPath.Combine(Dir, 'Fix.sqlite');
+    WriteC8Fixture(Dir, DescPas, 'TDescForm', '', '',
+      'inherited DescForm: TDescForm' + sLineBreak + '  inherited Label1: TLabel' + sLineBreak + '    Caption = ''Desc''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak);
+    Eng:= TEngineAdapter.Create(Exe, [Db]);
+    try
+      Check('lookup.live.index', Eng.IndexProject(TPath.Combine(Dir, 'Fix.dpr'), Db, Output) = 0, Output);
+      Check('lookup.live.found', (Eng.LookupClass(Db, 'TDescForm', P, A, E) = cloFound) and SameText(P, DescPas) and (A = 'TAncForm'), P + ' ' + A + ' ' + E);
+      Check('lookup.live.nocase', (Eng.LookupClass(Db, 'tancform', P, A, E) = cloFound) and SameText(P, TPath.Combine(Dir, 'Anc.pas')) and (A = 'TForm'),
+        P + ' ' + A + ' ' + E);
+      Check('lookup.live.library.absent', Eng.LookupClass(Db, 'TForm', P, A, E) = cloAbsent, E);
+      Check('lookup.live.injection.absent', Eng.LookupClass(Db, 'x'' OR ''1''=''1', P, A, E) = cloAbsent);
+      Check('lookup.live.bad.db.failed', (Eng.LookupClass(TPath.Combine(Dir, 'none.sqlite'), 'TDescForm', P, A, E) = cloFailed) and (E <> '')
+        and not TFile.Exists(TPath.Combine(Dir, 'none.sqlite')), E);
+      Pr.FromType:= 'TLabel';
+      Pr.ToType  := 'TStaticText';
+      U:= AnalyzeUnit(DescPas, [Pr], EngineClassLookup(Eng, Db, [Pr]), DiskTextReader());
+      Check('lookup.live.analysis', U.Known and (Length(U.Verdicts) = 1) and (U.Verdicts[0].State = asUnconverted) and (U.Verdicts[0].DeclaringUnit = 'Anc'),
+        Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+      U:= AnalyzeUnit(DescPas, [Pr], EngineClassLookup(Eng, TPath.Combine(Dir, 'none.sqlite'), [Pr]), DiskTextReader());
+      // The engine's own text ("--db #1 of 1 does not exist") reaches the unit's Error.
+      Check('lookup.live.analysis.bad.db.unknown', not U.Known and ContainsText(U.Error, 'TDescForm') and ContainsText(U.Error, 'does not exist')
+        and ContainsText(U.Error, 'none.sqlite'), U.Error);
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ C8 E10: convert-apply's apply/1 inherited[] (spec N1 key names) is read into
+  TApplyRow.InheritedLeft; a converted row's note lists what was left ONLY when the
+  engine reports inherited_instances; a refusal stays a refusal (today's handling).
+  E11: ancestor then descendant, each unit reindexed before its first book. }
+procedure TestInheritedApply;
+const
+  // The engine's own reason texts (DRagLint.Convert.Apply, 1.22.0).
+  REASON_PTD = 'declared in PathToData, which still has TTable -- convert PathToData first (recommended)';
+  REASON_LIB = 'declaring ancestor not found (no ancestor .dfm of TLeafDM declares qryLib) -- convert it from its own project';
+  REASON_ANC = 'declared in Anc, which already has TStaticText -- retyping an inherited instance is not supported yet';
+  INH_JSON ='{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
+    + '"inherited":[{"name":"tblFtrs","type":"TTable","line":4,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"' + REASON_PTD + '"},'
+    + '{"name":"tblOps","type":"TTable","line":9,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"' + REASON_PTD + '"},'
+    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"","ancestor_state":"outside","reason":"' + REASON_LIB + '"}]}';
+  OLD_JSON = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  // Engine 1.22.0's own output for a .dfm holding ONLY inherited instances (captured
+  // 2026-10-06 on the E11 fixture after its ancestor was converted): ok, exit 0, no edit.
+  SKIPPED_JSON = '{"schema":"apply/1","mode":"apply","ok":true,"error":"","refused":false,"reason":"","rule_errors":[],"edits_count":0,"converted":[],'
+    + '"todos":[],"reemit_notes":[],"warnings":["line 2: warning: inherited instance Label1: TLabel skipped -- ' + REASON_ANC + '"],'
+    + '"component_part":"skipped-no-instances","inherited":[{"name":"Label1","type":"TLabel","line":2,"ancestor_unit":"Anc",'
+    + '"ancestor_state":"converted","reason":"' + REASON_ANC + '"}]}';
+  // Fix round 1: the inherited warning is no longer counted in "remaining" (it is the
+  // "left" note's), and without inherited_retype the note says the unit may break.
+  NOTE_SKIPPED = '0 edit(s), 0 remaining for manual work; no component of its own to convert; '
+    + '1 inherited instance(s) left: ancestor Anc converted -- this unit still has TLabel there and may not compile or load '
+    + 'until the engine can retype inherited instances (N2)';
+  NOTE_SKIPPED_RETYPE = '0 edit(s), 0 remaining for manual work; no component of its own to convert; '
+    + '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)';
+  // One inherited warning and one other: only the other is manual remainder.
+  MIXED_JSON = '{"schema":"apply/1","ok":true,"edits_count":1,"warnings":["line 2: warning: inherited instance Label1: TLabel skipped -- x",'
+    + '"line 9: warning: something else"],"inherited":[{"name":"Label1","type":"TLabel","line":2,"ancestor_unit":"Anc","ancestor_state":"unconverted","reason":"x"}]}';
+  // No inherited[] (not this contract): an inherited-shaped warning is still remainder.
+  NO_LIST_JSON = '{"schema":"apply/1","ok":true,"edits_count":1,"warnings":["line 2: warning: inherited instance Label1: TLabel skipped -- x"]}';
+  // A non-object entry is skipped; a wrongly-typed field reads as its default.
+  BAD_ITEMS_JSON = '{"schema":"apply/1","ok":true,"edits_count":1,"inherited":[5,"x",null,{"name":"tblA","line":"four","type":7}]}';
+  BAD_KEY_JSON   = '{"schema":"apply/1","ok":true,"edits_count":1,"inherited":{"name":"tblA"}}';
+  REFUSED_JSON = '{"schema":"apply/1","ok":false,"refused":true,"reason":"inherited instances of TTable are not converted yet -- unit not changed","rule_errors":[],"edits_count":0}';
+  ORIG = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+  LINE_TBL = 4;
+  ITEMS    = 3;
+  NOTE_LEFT = '2 inherited instance(s) left: ancestor PathToData not converted; 1 inherited instance(s) left: ancestor not determinable -- ' + REASON_LIB;
+var
+  Row : TApplyRow;
+  Bad : TApplyRow;
+  Dir, Anc, Desc: string;
+  Rows: TArray<TConvertRow>;
+  Log : TStringList;
+  Index: TIndexFn;
+
+  function ApplyWith(const AJson: string): TApplyFn;
+  var
+    LJson: string;
+  begin
+    LJson:= AJson;
+    Result:= function(const AUnitPas, ARulesFile: string; out AJson2: string): Integer
+      begin
+        AJson2:= LJson;
+        Result:= 0;
+      end;
+  end;
+
+begin
+  Row:= ParseApplyJson(INH_JSON);
+  Check('apply.inherited.parsed', Row.Ok and (Length(Row.InheritedLeft) = ITEMS), IntToStr(Length(Row.InheritedLeft)));
+  if Length(Row.InheritedLeft) = ITEMS then
+  begin
+    Check('apply.inherited.fields', (Row.InheritedLeft[0].Name = 'tblFtrs') and (Row.InheritedLeft[0].TypeName = 'TTable') and (Row.InheritedLeft[0].Line = LINE_TBL));
+    Check('apply.inherited.fields.ancestor', (Row.InheritedLeft[0].AncestorUnit = 'PathToData') and (Row.InheritedLeft[0].AncestorState = 'unconverted')
+      and (Row.InheritedLeft[2].AncestorState = 'outside'));
+  end;
+  Check('apply.inherited.absent.key', Length(ParseApplyJson(OLD_JSON).InheritedLeft) = 0);
+  Bad:= ParseApplyJson(BAD_ITEMS_JSON);
+  Check('apply.inherited.malformed.items', Bad.Ok and (Length(Bad.InheritedLeft) = 1) and (Bad.InheritedLeft[0].Name = 'tblA') and (Bad.InheritedLeft[0].Line = 0)
+    and (Bad.InheritedLeft[0].TypeName = ''), Format('ok=%s n=%d %s', [BoolToStr(Bad.Ok, True), Length(Bad.InheritedLeft), Bad.Error]));
+  Bad:= ParseApplyJson(BAD_KEY_JSON);
+  Check('apply.inherited.malformed.key', Bad.Ok and (Length(Bad.InheritedLeft) = 0), Bad.Error);
+  Check('apply.inherited.note', InheritedLeftNote(Row.InheritedLeft, True) = NOTE_LEFT, InheritedLeftNote(Row.InheritedLeft, True));
+  Check('apply.inherited.note.empty', InheritedLeftNote(nil, True) = '');
+  if Length(Row.InheritedLeft) = ITEMS then
+  begin
+    Check('apply.inherited.report', InheritedReportNote(Row.InheritedLeft[0], True) = 'tblFtrs: TTable line 4 -- ancestor PathToData not converted (' + REASON_PTD + ')',
+      InheritedReportNote(Row.InheritedLeft[0], True));
+    // outside: the reason is already in the words, so it is not repeated in parentheses.
+    Check('apply.inherited.report.outside', InheritedReportNote(Row.InheritedLeft[2], True) = 'qryLib: TQuery line 12 -- ancestor not determinable -- ' + REASON_LIB,
+      InheritedReportNote(Row.InheritedLeft[2], True));
+  end;
+  Bad:= ParseApplyJson(SKIPPED_JSON);
+  Check('apply.component.part', Bad.Ok and (Bad.ComponentPart = 'skipped-no-instances') and (ParseApplyJson(OLD_JSON).ComponentPart = ''), Bad.ComponentPart);
+  Check('apply.note.skipped', ConvertedRowNote(Bad, True, False) = NOTE_SKIPPED, ConvertedRowNote(Bad, True, False));
+  Check('apply.note.skipped.retype', ConvertedRowNote(Bad, True, True) = NOTE_SKIPPED_RETYPE, ConvertedRowNote(Bad, True, True));
+  Check('apply.note.plain', ConvertedRowNote(ParseApplyJson(OLD_JSON), True, False) = '1 edit(s), 0 remaining for manual work', ConvertedRowNote(ParseApplyJson(OLD_JSON), True, False));
+  Check('apply.note.skipped.gated', ConvertedRowNote(Bad, False, False) = '0 edit(s), 0 remaining for manual work; no component of its own to convert', ConvertedRowNote(Bad, False, False));
+  Check('apply.remainder.excludes.inherited', (Length(Bad.Remainder) = 0) and (Length(ParseApplyJson(MIXED_JSON).Remainder) = 1)
+    and (ParseApplyJson(MIXED_JSON).Remainder[0] = 'line 9: warning: something else'), string.Join(' | ', ParseApplyJson(MIXED_JSON).Remainder));
+  Check('apply.remainder.no.list.keeps', Length(ParseApplyJson(NO_LIST_JSON).Remainder) = 1);
+
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8apply-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Log:= TStringList.Create;
+  try
+    Anc := TPath.Combine(Dir, 'Anc.pas');
+    Desc:= TPath.Combine(Dir, 'Desc.pas');
+    TFile.WriteAllText(Anc, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(Desc, ORIG, TEncoding.ASCII);
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Log.Add('index');
+        Result:= 0;
+      end;
+
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(INH_JSON), Index, nil, nil, True);
+    Check('runner.inherited.converted', (Length(Rows) = 1) and (Rows[0].Status = csConverted) and Rows[0].Note.EndsWith('; ' + NOTE_LEFT),
+      if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(INH_JSON), Index, nil, nil, False);
+    Check('runner.inherited.gated', (Length(Rows) = 1) and (Rows[0].Status = csConverted) and (Pos('inherited', Rows[0].Note) = 0),
+      if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(REFUSED_JSON), Index, nil, nil, True);
+    Check('runner.inherited.refusal.kept', (Length(Rows) = 1) and (Rows[0].Status = csRefused));
+    // Engine 1.22.0: a .dfm with ONLY inherited instances is ok + exit 0 -- a converted row, never a failure.
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(SKIPPED_JSON), Index, nil, nil, True);
+    Check('runner.inherited.skipped.no.instances', (Length(Rows) = 1) and (Rows[0].Status = csConverted) and (Rows[0].Note = NOTE_SKIPPED),
+      if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(SKIPPED_JSON), Index, nil, nil, True, True);
+    Check('runner.inherited.retype.passed', (Length(Rows) = 1) and (Rows[0].Note = NOTE_SKIPPED_RETYPE),
+      if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
+
+    Log.Clear;
+    Rows:= RunConversionUnits([Anc, Desc], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Log.Add('apply ' + ExtractFileName(AUnitPas));
+        AJson := OLD_JSON;
+        Result:= 0;
+      end, Index, nil, nil, True);
+    Check('runner.e11.two.rows', Length(Rows) = 2, IntToStr(Length(Rows)));
+    Check('runner.e11.ancestor.then.reindexed.descendant', Log.CommaText = 'index,"apply Anc.pas",index,index,"apply Desc.pas",index', Log.CommaText);
+  finally
+    Log.Free;
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ C8 E11 live, ONLY against an engine that reports inherited_instances (1.22.0 on):
+  Anc then Desc in one run; Anc's Label1 is retyped, Desc's inherited Label1 is left
+  as it is (N1 skips it; retype is N2) and reported as left with state converted. }
+procedure TestInheritedRunLive;
+var
+  Exe, Dir, Db, Dpr, AncPas, DescPas, Book, Output: string;
+  DescDfm: string;
+  Eng : TEngineAdapter;
+  Job : TConvertJob;
+  Rows: TArray<TConvertRow>;
+  LShape: Boolean;
+begin
+  Exe:= ResolveExe;
+  if (Exe = '') or not TFile.Exists(LibWin64) then
+  begin
+    Skip('inherited.live', 'exe or library-Win64 absent: ' + GEngineWhy);
+    Exit;
+  end;
+  Eng:= TEngineAdapter.Create(Exe, []);
+  try
+    if not Eng.HasCapability(CAPABILITY_INHERITED_INSTANCES) then
+    begin
+      Skip('inherited.live', 'engine lacks ' + CAPABILITY_INHERITED_INSTANCES);
+      Exit;
+    end;
+  finally
+    Eng.Free;
+  end; // try
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8run-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Dpr    := TPath.Combine(Dir, 'Fix.dpr');
+    AncPas := TPath.Combine(Dir, 'Anc.pas');
+    DescPas:= TPath.Combine(Dir, 'Desc.pas');
+    Db     := TPath.Combine(Dir, 'Fix.sqlite');
+    Book   := TPath.Combine(Dir, 'Fix.rules');
+    TFile.WriteAllText(Dpr, 'program Fix;' + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak + '  Anc in ''Anc.pas'' {AncForm},' + sLineBreak +
+      '  Desc in ''Desc.pas'' {DescForm};' + sLineBreak + 'begin' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(AncPas, 'unit Anc;' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak +
+      'type' + sLineBreak + '  TAncForm = class(TForm)' + sLineBreak + '    Label1: TLabel;' + sLineBreak + '  end;' + sLineBreak + 'implementation' + sLineBreak +
+      '{$R *.dfm}' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(ChangeFileExt(AncPas, '.dfm'), 'object AncForm: TAncForm' + sLineBreak + '  object Label1: TLabel' + sLineBreak +
+      '    Caption = ''Hello''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(DescPas, 'unit Desc;' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak + '  Anc;' + sLineBreak + 'type' + sLineBreak +
+      '  TDescForm = class(TAncForm)' + sLineBreak + '  end;' + sLineBreak + 'implementation' + sLineBreak + '{$R *.dfm}' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    DescDfm:= 'inherited DescForm: TDescForm' + sLineBreak + '  inherited Label1: TLabel' + sLineBreak + '    Caption = ''Desc''' + sLineBreak + '  end' + sLineBreak +
+      'end' + sLineBreak;
+    TFile.WriteAllText(ChangeFileExt(DescPas, '.dfm'), DescDfm, TEncoding.ASCII);
+    TFile.WriteAllText(Book, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link Caption <- Caption' + sLineBreak, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(Exe, [Db, LibWin64]);
+    try
+      Check('inherited.live.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      Job:= Default(TConvertJob);
+      Job.Units             := [AncPas, DescPas];
+      Job.Books             := [Book];
+      Job.Dbs               := [Db, LibWin64];
+      Job.ProjectDb         := Db;
+      Job.ProjectFile       := Dpr;
+      Job.InheritedSupported:= True;
+      Job.RetypeSupported   := Eng.HasCapability(CAPABILITY_INHERITED_RETYPE);
+      Rows:= RunConversion(Job, Eng, nil, nil);
+      Check('inherited.live.both.converted', (Length(Rows) = 2) and (Rows[0].Status = csConverted) and (Rows[1].Status = csConverted), Format('%d rows', [Length(Rows)]));
+      Check('inherited.live.ancestor.retyped', Pos('object Label1: TStaticText', TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm'))) > 0,
+        TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm')));
+      // Engine N1 (1.22.0): the descendant's inherited instance is SKIPPED even though its
+      // ancestor now has the To type -- retyping it is N2. The .dfm stays byte-unchanged.
+      // (Corrected 2026-10-06 from a real run: the Task 6 guess expected it retyped.)
+      // THIS CHECK PINS N1 BEHAVIOUR ON PURPOSE: when the engine ships N2 (retype) it goes
+      // RED -- that is the signal to re-adopt (retyped descendant, the retype texts), not a
+      // regression.
+      Check('inherited.live.descendant.unchanged', TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')) = DescDfm, TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')));
+      LShape:= (Length(Rows) = 2) and (Length(Rows[1].Apply.InheritedLeft) = 1);
+      Check('inherited.live.descendant.left', LShape and (Rows[1].Apply.InheritedLeft[0].Name = 'Label1') and (Rows[1].Apply.InheritedLeft[0].AncestorUnit = 'Anc')
+        and (Rows[1].Apply.InheritedLeft[0].AncestorState = 'converted') and (Rows[1].Apply.ComponentPart = 'skipped-no-instances'),
+        if Length(Rows) = 2 then Format('%d left, part=%s', [Length(Rows[1].Apply.InheritedLeft), Rows[1].Apply.ComponentPart]) else '');
+      Check('inherited.live.descendant.note', (Length(Rows) = 2) and not Job.RetypeSupported and Rows[1].Note.EndsWith('; no component of its own to convert; '
+        + '1 inherited instance(s) left: ancestor Anc converted -- this unit still has TLabel there and may not compile or load until the engine can '
+        + 'retype inherited instances (N2)'), if Length(Rows) = 2 then Rows[1].Note else '');
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ C8 E2b engine reads: positional rows [name, type] and [name, receiver, line]. }
+procedure TestCodeRefs;
+const
+  FIELDS_JSON = '{"rows":[["tblFtrs","TTable"],["qryX","TQuery"]]}' + sLineBreak + '(loaded defaults from C:\x.json)';
+  REFS_JSON   = '{"rows":[["Post","tblFtrs",3371],["tblOps",null,3380],["Open","Self.qryX",3390]]}';
+  LINE_FIRST = 3371;
+  REF_ROWS   = 3;
+var
+  Fields : TArray<TEngineField>;
+  Refs   : TArray<TEngineCodeRef>;
+  LParsed: Boolean;
+begin
+  Check('fields.rows', ParseFieldRows(FIELDS_JSON, Fields) and (Length(Fields) = 2) and (Fields[0].Name = 'tblFtrs') and (Fields[1].TypeName = 'TQuery'));
+  Check('fields.rows.garbage', not ParseFieldRows('FATAL', Fields) and (Length(Fields) = 0));
+  LParsed:= ParseCodeRefRows(REFS_JSON, Refs) and (Length(Refs) = REF_ROWS);
+  Check('refs.rows', LParsed and (Refs[0].Receiver = 'tblFtrs') and (Refs[0].Line = LINE_FIRST) and (Refs[1].Name = 'tblOps') and (Refs[1].Receiver = ''));
+  Check('refs.rows.garbage', not ParseCodeRefRows('', Refs));
+  Check('refs.rows.stale', not ParseCodeRefRows('{"rows":[["Post","tblFtrs",1]],"stale":true,"stale_files":2}', Refs) and (Length(Refs) = 0));
+  Check('sql.quote', SqlQuoted('C:\a''b\U.pas') = '''C:\a''''b\U.pas''');  // dl:ok hardcoded-absolute-path@336f -- REVIEWED 2026-10-05 quoting test text; nothing on disk is touched
+end;
+
+{ The identifiers a ListCodeRefs answer stands for (CodeUseName per row). }
+function CodeNames(const ARefs: TArray<TEngineCodeRef>): TArray<string>;
+begin
+  Result:= nil;
+  for var LRef: TEngineCodeRef in ARefs do
+    Result:= Result + [CodeUseName(LRef.Name, LRef.Receiver)];
+end;
+
+{ C8 E2b live: a descendant whose .dfm has NO block for Label1 but whose FormCreate
+  writes Label1.Caption, and has a LOCAL Label2. The index must answer the field (on
+  TAncForm) and the use (in TDesc2Form's method), never the local, and AnalyzeUnit
+  must report the use as an inherited code use. }
+procedure TestCodeRefsLive;
+var
+  Exe, Dir, Db, DescPas, AncPas, Output, Err: string;
+  Eng   : TEngineAdapter;
+  Fields: TArray<TEngineField>;
+  Refs  : TArray<TEngineCodeRef>;  // dl:ok duplicate-code@e1ac -- REVIEWED 2026-10-05 the live-test skeleton (engine skip, private temp dir, fixture, adapter, try/finally) is repeated on purpose so each live test reads on its own; the shared fixture text is already WriteC8Fixture
+  U     : TUnitInheritance;
+  Pr    : TTypePair;
+  LUsed : Boolean;
+begin
+  Exe:= ResolveExe;
+  if Exe = '' then
+  begin
+    Skip('coderefs.live', 'no test engine: ' + GEngineWhy);
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8code-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    DescPas:= TPath.Combine(Dir, 'Desc2.pas');
+    Db     := TPath.Combine(Dir, 'Fix.sqlite');
+    WriteC8Fixture(Dir, DescPas, 'TDesc2Form', '    procedure FormCreate(Sender: TObject);' + sLineBreak,
+      'procedure TDesc2Form.FormCreate(Sender: TObject);' + sLineBreak + 'var' + sLineBreak + '  Label2: Integer;' + sLineBreak +
+      'begin' + sLineBreak + '  Label1.Caption:= ''Two'';' + sLineBreak + '  Label2:= 0;' + sLineBreak + '  Tag:= Label2;' + sLineBreak + 'end;' + sLineBreak,
+      'inherited Desc2Form: TDesc2Form' + sLineBreak + '  OnCreate = FormCreate' + sLineBreak + 'end' + sLineBreak);
+    Eng:= TEngineAdapter.Create(Exe, [Db]);
+    try
+      Check('coderefs.live.index', Eng.IndexProject(TPath.Combine(Dir, 'Fix.dpr'), Db, Output) = 0, Output);
+      AncPas:= TPath.Combine(Dir, 'Anc.pas');
+      Check('coderefs.live.fields', Eng.ListClassFields(Db, 'TAncForm', AncPas, ['TLabel'], Fields, Err) and (Length(Fields) = 1) and (Fields[0].Name = 'Label1'), Err);
+      Check('coderefs.live.fields.filtered', Eng.ListClassFields(Db, 'TAncForm', AncPas, ['TTable'], Fields, Err) and (Length(Fields) = 0), Err);
+      Check('coderefs.live.fields.other.file', Eng.ListClassFields(Db, 'TAncForm', DescPas, ['TLabel'], Fields, Err) and (Length(Fields) = 0), Err);
+      LUsed:= False;
+      if Eng.ListCodeRefs(Db, DescPas, 'TDesc2Form', Refs, Err) then
+        for var LRef: TEngineCodeRef in Refs do
+          if SameText(CodeUseName(LRef.Name, LRef.Receiver), 'Label1') then
+            LUsed:= True;
+      Check('coderefs.live.use.found', LUsed, Format('%d refs %s', [Length(Refs), Err]));
+      Check('coderefs.live.local.ignored', (Length(Refs) > 0) and not MatchText('Label2', CodeNames(Refs)), string.Join(',', CodeNames(Refs)));
+      Check('coderefs.live.bad.db.failed', not Eng.ListCodeRefs(TPath.Combine(Dir, 'none.sqlite'), DescPas, 'TDesc2Form', Refs, Err) and (Err <> ''), Err);
+      Check('coderefs.live.unit.not.indexed.failed', not Eng.ListCodeRefs(Db, TPath.Combine(Dir, 'Nope.pas'), 'TDesc2Form', Refs, Err)
+        and ContainsText(Err, 'not in the index'), Err);
+      Pr.FromType:= 'TLabel';
+      Pr.ToType  := 'TStaticText';
+      U:= AnalyzeUnit(DescPas, [Pr], EngineClassLookup(Eng, Db, [Pr]), DiskTextReader(), EngineCodeUses(Eng, Db));
+      Check('coderefs.live.analysis', U.Known and (Length(U.Verdicts) = 1) and U.Verdicts[0].Instance.FromCode and (U.Verdicts[0].DeclaringUnit = 'Anc'),
+        Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+      // A unit edited after it was indexed: the engine answers "stale": true, and a C8
+      // read refuses it (a stale DB is not authoritative) -- measured on 1.21.1.
+      TFile.AppendAllText(DescPas, '// edited after indexing' + sLineBreak, TEncoding.ASCII);
+      TFile.SetLastWriteTime(DescPas, Now + 1 / MinsPerDay);
+      Check('coderefs.live.stale.failed', not Eng.ListCodeRefs(Db, DescPas, 'TDesc2Form', Refs, Err) and ContainsText(Err, 'stale'), Err);
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ An analysis the index could not decide (Known = False, AError). }
+function UnknownUnit(const APas, AError: string): TUnitInheritance;
+begin
+  Result:= Default(TUnitInheritance);
+  Result.UnitPas:= APas;
+  Result.Error  := AError;
+end;
+
+{ A decided analysis with no verdicts. }
+function FreshUnit(const APas: string): TUnitInheritance;
+begin
+  Result:= Default(TUnitInheritance);
+  Result.UnitPas:= APas;
+  Result.Known  := True;
+end;
+
+{ C8 Task 6, analysis pass: one .dfm read per PASS (not per unit), a cancel makes the
+  unit unknown with "cancelled" without asking the index, and the status text for the
+  units the analysis could not decide. ConvertTab.pas is outside this closure. }
+procedure TestInheritanceTabAnalysis;
+const
+  LEAF_DFM  = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  LEAF2_DFM = 'inherited Leaf2DM: TLeaf2DM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BASE_DFM  = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  N_UNITS   = 2;
+var
+  P       : TTypePair;
+  Rows    : TArray<string>;
+  Inner   : TDfmTextReader;
+  BaseRead: Integer;
+  Calls   : TStringList;
+  Units   : TArray<TUnitInheritance>;
+  U       : TUnitInheritance;
+  Uses1   : TArray<TCodeUse>;
+  Err     : string;
+  LOrder  : Boolean;
+  LKnown  : Boolean;
+begin
+  P.FromType:= 'TTable';
+  P.ToType  := 'TFDTable';
+  Rows:= ['TLeafDM|fx\Leaf.pas|TBaseDM', 'TLeaf2DM|fx\Leaf2.pas|TBaseDM', 'TBaseDM|fx\Base.pas|TDataModule'];
+  Inner:= FakeReader(['fx\Leaf.dfm', 'fx\Leaf2.dfm', 'fx\Base.dfm'], [LEAF_DFM, LEAF2_DFM, BASE_DFM]);
+  BaseRead:= 0;
+  Units:= AnalyzeUnits(['fx\Leaf.pas', 'fx\Leaf2.pas'], [P], FakeLookup(Rows, nil),
+    function(const APath: string; out AText: string): TDfmRead
+    begin
+      if SameText(APath, 'fx\Base.dfm') then
+        Inc(BaseRead);
+      Result:= Inner(APath, AText);
+    end);
+  LOrder:= (Length(Units) = N_UNITS) and (Units[0].UnitPas = 'fx\Leaf.pas') and (Units[1].UnitPas = 'fx\Leaf2.pas');
+  LKnown:= LOrder and Units[0].Known and Units[1].Known and (Length(Units[0].Verdicts) = 1) and (Length(Units[1].Verdicts) = 1);
+  Check('tab.analyze.units.order', LKnown, IntToStr(Length(Units)));
+  Check('tab.analyze.units.one.read.per.pass', BaseRead = 1, IntToStr(BaseRead));
+
+  Calls:= TStringList.Create;
+  try
+    U:= AnalyzeUnit('fx\Leaf.pas', [P], CancellableLookup(FakeLookup(Rows, Calls), function: Boolean begin Result:= True; end), Inner);
+    Check('tab.cancel.unknown', not U.Known and ContainsText(U.Error, ANALYSIS_CANCELLED) and (Length(U.Verdicts) = 0), U.Error);
+    Check('tab.cancel.index.not.asked', Calls.Count = 0, Calls.CommaText);
+    U:= AnalyzeUnit('fx\Leaf.pas', [P], CancellableLookup(FakeLookup(Rows, Calls), function: Boolean begin Result:= False; end), Inner);
+    Check('tab.cancel.not.passes.through', U.Known and (Length(U.Verdicts) = 1) and (Calls.Count > 0), U.Error);
+  finally
+    Calls.Free;
+  end; // try
+  Check('tab.cancel.code.uses', not CancellableCodeUses(FakeCodeUses(['tblFtrs||40'], False), function: Boolean begin Result:= True; end)('fx\Leaf.pas', 'TLeafDM', Uses1, Err)
+    and (Err = ANALYSIS_CANCELLED) and (Length(Uses1) = 0), Err);
+  Check('tab.cancel.code.uses.not', CancellableCodeUses(FakeCodeUses(['tblFtrs||40'], False), function: Boolean begin Result:= False; end)('fx\Leaf.pas', 'TLeafDM', Uses1, Err)
+    and (Length(Uses1) = 1), Err);
+
+  Check('tab.unknown.text.none', UnknownUnitsText([FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', '')]) = '');
+  Check('tab.unknown.text.first.plus.more', UnknownUnitsText([FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', 'boom'), UnknownUnit('a\C.pas', 'bang'), UnknownUnit('a\D.pas', 'pow')])
+    = 'B.pas: boom (+2 more)', UnknownUnitsText([UnknownUnit('a\B.pas', 'boom'), UnknownUnit('a\C.pas', 'bang'), UnknownUnit('a\D.pas', 'pow')]));
+end;
+
+{ C8 Task 6 fix round 1: Convert's gate after its inherited-instance check (cancelled
+  = stop; any unit unchecked = ask once; else run), one code-use note per unit (not
+  per book), and the report's 8-column `inherited left` lines. }
+procedure TestInheritanceTabGate;
+const
+  REPORT_COLS = 8;
+  NOTE_COL    = REPORT_COLS - 1; // the Note column is the last
+  INH_JSON = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
+    + '"inherited":[{"name":"tblFtrs","type":"TTable","line":4,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"ancestor not converted"},'
+    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"LibForms","ancestor_state":"outside","reason":"ancestor not in any --db"}]}';
+var
+  Q      : string;
+  Row    : TConvertRow;
+  Earlier: TConvertRow;
+  Lines  : TArray<string>;
+  Cols   : TArray<string>;
+  LShape : Boolean;
+begin
+  Check('tab.gate.cancelled', (InheritanceGate(True, [UnknownUnit('a\A.pas', 'boom')], 'boom', Q) = igCancelled) and (Q = ''), Q);
+  Check('tab.gate.cancelled.text', GATE_CANCELLED_TEXT = 'Convert cancelled: the inherited-instance check was cancelled.');
+  Check('tab.gate.proceed', (InheritanceGate(False, [FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', '')], '', Q) = igProceed) and (Q = ''), Q);
+  Check('tab.gate.ask.units', (InheritanceGate(False, [FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', 'x'), UnknownUnit('a\C.pas', 'y')], 'x', Q) = igAsk)
+    and (Q = 'Could not check inherited instances for B.pas, C.pas -- convert anyway?'), Q);
+  Check('tab.gate.ask.error.only', (InheritanceGate(False, [FreshUnit('a\A.pas')], 'Fix.rules: locked', Q) = igAsk)
+    and (Q = 'Could not check inherited instances for the listed units -- convert anyway?'), Q);
+  Check('tab.gate.stop.text', InheritanceGateStopText('boom') = 'Convert cancelled: inherited instances could not be checked -- boom', InheritanceGateStopText('boom'));
+  // M2: a drop under a run, the analysis or one of its prompts is refused (OLE delivers
+  // drops inside a MessageDlg's modal loop); a run outranks a check.
+  Check('tab.add.refused.running', SourcesAddRefusal(True, False) = 'A conversion is running -- sources cannot be added until it finishes.', SourcesAddRefusal(True, False));
+  Check('tab.add.refused.running.wins', SourcesAddRefusal(True, True) = SourcesAddRefusal(True, False), SourcesAddRefusal(True, True));
+  Check('tab.add.refused.checking', SourcesAddRefusal(False, True) = 'Inherited instances are being checked -- add the sources again when it finishes.', SourcesAddRefusal(False, True));
+  Check('tab.add.allowed', SourcesAddRefusal(False, False) = '', SourcesAddRefusal(False, False));
+
+  Row:= Default(TConvertRow);
+  Row.UnitPas:= 'x\Desc.pas';
+  Row.Book   := 'B2.rules';
+  Row.Status := csConverted;
+  Earlier:= Row;
+  Earlier.Book:= 'B1.rules';
+  Check('tab.note.due.first', CodeUseNoteDue(Row, []));
+  Check('tab.note.due.once.per.unit', not CodeUseNoteDue(Row, [Earlier]));
+  Earlier.UnitPas:= 'x\Other.pas';
+  Check('tab.note.due.other.unit', CodeUseNoteDue(Row, [Earlier]));
+  Row.Status:= csRefused;
+  Check('tab.note.due.not.converted', not CodeUseNoteDue(Row, []));
+
+  Row:= Default(TConvertRow);
+  Row.UnitPas:= 'x\Desc.pas';
+  Row.Book   := 'B.rules';
+  Row.Status := csConverted;
+  Row.Apply  := ParseApplyJson(INH_JSON);
+  Lines:= InheritedReportLines(Row, True, True);
+  Cols := if Length(Lines) > 0 then Lines[0].Split([#9]) else nil;
+  LShape:= (Length(Lines) = Length(Row.Apply.InheritedLeft)) and (Length(Cols) = REPORT_COLS);
+  Check('tab.report.lines.shape', LShape, Format('%d lines, %d cols', [Length(Lines), Length(Cols)]));
+  if LShape then
+    Check('tab.report.lines.text', (Cols[0] = 'B.rules') and (Cols[1] = 'x\Desc.pas') and (Cols[2] = REPORT_STATUS_INHERITED_LEFT) and (Cols[2] = 'inherited left')
+      and (Cols[NOTE_COL] = InheritedReportNote(Row.Apply.InheritedLeft[0], True)), Lines[0]);
+  // Controller ruling M4: the engine's inherited[] is authoritative (reported after the
+  // runner's reindex), so nothing filters it -- not even an ancestor converted earlier
+  // in the run (that case is tab.r4.runner.engine.unfiltered).
+  Check('tab.report.lines.engine.unfiltered', (Length(Lines) = Length(Row.Apply.InheritedLeft)) and (Length(Lines) > 0)
+    and (Pos('PathToData', Lines[0]) > 0), string.Join(' | ', Lines));
+  Check('tab.report.lines.gated', Length(InheritedReportLines(Row, False, True)) = 0);
+  Row.Status:= csRolledBack;
+  Check('tab.report.lines.converted.only', Length(InheritedReportLines(Row, True, True)) = 0);
+end;
+
+{ C8 Task 6, ruling R4: an ancestor converted EARLIER IN THE SAME RUN converted its
+  descendants' code uses too, so the editor's code-use note omits it. The engine's own
+  inherited[] is NOT filtered (controller ruling M4: it is reported after the runner's
+  reindex and is authoritative) -- neither in the note nor in the runner's row. }
+procedure TestInheritanceTabR4;
+const
+  REASON_LIB = 'declaring ancestor not found (no ancestor .dfm of TLeafDM declares qryLib) -- convert it from its own project';
+  INH_JSON  = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
+    + '"inherited":[{"name":"tblFtrs","type":"TTable","line":4,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"ancestor not converted"},'
+    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"","ancestor_state":"outside","reason":"' + REASON_LIB + '"}]}';
+  OLD_JSON  = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  ORIG      = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+  NOTE_LIB  = '1 inherited instance(s) left: ancestor not determinable -- ' + REASON_LIB;
+  N_ROWS    = 2;
+var
+  U     : TUnitInheritance;
+  V     : TInstanceVerdict;
+  Items : TArray<TInheritedLeft>;
+  Item  : TInheritedLeft;
+  CRows : TArray<TConvertRow>;
+  CRow  : TConvertRow;
+  Dir   : string;
+  Index : TIndexFn;
+  LShape: Boolean;
+begin
+  U:= FreshUnit('fx\Leaf.pas');
+  V:= Default(TInstanceVerdict);
+  V.Instance.Name    := 'tblFtrs';
+  V.Instance.TypeName:= 'TTable';
+  V.Instance.FromCode:= True;
+  V.State            := asUnconverted;
+  V.DeclaringUnit    := 'Base';
+  U.Verdicts:= [V];
+  V.Instance.Name    := 'qryOps';
+  V.DeclaringUnit    := 'Mid';
+  U.Verdicts:= U.Verdicts + [V];
+  Check('tab.r4.code.left.all', CodeUseLeftNote(U) = '1 inherited code use(s) left: ancestor Base not converted; 1 inherited code use(s) left: ancestor Mid not converted', CodeUseLeftNote(U));
+  Check('tab.r4.code.left.omits.converted', CodeUseLeftNote(U, ['base']) = '1 inherited code use(s) left: ancestor Mid not converted', CodeUseLeftNote(U, ['base']));
+  Check('tab.r4.code.left.all.converted', CodeUseLeftNote(U, ['Base', 'Mid']) = '');
+
+  Item:= Default(TInheritedLeft);
+  Item.AncestorUnit := 'PathToData';
+  Item.AncestorState:= 'unconverted';
+  Items:= [Item];
+  Item.AncestorUnit := '';
+  Item.AncestorState:= 'outside';
+  Item.Reason       := REASON_LIB;
+  Items:= Items + [Item];
+  Check('tab.r4.left.engine.all', InheritedLeftNote(Items, True) = '1 inherited instance(s) left: ancestor PathToData not converted; ' + NOTE_LIB, InheritedLeftNote(Items, True));
+
+  CRows:= nil;
+  CRow:= Default(TConvertRow);
+  CRow.UnitPas:= 'x\PathToData.pas';
+  CRow.Status := csConverted;
+  CRows:= CRows + [CRow, CRow];
+  CRow.UnitPas:= 'x\Rolled.pas';
+  CRow.Status := csRolledBack;
+  CRows:= CRows + [CRow];
+  CRow.UnitPas:= 'x\My.Dotted.pas';
+  CRow.Status := csConverted;
+  CRows:= CRows + [CRow];
+  Check('tab.r4.units.converted.in', string.Join(',', UnitsConvertedIn(CRows)) = 'PathToData,My.Dotted', string.Join(',', UnitsConvertedIn(CRows)));
+
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8tab-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'PathToData.pas'), ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'Desc.pas'), ORIG, TEncoding.ASCII);
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end;
+    CRows:= RunConversionUnits([TPath.Combine(Dir, 'PathToData.pas'), TPath.Combine(Dir, 'Desc.pas')], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := if SameText(ExtractFileName(AUnitPas), 'Desc.pas') then INH_JSON else OLD_JSON;
+        Result:= 0;
+      end, Index, nil, nil, True);
+    LShape:= (Length(CRows) = N_ROWS) and (CRows[1].Status = csConverted);
+    Check('tab.r4.runner.engine.unfiltered', LShape and CRows[1].Note.EndsWith('; ' + NOTE_LIB) and (Pos('ancestor PathToData not converted', CRows[1].Note) > 0),
+      if Length(CRows) = N_ROWS then CRows[1].Note else IntToStr(Length(CRows)));
+    CRows:= RunConversionUnits([TPath.Combine(Dir, 'Desc.pas')], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := INH_JSON;
+        Result:= 0;
+      end, Index, nil, nil, True);
+    Check('tab.r4.runner.keeps.unconverted.ancestor', (Length(CRows) = 1) and (Pos('ancestor PathToData not converted', CRows[0].Note) > 0),
+      if Length(CRows) = 1 then CRows[0].Note else IntToStr(Length(CRows)));
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ C8 Task 8 (engine 1.22.0, N1+N5): the row note and the report note for every
+  ancestor_state the engine sends -- unconverted, converted (retype is N2), mismatched
+  (the type read from the engine's reason; a reason of another shape falls back to it
+  verbatim), outside (ancestor_unit is '', grouped by reason) and any other state. }
+procedure TestInheritedStateTexts;
+const
+  REASON_MIS   = 'declared in Base as TADOTable, neither TTable nor TFDTable -- not converted';
+  REASON_MIS_2 = 'declared in Base as TClientDataSet, neither TTable nor TFDTable -- not converted';
+  REASON_ODD   = 'the declaring object has some other type';
+  REASON_OUT_A = 'declaring ancestor not found (Mid.dfm is binary (TPF0)) -- convert it from its own project';
+  REASON_OUT_B = 'declaring ancestor not found (no ancestor .dfm of TLeafDM declares qryLib) -- convert it from its own project';
+  NOTE_MIS     = '2 inherited instance(s) left: ancestor Base has TADOTable (neither TTable nor TFDTable)';
+  ITEM_LINE    = 3; // the 'line 3' of the report notes below
+  NOTE_CONV_N1 = '1 inherited instance(s) left: ancestor Anc converted -- this unit still has TTable there and may not compile or load until the engine '
+    + 'can retype inherited instances (N2)';
+var
+  Items: TArray<TInheritedLeft>;
+
+  function Item(const AName, AUnit, AState, AReason: string): TInheritedLeft;
+  begin
+    Result:= Default(TInheritedLeft);
+    Result.Name         := AName;
+    Result.TypeName     := 'TTable';
+    Result.Line         := ITEM_LINE;
+    Result.AncestorUnit := AUnit;
+    Result.AncestorState:= AState;
+    Result.Reason       := AReason;
+  end;
+
+begin
+  Check('state.converted', InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')], True) = '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)',
+    InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')], True));
+  Items:= [Item('tblA', 'Base', 'mismatched', REASON_MIS), Item('tblB', 'Base', 'mismatched', REASON_MIS)];
+  Check('state.mismatched', InheritedLeftNote(Items, True) = NOTE_MIS, InheritedLeftNote(Items, True));
+  Items:= Items + [Item('tblC', 'Base', 'mismatched', REASON_MIS_2)];
+  Check('state.mismatched.by.found.type', InheritedLeftNote(Items, True) = NOTE_MIS + '; 1 inherited instance(s) left: ancestor Base has TClientDataSet (neither TTable nor TFDTable)',
+    InheritedLeftNote(Items, True));
+  Check('state.mismatched.fallback', InheritedLeftNote([Item('tblA', 'Base', 'mismatched', REASON_ODD)], True) = '1 inherited instance(s) left: ancestor Base has another type -- ' + REASON_ODD,
+    InheritedLeftNote([Item('tblA', 'Base', 'mismatched', REASON_ODD)], True));
+  Check('state.mismatched.fallback.other.unit', Pos('has another type', InheritedLeftNote([Item('tblA', 'Mid', 'mismatched', REASON_MIS)], True)) > 0,
+    InheritedLeftNote([Item('tblA', 'Mid', 'mismatched', REASON_MIS)], True));
+  Items:= [Item('tblA', '', 'outside', REASON_OUT_A), Item('tblB', '', 'outside', REASON_OUT_B), Item('tblC', '', 'outside', REASON_OUT_A)];
+  Check('state.outside.by.reason', InheritedLeftNote(Items, True) = '2 inherited instance(s) left: ancestor not determinable -- ' + REASON_OUT_A
+    + '; 1 inherited instance(s) left: ancestor not determinable -- ' + REASON_OUT_B, InheritedLeftNote(Items, True));
+  Check('state.other', InheritedLeftNote([Item('tblA', 'Anc', 'frobbed', 'x')], True) = '1 inherited instance(s) left: ancestor Anc: frobbed',
+    InheritedLeftNote([Item('tblA', 'Anc', 'frobbed', 'x')], True));
+  Check('state.report.mismatched', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_MIS), True)
+    = 'tblA: TTable line 3 -- ancestor Base has TADOTable (neither TTable nor TFDTable) (' + REASON_MIS + ')', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_MIS), True));
+  Check('state.report.fallback.once', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_ODD), True) = 'tblA: TTable line 3 -- ancestor Base has another type -- ' + REASON_ODD,
+    InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_ODD), True));
+  Check('state.report.converted', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'), True)
+    = 'tblA: TTable line 3 -- ancestor Anc converted -- retype pending (engine N2) (why)', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'), True));
+  Check('state.report.no.reason', InheritedReportNote(Item('tblA', 'Anc', 'unconverted', ''), True) = 'tblA: TTable line 3 -- ancestor Anc not converted',
+    InheritedReportNote(Item('tblA', 'Anc', 'unconverted', ''), True));
+
+  // Fix round 1 (controller ruling): until the engine retypes (N2) a converted ancestor
+  // leaves this unit with the From type there -- say it may not compile or load.
+  Check('state.converted.no.retype', InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')], False) = NOTE_CONV_N1,
+    InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')], False));
+  Items:= [Item('tblA', 'Anc', 'converted', 'x'), Item('tblB', 'Anc', 'converted', 'y')];
+  Items[1].TypeName:= 'TQuery';
+  Check('state.converted.no.retype.by.type', InheritedLeftNote(Items, False) = NOTE_CONV_N1 + '; 1 inherited instance(s) left: ancestor Anc converted -- this unit still has '
+    + 'TQuery there and may not compile or load until the engine can retype inherited instances (N2)', InheritedLeftNote(Items, False));
+  Check('state.unconverted.same.both', InheritedLeftNote([Item('tblA', 'Anc', 'unconverted', 'x')], False) = InheritedLeftNote([Item('tblA', 'Anc', 'unconverted', 'x')], True));
+  Check('state.report.converted.no.retype', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'), False)
+    = 'tblA: TTable line 3 -- ancestor Anc converted -- this unit still has TTable there and may not compile or load until the engine can retype inherited '
+    + 'instances (N2) (why)', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'), False));
+end;
+
+{ C8 Task 6: the real disk reader (missing, BOM stripped as TFile.ReadAllText does,
+  binary passed through for the scanner to recognise, locked = unreadable) and ONE
+  reindex-and-retry on a STALE index (never more; other failures are not retried). }
+procedure TestInheritanceTabDiskAndStale;
+const
+  STALE_ERR = 'cannot ask the index about TLeafDM (class lookup failed for x.sqlite: the index is stale (2 file(s) changed since it was indexed) -- reindex the project first)';
+  BIN_TAIL: array[0..1] of Byte = (0, $FF);
+  N_ASKED   = 2;
+var
+  Units  : TArray<TUnitInheritance>;
+  Dir    : string;
+  Txt    : string;
+  Lock   : TFileStream;
+  Reindex: Integer;
+  Asked  : TArray<string>;
+  Ok     : TIndexRefresh;
+  LAll   : Boolean;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8disk-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Check('tab.disk.missing', DiskTextReader()(TPath.Combine(Dir, 'None.dfm'), Txt) = drMissing);
+    TFile.WriteAllText(TPath.Combine(Dir, 'Bom.dfm'), 'object A: TA' + sLineBreak + 'end' + sLineBreak, TEncoding.UTF8);
+    Check('tab.disk.bom.stripped', (DiskTextReader()(TPath.Combine(Dir, 'Bom.dfm'), Txt) = drRead) and Txt.StartsWith('object A: TA')
+      and (ScanDfmInheritance(Txt).RootClass = 'TA'), Txt);
+    TFile.WriteAllBytes(TPath.Combine(Dir, 'Bin.dfm'), TEncoding.ASCII.GetBytes(BINARY_DFM_SIGNATURE) + [BIN_TAIL[0], BIN_TAIL[1]]);
+    Check('tab.disk.binary', (DiskTextReader()(TPath.Combine(Dir, 'Bin.dfm'), Txt) = drRead) and ScanDfmInheritance(Txt).IsBinary, Copy(Txt, 1, Length(BINARY_DFM_SIGNATURE)));
+    TFile.WriteAllText(TPath.Combine(Dir, 'Locked.dfm'), 'object A: TA' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    Lock:= TFileStream.Create(TPath.Combine(Dir, 'Locked.dfm'), fmOpenReadWrite or fmShareExclusive);
+    try
+      Check('tab.disk.unreadable', DiskTextReader()(TPath.Combine(Dir, 'Locked.dfm'), Txt) = drUnreadable);
+    finally
+      Lock.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+
+  Check('tab.stale.match', IsStaleIndexError(STALE_ERR) and not IsStaleIndexError('cannot ask the index about TX (DB does not exist)'));
+  Ok:= function(out AError: string): Boolean
+    begin
+      Inc(Reindex);
+      AError:= '';
+      Result:= True;
+    end;
+  Reindex:= 0;
+  Asked  := nil;
+  Units:= AnalyzeRetryingStale(['a\A.pas', 'a\B.pas'],
+    function(const APaths: TArray<string>): TArray<TUnitInheritance>
+    begin
+      Asked := Asked + [string.Join('+', APaths)];
+      Result:= [FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', 'DB does not exist')];
+    end, Ok);
+  Check('tab.stale.not.stale.no.reindex', (Reindex = 0) and (Length(Asked) = 1) and not Units[1].Known, IntToStr(Reindex));
+  Reindex:= 0;
+  Asked  := nil;
+  Units:= AnalyzeRetryingStale(['a\A.pas', 'a\B.pas', 'a\C.pas'],
+    function(const APaths: TArray<string>): TArray<TUnitInheritance>
+    begin
+      Asked:= Asked + [string.Join('+', APaths)];
+      if Length(Asked) = 1 then
+        Result:= [UnknownUnit('a\A.pas', STALE_ERR), FreshUnit('a\B.pas'), UnknownUnit('a\C.pas', STALE_ERR)]
+      else
+        Result:= [FreshUnit('a\A.pas'), FreshUnit('a\C.pas')];
+    end, Ok);
+  LAll:= Units[0].Known and Units[1].Known and Units[2].Known and (Units[2].UnitPas = 'a\C.pas');
+  Check('tab.stale.reindex.once.retry.stale.only', (Reindex = 1) and (string.Join(' | ', Asked) = 'a\A.pas+a\B.pas+a\C.pas | a\A.pas+a\C.pas') and LAll,
+    string.Join(' | ', Asked));
+  Reindex:= 0;
+  Asked  := nil;
+  Units:= AnalyzeRetryingStale(['a\A.pas'],
+    function(const APaths: TArray<string>): TArray<TUnitInheritance>
+    begin
+      Asked := Asked + [string.Join('+', APaths)];
+      Result:= [UnknownUnit('a\A.pas', STALE_ERR + ' #' + IntToStr(Length(Asked)))];
+    end, Ok);
+  Check('tab.stale.twice.stays.unknown', (Reindex = 1) and (Length(Asked) = N_ASKED) and not Units[0].Known and Units[0].Error.EndsWith('#2'), Units[0].Error);
+  Reindex:= 0;
+  Asked  := nil;
+  Units:= AnalyzeRetryingStale(['a\A.pas'],
+    function(const APaths: TArray<string>): TArray<TUnitInheritance>
+    begin
+      Asked := Asked + [string.Join('+', APaths)];
+      Result:= [UnknownUnit('a\A.pas', STALE_ERR)];
+    end,
+    function(out AError: string): Boolean
+    begin
+      Inc(Reindex);
+      AError:= 'boom';
+      Result:= False;
+    end);
+  Check('tab.stale.reindex.failed', (Reindex = 1) and (Length(Asked) = 1) and not Units[0].Known and Units[0].Error.EndsWith('; reindex failed: boom'), Units[0].Error);
+end;
+
+{ C8 E5-E9 decisions, on hand-built verdicts (the walk itself is TestInheritanceWalk):
+  the row note's exact text, the topmost-first chain, the offer, the insertion
+  (dedupe, directly before the descendant), the ordering warning (never a block) and
+  the notes for an engine without inherited_instances. }
+procedure TestInheritanceDecisions;
+const
+  BASE_PAS = 'fx\Base.pas';
+  MID_PAS  = 'fx\Mid.pas';
+  LEAF_PAS = 'fx\Leaf.pas';
+  X_PAS    = 'fx\X.pas';
+  Y_PAS    = 'fx\Y.pas';
+  LOW_PAS  = 'fx\Low.pas';
+  DEPTH_MID   = 1;
+  DEPTH_BASE  = 2;
+  DEPTH_FRAME = 3;
+  N_WARN     = 2;
+  N_NOTES    = 2;
+var
+  Leaf, Done, Unknown, CodeOnly, NoAnc, Framed, MidU: TUnitInheritance;
+  Warn : TArray<string>;
+  Notes: TArray<string>;
+
+  function Link(const APas: string; ADepth: Integer): TChainUnit;
+  begin
+    Result.PasPath:= APas;
+    Result.Depth  := ADepth;
+  end;
+
+  function Verdict(const AName, AType: string; AState: TAncestorState; const AUnit: string; const AChain: TArray<TChainUnit>): TInstanceVerdict;
+  begin
+    Result:= Default(TInstanceVerdict);
+    Result.Instance.Name    := AName;
+    Result.Instance.TypeName:= AType;
+    Result.State            := AState;
+    Result.DeclaringUnit    := AUnit;
+    Result.DeclaringPas     := if AState = asOutside then '' else 'fx\' + AUnit + '.pas';
+    Result.Chain            := AChain;
+  end;
+
+begin
+  Leaf:= Default(TUnitInheritance);
+  Leaf.UnitPas := LEAF_PAS;
+  Leaf.Known   := True;
+  // Bottom-up first-seen (Mid before Base): only the Depth sort puts Base first.
+  Leaf.Verdicts:= [Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(MID_PAS, DEPTH_MID), Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('tblFtrs', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('qryX', 'TQuery', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('qryLib', 'TQuery', asOutside, 'TDataModule', [])];
+  Check('inherit.note.text', InheritanceRowNote(Leaf, True) = 'inherits 3 TTable, TQuery instance(s) from Base -- convert it first (recommended); '
+    + 'inherits from TDataModule, which is not in this project''s index -- convert it from its own project', InheritanceRowNote(Leaf, True));
+  NoAnc:= Leaf;
+  NoAnc.Verdicts:= [Verdict('qryLib', 'TQuery', asOutside, OUTSIDE_NO_ANCESTOR, [])];
+  Check('inherit.note.outside.no.ancestor', (InheritanceRowNote(NoAnc, True) = OutsideNote(NoAnc.Verdicts[0]))
+    and not InheritanceRowNote(NoAnc, True).Contains(OUTSIDE_NO_ANCESTOR), InheritanceRowNote(NoAnc, True));
+  Done:= Leaf;
+  Done.Verdicts:= [Verdict('tblFtrs', 'TTable', asConverted, 'Base', [])];
+  Check('inherit.note.converted.silent', InheritanceRowNote(Done, True) = '', InheritanceRowNote(Done, True));
+  Unknown:= Leaf;
+  Unknown.Known:= False;
+  Check('inherit.note.unknown.silent', InheritanceRowNote(Unknown, True) = '');
+
+  Check('inherit.chain.topmost.first', string.Join(',', AncestorChain(Leaf)) = BASE_PAS + ',' + MID_PAS, string.Join(',', AncestorChain(Leaf)));
+  // Mid is first met at depth 1 (below Base), then at depth 3 as a frame above it: its largest Depth wins.
+  Framed:= Leaf;
+  Framed.Verdicts:= [Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(MID_PAS, DEPTH_MID), Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('qryFrm', 'TQuery', asUnconverted, 'Mid', [Link(MID_PAS, DEPTH_FRAME)])];
+  Check('inherit.chain.max.depth', string.Join(',', AncestorChain(Framed)) = MID_PAS + ',' + BASE_PAS, string.Join(',', AncestorChain(Framed)));
+  Check('inherit.chain.converted.empty', Length(AncestorChain(Done)) = 0);
+  Check('inherit.offer.text', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), True) = 'Add Base.pas, Mid.pas ahead of Leaf.pas?',
+    OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), True));
+  Check('inherit.offer.missing', string.Join(',', MissingAncestors([BASE_PAS, MID_PAS], ['FX\mid.pas', LEAF_PAS])) = BASE_PAS);
+  Check('inherit.offer.none.when.listed', Length(MissingAncestors([BASE_PAS, MID_PAS], [MID_PAS, BASE_PAS, LEAF_PAS])) = 0);
+
+  Check('inherit.insert.before', string.Join(',', InsertAncestors([X_PAS, LEAF_PAS, Y_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])) = string.Join(',', [X_PAS, BASE_PAS, MID_PAS, LEAF_PAS, Y_PAS]),
+    string.Join(',', InsertAncestors([X_PAS, LEAF_PAS, Y_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])));
+  Check('inherit.insert.skips.listed', string.Join(',', InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])) = string.Join(',', [BASE_PAS, MID_PAS, LEAF_PAS]),
+    string.Join(',', InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])));
+  Check('inherit.insert.around.listed.middle', string.Join(',', InsertAncestors([Y_PAS, MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS, LOW_PAS]))
+    = string.Join(',', [Y_PAS, BASE_PAS, MID_PAS, LOW_PAS, LEAF_PAS]), string.Join(',', InsertAncestors([Y_PAS, MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS, LOW_PAS])));
+  // Mid re-opens Base's tblOps, so a result with Base below Mid trips E7 on its own.
+  MidU:= Default(TUnitInheritance);
+  MidU.UnitPas := MID_PAS;
+  MidU.Known   := True;
+  MidU.Verdicts:= [Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_MID)])];
+  Check('inherit.insert.result.order.clean', Length(OrderWarnings(InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, AncestorChain(Leaf)), [Leaf, MidU], True)) = 0,
+    string.Join(' | ', OrderWarnings(InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, AncestorChain(Leaf)), [Leaf, MidU], True)));
+  Check('inherit.insert.unit.absent.appends', string.Join(',', InsertAncestors([X_PAS], LEAF_PAS, [BASE_PAS])) = string.Join(',', [X_PAS, BASE_PAS]));
+
+  Warn:= OrderWarnings([LEAF_PAS, BASE_PAS, MID_PAS], [Leaf], True);
+  Check('inherit.order.warns', (Length(Warn) = N_WARN) and (Warn[0] = 'Leaf.pas is listed above its ancestor Base.pas, which is not converted yet')
+    and (Warn[1] = 'Leaf.pas is listed above its ancestor Mid.pas, which is not converted yet'), string.Join(' | ', Warn));
+  Check('inherit.order.ok', Length(OrderWarnings([BASE_PAS, MID_PAS, LEAF_PAS], [Leaf], True)) = 0);
+  Check('inherit.order.unlisted.ancestor', Length(OrderWarnings([LEAF_PAS], [Leaf], True)) = 0);
+  Check('inherit.order.converted.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [Done], True)) = 0);
+  Check('inherit.order.text', OrderWarningText(Warn, True).StartsWith('Some units are listed above an ancestor that is not converted yet')
+    and OrderWarningText(Warn, True).Contains(Warn[0]) and OrderWarningText(Warn, True).EndsWith('Convert in this order anyway?'), OrderWarningText(Warn, True));
+
+  Notes:= EngineRefusalNotes([Leaf, Done, Unknown], False);
+  Check('inherit.refusal.notes', (Length(Notes) = N_NOTES)
+    and (Notes[0] = 'Leaf.pas: 4 inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged')
+    and (Notes[1] = 'Leaf.pas: 1 inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged'),
+    string.Join(' | ', Notes));
+  Check('inherit.refusal.notes.supported', Length(EngineRefusalNotes([Leaf], True)) = 0);
+  CodeOnly:= Leaf;
+  CodeOnly.Verdicts:= [Verdict('tblFtrs', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)])];
+  CodeOnly.Verdicts[0].Instance.FromCode:= True;
+  Check('inherit.refusal.notes.code.only.silent', Length(EngineRefusalNotes([CodeOnly], False)) = 0);
+  Check('inherit.chain.code.use', string.Join(',', AncestorChain(CodeOnly)) = BASE_PAS);
+
+  // Fix round 1 (controller ruling): until the engine retypes inherited instances (N2),
+  // converting an ancestor first breaks the descendant, and the order does not change
+  // this run's result. E5 stays verbatim and gains a suffix; E6 gains a sentence; E7 no
+  // longer claims reordering helps. With retype, the texts above are unchanged.
+  Check('inherit.types.unconverted', string.Join(',', UnconvertedTypes(Leaf)) = 'TTable,TQuery', string.Join(',', UnconvertedTypes(Leaf)));
+  Check('inherit.note.text.no.retype', InheritanceRowNote(Leaf, False) = 'inherits 3 TTable, TQuery instance(s) from Base -- convert it first (recommended)'
+    + ' -- with this engine, converting it now breaks this unit until N2; '
+    + 'inherits from TDataModule, which is not in this project''s index -- convert it from its own project', InheritanceRowNote(Leaf, False));
+  Check('inherit.offer.text.no.retype', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), False)
+    = 'Add Base.pas, Mid.pas ahead of Leaf.pas? Converting Base.pas, Mid.pas leaves Leaf.pas''s inherited instance(s) as TTable, TQuery until engine N2 '
+    + '-- Leaf.pas may not compile or load.', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), False));
+  Warn:= OrderWarnings([LEAF_PAS, BASE_PAS], [Leaf], False);
+  Check('inherit.order.warns.no.retype', (Length(Warn) = 1) and (Warn[0] = 'Leaf.pas is listed above its ancestor Base.pas.'), string.Join(' | ', Warn));
+  Check('inherit.order.text.no.retype', OrderWarningText(Warn, False) = 'Leaf.pas is listed above its ancestor Base.pas.' + sLineBreak + sLineBreak
+    + 'With this engine the order does not change this run''s result: inherited instances are skipped either way. Run anyway?', OrderWarningText(Warn, False));
+  Check('inherit.order.cancel.text', (OrderCancelledText(True) = 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.')
+    and (OrderCancelledText(False) = 'Convert cancelled: nothing was run.'), OrderCancelledText(False));
+end;
+
+{ C8 E2 / E3 / E8: the ancestor walk over a fake index. The fixture mirrors the
+  measured DMTEST shape: the leaf's tblFtrs is declared two levels up (Base), and
+  the middle unit does not mention it; Mid re-opens tblOps; qryLib is declared by
+  no project unit (the chain leaves the index at TDataModule -- outside). }
+procedure TestInheritanceWalk;  // dl:ok cyclomatic-complexity@2712 -- REVIEWED 2026-10-06 an assertion list plus a one-loop lookup helper (nested function V); the count is mostly the and-chains in Check conditions (Task 8 added the mismatched checks), and splitting the list would only scatter one fixture
+const
+  BASE_PAS = 'fx\Base.pas';
+  MID_PAS  = 'fx\Mid.pas';
+  LEAF_PAS = 'fx\Leaf.pas';
+  BASE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BASE_DONE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TFDTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TFDTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BASE_MIS_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TADOTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TFDTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  NOTE_MISMATCHED = 'inherits 1 TTable instance(s) from Base, where they are TADOTable -- not this book''s From or To type';
+  MID_DFM  = 'inherited MidDM: TMidDM' + sLineBreak + '  inherited tblOps: TTable' + sLineBreak + '    ReadOnly = True' + sLineBreak +
+    '  end' + sLineBreak + 'end' + sLineBreak;
+  LEAF_DFM ='inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak +
+    '  inherited tblOps: TTable' + sLineBreak + '  end' + sLineBreak + '  inherited qryLib: TQuery' + sLineBreak + '  end' + sLineBreak +
+    '  inherited memNote: TMemo' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  FORM_DFM = 'object Form2: TForm2' + sLineBreak + '  inline Frame11: TFrame1' + sLineBreak + '    inherited Button1: TButton' + sLineBreak +
+    '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  FRAME_DFM = 'object Frame1: TFrame1' + sLineBreak + '  object Button1: TButton' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  ANCF_DFM = 'object AncF: TAncF' + sLineBreak + '  inline Frame11: TFrame1' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  DESCF_DFM = 'inherited DescF: TDescF' + sLineBreak + '  inherited Frame11: TFrame1' + sLineBreak + '    inherited Button1: TButton' + sLineBreak +
+    '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  LOOP_DFM = 'inherited LoopDM: TLoopA' + sLineBreak + '  inherited tblX: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  CHAIN_DEPTH_BASE = 2;
+  LEAF_FROM_INSTANCES = 3;
+  OPS_CHAIN_UNITS = 2;
+  CACHE_CALLS_AFTER_BROKEN = 3;
+  NOTE_OUTSIDE_LIB = 'inherits from TDataModule, which is not in this project''s index -- convert it from its own project';
+  NOTE_NO_ANCESTOR = 'inherits qryLib from an ancestor that is not in this project''s index -- convert it from its own project';
+var
+  Pairs : TArray<TTypePair>;
+  Rows  : TArray<string>;
+  U     : TUnitInheritance;
+  Calls : TStringList;
+  Cache : TDictionary<string, TClassInfo>;
+  Cached: TClassLookup;
+  Info  : TClassInfo;
+
+  function Pair(const AFrom, ATo: string): TTypePair;
+  begin
+    Result.FromType:= AFrom;
+    Result.ToType  := ATo;
+  end;
+
+  function V(const AName: string): TInstanceVerdict;
+  begin
+    Result:= Default(TInstanceVerdict);
+    for var LV: TInstanceVerdict in U.Verdicts do
+      if SameText(LV.Instance.Name, AName) then
+        Exit(LV);
+  end;
+
+begin
+  Pairs:= [Pair('TTable', 'TFDTable'), Pair('TQuery', 'TFDQuery'), Pair('TButton', 'TcxButton')];
+  Rows := ['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM', 'TBaseDM|' + BASE_PAS + '|TDataModule'];
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, MID_DFM, BASE_DFM]));
+  Check('inherit.walk.known', U.Known and (U.Error = ''), U.Error);
+  Check('inherit.walk.from.filter', Length(U.Verdicts) = LEAF_FROM_INSTANCES, IntToStr(Length(U.Verdicts)) + ' (memNote is a TMemo: not a From type)');
+  Check('inherit.walk.two.levels', (V('tblFtrs').State = asUnconverted) and (V('tblFtrs').DeclaringUnit = 'Base') and SameText(V('tblFtrs').DeclaringPas, BASE_PAS));
+  Check('inherit.walk.skips.silent.middle', (Length(V('tblFtrs').Chain) = 1) and SameText(V('tblFtrs').Chain[0].PasPath, BASE_PAS)
+    and (V('tblFtrs').Chain[0].Depth = CHAIN_DEPTH_BASE));
+  Check('inherit.walk.intermediate.in.chain', (Length(V('tblOps').Chain) = OPS_CHAIN_UNITS) and SameText(V('tblOps').Chain[0].PasPath, MID_PAS)
+    and SameText(V('tblOps').Chain[1].PasPath, BASE_PAS));
+  Check('inherit.walk.outside.library', (V('qryLib').State = asOutside) and (V('qryLib').DeclaringUnit = 'TDataModule') and (V('qryLib').DeclaringPas = '')
+    and (Length(V('qryLib').Chain) = 0), V('qryLib').DeclaringUnit);
+  Check('inherit.note.outside', OutsideNote(V('qryLib')) = NOTE_OUTSIDE_LIB, OutsideNote(V('qryLib')));
+  Check('inherit.note.not.outside', OutsideNote(V('tblFtrs')) = '', OutsideNote(V('tblFtrs')));
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, MID_DFM, BASE_DONE_DFM]));
+  Check('inherit.walk.converted', (V('tblFtrs').State = asConverted) and (V('tblFtrs').DeclaringUnit = 'Base') and (Length(V('tblFtrs').Chain) = 0));
+  Check('inherit.note.converted.silent.walk', InheritanceRowNote(U, True) = NOTE_OUTSIDE_LIB, InheritanceRowNote(U, True));
+
+  // Task 8 (reverses preflight ruling C4): a declaring object of a THIRD type -- neither
+  // the book's From (TTable) nor its To (TFDTable) -- is mismatched, as the engine says.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, MID_DFM, BASE_MIS_DFM]));
+  Check('inherit.walk.mismatched', (V('tblFtrs').State = asMismatched) and (V('tblFtrs').DeclaringUnit = 'Base') and (V('tblFtrs').FoundType = 'TADOTable')
+    and (Length(V('tblFtrs').Chain) = 0), Format('state=%d found=%s', [Ord(V('tblFtrs').State), V('tblFtrs').FoundType]));
+  Check('inherit.walk.mismatched.to.is.converted', V('tblOps').State = asConverted, IntToStr(Ord(V('tblOps').State)));
+  Check('inherit.note.mismatched', InheritanceRowNote(U, True) = NOTE_MISMATCHED + '; ' + NOTE_OUTSIDE_LIB, InheritanceRowNote(U, True));
+  Check('inherit.chain.mismatched.not.offered', Length(AncestorChain(U)) = 0, string.Join(',', AncestorChain(U)));
+  Check('inherit.order.mismatched.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [U], True)) = 0);
+  Check('inherit.walk.mismatched.direct', ResolveInstance(V('tblFtrs').Instance, 'TMidDM', FakeLookup(Rows, nil),
+    FakeReader(['fx\Mid.dfm', 'fx\Base.dfm'], [MID_DFM, BASE_MIS_DFM]), Pairs).State = asMismatched);
+
+  U:= AnalyzeUnit('fx\Form2.pas', Pairs, FakeLookup(['TForm2|fx\Form2.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
+    FakeReader(['fx\Form2.dfm', 'fx\Frame1.dfm'], [FORM_DFM, FRAME_DFM]));
+  Check('inherit.walk.inline.frame', (Length(U.Verdicts) = 1) and (V('Button1').State = asUnconverted) and (V('Button1').DeclaringUnit = 'Frame1'),
+    Format('%d verdicts', [Length(U.Verdicts)]));
+  Check('inherit.walk.inline.not.listed', V('Frame11').Instance.Name = '');
+
+  U:= AnalyzeUnit('fx\DescF.pas', Pairs,
+    FakeLookup(['TDescF|fx\DescF.pas|TAncF', 'TAncF|fx\AncF.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
+    FakeReader(['fx\DescF.dfm', 'fx\AncF.dfm', 'fx\Frame1.dfm'], [DESCF_DFM, ANCF_DFM, FRAME_DFM]));
+  Check('inherit.walk.frame.in.ancestor', (V('Button1').State = asUnconverted) and (V('Button1').DeclaringUnit = 'Frame1'), V('Button1').DeclaringUnit);
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), FakeReader([], []));
+  Check('inherit.walk.no.dfm', not U.Known and (Length(U.Verdicts) = 0));
+  U:= AnalyzeUnit(LEAF_PAS, nil, FakeLookup(Rows, nil), FakeReader(['fx\Leaf.dfm'], [LEAF_DFM]));
+  Check('inherit.walk.no.checked.book', not U.Known and (Length(U.Verdicts) = 0));
+  U:= AnalyzeUnit(LEAF_PAS, [Pair('TMemoX', 'TcxMemo')], FakeLookup(Rows, nil), FakeReader(['fx\Leaf.dfm'], [LEAF_DFM]));
+  Check('inherit.walk.no.from.match', U.Known and (Length(U.Verdicts) = 0));
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TMidDM|' + MID_PAS + '|TBaseDM'], nil), FakeReader(['fx\Leaf.dfm'], [LEAF_DFM]));
+  Check('inherit.walk.unit.not.indexed', not U.Known and (Length(U.Verdicts) = 0));
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|!'], nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm'], [LEAF_DFM, MID_DFM]));
+  Check('inherit.walk.lookup.failed', not U.Known and (Length(U.Verdicts) = 0) and (U.Error <> ''), U.Error);
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|!|index is locked'], nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm'], [LEAF_DFM, MID_DFM]));
+  Check('inherit.walk.lookup.failed.cause', not U.Known and ContainsText(U.Error, 'TMidDM') and ContainsText(U.Error, 'index is locked'), U.Error);
+  U:= AnalyzeUnit('fx\Loop.pas', Pairs, FakeLookup(['TLoopA|fx\Loop.pas|TLoopB', 'TLoopB|fx\LoopB.pas|TLoopA'], nil),
+    FakeReader(['fx\Loop.dfm'], [LOOP_DFM]));
+  Check('inherit.walk.cycle.ends', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'loops back to TLoopB') and ContainsText(U.Error, 'tblX'),
+    U.Error);
+
+  // C3: the unit's own class records no ancestor at all -- outside, but there is no
+  // class to name, so the note names the instance instead of a pseudo-class.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|'], nil), FakeReader(['fx\Leaf.dfm'], [LEAF_DFM]));
+  Check('inherit.walk.no.ancestor', U.Known and (V('qryLib').State = asOutside) and (V('qryLib').DeclaringUnit = OUTSIDE_NO_ANCESTOR),
+    V('qryLib').DeclaringUnit);
+  Check('inherit.note.no.ancestor', OutsideNote(V('qryLib')) = NOTE_NO_ANCESTOR, OutsideNote(V('qryLib')));
+  Check('inherit.unit.name', UnitNameOf('fx\PathToData.pas') = 'PathToData');
+
+  Calls:= TStringList.Create;
+  Cache:= TDictionary<string, TClassInfo>.Create;
+  try
+    Cached:= CachingLookup(FakeLookup(Rows + ['TBroken|!'], Calls), Cache);
+    Info:= Cached('TBaseDM');
+    Check('inherit.cache.answers', Info.Found and SameText(Info.PasPath, BASE_PAS), Info.PasPath);
+    Info:= Cached('tbasedm');
+    Check('inherit.cache.one.question', Info.Found and (Calls.Count = 1), Calls.CommaText);
+    Cached('TBroken');
+    Cached('TBroken');
+    Check('inherit.cache.failure.not.cached', Calls.Count = CACHE_CALLS_AFTER_BROKEN, Calls.CommaText);
+  finally
+    Cache.Free;
+    Calls.Free;
+  end; // try
+end;
+
+{ C8 E2 edges: the frame fallback at any nesting depth inside the frame (a panel
+  between frame and button), a re-opening intermediate form kept in Chain below the
+  frame, and the outcomes that are UNKNOWN (cycle, depth cap, binary or unreadable
+  ancestor .dfm -- never reported as outside) or that end at an INDEXED class with no
+  ancestor (the no-ancestor wording, never naming that class). }
+procedure TestInheritanceWalkEdges;
+const
+  FRAMEP_DFM = 'object Frame1: TFrame1' + sLineBreak + '  object Panel1: TPanel' + sLineBreak + '    object Button1: TButton' + sLineBreak +
+    '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  ANCF_DFM = 'object AncF: TAncF' + sLineBreak + '  inline Frame11: TFrame1' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  DESCP_DFM = 'inherited DescF: TDescF' + sLineBreak + '  inherited Frame11: TFrame1' + sLineBreak + '    inherited Panel1: TPanel' + sLineBreak +
+    '      inherited Button1: TButton' + sLineBreak + '      end' + sLineBreak + '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  MIDF_DFM = 'inherited MidF: TMidF' + sLineBreak + '  inherited Frame11: TFrame1' + sLineBreak + '    inherited Panel1: TPanel' + sLineBreak +
+    '      inherited Button1: TButton' + sLineBreak + '      end' + sLineBreak + '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  MID_DFM  = 'inherited MidDM: TMidDM' + sLineBreak + 'end' + sLineBreak;
+  BASE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BINARY_DFM = BINARY_DFM_SIGNATURE + #1#2#3;
+  CAP_DFM  = 'inherited C0: TC0' + sLineBreak + '  inherited tblX: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  CAP_EXTRA_CLASSES = 8;
+  REOPEN_CHAIN_UNITS = 2;
+  NOTE_NO_ANCESTOR = 'inherits tblFtrs from an ancestor that is not in this project''s index -- convert it from its own project';
+var
+  Pairs: TArray<TTypePair>;
+  Rows : TArray<string>;
+  U    : TUnitInheritance;
+  S    : TDfmInheritance;
+  R    : TInstanceVerdict;
+  Btn  : TInstanceVerdict;
+
+  function Pair(const AFrom, ATo: string): TTypePair;
+  begin
+    Result.FromType:= AFrom;
+    Result.ToType  := ATo;
+  end;
+
+  function V(const AName: string): TInstanceVerdict;
+  begin
+    Result:= Default(TInstanceVerdict);
+    for var LV: TInstanceVerdict in U.Verdicts do
+      if SameText(LV.Instance.Name, AName) then
+        Exit(LV);
+  end;
+
+begin
+  Pairs:= [Pair('TTable', 'TFDTable'), Pair('TButton', 'TcxButton')];
+
+  S:= ScanDfmInheritance(DESCP_DFM);
+  Btn:= Default(TInstanceVerdict);
+  for var LInst: TInheritedInstance in S.Instances do
+    if LInst.Name = 'Button1' then
+      Btn.Instance:= LInst;
+  Check('inherit.scan.enclosing', (Length(Btn.Instance.Enclosing) = REOPEN_CHAIN_UNITS) and (Btn.Instance.Enclosing[0] = 'TPanel')
+    and (Btn.Instance.Enclosing[1] = 'TFrame1'), string.Join(',', Btn.Instance.Enclosing));
+
+  // A panel between the frame and the button: the fallback must reach TFrame1.
+  U:= AnalyzeUnit('fx\DescF.pas', Pairs,
+    FakeLookup(['TDescF|fx\DescF.pas|TAncF', 'TAncF|fx\AncF.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
+    FakeReader(['fx\DescF.dfm', 'fx\AncF.dfm', 'fx\Frame1.dfm'], [DESCP_DFM, ANCF_DFM, FRAMEP_DFM]));
+  Check('inherit.walk.frame.panel.between', U.Known and (V('Button1').State = asUnconverted) and (V('Button1').DeclaringUnit = 'Frame1'),
+    V('Button1').DeclaringUnit + ' ' + U.Error);
+
+  // An intermediate form re-opens Frame11 / Panel1 / Button1: it stays in Chain, and
+  // the frame (converted first) sits above it.
+  U:= AnalyzeUnit('fx\DescF.pas', Pairs,
+    FakeLookup(['TDescF|fx\DescF.pas|TMidF', 'TMidF|fx\MidF.pas|TAncF', 'TAncF|fx\AncF.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
+    FakeReader(['fx\DescF.dfm', 'fx\MidF.dfm', 'fx\AncF.dfm', 'fx\Frame1.dfm'], [DESCP_DFM, MIDF_DFM, ANCF_DFM, FRAMEP_DFM]));
+  Btn:= V('Button1');
+  Check('inherit.walk.frame.reopen.in.chain', (Btn.DeclaringUnit = 'Frame1') and (Length(Btn.Chain) = REOPEN_CHAIN_UNITS)
+    and SameText(Btn.Chain[0].PasPath, 'fx\MidF.pas') and SameText(Btn.Chain[1].PasPath, 'fx\Frame1.pas'),
+    Format('%s, %d chain units', [Btn.DeclaringUnit, Length(Btn.Chain)]));
+  if Length(Btn.Chain) = REOPEN_CHAIN_UNITS then
+    Check('inherit.walk.frame.depth.above.forms', Btn.Chain[1].Depth > Btn.Chain[0].Depth,
+      Format('MidF %d, Frame1 %d', [Btn.Chain[0].Depth, Btn.Chain[1].Depth]));
+
+  Rows:= ['TLeafDM|fx\Leaf.pas|TMidDM', 'TMidDM|fx\Mid.pas|TBaseDM', 'TBaseDM|fx\Base.pas|TDataModule'];
+  U:= AnalyzeUnit('fx\Leaf.pas', Pairs, FakeLookup(Rows, nil), FakeReader(['fx\Leaf.dfm', 'fx\Base.dfm'], [LEAF_DFM, BASE_DFM]));
+  Check('inherit.walk.missing.dfm.skipped', U.Known and (V('tblFtrs').State = asUnconverted) and (V('tblFtrs').DeclaringUnit = 'Base'), U.Error);
+  U:= AnalyzeUnit('fx\Leaf.pas', Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, BINARY_DFM, BASE_DFM]));
+  Check('inherit.walk.binary.ancestor.unknown', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'TMidDM'), U.Error);
+  U:= AnalyzeUnit('fx\Leaf.pas', Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, FAKE_UNREADABLE_DFM, BASE_DFM]));
+  Check('inherit.walk.unreadable.ancestor.unknown', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'TMidDM'), U.Error);
+
+  // An INDEXED ancestor with no ancestor of its own ends the chain: no-ancestor wording.
+  U:= AnalyzeUnit('fx\Leaf.pas', Pairs, FakeLookup(['TLeafDM|fx\Leaf.pas|TMidDM', 'TMidDM|fx\Mid.pas|'], nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm'], [LEAF_DFM, MID_DFM]));
+  Check('inherit.walk.indexed.no.ancestor', U.Known and (V('tblFtrs').State = asOutside) and (V('tblFtrs').DeclaringUnit = OUTSIDE_NO_ANCESTOR),
+    V('tblFtrs').DeclaringUnit);
+  Check('inherit.note.indexed.no.ancestor', (OutsideNote(V('tblFtrs')) = NOTE_NO_ANCESTOR) and not ContainsText(OutsideNote(V('tblFtrs')), 'TMidDM'),
+    OutsideNote(V('tblFtrs')));
+
+  // A chain longer than MAX_CHAIN_DEPTH is unknown, not outside.
+  Rows:= nil;
+  for var I: Integer:= 0 to MAX_CHAIN_DEPTH + CAP_EXTRA_CLASSES do
+    Rows:= Rows + [Format('TC%d|fx\C%d.pas|TC%d', [I, I, I + 1])];
+  U:= AnalyzeUnit('fx\C0.pas', Pairs, FakeLookup(Rows, nil), FakeReader(['fx\C0.dfm'], [CAP_DFM]));
+  Check('inherit.walk.depth.cap.unknown', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'longer than ' + IntToStr(MAX_CHAIN_DEPTH)),
+    U.Error);
+
+  // The failure travels as a state, not as an empty string.
+  R:= ResolveInstance(Btn.Instance, 'TBroken', FakeLookup(['TBroken|!'], nil), FakeReader([], []), []);
+  Check('inherit.resolve.unknown.state', (R.State = asUnknown) and ContainsText(R.Reason, 'TBroken') and (OutsideNote(R) = ''), R.Reason);
+end;
+
+{ C10 E1-E3: a #link's glyph expression is split off AFTER the cast suffix, at the
+  first ' G[', kept verbatim, found by its bare FromPath, and re-emitted canonically. }
+procedure TestGlyphLinkParse;
+const
+  LINE_IMG   = '#link OptionsImage.Glyph <- Picture G[*/4], G[1/5]G[2/5]G[3/5]G[4/5] : AssignGraphic';
+  LINE_COUNT = '#link OptionsImage.NumGlyphs <- Picture G[count]';
+  LINE_PLAIN = '#link Caption <- Caption';
+  LINE_TWO   = '#link SomeOtherGlyph <- Picture G[5/5]';
+  LINE_LOOSE = '#link Glyph2 <- Picture   G[5/5]   :   AssignGraphic';
+  BOOK_TEXT = '#convert Abcbtn.TabcToggleBtn -> cxButtons.TcxButton, cxButtons'#13#10 + LINE_IMG + #13#10 + LINE_COUNT + #13#10
+    + LINE_PLAIN + #13#10 + LINE_TWO + #13#10;
+  NODES_IN_BOOK = 5;
+  LINKS_IN_BOOK = 4;
+  IDX_IMG   = 1; // node index of LINE_IMG in BOOK_TEXT (0 is the #convert header)
+  IDX_COUNT = 2;
+  IDX_PLAIN = 3;
+  IDX_TWO   = 4;
+var
+  Book : TRuleBook;
+  Book2: TRuleBook;
+  N    : TRuleNode;
+  Path : string;
+  Expr : string;
+  Links: TArray<TRuleNode>;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BOOK_TEXT);
+    Check('glyph.parse.nodes', Book.Nodes.Count = NODES_IN_BOOK, IntToStr(Book.Nodes.Count));
+    if Book.Nodes.Count <> NODES_IN_BOOK then
+      Exit;
+    N:= Book.Nodes[IDX_IMG];
+    Check('glyph.parse.from.bare', N.LinkFrom = 'Picture', N.LinkFrom);
+    Check('glyph.parse.expr.verbatim', N.GlyphExpr = 'G[*/4], G[1/5]G[2/5]G[3/5]G[4/5]', N.GlyphExpr);
+    Check('glyph.parse.cast', N.Cast = 'AssignGraphic', N.Cast);
+    N:= Book.Nodes[IDX_COUNT];
+    Check('glyph.parse.count.link', (N.LinkFrom = 'Picture') and (N.GlyphExpr = 'G[count]') and (N.Cast = ''), N.GlyphExpr + '|' + N.Cast);
+    Check('glyph.parse.plain.empty', (Book.Nodes[IDX_PLAIN].GlyphExpr = '') and (Book.Nodes[IDX_PLAIN].LinkFrom = 'Caption'));
+    Check('glyph.roundtrip.untouched', Book.SaveToString = BOOK_TEXT);
+    Check('glyph.snapshot.clean', Book.Snapshot = BOOK_TEXT, 'a canonical G-link book must not read dirty');
+    Book.Nodes[IDX_IMG].Dirty:= True;
+    Book.Nodes[IDX_COUNT].Dirty:= True;
+    Book.Nodes[IDX_TWO].Dirty:= True;
+    Check('glyph.roundtrip.dirty', Book.SaveToString = BOOK_TEXT, Book.Nodes[IDX_IMG].Emit);
+    Check('glyph.links.for.block', Length(Book.LinksForBlock(0)) = LINKS_IN_BOOK, IntToStr(Length(Book.LinksForBlock(0))));
+    Check('glyph.links.two.from.same', (Book.Nodes[IDX_TWO].LinkFrom = 'Picture') and (Book.Nodes[IDX_TWO].GlyphExpr = 'G[5/5]'));
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.links.two.from.same.distinct',
+      (Length(Links) = LINKS_IN_BOOK) and (Links[0] = Book.Nodes[IDX_IMG]) and (Links[LINKS_IN_BOOK - 1] = Book.Nodes[IDX_TWO])
+      and (Links[0].GlyphExpr <> Links[LINKS_IN_BOOK - 1].GlyphExpr),
+      'LinksForBlock must return both Picture G-links as separate nodes with their own expressions');
+  finally
+    Book.Free;
+  end;
+  Book2:= TRuleBook.Create;
+  try
+    Book2.LoadFromString(LINE_LOOSE + #13#10);
+    N:= Book2.Nodes[0];
+    Check('glyph.parse.loose', (N.LinkFrom = 'Picture') and (N.GlyphExpr = 'G[5/5]') and (N.Cast = 'AssignGraphic'), N.Raw);
+    Check('glyph.roundtrip.loose.raw', Book2.SaveToString = LINE_LOOSE + #13#10);
+    N.Dirty:= True;
+    Check('glyph.emit.canonical', N.Emit = '#link Glyph2 <- Picture G[5/5] : AssignGraphic', N.Emit);
+  finally
+    Book2.Free;
+  end;
+  Path:= 'Picture G[1/2]G[2/2]';
+  Check('glyph.split.helper', SplitGlyphExprOff(Path, Expr) and (Path = 'Picture') and (Expr = 'G[1/2]G[2/2]'), Path + '|' + Expr);
+  Path:= 'Font.Size';
+  Check('glyph.split.none', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Font.Size') and (Expr = ''));
+  Path:= 'Picture g[1/2]';
+  Check('glyph.split.case.sensitive', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Picture g[1/2]'), 'lower-case g[ is a path, as in the engine');
+end;
+
+{ C10 E11/E12: convert-apply and convert-validate are given --castlib when the adapter
+  knows an EXISTING cast library, and never otherwise (a missing file would make the
+  engine exit 2 on every call). A .cmd stand-in echoes its arguments. }
+procedure TestGlyphCastLibArgs;
+const
+  ECHO_CMD = '@echo %*'#13#10;
+var
+  Dir  : string;
+  Lib  : string;
+  Eng  : TEngineAdapter;
+  Json : string;
+  V    : TValidateResult;
+begin
+  Check('glyph.caps.name', CAPABILITY_GLYPH_STITCH = 'glyph_stitch', CAPABILITY_GLYPH_STITCH);
+  Dir:= TPath.Combine(TPath.GetTempPath, 'castlib-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'echo.cmd'), ECHO_CMD, TEncoding.ASCII);
+    Lib:= TPath.Combine(Dir, 'casts.castlib');
+    TFile.WriteAllText(Lib, '# empty'#13#10, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'echo.cmd'), []);
+    try
+      Check('glyph.castlib.default.empty', Eng.CastLibFile = '');
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.absent.no.arg', Pos('--castlib', Json) = 0, Json);
+      Eng.CastLibFile:= TPath.Combine(Dir, 'missing.castlib');
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.missing.no.arg', Pos('--castlib', Json) = 0, Json);
+      Eng.CastLibFile:= Lib;
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.apply.arg', Pos('--castlib "' + Lib + '"', Json) > 0, Json);
+      Check('glyph.castlib.apply.keeps.flags', (Pos('--apply', Json) > 0) and (Pos('--format json', Json) > 0), Json);
+      // C12: the runner ALWAYS calls the --only overload (nil = unscoped), so the
+      // castlib must travel on THAT overload's command line, scoped and unscoped.
+      Eng.ApplyConversion('U.pas', 'B.rules', [], ['BtnA', 'BtnB'], Json);
+      Check('glyph.castlib.apply.only.scoped.arg', (Pos('--castlib "' + Lib + '"', Json) > 0) and (Pos('--only "BtnA,BtnB"', Json) > 0), Json);
+      Eng.ApplyConversion('U.pas', 'B.rules', [], nil, Json);
+      Check('glyph.castlib.apply.only.unscoped.arg', (Pos('--castlib "' + Lib + '"', Json) > 0) and (Pos('--only', Json) = 0), Json);
+      V:=Eng.ValidateText('#convert A -> B'#13#10, '', '', nil);
+      Check('glyph.castlib.validate.arg', Pos('--castlib "' + Lib + '"', V.Output) > 0, V.Output);
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
+{ C10 E13: ParseApplyJson reads glyphs[] whenever it is present (additive, not gated);
+  a missing array, a missing dropped_slots key, an unknown kind and wrongly-typed
+  values never raise. }
+procedure TestGlyphApplyParse;
+const
+  NO_SLOTS_KEY = '{"ok":true,"edits_count":1,"glyphs":[{"instance":"B","from_path":"Glyph","to_path":"X","kind":"glyph-weird","source_n":3,"alternative":"G[1]","rule_line":7,"message":"m"}]}';
+  BAD_TYPES = '{"ok":true,"edits_count":1,"glyphs":[7,"x",{"instance":5,"kind":["k"],"source_n":"3","rule_line":true,"dropped_slots":"5","message":"m2"},{"dropped_slots":[2,"z",null,{"a":1},3]}]}';
+  NOT_ARRAY = '{"ok":true,"edits_count":1,"glyphs":{"instance":"B"}}';
+  OUTCOMES = 3;
+  EDITS = 3;
+  N_FOUR = 4;
+  N_FIVE = 5;
+  SLOT_FIVE = 5;
+  SLOT_THREE = 3;
+  SLOT_TWO = 2;
+  LINE_TWO = 2;
+  TWO_ENTRIES = 2;
+var
+  P    : string;
+  Row  : TApplyRow;
+  Texts: Boolean;
+  Nums : Boolean;
+begin
+  P:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('glyph.apply.fixture', 'missing ' + P);
+    Exit;
+  end;
+  Row:= ParseApplyJson('(loaded defaults from x)'#13#10 + TFile.ReadAllText(P) + #13#10'(loaded defaults from y)');
+  Check('glyph.apply.ok', Row.Ok and (Row.EditsCount = EDITS), Row.Error);
+  Check('glyph.apply.count', Length(Row.Glyphs) = OUTCOMES, IntToStr(Length(Row.Glyphs)));
+  if Length(Row.Glyphs) = OUTCOMES then
+  begin
+    Texts:= (Row.Glyphs[0].Instance = 'Btn1') and (Row.Glyphs[0].Kind = GLYPH_KIND_STITCHED) and (Row.Glyphs[0].Alternative = 'G[*/4]');
+    Nums := (Row.Glyphs[0].SourceN = N_FOUR) and (Length(Row.Glyphs[0].DroppedSlots) = 0) and (Row.Glyphs[0].RuleLine = LINE_TWO);
+    Check('glyph.apply.stitched', Texts and Nums);
+    Check('glyph.apply.todo', (Row.Glyphs[1].Kind = 'glyph-no-alternative') and IsGlyphTodo(Row.Glyphs[1]) and (Pos('TODO written', Row.Glyphs[1].Message) > 0));
+    Check('glyph.apply.dropped', (Row.Glyphs[2].SourceN = N_FIVE) and (Length(Row.Glyphs[2].DroppedSlots) = 1) and (Row.Glyphs[2].DroppedSlots[0] = SLOT_FIVE)
+      and (Row.Glyphs[2].FromPath = 'Glyph') and (Row.Glyphs[2].ToPath = 'OptionsImage.Glyph'));
+    Check('glyph.apply.note', GlyphNoteSuffix(Row.Glyphs) = '; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', GlyphNoteSuffix(Row.Glyphs));
+  end;
+  Check('glyph.apply.remainder.unchanged', Length(Row.Remainder) = 1, 'todos[] still feeds Remainder');
+  Row:= ParseApplyJson('{"ok":true,"edits_count":0}');
+  Check('glyph.apply.absent.array', Row.Ok and (Length(Row.Glyphs) = 0));
+  Row:= ParseApplyJson(NO_SLOTS_KEY);
+  Check('glyph.apply.no.dropped.key', (Length(Row.Glyphs) = 1) and (Length(Row.Glyphs[0].DroppedSlots) = 0));
+  Check('glyph.apply.unknown.kind.is.todo', (Length(Row.Glyphs) = 1) and IsGlyphTodo(Row.Glyphs[0]) and (Row.Glyphs[0].Message = 'm'));
+  // R8: a wrongly-typed value degrades to its default; a non-object entry is skipped.
+  Row:= ParseApplyJson(BAD_TYPES);
+  Check('glyph.apply.bad.types.ok', Row.Ok and (Length(Row.Glyphs) = TWO_ENTRIES), IntToStr(Length(Row.Glyphs)));
+  if Length(Row.Glyphs) = TWO_ENTRIES then
+  begin
+    Texts:= (Row.Glyphs[0].Instance = '') and (Row.Glyphs[0].Kind = '') and (Row.Glyphs[0].Message = 'm2');
+    Nums := (Row.Glyphs[0].SourceN = 0) and (Row.Glyphs[0].RuleLine = 0) and (Length(Row.Glyphs[0].DroppedSlots) = 0);
+    Check('glyph.apply.bad.types.defaults', Texts and Nums);
+    Check('glyph.apply.bad.slots.skipped', (Length(Row.Glyphs[1].DroppedSlots) = TWO_ENTRIES) and (Row.Glyphs[1].DroppedSlots[0] = SLOT_TWO)
+      and (Row.Glyphs[1].DroppedSlots[1] = SLOT_THREE));
+  end;
+  Row:= ParseApplyJson(NOT_ARRAY);
+  Check('glyph.apply.not.array', Row.Ok and (Length(Row.Glyphs) = 0));
+end;
+
+{ C10 E12/E13: the runner's converted row carries the glyph suffix; Preflight skips a
+  G-link book while the engine lacks glyph_stitch and runs it when it has it. }
+procedure TestGlyphRunner;
+const
+  BOOKS_TWO = 2;
+var
+  P     : string;
+  Json  : string;
+  Rows  : TArray<TConvertRow>;
+  Dir   : string;
+  UnitP : string;
+  Books : TArray<TBookEntry>;
+  Pre   : TPreflight;
+begin
+  P:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('glyph.runner.fixture', 'missing ' + P);
+    Exit;
+  end;
+  Json:= TFile.ReadAllText(P);
+  Dir:= TPath.Combine(TPath.GetTempPath, 'glyphrun-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    UnitP:= TPath.Combine(Dir, 'U.pas');
+    TFile.WriteAllText(UnitP, 'unit U; interface implementation end.'#13#10, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'U.dfm'), 'object F: TF'#13#10'end'#13#10, TEncoding.ASCII);
+    Rows:= RunConversionUnits([UnitP], [TPath.Combine(Dir, 'B.rules')],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := Json;
+        Result:= 0;
+      end,
+      function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end,
+      nil, nil);
+    Check('glyph.runner.one.row', Length(Rows) = 1, IntToStr(Length(Rows)));
+    if Length(Rows) = 1 then
+    begin
+      Check('glyph.runner.converted', Rows[0].Status = csConverted, ConvertStatusText(Rows[0].Status) + ' ' + Rows[0].Note);
+      Check('glyph.runner.note', Rows[0].Note = '3 edit(s), 1 remaining for manual work; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', Rows[0].Note);
+      Check('glyph.runner.row.glyphs', Length(Rows[0].Apply.Glyphs) = Length(ParseApplyJson(Json).Glyphs));
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  SetLength(Books, BOOKS_TWO);
+  Books[0].Path    := 'b\Glyph.rules';
+  Books[0].Checked := True;
+  Books[0].Kind    := bkConvertOnly;
+  Books[0].HasGlyph:= True;
+  Books[1].Path    := 'b\Plain.rules';
+  Books[1].Checked := True;
+  Books[1].Kind    := bkConvertOnly;
+  Books[1].HasGlyph:= False;
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, False);
+  Check('glyph.pre.unsupported.skipped', Pre.Ok and (Length(Pre.Runnable) = 1) and (Pre.Runnable[0] = Books[1].Path), string.Join(';', Pre.Runnable));
+  Check('glyph.pre.unsupported.note', (Length(Pre.Notes) = 1) and (Pre.Notes[0] = 'Glyph.rules: glyph links: engine support pending -- skipped'), string.Join(';', Pre.Notes));
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, True);
+  Check('glyph.pre.supported.runs', Pre.Ok and (Length(Pre.Runnable) = BOOKS_TWO) and (Length(Pre.Notes) = 0), string.Join(';', Pre.Notes));
+  Books[1].Checked:= False;
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, False);
+  Check('glyph.pre.only.glyph.book.refused', (not Pre.Ok) and (Length(Pre.Problems) = 1) and (Pre.Problems[0] = 'None of the checked rule books can run (see notes).'), string.Join(';', Pre.Problems));
+end;
+
+{ C10 E11/E12/E14 (Task 6): the Convert tab's decisions -- one classification sets
+  HasGlyph on first listing AND on refresh (else the glyph_stitch gate is inert), the
+  checklist greys a G-link book until glyph_stitch, a castlib that does not exist is
+  never recorded, and the red summary counts UNITS, not rows. }
+procedure TestGlyphConvertTab;
+const
+  GLYPH_BOOK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4] : AssignGraphic'#13#10;
+  PLAIN_BOOK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  MIXED_GLYPH_BOOK = '#use cxButtons'#13#10 + GLYPH_BOOK;
+  UNITS_SUFFIX  = '  (unit rules: engine support pending)';
+  MIXED_SUFFIX  = '  (unit rules not applied: engine)';
+  TODO_UNITS    = 2;
+  GLYPH_LINES   = 2;
+  REPORT_COLS_GLYPH = 8; // the run report's column count (Book .. Note)
+  RESTORE_LEAD  = 'RESTORE FAILED for A.pas, B.pas -- may be half-converted; restore by hand from the backups its row names. ';
+var
+  E   : TBookEntry;
+  En  : Boolean;
+  S   : string;
+  Dir : string;
+  Lib : string;
+  Rows: TArray<TConvertRow>;
+  Todo: TGlyphOutcome;
+  Done: TGlyphOutcome;
+
+  function Row(const AUnit: string; AStatus: TConvertStatus; const AGlyphs: TArray<TGlyphOutcome>): TConvertRow;
+  begin
+    Result:= Default(TConvertRow);
+    Result.UnitPas:= AUnit;
+    Result.Status := AStatus;
+    Result.Apply.Glyphs:= AGlyphs;
+  end;
+
+begin
+  E:= Default(TBookEntry);
+  E.Path   := 'b\Glyph.rules';
+  E.Checked:= True;
+  E:= ClassifiedEntry(E, GLYPH_BOOK);
+  Check('glyph.tab.classify.glyph', E.HasGlyph and (E.Kind = bkConvertOnly) and E.Checked and (E.Path = 'b\Glyph.rules'));
+  E:= ClassifiedEntry(E, PLAIN_BOOK);
+  Check('glyph.tab.classify.refresh.clears', (not E.HasGlyph) and (E.Kind = bkConvertOnly), 'a refresh must recompute HasGlyph');
+  E:= ClassifiedEntry(E, MIXED_GLYPH_BOOK);
+  Check('glyph.tab.classify.mixed', E.HasGlyph and (E.Kind = bkMixed));
+
+  E:= ClassifiedEntry(Default(TBookEntry), GLYPH_BOOK);
+  S:= BookListSuffix(E, True, False, En);
+  Check('glyph.tab.suffix.pending', (S = GLYPH_BOOK_PENDING_SUFFIX) and (S = '  (glyph links: engine support pending)') and not En, S);
+  S:= BookListSuffix(E, True, True, En);
+  Check('glyph.tab.suffix.supported', (S = '') and En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), MIXED_GLYPH_BOOK);
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.mixed.both', (S = MIXED_SUFFIX + GLYPH_BOOK_PENDING_SUFFIX) and not En, S);
+  S:= BookListSuffix(E, False, True, En);
+  Check('glyph.tab.suffix.mixed.units.only', (S = MIXED_SUFFIX) and En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), '#use cxButtons'#13#10);
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.units.unchanged', (S = UNITS_SUFFIX) and not En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), '');
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.empty.unchanged', (S = '  (empty)') and En, S);
+
+  Check('glyph.tab.castlib.none', ExistingCastLib('') = '');
+  Dir:= TPath.Combine(TPath.GetTempPath, 'tabcastlib-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Lib:= TPath.Combine(Dir, 'casts.castlib');
+    Check('glyph.tab.castlib.missing', ExistingCastLib(Lib) = '', ExistingCastLib(Lib));
+    TFile.WriteAllText(Lib, '# empty'#13#10, TEncoding.ASCII);
+    Check('glyph.tab.castlib.exists', ExistingCastLib(Lib) = Lib, ExistingCastLib(Lib));
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  Todo:= Default(TGlyphOutcome);
+  Todo.Kind:= 'glyph-no-alternative';
+  Done:= Default(TGlyphOutcome);
+  Done.Kind:= GLYPH_KIND_STITCHED;
+  Rows:= [Row('u\A.pas', csConverted, [Todo]), Row('U\a.PAS', csConverted, [Done, Todo]),
+    Row('u\B.pas', csConverted, [Done]), Row('u\C.pas', csRolledBack, [Todo]),
+    Row('u\D.pas', csConverted, [Todo]), Row('u\E.pas', csRefused, [Todo])];
+  Check('glyph.tab.todo.units', GlyphTodoUnitCount(Rows) = TODO_UNITS, IntToStr(GlyphTodoUnitCount(Rows)));
+  Check('glyph.tab.todo.none', GlyphTodoUnitCount([Row('u\B.pas', csConverted, [Done])]) = 0);
+  Check('glyph.tab.todo.summary', GlyphRunSummary(GlyphTodoUnitCount(Rows)) <> '');
+
+  // Fix round 1: RESTORE FAILED (a half-converted unit) always leads; glyph to-dos next.
+  S:= RunStatusLead(['A.pas', 'B.pas'], GlyphRunSummary(1), 'Converted 1 of 2.');
+  Check('glyph.tab.lead.restore.first', S = RESTORE_LEAD + GlyphRunSummary(1) + '  Converted 1 of 2.', S);
+  S:= RunStatusLead([], GlyphRunSummary(1), 'Converted 1 of 2.');
+  Check('glyph.tab.lead.glyph.only', S = GlyphRunSummary(1) + '  Converted 1 of 2.', S);
+  S:= RunStatusLead(['A.pas', 'B.pas'], '', 'Converted 1 of 2.');
+  Check('glyph.tab.lead.restore.only', S = RESTORE_LEAD + 'Converted 1 of 2.', S);
+  S:= RunStatusLead([], '', 'Converted 1 of 2.');
+  Check('glyph.tab.lead.body.only', S = 'Converted 1 of 2.', S);
+
+  // Final-review ruling (E13 amended): ONE report shape -- each glyph line has the
+  // report's 8 columns, Status `glyph`, the outcome in the Note; converted rows only.
+  Todo.Instance:= 'Btn1';
+  Todo.FromPath:= 'Glyph';
+  Todo.ToPath  := 'OptionsImage.Glyph';
+  Todo.Message := 'matched no alternative';
+  var GRow: TConvertRow:= Row('u\A.pas', csConverted, [Done, Todo]);
+  GRow.Book:= 'B.rules';
+  var GLines: TArray<string>:= GlyphReportLines(GRow);
+  var GCols : TArray<string>:= if Length(GLines) = GLYPH_LINES then GLines[1].Split([#9]) else nil;
+  Check('glyph.report.lines.count', Length(GLines) = GLYPH_LINES, IntToStr(Length(GLines)));
+  Check('glyph.report.lines.shape', Length(GCols) = REPORT_COLS_GLYPH, IntToStr(Length(GCols)));
+  Check('glyph.report.status.text', REPORT_STATUS_GLYPH = 'glyph', REPORT_STATUS_GLYPH);
+  if Length(GCols) = REPORT_COLS_GLYPH then
+    Check('glyph.report.lines.text', GLines[1] = string.Join(#9, ['B.rules', 'u\A.pas', REPORT_STATUS_GLYPH, '', '', '', '', GlyphReportNote(Todo)]), GLines[1]);
+  GRow.Status:= csRolledBack;
+  Check('glyph.report.lines.converted.only', Length(GlyphReportLines(GRow)) = 0);
+  GRow.Status:= csConverted;
+  GRow.Apply.Glyphs:= nil;
+  Check('glyph.report.lines.none', Length(GlyphReportLines(GRow)) = 0);
+end;
+
+{ C10 E7/E8/E12-E14: the editor's own glyph decisions -- the live check goes through the
+  ENGINE's parser (DRagLint.Convert.GlyphExpr, one parser for both), the two block-level
+  rules carry the engine's wording, the count-target suggestion never guesses, and the
+  note / report / summary texts are pinned verbatim. }
+procedure TestGlyphDecisions;
+const
+  BLOCK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] : AssignGraphic'#13#10 +
+    '#link OptionsImage.NumGlyphs <- NumGlyphs'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  BLOCK_TWO_IMAGES =
+    '#convert A -> B'#13#10 +
+    '#link Glyph1 <- Picture G[1/2]'#13#10 +
+    '#link Glyph2 <- Picture G[2/2]'#13#10;
+  BLOCK_NO_GLINK =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- NumGlyphs'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph : AssignGraphic'#13#10;
+  BLOCK_CARRY_NOT_COUNT =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Spacing'#13#10;
+  EXPECT_HINT = '#link OptionsImage.NumGlyphs <- NumGlyphs is a straight carry of the source glyph count -- write "#link OptionsImage.NumGlyphs <- Glyph G[count]" instead';
+  N_FIVE = 5;
+  N_TWO  = 2;
+  LINE_IMG = 52;
+  IDX_CAPTION = 3;
+var
+  Book : TRuleBook;
+  Nodes: TArray<TRuleNode>;
+  Err  : string;
+  O    : TGlyphOutcome;
+  P    : TGlyphOutcome;
+  Line : string;
+begin
+  Check('glyph.check.ok', CheckGlyphExprText('G[*/4], G[1/5]G[2/5]', Err) and (Err = ''), Err);
+  Check('glyph.check.empty.ok', CheckGlyphExprText('', Err) and (Err = ''));
+  Check('glyph.check.syntax', (not CheckGlyphExprText('G[1/', Err)) and (Pos('column ', Err) = 1), Err);
+  Check('glyph.check.range', (not CheckGlyphExprText('G[5/4]', Err)) and (Pos('column ', Err) = 1) and (Pos('5', Err) > 0), Err);
+  Check('glyph.check.two.for.one.n', not CheckGlyphExprText('G[1/4], G[*/4]', Err), Err);
+
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    Nodes:= Book.Nodes.ToArray;
+    Check('glyph.image.link', IsImageGlyphLink(Nodes[1]) and not IsImageGlyphLink(Nodes[2]) and not IsImageGlyphLink(Nodes[IDX_CAPTION]));
+    Check('glyph.image.links.from', (ImageGlyphLinksFrom(Nodes, 'glyph') = 1) and (ImageGlyphLinksFrom(Nodes, 'Caption') = 0));
+    Check('glyph.count.issue.none', CountLinkIssueFor(Nodes, nil, 'Glyph', 'G[count]') = '', CountLinkIssueFor(Nodes, nil, 'Glyph', 'G[count]'));
+    Check('glyph.count.issue.not.count.expr', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[1/2]') = '');
+    Check('glyph.count.issue.zero', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[count]') = 'G[count] needs exactly one image link from Caption; found 0', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[count]'));
+    Check('glyph.carry.hint', StraightCountCarryHint(Nodes) = EXPECT_HINT, StraightCountCarryHint(Nodes));
+    Check('glyph.suggest.one', SuggestCountTarget(['OptionsImage.Glyph', 'OptionsImage.NumGlyphs', 'Caption'], [Nodes[0], Nodes[1], Nodes[IDX_CAPTION]]) = 'OptionsImage.NumGlyphs');
+    Check('glyph.suggest.already.linked', SuggestCountTarget(['OptionsImage.Glyph', 'OptionsImage.NumGlyphs'], Nodes) = '', 'NumGlyphs is already a link target');
+    Check('glyph.suggest.ambiguous', SuggestCountTarget(['OptionsImage.NumGlyphs', 'Other.GlyphCount'], [Nodes[0], Nodes[1]]) = '', 'two candidates: never guess');
+    Check('glyph.suggest.none', SuggestCountTarget(['Caption', 'Width'], [Nodes[0], Nodes[1]]) = '');
+
+    Book.LoadFromString(BLOCK_TWO_IMAGES);
+    Nodes:= Book.Nodes.ToArray;
+    Check('glyph.count.two.image.links', CountLinkIssueFor(Nodes, nil, 'Picture', 'G[count]') = 'G[count] needs exactly one image link from Picture; found 2', CountLinkIssueFor(Nodes, nil, 'Picture', 'G[count]'));
+
+    Book.LoadFromString(BLOCK_NO_GLINK);
+    Check('glyph.carry.no.glink.silent', StraightCountCarryHint(Book.Nodes.ToArray) = '', StraightCountCarryHint(Book.Nodes.ToArray));
+    Book.LoadFromString(BLOCK_CARRY_NOT_COUNT);
+    Check('glyph.carry.not.count.prop', StraightCountCarryHint(Book.Nodes.ToArray) = '', StraightCountCarryHint(Book.Nodes.ToArray));
+  finally
+    Book.Free;
+  end;
+
+  Check('glyph.book.has', BookHasGlyphLinks(BLOCK) and BookHasGlyphLinks(BLOCK_TWO_IMAGES));
+  Check('glyph.book.has.not', (not BookHasGlyphLinks(BLOCK_NO_GLINK)) and (not BookHasGlyphLinks('')));
+  Check('glyph.last.segment', (LastSegment('OptionsImage.NumGlyphs') = 'NumGlyphs') and (LastSegment('Glyph') = 'Glyph') and (LastSegment('') = ''));
+
+  O:= Default(TGlyphOutcome);
+  O.Instance:= 'Btn1';
+  O.FromPath:= 'Picture';
+  O.ToPath:= 'OptionsImage.Glyph';
+  O.Kind:= GLYPH_KIND_STITCHED;
+  O.SourceN:= N_FIVE;
+  O.Alternative:= 'G[1/5]G[2/5]G[3/5]G[4/5]';
+  O.DroppedSlots:= [N_FIVE];
+  O.RuleLine:= LINE_IMG;
+  O.Message:= 'slot 5 dropped by rule line 52';
+  P:= O;
+  P.Instance:= 'Btn2';
+  P.Kind:= 'glyph-no-alternative';
+  P.SourceN:= N_TWO;
+  P.Alternative:= '';
+  P.DroppedSlots:= nil;
+  P.Message:= 'N=2 matched no alternative; TODO written';
+  Check('glyph.todo.kinds', (not IsGlyphTodo(O)) and IsGlyphTodo(P));
+  Check('glyph.todo.unknown.kind', GlyphTodoCount([O, P, Default(TGlyphOutcome)]) = 2, 'an unknown / empty kind is a TODO');
+  Check('glyph.note.suffix', GlyphNoteSuffix([O, P]) = '; glyphs: 1 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', GlyphNoteSuffix([O, P]));
+  Check('glyph.note.none', GlyphNoteSuffix(nil) = '');
+  Line:= GlyphReportNote(O);
+  Check('glyph.report.note', Line = 'Btn1.Picture -> OptionsImage.Glyph: glyph-stitched, N=5, G[1/5]G[2/5]G[3/5]G[4/5], dropped 5 -- slot 5 dropped by rule line 52', Line);
+  Line:= GlyphReportNote(P);
+  Check('glyph.report.note.todo', Line = 'Btn2.Picture -> OptionsImage.Glyph: glyph-no-alternative, N=2 -- N=2 matched no alternative; TODO written', Line);
+  P.Message:= '';
+  Line:= GlyphReportNote(P);
+  Check('glyph.report.note.no.message', Line = 'Btn2.Picture -> OptionsImage.Glyph: glyph-no-alternative, N=2', Line);
+  Check('glyph.report.note.no.tab', Pos(#9, GlyphReportNote(O)) = 0, 'the note is ONE report cell');
+  Check('glyph.summary', GlyphRunSummary(2) = '2 unit(s) have glyph TODOs -- each one''s implementation section starts with the TODO line; see the report', GlyphRunSummary(2));
+  Check('glyph.summary.none', GlyphRunSummary(0) = '');
+end;
+
+{ C10 Task 5: a plain Assign must never retarget a glyph link. FindLinkForFrom
+  returns the FIRST link per From, so on a G-link (or a From with several links)
+  AssignLink would rewrite LinkTo and silently keep the expression -- the guard
+  refuses instead and names the link. A plain single link is still re-assignable. }
+procedure TestGlyphAssignGuard;
+const
+  BLOCK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] : AssignGraphic'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Glyph G[count]'#13#10 +
+    '#link Caption <- Caption'#13#10 +
+    '#link Hint <- Tag'#13#10 +
+    '#link HelpKeyword <- Tag'#13#10;
+  EXPECT_GLINK = 'Blocked: #link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] is a glyph link -- change it through Mapping > Glyph expression... or the Raw DSL, or Unassign it first.';
+  EXPECT_TWO   = 'Blocked: Tag has 2 #link lines in this rule -- an assign would retarget only the first; edit them in the Raw DSL.';
+var
+  Book : TRuleBook;
+  Links: TArray<TRuleNode>;
+  S    : string;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.assign.plain.ok', GlyphAssignBlock(Links, 'Caption') = '', GlyphAssignBlock(Links, 'Caption'));
+    Check('glyph.assign.unlinked.ok', GlyphAssignBlock(Links, 'Width') = '', GlyphAssignBlock(Links, 'Width'));
+    S:= GlyphAssignBlock(Links, 'glyph');
+    Check('glyph.assign.glink.refused', S = EXPECT_GLINK, S);
+    S:= GlyphAssignBlock(Links, 'Tag');
+    Check('glyph.assign.two.links.refused', S = EXPECT_TWO, S);
+    Check('glyph.assign.no.links.ok', GlyphAssignBlock(nil, 'Glyph') = '');
+    // R4: the count link is not a grid row; the image link's dialog finds it by From.
+    Check('glyph.count.link.found', (FindCountLink(Links, 'glyph') <> nil) and (FindCountLink(Links, 'glyph').LinkTo = 'OptionsImage.NumGlyphs'));
+    Check('glyph.count.link.none', (FindCountLink(Links, 'Caption') = nil) and (FindCountLink(nil, 'Glyph') = nil));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ Final review Minor 1: the grid's cell painter and its hint ask ONE routine which rule
+  nodes' marks a cell shows -- the row's link, plus in the Glyph column the From's
+  G[count] link (no grid row of its own, ruling R4) -- so the hint can never name less
+  than the cell paints. }
+procedure TestGlyphGridMarkNodes;
+const
+  BLOCK =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  IDX_COUNT   = 1;
+  IDX_CAPTION = 2;
+  WITH_COUNT  = 2;
+var
+  Book: TRuleBook;
+  L   : TArray<TRuleNode>;
+  R   : TArray<TRuleNode>;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.marks.no.link', Length(GridMarkNodes(L, nil, 'Picture', True)) = 0);
+    R:= GridMarkNodes(L, L[0], 'picture', True);
+    Check('glyph.marks.glyph.col.adds.count.link', (Length(R) = WITH_COUNT) and (R[0] = L[0]) and (R[1] = L[IDX_COUNT]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[0], 'Picture', False);
+    Check('glyph.marks.other.col.link.only', (Length(R) = 1) and (R[0] = L[0]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[IDX_COUNT], 'Picture', True);
+    Check('glyph.marks.count.row.once', (Length(R) = 1) and (R[0] = L[IDX_COUNT]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[IDX_CAPTION], 'Caption', True);
+    Check('glyph.marks.no.count.link', (Length(R) = 1) and (R[0] = L[IDX_CAPTION]), IntToStr(Length(R)));
+  finally
+    Book.Free;
+  end;
+end;
+{ C10 Task 5 fix 1: the dialog's G[count] rule must not count the link being EDITED
+  as its own image link; only a count link with NO image link left is an orphan.
+  Fix 2: the editor never refuses what the engine accepts -- several G[count] links
+  from one From to DIFFERENT Tos are engine-valid (CheckGlyphLink counts image links
+  only); only an exact duplicate (same From AND To) is refused, and the dialog never
+  AUTO-creates a count link beside an existing one. }
+procedure TestGlyphCountLinkEdit;
+const
+  ONE_IMAGE =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  COUNT_FIRST =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10;
+  TWO_IMAGES_COUNT =
+    '#convert A -> B'#13#10 +
+    '#link Glyph1 <- Picture G[1/2]'#13#10 +
+    '#link Glyph2 <- Picture G[2/2]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  COUNT_ONLY =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  TWO_COUNTS =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link Other.GlyphCount <- Picture G[count]'#13#10;
+  SAME_TO =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture'#13#10;
+  FOUND_0 = 'G[count] needs exactly one image link from Picture; found 0';
+  DUP     = 'G[count] from Picture is already linked: #link OptionsImage.NumGlyphs <- Picture G[count]';
+  IDX_THIRD = 2;
+  BOOKS: array[0..3] of string = (ONE_IMAGE, COUNT_FIRST, TWO_IMAGES_COUNT, TWO_COUNTS);
+  EXPRS: array[0..1] of string = ('G[count]', 'G[*/4]');
+var
+  Book    : TRuleBook;
+  L       : TArray<TRuleNode>;
+  Edited  : TRuleNode;
+  N       : TRuleNode;
+  Existing: TRuleNode;
+  Step    : TCountLinkStep;
+  Src     : string;
+  Expr    : string;
+  Want    : Boolean;
+  Counts  : Integer;
+  Worst   : Integer;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(ONE_IMAGE);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.self.excluded', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = FOUND_0, CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.edit.image.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[*/2]') = '');
+    Check('glyph.count.find.exclude.other', FindCountLink(L, 'Picture', L[0]) = L[1]);
+
+    Book.LoadFromString(COUNT_FIRST);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.count.first.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.find.exclude.self', FindCountLink(L, 'Picture', L[0]) = nil);
+
+    Book.LoadFromString(TWO_IMAGES_COUNT);
+    L:= Book.LinksForBlock(0);
+    // Glyph1 -> G[count] beside a count link to ANOTHER To: engine-valid, no refusal.
+    Check('glyph.count.edit.other.to.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.orphan.images.left', OrphanedCountLink(L, 'Picture') = nil);
+    Check('glyph.count.orphan.one.image.left', OrphanedCountLink([L[1], L[IDX_THIRD]], 'Picture') = nil, 'unassigning one of several image links keeps the count link');
+
+    Book.LoadFromString(COUNT_ONLY);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.orphan.none.left', OrphanedCountLink(L, 'Picture') = L[0]);
+
+    Book.LoadFromString(TWO_COUNTS);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.two.tos.first.ok', CountLinkIssueFor(L, L[1], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[1], 'Picture', 'G[count]'));
+    Check('glyph.count.two.tos.second.ok', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]'));
+
+    Book.LoadFromString(SAME_TO);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.exact.duplicate', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]') = DUP, CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]'));
+  finally
+    Book.Free;
+  end;
+
+  Existing:= TRuleNode.Create;
+  try
+    Check('glyph.count.step.add', CountLinkStepFor(nil, 'G[*/4]', True) = clsAdd);
+    Check('glyph.count.step.keep', CountLinkStepFor(Existing, 'G[*/4]', True) = clsNone);
+    Check('glyph.count.step.remove', CountLinkStepFor(Existing, 'G[*/4]', False) = clsRemove);
+    Check('glyph.count.step.none', CountLinkStepFor(nil, 'G[*/4]', False) = clsNone);
+    Check('glyph.count.step.count.expr', (CountLinkStepFor(Existing, 'G[count]', False) = clsNone) and (CountLinkStepFor(nil, 'G[count]', True) = clsNone));
+  finally
+    Existing.Free;
+  end;
+
+  // Every edit the dialog can confirm (CountLinkIssueFor silent), on every link of
+  // every fixture, with the box either way: the dialog never AUTO-adds a count link
+  // when one from this From already exists after the edit (the edited link included).
+  // A book may hold several count links the user wrote; the dialog adds none beside them.
+  Worst:= 0;
+  Book:= TRuleBook.Create;
+  try
+    for Src in BOOKS do
+    begin
+      Book.LoadFromString(Src);
+      L:= Book.LinksForBlock(0);
+      for Edited in L do
+        for Expr in EXPRS do
+          for Want in [False, True] do
+          begin
+            if CountLinkIssueFor(L, Edited, 'Picture', Expr) <> '' then
+              Continue;
+            Existing:= FindCountLink(L, 'Picture', Edited);
+            Step:= CountLinkStepFor(Existing, Expr, Want);
+            Counts:= 0;
+            for N in L do
+              if (N <> Edited) and (N.GlyphExpr = 'G[count]') then
+                Inc(Counts);
+            if Expr = 'G[count]' then
+              Inc(Counts);
+            if Step = clsRemove then
+              Dec(Counts);
+            // Counts = count links after the edit, before any automatic insert.
+            if (Step = clsAdd) and (Counts > 0) then
+              Inc(Worst);
+          end;
+    end;
+  finally
+    Book.Free;
+  end;
+  Check('glyph.count.never.auto.second', Worst = 0, Format('%d edit(s) auto-added a count link beside an existing one', [Worst]));
+end;
+{ C10 fix round 1: the block merger must see a #link's glyph expression. Once the
+  expression left LinkFrom, two links to one To that differ ONLY in the expression
+  compared equal and the incoming one was dropped as a duplicate. They are a
+  CONFLICT (the user picks), an identical pair is still a duplicate, and two
+  G-links from one FromPath to different To paths both merge in. }
+procedure TestGlyphLinkMerge;
+const
+  HDR       = '#convert Abcbtn.TabcToggleBtn -> cxButtons.TcxButton'#13#10;
+  LINE_ALL  = '#link OptionsImage.Glyph <- Picture G[*/4]';
+  LINE_ONE  = '#link OptionsImage.Glyph <- Picture G[1/5]';
+  LINE_TWO  = '#link SomeOtherGlyph <- Picture G[5/5]';
+  LINE_CASE = '#link OptionsImage.Glyph <- Picture G[COUNT]';
+  LINE_LOW  = '#link OptionsImage.Glyph <- Picture G[count]';
+var
+  Plan  : TMergePlan       ;
+  Merged: TRuleBlocks      ;
+  Book  : TRuleBook        ;
+  Links : TArray<TRuleNode>;
+  BLinks: TArray<TBlockLink>;
+begin
+  BLinks:= BlockLinks(SplitRulesBlocks(HDR + LINE_ALL + #13#10)[0]);
+  Check('glyph.blocklinks.expr', (Length(BLinks) = 1) and (BLinks[0].LinkFrom = 'Picture') and (BLinks[0].GlyphExpr = 'G[*/4]'),
+    'BlockLinks must carry the glyph expression');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_ONE + #13#10));
+  Check('glyph.merge.expr.differs.conflict', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maConflict),
+    'links differing only in the glyph expression must not be skipped as duplicates');
+  if Length(Plan.Items) = 1 then
+  begin
+    Check('glyph.merge.conflict.shows.expr', (Plan.Items[0].ExistingFrom = 'Picture G[*/4]') and (Plan.Items[0].IncomingFrom = 'Picture G[1/5]'),
+      Plan.Items[0].ExistingFrom + ' | ' + Plan.Items[0].IncomingFrom);
+    Merged:= ApplyMerge(Plan, [mrTakeIncoming]);
+    Check('glyph.merge.take.incoming', JoinBlocks(Merged) = HDR + LINE_ONE + #13#10, JoinBlocks(Merged));
+    Merged:= ApplyMerge(Plan, [mrKeepExisting]);
+    Check('glyph.merge.keep.existing', JoinBlocks(Merged) = HDR + LINE_ALL + #13#10, JoinBlocks(Merged));
+  end;
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_LOW + #13#10), SplitRulesBlocks(HDR + LINE_CASE + #13#10));
+  Check('glyph.merge.expr.case.sensitive', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maConflict),
+    'the expression compares case-SENSITIVELY, as the engine splits it');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_ALL + #13#10));
+  Check('glyph.merge.identical.dedup', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maSkipDuplicate),
+    'an identical G-link is still a duplicate');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_TWO + #13#10));
+  Check('glyph.merge.two.from.same', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maMergeLink),
+    'a second G-link from the same FromPath to another To merges in');
+  Merged:= ApplyMerge(Plan, []);
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(JoinBlocks(Merged));
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.merge.two.from.same.distinct',
+      (Length(Links) = 2) and (Links[0].GlyphExpr = 'G[*/4]') and (Links[1].GlyphExpr = 'G[5/5]')
+      and (Links[0].LinkFrom = 'Picture') and (Links[1].LinkFrom = 'Picture'),
+      JoinBlocks(Merged));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ C10 E10: the engine's G-expression error marks the G-link node (so the Glyph cell
+  shows [!]) and a good book marks nothing. Real captured engine text (1.21.1 pin,
+  convert-validate --rules <book>, parse-only, no --db), injected as the validate
+  function exactly as TestValidateScopeRun feeds its captures. }
+procedure TestGlyphValidateMarks;
+var
+  Dir    : string;
+  Bad    : string;
+  Ok     : string;
+  Txt    : string;
+  Dropped: Integer;
+  Map    : TArray<TRuleNode>;
+  Fake   : TValidateFn;
+  Capture: string;
+  Book   : TRuleBook;
+  N      : TRuleNode;
+  Hits   : Integer;
+  Text   : string;
+begin
+  Dir:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph'));
+  if not (TFile.Exists(TPath.Combine(Dir, 'validate-glyph-bad.txt'))
+    and TFile.Exists(TPath.Combine(Dir, 'validate-glyph-ok.txt'))
+    and TFile.Exists(TPath.Combine(Dir, 'BitBtn-glyph-bad.rules'))
+    and TFile.Exists(TPath.Combine(Dir, 'BitBtn-glyph.rules'))) then
+  begin
+    Skip('glyph.validate.fixture', 'missing captures under ' + Dir);
+    Exit;
+  end;
+  Bad:= TFile.ReadAllText(TPath.Combine(Dir, 'validate-glyph-bad.txt'));
+  Ok:= TFile.ReadAllText(TPath.Combine(Dir, 'validate-glyph-ok.txt'));
+  Check('glyph.validate.capture.shape', Pos('G-expression column', Bad) > 0, Bad);
+  Fake:= function(const AText, AFrom, ATo: string): string
+    begin
+      Result:= Capture;
+    end;
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(TFile.ReadAllText(TPath.Combine(Dir, 'BitBtn-glyph-bad.rules')));
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Capture:= Bad;
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, RunScopedValidation(Txt, nil, Fake));
+    Hits:= 0;
+    Text:= '';
+    for N in Book.Nodes do
+      if (N.Kind = rnkLink) and (N.GlyphExpr <> '') and (Length(N.Marks) > 0) and not N.Marks[0].IsWarning then
+      begin
+        Inc(Hits);
+        Text:= N.Marks[0].Text;
+      end;
+    Check('glyph.validate.marks.link', Hits = 1, IntToStr(Hits));
+    Check('glyph.validate.marks.text', Pos('G-expression column', Text) > 0, Text);
+
+    Book.LoadFromString(TFile.ReadAllText(TPath.Combine(Dir, 'BitBtn-glyph.rules')));
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Capture:= Ok;
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, RunScopedValidation(Txt, nil, Fake));
+    Hits:= 0;
+    for N in Book.Nodes do
+      Hits:= Hits + Length(N.Marks);
+    Check('glyph.validate.ok.no.marks', Hits = 0, IntToStr(Hits));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ C12 Task 1: the IDE convert-request file (convert-request/1) -- parse, validate
+  against the editor's own project index, and the editor-capabilities/1 file.
+  Every request path is a FAKE under REQ_ROOT: validation takes an injected file
+  probe, so none of them is ever opened. }
+const
+  REQ_ROOT = 'C:\';  // dl:ok hardcoded-absolute-path@c4f0 -- REVIEWED 2026-10-06 root of FAKE request paths: validation takes an injected file probe, nothing under it is ever opened
+  REQ_GOOD = '{"schema":"convert-request/1","written":"2026-10-06T14:02:11","source":"ide-menu","ide_pid":12345,' +
+             '"scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite","platform":"Win64",' +
+             '"units":[{"pas":"C:\\P\\U.pas","dfm":"C:\\P\\U.dfm","form_class":"TFormU",' +
+             '"components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Label2","type":"tlabel"}]}]}';
+  REQ_COMPONENTS = '"components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Label2","type":"tlabel"}]';
+  REQ_DB           = REQ_ROOT + 'P\_D-RAG\App.sqlite';
+  REQ_PROJECT_FILE = REQ_ROOT + 'P\App.dproj';
+  REQ_PAS          = REQ_ROOT + 'P\U.pas';
+
+{ ParseConvertRequest over REQ_GOOD with AFind replaced by AReplace (first match). }
+function ParseEditedRequest(const AFind, AReplace: string): TRequestOutcome;
+begin
+  Result:= ParseConvertRequest(StringReplace(REQ_GOOD, AFind, AReplace, []));
+end;
+
+procedure TestConvertRequestParse;
+const
+  IDE_PID         = 12345;
+  COMPONENT_COUNT = 3;
+var
+  O        : TRequestOutcome;
+  ShapeOk  : Boolean;
+  ValuesOk : Boolean;
+begin
+  O:= ParseConvertRequest(REQ_GOOD);
+  ShapeOk := O.Ok and (O.Request.Scope = rsSelected) and (Length(O.Request.Units) = 1)
+    and (Length(O.Request.Units[0].Components) = COMPONENT_COUNT);
+  ValuesOk:= ShapeOk and (O.Request.Units[0].Components[1].TypeName = 'TButton') and (O.Request.IdePid = IDE_PID)
+    and (O.Request.ProjectDb = REQ_DB);
+  Check('request.parse.ok', ValuesOk, O.Error);
+  Check('request.parse.types.distinct', string.Join(',', RequestedTypes(O.Request)) = 'TLabel,TButton');
+  Check('request.parse.rules.folder.absent', O.Ok and (O.Request.RulesFolder = ''), O.Request.RulesFolder);
+  O:= ParseEditedRequest('"platform":"Win64",', '"platform":"Win64","rules_folder":"C:\\R\\Books",');
+  Check('request.parse.rules.folder.present', O.Ok and (O.Request.RulesFolder = REQ_ROOT + 'R\Books'), O.Error + O.Request.RulesFolder);
+  O:= ParseEditedRequest('convert-request/1', 'convert-request/2');
+  Check('request.parse.schema.refused', (not O.Ok) and (Pos('schema', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":"project"');
+  Check('request.parse.project.refused', (not O.Ok) and (O.Error = SCOPE_PROJECT_UNSUPPORTED), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":"all"');
+  Check('request.parse.scope.unknown', (not O.Ok) and (Pos('scope', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest(REQ_COMPONENTS, '"components":[]');
+  Check('request.parse.components.empty', (not O.Ok) and (Pos('components', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('{"name":"Btn1","type":"TButton"}', '{"name":"Btn1"}');
+  Check('request.parse.component.no.type', (not O.Ok) and (Pos('type', O.Error) > 0), O.Error);
+  O:= ParseConvertRequest('{"schema":"convert-request/1","scope":"selected","project_file":"a","project_db":"b","units":[]}');
+  Check('request.parse.units.empty', (not O.Ok) and (Pos('units', O.Error) > 0), O.Error);
+  O:= ParseConvertRequest('not json at all');
+  Check('request.parse.garbage', (not O.Ok) and (O.Error <> ''), O.Error);
+  O:= ParseConvertRequest('[1,2]');
+  Check('request.parse.root.array', (not O.Ok) and (O.Error <> ''), O.Error);
+  O:= ParseEditedRequest('"platform":"Win64",', '"platform":"Win64","extra":{"x":1},');
+  Check('request.parse.unknown.key.ignored', O.Ok, O.Error);
+
+  // R8: a missing required key is refused and named.
+  O:= ParseEditedRequest('"project_file":"C:\\P\\App.dproj",', '');
+  Check('request.parse.project.file.missing', (not O.Ok) and (Pos('project_file', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"project_db":"C:\\P\\_D-RAG\\App.sqlite",', '');
+  Check('request.parse.project.db.missing', (not O.Ok) and (Pos('project_db', O.Error) > 0), O.Error);
+
+  // R4: a malformed shape is refused with a message, never an exception.
+  O:= ParseEditedRequest('"units":[{"pas":"C:\\P\\U.pas","dfm":"C:\\P\\U.dfm","form_class":"TFormU",' + REQ_COMPONENTS + '}]',
+    '"units":{"pas":"x"}');
+  Check('request.parse.units.not.array', (not O.Ok) and (Pos('units', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"units":[{', '"units":[5,{');
+  Check('request.parse.unit.not.object', (not O.Ok) and (Pos('unit', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest(REQ_COMPONENTS, '"components":"Label1"');
+  Check('request.parse.components.not.array', (not O.Ok) and (Pos('components', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('{"name":"Btn1","type":"TButton"}', '"Btn1"');
+  Check('request.parse.component.not.object', (not O.Ok) and (Pos('component', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"type":"TButton"', '"type":7');
+  Check('request.parse.component.type.wrong.type', (not O.Ok) and (Pos('type', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"project_file":"C:\\P\\App.dproj"', '"project_file":5');
+  Check('request.parse.project.file.wrong.type', (not O.Ok) and (Pos('project_file', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":["selected"]');
+  Check('request.parse.scope.wrong.type', (not O.Ok) and (Pos('scope', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"ide_pid":12345', '"ide_pid":"abc"');
+  Check('request.parse.ide.pid.wrong.type', (not O.Ok) and (Pos('ide_pid', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"pas":"C:\\P\\U.pas"', '"pas":{}');
+  Check('request.parse.pas.wrong.type', (not O.Ok) and (Pos('pas', O.Error) > 0), O.Error);
+end;
+
+procedure TestConvertRequestValidate;
+var
+  O  : TRequestOutcome;
+  Err: string;
+
+  function Exists(const AAll: Boolean): TFunc<string, Boolean>;
+  begin
+    Result:= function(APath: string): Boolean
+      begin
+        Result:= AAll;
+      end;
+  end;
+
+begin
+  O:= ParseConvertRequest(REQ_GOOD);
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(True));
+  Check('request.validate.ok', Err = '', Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_ROOT + 'P\_D-RAG\app.SQLITE', LowerCase(REQ_ROOT) + 'p\APP.dproj', Exists(True));
+  Check('request.validate.case.insensitive', Err = '', Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_ROOT + 'Other\_D-RAG\Other.sqlite', REQ_ROOT + 'Other\Other.dproj', Exists(True));
+  Check('request.validate.project.db.mismatch', (Pos('project index', Err) > 0) and (Pos(REQ_ROOT + 'Other\_D-RAG\Other.sqlite', Err) > 0), Err);
+  // Review Focus 1: the editor's DB, but a DIFFERENT .dproj in the same folder.
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_ROOT + 'P\Other.dproj', Exists(True));
+  Check('request.validate.project.file.mismatch', (Pos(REQ_PROJECT_FILE, Err) > 0) and (Pos(REQ_ROOT + 'P\Other.dproj', Err) > 0), Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(False));
+  Check('request.validate.pas.missing', Pos(REQ_PAS, Err) > 0, Err);
+  O:= ParseEditedRequest('"units":[{', '"units":[{"pas":"C:\\P\\V.pas","components":[{"name":"X","type":"TX"}]},{');
+  Check('request.validate.two.units', O.Ok and (Pos('one unit', ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(True))) > 0));
+end;
+
+procedure TestConvertRequestCaps;
+var
+  Dir : string;
+  Caps: string;
+  Cwd : string;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c12caps-' + IntToStr(GetCurrentProcessId));
+  Cwd:= GetCurrentDir;
+  try
+    Check('request.caps.write', WriteCapabilitiesFile(TPath.Combine(Dir, 'sub\caps.json')) = 0);
+    Caps:= TFile.ReadAllText(TPath.Combine(Dir, 'sub\caps.json'));
+    Check('request.caps.json', (Caps = CapabilitiesJson) and (Pos('"schema":"editor-capabilities/1"', Caps) > 0) and (Pos('"convert_request":1', Caps) > 0), Caps);
+    Check('request.caps.no.bom', TFile.ReadAllBytes(TPath.Combine(Dir, 'sub\caps.json'))[0] = Ord('{'));
+    // a FILE in the folder position
+    Check('request.caps.write.fails', WriteCapabilitiesFile(TPath.Combine(Dir, 'sub\caps.json\inner.json')) = 1);
+    // C7: a bare file name has no folder part -- written to the current folder, no CreateDirectory('').
+    SetCurrentDir(TPath.Combine(Dir, 'sub'));
+    Check('request.caps.write.bare.name', (WriteCapabilitiesFile('bare-caps.json') = 0) and TFile.Exists(TPath.Combine(Dir, 'sub\bare-caps.json')));
+  finally
+    SetCurrentDir(Cwd);
+    if TDirectory.Exists(Dir) then
+      TDirectory.Delete(Dir, True);
+  end;
+end;
+
+{ C12 Task 2: the request resolved to a component scope over the .dfm text. }
+procedure TestConvertScope;  // dl:ok cyclomatic-complexity@ffc2 -- REVIEWED 2026-10-06 an assertion list over one .dfm fixture; the count is the and-chains in Check conditions, and splitting the list would only scatter the fixture
+const
+  DFM = 'object FormU: TFormU' + sLineBreak +
+        '  Caption = ''inherited fake: TLabel''' + sLineBreak +
+        '  object Label1: TLabel' + sLineBreak + '  end' + sLineBreak +
+        '  object Panel1: TPanel' + sLineBreak +
+        '    object Label2: TLabel' + sLineBreak +
+        '      Font.Name = ''Tahoma''' + sLineBreak + '    end' + sLineBreak +
+        '    inline Frame1: TFrame1' + sLineBreak +
+        '      inherited Label3: TLabel' + sLineBreak + '      end' + sLineBreak +
+        '    end' + sLineBreak + '  end' + sLineBreak +
+        '  object Grid1: TcxGrid' + sLineBreak +
+        '    Columns = <' + sLineBreak + '      item' + sLineBreak + '        Caption = ''object Bogus: TLabel''' + sLineBreak +
+        '      end>' + sLineBreak + '  end' + sLineBreak +
+        '  object Btn1: TButton' + sLineBreak + '  end' + sLineBreak +
+        'end' + sLineBreak;
+  // An inline frame child that shares the ROOT's name: the root is excluded by depth, not by name.
+  DFM_ROOT_NAME = 'object FormU: TFormU' + sLineBreak +
+        '  inline Frame1: TFrame1' + sLineBreak +
+        '    inherited FormU: TLabel' + sLineBreak + '    end' + sLineBreak +
+        '  end' + sLineBreak + 'end' + sLineBreak;
+  BINARY_DFM  = 'TPF0' + #0#1#2;
+  BOOK_LABEL  = '#convert TLabel -> TStaticText' + sLineBreak + '#link Caption <- Caption' + sLineBreak;
+  BOOK_BUTTON = '#convert TButton -> TcxButton' + sLineBreak;
+  BOOK_BOTH   = BOOK_LABEL + sLineBreak + BOOK_BUTTON;
+  REQ_SEL  = '{"schema":"convert-request/1","scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Gone","type":"TLabel"}]}]}';
+  REQ_FORM = '{"schema":"convert-request/1","scope":"form","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"Label1","type":"tlabel"}]}]}';
+  REQ_ROOT = '{"schema":"convert-request/1","scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"FormU","type":"TFormU"}]}]}';
+  REQ_DUP  = '{"schema":"convert-request/1","scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"Label1","type":"TLabel"},{"name":"Gone","type":"TLabel"},' +
+             '{"name":"label1","type":"TLabel"},{"name":"GONE","type":"TLabel"}]}]}';
+  DFM_PATH ='C:\P\U.dfm';  // dl:ok hardcoded-absolute-path@b501 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_PATH = 'C:\P\U.pas';  // dl:ok hardcoded-absolute-path@94c1 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_PATH_OTHER_CASE = 'c:\p\u.PAS';  // dl:ok hardcoded-absolute-path@728b -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_OTHER = 'C:\P\V.pas';  // dl:ok hardcoded-absolute-path@70fc -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  RULES_DIR = 'C:\R';  // dl:ok hardcoded-absolute-path@c2b2 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  IDX_ROOT   = 0;
+  IDX_LABEL1 = 1;
+  IDX_FRAME1 = 4;
+  IDX_LABEL3 = 5;
+  IDX_LAST_FORM_HIT = 2;
+  FORM_HITS = 3;
+  LINE_ROOT   = 1;
+  LINE_LABEL1 = 3;
+  DEPTH_LABEL3 = 3; // root > Panel1 > Frame1 > Label3
+var
+  Inst : TArray<TDfmInstance>;
+  Sc   : TConvertScope;
+  Err  : string;
+  Names: TArray<string>;
+  Req  : TConvertRequest;
+
+  function Join(const A: TArray<string>): string;
+  begin
+    Result:= string.Join(',', A);
+  end;
+
+  function InstNames(const A: TArray<TDfmInstance>): string;
+  begin
+    Result:= '';
+    for var I: TDfmInstance in A do
+      Result:= Result + I.Name + ':' + I.TypeName + ',';
+  end;
+
+begin
+  Inst:= ListDfmInstances(DFM);
+  Check('dfm.instances.all.depths', InstNames(Inst) = 'FormU:TFormU,Label1:TLabel,Panel1:TPanel,Label2:TLabel,Frame1:TFrame1,Label3:TLabel,Grid1:TcxGrid,Btn1:TButton,', InstNames(Inst));
+  Check('dfm.instances.quoted.not.header', Pos('fake', InstNames(Inst)) = 0);
+  Check('dfm.instances.collection.item.skipped', Pos('Bogus', InstNames(Inst)) = 0);
+  Check('dfm.instances.opener', (Inst[IDX_FRAME1].Opener = doInline) and (Inst[IDX_LABEL3].Opener = doInherited) and (Inst[IDX_LABEL1].Opener = doObject));
+  Check('dfm.instances.depth', (Inst[IDX_ROOT].Depth = 0) and (Inst[IDX_LABEL1].Depth = 1) and (Inst[IDX_LABEL3].Depth = DEPTH_LABEL3), IntToStr(Inst[IDX_LABEL3].Depth));
+  Check('dfm.instances.line', (Inst[IDX_ROOT].Line = LINE_ROOT) and (Inst[IDX_LABEL1].Line = LINE_LABEL1), IntToStr(Inst[IDX_LABEL1].Line));
+  Check('dfm.instances.binary', Length(ListDfmInstances(BINARY_DFM)) = 0);
+  Check('dfm.instances.empty', Length(ListDfmInstances('')) = 0);
+
+  // selected scope
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, DFM, Err);
+  Check('scope.selected.build', (Err = '') and (Sc.Kind = skSelected) and (Sc.UnitPas = PAS_PATH) and (Join(Sc.Types) = 'TLabel,TButton'), Err);
+  Check('scope.selected.instances', InstNames(Sc.Instances) = 'Label1:TLabel,Btn1:TButton,', InstNames(Sc.Instances));
+  Check('scope.selected.unknown.name', Join(Sc.NotFound) = 'Gone', Join(Sc.NotFound));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_LABEL));
+  Check('scope.selected.names.for.label.book', Join(Names) = 'Label1', Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_BOTH));
+  Check('scope.selected.names.for.both.book', Join(Names) = 'Label1,Btn1', Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText('#convert TEdit -> TcxTextEdit' + sLineBreak));
+  Check('scope.selected.names.none', Length(Names) = 0, Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText('#convert TLabel -> ' + sLineBreak));
+  Check('scope.selected.names.from.only.stub', Length(Names) = 0, Join(Names));
+  Check('scope.selected.text', ScopeText(Sc) = 'Scope: 2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Gone', ScopeText(Sc));
+  Check('scope.selected.found.no.tail', EmptyScopeTail(Sc) = '', EmptyScopeTail(Sc));
+  Check('scope.selected.status', ScopeStatusText(Sc, 2) = 'Request from the IDE: convert 2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Gone with 2 matching book(s) -- review and press Convert.', ScopeStatusText(Sc, 2));
+  Sc:= BuildScope(ParseConvertRequest(REQ_ROOT).Request, DFM, Err);
+  Check('scope.selected.root.not.instance', (Err = '') and (Length(Sc.Instances) = 0) and (Join(Sc.NotFound) = 'FormU'), Join(Sc.NotFound));
+  // Fix wave Minor 1: no instance found -> no empty list before ';', and the E5 tail says so.
+  Check('scope.selected.none.text', ScopeText(Sc) = 'Scope: 0 selected component(s) on U; not found on the form: FormU', ScopeText(Sc));
+  Check('scope.selected.none.tail', EmptyScopeTail(Sc) = ' Also: no requested instance is on the form.', EmptyScopeTail(Sc));
+  // R9: a binary or missing .dfm is refused for BOTH scopes, naming the file.
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, BINARY_DFM, Err);
+  Check('scope.selected.binary.refused', (Pos('binary', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, '', Err);
+  Check('scope.selected.missing.refused', (Pos('missing', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+
+  // form scope: every TLabel at any depth, inline children included, .dfm order
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM, Err);
+  Check('scope.form.build', (Err = '') and (Sc.Kind = skForm) and (Join(Sc.Types) = 'tlabel'), Err);
+  Check('scope.form.nested', InstNames(Sc.Instances) = 'Label1:TLabel,Label2:TLabel,Label3:TLabel,', InstNames(Sc.Instances));
+  Check('scope.form.inline.child', (Length(Sc.Instances) = FORM_HITS) and (Sc.Instances[IDX_LAST_FORM_HIT].Opener = doInherited));
+  Check('scope.form.text', ScopeText(Sc) = 'Scope: all tlabel instances on U (3 found)', ScopeText(Sc));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_BUTTON));
+  Check('scope.form.names.other.book', Length(Names) = 0, Join(Names));
+  Sc:= BuildScope(ParseConvertRequest(StringReplace(REQ_FORM, '"type":"tlabel"', '"type":"TcxTreeList"', [])).Request, DFM, Err);
+  Check('scope.form.none.found', (Err = '') and (Length(Sc.Instances) = 0) and (ScopeText(Sc) = 'Scope: all TcxTreeList instances on U (0 found)'), ScopeText(Sc));
+  Check('scope.form.none.tail', EmptyScopeTail(Sc) = ' Also: no requested instance is on the form.', EmptyScopeTail(Sc));
+  Sc:= BuildScope(ParseConvertRequest(StringReplace(REQ_FORM, '"type":"tlabel"', '"type":"TFormU"', [])).Request, DFM, Err);
+  Check('scope.form.root.never.instance', (Err = '') and (Length(Sc.Instances) = 0), InstNames(Sc.Instances));
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM_ROOT_NAME, Err);
+  Check('scope.form.root.by.depth.not.name', (Err = '') and (InstNames(Sc.Instances) = 'FormU:TLabel,'), InstNames(Sc.Instances));
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, 'TPF0' + #0#1, Err);
+  Check('scope.form.binary.refused', (Pos('binary', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, '', Err);
+  Check('scope.form.missing.refused', (Pos('missing', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+
+  // a name selected twice (any case) is one instance, and one not-found entry
+  Sc:= BuildScope(ParseConvertRequest(REQ_DUP).Request, DFM, Err);
+  Check('scope.selected.duplicate.name', (Err = '') and (InstNames(Sc.Instances) = 'Label1:TLabel,') and (Join(Sc.NotFound) = 'Gone'),
+    InstNames(Sc.Instances) + ' / ' + Join(Sc.NotFound));
+  // BuildScope guards its own precondition: exactly one unit, else a refusal, never a range error
+  Req:= ParseConvertRequest(REQ_SEL).Request;
+  Req.Units:= Req.Units + Req.Units;
+  Sc:= BuildScope(Req, DFM, Err);
+  Check('scope.units.two.refused', (Pos('exactly one unit', Err) > 0) and (Length(Sc.Instances) = 0), Err);
+  Req.Units:= nil;
+  Sc:= BuildScope(Req, DFM, Err);
+  Check('scope.units.none.refused', (Pos('exactly one unit', Err) > 0) and (Length(Sc.Instances) = 0) and (Sc.UnitPas = ''), Err);
+
+  // books, texts, unit check
+  Check('scope.book.matches', BookMatchesTypes(BOOK_LABEL, ['TLABEL']) and BookMatchesTypes(BOOK_BOTH, ['TButton']) and not BookMatchesTypes(BOOK_BUTTON, ['TLabel']));
+  Check('scope.book.exact.not.ancestor', not BookMatchesTypes('#convert TCustomLabel -> TX' + sLineBreak, ['TLabel']));
+  Check('scope.no.book.text', NoBookText(RULES_DIR, ['TLabel', 'TButton']) = 'No book in C:\R converts TLabel, TButton -- pick the From class on the Classes tab and choose Conversion > New Conversion');
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, DFM, Err);
+  Check('scope.matches.units.ok', ScopeMatchesUnits(Sc, [PAS_PATH_OTHER_CASE]) = '');
+  // Ruling B5/R7 (C12 Task 4): the C8 ancestor insert lists more units WITHOUT a scope
+  // reset; they run whole, so a list that still holds the scope's unit is accepted.
+  Check('scope.matches.units.extra.unit.whole', ScopeMatchesUnits(Sc, [PAS_OTHER, PAS_PATH]) = '', ScopeMatchesUnits(Sc, [PAS_OTHER, PAS_PATH]));
+  Check('scope.matches.units.other.unit', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [PAS_OTHER])) > 0);
+  Check('scope.matches.units.empty', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [])) > 0);
+  Sc:= Default(TConvertScope);
+  Check('scope.whole.unit.text', (ScopeText(Sc) = WHOLE_UNIT_SCOPE_TEXT) and (ScopeMatchesUnits(Sc, ['a', 'b']) = ''));
+  Check('scope.whole.unit.no.tail', EmptyScopeTail(Sc) = '', EmptyScopeTail(Sc));
+
+  // Fix wave Minor 2 (interim until only_matched[]): no "re-send it" when every --only
+  // name is inherited or inline -- the engine leaves those to the ancestor.
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM, Err); // Label1/Label2 doObject, Label3 doInherited
+  Check('scope.hint.all.inherited.none', UnmatchedOnlyHintFor(Sc, ['label3']) = '', UnmatchedOnlyHintFor(Sc, ['label3']));
+  Check('scope.hint.mixed.kept', UnmatchedOnlyHintFor(Sc, ['Label1', 'Label3']) = UnmatchedOnlyHint(['Label1', 'Label3']), UnmatchedOnlyHintFor(Sc, ['Label1', 'Label3']));
+  Check('scope.hint.unknown.kept', UnmatchedOnlyHintFor(Sc, ['Gone']) = UnmatchedOnlyHint(['Gone']), UnmatchedOnlyHintFor(Sc, ['Gone']));
+end;
+
+{ C12 Task 4: the launch decisions the .dpr and the main form make before any
+  control is touched -- the project index a request launch adopts, the rules
+  folder (ruling B1), the whole prepare chain, the report's Scope line and the
+  run summary's out-of-scope count. Every path is FAKE (injected probes). }
+procedure TestConvertRequestLaunch;  // dl:ok cyclomatic-complexity@c0ce -- REVIEWED 2026-10-06 an assertion list over one fake-probe fixture plus a one-line Row helper; the count is the and-chains in Check conditions, and splitting the list would only scatter the fixture
+const
+  LAUNCH_DFM = 'object FormU: TFormU' + sLineBreak + '  object Label1: TLabel' + sLineBreak + '  end' + sLineBreak +
+               '  object Btn1: TButton' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  DEFAULT_DB  = REQ_ROOT + 'Default.sqlite';
+  RULES_REQ   = REQ_ROOT + 'R1';
+  RULES_SW    = REQ_ROOT + 'R2';
+  RULES_SESS  = REQ_ROOT + 'R3';
+  FORMS_DFM   = REQ_ROOT + 'P\Forms\U.dfm';
+  PAIRS_RUN   = 4;
+  PAIRS_OTHER = 3;
+var
+  F   : string;
+  Err : string;
+  P   : TPreparedRequest;
+  Rows: TArray<TConvertRow>;
+  T   : TRunTally;
+  Req : string;
+
+  function Probe(const AYes: TArray<string>; AAll: Boolean): TFunc<string, Boolean>;
+  var
+    LYes: TArray<string>;
+  begin
+    LYes:= AYes;
+    Result:= function(APath: string): Boolean
+      begin
+        Result:= AAll or MatchText(APath, LYes);
+      end;
+  end;
+
+  function Row(AStatus: TConvertStatus; const AUnit: string): TConvertRow;
+  begin
+    Result:= Default(TConvertRow);
+    Result.Status := AStatus;
+    Result.UnitPas:= AUnit;
+  end;
+
+begin
+  // The project index a launch uses: explicit > the request's > the default.
+  Check('launch.db.explicit.wins', AdoptedProjectDb(DEFAULT_DB, REQ_GOOD, 'X', Probe([], True)) = DEFAULT_DB);
+  Check('launch.db.adopts.request', AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([REQ_DB], False)) = REQ_DB, AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([REQ_DB], False)));
+  Check('launch.db.no.request', AdoptedProjectDb('', '', DEFAULT_DB, Probe([], True)) = DEFAULT_DB);
+  Check('launch.db.bad.request', AdoptedProjectDb('', 'not json', DEFAULT_DB, Probe([], True)) = DEFAULT_DB);
+  // Fix wave Minor 3: a request project_db that does not exist is not adopted.
+  Check('launch.db.missing.not.adopted', AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([DEFAULT_DB], False)) = DEFAULT_DB,
+    AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([DEFAULT_DB], False)));
+
+  // B1: request > switch; a named folder that is missing is refused, never replaced.
+  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, '', ['TLabel'], Probe([], True), F);
+  Check('launch.rules.request.wins', (Err = '') and (F = RULES_REQ), Err + F);
+  Err:= ResolveRequestRulesFolder('', RULES_SW, '', ['TLabel'], Probe([], True), F);
+  Check('launch.rules.switch.fallback', (Err = '') and (F = RULES_SW), Err + F);
+  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, '', ['TLabel'], Probe([RULES_SW], False), F);
+  Check('launch.rules.request.missing.refused', (F = '') and StartsText('No book in ' + RULES_REQ, Err) and (Pos('does not exist', Err) > 0)
+    and (Pos(RULES_SW, Err) = 0), Err);
+  Err:= ResolveRequestRulesFolder('', '', '', ['TLabel', 'TButton'], Probe([], True), F);
+  Check('launch.rules.none.refused', (F = '') and StartsText('No book in ', Err) and (Pos('no rules folder', Err) > 0)
+    and (Pos('and no book is open', Err) > 0) and (Pos('TLabel, TButton', Err) > 0), Err);
+  // Task-4 review (a): the editor's in-session folder is the THIRD candidate.
+  Err:= ResolveRequestRulesFolder('', '', RULES_SESS, ['TLabel'], Probe([], True), F);
+  Check('launch.rules.session.fallback', (Err = '') and (F = RULES_SESS), Err + F);
+  Err:= ResolveRequestRulesFolder('', RULES_SW, RULES_SESS, ['TLabel'], Probe([], True), F);
+  Check('launch.rules.switch.beats.session', (Err = '') and (F = RULES_SW), Err + F);
+  Err:= ResolveRequestRulesFolder(RULES_REQ, '', RULES_SESS, ['TLabel'], Probe([RULES_SESS], False), F);
+  Check('launch.rules.request.missing.not.replaced.by.session', (F = '') and StartsText('No book in ' + RULES_REQ, Err), Err);
+
+  // The whole chain.
+  Req:= StringReplace(REQ_GOOD, '"platform":"Win64",', '"platform":"Win64","rules_folder":"C:\\R1",', []);
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.ok', P.Ok and (P.Error = '') and (P.Scope.Kind = skSelected) and (P.RulesFolder = RULES_REQ), P.Error);
+  Check('launch.prepare.scope', (Length(P.Scope.Instances) = 2) and (Length(P.Scope.NotFound) = 1), ScopeText(P.Scope));
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_ROOT + 'Other\_D-RAG\O.sqlite', REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.validate.refused', (not P.Ok) and (Pos('project index', P.Error) > 0), P.Error);
+  P:= PrepareConvertRequest('{', TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.parse.refused', (not P.Ok) and (P.Error <> ''), P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.no.folder.refused', (not P.Ok) and StartsText('No book in ', P.Error), P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, RULES_SW, ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.switch.folder', P.Ok and (P.RulesFolder = RULES_SW), P.Error);
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.dfm.missing.refused', (not P.Ok) and (Pos('missing', P.Error) > 0) and (Pos(REQ_ROOT + 'P\U.dfm', P.Error) > 0), P.Error);
+  // The request's own "dfm" is read, not the .pas sibling.
+  P:= PrepareConvertRequest(StringReplace(Req, '"dfm":"C:\\P\\U.dfm"', '"dfm":"C:\\P\\Forms\\U.dfm"', []), TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''),
+    Probe([], True), Probe([], True), FakeReader([FORMS_DFM], [LAUNCH_DFM]));
+  Check('launch.prepare.reads.request.dfm', P.Ok, P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', RULES_SESS), Probe([], True), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.session.folder', P.Ok and (P.RulesFolder = RULES_SESS), P.Error);
+  // Task-4 review (c): a project index that does not exist is refused before anything else is read.
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([REQ_PAS], False), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.db.missing.refused', (not P.Ok)
+    and (P.Error = 'the project index ' + REQ_DB + ' does not exist -- index the project first'), P.Error);
+  // Fix wave Minor 3: the request's own index is missing and was not adopted -- the
+  // refusal names THAT file, not a mismatch with the editor's (existing) default.
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(DEFAULT_DB, REQ_ROOT + 'Default.dproj', '', ''), Probe([REQ_PAS, DEFAULT_DB], False), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.request.db.missing.named', (not P.Ok)
+    and (P.Error = 'the project index ' + REQ_DB + ' does not exist -- index the project first'), P.Error);
+  // Task-5 review carry: an editor with no project index says so, without a blank name.
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make('', '', '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.db.empty.refused', (not P.Ok)
+    and (P.Error = 'the editor has no project index -- launch it with --project-db') and (Pos('  ', P.Error) = 0), P.Error);
+
+  // Task-4 review (b): the E5 status tail -- an unindexed unit is named and Convert will refuse it.
+  Check('launch.tail.indexed.empty', RequestStatusTail(REQ_PAS, [REQ_PAS], True, '') = '', RequestStatusTail(REQ_PAS, [REQ_PAS], True, ''));
+  Check('launch.tail.unindexed', RequestStatusTail(REQ_PAS, [REQ_DB], True, '') =
+    ' Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.', RequestStatusTail(REQ_PAS, [REQ_DB], True, ''));
+  Check('launch.tail.index.unknown', RequestStatusTail(REQ_PAS, nil, False, '') =
+    ' Also: the project index could not be read, so unindexed units are not flagged.', RequestStatusTail(REQ_PAS, nil, False, ''));
+  Check('launch.tail.inherit.error.first', RequestStatusTail(REQ_PAS, nil, False, 'boom') =
+    ' Also: inherited instances could not be checked -- boom Also: the project index could not be read, so unindexed units are not flagged.',
+    RequestStatusTail(REQ_PAS, nil, False, 'boom'));
+  // Task-5 review carry: an unindexed unit is ONE cause -- the C8 analysis error it causes is not repeated.
+  Check('launch.tail.unindexed.drops.inherit', RequestStatusTail(REQ_PAS, nil, True, 'boom') =
+    ' Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.', RequestStatusTail(REQ_PAS, nil, True, 'boom'));
+
+  // E11: the report line.
+  Check('launch.report.scope.whole', ScopeReportLine(Default(TConvertScope)) = 'Scope'#9'whole unit', ScopeReportLine(Default(TConvertScope)));
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.report.scope.selected', ScopeReportLine(P.Scope) = 'Scope'#9'2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Label2',
+    ScopeReportLine(P.Scope));
+
+  // Task-3 carry: out-of-scope pairs are counted apart and leave the denominator.
+  Rows:= [Row(csConverted, 'a.pas'), Row(csOutOfScope, 'a.pas'), Row(csOutOfScope, 'a.pas'), Row(csFailedRestored, 'b.pas')];
+  T:= TallyRows(Rows);
+  Check('launch.tally.counts', (T.Converted = 1) and (T.OutOfScope = 2) and (T.Restored = 1) and (T.Refused = 0));
+  Check('launch.summary.out.of.scope', ConvertedSummaryText(T, PAIRS_RUN) =
+    'Converted 1 of 2 unit x book pair(s); 1 failed and were restored. 2 pair(s) skipped -- not in scope.', ConvertedSummaryText(T, PAIRS_RUN));
+  T:= TallyRows([Row(csConverted, 'a.pas'), Row(csRestoreFailed, 'x\b.pas'), Row(csRefused, 'c.pas')]);
+  Check('launch.summary.whole.unit', (ConvertedSummaryText(T, PAIRS_OTHER) = 'Converted 1 of 3 unit x book pair(s); 0 failed and were restored.')
+    and (string.Join(',', T.NotRestored) = 'b.pas') and (T.Refused = 1), ConvertedSummaryText(T, PAIRS_OTHER));
+end;
+
+{ C12 Task 3 (E9-E11, runner side): the scoped unit loop with fake engine seams.
+  A book with no selected instance of its From types gets csOutOfScope and NO
+  engine call; a scoped book's names reach apply as --only; an all-out-of-scope
+  unit keeps no backup; the engine's --only refusal gets the E10 hint; an --only
+  that matched nothing stays a failure and says what was asked. }
+procedure TestRunnerScope;  // dl:ok cyclomatic-complexity@10c5 -- REVIEWED 2026-10-06 one fake-seam fixture walked case by case (out of scope, --only, refusal, unmatched name, injected hint); the count is the and-chains in Check conditions, and splitting would duplicate the temp-folder fixture
+const
+  ORIG = 'unit F; interface implementation end.';
+  OK_JSON      = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  // measured on engine 1.22.0: an --only name that matches nothing (task-3-report.md)
+  NO_MATCH_JSON = '{"schema":"apply/1","ok":false,"error":"no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)",' +
+                  '"refused":false,"reason":"","rule_errors":[],"edits_count":0}';
+  UNKNOWN_HINT = ' -- --only asked for Label1, Label3; the form may have changed since the IDE request -- re-send it';
+  REFUSED_ONLY = '{"schema":"apply/1","ok":false,"refused":true,"reason":"#unuse DBTables would leave 1 unconverted instance(s) of TTable -- unit not changed",' +
+                 '"rule_errors":[],"edits_count":0}';
+  TWO_ROWS = 2;
+  IDX_LABEL_ROW = 1;
+var
+  Dir   : string;
+  AllDir: string;
+  LPas  : string;
+  LRows : TArray<TConvertRow>;
+  Calls : TArray<string>;   // "<book>|<only joined by ,>" per apply call
+  Index : TIndexFn;
+  Apply : TApplyOnlyFn;
+  Scope : TScopeFn;
+  Whole  : TScopeFn;
+  Refuse : TApplyOnlyFn;
+  NoMatch: TApplyOnlyFn;
+
+  function Describe(const R: TArray<TConvertRow>): string;
+  var
+    L: TArray<string>;
+  begin
+    SetLength(L, Length(R));
+    for var I: Integer:= 0 to High(R) do
+      L[I]:= Format('[%s %s %s | %s]', [ExtractFileName(R[I].Book), ConvertStatusText(R[I].Status), R[I].Backup, R[I].Note]);
+    Result:= string.Join(' ', L);
+  end;
+
+  // An apply that touches nothing and answers AJson with exit 1.
+  function Answer(const AJson: string): TApplyOnlyFn;
+  begin
+    Result:= function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson2: string): Integer
+      begin
+        AJson2:= AJson;
+        Result:= 1;
+      end;
+  end;
+
+  // The whole-unit scope: today's behaviour, no --only.
+  function WholeUnit: TScopeFn;
+  begin
+    Result:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+      begin
+        ANames:= nil;
+        Result:= False;
+      end;
+  end;
+
+  procedure WriteUnit(const APas: string);
+  begin
+    TFile.WriteAllText(APas, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(ChangeFileExt(APas, '.dfm'), 'object F: TF' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c12scope-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    LPas:= TPath.Combine(Dir, 'F.pas');
+    WriteUnit(LPas);
+    Whole  := WholeUnit();
+    Refuse := Answer(REFUSED_ONLY);
+    NoMatch:= Answer(NO_MATCH_JSON);
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result:= 0;
+      end;
+    Apply:= function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+      begin
+        Calls:= Calls + [ExtractFileName(ARulesFile) + '|' + string.Join(',', AOnly)];
+        TFile.WriteAllText(AUnitPas, 'CONVERTED', TEncoding.ASCII);
+        AJson := OK_JSON;
+        Result:= 0;
+      end;
+    Scope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+      begin
+        Result:= True;
+        if SameText(ExtractFileName(ABook), 'Label.rules') then
+          ANames:= ['Label1', 'Label3']
+        else
+          ANames:= nil;
+      end;
+    Calls:= nil;
+    LRows:= RunConversionUnits([LPas], ['Button.rules', 'Label.rules'], Apply, Index, Scope, nil, nil);
+    var LNoBackup: Boolean:= (Length(LRows) = TWO_ROWS) and (LRows[0].Backup = '') and (LRows[0].BackupDfm = '');
+    Check('runner.scope.out.of.scope.no.call', LNoBackup and (LRows[0].Status = csOutOfScope)
+      and (LRows[0].Note = 'no in-scope instance of this book''s From types on the unit') and (Length(Calls) = 1), Describe(LRows) + string.Join(';', Calls));
+    Check('runner.scope.only.reaches.apply', (Length(Calls) = 1) and (Calls[0] = 'Label.rules|Label1,Label3'), string.Join(';', Calls));
+    Check('runner.scope.converted.note', (Length(LRows) = TWO_ROWS) and (LRows[IDX_LABEL_ROW].Status = csConverted)
+      and (LRows[IDX_LABEL_ROW].Note = '--only 2 instance(s): Label1, Label3; 2 edit(s), 0 remaining for manual work'), Describe(LRows));
+    Check('runner.scope.status.text', ConvertStatusText(csOutOfScope) = 'skipped -- not in scope');
+
+    // whole-unit scope function: today's behaviour, no --only, the plain note
+    WriteUnit(LPas);
+    Calls:= nil;
+    LRows:= RunConversionUnits([LPas], ['Button.rules'], Apply, Index,
+      Whole, nil, nil);
+    Check('runner.scope.whole.unit', (Length(Calls) = 1) and (Calls[0] = 'Button.rules|') and (Length(LRows) = 1) and (LRows[0].Status = csConverted)
+      and (LRows[0].Note = '2 edit(s), 0 remaining for manual work'), Describe(LRows));
+
+    // every book out of scope: no backup survives, the unit is untouched (own folder, B4)
+    AllDir:= TPath.Combine(Dir, 'allout');
+    TDirectory.CreateDirectory(AllDir);
+    WriteUnit(TPath.Combine(AllDir, 'F.pas'));
+    Calls:= nil;
+    LRows:= RunConversionUnits([TPath.Combine(AllDir, 'F.pas')], ['Button.rules'], Apply, Index, Scope, nil, nil);
+    Check('runner.scope.all.out.drops.backup', (Length(LRows) = 1) and (LRows[0].Status = csOutOfScope) and (Length(Calls) = 0)
+      and (TFile.ReadAllText(TPath.Combine(AllDir, 'F.pas')) = ORIG) and (Length(TDirectory.GetFiles(AllDir, 'F.*.BCK*')) = 0), Describe(LRows));
+
+    // the engine's --only refusal gets the hint (E10)
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      Refuse, Index, Scope, nil, nil);
+    Check('runner.scope.refused.hint', (Length(LRows) = 1) and (LRows[0].Status = csRefused)
+      and LRows[0].Note.EndsWith(' -- convert all TTable instances on this form, or remove the #unuse / #useswap from the book'), Describe(LRows));
+    Check('runner.scope.refusal.hint.pure', (RefusalHint('x would leave 3 unconverted instance(s) of TQuery -- unit not changed') = ' -- convert all TQuery instances on this form, or remove the #unuse / #useswap from the book')
+      and (RefusalHint('inherited instances of TTable are not converted yet') = ''));
+    // an unscoped refusal never gets the hint: the reason is not about a scope
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      Refuse, Index,
+      Whole, nil, nil);
+    Check('runner.scope.unscoped.refusal.no.hint', (Length(LRows) = 1) and (LRows[0].Status = csRefused) and (Pos(' -- convert all ', LRows[0].Note) = 0), Describe(LRows));
+    // an --only that matched nothing stays a failure (restored), and says what was asked
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      NoMatch, Index, Scope, nil, nil);
+    Check('runner.scope.unknown.name.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and LRows[0].Note.EndsWith(UNKNOWN_HINT)
+      and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
+    // Fix wave Minor 2: the job binds the hint to its scope; an empty tail drops it.
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      NoMatch, Index, Scope, nil, nil, False, False,
+      function(const AOnly: TArray<string>): string
+      begin
+        Result:= '';
+      end);
+    Check('runner.scope.hint.injected.empty', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (Pos('re-send', LRows[0].Note) = 0)
+      and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson:= NO_MATCH_JSON;
+        Result:= 1;
+      end, Index, nil, nil);
+    Check('runner.scope.unscoped.no.match.no.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (Pos('--only asked', LRows[0].Note) = 0), Describe(LRows));
+    // An engine 1.25.1+ edit-set refusal with edits_count 0 on a scoped run is NOT an
+    // unmatched --only name: no "re-send it" hint (apply-guard fix wave, item 1).
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      Answer('{"schema":"apply/1","ok":false,"error":"refused 3 edit(s) to F.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written",' +
+        '"refused":false,"reason":"","rule_errors":[],"edits_count":0}'), Index, Scope, nil, nil);
+    Check('runner.editset.scoped.no.hint', (Length(LRows) = 1) and (Pos('re-send', LRows[0].Note) = 0) and (Pos('--only asked', LRows[0].Note) = 0)
+      and (Pos('engine refused the unit as an engine defect', LRows[0].Note) > 0), Describe(LRows));
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ C12 Task 3, ruling B5: the scope binds the request's unit ONLY, and the job's
+  scope function (ScopedNamesForBookFile) turns an unreadable book into NO name. }
+procedure TestScopeForUnit;
+const
+  LABEL_BOOK = '#convert TLabel -> TStaticText' + sLineBreak;
+  EDIT_BOOK  = '#convert TEdit -> TcxTextEdit' + sLineBreak;
+var
+  Sc      : TConvertScope;
+  Inst    : TDfmInstance;
+  Names   : TArray<string>;
+  BookDir : string;
+  BookPath: string;
+begin
+  Inst:= Default(TDfmInstance);
+  Inst.Name    := 'Label1';
+  Inst.TypeName:= 'TLabel';
+  Sc:= Default(TConvertScope);
+  Sc.Kind     := skSelected;
+  Sc.UnitPas  := 'P\U.pas'; // relative: ScopedNamesForUnit expands both sides alike
+  Sc.Instances:= [Inst];
+  Check('scope.unit.own.unit.scoped', ScopedNamesForUnit(Sc, 'p\u.PAS', LABEL_BOOK, Names) and (string.Join(',', Names) = 'Label1'), string.Join(',', Names));
+  Check('scope.unit.own.unit.other.book', ScopedNamesForUnit(Sc, 'P\U.pas', EDIT_BOOK, Names) and (Length(Names) = 0), string.Join(',', Names));
+  Check('scope.unit.other.unit.whole', not ScopedNamesForUnit(Sc, 'P\V.pas', LABEL_BOOK, Names) and (Length(Names) = 0));
+  Check('scope.unit.whole.unit.scope', not ScopedNamesForUnit(Default(TConvertScope), 'P\U.pas', LABEL_BOOK, Names) and (Length(Names) = 0));
+  // the job's scope function reads the BOOK FILE: an unreadable book scopes to no name
+  // (an out-of-scope row), never to a whole-unit apply
+  BookDir:= TPath.Combine(TPath.GetTempPath, 'c12book-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(BookDir);
+  try
+    BookPath:= TPath.Combine(BookDir, 'Label.rules');
+    TFile.WriteAllText(BookPath, LABEL_BOOK, TEncoding.ASCII);
+    Check('scope.book.file.read', ScopedNamesForBookFile(Sc, 'P\U.pas', BookPath, Names) and (string.Join(',', Names) = 'Label1'), string.Join(',', Names));
+    Check('scope.book.file.unreadable.out.of.scope', ScopedNamesForBookFile(Sc, 'P\U.pas', TPath.Combine(BookDir, 'Missing.rules'), Names) and (Length(Names) = 0),
+      string.Join(',', Names));
+    Check('scope.book.file.other.unit.whole', not ScopedNamesForBookFile(Sc, 'P\V.pas', TPath.Combine(BookDir, 'Missing.rules'), Names) and (Length(Names) = 0));
+  finally
+    TDirectory.Delete(BookDir, True);
+  end; // try
+end;
+
+{ C12 Task 3: --only against the REAL engine (spec E9). Two labels, the book
+  converts TLabel, --only names one: that one converts, the other stays. Then
+  MEASURES what the engine does with a name that matches no instance (feeds the
+  engine ask N3) -- the outcome is printed as a MEASURE line, and only the
+  no-edit part is asserted. Fixture conventions copied from TestConvertRunnerLive. }
+procedure TestRunnerLiveOnly;
+const
+  LIB64 = 'C:\Projects\.drag-lint\library-Win64.sqlite';  // dl:ok hardcoded-absolute-path@6fd2 -- REVIEWED 2026-10-06 the real Win64 library index; the test Skip()s when it is absent
+  JSON_HEAD_CHARS = 600;
+var
+  Exe, Dir, Db, Dpr, Pas, Dfm, Book, Output, LJson, LDfm, LPasText: string;
+  Eng  : TEngineAdapter;
+  LCode: Integer;
+  LRow : TApplyRow;  // dl:ok duplicate-code@3a3a -- REVIEWED 2026-10-06 the live-runner prologue (ResolveExe / Skip / temp Dir / fixture paths) is copied from TestConvertRunnerLive on purpose (controller ruling R5); the .dpr writer is already shared (WriteFixDpr)
+begin
+  Exe:= ResolveExe;
+  if (Exe = '') or not TFile.Exists(LIB64) then
+  begin
+    Skip('runner.live.only', 'exe or library-Win64 absent');
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-only-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Dpr := TPath.Combine(Dir, 'Fix.dpr');
+    Pas := TPath.Combine(Dir, 'FixUnit.pas');
+    Dfm := TPath.Combine(Dir, 'FixUnit.dfm');
+    Book:= TPath.Combine(Dir, 'Fix.rules');
+    Db  := TPath.Combine(Dir, 'Fix.sqlite');
+    WriteFixDpr(Dpr);
+    TFile.WriteAllText(Pas, 'unit FixUnit;' + sLineBreak + sLineBreak + 'interface' + sLineBreak + sLineBreak + 'uses' + sLineBreak +
+      '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak + sLineBreak + 'type' + sLineBreak +
+      '  TFixForm = class(TForm)' + sLineBreak + '    Label1: TLabel;' + sLineBreak + '    Label2: TLabel;' + sLineBreak + '  end;' + sLineBreak + sLineBreak +
+      'var' + sLineBreak + '  FixForm: TFixForm;' + sLineBreak + sLineBreak + 'implementation' + sLineBreak + sLineBreak + '{$R *.dfm}' + sLineBreak + sLineBreak +
+      'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Dfm, 'object FixForm: TFixForm' + sLineBreak + '  Left = 0' + sLineBreak + '  Top = 0' + sLineBreak + '  Caption = ''Fix''' + sLineBreak +
+      '  object Label1: TLabel' + sLineBreak + '    Left = 8' + sLineBreak + '    Top = 8' + sLineBreak + '    Caption = ''one''' + sLineBreak + '  end' + sLineBreak +
+      '  object Label2: TLabel' + sLineBreak + '    Left = 8' + sLineBreak + '    Top = 32' + sLineBreak + '    Caption = ''two''' + sLineBreak + '  end' + sLineBreak +
+      'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Book, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link Caption <- Caption' + sLineBreak +
+      '#link Left <- Left' + sLineBreak + '#link Top <- Top' + sLineBreak, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(Exe, [Db, LIB64]);
+    try
+      Check('runner.live.only.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      LCode:= Eng.ApplyConversion(Pas, Book, [Db, LIB64], ['Label1'], LJson);
+      LRow := ParseApplyJson(LJson);
+      LDfm := TFile.ReadAllText(Dfm);
+      Check('runner.live.only.converts.named', (LCode = 0) and LRow.Ok and (Pos('Label1: TStaticText', LDfm) > 0), Copy(LJson, 1, JSON_HEAD_CHARS));
+      Check('runner.live.only.leaves.other', Pos('Label2: TLabel', LDfm) > 0, LDfm);
+      LPasText:= TFile.ReadAllText(Pas);
+      Check('runner.live.only.pas.partial', (Pos('Label1: TStaticText', LPasText) > 0) and (Pos('Label2: TLabel', LPasText) > 0), LPasText);
+      // convert-apply patches at the index's line ranges: reindex the changed unit first (R5)
+      Check('runner.live.only.reindex', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      // MEASURED FOR N3 -- the outcome goes into the task report, whatever it is:
+      LCode:= Eng.ApplyConversion(Pas, Book, [Db, LIB64], ['NoSuchName'], LJson);
+      LRow := ParseApplyJson(LJson);
+      Writeln(Format('MEASURE runner.live.only.unknown.name: exit=%d ok=%s refused=%s edits=%d remaining=%d reason=%s',
+        [LCode, BoolToStr(LRow.Ok, True), BoolToStr(LRow.Refused, True), LRow.EditsCount, Length(LRow.Remainder), LRow.Error]));
+      Writeln('MEASURE runner.live.only.unknown.name.json: ', StringReplace(Copy(LJson, 1, JSON_HEAD_CHARS), sLineBreak, ' ', [rfReplaceAll]));
+      Check('runner.live.only.unknown.name.no.edit', Pos('Label2: TLabel', TFile.ReadAllText(Dfm)) > 0);
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end; // procedure
+
 begin
   try
     if ResolveExe <> '' then
@@ -8494,6 +11804,23 @@ begin
     TestConvertRunner;
     TestConvertRunnerFaults;
     TestConvertRunnerLive;
+    TestInheritanceScan;
+    TestInheritancePairs;
+    TestInheritanceWalk;
+    TestInheritanceDecisions;
+    TestInheritanceWalkEdges;
+    TestInheritanceCodeUses;
+    TestClassLookup;
+    TestClassLookupLive;
+    TestInheritedApply;
+    TestInheritedRunLive;
+    TestCodeRefs;
+    TestCodeRefsLive;
+    TestInheritanceTabAnalysis;
+    TestInheritanceTabR4;
+    TestInheritedStateTexts;
+    TestInheritanceTabDiskAndStale;
+    TestInheritanceTabGate;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;
@@ -8521,6 +11848,25 @@ begin
     TestValidateScopeRun;
     TestValidateTextStreams;
     TestValidateScopeCancel;
+    TestGlyphLinkParse;
+    TestGlyphDecisions;
+    TestGlyphAssignGuard;
+    TestGlyphCountLinkEdit;
+    TestGlyphGridMarkNodes;
+    TestGlyphCastLibArgs;
+    TestGlyphApplyParse;
+    TestGlyphRunner;
+    TestGlyphValidateMarks;
+    TestGlyphLinkMerge;
+    TestGlyphConvertTab;
+    TestConvertRequestParse;
+    TestConvertRequestValidate;
+    TestConvertRequestCaps;
+    TestConvertScope;
+    TestConvertRequestLaunch;
+    TestRunnerScope;
+    TestScopeForUnit;
+    TestRunnerLiveOnly;
 
     FreeAndNil(GParseBook);
 

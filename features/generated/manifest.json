@@ -1743,6 +1743,11 @@
         {
           "type": "exe",
           "name": "ConvRulesEditor.exe"
+        },
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)"
         }
       ],
       "audience": "both",

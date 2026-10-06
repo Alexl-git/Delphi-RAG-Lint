@@ -10,6 +10,7 @@ interface
 
 uses
   System.SysUtils
+  , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_BOOK_PENDING_SUFFIX travels with BookHasGlyphLinks: the greyed-book text belongs to the glyph gate
   , ConvRules.UnitStatus
   ;
 
@@ -28,6 +29,25 @@ type
     Checked: Boolean;
     /// <summary>BookKindOfText of the file's text.</summary>
     Kind   : TBookKind;
+    /// <summary>True when the book holds a #link with a glyph expression (BookHasGlyphLinks); runnable only when the engine reports glyph_stitch.</summary>
+    HasGlyph: Boolean;
+  end;
+
+  /// <summary>One inherited / inline instance convert-apply left unconverted (apply/1
+  /// `inherited[]`, engine C8 N1; key names follow the engine's merge notice).</summary>
+  TInheritedLeft = record
+    /// <summary>`name` -- the instance.</summary>
+    Name         : string;
+    /// <summary>`type` -- its class.</summary>
+    TypeName     : string;
+    /// <summary>`line` -- its .dfm line; 0 when absent or not an integer.</summary>
+    Line         : Integer;
+    /// <summary>`ancestor_unit` -- the declaring ancestor's unit; '' for outside.</summary>
+    AncestorUnit : string;
+    /// <summary>`ancestor_state` -- unconverted / converted / mismatched / outside.</summary>
+    AncestorState: string;
+    /// <summary>`reason` -- the engine's words.</summary>
+    Reason       : string;
   end;
 
   /// <summary>One convert-apply run, read from its apply/1 JSON.</summary>
@@ -52,8 +72,27 @@ type
     RuleErrorCount: Integer;
     /// <summary>converted[] -- one line per converted instance.</summary>
     Converted : TArray<string>;
-    /// <summary>todos[] + reemit_notes[] + warnings[] -- the manual remainder.</summary>
+    /// <summary>todos[] + reemit_notes[] + warnings[] -- the manual remainder. When inherited[]
+    /// is not empty, the engine's per-instance 'line N: warning: inherited instance ...'
+    /// warnings are left out: InheritedLeftNote already counts those instances.</summary>
     Remainder : TArray<string>;
+    /// <summary>inherited[] -- the instances left unconverted; empty for an engine
+    /// without inherited_instances (it refuses such a unit instead). A non-object
+    /// entry is skipped; a missing or wrongly-typed field reads as '' / 0.</summary>
+    InheritedLeft: TArray<TInheritedLeft>;
+    /// <summary>`component_part` -- what happened to the .dfm's component part
+    /// ('skipped-no-instances': the .dfm holds no instance of its own, only inherited
+    /// ones, engine C8 N1); '' when absent.</summary>
+    ComponentPart: string;
+    /// <summary>glyphs[] -- one outcome per converted instance per G-link (engine ask N3); [] when the engine sends none.</summary>
+    Glyphs    : TArray<TGlyphOutcome>;
+    /// <summary>The engine's own edit-set refusals found in its output, each one
+    /// '[drag-lint: |ERROR: ]refused N edit(s) to &lt;file&gt; -- &lt;why&gt;' line,
+    /// distinct, in order. Up to 1.25.0 the line goes to stderr
+    /// (DRagLint.Refactor.TextEdit), which the editor's capture appends after the
+    /// document; from 1.25.1 it is also apply/1 error. warnings[] is read too. Empty
+    /// for a clean run.</summary>
+    EditRefusals: TArray<string>;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -84,6 +123,31 @@ function SharedBackupPaths(const AFiles: TArray<string>; const AExists: TFilePro
 /// <returns>bkEmpty (no #convert, no unit rule), bkConvertOnly, bkUnitsOnly or bkMixed.</returns>
 function BookKindOfText(const ARulesText: string): TBookKind;
 
+/// <summary>AEntry with Kind and HasGlyph set from the book's text -- the ONE place
+/// the Convert tab classifies a book, on first listing and on every refresh alike.</summary>
+/// <param name="AEntry">The entry; Path and Checked are kept.</param>
+/// <param name="ARulesText">The .rules text.</param>
+/// <returns>The entry with Kind = BookKindOfText and HasGlyph = BookHasGlyphLinks of
+/// ARulesText (both recomputed, so an edit that removed the last G-link clears it).</returns>
+function ClassifiedEntry(const AEntry: TBookEntry; const ARulesText: string): TBookEntry;
+
+/// <summary>The checklist suffix for a book and whether its check box is enabled.</summary>
+/// <param name="AEntry">The classified entry.</param>
+/// <param name="AUnitRulesOk">The engine reports apply_unit_rules.</param>
+/// <param name="AGlyphOk">The engine reports glyph_stitch.</param>
+/// <param name="AEnabled">False = the book cannot be checked (unit-rules-only while
+/// apply_unit_rules is missing, or a G-link book while glyph_stitch is missing).</param>
+/// <returns>'  (empty)', '  (unit rules: engine support pending)' or '  (unit rules not
+/// applied: engine)' by Kind, then GLYPH_BOOK_PENDING_SUFFIX appended for a G-link book
+/// while glyph_stitch is missing; '' when nothing applies.</returns>
+function BookListSuffix(const AEntry: TBookEntry; AUnitRulesOk, AGlyphOk: Boolean; out AEnabled: Boolean): string;
+
+/// <summary>The castlib a Convert run records and passes: APath when that file exists.</summary>
+/// <param name="APath">The editor's resolved casts.castlib path; '' = none.</param>
+/// <returns>APath, or '' when it is '' or names no file (the adapter then passes no
+/// --castlib, so the report must not name one either).</returns>
+function ExistingCastLib(const APath: string): string;
+
 /// <summary>AEntries with entry AIndex moved ADelta places (clamped to the ends).</summary>
 /// <param name="AEntries">The checklist, in application order.</param>
 /// <param name="AIndex">The entry to move.</param>
@@ -113,6 +177,13 @@ function ExpandSources(const APaths: TArray<string>; out AErrors: TArray<string>
 /// pass a unit the engine then cannot find.</remarks>
 function UnitInIndex(const AUnitPas: string; const AIndexedFiles: TArray<string>): Boolean;
 
+/// <summary>PURE: where the FILE APath is in APaths, by UnitInIndex's compare (both
+/// sides ExpandFileName'd, case-insensitively).</summary>
+/// <param name="APath">A file path.</param>
+/// <param name="APaths">The paths to search.</param>
+/// <returns>The first matching index; -1 when absent.</returns>
+function PathIndex(const APath: string; const APaths: TArray<string>): Integer;
+
 /// <summary>The Convert tab's DISPLAYED text for one source row.</summary>
 /// <param name="AUnitPas">The listed .pas path. It stays the item string --
 /// the job and Preflight consume it -- so only the display changes.</param>
@@ -128,17 +199,110 @@ function SourceRowText(const AUnitPas: string; const AIndexedFiles: TArray<strin
 /// <param name="AUnits">The source units (.pas paths).</param>
 /// <param name="AIndexedFiles">File paths in the project index (see UnitInIndex).</param>
 /// <param name="AUnitRulesSupported">The engine reports apply_unit_rules.</param>
+/// <param name="AGlyphSupported">The engine reports glyph_stitch; without it a book whose HasGlyph is True is skipped with a note.</param>
 /// <returns>Ok=False when no book is checked, no unit is listed, or a unit's
 /// FILE is not in the index (convert-apply would report a FALSE "could not
 /// locate .dfm object block" for it); Runnable = checked books minus empty ones
-/// and minus unit-rules-only ones while unsupported.</returns>
-function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
+/// minus unit-rules-only ones while unsupported, and minus G-link books while glyph_stitch is unsupported.</returns>
+function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 
 /// <summary>Reads convert-apply's --format json output (schema apply/1).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; text before the first
 /// '{' and after the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
 /// <returns>See TApplyRow; never raises.</returns>
 function ParseApplyJson(const AJson: string): TApplyRow;
+
+/// <summary>PURE: True when convert-apply claims success but refused to write one of
+/// the unit's edit sets -- the unit is left HALF-converted.</summary>
+/// <param name="ARow">ParseApplyJson's reading of the run.</param>
+/// <returns>ARow.Ok and ARow.EditRefusals is not empty. False for a row that is not
+/// Ok (failed or refused): it fails on its own already.</returns>
+/// <remarks>Engine defect, every version up to 1.25.0: a nested converted component
+/// makes the .dfm re-emit plan overlapping deletes; the applier refuses that file's
+/// edits whole ('overlapping delete ranges'), writes the .pas anyway, and the run
+/// still reports ok=true, exit 0. No apply/1 key carries it -- only the stderr line.
+/// A STOP-GAP until the engine applies a unit all-or-nothing; tighten it to the
+/// engine's exit contract when that ships.</remarks>
+function ApplyHalfWritten(const ARow: TApplyRow): Boolean;
+
+/// <summary>PURE: the note of a row ApplyHalfWritten fails.</summary>
+/// <param name="ARow">A row for which ApplyHalfWritten is True.</param>
+/// <returns>'engine left the unit half-converted (&lt;ext&gt; edits refused: N edit(s),
+/// &lt;why&gt;) -- restored from backup; engine fix pending', one parenthesised part per
+/// refusal joined '; ' (the extension is the refused file's, &lt;why&gt; the engine's
+/// reason without its trailing parenthesis).</returns>
+function HalfWrittenNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: True when convert-apply FAILED because it refused one of the unit's
+/// edit sets -- the engine 1.25.1+ shape, where the plan is checked before anything is
+/// written (exit 1, ok=false, 'refused N edit(s) to &lt;file&gt; -- ... -- unit not
+/// changed, nothing written').</summary>
+/// <param name="ARow">ParseApplyJson's reading of the run.</param>
+/// <returns>not ARow.Ok and ARow.EditRefusals is not empty.</returns>
+/// <remarks>A UNIT failure, never a book error: the runner's failure path takes it
+/// (its restore from its own .BCK is harmless -- the unit is unchanged).</remarks>
+function ApplyEditSetRefused(const ARow: TApplyRow): Boolean;
+
+/// <summary>PURE: the note of a row ApplyEditSetRefused fails.</summary>
+/// <param name="ARow">A row for which ApplyEditSetRefused is True.</param>
+/// <returns>'engine refused the unit as an engine defect (&lt;ext&gt; edits refused: N
+/// edit(s), &lt;why&gt;) -- unit not changed, nothing written', the parts as
+/// HalfWrittenNote's.</returns>
+function EditSetRefusedNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the converted row's note for what was left (spec E10).</summary>
+/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2). False
+/// (1.22.0) changes the converted words only (see returns).</param>
+/// <param name="AItems">TApplyRow.InheritedLeft -- the engine's own inherited[],
+/// reported after the runner's reindex and shown UNFILTERED (controller ruling M4: the
+/// R4 omission of ancestors converted earlier in the run is the editor-side code-use
+/// note's alone).</param>
+/// <returns>'' for none; else 'N inherited instance(s) left: &lt;words&gt;' per distinct
+/// words, first-seen order, joined '; '. The words by ancestor_state: unconverted
+/// 'ancestor &lt;U&gt; not converted'; converted 'ancestor &lt;U&gt; converted -- retype
+/// pending (engine N2)' with retype, else 'ancestor &lt;U&gt; converted -- this unit still has
+/// &lt;Type&gt; there and may not compile or load until the engine can retype inherited
+/// instances (N2)' (an inherited object of the From type under an ancestor that now
+/// declares the To type fails at load, and From-only member uses stop compiling); mismatched 'ancestor &lt;U&gt; has &lt;Found&gt; (neither
+/// &lt;From&gt; nor &lt;To&gt;)', the three types read from the engine's reason, or
+/// 'ancestor &lt;U&gt; has another type -- &lt;reason&gt;' when the reason has another
+/// shape; outside 'ancestor not determinable -- &lt;reason&gt;' (the engine sends no
+/// ancestor_unit); any other state 'ancestor &lt;U&gt;: &lt;state&gt;'.</returns>
+/// <remarks>Grouping is by the words, so it is by (state, unit), plus the type found for
+/// mismatched and the reason for outside.</remarks>
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; ARetypeSupported: Boolean): string;
+
+/// <summary>PURE: one run-report note for one left instance.</summary>
+/// <param name="AItem">The instance.</param>
+/// <param name="ARetypeSupported">As for InheritedLeftNote.</param>
+/// <returns>'&lt;name&gt;: &lt;type&gt; line N -- &lt;words&gt; (&lt;reason&gt;)', the words as
+/// InheritedLeftNote's; ' (&lt;reason&gt;)' is left out when the reason is '' or the words
+/// already carry it (outside, and a mismatched reason that could not be read).</returns>
+function InheritedReportNote(const AItem: TInheritedLeft; ARetypeSupported: Boolean): string;
+
+/// <summary>PURE: the note of a csConverted row.</summary>
+/// <param name="AApply">The book's apply/1 answer (Ok).</param>
+/// <param name="AInheritedSupported">The engine reports inherited_instances: only then is
+/// inherited[] read as that contract (InheritedLeftNote is appended).</param>
+/// <param name="ARetypeSupported">The engine reports inherited_retype (passed to
+/// InheritedLeftNote).</param>
+/// <returns>'N edit(s), M remaining for manual work', then '; no component of its own to
+/// convert' when ComponentPart is 'skipped-no-instances' (the engine converted around a
+/// .dfm holding only inherited instances, exit 0 -- not a failure), then '; ' +
+/// InheritedLeftNote when supported and something was left.</returns>
+function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported, ARetypeSupported: Boolean): string;
+
+/// <summary>PURE: why the Convert tab must not add sources right now, or '' when it may.</summary>
+/// <param name="ARunning">A conversion run is in progress.</param>
+/// <param name="AChecking">The inherited-instance check is busy: its analysis runs, or
+/// one of its prompts is up (the E6 offer, the Convert gate question, the E7 order
+/// warning).</param>
+/// <returns>The status-line refusal text; '' = the sources may be added.</returns>
+/// <remarks>OLE delivers a drop inside ANY modal loop, a MessageDlg included. A prompt
+/// was built from the list as it was when it opened, and its answer rewrites that list
+/// (E6) or runs it (the gate, E7), so a unit added under it would be lost or listed but
+/// not run: the prompt counts as busy. A run outranks a check.</remarks>
+function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
 
 implementation
 
@@ -147,6 +311,7 @@ uses
   , System.IOUtils
   , System.JSON
   , System.Math
+  , System.RegularExpressions
   , System.StrUtils
   , ConvRules.Model
   , ConvRules.UsesHarvest
@@ -155,6 +320,26 @@ uses
 const
   BCK_TAG          = '.BCK';
   ERR_HEAD_CHARS   = 200;
+  // The engine's refusal of one file's edit set, one whole line. Up to 1.25.0 the
+  // applier (DRagLint.Refactor.TextEdit) writes it to stderr AFTER the other file
+  // was written, exit 0: 'drag-lint: refused <N> edit(s) to <file> -- <why>'. From
+  // 1.25.1 the plan is checked before any write, exit 1, ok=false: 'ERROR: refused
+  // <N> edit(s) to <file> -- <why> -- unit not changed, nothing written' (apply/1
+  // error: the same without 'ERROR: '). Anchored on the whole line, so the words
+  // 'overlapping delete ranges' elsewhere never match.
+  // Matched case-insensitively (EDIT_REFUSAL_OPTIONS); 'edit', 'edits' and 'edit(s)'.
+  EDIT_REFUSAL_PATTERN = '^(?:drag-lint: |ERROR: )?refused (\d+) edit(?:\(s\)|s)? to (.+?) -- (.+)$';
+  EDIT_REFUSAL_OPTIONS = [roIgnoreCase];
+  EDIT_REFUSAL_PREFIX  = '^(?:drag-lint: |ERROR: )';
+  EDIT_REFUSAL_COUNT   = 1;
+  EDIT_REFUSAL_FILE    = 2;
+  EDIT_REFUSAL_WHY     = 3;
+  HALF_PART_FMT = '%s edits refused: %s edit(s), %s';
+  HALF_NOTE_FMT = 'engine left the unit half-converted (%s) -- restored from backup; engine fix pending';
+  EDIT_SET_REFUSED_FMT = 'engine refused the unit as an engine defect (%s) -- unit not changed, nothing written';
+  // The engine's per-instance inherited warning (also an items[] inherited-instance-skipped):
+  // 'line N: warning: inherited instance <Name>: <Type> skipped -- <reason>'.
+  INHERITED_WARNING_PATTERN = '^line \d+: warning: inherited instance ';
   BCK_PROBE_WINDOW = 50;
 
 // The highest N with AFile + '.BCK' + N present; 0 when there is none.
@@ -209,6 +394,42 @@ begin
     Result:= bkUnitsOnly
   else
     Result:= bkEmpty;
+end;
+
+function ClassifiedEntry(const AEntry: TBookEntry; const ARulesText: string): TBookEntry;
+begin
+  Result:= AEntry;
+  Result.Kind    := BookKindOfText(ARulesText);
+  Result.HasGlyph:= BookHasGlyphLinks(ARulesText);
+end;
+
+function BookListSuffix(const AEntry: TBookEntry; AUnitRulesOk, AGlyphOk: Boolean; out AEnabled: Boolean): string;
+begin
+  AEnabled:= True;
+  Result  := '';
+  case AEntry.Kind of
+    bkEmpty:
+      Result:= '  (empty)';
+    bkUnitsOnly:
+      if not AUnitRulesOk then
+      begin
+        Result  := '  (unit rules: engine support pending)';
+        AEnabled:= False;
+      end;
+    bkMixed:
+      if not AUnitRulesOk then
+        Result:= '  (unit rules not applied: engine)';
+  end; // case
+  if AEntry.HasGlyph and not AGlyphOk then
+  begin
+    Result  := Result + GLYPH_BOOK_PENDING_SUFFIX;
+    AEnabled:= False;
+  end;
+end;
+
+function ExistingCastLib(const APath: string): string;
+begin
+  Result:= if (APath <> '') and TFile.Exists(APath) then APath else '';
 end;
 
 function MoveEntry(const AEntries: TArray<TBookEntry>; AIndex, ADelta: Integer): TArray<TBookEntry>;
@@ -305,15 +526,20 @@ begin
   Result:= Found;
 end;
 
-function UnitInIndex(const AUnitPas: string; const AIndexedFiles: TArray<string>): Boolean;
+function PathIndex(const APath: string; const APaths: TArray<string>): Integer;
 var
   LFull: string;
 begin
-  LFull:= ExpandFileName(AUnitPas);
-  for var LPath: string in AIndexedFiles do
-    if SameText(ExpandFileName(LPath), LFull) then
-      Exit(True);
-  Result:= False;
+  LFull:= ExpandFileName(APath);
+  for var I: Integer:= 0 to High(APaths) do
+    if SameText(ExpandFileName(APaths[I]), LFull) then
+      Exit(I);
+  Result:= -1;
+end;
+
+function UnitInIndex(const AUnitPas: string; const AIndexedFiles: TArray<string>): Boolean;
+begin
+  Result:= PathIndex(AUnitPas, AIndexedFiles) >= 0;
 end;
 
 function SourceRowText(const AUnitPas: string; const AIndexedFiles: TArray<string>; AIndexKnown: Boolean; out AFlagged: Boolean): string;
@@ -324,7 +550,7 @@ begin
     Result:= Result + ' -- not in the project index';
 end;
 
-function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
+function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 var
   B       : TBookEntry;
   U       : string;
@@ -338,6 +564,11 @@ begin
     if not B.Checked then
       Continue;
     AnyCheck:= True;
+    if B.HasGlyph and not AGlyphSupported then
+    begin
+      Result.Notes:= Result.Notes + [ExtractFileName(B.Path) + ': glyph links: engine support pending -- skipped'];
+      Continue;
+    end;
     case B.Kind of
       bkEmpty:
         Result.Notes:= Result.Notes + [ExtractFileName(B.Path) + ': no #convert and no unit rule -- skipped'];
@@ -371,6 +602,71 @@ begin
   Result.Ok:= Length(Result.Problems) = 0;
 end;
 
+{ glyphs[] (C10, engine ask N3). Every key is optional and every read is
+  type-checked: an older engine sends no array, a future one may add keys or change
+  a type, and a value of the wrong JSON type reads as its default -- nothing here
+  raises (GetValue<T> would, on a wrong type). }
+function GlyphOutcomes(AObj: TJSONObject): TArray<TGlyphOutcome>;
+
+  // A JSON string; TJSONNumber descends from TJSONString, so it is excluded.
+  function Str(AItem: TJSONObject; const AKey: string): string;
+  var
+    LVal: TJSONValue;
+  begin
+    LVal:= AItem.GetValue(AKey);
+    if (LVal is TJSONString) and not (LVal is TJSONNumber) then
+      Result:= TJSONString(LVal).Value
+    else
+      Result:= '';
+  end;
+
+  // A JSON number holding an integer; anything else (3.5, "3", true) is False.
+  function TryInt(AVal: TJSONValue; out AInt: Integer): Boolean;
+  begin
+    AInt:= 0;
+    Result:= (AVal is TJSONNumber) and TryStrToInt(TJSONNumber(AVal).Value, AInt);
+  end;
+
+  function Int(AItem: TJSONObject; const AKey: string): Integer;
+  begin
+    if not TryInt(AItem.GetValue(AKey), Result) then
+      Result:= 0;
+  end;
+
+var
+  LArr  : TJSONValue;
+  LSlots: TJSONValue;
+  LItem : TJSONObject;
+  LSlot : Integer;
+  O     : TGlyphOutcome;
+begin
+  Result:= nil;
+  LArr:= AObj.GetValue('glyphs');
+  if not (LArr is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(LArr) do
+  begin
+    if not (LVal is TJSONObject) then
+      Continue;
+    LItem:= TJSONObject(LVal);
+    O:= Default(TGlyphOutcome);
+    O.Instance   := Str(LItem, 'instance');
+    O.FromPath   := Str(LItem, 'from_path');
+    O.ToPath     := Str(LItem, 'to_path');
+    O.Kind       := Str(LItem, 'kind');
+    O.Alternative:= Str(LItem, 'alternative');
+    O.Message    := Str(LItem, 'message');
+    O.SourceN    := Int(LItem, 'source_n');
+    O.RuleLine   := Int(LItem, 'rule_line');
+    LSlots:= LItem.GetValue('dropped_slots');
+    if LSlots is TJSONArray then
+      for var LSlotVal: TJSONValue in TJSONArray(LSlots) do
+        if TryInt(LSlotVal, LSlot) then
+          O.DroppedSlots:= O.DroppedSlots + [LSlot];
+    Result:= Result + [O];
+  end;
+end;
+
 function ParseApplyJson(const AJson: string): TApplyRow;
 
   function Strings(AObj: TJSONObject; const AKey: string): TArray<string>;
@@ -381,6 +677,79 @@ function ParseApplyJson(const AJson: string): TApplyRow;
     if AObj.TryGetValue<TJSONArray>(AKey, Arr) then
       for var LVal: TJSONValue in Arr do
         Result:= Result + [LVal.Value];
+  end;
+
+  // A JSON string member's text; '' when absent or of another JSON type
+  // (TJSONNumber descends from TJSONString, so it is excluded by name).
+  function Str(AObj: TJSONObject; const AKey: string): string;
+  var
+    LVal: TJSONValue;
+  begin
+    LVal:= AObj.Values[AKey];
+    Result:= if (LVal is TJSONString) and not (LVal is TJSONNumber) then LVal.Value else '';
+  end;
+
+  // apply/1 inherited[] (C8 N1). Read type-checked, never by GetValue<T>: a
+  // malformed entry must not cost the whole row (GetValue raises on a mismatch).
+  function InheritedItems(AObj: TJSONObject): TArray<TInheritedLeft>;
+  var
+    LItem: TInheritedLeft;
+    LNum : TJSONValue;
+  begin
+    Result:= nil;
+    if not (AObj.Values['inherited'] is TJSONArray) then
+      Exit;
+    for var LVal: TJSONValue in TJSONArray(AObj.Values['inherited']) do
+      if LVal is TJSONObject then
+      begin
+        LItem:= Default(TInheritedLeft);
+        LItem.Name         := Str(TJSONObject(LVal), 'name');
+        LItem.TypeName     := Str(TJSONObject(LVal), 'type');
+        LItem.AncestorUnit := Str(TJSONObject(LVal), 'ancestor_unit');
+        LItem.AncestorState:= Str(TJSONObject(LVal), 'ancestor_state');
+        LItem.Reason       := Str(TJSONObject(LVal), 'reason');
+        LNum:= TJSONObject(LVal).Values['line'];
+        if not ((LNum is TJSONNumber) and TryStrToInt(LNum.Value, LItem.Line)) then
+          LItem.Line:= 0;
+        Result:= Result + [LItem];
+      end;
+  end;
+
+  // AWarnings minus the engine's per-instance inherited warnings when inherited[] is
+  // there (AHasList): those are the "left" note's, so counting them as manual remainder
+  // too would count each instance twice. Without inherited[] they stay.
+  function OwnWarnings(const AWarnings: TArray<string>; AHasList: Boolean): TArray<string>;
+  begin
+    Result:= nil;
+    for var LWarn: string in AWarnings do
+      if not (AHasList and TRegEx.IsMatch(LWarn, INHERITED_WARNING_PATTERN)) then
+        Result:= Result + [LWarn];
+  end;
+
+  // A refusal line without its 'drag-lint: ' / 'ERROR: ' prefix: one refusal read
+  // from apply/1 error AND from stderr is the same refusal.
+  function RefusalKey(const ALine: string): string;
+  begin
+    Result:= TRegEx.Replace(ALine, EDIT_REFUSAL_PREFIX, '', EDIT_REFUSAL_OPTIONS);
+  end;
+
+  // Every distinct refusal line in ALines, in order, appended to AFound (first form kept).
+  procedure AddRefusals(const ALines: TArray<string>; var AFound: TArray<string>);
+  var
+    LLine: string;
+    LSeen: Boolean;
+  begin
+    for var LRaw: string in ALines do
+    begin
+      LLine:= Trim(LRaw);
+      if not TRegEx.IsMatch(LLine, EDIT_REFUSAL_PATTERN, EDIT_REFUSAL_OPTIONS) then
+        Continue;
+      LSeen:= False;
+      for var LHad: string in AFound do
+        LSeen:= LSeen or (RefusalKey(LHad) = RefusalKey(LLine));
+      if not LSeen then
+        AFound:= AFound + [LLine];
+    end;
   end;
 
 var
@@ -410,7 +779,15 @@ begin
     Result.Ok        := Obj.GetValue<Boolean>('ok', False);
     Result.EditsCount:= Obj.GetValue<Integer>('edits_count', 0);
     Result.Converted := Strings(Obj, 'converted');
-    Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + Strings(Obj, 'warnings');
+    Result.InheritedLeft:= InheritedItems(Obj);
+    Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0);
+    Result.ComponentPart:= Str(Obj, 'component_part');
+    Result.Glyphs    := GlyphOutcomes(Obj);
+    // The applier's refusal reaches us on stderr, outside the document (no apply/1
+    // key carries it, up to engine 1.25.0); warnings[] / error are read as well.
+    AddRefusals(AJson.Split([#10]), Result.EditRefusals);
+    AddRefusals(Strings(Obj, 'warnings'), Result.EditRefusals);
+    AddRefusals([Str(Obj, 'error')], Result.EditRefusals);
     if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
       Result.RuleErrorCount:= Errs.Count;
     Result.Refused:= (not Result.Ok) and Obj.GetValue<Boolean>('refused', False);
@@ -434,6 +811,193 @@ begin
   finally
     Root.Free;
   end; // try
+end;
+
+function ApplyHalfWritten(const ARow: TApplyRow): Boolean;
+begin
+  Result:= ARow.Ok and (Length(ARow.EditRefusals) > 0);
+end;
+
+// The refusals of ARow as '<ext> edits refused: N edit(s), <why>' parts, joined '; '.
+function RefusalParts(const ARow: TApplyRow): string;
+var
+  LMatch: TMatch;
+  LParts: TArray<string>;
+  LWhy  : string;
+begin
+  LParts:= nil;
+  for var LLine: string in ARow.EditRefusals do
+  begin
+    LMatch:= TRegEx.Match(LLine, EDIT_REFUSAL_PATTERN, EDIT_REFUSAL_OPTIONS);
+    if not LMatch.Success then
+      Continue;
+    // The engine's trailing '(an engine defect; the file is left unchanged)' is about
+    // that ONE file -- the other one was written, which is the point of this note.
+    LWhy:= LMatch.Groups[EDIT_REFUSAL_WHY].Value;
+    if Pos(' (', LWhy) > 0 then
+      LWhy:= Copy(LWhy, 1, Pos(' (', LWhy) - 1);
+    LParts:= LParts + [Format(HALF_PART_FMT, [LowerCase(ExtractFileExt(LMatch.Groups[EDIT_REFUSAL_FILE].Value)),
+      LMatch.Groups[EDIT_REFUSAL_COUNT].Value, LWhy])];
+  end;
+  Result:= string.Join('; ', LParts);
+end;
+
+function HalfWrittenNote(const ARow: TApplyRow): string;
+begin
+  Result:= Format(HALF_NOTE_FMT, [RefusalParts(ARow)]);
+end;
+
+function ApplyEditSetRefused(const ARow: TApplyRow): Boolean;
+begin
+  Result:= (not ARow.Ok) and (Length(ARow.EditRefusals) > 0);
+end;
+
+function EditSetRefusedNote(const ARow: TApplyRow): string;
+begin
+  Result:= Format(EDIT_SET_REFUSED_FMT, [RefusalParts(ARow)]);
+end;
+
+const
+  LEFT_FMT        = '%d inherited instance(s) left: %s';
+  STATE_UNCONV    = 'unconverted';
+  STATE_CONV      = 'converted';
+  STATE_MISMATCH  = 'mismatched';
+  STATE_OUTSIDE   = 'outside';
+  WORDS_UNCONV    = 'ancestor %s not converted';
+  WORDS_CONV      = 'ancestor %s converted -- retype pending (engine N2)';
+  WORDS_CONV_N1   = 'ancestor %s converted -- this unit still has %s there and may not compile or load until the engine can retype inherited instances (N2)';
+  WORDS_MISMATCH  = 'ancestor %s has %s (neither %s nor %s)';
+  WORDS_MIS_OTHER = 'ancestor %s has another type -- %s';
+  WORDS_OUTSIDE   = 'ancestor not determinable -- %s';
+  WORDS_OTHER     = 'ancestor %s: %s';
+  REPORT_LEFT_FMT = '%s: %s line %d -- %s';
+  REPORT_REASON   = ' (%s)';
+  NOTE_CONVERTED  = '%d edit(s), %d remaining for manual work';
+  NOTE_NO_OWN_COMPONENT = '; no component of its own to convert';
+  PART_SKIPPED_NO_INSTANCES = 'skipped-no-instances';
+  // The engine's mismatched reason (DRagLint.Convert.Apply, 1.22.0):
+  // 'declared in <Unit> as <Found>, neither <From> nor <To> -- not converted'.
+  MIS_HEAD    = 'declared in ';
+  MIS_AS      = ' as ';
+  MIS_NEITHER = ', neither ';
+  MIS_NOR     = ' nor ';
+  MIS_TAIL    = ' -- ';
+  SOURCES_REFUSED_RUNNING  = 'A conversion is running -- sources cannot be added until it finishes.';
+  SOURCES_REFUSED_CHECKING = 'Inherited instances are being checked -- add the sources again when it finishes.';
+
+// The engine's mismatched reason read back: True with the three type names when
+// AItem.Reason has exactly MIS_HEAD + AncestorUnit + MIS_AS + Found + MIS_NEITHER + From
+// + MIS_NOR + To + MIS_TAIL..., each name one non-empty word.
+function TryReadMismatch(const AItem: TInheritedLeft; out AFound, AFrom, ATo: string): Boolean;
+
+  // The text of ARest up to ASep (ARest then starts after it); False when ASep is
+  // absent or the cut is not one word.
+  function Cut(var ARest: string; const ASep: string; out AWord: string): Boolean;
+  var
+    LPos: Integer;
+  begin
+    LPos := Pos(ASep, ARest);
+    AWord:= if LPos > 0 then Copy(ARest, 1, LPos - 1) else '';
+    ARest:= if LPos > 0 then Copy(ARest, LPos + Length(ASep), MaxInt) else '';
+    Result:= (AWord <> '') and (Pos(' ', AWord) = 0) and (Pos(',', AWord) = 0);
+  end;
+
+var
+  LHead: string;
+  LRest: string;
+begin
+  AFound:= '';
+  AFrom := '';
+  ATo   := '';
+  LHead := MIS_HEAD + AItem.AncestorUnit + MIS_AS;
+  if (AItem.AncestorUnit = '') or not StartsText(LHead, AItem.Reason) then
+    Exit(False);
+  LRest := Copy(AItem.Reason, Length(LHead) + 1, MaxInt);
+  Result:= Cut(LRest, MIS_NEITHER, AFound) and Cut(LRest, MIS_NOR, AFrom) and Cut(LRest, MIS_TAIL, ATo);
+end;
+
+// What was left, in words, per ancestor_state (see InheritedLeftNote).
+function LeftWords(const AItem: TInheritedLeft; ARetypeSupported: Boolean): string;
+var
+  LFound, LFrom, LTo: string;
+begin
+  if SameText(AItem.AncestorState, STATE_UNCONV) then
+    Result:= Format(WORDS_UNCONV, [AItem.AncestorUnit])
+  else if SameText(AItem.AncestorState, STATE_CONV) then
+    Result:= if ARetypeSupported then Format(WORDS_CONV, [AItem.AncestorUnit]) else Format(WORDS_CONV_N1, [AItem.AncestorUnit, AItem.TypeName])
+  else if SameText(AItem.AncestorState, STATE_MISMATCH) then
+    Result:= if TryReadMismatch(AItem, LFound, LFrom, LTo) then Format(WORDS_MISMATCH, [AItem.AncestorUnit, LFound, LFrom, LTo])
+      else Format(WORDS_MIS_OTHER, [AItem.AncestorUnit, AItem.Reason])
+  else if SameText(AItem.AncestorState, STATE_OUTSIDE) then
+    Result:= Format(WORDS_OUTSIDE, [AItem.Reason])
+  else
+    Result:= Format(WORDS_OTHER, [AItem.AncestorUnit, AItem.AncestorState]);
+end;
+
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; ARetypeSupported: Boolean): string;
+var
+  LWords : TArray<string>; // one per distinct LeftWords, first-seen order
+  LCounts: TArray<Integer>;
+  LIdx   : Integer;
+  LParts : TArray<string>;
+  LText  : string;
+begin
+  LWords := nil;
+  LCounts:= nil;
+  // The words carry the grouping: ancestor + state, plus the type found (mismatched)
+  // or the reason (outside, an unread mismatched reason) -- two different texts are
+  // never merged under one count.
+  for var LItem: TInheritedLeft in AItems do
+  begin
+    LText:= LeftWords(LItem, ARetypeSupported);
+    LIdx := High(LWords);
+    while (LIdx >= 0) and not SameText(LWords[LIdx], LText) do
+      Dec(LIdx);
+    if LIdx < 0 then
+    begin
+      LWords := LWords + [LText];
+      LCounts:= LCounts + [0];
+      LIdx   := High(LWords);
+    end;
+    Inc(LCounts[LIdx]);
+  end;
+  LParts:= nil;
+  for var I: Integer:= 0 to High(LWords) do
+    LParts:= LParts + [Format(LEFT_FMT, [LCounts[I], LWords[I]])];
+  Result:= string.Join('; ', LParts);
+end;
+
+function InheritedReportNote(const AItem: TInheritedLeft; ARetypeSupported: Boolean): string;
+var
+  LWords: string;
+begin
+  LWords:= LeftWords(AItem, ARetypeSupported);
+  Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, LWords]);
+  if (AItem.Reason <> '') and (Pos(AItem.Reason, LWords) = 0) then
+    Result:= Result + Format(REPORT_REASON, [AItem.Reason]);
+end;
+
+function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported, ARetypeSupported: Boolean): string;
+var
+  LLeft: string;
+begin
+  Result:= Format(NOTE_CONVERTED, [AApply.EditsCount, Length(AApply.Remainder)]);
+  if SameText(AApply.ComponentPart, PART_SKIPPED_NO_INSTANCES) then
+    Result:= Result + NOTE_NO_OWN_COMPONENT;
+  // E10: only an engine with inherited_instances sends inherited[]; the gate keeps an
+  // older engine's output from being read as this contract. Unfiltered (ruling M4).
+  LLeft:= if AInheritedSupported then InheritedLeftNote(AApply.InheritedLeft, ARetypeSupported) else '';
+  if LLeft <> '' then
+    Result:= Result + '; ' + LLeft;
+end;
+function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
+begin
+  if ARunning then
+    Result:= SOURCES_REFUSED_RUNNING
+  else if AChecking then
+    Result:= SOURCES_REFUSED_CHECKING
+  else
+    Result:= '';
 end;
 
 end.
