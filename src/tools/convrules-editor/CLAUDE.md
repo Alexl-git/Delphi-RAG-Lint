@@ -583,9 +583,10 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 ### Verification kit
 
 * **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
-  the 1.22.0 pin -> **`model-tests: 1806 pass / 5 fail / 0 skip / 1811 total`**
-  (measured 2026-10-06 on C8 + C10 after the C10 final-review fix wave; C12 on C8 alone, before its rebase onto C10, 1792 / 5 / 0; 1793 / 5 / 0
-  right after the rebase onto C8; C8 alone 1660 / 5 / 0 after its Task 8 fix round 1, 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
+  the 1.22.0 pin -> **`model-tests: 1951 pass / 5 fail / 0 skip / 1956 total`**
+  (measured 2026-10-06 on C8 + C10 + C12 after the C12 final-review fix wave, 148 s;
+  1938 / 5 / 0 right after the C12 rebase onto C10; C12 on C8 alone 1792 / 5 / 0;
+  C8 + C10 1806 / 5 / 0 after the C10 fix wave, 1793 / 5 / 0 right after the C10 rebase onto C8; C8 alone 1660 / 5 / 0 after its Task 8 fix round 1, 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
   fix wave; 1422 / 5 / 0 before C8; 1329 / 5 before C6); `inherited.live` RUNS now
   (the engine reports `inherited_instances`) and SKIPs on an older pin; the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
@@ -594,9 +595,9 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 * **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
   -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
   Win64 library index answers -- a staged copy, never `dll-win64`). Expected
-  on the final build (re-measured 2026-10-06 on C8 + C10 after the C10 fix wave,
-  on a staged copy of the 1.22.0 pin: all 11 green with these exact counts;
-  `drive-inherited-offer.ps1` also 15 / 0 on a staged 1.21.1 copy):
+  on the final build (re-measured 2026-10-06 on C8 + C10 + C12 after the C12 fix wave,
+  on a staged copy of the 1.22.0 pin: all 12 green with these exact counts, each on
+  its first run; `drive-inherited-offer.ps1` also 15 / 0 on a staged 1.21.1 copy):
 
   | driver | checks | covers |
   |---|---|---|
@@ -611,15 +612,17 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   | `drive-validate-scope.ps1` | 18 | scoped validation on Save (warnings, unchanged re-save fast), progress window + Cancel, owed block revalidated, Exit without a prompt, `automatch.*` |
   | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), the E10 run note branching on the staged engine's `inherited_instances` (`engine.refusal.note.absent` on 1.22.0, `engine.refusal.note` on a 1.21.1 pin copy -- run BOTH stages; `-ProofNoInheritance` control) |
   | `drive-glyph-link.ps1` | 23 | C10: Glyph expression menu item (disabled without a rule, enabled with one), Convert tab greys the G-link book and it stays unchecked through Check all / Space / a click (`Convert refused: No rule book is checked.`), the dialog's checked `Keep ... G[count]` box, Auto-Match + Save As keeps both G-link lines byte-exact with no duplicate, the bad book's Save shows `G-expression column` (`-ProofNoGlyph` control: 17 / 6) |
-  | `drive-convert-request.ps1` | 24 | C12: `--convert-request` opens the Convert tab with the unit listed, only the matching book checked, the E5 status, `Clear scope` enabled; Convert converts the selected instance only (`--only`), report `Scope` line + `--only` note; Delete resets the scope; Exit without a prompt; `form` scope; E3 no-rules-folder refusal (editor stays usable); missing project index refused; unindexed unit named in red; `--write-capabilities` within 5 s, no window (`-ProofNoRequest` control) |
+  | `drive-convert-request.ps1` | 25 | C12: `--convert-request` opens the Convert tab with the unit listed, only the matching book checked, the E5 status, `Clear scope` enabled; Convert converts the selected instance only (`--only`), report `Scope` line + `--only` note; Delete resets the scope and says `Scope cleared` on the status bar; Exit without a prompt; `form` scope; E3 no-rules-folder refusal (editor stays usable); missing project index refused; unindexed unit named in red; `--write-capabilities` within 5 s, no window (`-ProofNoRequest` control) |
 
   `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
   fail is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
   the project index" (no DB), not at the unindexed refusal; that refusal is
   proven by `Loose.pas` in the normal run. `drive-inherited-offer.ps1
-  -ProofNoInheritance` gives 8 pass / 6 fail on the 1.22.0 pin and 7 / 7 on the
-  1.21.1 pin (both re-measured 2026-10-06 with the fix-round-1 exe; on 1.21.1 the E10
-  refusal note is the seventh FAIL, on 1.22.0 its `.absent` twin passes vacuously):
+  -ProofNoInheritance` gave 8 pass / 6 fail on the 1.22.0 pin and 7 / 7 on the
+  1.21.1 pin (both measured 2026-10-06 with the C8 fix-round-1 exe; on 1.21.1 the E10
+  refusal note is the seventh FAIL, on 1.22.0 its `.absent` twin passes vacuously);
+  on the C12 fix-wave build 7 / 7 on 1.22.0 and 6 / 8 on 1.21.1, the extra FAIL in
+  both being `sources.cleared` (the timing below):
   the C8 checks can fail. On the C8 + C10 build (C10 fix wave, 1.22.0) it measured
   7 / 7 TWICE: the six C8 checks plus `sources.cleared` -- in proof mode Convert starts
   a REAL two-unit run and the driver clears the list ~32 s later; both logs show the
@@ -628,7 +631,8 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   run that had). Read it as the proof run's timing, not a C8 check -- unconfirmed
   against a C8-only build. Not bent in the driver. The driver also branches its E6 / E7 / cancel expectations on
   the staged engine's `inherited_retype` (absent on both pins today). `drive-convert-request.ps1
-  -ProofNoRequest` gives 6 pass / 18 fail and prints a `PROOF` line per pass: four
+  -ProofNoRequest` gives 6 pass / 19 fail (C12 fix wave; 6 / 18 before
+  `req.delete.says.scope.cleared`) and prints a `PROOF` line per pass: four
   positive controls (`req.fixture.index`, `req.main`, `req.nofolder.usable`,
   `req.caps.probe`) and two checks that CANNOT discriminate (`req.label2.untouched`,
   `req.exit` -- they hold with or without a request); any other pass is printed as
@@ -1395,7 +1399,9 @@ matching books checked and a component SCOPE, and waits for Convert. Spec
 contract"), engine asks `...\2026-10-06-c12-engine-asks.md`, plan
 `docs\superpowers\plans\2026-10-06-c12-ide-convert-menu-editor.md`; ledger with
 every ruling `.superpowers\sdd\2026-10-06-c12-ide-convert-menu-editor\progress.md`
-in the `c12-request` worktree. Branched from C8 (774093c9).
+in the `c12-request` worktree. Branched from C8 (774093c9); rebased onto C10
+(`feat/c10-glyph-editor` d879dedc) for the final-review fix wave, so the merge order is
+C8 -> C10 -> C12.
 
 **The ENGINE's plugin half is NOT built yet** -- N1 (the `drag-lint > Convert
 Components` submenu, the request writer, close / launch / reopen) and N2 (the
@@ -1425,14 +1431,19 @@ hand-written request file, which is exactly what `drive-convert-request.ps1` doe
   seconds (`req.caps.probe`: written, exited, no window, within 5 s).
 * **Project index adoption** (`AdoptedProjectDb`): an explicit `--project-db` wins;
   a request launch WITHOUT one adopts the request's `project_db` instead of the
-  built-in `ProjectDb`. An explicit `--project-db` that differs from the request is
+  built-in `ProjectDb` -- only when that file EXISTS (fix wave Minor 3: a missing one
+  would have put the whole session on a missing index). Not adopted, the editor keeps
+  its own index and the request is refused naming the request's file (`the project
+  index <request db> does not exist -- index the project first`), not as a mismatch.
+  An explicit `--project-db` that differs from the request is
   kept, and `ValidateConvertRequest` then refuses the request naming both paths --
   never re-scoped. `project_file` must equal `ProjectFileForDb(project_db)`.
 * **`PrepareConvertRequest(AJson, TRequestEditorState, probes, reader)`** is the
   pure pass the form runs before touching a control; refusals in this order: parse;
   the editor has no project index (`the editor has no project index -- launch it with
-  --project-db`); validate; the project index file does not exist (`the project index
-  <db> does not exist -- index the project first`); rules folder; scope (`.dfm`
+  --project-db`); the REQUEST's project index does not exist; validate; the editor's
+  project index file does not exist (both as `the project index <db> does not exist --
+  index the project first`); rules folder; scope (`.dfm`
   binary, missing, unreadable or header-less -- refused for BOTH scopes, ruling R9).
   A refusal is shown red as `Convert request <file> refused: ...` and the editor
   stays on the Classes tab, usable (`req.nofolder.usable`).
@@ -1456,7 +1467,11 @@ hand-written request file, which is exactly what `drive-convert-request.ps1` doe
   the line goes RED when anything was appended: an unindexed unit is named (`Also:
   <pas> is not in the project index -- Convert will refuse.`) and then the C8
   inherited-analysis error is DROPPED (the missing index entry is its cause --
-  reported once); an unreadable project index is said so.
+  reported once); an unreadable project index is said so. A scope that holds NO
+  instance (every selected name missing from the `.dfm`, or a form scope `(0 found)`)
+  leads the tail with ` Also: no requested instance is on the form.` (`EmptyScopeTail`,
+  fix wave Minor 1), red: such a run converts nothing. Its Scope text has no empty
+  list: `0 selected component(s) on U; not found on the form: x`.
 
 ### The scope
 
@@ -1478,8 +1493,9 @@ hand-written request file, which is exactly what `drive-convert-request.ps1` doe
   call and no backup named; a unit whose every book is out of scope keeps no `.BCK`.
   A book file that cannot be read scopes to no name (out of scope, never whole-unit).
 * **Notes and summary.** A converted scoped row's note is `--only N instance(s): a,
-  b; ` + the unscoped note (`<edits> edit(s), <k> remaining for manual work` and any
-  C8 tail) -- what was ASKED, not what converted (spec E11 amended; the engine had no
+  b; ` + the unscoped note (`ConvertedRowNote`: `<edits> edit(s), <k> remaining for
+  manual work` and any C8 tail; then C10's `; glyphs: ...` suffix, `GlyphNoteSuffix`)
+  -- what was ASKED, not what converted (spec E11 amended; the engine had no
   per-name answer). The engine's `--only` refusal (`unconverted instance(s) of
   <Type>`, a `#unuse` / `#useswap` stranding excluded instances) gets the E10 hint
   ` -- convert all <Type> instances on this form, or remove the #unuse / #useswap
@@ -1490,20 +1506,34 @@ hand-written request file, which is exactly what `drive-convert-request.ps1` doe
   convertible instances found`) -- NOT a refusal. The runner keeps it on the
   FAILED / restore path (all-or-nothing per unit) and appends ` -- --only asked for
   <names>; the form may have changed since the IDE request -- re-send it`. A mix of
-  valid and unknown names was not measured.
+  valid and unknown names was not measured. Interim until N3 is adopted (fix wave
+  Minor 2): the hint is SKIPPED when every `--only` name is an inherited or inline
+  instance (`UnmatchedOnlyHintFor`, bound to the job's scope through the runner's
+  `AOnlyHint` seam) -- the engine leaves those to the ancestor, so "re-send it" would
+  be wrong.
+* **`--castlib` travels on the AOnly overload** of `TEngineAdapter.ApplyConversion`
+  (rebase hot spot H1): the runner ALWAYS calls that overload (nil = unscoped) and the
+  4-argument one only delegates to it. Guard: `glyph.castlib.apply.only.scoped.arg` /
+  `.unscoped.arg` (RED with the argument left out).
 * **The Convert tab.** `Scope:` line (`FLblScope`, a `TLabel` named `LblScope`) under
   the heading; `Clear scope` (enabled only with a scope, disabled during a run)
   resets to a whole-unit run and says so. **Adding a NEW unit (Add / drop,
-  `AddSources`) or deleting any selected row resets the scope**; the C8 ancestor
+  `AddSources`) or deleting any selected row resets the scope**, and when a scope was
+  in force the status says `Scope cleared -- the whole unit will be converted.`
+  (`SCOPE_CLEARED_TEXT`, fix wave Minor 4; `ResetScope` answers whether it cleared
+  one); the C8 ancestor
   insert does not (ruling B5/R7). So the `ScopeMatchesUnits` refusal (`the scope
   names <pas> but the source list (N unit(s)) does not hold it`) is NOT reachable
   from the GUI today: deleting the unit clears the scope first. Review Focus 5's
   "Convert tab check" therefore has no GUI driver; `req.delete.resets.scope` covers
   what the GUI does, and `scope.matches.units.mismatch` (model) covers the refusal
-  (ruling R11). A scoped run adds a grid note row with the scope text, and the
-  report's first line after its header is `Scope<TAB><scope text>` (`Scope<TAB>whole
-  unit` on a plain run), captured at Convert time (`FRunScope`) so `Clear scope`
-  mid-run cannot change it.
+  (ruling R11). A scoped run adds a grid note row with the scope text.
+* **The run report's layout, all three branches together** (C8 + C10 + C12): the
+  header; `Scope<TAB><scope text>` (`Scope<TAB>whole unit` on a plain run; captured at
+  Convert time in `FRunScope`, so `Clear scope` mid-run cannot change it); per row the
+  row line, then C8's `inherited left` lines, then C10's `glyph` lines (converted rows
+  only); the `not reached (cancelled)` rows; `Run<TAB>completed` / `cancelled -- ...`;
+  `Castlib<TAB><path>` / `(none)` (C10); `Final reindex<TAB>...`.
 * **Driver decision:** the Scope line is a `TLabel` -- no window, unreadable by the
   driver -- so `drive-convert-request.ps1` asserts the status bar, built from the
   same `ScopeText`. The label itself is an owner visual check.
