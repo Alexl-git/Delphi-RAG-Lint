@@ -3,6 +3,46 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.23.0-alpha -- unreleased
+
+No extractor change: indexes do not re-parse.
+
+### Added
+
+- **`convert-apply` batch mode (C13 b2).** `--unit` may repeat; every unit runs in ONE
+  process with one rule-book validation and one member cache. Text: one
+  `=== unit i of N: <path> ===` section per unit, then
+  `batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E`. JSON: one
+  `apply-batch/1` document `{schema, mode, rules_file, units_count, ok, exit_code, ok_count,
+  refused_count, failed_count, classes_built, units[]}`, `units[]` = `apply/1` per unit;
+  a single `--unit` is unchanged. Per-unit refusal/failure never stops the others; exit =
+  worst unit. Measured on DMTEST (BDE-to-FireDAC.rules, dry run): 3 units 45.7 s batched vs
+  114.7 s as separate processes. `info --json` `capabilities.batch_units`.
+  Guard: `run_convert_apply_batch.ps1`.
+- **`--only` contract (C12 N3).** `apply/1` `only_matched[]` / `only_unmatched[]` (always
+  present); an unknown name is ignored, never an error; text
+  `--only: no #convert instance named X (ignored)`. Guard: `run_convert_apply_only.ps1`.
+
+### Changed
+
+- **An unresolved `#convert` type REFUSES the unit (C13 d, owner ruling).** Dry run and
+  `--apply` alike: `REFUSED: <Type> (line N) resolves in no --db -- index gap in the library
+  or project index; reindex, or report it, before converting`, `refused: true`. It was a
+  rule-validation error (`#convert From/To type not found in any --db`) before.
+- **`--only` skips, rather than refuses, a unit rule it would strand (C12 N4).** A
+  `#unuse` / `#useswap` removal whose stranded instances are ALL ones `--only` left out is
+  skipped: unit kept, `uses[]` `{action: "skipped", ..., reason}`, a `line N: warning:` and
+  `items[]` kind `unit-rule-skipped`. Other stranded instances (failed re-emit, inherited)
+  still refuse (R26). `uses[]` rows gain `reason`. `capabilities.only_skips_unit_rules`.
+
+### Fixed
+
+- **Interface uses for an interface-declared retyped field (C13 a).** The To type's unit
+  went to the implementation uses whenever the unit had one, so a retyped form field failed
+  E2003. Both planners (no unit rules / unit rules) now put it in the interface uses.
+  Guard: `run_convert_apply_interface_uses.ps1` (compiles the result).
+- **`#migrate Foo -> ` (From-only) read Old `Foo ->` (C13 c, R27).**
+
 ## v1.22.0-alpha -- unreleased
 
 No extractor change: indexes do not re-parse.

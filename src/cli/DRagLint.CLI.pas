@@ -973,16 +973,18 @@ begin
   Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
     '{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) or missing exits 2; every stderr line is flushed BEFORE the stdout document, which is written in one piece (a merged pipe reads notes, then the whole document); ' +
     'convert-apply / convert-validate never emit progress and reject the flag as an unknown argument (exit 3); cancel = kill the process (the default write-back is kill-safe: each memoized type is its own SQLite statement)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
+  Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
-    'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added; ' +
+    'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule,reason}, uses_removed, uses_added; the To type''s unit goes to the INTERFACE uses when the retyped field is declared in the interface (1.23.0); ' +
     'EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each #mapping against the blocks that #apply it -- ' +
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
-    'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
+    'a #convert type that resolves in no --db REFUSES the unit, dry run and --apply alike -- an index gap, not a rule error (''<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting''); json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
     'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
     'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
-    '--only filters instances, never unit rules, so a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed''); ' +
+    'a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed'') -- EXCEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); ' +
+    '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
+    '--unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built,units[]: one apply/1 per unit}; a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
@@ -25143,7 +25145,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@7f4b
   begin
     UnitPas:= AUnitPas;
     PlanRes:= Default(TApplyResult);
@@ -25358,15 +25360,24 @@ begin
   end;
   { one unit keeps its old first check; a batch checks each unit in RunUnit }
   if (Length(Units) = 1) and not TFile.Exists(Units[0]) then
-  begin Writeln(Format('ERROR: unit not found: %s', [Units[0]])); Exit(2); end;
+  begin
+    Writeln(Format('ERROR: unit not found: %s', [Units[0]]));  // dl:ok duplicate-code@f028
+    Exit(2);
+  end;
   if not TFile.Exists(AArgs.RulesFile) then
-  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
+  begin
+    Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile]));
+    Exit(2);
+  end;
 
   try
     RulesText:= TFile.ReadAllText(AArgs.RulesFile);
   except
     on Ex: Exception do
-    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
+    begin
+      Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message]));
+      Exit(2);
+    end;
   end;
   Rules:= ParseConversionRules(RulesText);
 
@@ -25380,7 +25391,11 @@ begin
   end;
 
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  if Length(Dbs) = 0 then
+  begin
+    Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+    Exit(2);
+  end;
 
   // Open EVERY readable --db up front (not just the first) -- Bug 2: the
   // From type, To type, and the form's own instances may each live in a
@@ -25407,7 +25422,11 @@ begin
   finally
     StoresList.Free;
   end;
-  if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if Length(Stores) = 0 then
+  begin
+    Writeln('ERROR: no readable drag-lint index among --db path(s)');
+    Exit(2);
+  end;
 
   BookChecked := False;
   FreshChecked:= False;

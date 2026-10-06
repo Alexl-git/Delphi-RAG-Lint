@@ -1920,17 +1920,17 @@ begin
     for Ch in AChanges do
     begin
       if Ch.Action <> 'remove' then Continue;
-      var Stranded: string:= '';
+      var Parts: TArray<string>:= nil;
       var AllExcluded: Boolean:= True;
       for Key in Order do
         if SameText(DeclaringUnitOf(ATrees, Key), Ch.UnitName.Replace(' ', '').Replace(#9, '')) then
         begin
           if not Excl.TryGetValue(Key, Count) then Count:= 0;
           if Count < Left[Key] then AllExcluded:= False;
-          if Stranded <> '' then Stranded:= Stranded + ', ';
-          Stranded:= Stranded + Format('%d unconverted instance(s) of %s', [Left[Key], Key]);
+          Parts:= Parts + [Format('%d unconverted instance(s) of %s', [Left[Key], Key])];
         end;
-      if Stranded = '' then Continue;
+      if Length(Parts) = 0 then Continue;
+      var Stranded: string:= String.Join(', ', Parts);
       if not AllExcluded then
         Exit(Format('%s would leave %s -- unit not changed', [Ch.Rule, Stranded]));
       var Skip: TUsesChange:= Ch;
