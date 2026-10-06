@@ -22,6 +22,7 @@ implementation
 
 procedure TfrmGroups6.btnEditGroupClick(Sender: TObject);
 begin
+  if lbGroups.ItemIndex < 0 then Exit;
   TfrmGroupEdit6.Create(Self).ShowModal;
 end;
 

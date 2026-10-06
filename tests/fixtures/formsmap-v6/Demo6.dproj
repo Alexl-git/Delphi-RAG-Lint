@@ -12,5 +12,12 @@
     <DCCReference Include="uLonely6.pas"><Form>frmLonely6</Form><FormType>dfm</FormType></DCCReference>
     <DCCReference Include="uLog6.pas"><Form>frmLog6</Form><FormType>dfm</FormType></DCCReference>
     <DCCReference Include="uHelpers6.pas"/>
+    <DCCReference Include="uImport6.pas"><Form>frmImport6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uImportVM6.pas"/>
+    <DCCReference Include="uMdi6.pas"><Form>frmMdi6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uPanel6.pas"><Form>frmPanel6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uSerial6.pas"><Form>frmSerial6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uCache6.pas"><Form>frmCache6</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uPopup6.pas"><Form>frmPopup6</Form><FormType>dfm</FormType></DCCReference>
   </ItemGroup>
 </Project>

@@ -33,6 +33,29 @@ object frmMain6: TfrmMain6
         Action = actReports
       end
     end
+    object tsMore: TTabSheet
+      Caption = 'More'
+      object btnImport: TButton
+        Caption = 'Import'
+        OnClick = btnImportClick
+      end
+      object btnMdi: TButton
+        Caption = 'Open MDI'
+        OnClick = btnMdiClick
+      end
+      object btnPanel: TButton
+        Caption = 'Open Panel'
+        OnClick = btnPanelClick
+      end
+      object btnSerial: TButton
+        Caption = 'Serials'
+        OnClick = btnSerialClick
+      end
+      object btnCache: TButton
+        Caption = 'Cache'
+        OnClick = btnCacheClick
+      end
+    end
   end
   object mnuMain: TMainMenu
     Left = 300
