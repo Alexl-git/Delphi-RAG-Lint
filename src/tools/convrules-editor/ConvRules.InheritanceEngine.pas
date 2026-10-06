@@ -9,7 +9,7 @@ unit ConvRules.InheritanceEngine;
 interface
 
 uses
-  ConvRules.Engine
+  ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- INDEX_STALE_MARKER is the text the adapter's stale-answer failure carries, so the binder's retry test travels with the adapter that writes it
   , ConvRules.Inheritance
   ;
 

@@ -37,7 +37,7 @@ uses
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
-  , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'
+  , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
   , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
   ;
 
@@ -8607,7 +8607,7 @@ end;
   whose .dfm never overrides tblFtrs). Same chain rule as E2a; no double count with a
   .dfm block; own fields, unknown names and converted fields are not uses; a walk
   that cannot decide makes the unit unknown, never outside. }
-procedure TestInheritanceCodeUses;
+procedure TestInheritanceCodeUses;  // dl:ok cyclomatic-complexity@520f -- REVIEWED 2026-10-06 straight-line assertion list: the count is the `and` chains inside Check conditions, there is no branching control flow to extract
 const
   BASE_PAS = 'fx\Base.pas';
   MID_PAS  = 'fx\Mid.pas';
@@ -9530,7 +9530,7 @@ end;
   measured DMTEST shape: the leaf's tblFtrs is declared two levels up (Base), and
   the middle unit does not mention it; Mid re-opens tblOps; qryLib is declared by
   no project unit (the chain leaves the index at TDataModule -- outside). }
-procedure TestInheritanceWalk;
+procedure TestInheritanceWalk;  // dl:ok cyclomatic-complexity@cedf -- REVIEWED 2026-10-06 straight-line assertion list: the count is the `and` chains inside Check conditions, there is no branching control flow to extract
 const
   BASE_PAS = 'fx\Base.pas';
   MID_PAS  = 'fx\Mid.pas';

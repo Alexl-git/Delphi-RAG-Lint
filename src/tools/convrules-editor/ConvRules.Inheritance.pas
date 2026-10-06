@@ -1,11 +1,16 @@
 unit ConvRules.Inheritance;
 
 { C8 (spec 2026-10-05-c8-inherited-instances-design.md), editor half: which objects
-  in a unit's .dfm are INHERITED / INLINE instances of a checked book's From type,
-  which ancestor declares each one and whether that ancestor is converted, and the
-  Convert tab's texts and list edits that follow. Pure: the project index and the
-  file system come in as function references, so ConvRulesModelTests pins every
-  rule with fixture text and a fake index. }
+  in a unit's .dfm are INHERITED instances of a checked book's From type (inline
+  blocks are the unit's own frames; their children count), which identifiers its own
+  class's code uses from an ancestor's From-typed field (E2b), which ancestor declares
+  each one and whether that ancestor is converted -- and what the Convert tab does with
+  that: row notes, the ancestor-first offer and list insert, the order warning, the
+  Convert gate and the no-capability run notes. The decisions are pure: the project
+  index, the code uses and the file system come in as function references, so
+  ConvRulesModelTests pins every rule with fixture text and a fake index. Not pure:
+  DiskTextReader (the real file reader) and CachingLookup (fills a caller-owned
+  cache). The engine binders are in ConvRules.InheritanceEngine. }
 
 interface
 

@@ -22,7 +22,7 @@ uses
   , Vcl.ComCtrls
   , Vcl.ExtCtrls
   , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- CAPABILITY_INHERITED_INSTANCES is the engine contract the tab gates E10 on, so it travels with the adapter
-  , ConvRules.EngineProgress
+  , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED is the long-call runner's cancel contract the analysis work returns and reads back, so it travels with the runner
   , ConvRules.ConvertRun
   , ConvRules.ConvertRunner
   , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel

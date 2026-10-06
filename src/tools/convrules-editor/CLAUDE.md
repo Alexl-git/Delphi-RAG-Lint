@@ -579,15 +579,19 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 
 ### Verification kit
 
-* **Model tests:** `tests\ConvRulesModelTests.exe` -> **1329 pass / 5 fail** (1334 total; was 1243 / 5 before the engine-1.20.6 adoption branch);
-  the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
+* **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
+  the 1.21.1 pin -> **`model-tests: 1614 pass / 5 fail / 1 skip / 1620 total`**
+  (measured 2026-10-06 at the end of feat/c8-inherited-editor; 1422 / 5 / 0 before
+  it; 1329 / 5 before C6); the skip is `inherited.live` (the engine lacks
+  `inherited_instances`); the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
-  `.has.TOvcTable`). A full run is ~6 min (the live runner test is ~3 min of
-  it); a build or redeploy of `dll-win64` mid-run kills it -- discard that run.
+  `.has.TOvcTable`). A full run measured 98 s on 2026-10-06 (recorded
+  earlier as ~6 min, the live runner test ~3 min of it); a build or redeploy of `dll-win64` mid-run kills it -- discard that run.
 * **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
   -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
   Win64 library index answers -- a staged copy, never `dll-win64`). Expected
-  on the final build (measured 2026-10-04 on the 1.20.3 pin copy, all 8 green):
+  on the final build (measured 2026-10-06 on a staged copy of the 1.21.1 pin,
+  all 10 green):
 
   | driver | checks | covers |
   |---|---|---|
@@ -596,14 +600,18 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   | `drive-unit-harvest.ps1` | 21 | Unit Rules harvest (`-ProofNoDestination` control) |
   | `drive-file-menu.ps1` | 19 | New / Save As / Exit, the guard, delete-in-place makes dirty |
   | `drive-owning-open.ps1` | 6 | cross-book double-click goes through `ConfirmDiscard` |
-  | `drive-engine-wait.ps1` | 8 | progress window: appears after `SHOW_DELAY_MS`, Cancel closes it and stops the To tree, retry after cancel, a fast load shows no window |
-  | `drive-book-depth.ps1` | 10 + 1 SKIP | depth combo shows the book's `#depth`, gated on `book_depth`, absent `#depth` not added on save, New file shows the default; the SKIP line is the 3 `depth.change.*` checks (13 pass after the 1.20.6 re-pin) |
-  | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line |
+  | `drive-engine-wait.ps1` | 9 | progress window: appears after `SHOW_DELAY_MS`, Cancel closes it and stops the To tree, retry after cancel, a fast load shows no window, a re-load is cached (`wait.reload.*`) |
+  | `drive-book-depth.ps1` | 13 | depth combo shows the book's `#depth`, gated on `book_depth`, absent `#depth` not added on save, New file shows the default, `depth.change.*` (an engine without `book_depth` gives 10 + 1 SKIP line) |
+  | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line; since C8 also: no E7 order dialog on a fixture with no inherited instance |
+  | `drive-validate-scope.ps1` | 18 | scoped validation on Save (warnings, unchanged re-save fast), progress window + Cancel, owed block revalidated, Exit without a prompt, `automatch.*` |
+  | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), no-capability run note (`-ProofNoInheritance` control) |
 
   `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
   fail is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
   the project index" (no DB), not at the unindexed refusal; that refusal is
-  proven by `Loose.pas` in the normal run.
+  proven by `Loose.pas` in the normal run. `drive-inherited-offer.ps1
+  -ProofNoInheritance` gives 7 pass / 7 fail (measured 2026-10-06): the C8 checks
+  can fail.
 * **Driver traps recorded on this branch:** `LB_GETTEXT` is system-marshalled
   -- read it into a LOCAL buffer, not remote memory; screen capture of a CHILD
   window here returns another control's pixels -- use `PrintWindow(hwnd, dc,
@@ -987,6 +995,133 @@ unchanged is presumed validated earlier."
   are never cached (`rcache.*`). `drive-engine-wait.ps1` now checks the RE-load
   (`wait.reload.no.window`, `wait.reload.query.cached` = one engine child,
   proptree only); both FAIL on the uncached build. The first uncached load is not
-  asserted; `wait.window.appears` is the positive control.* **Mapping > Auto-Match is disabled while no rule is loaded**
+  asserted; `wait.window.appears` is the positive control.
+* **Mapping > Auto-Match is disabled while no rule is loaded**
   (`UpdateMenuEnabled`; driver `automatch.*` in `drive-validate-scope.ps1`, RED
   on main).
+
+## Inherited instances (C8) -- hand-over notes (feat/c8-inherited-editor, 2026-10-06)
+
+Spec: `docs\superpowers\specs\2026-10-05-c8-inherited-instances-design.md` (E1-E11;
+the engine half N1-N5 is the ENGINE stream's). Plan:
+`docs\superpowers\plans\2026-10-05-c8-inherited-instances-editor.md`. Ledger with
+every ruling: `.superpowers\sdd\2026-10-05-c8-inherited-instances-editor\progress.md`
+in the `c8-inherited` worktree.
+
+### Where things live
+
+* **Decisions: `ConvRules.Inheritance`** (model-tested). `ScanDfmInheritance` /
+  `FindDfmObject` share one header walk (`WalkDfmHeaders`) that skips `<` / `(` /
+  `{` values whole, so a collection's `item`/`end` never closes a component.
+  `AnalyzeUnit` / `AnalyzeUnits` walk the class chain through a `TClassLookup` and
+  read ancestor .dfm files through a `TDfmTextReader`; the row notes, the offer,
+  the list insert, the order warning, the Convert gate and the no-capability run
+  notes are all pure routines here. Two helpers are not pure: `DiskTextReader`
+  (the real reader, `TFile.ReadAllText`, which drops a BOM) and `CachingLookup`
+  (fills a caller-owned cache).
+* **The reader answers `TDfmRead`:** `drMissing` (no .dfm -- a class with no .dfm
+  declares no component), `drUnreadable` (exists, read raised), `drRead`.
+* **Engine binders: `ConvRules.InheritanceEngine`** -- `EngineClassLookup`
+  (`LookupClass` + `ListClassFields`), `EngineCodeUses` (`ListCodeRefs` through
+  `CodeUseName`), `IsStaleIndexError`, `AnalyzeRetryingStale`. The ONE place the
+  binding is made; the model tests drive it against a fixture index.
+* **Engine reads (`ConvRules.Engine`) share `SqlRowsOfDb`.** `LookupClass`:
+  `symbols` kind `class` JOIN `files` LEFT JOIN `type_ancestors` ordinal 0,
+  `COLLATE NOCASE`; only `IsPlainIdentifier` names are spliced in. One file = found;
+  two or more files = ambiguous = outside, never guessed. `ListClassFields` reads
+  only the From-typed fields the class itself declares, PINNED to the .pas the
+  lookup found. The C8 reads pass `ARequireFresh`: a STALE answer is a failure
+  (`INDEX_STALE_MARKER`), not data. `ParseClassLookupRows` / `ParseFieldRows` /
+  `ParseCodeRefRows` are test-only entry points over the same row mappers (held by
+  `dl:ok unused-public-symbol`).
+* **`MainForm.pas` / `ConvertTab.pas` are outside the tests' closure** -- as before,
+  build the editor too.
+
+### What the analysis decides
+
+* **The declaring ancestor is NOT always the parent.** Measured on DMTEST:
+  `dmCPData`'s `inherited tblFtrs: TTable` is declared in `DMREADINGS`, two levels
+  up; `PathToData.dfm` never mentions it. The walk continues past an ancestor that
+  does not open the instance.
+* **`TAncestorState`: `asUnconverted` / `asConverted` / `asOutside` / `asUnknown`.**
+  `asUnknown` = the walk could not decide: the index could not be asked (failed or
+  stale read), the chain loops or passes `MAX_CHAIN_DEPTH` (32), or an IN-INDEX
+  ancestor's .dfm is binary (`TPF0`) or unreadable. The verdict's `Reason` names the
+  cause; `AnalyzeUnit` then makes the unit `Known = False` with an `Error` carrying
+  the engine's own text. **Unknown is never a row note** -- the reason goes to the
+  status line (`UnknownUnitsText`). `asOutside` = the chain left the project index
+  (a library ancestor, an ambiguous class) or ended at an indexed class with no
+  ancestor; with no ancestor class named at all the note is the no-ancestor wording
+  (`OUTSIDE_NO_ANCESTOR`, `OutsideNote`).
+* **`inline` blocks are the unit's OWN frames** and are not verdicts; their
+  `inherited` children are, resolved from the frame class. **Frame fallback:** when
+  the form chain does not declare an instance, every enclosing block's class
+  (`TInheritedInstance.Enclosing`, innermost outward, up to the innermost `inline`)
+  is walked next, and the chains are MERGED; `TChainUnit.Depth` is one shared
+  counter, so a frame unit always sits above every form that re-opens its child.
+* **The chain offered (E2a / E6) is only the units whose .dfm declares or re-opens
+  one of the descendant's instances** (plus, for a code use, the unit declaring the
+  field), topmost first -- ancestors that never mention it are not offered.
+* **E2b code uses: Fields first.** An identifier the unit's own class's methods use
+  (implicit Self, or a receiver's first segment) is matched against the From-typed
+  `Fields` each ancestor declares (`ListClassFields`); a name no ancestor declares is
+  dropped WITHOUT reading any .dfm, so it can never make the unit unknown. Only a
+  real hit walks the chain again reading .dfm files. The index leaves implicit-Self
+  refs unresolved, so `ListCodeRefs` matches by enclosing class + name. Accepted
+  gap: a closer ancestor redeclaring the name with a non-From type (shadowing) is
+  absent from the filtered Fields, so a further ancestor's From field of that name
+  counts.
+* **Cost:** one pass measured 1.5-2.1 s per unit on DMTEST `dmCPData`. Each pass
+  has its OWN class cache (`CachingLookup` over a per-pass dictionary; a failed
+  answer is never cached) and one .dfm cache, so a retry asks afresh.
+
+### The Convert tab
+
+* **Analysis runs behind the progress window** (`FHost.RunLongCall`,
+  cancellable). `FEngineProbe` is then used on the window's worker thread; that is
+  safe only because the runner is MODAL and a drop is refused while `FAnalyzing`
+  (class remarks of `TConvertTab`). A non-modal runner would break it.
+* **A stale read triggers ONE incremental reindex of the editor's own project**
+  (`ProjectFileForDb` of the project DB, as the runner does) and one retry of the
+  stale units (`AnalyzeRetryingStale`); a second failure leaves them unknown with
+  `; reindex failed: ...` or the retry's own reason.
+* **Re-analysis cadence:** added units on add; the whole list when the CHECKED PAIRS
+  change (`ReanalyzeAll(False)` is a no-op otherwise, so showing the tab costs
+  nothing), always on Convert -- AFTER `Preflight`, so a refused run never pays the
+  analysis -- and after a run (converted ancestors answer differently). The pairs key
+  is committed only for a completed pass.
+* **E6 offer:** a unit whose chain has units not yet listed asks
+  `Add <chain> ahead of <unit>?`. **Insertion (amended 2026-10-05):** each MISSING
+  chain unit, topmost first, goes directly before the earliest LISTED unit among the
+  later chain units and the descendant (appended when none is listed); listed units
+  never move, so a pre-existing misorder stays and E7 still warns about it.
+* **Convert gate (`InheritanceGate`):** a CANCELLED check stops the Convert
+  (`GATE_CANCELLED_TEXT`, nothing runs); a FAILED check asks once
+  `Could not check inherited instances for <units> -- convert anyway?` with the
+  reason on the status line; No stops with `InheritanceGateStopText`. Never a
+  refusal (E9). Covered by model tests only -- the fixture analysis finishes before
+  the 400 ms window delay.
+* **E7 order warning:** one dialog listing every descendant listed above an
+  unconverted ancestor; No runs nothing.
+* **Dialog text is mirrored on the status line** (the E6 prompt, the gate question,
+  the E7 warning) because a `TMessageForm`'s text is a windowless `TLabel`;
+  `drive-inherited-offer.ps1` asserts the status bar.
+* **Capability gate:** `inherited_instances`, read with `apply_unit_rules` in ONE
+  `CapabilityNames` call in `RefreshBooks`; `TConvertJob.InheritedSupported` comes
+  from that probe. Without it: `EngineRefusalNotes` says the engine will refuse each
+  Known unit with a .dfm verdict (code uses do not count -- the engine does not
+  refuse on code), and the refusal path is unchanged. With it: a converted row's
+  note lists `N inherited instance(s) left: ancestor U not converted`
+  (`InheritedLeftNote`) and the report adds one 8-column `inherited left` line per
+  instance (`InheritedReportLines`).
+* **R4 -- an ancestor converted EARLIER IN THE SAME RUN is not "left":** both the
+  engine's `inherited[]` notes / report lines and the editor-side code-use note omit
+  it (`UnitsConvertedIn`). The code-use note (`N inherited code use(s) left: ...`,
+  `CodeUseLeftNote`) appears ONCE per unit (`CodeUseNoteDue`), not once per book.
+* **Not built:** E4 (the index's inherited/inline `modifiers` flag) -- the .dfm text
+  read is the only source. The E11 live test `inherited.live` SKIPs until the engine
+  reports `inherited_instances`.
+* **Deferred minors (ledger):** a multi-file drop of N descendants of one unlisted
+  base prompts once per descendant on No (no "No to all"); the Convert gate's Yes /
+  No has no GUI check; `drive-inherited-offer.ps1` still has a fixed 2 s sleep after
+  an answer.
