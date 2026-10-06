@@ -64,12 +64,17 @@ function IsImageGlyphLink(ANode: TRuleNode): Boolean;
 function ImageGlyphLinksFrom(const ANodes: TArray<TRuleNode>; const AFromPath: string): Integer;
 
 /// <summary>The engine's rule that a G[count] link needs EXACTLY one image link from
-/// its FromPath in the same block.</summary>
+/// its FromPath in the same block, checked for the expression a link is being given --
+/// plus the editor's rule that one From has at most ONE G[count] link.</summary>
 /// <param name="ANodes">The block's nodes.</param>
-/// <param name="AFromPath">The count link's FromPath.</param>
+/// <param name="AEdited">The link whose expression AExpr would replace; it is left out
+/// of both counts (its OLD expression is about to go). nil = no link is being edited.</param>
+/// <param name="AFromPath">The link's FromPath.</param>
 /// <param name="AExpr">The expression being written; anything but G[count] gives ''.</param>
-/// <returns>'' when fine, else 'G[count] needs exactly one image link from &lt;From&gt;; found K'.</returns>
-function CountLinkIssue(const ANodes: TArray<TRuleNode>; const AFromPath, AExpr: string): string;
+/// <returns>'' when fine; else 'G[count] needs exactly one image link from &lt;From&gt;;
+/// found K' (K counted without AEdited), or 'G[count] from &lt;From&gt; is already linked:
+/// #link &lt;To&gt; &lt;- &lt;From&gt; G[count]' when another count link reads that From.</returns>
+function CountLinkIssueFor(const ANodes: TArray<TRuleNode>; AEdited: TRuleNode; const AFromPath, AExpr: string): string;
 
 /// <summary>The engine's warning, as a hint: a straight carry of a glyph-count property
 /// beside an image G-link in the same block is right only for identity alternatives.</summary>
@@ -89,10 +94,33 @@ function SuggestCountTarget(const AToLeafPaths: TArray<string>; const ANodes: TA
 /// <summary>The block's G[count] link reading from AFromPath, if any.</summary>
 /// <param name="ABlockLinks">The ACTIVE block's links (LinksForBlock).</param>
 /// <param name="AFromPath">Compared case-insensitively with LinkFrom.</param>
+/// <param name="AExclude">A link never returned (the one being edited); nil = none.</param>
 /// <returns>The first such link, or nil. The glyph dialog shows it as the checked
 /// 'Keep' box of the image link with the same FromPath (the grid shows only the first
-/// link per From, so it never shows this one).</returns>
-function FindCountLink(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): TRuleNode;
+/// link per From, so it usually does not show this one).</returns>
+function FindCountLink(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string; AExclude: TRuleNode = nil): TRuleNode;
+
+/// <summary>The block's G[count] link from AFromPath when NO image link from that From
+/// is left (K = 0) -- the one an Unassign or a Clear removes with it.</summary>
+/// <param name="ABlockLinks">The ACTIVE block's links, AFTER the change.</param>
+/// <param name="AFromPath">Compared case-insensitively with LinkFrom.</param>
+/// <returns>That count link, or nil when there is none or an image link remains (one of
+/// several image links going must not silently drop the count link).</returns>
+function OrphanedCountLink(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): TRuleNode;
+
+type
+  /// <summary>What a confirmed glyph dialog does to the From's G[count] link.</summary>
+  TCountLinkStep = (clsNone, clsAdd, clsRemove);
+
+/// <summary>The count-link step for a confirmed (gerSet) dialog.</summary>
+/// <param name="AExisting">The From's OTHER count link (FindCountLink excluding the
+/// edited link), or nil.</param>
+/// <param name="ANewExpr">The expression the edited link gets.</param>
+/// <param name="AWantCountLink">The box was shown and left checked.</param>
+/// <returns>clsAdd when wanted and none exists; clsRemove when one exists and is no
+/// longer wanted; clsNone otherwise, and ALWAYS when ANewExpr is itself G[count] (the
+/// edited link becomes the count link; CountLinkIssueFor refuses a second one).</returns>
+function CountLinkStepFor(AExisting: TRuleNode; const ANewExpr: string; AWantCountLink: Boolean): TCountLinkStep;
 
 /// <summary>Whether a plain Assign may retarget AFromPath's link in this block.</summary>
 /// <param name="ABlockLinks">The ACTIVE block's links (LinksForBlock), never the whole book.</param>
@@ -190,16 +218,22 @@ begin
       Inc(Result);
 end;
 
-function CountLinkIssue(const ANodes: TArray<TRuleNode>; const AFromPath, AExpr: string): string;
+function CountLinkIssueFor(const ANodes: TArray<TRuleNode>; AEdited: TRuleNode; const AFromPath, AExpr: string): string;
 var
-  K: Integer;
+  K    : Integer;
+  Other: TRuleNode;
 begin
   Result:= '';
   if not IsCountExprText(AExpr) then
     Exit;
   K:= ImageGlyphLinksFrom(ANodes, AFromPath);
+  if (AEdited <> nil) and IsImageGlyphLink(AEdited) and SameText(AEdited.LinkFrom, AFromPath) then
+    Dec(K); // its image expression is the one being replaced
   if K <> 1 then
-    Result:= Format('G[count] needs exactly one image link from %s; found %d', [AFromPath, K]);
+    Exit(Format('G[count] needs exactly one image link from %s; found %d', [AFromPath, K]));
+  Other:= FindCountLink(ANodes, AFromPath, AEdited);
+  if Other <> nil then
+    Result:= Format('G[count] from %s is already linked: #link %s <- %s %s', [AFromPath, Other.LinkTo, Other.LinkFrom, Other.GlyphExpr]);
 end;
 
 function LastSegment(const APath: string): string;
@@ -266,14 +300,32 @@ begin
     Result:= '';
 end;
 
-function FindCountLink(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): TRuleNode;
+function FindCountLink(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string; AExclude: TRuleNode): TRuleNode;
 var
   N: TRuleNode;
 begin
   for N in ABlockLinks do
-    if (N.Kind = rnkLink) and SameText(N.LinkFrom, AFromPath) and (N.GlyphExpr <> '') and IsCountExprText(N.GlyphExpr) then
+    if (N <> AExclude) and (N.Kind = rnkLink) and SameText(N.LinkFrom, AFromPath) and (N.GlyphExpr <> '') and IsCountExprText(N.GlyphExpr) then
       Exit(N);
   Result:= nil;
+end;
+
+function OrphanedCountLink(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): TRuleNode;
+begin
+  if ImageGlyphLinksFrom(ABlockLinks, AFromPath) > 0 then
+    Exit(nil);
+  Result:= FindCountLink(ABlockLinks, AFromPath);
+end;
+
+function CountLinkStepFor(AExisting: TRuleNode; const ANewExpr: string; AWantCountLink: Boolean): TCountLinkStep;
+begin
+  Result:= clsNone;
+  if IsCountExprText(ANewExpr) then
+    Exit;
+  if AWantCountLink and (AExisting = nil) then
+    Result:= clsAdd
+  else if (not AWantCountLink) and (AExisting <> nil) then
+    Result:= clsRemove;
 end;
 
 function GlyphAssignBlock(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): string;

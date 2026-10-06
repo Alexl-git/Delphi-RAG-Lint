@@ -5918,11 +5918,32 @@ begin
   var CellText: string:= FGrid.Cells[ACol, ARow];
   if (ARow > 0) and (ACol in [GRID_CAST_COL, GRID_GLYPH_COL]) then
   begin
-    var Link: TRuleNode:= FindLinkForFrom(PathOfGridCell(FGrid.Cells[0, ARow]));
+    var RowFrom: string:= PathOfGridCell(FGrid.Cells[0, ARow]);
+    var Link: TRuleNode:= FindLinkForFrom(RowFrom);
     var E: Integer:= 0;
     var W: Integer:= 0;
+    var HasCountLink: Boolean:= False;
     if Link <> nil then
-      MarksText([Link], E, W);
+    begin
+      var MarkNodes: TArray<TRuleNode>:= [Link];
+      // The G[count] link is no grid row of its own (ruling R4): its marks show in the
+      // glyph column of the row it shares a From with.
+      if ACol = GRID_GLYPH_COL then
+      begin
+        var CountLink: TRuleNode:= FindCountLink(ActiveLinks, RowFrom, Link);
+        HasCountLink:= CountLink <> nil;
+        if HasCountLink then
+          MarkNodes:= MarkNodes + [CountLink];
+      end;
+      MarksText(MarkNodes, E, W);
+    end;
+    // An empty glyph cell gets no bare prefix (the cast column already carries the
+    // link's mark) -- unless the marks are the hidden count link's, shown nowhere else.
+    if (ACol = GRID_GLYPH_COL) and (CellText = '') and not HasCountLink then
+    begin
+      E:= 0;
+      W:= 0;
+    end;
     if E + W > 0 then
     begin
       CellText:= (if E > 0 then MARK_ERROR_PREFIX else MARK_WARN_PREFIX) + CellText;
@@ -6894,9 +6915,11 @@ begin
   // A G[count] link left with no image link from this From is an engine error, and
   // as the From's first link it would take over this grid row: it goes too.
   var LDropped: string:= DropOrphanCountLink(FromPath);
-  FGrid.Cells[1, Row]:= '';
-  FGrid.Cells[GRID_CAST_COL, Row]:= '';
-  FGrid.Cells[GRID_GLYPH_COL, Row]:= '';
+  // Re-read the row from the model: a later link from this From (a hand-ordered block
+  // that put the G[count] link first, or a second plain link) now shows here.
+  RefreshGrid;
+  if Row < FGrid.RowCount then
+    FGrid.Row:= Row;
   RefreshPool;
   SyncRawFromModel;
   RefreshRulesList;
@@ -6909,16 +6932,17 @@ begin
     SetStatus('Unassigned ' + FromPath);
 end; // procedure
 
-{ C10: removes the block's G[count] link from AFromPath when no image link from that
-  From is left for it (CountLinkIssue reports found 0 or more than one). Returns the
-  removed link as '#link To <- From G[count]', or '' when nothing was removed. }
+{ C10: removes the block's G[count] link from AFromPath when NO image link from that
+  From is left (OrphanedCountLink, K = 0 -- one of several image links going keeps
+  it). Returns the removed link as '#link To <- From G[count]', or '' when nothing
+  was removed. }
 function TConvRulesForm.DropOrphanCountLink(const AFromPath: string): string;
 var
   LCount: TRuleNode;
 begin
   Result:= '';
-  LCount:= FindCountLink(ActiveLinks, AFromPath);
-  if (LCount = nil) or (CountLinkIssue(ActiveLinks, AFromPath, GLYPH_COUNT_EXPR) = '') then
+  LCount:= OrphanedCountLink(ActiveLinks, AFromPath);
+  if LCount = nil then
     Exit;
   Result:= Format('#link %s <- %s %s', [LCount.LinkTo, LCount.LinkFrom, LCount.GlyphExpr]);
   FBook.Nodes.Remove(LCount);
@@ -6966,9 +6990,9 @@ begin
   Opts.ToPath    := Link.LinkTo;
   Opts.Expr      := Link.GlyphExpr;
   Opts.BlockNodes:= ActiveLinks; // block-scoped: the block rules never see another block
-  Existing:= FindCountLink(Opts.BlockNodes, FromPath);
-  if Existing = Link then
-    Existing:= nil; // the row IS a count link: it gets no count link of its own
+  Opts.Link      := Link; // left out of the G[count] rule: its expression is being replaced
+  // The From's OTHER count link: a row that IS a count link is not its own count link.
+  Existing:= FindCountLink(Opts.BlockNodes, FromPath, Link);
   Opts.CountExists:= Existing <> nil;
   if Existing <> nil then
     Opts.CountTarget:= Existing.LinkTo
@@ -6987,7 +7011,11 @@ begin
     begin
       Link.GlyphExpr:= Opts.Expr;
       Link.Dirty    := True;
-      if AddCount and (Existing = nil) then
+      Link.Marks    := nil; // a mark about the old expression must not survive the edit
+      // The dialog refused a second count link (CountLinkIssueFor); CountLinkStepFor
+      // never adds one beside an existing one, nor when the link itself became G[count].
+      var LStep: TCountLinkStep:= CountLinkStepFor(Existing, Opts.Expr, AddCount);
+      if LStep = clsAdd then
       begin
         CountLink:= TRuleNode.Create;
         CountLink.Kind     := rnkLink;
@@ -7001,7 +7029,7 @@ begin
         FActiveHdr:= FBook.Nodes.IndexOf(LHdr);
         Extra:= Format(' -- added #link %s <- %s %s', [Opts.CountTarget, FromPath, GLYPH_COUNT_EXPR]);
       end
-      else if (not AddCount) and (Existing <> nil) and not SameText(Opts.Expr, GLYPH_COUNT_EXPR) then
+      else if LStep = clsRemove then
       begin
         Extra:= Format(' -- removed #link %s <- %s %s', [Existing.LinkTo, Existing.LinkFrom, Existing.GlyphExpr]);
         FBook.Nodes.Remove(Existing);
@@ -7012,6 +7040,7 @@ begin
     begin
       Link.GlyphExpr:= '';
       Link.Dirty    := True;
+      Link.Marks    := nil;
       Extra:= DropOrphanCountLink(FromPath);
       if Extra <> '' then
         Extra:= ' -- ' + Extra + ' went with it';

@@ -10230,9 +10230,9 @@ begin
     Nodes:= Book.Nodes.ToArray;
     Check('glyph.image.link', IsImageGlyphLink(Nodes[1]) and not IsImageGlyphLink(Nodes[2]) and not IsImageGlyphLink(Nodes[IDX_CAPTION]));
     Check('glyph.image.links.from', (ImageGlyphLinksFrom(Nodes, 'glyph') = 1) and (ImageGlyphLinksFrom(Nodes, 'Caption') = 0));
-    Check('glyph.count.issue.none', CountLinkIssue(Nodes, 'Glyph', 'G[count]') = '', CountLinkIssue(Nodes, 'Glyph', 'G[count]'));
-    Check('glyph.count.issue.not.count.expr', CountLinkIssue(Nodes, 'Caption', 'G[1/2]') = '');
-    Check('glyph.count.issue.zero', CountLinkIssue(Nodes, 'Caption', 'G[count]') = 'G[count] needs exactly one image link from Caption; found 0', CountLinkIssue(Nodes, 'Caption', 'G[count]'));
+    Check('glyph.count.issue.none', CountLinkIssueFor(Nodes, nil, 'Glyph', 'G[count]') = '', CountLinkIssueFor(Nodes, nil, 'Glyph', 'G[count]'));
+    Check('glyph.count.issue.not.count.expr', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[1/2]') = '');
+    Check('glyph.count.issue.zero', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[count]') = 'G[count] needs exactly one image link from Caption; found 0', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[count]'));
     Check('glyph.carry.hint', StraightCountCarryHint(Nodes) = EXPECT_HINT, StraightCountCarryHint(Nodes));
     Check('glyph.suggest.one', SuggestCountTarget(['OptionsImage.Glyph', 'OptionsImage.NumGlyphs', 'Caption'], [Nodes[0], Nodes[1], Nodes[IDX_CAPTION]]) = 'OptionsImage.NumGlyphs');
     Check('glyph.suggest.already.linked', SuggestCountTarget(['OptionsImage.Glyph', 'OptionsImage.NumGlyphs'], Nodes) = '', 'NumGlyphs is already a link target');
@@ -10241,7 +10241,7 @@ begin
 
     Book.LoadFromString(BLOCK_TWO_IMAGES);
     Nodes:= Book.Nodes.ToArray;
-    Check('glyph.count.two.image.links', CountLinkIssue(Nodes, 'Picture', 'G[count]') = 'G[count] needs exactly one image link from Picture; found 2', CountLinkIssue(Nodes, 'Picture', 'G[count]'));
+    Check('glyph.count.two.image.links', CountLinkIssueFor(Nodes, nil, 'Picture', 'G[count]') = 'G[count] needs exactly one image link from Picture; found 2', CountLinkIssueFor(Nodes, nil, 'Picture', 'G[count]'));
 
     Book.LoadFromString(BLOCK_NO_GLINK);
     Check('glyph.carry.no.glink.silent', StraightCountCarryHint(Book.Nodes.ToArray) = '', StraightCountCarryHint(Book.Nodes.ToArray));
@@ -10323,6 +10323,118 @@ begin
   end;
 end;
 
+{ C10 Task 5 fix 1: the dialog's G[count] rule must not count the link being EDITED
+  as its own image link; an edit must never leave two count links from one From; and
+  only a count link with NO image link left is an orphan. }
+procedure TestGlyphCountLinkEdit;
+const
+  ONE_IMAGE =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  COUNT_FIRST =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10;
+  TWO_IMAGES_COUNT =
+    '#convert A -> B'#13#10 +
+    '#link Glyph1 <- Picture G[1/2]'#13#10 +
+    '#link Glyph2 <- Picture G[2/2]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  COUNT_ONLY =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  FOUND_0 = 'G[count] needs exactly one image link from Picture; found 0';
+  DUP     = 'G[count] from Picture is already linked: #link OptionsImage.NumGlyphs <- Picture G[count]';
+  IDX_THIRD = 2;
+  BOOKS: array[0..2] of string = (ONE_IMAGE, COUNT_FIRST, TWO_IMAGES_COUNT);
+  EXPRS: array[0..1] of string = ('G[count]', 'G[*/4]');
+var
+  Book    : TRuleBook;
+  L       : TArray<TRuleNode>;
+  Edited  : TRuleNode;
+  N       : TRuleNode;
+  Existing: TRuleNode;
+  Step    : TCountLinkStep;
+  Src     : string;
+  Expr    : string;
+  Want    : Boolean;
+  Counts  : Integer;
+  Worst   : Integer;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(ONE_IMAGE);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.self.excluded', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = FOUND_0, CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.edit.image.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[*/2]') = '');
+    Check('glyph.count.find.exclude.other', FindCountLink(L, 'Picture', L[0]) = L[1]);
+
+    Book.LoadFromString(COUNT_FIRST);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.count.first.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.find.exclude.self', FindCountLink(L, 'Picture', L[0]) = nil);
+
+    Book.LoadFromString(TWO_IMAGES_COUNT);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.duplicate', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = DUP, CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.orphan.images.left', OrphanedCountLink(L, 'Picture') = nil);
+    Check('glyph.count.orphan.one.image.left', OrphanedCountLink([L[1], L[IDX_THIRD]], 'Picture') = nil, 'unassigning one of several image links keeps the count link');
+
+    Book.LoadFromString(COUNT_ONLY);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.orphan.none.left', OrphanedCountLink(L, 'Picture') = L[0]);
+  finally
+    Book.Free;
+  end;
+
+  Existing:= TRuleNode.Create;
+  try
+    Check('glyph.count.step.add', CountLinkStepFor(nil, 'G[*/4]', True) = clsAdd);
+    Check('glyph.count.step.keep', CountLinkStepFor(Existing, 'G[*/4]', True) = clsNone);
+    Check('glyph.count.step.remove', CountLinkStepFor(Existing, 'G[*/4]', False) = clsRemove);
+    Check('glyph.count.step.none', CountLinkStepFor(nil, 'G[*/4]', False) = clsNone);
+    Check('glyph.count.step.count.expr', (CountLinkStepFor(Existing, 'G[count]', False) = clsNone) and (CountLinkStepFor(nil, 'G[count]', True) = clsNone));
+  finally
+    Existing.Free;
+  end;
+
+  // Every edit the dialog can confirm (CountLinkIssueFor silent), on every link of
+  // every fixture, with the box either way: at most ONE count link from the From after.
+  Worst:= 0;
+  Book:= TRuleBook.Create;
+  try
+    for Src in BOOKS do
+    begin
+      Book.LoadFromString(Src);
+      L:= Book.LinksForBlock(0);
+      for Edited in L do
+        for Expr in EXPRS do
+          for Want in [False, True] do
+          begin
+            if CountLinkIssueFor(L, Edited, 'Picture', Expr) <> '' then
+              Continue;
+            Existing:= FindCountLink(L, 'Picture', Edited);
+            Step:= CountLinkStepFor(Existing, Expr, Want);
+            Counts:= 0;
+            for N in L do
+              if (N <> Edited) and (N.GlyphExpr = 'G[count]') then
+                Inc(Counts);
+            if Expr = 'G[count]' then
+              Inc(Counts);
+            if Step = clsAdd then
+              Inc(Counts);
+            if Step = clsRemove then
+              Dec(Counts);
+            if Counts > Worst then
+              Worst:= Counts;
+          end;
+    end;
+  finally
+    Book.Free;
+  end;
+  Check('glyph.count.never.two', Worst <= 1, Format('worst %d count links', [Worst]));
+end;
 { C10 fix round 1: the block merger must see a #link's glyph expression. Once the
   expression left LinkFrom, two links to one To that differ ONLY in the expression
   compared equal and the incoming one was dropped as a duplicate. They are a
@@ -10569,6 +10681,7 @@ begin
     TestGlyphLinkParse;
     TestGlyphDecisions;
     TestGlyphAssignGuard;
+    TestGlyphCountLinkEdit;
     TestGlyphCastLibArgs;
     TestGlyphApplyParse;
     TestGlyphRunner;

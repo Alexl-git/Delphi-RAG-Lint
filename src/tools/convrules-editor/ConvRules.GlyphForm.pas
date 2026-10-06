@@ -29,8 +29,12 @@ type
     ToPath     : string;
     /// <summary>In: the current expression. Out (gerSet): the accepted text, trimmed.</summary>
     Expr       : string;
-    /// <summary>The ACTIVE block's links, for CountLinkIssue / StraightCountCarryHint.</summary>
+    /// <summary>The ACTIVE block's links, for CountLinkIssueFor / StraightCountCarryHint.</summary>
     BlockNodes : TArray<TRuleNode>;
+    /// <summary>The link being edited (one of BlockNodes): left out of the G[count]
+    /// rule, because its old expression is the one being replaced. The dialog never
+    /// writes it.</summary>
+    Link       : TRuleNode;
     /// <summary>The To leaf a G[count] link may be added for; '' hides the checkbox.</summary>
     CountTarget: string;
     /// <summary>True when CountTarget is an EXISTING G[count] link from FromPath: the box
@@ -54,23 +58,24 @@ uses
   , Vcl.Forms
   , Vcl.StdCtrls
   , Vcl.Graphics  // dl:ok unused-unit-in-uses@825b -- REVIEWED 2026-10-06 false positive: clRed / clWindowText are used inside an if-expression (EditChange), whose then/else operands the 1.21.1 extractor emits no refs for; filed as a gap
-  , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_COUNT_EXPR travels with the count-link rules this dialog shows (CountLinkIssue)
+  , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_COUNT_EXPR travels with the count-link rules this dialog shows (CountLinkIssueFor)
   ;
 
 const
   DLG_W        = 560;
-  DLG_H        = 230;
+  DLG_H        = 246;
   MARGIN       = 12;
   ROW_H        = 24;
+  INTRO_H      = 40;
   HINT_H       = 36;
   BTN_W        = 80;
   BTN_SLOT     = BTN_W + MARGIN;
   INNER_W      = DLG_W - MARGIN - MARGIN;
-  EDIT_TOP     = 40;
-  CHECK_TOP    = 72;
-  COUNTBOX_TOP = 104;
-  HINT_TOP     = 134;
-  BTN_TOP      = 176;
+  EDIT_TOP     = 56;
+  CHECK_TOP    = 88;
+  COUNTBOX_TOP = 120;
+  HINT_TOP     = 150;
+  BTN_TOP      = 192;
   OK_LEFT      = DLG_W - BTN_SLOT - BTN_SLOT - BTN_SLOT;
   CLEAR_LEFT   = DLG_W - BTN_SLOT - BTN_SLOT;
   CANCEL_LEFT  = DLG_W - BTN_SLOT;
@@ -138,8 +143,9 @@ begin
   Position    := poOwnerFormCenter;
   ClientWidth := DLG_W;
   ClientHeight:= DLG_H;
-  L:= NewLabel(MARGIN, ROW_H);
-  L.Caption:= 'G[I/N] terms stitch left to right; commas separate per-N alternatives; G[count] links the glyph count.';
+  L:= NewLabel(MARGIN, INTRO_H);
+  L.Caption:= 'G[I/N] terms stitch left to right; commas separate per-N alternatives; G[count] links the glyph count. '
+    + 'A second image link from the same From is written in the Raw DSL.';
   FEdit:= TEdit.Create(Self);
   FEdit.Parent:= Self;
   FEdit.Left  := MARGIN;
@@ -184,7 +190,7 @@ begin
   if T = '' then
     Err:= NEED_TEXT
   else if CheckGlyphExprText(T, Err) then
-    Err:= CountLinkIssue(FOpts.BlockNodes, FOpts.FromPath, T);
+    Err:= CountLinkIssueFor(FOpts.BlockNodes, FOpts.Link, FOpts.FromPath, T);
   FCheck.Caption   := if Err = '' then CHECK_OK else Err;
   FCheck.Font.Color:= if Err = '' then clWindowText else clRed;
   FOk.Enabled:= Err = '';
