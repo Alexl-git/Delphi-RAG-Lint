@@ -157,6 +157,15 @@ function Get-TraceChartAlsoTarget([string] $Text, $Nodes) {
   $(if ($hit.Count -eq 1) { $hit[0] } else { $null })
 }
 
+# The label words of a crossing edge, from its WITH facet: the whole alternative set when the facet is one
+# (`rspError or rspOK` -- never just its first word, which would name the failure code on the success path), the
+# command when a payload follows it (`cmdDelta 'TABLE=...`), else nothing (the step number stands alone)
+function Get-TraceChartWithLabel([string] $With) {
+  if ($With -cmatch '^[A-Za-z_]\w*(?: or [A-Za-z_]\w*)*$') { return $With }
+  if ($With -cmatch '^([A-Za-z_]\w*) [''"(]') { return $Matches[1] }
+  ''
+}
+
 # One Form A line of an item or child, for a tooltip (the text's own words, never re-phrased)
 function Format-TraceChartTip($Item, [string] $Nums) {
   $note = Format-TraceNote $Item.Routine $Item.Note $Item.Ask
@@ -171,7 +180,8 @@ function Get-TraceChartLink([string] $Anchor, [hashtable] $AnchorPaths, [string]
   $leaf = $Anchor -replace ':\d+$', ''
   $line = [int]($Anchor -replace '^.*:', '')
   $full = $(if ($AnchorPaths -and $line -gt 0) { [string]$AnchorPaths[$leaf] } else { '' })
-  if (-not $full) { $State.Unlinked++; return '' }
+  # spec 5: no dead link and no guessed path -- the row says why it has none (the leaf is held at zero or several paths)
+  if (-not $full) { $State.Unlinked++; return " TITLE=`"$(ConvertTo-XmlText "ambiguous file name -- the indexes hold $leaf at zero or several paths; see trace.dlgraph")`"" }
   " HREF=`"$(New-RowHref $full $line)`" TITLE=`"$(ConvertTo-XmlText $Tip)`""
 }
 
@@ -212,8 +222,9 @@ function ConvertTo-TraceChart($Trace, [hashtable] $AnchorPaths = @{}, [hashtable
     param($From, $To, [string] $Kind, [int] $Num, [string] $Extra)
     if (-not $From -or -not $To -or [object]::ReferenceEquals($From, $To)) { return }
     $k = "$($From.Id)>$($To.Id)>$Kind"
-    if (-not $edges.Contains($k)) { $edges[$k] = [pscustomobject]@{ From = $From; To = $To; Kind = $Kind; Nums = (New-Object System.Collections.ArrayList); Extra = $Extra; FromPort = '' } }
+    if (-not $edges.Contains($k)) { $edges[$k] = [pscustomobject]@{ From = $From; To = $To; Kind = $Kind; Nums = (New-Object System.Collections.ArrayList); Extras = (New-Object System.Collections.ArrayList) } }
     [void]$edges[$k].Nums.Add($Num)
+    if ($Extra -and -not $edges[$k].Extras.Contains($Extra)) { [void]$edges[$k].Extras.Add($Extra) }
   }
 
   # ---- 1. every step to its node and row, every edge -----------------------------------------------
@@ -273,8 +284,11 @@ function ConvertTo-TraceChart($Trace, [hashtable] $AnchorPaths = @{}, [hashtable
         if ($src) {
           if ($src.Kind -eq 'crossing' -or $kind -eq 'crossing') { $ek = 'crossing' }
           elseif ($src.Kind -eq 'event') { $ek = 'event' }
-          $with = @($i.Children | Where-Object { $_.Kind -eq 'facet' -and $_.Head -ceq 'WITH' } | ForEach-Object { ($_.Text -split ' ')[0] })
-          & $addEdge $src $node $ek ([int]$i.Number) $(if ($kind -eq 'crossing' -and $with.Count) { $with[0] } else { '' })
+          # the label's words: a crossing edge names what crosses (Get-TraceChartWithLabel); a call edge the line it
+          # is called from (spec 3.3, the note's `from :<line>`)
+          $with = @($i.Children | Where-Object { $_.Kind -eq 'facet' -and $_.Head -ceq 'WITH' } | ForEach-Object { Get-TraceChartWithLabel $_.Text })
+          $extra = $(if ($kind -eq 'crossing' -and $with.Count) { $with[0] } elseif ($ek -eq 'call' -and $i.Note -cmatch '^from (:\d+)') { "from $($Matches[1])" } else { '' })
+          & $addEdge $src $node $ek ([int]$i.Number) $extra
         }
       }
       if ($kind -ne 'also') { $prev = $node }
@@ -327,9 +341,8 @@ function ConvertTo-TraceChart($Trace, [hashtable] $AnchorPaths = @{}, [hashtable
       & $fold $n @($n.Rows) 'steps'
       $ladder += 'cards'
     }
-    if ($laneNodes.Count -gt $cap.Nodes) {
-      [void]$legend.Add("$($laneNodes.Count) nodes, above the $($cap.Nodes)-node readability cap: drawn anyway, nothing dropped")
-    }
+    # folding rows does not remove nodes, so the chart is still above the cap: drawn anyway, and said
+    [void]$legend.Add("$($laneNodes.Count) nodes, above the $($cap.Nodes)-node readability cap: drawn anyway, nothing dropped")
   }
   $manifest.Ladder = (@($ladder | Select-Object -Unique) -join ',')
 
@@ -350,10 +363,15 @@ function ConvertTo-TraceChart($Trace, [hashtable] $AnchorPaths = @{}, [hashtable
     $body = $(switch ($i.Kind) { 'crosses' { "CROSSES $($i.Text)" } 'stops' { "STOPS $($i.Text)" } default { $i.Text } })
     $grade = $(if ($i.Grade) { " [$($i.Grade)]" } else { '' })
     $headTxt = "$numTxt $body$grade"
-    $br = Get-ChartBreaks $headTxt $script:ChartWidth
-    if ($br.Count + 1 -gt $script:ChartMaxLines) {
-      $cutAt = @($br | Sort-Object)[$script:ChartMaxLines - 1]
-      $headTxt = $headTxt.Substring(0, $cutAt) + ' ...'
+    # past 5 lines the BODY is shortened (at a break, ' ...' marking the cut) and the grade KEPT: cutting a trailing
+    # [inferred] / [by name] off would read as a certain step
+    if ((Get-ChartBreaks $headTxt $script:ChartWidth).Count + 1 -gt $script:ChartMaxLines) {
+      $lead = "$numTxt $body"
+      $cuts = @((Get-ChartBreaks $lead $script:ChartWidth) | Sort-Object -Descending)
+      foreach ($cutAt in $cuts) {
+        $headTxt = $lead.Substring(0, $cutAt) + ' ...' + $grade
+        if ((Get-ChartBreaks $headTxt $script:ChartWidth).Count + 1 -le $script:ChartMaxLines) { break }
+      }
       $state.Shortened++
     }
     $tips = @(foreach ($n in @($R.Nums | Sort-Object)) { Format-TraceChartTip $i ('[{0:00}]' -f [int]$n) })
@@ -497,7 +515,7 @@ function ConvertTo-TraceChart($Trace, [hashtable] $AnchorPaths = @{}, [hashtable
   # edges: a backward edge (to an earlier lane) does not rank -- the lanes stay left to right
   $laneIx = @{}; for ($q = 0; $q -lt $lanes.Count; $q++) { $laneIx[$lanes[$q]] = $q }
   foreach ($e in $edges.Values) {
-    $lbl = (@($e.Nums | Sort-Object -Unique | ForEach-Object { '[{0:00}]' -f [int]$_ }) -join '/') + $(if ($e.Extra) { " $($e.Extra)" } else { '' })
+    $lbl = (@($e.Nums | Sort-Object -Unique | ForEach-Object { '[{0:00}]' -f [int]$_ }) -join '/') + $(if ($e.Extras.Count) { " $($e.Extras -join ', ')" } else { '' })
     $st = $(switch ($e.Kind) {
       'crossing' { "penwidth=2.2, color=`"$($script:ChartLaneInk['PIPE'][0])`", fontcolor=`"$($script:ChartLaneInk['PIPE'][2])`"" }
       'event'    { 'style=dashed' }

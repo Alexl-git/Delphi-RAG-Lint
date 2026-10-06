@@ -1227,7 +1227,9 @@ $res.CalcSynIfChooser = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCa
 # <BR ALIGN="LEFT"/> read back as the ONE space it replaced, tags dropped, entities decoded. A cell is a STEP row
 # (`[NN]` or `[NN]/[MM]` first), a GUARD row (`WHEN` / `UNLESS` first), a FACET row (a facet head first), a
 # DISCLOSURE row (`+N more ...`, every `[NN]` / `[aa]-[bb]` in it disclosed), or other text (titles, notes, the
-# Legend's END TRACE line). Nodes are read per lane cluster.
+# Legend's END TRACE line). Nodes are read per lane cluster. Fix round 1 (I2): each guard / facet cell is attached
+# to the STEP cell above it in its node (Step: that cell's numbers), so a check can ask "is THIS step's guard drawn
+# under THIS step" -- a set test over every guard cell could not see a guard drawn on the wrong step.
 function Measure-TraceChart([string] $DotPath) {
   $dot = [IO.File]::ReadAllText($DotPath)
   $cells = New-Object System.Collections.ArrayList
@@ -1239,13 +1241,14 @@ function Measure-TraceChart([string] $DotPath) {
     if ($ln -match '^  \}$') { $lane = ''; continue }
     if ($ln -match '^\s*(n\d+|f\d+|hdr|legend) \[(.*?)label=<(.*)>(?:, tooltip="[^"]*")?\];$') {
       $id = $Matches[1]; $attr = $Matches[2]; $html = $Matches[3]
-      $nc = @()
+      $nc = @(); $cur = @()
       foreach ($m in [regex]::Matches($html, '<TD([^>]*)>(.*?)</TD>')) {
         $txt = [Net.WebUtility]::HtmlDecode((($m.Groups[2].Value -replace '<BR[^>]*/>', ' ') -replace '<[^>]+>', ''))
-        $c = [pscustomobject]@{ Node = $id; Lane = $lane; Text = $txt; Href = ($m.Groups[1].Value -match ' HREF="'); Title = ($m.Groups[1].Value -match ' TITLE="'); Kind = 'other'; Nums = @() }
-        if ($txt -match '^((?:\[\d{2,3}\])(?:/\[\d{2,3}\])*) ') { $c.Kind = 'step'; $c.Nums = @([regex]::Matches($Matches[1], '\d+') | ForEach-Object { [int]$_.Value }) }
-        elseif ($txt -cmatch '^(WHEN|UNLESS) ') { $c.Kind = 'cond' }
-        elseif ($txt -cmatch '^(VIA|ONTO|AT|CONTRACT|FROM|TO|OVER|WITH|REGENERATE) ') { $c.Kind = 'facet' }
+        $tt = $(if ($m.Groups[1].Value -match ' TITLE="([^"]*)"') { [Net.WebUtility]::HtmlDecode($Matches[1]) } else { '' })
+        $c = [pscustomobject]@{ Node = $id; Lane = $lane; Text = $txt; Href = ($m.Groups[1].Value -match ' HREF="'); Title = ($m.Groups[1].Value -match ' TITLE="'); TitleText = $tt; Kind = 'other'; Nums = @(); Step = @() }
+        if ($txt -match '^((?:\[\d{2,3}\])(?:/\[\d{2,3}\])*) ') { $c.Kind = 'step'; $c.Nums = @([regex]::Matches($Matches[1], '\d+') | ForEach-Object { [int]$_.Value }); $cur = $c.Nums }
+        elseif ($txt -cmatch '^(WHEN|UNLESS) ') { $c.Kind = 'cond'; $c.Step = $cur }
+        elseif ($txt -cmatch '^(VIA|ONTO|AT|CONTRACT|FROM|TO|OVER|WITH|REGENERATE) ') { $c.Kind = 'facet'; $c.Step = $cur }
         elseif ($txt -match '^\+\d+ more ') {
           $c.Kind = 'disclosure'
           $c.Nums = @(foreach ($r in [regex]::Matches($txt, '\[(\d{2,3})\](?:-\[(\d{2,3})\])?')) { $a = [int]$r.Groups[1].Value; $b = $(if ($r.Groups[2].Success) { [int]$r.Groups[2].Value } else { $a }); $a..$b })
@@ -1273,11 +1276,50 @@ function Get-TraceChartCover($Chart, [int] $Steps) {
   [pscustomobject]@{ Drawn = $drawn.Count; Disclosed = $disc.Count; Missing = $missing.Count; Both = $both.Count; Extra = $extra.Count; DisclosedNums = $disc; MissingNums = $missing }
 }
 
-# a drawn guard row read back as Form A: keyword, condition (rejoined), anchor
+# a drawn guard row read back as Form A: keyword, condition (rejoined), anchor, and the step numbers it hangs under
 function Get-TraceChartConds($Chart) {
   @($Chart.Cells | Where-Object { $_.Kind -eq 'cond' } | ForEach-Object {
-    if ($_.Text -cmatch '^(WHEN|UNLESS) (.+?) @([A-Za-z0-9_$.\-]+:\d+)(?: -- (.*))?$') { [pscustomobject]@{ Keyword = $Matches[1]; Condition = $Matches[2]; Anchor = $Matches[3]; Node = $_.Node } }
+    $s = $_.Step
+    if ($_.Text -cmatch '^(WHEN|UNLESS) (.+?) @([A-Za-z0-9_$.\-]+:\d+)(?: -- (.*))?$') { [pscustomobject]@{ Keyword = $Matches[1]; Condition = $Matches[2]; Anchor = $Matches[3]; Node = $_.Node; Step = $s } }
   })
+}
+# Fix round 1 (I2, spec 6): every condition and facet of the MODEL, step by step, against the cells drawn under THAT
+# step -- conditions by (step, keyword, anchor), facets by (step, head, anchor -- or text when it has none); a cell
+# serves one child per step (a merged row serves each of its steps). A REGENERATE facet is carried by its step
+# row's tooltip. Not drawn: DISCLOSED when the step's number is in a disclosure row, else MISSING. All MEASURED.
+function Get-TraceChartChildCheck($Chart, $Model) {
+  $disc = @($Chart.Cells | Where-Object { $_.Kind -eq 'disclosure' } | ForEach-Object { $_.Nums })
+  $conds = @(Get-TraceChartConds $Chart)
+  $facets = @($Chart.Cells | Where-Object { $_.Kind -eq 'facet' } | ForEach-Object {
+    $s = $_.Step
+    if ($_.Text -cmatch '^(\S+) (.*?)(?: @([A-Za-z0-9_$.\-]+:\d+))?$') { [pscustomobject]@{ Head = $Matches[1]; Text = $Matches[2]; Anchor = [string]$Matches[3]; Step = $s } }
+  })
+  $o = [ordered]@{ CDrawn = 0; CVerbatim = 0; CDisc = 0; CMiss = 0; CTotal = 0; FDrawn = 0; FTip = 0; FDisc = 0; FMiss = 0; FTotal = 0; Missing = @() }
+  foreach ($s in $Model.Sections) {
+    foreach ($i in $s.Items) {
+      $n = [int]$i.Number; $used = @{}
+      foreach ($ch in $i.Children) {
+        if ($ch.Kind -eq 'cond') {
+          $o.CTotal++
+          $hit = $null
+          for ($q = 0; $q -lt $conds.Count; $q++) { $x = $conds[$q]; if (-not $used.ContainsKey("c$q") -and $x.Step -contains $n -and $x.Keyword -ceq $ch.Keyword -and $x.Anchor -ceq $ch.Anchor) { $hit = $q; break } }
+          if ($null -ne $hit) { $used["c$hit"] = 1; $o.CDrawn++; if ($conds[$hit].Condition -ceq $ch.Condition) { $o.CVerbatim++ } }
+          elseif ($disc -contains $n) { $o.CDisc++ } else { $o.CMiss++; $o.Missing += "[{0:00}] $($ch.Keyword) @$($ch.Anchor)" -f $n }
+        } elseif ($ch.Head -ceq 'REGENERATE') {
+          $o.FTotal++
+          if (@($Chart.Cells | Where-Object { $_.Kind -eq 'step' -and $_.Nums -contains $n -and $_.TitleText.Contains("REGENERATE $($ch.Text)") }).Count) { $o.FTip++ }
+          elseif ($disc -contains $n) { $o.FDisc++ } else { $o.FMiss++; $o.Missing += "[{0:00}] REGENERATE" -f $n }
+        } else {
+          $o.FTotal++
+          $hit = $null
+          for ($q = 0; $q -lt $facets.Count; $q++) { $x = $facets[$q]; if (-not $used.ContainsKey("f$q") -and $x.Step -contains $n -and $x.Head -ceq $ch.Head -and $(if ($ch.Anchor) { $x.Anchor -ceq $ch.Anchor } else { $x.Text -ceq $ch.Text })) { $hit = $q; break } }
+          if ($null -ne $hit) { $used["f$hit"] = 1; $o.FDrawn++ }
+          elseif ($disc -contains $n) { $o.FDisc++ } else { $o.FMiss++; $o.Missing += "[{0:00}] $($ch.Head) @$($ch.Anchor)" -f $n }
+        }
+      }
+    }
+  }
+  [pscustomobject]$o
 }
 # the golden: OPERAT.NAME
 $ch = Measure-TraceChart $rt.Dot
@@ -1285,10 +1327,25 @@ $cv = Get-TraceChartCover $ch $rt.Steps
 $res.R5Cover = "$($cv.Drawn)/$($cv.Disclosed)/$($cv.Missing)|both $($cv.Both)|extra $($cv.Extra)"
 $tc = @(Get-TraceChartConds $ch)
 $textConds = @(foreach ($s in $T7.Sections) { foreach ($i in $s.Items) { foreach ($c in @($i.Children | Where-Object { $_.Kind -eq 'cond' })) { [pscustomobject]@{ N = $i.Number; Keyword = $c.Keyword; Condition = $c.Condition; Anchor = $c.Anchor } } } })
-$cDrawn = @($textConds | Where-Object { $k = $_; @($tc | Where-Object { $_.Keyword -ceq $k.Keyword -and $_.Anchor -ceq $k.Anchor }).Count })
-$res.R5Conds = "$($cDrawn.Count)/0/$($textConds.Count - $cDrawn.Count)"
-# A-R5-VERBATIM: a drawn guard row, its pieces rejoined with one space, equals the model's Condition exactly
-$res.R5Verbatim = "$(@($textConds | Where-Object { $k = $_; @($tc | Where-Object { $_.Keyword -ceq $k.Keyword -and $_.Anchor -ceq $k.Anchor -and $_.Condition -ceq $k.Condition }).Count }).Count)/$($textConds.Count)"
+# fix round 1 (I2): per STEP -- each condition under its own step, drawn / disclosed / missing all measured
+$cc1 = Get-TraceChartChildCheck $ch $T7
+$res.R5Conds = "$($cc1.CDrawn)/$($cc1.CDisc)/$($cc1.CMiss)"
+# A-R5-VERBATIM: the guard row under its step, its pieces rejoined with one space, equals the model's Condition exactly
+$res.R5Verbatim = "$($cc1.CVerbatim)/$($cc1.CTotal)"
+# facets the same way (spec 6): drawn / in the row's tooltip (REGENERATE) / disclosed / missing
+$res.R5Facets = "$($cc1.FDrawn)/$($cc1.FTip)/$($cc1.FDisc)/$($cc1.FMiss)"
+# ... and the check goes RED when a guard is drawn on the WRONG step: [11]'s UNLESS FSuppressEvents moved onto [13]
+$res.R5CondMut = $(try {
+  $Tw = Read-FormA $rt.Text
+  $all = @($Tw.Sections | ForEach-Object { $_.Items })
+  $s11 = @($all | Where-Object { $_.Number -eq 11 })[0]; $s13 = @($all | Where-Object { $_.Number -eq 13 })[0]
+  $mv = @($s11.Children | Where-Object { $_.Kind -eq 'cond' })[0]
+  [void]$s11.Children.Remove($mv); [void]$s13.Children.Add($mv)
+  $wp = Join-Path $work 'r5-cond-mut.dot'
+  [IO.File]::WriteAllText($wp, (ConvertTo-TraceChart $Tw $rt.AnchorPaths @{}).Dot, (New-Object Text.ASCIIEncoding))
+  $mc = Get-TraceChartChildCheck (Measure-TraceChart $wp) (Read-FormA $rt.Text)
+  "$($mc.CDrawn)/$($mc.CDisc)/$($mc.CMiss) $($mc.Missing -join ',')"
+} catch { "threw: $($_.Exception.Message)" })
 $res.R5NoQuote = @($tc | Where-Object { $_.Condition -match '^".*"$' }).Count
 # crossings: nodes titled `process boundary`, and the numbered CROSSES rows in them
 $xn = @($ch.Nodes | Where-Object { $_.Title -like 'process boundary @*' })
@@ -1328,7 +1385,28 @@ $gn = @(foreach ($e in ($gm7.MatchedBy -split ',')) {
 $res.R5GoldNodes = "$(@($gn | Where-Object { $_ -eq 'drawn' }).Count)/$(@($gn | Where-Object { $_ -eq 'disclosed' }).Count)/$((@($gn | Where-Object { $_ -clike 'missing*' -or $_ -clike '[?]*' })) -join ',')"
 $gg = @(foreach ($g in $inv.Guards) { $(if (@($tc | Where-Object { $_.Anchor -ceq "$($g.File):$($g.Line)" -and $_.Condition.Contains([string]$g.Word) }).Count) { 'drawn' } else { "missing:$($g.G)" }) })
 $res.R5GoldGuards = "$(@($gg | Where-Object { $_ -eq 'drawn' }).Count)//$((@($gg | Where-Object { $_ -like 'missing*' })) -join ',')"
-# the ALSO fold (owner answer 4: the golden shows all 9 ALSO rows; only an unusually long list folds) -- the SAME
+# fix round 1 (I1): the label of each edge INTO a crossing node -- the request's command, the response's whole
+# alternative set (it was `[41] rspError`: the first WITH word, the failure code on the success path)
+$xIds = @($xn | ForEach-Object { $_.Id })
+$res.R5CrossLabels = (@($ch.Edges | Where-Object { $xIds -contains $_.To } | ForEach-Object { if ($_.Attr -match 'label="([^"]*)"') { $Matches[1] } }) -join ' | ')
+# fix round 1 (5, spec 3.3): a call edge carries the line it is called from -- [12] DoAfterPostOperation -> SendDeltaOperation
+$res.R5CallFrom = (@($ch.Edges | Where-Object { $_.Attr -match 'label="\[12\][^"]*"' } | ForEach-Object { if ($_.Attr -match 'label="([^"]*)"') { $Matches[1] } }) -join ' | ')
+# fix round 1 (5, spec 5): a row whose leaf the indexes do NOT hold at one path stays unlinked, with the tooltip saying so --
+# the golden drawn with uDatasetsDef.pas taken out of the path map: every row on that leaf, no HREF, the tooltip, counted
+$apM = @{}; foreach ($k in $rt.AnchorPaths.Keys) { if ($k -ne 'uDatasetsDef.pas') { $apM[$k] = $rt.AnchorPaths[$k] } }
+$amb = ConvertTo-TraceChart $T7 $apM @{}
+$ambP = Join-Path $work 'r5-ambiguous.dot'; [IO.File]::WriteAllText($ambP, $amb.Dot, (New-Object Text.ASCIIEncoding))
+$ambC = @((Measure-TraceChart $ambP).Cells | Where-Object { $_.Text -match ' @uDatasetsDef\.pas:\d+( |$)' })
+$res.R5Ambiguous = "$($ambC.Count) rows|$(@($ambC | Where-Object { -not $_.Href -and $_.TitleText -ceq 'ambiguous file name -- the indexes hold uDatasetsDef.pas at zero or several paths; see trace.dlgraph' }).Count) unlinked with the tooltip|manifest $($amb.Manifest.Unlinked)"
+# fix round 1 (3): a step text past 5 wrapped lines is shortened in its BODY and keeps its grade (cutting a trailing
+# [inferred] off would read as a certain step)
+$lgT = New-Trace 'LG' 'a long graded step' 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
+[void](Add-TraceSection $lgT 'WRITE').Items.Add((New-TraceStep 'step' ('READS ' + ((1..60 | ForEach-Object { "Word$_" }) -join ' ')) 'X.pas:1' 'inferred' 'TX.R'))
+[void](Write-FormA $lgT)
+$lgP = Join-Path $work 'r5-shorten.dot'; [IO.File]::WriteAllText($lgP, (ConvertTo-TraceChart $lgT @{} @{}).Dot, (New-Object Text.ASCIIEncoding))
+$lgC = @((Measure-TraceChart $lgP).Cells | Where-Object { $_.Kind -eq 'step' })[0]
+$lgLines = ([regex]::Match([IO.File]::ReadAllText($lgP), '<TD PORT="p1"[^>]*>(.*?)</TD>').Groups[1].Value -split '<BR').Count
+$res.R5Shorten = "$($lgC.Text -creplace '^.* (\S+ \.\.\. \[inferred\] @X\.pas:1)$', '$1')|$lgLines lines|$(@((Measure-TraceChart $lgP).Cells | Where-Object { $_.Text -like '*label(s) shortened*' }).Count) legend row"# the ALSO fold (owner answer 4: the golden shows all 9 ALSO rows; only an unusually long list folds) -- the SAME
 # trace drawn with an ALSO cap of 6: 3 rows fold into ONE disclosure row, the Legend repeats it, the Manifest names it
 $af = ConvertTo-TraceChart $T7 $rt.AnchorPaths @{ Also = 6 }
 $afPath = Join-Path $work 'r5-also-fold.dot'
@@ -1338,14 +1416,14 @@ $afRows = @($afc.Cells | Where-Object { $_.Kind -eq 'disclosure' } | ForEach-Obj
 $res.R5AlsoFold = "$($afv.Drawn)/$($afv.Disclosed)/$($afv.Missing)|$(@($afv.DisclosedNums | Where-Object { $af.Manifest.Steps[[int]$_] -notlike 'disclosed:*' }).Count) not in the Manifest|$($afRows -join ' || ')"
 # the holdout MSCLIST.NUM, drawn by the same run
 $hc = Measure-TraceChart $rh.Dot; $hv = Get-TraceChartCover $hc $rh.Steps
-$hConds = @(foreach ($s in (Read-FormA $rh.Text).Sections) { foreach ($i in $s.Items) { foreach ($c in @($i.Children | Where-Object { $_.Kind -eq 'cond' })) { "$($c.Keyword)|$($c.Anchor)" } } })
-$htc = @(Get-TraceChartConds $hc | ForEach-Object { "$($_.Keyword)|$($_.Anchor)" })
-$res.R5Hold = "$($hv.Drawn + $hv.Disclosed)/$($hv.Missing)|conds $(@($hConds | Where-Object { $htc -contains $_ }).Count)/$($hConds.Count)|xing $(@($hc.Cells | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^\S+ CROSSES ' } | ForEach-Object { $_.Nums }).Count)|stops $(@($hc.Nodes | Where-Object { $_.Shape -eq 'note' }).Count)|lanes $((@('CLIENT', 'PIPE', 'SERVER', 'DATABASE') | ForEach-Object { $ln = $_; @($hc.Nodes | Where-Object { $_.Lane -eq $ln -and $_.Id -like 'n*' }).Count }) -join '/')"
+$hk = Get-TraceChartChildCheck $hc (Read-FormA $rh.Text)   # fix round 1 (I2): per step
+$res.R5Hold = "$($hv.Drawn + $hv.Disclosed)/$($hv.Missing)|conds $($hk.CDrawn)/$($hk.CDisc)/$($hk.CMiss) of $($hk.CTotal)|xing $(@($hc.Cells | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^\S+ CROSSES ' } | ForEach-Object { $_.Nums }).Count)|stops $(@($hc.Nodes | Where-Object { $_.Shape -eq 'note' }).Count)|lanes $((@('CLIENT', 'PIPE', 'SERVER', 'DATABASE') | ForEach-Object { $ln = $_; @($hc.Nodes | Where-Object { $_.Lane -eq $ln -and $_.Id -like 'n*' }).Count }) -join '/')"
 # A-R5-CALC: the calculated field -- its STOPS node and the DERIVED card of source-field rows
 $cc = Measure-TraceChart $rcF.Dot
 $dvn = @($cc.Nodes | Where-Object { $_.Title -like 'DERIVED*' })
 $ccv = Get-TraceChartCover $cc $rcF.Steps
-$res.R5Calc = "$(@($cc.Nodes | Where-Object { $_.Shape -eq 'note' }).Count)/$(@($dvn | ForEach-Object { $_.Cells } | Where-Object { $_.Kind -eq 'step' }).Count)|tooltip regenerate $(@([regex]::Matches($cc.Dot, 'TITLE="[^"]*REGENERATE ')).Count)|$($ccv.Drawn)/$($ccv.Disclosed)/$($ccv.Missing)"
+$ck5 = Get-TraceChartChildCheck $cc (Read-FormA $rcF.Text)
+$res.R5Calc = "$(@($cc.Nodes | Where-Object { $_.Shape -eq 'note' }).Count)/$(@($dvn | ForEach-Object { $_.Cells } | Where-Object { $_.Kind -eq 'step' }).Count)|tooltip regenerate $(@([regex]::Matches($cc.Dot, 'TITLE="[^"]*REGENERATE ')).Count)|$($ccv.Drawn)/$($ccv.Disclosed)/$($ccv.Missing)|facets $($ck5.FDrawn)/$($ck5.FTip)/$($ck5.FDisc)/$($ck5.FMiss)"
 # A-R5-SIZE: a synthetic 300-step trace (NO index) -- 150 routines of two steps each: the ladder engages, nothing is missing
 $sz = New-Trace 'SYN.SIZE' 'a synthetic trace of 300 steps' 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
 $szW = Add-TraceSection $sz 'WRITE'

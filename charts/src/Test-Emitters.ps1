@@ -2907,8 +2907,23 @@ Note 'round-trip: the chart ...'
 Step 'E-R5' {
   # every step drawn or disclosed, never both, together exactly 1..76; every condition drawn, verbatim, unquoted
   Chk 'A-R5-COVER'      $rt0.R5Cover '76/0/0|both 0|extra 0'
+  # fix round 1 (I2): checked PER STEP -- each condition against the guard rows under ITS step (it was a set test over
+  # every guard row, blind to a guard drawn on the wrong step), the disclosed count measured (it was a literal 0)
   Chk 'A-R5-CONDS'      $rt0.R5Conds '31/0/0'
   Chk 'A-R5-VERBATIM'   $rt0.R5Verbatim '31/31'
+  # facets the same way: drawn / in the row's tooltip (REGENERATE) / disclosed / missing
+  Chk 'A-R5-FACETS'     $rt0.R5Facets '19/0/0/0'
+  # ... and RED on a guard moved to another step: [11]'s UNLESS FSuppressEvents drawn under [13]
+  Chk 'A-R5-CONDMUT'    $rt0.R5CondMut '30/0/1 [11] UNLESS @Blueprint4.ViewModel.pas:3950'
+  # fix round 1 (I1): each edge into a crossing names what crosses -- the request's command, the response's WHOLE
+  # alternative set (it read `[41] rspError`, the first WITH word: the failure code on the success path)
+  Chk 'A-R5-CROSSLABEL' $rt0.R5CrossLabels '[14] cmdDelta | [41] rspError or rspOK | [46] cmdTableLoad | [64] rspData or rspError'
+  # fix round 1 (5): a call edge carries `from :<line>` (spec 3.3); a row on a leaf not held at one path stays unlinked
+  # with the "ambiguous file name" tooltip (spec 5) -- the golden drawn without uDatasetsDef.pas in the path map
+  Chk 'A-R5-CALLFROM'   $rt0.R5CallFrom '[12] from :3951'
+  Chk 'A-R5-AMBIGUOUS'  $rt0.R5Ambiguous '12 rows|12 unlinked with the tooltip|manifest 12'
+  # fix round 1 (3): a step text past 5 lines is cut in its BODY, its grade kept (synthetic, 60 words, [inferred])
+  Chk 'A-R5-SHORTEN'    $rt0.R5Shorten 'Word40 ... [inferred] @X.pas:1|5 lines|1 legend row'
   Chk 'A-R5-NOQUOTE'    $rt0.R5NoQuote 0
   # the golden's 17 nodes and 12 guards are DRAWN rows (not disclosures): matched/disclosed/missing
   Chk 'A-R5-GOLDNODES'  $rt0.R5GoldNodes '17/0/'
@@ -2931,9 +2946,11 @@ Step 'E-R5' {
   # owner answer 4: an ALSO cap of 6 on the same trace folds rows [74]-[76] into ONE disclosure row, repeated in the Legend
   Chk 'A-R5-ALSOFOLD'   $rt0.R5AlsoFold '73/3/0|0 not in the Manifest|+3 more routes not shown -- [74]-[76], full text in trace.dlgraph || +3 more routes not shown in ALSO -- [74]-[76], full text in trace.dlgraph'
   # the holdout MSCLIST.NUM: 103 steps drawn or disclosed, none missing; 35 of 35 conditions drawn; 4 CROSSES; 2 STOPS
-  Chk 'A-R5-HOLD'       $rt0.R5Hold '103/0|conds 35/35|xing 4|stops 2|lanes 7/2/13/3'
+  # RE-PINNED fix round 1 (I2): conditions per step, drawn/disclosed/missing of all 35 (was a set count, '35/35')
+  Chk 'A-R5-HOLD'       $rt0.R5Hold '103/0|conds 35/0/0 of 35|xing 4|stops 2|lanes 7/2/13/3'
   # the calculated field: its STOPS node and a DERIVED card of 18 rows, each REGENERATE in its row's tooltip; all 27 drawn
-  Chk 'A-R5-CALC'       $rt0.R5Calc '1/18|tooltip regenerate 18|27/0/0'
+  # RE-PINNED fix round 1 (I2): + its facets per step -- 2 drawn (the anchor's VIA at [01], the STOPS' VIA FtrNameString), 18 REGENERATE in tooltips
+  Chk 'A-R5-CALC'       $rt0.R5Calc '1/18|tooltip regenerate 18|27/0/0|facets 2/18/0/0'
   # a synthetic 300-step trace (150 routine cards): the ladder folds the cards with no protected row, missing 0, and the
   # Legend says the chart is above the 45-node cap and drawn anyway
   Chk 'A-R5-SIZE'       $rt0.R5Size 'cards|nodes 150|0/300/0|1 cap row'
@@ -3090,15 +3107,18 @@ Step 'RT-R5-STALE' {
 }
 # A-R5-DOTFAIL (owner answer 3): dot fails -> the text is still delivered, ChartError carries dot's own words, and no
 # chart output is left (no partial .svg). A stand-in dot.exe that prints an error and writes nothing; RT-N1's target
-# (one step) keeps it fast.
+# (one step) keeps it fast. Fix round 1 (4): the stand-in writes a PARTIAL .svg before it fails -- the half-made
+# picture a real dot can leave -- and the run must remove it (it is the .svg a bundle would otherwise show).
 Step 'RT-R5-DOTFAIL' {
   $dfDir = Join-Path $OutDir 'rt-r5-dotfail'
   New-Item -ItemType Directory -Force $dfDir | Out-Null
   $fake = Join-Path $dfDir 'fake-dot.cmd'
-  [IO.File]::WriteAllText($fake, "@echo off`r`necho fake dot: syntax error near line 1 1>&2`r`nexit /b 1`r`n", (New-Object Text.ASCIIEncoding))
+  # dot's arguments: -Tsvg -o <svg> ...; %3 is the svg path
+  [IO.File]::WriteAllText($fake, "@echo off`r`necho ^<svg partial^> > `"%~3`"`r`necho fake dot: syntax error near line 1 1>&2`r`nexit /b 1`r`n", (New-Object Text.ASCIIEncoding))
   $df = & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.cxGroupBox16' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $dfDir -Dot $fake 6>$null
   $left = @(Get-ChildItem $dfDir | Where-Object { $_.Extension -in '.svg', '.dot', '.png', '.pdf', '.plain' }).Count
-  Chk 'A-R5-DOTFAIL' "$(Test-Path $df.Trace)|$($df.Steps)|$($df.ChartError -like '*dot produced no SVG*fake dot: syntax error*')|$([bool]$df.Svg)|$left" 'True|1|True|False|0'
+  # the svg existed when dot exited (Invoke-DotRun's "dot exited 1"), so the removal is what proves no partial picture
+  Chk 'A-R5-DOTFAIL' "$(Test-Path $df.Trace)|$($df.Steps)|$($df.ChartError -like '*dot exited 1*fake dot: syntax error*')|$([bool]$df.Svg)|$left" 'True|1|True|False|0'
 }
 # the verb through the bundler: dispatch, the text AND its chart (R5; no svg before), -ServerDbPath / -SqlDbPath / -Depth in the regenerate command
 # 6>$null: the emitter prints the whole trace (Write-Host), and its else notes quote 'OPERAT %s FAILED'
