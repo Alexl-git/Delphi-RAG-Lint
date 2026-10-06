@@ -538,12 +538,21 @@ type
       /// <param name="InfoTip">Set to the messages; left as is when the block has none.</param>
       procedure RulesInfoTip(Sender: TObject; Item: TListItem; var InfoTip: string);
       /// <summary>FGrid.OnMouseMove: the hint is the validation messages on the
-      /// hovered row's #link, '' when it has none.</summary>
+      /// hovered cell's mark nodes (RowMarkNodes -- the ones GridDrawCell paints), ''
+      /// when they have none.</summary>
       /// <param name="Sender">FGrid; unused.</param>
       /// <param name="Shift">Unused.</param>
       /// <param name="X">Client x.</param>
       /// <param name="Y">Client y.</param>
       procedure GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+      /// <summary>The rule nodes whose marks a grid cell shows: GridMarkNodes over the
+      /// active block for the row's From. Shared by GridDrawCell and GridMouseMove, so
+      /// the hint names exactly what the cell paints (the G[count] link's marks in the
+      /// Glyph column included).</summary>
+      /// <param name="ARow">A grid row; 0 (the header) or less gives [].</param>
+      /// <param name="ACol">The grid column (GRID_GLYPH_COL adds the count link).</param>
+      /// <returns>See GridMarkNodes; [] when the row's From has no link.</returns>
+      function RowMarkNodes(ARow, ACol: Integer): TArray<TRuleNode>;
       /// <summary><!-- drag-lint:auto sum -->Open the curation window on the file
       /// currently loaded here. Curation moves VERBATIM block text and deliberately does
       /// NOT go through this form's canonical re-emitter, so a block that was merely
@@ -5922,25 +5931,13 @@ begin
   var CellText: string:= FGrid.Cells[ACol, ARow];
   if (ARow > 0) and (ACol in [GRID_CAST_COL, GRID_GLYPH_COL]) then
   begin
-    var RowFrom: string:= PathOfGridCell(FGrid.Cells[0, ARow]);
-    var Link: TRuleNode:= FindLinkForFrom(RowFrom);
     var E: Integer:= 0;
     var W: Integer:= 0;
-    var HasCountLink: Boolean:= False;
-    if Link <> nil then
-    begin
-      var MarkNodes: TArray<TRuleNode>:= [Link];
-      // The G[count] link is no grid row of its own (ruling R4): its marks show in the
-      // glyph column of the row it shares a From with.
-      if ACol = GRID_GLYPH_COL then
-      begin
-        var CountLink: TRuleNode:= FindCountLink(ActiveLinks, RowFrom, Link);
-        HasCountLink:= CountLink <> nil;
-        if HasCountLink then
-          MarkNodes:= MarkNodes + [CountLink];
-      end;
-      MarksText(MarkNodes, E, W);
-    end;
+    // The G[count] link is no grid row of its own (ruling R4): RowMarkNodes adds it in
+    // the glyph column of the row it shares a From with.
+    var MarkNodes: TArray<TRuleNode>:= RowMarkNodes(ARow, ACol);
+    var HasCountLink: Boolean:= Length(MarkNodes) > 1;
+    MarksText(MarkNodes, E, W);
     // An empty glyph cell gets no bare prefix (the cast column already carries the
     // link's mark) -- unless the marks are the hidden count link's, shown nowhere else.
     if (ACol = GRID_GLYPH_COL) and (CellText = '') and not HasCountLink then
@@ -7013,9 +7010,12 @@ begin
       Exit;
     gerSet:
     begin
+      // A mark about the OLD expression must not survive the edit; an OK that left the
+      // expression as it was keeps the marks the last validation put there.
+      if Link.GlyphExpr <> Opts.Expr then
+        Link.Marks:= nil;
       Link.GlyphExpr:= Opts.Expr;
       Link.Dirty    := True;
-      Link.Marks    := nil; // a mark about the old expression must not survive the edit
       // CountLinkStepFor never AUTO-adds a count link beside an existing one, nor when
       // the link itself became G[count]; a count link the user writes is the user's.
       var LStep: TCountLinkStep:= CountLinkStepFor(Existing, Opts.Expr, AddCount);
@@ -7194,19 +7194,21 @@ var
   Tip : string ;
 begin
   FGrid.MouseToCell(X, Y, ACol, ARow);
-  Tip:= '';
-  if ARow > 0 then
-  begin
-    var Link: TRuleNode:= FindLinkForFrom(PathOfGridCell(FGrid.Cells[0, ARow]));
-    if Link <> nil then
-      Tip:= MarksText([Link], E, W);
-  end;
+  Tip:= MarksText(RowMarkNodes(ARow, ACol), E, W);
   if Tip <> FGrid.Hint then
   begin
     FGrid.Hint:= Tip;
     Application.CancelHint; // re-show for the new row, not the last one's text
   end;
 end; // procedure
+
+function TConvRulesForm.RowMarkNodes(ARow, ACol: Integer): TArray<TRuleNode>;
+begin
+  if ARow <= 0 then
+    Exit(nil);
+  var RowFrom: string:= PathOfGridCell(FGrid.Cells[0, ARow]);
+  Result:= GridMarkNodes(ActiveLinks, FindLinkForFrom(RowFrom), RowFrom, ACol = GRID_GLYPH_COL);
+end; // function
 
 { Open the curation window on the file currently loaded here. Curation moves
   VERBATIM block text and deliberately does NOT go through this form's canonical

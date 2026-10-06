@@ -178,12 +178,25 @@ function GlyphTodoCount(const AOutcomes: TArray<TGlyphOutcome>): Integer;
 /// <returns>'' when none, else the spec E13 suffix -- N stitched, M slots dropped by rule, K to-do outcomes (exact text pinned by the glyph.note.suffix test).</returns>
 function GlyphNoteSuffix(const AOutcomes: TArray<TGlyphOutcome>): string;
 
-/// <summary>One tab-separated run-report line for an outcome.</summary>
-/// <param name="AUnitPas">The unit's path as the report names it.</param>
+/// <summary>The Note cell of an outcome's run-report line (spec E13 as amended by the
+/// final-review ruling: one 8-column report shape, the glyph details in the Note).</summary>
 /// <param name="AOutcome">The outcome.</param>
-/// <returns>glyph TAB unit TAB instance.from -&gt; to TAB kind TAB N=n TAB alternative TAB
-/// 'dropped a,b' or '-' TAB message.</returns>
-function GlyphReportLine(const AUnitPas: string; const AOutcome: TGlyphOutcome): string;
+/// <returns>'instance.from -&gt; to: kind, N=n' then ', alternative' when there is one,
+/// ', dropped a,b' when slots were dropped, and ' -- message' when there is a message
+/// (exact text pinned by the glyph.report.note tests).</returns>
+function GlyphReportNote(const AOutcome: TGlyphOutcome): string;
+
+/// <summary>The rule nodes whose validation marks a grid cell of one From row shows --
+/// the ONE answer the cell painter and the grid hint both use.</summary>
+/// <param name="ABlockLinks">The ACTIVE block's links (LinksForBlock).</param>
+/// <param name="ALink">The row's link (the first link per From, as the grid shows it);
+/// nil = the row has none.</param>
+/// <param name="AFromPath">The row's bare From path; compared case-insensitively.</param>
+/// <param name="AGlyphColumn">The cell is the Glyph column.</param>
+/// <returns>[] when ALink is nil; else [ALink], plus -- in the Glyph column only -- the
+/// From's G[count] link other than ALink: that link is no grid row of its own (ruling
+/// R4), so its marks show in the Glyph cell of the row it shares a From with.</returns>
+function GridMarkNodes(const ABlockLinks: TArray<TRuleNode>; ALink: TRuleNode; const AFromPath: string; AGlyphColumn: Boolean): TArray<TRuleNode>;
 
 /// <summary>The red run summary (spec E14).</summary>
 /// <param name="ATodoUnits">Units with at least one to-do outcome.</param>
@@ -429,7 +442,7 @@ begin
   Result:= Format('; glyphs: %d stitched, %d slot(s) dropped by rule, %d TODO(s)', [Stitched, Dropped, GlyphTodoCount(AOutcomes)]);
 end;
 
-function GlyphReportLine(const AUnitPas: string; const AOutcome: TGlyphOutcome): string;
+function GlyphReportNote(const AOutcome: TGlyphOutcome): string;
 var
   Slots: string;
   S    : Integer;
@@ -437,9 +450,28 @@ begin
   Slots:= '';
   for S in AOutcome.DroppedSlots do
     Slots:= Slots + (if Slots = '' then '' else ',') + IntToStr(S);
-  Slots:= if Slots = '' then '-' else 'dropped ' + Slots;
-  Result:= string.Join(#9, ['glyph', AUnitPas, Format('%s.%s -> %s', [AOutcome.Instance, AOutcome.FromPath, AOutcome.ToPath]),
-    AOutcome.Kind, 'N=' + IntToStr(AOutcome.SourceN), AOutcome.Alternative, Slots, AOutcome.Message]);
+  Result:= Format('%s.%s -> %s: %s, N=%d', [AOutcome.Instance, AOutcome.FromPath, AOutcome.ToPath, AOutcome.Kind, AOutcome.SourceN]);
+  if AOutcome.Alternative <> '' then
+    Result:= Result + ', ' + AOutcome.Alternative;
+  if Slots <> '' then
+    Result:= Result + ', dropped ' + Slots;
+  if AOutcome.Message <> '' then
+    Result:= Result + ' -- ' + AOutcome.Message;
+end;
+
+function GridMarkNodes(const ABlockLinks: TArray<TRuleNode>; ALink: TRuleNode; const AFromPath: string; AGlyphColumn: Boolean): TArray<TRuleNode>;
+var
+  CountLink: TRuleNode;
+begin
+  if ALink = nil then
+    Exit(nil);
+  Result:= [ALink];
+  if AGlyphColumn then
+  begin
+    CountLink:= FindCountLink(ABlockLinks, AFromPath, ALink);
+    if CountLink <> nil then
+      Result:= Result + [CountLink];
+  end;
 end;
 
 function GlyphRunSummary(ATodoUnits: Integer): string;

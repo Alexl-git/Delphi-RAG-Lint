@@ -10198,6 +10198,8 @@ const
   UNITS_SUFFIX  = '  (unit rules: engine support pending)';
   MIXED_SUFFIX  = '  (unit rules not applied: engine)';
   TODO_UNITS    = 2;
+  GLYPH_LINES   = 2;
+  REPORT_COLS_GLYPH = 8; // the run report's column count (Book .. Note)
   RESTORE_LEAD  = 'RESTORE FAILED for A.pas, B.pas -- may be half-converted; restore by hand from the backups its row names. ';
 var
   E   : TBookEntry;
@@ -10277,6 +10279,27 @@ begin
   Check('glyph.tab.lead.restore.only', S = RESTORE_LEAD + 'Converted 1 of 2.', S);
   S:= RunStatusLead([], '', 'Converted 1 of 2.');
   Check('glyph.tab.lead.body.only', S = 'Converted 1 of 2.', S);
+
+  // Final-review ruling (E13 amended): ONE report shape -- each glyph line has the
+  // report's 8 columns, Status `glyph`, the outcome in the Note; converted rows only.
+  Todo.Instance:= 'Btn1';
+  Todo.FromPath:= 'Glyph';
+  Todo.ToPath  := 'OptionsImage.Glyph';
+  Todo.Message := 'matched no alternative';
+  var GRow: TConvertRow:= Row('u\A.pas', csConverted, [Done, Todo]);
+  GRow.Book:= 'B.rules';
+  var GLines: TArray<string>:= GlyphReportLines(GRow);
+  var GCols : TArray<string>:= if Length(GLines) = GLYPH_LINES then GLines[1].Split([#9]) else nil;
+  Check('glyph.report.lines.count', Length(GLines) = GLYPH_LINES, IntToStr(Length(GLines)));
+  Check('glyph.report.lines.shape', Length(GCols) = REPORT_COLS_GLYPH, IntToStr(Length(GCols)));
+  Check('glyph.report.status.text', REPORT_STATUS_GLYPH = 'glyph', REPORT_STATUS_GLYPH);
+  if Length(GCols) = REPORT_COLS_GLYPH then
+    Check('glyph.report.lines.text', GLines[1] = string.Join(#9, ['B.rules', 'u\A.pas', REPORT_STATUS_GLYPH, '', '', '', '', GlyphReportNote(Todo)]), GLines[1]);
+  GRow.Status:= csRolledBack;
+  Check('glyph.report.lines.converted.only', Length(GlyphReportLines(GRow)) = 0);
+  GRow.Status:= csConverted;
+  GRow.Apply.Glyphs:= nil;
+  Check('glyph.report.lines.none', Length(GlyphReportLines(GRow)) = 0);
 end;
 
 { C10 E7/E8/E12-E14: the editor's own glyph decisions -- the live check goes through the
@@ -10373,10 +10396,14 @@ begin
   Check('glyph.todo.unknown.kind', GlyphTodoCount([O, P, Default(TGlyphOutcome)]) = 2, 'an unknown / empty kind is a TODO');
   Check('glyph.note.suffix', GlyphNoteSuffix([O, P]) = '; glyphs: 1 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', GlyphNoteSuffix([O, P]));
   Check('glyph.note.none', GlyphNoteSuffix(nil) = '');
-  Line:= GlyphReportLine('x\U.pas', O);
-  Check('glyph.report.line', Line = 'glyph'#9'x\U.pas'#9'Btn1.Picture -> OptionsImage.Glyph'#9'glyph-stitched'#9'N=5'#9'G[1/5]G[2/5]G[3/5]G[4/5]'#9'dropped 5'#9'slot 5 dropped by rule line 52', Line);
-  Line:= GlyphReportLine('U.pas', P);
-  Check('glyph.report.line.todo', Pos(#9'glyph-no-alternative'#9'N=2'#9#9'-'#9, Line) > 0, Line);
+  Line:= GlyphReportNote(O);
+  Check('glyph.report.note', Line = 'Btn1.Picture -> OptionsImage.Glyph: glyph-stitched, N=5, G[1/5]G[2/5]G[3/5]G[4/5], dropped 5 -- slot 5 dropped by rule line 52', Line);
+  Line:= GlyphReportNote(P);
+  Check('glyph.report.note.todo', Line = 'Btn2.Picture -> OptionsImage.Glyph: glyph-no-alternative, N=2 -- N=2 matched no alternative; TODO written', Line);
+  P.Message:= '';
+  Line:= GlyphReportNote(P);
+  Check('glyph.report.note.no.message', Line = 'Btn2.Picture -> OptionsImage.Glyph: glyph-no-alternative, N=2', Line);
+  Check('glyph.report.note.no.tab', Pos(#9, GlyphReportNote(O)) = 0, 'the note is ONE report cell');
   Check('glyph.summary', GlyphRunSummary(2) = '2 unit(s) have glyph TODOs -- each one''s implementation section starts with the TODO line; see the report', GlyphRunSummary(2));
   Check('glyph.summary.none', GlyphRunSummary(0) = '');
 end;
@@ -10420,6 +10447,42 @@ begin
   end;
 end;
 
+{ Final review Minor 1: the grid's cell painter and its hint ask ONE routine which rule
+  nodes' marks a cell shows -- the row's link, plus in the Glyph column the From's
+  G[count] link (no grid row of its own, ruling R4) -- so the hint can never name less
+  than the cell paints. }
+procedure TestGlyphGridMarkNodes;
+const
+  BLOCK =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  IDX_COUNT   = 1;
+  IDX_CAPTION = 2;
+  WITH_COUNT  = 2;
+var
+  Book: TRuleBook;
+  L   : TArray<TRuleNode>;
+  R   : TArray<TRuleNode>;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.marks.no.link', Length(GridMarkNodes(L, nil, 'Picture', True)) = 0);
+    R:= GridMarkNodes(L, L[0], 'picture', True);
+    Check('glyph.marks.glyph.col.adds.count.link', (Length(R) = WITH_COUNT) and (R[0] = L[0]) and (R[1] = L[IDX_COUNT]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[0], 'Picture', False);
+    Check('glyph.marks.other.col.link.only', (Length(R) = 1) and (R[0] = L[0]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[IDX_COUNT], 'Picture', True);
+    Check('glyph.marks.count.row.once', (Length(R) = 1) and (R[0] = L[IDX_COUNT]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[IDX_CAPTION], 'Caption', True);
+    Check('glyph.marks.no.count.link', (Length(R) = 1) and (R[0] = L[IDX_CAPTION]), IntToStr(Length(R)));
+  finally
+    Book.Free;
+  end;
+end;
 { C10 Task 5 fix 1: the dialog's G[count] rule must not count the link being EDITED
   as its own image link; only a count link with NO image link left is an orphan.
   Fix 2: the editor never refuses what the engine accepts -- several G[count] links
@@ -10868,6 +10931,7 @@ begin
     TestGlyphDecisions;
     TestGlyphAssignGuard;
     TestGlyphCountLinkEdit;
+    TestGlyphGridMarkNodes;
     TestGlyphCastLibArgs;
     TestGlyphApplyParse;
     TestGlyphRunner;

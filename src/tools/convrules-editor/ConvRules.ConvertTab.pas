@@ -1134,6 +1134,22 @@ begin
         Exit;
       Break;
     end;
+  // The save may have changed what a checked book IS (a G-link just added): classify
+  // the checked books afresh from disk, so ShowBooks greys one the engine cannot run
+  // yet instead of handing it to the run. A checked book that cannot be read stops the
+  // Convert with the reason, as RefreshBooks would not list it.
+  for var I: Integer:= 0 to High(FEntries) do
+    if FEntries[I].Checked then
+      try
+        FEntries[I]:= ClassifiedEntry(FEntries[I], TFile.ReadAllText(FEntries[I].Path));
+      except
+        on E: Exception do
+        begin
+          FHost.SetStatus(Format('Convert refused: rule book %s could not be read: %s', [ExtractFileName(FEntries[I].Path), E.Message]), True);
+          Exit;
+        end;
+      end; // try
+  ShowBooks;
   // Read AFTER that prompt: OLE delivers drops inside its modal loop too.
   Units:= FSources.Items.ToStringArray;
   if not FEngineProbe.ListIndexedFiles([FHost.GetProjectDb()], Idx, Err) then
@@ -1280,11 +1296,9 @@ begin
       // C8 E10: one line per instance the engine says the converted unit left (unfiltered, ruling M4).
       for var LLine: string in InheritedReportLines(LRow, FRunInheritedOk, FRunRetypeOk) do
         LLines.Add(LLine);
-      // Converted rows only: a rolled-back row's to-do markers were restored away
-      // (the same rule as GlyphTodoUnitCount).
-      if LRow.Status = csConverted then
-        for var LG: TGlyphOutcome in LRow.Apply.Glyphs do
-          LLines.Add(GlyphReportLine(LRow.UnitPas, LG));
+      // C10 E13: one 8-column line per glyph outcome, converted rows only.
+      for var LLine: string in GlyphReportLines(LRow) do
+        LLines.Add(LLine);
     end;
     for var LUnit: string in ANotReached do
       LLines.Add(string.Join(#9, ['', LUnit, STATUS_NOT_REACHED, '', '', '', '', '']));
@@ -1385,7 +1399,10 @@ begin
     Msg:= Msg + ' Inherited instances could not be re-checked: ' + FInheritError;
   // Re-harvest the converted code so the Unit Rules MISSING list is current.
   FHost.FeedHarvest(AJob.Units);
-  FHost.SetStatus(Msg, (LGlyphSummary <> '') or (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '') or (LIndexErr <> '') or (FInheritError <> ''));
+  // Red when the run went wrong, a re-read after it failed (C8), or units hold glyph to-dos (C10).
+  var LRunProblem : Boolean:= (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
+  var LReadProblem: Boolean:= (LIndexErr <> '') or (FInheritError <> '');
+  FHost.SetStatus(Msg, LRunProblem or LReadProblem or (LGlyphSummary <> ''));
 end;
 
 end.
