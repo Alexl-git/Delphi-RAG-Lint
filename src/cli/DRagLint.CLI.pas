@@ -16049,6 +16049,13 @@ begin
         still stream or use an instance it converts (apply/1 descendants[],
         items[] kind descendant-not-converted) -- a warning, never a refusal. }
       JCap.AddPair('descendant_warnings', TJSONBool.Create(True));
+      { 1.26.0 (C8 N2 / N2a; name agreed with the converter): an inherited /
+        inline instance whose declaring ancestor already has the To type is
+        RETYPED, its block and its code access sites converted, and a field a
+        converted ancestor declares is followed in code -- apply/1 inherited[]
+        gains `action` retyped | code | skipped, items[] kind
+        inherited-instance-retyped. }
+      JCap.AddPair('inherited_retype', TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -24811,6 +24818,7 @@ begin
       JI.AddPair('ancestor_unit' , Inh.AncestorUnit);
       JI.AddPair('ancestor_state', Inh.AncestorState);
       JI.AddPair('reason'        , Inh.Reason);
+      JI.AddPair('action'        , Inh.Action); { 1.26.0 (C8 N2): retyped | code | skipped }
       JInh.AddElement(JI);
     end;
     JRoot.AddPair('inherited', JInh);
@@ -24857,9 +24865,11 @@ end; // procedure
   book with no unit rules is 'applied', so its old errors stand -- unless the
   .dfm holds inherited / inline instances of a From type (AHasInherited, C8
   N1): those are skipped and reported, so a .dfm with no OTHER instance is
-  'skipped-no-instances' and converts nothing rather than failing. }
+  'skipped-no-instances' and converts nothing rather than failing -- unless
+  one of them is retyped or a converted ancestor's field is used in code
+  (AHasRetype, C8 N2 / N2a, 1.26.0): then BuildApplyPlan runs, 'applied'. }
 function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
-  const AOnly: TArray<string>; AHasInherited: Boolean): string;
+  const AOnly: TArray<string>; AHasInherited, AHasRetype: Boolean): string;
 var
   R         : TConversionRule;
   HasConvert: Boolean;
@@ -24873,7 +24883,8 @@ begin
     Result:= 'skipped-no-dfm'
   else if not HasConvert then
     Result:= 'skipped-no-convert-rules'
-  else if Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0 then
+  else if (Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0) and
+          not AHasRetype then
     Result:= 'skipped-no-instances';
 end;
 
@@ -25219,6 +25230,34 @@ var
       Result:= BookBuilt + (Trees.ClassesBuilt - UnitStart) - ValHere;
     end;
 
+    { C8 N2 / N2a: an inherited[] entry this run converts -- retyped or code }
+    function HasRetype: Boolean;
+    begin
+      for var Inh: TInheritedInstance in JCtx.InheritedInsts do
+        if Inh.Action <> INH_ACTION_SKIPPED then Exit(True);
+      Result:= False;
+    end;
+
+    { C8 N2a: a --only name that names no .dfm object but a code-only entry
+      is MATCHED -- the split is redone in --only order }
+    procedure MatchCodeOnlyNames;
+    var
+      Matched, Unmatched: TArray<string>;
+    begin
+      Matched  := nil;
+      Unmatched:= nil;
+      for var N: string in AArgs.OnlySections do
+      begin
+        var IsCode: Boolean:= False;
+        for var Inh: TInheritedInstance in JCtx.InheritedInsts do
+          if (Inh.Action = INH_ACTION_CODE) and SameText(Inh.Name, N) then IsCode:= True;
+        if IsCode or MatchText(N, JCtx.OnlyMatched) then Matched:= Matched + [N]
+        else Unmatched:= Unmatched + [N];
+      end;
+      JCtx.OnlyMatched  := Matched;
+      JCtx.OnlyUnmatched:= Unmatched;
+    end;
+
   begin
     UnitStart:= Trees.ClassesBuilt;
     ValHere  := 0;
@@ -25238,8 +25277,6 @@ var
     if Length(AArgs.OnlySections) > 0 then
       SplitOnlyNames(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
         Rules, AArgs.OnlySections, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
-    if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
-      Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
     { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
       #convert blocks have nothing to locate. A book with #unuse / #use /
       #useswap still has the unit's uses clauses to change, so it runs them and
@@ -25254,6 +25291,14 @@ var
       instances, code and unit rules convert. R26 still counts them as left
       unconverted, so a #unuse that would break them refuses the unit. }
     JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules, AArgs.OnlySections);
+    { 1.26.0 (C8 N2a): fields a converted ancestor declares that this unit's
+      code uses with no .dfm block -- inherited[] action 'code'. A --only name
+      that names one counts as matched. }
+    JCtx.InheritedInsts:= JCtx.InheritedInsts +
+      FindInheritedCodeUses(Trees, UnitPas, Rules, AArgs.OnlySections, JCtx.InheritedInsts);
+    if Length(JCtx.OnlyUnmatched) > 0 then MatchCodeOnlyNames;
+    if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
+      Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
     { EVERY block is validated against its OWN From/To classes (1.20.6, Task 2
       and T2b) -- driven from the rules file's own #convert headers rather than
       --from/--to (convert-apply has neither). It used to take the first block's
@@ -25340,11 +25385,11 @@ var
       BuildApplyPlan runs the whole book (its unit rules folded in). A book with
       no unit rules takes the old path unchanged, errors included. }
     JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections,
-      Length(JCtx.InheritedInsts) > 0);
+      Length(JCtx.InheritedInsts) > 0, HasRetype);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     if JCtx.ComponentPart = 'applied' then
       PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
-        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
+        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
     else
       PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections);
     JCtx.ClassesBuilt:= UnitClassesBuilt;
