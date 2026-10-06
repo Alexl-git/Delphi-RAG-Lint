@@ -114,11 +114,12 @@ Write-Ascii (Join-Path $g 'docs\wiki\Home.md') "# stub`n"
 $wikiWork = Join-Path $WorkDir 'wiki-work'
 $noRemote = Join-Path $WorkDir 'no-such-wiki-repo.git'   # LOCAL and absent: a clone can only fail, never reach a network
 $packVer = "zz-guard-$PID"
+$packRel = "C:\TEMP\rel-zz-guard-$PID"   # pack-lint-release.ps1 stages into C:\TEMP\rel-<Version>; $PID kept on this line so run_scratch_dirs_are_per_run.ps1 sees it is per run
 Write-Ascii (Join-Path $g 'fail-gate') "x`n"
 $o = & pwsh -NoProfile -File (Join-Path $g 'tools\publish-wiki.ps1') -Repo $noRemote -Work $wikiWork 2>&1 | Out-String
 Check 'publish-wiki.ps1: a stale gate refuses, before any clone' (($LASTEXITCODE -eq 1) -and ($o -match 'generated pages are not current') -and ($o -notmatch 'cloning') -and -not (Test-Path -LiteralPath $wikiWork)) "exit=$LASTEXITCODE"
 $o = & pwsh -NoProfile -File (Join-Path $g 'build\pack-lint-release.ps1') -Version $packVer -SkipBuild 2>&1 | Out-String
-Check 'pack-lint-release.ps1: a stale gate refuses, before anything is staged' (($LASTEXITCODE -eq 1) -and ($o -match 'PACK REFUSED') -and -not (Test-Path -LiteralPath "C:\TEMP\rel-$packVer")) "exit=$LASTEXITCODE"
+Check 'pack-lint-release.ps1: a stale gate refuses, before anything is staged' (($LASTEXITCODE -eq 1) -and ($o -match 'PACK REFUSED') -and -not (Test-Path -LiteralPath $packRel)) "exit=$LASTEXITCODE"
 Remove-Item -LiteralPath (Join-Path $g 'fail-gate') -Force
 $o = & pwsh -NoProfile -File (Join-Path $g 'tools\publish-wiki.ps1') -Repo $noRemote -Work $wikiWork 2>&1 | Out-String
 Check 'POSITIVE CONTROL: publish-wiki.ps1 passes a current gate through to the clone' (($o -match 'cloning the wiki repo') -and ($o -notmatch 'generated pages are not current')) "exit=$LASTEXITCODE"
