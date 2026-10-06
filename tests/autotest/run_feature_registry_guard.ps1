@@ -18,9 +18,12 @@
   importer's count must equal REPORT_QUESTION_COUNT and the ValidateSet.
   Also: an entry outside seed-backlog.json with no intro must fail A (the
   phase-in does not leak); an ide-context surface missing from its host's
-  context menu must fail C; an injected Structure-form context item must fail B.
-  IDE captions are matched by LEAF only (spec 18 v1); ide-context surfaces are
-  matched against their own host's context menu, not the main menu.
+  context menu must fail C; an injected Structure-form context item must fail B;
+  a caption that merely STARTS with a short registered key ('Refresh Zz Probe')
+  must fail B, and an entry leaf that merely prefixes a live caption must fail C.
+  IDE captions are matched by LEAF only (spec 18 v1), exactly or by a prefix of
+  >= 12 characters (docs-sync check 5's looser rule is for prose, not here);
+  ide-context surfaces are matched against their own host's context menu.
 
   Parameters:
     -Repo     repo root (default: two levels above this script)
@@ -66,14 +69,23 @@ $noIntroEntry = [ordered]@{ id = 'zz-no-intro'; title = 'No intro entry'; group 
 $ghostContext = [ordered]@{ id = 'zz-ghost-context'; title = 'Ghost context entry'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = $live.Versions.Product
   summary = 'Injected by the guard to prove the context-menu check can fail'; intro = 'Control.'; wikiPage = 'Home'; surfaces = @([ordered]@{ type = 'ide-context'; host = 'Structure form'; caption = 'Zz Ghost Context Item' }); audience = 'both'
   lastVerified = [ordered]@{ date = (Get-Date -Format 'yyyy-MM-dd'); by = 'guard'; build = $live.Versions.Product } }
+# Caption matching is exact, or a prefix only when the shorter key is >= 12
+# characters: a short registered key ('refresh', 'about') must not cover every
+# caption that starts with it (B), and a short entry leaf must not match a long
+# live caption (C). 'Uses Au' is a 7-character prefix of the live 'Uses Audit ...'.
+$shortLeaf = [ordered]@{ id = 'zz-short-leaf'; title = 'Short leaf entry'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = $live.Versions.Product
+  summary = 'Injected by the guard to prove a short leaf is not a prefix match'; intro = 'Control.'; wikiPage = 'Home'; surfaces = @([ordered]@{ type = 'ide-menu'; path = 'drag-lint > Uses Au' }); audience = 'both'
+  lastVerified = [ordered]@{ date = (Get-Date -Format 'yyyy-MM-dd'); by = 'guard'; build = $live.Versions.Product } }
 $guid = [Guid]::NewGuid().ToString('N').Substring(0, 8)
-$ctl = Invoke-RegistryCheck -Paths $p -Level Full -Live $live -SkipGenerated -InjectEntries @($ghostEntry, $noIntroEntry, $ghostContext) -InjectHelpVerbs @("zz-not-a-verb-$guid") -InjectCaptions @('Zz Not A Real Menu Item') -InjectContextCaptions @('Zz Not A Context Item')
+$ctl = Invoke-RegistryCheck -Paths $p -Level Full -Live $live -SkipGenerated -InjectEntries @($ghostEntry, $noIntroEntry, $ghostContext, $shortLeaf) -InjectHelpVerbs @("zz-not-a-verb-$guid") -InjectCaptions @('Zz Not A Real Menu Item', 'Refresh Zz Probe') -InjectContextCaptions @('Zz Not A Context Item')
 Control 'an entry whose wikiPage does not exist is reported (C/A)' (@($ctl.Failures | Where-Object { $_ -like '*Zz-No-Such-Page*' }).Count -gt 0)
 Control 'an entry outside the seed backlog with no intro is reported (A)' (@($ctl.Failures | Where-Object { $_ -like 'A: zz-no-intro.json: intro is required*' }).Count -gt 0)
 Control 'an ide-context surface absent from its host menu is reported (C)' (@($ctl.Failures | Where-Object { $_ -like 'C: zz-ghost-context: ide-context*Zz Ghost Context Item*' }).Count -gt 0)
 Control 'an unregistered context-menu item is reported (B)' (@($ctl.Failures | Where-Object { $_ -like 'B: *Zz Not A Context Item*' }).Count -gt 0)
 Control 'an unregistered --help verb is reported with a skeleton (B)' (@($ctl.Failures | Where-Object { $_ -like "B: *zz-not-a-verb-$guid*" -and $_ -like '*"id":*' }).Count -gt 0)
 Control 'an unregistered caption is reported (B)' (@($ctl.Failures | Where-Object { $_ -like 'B: *Zz Not A Real Menu Item*' }).Count -gt 0)
+Control 'a caption that only starts with a short registered key is reported (B)' (@($ctl.Failures | Where-Object { $_ -like "B: *unregistered: 'Refresh Zz Probe'*" }).Count -gt 0)
+Control 'a short entry leaf that only prefixes a live caption is reported (C)' (@($ctl.Failures | Where-Object { $_ -like "C: zz-short-leaf: ide-menu 'drag-lint > Uses Au'*" }).Count -gt 0)
 [void](Invoke-RegistryGenerate -Paths $p -OutDir $WorkDir)
 $fp = Join-Path $WorkDir 'docs\wiki\Quick-Help.md'
 $before = [IO.File]::ReadAllText($fp)

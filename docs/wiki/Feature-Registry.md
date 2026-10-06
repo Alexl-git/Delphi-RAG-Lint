@@ -54,9 +54,9 @@ the same; the two must agree.
 | `update` | `-Id <id> -Set "field=value ;; field2=value2"` -- JSON for arrays and objects (`aliases=["a","b"]`); `field=` with no value removes the field |
 | `find` | `-Text <text>` [`-IncludeChildren`: also the lint-rule and chart-question family rows] |
 | `blast-radius` | one of `-MenuPath "<node>"`, `-VerbName <verb>`, `-WikiPage <page>`, `-Group <g>`; [`-IncludeChildren`] |
-| `move-menu` | `-From "<old prefix>" -To "<new prefix>"` [`-WhatIf`: print, write nothing]; also rewrites `menuPrefix` in `families\chart-questions.json` when the node covers it |
+| `move-menu` | `-From "<old prefix>" -To "<new prefix>"` [`-WhatIf`: print, write nothing]; also rewrites `menuPrefix` in `families\chart-questions.json` when the node covers it. `-To` must be `drag-lint` or start `drag-lint > ` (the plugin's root menu); any other target is refused |
 | `deprecate` | `-Id <id>` [`-SupersededBy <id>`] [`-RemovedIn <ver>`] |
-| `normalise` | none -- rewrites entries into canonical JSON, `groups.json` / `teams.json` one row per line; families, exemptions and related-projects get CRLF / trailing newline / BOM fixes only |
+| `normalise` | none -- rewrites entries into canonical JSON, `groups.json` / `teams.json` one row per line; families, exemptions, related-projects and the `features\templates` pages get CRLF / trailing newline / BOM fixes only |
 | `check` | [`-Level WellFormed\|Full`] (default `Full`, which needs the engine exe) |
 | `generate` | [`-Check`] [`-OutDir <dir>`] -- the same as `build-feature-pages.ps1` |
 

@@ -141,6 +141,11 @@ $threw = $false; try { Read-FeatureEntry -Path $bad | Out-Null } catch { $threw 
 Check 'a non-ASCII byte is refused on read with its offset' $threw
 $asc = Test-AsciiCrlfFile -Path $bad
 Check 'Test-AsciiCrlfFile names the non-ASCII line' ($asc -like '*bad.json:1*')
+# A lone CR (no LF after it) is neither CRLF nor LF: it must not pass as clean.
+$loneCr = Join-Path $WorkDir 'lone-cr.json'
+[IO.File]::WriteAllBytes($loneCr, [byte[]](0x61, 0x0D, 0x0A, 0x62, 0x0D, 0x63, 0x0D, 0x0A))
+$asc = Test-AsciiCrlfFile -Path $loneCr
+Check 'Test-AsciiCrlfFile rejects a lone CR, naming its line' ($asc -like '*lone-cr.json: lone CR at line 2') $asc
 $tmpl = Join-Path $p.Features 'related-projects.json'
 Check 'related-projects.json is ASCII+CRLF' ((Test-AsciiCrlfFile -Path $tmpl) -eq '')
 

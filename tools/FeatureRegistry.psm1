@@ -34,7 +34,7 @@
   Sort-OrdinalUnique, New-RegistryListAddition, Read-RegistryList,
   Get-FamilyMenuPrefixes, ConvertTo-RegistryListJson, Get-ChildIdsIfNeeded, Get-AllRegistryItems and
   Test-MenuNodeCovers are module-internal (not exported), as are the check's
-  helpers Get-LeafKey, Get-ExemptionMap and Get-NearestCaption (WRAPPED). Family children carry
+  helpers Get-LeafKey, Get-ExemptionMap, Test-RegistryCaptionMatch ([bool]) and Get-NearestCaption (WRAPPED). Family children carry
   child-only keys (parent, subgroup, emitter, wikiAnchor) and are NEVER
   written under features\entries\.
 #>
@@ -45,6 +45,8 @@ $ErrorActionPreference = 'Stop'
 # the file). Dot-sourced once at module load, from the module's own repo, so
 # Get-CaptionKey / Get-LiveMenuCaptions / Get-HelpVerbList / Test-CaptionKeyMatch
 # are one definition for both guards. Get-LiveSurface re-loads it if absent.
+# Test-CaptionKeyMatch is docs-sync's LOOSE rule (abbreviated prose); checks B
+# and C here use the stricter module-internal Test-RegistryCaptionMatch.
 $script:HarvestLibPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\autotest\lib\DocsSurfaceHarvest.ps1'
 if (Test-Path -LiteralPath $script:HarvestLibPath) { . $script:HarvestLibPath }
 
@@ -251,6 +253,7 @@ function Test-AsciiCrlfFile {
   $line = 1
   for ($i = 0; $i -lt $b.Length; $i++) {
     if ($b[$i] -gt 127) { return ("{0}:{1}: non-ASCII byte 0x{2:X2}" -f $Path, $line, $b[$i]) }
+    if ($b[$i] -eq 13 -and ($i + 1 -ge $b.Length -or $b[$i + 1] -ne 10)) { return "$Path`: lone CR at line $line" }
     if ($b[$i] -eq 10) { if ($i -eq 0 -or $b[$i - 1] -ne 13) { return "$Path`: LF line ending at line $line" }; $line++ }
   }
   if ($b.Length -gt 0 -and -not ($b[$b.Length - 1] -eq 10)) { return "$Path`: no trailing newline" }
@@ -613,7 +616,7 @@ function Import-LintRuleFamily {
   if ($rules.Count -eq 0) { throw 'lint-rules importer: 0 rules harvested' }
   if ($rules.Count -ne [int]$Live.RuleCatalog.summary.total) { throw "lint-rules importer: $($rules.Count) rule rows vs summary.total $($Live.RuleCatalog.summary.total)" }
   $ids = [string[]]@($rules | ForEach-Object { [string]$_.id })
-  foreach ($ov in @($Family['children'].Keys)) { if ($ids -cnotcontains $ov) { throw "lint-rules importer: override '$ov' names a rule that no longer exists in rules --json (did you mean: $((Get-NearestCandidates -Value $ov -Candidates $ids) -join ', '))" } }
+  foreach ($ov in @($Family['children'].get_Keys())) { if ($ids -cnotcontains $ov) { throw "lint-rules importer: override '$ov' names a rule that no longer exists in rules --json (did you mean: $((Get-NearestCandidates -Value $ov -Candidates $ids) -join ', '))" } }
   $byId = @{}; foreach ($r0 in $rules) { $byId[[string]$r0.id] = $r0 }
   $out = New-Object 'System.Collections.Generic.List[object]'
   foreach ($id in (Sort-OrdinalUnique $ids)) {
@@ -647,7 +650,7 @@ function Import-ChartQuestionFamily {
   if ($noMenu.Count -or $noScript.Count) {
     throw ("chart-questions importer: catalog and ValidateSet differ -- in New-DiagramArtifact.ps1 only: [{0}]; in REPORT_QUESTIONS only: [{1}]" -f ($noMenu -join ' '), ($noScript -join ' '))
   }
-  foreach ($ov in @($Family['children'].Keys)) { if ($menuIds -cnotcontains $ov) { throw "chart-questions importer: override '$ov' names a question that no longer exists (did you mean: $((Get-NearestCandidates -Value $ov -Candidates $menuIds) -join ', '))" } }
+  foreach ($ov in @($Family['children'].get_Keys())) { if ($menuIds -cnotcontains $ov) { throw "chart-questions importer: override '$ov' names a question that no longer exists (did you mean: $((Get-NearestCandidates -Value $ov -Candidates $menuIds) -join ', '))" } }
   $out = New-Object 'System.Collections.Generic.List[object]'
   $named = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
   foreach ($q in $qs) {
@@ -1051,18 +1054,23 @@ function Invoke-RegistryNormalise {
   # groups.json / teams.json have a canonical row layout (spec 5.3). The other
   # data files are hand-laid-out tables (families: one child per line), so they
   # are normalised at the BYTE level only -- CRLF, trailing newline, no BOM --
-  # never re-serialised; non-ASCII is refused, not rewritten.
+  # never re-serialised; non-ASCII is refused, not rewritten. The page
+  # templates (features\templates) get the same byte-level pass: check A
+  # polices their ASCII/CRLF, so normalise must be able to repair them.
   foreach ($lf in @(@($Paths.Groups, 'groups'), @($Paths.Teams, 'teams'))) {
     $text = ConvertTo-RegistryListJson $lf[1] (Read-RegistryList $lf[0] $lf[1])
     if ([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($lf[0])) -cne $text) { [IO.File]::WriteAllText($lf[0], $text, [Text.Encoding]::ASCII); $changed.Add($lf[0]) }
   }
-  foreach ($f in @($Paths.Exemptions, $Paths.RelatedProjects) + @(Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })) {
+  $byteFiles = @($Paths.Exemptions, $Paths.RelatedProjects) +
+               @(Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) +
+               @(Get-ChildItem -LiteralPath $Paths.Templates -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+  foreach ($f in $byteFiles) {
     if (-not (Test-Path -LiteralPath $f)) { continue }
     $b = [IO.File]::ReadAllBytes($f)
     $start = if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) { 3 } else { 0 }
     for ($i = $start; $i -lt $b.Length; $i++) { if ($b[$i] -gt 127) { throw ("normalise: {0}: non-ASCII byte 0x{1:X2} at byte {2}; fix it by hand" -f $f, $b[$i], $i) } }
     $text = [Text.Encoding]::ASCII.GetString($b, $start, $b.Length - $start)
-    $text = ($text -replace "`r`n", "`n") -replace "`n", "`r`n"
+    $text = $text -replace "`r`n|`r|`n", "`r`n"   # a lone CR too: Test-AsciiCrlfFile rejects it
     if (-not $text.EndsWith("`r`n")) { $text += "`r`n" }
     if ([Text.Encoding]::ASCII.GetString($b) -cne $text) { [IO.File]::WriteAllText($f, $text, [Text.Encoding]::ASCII); $changed.Add($f) }
   }
@@ -1101,6 +1109,25 @@ function Get-LeafKey([System.Collections.IDictionary]$S) {
     'ide-about'   { return (Get-CaptionKey -S ([string]$S['caption'])) }
   }
   return ''
+}
+
+# The registry's caption match (checks B and C), STRICTER than the shared
+# Test-CaptionKeyMatch that docs-sync check 5 uses for abbreviated prose: an
+# exact key, or a prefix either way only when the SHORTER key is >= 12
+# characters. Five registered keys are <= 10 characters ('about', 'close',
+# 'drag-lint', 'fix it', 'refresh'), and under the loose rule every new caption
+# starting with one of them ('Refresh index...') would pass B unregistered.
+$script:MinCaptionPrefix = 12
+function Test-RegistryCaptionMatch([string]$Key, [string[]]$Keys) {
+  if (-not $Key) { return $false }
+  foreach ($k in $Keys) {
+    if (-not $k) { continue }
+    if ($k -ceq $Key) { return $true }
+    $short = if ($k.Length -lt $Key.Length) { $k } else { $Key }
+    if ($short.Length -lt $script:MinCaptionPrefix) { continue }
+    if ($k.StartsWith($Key, [StringComparison]::Ordinal) -or $Key.StartsWith($k, [StringComparison]::Ordinal)) { return $true }
+  }
+  return $false
 }
 
 # Nearest live captions for a (usually abbreviated) caption key: each candidate
@@ -1231,19 +1258,19 @@ function Invoke-RegistryCheck {
   foreach ($cap in $captions) {
     $k = Get-CaptionKey -S $cap
     if (-not $k) { continue }
-    if ((Test-CaptionKeyMatch -Key $k -LiveKeys $regKeyArr) -or $exCaps.Contains($cap)) { continue }
+    if ((Test-RegistryCaptionMatch -Key $k -Keys $regKeyArr) -or $exCaps.Contains($cap)) { continue }
     $sid = ($cap.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
     $sk = Get-EntrySkeleton -Id $sid -Surface ([ordered]@{ type = 'ide-menu'; path = "drag-lint > <submenu> > $cap" }) -Live $Live -Context $ctx
-    $fail.Add("B: every live IDE caption is registered -- unregistered: '$cap'`n   ^ no ide-menu/ide-context/ide-about/tool-window surface matches it (check-5 prefix rule; nearest registered: $((Get-NearestCandidates -Value $k -Candidates $regKeyArr) -join ' | ')). Register it, or add it to features\exemptions.json captions WITH a reason if it is a container or header:`n" + ($sk.TrimEnd() -replace '(?m)^', '   '))
+    $fail.Add("B: every live IDE caption is registered -- unregistered: '$cap'`n   ^ no ide-menu/ide-context/ide-about/tool-window surface matches it (exact, or a prefix of >= 12 characters; nearest registered: $((Get-NearestCandidates -Value $k -Candidates $regKeyArr) -join ' | ')). Register it, or add it to features\exemptions.json captions WITH a reason if it is a container or header:`n" + ($sk.TrimEnd() -replace '(?m)^', '   '))
   }
   foreach ($h in @($ctxCaptions.get_Keys())) {
     $hostKeys = if ($regCtx.ContainsKey($h)) { [string[]]$regCtx[$h].ToArray() } else { [string[]]@() }
     foreach ($cap in $ctxCaptions[$h]) {
       $k = Get-CaptionKey -S $cap
-      if (-not $k -or (Test-CaptionKeyMatch -Key $k -LiveKeys $hostKeys)) { continue }
+      if (-not $k -or (Test-RegistryCaptionMatch -Key $k -Keys $hostKeys)) { continue }
       $sid = ($cap.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
       $sk = Get-EntrySkeleton -Id $sid -Surface ([ordered]@{ type = 'ide-context'; host = $h; caption = $cap }) -Live $Live -Context $ctx
-      $fail.Add("B: every context-menu item is registered -- unregistered: '$cap' ($h)`n   ^ no ide-context surface with host '$h' matches it (check-5 prefix rule). Add { `"type`": `"ide-context`", `"host`": `"$h`", `"caption`": `"$cap`" } to the entry that owns it, or create:`n" + ($sk.TrimEnd() -replace '(?m)^', '   '))
+      $fail.Add("B: every context-menu item is registered -- unregistered: '$cap' ($h)`n   ^ no ide-context surface with host '$h' matches it (exact, or a prefix of >= 12 characters). Add { `"type`": `"ide-context`", `"host`": `"$h`", `"caption`": `"$cap`" } to the entry that owns it, or create:`n" + ($sk.TrimEnd() -replace '(?m)^', '   '))
     }
   }
   foreach ($x in @($Live.PackExes)) { if ($regExes -notcontains $x -and -not $exExes.Contains($x)) { $fail.Add("B: every release payload exe is registered -- '$x' is packed by build\pack-lint-release.ps1 and no entry has an exe surface for it (add { `"type`": `"exe`", `"name`": `"$x`" } to the entry that owns it, or exempt it in features\exemptions.json exes WITH a reason)") } }
@@ -1256,7 +1283,7 @@ function Invoke-RegistryCheck {
   }
   foreach ($k in @($exCaps.get_Keys())) {
     if ($captions -cnotcontains $k) { $fail.Add("B: exemptions.json captions: '$k' is no longer a live caption (nearest: $((Get-NearestCandidates -Value $k -Candidates $captions) -join ' | ')) -- delete or correct the exemption") }
-    elseif (Test-CaptionKeyMatch -Key (Get-CaptionKey -S $k) -LiveKeys $regKeyArr) { $fail.Add("B: exemptions.json captions: '$k' is covered by a registered surface after all -- delete the exemption") }
+    elseif (Test-RegistryCaptionMatch -Key (Get-CaptionKey -S $k) -Keys $regKeyArr) { $fail.Add("B: exemptions.json captions: '$k' is covered by a registered surface after all -- delete the exemption") }
   }
   foreach ($k in @($exExes.get_Keys())) { if (@($Live.PackExes) -notcontains $k) { $fail.Add("B: exemptions.json exes: '$k' is no longer packed -- delete the exemption") } }
   $exCount = @($exVerbs.get_Keys()).Count + @($exCaps.get_Keys()).Count + @($exExes.get_Keys()).Count
@@ -1284,12 +1311,12 @@ function Invoke-RegistryCheck {
           if (-not $ctxCaptions.Contains($h)) { $fail.Add("C: $id`: ide-context host '$h' has no live harvest (harvested hosts: $(@($ctxCaptions.get_Keys()) -join ', ')) -- teach Get-LiveSurface to read that host's menu before registering against it") }
           else {
             $hostKeys = [string[]]@(foreach ($c in $ctxCaptions[$h]) { Get-CaptionKey -S $c })
-            if (-not (Test-CaptionKeyMatch -Key $k -LiveKeys $hostKeys)) { $fail.Add("C: $id`: ide-context '$($s['caption'])' is not on the $h context menu (nearest: $((Get-NearestCaption -Key $k -Captions $ctxCaptions[$h]) -join ' | ')) -- the usual cause is a renamed item: update the entry") }
+            if (-not (Test-RegistryCaptionMatch -Key $k -Keys $hostKeys)) { $fail.Add("C: $id`: ide-context '$($s['caption'])' is not on the $h context menu (nearest: $((Get-NearestCaption -Key $k -Captions $ctxCaptions[$h]) -join ' | ')) -- the usual cause is a renamed item: update the entry") }
           }
         }
         { $_ -in @('ide-menu', 'ide-about', 'tool-window') } {
           $k = Get-LeafKey $s
-          if (-not (Test-CaptionKeyMatch -Key $k -LiveKeys $liveKeys)) {
+          if (-not (Test-RegistryCaptionMatch -Key $k -Keys $liveKeys)) {
             $near = Get-NearestCaption -Key $k -Captions $captions
             $where = if ($s.Contains('path')) { $s['path'] } else { $s['caption'] }
             $fail.Add("C: $id`: $($s['type']) '$where' matches no live caption (nearest: $($near -join ' | ')) -- the usual cause is a renamed or moved menu item: tools\feature-registry.ps1 move-menu, or update the entry")

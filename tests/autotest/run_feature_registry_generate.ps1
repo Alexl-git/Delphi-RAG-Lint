@@ -90,7 +90,8 @@ Check 'Features: a cli surface renders as the verb in backticks' ($feat -match '
 Check 'Features: every group H2 present in order' ((@([regex]::Matches($feat, '(?m)^## (.+)$') | ForEach-Object { $_.Groups[1].Value.TrimEnd("`r") }) -join '|') -eq 'Indexing|Search and navigation|Linting|Documentation|Refactoring and code generation|Component conversion|Graphs and reports|Diagrams and charts|Compiler integration|Database and Firebird|Editor integration|Maintenance and diagnostics')
 $qh = Get-Content -LiteralPath (Join-Path $outA 'docs\wiki\Quick-Help.md') -Raw
 Check 'Quick-Help: entry line with summary, intro, More link and aliases' ($qh -match '\* \*\*Diagnose Current State\*\* -- Which databases the engine would open for a target, and why\. Prints the resolved databases and the manifest sections\. \[More\]\(Maintenance\)' -and $qh -match 'aliases: resolved dbs, which db')
-Check 'Quick-Help: families collapsed to one line' (($qh -match "\* \*\*Lint rules\*\* -- $t rules") -and ($qh -match '\* \*\*Chart questions\*\* -- 25 questions'))
+$nq = $live.ChartValidateSet.Count
+Check 'Quick-Help: families collapsed to one line' (($nq -gt 0) -and ($qh -match "\* \*\*Lint rules\*\* -- $t rules") -and ($qh -match "\* \*\*Chart questions\*\* -- $nq questions")) "rules=$t questions=$nq"
 Check 'Quick-Help: declared-not-harvested footnote lists the shortcut' ($qh -match '(?s)## Declared, not harvested.*Fix it.*shortcut Ctrl\+Alt\+F')
 $ai = Get-Content -LiteralPath (Join-Path $outA 'docs\AI-USAGE.md') -Raw
 Check 'AI-USAGE block: agent/both entries with cli surfaces, human ones excluded' (($ai -match '(?s)<!-- dl:registry:begin agent-verbs -->.*\| `info` \| \[Diagnose Current State\].*\| `selftest` \|.*<!-- dl:registry:end agent-verbs -->') -and -not ($ai -match '(?s)begin agent-verbs -->.*Fix it.*end agent-verbs'))
@@ -140,9 +141,26 @@ $badTpl = Join-Path $tpl 'Home.intro.md'; [IO.File]::WriteAllBytes($badTpl, [byt
 $threw = ''; try { Get-RegistryModel -Paths $p | Out-Null } catch { $threw = $_.Exception.Message }
 Check 'a non-ASCII template byte fails with file:line' ($threw -like '*Home.intro.md:2*')
 
-# CLI -Check exit code on the scratch set (OutDir is current after r4)
 [IO.File]::WriteAllText($badTpl, "# Home`r`n`r`nIntro for Home (scratch).`r`n", [Text.Encoding]::ASCII)
-Check 'build-feature-pages.ps1 -Check exits 0 when current' ($true) '(exercised through the module above; the script is a thin caller)'
+
+# The SCRIPT's exit codes, through real child processes: render the tracked
+# registry into a scratch -OutDir, -Check it (0), flip one byte, -Check again
+# (1, the file named, nothing written).
+$outC = Join-Path $WorkDir 'outC'
+function RunGen { param([string[]]$ArgList) $o = & pwsh -NoProfile -File $gen @ArgList 2>&1 | Out-String; return [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function TreeSha([string]$Dir) { return (@(Get-ChildItem -LiteralPath $Dir -Recurse -File | Sort-Object FullName | ForEach-Object { $_.FullName.Substring($Dir.Length) + '=' + (Get-FileHash -LiteralPath $_.FullName).Hash }) -join ';') }
+$g = RunGen @('-OutDir', $outC)
+Check 'build-feature-pages.ps1 renders into a scratch -OutDir (exit 0)' (($g.Code -eq 0) -and (Test-Path -LiteralPath (Join-Path $outC 'docs\wiki\Quick-Help.md'))) "exit=$($g.Code) $(($g.Out.Trim() -split "`n" | Select-Object -First 1))"
+$g = RunGen @('-Check', '-OutDir', $outC)
+Check 'build-feature-pages.ps1 -Check exits 0 when current' (($g.Code -eq 0) -and ($g.Out -match 'feature pages: current')) "exit=$($g.Code) $(($g.Out.Trim() -split "`n" | Select-Object -First 1))"
+$fc = Join-Path $outC 'docs\wiki\Quick-Help.md'
+$cur = [IO.File]::ReadAllText($fc); $flipped = $cur.Replace('## Declared, not harvested', '## Declared, not harvestec')
+Check 'the -Check flip found its anchor in the rendered Quick-Help.md' ($flipped -cne $cur)
+[IO.File]::WriteAllText($fc, $flipped, [Text.Encoding]::ASCII)
+$snap = TreeSha $outC
+$g = RunGen @('-Check', '-OutDir', $outC)
+Check 'build-feature-pages.ps1 -Check exits 1 on a flipped byte, naming the file' (($g.Code -eq 1) -and ($g.Out -match '1 output\(s\) would change') -and ($g.Out -match 'docs\\wiki\\Quick-Help\.md') -and ($g.Out -match 'harvestec')) "exit=$($g.Code) $(($g.Out.Trim() -split "`n" | Select-Object -First 1))"
+Check 'build-feature-pages.ps1 -Check wrote nothing' ((TreeSha $outC) -eq $snap)
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FEATURE REGISTRY GENERATE: FAIL' -ForegroundColor Red; exit 1 }

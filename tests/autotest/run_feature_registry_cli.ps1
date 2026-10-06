@@ -140,6 +140,15 @@ Check 'normalise rewrites it and names the file' (($r.Code -eq 0) -and ($r.Out -
 Check 'and nothing else (the engine writes are already canonical)' ($r.Out -match 'normalised 1 file') ($r.Out.Trim() -split "`n" | Select-Object -First 1)
 $r = Run @('normalise')
 Check 'a second normalise rewrites nothing' (($r.Code -eq 0) -and ($r.Out -match '0 file'))
+# Check A polices the templates' ASCII/CRLF, so normalise must repair their line
+# endings and trailing newline too (an LF template with no final newline).
+$tplF = Join-Path $S 'features\templates\Home.intro.md'
+$tplOrig = [IO.File]::ReadAllText($tplF)
+[IO.File]::WriteAllText($tplF, ($tplOrig -replace "`r`n", "`n").TrimEnd("`n"), [Text.Encoding]::ASCII)
+$r = Run @('check', '-Level', 'WellFormed')
+Check 'check reports an LF template, naming it' (($r.Code -eq 1) -and ($r.Out -match 'Home\.intro\.md')) ($r.Out.Trim() -split "`n" | Select-Object -Last 1)
+$r = Run @('normalise')
+Check 'normalise repairs the template (CRLF + trailing newline) and names it' (($r.Code -eq 0) -and ($r.Out -match 'Home\.intro\.md') -and ([IO.File]::ReadAllText($tplF) -ceq $tplOrig)) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
 $r = Run @('check', '-Level', 'WellFormed')
 Check 'check passes again' ($r.Code -eq 0)
 $r = Run @('bogus-verb')

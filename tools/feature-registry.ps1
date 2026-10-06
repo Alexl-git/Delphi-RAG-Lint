@@ -20,11 +20,12 @@
     find       -Text <text> [-IncludeChildren]
     blast-radius  -MenuPath "<node>" | -VerbName <verb> | -WikiPage <page> | -Group <g>  [-IncludeChildren]
     move-menu  -From "<old prefix>" -To "<new prefix>" [-WhatIf]   (also rewrites menuPrefix in
-               families\chart-questions.json, in place, when the node covers it)
+               families\chart-questions.json, in place, when the node covers it; -To must be
+               'drag-lint' or start 'drag-lint > ' -- anything else is refused)
     deprecate  -Id <id> [-SupersededBy <id>] [-RemovedIn <ver>]
     normalise  (entries: canonical JSON; groups.json / teams.json: one row per line, keys id title order
-               summary; families, exemptions, related-projects: CRLF / trailing newline / BOM only, never
-               re-serialised -- their hand layout is kept)
+               summary; families, exemptions, related-projects and the templates\ pages: CRLF / trailing
+               newline / BOM only, never re-serialised -- their hand layout is kept)
     check      [-Level WellFormed|Full]   (= the guard's checks; Full needs the engine exe)
     generate   [-Check] [-OutDir <dir>]    (= tools\build-feature-pages.ps1)
   Common: -Repo <root> (default: parent of this script's folder), -Json (machine output).

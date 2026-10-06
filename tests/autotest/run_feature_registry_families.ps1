@@ -119,6 +119,12 @@ try {
 
 $lrBad = ConvertTo-OrderedObject ($lr | ConvertTo-Json -Depth 10 | ConvertFrom-Json); $lrBad.children['zz-no-such-rule'] = [ordered]@{ aliases = @('x') }
 Expect-Throw 'a lint override naming a missing rule throws' { Import-LintRuleFamily -Live $live -Family $lrBad -Parent $parentLint } 'zz-no-such-rule'
+# Override ids are DATA: an override named 'keys' must be read as a key, not
+# shadow the dictionary's .Keys member (get_Keys(), module header).
+$lrKeys = ConvertTo-OrderedObject ($lr | ConvertTo-Json -Depth 10 | ConvertFrom-Json); $lrKeys.children['keys'] = [ordered]@{ aliases = @('x') }
+Expect-Throw "a lint override named 'keys' is named in the error" { Import-LintRuleFamily -Live $live -Family $lrKeys -Parent $parentLint } "override 'keys'"
+$cqKeys = ConvertTo-OrderedObject ($cq | ConvertTo-Json -Depth 10 | ConvertFrom-Json); $cqKeys.children['keys'] = [ordered]@{ notes = 'x' }
+Expect-Throw "a chart override named 'keys' is named in the error" { Import-ChartQuestionFamily -Live $live -Family $cqKeys -Parent $parentChart -Paths $p } "override 'keys'"
 
 # --- Get-RegistryChildren wiring ---------------------------------------------
 $kids = Get-RegistryChildren -Live $live -Entries @($parentLint, $parentChart) -Paths $p
