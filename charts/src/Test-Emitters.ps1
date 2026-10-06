@@ -796,6 +796,39 @@ Step 'E-CY' {
   Chk 'A-CY2-EDGES'  $cy2.Edges 7
   Chk 'A-CY2-GAPS'   $cy2.Unwalkable 0
 
+  # R3 (2026-10-06): the DL SCC is the largest real multi-unit cycle in the clones
+  # (5 units; CLIENT's groups are 3 and 2), and every edge below was checked by
+  # hand against C:\Projects\Delphi-RAG-lint\src\doc\*.pas, each file's sha256
+  # equal to the clone's files.sha256: the uses entry is on that line, in that
+  # section. (The :267 / :431 in the comment above are the 1.19-era lines; the
+  # same two edges are :304 / :447 in this clone.) A change in edge extraction,
+  # section tagging or the cycle walk moves this set and fails here.
+  $cy2Want = @(
+    'draglint.doc.facts->draglint.doc.harvest implementation 977'
+    'draglint.doc.harvest->draglint.doc.regions implementation 206'
+    'draglint.doc.projecttags->draglint.doc.regions implementation 304'
+    'draglint.doc.regions->draglint.doc.facts interface 42'
+    'draglint.doc.regions->draglint.doc.sharedfacts implementation 933'
+    'draglint.doc.sharedfacts->draglint.doc.projecttags implementation 447'
+    'draglint.doc.sharedfacts->draglint.doc.regions implementation 446'
+  ) -join '; '
+  Chk 'A-CY2-EDGESET' ((@($cy2.EdgeList) | Sort-Object) -join '; ') $cy2Want
+  $t2 = Dot $cy2
+  # A row anchors to its FIRST intra-group uses entry. SharedFacts uses Regions at
+  # :446 and ProjectTags at :447; the walk used to follow the verb's member order
+  # and anchored the row at :447.
+  if ($t2 -notmatch 'DRagLint\.Doc\.SharedFacts\.pas&amp;line=446"') {
+    Fail 'A-CY2-FIRST-USE' 'SharedFacts is not anchored to its first intra-group uses entry (:446)' }
+  # interface_cycle:true means ONE interface edge, not an interface-only loop:
+  # Regions -> Facts (:42) is the only one, so every loop crosses an
+  # implementation use and the compiler accepts the group. Calling it an
+  # "interface cycle" is the claim the source contradicts.
+  if ($t2 -match '>interface cycle<') { Fail 'A-CY2-VERDICT' 'the group is still called an interface cycle' }
+  if ($t2 -notmatch '1 of 7 uses interface-section') { Fail 'A-CY2-VERDICT-N' 'the verdict does not count the interface uses' }
+  # Edge colour says the section: 1 interface arrow, 6 implementation arrows.
+  Chk 'A-CY2-INTF-ARROWS' ([regex]::Matches($t2, '-> n\d+:p\d+ \[color="#B02A37"')).Count 1
+  Chk 'A-CY2-IMPL-ARROWS' ([regex]::Matches($t2, '-> n\d+:p\d+ \[color="#B45309"')).Count 6
+
   # N18: no cycles is an ANSWER -- it renders and exits 0.
   $script:cy3 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDc -OutDir $OutDir
   Chk 'A-CY3-GROUPS' $cy3.Cycles 0
