@@ -980,7 +980,8 @@ begin
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
     'a #convert type that resolves in no --db REFUSES the unit, dry run and --apply alike -- an index gap, not a rule error (''<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting''); json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
-    'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
+    'an inherited/inline .dfm object of a From type whose declaring ancestor is not converted is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason,action}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
+    'one whose declaring ancestor ALREADY has the To type is RETYPED (1.26.0, C8 N2): inherited X: TFrom -> inherited X: TTo, keyword kept, nested and inline-frame children too; the properties its block overrides convert per the book (what it does not stream it inherits: no default resolved, no #default written); its code access sites are rewritten as for an own instance and the To unit is added; every code access to a field a converted ancestor declares (bound by the resolver, any level up) is rewritten too, .dfm block or not (N2a) -- json inherited[].action retyped|code|skipped (code: line = its first .pas reference), a converted[] line and items[] kind inherited-instance-retyped, not a warning; --only filters both; info capability inherited_retype; ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
     'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
     'a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed'') -- EXCEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); ' +
@@ -24804,7 +24805,8 @@ begin
     JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(ACtx.Unreachable)));
 
     { 1.22.0 (C8 N1) -- one OBJECT per inherited / inline .dfm object of a From
-      type: skipped, never converted; ancestor_state unconverted | converted |
+      type (1.26.0: and per code-only use of a converted ancestor's field):
+      action retyped | code | skipped; ancestor_state unconverted | converted |
       mismatched | outside, ancestor_unit '' when not known. ALWAYS present, [] when none;
       warnings[] carries each one's 'line N: warning:' text too, and items[]
       its kind inherited-instance-skipped mirror. }
@@ -25015,9 +25017,11 @@ type
 /// any rule is checked). The .dfm is then read (FindInheritedInstances, 1.22.0, C8 N1/N3): an
 /// inherited/inline object of a From type is NOT converted and no longer refuses the unit -- it
 /// is skipped and reported with its declaring ancestor (apply/1 inherited[] {name, type, line,
-/// ancestor_unit, ancestor_state unconverted|converted|mismatched|outside, reason}, a 'line N: warning:'
+/// ancestor_unit, ancestor_state unconverted|converted|mismatched|outside, reason, action}, a 'line N: warning:'
 /// line in warnings[], items[] kind inherited-instance-skipped), while the unit's own instances,
-/// code and unit rules convert; R26 counts it as left unconverted. Rules are then validated (ValidateConvertBook)
+/// code and unit rules convert; R26 counts it as left unconverted. One whose ancestor already has
+/// the To type is RETYPED instead (1.26.0, C8 N2: action retyped), and a converted ancestor's field
+/// used only in code joins the access-site rewrite (N2a, FindInheritedCodeUses: action code). Rules are then validated (ValidateConvertBook)
 /// BEFORE BuildApplyPlan runs -- EVERY block against its OWN From/To classes, each path resolved
 /// segment by segment (1.20.6, T2b: no property tree is built, so validating the whole book is
 /// cheap and ruling R5's per-unit scope and --validate-all-blocks are gone), and a #mapping

@@ -3,6 +3,49 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.0-alpha -- unreleased
+
+No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
+
+### Added
+
+- **`convert-apply` retypes inherited instances of a converted ancestor (C8 N2).** An
+  `inherited` / `inline` `.dfm` object of a From type whose declaring ancestor ALREADY has
+  the block's To type is no longer skipped: its header becomes `inherited X: TTo` (keyword
+  kept; nested blocks and `inline`-frame children too), the properties the block overrides
+  convert per the book (`#link` / `#ignore` / casts, through the same re-emit as an own
+  instance), its code access sites are rewritten as for an own instance, and the To type's
+  unit is added (the C13 section rule). A property the block does not stream is INHERITED,
+  not defaulted, so for such a block no default is resolved, no `#default` is written and a
+  `#mapping` whose source it does not stream is skipped silently. There is no field
+  declaration or creator site to retype in the descendant. Unconverted / mismatched /
+  outside instances stay skipped exactly as in 1.22.0.
+- **Code-only uses follow a converted ancestor (C8 N2a).** Every access in the unit's code
+  on a field a converted ancestor declares -- several levels up, bound to that field by the
+  resolver (E5, `refs.symbol_id`), the ancestor `.dfm` opening it with the To type -- is
+  rewritten, whether or not the descendant `.dfm` re-opens the component. A local or
+  parameter of the same name binds to itself and is left alone.
+- **`apply/1` `inherited[]` gains `action`** -- `retyped`, `code` (an N2a entry: no `.dfm`
+  block; `line` is its first reference in the `.pas`) or `skipped`. The six existing keys
+  keep their meaning; `reason` of a retyped entry reads `... -- retyped to <TTo>`. A retyped
+  instance is one `converted[]` line, `<Name>: inherited <TFrom> -> <TTo> (declared in
+  <Unit>)`, with an `items[]` mirror of the new kind `inherited-instance-retyped` -- not a
+  warning; one whose block cannot be located or re-emitted falls back to `skipped` with that
+  reason. `--only` filters retyped and code entries by name, and a `--only` name that names
+  a code-only field counts as matched. R26 no longer counts a retyped instance as left
+  unconverted. `info --json` `capabilities.inherited_retype` (name agreed with the
+  converter). The descendant-warning text is unchanged -- it stays true: convert the
+  descendant next. Guard: `run_convert_apply_inherited_retype.ps1` (two-level chain, nested
+  block, inline frame, code-only use, a shadowing local, `--only`, batch, own-instance
+  positive control, and a dcc64 compile of the converted descendants).
+
+### Changed
+
+- **`.dfm` re-emit keeps the header keyword.** `ReemitComponent` used to write every block,
+  nested ones included, as `object`; an `inline` frame or `inherited` child inside a
+  converted block now keeps its keyword (written as `object` it would declare a second
+  component of that name and fail at load).
+
 ## v1.25.0-alpha -- unreleased
 
 No extractor or resolver change on top of 1.24.0: indexes do not re-parse.

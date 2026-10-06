@@ -2889,7 +2889,7 @@ begin
   Result.Unreachable:= AUnreachable;
 end;
 
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90 -- REVIEWED 2026-10-06: the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place; the book and the cast library are per-run, so no existing record fits it
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@107f -- REVIEWED 2026-10-06: parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines before C8 N2 (+4), its surfaces already nested routines, and splitting the main loop is a refactor of its own
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;

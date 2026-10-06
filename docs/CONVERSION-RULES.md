@@ -749,8 +749,8 @@ the component with `object`; a `.dfm` that only re-opens it with `inherited` is
 passed over. The owner is the form's root class, or the class of the nearest
 enclosing `inline` frame for a frame's children. `ancestor_state` is
 `unconverted` (that ancestor still has the From type -- convert it first),
-`converted` (it already has the To type; still skipped -- retyping an inherited
-instance is not supported yet), `mismatched` (it has a third type, named in
+`converted` (it already has the To type -- RETYPED since 1.26.0, below),
+`mismatched` (it has a third type, named in
 `reason`; `ancestor_unit` set) or `outside` (not determinable: no ancestor in
 the `--db` declares it, the chain leaves the index, or an ancestor's `.dfm` on
 the way is missing or binary -- that STOPS the walk, since it might declare the
@@ -761,11 +761,43 @@ R26 (see *Refusals*) still counts every such instance as left unconverted. `info
 advertises the behaviour as `capabilities.inherited_instances: true`; an engine
 without the key still refuses the unit.
 
+**Retyping inherited instances** (1.26.0, C8 N2 / N2a). An instance whose
+declaring ancestor ALREADY has the block's To type is converted, not skipped:
+
+* the header becomes `inherited X: TTo` (or `inline X: TTo`) -- the keyword is
+  kept, and nested blocks and `inline`-frame children are retyped the same way;
+* the properties the block overrides convert per the book -- `#link`, `#ignore`,
+  `#remove`, casts -- through the same re-emit as an own instance. A property
+  the block does NOT stream is inherited from the ancestor, not at its declared
+  default, so for such a block no default is resolved, no `#default` is written
+  (the ancestor's own conversion wrote it, or a carried value superseded it),
+  and a `#mapping` whose source the block does not stream is skipped silently;
+* code access sites on X are rewritten exactly as for an own instance, and the
+  To type's unit is added to the uses (the usual section rule; the descendant
+  declares no field, so there is nothing to retype in its type section and no
+  creator site).
+
+Code that uses a converted ancestor's field WITHOUT a `.dfm` block (N2a) is
+followed too: every access in the unit on a field an ancestor declares -- any
+number of levels up, bound to that field by the resolver (`refs.symbol_id`),
+the ancestor's `.dfm` opening the component with the To type -- is rewritten.
+A local or parameter of the same name binds to itself and is left alone.
+
+`inherited[]` gains `action`: `retyped`, `code` (an N2a field; `line` is its
+first reference in the `.pas`) or `skipped` (every other state, and a retype
+whose block cannot be located or re-emitted -- `reason` says why). A retyped
+instance is one `converted[]` line, `<Name>: inherited <TFrom> -> <TTo>
+(declared in <Unit>)`, with an `items[]` entry of kind
+`inherited-instance-retyped` -- not a warning. `--only` filters retyped and
+code entries by name (a code-only name counts in `only_matched[]`); R26 does not
+count a retyped instance as left unconverted. `info --json` advertises it as
+`capabilities.inherited_retype: true`.
+
 **Descendant warnings** (1.25.0). Converting an ANCESTOR does not touch its
 descendants: each descendant `.dfm` still says `inherited X: TOld`, and VCL
 streaming then fails at load (`EClassNotFound`, or `EReadError` on an
 overridden property the To type lacks); descendant code using From-only
-members no longer compiles. Until C8 N2 retypes them, `convert-apply` SAYS so.
+members no longer compiles. `convert-apply` SAYS so; converting the descendant next retypes them (C8 N2, 1.26.0).
 For every instance the run converts it lists each descendant unit -- a class
 descending from the unit's root class at any level (the index's
 `type_ancestors`), or a form hosting that class as an `inline` frame -- whose
