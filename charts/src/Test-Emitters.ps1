@@ -789,8 +789,9 @@ Step 'E-CY' {
   # `regions`, every edge must still be drawn. 7 edges / 5 members, was 5 / 4 at
   # 1.18: the DL clone re-indexes the engine's own source, and 1.19 added the unit
   # DRagLint.Doc.ProjectTags, which joins the SCC -- ProjectTags uses Regions
-  # (:267) and SharedFacts uses ProjectTags (:431). A SOURCE change, diffed
-  # against the pre-1.19 clone; the other 5 are the 1.18 edges (2 at new lines).
+  # (:304) and SharedFacts uses ProjectTags (:447), lines as of this clone,
+  # verified in R3. A SOURCE change, diffed against the pre-1.19 clone; the other
+  # 5 are the 1.18 edges (2 at new lines).
   $script:cy2 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDl -OutDir $OutDir
   Chk 'A-CY2-GROUPS' $cy2.Cycles 1
   Chk 'A-CY2-EDGES'  $cy2.Edges 7
@@ -800,9 +801,8 @@ Step 'E-CY' {
   # (5 units; CLIENT's groups are 3 and 2), and every edge below was checked by
   # hand against C:\Projects\Delphi-RAG-lint\src\doc\*.pas, each file's sha256
   # equal to the clone's files.sha256: the uses entry is on that line, in that
-  # section. (The :267 / :431 in the comment above are the 1.19-era lines; the
-  # same two edges are :304 / :447 in this clone.) A change in edge extraction,
-  # section tagging or the cycle walk moves this set and fails here.
+  # section. A change in edge extraction, section tagging or the cycle walk moves
+  # this set and fails here.
   $cy2Want = @(
     'draglint.doc.facts->draglint.doc.harvest implementation 977'
     'draglint.doc.harvest->draglint.doc.regions implementation 206'
@@ -823,11 +823,39 @@ Step 'E-CY' {
   # Regions -> Facts (:42) is the only one, so every loop crosses an
   # implementation use and the compiler accepts the group. Calling it an
   # "interface cycle" is the claim the source contradicts.
-  if ($t2 -match '>interface cycle<') { Fail 'A-CY2-VERDICT' 'the group is still called an interface cycle' }
-  if ($t2 -notmatch '1 of 7 uses interface-section') { Fail 'A-CY2-VERDICT-N' 'the verdict does not count the interface uses' }
+  # Positive on the EXACT default text, negative with no closing '<': a wrong
+  # Test-InterfaceLoop would print "interface cycle: an all-interface loop ...
+  # (1 of 7 uses interface-section)", which a '>interface cycle<' / '1 of 7'
+  # pair would both have let through (fix round 1, I1).
+  $cyCounted = 'interface coupling: 1 of 7 uses interface-section; every loop crosses an implementation use'
+  if ($t2 -match '>interface cycle') { Fail 'A-CY2-VERDICT' 'the group is still called an interface cycle' }
+  if (-not $t2.Contains(">$cyCounted<")) { Fail 'A-CY2-VERDICT-N' "the verdict is not exactly '$cyCounted'" }
   # Edge colour says the section: 1 interface arrow, 6 implementation arrows.
   Chk 'A-CY2-INTF-ARROWS' ([regex]::Matches($t2, '-> n\d+:p\d+ \[color="#B02A37"')).Count 1
   Chk 'A-CY2-IMPL-ARROWS' ([regex]::Matches($t2, '-> n\d+:p\d+ \[color="#B45309"')).Count 6
+
+  # -Playbook: the engine's Status line ("units of this cycle use each other in
+  # their INTERFACE uses clauses" -- engine job E14) is kept, but the counted
+  # clause goes AHEAD of it, so the chart never prints a claim its own check
+  # contradicts. --plan on the DL clone measured ~5.5s. Own folder: the base name
+  # is the same as cy2's.
+  $script:cy2p = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDl -OutDir (Join-Path $OutDir 'cy-playbook') -Playbook
+  $t2p = Dot $cy2p
+  if (-not $t2p.Contains(">$cyCounted -- engine: interface coupling -- units of this cycle use each other in their INTERFACE uses clauses.<")) {
+    Fail 'A-CY2P-VERDICT' 'the -Playbook verdict does not lead with the counted clause ahead of the engine line' }
+  if ($t2p -match '>interface cycle') { Fail 'A-CY2P-NOCYCLE' 'the -Playbook verdict calls the group an interface cycle' }
+
+  # Test-InterfaceLoop on synthetic graphs (fix round 1, item 3): the branch no
+  # clone exercises -- no compiling project has an all-interface loop.
+  $script:cyLoop = & {
+    . "$SRC\Emit-Common.ps1"
+    $i = [pscustomobject]@{ section = 'interface' }; $m = [pscustomobject]@{ section = 'implementation' }
+    $ring  = @{ 'a|b' = $i; 'b|c' = $i; 'c|a' = $i }
+    $mixIn = @{ 'a|b' = $i; 'b|a' = $m; 'b|c' = $i; 'c|b' = $i }   # SCC whose b<->c sub-loop is all-interface
+    $mixNo = @{ 'a|b' = $i; 'b|c' = $i; 'c|a' = $m }               # every loop crosses an implementation use
+    '{0}/{1}/{2}' -f (Test-InterfaceLoop $ring @('a','b','c')), (Test-InterfaceLoop $mixIn @('a','b','c')), (Test-InterfaceLoop $mixNo @('a','b','c'))
+  }
+  Chk 'A-CY-ILOOP' $cyLoop 'True/True/False'
 
   # N18: no cycles is an ANSWER -- it renders and exits 0.
   $script:cy3 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDc -OutDir $OutDir

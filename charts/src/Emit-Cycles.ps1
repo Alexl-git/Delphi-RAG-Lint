@@ -204,28 +204,6 @@ function Get-OutEdges([string] $From, [string[]] $Members) {
   , @($out | Sort-Object { [int]$_.Edge.line })
 }
 
-# True when the INTERFACE-section edges alone close a loop among the members --
-# the shape the compiler refuses (F2047). `interface_cycle:true` from the verb
-# means only that ONE intra-group edge is interface-section (R3: DL's group has
-# 1 of 7, and it compiles), so the verdict must not be read off that flag alone.
-function Test-InterfaceLoop([string[]] $Members) {
-  $state = @{}   # 1 = on the DFS path, 2 = done
-  $visit = {
-    param([string] $u)
-    $state[$u] = 1
-    foreach ($m in $Members) {
-      $e = $edgeKey[$u + '|' + $m]
-      if (-not $e -or [string]$e.section -ne 'interface') { continue }
-      if ($state[$m] -eq 1) { return $true }
-      if (-not $state[$m] -and (& $visit $m)) { return $true }
-    }
-    $state[$u] = 2
-    $false
-  }
-  foreach ($u in $Members) { if (-not $state[$u] -and (& $visit $u)) { return $true } }
-  $false
-}
-
 # ---- 6. dot ---------------------------------------------------------------------
 $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine('digraph cycles {')
@@ -300,10 +278,17 @@ foreach ($item in $selected) {
   # interface edge among implementation ones is not that (R3, DL group 1).
   $grpEdges = @(foreach ($u in $mem) { foreach ($o in (Get-OutEdges $u $mem)) { $o } })
   $nIntf = @($grpEdges | Where-Object { [string]$_.Edge.section -eq 'interface' }).Count
-  $verdict = $(if ($verdicts.ContainsKey($item.Ordinal)) { $verdicts[$item.Ordinal] }
-               elseif (-not $isIntf) { 'implementation-only' }
-               elseif (Test-InterfaceLoop $mem) { "interface cycle: an all-interface loop, which the compiler refuses ($nIntf of $($grpEdges.Count) uses interface-section)" }
+  $intfLoop = $isIntf -and (Test-InterfaceLoop $edgeKey $mem)
+  $counted = $(if (-not $isIntf) { 'implementation-only' }
+               elseif ($intfLoop) { "interface cycle: an all-interface loop, which the compiler refuses ($nIntf of $($grpEdges.Count) uses interface-section)" }
                else { "interface coupling: $nIntf of $($grpEdges.Count) uses interface-section; every loop crosses an implementation use" })
+  # -Playbook: the engine's line is kept, but when this chart's own check finds
+  # no all-interface loop the counted clause goes FIRST -- the engine's Status
+  # says the units "use each other in their INTERFACE uses clauses" (engine job
+  # E14), and the chart must never print a claim its own check contradicts.
+  $verdict = $(if (-not $verdicts.ContainsKey($item.Ordinal)) { $counted }
+               elseif ($isIntf -and -not $intfLoop) { "$counted -- engine: $($verdicts[$item.Ordinal])" }
+               else { $verdicts[$item.Ordinal] })
   [void]$cells.Add((New-NoteRow $verdict))
 
   $nodeId++; $clusters++

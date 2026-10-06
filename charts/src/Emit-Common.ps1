@@ -2773,3 +2773,27 @@ function Add-RowCluster {
   [void]$Sb.AppendLine('  }')
   , $ports.ToArray()
 }
+
+# True when the INTERFACE-section edges alone close a loop among the members --
+# the shape the compiler refuses (F2047). `cycles` sets `interface_cycle:true`
+# when ONE intra-group edge is interface-section (R3: DL's group has 1 of 7 and
+# compiles), so Emit-Cycles' verdict must not be read off that flag alone.
+# pEdgeMap: 'src|dst' (lowercased unit names) -> an object with a .section.
+# Pinned on synthetic graphs in Test-Emitters (A-CY-ILOOP-*).
+function Test-InterfaceLoop([hashtable] $pEdgeMap, [string[]] $pMembers) {
+  $state = @{}   # 1 = on the DFS path, 2 = done
+  $visit = {
+    param([string] $u)
+    $state[$u] = 1
+    foreach ($m in $pMembers) {
+      $e = $pEdgeMap[$u + '|' + $m]
+      if (-not $e -or [string]$e.section -ne 'interface') { continue }
+      if ($state[$m] -eq 1) { return $true }
+      if (-not $state[$m] -and (& $visit $m)) { return $true }
+    }
+    $state[$u] = 2
+    $false
+  }
+  foreach ($u in $pMembers) { if (-not $state[$u] -and (& $visit $u)) { return $true } }
+  $false
+}
