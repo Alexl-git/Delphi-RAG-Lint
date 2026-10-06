@@ -327,19 +327,25 @@ function AncestorChain(const AUnit: TUnitInheritance): TArray<string>;
 /// <param name="AChain">AncestorChain's answer.</param>
 /// <param name="AList">The source list.</param>
 /// <returns>In AChain order.</returns>
-function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;
+function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@9a33 -- REVIEWED 2026-10-05 called by the model tests (inherit.offer.*) only until the C8 Convert-tab tasks wire the E6 offer into the editor; drop this marker when they do
 
 /// <summary>PURE: the E6 question, 'Add &lt;chain&gt; ahead of &lt;unit&gt;?', with file names.</summary>
-/// <param name="AChain">The chain to offer, topmost first.</param>
+/// <param name="AChain">The units the offer would add: MissingAncestors(AncestorChain(unit),
+/// source list) -- the chain units not yet listed, topmost first. Not empty.</param>
 /// <param name="AUnitPas">The descendant.</param>
 /// <returns>'Add Base.pas, Mid.pas ahead of Leaf.pas?'.</returns>
 function OfferText(const AChain: TArray<string>; const AUnitPas: string): string;  // dl:ok unused-public-symbol@9c66 -- REVIEWED 2026-10-05 called by the model tests (inherit.offer.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
 
-/// <summary>PURE: AList with AChain's missing units inserted directly before AUnitPas (spec E6 Yes).</summary>
+/// <summary>PURE: AList with AChain's missing units inserted so every ancestor precedes its
+/// descendants (spec E6 Yes, as amended 2026-10-05).</summary>
 /// <param name="AList">The source list.</param>
 /// <param name="AUnitPas">The descendant.</param>
-/// <param name="AChain">Topmost first; units already listed are skipped wherever they are.</param>
-/// <returns>A new list; the missing units are appended when AUnitPas is not listed.</returns>
+/// <param name="AChain">AncestorChain's answer, topmost first.</param>
+/// <returns>A new list. Each MISSING chain unit, taken topmost first, goes directly before
+/// the earliest LISTED unit among the chain units after it and AUnitPas; appended when none
+/// of those is listed. ([Mid, Leaf] + [Base, Mid] gives [Base, Mid, Leaf].)</returns>
+/// <remarks>Units already listed are never moved: a pre-existing misorder stays, and E7
+/// (OrderWarnings) still warns about it.</remarks>
 function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; const AChain: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@5e06 -- REVIEWED 2026-10-05 called by the model tests (inherit.insert.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
 
 /// <summary>PURE: one line per (listed descendant, listed ancestor of its AncestorChain
@@ -366,7 +372,8 @@ function OrderWarningText(const AWarnings: TArray<string>): string;  // dl:ok un
 /// verdict, whatever its state ('&lt;Unit.pas&gt;: N inherited instance(s) of a From type
 /// -- this engine refuses such a unit (no inherited_instances capability), so it will be
 /// left unchanged').</returns>
-/// <remarks>FromCode verdicts are not counted: the engine does not refuse on code.</remarks>
+/// <remarks>FromCode verdicts are not counted: the engine does not refuse on code. A unit
+/// that is not Known gets no note, although the engine may still refuse it.</remarks>
 function EngineRefusalNotes(const AUnits: TArray<TUnitInheritance>; AInheritedSupported: Boolean): TArray<string>;  // dl:ok unused-public-symbol@2cbe -- REVIEWED 2026-10-05 called by the model tests (inherit.refusal.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
 
 implementation
@@ -1224,14 +1231,26 @@ end;
 
 function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; const AChain: TArray<string>): TArray<string>;
 var
-  LMissing: TArray<string>;
-  LPos    : Integer;
+  LPos: Integer;
+  LAt : Integer;
 begin
-  LMissing:= MissingAncestors(AChain, AList);
-  LPos    := PathIndex(AUnitPas, AList);
-  if LPos < 0 then
-    Exit(AList + LMissing);
-  Result:= Copy(AList, 0, LPos) + LMissing + Copy(AList, LPos, Length(AList) - LPos);
+  Result:= Copy(AList);
+  for var I: Integer:= 0 to High(AChain) do
+  begin
+    if PathIndex(AChain[I], Result) >= 0 then
+      Continue; // listed already: never moved
+    LPos:= PathIndex(AUnitPas, Result);
+    for var J: Integer:= I + 1 to High(AChain) do
+    begin
+      LAt:= PathIndex(AChain[J], Result);
+      if (LAt >= 0) and ((LPos < 0) or (LAt < LPos)) then
+        LPos:= LAt;
+    end;
+    if LPos < 0 then
+      Result:= Result + [AChain[I]]
+    else
+      Insert(AChain[I], Result, LPos);
+  end;
 end;
 
 function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;

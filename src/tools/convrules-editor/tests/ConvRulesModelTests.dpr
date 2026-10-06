@@ -8724,12 +8724,14 @@ const
   LEAF_PAS = 'fx\Leaf.pas';
   X_PAS    = 'fx\X.pas';
   Y_PAS    = 'fx\Y.pas';
-  DEPTH_MID  = 1;
-  DEPTH_BASE = 2;
+  LOW_PAS  = 'fx\Low.pas';
+  DEPTH_MID   = 1;
+  DEPTH_BASE  = 2;
+  DEPTH_FRAME = 3;
   N_WARN     = 2;
   N_NOTES    = 2;
 var
-  Leaf, Done, Unknown, CodeOnly, NoAnc: TUnitInheritance;
+  Leaf, Done, Unknown, CodeOnly, NoAnc, Framed, MidU: TUnitInheritance;
   Warn : TArray<string>;
   Notes: TArray<string>;
 
@@ -8754,8 +8756,9 @@ begin
   Leaf:= Default(TUnitInheritance);
   Leaf.UnitPas := LEAF_PAS;
   Leaf.Known   := True;
-  Leaf.Verdicts:= [Verdict('tblFtrs', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
-    Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(MID_PAS, DEPTH_MID), Link(BASE_PAS, DEPTH_BASE)]),
+  // Bottom-up first-seen (Mid before Base): only the Depth sort puts Base first.
+  Leaf.Verdicts:= [Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(MID_PAS, DEPTH_MID), Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('tblFtrs', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
     Verdict('qryX', 'TQuery', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
     Verdict('qryLib', 'TQuery', asOutside, 'TDataModule', [])];
   Check('inherit.note.text', InheritanceRowNote(Leaf) = 'inherits 3 TTable, TQuery instance(s) from Base -- convert it first (recommended); '
@@ -8772,14 +8775,30 @@ begin
   Check('inherit.note.unknown.silent', InheritanceRowNote(Unknown) = '');
 
   Check('inherit.chain.topmost.first', string.Join(',', AncestorChain(Leaf)) = BASE_PAS + ',' + MID_PAS, string.Join(',', AncestorChain(Leaf)));
+  // Mid is first met at depth 1 (below Base), then at depth 3 as a frame above it: its largest Depth wins.
+  Framed:= Leaf;
+  Framed.Verdicts:= [Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(MID_PAS, DEPTH_MID), Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('qryFrm', 'TQuery', asUnconverted, 'Mid', [Link(MID_PAS, DEPTH_FRAME)])];
+  Check('inherit.chain.max.depth', string.Join(',', AncestorChain(Framed)) = MID_PAS + ',' + BASE_PAS, string.Join(',', AncestorChain(Framed)));
   Check('inherit.chain.converted.empty', Length(AncestorChain(Done)) = 0);
-  Check('inherit.offer.text', OfferText([BASE_PAS, MID_PAS], LEAF_PAS) = 'Add Base.pas, Mid.pas ahead of Leaf.pas?', OfferText([BASE_PAS, MID_PAS], LEAF_PAS));
+  Check('inherit.offer.text', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS) = 'Add Base.pas, Mid.pas ahead of Leaf.pas?',
+    OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS));
   Check('inherit.offer.missing', string.Join(',', MissingAncestors([BASE_PAS, MID_PAS], ['FX\mid.pas', LEAF_PAS])) = BASE_PAS);
   Check('inherit.offer.none.when.listed', Length(MissingAncestors([BASE_PAS, MID_PAS], [MID_PAS, BASE_PAS, LEAF_PAS])) = 0);
 
   Check('inherit.insert.before', string.Join(',', InsertAncestors([X_PAS, LEAF_PAS, Y_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])) = string.Join(',', [X_PAS, BASE_PAS, MID_PAS, LEAF_PAS, Y_PAS]),
     string.Join(',', InsertAncestors([X_PAS, LEAF_PAS, Y_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])));
-  Check('inherit.insert.skips.listed', string.Join(',', InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])) = string.Join(',', [MID_PAS, BASE_PAS, LEAF_PAS]));
+  Check('inherit.insert.skips.listed', string.Join(',', InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])) = string.Join(',', [BASE_PAS, MID_PAS, LEAF_PAS]),
+    string.Join(',', InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])));
+  Check('inherit.insert.around.listed.middle', string.Join(',', InsertAncestors([Y_PAS, MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS, LOW_PAS]))
+    = string.Join(',', [Y_PAS, BASE_PAS, MID_PAS, LOW_PAS, LEAF_PAS]), string.Join(',', InsertAncestors([Y_PAS, MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS, LOW_PAS])));
+  // Mid re-opens Base's tblOps, so a result with Base below Mid trips E7 on its own.
+  MidU:= Default(TUnitInheritance);
+  MidU.UnitPas := MID_PAS;
+  MidU.Known   := True;
+  MidU.Verdicts:= [Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_MID)])];
+  Check('inherit.insert.result.order.clean', Length(OrderWarnings(InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, AncestorChain(Leaf)), [Leaf, MidU])) = 0,
+    string.Join(' | ', OrderWarnings(InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, AncestorChain(Leaf)), [Leaf, MidU])));
   Check('inherit.insert.unit.absent.appends', string.Join(',', InsertAncestors([X_PAS], LEAF_PAS, [BASE_PAS])) = string.Join(',', [X_PAS, BASE_PAS]));
 
   Warn:= OrderWarnings([LEAF_PAS, BASE_PAS, MID_PAS], [Leaf]);
@@ -8793,7 +8812,8 @@ begin
 
   Notes:= EngineRefusalNotes([Leaf, Done, Unknown], False);
   Check('inherit.refusal.notes', (Length(Notes) = N_NOTES)
-    and (Notes[0] = 'Leaf.pas: 4 inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged'),
+    and (Notes[0] = 'Leaf.pas: 4 inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged')
+    and (Notes[1] = 'Leaf.pas: 1 inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged'),
     string.Join(' | ', Notes));
   Check('inherit.refusal.notes.supported', Length(EngineRefusalNotes([Leaf], True)) = 0);
   CodeOnly:= Leaf;
