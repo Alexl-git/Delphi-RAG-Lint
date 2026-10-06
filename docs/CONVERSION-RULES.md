@@ -527,7 +527,7 @@ Real reFind sample lines (from the BDE2FD sample):
 | `#convert <From> -> <To> [, <unit> ...]` | declares the type-pair this block converts (groups the links; optional target uses-add). A From-only header -- `#convert TFoo -> ` (the editor writes it while authoring) or `#convert TFoo` -- parses as From `TFoo` with an EMPTY To, never as a class named `TFoo ->`, and is a `line N:` error: `#convert TFoo has no To type` (1.20.6, R27). Likewise `#useswap X -> ` with no New unit: `#useswap X has no replacement unit`. |
 | `#link <ToPath> <- <FromPath>` | deep property assignment. **Note the `<-` arrow** -- reversed vs `#migrate`'s `->`. Read it "target gets source." **Type-identity carry (2026-09-16):** when both sides are CLASS-TYPED and of the SAME class (`#link Font <- Font`, both `TFont`), every sub-leaf the `.dfm` streams under the source (`Font.Charset`, `Font.Name`, ...) is carried to the same leaf under the target automatically -- the five hand-written `Font.*` lines become one. When the types DIFFER (`OptionsImage.Glyph <- Picture`, `TdxSmartGlyph <- TPicture`) nothing is carried implicitly and every dotted leaf must be named, because an invented target path is how a form stops loading. An explicit per-leaf `#link` / `#ignore` / `#remove` always wins over the carry; a carried leaf is reported (`sub-leaf-carried` in `convert-apply --format json`, `report.carried[]` in `convert-reemit`) so the leaves nobody typed are visible. Not implemented: the "target type is an ancestor of the source type" case -- the engine has no class graph, so that still needs explicit leaves. |
 | `#default <ToPath> = <value>` | set a target property to a default when no source maps to it |
-| `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. |
+| `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. Scoped to its own `#convert` block (see *Rule scope* below). |
 | `#note <text>` | a human comment carried in the rule (the scaffolder emits `candidates:` and `DROPPED` notes) |
 | `#use <unit>` | add a unit to the PAS `uses` clause (the companion to reFind's `#unuse`) |
 | `#useswap <Old> -> <New1> [, <New2> ...]` | replace unit `<Old>` with one-or-more `<New>` units. Sugar for `#unuse Old` + `#use New1` + `#use New2` ... |
@@ -546,6 +546,43 @@ Example superset block:
 `#link`/`#default` **ToPath** must exist in the `--to` tree; `#link` **FromPath**
 must exist in the `--from` tree (unless it is the `???` stub). That is exactly what
 `convert-validate` checks.
+
+### Rule scope (1.26.1)
+
+A `#convert` block owns the lines from its `#convert` up to the next one. When
+`convert-apply` / `convert-reemit` converts a `.dfm` object, it runs that
+object's block (the first `#convert` whose From type is the object's class):
+
+- `#link`, `#ignore`, `#default`, `#remove` and `#apply` of **that block**, plus
+  the **file-scope** ones written before the first `#convert` (BDE-to-FireDAC's
+  `#remove` list);
+- every `#convert`, `#mapping` and `#note` line of the book (a `#mapping` is
+  named and `#apply`'d from any block; `#note owned:<Class>` marks a class).
+
+So an `#ignore ReadOnly` in the TDatabase block no longer suppresses the TTable
+block's `#link UpdateOptions.ReadOnly <- ReadOnly`, and two blocks may link the
+same source path to different targets. Until 1.26.0 the whole book ran in every
+block: the first `#link` of a path anywhere won, any `#ignore` anywhere
+suppressed it, and a `#default` was written into every block's instances.
+
+### Carried without a rule (1.26.1)
+
+Two `.dfm` entries are DefineProperties pseudo-properties, not published, so no
+rule can name them; `convert-apply` carries them unless a rule of the block names
+them first (`#ignore Left` still drops it):
+
+- **`Left` / `Top`** -- a non-visual component's designer position
+  (TComponent.DesignInfo); on a control they are published under the same
+  names, so the line loads on any target. Carried verbatim.
+- **`ParamData = < item ... end>`** -- how TQuery / TStoredProc (and TFDQuery /
+  TFDStoredProc / TFDCommand) stream `Params`. Carried under the same name; each
+  item member is mapped through the block's `#link Params.Items.<X>` (a renaming
+  link renames it; one with a cast is not applied inside a collection), else kept
+  when the target's `Params` item publishes the same member with the same type,
+  else NOT carried and reported per item:
+  `ParamData item <n> (<Name>): <line> not carried -- <why>` (reemit note). A
+  target with no `Params` property gets nothing, and `ParamData` counts as
+  dropped. An `#ignore Params.Items.<X>` drops that member silently.
 
 ### Unit replacement: `#use` / `#useswap`
 
@@ -828,6 +865,22 @@ count a retyped instance as left unconverted. `info --json` advertises it as
 (the only kind a `.dfm` streams); a path through a public hop such as a
 collection's `Items` or `TFieldDefs.ParentDef` gets nothing. A property's
 attributes (`[Default(False)]`) are never read as its `default` clause.
+
+**The most-derived declaration wins** (1.26.1). The value written is the
+SOURCE's declared default -- the value the source component really had -- and
+it is written even when it equals the target's default (a deliberate choice,
+D3: Delphi trims a redundant default on the next save, while leaving a property
+absent silently adopts a value nobody chose). One exception: when the TARGET
+class redeclares the default of an inherited property, and the source's
+default comes from a class the target also descends from, the target's
+redeclaration is the more derived one and wins -- nothing is written and a
+reemit note says so (`N resolved default(s) not written -- <paths>: <T>
+redeclares the default, and the most-derived declaration wins, so the T default
+applies`). TAutoIncField -> TFDAutoIncField is the case: Data.DB.TField declares
+`AutoGenerateValue default arNone`, TFDAutoIncField redeclares `default
+arAutoInc`, and writing `arNone` turned auto-increment off. A default the source
+class redeclared itself is still written (it is the source's real value), as is
+one both classes share. Top-level, same-named paths only.
 
 **Collections** (1.25.1). A collection-valued property (`FieldDefs = < item ...
 end>`) streams as ONE leaf. A whole-collection `#link FieldDefs <- FieldDefs`
