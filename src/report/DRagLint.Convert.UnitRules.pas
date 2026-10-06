@@ -59,6 +59,10 @@ type
   /// for the change, normalised to '#unuse Old', '#use New' or
   /// '#useswap Old -&gt; New1, New2'. UnitName is spelled as written in the
   /// unit for a removal and as written in the book for an add.
+  /// Action 'skipped' (1.23.0, C13 N4) is a removal convert-apply did NOT make
+  /// because it would strand instances that --only left out; the row has no
+  /// edit behind it, Line/Section are the kept entry's, and Reason says why
+  /// ('would leave N unconverted instance(s) of T'). Reason is '' otherwise.
   /// </remarks>
   TUsesChange = record
     Action  : string;
@@ -66,6 +70,7 @@ type
     Section : string;
     Line    : Integer;
     Rule    : string;
+    Reason  : string;
   end;
 
   /// <summary>The outcome of PlanUnitRules for one unit.</summary>
@@ -113,6 +118,13 @@ function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 /// new implementation clause -- the section TFindUnitRefactoring.Build picks.
 /// They produce edits but no TUsesChange row: they are the #convert surface,
 /// not a unit rule.</param>
+/// <param name="AInterfaceAdds">The units of AExtraAdds that must go to the
+/// INTERFACE uses because a retyped field of their To type is declared in the
+/// interface section (C13 a). Requested first, so a #use of the same unit does
+/// not pull it into the implementation; one the unit uses ONLY in its
+/// implementation clause is MOVED (removed there, added to the interface; no
+/// TUsesChange row). Default nil: every extra add takes the section rule
+/// above.</param>
 /// <returns>The plan; see TUsesPlan. Ok=False (with Error) when the text is
 /// not a unit with interface and implementation sections, when a clause
 /// cannot be read, when an entry to remove sits in a conditional region, when
@@ -122,7 +134,7 @@ function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 /// contract (remove Old, add each New once in any case, keep Old's section) is
 /// pinned by tests\autotest\run_convert_apply_unit_rules.ps1.</remarks>
 function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
-  const AExtraAdds: TArray<string>): TUsesPlan;
+  const AExtraAdds: TArray<string>; const AInterfaceAdds: TArray<string> = nil): TUsesPlan;
 
 implementation
 
@@ -467,7 +479,7 @@ type
 
   { One planning run. A class so the many small steps share the lexed unit
     and the accumulating plan instead of passing a dozen parameters. }
-  TUnitRulePlanner = class
+  TUnitRulePlanner = class  // dl:ok high-response@7a45 -- REVIEWED 2026-10-06: 51 since PlanMoves (C13 a) joined; one uses-clause rewrite whose steps share the parsed clauses -- splitting it would pass that state between classes
   private
     FUnitPas   : string;
     FUnitName  : string;
@@ -487,7 +499,8 @@ type
     function IsPresent(const AName: string): Boolean;
     function SectionOf(const AName: string): Integer;
     procedure RequestAdd(const AName: string; ASection: Integer; const ARule: string);
-    procedure RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>);
+    procedure RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>);
+    procedure PlanMoves(const AInterfaceAdds: TArray<string>);
     function Refuse(const AMsg: string): Boolean;
     function RemovalSpans(const AC: TUsesClause; AIdx, ALastKept: Integer;
       AClaimed: TList<Integer>; ASpans: TList<TSpan>): Boolean;
@@ -499,7 +512,7 @@ type
   public
     constructor Create(const AUnitPas, AText: string);
     destructor Destroy; override;
-    function Run(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>): TUsesPlan;
+    function Run(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>): TUsesPlan;
   end;
 
 function SwapRuleText(const R: TConversionRule): string;
@@ -695,12 +708,31 @@ begin
   FAdds[ASection].Add(C);
 end;
 
-procedure TUnitRulePlanner.RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>);
+{ C13 a: a unit an INTERFACE declaration needs that the unit uses only in its
+  implementation clause is MOVED -- removed there (a removal with no rule, so
+  no uses[] row) and then added to the interface by RequestAdds. Left where it
+  is, the interface declaration fails E2003. }
+procedure TUnitRulePlanner.PlanMoves(const AInterfaceAdds: TArray<string>);
+var
+  U: string;
+  E: TUsesEntry;
+begin
+  for U in AInterfaceAdds do
+    if SectionOf(U) = 1 then
+      for E in FClauses[1].Entries do
+        if SameText(E.Name, U) then FRemoveRule.AddOrSetValue(E.Name, '');
+end;
+
+procedure TUnitRulePlanner.RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>);
 var
   R: TConversionRule;
   U: string;
   S: Integer;
 begin
+  { C13 a: a To type whose retyped field is declared in the interface needs
+    its unit THERE -- requested before any rule, so IsPresent then keeps a
+    #use or the section rule below from adding it a second time }
+  for U in AInterfaceAdds do RequestAdd(U, 0, '');
   for R in ARules.Rules do
     case R.Kind of
       rkUse: RequestAdd(R.UnitName, 1, '#use ' + R.UnitName);
@@ -901,7 +933,8 @@ begin
     Exit;
   end;
   for I:= 0 to High(AC.Entries) do
-    if ARemoved[I] then
+    { a C13 move (FRemoveRule value '') is the #convert surface: no row }
+    if ARemoved[I] and (FRemoveRule[AC.Entries[I].Name] <> '') then
     begin
       Ch:= Default(TUsesChange);
       Ch.Action  := 'remove';
@@ -1016,13 +1049,14 @@ begin
   end;
 end;
 
-function TUnitRulePlanner.Run(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>): TUsesPlan;
+function TUnitRulePlanner.Run(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>): TUsesPlan;
 begin
   Result:= Default(TUsesPlan);
   if ReadUnit then
   begin
     Normalise(ARules, AExtraAdds);
-    RequestAdds(ARules, AExtraAdds);
+    PlanMoves(AInterfaceAdds);
+    RequestAdds(ARules, AExtraAdds, AInterfaceAdds);
     if PlanClause(0) and PlanClause(1) then
     begin
       Result.Ok     := True;
@@ -1045,13 +1079,13 @@ begin
 end;
 
 function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
-  const AExtraAdds: TArray<string>): TUsesPlan;
+  const AExtraAdds: TArray<string>; const AInterfaceAdds: TArray<string>): TUsesPlan;
 var
   Planner: TUnitRulePlanner;
 begin
   Planner:= TUnitRulePlanner.Create(AUnitPas, AText);
   try
-    Result:= Planner.Run(ARules, AExtraAdds);
+    Result:= Planner.Run(ARules, AExtraAdds, AInterfaceAdds);
   finally
     Planner.Free;
   end;

@@ -5,9 +5,6 @@ breaking changes** until v1.0.
 
 ## v1.24.0-alpha -- unreleased
 
-(1.23.0-alpha ships from `feat/c13-convert-apply`; this branch takes 1.24.0 so the two can
-merge in either order.)
-
 No extractor change: indexes do not re-parse. **Resolver 1.11.0 -> 1.12.0-alpha**: the next
 `index` of every database re-resolves on its own (resolver fingerprint); to do it at once,
 `index --all --resolve-only`.
@@ -35,6 +32,70 @@ No extractor change: indexes do not re-parse. **Resolver 1.11.0 -> 1.12.0-alpha*
   Guards: `run_in_class_field_bind.ps1` (new); `run_with_scope_bind.ps1` OWN-FIELD,
   `run_parenless_call_bind.ps1` NEG-FIELD and `run_property_refs_resolve.ps1` E2 flipped
   from "stays unbound" to "binds".
+
+## v1.23.0-alpha -- unreleased
+
+No extractor change: indexes do not re-parse.
+
+### Added
+
+- **`convert-apply` batch mode (C13 b2).** `--unit` may repeat; every unit runs in ONE
+  process with one rule-book validation and one member cache. Text: one
+  `=== unit i of N: <path> ===` section per unit, then
+  `batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E`. JSON: one
+  `apply-batch/1` document `{schema, mode, rules_file, units_count, ok, exit_code, ok_count,
+  refused_count, failed_count, classes_built, units[]}`, `units[]` = `apply/1` per unit;
+  a single `--unit` is unchanged. Per-unit refusal/failure never stops the others; exit =
+  worst unit. Measured on DMTEST (BDE-to-FireDAC.rules, dry run): 3 units 45.7 s batched vs
+  114.7 s as separate processes. `info --json` `capabilities.batch_units`.
+  Guard: `run_convert_apply_batch.ps1`.
+- **`--only` contract (C12 N3).** `apply/1` `only_matched[]` / `only_unmatched[]` (always
+  present); an unknown name is ignored, never an error; text
+  `--only: no #convert instance named X (ignored)`. Guard: `run_convert_apply_only.ps1`.
+
+### Changed
+
+- **An unresolved `#convert` type REFUSES the unit (C13 d, owner ruling).** Dry run and
+  `--apply` alike: `REFUSED: <Type> (line N) resolves in no --db -- index gap in the library
+  or project index; reindex, or report it, before converting`, `refused: true`. It was a
+  rule-validation error (`#convert From/To type not found in any --db`) before.
+  The C13 plan's "R26 silent when DeclaringUnitOf is empty" path is unreachable for such a
+  type: book validation (BuildBlockClasses, R7) finds it unresolved before any plan -- and
+  R26 -- runs, and now refuses the unit there.
+- **`--only` skips, rather than refuses, a unit rule it would strand (C12 N4).** A
+  `#unuse` / `#useswap` removal whose stranded instances are ALL ones `--only` left out is
+  skipped: unit kept, `uses[]` `{action: "skipped", ..., reason}`, a `line N: warning:` and
+  `items[]` kind `unit-rule-skipped`. Other stranded instances (failed re-emit, inherited)
+  still refuse (R26). `uses[]` rows gain `reason`. `capabilities.only_skips_unit_rules`.
+
+### Fixed
+
+- **Interface uses for an interface-declared retyped field (C13 a).** The To type's unit
+  went to the implementation uses whenever the unit had one, so a retyped form field failed
+  E2003. Both planners (no unit rules / unit rules) now put it in the interface uses, and a
+  To unit the unit already uses ONLY in its implementation clause is MOVED there (removed
+  from the implementation clause, no `uses[]` row: it is the `#convert` surface).
+  Plan size: when a unit rule already rewrites the interface clause, the adds now ride that
+  rewrite instead of a second implementation-clause rewrite -- dmToolStats
+  (BDE-to-FireDAC.rules) plans 38 edits, not 1.21.1's 40; the 2 gone are that clause's
+  delete + insert. Pinned by arm P (IntfFormU: 7 -> 5).
+  Guard: `run_convert_apply_interface_uses.ps1` (compiles the result).
+  A move whose implementation entry sits in a `{$IF...}` region is REFUSED (the existing
+  conditional-entry refusal; pinned by M7).
+- **`#migrate Foo -> ` (From-only) read Old `Foo ->` (C13 c, R27).**
+- **A file `convert-apply --apply` cannot write no longer aborts the run.** Every touched file
+  is checked writable before anything is written; a read-only or locked one fails THAT unit
+  (exit 2, `ok:false`, `refused:false`, `cannot write <file>: ... -- unit not changed, nothing
+  written`; no `.BCK`, no recovery record). A failure after that check can leave the unit
+  partly written -- its backups and `recovery.txt` are complete and the error says so. In a
+  batch the other units go on and `apply-batch/1` is still emitted. Batch `units[i].classes_built`
+  is now the unit's own (equal to its single-unit run), the wrapper's the run total.
+
+### Known limitations
+
+- The interface-uses MOVE decides "used only in the implementation" from the index's uses
+  (`UsedOnlyInImplementation`) while the uses planner reads the live file: a stale index can
+  miss a move (the convert-apply freshness guard covers most such staleness).
 
 ## v1.22.0-alpha -- unreleased
 

@@ -181,6 +181,12 @@ type
     /// <param name="AInFile"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AResolvedUnit"><!-- drag-lint:auto type -->out string</param>
     /// <param name="AAlreadyUsed"><!-- drag-lint:auto type -->out Boolean</param>
+    /// <param name="APreferInterface">False (default): the section rule above.
+    /// True: target the INTERFACE uses -- appended after its last entry, or a
+    /// fresh 'uses X;' after the 'interface' keyword when it has none. convert-
+    /// apply passes True when the retyped field is declared in the interface
+    /// section, where an implementation-only uses would not compile (E2003). A
+    /// unit already used in EITHER section is still AAlreadyUsed.</param>
     /// <returns><!-- drag-lint:auto -->TArray&lt;TTextEdit&gt; -- Observed: nil; [Edit].</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -199,7 +205,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
-      out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>; overload;
+      out AResolvedUnit: string; out AAlreadyUsed: Boolean; APreferInterface: Boolean = False): TArray<TTextEdit>; overload;
   end;
 
   /// <remarks>
@@ -571,7 +577,8 @@ begin
 end;
 
 class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;
-  const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
+  const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
+  APreferInterface: Boolean): TArray<TTextEdit>;
 var
   Syms : TArray<TSymbol>;
   S    : TSymbol;
@@ -638,7 +645,9 @@ begin
       if U.Section = uusImplementation then HasImpl:= True;
       if U.Section = uusInterface then HasIntf:= True;
     end;
-    if HasImpl then TargetSection:= uusImplementation
+    { C13 a: a caller retyping an INTERFACE declaration needs the unit there }
+    if APreferInterface then TargetSection:= uusInterface
+    else if HasImpl then TargetSection:= uusImplementation
     else if HasIntf then TargetSection:= uusInterface
     else TargetSection:= uusImplementation; { fresh block goes to implementation }
 

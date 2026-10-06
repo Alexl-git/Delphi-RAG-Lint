@@ -312,7 +312,8 @@ implementation
 end.
 "@
 
-# S: block 3 (line 10) has no instance and a bogus link; block 4 (line 12) names types no --db has.
+# S: block 3 (line 10) has no instance and a bogus link. scopeghost.rules adds
+# block 4 (line 12), whose types no --db has (C13 d: that REFUSES the unit).
 Write-Ascii (P 'scope.rules') @"
 #mapping KindMap from LibCD.TCKind to LibCD.TDstD
 #mapping KindMap #when Kind = ckOne -> Mode = dmFirst
@@ -325,8 +326,8 @@ Write-Ascii (P 'scope.rules') @"
 #apply KindMap
 #convert LibAB.TSrcF -> LibAB.TDstB, LibAB
 #link NoSuchDst <- NoSuchSrc
-#convert LibX.TGhost -> LibX.TNone, LibX
 "@
+Write-Ascii (P 'scopeghost.rules') ([IO.File]::ReadAllText((P 'scope.rules')).TrimEnd() + "`n#convert LibX.TGhost -> LibX.TNone, LibX`n")
 
 # G: block 2's type lives in LibG, which goes stale; nothing in MyForm/Plain uses it.
 Write-Ascii (P 'gscope.rules') @"
@@ -429,9 +430,10 @@ $e = ErrLines $r.Out
 Check 'S1 default: the bogus link in block 10 (no instance) fails -> exit 1' ($r.Code -eq 1) $r.Out
 Check 'S2 the bogus link on line 11 fails on both sides' `
   (@($e | Where-Object { $_ -match '^\s+line 11: link (To|From)Path not found' }).Count -eq 2) ($e -join ' | ')
-Check 'S3 the unresolved types fail on line 12' `
-  ((@($e | Where-Object { $_ -match '^\s+line 12: #convert From type not found in any --db: LibX\.TGhost' }).Count -eq 1) -and `
-   (@($e | Where-Object { $_ -match '^\s+line 12: #convert To type not found in any --db: LibX\.TNone' }).Count -eq 1)) ($e -join ' | ')
+$r3 = Apply 'scopeghost.rules'
+Check 'S3 (C13 d) unresolved types on line 12 REFUSE the unit as an index gap, naming both, before any rule error' `
+  (($r3.Code -eq 1) -and ($r3.Out -match ('(?m)^REFUSED: ' + [regex]::Escape('LibX.TGhost (line 12), LibX.TNone (line 12) resolve in no --db -- index gap in the library or project index; reindex, or report it, before converting') + '\r?$')) -and `
+   -not ($r3.Out -match 'failed validation')) $r3.Out
 Check 'S4 nothing is listed as not validated' (-not ($r.Out -match 'not validated here')) $r.Out
 $r = Apply 'scope.rules' @('--format', 'json')
 $j = Json $r.Out
@@ -448,8 +450,8 @@ Check 'T1 bare header + bogus link: exit 1, the link fails on line 2' `
   (($r.Code -eq 1) -and ($e.Count -eq 1) -and ($e[0] -match '^\s+line 2: link FromPath not found in --from tree: NoSuchProp')) $r.Out
 $r = Apply 'ghost.rules'
 $e = ErrLines $r.Out
-Check 'T2 qualified type that does not exist: exit 1 on its #convert line 1' `
-  (($r.Code -eq 1) -and ($e.Count -eq 1) -and ($e[0] -match '^\s+line 1: #convert To type not found in any --db: LibAB\.TNowhere$')) $r.Out
+Check 'T2 (C13 d) qualified type that does not exist: REFUSED naming it and its #convert line 1' `
+  (($r.Code -eq 1) -and ($e.Count -eq 0) -and ($r.Out -match '(?m)^REFUSED: LibAB\.TNowhere \(line 1\) resolves in no --db -- index gap')) $r.Out
 
 # ---- P: a mapping applied by two blocks of different types ----------------
 $r = Apply 'map2.rules'

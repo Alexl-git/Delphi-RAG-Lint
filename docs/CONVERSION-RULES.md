@@ -593,6 +593,19 @@ break the compile (E2003), so the unit is refused with
 `<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed`
 (e.g. `#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed`;
 the declaring unit is the From type's indexed declaring file).
+With `--only` (1.23.0, C12 N4), a removal whose stranded instances are ALL
+own instances `--only` left out is SKIPPED instead of refused -- the user chose
+the scope: the unit stays in uses, `uses[]` gets a row
+`{action: "skipped", unit, section, line, rule, reason: "would leave N unconverted instance(s) of <Type>"}`,
+and `warnings[]` / text `Warnings:` a `line N: warning: <rule> skipped -- ...`
+line (`items[]` kind `unit-rule-skipped`). A stranded instance left for any
+other reason (a failed re-emit, an `inherited`/`inline` object) keeps the
+refusal. `info --json`: `capabilities.only_skips_unit_rules: true`.
+A `#convert` From or To type that resolves in no `--db` (1.23.0, owner
+ruling) refuses the unit too, dry run and `--apply` alike, before any rule
+error is reported: the converter cannot convert a type it cannot see, and the
+cause is a parsing / index gap in the library or project index, not the book:
+`<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting`.
 Every such refusal behaves the same way: exit
 1, NOTHING written (neither `.pas` nor `.dfm`), one text line
 `REFUSED: <reason>`, and in `apply/1` JSON `"ok": false`, `"refused": true`,
@@ -671,6 +684,36 @@ Without `--apply`, `convert-apply` is dry-run only: it prints the planned edits
 for real. `--only Name1,Name2,...` restricts the run to specific `.dfm` instance
 names; `--db` may repeat for a multi-DB index.
 
+**`--only` names (1.23.0).** Names match case-insensitively. A name that
+names no `.dfm` object of a `#convert` From type (own, `inherited` or
+`inline`) is IGNORED -- never an error, the exit code is unchanged -- and
+reported: `apply/1` carries `only_matched[]` and `only_unmatched[]` (spelled
+as given, in `--only` order, always present, `[]` without `--only`), and
+text mode prints `--only: no #convert instance named X, Y (ignored)`.
+
+**Batch (1.23.0).** `--unit` may repeat. Every unit then runs in ONE process:
+the book is validated once and every class's members are resolved once
+(measured on DMTEST with `BDE-to-FireDAC.rules`: 36-42 s per unit as
+separate processes, 45.7 s for three units batched). Text prints one
+`=== unit i of N: <path> ===` section per unit -- that unit's normal output --
+then `batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E`.
+JSON is one `apply-batch/1` document: `schema`, `mode`, `rules_file`,
+`units_count`, `ok` (every unit ok), `exit_code` (the worst unit's),
+`ok_count`, `refused_count`, `failed_count`, `classes_built` (the run's
+total) and `units[]` -- one ordinary `apply/1` object per unit, in `--unit`
+order, equal to that unit's single-unit `apply/1` (its `classes_built` is the
+unit's own: the book's validation set plus what its run added). A single
+`--unit` still emits a bare `apply/1`. A unit's refusal or failure never stops
+the others; the process exits with the worst unit's code (2 > 1 > 0). Under
+`--apply`, every file a unit would touch is checked writable FIRST: a read-only
+or locked file fails that unit (exit 2, `ok: false`, `refused: false`,
+`cannot write <file>: ... -- unit not changed, nothing written`) with nothing
+written, no `.BCK` and no recovery record. A write that fails AFTER that check
+(a lock taken in between, a full disk) can leave the unit partly converted; its
+backups and `recovery.txt` entry are complete by then and the error says to
+restore from them. A single `--unit` reports either as `ERROR: ...`, exit 2.
+`info --json` advertises it as `capabilities.batch_units: true`.
+
 **Which blocks are validated (1.20.6).** Before planning, `convert-apply`
 validates the WHOLE book: every `#convert` block against its OWN From/To types,
 and each `#mapping` against the block(s) that `#apply` it -- each path resolved
@@ -680,7 +723,8 @@ property such as `Connection`) is a leaf here, so a path THROUGH it
 (`Connection.Params.X`) is not found -- the plan could not apply it either.
 Every block is also freshness-checked: a stale type behind ANY block warns on a
 dry run and refuses `--apply`, a unit-rules-only run included. A block whose
-From or To type resolves in no `--db` is an error on its `#convert` line.
+From or To type resolves in no `--db` REFUSES the unit (1.23.0, owner ruling;
+see *Refusals*): that is an index gap, not a rule-book error.
 Validation and the plan share one member cache per `--db` (json
 `classes_built` = the classes whose members were resolved). A path error ends
 with the block it was checked in: `(#convert line N: From -> To)`.
@@ -723,7 +767,11 @@ without the key still refuses the unit.
 1. **`.pas` declaration retype** -- `Name: FromType;` -> `Name: ToType;` on the
    instance's published field declaration.
 2. **`.pas` uses-add** -- adds ToType's declaring unit to the `.pas` `uses`
-   clause (once per distinct ToType), via `TFindUnitRefactoring.Build`.
+   clause (once per distinct ToType), via `TFindUnitRefactoring.Build` -- the
+   INTERFACE uses when the retyped field is declared in the interface section
+   (1.23.0; a form's published fields always are), else the implementation
+   uses when the unit has one. A To unit the unit already uses ONLY in its
+   implementation clause is MOVED to the interface clause in that case.
 3. **`.dfm` object-block re-emit** -- the instance's whole `object Name: Class
    ... end` block is replaced with the re-emitted T block from `ReemitComponent`
    (Batch 2a-i), including moved-depth properties and event renames. A hard

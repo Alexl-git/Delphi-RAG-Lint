@@ -371,6 +371,15 @@ $okOut = ((& $Exe convert-validate --rules $okFile --print-parsed 2>$null) -join
 $okExit = $LASTEXITCODE
 Check 'R27f control: a normal #convert A -> B and #useswap OldU -> NewU parse unchanged (exit 0)' `
   (($okExit -eq 0) -and ($okOut -match '(?m)^line 1: convert A -> B\r?$') -and ($okOut -match '(?m)^line 3: useswap OldU -> NewU\s*$')) "exit=$okExit; out=$okOut"
+# R27 for #migrate (C13 c): the same trim bug lived in the #migrate branch, which
+# matched ' -> ' against the trimmed Arg and read Old = 'Foo ->'. --print-parsed
+# then showed 'migrate Foo -> -> '. Old must be 'Foo'; the normal form stays as is.
+$miFile = Join-Path $WorkDir 'migrate-only.rules'
+[IO.File]::WriteAllText($miFile, "#migrate Foo -> `r`n#migrate Foo -> Bar`r`n", [Text.Encoding]::ASCII)
+$miOut = ((& $Exe convert-validate --rules $miFile --print-parsed 2>$null) -join "`n")
+Check 'R27g From-only #migrate: Old is Foo, never "Foo ->"' `
+  (($miOut -match '(?m)^line 1: migrate Foo -> \s*$') -and -not ($miOut -match 'Foo ->\s*->')) "out=$miOut"
+Check 'R27h control: #migrate Foo -> Bar parses unchanged' ($miOut -match '(?m)^line 2: migrate Foo -> Bar\s*$') "out=$miOut"
 
 # A bare '#mapping Name' counts as a declaration: the editor emits that shape
 # while a rule is being authored, and rejecting it would fail the round-trip.

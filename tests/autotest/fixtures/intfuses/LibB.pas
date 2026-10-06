@@ -1,0 +1,18 @@
+unit LibB;
+
+interface
+
+uses
+  Classes;
+
+type
+  TDstBtn = class(TPersistent)
+  private
+    FCaption: string;
+  published
+    property Caption: string read FCaption write FCaption;
+  end;
+
+implementation
+
+end.
