@@ -42,6 +42,8 @@ uses
   , ConvRules.UnitMask in 'ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in 'ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in 'ConvRules.ConvertRunner.pas'
+  , ConvRules.Inheritance in 'ConvRules.Inheritance.pas'
+  , ConvRules.InheritanceEngine in 'ConvRules.InheritanceEngine.pas'
   , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
   , ConvRules.ConvertTab in 'ConvRules.ConvertTab.pas'
   , ConvRules.ValidateScope in 'ConvRules.ValidateScope.pas'

@@ -3430,6 +3430,23 @@ begin
       if not ARunning then
         FEngine.ClearResolveCache;
     end;
+  // C8: the tab's inherited-instance check reindexed the project through ITS adapter
+  // (the stale retry) -- the same staleness as after a run.
+  LHost.ProjectReindexed:= procedure
+    begin
+      FEngine.ClearResolveCache;
+    end;
+  // C8: the inherited-instance check behind the same cancellable window as proptree;
+  // FTreeLoads holds depth commits back while it runs (see FEngine.LongCallRunner).
+  LHost.RunLongCall:= function(const ATitle: string; const AWork: TStreamingWork): Integer
+    begin
+      Inc(FTreeLoads);
+      try
+        Result:= RunWithProgressDialog(ATitle, AWork);
+      finally
+        Dec(FTreeLoads);
+      end; // try
+    end;
   FConvertTab:= TConvertTab.Create(Self, LHost);
   FConvertTab.Parent:= FTabConvert;
   FConvertTab.Align := alClient;
