@@ -50,7 +50,7 @@ type
 /// <param name="AText">The expression; '' is valid (no expression).</param>
 /// <param name="AError">'' when valid, else 'column C: &lt;message&gt;' for the first problem.</param>
 /// <returns>True when valid.</returns>
-function CheckGlyphExprText(const AText: string; out AError: string): Boolean;  // dl:ok unused-public-symbol@c654 -- REVIEWED 2026-10-06 editor caller arrives in a later C10 task (GlyphForm / MainForm / ConvertTab); ConvRulesModelTests already calls it
+function CheckGlyphExprText(const AText: string; out AError: string): Boolean;
 
 /// <summary>True for a #link whose expression is set and is not G[count].</summary>
 /// <param name="ANode">Any node; nil or a non-link gives False.</param>
@@ -69,7 +69,7 @@ function ImageGlyphLinksFrom(const ANodes: TArray<TRuleNode>; const AFromPath: s
 /// <param name="AFromPath">The count link's FromPath.</param>
 /// <param name="AExpr">The expression being written; anything but G[count] gives ''.</param>
 /// <returns>'' when fine, else 'G[count] needs exactly one image link from &lt;From&gt;; found K'.</returns>
-function CountLinkIssue(const ANodes: TArray<TRuleNode>; const AFromPath, AExpr: string): string;  // dl:ok unused-public-symbol@dfd3 -- REVIEWED 2026-10-06 editor caller arrives in a later C10 task (GlyphForm / MainForm / ConvertTab); ConvRulesModelTests already calls it
+function CountLinkIssue(const ANodes: TArray<TRuleNode>; const AFromPath, AExpr: string): string;
 
 /// <summary>The engine's warning, as a hint: a straight carry of a glyph-count property
 /// beside an image G-link in the same block is right only for identity alternatives.</summary>
@@ -77,14 +77,37 @@ function CountLinkIssue(const ANodes: TArray<TRuleNode>; const AFromPath, AExpr:
 /// <returns>'' when the block has no image G-link or no straight count carry; else
 /// '#link &lt;To&gt; &lt;- &lt;From&gt; is a straight carry of the source glyph count -- write
 /// "#link &lt;To&gt; &lt;- &lt;ImageFrom&gt; G[count]" instead' for the first such carry.</returns>
-function StraightCountCarryHint(const ANodes: TArray<TRuleNode>): string;  // dl:ok unused-public-symbol@6d5b -- REVIEWED 2026-10-06 editor caller arrives in a later C10 task (GlyphForm / MainForm / ConvertTab); ConvRulesModelTests already calls it
+function StraightCountCarryHint(const ANodes: TArray<TRuleNode>): string;
 
 /// <summary>The one To leaf a G[count] link should target: its last segment is a
 /// glyph-count property name and no link in the block targets it.</summary>
 /// <param name="AToLeafPaths">The To tree's leaf paths.</param>
 /// <param name="ANodes">The block's nodes.</param>
 /// <returns>The path, or '' when there is none OR more than one (never guess).</returns>
-function SuggestCountTarget(const AToLeafPaths: TArray<string>; const ANodes: TArray<TRuleNode>): string;  // dl:ok unused-public-symbol@d840 -- REVIEWED 2026-10-06 editor caller arrives in a later C10 task (GlyphForm / MainForm / ConvertTab); ConvRulesModelTests already calls it
+function SuggestCountTarget(const AToLeafPaths: TArray<string>; const ANodes: TArray<TRuleNode>): string;
+
+/// <summary>The block's G[count] link reading from AFromPath, if any.</summary>
+/// <param name="ABlockLinks">The ACTIVE block's links (LinksForBlock).</param>
+/// <param name="AFromPath">Compared case-insensitively with LinkFrom.</param>
+/// <returns>The first such link, or nil. The glyph dialog shows it as the checked
+/// 'Keep' box of the image link with the same FromPath (the grid shows only the first
+/// link per From, so it never shows this one).</returns>
+function FindCountLink(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): TRuleNode;
+
+/// <summary>Whether a plain Assign may retarget AFromPath's link in this block.</summary>
+/// <param name="ABlockLinks">The ACTIVE block's links (LinksForBlock), never the whole book.</param>
+/// <param name="AFromPath">The From row's bare path; compared case-insensitively.</param>
+/// <returns>'' when the From has no link, or exactly one link without a glyph
+/// expression. Otherwise the refusal the status line shows: 'Blocked: #link &lt;To&gt;
+/// &lt;- &lt;From&gt; &lt;Expr&gt; is a glyph link -- ...' naming the first G-link, or
+/// 'Blocked: &lt;From&gt; has K #link lines in this rule -- ...' (exact texts pinned
+/// by the glyph.assign.* tests).</returns>
+/// <remarks>The editor's grid shows only the FIRST link per From, and AssignLink
+/// rewrites that link's LinkTo and Cast. On a G-link that would silently keep the
+/// expression against a new target; with several links it would retarget one the
+/// user cannot see. A refusal keeps every such link visible and unchanged; adding a
+/// second link instead would be invisible in the grid (C10 Task 5 decision).</remarks>
+function GlyphAssignBlock(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): string;
 
 /// <summary>The text after the last '.' of a dotted path (the whole path when undotted).</summary>
 /// <param name="APath">A property path.</param>
@@ -241,6 +264,36 @@ begin
     end;
   if Found <> 1 then
     Result:= '';
+end;
+
+function FindCountLink(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): TRuleNode;
+var
+  N: TRuleNode;
+begin
+  for N in ABlockLinks do
+    if (N.Kind = rnkLink) and SameText(N.LinkFrom, AFromPath) and (N.GlyphExpr <> '') and IsCountExprText(N.GlyphExpr) then
+      Exit(N);
+  Result:= nil;
+end;
+
+function GlyphAssignBlock(const ABlockLinks: TArray<TRuleNode>; const AFromPath: string): string;
+var
+  N    : TRuleNode;
+  Count: Integer;
+begin
+  Result:= '';
+  Count := 0;
+  for N in ABlockLinks do
+  begin
+    if (N.Kind <> rnkLink) or not SameText(N.LinkFrom, AFromPath) then
+      Continue;
+    if N.GlyphExpr <> '' then
+      Exit(Format('Blocked: #link %s <- %s %s is a glyph link -- change it through Mapping > Glyph expression... or the Raw DSL, or Unassign it first.',
+        [N.LinkTo, N.LinkFrom, N.GlyphExpr]));
+    Inc(Count);
+  end;
+  if Count > 1 then
+    Result:= Format('Blocked: %s has %d #link lines in this rule -- an assign would retarget only the first; edit them in the Raw DSL.', [AFromPath, Count]);
 end;
 
 function BookHasGlyphLinks(const ARulesText: string): Boolean;

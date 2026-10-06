@@ -10284,6 +10284,45 @@ begin
   Check('glyph.summary.none', GlyphRunSummary(0) = '');
 end;
 
+{ C10 Task 5: a plain Assign must never retarget a glyph link. FindLinkForFrom
+  returns the FIRST link per From, so on a G-link (or a From with several links)
+  AssignLink would rewrite LinkTo and silently keep the expression -- the guard
+  refuses instead and names the link. A plain single link is still re-assignable. }
+procedure TestGlyphAssignGuard;
+const
+  BLOCK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] : AssignGraphic'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Glyph G[count]'#13#10 +
+    '#link Caption <- Caption'#13#10 +
+    '#link Hint <- Tag'#13#10 +
+    '#link HelpKeyword <- Tag'#13#10;
+  EXPECT_GLINK = 'Blocked: #link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] is a glyph link -- change it through Mapping > Glyph expression... or the Raw DSL, or Unassign it first.';
+  EXPECT_TWO   = 'Blocked: Tag has 2 #link lines in this rule -- an assign would retarget only the first; edit them in the Raw DSL.';
+var
+  Book : TRuleBook;
+  Links: TArray<TRuleNode>;
+  S    : string;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.assign.plain.ok', GlyphAssignBlock(Links, 'Caption') = '', GlyphAssignBlock(Links, 'Caption'));
+    Check('glyph.assign.unlinked.ok', GlyphAssignBlock(Links, 'Width') = '', GlyphAssignBlock(Links, 'Width'));
+    S:= GlyphAssignBlock(Links, 'glyph');
+    Check('glyph.assign.glink.refused', S = EXPECT_GLINK, S);
+    S:= GlyphAssignBlock(Links, 'Tag');
+    Check('glyph.assign.two.links.refused', S = EXPECT_TWO, S);
+    Check('glyph.assign.no.links.ok', GlyphAssignBlock(nil, 'Glyph') = '');
+    // R4: the count link is not a grid row; the image link's dialog finds it by From.
+    Check('glyph.count.link.found', (FindCountLink(Links, 'glyph') <> nil) and (FindCountLink(Links, 'glyph').LinkTo = 'OptionsImage.NumGlyphs'));
+    Check('glyph.count.link.none', (FindCountLink(Links, 'Caption') = nil) and (FindCountLink(nil, 'Glyph') = nil));
+  finally
+    Book.Free;
+  end;
+end;
+
 { C10 fix round 1: the block merger must see a #link's glyph expression. Once the
   expression left LinkFrom, two links to one To that differ ONLY in the expression
   compared equal and the incoming one was dropped as a duplicate. They are a
@@ -10529,6 +10568,7 @@ begin
     TestValidateScopeCancel;
     TestGlyphLinkParse;
     TestGlyphDecisions;
+    TestGlyphAssignGuard;
     TestGlyphCastLibArgs;
     TestGlyphApplyParse;
     TestGlyphRunner;

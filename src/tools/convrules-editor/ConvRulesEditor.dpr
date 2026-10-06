@@ -49,6 +49,7 @@ uses
   , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
   , ConvRules.ConvertTab in 'ConvRules.ConvertTab.pas'
   , ConvRules.ValidateScope in 'ConvRules.ValidateScope.pas'
+  , ConvRules.GlyphForm in 'ConvRules.GlyphForm.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

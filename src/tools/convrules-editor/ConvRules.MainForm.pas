@@ -157,6 +157,7 @@ type
       FMiFileCurate  : TMenuItem  ; //   would otherwise see a changed book)
       FMiAssign      : TMenuItem  ; // Mapping: gated by UpdateMenuEnabled
       FMiUnassign    : TMenuItem  ;
+      FMiGlyphExpr   : TMenuItem  ; // Mapping > Glyph expression...: needs a loaded rule (C10, ruling B2)
       FMiFindInFrom  : TMenuItem  ;
       FMiOnlyType    : TMenuItem  ; // Mapping: CHECKED while the pool shows only one type
       FMiMappings    : TMenuItem  ;
@@ -1445,6 +1446,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoUnassign(Sender: TObject);
+      /// <summary>Mapping > Glyph expression...: sets, changes or clears the selected
+      /// grid row's link G[I/N] expression through RunGlyphExprDialog, and adds, keeps or
+      /// removes the block's G[count] link for that From (C10 E6-E8, ruling R4).</summary>
+      /// <param name="Sender">The menu item; unused.</param>
+      /// <remarks>Disabled while no rule is loaded (UpdateMenuEnabled, ruling B2). Every
+      /// decision is ConvRules.Glyph's; an insert re-finds FActiveHdr by node (R3).</remarks>
+      procedure DoGlyphExpr(Sender: TObject);
+      /// <summary>Removes the active block's G[count] link from AFromPath when no single
+      /// image link from that From is left for it (CountLinkIssue).</summary>
+      /// <param name="AFromPath">The bare From path.</param>
+      /// <returns>The removed link as '#link To &lt;- From G[count]', or ''.</returns>
+      function DropOrphanCountLink(const AFromPath: string): string;
       /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2585,6 +2598,8 @@ uses
   , ConvRules.DropTarget
   , ConvRules.EngineWait // RunWithProgressDialog: proptree behind a cancellable window
   , ConvRules.EngineProgress // TStreamingWork: the LongCallRunner wrapper's signature
+  , ConvRules.Glyph     // dl:unit ConvRules.Glyph accepted -- C10 glyph-link decisions; GLYPH_COUNT_EXPR travels with FindCountLink / CountLinkIssue
+  , ConvRules.GlyphForm // C10: the glyph-expression dialog
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2604,6 +2619,8 @@ const { VCL style names as they are recorded INSIDE the .vsf files linked by
     painted, never stored in the cell. Colours are the fixed red / orange of a
     status mark, readable on both the light and the dark style. }
   GRID_CAST_COL     = 2;
+  GRID_GLYPH_COL    = 3; // C10: the link's G[I/N] expression, verbatim
+  GRID_COL_COUNT    = 4;
   MARK_ERROR_PREFIX = '[!] ';
   MARK_WARN_PREFIX  = '[w] ';
   MARK_ERROR_COLOR  = clRed;
@@ -2702,6 +2719,8 @@ begin
   var LLib: TCastLib := ParseCastLib(GEditorCastLib);
   FCastDefs:= LLib.Casts;
   FEnumDefs:= LLib.Enums;
+  // C10: validate gets --castlib from the same file (CastLibArgs drops a missing one).
+  FEngine.CastLibFile:= GEditorCastLib;
   BuildUI;
   // After BuildUI: ApplyTheme repaints FGrid, which BuildUI creates.
   ApplyTheme(ResolveThemeMode(GEditorThemePref, GEditorIdeTheme));
@@ -2805,6 +2824,7 @@ begin
   FMiAutoMatch:= AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
   FMiAssign    := AddMenuCmd(LMapping, '&Assign'      , 'Assign the highlighted To leaf (pool, right) to the selected From row', DoAssign);
   FMiUnassign  := AddMenuCmd(LMapping, '&Unassign'    , 'Drop the selected From row''s assignment', DoUnassign);
+  FMiGlyphExpr := AddMenuCmd(LMapping, '&Glyph expression...', 'Set, change or clear the selected link''s G[I/N] glyph expression (C10)', DoGlyphExpr);
   FMiFindInFrom:= AddMenuCmd(LMapping, '&Find in From', 'Select the From-grid row whose property has the SAME name as the highlighted To leaf', DoFindInFrom);
   FMiOnlyType  := AddMenuCmd(LMapping, '&Only this type', 'Show only pool leaves whose TYPE matches the highlighted leaf (toggle)', DoOnlyType);
   AddMenuCmd(LMapping, '-', '', nil);
@@ -2955,6 +2975,7 @@ begin
   FMiClearExamine.Enabled:= (Length(FUsedProps) > 0) or (Length(FUnitCandidates) > 0);
   FMiMappings.Enabled:= (FActiveHdr >= 0);
   FMiAutoMatch.Enabled:= (FActiveHdr >= 0); // job C6: enabled, it only answered "Select or create a rule first."
+  FMiGlyphExpr.Enabled:= (FActiveHdr >= 0); // C10 ruling B2: same gate as Auto-Match
   if (FMiScopeRenames <> nil) and (FUnitList <> nil) then
   begin
     var LScope: Boolean:= False;
@@ -3567,7 +3588,10 @@ begin
   FGrid:= TStringGrid.Create(Self);
   FGrid.Parent:= GridPanel; FGrid.Align:= alClient;
   // RowCount must stay > FixedRows: start at 2 (header + one blank data row).
-  FGrid.ColCount:= 3; FGrid.RowCount:= 2; FGrid.FixedRows:= 1; FGrid.FixedCols:= 0;
+  FGrid.ColCount:= GRID_COL_COUNT;
+  FGrid.RowCount:= 2;
+  FGrid.FixedRows:= 1;
+  FGrid.FixedCols:= 0;
   // goColSizing: the user can drag column borders to widen From/To to taste.
   FGrid.Options:= FGrid.Options + [goRowSelect, goVertLine, goHorzLine, goColSizing];
   FGrid.DefaultRowHeight:= 20;
@@ -3575,6 +3599,8 @@ begin
   FGrid.Cells[1, 0]:= 'To (assigned)';
   FGrid.Cells[2, 0]:= 'cast';
   FGrid.ColWidths[0]:= 330; FGrid.ColWidths[1]:= 330; FGrid.ColWidths[2]:= 110;
+  FGrid.Cells[GRID_GLYPH_COL, 0]:= 'Glyph';
+  FGrid.ColWidths[GRID_GLYPH_COL]:= FGrid.ColWidths[GRID_CAST_COL] * 2;
   // Hand painting entirely to GridDrawCell (header, selection and Examine's green
   // marking all go through it) -- required for OnDrawCell to own the cell colour.
   FGrid.DefaultDrawing:= False;
@@ -4644,7 +4670,10 @@ begin
   FGrid.RowCount:= Max(2, matched + 1);
   for r:= 1 to FGrid.RowCount - 1 do
   begin
-    FGrid.Cells[0, r]:= ''; FGrid.Cells[1, r]:= ''; FGrid.Cells[2, r]:= '';
+    FGrid.Cells[0, r]:= '';
+    FGrid.Cells[1, r]:= '';
+    FGrid.Cells[GRID_CAST_COL, r]:= '';
+    FGrid.Cells[GRID_GLYPH_COL, r]:= '';
   end;
 
   r:= 1;
@@ -4665,6 +4694,13 @@ begin
       FGrid.Cells[2, r]:= Link.Cast
     else
       FGrid.Cells[2, r]:= '';
+    // C10: the expression verbatim. Only the FIRST link per From is a row, so a
+    // G[count] link behind an image link is not shown here (its image link's glyph
+    // dialog carries it as the 'Keep' box).
+    if Link <> nil then
+      FGrid.Cells[GRID_GLYPH_COL, r]:= Link.GlyphExpr
+    else
+      FGrid.Cells[GRID_GLYPH_COL, r]:= '';
     Inc(r);
   end; // for
 
@@ -5875,10 +5911,12 @@ begin
   else
     Cv.Font.Color:= StyleServices.GetSystemColor(clWindowText);
 
-  // A validation mark on the row's #link shows in the cast column as a prefix --
-  // painted only: the cell TEXT stays the cast, which DoAssign and friends read.
+  // A validation mark on the row's #link shows in the cast AND the glyph column as a
+  // prefix (a bad G-expression is reported on the link's line, so the mark belongs
+  // beside the expression too) -- painted only: the cell TEXT stays the cast / the
+  // expression, which DoAssign and friends read.
   var CellText: string:= FGrid.Cells[ACol, ARow];
-  if (ARow > 0) and (ACol = GRID_CAST_COL) then
+  if (ARow > 0) and (ACol in [GRID_CAST_COL, GRID_GLYPH_COL]) then
   begin
     var Link: TRuleNode:= FindLinkForFrom(PathOfGridCell(FGrid.Cells[0, ARow]));
     var E: Integer:= 0;
@@ -6270,7 +6308,11 @@ end;
 { Create or update the #link mapping ToPath <- FromPath in the active block,
   choosing a default cast from the leaf types (identity when same type). Shared by
   the manual Assign and the Auto-Match pass. Does NOT touch the grid/UI -- callers
-  refresh. Assumes CanCast(AFromType, AToType) was already checked. }
+  refresh. Assumes CanCast(AFromType, AToType) was already checked.
+  The link's glyph expression (C10) survives a re-assign: only LinkTo and Cast
+  change. DoAssign never re-assigns a glyph link, or a From with several links
+  (ConvRules.Glyph.GlyphAssignBlock refuses first); Auto-Match only fills From
+  leaves that have no link. }
 procedure TConvRulesForm.AssignLink(const AFromPath, AToPath, AFromType, AToType: string);
 var
   Link    : TRuleNode ;
@@ -6396,6 +6438,16 @@ begin
           + 'Edit that mapping instead -- a #link here would claim the same source property '
           + 'a second time, unconditionally.',
         [FromPath, LCases]));
+    Exit;
+  end;
+
+  // C10: AssignLink retargets the FIRST link of this From. On a glyph link that would
+  // keep the expression against a new target; with several links it would move one
+  // the grid does not show. Refuse and name the link instead.
+  var LGlyphBlock: string:= GlyphAssignBlock(ActiveLinks, FromPath);
+  if LGlyphBlock <> '' then
+  begin
+    SetError(LGlyphBlock);
     Exit;
   end;
 
@@ -6835,15 +6887,143 @@ begin
   FromPath:= PathOfGridCell(FGrid.Cells[0, Row]);
   Link:= FindLinkForFrom(FromPath);
   if Link = nil then begin SetStatus('That From row has no assignment.'); Exit; end;
+  // Read BEFORE Remove: the book owns its nodes, and Remove frees this one.
+  var LHadGlyph: Boolean:= Link.GlyphExpr <> '';
   // remove the link node from the model
   FBook.Nodes.Remove(Link);
+  // A G[count] link left with no image link from this From is an engine error, and
+  // as the From's first link it would take over this grid row: it goes too.
+  var LDropped: string:= DropOrphanCountLink(FromPath);
   FGrid.Cells[1, Row]:= '';
-  FGrid.Cells[2, Row]:= '';
+  FGrid.Cells[GRID_CAST_COL, Row]:= '';
+  FGrid.Cells[GRID_GLYPH_COL, Row]:= '';
   RefreshPool;
   SyncRawFromModel;
   RefreshRulesList;
   UpdateMenuEnabled; // same reason as DoAssign: the pool list was rebuilt
-  SetStatus('Unassigned ' + FromPath);
+  if LDropped <> '' then
+    SetStatus('Unassigned ' + FromPath + ' -- its glyph expression and ' + LDropped + ' went with it')
+  else if LHadGlyph then
+    SetStatus('Unassigned ' + FromPath + ' -- its glyph expression went with it')
+  else
+    SetStatus('Unassigned ' + FromPath);
+end; // procedure
+
+{ C10: removes the block's G[count] link from AFromPath when no image link from that
+  From is left for it (CountLinkIssue reports found 0 or more than one). Returns the
+  removed link as '#link To <- From G[count]', or '' when nothing was removed. }
+function TConvRulesForm.DropOrphanCountLink(const AFromPath: string): string;
+var
+  LCount: TRuleNode;
+begin
+  Result:= '';
+  LCount:= FindCountLink(ActiveLinks, AFromPath);
+  if (LCount = nil) or (CountLinkIssue(ActiveLinks, AFromPath, GLYPH_COUNT_EXPR) = '') then
+    Exit;
+  Result:= Format('#link %s <- %s %s', [LCount.LinkTo, LCount.LinkFrom, LCount.GlyphExpr]);
+  FBook.Nodes.Remove(LCount);
+end;
+
+{ C10 E6: the selected grid row's link gets its glyph expression from the dialog.
+  Decisions (the live check, the block rules, the count-target suggestion, which
+  count link exists) are ConvRules.Glyph's; this only moves text between the nodes
+  and the dialog. The G[count] link is managed here too (ruling R4): the box is
+  checked and reads 'Keep' when the block already has one from this From, and
+  unchecking it removes that link. }
+procedure TConvRulesForm.DoGlyphExpr(Sender: TObject);
+var
+  Row      : Integer;
+  FromPath : string;
+  Link     : TRuleNode;
+  Opts     : TGlyphDialogOptions;
+  AddCount : Boolean;
+  Existing : TRuleNode;
+  CountLink: TRuleNode;
+  ToPaths  : TArray<string>;
+  Extra    : string;
+  i        : Integer;
+begin
+  if FActiveHdr < 0 then
+  begin
+    SetStatusAfterCancel('Select or create a rule first.');
+    Exit;
+  end;
+  Row:= FGrid.Row;
+  if Row < 1 then
+  begin
+    SetStatus('Pick a From row in the grid (left) first.');
+    Exit;
+  end;
+  FromPath:= PathOfGridCell(FGrid.Cells[0, Row]);
+  Link:= FindLinkForFrom(FromPath);
+  if Link = nil then
+  begin
+    SetStatus(Format('%s has no #link yet -- assign a To property first, then add the glyph expression.', [FromPath]));
+    Exit;
+  end;
+  Opts:= Default(TGlyphDialogOptions);
+  Opts.FromPath  := FromPath;
+  Opts.ToPath    := Link.LinkTo;
+  Opts.Expr      := Link.GlyphExpr;
+  Opts.BlockNodes:= ActiveLinks; // block-scoped: the block rules never see another block
+  Existing:= FindCountLink(Opts.BlockNodes, FromPath);
+  if Existing = Link then
+    Existing:= nil; // the row IS a count link: it gets no count link of its own
+  Opts.CountExists:= Existing <> nil;
+  if Existing <> nil then
+    Opts.CountTarget:= Existing.LinkTo
+  else
+  begin
+    SetLength(ToPaths, Length(FToTree.Leaves));
+    for i:= 0 to High(FToTree.Leaves) do
+      ToPaths[i]:= FToTree.Leaves[i].Path;
+    Opts.CountTarget:= SuggestCountTarget(ToPaths, Opts.BlockNodes);
+  end;
+  Extra:= '';
+  case RunGlyphExprDialog(Self, Opts, AddCount) of
+    gerCancel:
+      Exit;
+    gerSet:
+    begin
+      Link.GlyphExpr:= Opts.Expr;
+      Link.Dirty    := True;
+      if AddCount and (Existing = nil) then
+      begin
+        CountLink:= TRuleNode.Create;
+        CountLink.Kind     := rnkLink;
+        CountLink.LinkTo   := Opts.CountTarget;
+        CountLink.LinkFrom := FromPath;
+        CountLink.GlyphExpr:= GLYPH_COUNT_EXPR;
+        CountLink.Dirty    := True;
+        // R3: an insert shifts every later header -- re-find the active one by NODE.
+        var LHdr: TRuleNode:= FBook.Nodes[FActiveHdr];
+        FBook.Nodes.Insert(FBook.Nodes.IndexOf(Link) + 1, CountLink);
+        FActiveHdr:= FBook.Nodes.IndexOf(LHdr);
+        Extra:= Format(' -- added #link %s <- %s %s', [Opts.CountTarget, FromPath, GLYPH_COUNT_EXPR]);
+      end
+      else if (not AddCount) and (Existing <> nil) and not SameText(Opts.Expr, GLYPH_COUNT_EXPR) then
+      begin
+        Extra:= Format(' -- removed #link %s <- %s %s', [Existing.LinkTo, Existing.LinkFrom, Existing.GlyphExpr]);
+        FBook.Nodes.Remove(Existing);
+      end;
+      SetStatus(Format('Glyph expression on %s -> %s: %s', [FromPath, Link.LinkTo, Opts.Expr]) + Extra);
+    end;
+    gerClear:
+    begin
+      Link.GlyphExpr:= '';
+      Link.Dirty    := True;
+      Extra:= DropOrphanCountLink(FromPath);
+      if Extra <> '' then
+        Extra:= ' -- ' + Extra + ' went with it';
+      SetStatus(Format('Glyph expression removed from %s -> %s.', [FromPath, Link.LinkTo]) + Extra);
+    end;
+  end; // case
+  SyncRawFromModel;
+  RefreshRulesList;
+  RefreshGrid;
+  if Row < FGrid.RowCount then
+    FGrid.Row:= Row;
+  UpdateMenuEnabled;
 end; // procedure
 
 procedure TConvRulesForm.SyncRawFromModel;
