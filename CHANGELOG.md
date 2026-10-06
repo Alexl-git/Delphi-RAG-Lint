@@ -21,12 +21,15 @@ No extractor or resolver change on top of 1.25.1: indexes do not re-parse.
     public class-typed hop -- a collection's indexed `Items`, `TFieldDefs.ParentDef` -- so
     `FieldDefs.Items.Attributes = []` and its kin were written. A .dfm streams published
     properties only; a resolved default is now written only to a path whose every hop is
-    published (`PublishedChain`).
+    published (`PublishedChain`). A default skipped this way is REPORTED, one reemit note per
+    instance: `<N> resolved default(s) not written -- <paths>: the path runs through a
+    non-published member, which a .dfm cannot stream, so the T default applies (verify)`.
   - **two ADJACENT re-emitted blocks could land inside each other.** The second block's
     `insert after L` and the first block's delete ending at L share the applier's sort key,
     and `TList.Sort` is not stable: applied after the delete, the insert landed as many
     lines too low as were deleted -- a table spliced into its neighbour. The insert now
-    always goes first.
+    always goes first, and the applier's sort is STABLE: edits it still ties (two inserts at
+    one position) land in planned order.
 - **The standing .dfm LOAD guard.** `tests\autotest\lib\DfmLoadCheck.ps1` (+ `DfmLoadCheck.dpr`,
   built once with dcc64) runs a .dfm through Delphi's own reader -- `ObjectTextToBinary`, then
   binary -> text -> binary byte-identical. Every convert suite that WRITES a .dfm now checks

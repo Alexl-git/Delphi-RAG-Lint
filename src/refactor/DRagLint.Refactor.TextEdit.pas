@@ -478,7 +478,25 @@ begin
           if Result = 0 then Result:= Ord(A.Kind <> tekInsertLines) - Ord(B.Kind <> tekInsertLines);
           if Result = 0 then Result:= B.Col - A.Col; // same line: larger column first (back-to-front)
         end);
-      Group.Sort(Cmp);
+      { 1.25.2: STABLE. Edits the comparer ties (two inserts at one line and
+        column) are applied in REVERSE planned order, so they land in the file
+        in planned order: each later insert at the same index goes above the
+        earlier one. TList.Sort alone left it to the sort. }
+      var Planned: TArray<TTextEdit>:= Group.ToArray;
+      var Order: TList<Integer>:= TList<Integer>.Create;
+      try
+        for var K: Integer:= 0 to High(Planned) do Order.Add(K);
+        Order.Sort(TComparer<Integer>.Construct(
+          function(const IA, IB: Integer): Integer
+          begin
+            Result:= Cmp.Compare(Planned[IA], Planned[IB]);
+            if Result = 0 then Result:= IB - IA;
+          end));
+        Group.Clear;
+        for var K: Integer in Order do Group.Add(Planned[K]);
+      finally
+        Order.Free;
+      end;
 
       Lines:= TStringList.Create;
       try

@@ -1764,6 +1764,9 @@ var
   { step 4b: rule-referenced F paths absent from the block with NO default
     clause -- genuinely unknown, and all step 6 still warns about. }
   Unresolved : TArray<string>;
+  { 1.25.2: rule-referenced paths whose resolved default was NOT written --
+    a hop is not published, so the .dfm cannot stream it (PublishedChain) }
+  Unstreamable: TArray<string>;
 begin
   Result:= Default(TReemitResult);
   FRoot := nil; TRoot:= nil;
@@ -1771,6 +1774,7 @@ begin
   Dropped     := nil;
   Ignored     := nil;
   Unresolved  := nil;
+  Unstreamable:= nil;
   EnumUnmapped:= nil;
 
   // 1. Parse the F block FIRST (moved ahead of the #convert gate below): the gate
@@ -1912,7 +1916,16 @@ begin
         be defaulted, so it must check for itself. }
       if LeafTypeOf(ATo, R.ToPath) = '' then Continue;
       { 1.25.2: and a path the .dfm can stream -- see PublishedChain }
-      if not PublishedChain(ATo, R.ToPath) then Continue;
+      if not PublishedChain(ATo, R.ToPath) then
+      begin
+        { not silent: reported below when a value would have been written }
+        var Listed: Boolean:= False;
+        for var U: string in Unstreamable do
+          if SameText(U, R.ToPath) then Listed:= True;
+        if not Listed and LeafDefaultOf(AFrom, R.FromPath, ResolvedVal) then
+          Unstreamable:= Unstreamable + [R.ToPath];
+        Continue;
+      end;
       if not LeafDefaultOf(AFrom, R.FromPath, ResolvedVal) then
       begin
         // Absent AND no `default` clause: such a property is ALWAYS streamed,
@@ -1995,6 +2008,10 @@ begin
     // has no `default` clause to resolve it to. Those are always streamed, so
     // their absence is unexplained, and the note NAMES them instead of gesturing
     // at the whole class pair.
+    if Length(Unstreamable) > 0 then
+      Result.Report.Notes:= Result.Report.Notes +
+        [Format('%d resolved default(s) not written -- %s: the path runs through a non-published member, which a .dfm cannot stream, so the T default applies (verify)',
+          [Length(Unstreamable), string.Join(', ', Unstreamable)])];
     if Length(Unresolved) > 0 then
       Result.Report.Notes:= Result.Report.Notes +
         [Format('property defaults may diverge between %s and %s -- %s absent from the F DFM with no default clause to resolve, so the T default applies (verify)',

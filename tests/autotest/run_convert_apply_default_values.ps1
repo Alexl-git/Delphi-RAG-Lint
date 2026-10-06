@@ -269,7 +269,47 @@ function ApplyTo([string]$Unit, [string[]]$Extra = @()) {
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 
+# ---- the guard itself: POSITIVE CONTROL -----------------------------------------
+# Without a known-bad input failing, a green guard proves nothing.
+Write-Ascii (P 'Bad1.dfm') @'
+object Bad1: TBad1
+  object t: TFDTable
+    CachedUpdates = (False)]
+  end
+end
+'@
+Write-Ascii (P 'Bad2.dfm') @'
+object Bad2: TBad2
+  object t: TFDTable
+    object f: TIntegerField
+    end
+    Active = False
+  end
+end
+'@
+Write-Ascii (P 'Bad3.dfm') @'
+object Bad3: TBad3
+  object t: TFDTable
+    FieldDefs.Items.Attributes = []
+  end
+end
+'@
+$pc = Test-DfmLoads @((P 'Bad1.dfm'), (P 'Bad2.dfm'), (P 'Bad3.dfm'))
+Check 'G1 positive control: the 1.25.1 value shape ''CachedUpdates = (False)]'' FAILS the load guard' `
+  (@($pc | Where-Object { $_ -match 'Bad1\.dfm' }).Count -eq 1) ($pc -join ' | ')
+Check 'G2 positive control: a property AFTER a nested object FAILS the load guard' `
+  (@($pc | Where-Object { $_ -match 'Bad2\.dfm' }).Count -eq 1) ($pc -join ' | ')
+# The guard's stated LIMIT, pinned so nobody reads more into it: a dotted name
+# through a non-published member PARSES -- only a load against the real classes
+# rejects it. D2 below is what guards that shape.
+Check 'G3 limit, pinned: ''FieldDefs.Items.Attributes = []'' PARSES (caught by D2, not by the load guard)' `
+  (@($pc | Where-Object { $_ -match 'Bad3\.dfm' }).Count -eq 0) ($pc -join ' | ')
+
 # ---- resolved defaults --------------------------------------------------------
+$r = ApplyTo 'AbsentDM.pas' @('--format', 'json')
+$jd = $null; try { $jd = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+Check 'D2b a default NOT written for a non-published path is REPORTED: one reemit note, count and paths' `
+  (($null -ne $jd) -and (@($jd.reemit_notes | Where-Object { $_ -match '^v: 2 resolved default\(s\) not written -- Defs\.Items\.Size, Sub\.Level: the path runs through a non-published member' }).Count -eq 1)) ($jd.reemit_notes -join ' | ')
 $r = ApplyTo 'AbsentDM.pas' @('--apply', '--no-backup')
 $t = [IO.File]::ReadAllText((P 'AbsentDM.dfm'))
 Check 'A0 --apply exits 0' ($r.Code -eq 0) $r.Out
