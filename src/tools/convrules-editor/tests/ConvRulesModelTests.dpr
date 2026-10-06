@@ -10324,8 +10324,11 @@ begin
 end;
 
 { C10 Task 5 fix 1: the dialog's G[count] rule must not count the link being EDITED
-  as its own image link; an edit must never leave two count links from one From; and
-  only a count link with NO image link left is an orphan. }
+  as its own image link; only a count link with NO image link left is an orphan.
+  Fix 2: the editor never refuses what the engine accepts -- several G[count] links
+  from one From to DIFFERENT Tos are engine-valid (CheckGlyphLink counts image links
+  only); only an exact duplicate (same From AND To) is refused, and the dialog never
+  AUTO-creates a count link beside an existing one. }
 procedure TestGlyphCountLinkEdit;
 const
   ONE_IMAGE =
@@ -10344,10 +10347,20 @@ const
   COUNT_ONLY =
     '#convert A -> B'#13#10 +
     '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  TWO_COUNTS =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link Other.GlyphCount <- Picture G[count]'#13#10;
+  SAME_TO =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture'#13#10;
   FOUND_0 = 'G[count] needs exactly one image link from Picture; found 0';
   DUP     = 'G[count] from Picture is already linked: #link OptionsImage.NumGlyphs <- Picture G[count]';
   IDX_THIRD = 2;
-  BOOKS: array[0..2] of string = (ONE_IMAGE, COUNT_FIRST, TWO_IMAGES_COUNT);
+  BOOKS: array[0..3] of string = (ONE_IMAGE, COUNT_FIRST, TWO_IMAGES_COUNT, TWO_COUNTS);
   EXPRS: array[0..1] of string = ('G[count]', 'G[*/4]');
 var
   Book    : TRuleBook;
@@ -10377,13 +10390,23 @@ begin
 
     Book.LoadFromString(TWO_IMAGES_COUNT);
     L:= Book.LinksForBlock(0);
-    Check('glyph.count.edit.duplicate', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = DUP, CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    // Glyph1 -> G[count] beside a count link to ANOTHER To: engine-valid, no refusal.
+    Check('glyph.count.edit.other.to.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
     Check('glyph.count.orphan.images.left', OrphanedCountLink(L, 'Picture') = nil);
     Check('glyph.count.orphan.one.image.left', OrphanedCountLink([L[1], L[IDX_THIRD]], 'Picture') = nil, 'unassigning one of several image links keeps the count link');
 
     Book.LoadFromString(COUNT_ONLY);
     L:= Book.LinksForBlock(0);
     Check('glyph.count.orphan.none.left', OrphanedCountLink(L, 'Picture') = L[0]);
+
+    Book.LoadFromString(TWO_COUNTS);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.two.tos.first.ok', CountLinkIssueFor(L, L[1], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[1], 'Picture', 'G[count]'));
+    Check('glyph.count.two.tos.second.ok', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]'));
+
+    Book.LoadFromString(SAME_TO);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.exact.duplicate', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]') = DUP, CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]'));
   finally
     Book.Free;
   end;
@@ -10400,7 +10423,9 @@ begin
   end;
 
   // Every edit the dialog can confirm (CountLinkIssueFor silent), on every link of
-  // every fixture, with the box either way: at most ONE count link from the From after.
+  // every fixture, with the box either way: the dialog never AUTO-adds a count link
+  // when one from this From already exists after the edit (the edited link included).
+  // A book may hold several count links the user wrote; the dialog adds none beside them.
   Worst:= 0;
   Book:= TRuleBook.Create;
   try
@@ -10422,18 +10447,17 @@ begin
                 Inc(Counts);
             if Expr = 'G[count]' then
               Inc(Counts);
-            if Step = clsAdd then
-              Inc(Counts);
             if Step = clsRemove then
               Dec(Counts);
-            if Counts > Worst then
-              Worst:= Counts;
+            // Counts = count links after the edit, before any automatic insert.
+            if (Step = clsAdd) and (Counts > 0) then
+              Inc(Worst);
           end;
     end;
   finally
     Book.Free;
   end;
-  Check('glyph.count.never.two', Worst <= 1, Format('worst %d count links', [Worst]));
+  Check('glyph.count.never.auto.second', Worst = 0, Format('%d edit(s) auto-added a count link beside an existing one', [Worst]));
 end;
 { C10 fix round 1: the block merger must see a #link's glyph expression. Once the
   expression left LinkFrom, two links to one To that differ ONLY in the expression

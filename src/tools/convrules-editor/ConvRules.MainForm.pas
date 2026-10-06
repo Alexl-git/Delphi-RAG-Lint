@@ -1453,8 +1453,8 @@ type
       /// <remarks>Disabled while no rule is loaded (UpdateMenuEnabled, ruling B2). Every
       /// decision is ConvRules.Glyph's; an insert re-finds FActiveHdr by node (R3).</remarks>
       procedure DoGlyphExpr(Sender: TObject);
-      /// <summary>Removes the active block's G[count] link from AFromPath when no single
-      /// image link from that From is left for it (CountLinkIssue).</summary>
+      /// <summary>Removes the active block's G[count] link from AFromPath when NO
+      /// image link from that From is left for it (OrphanedCountLink, K = 0).</summary>
       /// <param name="AFromPath">The bare From path.</param>
       /// <returns>The removed link as '#link To &lt;- From G[count]', or ''.</returns>
       function DropOrphanCountLink(const AFromPath: string): string;
@@ -2598,7 +2598,7 @@ uses
   , ConvRules.DropTarget
   , ConvRules.EngineWait // RunWithProgressDialog: proptree behind a cancellable window
   , ConvRules.EngineProgress // TStreamingWork: the LongCallRunner wrapper's signature
-  , ConvRules.Glyph     // dl:unit ConvRules.Glyph accepted -- C10 glyph-link decisions; GLYPH_COUNT_EXPR travels with FindCountLink / CountLinkIssue
+  , ConvRules.Glyph     // dl:unit ConvRules.Glyph accepted -- C10 glyph-link decisions; GLYPH_COUNT_EXPR travels with FindCountLink / CountLinkIssueFor
   , ConvRules.GlyphForm // C10: the glyph-expression dialog
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
@@ -7012,8 +7012,8 @@ begin
       Link.GlyphExpr:= Opts.Expr;
       Link.Dirty    := True;
       Link.Marks    := nil; // a mark about the old expression must not survive the edit
-      // The dialog refused a second count link (CountLinkIssueFor); CountLinkStepFor
-      // never adds one beside an existing one, nor when the link itself became G[count].
+      // CountLinkStepFor never AUTO-adds a count link beside an existing one, nor when
+      // the link itself became G[count]; a count link the user writes is the user's.
       var LStep: TCountLinkStep:= CountLinkStepFor(Existing, Opts.Expr, AddCount);
       if LStep = clsAdd then
       begin

@@ -65,7 +65,8 @@ function ImageGlyphLinksFrom(const ANodes: TArray<TRuleNode>; const AFromPath: s
 
 /// <summary>The engine's rule that a G[count] link needs EXACTLY one image link from
 /// its FromPath in the same block, checked for the expression a link is being given --
-/// plus the editor's rule that one From has at most ONE G[count] link.</summary>
+/// plus an exact-duplicate check (another G[count] link with the same From AND To).
+/// Several count links from one From to different Tos are engine-valid and pass.</summary>
 /// <param name="ANodes">The block's nodes.</param>
 /// <param name="AEdited">The link whose expression AExpr would replace; it is left out
 /// of both counts (its OLD expression is about to go). nil = no link is being edited.</param>
@@ -73,7 +74,8 @@ function ImageGlyphLinksFrom(const ANodes: TArray<TRuleNode>; const AFromPath: s
 /// <param name="AExpr">The expression being written; anything but G[count] gives ''.</param>
 /// <returns>'' when fine; else 'G[count] needs exactly one image link from &lt;From&gt;;
 /// found K' (K counted without AEdited), or 'G[count] from &lt;From&gt; is already linked:
-/// #link &lt;To&gt; &lt;- &lt;From&gt; G[count]' when another count link reads that From.</returns>
+/// #link &lt;To&gt; &lt;- &lt;From&gt; G[count]' when another count link has AEdited's From
+/// AND To (never checked when AEdited is nil).</returns>
 function CountLinkIssueFor(const ANodes: TArray<TRuleNode>; AEdited: TRuleNode; const AFromPath, AExpr: string): string;
 
 /// <summary>The engine's warning, as a hint: a straight carry of a glyph-count property
@@ -119,7 +121,8 @@ type
 /// <param name="AWantCountLink">The box was shown and left checked.</param>
 /// <returns>clsAdd when wanted and none exists; clsRemove when one exists and is no
 /// longer wanted; clsNone otherwise, and ALWAYS when ANewExpr is itself G[count] (the
-/// edited link becomes the count link; CountLinkIssueFor refuses a second one).</returns>
+/// edited link becomes a count link). An automatic insert never lands beside an existing
+/// count link; count links the user writes are never refused for that.</returns>
 function CountLinkStepFor(AExisting: TRuleNode; const ANewExpr: string; AWantCountLink: Boolean): TCountLinkStep;
 
 /// <summary>Whether a plain Assign may retarget AFromPath's link in this block.</summary>
@@ -231,7 +234,19 @@ begin
     Dec(K); // its image expression is the one being replaced
   if K <> 1 then
     Exit(Format('G[count] needs exactly one image link from %s; found %d', [AFromPath, K]));
-  Other:= FindCountLink(ANodes, AFromPath, AEdited);
+  // Only an EXACT duplicate (same From AND same To) is refused: the engine accepts any
+  // number of G[count] links from one From to different Tos (CheckGlyphLink counts
+  // image links only), and the editor never refuses what the engine accepts.
+  if AEdited = nil then
+    Exit;
+  Other:= nil;
+  for var N: TRuleNode in ANodes do
+    if (N <> AEdited) and (N.Kind = rnkLink) and SameText(N.LinkFrom, AFromPath)
+       and SameText(N.LinkTo, AEdited.LinkTo) and IsCountExprText(N.GlyphExpr) then
+    begin
+      Other:= N;
+      Break;
+    end;
   if Other <> nil then
     Result:= Format('G[count] from %s is already linked: #link %s <- %s %s', [AFromPath, Other.LinkTo, Other.LinkFrom, Other.GlyphExpr]);
 end;
