@@ -982,6 +982,7 @@ begin
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
     'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
+    'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; a .dfm component nested in another converted one is spliced into its parent''s re-emit, and --only naming the parent converts it too (json only_included[] {name,parent}, text ''--only: <child> converts too -- nested in <parent>''); a collection property (FieldDefs = < item ... end>) whose item members the book links (#link X.Items.* <- X.Items.*, identity) is carried whole when the To type publishes X with the same collection type, else reported NOT carried with its item count and counted as dropped, #ignore X notwithstanding; ' +
     'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
     'a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed'') -- EXCEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); ' +
     '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
@@ -24598,6 +24599,8 @@ type
       --only. An unmatched name is ignored (never an error). }
     OnlyMatched  : TArray<string>;
     OnlyUnmatched: TArray<string>;
+    { 1.25.1: objects --only left out that convert with a kept parent }
+    OnlyIncluded : TArray<TNestedOnly>;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24836,6 +24839,17 @@ begin
     { 1.23.0 (C13 N3) -- ALWAYS present, [] without --only. }
     JRoot.AddPair('only_matched'  , ArrOf(ACtx.OnlyMatched));
     JRoot.AddPair('only_unmatched', ArrOf(ACtx.OnlyUnmatched));
+    { 1.25.1 -- ALWAYS present, [] without --only: one (name, parent) object per object
+      --only did not name that converts because a kept parent contains it }
+    var JInc: TJSONArray:= TJSONArray.Create;
+    for var NO: TNestedOnly in ACtx.OnlyIncluded do
+    begin
+      var JN: TJSONObject:= TJSONObject.Create;
+      JN.AddPair('name'  , NO.Instance.InstanceName);
+      JN.AddPair('parent', NO.Parent);
+      JInc.AddElement(JN);
+    end;
+    JRoot.AddPair('only_included', JInc);
 
     if Assigned(ACtx.Sink) then
     begin
@@ -24956,6 +24970,23 @@ begin
   for U in AUnresolved do Parts:= Parts + [Format('%s (line %d)', [U.Message, U.LineNo])];
   Result:= Format('%s %s in no --db -- index gap in the library or project index; reindex, or report it, before converting',
     [String.Join(', ', Parts), if Length(Parts) = 1 then 'resolves' else 'resolve']);
+end;
+
+{ 1.25.1 (the DMREADINGS defect): a plan the edit applier would refuse in
+  part fails the WHOLE unit before anything is written. TTextEditApplier.Apply
+  works file by file and refuses one file's edits whole on overlapping delete
+  ranges -- after the .pas has already been written -- so a unit came out
+  half-converted with exit 0. Checked on the dry run too, so the preview
+  fails exactly as --apply would: Ok=False, exit 1, nothing written. }
+procedure RefuseUnapplicablePlan(var APlan: TApplyResult);
+var
+  Refusal: string;
+begin
+  if not APlan.Ok then Exit;
+  Refusal:= TTextEditApplier.RefusalOf(APlan.Edits);
+  if Refusal = '' then Exit;
+  APlan.Ok   := False;
+  APlan.Error:= Refusal + ' -- unit not changed, nothing written';
 end;
 
 type
@@ -25240,6 +25271,12 @@ var
         Rules, AArgs.OnlySections, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
     if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
       Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
+    { 1.25.1: a kept parent's nested From-type children convert with it }
+    if (Length(AArgs.OnlySections) > 0) and TFile.Exists(DfmPath) then
+      JCtx.OnlyIncluded:= NestedOnlyInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)), Rules, AArgs.OnlySections);
+    if not UseJson then
+      for var NO: TNestedOnly in JCtx.OnlyIncluded do
+        Writeln(Format('--only: %s converts too -- nested in %s', [NO.Instance.InstanceName, NO.Parent]));
     { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
       #convert blocks have nothing to locate. A book with #unuse / #use /
       #useswap still has the unit's uses clauses to change, so it runs them and
@@ -25347,6 +25384,7 @@ var
         AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
     else
       PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections);
+    RefuseUnapplicablePlan(PlanRes); { 1.25.1: all-or-nothing across .pas and .dfm }
     JCtx.ClassesBuilt:= UnitClassesBuilt;
     if PlanRes.Refused then Exit(RefuseUnit(PlanRes.Error));
     if not PlanRes.Ok then

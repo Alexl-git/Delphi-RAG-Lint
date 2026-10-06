@@ -761,6 +761,22 @@ R26 (see *Refusals*) still counts every such instance as left unconverted. `info
 advertises the behaviour as `capabilities.inherited_instances: true`; an engine
 without the key still refuses the unit.
 
+**Collections** (1.25.1). A collection-valued property (`FieldDefs = < item ...
+end>`) streams as ONE leaf. A whole-collection `#link FieldDefs <- FieldDefs`
+relocates it verbatim, as before. Links on its ITEM members --
+`#link FieldDefs.Items.Name <- FieldDefs.Items.Name` -- now take effect too, and
+ahead of an `#ignore FieldDefs` on the same block (they are the more specific
+rule): when every such link is an identity link and the To type publishes the
+property with the SAME collection type, the collection is carried verbatim
+(reemit note `collection FieldDefs carried, items unchanged (#link FieldDefs.*
+at line(s) ...; N item(s))`). When they cannot be honoured -- a renaming item
+link, another collection type, or none on the `.dfm` surface (FireDAC's
+TFDTable publishes neither FieldDefs nor IndexDefs) -- the collection is NOT
+carried, a reemit note says why with its item count, and it is COUNTED as
+dropped: `dropped FieldDefs`, the `dropped on N of M` warning and `unlinked[]`.
+A collection the book does not mention at all is dropped and counted the same
+way; only a bare `#ignore` with no item links accepts the drop silently.
+
 **Descendant warnings** (1.25.0). Converting an ANCESTOR does not touch its
 descendants: each descendant `.dfm` still says `inherited X: TOld`, and VCL
 streaming then fails at load (`EClassNotFound`, or `EReadError` on an

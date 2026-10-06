@@ -79,6 +79,18 @@ type
     ToType      : string;
   end;
 
+  /// <summary>One .dfm object of a From type that --only did NOT name but that
+  /// converts anyway, because it is nested inside one --only did name (1.25.1;
+  /// apply/1 only_included[]).</summary>
+  /// <remarks>The parent's re-emit converts its nested From-type children
+  /// (the owned-part recursion), so leaving the child out would convert it in
+  /// the .dfm and not in the .pas -- form and code disagreeing. Parent is the
+  /// nearest enclosing converted instance's name.</remarks>
+  TNestedOnly = record
+    Instance: TConvertInstance;
+    Parent  : string;
+  end;
+
   /// <summary>One INHERITED or INLINE .dfm object whose class is the From type
   /// of a #convert block -- an instance convert-apply skips and reports
   /// (apply/1 inherited[], C8 engine item N1).</summary>
@@ -803,6 +815,20 @@ function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas,
 function FindConvertInstances(const ADfmText: string; const ARules: TConversionRuleSet;
   const AOnly: TArray<string>): TArray<TConvertInstance>;
 
+/// <summary>The .dfm objects of a From type that --only left out but that sit
+/// inside an object --only kept (1.25.1) -- each converts with its parent.</summary>
+/// <param name="ADfmText">The unit's .dfm text.</param>
+/// <param name="ARules">The parsed rule book.</param>
+/// <param name="AOnly">The --only names; empty gives an empty result (every
+/// instance converts anyway).</param>
+/// <returns>One TNestedOnly per such object, in .dfm order, any depth below the
+/// kept parent -- a child included this way includes its own children too.</returns>
+/// <remarks>Only `object` blocks count, as in FindConvertInstances. Blocks are
+/// tracked on a stack: object / inherited / inline headers and collection
+/// `item`s open one, `end` / `end>` closes one. Pure.</remarks>
+function NestedOnlyInstances(const ADfmText: string; const ARules: TConversionRuleSet;
+  const AOnly: TArray<string>): TArray<TNestedOnly>;
+
 /// <summary>Splits convert-apply's --only names into the ones that name a .dfm
 /// object of a #convert From type and the ones that name none (C13 N3, apply/1
 /// only_matched[] / only_unmatched[]).</summary>
@@ -1283,6 +1309,66 @@ begin
     Found.Free;
     OpenClasses.Free;
     Kinds.Free;
+  end;
+end;
+
+function NestedOnlyInstances(const ADfmText: string; const ARules: TConversionRuleSet;
+  const AOnly: TArray<string>): TArray<TNestedOnly>;
+var
+  Open   : TList<string>; { per open block: the converting instance's name, '' when it converts nothing }
+  T, Kw  : string;
+  HdrName  : string;
+  HdrClass : string;
+  ToType : string;
+  Parent : string;
+  N      : TNestedOnly;
+begin
+  Result:= nil;
+  if Length(AOnly) = 0 then Exit;
+  Open:= TList<string>.Create;
+  try
+    for var L: string in ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]) do
+    begin
+      T:= Trim(L);
+      Kw:= '';
+      if StartsText(KW_OBJECT + ' ', T) then Kw:= KW_OBJECT + ' '
+      else if StartsText(KW_INHERITED + ' ', T) then Kw:= KW_INHERITED + ' '
+      else if StartsText(KW_INLINE + ' ', T) then Kw:= KW_INLINE + ' ';
+      if Kw <> '' then
+      begin
+        Parent:= '';
+        for var K: Integer:= Open.Count - 1 downto 0 do
+          if Open[K] <> '' then
+          begin
+            Parent:= Open[K];
+            Break;
+          end;
+        HdrName:= '';
+        if (Kw = KW_OBJECT + ' ') and TryParseHeaderAfter(T, Kw, HdrName, HdrClass) and FindConvertRuleFor(ARules, HdrClass, ToType) then
+        begin
+          if not InOnlyList(HdrName, AOnly) and (Parent <> '') then
+          begin
+            N:= Default(TNestedOnly);
+            N.Instance.InstanceName:= HdrName;
+            N.Instance.FromType    := HdrClass;
+            N.Instance.ToType      := ToType;
+            N.Parent               := Parent;
+            Result:= Result + [N];
+          end
+          else if not InOnlyList(HdrName, AOnly) then
+            HdrName:= '';
+        end
+        else
+          HdrName:= '';
+        Open.Add(HdrName);
+      end
+      else if SameText(T, KW_ITEM) then
+        Open.Add('')
+      else if (Open.Count > 0) and (SameText(T, KW_END) or SameText(T, KW_END + '>')) then
+        Open.Delete(Open.Count - 1);
+    end;
+  finally
+    Open.Free;
   end;
 end;
 
@@ -1931,7 +2017,10 @@ var
 begin
   Result:= nil;
   if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
-  for var Inst: TConvertInstance in FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly) do
+  var DfmText: string:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+  var All: TArray<TConvertInstance>:= FindConvertInstances(DfmText, ARules, AOnly);
+  for var NO: TNestedOnly in NestedOnlyInstances(DfmText, ARules, AOnly) do All:= All + [NO.Instance];
+  for var Inst: TConvertInstance in All do
   begin
     Skipped:= False;
     for var It: TApplyItem in AReport.Items do
@@ -2637,7 +2726,38 @@ begin
   Result.Unreachable:= AUnreachable;
 end;
 
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+// 1.25.1: AEdits less every in-line edit (tekReplaceInLine / tekInsertInLine)
+// that repeats an earlier one exactly -- same file, line, columns and text.
+// Two #convert blocks carrying the same renaming #link (Title <- Caption on a
+// table and on its fields), or two instances of one type sharing a creator
+// site, planned the identical rewrite twice; applied twice, the second splice
+// lands on the already-rewritten line and corrupts it ('tbl.Title= tblID.Title
+// tbl2ID.Title'). Line deletes and inserts are kept as they are: a repeated
+// block edit is an overlap the all-or-nothing guard must see. Order kept.
+function DistinctInLineEdits(const AEdits: TArray<TTextEdit>): TArray<TTextEdit>;
+var
+  Seen: TDictionary<string, Boolean>;
+  Key : string;
+begin
+  Result:= nil;
+  Seen  := TDictionary<string, Boolean>.Create;
+  try
+    for var Ed: TTextEdit in AEdits do
+    begin
+      if Ed.Kind in [tekReplaceInLine, tekInsertInLine] then
+      begin
+        Key:= Format('%s|%d|%d|%d|%d|%s', [UpperCase(Ed.FilePath), Ord(Ed.Kind), Ed.Line, Ed.Col, Ed.EndCol, Ed.Text]);
+        if Seen.ContainsKey(Key) then Continue;
+        Seen.Add(Key, True);
+      end;
+      Result:= Result + [Ed];
+    end;
+  finally
+    Seen.Free;
+  end;
+end;
+
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok method-too-long@38ad -- REVIEWED 2026-10-06: 264 lines at 1.25.0, 272 now (1.25.1: the nested-instance splice call and the --only child include, each a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
 var
@@ -3006,6 +3126,81 @@ var
     end;
   end;
 
+  // 1.25.1 (the DMREADINGS defect): an instance whose .dfm block lies INSIDE
+  // the block of an instance this run already re-emitted -- a TField of a
+  // converted TTable. Its own delete + insert used to be planned beside the
+  // parent's, which covers the same lines: two overlapping delete ranges, so
+  // the applier refused the whole .dfm AFTER the .pas had been written.
+  //
+  // The parent's re-emit already holds a converted copy of the child (the
+  // owned-part recursion, run with the PARENT's trees). The child's OWN
+  // re-emit (AReemit, its own trees: defaults resolved, remainder reported
+  // under its own name -- run_convert_apply.ps1 Phase 9) is the better text,
+  // so it REPLACES that copy inside the parent's insert. One delete + insert
+  // for the whole parent, the child's report and .pas surfaces as before.
+  // When the parent's text holds no `object <Name>: <ToType>` block the child
+  // is skipped and warned, its .pas left alone to match. Parents precede their
+  // children in .dfm order, so the parent's edits are already in Edits.
+  // False when the block is inside no re-emitted block.
+  function SpliceIntoParent(AStart, AEnd: Integer; const AReemit: TReemitResult): Boolean;
+  var
+    Outer, InsIx: Integer;
+    Lines       : TArray<string>;
+    Hdr, HdrEnd : Integer;
+    HdrName     : string;
+    HdrClass    : string;
+    Ed          : TTextEdit;
+  begin
+    Outer:= 0;
+    for Ed in Edits do
+      if (Ed.Kind = tekDeleteLines) and SamePath(Ed.FilePath, ADfmPath) and
+         (Ed.Line < AStart) and (Ed.EndLine >= AEnd) then Outer:= Ed.Line;
+    if Outer = 0 then Exit(False);
+    Result:= True;
+    InsIx:= -1;
+    for var K: Integer:= 0 to Edits.Count - 1 do
+      if (Edits[K].Kind = tekInsertLines) and SamePath(Edits[K].FilePath, ADfmPath) and (Edits[K].Line = Outer - 1) then
+        InsIx:= K;
+    Hdr:= -1;
+    Lines:= nil;
+    if InsIx >= 0 then
+    begin
+      Lines:= Edits[InsIx].Text.Replace(#13#10, #10).Split([#10]);
+      for var K: Integer:= 0 to High(Lines) do
+        if TryParseObjectHeader(Trim(Lines[K]), HdrName, HdrClass) and SameText(HdrName, Inst.InstanceName) and
+           SameText(HdrClass, Inst.ToType) then
+        begin
+          Hdr:= K;
+          Break;
+        end;
+    end;
+    if Hdr < 0 then
+    begin
+      var SIt: TApplyItem:= InstItem(aikInstanceSkipped, afWarnings,
+        Format('%s: nested in a converted component whose .dfm re-emit does not carry it -- instance skipped',
+          [Inst.InstanceName]));
+      SIt.FilePath:= ADfmPath;
+      SIt.Line    := AStart;
+      Emit(SIt);
+      Exit;
+    end;
+    { the copy's own `end` is the first one at its header's indent }
+    HdrEnd:= Hdr + 1;
+    while (HdrEnd < High(Lines)) and not ((Trim(Lines[HdrEnd]) = 'end') and
+          (LeadingIndent(Lines[HdrEnd]) = LeadingIndent(Lines[Hdr]))) do Inc(HdrEnd);
+    Ed:= Edits[InsIx];
+    Ed.Text:= String.Join(#13#10, Lines, 0, Hdr) + (if Hdr > 0 then #13#10 else '') +
+      ReindentBlock(AReemit.DfmText, LeadingIndent(Lines[Hdr])) +
+      (if HdrEnd < High(Lines) then #13#10 + String.Join(#13#10, Lines, HdrEnd + 1, High(Lines) - HdrEnd) else '');
+    Edits[InsIx]:= Ed;
+    ConvertedInstNames.Add(Inst.InstanceName);
+    FoldReemitReport(AReemit.Report, AStart);
+    PlanFieldRetype;
+    PlanCreatorSites;
+    if DoneUnits.ContainsKey(Inst.ToType) then Exit;
+    DoneUnits.Add(Inst.ToType, True);
+    ToTypesSeen.Add(Inst.ToType);
+  end;
   // -- surface #4: instance-scoped property/event ACCESS rewrite, via ref-gap
   // G's 'member-access' refs. Runs ONCE over the whole unit per renaming
   // '#link ToMember <- FromMember' rule (not per-instance --
@@ -3233,6 +3428,10 @@ var
           UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed, WantIntf);
           if AlreadyUsed or (Length(UseEdits) > 0) then Break;
         end;
+        { 1.25.1: two To types declared in ONE unit (TFDTable and
+          TFDAutoIncField) planned that unit's add twice -- 'uses LibB, LibB'
+          does not compile. The first type's add stands for both. }
+        if not AlreadyUsed and (Length(UseEdits) > 0) and MatchText(ResolvedUnit, ConvertAdds.ToArray) then Continue;
         if AlreadyUsed or (Length(UseEdits) > 0) then
         begin
           ConvertAdds.Add(ResolvedUnit);
@@ -3380,6 +3579,8 @@ begin
 
   DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
   Instances:= FindConvertInstances(DfmText, ABook.Rules, AOnly);
+  { 1.25.1: a child of a kept parent converts with it, .pas included }
+  for var NO: TNestedOnly in NestedOnlyInstances(DfmText, ABook.Rules, AOnly) do Instances:= Instances + [NO.Instance];
   if Length(Instances) = 0 then
   begin
     Result.Error:= 'no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)';
@@ -3505,6 +3706,7 @@ begin
         Break;
       end;
 
+
       var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
       var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ABook.Rules, ATrees.ClassFor(Inst.FromType),
         ATrees.ClassFor(Inst.ToType), ACastLib, ABook.Unreachable);
@@ -3517,6 +3719,11 @@ begin
         Emit(It);
         Continue;
       end;
+
+      { 1.25.1: a block inside one this run already re-emitted -- a TField of a
+        converted TTable -- goes INTO that re-emit; its own delete + insert
+        would overlap the parent's (see SpliceIntoParent) }
+      if SpliceIntoParent(BlockStart, BlockEnd, ReemitRes) then Continue;
 
       { Instance has cleared the re-emit checkpoint -- it WILL get its #1/#2/#5
         edits below, so it is eligible for surface #4's instance-scoping too.
@@ -3603,7 +3810,7 @@ begin
     Result.Report.UsesChanges:= UsesPlan.Changes;
     Result.Report.Unlinked:= SummarizeUnlinked;
 
-    Result.Edits          := Edits.ToArray;
+    Result.Edits          := DistinctInLineEdits(Edits.ToArray);
     Result.Report.Converted:= Converted.ToArray;
     Result.Report.Warnings := Warnings.ToArray;
     Result.Report.ReemitNotes:= ReemitNotes.ToArray;

@@ -135,6 +135,18 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RenderDryRun(const AEdits: TArray<TTextEdit>): string;
+    /// <summary>Why Apply would refuse part of an edit set, or '' when it
+    /// would apply every file's edits (1.25.1).</summary>
+    /// <param name="AEdits">The whole plan, every file's edits.</param>
+    /// <returns>'' or, for the first file whose edits Apply would refuse
+    /// whole, 'refused N edit(s) to &lt;file&gt; -- overlapping delete ranges
+    /// (an engine defect)'.</returns>
+    /// <remarks>The same overlap test Apply makes per file, without reading
+    /// or writing anything, so a caller can refuse a multi-file plan BEFORE
+    /// any file is written -- Apply works file by file and cannot undo a file
+    /// it already wrote. Stale-anchor edits are not considered: they are
+    /// skipped one by one by design. Pure.</remarks>
+    class function RefusalOf(const AEdits: TArray<TTextEdit>): string;
   end;
 
   /// <remarks>
@@ -362,6 +374,34 @@ begin
       if Ranges[I].Line <= Ranges[I - 1].EndLine then Exit(True);
   finally
     Ranges.Free;
+  end;
+end;
+
+class function TTextEditApplier.RefusalOf(const AEdits: TArray<TTextEdit>): string;
+var
+  FileMap: TObjectDictionary<string, TList<TTextEdit>>;
+  Group  : TList<TTextEdit>;
+  Paths  : TArray<string>;
+begin
+  Result := '';
+  FileMap:= TObjectDictionary<string, TList<TTextEdit>>.Create([doOwnsValues]);
+  try
+    Paths:= nil;
+    for var E: TTextEdit in AEdits do
+    begin
+      if not FileMap.TryGetValue(E.FilePath, Group) then
+      begin
+        Group:= TList<TTextEdit>.Create;
+        FileMap.Add(E.FilePath, Group);
+        Paths:= Paths + [E.FilePath];
+      end;
+      Group.Add(E);
+    end;
+    for var P: string in Paths do
+      if DeletesOverlap(FileMap[P]) then
+        Exit(Format('refused %d edit(s) to %s -- overlapping delete ranges (an engine defect)', [FileMap[P].Count, P]));
+  finally
+    FileMap.Free;
   end;
 end;
 
