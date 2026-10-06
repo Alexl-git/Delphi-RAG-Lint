@@ -9956,6 +9956,7 @@ var
   N    : TRuleNode;
   Path : string;
   Expr : string;
+  Links: TArray<TRuleNode>;
 begin
   Book:= TRuleBook.Create;
   try
@@ -9978,6 +9979,11 @@ begin
     Check('glyph.roundtrip.dirty', Book.SaveToString = BOOK_TEXT, Book.Nodes[IDX_IMG].Emit);
     Check('glyph.links.for.block', Length(Book.LinksForBlock(0)) = LINKS_IN_BOOK, IntToStr(Length(Book.LinksForBlock(0))));
     Check('glyph.links.two.from.same', (Book.Nodes[IDX_TWO].LinkFrom = 'Picture') and (Book.Nodes[IDX_TWO].GlyphExpr = 'G[5/5]'));
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.links.two.from.same.distinct',
+      (Length(Links) = LINKS_IN_BOOK) and (Links[0] = Book.Nodes[IDX_IMG]) and (Links[LINKS_IN_BOOK - 1] = Book.Nodes[IDX_TWO])
+      and (Links[0].GlyphExpr <> Links[LINKS_IN_BOOK - 1].GlyphExpr),
+      'LinksForBlock must return both Picture G-links as separate nodes with their own expressions');
   finally
     Book.Free;
   end;
@@ -9998,6 +10004,68 @@ begin
   Check('glyph.split.none', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Font.Size') and (Expr = ''));
   Path:= 'Picture g[1/2]';
   Check('glyph.split.case.sensitive', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Picture g[1/2]'), 'lower-case g[ is a path, as in the engine');
+end;
+
+{ C10 fix round 1: the block merger must see a #link's glyph expression. Once the
+  expression left LinkFrom, two links to one To that differ ONLY in the expression
+  compared equal and the incoming one was dropped as a duplicate. They are a
+  CONFLICT (the user picks), an identical pair is still a duplicate, and two
+  G-links from one FromPath to different To paths both merge in. }
+procedure TestGlyphLinkMerge;
+const
+  HDR       = '#convert Abcbtn.TabcToggleBtn -> cxButtons.TcxButton'#13#10;
+  LINE_ALL  = '#link OptionsImage.Glyph <- Picture G[*/4]';
+  LINE_ONE  = '#link OptionsImage.Glyph <- Picture G[1/5]';
+  LINE_TWO  = '#link SomeOtherGlyph <- Picture G[5/5]';
+  LINE_CASE = '#link OptionsImage.Glyph <- Picture G[COUNT]';
+  LINE_LOW  = '#link OptionsImage.Glyph <- Picture G[count]';
+var
+  Plan  : TMergePlan       ;
+  Merged: TRuleBlocks      ;
+  Book  : TRuleBook        ;
+  Links : TArray<TRuleNode>;
+  BLinks: TArray<TBlockLink>;
+begin
+  BLinks:= BlockLinks(SplitRulesBlocks(HDR + LINE_ALL + #13#10)[0]);
+  Check('glyph.blocklinks.expr', (Length(BLinks) = 1) and (BLinks[0].LinkFrom = 'Picture') and (BLinks[0].GlyphExpr = 'G[*/4]'),
+    'BlockLinks must carry the glyph expression');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_ONE + #13#10));
+  Check('glyph.merge.expr.differs.conflict', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maConflict),
+    'links differing only in the glyph expression must not be skipped as duplicates');
+  if Length(Plan.Items) = 1 then
+  begin
+    Check('glyph.merge.conflict.shows.expr', (Plan.Items[0].ExistingFrom = 'Picture G[*/4]') and (Plan.Items[0].IncomingFrom = 'Picture G[1/5]'),
+      Plan.Items[0].ExistingFrom + ' | ' + Plan.Items[0].IncomingFrom);
+    Merged:= ApplyMerge(Plan, [mrTakeIncoming]);
+    Check('glyph.merge.take.incoming', JoinBlocks(Merged) = HDR + LINE_ONE + #13#10, JoinBlocks(Merged));
+    Merged:= ApplyMerge(Plan, [mrKeepExisting]);
+    Check('glyph.merge.keep.existing', JoinBlocks(Merged) = HDR + LINE_ALL + #13#10, JoinBlocks(Merged));
+  end;
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_LOW + #13#10), SplitRulesBlocks(HDR + LINE_CASE + #13#10));
+  Check('glyph.merge.expr.case.sensitive', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maConflict),
+    'the expression compares case-SENSITIVELY, as the engine splits it');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_ALL + #13#10));
+  Check('glyph.merge.identical.dedup', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maSkipDuplicate),
+    'an identical G-link is still a duplicate');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_TWO + #13#10));
+  Check('glyph.merge.two.from.same', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maMergeLink),
+    'a second G-link from the same FromPath to another To merges in');
+  Merged:= ApplyMerge(Plan, []);
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(JoinBlocks(Merged));
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.merge.two.from.same.distinct',
+      (Length(Links) = 2) and (Links[0].GlyphExpr = 'G[*/4]') and (Links[1].GlyphExpr = 'G[5/5]')
+      and (Links[0].LinkFrom = 'Picture') and (Links[1].LinkFrom = 'Picture'),
+      JoinBlocks(Merged));
+  finally
+    Book.Free;
+  end;
 end;
 
 begin
@@ -10182,6 +10250,7 @@ begin
     TestValidateTextStreams;
     TestValidateScopeCancel;
     TestGlyphLinkParse;
+    TestGlyphLinkMerge;
 
     FreeAndNil(GParseBook);
 

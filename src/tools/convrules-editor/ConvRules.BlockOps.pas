@@ -226,6 +226,10 @@ type
     LinkTo  : string; // target path (left of '<-')
     LinkFrom: string; // source path (right of '<-')
     Cast    : string; // optional cast name ('' = identity)
+    /// <summary>The #link's glyph expression ('G[*/4]', C10), verbatim; '' = none.
+    /// LinkFrom is the BARE source path since C10 E1, so two links that differ only
+    /// here must not compare equal -- PlanMerge compares it.</summary>
+    GlyphExpr: string;
   end;
 
   /// <summary>What the merger decided to do with one incoming line or block.</summary>
@@ -239,7 +243,8 @@ type
     maMergeLink, // incoming #link is missing from the target -> append the line
     maMergeOther, // incoming non-link line not already present -> append the line
     maSkipDuplicate, // identical link already present -> do nothing
-    maConflict // target already linked from a different source (or cast)
+    // target already linked from a different source (or cast, or glyph expression)
+    maConflict
   );
 
   /// <summary>One planned merge decision.</summary>
@@ -256,8 +261,8 @@ type
     Line            : string      ; // the incoming line, verbatim ('' for maAppendBlock)
     ToPath          : string      ; // contested/merged target path ('' when n/a)
     ExistingLine    : string      ; // maConflict: the target's current #link line
-    ExistingFrom    : string      ; // maConflict: its source path
-    IncomingFrom    : string      ; // maConflict: the incoming source path
+    ExistingFrom    : string      ; // maConflict: its source path [+ ' ' + glyph expression]
+    IncomingFrom    : string      ; // maConflict: the incoming source path [+ ' ' + glyph expression]
   end;
 
   /// <summary>A merge worked out but NOT applied. Planning is pure and writes
@@ -303,7 +308,8 @@ function BlockLinks(const ABlock: TRuleBlock): TArray<TBlockLink>;
 /// <summary>PURE: work out how AIncoming would fold into ATarget. Blocks are matched
 /// by trimmed header, case-insensitively. Within a matched pair: an identical link
 /// is skipped; a target already linked from a different source (or with a different
-/// cast) is a CONFLICT; a new target -- including one fed by an already-used source
+/// cast, or a different glyph expression -- compared case-SENSITIVELY, C10) is a
+/// CONFLICT, whose ExistingFrom / IncomingFrom carry the expression; a new target -- including one fed by an already-used source
 /// -- is merged; non-link lines not already present in the target are merged
 /// verbatim, where "already present" is an EXACT match after trimming (case-
 /// SENSITIVE -- non-link content is never deduped just because it differs only in
@@ -703,6 +709,17 @@ begin
       Inc(Result);
 end;
 
+{ The source side of a link as the conflict report and the curation grid show it:
+  the FromPath plus its glyph expression, the text LinkFrom held before C10 E1
+  split the expression off -- without it two conflicting G-links read identical. }
+function LinkSourceText(const ALink: TBlockLink): string;
+begin
+  if ALink.GlyphExpr = '' then
+    Result:= ALink.LinkFrom
+  else
+    Result:= ALink.LinkFrom + ' ' + ALink.GlyphExpr;
+end;
+
 function BlockLinks(const ABlock: TRuleBlock): TArray<TBlockLink>;
 var
   Book: TRuleBook        ;
@@ -721,6 +738,7 @@ begin
         L.LinkTo  := Book.Nodes[i].LinkTo;
         L.LinkFrom:= Book.Nodes[i].LinkFrom;
         L.Cast    := Book.Nodes[i].Cast;
+        L.GlyphExpr:= Book.Nodes[i].GlyphExpr;
         List.Add(L);
       end;
     Result:= List.ToArray;
@@ -863,15 +881,19 @@ begin
         Item.ToPath:= L.LinkTo;
         if not FindTargetLink(L.LinkTo, Existing) then
           Item.Action:= maMergeLink // missing (incl. fan-out)
+        // The glyph expression compares case-SENSITIVELY: the engine splits it on a
+        // capital ' G[' and reads it as written, so any difference is a real one and
+        // must reach the user as a conflict, never be dropped as a duplicate.
         else if SameText(Existing.LinkFrom, L.LinkFrom)
-                and SameText(Existing.Cast, L.Cast) then
+                and SameText(Existing.Cast, L.Cast)
+                and (Existing.GlyphExpr = L.GlyphExpr) then
           Item.Action:= maSkipDuplicate
         else
         begin
           Item.Action:= maConflict;
           Item.ExistingLine:= Existing.Line;
-          Item.ExistingFrom:= Existing.LinkFrom;
-          Item.IncomingFrom:= L       .LinkFrom;
+          Item.ExistingFrom:= LinkSourceText(Existing);
+          Item.IncomingFrom:= LinkSourceText(L);
         end;
         Items.Add(Item);
       end; // for
