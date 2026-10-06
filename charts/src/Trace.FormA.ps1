@@ -144,6 +144,10 @@ function New-TraceFacet([string] $Head, [string] $Text, [string] $Anchor = '', [
   [pscustomobject]@{ Kind = 'facet'; Head = $Head; Text = $Text; Anchor = $Anchor; Note = $Note; Ask = '' }
 }
 
+# The END TRACE line of counts $C (Get-TraceCounts) -- ONE builder, so the text and the chart's Legend (R5,
+# A-R5-COUNTS) cannot word it two ways.
+function Format-TraceEndLine($C) { "END TRACE  $($C.Steps) steps, $($C.Conditions) conditions, $($C.Crossings) crossings, $($C.Unresolved) unresolved." }
+
 # Recomputed from the items, never stored (AC-3).
 function Get-TraceCounts($Trace) {
   $s = 0; $c = 0; $x = 0; $u = 0
@@ -261,7 +265,7 @@ function Write-FormA($Trace) {
   }
   $c = Get-TraceCounts $Trace
   & $L ''
-  & $L "END TRACE  $($c.Steps) steps, $($c.Conditions) conditions, $($c.Crossings) crossings, $($c.Unresolved) unresolved."
+  & $L (Format-TraceEndLine $c)
   $text = $sb.ToString()
   $bad = [regex]::Match($text, '[^\x0D\x0A\x20-\x7E]')
   if ($bad.Success) {
