@@ -327,7 +327,9 @@ const
   // <N> edit(s) to <file> -- <why> -- unit not changed, nothing written' (apply/1
   // error: the same without 'ERROR: '). Anchored on the whole line, so the words
   // 'overlapping delete ranges' elsewhere never match.
-  EDIT_REFUSAL_PATTERN = '^(?:drag-lint: |ERROR: )?refused (\d+) edit\(s\) to (.+?) -- (.+)$';
+  // Matched case-insensitively (EDIT_REFUSAL_OPTIONS); 'edit', 'edits' and 'edit(s)'.
+  EDIT_REFUSAL_PATTERN = '^(?:drag-lint: |ERROR: )?refused (\d+) edit(?:\(s\)|s)? to (.+?) -- (.+)$';
+  EDIT_REFUSAL_OPTIONS = [roIgnoreCase];
   EDIT_REFUSAL_PREFIX  = '^(?:drag-lint: |ERROR: )';
   EDIT_REFUSAL_COUNT   = 1;
   EDIT_REFUSAL_FILE    = 2;
@@ -728,7 +730,7 @@ function ParseApplyJson(const AJson: string): TApplyRow;
   // from apply/1 error AND from stderr is the same refusal.
   function RefusalKey(const ALine: string): string;
   begin
-    Result:= TRegEx.Replace(ALine, EDIT_REFUSAL_PREFIX, '');
+    Result:= TRegEx.Replace(ALine, EDIT_REFUSAL_PREFIX, '', EDIT_REFUSAL_OPTIONS);
   end;
 
   // Every distinct refusal line in ALines, in order, appended to AFound (first form kept).
@@ -740,7 +742,7 @@ function ParseApplyJson(const AJson: string): TApplyRow;
     for var LRaw: string in ALines do
     begin
       LLine:= Trim(LRaw);
-      if not TRegEx.IsMatch(LLine, EDIT_REFUSAL_PATTERN) then
+      if not TRegEx.IsMatch(LLine, EDIT_REFUSAL_PATTERN, EDIT_REFUSAL_OPTIONS) then
         Continue;
       LSeen:= False;
       for var LHad: string in AFound do
@@ -826,7 +828,7 @@ begin
   LParts:= nil;
   for var LLine: string in ARow.EditRefusals do
   begin
-    LMatch:= TRegEx.Match(LLine, EDIT_REFUSAL_PATTERN);
+    LMatch:= TRegEx.Match(LLine, EDIT_REFUSAL_PATTERN, EDIT_REFUSAL_OPTIONS);
     if not LMatch.Success then
       Continue;
     // The engine's trailing '(an engine defect; the file is left unchanged)' is about

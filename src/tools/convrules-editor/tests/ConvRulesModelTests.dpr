@@ -1541,6 +1541,10 @@ begin
   // An ordinary failure is not an edit-set refusal.
   Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}');
   Check('editset.plain.failure.no', not ApplyEditSetRefused(Row));
+  // The pattern is case-insensitive and takes 'edit', 'edits' and 'edit(s)'.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[]}' + sLineBreak +
+    'Error: Refused 1 edit to C:\fix\DMREADINGS.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written');
+  Check('editset.variant.case.singular', ApplyEditSetRefused(Row) and (Pos('.dfm edits refused: 1 edit(s)', EditSetRefusedNote(Row)) > 0), string.Join(' | ', Row.EditRefusals));
 end; // procedure
 
 { ConvRules.ConvertRun -- every decision the Convert tab makes before or after
@@ -1802,18 +1806,18 @@ var
       end;
   end;
 
+  // Backups of APas's unit (.pas and .dfm) left in Dir.
+  function BackupsLeft(const APas: string): Integer;
+  begin
+    Result:= Length(TDirectory.GetFiles(Dir, ChangeFileExt(ExtractFileName(APas), '') + '.*.BCK*'));
+  end;
+
   // Engine 1.20.6 refusals (apply/1 "refused": true), kept out of the main body
   // so its cyclomatic complexity stays under the lint limit.
   procedure CheckRefusals;
   var
     LPas : string;
     LRows: TArray<TConvertRow>;
-
-    // Backups of APas's unit (.pas and .dfm) left in Dir.
-    function BackupsLeft(const APas: string): Integer;
-    begin
-      Result:= Length(TDirectory.GetFiles(Dir, ChangeFileExt(ExtractFileName(APas), '') + '.*.BCK*'));
-    end;
 
   begin
     // --- the FIRST book is refused: nothing changed the unit, so no restore and no backup ---
@@ -1936,7 +1940,15 @@ var
       end, Index, nil, nil);
     Check('runner.half.ordinary.converted', (Length(LRows) = 1) and (LRows[0].Status = csConverted)
       and (TFile.ReadAllText(LPas) = 'CONVERTED-A'), Describe(LRows));
+  end;
 
+  // Engine 1.25.1+ edit-set refusals through the runner (apart from CheckHalfWritten
+  // so each stays under the complexity limit).
+  procedure CheckEditSetRefusedRunner;
+  var
+    LPas : string;
+    LRows: TArray<TConvertRow>;
+  begin
     // --- engine 1.25.1+: exit 1, ok=false, nothing written. A unit failure (never a
     // book error), the note says the engine refused it as a defect; the next unit runs ---
     LPas:= TPath.Combine(Dir, 'H4.pas');
@@ -1951,10 +1963,34 @@ var
         AJson := NEW_REFUSED_JSON + sLineBreak + NEW_REFUSED_LINE + sLineBreak + HALF_DEFAULTS;
         Result:= 1;
       end, Index, nil, nil);
-    Check('runner.editset.new.unit.failure', (Length(LRows) = TWO_ROWS) and (LRows[0].Status = csFailedRestored)
-      and (LRows[1].Status = csFailedRestored) and (LCalls5 = TWO_ROWS) and (TFile.ReadAllText(LPas) = ORIG),
+    // Nothing had changed either unit: the csRefused "nothing changed" branch -- no
+    // restore, no backup named, the unneeded .BCK<N> dropped (owner decision 2026-10-04).
+    Check('runner.editset.new.unit.failure', (Length(LRows) = TWO_ROWS) and (LRows[0].Status = csRefused)
+      and (LRows[1].Status = csRefused) and (LCalls5 = TWO_ROWS) and (TFile.ReadAllText(LPas) = ORIG),
       Describe(LRows) + Format(' | calls=%d', [LCalls5]));
     Check('runner.editset.new.note', (Length(LRows) = TWO_ROWS) and (LRows[0].Note = NEW_REFUSED_NOTE), Describe(LRows));
+    Check('runner.editset.first.drops.backup', (Length(LRows) = TWO_ROWS) and (LRows[0].Backup = '') and (LRows[0].BackupDfm = '')
+      and (BackupsLeft(LPas) = 0) and (BackupsLeft(LPas5) = 0), Describe(LRows) + Format(' | backups left=%d/%d', [BackupsLeft(LPas), BackupsLeft(LPas5)]));
+
+    // --- 1.25.1 shape after an earlier book converted the unit: restore + roll back ---
+    LPas:= TPath.Combine(Dir, 'H6.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        if not SameText(ExtractFileName(ARulesFile), 'A.rules') then
+        begin
+          AJson := NEW_REFUSED_JSON + sLineBreak + NEW_REFUSED_LINE;
+          Exit(1);
+        end;
+        TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+        AJson := OK_JSON;
+        Result:= 0;
+      end, Index, nil, nil);
+    var LRestored: Boolean:= (TFile.ReadAllText(LPas) = ORIG) and (BackupsLeft(LPas) = 1);
+    Check('runner.editset.later.restores', LRestored and (Length(LRows) = TWO_ROWS)
+      and (LRows[0].Status = csRolledBack) and (LRows[1].Status = csRefused) and (LRows[1].Backup <> ''),
+      'pas=' + TFile.ReadAllText(LPas) + ' | ' + Describe(LRows) + Format(' | backups left=%d', [BackupsLeft(LPas)]));
   end;
 
 begin
@@ -1982,6 +2018,7 @@ begin
 
     CheckRefusals;
     CheckHalfWritten;
+    CheckEditSetRefusedRunner;
 
     // --- the backup cannot be taken: the unit is skipped, nothing left behind ---
     PasL:= TPath.Combine(Dir, 'L.pas');
@@ -11509,6 +11546,14 @@ begin
         Result:= 1;
       end, Index, nil, nil);
     Check('runner.scope.unscoped.no.match.no.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (Pos('--only asked', LRows[0].Note) = 0), Describe(LRows));
+    // An engine 1.25.1+ edit-set refusal with edits_count 0 on a scoped run is NOT an
+    // unmatched --only name: no "re-send it" hint (apply-guard fix wave, item 1).
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      Answer('{"schema":"apply/1","ok":false,"error":"refused 3 edit(s) to F.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written",' +
+        '"refused":false,"reason":"","rule_errors":[],"edits_count":0}'), Index, Scope, nil, nil);
+    Check('runner.editset.scoped.no.hint', (Length(LRows) = 1) and (Pos('re-send', LRows[0].Note) = 0) and (Pos('--only asked', LRows[0].Note) = 0)
+      and (Pos('engine refused the unit as an engine defect', LRows[0].Note) > 0), Describe(LRows));
   finally
     TDirectory.Delete(Dir, True);
   end; // try

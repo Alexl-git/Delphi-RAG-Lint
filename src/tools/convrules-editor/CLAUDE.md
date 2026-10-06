@@ -1572,7 +1572,9 @@ hand-written request file, which is exactly what `drive-convert-request.ps1` doe
   apply/1 says `ok: true`, `edits_count` is the PLANNED count, exit 0. No
   apply/1 key carries the refusal -- the stderr line is the only signal.
 * **What the editor does.** `ParseApplyJson` collects every whole line matching
-  `^drag-lint: refused (\d+) edit\(s\) to (.+?) -- (.+)$` from the captured
+  `EDIT_REFUSAL_PATTERN` =
+  `^(?:drag-lint: |ERROR: )?refused (\d+) edit(?:\(s\)|s)? to (.+?) -- (.+)$`,
+  case-insensitive (`EDIT_REFUSAL_OPTIONS` = `[roIgnoreCase]`), from the captured
   output (stderr follows stdout there), `warnings[]` and `error` into
   `TApplyRow.EditRefusals`; `ApplyHalfWritten` = `Ok` and any refusal. The
   runner then takes the FAILURE path (`FailUnit(.., csFailedRestored)`): the
@@ -1586,12 +1588,17 @@ hand-written request file, which is exactly what `drive-convert-request.ps1` doe
   `.BCK`, no recovery.txt), and the line is `ERROR: refused N edit(s) to <file>
   -- overlapping delete ranges (an engine defect) -- unit not changed, nothing
   written` (assumed the same text without `ERROR: ` in apply/1 `error`). The
-  pattern accepts an optional `drag-lint: ` / `ERROR: ` prefix;
+  pattern above accepts that prefix;
   `ApplyEditSetRefused` = NOT `Ok` and any refusal. It is a UNIT failure, never a
   book error (the book-skip branch excludes it; the next unit still runs), the
   note is `EditSetRefusedNote` (`engine refused the unit as an engine defect
-  (...) -- unit not changed, nothing written`); the runner's restore from its
-  own `.BCK` is harmless. Tests: `editset.*`, `runner.editset.*`.
+  (...) -- unit not changed, nothing written`). It takes the `csRefused` path of
+  `FailUnit` (status `refused -- not changed`): when no earlier book changed the
+  unit nothing is restored and the unneeded `.BCK<N>` files are DROPPED (owner
+  decision 2026-10-04, as `runner.refused.first.drops.backup`); when one did, the
+  unit is restored from its `.BCK<N>` and that book rolls back. A scoped run's
+  `edits_count` 0 here never gets the `--only asked for ... re-send it` hint.
+  Tests: `editset.*`, `runner.editset.*`.
 * **A STOP-GAP.** It keys on engine TEXT. When the engine ships its
   all-or-nothing apply (a non-zero exit / `ok:false` on any refused edit set),
   tighten this to that exit contract and drop the text match. Blind spot: the
