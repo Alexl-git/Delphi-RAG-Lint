@@ -76,6 +76,32 @@ an older parse. dot is resolved when a chart is drawn, so `round-trip` still del
 configured: the questions that read a SERVER or SQL index stop with exit 2 and say to copy
 `charts\report-pairs.example.json` to it (or to pass `-ServerDbPath` / `-SqlDbPath`).
 
+## Registering the MCP server with Claude Code and VS Code (R4, 2026-10-06)
+
+`src\Set-DragLintMcpConfig.ps1` adds drag-lint's MCP server (`drag-lint serve`) to the MCP clients'
+own config. The installer runs it with `-All` as an optional task.
+
+```
+pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -DryRun        (print the change, write nothing)
+pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -ClaudeCode -DbPath C:\Projects\MyApp\_D-RAG\MyApp.sqlite
+pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -Remove
+```
+
+* Targets: `-ClaudeCode` (user scope, top-level `mcpServers` in `~\.claude.json`; through the `claude mcp`
+  CLI when it is on PATH, else a file edit), `-VSCode` (`servers` in `%APPDATA%\Code\User\mcp.json`), or `-All`
+  (a client that is not installed is skipped).
+* The entry is `{ "type": "stdio", "command": "<engine>", "args": ["serve", "--db", "<-DbPath>"] }` (Claude
+  Code adds `"env": {}`). Without `-DbPath` the args are `["serve"]` and the engine picks the index from its
+  manifest when the client starts it. `serve` answers from ONE index, so register one entry per index with
+  `-Name`. The engine comes from `Resolve-DragLintEngine` (table above).
+* Safe on a real config: `-DryRun` writes nothing; a real write backs the file up to `<file>.bak-<timestamp>`,
+  merges (other servers and keys untouched), is idempotent (a second run says "no change" and writes
+  nothing), and `-Remove` deletes only its own entry. Malformed JSON, or JSON with comments a rewrite would
+  drop, is refused with nothing written. A file a running client rewrote while the script ran is not
+  overwritten. JSON is written UTF-8 without BOM.
+* Tests: `src\Test-McpConfig.ps1` (seconds; temp copies via `-ConfigPath`, a fake `claude` for the CLI path;
+  it never writes the real files).
+
 ## Graphviz -- present and verified 2026-09-22
 
 * `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` -- version 16.1.0
