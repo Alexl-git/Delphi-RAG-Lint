@@ -11,6 +11,7 @@ uses
   , System.IOUtils
   , System.Classes
   , System.StrUtils
+  , System.Generics.Collections
   , Winapi.Windows
   , ConvRules.Model in '..\ConvRules.Model.pas'  // dl:unit ConvRules.Model accepted -- the tests read BOOK_DEPTH_DEFAULT to pin the model's own default, so the const travels with the unit under test
   , ConvRules.Mappings in '..\ConvRules.Mappings.pas'
@@ -8484,6 +8485,188 @@ begin
   Check('usage.ispropname.public', IsPropName('Title.Caption') and not IsPropName('''abc'));
 end;
 
+{ A fake project index for the C8 walk: each row 'Class|PasPath|Parent'; a row
+  'Class|!' answers Failed (the engine could not be asked). A class with no row is
+  not in the index. ACalls (may be nil) records every question asked. }
+function FakeLookup(const ARows: TArray<string>; ACalls: TStringList): TClassLookup;
+const
+  PARENT_FIELD = 2;
+var
+  LRows: TArray<string>;
+begin
+  LRows:= ARows;
+  Result:= function(const AClassName: string): TClassInfo
+    var
+      LParts: TArray<string>;
+    begin
+      Result:= Default(TClassInfo);
+      if ACalls <> nil then
+        ACalls.Add(AClassName);
+      for var LRow: string in LRows do
+      begin
+        LParts:= LRow.Split(['|']);
+        if not SameText(LParts[0], AClassName) then
+          Continue;
+        if LParts[1] = '!' then
+          Result.Failed:= True
+        else
+        begin
+          Result.Found  := True;
+          Result.PasPath:= LParts[1];
+          if Length(LParts) > PARENT_FIELD then
+            Result.ParentClass:= LParts[PARENT_FIELD];
+        end;
+        Exit;
+      end;
+    end;
+end;
+
+{ A fake file system for the C8 walk: APaths[i] holds ATexts[i]; anything else is absent. }
+function FakeReader(const APaths, ATexts: TArray<string>): TDfmTextReader;
+var
+  LPaths, LTexts: TArray<string>;
+begin
+  LPaths:= APaths;
+  LTexts:= ATexts;
+  Result:= function(const APath: string; out AText: string): Boolean
+    begin
+      AText:= '';
+      for var I: Integer:= 0 to High(LPaths) do
+        if SameText(LPaths[I], APath) then
+        begin
+          AText:= LTexts[I];
+          Exit(True);
+        end;
+      Result:= False;
+    end;
+end;
+
+{ C8 E2 / E3 / E8: the ancestor walk over a fake index. The fixture mirrors the
+  measured DMTEST shape: the leaf's tblFtrs is declared two levels up (Base), and
+  the middle unit does not mention it; Mid re-opens tblOps; qryLib is declared by
+  no project unit (the chain leaves the index at TDataModule -- outside). }
+procedure TestInheritanceWalk;
+const
+  BASE_PAS = 'fx\Base.pas';
+  MID_PAS  = 'fx\Mid.pas';
+  LEAF_PAS = 'fx\Leaf.pas';
+  BASE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BASE_DONE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TFDTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TFDTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  MID_DFM  = 'inherited MidDM: TMidDM' + sLineBreak + '  inherited tblOps: TTable' + sLineBreak + '    ReadOnly = True' + sLineBreak +
+    '  end' + sLineBreak + 'end' + sLineBreak;
+  LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak +
+    '  inherited tblOps: TTable' + sLineBreak + '  end' + sLineBreak + '  inherited qryLib: TQuery' + sLineBreak + '  end' + sLineBreak +
+    '  inherited memNote: TMemo' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  FORM_DFM = 'object Form2: TForm2' + sLineBreak + '  inline Frame11: TFrame1' + sLineBreak + '    inherited Button1: TButton' + sLineBreak +
+    '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  FRAME_DFM = 'object Frame1: TFrame1' + sLineBreak + '  object Button1: TButton' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  ANCF_DFM = 'object AncF: TAncF' + sLineBreak + '  inline Frame11: TFrame1' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  DESCF_DFM = 'inherited DescF: TDescF' + sLineBreak + '  inherited Frame11: TFrame1' + sLineBreak + '    inherited Button1: TButton' + sLineBreak +
+    '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  LOOP_DFM = 'inherited LoopDM: TLoopA' + sLineBreak + '  inherited tblX: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  CHAIN_DEPTH_BASE = 2;
+  LEAF_FROM_INSTANCES = 3;
+  OPS_CHAIN_UNITS = 2;
+  CACHE_CALLS_AFTER_BROKEN = 3;
+  NOTE_OUTSIDE_LIB = 'inherits from TDataModule, which is not in this project''s index -- convert it from its own project';
+  NOTE_NO_ANCESTOR = 'inherits qryLib from an ancestor that is not in this project''s index -- convert it from its own project';
+var
+  Pairs : TArray<TTypePair>;
+  Rows  : TArray<string>;
+  U     : TUnitInheritance;
+  Calls : TStringList;
+  Cache : TDictionary<string, TClassInfo>;
+  Cached: TClassLookup;
+  Info  : TClassInfo;
+
+  function Pair(const AFrom, ATo: string): TTypePair;
+  begin
+    Result.FromType:= AFrom;
+    Result.ToType  := ATo;
+  end;
+
+  function V(const AName: string): TInstanceVerdict;
+  begin
+    Result:= Default(TInstanceVerdict);
+    for var LV: TInstanceVerdict in U.Verdicts do
+      if SameText(LV.Instance.Name, AName) then
+        Exit(LV);
+  end;
+
+begin
+  Pairs:= [Pair('TTable', 'TFDTable'), Pair('TQuery', 'TFDQuery'), Pair('TButton', 'TcxButton')];
+  Rows := ['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM', 'TBaseDM|' + BASE_PAS + '|TDataModule'];
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, MID_DFM, BASE_DFM]));
+  Check('inherit.walk.known', U.Known and (U.Error = ''), U.Error);
+  Check('inherit.walk.from.filter', Length(U.Verdicts) = LEAF_FROM_INSTANCES, IntToStr(Length(U.Verdicts)) + ' (memNote is a TMemo: not a From type)');
+  Check('inherit.walk.two.levels', (V('tblFtrs').State = asUnconverted) and (V('tblFtrs').DeclaringUnit = 'Base') and SameText(V('tblFtrs').DeclaringPas, BASE_PAS));
+  Check('inherit.walk.skips.silent.middle', (Length(V('tblFtrs').Chain) = 1) and SameText(V('tblFtrs').Chain[0].PasPath, BASE_PAS)
+    and (V('tblFtrs').Chain[0].Depth = CHAIN_DEPTH_BASE));
+  Check('inherit.walk.intermediate.in.chain', (Length(V('tblOps').Chain) = OPS_CHAIN_UNITS) and SameText(V('tblOps').Chain[0].PasPath, MID_PAS)
+    and SameText(V('tblOps').Chain[1].PasPath, BASE_PAS));
+  Check('inherit.walk.outside.library', (V('qryLib').State = asOutside) and (V('qryLib').DeclaringUnit = 'TDataModule') and (V('qryLib').DeclaringPas = '')
+    and (Length(V('qryLib').Chain) = 0), V('qryLib').DeclaringUnit);
+  Check('inherit.note.outside', OutsideNote(V('qryLib')) = NOTE_OUTSIDE_LIB, OutsideNote(V('qryLib')));
+  Check('inherit.note.not.outside', OutsideNote(V('tblFtrs')) = '', OutsideNote(V('tblFtrs')));
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, MID_DFM, BASE_DONE_DFM]));
+  Check('inherit.walk.converted', (V('tblFtrs').State = asConverted) and (V('tblFtrs').DeclaringUnit = 'Base') and (Length(V('tblFtrs').Chain) = 0));
+
+  U:= AnalyzeUnit('fx\Form2.pas', Pairs, FakeLookup(['TForm2|fx\Form2.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
+    FakeReader(['fx\Form2.dfm', 'fx\Frame1.dfm'], [FORM_DFM, FRAME_DFM]));
+  Check('inherit.walk.inline.frame', (Length(U.Verdicts) = 1) and (V('Button1').State = asUnconverted) and (V('Button1').DeclaringUnit = 'Frame1'),
+    Format('%d verdicts', [Length(U.Verdicts)]));
+  Check('inherit.walk.inline.not.listed', V('Frame11').Instance.Name = '');
+
+  U:= AnalyzeUnit('fx\DescF.pas', Pairs,
+    FakeLookup(['TDescF|fx\DescF.pas|TAncF', 'TAncF|fx\AncF.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
+    FakeReader(['fx\DescF.dfm', 'fx\AncF.dfm', 'fx\Frame1.dfm'], [DESCF_DFM, ANCF_DFM, FRAME_DFM]));
+  Check('inherit.walk.frame.in.ancestor', (V('Button1').State = asUnconverted) and (V('Button1').DeclaringUnit = 'Frame1'), V('Button1').DeclaringUnit);
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), FakeReader([], []));
+  Check('inherit.walk.no.dfm', not U.Known and (Length(U.Verdicts) = 0));
+  U:= AnalyzeUnit(LEAF_PAS, nil, FakeLookup(Rows, nil), FakeReader(['fx\Leaf.dfm'], [LEAF_DFM]));
+  Check('inherit.walk.no.checked.book', not U.Known and (Length(U.Verdicts) = 0));
+  U:= AnalyzeUnit(LEAF_PAS, [Pair('TMemoX', 'TcxMemo')], FakeLookup(Rows, nil), FakeReader(['fx\Leaf.dfm'], [LEAF_DFM]));
+  Check('inherit.walk.no.from.match', U.Known and (Length(U.Verdicts) = 0));
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TMidDM|' + MID_PAS + '|TBaseDM'], nil), FakeReader(['fx\Leaf.dfm'], [LEAF_DFM]));
+  Check('inherit.walk.unit.not.indexed', not U.Known and (Length(U.Verdicts) = 0));
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|!'], nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm'], [LEAF_DFM, MID_DFM]));
+  Check('inherit.walk.lookup.failed', not U.Known and (Length(U.Verdicts) = 0) and (U.Error <> ''), U.Error);
+  U:= AnalyzeUnit('fx\Loop.pas', Pairs, FakeLookup(['TLoopA|fx\Loop.pas|TLoopB', 'TLoopB|fx\LoopB.pas|TLoopA'], nil),
+    FakeReader(['fx\Loop.dfm'], [LOOP_DFM]));
+  Check('inherit.walk.cycle.ends', (Length(U.Verdicts) = 1) and (U.Verdicts[0].State = asOutside), Format('%d verdicts', [Length(U.Verdicts)]));
+
+  // C3: the unit's own class records no ancestor at all -- outside, but there is no
+  // class to name, so the note names the instance instead of a pseudo-class.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|'], nil), FakeReader(['fx\Leaf.dfm'], [LEAF_DFM]));
+  Check('inherit.walk.no.ancestor', U.Known and (V('qryLib').State = asOutside) and (V('qryLib').DeclaringUnit = OUTSIDE_NO_ANCESTOR),
+    V('qryLib').DeclaringUnit);
+  Check('inherit.note.no.ancestor', OutsideNote(V('qryLib')) = NOTE_NO_ANCESTOR, OutsideNote(V('qryLib')));
+  Check('inherit.unit.name', UnitNameOf('fx\PathToData.pas') = 'PathToData');
+
+  Calls:= TStringList.Create;
+  Cache:= TDictionary<string, TClassInfo>.Create;
+  try
+    Cached:= CachingLookup(FakeLookup(Rows + ['TBroken|!'], Calls), Cache);
+    Info:= Cached('TBaseDM');
+    Check('inherit.cache.answers', Info.Found and SameText(Info.PasPath, BASE_PAS), Info.PasPath);
+    Info:= Cached('tbasedm');
+    Check('inherit.cache.one.question', Info.Found and (Calls.Count = 1), Calls.CommaText);
+    Cached('TBroken');
+    Cached('TBroken');
+    Check('inherit.cache.failure.not.cached', Calls.Count = CACHE_CALLS_AFTER_BROKEN, Calls.CommaText);
+  finally
+    Cache.Free;
+    Calls.Free;
+  end; // try
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -8623,6 +8806,7 @@ begin
     TestConvertRunnerLive;
     TestInheritanceScan;
     TestInheritancePairs;
+    TestInheritanceWalk;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;
