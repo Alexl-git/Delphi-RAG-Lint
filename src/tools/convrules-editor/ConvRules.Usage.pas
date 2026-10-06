@@ -308,6 +308,21 @@ function IsRowUsed(const AFromPath: string; const AUsed: TArray<string>): Boolea
 /// </remarks>
 function ComputeUsage(const ADfmTexts, APasTexts: TArray<string>; const AFromClass: string; const AFromPaths: TArray<string>): TUsageSet;
 
+/// <summary>PURE: ALine with the CONTENT of every single-quoted DFM string literal
+/// removed (the quotes too), the doubled-apostrophe escape handled, so a literal's own
+/// '>', ')' or '}' can never be read as a block terminator.</summary>
+/// <param name="ALine">One .dfm line.</param>
+/// <returns>The line outside its literals; a literal left open runs to the end of the line.</returns>
+function StripQuoted(const ALine: string): string;
+
+/// <summary>PURE: True when S is a valid, possibly dotted, DFM property name -- identifier
+/// characters and dots only, starting with a letter or underscore.</summary>
+/// <param name="S">The trimmed text left of a line's '='.</param>
+/// <returns>False for '' and for anything holding a quote, space or other punctuation.</returns>
+/// <remarks>The guard that keeps a continuation line of a quoted string -- which may
+/// well contain '=' -- from being read as a property assignment.</remarks>
+function IsPropName(const S: string): Boolean;
+
 implementation
 
 { A valid (possibly dotted) DFM property name: identifier chars and dots only, starting

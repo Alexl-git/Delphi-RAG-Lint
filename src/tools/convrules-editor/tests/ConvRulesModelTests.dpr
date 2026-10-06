@@ -36,6 +36,7 @@ uses
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
+  , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'
   ;
 
 var
@@ -8357,6 +8358,132 @@ begin
     TDirectory.Delete(Dir, True);
   end;
 end;
+
+{ C8 E1: the .dfm scan lists every inherited / inline object, nested ones included,
+  with name, class, line, enclosing frame class and enclosing block type. Lists ('<',
+  '(', '{' values) are skipped whole, so a collection's item/end never closes a
+  component; quoted text is never a header. }
+procedure TestInheritanceScan;
+const
+  DESC_DFM =
+    'inherited dmlCPData: TdmlCPData' + sLineBreak +
+    '  Height = 480' + sLineBreak +
+    '  inherited tblFtrs: TTable' + sLineBreak +
+    '    inherited tblFtrsDimName: TStringField' + sLineBreak +
+    '      DisplayLabel = ''Characteristic Name''' + sLineBreak +
+    '    end' + sLineBreak +
+    '  end' + sLineBreak +
+    '  inherited qryScrap: TQuery [2]' + sLineBreak +
+    '    SQL.Strings = (' + sLineBreak +
+    '      ''select a, b'' +' + sLineBreak +
+    '      ''from t)'')' + sLineBreak +
+    '  end' + sLineBreak +
+    '  object qryOwn: TQuery' + sLineBreak +
+    '  end' + sLineBreak +
+    'end' + sLineBreak;
+  FRAME_DFM =
+    'object Form2: TForm2' + sLineBreak +
+    '  Caption = ''inherited fake: TTable''' + sLineBreak +
+    '  inline Frame11: TFrame1' + sLineBreak +
+    '    inherited Button1: TButton' + sLineBreak +
+    '      Caption = ''Go''' + sLineBreak +
+    '    end' + sLineBreak +
+    '  end' + sLineBreak +
+    '  object Grid: TDBGrid' + sLineBreak +
+    '    Columns = <' + sLineBreak +
+    '      item' + sLineBreak +
+    '        Expanded = False' + sLineBreak +
+    '      end' + sLineBreak +
+    '      item' + sLineBreak +
+    '        Title.Caption = ''a > b''' + sLineBreak +
+    '      end>' + sLineBreak +
+    '  end' + sLineBreak +
+    '  object After: TLabel' + sLineBreak +
+    '  end' + sLineBreak +
+    'end' + sLineBreak;
+  // Ruling R2: a string CONTINUATION line holding '=' and '(' is not a property
+  // assignment, so it must not open a list skip that would swallow every header after it.
+  CONT_DFM =
+    'inherited Form3: TForm3' + sLineBreak +
+    '  object Lbl: TLabel' + sLineBreak +
+    '    Hint =' + sLineBreak +
+    '      ''abc = (def'' +' + sLineBreak +
+    '      ''ghi''' + sLineBreak +
+    '  end' + sLineBreak +
+    '  inherited qryLate: TQuery' + sLineBreak +
+    '  end' + sLineBreak +
+    'end' + sLineBreak;
+  LINE_DIM   = 4;
+  LINE_SCRAP = 8;
+  LINE_LATE  = 7;
+  INSTANCES_IN_DESC = 3;
+var
+  S     : TDfmInheritance;
+  Opener: TDfmOpener;
+  Typ   : string;
+begin
+  S:= ScanDfmInheritance(DESC_DFM);
+  Check('inherit.scan.root', S.RootClass = 'TdmlCPData', S.RootClass);
+  Check('inherit.scan.count', Length(S.Instances) = INSTANCES_IN_DESC, IntToStr(Length(S.Instances)));
+  if Length(S.Instances) = INSTANCES_IN_DESC then
+  begin
+    Check('inherit.scan.plain', (S.Instances[0].Name = 'tblFtrs') and (S.Instances[0].TypeName = 'TTable') and (S.Instances[0].Opener = doInherited)
+      and (S.Instances[0].FrameClass = '') and (S.Instances[0].ParentType = ''));
+    Check('inherit.scan.nested', (S.Instances[1].Name = 'tblFtrsDimName') and (S.Instances[1].Line = LINE_DIM) and (S.Instances[1].ParentType = 'TTable'),
+      Format('%s line %d parent %s', [S.Instances[1].Name, S.Instances[1].Line, S.Instances[1].ParentType]));
+    Check('inherit.scan.index.suffix', (S.Instances[2].TypeName = 'TQuery') and (S.Instances[2].Line = LINE_SCRAP), S.Instances[2].TypeName);
+  end;
+  Check('inherit.scan.list.skipped', FindDfmObject(DESC_DFM, 'qryOwn', Opener, Typ) and (Opener = doObject) and (Typ = 'TQuery'), Typ);
+
+  S:= ScanDfmInheritance(FRAME_DFM);
+  Check('inherit.scan.quoted.not.header', Length(S.Instances) = 2, IntToStr(Length(S.Instances)));
+  if Length(S.Instances) = 2 then
+  begin
+    Check('inherit.scan.inline', (S.Instances[0].Name = 'Frame11') and (S.Instances[0].Opener = doInline) and (S.Instances[0].FrameClass = ''));
+    Check('inherit.scan.frame.child', (S.Instances[1].Name = 'Button1') and (S.Instances[1].Opener = doInherited)
+      and (S.Instances[1].FrameClass = 'TFrame1') and (S.Instances[1].ParentType = 'TFrame1'), S.Instances[1].FrameClass);
+  end;
+  Check('inherit.find.after.collection', FindDfmObject(FRAME_DFM, 'after', Opener, Typ) and (Opener = doObject) and (Typ = 'TLabel'), Typ);
+  Check('inherit.find.ignores.frame.children', not FindDfmObject(FRAME_DFM, 'Button1', Opener, Typ));
+  Check('inherit.find.absent', not FindDfmObject(FRAME_DFM, 'NoSuch', Opener, Typ));
+
+  S:= ScanDfmInheritance(CONT_DFM);
+  Check('inherit.scan.continuation.not.list', (Length(S.Instances) = 1) and (S.Instances[0].Name = 'qryLate') and (S.Instances[0].Line = LINE_LATE),
+    IntToStr(Length(S.Instances)));
+
+  S:= ScanDfmInheritance('TPF0'#0#1'garbage');
+  Check('inherit.scan.binary', S.IsBinary and (Length(S.Instances) = 0));
+  S:= ScanDfmInheritance('');
+  Check('inherit.scan.empty', (S.RootClass = '') and (Length(S.Instances) = 0) and not S.IsBinary);
+end;
+
+{ C8 E1 helpers: bare class names, a book's #convert pairs (From-only stubs kept), the
+  From-type test, and the two ConvRules.Usage helpers the scan now shares. }
+procedure TestInheritancePairs;
+const
+  BOOK =
+    '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak +
+    '#link Caption <- Caption' + sLineBreak +
+    '#convert TTable -> TFDTable' + sLineBreak +
+    '#convert TQuery -> ' + sLineBreak;
+  PAIRS_IN_BOOK = 3;
+var
+  Pairs: TArray<TTypePair>;
+begin
+  Check('inherit.bare.type', (BareType('Vcl.StdCtrls.TLabel') = 'TLabel') and (BareType('TTable') = 'TTable') and (BareType('') = ''));
+  Pairs:= TypePairsOfText(BOOK);
+  Check('inherit.pairs.count', Length(Pairs) = PAIRS_IN_BOOK, IntToStr(Length(Pairs)));
+  if Length(Pairs) = PAIRS_IN_BOOK then
+  begin
+    Check('inherit.pairs.bare', (Pairs[0].FromType = 'TLabel') and (Pairs[0].ToType = 'TStaticText') and (Pairs[1].FromType = 'TTable') and (Pairs[1].ToType = 'TFDTable'));
+    Check('inherit.pairs.from.only', (Pairs[2].FromType = 'TQuery') and (Pairs[2].ToType = ''));
+  end;
+  Check('inherit.isfrom', IsFromType('ttable', Pairs) and IsFromType('DBTables.TTable', Pairs) and not IsFromType('TMemo', Pairs));
+  Check('inherit.isfrom.none', not IsFromType('TTable', nil));
+  Check('usage.stripquoted.public', Pos('>', StripQuoted('Title.Caption = ''a > b''')) = 0);
+  Check('usage.ispropname.public', IsPropName('Title.Caption') and not IsPropName('''abc'));
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -8494,6 +8621,8 @@ begin
     TestConvertRunner;
     TestConvertRunnerFaults;
     TestConvertRunnerLive;
+    TestInheritanceScan;
+    TestInheritancePairs;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;
