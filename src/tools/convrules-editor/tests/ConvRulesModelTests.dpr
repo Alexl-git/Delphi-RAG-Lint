@@ -1544,26 +1544,26 @@ begin
   Books[2].Checked:= True;
   Books[2].Kind:= bkMixed;
   // The index is a list of FILE PATHS (the project DB's files table).
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.ok', Pre.Ok, string.Join(' | ', Pre.Problems));
   Check('convertrun.pre.units.only.skipped', string.Join(',', Pre.Runnable) = 'Conv.rules,Mixed.rules', string.Join(',', Pre.Runnable));
   Check('convertrun.pre.notes', Length(Pre.Notes) = 2, string.Join(' | ', Pre.Notes));
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
   Check('convertrun.pre.units.supported', Length(Pre.Runnable) = BOOK_COUNT, string.Join(',', Pre.Runnable));
-  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['P\u1.PAS'], False);
+  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['P\u1.PAS'], False, True);
   Check('convertrun.pre.unindexed.refused', (not Pre.Ok) and (Pos('Loose', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
   Check('convertrun.pre.index.nocase', Pos('U1', string.Join(' ', Pre.Problems)) = 0, string.Join(' | ', Pre.Problems));
   // The migration case: the project indexes ITS OWN U1.pas; a same-named unit
   // from another tree is not indexed -- the engine finds the .dfm by path.
-  Pre:= Preflight(Books, ['m2022\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['m2022\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.same.name.foreign.path', (not Pre.Ok) and (Pos('U1.pas', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
   Books[0].Checked:= False;
   Books[1].Checked:= False;
   Books[2].Checked:= False;
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.book', not Pre.Ok, string.Join(' | ', Pre.Problems));
   Books[0].Checked:= True;
-  Pre:= Preflight(Books, [], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, [], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
 
   // --- ParseApplyJson (schema apply/1) ---
@@ -10049,6 +10049,139 @@ begin
     TDirectory.Delete(Dir, True);
   end;
 end;
+
+{ C10 E13: ParseApplyJson reads glyphs[] whenever it is present (additive, not gated);
+  a missing array, a missing dropped_slots key, an unknown kind and wrongly-typed
+  values never raise. }
+procedure TestGlyphApplyParse;
+const
+  NO_SLOTS_KEY = '{"ok":true,"edits_count":1,"glyphs":[{"instance":"B","from_path":"Glyph","to_path":"X","kind":"glyph-weird","source_n":3,"alternative":"G[1]","rule_line":7,"message":"m"}]}';
+  BAD_TYPES = '{"ok":true,"edits_count":1,"glyphs":[7,"x",{"instance":5,"kind":["k"],"source_n":"3","rule_line":true,"dropped_slots":"5","message":"m2"},{"dropped_slots":[2,"z",null,{"a":1},3]}]}';
+  NOT_ARRAY = '{"ok":true,"edits_count":1,"glyphs":{"instance":"B"}}';
+  OUTCOMES = 3;
+  EDITS = 3;
+  N_FOUR = 4;
+  N_FIVE = 5;
+  SLOT_FIVE = 5;
+  SLOT_THREE = 3;
+  SLOT_TWO = 2;
+  LINE_TWO = 2;
+  TWO_ENTRIES = 2;
+var
+  P    : string;
+  Row  : TApplyRow;
+  Texts: Boolean;
+  Nums : Boolean;
+begin
+  P:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('glyph.apply.fixture', 'missing ' + P);
+    Exit;
+  end;
+  Row:= ParseApplyJson('(loaded defaults from x)'#13#10 + TFile.ReadAllText(P) + #13#10'(loaded defaults from y)');
+  Check('glyph.apply.ok', Row.Ok and (Row.EditsCount = EDITS), Row.Error);
+  Check('glyph.apply.count', Length(Row.Glyphs) = OUTCOMES, IntToStr(Length(Row.Glyphs)));
+  if Length(Row.Glyphs) = OUTCOMES then
+  begin
+    Texts:= (Row.Glyphs[0].Instance = 'Btn1') and (Row.Glyphs[0].Kind = GLYPH_KIND_STITCHED) and (Row.Glyphs[0].Alternative = 'G[*/4]');
+    Nums := (Row.Glyphs[0].SourceN = N_FOUR) and (Length(Row.Glyphs[0].DroppedSlots) = 0) and (Row.Glyphs[0].RuleLine = LINE_TWO);
+    Check('glyph.apply.stitched', Texts and Nums);
+    Check('glyph.apply.todo', (Row.Glyphs[1].Kind = 'glyph-no-alternative') and IsGlyphTodo(Row.Glyphs[1]) and (Pos('TODO written', Row.Glyphs[1].Message) > 0));
+    Check('glyph.apply.dropped', (Row.Glyphs[2].SourceN = N_FIVE) and (Length(Row.Glyphs[2].DroppedSlots) = 1) and (Row.Glyphs[2].DroppedSlots[0] = SLOT_FIVE)
+      and (Row.Glyphs[2].FromPath = 'Glyph') and (Row.Glyphs[2].ToPath = 'OptionsImage.Glyph'));
+    Check('glyph.apply.note', GlyphNoteSuffix(Row.Glyphs) = '; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', GlyphNoteSuffix(Row.Glyphs));
+  end;
+  Check('glyph.apply.remainder.unchanged', Length(Row.Remainder) = 1, 'todos[] still feeds Remainder');
+  Row:= ParseApplyJson('{"ok":true,"edits_count":0}');
+  Check('glyph.apply.absent.array', Row.Ok and (Length(Row.Glyphs) = 0));
+  Row:= ParseApplyJson(NO_SLOTS_KEY);
+  Check('glyph.apply.no.dropped.key', (Length(Row.Glyphs) = 1) and (Length(Row.Glyphs[0].DroppedSlots) = 0));
+  Check('glyph.apply.unknown.kind.is.todo', (Length(Row.Glyphs) = 1) and IsGlyphTodo(Row.Glyphs[0]) and (Row.Glyphs[0].Message = 'm'));
+  // R8: a wrongly-typed value degrades to its default; a non-object entry is skipped.
+  Row:= ParseApplyJson(BAD_TYPES);
+  Check('glyph.apply.bad.types.ok', Row.Ok and (Length(Row.Glyphs) = TWO_ENTRIES), IntToStr(Length(Row.Glyphs)));
+  if Length(Row.Glyphs) = TWO_ENTRIES then
+  begin
+    Texts:= (Row.Glyphs[0].Instance = '') and (Row.Glyphs[0].Kind = '') and (Row.Glyphs[0].Message = 'm2');
+    Nums := (Row.Glyphs[0].SourceN = 0) and (Row.Glyphs[0].RuleLine = 0) and (Length(Row.Glyphs[0].DroppedSlots) = 0);
+    Check('glyph.apply.bad.types.defaults', Texts and Nums);
+    Check('glyph.apply.bad.slots.skipped', (Length(Row.Glyphs[1].DroppedSlots) = TWO_ENTRIES) and (Row.Glyphs[1].DroppedSlots[0] = SLOT_TWO)
+      and (Row.Glyphs[1].DroppedSlots[1] = SLOT_THREE));
+  end;
+  Row:= ParseApplyJson(NOT_ARRAY);
+  Check('glyph.apply.not.array', Row.Ok and (Length(Row.Glyphs) = 0));
+end;
+
+{ C10 E12/E13: the runner's converted row carries the glyph suffix; Preflight skips a
+  G-link book while the engine lacks glyph_stitch and runs it when it has it. }
+procedure TestGlyphRunner;
+const
+  BOOKS_TWO = 2;
+var
+  P     : string;
+  Json  : string;
+  Rows  : TArray<TConvertRow>;
+  Dir   : string;
+  UnitP : string;
+  Books : TArray<TBookEntry>;
+  Pre   : TPreflight;
+begin
+  P:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('glyph.runner.fixture', 'missing ' + P);
+    Exit;
+  end;
+  Json:= TFile.ReadAllText(P);
+  Dir:= TPath.Combine(TPath.GetTempPath, 'glyphrun-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    UnitP:= TPath.Combine(Dir, 'U.pas');
+    TFile.WriteAllText(UnitP, 'unit U; interface implementation end.'#13#10, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'U.dfm'), 'object F: TF'#13#10'end'#13#10, TEncoding.ASCII);
+    Rows:= RunConversionUnits([UnitP], [TPath.Combine(Dir, 'B.rules')],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := Json;
+        Result:= 0;
+      end,
+      function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end,
+      nil, nil);
+    Check('glyph.runner.one.row', Length(Rows) = 1, IntToStr(Length(Rows)));
+    if Length(Rows) = 1 then
+    begin
+      Check('glyph.runner.converted', Rows[0].Status = csConverted, ConvertStatusText(Rows[0].Status) + ' ' + Rows[0].Note);
+      Check('glyph.runner.note', Rows[0].Note = '3 edit(s), 1 remaining for manual work; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', Rows[0].Note);
+      Check('glyph.runner.row.glyphs', Length(Rows[0].Apply.Glyphs) = Length(ParseApplyJson(Json).Glyphs));
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  SetLength(Books, BOOKS_TWO);
+  Books[0].Path    := 'b\Glyph.rules';
+  Books[0].Checked := True;
+  Books[0].Kind    := bkConvertOnly;
+  Books[0].HasGlyph:= True;
+  Books[1].Path    := 'b\Plain.rules';
+  Books[1].Checked := True;
+  Books[1].Kind    := bkConvertOnly;
+  Books[1].HasGlyph:= False;
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, False);
+  Check('glyph.pre.unsupported.skipped', Pre.Ok and (Length(Pre.Runnable) = 1) and (Pre.Runnable[0] = Books[1].Path), string.Join(';', Pre.Runnable));
+  Check('glyph.pre.unsupported.note', (Length(Pre.Notes) = 1) and (Pre.Notes[0] = 'Glyph.rules: glyph links: engine support pending -- skipped'), string.Join(';', Pre.Notes));
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, True);
+  Check('glyph.pre.supported.runs', Pre.Ok and (Length(Pre.Runnable) = BOOKS_TWO) and (Length(Pre.Notes) = 0), string.Join(';', Pre.Notes));
+  Books[1].Checked:= False;
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, False);
+  Check('glyph.pre.only.glyph.book.refused', (not Pre.Ok) and (Length(Pre.Problems) = 1) and (Pre.Problems[0] = 'None of the checked rule books can run (see notes).'), string.Join(';', Pre.Problems));
+end;
+
 { C10 E7/E8/E12-E14: the editor's own glyph decisions -- the live check goes through the
   ENGINE's parser (DRagLint.Convert.GlyphExpr, one parser for both), the two block-level
   rules carry the engine's wording, the count-target suggestion never guesses, and the
@@ -10397,6 +10530,8 @@ begin
     TestGlyphLinkParse;
     TestGlyphDecisions;
     TestGlyphCastLibArgs;
+    TestGlyphApplyParse;
+    TestGlyphRunner;
     TestGlyphLinkMerge;
 
     FreeAndNil(GParseBook);

@@ -200,6 +200,7 @@ implementation
 uses
   System.IOUtils
   , System.StrUtils
+  , ConvRules.Glyph
   , ConvRules.UnitStatus  // dl:ok unused-unit-in-uses@ec0d -- REVIEWED 2026-09-29 false positive: TFileProbe (FileProbe's return type) is declared here; removing the unit fails with E2003
   ;
 
@@ -501,7 +502,7 @@ var
     Row.Status:= csConverted;
     // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
     // before its first book, so the engine already knows which ancestors this run converted.
-    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported);
+    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs);
     Add;
   end;
 

@@ -10,6 +10,7 @@ interface
 
 uses
   System.SysUtils
+  , ConvRules.Glyph
   , ConvRules.UnitStatus
   ;
 
@@ -28,6 +29,8 @@ type
     Checked: Boolean;
     /// <summary>BookKindOfText of the file's text.</summary>
     Kind   : TBookKind;
+    /// <summary>True when the book holds a #link with a glyph expression (BookHasGlyphLinks); runnable only when the engine reports glyph_stitch.</summary>
+    HasGlyph: Boolean;
   end;
 
   /// <summary>One inherited / inline instance convert-apply left unconverted (apply/1
@@ -81,6 +84,8 @@ type
     /// ('skipped-no-instances': the .dfm holds no instance of its own, only inherited
     /// ones, engine C8 N1); '' when absent.</summary>
     ComponentPart: string;
+    /// <summary>glyphs[] -- one outcome per converted instance per G-link (engine ask N3); [] when the engine sends none.</summary>
+    Glyphs    : TArray<TGlyphOutcome>;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -162,11 +167,12 @@ function SourceRowText(const AUnitPas: string; const AIndexedFiles: TArray<strin
 /// <param name="AUnits">The source units (.pas paths).</param>
 /// <param name="AIndexedFiles">File paths in the project index (see UnitInIndex).</param>
 /// <param name="AUnitRulesSupported">The engine reports apply_unit_rules.</param>
+/// <param name="AGlyphSupported">The engine reports glyph_stitch; without it a book whose HasGlyph is True is skipped with a note.</param>
 /// <returns>Ok=False when no book is checked, no unit is listed, or a unit's
 /// FILE is not in the index (convert-apply would report a FALSE "could not
 /// locate .dfm object block" for it); Runnable = checked books minus empty ones
-/// and minus unit-rules-only ones while unsupported.</returns>
-function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
+/// minus unit-rules-only ones while unsupported, and minus G-link books while glyph_stitch is unsupported.</returns>
+function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 
 /// <summary>Reads convert-apply's --format json output (schema apply/1).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; text before the first
@@ -421,7 +427,7 @@ begin
     Result:= Result + ' -- not in the project index';
 end;
 
-function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
+function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 var
   B       : TBookEntry;
   U       : string;
@@ -435,6 +441,11 @@ begin
     if not B.Checked then
       Continue;
     AnyCheck:= True;
+    if B.HasGlyph and not AGlyphSupported then
+    begin
+      Result.Notes:= Result.Notes + [ExtractFileName(B.Path) + ': glyph links: engine support pending -- skipped'];
+      Continue;
+    end;
     case B.Kind of
       bkEmpty:
         Result.Notes:= Result.Notes + [ExtractFileName(B.Path) + ': no #convert and no unit rule -- skipped'];
@@ -466,6 +477,71 @@ begin
   if AnyCheck and (Length(Result.Runnable) = 0) and (Length(Result.Problems) = 0) then
     Result.Problems:= Result.Problems + ['None of the checked rule books can run (see notes).'];
   Result.Ok:= Length(Result.Problems) = 0;
+end;
+
+{ glyphs[] (C10, engine ask N3). Every key is optional and every read is
+  type-checked: an older engine sends no array, a future one may add keys or change
+  a type, and a value of the wrong JSON type reads as its default -- nothing here
+  raises (GetValue<T> would, on a wrong type). }
+function GlyphOutcomes(AObj: TJSONObject): TArray<TGlyphOutcome>;
+
+  // A JSON string; TJSONNumber descends from TJSONString, so it is excluded.
+  function Str(AItem: TJSONObject; const AKey: string): string;
+  var
+    LVal: TJSONValue;
+  begin
+    LVal:= AItem.GetValue(AKey);
+    if (LVal is TJSONString) and not (LVal is TJSONNumber) then
+      Result:= TJSONString(LVal).Value
+    else
+      Result:= '';
+  end;
+
+  // A JSON number holding an integer; anything else (3.5, "3", true) is False.
+  function TryInt(AVal: TJSONValue; out AInt: Integer): Boolean;
+  begin
+    AInt:= 0;
+    Result:= (AVal is TJSONNumber) and TryStrToInt(TJSONNumber(AVal).Value, AInt);
+  end;
+
+  function Int(AItem: TJSONObject; const AKey: string): Integer;
+  begin
+    if not TryInt(AItem.GetValue(AKey), Result) then
+      Result:= 0;
+  end;
+
+var
+  LArr  : TJSONValue;
+  LSlots: TJSONValue;
+  LItem : TJSONObject;
+  LSlot : Integer;
+  O     : TGlyphOutcome;
+begin
+  Result:= nil;
+  LArr:= AObj.GetValue('glyphs');
+  if not (LArr is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(LArr) do
+  begin
+    if not (LVal is TJSONObject) then
+      Continue;
+    LItem:= TJSONObject(LVal);
+    O:= Default(TGlyphOutcome);
+    O.Instance   := Str(LItem, 'instance');
+    O.FromPath   := Str(LItem, 'from_path');
+    O.ToPath     := Str(LItem, 'to_path');
+    O.Kind       := Str(LItem, 'kind');
+    O.Alternative:= Str(LItem, 'alternative');
+    O.Message    := Str(LItem, 'message');
+    O.SourceN    := Int(LItem, 'source_n');
+    O.RuleLine   := Int(LItem, 'rule_line');
+    LSlots:= LItem.GetValue('dropped_slots');
+    if LSlots is TJSONArray then
+      for var LSlotVal: TJSONValue in TJSONArray(LSlots) do
+        if TryInt(LSlotVal, LSlot) then
+          O.DroppedSlots:= O.DroppedSlots + [LSlot];
+    Result:= Result + [O];
+  end;
 end;
 
 function ParseApplyJson(const AJson: string): TApplyRow;
@@ -557,6 +633,7 @@ begin
     Result.InheritedLeft:= InheritedItems(Obj);
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0);
     Result.ComponentPart:= Str(Obj, 'component_part');
+    Result.Glyphs    := GlyphOutcomes(Obj);
     if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
       Result.RuleErrorCount:= Errs.Count;
     Result.Refused:= (not Result.Ok) and Obj.GetValue<Boolean>('refused', False);

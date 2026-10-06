@@ -538,7 +538,7 @@ begin
   for var LFile: string in Files do
     if not Listed(LFile) then
     begin
-      var E: TBookEntry;
+      var E: TBookEntry:= Default(TBookEntry); // HasGlyph must not be stack garbage (C10 Task 4)
       E.Path   := LFile;
       E.Checked:= False;
       if KindOf(LFile, E.Kind) then
@@ -1151,7 +1151,7 @@ begin
   FIndexKnown:= True;
   FIndexed   := Idx;
   FSources.Invalidate;
-  Pre:= Preflight(FEntries, Units, Idx, FUnitRulesOk);
+  Pre:= Preflight(FEntries, Units, Idx, FUnitRulesOk, False); // glyph_stitch probe arrives in C10 Task 6
   FResults.Items.Clear;
   FRunRows:= nil;
   FNotes  := Pre.Notes;

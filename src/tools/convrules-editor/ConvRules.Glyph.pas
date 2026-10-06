@@ -109,7 +109,7 @@ function GlyphTodoCount(const AOutcomes: TArray<TGlyphOutcome>): Integer;
 /// <summary>The converted row's note suffix.</summary>
 /// <param name="AOutcomes">A unit's glyph outcomes.</param>
 /// <returns>'' when none, else the spec E13 suffix -- N stitched, M slots dropped by rule, K to-do outcomes (exact text pinned by the glyph.note.suffix test).</returns>
-function GlyphNoteSuffix(const AOutcomes: TArray<TGlyphOutcome>): string;  // dl:ok unused-public-symbol@ba7e -- REVIEWED 2026-10-06 editor caller arrives in a later C10 task (GlyphForm / MainForm / ConvertTab); ConvRulesModelTests already calls it
+function GlyphNoteSuffix(const AOutcomes: TArray<TGlyphOutcome>): string;
 
 /// <summary>One tab-separated run-report line for an outcome.</summary>
 /// <param name="AUnitPas">The unit's path as the report names it.</param>
