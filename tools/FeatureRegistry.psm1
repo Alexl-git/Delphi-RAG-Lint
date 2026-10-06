@@ -23,7 +23,7 @@
   * SINGLE OBJECT -- Read-FamilyDefinition and Get-RegistryChildren return one
     [ordered] dictionary; Get-RegistryChildren's values are object[] child
     lists (familyId -> children), already safe to .Count.
-  * SINGLE OBJECT also: Invoke-RegistryCheck ({ Failures; Notes; Stats }),
+  * SINGLE OBJECT also: Invoke-RegistryCheck ({ Failures; Notes; Stats }), Get-EntrySkeleton ([string]),
     ConvertFrom-SurfaceSpec ([ordered] surface), and the [string] returns of
     New-FeatureEntry / Update-FeatureEntry / Set-FeatureDeprecated (file path).
   * Generator (Task 5): Get-RegistryModel and Invoke-RegistryGenerate return
@@ -33,7 +33,8 @@
     not an approved verb (exporting them would make Import-Module warn).
   Sort-OrdinalUnique, New-RegistryListAddition, Read-RegistryList,
   Get-FamilyMenuPrefixes, ConvertTo-RegistryListJson, Get-ChildIdsIfNeeded, Get-AllRegistryItems and
-  Test-MenuNodeCovers are module-internal (not exported). Family children carry
+  Test-MenuNodeCovers are module-internal (not exported), as are the check's
+  helpers Get-LeafKey, Get-ExemptionMap and Get-NearestCaption (WRAPPED). Family children carry
   child-only keys (parent, subgroup, emitter, wikiAnchor) and are NEVER
   written under features\entries\.
 #>
@@ -497,6 +498,17 @@ function Get-LiveSurface {
   $captionKeys = @($captions | ForEach-Object { Get-CaptionKey -S $_ } | Where-Object { $_ })
   $aboutSrc = Get-Content -LiteralPath (Join-Path $Paths.Repo 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas') -Raw
   $aboutButtons = @([regex]::Matches($aboutSrc, "Add(?:Proc)?Button\(\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value.Replace('&&', '&').Trim() } | Sort-Object -Unique)
+  # Context-menu captions, per ide-context host (spec 6.1). They are NOT in
+  # Captions: the docs-sync harvest reads the main-menu sources only, and a
+  # context item checked against main-menu captions passes or fails by
+  # coincidence. Single '&' is an accelerator here and is dropped; '&&' is a
+  # literal '&'. A host with no harvester is absent (check C names it).
+  $ctxCaps = [ordered]@{}
+  $sfSrc = Get-Content -LiteralPath (Join-Path $Paths.Repo 'src\delphi-plugin\DragLint.Plugin.StructureForm.pas') -Raw
+  $ctxCaps['Structure form'] = [string[]]@([regex]::Matches($sfSrc, "AddPopupItem\(\s*\w+\s*,\s*'([^']+)'") | ForEach-Object { (($_.Groups[1].Value -replace '&&', "`u{1}") -replace '&', '' -replace "`u{1}", '&').Trim() } | Where-Object { $_ -ne '-' } | Sort-Object -Unique)
+  $pmSrc = Get-Content -LiteralPath (Join-Path $Paths.Repo 'src\delphi-plugin\DragLint.Plugin.ProjectMenu.pas') -Raw
+  $ctxCaps['Project Manager'] = [string[]]@([regex]::Matches($pmSrc, "MENU_CAPTION\s*=\s*'([^']+)'") | ForEach-Object { (($_.Groups[1].Value -replace '&&', "`u{1}") -replace '&', '' -replace "`u{1}", '&').Trim() })
+  foreach ($h in @($ctxCaps.get_Keys())) { if ($ctxCaps[$h].Count -eq 0) { throw "live surface: 0 context-menu captions harvested for host '$h'" } }
   $mcpSrc = Get-Content -LiteralPath $Paths.McpServer -Raw
   $mcpTools = @([regex]::Matches($mcpSrc, "ToolDescriptor\(\s*'([a-z_]+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
   $mcpDispatch = @([regex]::Matches($mcpSrc, "ToolName\s*=\s*'([a-z_]+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
@@ -540,7 +552,7 @@ function Get-LiveSurface {
   if (-not $vers.Product) { throw 'live surface: DRAGLINT_VERSION not found in DRagLint.Core.Model.pas' }
   return [pscustomobject]@{
     HelpText = $helpText; HelpVerbs = $helpVerbs; DispatchVerbs = $dispatch; SubMap = $subMap
-    Captions = $captions; CaptionKeys = $captionKeys; AboutButtons = $aboutButtons
+    Captions = $captions; CaptionKeys = $captionKeys; AboutButtons = $aboutButtons; ContextCaptions = $ctxCaps
     McpTools = $mcpTools; McpDispatch = $mcpDispatch; RuleCatalog = $cat
     ReportQuestions = $questions; ReportQuestionCount = [int]$qc.Groups[1].Value; GroupCaptions = $groupCaptions
     ChartValidateSet = $validateSet; EmitterFiles = $emitters; PackExes = $packExes; Versions = $vers
@@ -1057,8 +1069,74 @@ function Invoke-RegistryNormalise {
   return ,[string[]]$changed.ToArray()
 }
 
+# Get-EntrySkeleton -- the JSON a check-B failure prints for the implementer
+# to paste into features\entries\<id>.json. SINGLE OBJECT ([string], CRLF,
+# canonical). since and lastVerified.build come from the live product
+# version; wikiPage is a docs\wiki page whose stem equals the id (exact case
+# first, then case-insensitively, printed in the page's own case), else a
+# placeholder. Placeholders are <...> so the result never validates as-is.
+function Get-EntrySkeleton {
+  param([Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][System.Collections.IDictionary]$Surface, [Parameter(Mandatory)]$Live, [Parameter(Mandatory)]$Context)
+  $page = '<page stem under docs\wiki>'
+  if ($Context.WikiPages.Contains($Id)) { $page = $Id }
+  else { foreach ($w in $Context.WikiPages) { if ([string]::Equals($w, $Id, [StringComparison]::OrdinalIgnoreCase)) { $page = $w; break } } }
+  $sk = [ordered]@{
+    id = $Id; title = '<the name a human says>'; group = ('<one of: ' + (@($Context.Groups.get_Keys()) -join ' ') + '>'); owner = ('<one of: ' + (@($Context.Teams) -join ' ') + '>')
+    status = 'shipped'; since = $Live.Versions.Product; summary = '<one line, 20..160 chars, no trailing period>'; intro = '<1..5 sentences: what it does, when to reach for it, what it needs>'
+    wikiPage = $page; surfaces = @($Surface); audience = 'both'
+    lastVerified = [ordered]@{ date = (Get-Date -Format 'yyyy-MM-dd'); by = '<you>'; build = $Live.Versions.Product }
+  }
+  return (ConvertTo-CanonicalJson -Value $sk)
+}
+
+# The caption key of an IDE surface's LEAF: the last ' > ' segment of an
+# ide-menu / tool-window path, or the caption of an ide-context / ide-about
+# surface. v1 checks leaves only (spec 18; full-path nesting is v2, once the
+# plugin has a declarative menu table). '' for every other surface type.
+function Get-LeafKey([System.Collections.IDictionary]$S) {
+  switch ([string]$S['type']) {
+    'ide-menu'    { return (Get-CaptionKey -S (([string]$S['path'] -split '\s+>\s+')[-1])) }
+    'tool-window' { return (Get-CaptionKey -S (([string]$S['path'] -split '\s+>\s+')[-1])) }
+    'ide-context' { return (Get-CaptionKey -S ([string]$S['caption'])) }
+    'ide-about'   { return (Get-CaptionKey -S ([string]$S['caption'])) }
+  }
+  return ''
+}
+
+# Nearest live captions for a (usually abbreviated) caption key: each candidate
+# is scored both whole and cut to the key's length, because entries abbreviate
+# on purpose ("Call Graph" for "Call Graph (Butterfly)...") and a whole-string
+# Levenshtein then ranks "Close" above the caption that was meant. WRAPPED.
+function Get-NearestCaption([string]$Key, [string[]]$Captions) {
+  $pool = @{}
+  foreach ($c in $Captions) {
+    $pool[$c] = $c
+    $ck = Get-CaptionKey -S $c
+    if ($ck.Length -gt $Key.Length) { $cut = $ck.Substring(0, $Key.Length); if (-not $pool.ContainsKey($cut)) { $pool[$cut] = $c } }
+  }
+  $seen = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($n in (Get-NearestCandidates -Value $Key -Candidates ([string[]]@($pool.Keys)) -Top 12)) { $o = [string]$pool[$n]; if (-not $seen.Contains($o)) { $seen.Add($o) }; if ($seen.Count -ge 3) { break } }
+  return ,[string[]]$seen.ToArray()
+}
+
+function Get-ExemptionMap($Context, [string]$Kind) {
+  if ($Context.Exemptions -is [System.Collections.IDictionary] -and $Context.Exemptions.Contains($Kind) -and $Context.Exemptions[$Kind] -is [System.Collections.IDictionary]) { return $Context.Exemptions[$Kind] }
+  return [ordered]@{}
+}
+
+# Invoke-RegistryCheck -- the guard's checks (spec 9). SINGLE OBJECT
+# { Failures; Notes; Stats }. Failure strings are prefixed 'A: '..'D: ';
+# check E (staleness) and the seed-backlog debt land in Notes ('stale: ...',
+# 'backlog: <TEAM> <n> remaining ...'), never in Failures.
+# -Level WellFormed runs check A only (no engine, no live harvest).
+# -Level Full (default) adds B, C, D and E; -Live reuses a Get-LiveSurface
+# result; -SkipGenerated skips D. The -Inject* parameters exist for the
+# guard's positive controls: they add in-memory entries, --help verbs, live
+# main-menu captions and (-InjectContextCaptions) Structure-form context-menu
+# captions to the run, and never touch a file.
 function Invoke-RegistryCheck {
-  param([Parameter(Mandatory)]$Paths, [ValidateSet('WellFormed', 'Full')][string]$Level = 'Full')
+  param([Parameter(Mandatory)]$Paths, [ValidateSet('WellFormed', 'Full')][string]$Level = 'Full', $Live = $null, [switch]$SkipGenerated,
+        [object[]]$InjectEntries = @(), [string[]]$InjectHelpVerbs = @(), [string[]]$InjectCaptions = @(), [string[]]$InjectContextCaptions = @())
   $fail = New-Object 'System.Collections.Generic.List[string]'
   $notes = New-Object 'System.Collections.Generic.List[string]'
   $stats = [ordered]@{}
@@ -1066,25 +1144,194 @@ function Invoke-RegistryCheck {
   if (-not (Test-Path -LiteralPath $Paths.Entries)) { $fail.Add("A: $($Paths.Entries) does not exist") }
   $ctx = $null
   try { $ctx = Get-RegistryContext -Paths $Paths } catch { $fail.Add("A: cannot load the registry: $($_.Exception.Message)") }
-  if ($null -ne $ctx) {
-    # Non-empty groups are a Full-level property (Task 7): a scratch registry with
-    # three entries is well-formed, it is just not complete.
-    foreach ($pr in (Test-GroupsAndTeams -Context $ctx -RequireNonEmptyGroups:($Level -eq 'Full'))) { $fail.Add("A: $pr") }
-    # Not $home: $HOME is a read-only automatic variable and the assignment throws.
-    $homeSeen = @{}
-    foreach ($r in $ctx.Entries) {
-      foreach ($pr in @(Test-FeatureEntry -Entry $r.Entry -Context $ctx -Stem $r.Stem)) { $fail.Add("A: $pr") }
-      $canon = Test-EntryCanonicalBytes -Read $r -KeyOrder $ctx.KeyOrder; if ($canon) { $fail.Add("A: $canon") }
-      if ($r.Entry.Contains('homeOrder')) { $ho = [int]$r.Entry['homeOrder']; if ($homeSeen.ContainsKey($ho)) { $fail.Add("A: $($r.Stem).json: homeOrder $ho is also used by $($homeSeen[$ho])") } else { $homeSeen[$ho] = $r.Stem } }
-    }
-    foreach ($f in @(Get-ChildItem -LiteralPath $Paths.Templates -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) + @($Paths.RelatedProjects, $Paths.Exemptions, $Paths.Groups, $Paths.Teams) + @(Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })) {
-      if (Test-Path -LiteralPath $f) { $asc = Test-AsciiCrlfFile -Path $f; if ($asc) { $fail.Add("A: $asc") } }
-    }
-    foreach ($f in (Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue)) { try { [void](Read-FamilyDefinition -Path $f.FullName) } catch { $fail.Add("A: $($_.Exception.Message)") } }
-    $stats['entries'] = $ctx.Entries.Count
-    foreach ($g in $ctx.Groups.Keys) { $stats["group:$g"] = @($ctx.Entries | Where-Object { [string]$_.Entry['group'] -eq $g }).Count }
+  if ($null -eq $ctx) { return [pscustomobject]@{ Failures = $fail; Notes = $notes; Stats = $stats } }
+  # Non-empty groups are a Full-level property: a scratch registry with three
+  # entries is well-formed, it is just not complete.
+  foreach ($pr in @(Test-GroupsAndTeams -Context $ctx -RequireNonEmptyGroups:($Level -eq 'Full'))) { $fail.Add("A: $pr") }
+  # Not $home: $HOME is a read-only automatic variable and the assignment throws.
+  $homeSeen = @{}
+  foreach ($r in $ctx.Entries) {
+    $canon = Test-EntryCanonicalBytes -Read $r -KeyOrder $ctx.KeyOrder; if ($canon) { $fail.Add("A: $canon") }
+    if ($r.Entry.Contains('homeOrder')) { $ho = [int]$r.Entry['homeOrder']; if ($homeSeen.ContainsKey($ho)) { $fail.Add("A: $($r.Stem).json: homeOrder $ho is also used by $($homeSeen[$ho])") } else { $homeSeen[$ho] = $r.Stem } }
   }
-  if ($Level -eq 'Full') { throw 'Invoke-RegistryCheck -Level Full is implemented in Task 7 (checks B-E)' }
+  foreach ($f in @(Get-ChildItem -LiteralPath $Paths.Templates -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) + @($Paths.RelatedProjects, $Paths.Exemptions, $Paths.SeedBacklog) + @(Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })) {
+    if (Test-Path -LiteralPath $f) { $asc = Test-AsciiCrlfFile -Path $f; if ($asc) { $fail.Add("A: $asc") } }
+  }
+  $families = [ordered]@{}
+  foreach ($f in (Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue)) { try { $families[$f.BaseName] = Read-FamilyDefinition -Path $f.FullName -Context $ctx } catch { $fail.Add("A: $($_.Exception.Message)") } }
+  $stats['entries'] = $ctx.Entries.Count
+  foreach ($g in @($ctx.Groups.get_Keys())) { $stats["group:$g"] = @($ctx.Entries | Where-Object { [string]$_.Entry['group'] -eq $g }).Count }
+  if ($Level -eq 'WellFormed') {
+    foreach ($r in $ctx.Entries) { foreach ($pr in @(Test-FeatureEntry -Entry $r.Entry -Context $ctx -Stem $r.Stem)) { $fail.Add("A: $pr") } }
+    return [pscustomobject]@{ Failures = $fail; Notes = $notes; Stats = $stats }
+  }
+  # ---- Full: live surface + family children ----------------------------------
+  if ($null -eq $Live) { try { $Live = Get-LiveSurface -Paths $Paths } catch { $fail.Add("B: live surface: $($_.Exception.Message)"); return [pscustomobject]@{ Failures = $fail; Notes = $notes; Stats = $stats } } }
+  $hand = [object[]]@(@(foreach ($r in $ctx.Entries) { $r.Entry }) + @($InjectEntries))
+  $children = [ordered]@{}
+  try { $children = Get-RegistryChildren -Live $Live -Entries $hand -Paths $Paths }
+  catch {
+    # The importer throws for three reasons; file each under the check it is.
+    $m = $_.Exception.Message
+    $letter = if ($m -like 'family children failed validation*') { 'A' } elseif ($m -like '*override*') { 'C' } else { 'B' }
+    $fail.Add("${letter}: family import: $m")
+  }
+  $childList = [object[]]@(foreach ($v in $children.Values) { foreach ($c in $v) { $c } })
+  $allIds = [string[]]@(@(foreach ($e in $hand) { [string]$e['id'] }) + @(foreach ($c in $childList) { [string]$c['id'] }))
+  $ctx = Get-RegistryContext -Paths $Paths -ExtraIds $allIds
+  foreach ($e in $hand) { foreach ($pr in @(Test-FeatureEntry -Entry $e -Context $ctx -Stem ([string]$e['id']))) { $fail.Add("A: $pr") } }
+  $helpVerbs = [string[]]@(@(foreach ($v in $Live.HelpVerbs) { $v }) + @($InjectHelpVerbs))
+  # foreach, not @(...): Captions is a HashSet and @() over a generic
+  # collection is not safe on this pwsh (see Import-ChartQuestionFamily).
+  $captions = [string[]]@(@(foreach ($c in $Live.Captions) { $c }) + @($InjectCaptions))
+  $liveKeys = [string[]]@(foreach ($c in $captions) { $k = Get-CaptionKey -S $c; if ($k) { $k } })
+  $ctxCaptions = [ordered]@{}
+  if ($Live.PSObject.Properties.Name -contains 'ContextCaptions') { foreach ($h in @($Live.ContextCaptions.get_Keys())) { $ctxCaptions[$h] = [string[]]@($Live.ContextCaptions[$h]) } }
+  if (@($InjectContextCaptions).Count) { $ctxCaptions['Structure form'] = [string[]]@(@(if ($ctxCaptions.Contains('Structure form')) { $ctxCaptions['Structure form'] }) + @($InjectContextCaptions)) }
+  $verbSubs = $Live.SubMap.VerbSubs
+  $subVerbs = [string[]]@($verbSubs.get_Keys())
+  $all = [object[]]@($hand + $childList)
+  # ---- B. live -> registry ----------------------------------------------------
+  $regVerbs = @{}; $regSubs = @{}
+  $regKeys = New-Object 'System.Collections.Generic.List[string]'
+  $regExes = New-Object 'System.Collections.Generic.List[string]'
+  $regCtx = @{}   # ide-context host -> leaf keys registered on it
+  foreach ($e in $all) {
+    if ([string]$e['status'] -eq 'planned') { continue }
+    foreach ($s in (Get-EntryList $e 'surfaces')) {
+      switch ([string]$s['type']) {
+        'cli' { $regVerbs[[string]$s['verb']] = $true; if ($s.Contains('sub')) { $regSubs[[string]$s['verb'] + ' ' + [string]$s['sub']] = $true } }
+        'exe' { $regExes.Add([string]$s['name']) }
+        default {
+          $k = Get-LeafKey $s; if ($k) { $regKeys.Add($k) }
+          if ($k -and [string]$s['type'] -eq 'ide-context') { $hk = [string]$s['host']; if (-not $regCtx.ContainsKey($hk)) { $regCtx[$hk] = New-Object 'System.Collections.Generic.List[string]' }; $regCtx[$hk].Add($k) }
+        }
+      }
+    }
+  }
+  $regKeyArr = [string[]]$regKeys.ToArray()
+  $exVerbs = Get-ExemptionMap $ctx 'verbs'; $exCaps = Get-ExemptionMap $ctx 'captions'; $exExes = Get-ExemptionMap $ctx 'exes'
+  foreach ($v in $helpVerbs) {
+    if ($regVerbs.ContainsKey($v) -or $exVerbs.Contains($v)) { continue }
+    $sk = Get-EntrySkeleton -Id $v -Surface ([ordered]@{ type = 'cli'; verb = $v }) -Live $Live -Context $ctx
+    $fail.Add("B: every --help verb is registered -- unregistered: '$v'`n   ^ no entry claims it. Create features\entries\$v.json (tools\feature-registry.ps1 add -Id $v ...), then run tools\build-feature-pages.ps1 and commit the regenerated pages:`n" + ($sk.TrimEnd() -replace '(?m)^', '   '))
+  }
+  foreach ($verb in $subVerbs) {
+    # Get-EntryList is WRAPPED: iterate it with foreach, never pipe it (the
+    # pipeline would hand Where-Object the whole array as one item).
+    $owners = @(foreach ($he in $hand) { foreach ($hs in (Get-EntryList $he 'surfaces')) { if ([string]$hs['type'] -eq 'cli' -and [string]$hs['verb'] -eq $verb) { $he; break } } })
+    # An internal verb's subcommands are its own business (the selftest dispatcher).
+    if (@($owners | Where-Object { [string]$_['status'] -eq 'internal' }).Count -gt 0) { continue }
+    foreach ($sub in @($verbSubs[$verb])) {
+      if ($regSubs.ContainsKey("$verb $sub") -or $exVerbs.Contains("$verb $sub")) { continue }
+      $sk = Get-EntrySkeleton -Id "$verb-$sub" -Surface ([ordered]@{ type = 'cli'; verb = $verb; sub = $sub }) -Live $Live -Context $ctx
+      $fail.Add("B: every subcommand is registered -- unregistered: '$verb $sub'`n   ^ add { `"type`": `"cli`", `"verb`": `"$verb`", `"sub`": `"$sub`" } to the entry that owns it, or create features\entries\$verb-$sub.json:`n" + ($sk.TrimEnd() -replace '(?m)^', '   '))
+    }
+  }
+  foreach ($cap in $captions) {
+    $k = Get-CaptionKey -S $cap
+    if (-not $k) { continue }
+    if ((Test-CaptionKeyMatch -Key $k -LiveKeys $regKeyArr) -or $exCaps.Contains($cap)) { continue }
+    $sid = ($cap.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+    $sk = Get-EntrySkeleton -Id $sid -Surface ([ordered]@{ type = 'ide-menu'; path = "drag-lint > <submenu> > $cap" }) -Live $Live -Context $ctx
+    $fail.Add("B: every live IDE caption is registered -- unregistered: '$cap'`n   ^ no ide-menu/ide-context/ide-about/tool-window surface matches it (check-5 prefix rule; nearest registered: $((Get-NearestCandidates -Value $k -Candidates $regKeyArr) -join ' | ')). Register it, or add it to features\exemptions.json captions WITH a reason if it is a container or header:`n" + ($sk.TrimEnd() -replace '(?m)^', '   '))
+  }
+  foreach ($h in @($ctxCaptions.get_Keys())) {
+    $hostKeys = if ($regCtx.ContainsKey($h)) { [string[]]$regCtx[$h].ToArray() } else { [string[]]@() }
+    foreach ($cap in $ctxCaptions[$h]) {
+      $k = Get-CaptionKey -S $cap
+      if (-not $k -or (Test-CaptionKeyMatch -Key $k -LiveKeys $hostKeys)) { continue }
+      $sid = ($cap.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+      $sk = Get-EntrySkeleton -Id $sid -Surface ([ordered]@{ type = 'ide-context'; host = $h; caption = $cap }) -Live $Live -Context $ctx
+      $fail.Add("B: every context-menu item is registered -- unregistered: '$cap' ($h)`n   ^ no ide-context surface with host '$h' matches it (check-5 prefix rule). Add { `"type`": `"ide-context`", `"host`": `"$h`", `"caption`": `"$cap`" } to the entry that owns it, or create:`n" + ($sk.TrimEnd() -replace '(?m)^', '   '))
+    }
+  }
+  foreach ($x in @($Live.PackExes)) { if ($regExes -notcontains $x -and -not $exExes.Contains($x)) { $fail.Add("B: every release payload exe is registered -- '$x' is packed by build\pack-lint-release.ps1 and no entry has an exe surface for it (add { `"type`": `"exe`", `"name`": `"$x`" } to the entry that owns it, or exempt it in features\exemptions.json exes WITH a reason)") } }
+  # Exemption lists are asserted BOTH ways: still live, and still unregistered.
+  foreach ($k in @($exVerbs.get_Keys())) {
+    $m = [regex]::Match([string]$k, '^(\S+) (\S+)$')
+    $liveOk = if ($m.Success) { ($subVerbs -contains $m.Groups[1].Value) -and (@($verbSubs[$m.Groups[1].Value]) -contains $m.Groups[2].Value) } else { $helpVerbs -contains $k }
+    if (-not $liveOk) { $fail.Add("B: exemptions.json verbs: '$k' is no longer a --help verb or subcommand -- delete the exemption"); continue }
+    if (($m.Success -and $regSubs.ContainsKey($k)) -or (-not $m.Success -and $regVerbs.ContainsKey($k))) { $fail.Add("B: exemptions.json verbs: '$k' is registered after all -- delete the exemption") }
+  }
+  foreach ($k in @($exCaps.get_Keys())) {
+    if ($captions -cnotcontains $k) { $fail.Add("B: exemptions.json captions: '$k' is no longer a live caption (nearest: $((Get-NearestCandidates -Value $k -Candidates $captions) -join ' | ')) -- delete or correct the exemption") }
+    elseif (Test-CaptionKeyMatch -Key (Get-CaptionKey -S $k) -LiveKeys $regKeyArr) { $fail.Add("B: exemptions.json captions: '$k' is covered by a registered surface after all -- delete the exemption") }
+  }
+  foreach ($k in @($exExes.get_Keys())) { if (@($Live.PackExes) -notcontains $k) { $fail.Add("B: exemptions.json exes: '$k' is no longer packed -- delete the exemption") } }
+  $exCount = @($exVerbs.get_Keys()).Count + @($exCaps.get_Keys()).Count + @($exExes.get_Keys()).Count
+  if ($exCount) { $notes.Add("exempt with reason: $(@($exVerbs.get_Keys()).Count) verb(s), $(@($exCaps.get_Keys()).Count) caption(s), $(@($exExes.get_Keys()).Count) exe(s) -- features\exemptions.json") }
+  # ---- C. registry -> live ----------------------------------------------------
+  foreach ($e in $all) {
+    $st = [string]$e['status']; $id = [string]$e['id']
+    if ($st -eq 'planned') { $notes.Add("planned, surfaces not checked: $id"); continue }
+    if ($st -eq 'deprecated' -and $e.Contains('removedIn')) { $notes.Add("removed in $($e['removedIn']), surfaces not checked: $id"); continue }
+    foreach ($s in (Get-EntryList $e 'surfaces')) {
+      switch ([string]$s['type']) {
+        'cli' {
+          $v = [string]$s['verb']
+          if ($st -eq 'internal') { if ($Live.DispatchVerbs -notcontains $v) { $fail.Add("C: $id`: internal verb '$v' is not dispatched by the CLI (nearest: $((Get-NearestCandidates -Value $v -Candidates $Live.DispatchVerbs) -join ', '))") } }
+          elseif ($helpVerbs -notcontains $v) { $fail.Add("C: $id`: cli verb '$v' is not in --help (nearest: $((Get-NearestCandidates -Value $v -Candidates $helpVerbs) -join ', ')) -- if it was retired, deprecate the entry with removedIn") }
+          if ($s.Contains('sub')) {
+            $subs = if ($subVerbs -contains $v) { [string[]]@($verbSubs[$v]) } else { [string[]]@() }
+            if ($subs -notcontains [string]$s['sub']) { $fail.Add("C: $id`: subcommand '$v $($s['sub'])' is not dispatched (nearest: $((Get-NearestCandidates -Value ([string]$s['sub']) -Candidates $subs) -join ', '))") }
+          }
+        }
+        'mcp' { if ($Live.McpTools -notcontains [string]$s['tool']) { $fail.Add("C: $id`: mcp tool '$($s['tool'])' is not in HandleToolsList (nearest: $((Get-NearestCandidates -Value ([string]$s['tool']) -Candidates $Live.McpTools) -join ', '))") } }
+        'ide-context' {
+          # Checked against ITS host's context menu, never the main menu.
+          $h = [string]$s['host']; $k = Get-LeafKey $s
+          if (-not $ctxCaptions.Contains($h)) { $fail.Add("C: $id`: ide-context host '$h' has no live harvest (harvested hosts: $(@($ctxCaptions.get_Keys()) -join ', ')) -- teach Get-LiveSurface to read that host's menu before registering against it") }
+          else {
+            $hostKeys = [string[]]@(foreach ($c in $ctxCaptions[$h]) { Get-CaptionKey -S $c })
+            if (-not (Test-CaptionKeyMatch -Key $k -LiveKeys $hostKeys)) { $fail.Add("C: $id`: ide-context '$($s['caption'])' is not on the $h context menu (nearest: $((Get-NearestCaption -Key $k -Captions $ctxCaptions[$h]) -join ' | ')) -- the usual cause is a renamed item: update the entry") }
+          }
+        }
+        { $_ -in @('ide-menu', 'ide-about', 'tool-window') } {
+          $k = Get-LeafKey $s
+          if (-not (Test-CaptionKeyMatch -Key $k -LiveKeys $liveKeys)) {
+            $near = Get-NearestCaption -Key $k -Captions $captions
+            $where = if ($s.Contains('path')) { $s['path'] } else { $s['caption'] }
+            $fail.Add("C: $id`: $($s['type']) '$where' matches no live caption (nearest: $($near -join ' | ')) -- the usual cause is a renamed or moved menu item: tools\feature-registry.ps1 move-menu, or update the entry")
+          }
+        }
+      }
+    }
+  }
+  # ---- seed backlog, two-way (spec 15.2: a debt, not a suppression) ----------------
+  if (Test-Path -LiteralPath $Paths.SeedBacklog) {
+    $bl = Get-Content -LiteralPath $Paths.SeedBacklog -Raw | ConvertFrom-Json
+    $byStem = @{}; foreach ($r in $ctx.Entries) { $byStem[$r.Stem] = $r.Entry }
+    foreach ($team in $bl.teams.PSObject.Properties) {
+      $remaining = 0
+      foreach ($bid in @($team.Value)) {
+        if (-not $byStem.ContainsKey([string]$bid)) { $fail.Add("A: seed-backlog.json: '$bid' ($($team.Name)) is not an entry (nearest: $((Get-NearestCandidates -Value ([string]$bid) -Candidates @($byStem.Keys)) -join ', ')) -- delete it from the backlog"); continue }
+        $be = $byStem[[string]$bid]
+        $owed = (-not $be.Contains('intro')) -or (-not $be.Contains('lastVerified')) -or ([string]$be['since'] -eq '0.0.0')
+        if ($owed) { $remaining++ } else { $fail.Add("A: seed-backlog.json: '$bid' now has intro, lastVerified and a real since -- delete it from the backlog (the list is a debt, not a suppression)") }
+      }
+      $notes.Add("backlog: $($team.Name) $remaining remaining (intro + lastVerified owed; deadline: $($bl.deadline))")
+    }
+  }
+  # ---- D. generated outputs current and untouched --------------------------------
+  if (-not $SkipGenerated) {
+    try {
+      $gen = Invoke-RegistryGenerate -Paths $Paths -Check
+      foreach ($c in $gen.Changed) { $fail.Add("D: $($c.Path) differs from a fresh render -- run tools\build-feature-pages.ps1 and commit (or revert the hand edit)`n" + ($c.Diff.TrimEnd() -replace '(?m)^', '   ')) }
+    } catch { $fail.Add("D: generator: $($_.Exception.Message)") }
+  }
+  # ---- E. staleness: WARN only -----------------------------------------------------
+  $stale = New-Object 'System.Collections.Generic.List[object]'
+  $verified = @(foreach ($e in $hand) { if ($e.Contains('lastVerified')) { [pscustomobject]@{ Id = [string]$e['id']; Lv = $e['lastVerified'] } } }) +
+              @(foreach ($fk in @($families.get_Keys())) { [pscustomobject]@{ Id = "family:$fk"; Lv = $families[$fk]['lastVerified'] } })
+  foreach ($x in $verified) {
+    $d = [datetime]::MinValue
+    if (-not [datetime]::TryParseExact([string]$x.Lv['date'], 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$d)) { continue }   # A reports it
+    if (((Get-Date).Date - $d.Date).TotalDays -gt 90) { $stale.Add([pscustomobject]@{ Id = $x.Id; Date = $d }) }
+  }
+  if ($stale.Count) { $oldest = @($stale | Sort-Object Date, Id)[0]; $notes.Add("stale: $($stale.Count) entries older than 90 days, oldest $($oldest.Id) ($($oldest.Date.ToString('yyyy-MM-dd'))) -- the periodic review's input, not a failure") }
+  $stats['children'] = $childList.Count
+  $stats['stale'] = $stale.Count
   return [pscustomobject]@{ Failures = $fail; Notes = $notes; Stats = $stats }
 }
 
@@ -1416,4 +1663,4 @@ function Invoke-RegistryGenerate {
 
 Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams, Get-LiveSurface, Read-FamilyDefinition, Import-LintRuleFamily, Import-ChartQuestionFamily, Get-RegistryChildren,
   ConvertFrom-SurfaceSpec, Get-CurrentBuildVersion, Add-RegistryGroup, Add-RegistryTeam, New-FeatureEntry, Update-FeatureEntry, Find-FeatureEntry, ConvertTo-MenuKey, Get-FeatureBlastRadius, Move-FeatureMenuPath, Set-FeatureDeprecated, Invoke-RegistryNormalise, Invoke-RegistryCheck,
-  Get-RegistryModel, Update-MarkedBlock, Get-DiffHead, Invoke-RegistryGenerate
+  Get-RegistryModel, Update-MarkedBlock, Get-DiffHead, Invoke-RegistryGenerate, Get-EntrySkeleton

@@ -157,7 +157,8 @@ foreach ($x in 'groups.json', 'teams.json', 'exemptions.json', 'related-projects
 Copy-Item -LiteralPath (Join-Path $Repo 'CHANGELOG.md') -Destination $L -Force
 Get-ChildItem -LiteralPath (Join-Path $Repo 'docs\wiki') -Filter '*.md' -File | Copy-Item -Destination (Join-Path $L 'docs\wiki') -Force
 foreach ($x in 'src\core\DRagLint.Core.Model.pas', 'src\cli\DRagLint.CLI.pas', 'src\storage\DRagLint.Storage.Schema.pas', 'src\mcp\DRagLint.MCP.Server.pas',
-               'src\delphi-plugin\DragLint.Plugin.Editor.pas', 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas', 'src\delphi-plugin\DragLint.Plugin.ReportText.pas', 'build\pack-lint-release.ps1') {
+               'src\delphi-plugin\DragLint.Plugin.Editor.pas', 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas', 'src\delphi-plugin\DragLint.Plugin.ReportText.pas', 'build\pack-lint-release.ps1',
+               'src\delphi-plugin\DragLint.Plugin.StructureForm.pas', 'src\delphi-plugin\DragLint.Plugin.ProjectMenu.pas') {
   $to = Join-Path $L $x; New-Item -ItemType Directory -Path (Split-Path -Parent $to) -Force | Out-Null; Copy-Item -LiteralPath (Join-Path $Repo $x) -Destination $to -Force
 }
 Copy-Item -LiteralPath (Join-Path $Repo 'charts\src') -Destination (Join-Path $L 'charts') -Recurse -Force
