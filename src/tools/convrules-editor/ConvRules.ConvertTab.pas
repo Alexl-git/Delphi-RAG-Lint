@@ -26,6 +26,7 @@ uses
   , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED is the long-call runner's cancel contract the analysis work returns and reads back, so it travels with the runner
   , ConvRules.ConvertRun
   , ConvRules.ConvertRunner
+  , ConvRules.ConvertRequest  // dl:unit ConvRules.ConvertRequest accepted -- WHOLE_UNIT_SCOPE_TEXT is the E4 Scope line ScopeText returns for no scope; it travels with ScopeText so the reset caption cannot drift from it
   , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel
   ;
 
@@ -115,6 +116,8 @@ type
       FRunInheritedOk : Boolean;            // FInheritedOk when Convert was pressed: the report follows the run
       FRetypeOk       : Boolean;            // engine reports inherited_retype (C8 N2): the notes stop warning that a descendant breaks
       FRunRetypeOk    : Boolean;            // FRetypeOk when Convert was pressed
+      FScope          : TConvertScope;      // C12: the IDE request's scope; Default = whole unit
+      FRunScope       : TConvertScope;      // FScope when Convert was pressed: the report's Scope line (Clear scope may run mid-run)
       FInherit        : TDictionary<string, TUnitInheritance>; // C8 analyses, by upper-cased path
       FPairsKey       : string;             // the checked pairs FInherit was computed with
       FInheritError   : string;             // '' or why some unit could not be checked (status line)
@@ -126,6 +129,8 @@ type
       FBottomPanel    : TPanel;
       FBooks          : TCheckListBox;
       FSources        : TListBox;
+      FLblScope       : TLabel;             // C12 E4: the Scope line (named LblScope for the GUI driver)
+      FBtnClearScope  : TButton;            // C12 E4: 'Clear scope'
       FBtnConvert     : TButton;
       FBtnCancel      : TButton;
       FProgress       : TProgressBar;
@@ -148,6 +153,12 @@ type
       procedure RefreshClick(Sender: TObject);
       procedure AddClick(Sender: TObject);
       procedure DeleteClick(Sender: TObject);
+      /// <summary>Back to a whole-unit run: FScope = Default, the Scope line says so,
+      /// Clear scope is disabled. Writes no status.</summary>
+      procedure ResetScope;
+      /// <summary>Clear scope: ResetScope plus a status line.</summary>
+      /// <param name="Sender">FBtnClearScope.</param>
+      procedure ClearScopeClick(Sender: TObject);
       /// <summary>Convert's C8 steps after Preflight: the forced re-analysis, the gate
       /// (InheritanceGate: cancelled = stop; unchecked units = ask once), the E10 refusal
       /// notes and the E7 order warning (asked once, never a refusal).</summary>
@@ -266,8 +277,20 @@ type
       /// repaints the flags; a failure goes to the status line and flags nothing.</summary>
       /// <remarks>One engine call (~0.9 s); skipped while the list is empty.</remarks>
       procedure RefreshIndex;
+      /// <summary>C12 E2-E5: applies a prepared IDE request -- checks exactly the books
+      /// that convert a requested type, lists the unit (AddSources: index flag, harvest,
+      /// C8 analysis with those books' pairs), then sets the scope and the status.</summary>
+      /// <param name="AReq">The validated request (one unit).</param>
+      /// <param name="AScope">Its scope (PrepareConvertRequest / BuildScope).</param>
+      /// <remarks>Order is load-bearing (ruling R1): books first, so the analysis sees
+      /// the right pairs; the scope after AddSources, which resets it. The status is
+      /// E5 (ScopeStatusText), or E3 (NoBookText, red) when no book matches; a problem
+      /// AddSources hit is appended. Never starts the run. Call after RefreshBooks.</remarks>
+      procedure LoadRequest(const AReq: TConvertRequest; const AScope: TConvertScope);
       /// <summary>True from Convert until the worker's results are in.</summary>
       property Running: Boolean read FRunning;
+      /// <summary>The scope the next Convert runs with (C12); Kind = skWholeUnit when none.</summary>
+      property Scope: TConvertScope read FScope;
   end;
 
 implementation
@@ -402,6 +425,15 @@ begin
   LLabel.Transparent     := True; // TGraphicControl: opaque, it paints clBtnFace under a dark style
   LLabel.Caption         := 'Source units -- drop .pas / .dpr / .dproj / folders here, or Add...';
 
+  FLblScope:= TLabel.Create(Self);
+  FLblScope.Name            := 'LblScope';
+  FLblScope.Parent          := LMid;
+  FLblScope.Top             := LLabel.Top + LLabel.Height; // below the heading (alTop orders by Top)
+  FLblScope.Align           := alTop;
+  FLblScope.AlignWithMargins:= True;
+  FLblScope.Transparent     := True; // see LLabel
+  FLblScope.Caption         := WHOLE_UNIT_SCOPE_TEXT;
+
   LRow:= TPanel.Create(Self);
   LRow.Parent    := LMid;
   LRow.Align     := alBottom;
@@ -409,6 +441,8 @@ begin
   LRow.BevelOuter:= bvNone;
   NewButton(LRow, 'Add...', alLeft, AddClick);
   NewButton(LRow, 'Delete', alLeft, DeleteClick);
+  FBtnClearScope:= NewButton(LRow, 'Clear scope', alRight, ClearScopeClick);
+  FBtnClearScope.Enabled:= False;
 
   FSources:= TListBox.Create(Self);
   FSources.Parent          := LMid;
@@ -665,7 +699,10 @@ begin
   Added:= ExpandSources(APaths, Errs);
   for var LPath: string in Added do
     if FSources.Items.IndexOf(LPath) < 0 then  // TListBox.IndexOf is case-insensitive
+    begin
       FSources.Items.Add(LPath);
+      ResetScope; // E4: a changed source list is a whole-unit run (LoadRequest sets its scope after this)
+    end;
   FInheritError:= '';
   if Length(Added) > 0 then
   begin
@@ -1001,8 +1038,64 @@ end;
 
 procedure TConvertTab.DeleteClick(Sender: TObject);
 begin
+  if FSources.SelCount > 0 then
+    ResetScope; // E4
   FSources.DeleteSelected;
   FHost.SetStatus(SourcesSummary, False);
+end;
+
+procedure TConvertTab.ResetScope;
+begin
+  FScope:= Default(TConvertScope);
+  FLblScope.Caption     := WHOLE_UNIT_SCOPE_TEXT;
+  FBtnClearScope.Enabled:= False;
+end;
+
+procedure TConvertTab.ClearScopeClick(Sender: TObject);
+begin
+  ResetScope;
+  FHost.SetStatus('Scope cleared -- the whole unit will be converted.', False);
+end;
+
+procedure TConvertTab.LoadRequest(const AReq: TConvertRequest; const AScope: TConvertScope);
+var
+  LMatch: Integer;
+  LText : string;
+  LTail : string;
+begin
+  // R1: the books first -- AddSources' C8 analysis reads CheckedPairs.
+  for var I: Integer:= 0 to High(FEntries) do
+  begin
+    try
+      LText:= TFile.ReadAllText(FEntries[I].Path);
+    except
+      on Exception do
+        LText:= ''; // an unreadable book converts nothing; RefreshBooks already reported it
+    end; // try
+    FEntries[I].Checked:= BookMatchesTypes(LText, AScope.Types);
+  end;
+  ShowBooks; // unchecks again what the engine cannot run
+  LMatch:= 0;
+  for var LEntry: TBookEntry in FEntries do
+    if LEntry.Checked then
+      Inc(LMatch);
+  // Commits FPairsKey for these checks (the list is empty at a request launch, so no
+  // engine call): a later RefreshBooks must not re-analyse and overwrite the status.
+  ReanalyzeAll(False);
+  AddSources([AReq.Units[0].Pas]);
+  FScope:= AScope;
+  FLblScope.Caption     := ScopeText(FScope);
+  FBtnClearScope.Enabled:= True;
+  // What AddSources reported in red is kept, after the request's own text.
+  LTail:= '';
+  if FInheritError <> '' then
+    LTail:= LTail + ' Also: inherited instances could not be checked -- ' + FInheritError;
+  if not FIndexKnown then
+    LTail:= LTail + ' Also: the project index could not be read, so unindexed units are not flagged.';
+  if LMatch = 0 then
+    FHost.SetStatus(NoBookText(FHost.GetRulesFolder(), AScope.Types) + LTail, True)
+  else
+    FHost.SetStatus(ScopeStatusText(FScope, LMatch) + LTail, LTail <> '');
 end;
 
 procedure TConvertTab.AddResultRow(const ACells: array of string);
@@ -1059,6 +1152,7 @@ begin
   FRunning:= ARunning;
   for var LCtl: TControl in FLockable do
     LCtl.Enabled:= not ARunning;
+  FBtnClearScope.Enabled:= (not ARunning) and (FScope.Kind <> skWholeUnit); // lockable, but only with a scope
   FBtnCancel.Caption:= CAP_CANCEL;
   FBtnCancel.Enabled:= ARunning;
   if Assigned(FHost.RunStateChanged) then
@@ -1152,6 +1246,9 @@ begin
   ShowBooks;
   // Read AFTER that prompt: OLE delivers drops inside its modal loop too.
   Units:= FSources.Items.ToStringArray;
+  // C12 (Review Focus 5): a scope whose unit is no longer listed describes nothing
+  // that would run -- refused with Preflight's problems, before any backup.
+  var LScopeErr: string:= ScopeMatchesUnits(FScope, Units);
   if not FEngineProbe.ListIndexedFiles([FHost.GetProjectDb()], Idx, Err) then
   begin
     FIndexKnown:= False;
@@ -1170,9 +1267,11 @@ begin
   FNotes  := Pre.Notes;
   for var LNote: string in FNotes do
     AddResultRow(['', '', 'note', '', '', '', '', LNote]);
-  if not Pre.Ok then
+  if FScope.Kind <> skWholeUnit then
+    AddResultRow(['', '', 'note', '', '', '', '', ScopeText(FScope)]); // E4/E11: the scope is in the grid too
+  if not Pre.Ok or (LScopeErr <> '') then
   begin
-    FHost.SetStatus('Convert refused: ' + string.Join(' ', Pre.Problems), True);
+    FHost.SetStatus('Convert refused: ' + Trim(LScopeErr + ' ' + string.Join(' ', Pre.Problems)), True);
     Exit;
   end;
   Job:= Default(TConvertJob); // Scope (managed fields) starts as the whole unit
@@ -1195,12 +1294,14 @@ begin
   Job.Dbs        := FHost.GetDbs();
   Job.InheritedSupported:= FInheritedOk;
   Job.RetypeSupported   := FRetypeOk;
+  Job.Scope             := FScope; // copied: Clear scope mid-run does not reach the worker
   LExe:= FHost.ExePath;
   // Captured now: the user may open or start another book mid-run, which moves
   // the live rules folder; the report belongs beside the books that ran.
   FRunRulesFolder:= FHost.GetRulesFolder();
   FRunInheritedOk:= FInheritedOk;
   FRunRetypeOk   := FRetypeOk;
+  FRunScope      := FScope;
   // The worker builds its own adapter: the castlib is read HERE, on the UI thread,
   // and only an existing file is passed and named in the report.
   FRunCastLib:= ExistingCastLib(FHost.GetCastLib());
@@ -1284,6 +1385,7 @@ begin
   LLines:= TStringList.Create;
   try
     LLines.Add(string.Join(#9, ['Book', 'Unit', 'Status', 'Edits', 'Remaining', 'Backup', 'Backup .dfm', 'Note']));
+    LLines.Add(ScopeReportLine(FRunScope)); // E11: first line after the header, 'Scope<TAB>whole unit' for a plain run
     for var LNote: string in FNotes do
       LLines.Add(string.Join(#9, ['', '', 'note', '', '', '', '', LNote]));
     for var I: Integer:= 0 to High(FRunRows) do
@@ -1329,13 +1431,7 @@ end;
 
 procedure TConvertTab.RunFinished(const AJob: TConvertJob; const AProblem: string; AStopAt: Integer; const AFinalIndex: string);
 var
-  Converted : Integer;
-  Restored  : Integer;
-  RolledBack: Integer;
-  BookSkips : Integer;
-  UnitSkips : Integer;
-  Refused   : Integer;
-  NotRestored: TArray<string>;
+  Tally     : TRunTally;
   NotReached: TArray<string>;
   Msg       : string;
   Report    : string;
@@ -1343,46 +1439,31 @@ var
 begin
   SetRunning(False);
   FProgress.Position:= FProgress.Max;
-  Converted := 0;
-  Restored  := 0;
-  RolledBack:= 0;
-  BookSkips := 0;
-  UnitSkips := 0;
-  Refused   := 0;
-  NotRestored:= nil;
   NotReached := nil;
   if (AStopAt >= 0) and (AStopAt < Length(AJob.Units)) then
     NotReached:= Copy(AJob.Units, AStopAt, Length(AJob.Units) - AStopAt);
   for var LUnit: string in NotReached do
     AddResultRow(['', ExtractFileName(LUnit), STATUS_NOT_REACHED, '', '', '', '', '']);
-  for var LRow: TConvertRow in FRunRows do
-    case LRow.Status of
-      csConverted     : Inc(Converted);
-      csFailedRestored: Inc(Restored);
-      csRolledBack    : Inc(RolledBack);
-      csBookSkipped   : Inc(BookSkips);
-      csUnitSkipped   : Inc(UnitSkips);
-      csRestoreFailed : NotRestored:= NotRestored + [ExtractFileName(LRow.UnitPas)];
-      csRefused       : Inc(Refused);
-    end; // case
-  Msg:= Format('Converted %d of %d unit x book pair(s); %d failed and were restored.', [Converted, Length(AJob.Books) * Length(AJob.Units), Restored]);
-  if Refused > 0 then
-    Msg:= Msg + Format(' %d unit(s) refused by the engine and left unchanged (a known limitation -- see each row''s note).', [Refused]);
+  // C12: out-of-scope pairs are counted apart and leave the "of M" denominator.
+  Tally:= TallyRows(FRunRows);
+  Msg:= ConvertedSummaryText(Tally, Length(AJob.Books) * Length(AJob.Units));
+  if Tally.Refused > 0 then
+    Msg:= Msg + Format(' %d unit(s) refused by the engine and left unchanged (a known limitation -- see each row''s note).', [Tally.Refused]);
   // After the refused sentence: a roll-back follows a failure OR a refusal, and
   // "rolled back with them" right after "0 failed" named the wrong cause.
-  if RolledBack > 0 then
-    Msg:= Msg + Format(' %d earlier conversion(s) on those units were rolled back by a later failure or refusal.', [RolledBack]);
-  if BookSkips > 0 then
-    Msg:= Msg + Format(' %d book(s) failed the engine''s validation and were skipped.', [BookSkips]);
-  if UnitSkips > 0 then
-    Msg:= Msg + Format(' %d unit(s) skipped.', [UnitSkips]);
+  if Tally.RolledBack > 0 then
+    Msg:= Msg + Format(' %d earlier conversion(s) on those units were rolled back by a later failure or refusal.', [Tally.RolledBack]);
+  if Tally.BookSkips > 0 then
+    Msg:= Msg + Format(' %d book(s) failed the engine''s validation and were skipped.', [Tally.BookSkips]);
+  if Tally.UnitSkips > 0 then
+    Msg:= Msg + Format(' %d unit(s) skipped.', [Tally.UnitSkips]);
   if FCancelRequested then
     Msg:= Msg + Format(' Cancelled: %d unit(s) not reached.', [Length(NotReached)]);
   // The most severe outcome leads: a unit that may be half-converted; glyph to-dos
   // (spec E14, counted per UNIT -- R5) come next: converted, but each such unit's
   // implementation section starts with a to-do line the user must act on.
   var LGlyphSummary: string:= GlyphRunSummary(GlyphTodoUnitCount(FRunRows));
-  Msg:= RunStatusLead(NotRestored, LGlyphSummary, Msg);
+  Msg:= RunStatusLead(Tally.NotRestored, LGlyphSummary, Msg);
   if AProblem <> '' then
     Msg:= Msg + ' Also: ' + AProblem + '.';
   if WriteReport(NotReached, AFinalIndex, Report, RepErr) then
@@ -1401,7 +1482,7 @@ begin
   // Re-harvest the converted code so the Unit Rules MISSING list is current.
   FHost.FeedHarvest(AJob.Units);
   // Red when the run went wrong, a re-read after it failed (C8), or units hold glyph to-dos (C10).
-  var LRunProblem : Boolean:= (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
+  var LRunProblem : Boolean:= (Tally.Restored + Tally.BookSkips + Tally.UnitSkips + Length(Tally.NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
   var LReadProblem: Boolean:= (LIndexErr <> '') or (FInheritError <> '');
   FHost.SetStatus(Msg, LRunProblem or LReadProblem or (LGlyphSummary <> ''));
 end;

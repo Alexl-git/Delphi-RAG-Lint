@@ -261,7 +261,7 @@ function FindDfmObject(const AText, AName: string; out AOpener: TDfmOpener; out 
 /// text are not headers. Children of inline frames are listed (their Depth counts the
 /// frame). Anonymous blocks (no instance name) are listed with Name = ''. The C12
 /// form scope reads this list; the engine splices against the same headers.</remarks>
-function ListDfmInstances(const AText: string): TArray<TDfmInstance>;  // dl:ok unused-public-symbol@5ffa -- REVIEWED 2026-10-06 C12 Task 2: its caller ConvRules.ConvertRequest.BuildScope joins the editor project in Task 4 (ConvertTab), which removes this marker
+function ListDfmInstances(const AText: string): TArray<TDfmInstance>;
 
 /// <summary>PURE: the last dotted segment of a class name ('Vcl.StdCtrls.TLabel' -> 'TLabel').</summary>
 /// <param name="AType">A bare or unit-qualified class name.</param>

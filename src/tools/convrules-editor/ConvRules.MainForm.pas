@@ -1977,6 +1977,15 @@ type
       /// <summary>Conversion &gt; Convert...: shows the Convert tab.</summary>
       /// <param name="Sender">The menu item.</param>
       procedure DoShowConvertTab(Sender: TObject);
+      /// <summary>C12 E1-E5: reads the IDE's request file, prepares it
+      /// (PrepareConvertRequest: parse, validate against this editor's project DB /
+      /// file, the rules folder, the .dfm scope) and hands it to the Convert tab.
+      /// Queued from Create, so it runs once the window is up.</summary>
+      /// <param name="APath">The --convert-request file.</param>
+      /// <remarks>A refused request leaves the editor as a plain --form launch, on the
+      /// Classes tab, with the reason in red. Never starts the run, never deletes the
+      /// file.</remarks>
+      procedure ApplyConvertRequest(const APath: string);
       procedure AddSourceFiles(const APaths: TArray<string>);
       procedure AddSourceText(const AText: string);
       procedure DoAddSource(Sender: TObject);
@@ -2577,6 +2586,12 @@ var
     browsing to it every time. Its FOLDER also seeds the Open dialog, so a browse
     from a --form session starts beside the unit that was passed. }
   GEditorFormPath: string = '';
+  { --convert-request <file>: the IDE plugin's request (C12); '' = none. Read once,
+    queued from Create after the --form load (ApplyConvertRequest). }
+  GEditorConvertRequest: string = '';
+  { --rules-folder <dir>: the rules folder a --convert-request uses when its file has
+    no rules_folder (ruling B1); '' = none. }
+  GEditorRulesFolderArg: string = '';
   { Defaults come from ConvRules.Platform so the .dpr and this unit cannot drift
     apart; the .dpr overwrites both from --from-platform / --to-platform, which
     still accept win32|win64|both. FROM was cpBoth until 2026-07-29 -- see
@@ -2609,6 +2624,8 @@ uses
   , ConvRules.EngineProgress // TStreamingWork: the LongCallRunner wrapper's signature
   , ConvRules.Glyph     // dl:unit ConvRules.Glyph accepted -- C10 glyph-link decisions; GLYPH_COUNT_EXPR travels with FindCountLink / CountLinkIssueFor
   , ConvRules.GlyphForm // C10: the glyph-expression dialog
+  , ConvRules.ConvertRequest // C12: PrepareConvertRequest / TPreparedRequest
+  , ConvRules.Inheritance    // C12: DiskTextReader, the .dfm reader the request's scope is built from
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2763,6 +2780,15 @@ begin
   end
   else
     SetStatus('Ready. Open a .rules file, or pick From/To classes and choose ' + '"Conversion > New Conversion".');
+
+  // C12: after the window shows (ruling R2) -- and after a .rules file the .dpr opens
+  // once CreateForm returns, so nothing queued before it overwrites the request's status.
+  if GEditorConvertRequest <> '' then
+    TThread.ForceQueue(nil,
+      procedure
+      begin
+        ApplyConvertRequest(GEditorConvertRequest);
+      end);
 end; // constructor
 
 procedure TConvRulesForm.FormCloseHandler(Sender: TObject; var Action: TCloseAction);
@@ -8034,6 +8060,44 @@ end;
 procedure TConvRulesForm.DoShowConvertTab(Sender: TObject);
 begin
   FTabs.ActivePage:= FTabConvert;
+end;
+
+procedure TConvRulesForm.ApplyConvertRequest(const APath: string);
+var
+  LText: string;
+  LPrep: TPreparedRequest;
+begin
+  try
+    LText:= TFile.ReadAllText(APath, TEncoding.UTF8);
+  except
+    on E: Exception do
+    begin
+      SetError(Format('Convert request %s could not be read: %s', [APath, E.Message]));
+      Exit;
+    end;
+  end; // try
+  LPrep:= PrepareConvertRequest(LText, GEditorProjectDb, ProjectFileForDb(GEditorProjectDb), GEditorRulesFolderArg,
+    function(P: string): Boolean
+    begin
+      Result:= TFile.Exists(P);
+    end,
+    function(P: string): Boolean
+    begin
+      Result:= TDirectory.Exists(P);
+    end,
+    DiskTextReader());
+  if not LPrep.Ok then
+  begin
+    SetError(Format('Convert request %s refused: %s', [APath, LPrep.Error]));
+    Exit;
+  end;
+  // B1: the folder is known BEFORE the request is applied. Through RescanRulesFolder,
+  // so the catalog and the skip file follow the folder exactly as on any other rescan.
+  FRulesFolder:= LPrep.RulesFolder;
+  RescanRulesFolder(nil);
+  DoShowConvertTab(nil);     // its OnShow re-lists the books (ConvertTabShow)
+  FConvertTab.RefreshBooks;  // R2: explicit -- the tab may already have been the active page
+  FConvertTab.LoadRequest(LPrep.Request, LPrep.Scope);
 end;
 
 procedure TConvRulesForm.AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string; AActivate: Boolean);

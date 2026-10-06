@@ -92,7 +92,7 @@ type
   /// <summary>A request resolved against the unit's .dfm text (BuildScope).
   /// Default(TConvertScope) is the whole-unit scope.</summary>
   /// <remarks>The scope binds UnitPas ONLY: every other unit of a run is converted
-  /// whole (ScopeMatchesUnits refuses a source list that is not exactly UnitPas).</remarks>
+  /// whole (ScopeMatchesUnits refuses a source list that no longer holds UnitPas).</remarks>
   TConvertScope = record
     /// <summary>skWholeUnit when no request scope is in force.</summary>
     Kind     : TScopeKind;
@@ -196,12 +196,16 @@ function ScopeStatusText(const AScope: TConvertScope; AMatchingBooks: Integer): 
 /// Classes tab and choose Conversion &gt; New Conversion'</returns>
 function NoBookText(const ARulesFolder: string; const ATypes: TArray<string>): string;
 
-/// <summary>Checks that a scoped run's source list is exactly the scope's unit.</summary>
+/// <summary>Checks that a scoped run's source list still holds the scope's unit.</summary>
 /// <param name="AScope">The scope.</param>
 /// <param name="AUnits">The Convert tab's source units.</param>
-/// <returns>'' for skWholeUnit, or when AUnits is the one unit UnitPas (paths
-/// compared case-insensitively after ExpandFileName); else the refusal, naming
-/// UnitPas and the list's size.</returns>
+/// <returns>'' for skWholeUnit, or when AUnits holds UnitPas (paths compared
+/// case-insensitively after ExpandFileName); else the refusal, naming UnitPas and
+/// the list's size.</returns>
+/// <remarks>Other listed units are allowed and run whole (ruling B5/R7): the C8
+/// ancestor insert adds them without resetting the scope. A drop or a delete resets
+/// the scope in the Convert tab, so a list without UnitPas means the request no
+/// longer describes what would run.</remarks>
 function ScopeMatchesUnits(const AScope: TConvertScope; const AUnits: TArray<string>): string;
 
 /// <summary>The runner's scope decision for one unit x book (spec E9; ruling B5: the
@@ -256,6 +260,74 @@ function RefusalHint(const AReason: string): string;
 /// unmatched name is invisible on success. "converted N of N" would be false in both.</remarks>
 function ScopedConvertedNote(const AOnly: TArray<string>; const AConvertedNote: string): string;
 
+/// <summary>The run report's scope line (spec E11).</summary>
+/// <param name="AScope">The run's scope; Default(TConvertScope) for none.</param>
+/// <returns>'Scope' + TAB + ScopeText without its 'Scope: ' prefix, e.g.
+/// 'Scope'#9'whole unit'.</returns>
+function ScopeReportLine(const AScope: TConvertScope): string;
+
+/// <summary>The project index a launch uses (controller ruling, C12 Task 4): an
+/// explicit --project-db wins; else a request launch ADOPTS the request's
+/// project_db; else the built-in default.</summary>
+/// <param name="AExplicitDb">--project-db as given; '' when absent.</param>
+/// <param name="ARequestJson">The request file's text; '' when there is no request
+/// or it could not be read.</param>
+/// <param name="ADefaultDb">The editor's built-in default index.</param>
+/// <returns>AExplicitDb when non-empty; else the request's project_db when the text
+/// parses as a request; else ADefaultDb.</returns>
+/// <remarks>An explicit --project-db that differs from the request's is kept: the
+/// request is then refused by ValidateConvertRequest, never silently re-pointed. A
+/// request that does not parse adopts nothing; its refusal comes later.</remarks>
+function AdoptedProjectDb(const AExplicitDb, ARequestJson, ADefaultDb: string): string;
+
+/// <summary>The rules folder a request runs with (controller ruling B1): the
+/// request's rules_folder, else --rules-folder.</summary>
+/// <param name="ARequestFolder">TConvertRequest.RulesFolder; '' when absent.</param>
+/// <param name="ASwitchFolder">--rules-folder; '' when absent.</param>
+/// <param name="ATypes">The requested types (RequestedTypes), for the refusal.</param>
+/// <param name="ADirExists">Folder probe (injected for the tests).</param>
+/// <param name="AFolder">The chosen folder; '' on a refusal.</param>
+/// <returns>'' when AFolder exists; else the E3 text (NoBookText) naming the missing
+/// folder, or saying that none was given.</returns>
+/// <remarks>The first non-empty candidate decides: a request folder that does not
+/// exist is refused, never replaced by the switch. The editor keeps no rules folder
+/// between sessions, so there is no third candidate.</remarks>
+function ResolveRequestRulesFolder(const ARequestFolder, ASwitchFolder: string; const ATypes: TArray<string>;
+  const ADirExists: TFunc<string, Boolean>; out AFolder: string): string;
+
+type
+  /// <summary>PrepareConvertRequest's answer: everything the editor needs before it
+  /// touches a control, or the refusal.</summary>
+  TPreparedRequest = record
+    /// <summary>True when the request can be loaded.</summary>
+    Ok         : Boolean;
+    /// <summary>The first problem; non-empty exactly when not Ok.</summary>
+    Error      : string;
+    /// <summary>The parsed, validated request; meaningful only when Ok.</summary>
+    Request    : TConvertRequest;
+    /// <summary>The request resolved against its .dfm (BuildScope).</summary>
+    Scope      : TConvertScope;
+    /// <summary>The existing rules folder (ResolveRequestRulesFolder).</summary>
+    RulesFolder: string;
+  end;
+
+/// <summary>E1 + B1 + E6-E8 in one pure pass: parse, validate, resolve the rules
+/// folder, read the .dfm and build the scope.</summary>
+/// <param name="AJson">The request file's text.</param>
+/// <param name="AProjectDb">GEditorProjectDb.</param>
+/// <param name="AProjectFile">ProjectFileForDb(GEditorProjectDb).</param>
+/// <param name="ASwitchFolder">--rules-folder; '' when absent.</param>
+/// <param name="AFileExists">File probe.</param>
+/// <param name="ADirExists">Folder probe.</param>
+/// <param name="AReader">Reads the unit's .dfm (the request's "dfm", else beside the
+/// .pas); anything but drRead counts as no text.</param>
+/// <returns>Ok with the request, scope and folder; else the first refusal in that
+/// order (parse, validate, rules folder, scope).</returns>
+/// <remarks>Never raises (the reader must not either). A refusal touches nothing: the
+/// caller shows it and stays on the Classes tab (E1).</remarks>
+function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFolder: string;
+  const AFileExists, ADirExists: TFunc<string, Boolean>; const AReader: TDfmTextReader): TPreparedRequest;
+
 /// <summary>The capabilities document, one line, no whitespace.</summary>
 /// <returns>{"schema":"editor-capabilities/1","convert_request":1}</returns>
 function CapabilitiesJson: string;
@@ -284,7 +356,7 @@ const
   STATUS_HEAD        = 'Request from the IDE: convert ';
   STATUS_TAIL_FMT    = ' with %d matching book(s) -- review and press Convert.';
   NO_BOOK_FMT        = 'No book in %s converts %s -- pick the From class on the Classes tab and choose Conversion > New Conversion';
-  UNITS_MISMATCH_FMT = 'the scope names %s but the source list holds %d unit(s) -- clear the scope or list only that unit';
+  UNITS_MISMATCH_FMT = 'the scope names %s but the source list (%d unit(s)) does not hold it -- clear the scope or list that unit';
   DFM_BINARY_FMT     = 'the .dfm %s is binary -- convert it to text in the IDE first';
   DFM_MISSING_FMT    = 'the .dfm %s is missing, unreadable or has no object header -- the component scope cannot be resolved';
   UNIT_COUNT_FMT     = 'a %s request lists exactly one unit (got %d)';
@@ -292,6 +364,9 @@ const
   REFUSAL_HINT_FMT   = ' -- convert all %s instances on this form, or remove the #unuse / #useswap from the book';
   SCOPED_NOTE_FMT    = '--only %d instance(s): %s; ';
   UNMATCHED_ONLY_FMT = ' -- --only asked for %s; the form may have changed since the IDE request -- re-send it';
+  REPORT_SCOPE_HEAD  = 'Scope'#9;
+  NO_RULES_FOLDER    = '<no rules folder: the request has no rules_folder and no --rules-folder was given>';
+  RULES_FOLDER_GONE  = '%s (the folder does not exist)';
 
 { The scope's word in a refusal: 'form' or 'selected'. }
 function ScopeWord(AScope: TRequestScope): string;
@@ -646,8 +721,9 @@ begin
   Result:= '';
   if AScope.Kind = skWholeUnit then
     Exit;
-  if (Length(AUnits) = 1) and SameText(ExpandFileName(AUnits[0]), ExpandFileName(AScope.UnitPas)) then
-    Exit;
+  for var LUnit: string in AUnits do
+    if SameText(ExpandFileName(LUnit), ExpandFileName(AScope.UnitPas)) then
+      Exit;
   Result:= Format(UNITS_MISMATCH_FMT, [AScope.UnitPas, Length(AUnits)]);
 end;
 
@@ -699,6 +775,65 @@ end;
 function ScopedConvertedNote(const AOnly: TArray<string>; const AConvertedNote: string): string;
 begin
   Result:= Format(SCOPED_NOTE_FMT, [Length(AOnly), string.Join(LIST_SEP, AOnly)]) + AConvertedNote;
+end;
+
+function ScopeReportLine(const AScope: TConvertScope): string;
+begin
+  Result:= REPORT_SCOPE_HEAD + Copy(ScopeText(AScope), Length(SCOPE_PREFIX) + 1, MaxInt);
+end;
+
+function AdoptedProjectDb(const AExplicitDb, ARequestJson, ADefaultDb: string): string;
+var
+  LOut: TRequestOutcome;
+begin
+  if AExplicitDb <> '' then
+    Exit(AExplicitDb);
+  Result:= ADefaultDb;
+  if ARequestJson = '' then
+    Exit;
+  LOut:= ParseConvertRequest(ARequestJson);
+  if LOut.Ok then
+    Result:= LOut.Request.ProjectDb;
+end;
+
+function ResolveRequestRulesFolder(const ARequestFolder, ASwitchFolder: string; const ATypes: TArray<string>;
+  const ADirExists: TFunc<string, Boolean>; out AFolder: string): string;
+var
+  LCandidate: string;
+begin
+  AFolder:= '';
+  LCandidate:= Trim(ARequestFolder);
+  if LCandidate = '' then
+    LCandidate:= Trim(ASwitchFolder);
+  if LCandidate = '' then
+    Exit(NoBookText(NO_RULES_FOLDER, ATypes));
+  if not ADirExists(LCandidate) then
+    Exit(NoBookText(Format(RULES_FOLDER_GONE, [LCandidate]), ATypes));
+  AFolder:= LCandidate;
+  Result:= '';
+end;
+
+function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFolder: string;
+  const AFileExists, ADirExists: TFunc<string, Boolean>; const AReader: TDfmTextReader): TPreparedRequest;
+var
+  LOut: TRequestOutcome;
+  LDfm: string;
+begin
+  Result:= Default(TPreparedRequest);
+  LOut:= ParseConvertRequest(AJson);
+  Result.Error:= LOut.Error;
+  if LOut.Ok then
+    Result.Error:= ValidateConvertRequest(LOut.Request, AProjectDb, AProjectFile, AFileExists);
+  if Result.Error <> '' then
+    Exit;
+  Result.Request:= LOut.Request;
+  Result.Error:= ResolveRequestRulesFolder(LOut.Request.RulesFolder, ASwitchFolder, RequestedTypes(LOut.Request), ADirExists, Result.RulesFolder);
+  if Result.Error <> '' then
+    Exit;
+  if AReader(DfmPathOf(LOut.Request.Units[0]), LDfm) <> drRead then
+    LDfm:= ''; // BuildScope refuses '' as missing, naming the .dfm
+  Result.Scope:= BuildScope(LOut.Request, LDfm, Result.Error);
+  Result.Ok:= Result.Error = '';
 end;
 
 function CapabilitiesJson: string;

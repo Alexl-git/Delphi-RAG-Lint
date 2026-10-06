@@ -208,6 +208,40 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// 'skipped -- not in scope'.</returns>
 function ConvertStatusText(AStatus: TConvertStatus): string;
 
+type
+  /// <summary>A finished run's rows counted by status (the Convert tab's summary).</summary>
+  TRunTally = record
+    /// <summary>csConverted rows.</summary>
+    Converted  : Integer;
+    /// <summary>csFailedRestored rows.</summary>
+    Restored   : Integer;
+    /// <summary>csRolledBack rows.</summary>
+    RolledBack : Integer;
+    /// <summary>csBookSkipped rows.</summary>
+    BookSkips  : Integer;
+    /// <summary>csUnitSkipped rows.</summary>
+    UnitSkips  : Integer;
+    /// <summary>csRefused rows.</summary>
+    Refused    : Integer;
+    /// <summary>csOutOfScope rows: unit x book pairs a scoped run never applied.</summary>
+    OutOfScope : Integer;
+    /// <summary>File names of the csRestoreFailed rows' units, row order.</summary>
+    NotRestored: TArray<string>;
+  end;
+
+/// <summary>PURE: counts ARows by status.</summary>
+/// <param name="ARows">A run's rows.</param>
+/// <returns>The tally; every row lands in exactly one count (or NotRestored).</returns>
+function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
+
+/// <summary>PURE: the summary's lead sentence (C12 Task 3 carry): out-of-scope pairs
+/// are counted on their own and are NOT part of the "of M" denominator.</summary>
+/// <param name="ATally">TallyRows of the run.</param>
+/// <param name="APairs">Books x units of the job.</param>
+/// <returns>'Converted N of M unit x book pair(s); R failed and were restored.' with
+/// M = APairs - OutOfScope, plus ' K pair(s) skipped -- not in scope.' when K &gt; 0.</returns>
+function ConvertedSummaryText(const ATally: TRunTally; APairs: Integer): string;
+
 /// <summary>PURE: the units ARows converted (C8 R4: an ancestor converted EARLIER IN THE
 /// SAME RUN converts its descendants' code uses too, so the editor-side code-use note
 /// omits it; the engine's inherited[] is never filtered by this).</summary>
@@ -292,6 +326,29 @@ begin
     csOutOfScope    : Result:= 'skipped -- not in scope';
     else              Result:= 'FAILED -- NOT restored';
   end;
+end;
+
+function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
+begin
+  Result:= Default(TRunTally);
+  for var LRow: TConvertRow in ARows do
+    case LRow.Status of
+      csConverted     : Inc(Result.Converted);
+      csFailedRestored: Inc(Result.Restored);
+      csRolledBack    : Inc(Result.RolledBack);
+      csBookSkipped   : Inc(Result.BookSkips);
+      csUnitSkipped   : Inc(Result.UnitSkips);
+      csRestoreFailed : Result.NotRestored:= Result.NotRestored + [ExtractFileName(LRow.UnitPas)];
+      csRefused       : Inc(Result.Refused);
+      csOutOfScope    : Inc(Result.OutOfScope);
+    end; // case
+end;
+
+function ConvertedSummaryText(const ATally: TRunTally; APairs: Integer): string;
+begin
+  Result:= Format('Converted %d of %d unit x book pair(s); %d failed and were restored.', [ATally.Converted, APairs - ATally.OutOfScope, ATally.Restored]);
+  if ATally.OutOfScope > 0 then
+    Result:= Result + Format(' %d pair(s) skipped -- not in scope.', [ATally.OutOfScope]);
 end;
 
 function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;

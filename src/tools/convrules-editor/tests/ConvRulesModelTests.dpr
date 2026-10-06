@@ -11035,10 +11035,109 @@ begin
   Check('scope.no.book.text', NoBookText(RULES_DIR, ['TLabel', 'TButton']) = 'No book in C:\R converts TLabel, TButton -- pick the From class on the Classes tab and choose Conversion > New Conversion');
   Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, DFM, Err);
   Check('scope.matches.units.ok', ScopeMatchesUnits(Sc, [PAS_PATH_OTHER_CASE]) = '');
-  Check('scope.matches.units.mismatch', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [PAS_PATH, PAS_OTHER])) > 0);
+  // Ruling B5/R7 (C12 Task 4): the C8 ancestor insert lists more units WITHOUT a scope
+  // reset; they run whole, so a list that still holds the scope's unit is accepted.
+  Check('scope.matches.units.extra.unit.whole', ScopeMatchesUnits(Sc, [PAS_OTHER, PAS_PATH]) = '', ScopeMatchesUnits(Sc, [PAS_OTHER, PAS_PATH]));
   Check('scope.matches.units.other.unit', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [PAS_OTHER])) > 0);
+  Check('scope.matches.units.empty', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [])) > 0);
   Sc:= Default(TConvertScope);
   Check('scope.whole.unit.text', (ScopeText(Sc) = WHOLE_UNIT_SCOPE_TEXT) and (ScopeMatchesUnits(Sc, ['a', 'b']) = ''));
+end;
+
+{ C12 Task 4: the launch decisions the .dpr and the main form make before any
+  control is touched -- the project index a request launch adopts, the rules
+  folder (ruling B1), the whole prepare chain, the report's Scope line and the
+  run summary's out-of-scope count. Every path is FAKE (injected probes). }
+procedure TestConvertRequestLaunch;
+const
+  LAUNCH_DFM = 'object FormU: TFormU' + sLineBreak + '  object Label1: TLabel' + sLineBreak + '  end' + sLineBreak +
+               '  object Btn1: TButton' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  DEFAULT_DB  = REQ_ROOT + 'Default.sqlite';
+  RULES_REQ   = REQ_ROOT + 'R1';
+  RULES_SW    = REQ_ROOT + 'R2';
+  FORMS_DFM   = REQ_ROOT + 'P\Forms\U.dfm';
+  PAIRS_RUN   = 4;
+  PAIRS_OTHER = 3;
+var
+  F   : string;
+  Err : string;
+  P   : TPreparedRequest;
+  Rows: TArray<TConvertRow>;
+  T   : TRunTally;
+  Req : string;
+
+  function Probe(const AYes: TArray<string>; AAll: Boolean): TFunc<string, Boolean>;
+  var
+    LYes: TArray<string>;
+  begin
+    LYes:= AYes;
+    Result:= function(APath: string): Boolean
+      begin
+        Result:= AAll or MatchText(APath, LYes);
+      end;
+  end;
+
+  function Row(AStatus: TConvertStatus; const AUnit: string): TConvertRow;
+  begin
+    Result:= Default(TConvertRow);
+    Result.Status := AStatus;
+    Result.UnitPas:= AUnit;
+  end;
+
+begin
+  // The project index a launch uses: explicit > the request's > the default.
+  Check('launch.db.explicit.wins', AdoptedProjectDb(DEFAULT_DB, REQ_GOOD, 'X') = DEFAULT_DB);
+  Check('launch.db.adopts.request', AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB) = REQ_DB, AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB));
+  Check('launch.db.no.request', AdoptedProjectDb('', '', DEFAULT_DB) = DEFAULT_DB);
+  Check('launch.db.bad.request', AdoptedProjectDb('', 'not json', DEFAULT_DB) = DEFAULT_DB);
+
+  // B1: request > switch; a named folder that is missing is refused, never replaced.
+  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, ['TLabel'], Probe([], True), F);
+  Check('launch.rules.request.wins', (Err = '') and (F = RULES_REQ), Err + F);
+  Err:= ResolveRequestRulesFolder('', RULES_SW, ['TLabel'], Probe([], True), F);
+  Check('launch.rules.switch.fallback', (Err = '') and (F = RULES_SW), Err + F);
+  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, ['TLabel'], Probe([RULES_SW], False), F);
+  Check('launch.rules.request.missing.refused', (F = '') and StartsText('No book in ' + RULES_REQ, Err) and (Pos('does not exist', Err) > 0)
+    and (Pos(RULES_SW, Err) = 0), Err);
+  Err:= ResolveRequestRulesFolder('', '', ['TLabel', 'TButton'], Probe([], True), F);
+  Check('launch.rules.none.refused', (F = '') and StartsText('No book in ', Err) and (Pos('no rules folder', Err) > 0)
+    and (Pos('TLabel, TButton', Err) > 0), Err);
+
+  // The whole chain.
+  Req:= StringReplace(REQ_GOOD, '"platform":"Win64",', '"platform":"Win64","rules_folder":"C:\\R1",', []);
+  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.ok', P.Ok and (P.Error = '') and (P.Scope.Kind = skSelected) and (P.RulesFolder = RULES_REQ), P.Error);
+  Check('launch.prepare.scope', (Length(P.Scope.Instances) = 2) and (Length(P.Scope.NotFound) = 1), ScopeText(P.Scope));
+  P:= PrepareConvertRequest(Req, REQ_ROOT + 'Other\_D-RAG\O.sqlite', REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.validate.refused', (not P.Ok) and (Pos('project index', P.Error) > 0), P.Error);
+  P:= PrepareConvertRequest('{', REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.parse.refused', (not P.Ok) and (P.Error <> ''), P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.no.folder.refused', (not P.Ok) and StartsText('No book in ', P.Error), P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, RULES_SW, Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.switch.folder', P.Ok and (P.RulesFolder = RULES_SW), P.Error);
+  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.dfm.missing.refused', (not P.Ok) and (Pos('missing', P.Error) > 0) and (Pos(REQ_ROOT + 'P\U.dfm', P.Error) > 0), P.Error);
+  // The request's own "dfm" is read, not the .pas sibling.
+  P:= PrepareConvertRequest(StringReplace(Req, '"dfm":"C:\\P\\U.dfm"', '"dfm":"C:\\P\\Forms\\U.dfm"', []), REQ_DB, REQ_PROJECT_FILE, '',
+    Probe([], True), Probe([], True), FakeReader([FORMS_DFM], [LAUNCH_DFM]));
+  Check('launch.prepare.reads.request.dfm', P.Ok, P.Error);
+
+  // E11: the report line.
+  Check('launch.report.scope.whole', ScopeReportLine(Default(TConvertScope)) = 'Scope'#9'whole unit', ScopeReportLine(Default(TConvertScope)));
+  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.report.scope.selected', ScopeReportLine(P.Scope) = 'Scope'#9'2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Label2',
+    ScopeReportLine(P.Scope));
+
+  // Task-3 carry: out-of-scope pairs are counted apart and leave the denominator.
+  Rows:= [Row(csConverted, 'a.pas'), Row(csOutOfScope, 'a.pas'), Row(csOutOfScope, 'a.pas'), Row(csFailedRestored, 'b.pas')];
+  T:= TallyRows(Rows);
+  Check('launch.tally.counts', (T.Converted = 1) and (T.OutOfScope = 2) and (T.Restored = 1) and (T.Refused = 0));
+  Check('launch.summary.out.of.scope', ConvertedSummaryText(T, PAIRS_RUN) =
+    'Converted 1 of 2 unit x book pair(s); 1 failed and were restored. 2 pair(s) skipped -- not in scope.', ConvertedSummaryText(T, PAIRS_RUN));
+  T:= TallyRows([Row(csConverted, 'a.pas'), Row(csRestoreFailed, 'x\b.pas'), Row(csRefused, 'c.pas')]);
+  Check('launch.summary.whole.unit', (ConvertedSummaryText(T, PAIRS_OTHER) = 'Converted 1 of 3 unit x book pair(s); 0 failed and were restored.')
+    and (string.Join(',', T.NotRestored) = 'b.pas') and (T.Refused = 1), ConvertedSummaryText(T, PAIRS_OTHER));
 end;
 
 { C12 Task 3 (E9-E11, runner side): the scoped unit loop with fake engine seams.
@@ -11500,6 +11599,7 @@ begin
     TestConvertRequestValidate;
     TestConvertRequestCaps;
     TestConvertScope;
+    TestConvertRequestLaunch;
     TestRunnerScope;
     TestScopeForUnit;
     TestRunnerLiveOnly;
