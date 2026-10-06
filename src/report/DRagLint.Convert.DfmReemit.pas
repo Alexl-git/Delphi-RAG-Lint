@@ -356,6 +356,12 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// #convert rules is left unconverted + Report.OwnedParts. A nested Controls/
 /// Components child is left ALONE. Deterministic; no file I/O -- the index is read
 /// through the caches (1.20.6, T2b: no property tree is built).
+/// The block's header keyword is kept, nested blocks' too: an `inherited` /
+/// `inline` block re-emits as `inherited X: T` / `inline X: T` (C8 N2, 1.26.0).
+/// Such a block RE-OPENS an ancestor's component, so a property it does not
+/// stream is inherited, not defaulted: for it no F default is resolved (no
+/// Report.DefaultsResolved, no divergence note), no #default is written, and a
+/// #mapping whose source it does not stream is skipped silently.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: ApplyInScope, ApplySets, Byte, CarryLinkFor, CharInSet, ClassCastUnderPath, CloneNode, CompatHas, Copy, Default (+38 more)</para>
@@ -401,6 +407,10 @@ uses
   DRagLint.Parser.DFM; // for tree_sitter_dfm (external decl lives there)
 
 const
+  { .dfm block keywords, as ObjectKeyword spells them }
+  KW_OBJECT    = 'object';
+  KW_INHERITED = 'inherited';
+  KW_INLINE    = 'inline';
   { the keyword that opens one element of a collection value }
   KW_ITEM = 'item';
 
@@ -627,14 +637,19 @@ var
   SB   : TStringBuilder;
   Child: TDfmNode;
   Head : string;
+  Kw   : string;
 begin
   SB:= TStringBuilder.Create;
   try
-    // Header line for a sub-object.
+    // Header line for a sub-object. The keyword is the parsed one (C8 N2,
+    // 1.26.0): an `inherited` / `inline` block re-emits as such -- written as
+    // `object` it would DECLARE a second component of that name, which fails
+    // when the form loads. A synthesized node has none and is an `object`.
+    Kw:= if ANode.Keyword <> '' then ANode.Keyword else KW_OBJECT;
     if ANode.ClassName_ <> '' then
-      Head:= Format('object %s: %s', [ANode.Name, ANode.ClassName_])
+      Head:= Format('%s %s: %s', [Kw, ANode.Name, ANode.ClassName_])
     else
-      Head:= Format('object %s', [ANode.Name]);
+      Head:= Format('%s %s', [Kw, ANode.Name]);
     SB.Append(Ind(AIndent)).Append(Head).Append(#13#10);
     { 1.25.1: every PROPERTY first, then the nested components. The .dfm text
       reader reads a block's properties until the first nested object and
@@ -770,6 +785,7 @@ begin
   Result.Kind      := ASrc.Kind;
   Result.ValueText := ASrc.ValueText;
   Result.ClassName_:= ASrc.ClassName_;
+  Result.Keyword   := ASrc.Keyword;
   for C in ASrc.Children do
     Result.Children.Add(CloneNode(C));
 end;
@@ -927,6 +943,12 @@ var
     missing one -- so every default-resolution path is gated on this. Declared
     here, ahead of the nested routines, because ResolveLeafValue reads it. }
   TreesDescribeThisBlock: Boolean;
+  { True when the block re-opens an ANCESTOR's component (`inherited` /
+    `inline` header, C8 N2, 1.26.0). Its sparse form means something else
+    there: a property the block does not stream is INHERITED from the
+    ancestor, not at its declared default -- so no default is resolved for it
+    and no #default is written into it. }
+  InheritedRoot: Boolean;
 
   // Find a #link whose FromPath equals AFromPath (the dotted lookup key -- a
   // top-level F property name, OR a 'SubObj.Leaf' path when the leaf lives
@@ -1316,6 +1338,8 @@ var
       value. Falling back to "absent" there is correct -- it is what the engine
       did before D2, and it reports rather than invents. }
     if not TreesDescribeThisBlock then Exit(False);
+    { C8 N2: absent from an inherited block means inherited, not defaulted }
+    if InheritedRoot then Exit(False);
     Result:= LeafDefaultOf(AFrom, ADottedPath, AValue);
   end;
 
@@ -1461,6 +1485,9 @@ var
 
     if not ResolveLeafValue(SrcPath, LeafVal) then
     begin
+      { C8 N2: an inherited block that does not stream the source leaves the
+        ancestor's mapped value in force -- nothing to map, nothing to say }
+      if InheritedRoot then Exit;
       { UNKNOWN source: absent from the block AND with no `default` clause to
         resolve it to, so the property is always streamed and its absence really
         does mean "the form never set it". Informational, NOT remainder -- and
@@ -1824,6 +1851,8 @@ begin
     TRoot.Kind      := dnkSubObject;
     TRoot.Name      := FRoot.Name;
     TRoot.ClassName_:= BareTypeTail(ToType);
+    TRoot.Keyword   := FRoot.Keyword;
+    InheritedRoot   := SameText(FRoot.Keyword, KW_INHERITED) or SameText(FRoot.Keyword, KW_INLINE);
 
     { Do the supplied trees describe THIS block? The caller builds them for the
       top-level instance, and HandleNested then re-enters here for each owned
@@ -1889,7 +1918,9 @@ begin
     // can supply the part's OWN trees -- which a PURE unit cannot build. Losing
     // the D4 benefit inside owned parts is a great deal better than corrupting
     // them, and step 4 still carries every value the part actually streams.
-    if TreesDescribeThisBlock then
+    //
+    // NOT for an inherited block (C8 N2): what it does not stream it inherits.
+    if TreesDescribeThisBlock and not InheritedRoot then
     for R in ARules.Rules do
     begin
       if (R.Kind <> rkLink) or (R.FromPath = '') then Continue;
@@ -1976,6 +2007,11 @@ begin
     // A superseded #default is REPORTED, not dropped in silence: the operator
     // wrote a rule that did nothing, and only they can say which of the two
     // they meant. Same reasoning as TReemitNotApplied.
+    //
+    // NOT for an inherited block (C8 N2): the ancestor's own conversion wrote
+    // the #default (or a carried value that superseded it), and the block
+    // inherits that; writing it here would override the ancestor's value.
+    if not InheritedRoot then
     for R in ARules.Rules do
       if R.Kind = rkDefault then
       begin

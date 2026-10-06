@@ -980,7 +980,9 @@ begin
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
     'a #convert type that resolves in no --db REFUSES the unit, dry run and --apply alike -- an index gap, not a rule error (''<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting''); json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
-    'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
+    'an inherited/inline .dfm object of a From type whose declaring ancestor is not converted is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason,action}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
+    'one whose declaring ancestor ALREADY has the To type is RETYPED (1.26.0, C8 N2): inherited X: TFrom -> inherited X: TTo, keyword kept, nested and inline-frame children too; the properties its block overrides convert per the book (what it does not stream it inherits: no default resolved, no #default written); its code access sites are rewritten as for an own instance and the To unit is added; every code access to a field a converted ancestor declares (bound by the resolver, any level up) is rewritten too, .dfm block or not (N2a) -- json inherited[].action retyped|code|skipped|unverified (code: line = its first .pas reference), a converted[] line and items[] kind inherited-instance-retyped, not a warning; --only filters both; info capability inherited_retype; ' +
+    'every code rewrite is scoped to the instance''s field (receiver bound to it, or unbound / bare / Self. in a routine of the .dfm root class with no same-named local); a site the index cannot vouch for is NOT rewritten and is reported (''access site <file>:<line> ... not verified against the index -- not rewritten'', items[] kind access-site-unverified, json access_sites_unverified); a --db resolved before resolver 1.12.0 is REFUSED, dry run too, naming the index ... --resolve-only fix; ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
     'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too, and a write that fails part-way is ROLLED BACK byte-identical (exit 2, ''-- rolled back, unit not changed''; a failed rollback names the files it could not restore) (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; ' +
     'a .dfm component nested in another converted one is spliced into its parent''s re-emit, and --only naming the parent converts it too (json only_included[] {name,parent}, text ''--only: <child> converts too -- nested in <parent>''); a collection property (FieldDefs = < item ... end>) whose item members the book links (#link X.Items.* <- X.Items.*, identity) is carried whole when the To type publishes X with the same collection type, else reported NOT carried with its item count and counted as dropped, #ignore X notwithstanding; ' +
@@ -16051,6 +16053,13 @@ begin
         still stream or use an instance it converts (apply/1 descendants[],
         items[] kind descendant-not-converted) -- a warning, never a refusal. }
       JCap.AddPair('descendant_warnings', TJSONBool.Create(True));
+      { 1.26.0 (C8 N2 / N2a; name agreed with the converter): an inherited /
+        inline instance whose declaring ancestor already has the To type is
+        RETYPED, its block and its code access sites converted, and a field a
+        converted ancestor declares is followed in code -- apply/1 inherited[]
+        gains `action` retyped | code | skipped, items[] kind
+        inherited-instance-retyped. }
+      JCap.AddPair('inherited_retype', TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -24759,6 +24768,12 @@ begin
     end;
     JRoot.AddPair('unlinked_source_properties', TJSONNumber.Create(Length(ACtx.Report.Unlinked)));
     JRoot.AddPair('unlinked_source_property_sites', TJSONNumber.Create(UnlinkedTotal));
+    { 1.26.0 (C8 N2 review): the code sites NOT rewritten because the index
+      could not tie them to the converted field (items[] access-site-unverified) }
+    var Unverified: Integer:= 0;
+    for var UIt: TApplyItem in ACtx.Report.Items do
+      if UIt.Kind = aikAccessSiteUnverified then Inc(Unverified);
+    JRoot.AddPair('access_sites_unverified', TJSONNumber.Create(Unverified));
     JRoot.AddPair('unlinked', JUnlinked);
 
     { 1.20.6 -- the unit rules. component_part says whether the #convert /
@@ -24801,7 +24816,8 @@ begin
     JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(ACtx.Unreachable)));
 
     { 1.22.0 (C8 N1) -- one OBJECT per inherited / inline .dfm object of a From
-      type: skipped, never converted; ancestor_state unconverted | converted |
+      type (1.26.0: and per code-only use of a converted ancestor's field):
+      action retyped | code | skipped; ancestor_state unconverted | converted |
       mismatched | outside, ancestor_unit '' when not known. ALWAYS present, [] when none;
       warnings[] carries each one's 'line N: warning:' text too, and items[]
       its kind inherited-instance-skipped mirror. }
@@ -24815,6 +24831,7 @@ begin
       JI.AddPair('ancestor_unit' , Inh.AncestorUnit);
       JI.AddPair('ancestor_state', Inh.AncestorState);
       JI.AddPair('reason'        , Inh.Reason);
+      JI.AddPair('action'        , Inh.Action); { 1.26.0 (C8 N2): retyped | code | skipped }
       JInh.AddElement(JI);
     end;
     JRoot.AddPair('inherited', JInh);
@@ -24872,9 +24889,11 @@ end; // procedure
   book with no unit rules is 'applied', so its old errors stand -- unless the
   .dfm holds inherited / inline instances of a From type (AHasInherited, C8
   N1): those are skipped and reported, so a .dfm with no OTHER instance is
-  'skipped-no-instances' and converts nothing rather than failing. }
+  'skipped-no-instances' and converts nothing rather than failing -- unless
+  one of them is retyped or a converted ancestor's field is used in code
+  (AHasRetype, C8 N2 / N2a, 1.26.0): then BuildApplyPlan runs, 'applied'. }
 function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
-  const AOnly: TArray<string>; AHasInherited: Boolean): string;
+  const AOnly: TArray<string>; AHasInherited, AHasRetype: Boolean): string;
 var
   R         : TConversionRule;
   HasConvert: Boolean;
@@ -24888,7 +24907,8 @@ begin
     Result:= 'skipped-no-dfm'
   else if not HasConvert then
     Result:= 'skipped-no-convert-rules'
-  else if Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0 then
+  else if (Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0) and
+          not AHasRetype then
     Result:= 'skipped-no-instances';
 end;
 
@@ -25029,6 +25049,29 @@ begin
     end;
 end;
 
+{ 1.26.0 (C8 N2 review): the REFUSED reason when the --db that indexes AUnitPas
+  had its edges derived by a resolver older than convert-apply's access-site
+  scoping needs (E5 field binds, resolver 1.12.0), or carries no resolver stamp
+  -- '' otherwise. On such a DB a field read is left unbound, and the rewrite
+  would skip it as unverifiable: refusing is the honest answer, dry run and
+  --apply alike. The text names the DB and the exact re-derive command. }
+function ResolverRefusal(const AStores: TArray<ISymbolStore>; const ADbs: TArray<string>;
+  const AUnitPas: string): string;
+const
+  MIN_RESOLVER = '1.12.0-alpha';
+begin
+  Result:= '';
+  for var I: Integer:= 0 to High(AStores) do
+  begin
+    if I > High(ADbs) then Break;
+    if (AStores[I].FindFileIdByPath(AUnitPas) <= 0) and (AStores[I].FindFileIdByPath(TPath.GetFullPath(AUnitPas)) <= 0) then Continue;
+    var Ver: string:= ResolverVersionOfFingerprint(AStores[I].GetMetaValue(RESOLVER_FP_KEY));
+    if (Ver <> '') and (CompareDottedVersions(Ver, MIN_RESOLVER) >= 0) then Exit;
+    Exit(Format('%s: edges were derived by resolver %s; convert-apply needs %s or newer (bound field reads) -- re-derive first: drag-lint %s',
+      [ADbs[I], if Ver <> '' then Ver else '(none)', MIN_RESOLVER, IndexRemedyFor(AStores[I], ADbs[I], {AResolveOnly=}True)]));
+  end;
+end;
+
 procedure RefuseUnapplicablePlan(var APlan: TApplyResult);
 var
   Refusal: string;
@@ -25086,9 +25129,11 @@ type
 /// any rule is checked). The .dfm is then read (FindInheritedInstances, 1.22.0, C8 N1/N3): an
 /// inherited/inline object of a From type is NOT converted and no longer refuses the unit -- it
 /// is skipped and reported with its declaring ancestor (apply/1 inherited[] {name, type, line,
-/// ancestor_unit, ancestor_state unconverted|converted|mismatched|outside, reason}, a 'line N: warning:'
+/// ancestor_unit, ancestor_state unconverted|converted|mismatched|outside, reason, action}, a 'line N: warning:'
 /// line in warnings[], items[] kind inherited-instance-skipped), while the unit's own instances,
-/// code and unit rules convert; R26 counts it as left unconverted. Rules are then validated (ValidateConvertBook)
+/// code and unit rules convert; R26 counts it as left unconverted. One whose ancestor already has
+/// the To type is RETYPED instead (1.26.0, C8 N2: action retyped), and a converted ancestor's field
+/// used only in code joins the access-site rewrite (N2a, FindInheritedCodeUses: action code). Rules are then validated (ValidateConvertBook)
 /// BEFORE BuildApplyPlan runs -- EVERY block against its OWN From/To classes, each path resolved
 /// segment by segment (1.20.6, T2b: no property tree is built, so validating the whole book is
 /// cheap and ruling R5's per-unit scope and --validate-all-blocks are gone), and a #mapping
@@ -25315,6 +25360,34 @@ var
       Result:= BookBuilt + (Trees.ClassesBuilt - UnitStart) - ValHere;
     end;
 
+    { C8 N2 / N2a: an inherited[] entry this run converts -- retyped or code }
+    function HasRetype: Boolean;
+    begin
+      for var Inh: TInheritedInstance in JCtx.InheritedInsts do
+        if (Inh.Action = INH_ACTION_RETYPED) or (Inh.Action = INH_ACTION_CODE) then Exit(True);
+      Result:= False;
+    end;
+
+    { C8 N2a: a --only name that names no .dfm object but a code-only entry
+      is MATCHED -- the split is redone in --only order }
+    procedure MatchCodeOnlyNames;
+    var
+      Matched, Unmatched: TArray<string>;
+    begin
+      Matched  := nil;
+      Unmatched:= nil;
+      for var N: string in AArgs.OnlySections do
+      begin
+        var IsCode: Boolean:= False;
+        for var Inh: TInheritedInstance in JCtx.InheritedInsts do
+          if (Inh.Action = INH_ACTION_CODE) and SameText(Inh.Name, N) then IsCode:= True;
+        if IsCode or MatchText(N, JCtx.OnlyMatched) then Matched:= Matched + [N]
+        else Unmatched:= Unmatched + [N];
+      end;
+      JCtx.OnlyMatched  := Matched;
+      JCtx.OnlyUnmatched:= Unmatched;
+    end;
+
   begin
     UnitStart:= Trees.ClassesBuilt;
     ValHere  := 0;
@@ -25327,6 +25400,9 @@ var
     JCtx.Sink   := BatchJson;
     JCtx.UnitPas:= UnitPas;
     if not TFile.Exists(UnitPas) then Exit(FailUnit(Format('unit not found: %s', [UnitPas]), 2));
+    { 1.26.0: a DB whose edges predate bound field reads is refused, dry run too }
+    var StaleResolver: string:= ResolverRefusal(Stores, Dbs, UnitPas);
+    if StaleResolver <> '' then Exit(RefuseUnit(StaleResolver));
     // Sibling .dfm: same base name + '.dfm', same folder as --unit.
     DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
     JCtx.DfmPath:= DfmPath;
@@ -25334,9 +25410,9 @@ var
     if Length(AArgs.OnlySections) > 0 then
       SplitOnlyNames(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
         Rules, AArgs.OnlySections, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
-    if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
-      Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
-    { 1.25.1: a kept parent's nested From-type children convert with it }
+    { 1.25.1: a kept parent's nested From-type children convert with it
+      (the --only unmatched line is printed below, once C8 N2a's code-only
+      names have been matched) }
     if (Length(AArgs.OnlySections) > 0) and TFile.Exists(DfmPath) then
       JCtx.OnlyIncluded:= NestedOnlyInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)), Rules, AArgs.OnlySections);
     if not UseJson then
@@ -25356,6 +25432,14 @@ var
       instances, code and unit rules convert. R26 still counts them as left
       unconverted, so a #unuse that would break them refuses the unit. }
     JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules, AArgs.OnlySections);
+    { 1.26.0 (C8 N2a): fields a converted ancestor declares that this unit's
+      code uses with no .dfm block -- inherited[] action 'code'. A --only name
+      that names one counts as matched. }
+    JCtx.InheritedInsts:= JCtx.InheritedInsts +
+      FindInheritedCodeUses(Trees, UnitPas, Rules, AArgs.OnlySections, JCtx.InheritedInsts);
+    if Length(JCtx.OnlyUnmatched) > 0 then MatchCodeOnlyNames;
+    if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
+      Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
     { EVERY block is validated against its OWN From/To classes (1.20.6, Task 2
       and T2b) -- driven from the rules file's own #convert headers rather than
       --from/--to (convert-apply has neither). It used to take the first block's
@@ -25442,11 +25526,11 @@ var
       BuildApplyPlan runs the whole book (its unit rules folded in). A book with
       no unit rules takes the old path unchanged, errors included. }
     JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections,
-      Length(JCtx.InheritedInsts) > 0);
+      Length(JCtx.InheritedInsts) > 0, HasRetype);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     if JCtx.ComponentPart = 'applied' then
       PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
-        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
+        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
     else
       PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections);
     RefuseUnapplicablePlan(PlanRes); { 1.25.1: all-or-nothing across .pas and .dfm }
@@ -25601,6 +25685,7 @@ begin
   // explicit --db exits 2 (StaleDbRefusesRun) rather than being skipped while
   // the trees are built -- pinned by run_explicit_db_strict.ps1's T5 row.
   var StoresList: TList<ISymbolStore>:= TList<ISymbolStore>.Create;
+  var OpenedDbs: TArray<string>:= nil;
   try
     for LDb in Dbs do
     begin
@@ -25612,8 +25697,10 @@ begin
         Continue; { manifest-resolved: stale DB reported, scan the rest }
       end;
       StoresList.Add(St);
+      OpenedDbs:= OpenedDbs + [LDb];
     end;
     Stores:= StoresList.ToArray;
+    Dbs   := OpenedDbs; { 1.26.0: index-aligned with Stores (ResolverRefusal names the DB) }
   finally
     StoresList.Free;
   end;
