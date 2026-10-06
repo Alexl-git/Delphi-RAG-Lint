@@ -981,6 +981,7 @@ begin
     'a #convert type that resolves in no --db REFUSES the unit, dry run and --apply alike -- an index gap, not a rule error (''<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting''); json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
     'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
+    'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
     'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
     'a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed'') -- EXCEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); ' +
     '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
@@ -16044,6 +16045,10 @@ begin
         removal that would strand ONLY instances --only left out is skipped
         (apply/1 uses[] action 'skipped') instead of refusing the unit. }
       JCap.AddPair('only_skips_unit_rules', TJSONBool.Create(True));
+      { 1.25.0, same contract: convert-apply lists the descendant units that
+        still stream or use an instance it converts (apply/1 descendants[],
+        items[] kind descendant-not-converted) -- a warning, never a refusal. }
+      JCap.AddPair('descendant_warnings', TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -24578,6 +24583,10 @@ type
       run SKIPPED, each with its declaring ancestor -- apply/1 inherited[]. Their
       'line N: warning:' text is ALSO in Report.Warnings / Report.Items. }
     InheritedInsts: TArray<TInheritedInstance>;
+    { 1.25.0: the descendant units that still stream or use an instance this
+      run converts -- apply/1 descendants[]. Their 'line N: warning:' text is
+      ALSO in Report.Warnings / Report.Items. }
+    Descendants: TArray<TDescendantUse>;
     { 1.23.0 (C13 b2): batch mode's collector. nil -> EmitApplyJson writes the
       document to stdout (single --unit, unchanged); assigned -> the apply/1
       object is appended to it instead (owned by the array) and nothing is
@@ -24805,6 +24814,24 @@ begin
       JInh.AddElement(JI);
     end;
     JRoot.AddPair('inherited', JInh);
+
+    { 1.25.0 -- one OBJECT per (descendant unit, converted instance) the
+      descendant still streams (.dfm) or uses (code): reason dfm | code | both,
+      line in the descendant .dfm, else its first code reference. ALWAYS
+      present, [] when none; warnings[] carries each one's 'line N: warning:'
+      text too, and items[] its kind descendant-not-converted mirror. }
+    var JDesc: TJSONArray:= TJSONArray.Create;
+    for var Desc: TDescendantUse in ACtx.Descendants do
+    begin
+      var JD: TJSONObject:= TJSONObject.Create;
+      JD.AddPair('unit'  , Desc.UnitName);
+      JD.AddPair('name'  , Desc.Name);
+      JD.AddPair('type'  , Desc.TypeName);
+      JD.AddPair('line'  , TJSONNumber.Create(Desc.Line));
+      JD.AddPair('reason', Desc.Reason);
+      JDesc.AddElement(JD);
+    end;
+    JRoot.AddPair('descendants', JDesc);
 
     { 1.23.0 (C13 N3) -- ALWAYS present, [] without --only. }
     JRoot.AddPair('only_matched'  , ArrOf(ACtx.OnlyMatched));
@@ -25338,6 +25365,14 @@ var
     JCtx.Ok       := True;
     MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
     AppendInheritedReport(JCtx.InheritedInsts, DfmPath, PlanRes.Report); { likewise }
+    { 1.25.0: descendants that still stream / use an instance converted here.
+      A warning, never a refusal; only the instances the plan converted count. }
+    if JCtx.ComponentPart = 'applied' then
+    begin
+      JCtx.Descendants:= FindDescendantUses(Trees, UnitPas, DfmPath, Rules,
+        ConvertedInstancesOf(PlanRes.Report, DfmPath, Rules, AArgs.OnlySections));
+      AppendDescendantReport(JCtx.Descendants, DfmPath, PlanRes.Report);
+    end;
     JCtx.Report   := PlanRes.Report;
     JCtx.EditCount:= Length(PlanRes.Edits);
 
