@@ -400,6 +400,10 @@ uses
   TreeSitterLib,
   DRagLint.Parser.DFM; // for tree_sitter_dfm (external decl lives there)
 
+const
+  { the keyword that opens one element of a collection value }
+  KW_ITEM = 'item';
+
 { TDfmNode }
 
 constructor TDfmNode.Create;
@@ -632,20 +636,24 @@ begin
     else
       Head:= Format('object %s', [ANode.Name]);
     SB.Append(Ind(AIndent)).Append(Head).Append(#13#10);
+    { 1.25.1: every PROPERTY first, then the nested components. The .dfm text
+      reader reads a block's properties until the first nested object and
+      after that accepts only objects -- a property written after one (a
+      resolved default or a #default appended to a block that holds persistent
+      fields) does not load, and the binary conversion fails. Order within
+      each group is kept. }
     for Child in ANode.Children do
-    begin
       case Child.Kind of
         dnkSubObject:
-          if Child.ClassName_ <> '' then
-            SB.Append(EmitBlock(Child, AIndent + 1))
-          else
-            EmitDotted(Child, Child.Name, AIndent + 1, SB);
+          if Child.ClassName_ = '' then EmitDotted(Child, Child.Name, AIndent + 1, SB);
         dnkScalar, dnkEvent, dnkBinary, dnkCollection:
           SB.Append(Ind(AIndent + 1))
             .Append(Child.Name).Append(' = ').Append(Child.ValueText)
             .Append(#13#10);
       end;
-    end;
+    for Child in ANode.Children do
+      if (Child.Kind = dnkSubObject) and (Child.ClassName_ <> '') then
+        SB.Append(EmitBlock(Child, AIndent + 1));
     SB.Append(Ind(AIndent)).Append('end').Append(#13#10);
     Result:= SB.ToString;
   finally
@@ -742,6 +750,14 @@ begin
   for j:= 0 to Cur.Children.Count - 1 do
     if SameText(Cur.Children[j].Name, Segs[High(Segs)]) then
       Exit(Cur.Children[j]);
+end;
+
+// The number of items in a collection value's verbatim text (1.25.1).
+function CountCollectionItems(const AValueText: string): Integer;
+begin
+  Result:= 0;
+  for var L: string in AValueText.Replace(#13#10, #10).Split([#10]) do
+    if SameText(Trim(L), KW_ITEM) or SameText(Trim(L), '<' + KW_ITEM) then Inc(Result);
 end;
 
 // Deep-copy a TDfmNode subtree (for verbatim copies of contained children /
@@ -1465,11 +1481,74 @@ var
         EvaluateMapping(Q);
   end;
 
+  // 1.25.1 (DMREADINGS: 14 collections, 709 items gone without a word). A
+  // collection streams as ONE leaf (`FieldDefs = < item ... end>`), so a book
+  // that links its ITEM members -- `#link FieldDefs.Items.Name <-
+  // FieldDefs.Items.Name` -- named a path no leaf ever has: the links were
+  // dead, and an `#ignore FieldDefs` beside them (BDE-to-FireDAC.rules' TTable
+  // block has both) dropped the collection with no report line at all.
+  //
+  // Item links are the more specific rule, so they decide, ahead of #ignore:
+  // when every #link under `AFromPath.` is an identity link and the To type
+  // has the property with the SAME collection type (resolved through the
+  // index), the collection is carried verbatim and said so (Relocated). When
+  // they cannot be honoured -- a renaming item link, or another collection
+  // type on T -- it is NOT carried: a Mismatched note says why and it is
+  // counted as Dropped, #ignore or not. AHandled: the leaf was dealt with.
+  procedure CarryCollectionByItemLinks(const ALeaf: TDfmNode; const AFromPath: string; out AHandled: Boolean);
+  var
+    Q        : TConversionRule;
+    Lines    : string;
+    Renames  : Boolean;
+    SrcType    : string;
+    DstType    : string;
+  begin
+    AHandled:= False;
+    Lines  := '';
+    Renames:= False;
+    if ALeaf.Kind <> dnkCollection then Exit;
+    for Q in ARules.Rules do
+      if (Q.Kind = rkLink) and Q.FromPath.StartsWith(AFromPath + '.', True) then
+      begin
+        Lines:= Lines + (if Lines = '' then '' else ', ') + IntToStr(Q.LineNo);
+        if not SameText(Q.FromPath, Q.ToPath) then Renames:= True;
+      end;
+    if Lines = '' then Exit;
+    SrcType:= LeafTypeOf(AFrom, AFromPath);
+    DstType:= LeafTypeOf(ATo, AFromPath);
+    if Renames or (SrcType = '') or not SameText(SrcType, DstType) then
+    begin
+      Result.Report.Mismatched:= Result.Report.Mismatched +
+        [Format('collection %s: #link %s.* at line(s) %s cannot carry it (%s) -- NOT carried, %d item(s)',
+          [AFromPath, AFromPath, Lines,
+           (if Renames then 'an item link renames a member'
+            else Format('F type %s, T type %s', [if SrcType <> '' then SrcType else '?', if DstType <> '' then DstType else 'none'])),
+           CountCollectionItems(ALeaf.ValueText)])];
+      { and counted as dropped -- the unlinked warning and json unlinked[] --
+        even under an #ignore: the item links say the book wanted it kept }
+      Dropped := Dropped + [AFromPath];
+      AHandled:= True;
+      Exit;
+    end;
+    PlaceAtPath(TRoot, AFromPath, ALeaf.ValueText, dnkCollection, Created);
+    Result.Report.Relocated:= Result.Report.Relocated +
+      [Format('collection %s carried, items unchanged (#link %s.* at line(s) %s; %d item(s))',
+        [AFromPath, AFromPath, Lines, CountCollectionItems(ALeaf.ValueText)])];
+    AHandled:= True;
+  end;
+
   procedure RemapLeaf(const ALeaf: TDfmNode; const AFromPath: string);
-  var ToPath: string;
+  var
+    ToPath : string;
+    Carried: Boolean;
   begin
     if IsRemoved(AFromPath) then Exit; // #remove: ensure absent from T
     if IsConsumed(AFromPath) then Exit; // a #mapping already wrote the T side
+    if not FindLinkFor(AFromPath, ToPath) then
+    begin
+      CarryCollectionByItemLinks(ALeaf, AFromPath, Carried);
+      if Carried then Exit;
+    end;
     if IsIgnored(AFromPath) then
     begin Ignored:= Ignored + [AFromPath]; Exit; end;
     if FindLinkFor(AFromPath, ToPath) then

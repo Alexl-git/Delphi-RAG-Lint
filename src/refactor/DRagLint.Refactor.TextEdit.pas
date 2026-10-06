@@ -135,6 +135,18 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RenderDryRun(const AEdits: TArray<TTextEdit>): string;
+    /// <summary>Why Apply would refuse part of an edit set, or '' when it
+    /// would apply every file's edits (1.25.1).</summary>
+    /// <param name="AEdits">The whole plan, every file's edits.</param>
+    /// <returns>'' or, for the first file whose edits Apply would refuse
+    /// whole, 'refused N edit(s) to &lt;file&gt; -- overlapping delete ranges
+    /// (an engine defect)'.</returns>
+    /// <remarks>The same overlap test Apply makes per file, without reading
+    /// or writing anything, so a caller can refuse a multi-file plan BEFORE
+    /// any file is written -- Apply works file by file and cannot undo a file
+    /// it already wrote. Stale-anchor edits are not considered: they are
+    /// skipped one by one by design. Pure.</remarks>
+    class function RefusalOf(const AEdits: TArray<TTextEdit>): string;
   end;
 
   /// <remarks>
@@ -365,6 +377,47 @@ begin
   end;
 end;
 
+{ 1.25.1: TEST SEAM, inert unless the environment variable names it. With
+  DRAGLINT_TEST_FAIL_WRITE_AT=N, the N-th file write of one Apply call raises
+  EInOutError before a byte of it is written -- the only way a test can make a
+  write fail AFTER convert-apply's writability pre-check, which is what its
+  rollback exists for (run_convert_apply_atomic.ps1). }
+procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
+const
+  TEST_FAIL_WRITE_AT = 'DRAGLINT_TEST_FAIL_WRITE_AT';
+begin
+  if GetEnvironmentVariable(TEST_FAIL_WRITE_AT) = IntToStr(AWriteNo) then
+    raise EInOutError.CreateFmt('%s=%d: simulated write failure on %s', [TEST_FAIL_WRITE_AT, AWriteNo, APath]);
+end;
+
+class function TTextEditApplier.RefusalOf(const AEdits: TArray<TTextEdit>): string;
+var
+  FileMap: TObjectDictionary<string, TList<TTextEdit>>;
+  Group  : TList<TTextEdit>;
+  Paths  : TArray<string>;
+begin
+  Result := '';
+  FileMap:= TObjectDictionary<string, TList<TTextEdit>>.Create([doOwnsValues]);
+  try
+    Paths:= nil;
+    for var E: TTextEdit in AEdits do
+    begin
+      if not FileMap.TryGetValue(E.FilePath, Group) then
+      begin
+        Group:= TList<TTextEdit>.Create;
+        FileMap.Add(E.FilePath, Group);
+        Paths:= Paths + [E.FilePath];
+      end;
+      Group.Add(E);
+    end;
+    for var P: string in Paths do
+      if DeletesOverlap(FileMap[P]) then
+        Exit(Format('refused %d edit(s) to %s -- overlapping delete ranges (an engine defect)', [FileMap[P].Count, P]));
+  finally
+    FileMap.Free;
+  end;
+end;
+
 class function TTextEditApplier.Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer;
 var
   Skipped: Integer;
@@ -532,6 +585,7 @@ begin
             if I < Lines.Count - 1 then SB.Append(#13#10);
           end;
           if (Length(Content) > 0) and (Content[Length(Content)] = #10) then SB.Append(#13#10);
+          FailWriteForTests(Touched + 1, Pair.Key);
           TFile.WriteAllBytes(Pair.Key, TEncoding.ANSI.GetBytes(SB.ToString));
         finally
           SB.Free;

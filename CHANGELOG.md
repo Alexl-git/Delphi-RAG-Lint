@@ -3,6 +3,81 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.25.1-alpha -- unreleased
+
+No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
+
+### Fixed
+
+- **DATA-LOSS RISK: `convert-apply --apply` could write a HALF-converted unit and exit 0.**
+  A converted component owning converted children in its `.dfm` -- a `TTable` with
+  persistent `TField` objects, each a From type of its own `#convert` block (measured on
+  DMTEST's DMREADINGS: 37 instances) -- had its block re-emitted AND each child's block,
+  inside it, re-emitted again: two overlapping delete ranges. The edit applier refused the
+  whole `.dfm` (`refused 74 edit(s) to ...DMREADINGS.dfm -- overlapping delete ranges`, on
+  stderr only) after the `.pas` had already been written, so every field was retyped while
+  the `.dfm` still streamed the old classes -- a unit that no longer loads -- and the run
+  reported success. Two fixes:
+  - **a nested converted instance is SPLICED into its parent's re-emit**: one delete + insert
+    for the parent, the child's block in it written by the child's OWN re-emit (its own
+    trees: defaults resolved, remainder reported under its name, as before), its `.pas`
+    surfaces unchanged. A child the parent's text does not carry is skipped and warned.
+  - **an apply is all-or-nothing across the unit's files**: the plan is checked before
+    anything is written, dry run included; an edit set the applier would refuse fails the
+    unit -- `ok:false`, exit 1, `ERROR: refused N edit(s) to <file> -- overlapping delete
+    ranges (an engine defect) -- unit not changed, nothing written` -- with no file touched,
+    no `.BCK` and no `recovery.txt`. In batch mode only that unit fails.
+- **An identical in-line rewrite planned twice was spliced twice.** Two `#convert` blocks
+  sharing a renaming `#link` (`Title <- Caption` on a table and on its fields) rewrote the
+  same access site twice -- `tbl.Caption := tblID.Caption` became `tbl.Title= tblID.Title`
+  -- and two To types declared in one unit added it twice (`uses LibB, LibB`). Exact
+  duplicate in-line edits are now planned once, and a unit two To types share is added once.
+
+- **DATA-LOSS RISK: collection-valued properties vanished without a word.** A collection
+  (`FieldDefs = < item ... end>`) is one `.dfm` leaf, so `#link FieldDefs.Items.Name <-
+  FieldDefs.Items.Name` -- BDE-to-FireDAC.rules links every item member of FieldDefs and
+  IndexDefs -- named a path no leaf has, and the `#ignore FieldDefs` / `#ignore IndexDefs`
+  beside them in the TTable block dropped the collections with no line in any report
+  surface: on DMREADINGS 12 collections, 707 items. Item links now decide, ahead of
+  `#ignore`: all identity and the To type publishing the property with the SAME collection
+  type -> carried verbatim (reemit note `collection X carried, items unchanged (#link X.* at
+  line(s) ...; N item(s))`); otherwise -> NOT carried, a reemit note naming the reason and the
+  item count, and COUNTED as dropped (`dropped X`, the `dropped on N of M` warning,
+  `unlinked[]`). On DMREADINGS all 12 are now reported -- TFDTable publishes neither
+  FieldDefs nor IndexDefs -- as `TTable.FieldDefs ... dropped on 8 of 21` and
+  `TTable.IndexDefs ... 4 of 21`; the other 2 of the 709 items are TQuery `ParamData`, which
+  was already warned. Guard: `run_convert_apply_collections.ps1`. A bare `#ignore X` --
+  with no `#link X.*` item links -- still drops a non-empty collection SILENTLY: that is the
+  book author's deliberate acceptance of the drop, exactly as for any other `#ignore`d
+  property.
+- **A write that failed part-way left the unit half-converted.** After the writability
+  pre-check (a lock taken in between, a full disk) the applier could write the `.pas` and
+  fail on the `.dfm`; the error only pointed at the `.BCK` files. Now the unit is ROLLED
+  BACK: every file already written is restored byte-identical (from its `.BCK`, or under
+  `--no-backup` from the bytes read before the write), exit 2, `write failed for <unit>:
+  ... -- rolled back, unit not changed`. Only a rollback that itself fails keeps the
+  "PARTLY converted" message, now naming the files it could not restore. Test seams, inert
+  unless set: `DRAGLINT_TEST_FAIL_WRITE_AT=N` (the N-th file write raises) and
+  `DRAGLINT_TEST_FAIL_ROLLBACK=1`.
+- **What is atomic, exactly.** Per unit, across `.pas` and `.dfm`: an overlapping edit set
+  -- nothing written (dry run too), exit 1; a file not writable up front -- nothing
+  written, exit 2; a write failing part-way -- rolled back, exit 2; a failed rollback --
+  reported with the files it could not restore, exit 2.
+- **A re-emitted block wrote properties AFTER its nested components** (a resolved default
+  or a `#default` appended to a block holding persistent fields). The `.dfm` reader accepts
+  no property after a nested object, so such a form failed to load and failed the binary
+  conversion. Properties are now written first.
+- **`--only <parent>` left the form and the code disagreeing.** A kept parent's re-emit
+  converts its nested From-type children in the `.dfm`, but the children's `.pas` fields
+  stayed the From type. They now convert with the parent, `.pas` included, and are listed in
+  the new `apply/1` key `only_included[]` `{name, parent}` (always present, `[]` without
+  `--only`) and as a text line `--only: <child> converts too -- nested in <parent>`.
+
+Guard: `run_convert_apply_atomic.ps1` (nested table + fields, dry run and `--apply`, a dcc64
+compile; a forced overlapping plan leaves `.pas` and `.dfm` byte-identical with exit 1,
+dry run and batch included). DMTEST copy: DMREADINGS whole-book `--apply` now converts all
+37 instances (95 edits, was 147 with the duplicates) and writes both files.
+
 ## v1.25.0-alpha -- unreleased
 
 No extractor or resolver change on top of 1.24.0: indexes do not re-parse.
