@@ -203,6 +203,16 @@ function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported, ARet
 /// and the to-do marker it wrote, were restored away.</returns>
 function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
 
+/// <summary>The run summary's leading sentences, most severe first.</summary>
+/// <param name="ANotRestored">Units whose restore failed (may be half-converted); [] = none.</param>
+/// <param name="AGlyphSummary">GlyphRunSummary of the run; '' = no glyph to-dos.</param>
+/// <param name="ABody">The ordinary summary (counts, problems, report path).</param>
+/// <returns>'RESTORE FAILED for &lt;units&gt; -- may be half-converted; restore by hand from the
+/// backups its row names. ' when ANotRestored is not empty, then AGlyphSummary + two spaces
+/// when it is set, then ABody. A half-converted unit always leads; the glyph to-dos come
+/// next.</returns>
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+
 implementation
 
 uses
@@ -269,6 +279,15 @@ begin
     if (LRow.Status = csConverted) and (GlyphTodoCount(LRow.Apply.Glyphs) > 0) and not MatchText(LRow.UnitPas, LUnits) then
       LUnits:= LUnits + [LRow.UnitPas];
   Result:= Length(LUnits);
+end;
+
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+begin
+  Result:= ABody;
+  if AGlyphSummary <> '' then
+    Result:= AGlyphSummary + '  ' + Result;
+  if Length(ANotRestored) > 0 then
+    Result:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backups its row names. ', [string.Join(', ', ANotRestored)]) + Result;
 end;
 
 function FileProbe: TFileProbe;

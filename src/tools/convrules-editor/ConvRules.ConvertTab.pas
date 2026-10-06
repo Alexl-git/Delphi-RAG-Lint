@@ -1280,8 +1280,11 @@ begin
       // C8 E10: one line per instance the engine says the converted unit left (unfiltered, ruling M4).
       for var LLine: string in InheritedReportLines(LRow, FRunInheritedOk, FRunRetypeOk) do
         LLines.Add(LLine);
-      for var LG: TGlyphOutcome in LRow.Apply.Glyphs do
-        LLines.Add(GlyphReportLine(LRow.UnitPas, LG));
+      // Converted rows only: a rolled-back row's to-do markers were restored away
+      // (the same rule as GlyphTodoUnitCount).
+      if LRow.Status = csConverted then
+        for var LG: TGlyphOutcome in LRow.Apply.Glyphs do
+          LLines.Add(GlyphReportLine(LRow.UnitPas, LG));
     end;
     for var LUnit: string in ANotReached do
       LLines.Add(string.Join(#9, ['', LUnit, STATUS_NOT_REACHED, '', '', '', '', '']));
@@ -1360,9 +1363,11 @@ begin
     Msg:= Msg + Format(' %d unit(s) skipped.', [UnitSkips]);
   if FCancelRequested then
     Msg:= Msg + Format(' Cancelled: %d unit(s) not reached.', [Length(NotReached)]);
-  // The most severe outcome leads: a unit that may be half-converted.
-  if Length(NotRestored) > 0 then
-    Msg:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backups its row names. ', [string.Join(', ', NotRestored)]) + Msg;
+  // The most severe outcome leads: a unit that may be half-converted; glyph to-dos
+  // (spec E14, counted per UNIT -- R5) come next: converted, but each such unit's
+  // implementation section starts with a to-do line the user must act on.
+  var LGlyphSummary: string:= GlyphRunSummary(GlyphTodoUnitCount(FRunRows));
+  Msg:= RunStatusLead(NotRestored, LGlyphSummary, Msg);
   if AProblem <> '' then
     Msg:= Msg + ' Also: ' + AProblem + '.';
   if WriteReport(NotReached, AFinalIndex, Report, RepErr) then
@@ -1380,13 +1385,7 @@ begin
     Msg:= Msg + ' Inherited instances could not be re-checked: ' + FInheritError;
   // Re-harvest the converted code so the Unit Rules MISSING list is current.
   FHost.FeedHarvest(AJob.Units);
-  // Glyph to-dos lead, in red (spec E14): converted, but each such unit's implementation
-  // section starts with a to-do line the user must act on. Counted per UNIT (R5).
-  var LGlyphSummary: string:= GlyphRunSummary(GlyphTodoUnitCount(FRunRows));
-  if LGlyphSummary <> '' then
-    FHost.SetStatus(LGlyphSummary + '  ' + Msg, True)
-  else
-    FHost.SetStatus(Msg, (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '') or (LIndexErr <> '') or (FInheritError <> ''));
+  FHost.SetStatus(Msg, (LGlyphSummary <> '') or (Restored + BookSkips + UnitSkips + Length(NotRestored) > 0) or (AProblem <> '') or (RepErr <> '') or (LIndexErr <> '') or (FInheritError <> ''));
 end;
 
 end.

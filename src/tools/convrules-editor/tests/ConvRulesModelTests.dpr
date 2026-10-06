@@ -10198,6 +10198,7 @@ const
   UNITS_SUFFIX  = '  (unit rules: engine support pending)';
   MIXED_SUFFIX  = '  (unit rules not applied: engine)';
   TODO_UNITS    = 2;
+  RESTORE_LEAD  = 'RESTORE FAILED for A.pas, B.pas -- may be half-converted; restore by hand from the backups its row names. ';
 var
   E   : TBookEntry;
   En  : Boolean;
@@ -10266,6 +10267,16 @@ begin
   Check('glyph.tab.todo.units', GlyphTodoUnitCount(Rows) = TODO_UNITS, IntToStr(GlyphTodoUnitCount(Rows)));
   Check('glyph.tab.todo.none', GlyphTodoUnitCount([Row('u\B.pas', csConverted, [Done])]) = 0);
   Check('glyph.tab.todo.summary', GlyphRunSummary(GlyphTodoUnitCount(Rows)) <> '');
+
+  // Fix round 1: RESTORE FAILED (a half-converted unit) always leads; glyph to-dos next.
+  S:= RunStatusLead(['A.pas', 'B.pas'], GlyphRunSummary(1), 'Converted 1 of 2.');
+  Check('glyph.tab.lead.restore.first', S = RESTORE_LEAD + GlyphRunSummary(1) + '  Converted 1 of 2.', S);
+  S:= RunStatusLead([], GlyphRunSummary(1), 'Converted 1 of 2.');
+  Check('glyph.tab.lead.glyph.only', S = GlyphRunSummary(1) + '  Converted 1 of 2.', S);
+  S:= RunStatusLead(['A.pas', 'B.pas'], '', 'Converted 1 of 2.');
+  Check('glyph.tab.lead.restore.only', S = RESTORE_LEAD + 'Converted 1 of 2.', S);
+  S:= RunStatusLead([], '', 'Converted 1 of 2.');
+  Check('glyph.tab.lead.body.only', S = 'Converted 1 of 2.', S);
 end;
 
 { C10 E7/E8/E12-E14: the editor's own glyph decisions -- the live check goes through the
@@ -10796,7 +10807,7 @@ begin
     TestGlyphApplyParse;
     TestGlyphRunner;
     TestGlyphLinkMerge;
-  TestGlyphConvertTab;
+    TestGlyphConvertTab;
 
     FreeAndNil(GParseBook);
 
