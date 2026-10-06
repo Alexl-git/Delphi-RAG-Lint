@@ -406,14 +406,14 @@ function Resolve-TraceAnchor([string] $Target, $SqlSet, [hashtable] $SourceOverr
 # branch; `else` -> the else of the if (or case) it pairs with; `on .. do` -> an
 # except handler; `;` / `begin` / `try` -> a statement of the enclosing block,
 # whose opener is then read the same way. Forms:
-#   inline  the `if` and the Exit share a line    -> UNLESS "C" (then branch), WHEN "C" (else branch)
+#   inline  the `if` and the Exit share a line    -> UNLESS C (then branch), WHEN C (else branch)
 #   block   the `if` is on an earlier line         -> the same keywords
-#   except  `try S .. except .. Exit`              -> UNLESS "S raises"; a body of several statements is
+#   except  `try S .. except .. Exit`              -> UNLESS S raises; a body of several statements is
 #                                                     quoted "S1 ... Sn raises" -- which one raises is not in the source
 #                                                     (' ... ', never ' .. ', Pascal's range operator -- ruling T4-R3)
-#   case    `case X of .. else .. Exit`            -> UNLESS "case X of", the note `else arm at :<line>` (T4-C3:
+#   case    `case X of .. else .. Exit`            -> UNLESS case X of, the note `else arm at :<line>` (T4-C3:
 #                                                     the source line verbatim, the arm said in generated text)
-#   unknown anything else: a loop, a case arm, no branch, a condition holding a double-quote, two
+#   unknown anything else: a loop, a case arm, no branch, a condition Form A cannot write unquoted, two
 #           Exits on the anchored line, a comment wrapping across the quoted lines, a conditional-
 #           compilation directive ({$IF.. {$ELSE {$ENDIF) between the guard and the Exit --
 #           Reason is plain GENERATED text the walker writes as a STOPS naming E1; never a guess, never a throw
@@ -428,8 +428,9 @@ function Resolve-TraceAnchor([string] $Target, $SqlSet, [hashtable] $SourceOverr
 # character (a comment at either END of a piece is dropped, as it would swallow
 # the join; one inside is kept as written) and the pieces are joined with ONE
 # space. Nothing inside a piece changes -- no whitespace collapse, no truncation,
-# no quote rewriting. A condition holding `"` cannot be written (New-TraceCond
-# refuses it) and comes back as a named `unknown`.
+# no quote rewriting. A condition Form A cannot write unquoted (Get-TraceCondProblem:
+# ` @<file>:<line>` or ` -- ` inside it; R5 Part 0 -- a `"` was the refusal while
+# conditions were quoted) comes back as a named `unknown`.
 #
 # Result: Form, Keyword ('' for unknown), Condition, IfLine (the if / except / case
 # line: the condition's anchor), BlockStart..BlockEnd (the lines of the branch
@@ -501,8 +502,9 @@ function Get-ShimCodeLineCount([string[]] $Stripped, [int] $L1, [int] $C1, [int]
 }
 
 function New-ShimResult($X, [string] $Form, [string] $Keyword, [string] $Condition, [int] $IfLine, [int] $BlockStart, [int] $BlockEnd, [string] $Reason = '', [int] $StmtLine = 0, [int] $StmtCol = 0) {
-  if ($Form -ne 'unknown' -and $Condition.Contains('"')) {
-    return (New-ShimResult $X 'unknown' '' '' 0 0 0 "the condition over the $($X.What) at :$($X.ExitLine) holds a double-quote, which a Form A condition cannot carry verbatim")
+  $why = $(if ($Form -ne 'unknown') { Get-TraceCondProblem $Condition } else { '' })
+  if ($why) {
+    return (New-ShimResult $X 'unknown' '' '' 0 0 0 "the condition over the $($X.What) at :$($X.ExitLine) $why -- a Form A condition cannot carry it verbatim")
   }
   [pscustomobject]@{ Form = $Form; Keyword = $Keyword; Condition = $Condition; IfLine = $IfLine; BlockStart = $BlockStart; BlockEnd = $BlockEnd; ExitArg = $X.ExitArg; Reason = $Reason
                      StmtLine = $StmtLine; StmtCol = $StmtCol }
@@ -755,8 +757,8 @@ function Get-GuardCondition([string] $Path, [int] $ExitLine, [int] $RoutineStart
 
 # The ENCLOSING condition of the statement that starts at ($Line, $Col) -- ruling T5-R1. The same
 # token reader, asked from a statement instead of an Exit: the nearest `if` whose branch holds the
-# statement, through begin / try blocks. The keyword says when the STATEMENT runs: WHEN "C" in the
-# then branch, UNLESS "C" in the else branch (the reverse of a guard's, which says when the path
+# statement, through begin / try blocks. The keyword says when the STATEMENT runs: WHEN C in the
+# then branch, UNLESS C in the else branch (the reverse of a guard's, which says when the path
 # CONTINUES past its Exit). Anything the reader cannot place -- no branch, a loop, a case arm, a
 # directive -- is a named `unknown`, and the caller keeps the statement. Innermost if only (T4-R4).
 # The keyword tokens of lines $From..$To, once per routine (fix round 1: every step line of a routine
@@ -835,7 +837,7 @@ function Get-LiteralSourceText($Lit, $Raw) {
   "'" + ([string]$Lit.text).Replace("'", "''") + "'"
 }
 
-# A branch for ANOTHER table (T5-R1): the statement runs WHEN "<cond>" and <cond> compares a value
+# A branch for ANOTHER table (T5-R1): the statement runs WHEN <cond> and <cond> compares a value
 # with `=` to a string literal that is a known table ($Tables) other than the anchor's -- and says
 # nothing that could let the anchor's table through: no `or` / `xor` / `not` / `<>`, no literal
 # naming the anchor table. Anything else keeps the step.
@@ -1243,7 +1245,8 @@ function Get-LineYield($I, $F, [int] $Depth, [hashtable] $Visited, $Ctx) {
 
 # The OMITS disclosure (T5-R1): how many STEPS the omitted lines would have yielded (T5-R6) and the
 # verbatim branch conditions that left them out (generated connectors, E1). $Recs: Count, Keyword,
-# Condition, Anchor, Routine. A condition the note cannot carry ('; ') is named by its anchor only.
+# Condition, Anchor, Routine. A condition the note cannot carry ('; ', or what Get-TraceCondProblem names) is
+# named by its anchor only; the rest are written unquoted, as on a condition line (R5 Part 0).
 function New-OmitStep($Recs) {
   $n = [int](@($Recs) | Measure-Object -Property Count -Sum).Sum
   $rn = @($Recs | ForEach-Object { [string]$_.Routine } | Sort-Object -Unique)
@@ -1252,7 +1255,7 @@ function New-OmitStep($Recs) {
     $k = "$($r.Keyword)|$($r.Condition)|$($r.Anchor)"
     if ($seen.ContainsKey($k)) { continue }
     $seen[$k] = 1
-    $cs += $(if ($r.Condition -match '; |[\r\n]') { "$($r.Keyword) at $($r.Anchor)" } else { "$($r.Keyword) `"$($r.Condition)`" @$($r.Anchor)" })
+    $cs += $(if ($r.Condition -match '; |[\r\n]' -or (Get-TraceCondProblem $r.Condition)) { "$($r.Keyword) at $($r.Anchor)" } else { "$($r.Keyword) $($r.Condition) @$($r.Anchor)" })
   }
   $s = New-TraceStep 'step' "OMITS $n step(s) in branches for other tables, every enclosing if read up to a loop or case arm" $Recs[0].Anchor '' $(if ($rn.Count -eq 1) { $rn[0] } else { '' }) ('not walked, the branch conditions: ' + ($cs -join ' / ')) 'E1'
   $s | Add-Member -NotePropertyName Omits -NotePropertyValue @($Recs)
@@ -1277,7 +1280,7 @@ function Merge-TraceOmits($Section) {
 # on the step of their `if` line, else the nearest step of this body above it,
 # else they come back in .Conds for the caller's CALLS step. A line inside a branch
 # for ANOTHER table (T5-R1: its enclosing condition, read from fresh source, is
-# `WHEN "<x> = '<TABLE>'"` for a known table that is not the anchor's) is not on
+# `WHEN <x> = '<TABLE>'` for a known table that is not the anchor's) is not on
 # the anchor's path: it is not walked, and one OMITS step counts it and quotes the
 # condition. Only a routine whose literals name such a table is read for this.
 # Fix round 1: every step line's enclosing CHAIN is read; the else branch of an if whose
@@ -1382,7 +1385,7 @@ function Walk-Routine([int] $Id, [int] $Depth, [hashtable] $Visited, $Ctx) {
   # path step of its branch -- WHEN in the then branch, UNLESS in the else. When exactly ONE side answers
   # (a success response or a commit, Get-BranchPathSide), the OTHER side is that condition's `-- else`
   # note, not steps; when both or neither answer, both sides stay steps, each with its condition. A
-  # line in an except handler is the note of UNLESS "<try body> raises". Innermost first. An if an Exit
+  # line in an except handler is the note of UNLESS <try body> raises. Innermost first. An if an Exit
   # guard already quotes is not written twice.
   $br = @{}
   foreach ($ln in $infoLines) {
@@ -2096,7 +2099,7 @@ function Find-CalcWrites($H, [string[]] $Vars, [string] $Field) {
 
 # The guards of the computation, VERBATIM (P16): every Exit of the handler before its first write (the Exit
 # guard's own UNLESS / WHEN, from Get-GuardConditionFromLines, the note `else Exit at :N`), then each write's
-# chain of enclosing ifs (WHEN "C" in a then branch; if-forms only, as the walk), read past a case (Cases: the selectors).
+# chain of enclosing ifs (WHEN C in a then branch; if-forms only, as the walk), read past a case (Cases: the selectors).
 # A shape the shim cannot read is not guessed: its generated reason is returned in Unknown for the STOPS note. Pure.
 function Get-CalcConditions($H, $Writes) {
   $out = New-Object System.Collections.ArrayList; $unk = New-Object System.Collections.ArrayList; $seen = @{}

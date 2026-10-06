@@ -17,12 +17,19 @@
        reindex command. It never runs `index` itself.
     4. DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 is set for the bundler call only, and restored after.
     5. the bundle goes under $env:TEMP\drag-lint-reports unless -OutRoot says otherwise.
-    6. stdout is the answer: `BUNDLE <folder>`, one `INDEX <db>[ (server|sql|counterpart)]` line per
-       index read, then the TEXT to read -- the whole trace.dlgraph for round-trip, else a `CHART`
+    6. stdout is the answer, by DEFAULT as a DocInsight block -- `/// <remarks>` ... `/// </remarks>`,
+       the same bytes the IDE's drag-lint > Reports menu puts on the clipboard (owner answer 2,
+       R5; the formatter is Report.DocInsight.ps1, a port of the plugin's FormatReportAsDocInsight,
+       checked against the plugin's own output by Test-AskReport AR-DOC-*). -Plain gives the plain
+       answer instead: `BUNDLE <folder>`, one `INDEX <db>[ (server|sql|counterpart)]` line per
+       index read, then the TEXT to read -- the whole trace.dlgraph for round-trip (plus a `NOTE the
+       chart could not be drawn: <why>` line when dot failed), else a `CHART`
        header (the counts), `TARGET <name> @File.pas:line` for the chart's own selection, one
        `<name> @File.pas:line` line per anchored result row, and `... +N more ... not shown (-Cap N;
        raise -Cap to see them)` for every row the chart itself left out -- a count in the header
-       is never silently larger than the rows printed. Nothing else is printed on stdout.
+       is never silently larger than the rows printed. The DocInsight block is made FROM that plain
+       answer (BUNDLE / INDEX / REGENERATE dropped, anchors as (File.pas:line)). Nothing else is
+       printed on stdout. The IDE plugin formats the answer itself, so it must ask with -Plain.
 
   Exit codes: 0 answered; 1 the question refused or failed (the reason on stderr);
   2 setup -- the indexes could not be resolved (stderr says what to pass or edit);
@@ -56,6 +63,8 @@ param(
   [string] $SqlDbPath,
   [string] $CounterpartDb,
   [switch] $ResolveOnly,
+  # the plain answer (the BUNDLE / INDEX lines and the text) instead of the default DocInsight block
+  [switch] $Plain,
   [int]    $MaxRows = 80,
   [string] $PairsFile = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\report-pairs.json')),
   [string] $Engine    = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
@@ -63,6 +72,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $bundler = Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1'
+. (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
+$answer = New-Object System.Collections.Generic.List[string]
 
 function Stop-Ask([int] $Code, [string] $Message) {
   $x = [Exception]::new($Message); $x.Data['AskExit'] = $Code; throw $x
@@ -234,19 +245,22 @@ try {
     }
 
     # ---- 5. the text to read ----------------------------------------------------------------
-    Write-Output "BUNDLE $($art.Bundle)"
+    $answer.Add("BUNDLE $($art.Bundle)")
     # which index(es) answered (fix round 1, M-1): the project index, then any other the question read
-    Write-Output "INDEX $DbPath"
-    if ($needServer)                    { Write-Output "INDEX $ServerDbPath (server)" }
-    if ($needSql)                       { Write-Output "INDEX $SqlDbPath (sql)" }
-    if ($wantOther -and $CounterpartDb) { Write-Output "INDEX $CounterpartDb (counterpart)" }
+    $answer.Add("INDEX $DbPath")
+    if ($needServer)                    { $answer.Add("INDEX $ServerDbPath (server)") }
+    if ($needSql)                       { $answer.Add("INDEX $SqlDbPath (sql)") }
+    if ($wantOther -and $CounterpartDb) { $answer.Add("INDEX $CounterpartDb (counterpart)") }
     $tracePath = Join-Path $art.Bundle 'trace.dlgraph'
     $dotPath   = Join-Path $art.Bundle 'graph.dot'
     if (Test-Path -LiteralPath $tracePath) {
-      Write-Output ([IO.File]::ReadAllText($tracePath).TrimEnd("`r", "`n"))
+      foreach ($tl in ([IO.File]::ReadAllText($tracePath).TrimEnd("`r", "`n") -split "`r`n")) { $answer.Add($tl) }
+      # owner answer 3 (R5): the text is delivered even when dot failed, with a line saying the chart is missing
+      $meta = Get-Content -LiteralPath (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
+      if ($meta.emitter.PSObject.Properties['ChartError'] -and $meta.emitter.ChartError) { $answer.Add("NOTE the chart could not be drawn: $($meta.emitter.ChartError)") }
     } else {
       $meta = Get-Content -LiteralPath (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
-      Write-Output "CHART $Question $Target -- $($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)"
+      $answer.Add("CHART $Question $Target -- $($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)")
       $rows = New-Object System.Collections.Generic.List[string]
       $targets = New-Object System.Collections.Generic.List[string]
       $notShown = New-Object System.Collections.Generic.List[string]
@@ -284,11 +298,17 @@ try {
           elseif (-not $rows.Contains($row)) { $rows.Add($row) }
         }
       }
-      foreach ($row in $targets) { Write-Output "  TARGET $row" }
-      if ($rows.Count -eq 0) { Write-Output "  (no anchored result rows -- open $($art.Shell))" }
-      foreach ($row in ($rows | Select-Object -First $MaxRows)) { Write-Output "  $row" }
-      foreach ($txt in $notShown) { Write-Output "  ... $txt" }
-      if ($rows.Count -gt $MaxRows) { Write-Output "  ... $($rows.Count - $MaxRows) more row(s) not printed here (-MaxRows $MaxRows): $dotPath" }
+      foreach ($row in $targets) { $answer.Add("  TARGET $row") }
+      if ($rows.Count -eq 0) { $answer.Add("  (no anchored result rows -- open $($art.Shell))") }
+      foreach ($row in ($rows | Select-Object -First $MaxRows)) { $answer.Add("  $row") }
+      foreach ($txt in $notShown) { $answer.Add("  ... $txt") }
+      if ($rows.Count -gt $MaxRows) { $answer.Add("  ... $($rows.Count - $MaxRows) more row(s) not printed here (-MaxRows $MaxRows): $dotPath") }
+    }
+    # ---- 6. the answer: plain, or (the default) the DocInsight block the IDE's Reports menu makes of it --------
+    if ($Plain) { foreach ($a in $answer) { Write-Output $a } }
+    else {
+      $doc = Format-ReportAsDocInsight $Question $Target (Get-Date) ($answer -join "`r`n")
+      foreach ($a in ($doc.TrimEnd("`r", "`n") -split "`r`n")) { Write-Output $a }
     }
   }
 } catch {

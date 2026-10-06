@@ -191,8 +191,24 @@ $stn = New-TraceStep 'step' 'CALLS X' 'X.pas:1'
 $res.FormANonAscii = $(try { Write-FormA $Tn | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*not 7-bit ASCII*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
 # a note with '; ' would break the parser's split -- refused up front
 $res.FormABadNote = $(try { $Tb = New-Trace 'X' 'x' 'x' 'A' '2026-09-27' 'x' 'client'; $sb2 = Add-TraceSection $Tb 'WRITE'; [void]$sb2.Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1' '' '' 'a; b')); Write-FormA $Tb | Out-Null; 'accepted' } catch { 'refused' })
-# P16: a condition is quoted VERBATIM, so one carrying a double-quote cannot be quoted -- the model refuses it
-$res.FormAQuote = $(try { New-TraceCond 'WHEN' 'S = "x"' 'X.pas:1' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*double-quote*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+# R5 Part 0 (was P16's 'refused'): conditions are written VERBATIM and UNQUOTED, so a double-quote is ordinary text --
+# accepted, written as is, read back the same, and the checker counts it (a `--` inside a word too); what would make
+# the line ambiguous -- ` @<file>:<line>` or ` -- ` inside it, or a trailing ` --` -- is refused by the model
+$qT = New-Trace 'X' 'x' 'x' 'A' '2026-10-06' 'x' 'client'
+$qS = New-TraceStep 'step' 'CALLS X' 'X.pas:1'
+[void]$qS.Children.Add((New-TraceCond 'WHEN' 'S = "x"' 'X.pas:2'))
+[void]$qS.Children.Add((New-TraceCond 'UNLESS' 'I--1 > 0' 'X.pas:3' 'else Exit'))
+[void](Add-TraceSection $qT 'WRITE').Items.Add($qS)
+$qTxt = Write-FormA $qT
+[IO.File]::WriteAllText((Join-Path $work 'model-unquoted.dlgraph'), $qTxt, (New-Object Text.ASCIIEncoding))
+& (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture (Join-Path $work 'model-unquoted.dlgraph') -Quiet 6>$null | Out-Null
+$qBack = Read-FormA $qTxt
+$q1 = $(if ($qTxt.Contains("       WHEN S = `"x`" @X.pas:2`r`n       UNLESS I--1 > 0 @X.pas:3 -- else Exit`r`n") -and (Write-FormA $qBack) -ceq $qTxt -and
+           $qBack.Sections[0].Items[0].Children[0].Condition -ceq 'S = "x"' -and $LASTEXITCODE -eq 0) { 'verbatim' } else { "rewritten (checker $LASTEXITCODE)" })
+$qR = foreach ($qc in @(@('A @X.pas:3', '*reads as its anchor*'), @('A -- B', '*reads as its note*'), @('A --', '*reads as its note*'))) {
+  $(try { New-TraceCond 'WHEN' $qc[0] 'X.pas:1' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like $qc[1]) { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+}
+$res.FormAQuote = "$q1/$($qR -join '/')"
 # Fix round 1 / P16: a TITLE is quoted too, so a double-quote in it is refused (it was written raw and
 # read back un-doubled -- bytes differed); both at New-Trace and at Write-FormA (the property is mutable)
 $ttl1 = $(try { New-Trace 'X' 'a"b' 'x' 'A' '2026-09-28' 'x' 'client' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*double-quote*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
@@ -239,7 +255,7 @@ $exS = $LASTEXITCODE
 $cS = Get-TraceCounts $Ts
 $rtS = $(if ((Write-FormA (Read-FormA $textS)) -ceq $textS) { 'identical' } else { 'differs' })
 $srvS = @($textS -split "\r\n" | Where-Object { $_ -cmatch '^\[\d+\] SERVER STOPS ' }).Count
-$vbS = $(if ($textS.Contains('UNLESS "SQL = ''''" @uGenericTableRoute.pas:196')) { 'verbatim' } else { 'rewritten' })
+$vbS = $(if ($textS.Contains('UNLESS SQL = '''' @uGenericTableRoute.pas:196')) { 'verbatim' } else { 'rewritten' })
 $res.FormAStopsAll = "$exS/$($cS.Steps)/$($cS.Conditions)/$($cS.Crossings)/$($cS.Unresolved)/$rtS/$srvS/$vbS"
 
 # ---- 3. the anchor: the hop feeds-from misses (AC-15), and the non-data-bound / TABLE.COLUMN forms (AC-13) ----
@@ -342,7 +358,8 @@ $res.ShimSynthetic = "$($g1.Form):$($g1.Keyword):$($g1.Condition):$($g1.IfLine)|
 # The shapes the line-count walk of the plan's draft misread, on a real file so comments and strings are
 # stripped as in the corpus: a wrapped `if` whose first line ends in a comment and whose condition holds a
 # string with two spaces (joined, never collapsed); an Exit in an `end else begin` block (WHEN); an `if`
-# whose Exit is on the NEXT line (no begin); a `"` in the condition (named, not thrown, not rewritten);
+# whose Exit is on the NEXT line (no begin); a `"` in the condition (R5 Part 0: quoted as written -- it was a named
+# unknown while conditions were double-quoted); a ` -- ` in it (named, not thrown, not rewritten);
 # and the shapes the shim does not read -- a loop, a case arm, an Exit in no branch -- as named results
 $shp = @(
   'procedure P1;', 'begin', "  if (S = 'a  b') or  // why", "     (T = 1) then", '  begin', '    Exit;', '  end;', 'end;',                   # 1-8
@@ -351,11 +368,12 @@ $shp = @(
   'procedure P4;', 'begin', "  if S = '""' then Exit;", 'end;',                                                                       # 23-26
   'procedure P5;', 'begin', '  while X do begin', '    Exit;', '  end;', 'end;',                                                      # 27-32
   'procedure P6;', 'begin', '  case K of', '    1: Exit;', '  end;', 'end;',                                                          # 33-38
-  'procedure P7;', 'begin', '  if A then Y;', '  Exit;', 'end;')                                                                      # 39-43
+  'procedure P7;', 'begin', '  if A then Y;', '  Exit;', 'end;',                                                                      # 39-43
+  'procedure P8;', 'begin', "  if S = 'a -- b' then Exit;", 'end;')                                                         # 44-47
 $shpPas = Join-Path $work 'shim-shapes.pas'
 [IO.File]::WriteAllText($shpPas, (($shp -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
 $shR = [IO.File]::ReadAllLines($shpPas); $shS = Get-StrippedSourceLines $shpPas
-$sh = foreach ($q in @(@(6, 1), @(15, 9), @(21, 18), @(25, 23), @(30, 27), @(36, 33), @(42, 39))) {
+$sh = foreach ($q in @(@(6, 1), @(15, 9), @(21, 18), @(25, 23), @(30, 27), @(36, 33), @(42, 39), @(46, 44))) {
   $o = Get-GuardConditionFromLines $shR $shS $q[0] $q[1]
   "$($o.Form):$($o.Keyword):$($o.Condition):$($o.IfLine):$($o.BlockStart)-$($o.BlockEnd):$($o.Reason)"
 }
@@ -398,7 +416,7 @@ $res.RtCounts = "$($rt.Steps)/$($rt.Conditions)/$($rt.Crossings)/$($rt.Unresolve
 $lines = $txt -split "\r\n"
 function LinesLike([string] $rx) { , @($lines | Where-Object { $_ -match $rx }) }
 # AC-8: the response guard carries the failure branch naming CancelUpdates
-$res.RtCancel = (LinesLike 'UNLESS ".*<> rspOK\)" @Blueprint4\.ViewModel\.pas:3990 -- else .*FMTOperation\.CancelUpdates @Blueprint4\.ViewModel\.pas:3999').Count
+$res.RtCancel = (LinesLike 'UNLESS .*<> rspOK\) @Blueprint4\.ViewModel\.pas:3990 -- else .*FMTOperation\.CancelUpdates @Blueprint4\.ViewModel\.pas:3999').Count
 # AC-9: client -> server -> database, on separately queried indexes. CROSSES STEP lines only (ruling P4):
 # the request and the response are both anchored at the one ExecuteCommand call that carries both
 $res.RtCrossOut = (LinesLike '^\[\d+\] CROSSES process boundary @Blueprint4\.ViewModel\.pas:3985').Count
@@ -445,10 +463,10 @@ $res.RtOtherTableRule = $(try {
     ForEach-Object { Test-OtherTableBranch $_[0] $_[1] 'OPERAT' $tabs }) -join ','
 } catch { "threw: $($_.Exception.Message)" })
 # T5-R2: a condition hung on a CALLS step of ANOTHER routine names its own routine (411 / 421 hang on CALLS SplitPayload)
-$res.RtCondRoutine = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:(411|421) ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
+$res.RtCondRoutine = (@($lines | Where-Object { $_ -match '^       UNLESS .* @uGenericTableRoute\.pas:(411|421) ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
 # T5-R3: an else note quotes a literal VERBATIM with Pascal's doubled '' (the index stores it unescaped); one the
 # writer cannot carry (a double quote, the note separator) is named by its line, never rewritten
-$res.RtElse431 = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:431 ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
+$res.RtElse431 = (@($lines | Where-Object { $_ -match '^       UNLESS .* @uGenericTableRoute\.pas:431 ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
 $res.RtElseLits = $(try {
   $eF = [pscustomobject]@{ Path = 'X.pas'; Refs = @([pscustomobject]@{ kind = 'write'; tkind = 'param'; line = 5; nm = 'AOut' }); Lits = @() }   # line 5 writes a parameter: the payload line (T5-R11)
   $eG = [pscustomobject]@{ BlockStart = 4; BlockEnd = 6; ExitArg = '' }
@@ -469,8 +487,8 @@ function NoteOf([string] $l) { $(if ($l -match ' -- (.*)$') { $Matches[1] } else
 # Important 1: the else of `if ApplyResult = 0` (:557-569) and the except handler (:570-579) are not steps
 # of the path, and the :405 `ARspCmd:= rspError` is a default the :553 rspOK overwrites, not a SENDS
 $res.RtBranchSteps = @($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] .*@uGenericTableRoute\.pas:(405|562|566|573|576)( |$)' }).Count
-$res.RtApplyWhen = (@($lines | Where-Object { $_ -match '^       WHEN "ApplyResult = 0" @uGenericTableRoute\.pas:495' } | ForEach-Object { NoteOf $_ }) -join ' | ')
-$res.RtExceptCond = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:570' } | ForEach-Object { $_.Trim() }) -join ' | ')
+$res.RtApplyWhen = (@($lines | Where-Object { $_ -match '^       WHEN ApplyResult = 0 @uGenericTableRoute\.pas:495' } | ForEach-Object { NoteOf $_ }) -join ' | ')
+$res.RtExceptCond = (@($lines | Where-Object { $_ -match '^       UNLESS .* @uGenericTableRoute\.pas:570' } | ForEach-Object { $_.Trim() }) -join ' | ')
 $res.RtRspOkNote = (@($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] SENDS rspOK ' } | ForEach-Object { NoteOf $_ }) -join ' | ')
 # the chain of enclosing conditions of a line, innermost first (synthetic): else of an if, an except handler
 $chSrc = @('procedure P;', 'begin', '  try', '    R:= Apply;', '    if R = 0 then', '    begin', '      Send(1);', '    end', '    else', '    begin',
@@ -525,13 +543,13 @@ $res.RtElsePick = $(try {
   "[$a1] [$a2]"
 } catch { "threw: $($_.Exception.Message)" })
 # T5-R12: every path step inside a readable if carries it -- the transaction's OPENS and its Commit both say
-# WHEN "not WasTxn"; and what EnsureLoaded / PushTableChanged now carry
+# WHEN not WasTxn; and what EnsureLoaded / PushTableChanged now carry
 $condsOf = @(); $lastHead = ''
 foreach ($ln in $secLines['SERVER']) {
   if ($ln -match '^\[\d+\] ') { $lastHead = ($ln -replace '^\[\d+\] ', '') -replace ' @(\S+).*$', '@$1'; continue }
   if ($ln -match '^       (WHEN|UNLESS) ') { $condsOf += [pscustomobject]@{ Head = $lastHead; Cond = (($ln.Trim()) -replace ' -- .*$', '') } }
 }
-$res.RtWasTxn = (@($condsOf | Where-Object { $_.Cond -like 'WHEN "not WasTxn"*' } | ForEach-Object { $_.Head }) -join ' | ')
+$res.RtWasTxn = (@($condsOf | Where-Object { $_.Cond -like 'WHEN not WasTxn @*' } | ForEach-Object { $_.Head }) -join ' | ')
 $res.RtCondEnsure = (@($condsOf | Where-Object { $_.Head -like 'CALLS TDatasetsDef.EnsureLoaded*' -or $_.Head -like 'CALLS TBroadcastServer.PushTableChanged*' } | ForEach-Object { "$($_.Head -replace ' \[by name\]', '') :: $($_.Cond)" }) -join ' | ')
 
 # ---- 6. READ and ALSO (AC-6, AC-9, AC-10; Review Focus 1) ----------------------------------
@@ -544,7 +562,7 @@ $res.RtRead = (@($secLines['READ'] | Where-Object { $_ -match '^\[\d+\] ' } | Fo
 # AC-7 on the READ path, in walk order (ruling P9 + T1-C1): the client connection guard (:1133), the server's
 # missing-definition (:525) and unsafe-WHERE (:549) guards, the except handler whose Exit is :612 (its condition
 # anchors at the `except` line, :605), the response guard (:1137)
-$res.RtReadGuards = (@($secLines['READ'] | Where-Object { $_ -match '^       UNLESS ".*" @(Blueprint4\.ViewModel\.pas:(1133|1137)|uPipeSessionBuilder\.pas:(525|549|605))( |$)' } | ForEach-Object { $(if ($_ -match '" @(\S+)') { $Matches[1] }) }) -join ',')
+$res.RtReadGuards = (@($secLines['READ'] | Where-Object { $_ -match '^       UNLESS .* @(Blueprint4\.ViewModel\.pas:(1133|1137)|uPipeSessionBuilder\.pas:(525|549|605))( |$)' } | ForEach-Object { $(if ($_ -match ' @([A-Za-z0-9_$.\-]+:\d+)(?: -- |$)') { $Matches[1] }) }) -join ',')
 # every condition of the READ section, verbatim, with its anchor
 $res.RtReadConds = (@($secLines['READ'] | Where-Object { $_ -match '^       (WHEN|UNLESS) ' } | ForEach-Object { ($_.Trim()) -replace ' -- .*$', '' }) -join ' | ')
 # AC-12: the SELECT statement text is a numbered STOPS naming the empty fb_field_info
@@ -892,7 +910,7 @@ $res.TraceAnchors = "$(@(Get-TraceUnclickable $txt).Count)/$($rt.ClickTargets)/$
 $cut = $txt -replace ' @Blueprint4\.ViewModel\.pas:78 -- the anchor dataset', ' -- the anchor dataset'
 $res.TraceAnchorsCut = "$(@(Get-TraceUnclickable $cut).Count)/$($cut -ne $txt)"
 # T4-C3: a case guard quotes its source line verbatim through `of`; the else arm is the generated note
-$res.TraceCaseCond = (@($txt -split "\r\n" | Where-Object { $_ -match '^       (WHEN|UNLESS) "case ' } | ForEach-Object { $_.Trim() }) -join ' | ')
+$res.TraceCaseCond = (@($txt -split "\r\n" | Where-Object { $_ -match '^       (WHEN|UNLESS) case ' } | ForEach-Object { $_.Trim() }) -join ' | ')
 # I4 (replaces the `not (` heuristic): every condition quoted verbatim from the fresh source at its anchor line
 $cv = Measure-CondVerbatim (Get-GoldenRows $T7) @($DbCli, $DbSrv)
 $res.TraceNegated = "$($cv.Bad)/$($cv.Checked)/$($cv.Skipped)$(if ($cv.Which) { " $($cv.Which)" })"
@@ -917,7 +935,7 @@ $res.HoldCounts = "$($rh.Steps)/$($rh.Conditions)/$($rh.Crossings)/$($rh.Unresol
 $res.HoldAnchor = "$($rh.TableColumn):$($rh.DataSet)"
 $hl = $rh.Text -split "\r\n"
 $res.HoldSender = (@($hl | Where-Object { $_ -match "^\[\d+\] CALLS TBlueprint_ViewModel\.SendDeltaFtrs 'AfterPost' @Blueprint4\.ViewModel\.pas:3565 -- " })).Count
-$res.HoldCancel = (@($hl | Where-Object { $_ -match '^       UNLESS ".*<> rspOK\)" @Blueprint4\.ViewModel\.pas:3599 -- else .*FMTFtrs\.CancelUpdates @Blueprint4\.ViewModel\.pas:3611' })).Count
+$res.HoldCancel = (@($hl | Where-Object { $_ -match '^       UNLESS .*<> rspOK\) @Blueprint4\.ViewModel\.pas:3599 -- else .*FMTFtrs\.CancelUpdates @Blueprint4\.ViewModel\.pas:3611' })).Count
 $res.HoldRePoint = (@($hl | Where-Object { $_ -match '^\[\d+\] SETS dxDBGrid1FtrsV\.DataSource := FBlueprint_ViewModel\.pdsrFtrs @Blueprint4\.pas:2283 -- in FormShow$' })).Count
 # fix wave (FW-R1): the same per-statement load lines as OPERAT.NAME's A-RT5-STOPS, on a DIFFERENT anchor table
 # (MSCLIST) -- proves the derivation is generic, not hard-coded to OPERAT's :148/:149/:150
@@ -965,7 +983,7 @@ function Format-SynthWalk($W) {
   "$($it -join ' > ') || pending: $((@($W.Conds | ForEach-Object { & $fc $_ })) -join ', ')"
 }
 # I1: an Exit guard's IfLine is walked for its CONDITION only. `if X then begin FMT.CancelUpdates; Exit; end;`
-# wrote APPLIES FMT.CancelUpdates as a path step with UNLESS "X" hung on it (inverted) AND named it in the else
+# wrote APPLIES FMT.CancelUpdates as a path step with UNLESS X hung on it (inverted) AND named it in the else
 # note; an `ARspCmd:= rspError` after the `then` was a SENDS. P2: a WHEN guard (Exit in the else) keeps its then
 # branch as the path, and its else note names only the else branch.
 $res.FinI1Walk = $(try {

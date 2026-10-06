@@ -18,6 +18,12 @@
     AR-INDEX     every answer names the index(es) that answered, after BUNDLE
     AR-TARGET    a chart's own focus row is marked TARGET, not listed like a result
     AR-CAP       a capped chart prints its "+N more ... not shown" disclosure and the -Cap to raise
+    AR-DOC-PORT  Report.DocInsight.ps1 gives, byte for byte, what the IDE plugin's own formatter wrote
+                 (charts\fixtures\docinsight\*.expected.txt) for the same answers
+    AR-DOC-CAPTIONS  its caption table equals the plugin's REPORT_QUESTIONS (read from the plugin source)
+    AR-DOC-RT    the DEFAULT answer (no -Plain) is the DocInsight block of the -Plain answer (owner answer 2, R5)
+
+  Every check of the answer's plain shape passes -Plain; the default is the DocInsight block.
 
   FRESH CLONES NEEDED: AR-OUTROOT, AR-CHART, AR-CAP and AR-RT read the CLIENT / SERVER / SQL clones under
   charts\scratch\db, and Ask-Report checks freshness first -- once a source file those clones index changes
@@ -88,10 +94,10 @@ Step 'AR-OUTROOT' {
   try {
     $env:TEMP = $tmp
     $env:DRAGLINT_CHARTS_ALLOW_LIVE_DB = 'sentinel'
-    $o1 = & $AR -Question who-reads -Target $Q_FNR -DbPath $DbCli
+    $o1 = & $AR -Question who-reads -Target $Q_FNR -DbPath $DbCli -Plain
     $e1 = $LASTEXITCODE; $live1 = [Environment]::GetEnvironmentVariable('DRAGLINT_CHARTS_ALLOW_LIVE_DB', 'Process')
     Remove-Item Env:\DRAGLINT_CHARTS_ALLOW_LIVE_DB -ErrorAction SilentlyContinue
-    $o2 = & $AR -Question who-reads -Target $Q_FNR -DbPath $DbCli -OutRoot (Join-Path $OutDir 'explicit')
+    $o2 = & $AR -Question who-reads -Target $Q_FNR -DbPath $DbCli -OutRoot (Join-Path $OutDir 'explicit') -Plain
     $e2 = $LASTEXITCODE; $live2 = [Environment]::GetEnvironmentVariable('DRAGLINT_CHARTS_ALLOW_LIVE_DB', 'Process')
   } finally {
     $env:TEMP = $oldTemp
@@ -114,7 +120,7 @@ Step 'AR-OUTROOT' {
 Write-Host 'the cap disclosure ...'
 Step 'AR-CAP' {
   # who-writes FNoRecursion: 26 routines, the chart draws 20 (-Cap 20) and says so in a cell with no link
-  $c = Invoke-Ask @('-Question', 'who-writes', '-Target', $Q_FNR, '-DbPath', $DbCli, '-OutRoot', (Join-Path $OutDir 'cap'))
+  $c = Invoke-Ask @('-Question', 'who-writes', '-Target', $Q_FNR, '-DbPath', $DbCli, '-OutRoot', (Join-Path $OutDir 'cap'), '-Plain')
   Chk 'AR-CAP-EXIT' "$($c.Exit)|$($c.Err)" '0|'
   $shown = @($c.Out | Where-Object { $_ -cmatch '^  TfrmBlueprint4\.' }).Count
   $disc  = @($c.Out | Where-Object { $_ -clike '  ... *not shown*' })
@@ -140,7 +146,7 @@ Step 'AR-JSON' {
 
 Write-Host 'round-trip on the clones (about a minute) ...'
 Step 'AR-RT' {
-  $r = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-DbPath', $DbCli, '-ServerDbPath', $DbSrv, '-SqlDbPath', $DbSql, '-OutRoot', (Join-Path $OutDir 'rt'))
+  $r = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-DbPath', $DbCli, '-ServerDbPath', $DbSrv, '-SqlDbPath', $DbSql, '-OutRoot', (Join-Path $OutDir 'rt'), '-Plain')
   Chk 'AR-RT-EXIT' "$($r.Exit)|$($r.Err)" '0|'
   $b = "$($r.Out[0])"
   if ($b -cnotlike 'BUNDLE *') { Fail 'AR-RT' "line 1 is not BUNDLE <folder>: $b" }
@@ -149,6 +155,41 @@ Step 'AR-RT' {
   $tr = Join-Path $b.Substring(7) 'trace.dlgraph'
   if (-not (Test-Path $tr)) { Fail 'AR-RT' "no trace.dlgraph in $b" }
   elseif ((($r.Out | Select-Object -Skip 4) -join "`r`n") -cne [IO.File]::ReadAllText($tr).TrimEnd("`r", "`n")) { Fail 'AR-RT' 'stdout after BUNDLE is not the whole trace.dlgraph' }
+  # AR-DOC-RT: the same question WITHOUT -Plain answers the DocInsight block the IDE's Reports menu makes of that text
+  $d = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-DbPath', $DbCli, '-ServerDbPath', $DbSrv, '-SqlDbPath', $DbSql, '-OutRoot', (Join-Path $OutDir 'rt-doc'))
+  . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
+  $want = (Format-ReportAsDocInsight 'round-trip' 'frmBlueprint4.dxDBGrid1FtrsVNum' (Get-Date) ($r.Out -join "`r`n")).TrimEnd("`r", "`n")
+  Chk 'AR-DOC-RT' "$($d.Exit)|$(@($d.Out)[0])|$(@($d.Out)[-1])|$((($d.Out) -join "`r`n") -ceq $want)" '0|/// <remarks>|/// </remarks>|True'
+}
+
+Write-Host 'the DocInsight formatter against the plugin ...'
+Step 'AR-DOC-PORT' {
+  . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
+  $fx = Join-Path $PSScriptRoot '..\fixtures\docinsight'
+  $n = 0; $same = 0; $diff = @()
+  foreach ($l in (Get-Content (Join-Path $fx 'cases.txt'))) {
+    if ($l -match '^#' -or -not $l.Trim()) { continue }
+    $c = $l -split '\|'; $n++
+    $a = [regex]::Replace([IO.File]::ReadAllText((Join-Path $fx $c[0])), '\{U\+([0-9A-F]{4,5})\}', { param($m) [char]::ConvertFromUtf32([Convert]::ToInt32($m.Groups[1].Value, 16)) })
+    if ((Format-ReportAsDocInsight $c[1] $c[2] ([datetime]'2026-10-06') $a) -ceq [IO.File]::ReadAllText((Join-Path $fx $c[3]))) { $same++ } else { $diff += $c[3] }
+  }
+  Chk 'AR-DOC-PORT' "$same/$n$(if ($diff) { ' differ: ' + ($diff -join ',') })" '4/4'
+  # the port must go red when it drifts: one byte of the wrap width changed
+  $script:ReportDocMaxLine = 99
+  $c = (Get-Content (Join-Path $fx 'cases.txt') | Where-Object { $_ -like 'chart-who-writes*' }) -split '\|'
+  $a = [regex]::Replace([IO.File]::ReadAllText((Join-Path $fx $c[0])), '\{U\+([0-9A-F]{4,5})\}', { param($m) [char]::ConvertFromUtf32([Convert]::ToInt32($m.Groups[1].Value, 16)) })
+  Chk 'AR-DOC-PORT-MUT' ((Format-ReportAsDocInsight $c[1] $c[2] ([datetime]'2026-10-06') $a) -ceq [IO.File]::ReadAllText((Join-Path $fx $c[3]))) 'False'
+  $script:ReportDocMaxLine = 100
+}
+Step 'AR-DOC-CAPTIONS' {
+  . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
+  $pas = 'C:\Projects\Delphi-RAG-lint\src\delphi-plugin\DragLint.Plugin.ReportText.pas'
+  if (-not (Test-Path -LiteralPath $pas)) { Write-Host "  AR-DOC-CAPTIONS skipped: $pas is not on this machine" }
+  else {
+    $pq = @([regex]::Matches([IO.File]::ReadAllText($pas), "\(Id: '([^']+)'\s*; Caption: '((?:[^']|'')*)'") | ForEach-Object { "$($_.Groups[1].Value)=$($_.Groups[2].Value -replace "''", "'")" })
+    $mine = @($script:ReportCaptions.Keys | ForEach-Object { "$_=$($script:ReportCaptions[$_])" })
+    Chk 'AR-DOC-CAPTIONS' "$($pq.Count)|$(($pq -join ';') -ceq ($mine -join ';'))" '25|True'
+  }
 }
 
 Write-Host 'freshness ...'

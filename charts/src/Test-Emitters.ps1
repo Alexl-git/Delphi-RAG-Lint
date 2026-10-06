@@ -2492,10 +2492,12 @@ Step 'E-RT0' {
   Chk 'A-RT2-FORMA'     "$($rt0.FormAChecker)/$($rt0.FormACheckerMut)" '0/1'
   Chk 'A-RT2-NONASCII'  $rt0.FormANonAscii 'refused'
   Chk 'A-RT2-BADNOTE'   $rt0.FormABadNote 'refused'
-  # P16: a condition is quoted verbatim, so a double-quote inside one is refused by the model
-  Chk 'A-RT2-QUOTE'     $rt0.FormAQuote 'refused'
+  # RE-PINNED 2026-10-06 (R5 Part 0; was P16's 'refused'): conditions are written UNQUOTED, so a double-quote is
+  # ordinary text -- written as is, read back the same, counted by the checker (with a `--` inside a word too); a
+  # condition carrying ' @<file>:<line>', ' -- ' or a trailing ' --' (what would make the line ambiguous) is refused
+  Chk 'A-RT2-QUOTE'     $rt0.FormAQuote 'verbatim/refused/refused/refused'
   # P7: seven STOPS, one per section, five behind an actor word ([NN] SERVER STOPS twice): checker exit 0 =
-  # it counted all 7 unresolved; the round trip holds; UNLESS "SQL = ''" is written verbatim
+  # it counted all 7 unresolved; the round trip holds; UNLESS SQL = '' is written verbatim
   Chk 'A-RT2-STOPSALL'  $rt0.FormAStopsAll '0/8/1/0/7/identical/2/verbatim'
   # fix round 1: a double-quote in the TITLE is refused (New-Trace / Write-FormA); the model refuses every
   # text its own parser or the checker would misread (16 cases), and not the three look-alikes that are safe
@@ -2564,11 +2566,14 @@ Step 'E-RT0' {
   # Review Focus 3 on a stripped file: a wrapped line's trailing comment is dropped and the string's two spaces kept;
   # `end else begin` is WHEN; an Exit on the line after `then`; then the named results (Reason) for a `"`, a loop,
   # a case arm and an Exit in no branch -- each becomes a STOPS naming E1 in the walk, never a guess or a throw
+  # RE-PINNED 2026-10-06 (R5 Part 0): the :25 condition holding a `"` is quoted as written now (inline UNLESS; it was a
+  # named unknown while conditions were double-quoted); the refusal arm moved to P8 (:46), a condition holding ' -- '
   Chk 'A-RT4-SHAPES'    $rt0.ShimShapes ("block:UNLESS:(S = 'a  b') or (T = 1):3:5-7:|block:WHEN:C:11:14-16:|block:UNLESS:D:20:21-21:|" +
-                                         'unknown:::0:0-0:the condition over the Exit at :25 holds a double-quote, which a Form A condition cannot carry verbatim|' +
+                                         'inline:UNLESS:S = ''"'':25:25-25:|' +
                                          'unknown:::0:0-0:the Exit at :30 sits under a while statement, a shape the source shim does not read|' +
                                          'unknown:::0:0-0:the Exit at :36 sits in a case arm, a shape the source shim does not read|' +
-                                         'unknown:::0:0-0:the Exit at :42 is not inside a branch, a shape the source shim does not read')
+                                         'unknown:::0:0-0:the Exit at :42 is not inside a branch, a shape the source shim does not read|' +
+                                         "unknown:::0:0-0:the condition over the Exit at :46 carries ' -- ', which reads as its note -- a Form A condition cannot carry it verbatim")
   # fix round 1: two Exits on the anchored line; a comment wrapping across a condition's lines (`{` with an
   # apostrophe in its tail, `(*` with `//` in its tail); a {$IFDEF}/{$ELSE}/{$ENDIF} choice between the guard and
   # the Exit (one line, wrapped) -- each a NAMED unknown (pre-fix: UNLESS A, "A and 't } B ", "A and", B, B).
@@ -2637,11 +2642,11 @@ Step 'E-RT0' {
   # FIX ROUND 1 moved it again, 50/12/2/2 -> 45/15/2/2: five SERVER lines are no longer path steps -- the :405
   # rspError DEFAULT (overwritten by :553 rspOK), the else of `if ApplyResult = 0` (:562 Rollback, :566 rspError)
   # and the except handler (:573 Rollback, :576 rspError) -- and three conditions say where they went:
-  # WHEN "ApplyResult = 0" (its else note), UNLESS "<try body> raises" (the handler), WHEN "not WasTxn" (the Commit)
-  # FIX ROUND 2 (T5-R12): 45/15 -> 45/21 -- every path step inside a readable if now carries it: WHEN "not WasTxn"
-  # on OPENS (:492), WHEN "not GDatasetsDef.Loaded" on EnsureLoaded (:429), WHEN "not FLoaded" on LoadFromInternal
-  # (:97), WHEN "Field is TBlobField" + UNLESS "IsOld or Field.IsNull" on BindParams' LoadFromStream (:157/:160),
-  # WHEN "Assigned(GBroadcastServer)" on PushTableChanged (:507). No step moved
+  # WHEN ApplyResult = 0 (its else note), UNLESS <try body> raises (the handler), WHEN not WasTxn (the Commit)
+  # FIX ROUND 2 (T5-R12): 45/15 -> 45/21 -- every path step inside a readable if now carries it: WHEN not WasTxn
+  # on OPENS (:492), WHEN not GDatasetsDef.Loaded on EnsureLoaded (:429), WHEN not FLoaded on LoadFromInternal
+  # (:97), WHEN Field is TBlobField + UNLESS IsOld or Field.IsNull on BindParams' LoadFromStream (:157/:160),
+  # WHEN Assigned(GBroadcastServer) on PushTableChanged (:507). No step moved
   # READ SECTION ADDED (Task 6, ruling P6): 45/21/2/2 -> 76/31/4/2. The READ placeholder STOPS (1 step, 1 unresolved)
   # and the lone ALSO row are replaced by READ's 24 steps (fill call, callee, send, 15 SERVER, 2 DATABASE, rows back,
   # 3 CLIENT) and ALSO's 9 rows (A-RT6-ALSO): 45 - 2 + 24 + 9 = 76. Conditions +10 (A-RT6-READCONDS), crossings +2
@@ -2657,11 +2662,12 @@ Step 'E-RT0' {
   # MSCLIST`, was a routine-level sql fact, dropped by the fact filter, not a line of these branches.)
   # RE-PINNED by final-review I5 (every if of a line's enclosing chain is tested, not only the innermost): the text no
   # longer states the innermost-if limit; the count stays 11 -- no line of HandleDelta sits one if deeper in these branches
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
   Chk 'A-RT5-OMITS'     $rt0.RtOmits ("OMITS 11 step(s) in branches for other tables, every enclosing if read up to a loop or case arm @uGenericTableRoute.pas:468 -- in TGenericTableRoute.HandleDelta; " +
-                                      "not walked, the branch conditions: WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 / " +
-                                      "WHEN `"TableName = 'OPTRLIST'`" @uGenericTableRoute.pas:476 / " +
-                                      "WHEN `"(TableName = 'MSCLIST') and (Ctx.AppliedIns > 0)`" @uGenericTableRoute.pas:515 / " +
-                                      "WHEN `"(TableName = 'OPTRLIST') and (Length(RoleSyncItems) > 0)`" @uGenericTableRoute.pas:540; ask E1")
+                                      "not walked, the branch conditions: WHEN TableName = 'MSCLIST' @uGenericTableRoute.pas:468 / " +
+                                      "WHEN TableName = 'OPTRLIST' @uGenericTableRoute.pas:476 / " +
+                                      "WHEN (TableName = 'MSCLIST') and (Ctx.AppliedIns > 0) @uGenericTableRoute.pas:515 / " +
+                                      "WHEN (TableName = 'OPTRLIST') and (Length(RoleSyncItems) > 0) @uGenericTableRoute.pas:540; ask E1")
   # the enclosing-condition reader on synthetic lines: then -> WHEN, through begin/try -> WHEN, else -> UNLESS, no branch -> unknown
   Chk 'A-RT5-ENCLOSING' $rt0.RtEnclosing "block:WHEN:T = 'MSCLIST':3 | block:WHEN:(T = 'X') and (N > 0):5 | block:UNLESS:(T = 'X') and (N > 0):5 | unknown:::0"
   # the prune rule: only WHEN + `= '<known other table>'`; UNLESS, <>, or, a non-table literal, the anchor's table all keep the step
@@ -2681,14 +2687,15 @@ Step 'E-RT0' {
   # the condition model's new routine field reads back: the written trace round-trips byte for byte
   Chk 'A-RT5-ROUNDTRIP' $rt0.RtRoundTrip 'identical'
   # Fix round 1, Important 1 (failed 5 before): no SERVER step from the :405 default, the else of `if ApplyResult = 0`
-  # or the except handler; the success branch carries WHEN "ApplyResult = 0" whose else note names the Rollback and
-  # rspError; the handler is the note of UNLESS "<try body> raises" (the body's last statement is a 75-line if, so the
+  # or the except handler; the success branch carries WHEN ApplyResult = 0 whose else note names the Rollback and
+  # rspError; the handler is the note of UNLESS <try body> raises (the body's last statement is a 75-line if, so the
   # quote is `S1 ... raises`); the rspOK says what it overwrites. Protocol constants only in an else note (not mtError)
   Chk 'A-RT5-BRANCHSTEPS' $rt0.RtBranchSteps 0
   # FIX ROUND 2 (T5-R11): the else of :495 quotes no literal (its :563 text goes to a local, the payload line :565
   # has none); the handler quotes :575's payload literal, not :574's DeltaDiagLog text
   Chk 'A-RT5-APPLYWHEN' $rt0.RtApplyWhen "else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:562, rspError; ask E1"
-  Chk 'A-RT5-EXCEPTCOND' $rt0.RtExceptCond "UNLESS `"ApplyResult:= Mem.ApplyUpdates(0) ... raises`" @uGenericTableRoute.pas:570 -- else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:573, rspError, 'cmdDelta %s: %s'; ask E1"
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT5-EXCEPTCOND' $rt0.RtExceptCond "UNLESS ApplyResult:= Mem.ApplyUpdates(0) ... raises @uGenericTableRoute.pas:570 -- else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:573, rspError, 'cmdDelta %s: %s'; ask E1"
   Chk 'A-RT5-RSPOKNOTE' $rt0.RtRspOkNote 'in TGenericTableRoute.HandleDelta; overwrites the rspError default set at :405'
   # the enclosing CHAIN reader (synthetic): if inside an else, an except handler, a then branch
   Chk 'A-RT5-CHAIN'     $rt0.RtChain "inline:WHEN:W:11 > block:UNLESS:R = 0:5 | except:WHEN:R:= Apply ... raises:13 | block:WHEN:R = 0:5"
@@ -2709,15 +2716,16 @@ Step 'E-RT0' {
   Chk 'A-RT5-PATHSIDE'  $rt0.RtPathSide 'then,else,both,none,False'
   # T5-R11 (picked the logger's literal before): the literal on the parameter-writing line; a logger-only block quotes none
   Chk 'A-RT5-ELSEPICK'  $rt0.RtElsePick "[else 'sent back to the caller'] []"
-  # T5-R12 (only the Commit carried it before): the transaction's OPENS AND its Commit both carry WHEN "not WasTxn";
+  # T5-R12 (only the Commit carried it before): the transaction's OPENS AND its Commit both carry WHEN not WasTxn;
   # EnsureLoaded and PushTableChanged gained the ifs they sit under (named in HandleDelta, T5-R2) -- EnsureLoaded
   # also keeps its own `FLoaded` guard, hung there as the callee's
   Chk 'A-RT5-WASTXN'    $rt0.RtWasTxn 'OPENS AThreadStorage.UpdateTransaction.StartTransaction@uGenericTableRoute.pas:492 | RUNS AThreadStorage.UpdateTransaction.Commit@uGenericTableRoute.pas:498'
   # RE-PINNED by final-review I6 (caller condition before callee guards: the enclosing if is evaluated before the call
-  # runs); was UNLESS "FLoaded" first, then WHEN "not GDatasetsDef.Loaded"
-  Chk 'A-RT5-CONDENSURE' $rt0.RtCondEnsure ('CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: WHEN "not GDatasetsDef.Loaded" @uGenericTableRoute.pas:429 | ' +
-                                          'CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: UNLESS "FLoaded" @uDatasetsDef.pas:94 | ' +
-                                          'CALLS TBroadcastServer.PushTableChanged@uBroadcastServer.pas:401 :: WHEN "Assigned(GBroadcastServer)" @uGenericTableRoute.pas:507')
+  # runs); was UNLESS FLoaded first, then WHEN not GDatasetsDef.Loaded
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT5-CONDENSURE' $rt0.RtCondEnsure ('CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: WHEN not GDatasetsDef.Loaded @uGenericTableRoute.pas:429 | ' +
+                                          'CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: UNLESS FLoaded @uDatasetsDef.pas:94 | ' +
+                                          'CALLS TBroadcastServer.PushTableChanged@uBroadcastServer.pas:401 :: WHEN Assigned(GBroadcastServer) @uGenericTableRoute.pas:507')
   # Task 6: the READ direction and ALSO. AC-6 both directions (green since Task 5's placeholder -- ruling P11: the RED
   # step was A-RT6-READ, which read the placeholder STOPS). AC-9: four crossings -- cmdDelta out and its response,
   # cmdTableLoad out and its rows -- on the CLIENT and SERVER clones queried separately (Invoke-OnDb, A-RT5-ONDB)
@@ -2730,7 +2738,7 @@ Step 'E-RT0' {
   # [by name], TryBuildSafeWhere (a step because the :549 guard turns on it; in a uPipe* unit, so not descended),
   # the read transaction, the query, SaveToStream, Commit, and rspData overwriting the :519 rspError default.
   # DATABASE: the SELECT STOPS (A-RT6-READSTOPS) and the column [inferred]. Then the rows back and the CLIENT
-  # load: RECEIVES rspData, EmptyDataSet (under WHEN "AMT.Active"), LoadFromStream.
+  # load: RECEIVES rspData, EmptyDataSet (under WHEN AMT.Active), LoadFromStream.
   # FIX ROUND 1 moved it: T6-R1 -- EmptyDataSet's verb is EMPTIES (was LOADS: it empties the dataset); M4 -- the two
   # DATABASE steps stand right after the RUNS that executes the query (Qry.Open :594), in source order, no longer after
   # SENDS rspData :618
@@ -2749,15 +2757,16 @@ Step 'E-RT0' {
   Chk 'A-RT6-READGUARDS' $rt0.RtReadGuards 'Blueprint4.ViewModel.pas:1133,uPipeSessionBuilder.pas:525,uPipeSessionBuilder.pas:549,uPipeSessionBuilder.pas:605,Blueprint4.ViewModel.pas:1137'
   # every READ condition verbatim: the five guards above plus the branch conditions of their steps (EnsureLoaded's own
   # FLoaded Exit, the ifs around EnsureLoaded / LoadFromInternal, around EmptyDataSet and LoadFromStream)
-  # RE-PINNED by final-review I6 (caller condition before callee guards): WHEN "not GDatasetsDef.Loaded" @:523 now
-  # stands ahead of EnsureLoaded's own UNLESS "FLoaded" @:94 (was the reverse)
-  Chk 'A-RT6-READCONDS' $rt0.RtReadConds ('UNLESS "not (Assigned(FConn) and FConn.Connected)" @Blueprint4.ViewModel.pas:1133 | WHEN "not GDatasetsDef.Loaded" @uPipeSessionBuilder.pas:523 | ' +
-                                          'UNLESS "FLoaded" @uDatasetsDef.pas:94 | WHEN "not FLoaded" @uDatasetsDef.pas:97 | ' +
-                                          'UNLESS "not GDatasetsDef.GetTable(ATableName, Def)" @uPipeSessionBuilder.pas:525 | ' +
-                                          'UNLESS "not TryBuildSafeWhere(WhereStr, Def, WhereSql, WhereVals)" @uPipeSessionBuilder.pas:549 | ' +
-                                          'UNLESS "T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises" @uPipeSessionBuilder.pas:605 | ' +
-                                          'UNLESS "(GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspData)" @Blueprint4.ViewModel.pas:1137 | ' +
-                                          'WHEN "AMT.Active" @Blueprint4.ViewModel.pas:1162 | WHEN "Length(RspPayload) > 0" @Blueprint4.ViewModel.pas:1163')
+  # RE-PINNED by final-review I6 (caller condition before callee guards): WHEN not GDatasetsDef.Loaded @:523 now
+  # stands ahead of EnsureLoaded's own UNLESS FLoaded @:94 (was the reverse)
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT6-READCONDS' $rt0.RtReadConds ('UNLESS not (Assigned(FConn) and FConn.Connected) @Blueprint4.ViewModel.pas:1133 | WHEN not GDatasetsDef.Loaded @uPipeSessionBuilder.pas:523 | ' +
+                                          'UNLESS FLoaded @uDatasetsDef.pas:94 | WHEN not FLoaded @uDatasetsDef.pas:97 | ' +
+                                          'UNLESS not GDatasetsDef.GetTable(ATableName, Def) @uPipeSessionBuilder.pas:525 | ' +
+                                          'UNLESS not TryBuildSafeWhere(WhereStr, Def, WhereSql, WhereVals) @uPipeSessionBuilder.pas:549 | ' +
+                                          'UNLESS T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises @uPipeSessionBuilder.pas:605 | ' +
+                                          'UNLESS (GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspData) @Blueprint4.ViewModel.pas:1137 | ' +
+                                          'WHEN AMT.Active @Blueprint4.ViewModel.pas:1162 | WHEN Length(RspPayload) > 0 @Blueprint4.ViewModel.pas:1163')
   # AC-12: the SELECT text is a numbered STOPS. It says only what was queried: WHERE the statement is assembled, and the
   # FIB$ tables the READ walk reads have no snapshot rows in the SERVER clone. FIX ROUND 1 (M3) moved the text: it names
   # EVERY assignment to the variable the SELECT literal goes into -- :544 and the :556 ' WHERE ' extension -- each quoted
@@ -2887,7 +2896,8 @@ Step 'E-RT' {
   Chk 'A-RT7-ANCHORS'   $rt0.TraceAnchors '0/118/True'
   Chk 'A-RT7-ANCHORCUT' $rt0.TraceAnchorsCut '1/True'
   # T4-C3: the case guard quotes `case ARequest of` verbatim; the else arm is generated text (was "case ARequest of else")
-  Chk 'A-RT7-CASE'      $rt0.TraceCaseCond 'UNLESS "case ARequest of" @uGenericTableRoute.pas:188 -- else arm at :192; ask E1'
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT7-CASE'      $rt0.TraceCaseCond 'UNLESS case ARequest of @uGenericTableRoute.pas:188 -- else arm at :192; ask E1'
 }
 # ---- round-trip, the final review's fix wave (I1-I9, M2, M3, M7) ----
 Note 'round-trip: the final review ...'
@@ -2903,8 +2913,9 @@ Step 'E-RTF' {
   # I4: the WRITE direction starts at AfterPost even when an AfterDelete (or a BeforePost) is wired above it
   Chk 'A-RTF-I4-WIRING' $rt0.FinI4Wiring 'AfterPost@15,AfterPost@20,BeforePost@5,AfterDelete@10'
   # I5 (synthetic walk): a call one if DEEPER in another table's branch is omitted too (it was a path step)
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
   Chk 'A-RTF-I5-OMITS'  $rt0.FinI5Omits ("OMITS 1 step(s) in branches for other tables, every enclosing if read up to a loop or case arm -- not walked, the branch conditions: " +
-                                        "WHEN `"T = 'MSCLIST'`" @fin-i5.pas:3 > APPLIES FMT.CommitUpdates")
+                                        "WHEN T = 'MSCLIST' @fin-i5.pas:3 > APPLIES FMT.CommitUpdates")
   # RC-R6 (synthetic walk): a transport-convention callee whose body calls WriteFile is KEPT as a CALLS step (not
   # descended); a logger-shaped transport callee is skipped; a non-transport callee with an empty body is pruned
   Chk 'A-RC-R6-OUTWARD' $rt0.RcR6Outward 'CALLS TB.PushX [] || pending: '
@@ -3071,8 +3082,9 @@ Step 'RT-HOLD' {
   # SELECT STOPS (both E4), as for OPERAT.NAME
   Chk 'A-RT9-COUNTS'  $rt0.HoldCounts '103/35/4/2'
   # final-review I6: [27] CoerceMSCLISTPlanIds -- the caller's branch condition first, then the callee's own guards
-  # (was UNLESS "FieldCnt = 0", UNLESS "Wanted.Count = 0", then WHEN "TableName = 'MSCLIST'")
-  Chk 'A-RT9-CONDORDER' $rt0.HoldCoerceConds "WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 | UNLESS `"FieldCnt = 0`" @uGenericTableRoute.pas:310 | UNLESS `"Wanted.Count = 0`" @uGenericTableRoute.pas:336"
+  # (was UNLESS FieldCnt = 0, UNLESS Wanted.Count = 0, then WHEN TableName = 'MSCLIST')
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT9-CONDORDER' $rt0.HoldCoerceConds "WHEN TableName = 'MSCLIST' @uGenericTableRoute.pas:468 | UNLESS FieldCnt = 0 @uGenericTableRoute.pas:310 | UNLESS Wanted.Count = 0 @uGenericTableRoute.pas:336"
 }
 # calc-field brief (owner, 2026-09-28, URGENT): a CALCULATED anchor says so and offers its source fields. The owner's
 # pick FtrName stopped at [09] "MSCLIST.FTRNAME: not extracted as a column ..." (9/0/0/1) -- true, not WHY. Now: the
@@ -3098,7 +3110,8 @@ Step 'RT-CALC' {
   Chk 'A-RTC-FTR-TITLE'  $rt0.CalcFtrTitle 'Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calculated'
   Chk 'A-RTC-FTR-STOP'   $rt0.CalcFtrStop ('STOPS FtrName is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
                                            '@Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735; ask E3')
-  Chk 'A-RTC-FTR-GUARDS' $rt0.CalcFtrChildren ('UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_FtrName)" @Blueprint4.ViewModel.pas:985 | ' +
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RTC-FTR-GUARDS' $rt0.CalcFtrChildren ('UNLESS DataSet.State = dsInsert @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN Assigned(FfFtrs_FtrName) @Blueprint4.ViewModel.pas:985 | ' +
                                                'VIA FtrNameString @MSCTYPES.PAS:840 -- computed by this call at :986, its body is not walked, nor are those of TagOf')
   Chk 'A-RTC-FTR-NOTE'   $rt0.CalcFtrNote "FtrName is calculated from 18 fields -- trace one of them instead (every binding below: $bindWhy):"
   # every candidate and its column, in source order (:987-993, FtrType's row at its read :990); each target is the TField variable
@@ -3123,7 +3136,8 @@ Step 'RT-CALC' {
   Chk 'A-RTC-TOL-STOP'   $rt0.CalcTolStop ('STOPS Tolerance is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :760, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
                                            '@Blueprint4.ViewModel.pas:1045 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735, ' +
                                            'the formula is chosen by the case at :1043 (writes at :1045, :1046, :1047, :1049, :1050) and the case at :1044 (writes at :1045, :1046, :1047), their selectors are offered below; ask E3')
-  Chk 'A-RTC-TOL-GUARDS' $rt0.CalcTolChildren 'UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_Tolerance)" @Blueprint4.ViewModel.pas:1041'
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RTC-TOL-GUARDS' $rt0.CalcTolChildren 'UNLESS DataSet.State = dsInsert @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN Assigned(FfFtrs_Tolerance) @Blueprint4.ViewModel.pas:1041'
   Chk 'A-RTC-TOL-OFFER'  "$($rt0.CalcTolNote)|$($rt0.CalcTolRows)" ("Tolerance is calculated from 4 fields, and the value is chosen by 2 more (case at :1043, :1044) -- trace one of them instead (every binding below: $bindWhy):|" +
                                                                     ((@(@('USL', 'LSL', 'UpperTol', 'LowerTol') | ForEach-Object { "FROM MSCLIST.$($_.ToUpperInvariant()) VIA FfFtrs_$_ => $vm.FfFtrs_$_" }) +
                                                                       "FROM MSCLIST.SPECTYPE VIA FfFtrs_SpecType, chooses the value (case at :1043) => $vm.FfFtrs_SpecType" +
