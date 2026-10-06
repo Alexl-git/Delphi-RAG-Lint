@@ -167,10 +167,15 @@ type
                                the .dfm surface -- skipped, never applied (owner
                                ruling R12, T2h). Path and RuleLine are set; the
                                structured facts are apply/1 unreachable[]. }
-    aikInheritedInstanceSkipped); { an inherited / inline .dfm object of a
+    aikInheritedInstanceSkipped, { an inherited / inline .dfm object of a
                                From type, skipped -- its ancestor declares it
                                (C8 N1). Instance and Line are set; the
                                structured facts are apply/1 inherited[]. }
+    aikUnitRuleSkipped);     { a #unuse / #useswap removal NOT made because it
+                               would strand instances --only left out (C13 N4).
+                               RuleLine is the book line, Line the kept uses
+                               entry's; the structured row is apply/1 uses[]
+                               action 'skipped'. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -620,7 +625,9 @@ procedure AppendInheritedReport(const AInstances: TArray<TInheritedInstance>; co
 /// removal targets the unit declaring the From type of a #convert instance
 /// that stays unconverted, skipped or left out by AOnly ('&lt;rule&gt; would
 /// leave &lt;N&gt; unconverted instance(s) of &lt;Type&gt; -- unit not
-/// changed'). When the book has unit rules (#unuse / #use /
+/// changed') -- unless every such instance is an own instance AOnly left out:
+/// then that removal is SKIPPED, not refused (C13 N4; a Report.UsesChanges row
+/// with Action 'skipped' and a unit-rule-skipped warning). When the book has unit rules (#unuse / #use /
 /// #useswap), surface #2's resolved units are handed to PlanUnitRules, which
 /// then plans every uses change to the unit (Report.UsesChanges). Ok=True
 /// with per-instance problems noted in Report.Warnings
@@ -654,6 +661,10 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// when it has none.</param>
 /// <param name="ARules">The parsed, validated rule book; its #convert blocks
 /// only count toward the ADD-wins normalisation (see PlanUnitRules).</param>
+/// <param name="AOnly">The --only names (may be empty). When every instance a
+/// removal would strand was left out by it, the removal is SKIPPED (C13 N4):
+/// the unit stays in uses, Report.UsesChanges gets an Action 'skipped' row and
+/// Report.Warnings / Items a unit-rule-skipped line.</param>
 /// <returns>Ok=True with the uses-clause edits in Edits and one row per
 /// change in Report.UsesChanges (both empty when the book changes nothing
 /// here); every other report array empty. Ok=False with Error when the unit
@@ -668,7 +679,7 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// lexed from the unit's own bytes; the index is consulted only for R26's
 /// declaring unit. Pinned by run_convert_apply_unit_rules.ps1 (arm R).</remarks>
 function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
 /// returns the instances that should be converted: those whose class matches
@@ -702,6 +713,24 @@ function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas,
 /// </remarks>
 function FindConvertInstances(const ADfmText: string; const ARules: TConversionRuleSet;
   const AOnly: TArray<string>): TArray<TConvertInstance>;
+
+/// <summary>Splits convert-apply's --only names into the ones that name a .dfm
+/// object of a #convert From type and the ones that name none (C13 N3, apply/1
+/// only_matched[] / only_unmatched[]).</summary>
+/// <param name="ADfmText">The unit's .dfm text; '' when it has none (then every
+/// name is unmatched).</param>
+/// <param name="ARules">The parsed rule book; only its #convert From types
+/// count.</param>
+/// <param name="AOnly">The --only names, as given.</param>
+/// <param name="AMatched">The AOnly names that match an object -- own,
+/// inherited or inline -- case-insensitively, in AOnly order, spelled as given
+/// in AOnly.</param>
+/// <param name="AUnmatched">The rest, same order and spelling. A name that
+/// matches nothing is ignored by convert-apply (no error, exit unchanged);
+/// this is where it is reported.</param>
+/// <remarks>Pure; no I/O. Both arrays are empty when AOnly is.</remarks>
+procedure SplitOnlyNames(const ADfmText: string; const ARules: TConversionRuleSet;
+  const AOnly: TArray<string>; out AMatched, AUnmatched: TArray<string>);
 
 /// <summary>The stable wire name of an item kind, e.g. 'creator-verify'.</summary>
 /// <param name="AKind">The kind to spell.</param>
@@ -756,7 +785,7 @@ const
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
     'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable',
-    'inherited-instance-skipped');
+    'inherited-instance-skipped', 'unit-rule-skipped');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1813,63 +1842,138 @@ begin
         Exit(TPath.GetFileNameWithoutExtension(St.GetFilePath(S.FileId)));
 end;
 
+procedure SplitOnlyNames(const ADfmText: string; const ARules: TConversionRuleSet;
+  const AOnly: TArray<string>; out AMatched, AUnmatched: TArray<string>);
+var
+  Names: TArray<string>;
+  N    : string;
+begin
+  AMatched  := nil;
+  AUnmatched:= nil;
+  if Length(AOnly) = 0 then Exit;
+  Names:= nil;
+  if ADfmText <> '' then
+  begin
+    for var Inst: TConvertInstance in FindConvertInstances(ADfmText, ARules, nil) do Names:= Names + [Inst.InstanceName];
+    for var Inh: TInheritedInstance in ScanInheritedConvertInstances(ADfmText, ARules) do Names:= Names + [Inh.Name];
+  end;
+  for N in AOnly do
+    if MatchText(N, Names) then AMatched:= AMatched + [N] else AUnmatched:= AUnmatched + [N];
+end;
+
 // R26 (1.20.6): the refusal reason when a planned unit-rule REMOVAL (#unuse,
 // or #useswap's Old) takes away the unit declaring the From type of a .dfm
 // instance that stays unconverted -- skipped, or left out by --only -- which
 // would break the compile (E2003); '' when no removal does. Every #convert
-// instance of ADfmText counts, --only ignored, inherited / inline ones too (C8
-// N1: they are always left); AConverted names the ones the plan converts. The text is '<rule> would leave <N> unconverted instance(s)
-// of <Type> -- unit not changed', <rule> as TUsesChange.Rule spells it.
+// instance of ADfmText counts, inherited / inline ones too (C8 N1: they are
+// always left); AConverted names the ones the plan converts. The text is
+// '<rule> would leave <N> unconverted instance(s) of <Type> -- unit not
+// changed', <rule> as TUsesChange.Rule spells it.
+// C13 N4 (1.23.0): when AOnly is given and EVERY instance a removal would
+// strand is an own instance --only left out, the removal is not refused but
+// SKIPPED -- returned in ASkips as an Action 'skipped' row (Reason 'would
+// leave <N> unconverted instance(s) of <Type>') for the caller to keep the
+// unit and report it. A stranded instance left for any other reason (a failed
+// re-emit, an inherited / inline object, or no --only at all) keeps R26's
+// refusal.
 function RemovalLeavesUnconverted(const ATrees: TConvertTreeCache; const ADfmText: string;
-  const ARules: TConversionRuleSet; const AConverted: TList<string>;
-  const AChanges: TArray<TUsesChange>): string;
+  const ARules: TConversionRuleSet; const AConverted: TList<string>; const AOnly: TArray<string>;
+  const AChanges: TArray<TUsesChange>; out ASkips: TArray<TUsesChange>): string;
 var
   Left : TDictionary<string, Integer>; { From type as the .dfm spells it -> unconverted count }
+  Excl : TDictionary<string, Integer>; { the same, counting only own instances --only left out }
   Order: TList<string>;                { the same types, in .dfm order, so the reason is stable }
   Inst : TConvertInstance;
   Ch   : TUsesChange;
   Key  : string;
   Count: Integer;
+
+  procedure Bump(ADict: TDictionary<string, Integer>; const AType: string);
+  var
+    N: Integer;
+  begin
+    if not ADict.TryGetValue(AType, N) then N:= 0;
+    ADict.AddOrSetValue(AType, N + 1);
+  end;
+
 begin
   Result:= '';
+  ASkips:= nil;
   Left  := TDictionary<string, Integer>.Create;
+  Excl  := TDictionary<string, Integer>.Create;
   Order := TList<string>.Create;
   try
     for Inst in FindConvertInstances(ADfmText, ARules, nil) do
     begin
       if Assigned(AConverted) and AConverted.Contains(Inst.InstanceName) then Continue;
-      if not Left.TryGetValue(Inst.FromType, Count) then
-      begin
-        Count:= 0;
-        Order.Add(Inst.FromType);
-      end;
-      Left.AddOrSetValue(Inst.FromType, Count + 1);
+      if not Left.ContainsKey(Inst.FromType) then Order.Add(Inst.FromType);
+      Bump(Left, Inst.FromType);
+      if (Length(AOnly) > 0) and not InOnlyList(Inst.InstanceName, AOnly) then Bump(Excl, Inst.FromType);
     end;
     { C8 N1: an inherited / inline instance is never converted, so it always
-      counts as left unconverted }
+      counts as left unconverted -- and never as left out by --only }
     for var Inh: TInheritedInstance in ScanInheritedConvertInstances(ADfmText, ARules) do
     begin
-      if not Left.TryGetValue(Inh.TypeName, Count) then
-      begin
-        Count:= 0;
-        Order.Add(Inh.TypeName);
-      end;
-      Left.AddOrSetValue(Inh.TypeName, Count + 1);
+      if not Left.ContainsKey(Inh.TypeName) then Order.Add(Inh.TypeName);
+      Bump(Left, Inh.TypeName);
     end;
     for Ch in AChanges do
     begin
       if Ch.Action <> 'remove' then Continue;
+      var Parts: TArray<string>:= nil;
+      var AllExcluded: Boolean:= True;
       for Key in Order do
         if SameText(DeclaringUnitOf(ATrees, Key), Ch.UnitName.Replace(' ', '').Replace(#9, '')) then
-          Exit(Format('%s would leave %d unconverted instance(s) of %s -- unit not changed',
-            [Ch.Rule, Left[Key], Key]));
+        begin
+          if not Excl.TryGetValue(Key, Count) then Count:= 0;
+          if Count < Left[Key] then AllExcluded:= False;
+          Parts:= Parts + [Format('%d unconverted instance(s) of %s', [Left[Key], Key])];
+        end;
+      if Length(Parts) = 0 then Continue;
+      var Stranded: string:= String.Join(', ', Parts);
+      if not AllExcluded then
+        Exit(Format('%s would leave %s -- unit not changed', [Ch.Rule, Stranded]));
+      var Skip: TUsesChange:= Ch;
+      Skip.Action:= 'skipped';
+      Skip.Reason:= 'would leave ' + Stranded;
+      ASkips:= ASkips + [Skip];
     end;
   finally
     Order.Free;
+    Excl.Free;
     Left.Free;
   end;
 end;
 
+// The book line of the #unuse / #useswap that removes AUnit, or 0.
+function UnitRuleLine(const ARules: TConversionRuleSet; const AUnit: string): Integer;
+begin
+  for var R: TConversionRule in ARules.Rules do
+    if (R.Kind in [rkUnuse, rkUseSwap]) and SameText(R.UnitName.Replace(' ', ''), AUnit.Replace(' ', '').Replace(#9, '')) then
+      Exit(R.LineNo);
+  Result:= 0;
+end;
+
+// C13 N4: the warnings[] text and items[] mirror for one skipped removal.
+function SkippedRuleItem(const ARules: TConversionRuleSet; const AUnitPas: string; const ASkip: TUsesChange): TApplyItem;
+begin
+  Result         := Default(TApplyItem);
+  Result.Kind    := aikUnitRuleSkipped;
+  Result.Field   := afWarnings;
+  Result.FilePath:= AUnitPas;
+  Result.Line    := ASkip.Line;
+  Result.RuleLine:= UnitRuleLine(ARules, ASkip.UnitName);
+  Result.Text    := Format('line %d: warning: %s skipped -- it %s left out by --only; %s kept in uses',
+    [Result.RuleLine, ASkip.Rule, ASkip.Reason, ASkip.UnitName]);
+end;
+
+// The units of ASkips, for PlanUnitRules' AExtraAdds: a unit there is never
+// removed (ADD wins) and, being present already, never added again.
+function SkippedUnits(const ASkips: TArray<TUsesChange>): TArray<string>;
+begin
+  Result:= nil;
+  for var S: TUsesChange in ASkips do Result:= Result + [S.UnitName];
+end;
 // Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
 // output, trailing CRLF trimmed) with AIndent, so the replacement block lands
 // at the same indentation depth as the original.
@@ -2037,6 +2141,7 @@ var
   PasStore    : ISymbolStore; { the store that actually has AUnitPas indexed -- see StoreForFile }
   DoneUnits   : TDictionary<string, Boolean>; { ToType -> already handled (added or already-used) }
   ToTypesSeen : TList<string>;
+  IntfToTypes : TDictionary<string, Boolean>; { ToType -> a retyped field of it is declared in the INTERFACE (C13 a) }
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   E           : TTextEdit;
   It          : TApplyItem; { scratch for the main body's own Emit calls }
@@ -2284,6 +2389,8 @@ var
         E.EndCol  := FEndCol;
         E.Text    := Inst.ToType;
         Edits.Add(E);
+        { C13 a: an interface field needs its To type's unit in the INTERFACE uses }
+        if SameText(Sym.Section, 'interface') then IntfToTypes.AddOrSetValue(Inst.ToType, True);
         It:= InstItem(aikFieldRetyped, afConverted,
           Format('%s: %s -> %s', [Inst.InstanceName, Inst.FromType, Inst.ToType]));
         It.FilePath:= AUnitPas;
@@ -2566,25 +2673,52 @@ var
   // other one deletes. A unit already used is handed over too, so a #unuse of
   // it is overruled (ADD wins) rather than breaking the converted unit.
   // AUses is the unit-rule plan (Ok=True and empty when the book has none).
-  procedure PlanUsesAdditions(out AUses: TUsesPlan);
+  // C13 a: True when the unit uses AUnit in its implementation clause and NOT
+  // in its interface clause (as the index recorded the unit's uses).
+  function UsedOnlyInImplementation(const AUnit: string): Boolean;
+  var
+    InImpl, InIntf: Boolean;
+  begin
+    InImpl:= False;
+    InIntf:= False;
+    if PasFileId > 0 then
+      for var U: TUnitUse in PasStore.GetUnitUsesForFile(PasFileId) do
+        if SameText(U.UnitName, AUnit) then
+        begin
+          if U.Section = uusInterface then InIntf:= True else InImpl:= True;
+        end;
+    Result:= InImpl and not InIntf;
+  end;
+  procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);
   var
     E : TTextEdit;
     It: TApplyItem;
   begin
     var UnitRules  : Boolean      := BookHasUnitRules(ABook.Rules);
+    var MoveNeeded : Boolean      := False;
+    var Pending    : TList<TTextEdit>:= TList<TTextEdit>.Create;
     var ConvertAdds: TList<string>:= TList<string>.Create;
+    var IntfAdds   : TList<string>:= TList<string>.Create;
     try
       for var ToType_ in ToTypesSeen do
       begin
         var ResolvedUnit: string;
         var AlreadyUsed : Boolean;
         var UseEdits: TArray<TTextEdit>;
+        var WantIntf: Boolean:= IntfToTypes.ContainsKey(ToType_);
         for var St in Stores do
         begin
-          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
+          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed, WantIntf);
           if AlreadyUsed or (Length(UseEdits) > 0) then Break;
         end;
-        if UnitRules and (AlreadyUsed or (Length(UseEdits) > 0)) then ConvertAdds.Add(ResolvedUnit);
+        if AlreadyUsed or (Length(UseEdits) > 0) then
+        begin
+          ConvertAdds.Add(ResolvedUnit);
+          if WantIntf then IntfAdds.Add(ResolvedUnit);
+          { C13 a: used, but only in the implementation clause -- it has to
+            MOVE, which only the uses planner can do }
+          if WantIntf and AlreadyUsed and UsedOnlyInImplementation(ResolvedUnit) then MoveNeeded:= True;
+        end;
         if AlreadyUsed then Continue;
         if Length(UseEdits) = 0 then
         begin
@@ -2595,20 +2729,22 @@ var
           Emit(It);
           Continue;
         end;
-        if not UnitRules then
-          for E in UseEdits do Edits.Add(E);
+        for E in UseEdits do Pending.Add(E);
       end;
       AUses:= Default(TUsesPlan);
       AUses.Ok:= True;
-      if UnitRules then
-      begin
+      { the caller adds AUses.Edits after R26 -- a skipped removal (C13 N4)
+        re-plans the unit rules with AAdds / AIntfAdds first }
+      AAdds    := ConvertAdds.ToArray;
+      AIntfAdds:= IntfAdds.ToArray;
+      if UnitRules or MoveNeeded then
         AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
-          ConvertAdds.ToArray);
-        if AUses.Ok then
-          for E in AUses.Edits do Edits.Add(E);
-      end;
-    finally
+          AAdds, AIntfAdds)
+      else
+        for E in Pending do Edits.Add(E);    finally
+      IntfAdds.Free;
       ConvertAdds.Free;
+      Pending.Free;
     end;
   end;
 
@@ -2768,6 +2904,7 @@ begin
   ResolvedDefaults:= TList<TApplyResolvedDefault>.Create;
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
+  IntfToTypes:= TDictionary<string, Boolean>.Create;
   ConvertedInstNames:= TList<string>.Create;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
@@ -2897,6 +3034,9 @@ begin
 
     PlanAccessSites;
     var UsesPlan: TUsesPlan;
+    var UnitAdds    : TArray<string>:= nil;
+    var UnitIntfAdds: TArray<string>:= nil;
+    var Skips       : TArray<TUsesChange>:= nil;
     { a stale .dfm span is folded into the uses-plan refusal below, so
       BuildApplyPlan keeps one exit for it }
     if StaleDfm <> '' then
@@ -2905,11 +3045,25 @@ begin
       UsesPlan.Refused:= True;
       UsesPlan.Error  := StaleDfm;
     end
-    else PlanUsesAdditions(UsesPlan);
+    else PlanUsesAdditions(UsesPlan, UnitAdds, UnitIntfAdds);
     { R26: a removal must not take away the unit an unconverted instance needs }
     var Leaves: string:= '';
     if UsesPlan.Ok then
-      Leaves:= RemovalLeavesUnconverted(ATrees, DfmText, ABook.Rules, ConvertedInstNames, UsesPlan.Changes);
+      Leaves:= RemovalLeavesUnconverted(ATrees, DfmText, ABook.Rules, ConvertedInstNames, AOnly, UsesPlan.Changes, Skips);
+    { C13 N4: a removal that would strand only instances --only left out is
+      skipped, not refused -- re-plan keeping those units, then report each }
+    if UsesPlan.Ok and (Leaves = '') and (Length(Skips) > 0) then
+    begin
+      UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
+        UnitAdds + SkippedUnits(Skips), UnitIntfAdds);
+      if UsesPlan.Ok then
+      begin
+        UsesPlan.Changes:= UsesPlan.Changes + Skips;
+        for var Sk: TUsesChange in Skips do Emit(SkippedRuleItem(ABook.Rules, AUnitPas, Sk));
+      end;
+    end;
+    if UsesPlan.Ok then
+      for E in UsesPlan.Edits do Edits.Add(E);
     if Leaves <> '' then
     begin
       UsesPlan.Ok     := False;
@@ -2949,6 +3103,7 @@ begin
     Items.Free;
     ResolvedDefaults.Free;
     DoneUnits.Free;
+    IntfToTypes.Free;
     ToTypesSeen.Free;
     ConvertedInstNames.Free;
   end;
@@ -2962,10 +3117,11 @@ begin
 end;
 
 function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 var
   UsesPlan: TUsesPlan;
   Leaves  : string;
+  Skips   : TArray<TUsesChange>;
 begin
   Result:= Default(TApplyResult);
   if not TFile.Exists(AUnitPas) then
@@ -2977,9 +3133,25 @@ begin
   { R26: every #convert instance of the .dfm stays unconverted here (--only
     left them all out), so no removal may take away a unit they need }
   Leaves:= '';
+  Skips := nil;
   if UsesPlan.Ok and (ADfmPath <> '') and TFile.Exists(ADfmPath) then
     Leaves:= RemovalLeavesUnconverted(ATrees, TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules,
-      nil, UsesPlan.Changes);
+      nil, AOnly, UsesPlan.Changes, Skips);
+  { C13 N4: every instance was left out by --only -- skip, do not refuse }
+  if UsesPlan.Ok and (Leaves = '') and (Length(Skips) > 0) then
+  begin
+    UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, SkippedUnits(Skips));
+    if UsesPlan.Ok then
+    begin
+      UsesPlan.Changes:= UsesPlan.Changes + Skips;
+      for var Sk: TUsesChange in Skips do
+      begin
+        var It: TApplyItem:= SkippedRuleItem(ARules, AUnitPas, Sk);
+        Result.Report.Warnings:= Result.Report.Warnings + [It.Text];
+        Result.Report.Items   := Result.Report.Items + [It];
+      end;
+    end;
+  end;
   if Leaves <> '' then
   begin
     UsesPlan:= Default(TUsesPlan); { a refusal plans nothing }

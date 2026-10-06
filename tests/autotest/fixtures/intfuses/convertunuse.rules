@@ -1,0 +1,3 @@
+#convert TSrcBtn -> TDstBtn
+#link Caption <- Caption
+#unuse OldU
